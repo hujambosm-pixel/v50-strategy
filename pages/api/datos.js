@@ -1,5 +1,11 @@
 import yahooFinance from 'yahoo-finance2'
 
+yahooFinance.setGlobalConfig({
+  queue: { concurrency: 1, timeout: 60000 },
+  YF_QUERY_HOST: 'query2.finance.yahoo.com',
+  cookieJar: true,
+})
+
 function calcEMA(values, period) {
   const k = 2 / (period + 1)
   const result = new Array(values.length).fill(null)
