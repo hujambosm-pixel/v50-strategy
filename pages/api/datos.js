@@ -1,10 +1,13 @@
 import yahooFinance from 'yahoo-finance2'
 
-yahooFinance.setGlobalConfig({
-  queue: { concurrency: 1, timeout: 60000 },
-  YF_QUERY_HOST: 'query2.finance.yahoo.com',
-  cookieJar: true,
-})
+const YF_OPTS = {
+  fetchOptions: {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    }
+  }
+}
 
 function calcEMA(values, period) {
   const k = 2 / (period + 1)
@@ -188,53 +191,62 @@ export default async function handler(req, res) {
   const { simbolo, cfg } = req.body
   try {
     const period2 = new Date()
-    const period1 = new Date(); period1.setFullYear(period1.getFullYear()-(cfg.years+1))
-    const raw = await yahooFinance.historical(simbolo, { period1, period2, interval: '1d' })
-    if (!raw||raw.length===0) return res.status(404).json({ error: `No se encontraron datos para "${simbolo}"` })
-    const data = raw.filter(d=>d.close!=null).map(d=>({
+    const period1 = new Date()
+    period1.setFullYear(period1.getFullYear() - (cfg.years + 1))
+
+    const raw = await yahooFinance.historical(simbolo, { period1, period2, interval: '1d' }, YF_OPTS)
+    if (!raw || raw.length === 0) return res.status(404).json({ error: `No se encontraron datos para "${simbolo}"` })
+
+    const data = raw.filter(d => d.close != null).map(d => ({
       date: d.date.toISOString().split('T')[0],
-      open:d.open, high:d.high, low:d.low, close:d.close, volume:d.volume
+      open: d.open, high: d.high, low: d.low, close: d.close, volume: d.volume
     }))
-    let sp500Data=null
-    if (cfg.tipoFiltro!=='none') {
+
+    let sp500Data = null
+    if (cfg.tipoFiltro !== 'none') {
       try {
-        const rawSP=await yahooFinance.historical('^GSPC',{period1,period2,interval:'1d'})
-        sp500Data=rawSP.filter(d=>d.close!=null).map(d=>({date:d.date.toISOString().split('T')[0],close:d.close}))
+        const rawSP = await yahooFinance.historical('^GSPC', { period1, period2, interval: '1d' }, YF_OPTS)
+        sp500Data = rawSP.filter(d => d.close != null).map(d => ({ date: d.date.toISOString().split('T')[0], close: d.close }))
       } catch(_) {}
     }
-    let sp500Quote=null
+
+    let sp500Quote = null
     try {
-      const q=await yahooFinance.quote('^GSPC')
-      sp500Quote={price:q.regularMarketPrice,change:q.regularMarketChange,changePct:q.regularMarketChangePercent,date:q.regularMarketTime}
+      const q = await yahooFinance.quote('^GSPC', {}, YF_OPTS)
+      sp500Quote = { price: q.regularMarketPrice, change: q.regularMarketChange, changePct: q.regularMarketChangePercent, date: q.regularMarketTime }
     } catch(_) {}
-    const {chartData,trades,capitalReinv,gananciaSimple,startDate}=runBacktest(data,sp500Data,cfg)
-    const last=chartData[chartData.length-1]
-    const projR=projectEMA(last.emaR,last.close,cfg.emaR)
-    const projL=projectEMA(last.emaL,last.close,cfg.emaL)
-    const lastDate=new Date(last.date)
-    const projDates=projR.map(p=>{ const d=new Date(lastDate); d.setDate(d.getDate()+p.offset); return d.toISOString().split('T')[0] })
-    let sp500Status=null
-    if (sp500Data&&sp500Data.length>0) {
-      const spC=sp500Data.map(d=>d.close)
-      const spEmaR=calcEMA(spC,cfg.sp500EmaR), spEmaL=calcEMA(spC,cfg.sp500EmaL)
-      sp500Status={
-        precio:sp500Quote?.price??spC[spC.length-1],
-        emaR:spEmaR[spEmaR.length-1], emaL:spEmaL[spEmaL.length-1],
-        date:sp500Quote?.date??sp500Data[sp500Data.length-1].date,
-        change:sp500Quote?.change??0, changePct:sp500Quote?.changePct??0
+
+    const { chartData, trades, capitalReinv, gananciaSimple, startDate } = runBacktest(data, sp500Data, cfg)
+    const last = chartData[chartData.length - 1]
+    const projR = projectEMA(last.emaR, last.close, cfg.emaR)
+    const projL = projectEMA(last.emaL, last.close, cfg.emaL)
+    const lastDate = new Date(last.date)
+    const projDates = projR.map(p => { const d = new Date(lastDate); d.setDate(d.getDate() + p.offset); return d.toISOString().split('T')[0] })
+
+    let sp500Status = null
+    if (sp500Data && sp500Data.length > 0) {
+      const spC = sp500Data.map(d => d.close)
+      const spEmaR = calcEMA(spC, cfg.sp500EmaR)
+      const spEmaL = calcEMA(spC, cfg.sp500EmaL)
+      sp500Status = {
+        precio: sp500Quote?.price ?? spC[spC.length-1],
+        emaR: spEmaR[spEmaR.length-1], emaL: spEmaL[spEmaL.length-1],
+        date: sp500Quote?.date ?? sp500Data[sp500Data.length-1].date,
+        change: sp500Quote?.change ?? 0, changePct: sp500Quote?.changePct ?? 0
       }
     }
+
     res.status(200).json({
-      chartData:chartData.filter(d=>new Date(d.date)>=new Date(startDate)),
+      chartData: chartData.filter(d => new Date(d.date) >= new Date(startDate)),
       trades, capitalReinv, gananciaSimple,
-      startDate:startDate.toISOString().split('T')[0],
+      startDate: startDate.toISOString().split('T')[0],
       sp500Status,
-      projR:projR.map((p,i)=>({date:projDates[i],value:p.value})),
-      projL:projL.map((p,i)=>({date:projDates[i],value:p.value})),
-      meta:{simbolo,ultimaFecha:last.date,ultimoPrecio:last.close,totalBars:data.length}
+      projR: projR.map((p,i) => ({ date: projDates[i], value: p.value })),
+      projL: projL.map((p,i) => ({ date: projDates[i], value: p.value })),
+      meta: { simbolo, ultimaFecha: last.date, ultimoPrecio: last.close, totalBars: data.length }
     })
   } catch(err) {
     console.error(err)
-    res.status(500).json({error:err.message||'Error interno'})
+    res.status(500).json({ error: err.message || 'Error interno' })
   }
 }
