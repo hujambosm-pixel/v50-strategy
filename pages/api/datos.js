@@ -30,7 +30,7 @@ function projectEMA(lastEMA, lastClose, period, bars = 20) {
   return pts
 }
 
-async function fetchAV(symbol, apiKey) {
+async function fetchAV(symbol) {
   const sym = symbol === '^GSPC' ? 'spy' : symbol.replace('^','').toLowerCase()
   const url = `https://stooq.com/q/d/l/?s=${sym}.us&i=d`
   const res  = await fetch(url)
@@ -43,14 +43,7 @@ async function fetchAV(symbol, apiKey) {
     .filter(l => l.trim())
     .map(l => {
       const [date, open, high, low, close, volume] = l.split(',')
-      return {
-        date,
-        open:   parseFloat(open),
-        high:   parseFloat(high),
-        low:    parseFloat(low),
-        close:  parseFloat(close),
-        volume: parseFloat(volume) || 0,
-      }
+      return { date, open: parseFloat(open), high: parseFloat(high), low: parseFloat(low), close: parseFloat(close), volume: parseFloat(volume) || 0 }
     })
     .filter(d => d.close && !isNaN(d.close))
     .sort((a, b) => a.date.localeCompare(b.date))
@@ -200,17 +193,74 @@ function makeTrade(entryDate, exitDate, entryPx, exitPx, pnl, capitalReinv, capi
   }
 }
 
+function calcEquityCurves(trades, data, capitalIni, startDate) {
+  const filtered = data.filter(d => new Date(d.date) >= new Date(startDate))
+  if (!filtered.length) return { strategyCurve: [], bhCurve: [], maxDDStrategy: 0, maxDDBH: 0, maxDDStrategyDate: null, maxDDBHDate: null }
+
+  const p0 = filtered[0].close
+
+  // Sample every ~5 bars to keep data manageable
+  const step = Math.max(1, Math.floor(filtered.length / 300))
+  const sampled = filtered.filter((_, i) => i % step === 0 || i === filtered.length - 1)
+
+  // Build strategy equity — flat between trades
+  const tradeMap = {}
+  let runningEquity = capitalIni
+  trades.forEach(t => { tradeMap[t.exitDate] = t.capitalTras })
+
+  let stratEq = capitalIni
+  const strategyMap = {}
+  let cumPnl = 0
+  trades.forEach(t => {
+    cumPnl += t.pnlSimple
+    strategyMap[t.exitDate] = capitalIni + cumPnl
+  })
+
+  const strategyCurve = []
+  const bhCurve = []
+  let lastStrat = capitalIni
+
+  sampled.forEach(d => {
+    // Find last trade exit on or before this date
+    const exits = trades.filter(t => t.exitDate <= d.date)
+    if (exits.length) {
+      const cumPnlHere = exits.reduce((s, t) => s + t.pnlSimple, 0)
+      lastStrat = capitalIni + cumPnlHere
+    }
+    strategyCurve.push({ date: d.date, value: lastStrat })
+    bhCurve.push({ date: d.date, value: capitalIni * (d.close / p0) })
+  })
+
+  // Max drawdown strategy
+  let peakS = capitalIni, maxDDS = 0, maxDDSDate = null
+  strategyCurve.forEach(p => {
+    if (p.value > peakS) peakS = p.value
+    const dd = (peakS - p.value) / peakS * 100
+    if (dd > maxDDS) { maxDDS = dd; maxDDSDate = p.date }
+  })
+
+  // Max drawdown BH
+  let peakBH = capitalIni, maxDDBH = 0, maxDDBHDate = null
+  bhCurve.forEach(p => {
+    if (p.value > peakBH) peakBH = p.value
+    const dd = (peakBH - p.value) / peakBH * 100
+    if (dd > maxDDBH) { maxDDBH = dd; maxDDBHDate = p.date }
+  })
+
+  return { strategyCurve, bhCurve, maxDDStrategy: maxDDS, maxDDBH, maxDDStrategyDate: maxDDSDate, maxDDBHDate }
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
   const { simbolo, cfg } = req.body
 
   try {
-    const data = await fetchAV(simbolo, null)
+    const data = await fetchAV(simbolo)
     if (!data || data.length === 0) return res.status(404).json({ error: `No se encontraron datos para "${simbolo}"` })
 
     let sp500Data = null
     if (cfg.tipoFiltro !== 'none') {
-      try { sp500Data = await fetchAV('^GSPC', null) } catch(_) {}
+      try { sp500Data = await fetchAV('^GSPC') } catch(_) {}
     }
 
     const { chartData, trades, capitalReinv, gananciaSimple, startDate } = runBacktest(data, sp500Data, cfg)
@@ -219,6 +269,16 @@ export default async function handler(req, res) {
     const projL   = projectEMA(last.emaL, last.close, cfg.emaL)
     const lastDt  = new Date(last.date)
     const projDates = projR.map(p => { const d = new Date(lastDt); d.setDate(d.getDate()+p.offset); return d.toISOString().split('T')[0] })
+
+    // Equity curves
+    const filteredData = data.filter(d => new Date(d.date) >= new Date(startDate))
+    const { strategyCurve, bhCurve, maxDDStrategy, maxDDBH, maxDDStrategyDate, maxDDBHDate } = calcEquityCurves(trades, data, cfg.capitalIni, startDate)
+
+    // BH gain
+    let ganBH = 0
+    if (filteredData.length >= 2) {
+      ganBH = cfg.capitalIni * (filteredData[filteredData.length-1].close / filteredData[0].close) - cfg.capitalIni
+    }
 
     let sp500Status = null
     if (sp500Data && sp500Data.length > 0) {
@@ -234,9 +294,11 @@ export default async function handler(req, res) {
 
     res.status(200).json({
       chartData: chartData.filter(d => new Date(d.date) >= new Date(startDate)),
-      trades, capitalReinv, gananciaSimple,
+      trades, capitalReinv, gananciaSimple, ganBH,
       startDate: startDate.toISOString().split('T')[0],
       sp500Status,
+      strategyCurve, bhCurve,
+      maxDDStrategy, maxDDBH, maxDDStrategyDate, maxDDBHDate,
       projR: projR.map((p,i) => ({ date: projDates[i], value: p.value })),
       projL: projL.map((p,i) => ({ date: projDates[i], value: p.value })),
       meta: { simbolo, ultimaFecha: last.date, ultimoPrecio: last.close, totalBars: data.length }
