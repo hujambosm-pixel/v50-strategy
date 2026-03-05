@@ -31,24 +31,28 @@ function projectEMA(lastEMA, lastClose, period, bars = 20) {
 }
 
 async function fetchAV(symbol, apiKey) {
-  const sym = symbol === '^GSPC' ? 'SPY' : symbol.replace('^','')
-  const url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${sym}&outputsize=full&apikey=${apiKey}`
+  const sym = symbol === '^GSPC' ? 'spy' : symbol.replace('^','').toLowerCase()
+  const url = `https://stooq.com/q/d/l/?s=${sym}.us&i=d`
   const res  = await fetch(url)
-  const json = await res.json()
-  if (json['Error Message']) throw new Error(json['Error Message'])
-  if (json['Note']) throw new Error('Límite de API alcanzado. Alpha Vantage permite 25 consultas/día en plan gratuito.')
-  if (json['Information']) throw new Error('Límite de API alcanzado. Alpha Vantage permite 25 consultas/día en plan gratuito.')
-  const ts = json['Time Series (Daily)']
-  if (!ts) throw new Error(`Sin datos para ${symbol}. Respuesta: ${JSON.stringify(Object.keys(json))}`)
-  return Object.entries(ts)
-    .map(([date, v]) => ({
-      date,
-      open:   parseFloat(v['1. open']),
-      high:   parseFloat(v['2. high']),
-      low:    parseFloat(v['3. low']),
-      close:  parseFloat(v['4. close']),
-      volume: parseFloat(v['5. volume']),
-    }))
+  const text = await res.text()
+  if (!text || text.includes('No data') || text.trim().length < 50) {
+    throw new Error(`Sin datos para ${symbol}. Prueba con otro símbolo.`)
+  }
+  const lines = text.trim().split('\n').slice(1)
+  return lines
+    .filter(l => l.trim())
+    .map(l => {
+      const [date, open, high, low, close, volume] = l.split(',')
+      return {
+        date,
+        open:   parseFloat(open),
+        high:   parseFloat(high),
+        low:    parseFloat(low),
+        close:  parseFloat(close),
+        volume: parseFloat(volume) || 0,
+      }
+    })
+    .filter(d => d.close && !isNaN(d.close))
     .sort((a, b) => a.date.localeCompare(b.date))
 }
 
@@ -199,16 +203,14 @@ function makeTrade(entryDate, exitDate, entryPx, exitPx, pnl, capitalReinv, capi
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
   const { simbolo, cfg } = req.body
-  const apiKey = process.env.ALPHA_VANTAGE_KEY
-  if (!apiKey) return res.status(500).json({ error: 'Falta ALPHA_VANTAGE_KEY en variables de entorno' })
 
   try {
-    const data = await fetchAV(simbolo, apiKey)
+    const data = await fetchAV(simbolo, null)
     if (!data || data.length === 0) return res.status(404).json({ error: `No se encontraron datos para "${simbolo}"` })
 
     let sp500Data = null
     if (cfg.tipoFiltro !== 'none') {
-      try { sp500Data = await fetchAV('^GSPC', apiKey) } catch(_) {}
+      try { sp500Data = await fetchAV('^GSPC', null) } catch(_) {}
     }
 
     const { chartData, trades, capitalReinv, gananciaSimple, startDate } = runBacktest(data, sp500Data, cfg)
