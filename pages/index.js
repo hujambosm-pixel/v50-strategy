@@ -21,7 +21,6 @@ function calcMetrics(trades, capitalIni, capitalReinv, gananciaSimple, ganBH, st
   const lBrute = losses.reduce((s,t) => s + Math.abs(t.pnlSimple), 0)
   const factorBen = lBrute > 0 ? gBrute / lBrute : 999
   const ganTotalPct = (gananciaSimple / capitalIni) * 100
-
   let peakS = capitalIni, maxDDS = 0
   trades.forEach(t => {
     const eq = capitalIni + trades.slice(0, trades.indexOf(t)+1).reduce((s,x) => s + x.pnlSimple, 0)
@@ -36,11 +35,9 @@ function calcMetrics(trades, capitalIni, capitalReinv, gananciaSimple, ganBH, st
     if (dd > maxDDR) maxDDR = dd
   })
   const tiempoInv = totalDias / (safYears * 365.25) * 100
-
   return {
     n, wins: wins.length, losses: losses.length,
-    winRate, avgWin, avgLoss,
-    totalDias, diasProm: totalDias / n,
+    winRate, avgWin, avgLoss, totalDias, diasProm: totalDias / n,
     ganSimple: gananciaSimple, ganComp: capitalReinv - capitalIni,
     ganBH, ganTotalPct,
     cagrS: cagrS * 100, cagrC: cagrC * 100, cagrBH: cagrBH * 100,
@@ -68,8 +65,162 @@ function tvSymbol(sym) {
   return sym
 }
 
+// ── Candle Chart ─────────────────────────────────────────────
+function CandleChart({ data, projR, projL, emaRPeriod, emaLPeriod, trades, maxDD }) {
+  const containerRef = useRef(null)
+  const tooltipRef   = useRef(null)
+  const chartRef     = useRef(null)
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !containerRef.current) return
+    import('lightweight-charts').then(({ createChart, CrosshairMode, LineStyle }) => {
+      if (chartRef.current) { chartRef.current.remove(); chartRef.current = null }
+
+      const chart = createChart(containerRef.current, {
+        width: containerRef.current.clientWidth, height: 480,
+        layout: { background: { color: '#080c14' }, textColor: '#7a9bc0' },
+        grid: { vertLines: { color: '#0d1520' }, horzLines: { color: '#0d1520' } },
+        crosshair: { mode: CrosshairMode.Normal },
+        rightPriceScale: { borderColor: '#1a2d45' },
+        timeScale: { borderColor: '#1a2d45', timeVisible: true },
+      })
+      chartRef.current = chart
+
+      // ── Velas ──
+      const candles = chart.addCandlestickSeries({
+        upColor:'#00e5a0', downColor:'#ff4d6d',
+        borderUpColor:'#00e5a0', borderDownColor:'#ff4d6d',
+        wickUpColor:'#00e5a0', wickDownColor:'#ff4d6d',
+      })
+      candles.setData(data.map(d => ({ time:d.date, open:d.open, high:d.high, low:d.low, close:d.close })))
+
+      // ── EMAs ──
+      const erS = chart.addLineSeries({ color:'#ffd166', lineWidth:2, title:`EMA ${emaRPeriod}`, lastValueVisible:true })
+      erS.setData(data.filter(d=>d.emaR!=null).map(d=>({ time:d.date, value:d.emaR })))
+      const elS = chart.addLineSeries({ color:'#ff4d6d', lineWidth:2, title:`EMA ${emaLPeriod}`, lastValueVisible:true })
+      elS.setData(data.filter(d=>d.emaL!=null).map(d=>({ time:d.date, value:d.emaL })))
+
+      // ── Proyecciones ──
+      if (projR?.length) {
+        const pRS = chart.addLineSeries({ color:'#ffd166', lineWidth:1.5, lineStyle:LineStyle.Dashed, lastValueVisible:false, priceLineVisible:false })
+        pRS.setData(projR.map(p=>({ time:p.date, value:p.value })))
+      }
+      if (projL?.length) {
+        const pLS = chart.addLineSeries({ color:'#ff4d6d', lineWidth:1.5, lineStyle:LineStyle.Dashed, lastValueVisible:false, priceLineVisible:false })
+        pLS.setData(projL.map(p=>({ time:p.date, value:p.value })))
+      }
+
+      // ── Líneas de trades (verde/roja entrada→salida) ──
+      trades.forEach(t => {
+        if (!t.entryDate || !t.exitDate) return
+        const color = t.pnlPct >= 0 ? '#00e5a0' : '#ff4d6d'
+        const line = chart.addLineSeries({
+          color, lineWidth: 2, lineStyle: LineStyle.Solid,
+          lastValueVisible: false, priceLineVisible: false,
+          crosshairMarkerVisible: false,
+        })
+        line.setData([
+          { time: t.entryDate, value: t.entryPx },
+          { time: t.exitDate,  value: t.exitPx  },
+        ])
+      })
+
+      // ── Marcadores de cruce EMA ──
+      const crossMarkers = []
+      for (let i = 1; i < data.length; i++) {
+        const p = data[i-1], c = data[i]
+        if (p.emaR == null || p.emaL == null || c.emaR == null || c.emaL == null) continue
+        if (p.emaR < p.emaL && c.emaR >= c.emaL) {
+          crossMarkers.push({
+            time: c.date, position: 'belowBar',
+            color: '#00e5a0', shape: 'arrowUp',
+            text: '↗ Cruce Alcista',
+          })
+        } else if (p.emaR > p.emaL && c.emaR <= c.emaL) {
+          crossMarkers.push({
+            time: c.date, position: 'aboveBar',
+            color: '#ff4d6d', shape: 'arrowDown',
+            text: '↘ Cruce Bajista',
+          })
+        }
+      }
+      if (crossMarkers.length) candles.setMarkers(crossMarkers)
+
+      // ── Tooltip flotante ──
+      chart.subscribeCrosshairMove(param => {
+        const tooltip = tooltipRef.current
+        if (!tooltip) return
+        if (!param.time || !param.point || param.point.x < 0 || param.point.y < 0) {
+          tooltip.style.display = 'none'; return
+        }
+        const currentTime = param.time
+        const trade = trades.find(t => t.entryDate <= currentTime && currentTime <= t.exitDate)
+        if (!trade) { tooltip.style.display = 'none'; return }
+
+        const isWin = trade.pnlPct >= 0
+        const borderColor = isWin ? '#00e5a0' : '#ff4d6d'
+        const x = param.point.x
+        const y = param.point.y
+        const w = containerRef.current?.clientWidth || 600
+        const left = x + 120 > w ? x - 140 : x + 16
+        const top  = Math.max(8, y - 60)
+
+        tooltip.style.display = 'block'
+        tooltip.style.left = left + 'px'
+        tooltip.style.top  = top + 'px'
+        tooltip.style.borderColor = borderColor
+        tooltip.innerHTML = `
+          <div style="font-size:10px;color:#7a9bc0;margin-bottom:4px;">${fmtDate(trade.entryDate)} → ${fmtDate(trade.exitDate)}</div>
+          <div style="display:flex;justify-content:space-between;gap:16px;">
+            <span style="color:#7a9bc0;">Capital</span>
+            <span style="color:#e2eaf5;font-weight:600;">€${trade.capitalTras.toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;gap:16px;">
+            <span style="color:#7a9bc0;">Profit</span>
+            <span style="color:${borderColor};font-weight:600;">${trade.pnlPct>=0?'+':''}${trade.pnlPct.toFixed(2)}%</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;gap:16px;">
+            <span style="color:#7a9bc0;">P&L</span>
+            <span style="color:${borderColor};font-weight:600;">${trade.pnlSimple>=0?'€+':'€-'}${Math.abs(trade.pnlSimple).toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;gap:16px;">
+            <span style="color:#7a9bc0;">Días</span>
+            <span style="color:#e2eaf5;">${trade.dias}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;gap:16px;">
+            <span style="color:#7a9bc0;">Max DD</span>
+            <span style="color:#ff4d6d;">${maxDD.toFixed(2)}%</span>
+          </div>
+        `
+      })
+
+      chart.timeScale().fitContent()
+      const ro = new ResizeObserver(() => {
+        if (containerRef.current) chart.applyOptions({ width: containerRef.current.clientWidth })
+      })
+      ro.observe(containerRef.current)
+      return () => ro.disconnect()
+    })
+    return () => { if (chartRef.current) { chartRef.current.remove(); chartRef.current = null } }
+  }, [data, projR, projL, emaRPeriod, emaLPeriod, trades, maxDD])
+
+  return (
+    <div style={{ position:'relative' }}>
+      <div ref={containerRef} style={{ minHeight:480 }} />
+      <div ref={tooltipRef} style={{
+        position:'absolute', display:'none', pointerEvents:'none',
+        background:'rgba(8,12,20,0.95)', border:'1px solid #00e5a0',
+        borderRadius:6, padding:'8px 12px',
+        fontFamily:'IBM Plex Mono, monospace', fontSize:12,
+        color:'#e2eaf5', zIndex:10, minWidth:180,
+        boxShadow:'0 4px 20px rgba(0,0,0,0.5)',
+      }} />
+    </div>
+  )
+}
+
 // ── Equity Chart ─────────────────────────────────────────────
-function EquityChart({ strategyCurve, bhCurve, maxDDStrategyDate, maxDDBHDate, capitalIni }) {
+function EquityChart({ strategyCurve, bhCurve, maxDDStrategy, maxDDBH, maxDDStrategyDate, maxDDBHDate, capitalIni }) {
   const ref = useRef(null)
   const chartRef = useRef(null)
 
@@ -77,9 +228,9 @@ function EquityChart({ strategyCurve, bhCurve, maxDDStrategyDate, maxDDBHDate, c
     if (!ref.current || !strategyCurve?.length) return
     import('lightweight-charts').then(({ createChart, CrosshairMode, LineStyle }) => {
       if (chartRef.current) { chartRef.current.remove(); chartRef.current = null }
+
       const chart = createChart(ref.current, {
-        width: ref.current.clientWidth,
-        height: 260,
+        width: ref.current.clientWidth, height: 280,
         layout: { background: { color: '#080c14' }, textColor: '#7a9bc0' },
         grid: { vertLines: { color: '#0d1520' }, horzLines: { color: '#0d1520' } },
         crosshair: { mode: CrosshairMode.Normal },
@@ -88,29 +239,70 @@ function EquityChart({ strategyCurve, bhCurve, maxDDStrategyDate, maxDDBHDate, c
       })
       chartRef.current = chart
 
-      // Strategy line
-      const stratSeries = chart.addLineSeries({ color: '#00d4ff', lineWidth: 2, title: 'Estrategia' })
-      stratSeries.setData(strategyCurve.map(p => ({ time: p.date, value: p.value })))
+      // ── Estrategia ──
+      const stratSeries = chart.addLineSeries({ color:'#00d4ff', lineWidth:2, title:'Estrategia' })
+      stratSeries.setData(strategyCurve.map(p=>({ time:p.date, value:p.value })))
 
-      // BH line
-      const bhSeries = chart.addLineSeries({ color: '#ffd166', lineWidth: 2, title: 'Buy & Hold', lineStyle: LineStyle.Dashed })
-      bhSeries.setData(bhCurve.map(p => ({ time: p.date, value: p.value })))
+      // ── Buy & Hold ──
+      const bhSeries = chart.addLineSeries({ color:'#ffd166', lineWidth:2, lineStyle:LineStyle.Dashed, title:'Buy & Hold' })
+      bhSeries.setData(bhCurve.map(p=>({ time:p.date, value:p.value })))
 
-      // Capital inicial
-      const initVal = capitalIni
-      chart.addLineSeries({ color: '#3d5a7a', lineWidth: 1, lineStyle: LineStyle.Dotted, title: '' })
-        .setData([
-          { time: strategyCurve[0].date, value: initVal },
-          { time: strategyCurve[strategyCurve.length-1].date, value: initVal }
-        ])
+      // ── Línea base capital inicial ──
+      const initLine = chart.addLineSeries({ color:'#3d5a7a', lineWidth:1, lineStyle:LineStyle.Dotted, lastValueVisible:false, priceLineVisible:false })
+      initLine.setData([
+        { time: strategyCurve[0].date, value: capitalIni },
+        { time: strategyCurve[strategyCurve.length-1].date, value: capitalIni },
+      ])
 
-      // Max DD markers
-      const markers = []
-      if (maxDDStrategyDate) markers.push({ time: maxDDStrategyDate, position: 'aboveBar', color: '#00d4ff', shape: 'arrowDown', text: 'Max DD Estrategia' })
-      if (maxDDBHDate) markers.push({ time: maxDDBHDate, position: 'aboveBar', color: '#ffd166', shape: 'arrowDown', text: 'Max DD B&H' })
-      if (markers.length) {
-        markers.sort((a,b) => a.time.localeCompare(b.time))
-        stratSeries.setMarkers(markers)
+      // ── Línea roja drawdown Estrategia (pico → valle) ──
+      if (maxDDStrategyDate && maxDDStrategy > 0) {
+        // Encontrar el pico antes del máximo drawdown
+        let peak = { date: strategyCurve[0].date, value: strategyCurve[0].value }
+        for (const p of strategyCurve) {
+          if (p.date > maxDDStrategyDate) break
+          if (p.value > peak.value) peak = p
+        }
+        const trough = strategyCurve.find(p => p.date === maxDDStrategyDate)
+        if (trough && peak.date !== trough.date) {
+          const ddLineS = chart.addLineSeries({
+            color:'#ff4d6d', lineWidth:2, lineStyle:LineStyle.Solid,
+            lastValueVisible:false, priceLineVisible:false,
+          })
+          ddLineS.setData([
+            { time: peak.date,   value: peak.value   },
+            { time: trough.date, value: trough.value },
+          ])
+          ddLineS.setMarkers([{
+            time: trough.date, position:'belowBar',
+            color:'#ff4d6d', shape:'arrowDown',
+            text: `↓ DD Estrat. -${maxDDStrategy.toFixed(1)}%`,
+          }])
+        }
+      }
+
+      // ── Línea roja drawdown Buy&Hold (pico → valle) ──
+      if (maxDDBHDate && maxDDBH > 0) {
+        let peakBH = { date: bhCurve[0].date, value: bhCurve[0].value }
+        for (const p of bhCurve) {
+          if (p.date > maxDDBHDate) break
+          if (p.value > peakBH.value) peakBH = p
+        }
+        const troughBH = bhCurve.find(p => p.date === maxDDBHDate)
+        if (troughBH && peakBH.date !== troughBH.date) {
+          const ddLineBH = chart.addLineSeries({
+            color:'#ff9a3c', lineWidth:2, lineStyle:LineStyle.Solid,
+            lastValueVisible:false, priceLineVisible:false,
+          })
+          ddLineBH.setData([
+            { time: peakBH.date,   value: peakBH.value   },
+            { time: troughBH.date, value: troughBH.value },
+          ])
+          ddLineBH.setMarkers([{
+            time: troughBH.date, position:'belowBar',
+            color:'#ff9a3c', shape:'arrowDown',
+            text: `↓ DD B&H -${maxDDBH.toFixed(1)}%`,
+          }])
+        }
       }
 
       chart.timeScale().fitContent()
@@ -119,72 +311,9 @@ function EquityChart({ strategyCurve, bhCurve, maxDDStrategyDate, maxDDBHDate, c
       return () => ro.disconnect()
     })
     return () => { if (chartRef.current) { chartRef.current.remove(); chartRef.current = null } }
-  }, [strategyCurve, bhCurve, maxDDStrategyDate, maxDDBHDate, capitalIni])
+  }, [strategyCurve, bhCurve, maxDDStrategy, maxDDBH, maxDDStrategyDate, maxDDBHDate, capitalIni])
 
-  return <div ref={ref} style={{ minHeight: 260 }} />
-}
-
-// ── Candle Chart ─────────────────────────────────────────────
-function CandleChart({ data, projR, projL, emaRPeriod, emaLPeriod }) {
-  const containerRef = useRef(null)
-  const chartRef = useRef(null)
-
-  useEffect(() => {
-    if (typeof window === 'undefined' || !containerRef.current) return
-    import('lightweight-charts').then(({ createChart, CrosshairMode, LineStyle }) => {
-      if (chartRef.current) { chartRef.current.remove(); chartRef.current = null }
-      const chart = createChart(containerRef.current, {
-        width: containerRef.current.clientWidth, height: 460,
-        layout: { background: { color: '#080c14' }, textColor: '#7a9bc0' },
-        grid: { vertLines: { color: '#0d1520' }, horzLines: { color: '#0d1520' } },
-        crosshair: { mode: CrosshairMode.Normal },
-        rightPriceScale: { borderColor: '#1a2d45' },
-        timeScale: { borderColor: '#1a2d45', timeVisible: true },
-      })
-      chartRef.current = chart
-      const candles = chart.addCandlestickSeries({
-        upColor:'#00e5a0', downColor:'#ff4d6d',
-        borderUpColor:'#00e5a0', borderDownColor:'#ff4d6d',
-        wickUpColor:'#00e5a0', wickDownColor:'#ff4d6d',
-      })
-      candles.setData(data.map(d => ({ time:d.date, open:d.open, high:d.high, low:d.low, close:d.close })))
-      const erS = chart.addLineSeries({ color:'#ffd166', lineWidth:2, title:`EMA ${emaRPeriod}` })
-      erS.setData(data.filter(d=>d.emaR!=null).map(d=>({ time:d.date, value:d.emaR })))
-      const elS = chart.addLineSeries({ color:'#ff4d6d', lineWidth:2, title:`EMA ${emaLPeriod}` })
-      elS.setData(data.filter(d=>d.emaL!=null).map(d=>({ time:d.date, value:d.emaL })))
-      if (projR?.length) {
-        const pRS = chart.addLineSeries({ color:'#ffd166', lineWidth:2, lineStyle:LineStyle.Dashed, title:'' })
-        pRS.setData(projR.map(p=>({ time:p.date, value:p.value })))
-      }
-      if (projL?.length) {
-        const pLS = chart.addLineSeries({ color:'#ff4d6d', lineWidth:2, lineStyle:LineStyle.Dashed, title:'' })
-        pLS.setData(projL.map(p=>({ time:p.date, value:p.value })))
-      }
-      const bkData = data.filter(d=>d.breakoutLine!=null)
-      if (bkData.length) {
-        const bkS = chart.addLineSeries({ color:'#00d4ff', lineWidth:1, lineStyle:LineStyle.Dotted, title:'Breakout' })
-        bkS.setData(bkData.map(d=>({ time:d.date, value:d.breakoutLine })))
-      }
-      const slData = data.filter(d=>d.stopLine!=null)
-      if (slData.length) {
-        const slS = chart.addLineSeries({ color:'#ff9a3c', lineWidth:1, lineStyle:LineStyle.Dotted, title:'Stop' })
-        slS.setData(slData.map(d=>({ time:d.date, value:d.stopLine })))
-      }
-      const markers = []
-      data.forEach(d => {
-        if (d.signal==='entry') markers.push({ time:d.date, position:'belowBar', color:'#00e5a0', shape:'arrowUp', text:'Long' })
-        if (d.signal==='exit')  markers.push({ time:d.date, position:'aboveBar', color:'#ff4d6d', shape:'arrowDown', text:'Exit' })
-      })
-      if (markers.length) candles.setMarkers(markers)
-      chart.timeScale().fitContent()
-      const ro = new ResizeObserver(() => { if (containerRef.current) chart.applyOptions({ width:containerRef.current.clientWidth }) })
-      ro.observe(containerRef.current)
-      return () => ro.disconnect()
-    })
-    return () => { if (chartRef.current) { chartRef.current.remove(); chartRef.current = null } }
-  }, [data, projR, projL, emaRPeriod, emaLPeriod])
-
-  return <div ref={containerRef} style={{ minHeight:460 }} />
+  return <div ref={ref} style={{ minHeight:280 }} />
 }
 
 // ── Main ─────────────────────────────────────────────────────
@@ -242,8 +371,7 @@ export default function Home() {
   const TICKERS = ['^GSPC','AAPL','^IBEX','^GDAXI','MSFT','BTC-USD','GC=F']
 
   const openTV = () => {
-    const sym = tvSymbol(simbolo)
-    window.open(`https://www.tradingview.com/chart/?symbol=${sym}`, '_blank')
+    window.open(`https://www.tradingview.com/chart/?symbol=${tvSymbol(simbolo)}`, '_blank')
   }
 
   return (
@@ -264,7 +392,6 @@ export default function Home() {
                 background:'#131722', border:'1px solid #2d3748', color:'#00d4ff',
                 fontFamily:'var(--mono)', fontSize:11, padding:'5px 12px',
                 borderRadius:4, cursor:'pointer', display:'flex', alignItems:'center', gap:6,
-                transition:'all 0.2s'
               }}
               onMouseOver={e=>e.currentTarget.style.borderColor='#00d4ff'}
               onMouseOut={e=>e.currentTarget.style.borderColor='#2d3748'}
@@ -312,7 +439,7 @@ export default function Home() {
               {tipoStop==='atr' && (
                 <div className="row2">
                   <label>Periodo ATR<input type="number" value={atrP} min={1} onChange={e=>setAtrP(e.target.value)} /></label>
-                  <label>Mult.<input       type="number" value={atrM} min={0.1} step={0.1} onChange={e=>setAtrM(e.target.value)} /></label>
+                  <label>Mult.<input type="number" value={atrM} min={0.1} step={0.1} onChange={e=>setAtrM(e.target.value)} /></label>
                 </div>
               )}
               <label className="checkbox-row">
@@ -384,48 +511,54 @@ export default function Home() {
 
             {!loading && result && (
               <>
-                {/* Gráfico de velas */}
                 <div className="chart-wrap">
                   <div className="chart-header">
                     <div className="chart-title">{simbolo}</div>
                     <div className="chart-price">{fmt(result.meta?.ultimoPrecio,2)}</div>
                     <div className="chart-date">{fmtDate(result.meta?.ultimaFecha)}</div>
                   </div>
-                  <CandleChart data={result.chartData} projR={result.projR} projL={result.projL} emaRPeriod={emaR} emaLPeriod={emaL} />
+                  <CandleChart
+                    data={result.chartData}
+                    projR={result.projR}
+                    projL={result.projL}
+                    emaRPeriod={emaR}
+                    emaLPeriod={emaL}
+                    trades={result.trades || []}
+                    maxDD={metrics?.ddSimple || 0}
+                  />
                   <div style={{display:'flex',gap:20,marginTop:10,fontFamily:'var(--mono)',fontSize:11,color:'var(--text3)'}}>
                     <span><span style={{color:'#ffd166'}}>─</span> EMA {emaR}</span>
                     <span><span style={{color:'#ff4d6d'}}>─</span> EMA {emaL}</span>
-                    <span><span style={{color:'#ffd166'}}>- -</span> Proy. {emaR}</span>
-                    <span><span style={{color:'#ff4d6d'}}>- -</span> Proy. {emaL}</span>
-                    <span><span style={{color:'#00d4ff'}}>···</span> Breakout</span>
-                    <span><span style={{color:'#ff9a3c'}}>···</span> Stop</span>
+                    <span><span style={{color:'#ffd166'}}>- -</span> Proyección</span>
+                    <span><span style={{color:'#00e5a0'}}>─</span> Trade ✓</span>
+                    <span><span style={{color:'#ff4d6d'}}>─</span> Trade ✗</span>
+                    <span>↗ Cruce alcista &nbsp; ↘ Cruce bajista</span>
                   </div>
                 </div>
 
-                {/* Métricas */}
                 {metrics && (
                   <div className="metrics-section">
                     {[
-                      { label:'Total Operaciones',                    val:metrics.n,                              color:'yellow' },
-                      { label:`Tiempo Invertido (${fmt(metrics.anios,2)}a)`, val:fmt(metrics.tiempoInv,0,'%'),   color:'yellow' },
-                      { label:'Ganadoras',                            val:metrics.wins,                           color:'green'  },
-                      { label:'Perdedoras',                           val:metrics.losses,                         color:'red'    },
-                      { label:'Win Rate',                             val:fmt(metrics.winRate,1,'%'),              color:metrics.winRate>=50?'green':'red' },
-                      { label:'Ganancia Media (%)',                   val:fmt(metrics.avgWin,2,'%'),               color:'green'  },
-                      { label:'Pérdida Media (%)',                    val:fmt(metrics.avgLoss,2,'%'),              color:'red'    },
-                      { label:'Días Promedio',                        val:fmt(metrics.diasProm,1,' días'),         color:'cyan'   },
-                      { label:'Total Días Invertido',                 val:metrics.totalDias,                      color:'cyan'   },
-                      { label:'Ganancia Simple (€)',                  val:fmt(metrics.ganSimple,2,'€'),            color:metrics.ganSimple>=0?'green':'red' },
-                      { label:'Ganancia Compuesta (€)',               val:fmt(metrics.ganComp,2,'€'),              color:metrics.ganComp>=0?'green':'red'  },
-                      { label:'Ganancia Buy&Hold (€)',                val:fmt(metrics.ganBH,2,'€'),                color:metrics.ganBH>=0?'green':'red'    },
-                      { label:'Ganancia Total (%)',                   val:fmt(metrics.ganTotalPct,2,'%'),          color:metrics.ganTotalPct>=0?'green':'red' },
-                      { label:'Factor de Beneficio',                  val:fmt(metrics.factorBen,2),                color:metrics.factorBen>=1?'green':'red' },
-                      { label:`CAGR Estrategia (${fmt(metrics.anios,1)}a)`, val:fmt(metrics.cagrS,2,'%'),         color:metrics.cagrS>=0?'green':'red'    },
-                      { label:'Max Drawdown (%)',                     val:fmt(metrics.ddSimple,2,'%'),             color:'red'    },
-                      { label:`CAGR Buy&Hold (${fmt(metrics.anios,1)}a)`,   val:fmt(metrics.cagrBH,2,'%'),        color:metrics.cagrBH>=0?'green':'red'   },
-                      { label:'Max Drawdown Buy&Hold (%)',            val:fmt(result.maxDDBH,2,'%'),               color:'red'    },
-                      { label:`CAGR Compuesto (${fmt(metrics.anios,1)}a)`,  val:fmt(metrics.cagrC,2,'%'),         color:metrics.cagrC>=0?'green':'red'    },
-                      { label:'Max DD Compuesto (%)',                 val:fmt(metrics.ddComp,2,'%'),               color:'red'    },
+                      { label:'Total Operaciones',                          val:metrics.n,                      color:'yellow' },
+                      { label:`Tiempo Invertido (${fmt(metrics.anios,2)}a)`,val:fmt(metrics.tiempoInv,0,'%'),   color:'yellow' },
+                      { label:'Ganadoras',                                  val:metrics.wins,                   color:'green'  },
+                      { label:'Perdedoras',                                 val:metrics.losses,                 color:'red'    },
+                      { label:'Win Rate',                                   val:fmt(metrics.winRate,1,'%'),     color:metrics.winRate>=50?'green':'red' },
+                      { label:'Ganancia Media (%)',                         val:fmt(metrics.avgWin,2,'%'),      color:'green'  },
+                      { label:'Pérdida Media (%)',                          val:fmt(metrics.avgLoss,2,'%'),     color:'red'    },
+                      { label:'Días Promedio',                              val:fmt(metrics.diasProm,1,' días'),color:'cyan'   },
+                      { label:'Total Días Invertido',                       val:metrics.totalDias,              color:'cyan'   },
+                      { label:'Ganancia Simple (€)',                        val:fmt(metrics.ganSimple,2,'€'),   color:metrics.ganSimple>=0?'green':'red' },
+                      { label:'Ganancia Compuesta (€)',                     val:fmt(metrics.ganComp,2,'€'),     color:metrics.ganComp>=0?'green':'red'  },
+                      { label:'Ganancia Buy&Hold (€)',                      val:fmt(metrics.ganBH,2,'€'),       color:metrics.ganBH>=0?'green':'red'    },
+                      { label:'Ganancia Total (%)',                         val:fmt(metrics.ganTotalPct,2,'%'), color:metrics.ganTotalPct>=0?'green':'red' },
+                      { label:'Factor de Beneficio',                        val:fmt(metrics.factorBen,2),       color:metrics.factorBen>=1?'green':'red' },
+                      { label:`CAGR Estrategia (${fmt(metrics.anios,1)}a)`, val:fmt(metrics.cagrS,2,'%'),      color:metrics.cagrS>=0?'green':'red'    },
+                      { label:'Max Drawdown (%)',                           val:fmt(metrics.ddSimple,2,'%'),    color:'red'    },
+                      { label:`CAGR Buy&Hold (${fmt(metrics.anios,1)}a)`,   val:fmt(metrics.cagrBH,2,'%'),     color:metrics.cagrBH>=0?'green':'red'   },
+                      { label:'Max Drawdown Buy&Hold (%)',                  val:fmt(result.maxDDBH,2,'%'),      color:'red'    },
+                      { label:`CAGR Compuesto (${fmt(metrics.anios,1)}a)`,  val:fmt(metrics.cagrC,2,'%'),      color:metrics.cagrC>=0?'green':'red'    },
+                      { label:'Max DD Compuesto (%)',                       val:fmt(metrics.ddComp,2,'%'),      color:'red'    },
                     ].map(m => (
                       <div key={m.label} className="metric-card">
                         <span className="metric-label">{m.label}</span>
@@ -435,20 +568,22 @@ export default function Home() {
                   </div>
                 )}
 
-                {/* Equity curve */}
                 {result.strategyCurve?.length > 0 && (
                   <div className="equity-section">
                     <div className="section-title">
                       Curva de Equity — Estrategia vs Buy &amp; Hold
-                      <span style={{marginLeft:20,fontWeight:400}}>
+                      <span style={{marginLeft:16,fontWeight:400,fontSize:10}}>
                         <span style={{color:'#00d4ff'}}>─ Estrategia</span>
-                        <span style={{marginLeft:12,color:'#ffd166'}}>- - Buy &amp; Hold</span>
-                        <span style={{marginLeft:12,color:'#7a9bc0',fontSize:10}}>▼ Máx. Drawdown</span>
+                        <span style={{marginLeft:10,color:'#ffd166'}}>- - B&H</span>
+                        <span style={{marginLeft:10,color:'#ff4d6d'}}>─ Max DD Estrategia</span>
+                        <span style={{marginLeft:10,color:'#ff9a3c'}}>─ Max DD B&H</span>
                       </span>
                     </div>
                     <EquityChart
                       strategyCurve={result.strategyCurve}
                       bhCurve={result.bhCurve}
+                      maxDDStrategy={result.maxDDStrategy}
+                      maxDDBH={result.maxDDBH}
                       maxDDStrategyDate={result.maxDDStrategyDate}
                       maxDDBHDate={result.maxDDBHDate}
                       capitalIni={Number(capitalIni)}
@@ -456,7 +591,6 @@ export default function Home() {
                   </div>
                 )}
 
-                {/* Barras por operación */}
                 {result.trades?.length > 0 && (
                   <div className="equity-section">
                     <div className="section-title">Resultados por Operación</div>
@@ -472,7 +606,6 @@ export default function Home() {
                   </div>
                 )}
 
-                {/* Tabla de trades */}
                 {result.trades?.length > 0 && (
                   <div className="trades-section">
                     <div className="section-title">Historial — {result.trades.length} operaciones</div>
