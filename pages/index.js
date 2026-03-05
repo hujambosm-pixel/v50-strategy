@@ -1,35 +1,48 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import Head from 'next/head'
 
+// ── Métricas ──────────────────────────────────────────────────
 function calcMetrics(trades, capitalIni, capitalReinv, gananciaSimple, ganBH, startDate, endDate) {
   if (!trades || trades.length === 0) return null
   const n = trades.length
   const wins = trades.filter(t => t.pnlPct >= 0)
   const losses = trades.filter(t => t.pnlPct < 0)
   const winRate = (wins.length / n) * 100
-  const avgWin = wins.length ? wins.reduce((s,t) => s + t.pnlPct, 0) / wins.length : 0
-  const avgLoss = losses.length ? losses.reduce((s,t) => s + Math.abs(t.pnlPct), 0) / losses.length : 0
-  const totalDias = trades.reduce((s,t) => s + t.dias, 0)
-  const anios = startDate && endDate ? (new Date(endDate)-new Date(startDate))/(365.25*86400000) : 1
+  const avgWin  = wins.length  ? wins.reduce((s,t)=>s+t.pnlPct,0)/wins.length : 0
+  const avgLoss = losses.length ? losses.reduce((s,t)=>s+Math.abs(t.pnlPct),0)/losses.length : 0
+  const totalDias = trades.reduce((s,t)=>s+t.dias,0)
+
+  // Años reales del periodo total (días naturales entre primera y última fecha)
+  const totalDiasNaturales = startDate && endDate
+    ? (new Date(endDate)-new Date(startDate)) / 86400000
+    : 365
+  const anios = totalDiasNaturales / 365.25
   const safYears = Math.max(anios, 0.01)
-  const cagrS = Math.pow(Math.max(capitalIni+gananciaSimple,0.01)/capitalIni, 1/safYears) - 1
-  const cagrC = capitalReinv > 0 ? Math.pow(capitalReinv/capitalIni, 1/safYears) - 1 : 0
-  const capBH = capitalIni + ganBH
+
+  // Años reales invertidos (días de trades / 365.25)
+  const aniosInv = totalDias / 365.25
+  const tiempoInvPct = (totalDias / totalDiasNaturales) * 100
+
+  const cagrS  = Math.pow(Math.max(capitalIni+gananciaSimple,0.01)/capitalIni, 1/safYears) - 1
+  const cagrC  = capitalReinv > 0 ? Math.pow(capitalReinv/capitalIni, 1/safYears) - 1 : 0
+  const capBH  = capitalIni + ganBH
   const cagrBH = capBH > 0 ? Math.pow(capBH/capitalIni, 1/safYears) - 1 : 0
-  const gBrute = wins.reduce((s,t) => s + t.pnlSimple, 0)
-  const lBrute = losses.reduce((s,t) => s + Math.abs(t.pnlSimple), 0)
+
+  const gBrute = wins.reduce((s,t)=>s+t.pnlSimple,0)
+  const lBrute = losses.reduce((s,t)=>s+Math.abs(t.pnlSimple),0)
   const factorBen = lBrute > 0 ? gBrute/lBrute : 999
-  let peakS = capitalIni, maxDDS = 0
-  trades.forEach(t => {
-    const eq = capitalIni + trades.slice(0, trades.indexOf(t)+1).reduce((s,x)=>s+x.pnlSimple,0)
-    if (eq > peakS) peakS = eq
-    const dd = (peakS-eq)/peakS*100; if (dd > maxDDS) maxDDS = dd
+
+  let peakS=capitalIni, maxDDS=0
+  trades.forEach(t=>{
+    const eq=capitalIni+trades.slice(0,trades.indexOf(t)+1).reduce((s,x)=>s+x.pnlSimple,0)
+    if(eq>peakS)peakS=eq; const dd=(peakS-eq)/peakS*100; if(dd>maxDDS)maxDDS=dd
   })
-  let peakR = capitalIni, maxDDR = 0
-  trades.forEach(t => {
-    if (t.capitalTras > peakR) peakR = t.capitalTras
-    const dd = (peakR-t.capitalTras)/peakR*100; if (dd > maxDDR) maxDDR = dd
+  let peakR=capitalIni, maxDDR=0
+  trades.forEach(t=>{
+    if(t.capitalTras>peakR)peakR=t.capitalTras
+    const dd=(peakR-t.capitalTras)/peakR*100; if(dd>maxDDR)maxDDR=dd
   })
+
   return {
     n, wins:wins.length, losses:losses.length, winRate, avgWin, avgLoss,
     totalDias, diasProm:totalDias/n,
@@ -37,20 +50,24 @@ function calcMetrics(trades, capitalIni, capitalReinv, gananciaSimple, ganBH, st
     ganTotalPct:(gananciaSimple/capitalIni)*100,
     cagrS:cagrS*100, cagrC:cagrC*100, cagrBH:cagrBH*100,
     factorBen, ddSimple:maxDDS, ddComp:maxDDR,
-    tiempoInv:totalDias/(safYears*365.25)*100, anios:safYears,
+    tiempoInvPct, aniosInv, anios:safYears,
   }
 }
 
-const MONO = 'IBM Plex Mono, monospace'
-const SZ = { fontVariantNumeric:'slashed-zero', fontFeatureSettings:'"zero" 1' }
+// ── Helpers ───────────────────────────────────────────────────
+const MONO = '"JetBrains Mono", "Fira Code", "IBM Plex Mono", monospace'
 
 function fmt(v, dec=2, suf='') {
-  if (v == null || isNaN(v)) return '—'
+  if (v==null||isNaN(v)) return '—'
   return v.toLocaleString('es-ES',{minimumFractionDigits:dec,maximumFractionDigits:dec})+suf
 }
 function fmtDate(s) {
   if (!s) return '—'
   return new Date(s).toLocaleDateString('es-ES',{day:'2-digit',month:'2-digit',year:'numeric'})
+}
+function f2(v) {
+  if (v==null||isNaN(v)) return '—'
+  return v.toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2})
 }
 function tvSym(sym) {
   if (sym==='^GSPC') return 'SP:SPX'
@@ -60,46 +77,37 @@ function tvSym(sym) {
   if (sym.includes('-USD')) return `BINANCE:${sym.replace('-','')}`
   return sym
 }
-function f2(v) {
-  if (v==null||isNaN(v)) return '—'
-  return v.toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2})
-}
 
 // ── CandleChart ───────────────────────────────────────────────
-function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, showTradeLabels }) {
+function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, showTradeLabels, rulerActive }) {
   const containerRef = useRef(null)
   const svgRef       = useRef(null)
   const legendRef    = useRef(null)
   const tooltipRef   = useRef(null)
   const chartRef     = useRef(null)
   const candlesRef   = useRef(null)
-  const rulerRef     = useRef(false)
   const rulerStart   = useRef(null)
-  const [rulerOn, setRulerOn] = useState(false)
+  const rulerActiveR = useRef(rulerActive)
 
-  const toggleRuler = useCallback(() => {
-    const next = !rulerRef.current
-    rulerRef.current = next
-    setRulerOn(next)
-    if (!next) { rulerStart.current = null; if (svgRef.current) svgRef.current.innerHTML='' }
-  }, [])
+  useEffect(() => { rulerActiveR.current = rulerActive }, [rulerActive])
 
   useEffect(() => {
-    if (typeof window === 'undefined' || !containerRef.current) return
+    if (typeof window==='undefined'||!containerRef.current) return
 
-    import('lightweight-charts').then(({ createChart, CrosshairMode, LineStyle }) => {
+    import('lightweight-charts').then(({createChart,CrosshairMode,LineStyle}) => {
       if (chartRef.current) { chartRef.current.remove(); chartRef.current=null }
 
       const chart = createChart(containerRef.current, {
         width: containerRef.current.clientWidth, height: 480,
-        layout: { background:{color:'#080c14'}, textColor:'#7a9bc0' },
-        grid: { vertLines:{color:'#0d1520'}, horzLines:{color:'#0d1520'} },
-        crosshair: { mode: CrosshairMode.Normal },
-        rightPriceScale: { borderColor:'#1a2d45' },
-        timeScale: { borderColor:'#1a2d45', timeVisible:true },
+        layout: {background:{color:'#080c14'}, textColor:'#7a9bc0'},
+        grid: {vertLines:{color:'#0d1520'}, horzLines:{color:'#0d1520'}},
+        crosshair: {mode: CrosshairMode.Normal},
+        rightPriceScale: {borderColor:'#1a2d45'},
+        timeScale: {borderColor:'#1a2d45', timeVisible:true},
       })
       chartRef.current = chart
 
+      // Velas
       const candles = chart.addCandlestickSeries({
         upColor:'#00e5a0', downColor:'#ff4d6d',
         borderUpColor:'#00e5a0', borderDownColor:'#ff4d6d',
@@ -108,12 +116,13 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, showTradeLab
       candles.setData(data.map(d=>({time:d.date,open:d.open,high:d.high,low:d.low,close:d.close})))
       candlesRef.current = candles
 
+      // EMAs sin línea de precio en el eje
       const erS = chart.addLineSeries({color:'#ffd166',lineWidth:2,title:`EMA ${emaRPeriod}`,lastValueVisible:true,priceLineVisible:false})
       erS.setData(data.filter(d=>d.emaR!=null).map(d=>({time:d.date,value:d.emaR})))
       const elS = chart.addLineSeries({color:'#ff4d6d',lineWidth:2,title:`EMA ${emaLPeriod}`,lastValueVisible:true,priceLineVisible:false})
       elS.setData(data.filter(d=>d.emaL!=null).map(d=>({time:d.date,value:d.emaL})))
 
-      // Trade lines
+      // Líneas de trades
       trades.forEach(t => {
         if (!t.entryDate||!t.exitDate) return
         const ls = chart.addLineSeries({
@@ -123,103 +132,114 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, showTradeLab
         ls.setData([{time:t.entryDate,value:t.entryPx},{time:t.exitDate,value:t.exitPx}])
       })
 
-      // EMA cross markers — arrows only, no text
+      // Cruces EMA — flechas oblicuas con texto ↗ ↘, sin cuerpo de flecha vertical
       const marks = []
       for (let i=1; i<data.length; i++) {
         const p=data[i-1], c=data[i]
         if (!p.emaR||!p.emaL||!c.emaR||!c.emaL) continue
-        if (p.emaR<p.emaL && c.emaR>=c.emaL) marks.push({time:c.date,position:'belowBar',color:'#00e5a0',shape:'arrowUp',text:''})
-        else if (p.emaR>p.emaL && c.emaR<=c.emaL) marks.push({time:c.date,position:'aboveBar',color:'#ff4d6d',shape:'arrowDown',text:''})
+        if (p.emaR<p.emaL && c.emaR>=c.emaL)
+          marks.push({time:c.date, position:'belowBar', color:'#00e5a0', shape:'circle', size:0, text:'↗'})
+        else if (p.emaR>p.emaL && c.emaR<=c.emaL)
+          marks.push({time:c.date, position:'aboveBar', color:'#ff4d6d', shape:'circle', size:0, text:'↘'})
       }
       if (marks.length) candles.setMarkers(marks)
 
       // Lookup maps
       const ohlcMap={}, erMap={}, elMap={}
-      data.forEach(d => {
+      data.forEach(d=>{
         ohlcMap[d.date]=d
-        if (d.emaR!=null) erMap[d.date]=d.emaR
-        if (d.emaL!=null) elMap[d.date]=d.emaL
+        if(d.emaR!=null) erMap[d.date]=d.emaR
+        if(d.emaL!=null) elMap[d.date]=d.emaL
       })
 
-      // ── Ruler helpers ──
-      const drawRuler = (x1,y1,x2,y2,label) => {
-        const svg=svgRef.current; if(!svg) return
-        svg.innerHTML=''
-        const ns='http://www.w3.org/2000/svg'
-        const mk=(tag,attrs) => { const el=document.createElementNS(ns,tag); Object.entries(attrs).forEach(([k,v])=>el.setAttribute(k,v)); return el }
-        // Guide lines
-        svg.appendChild(mk('line',{x1,y1,x2,y2:y1,stroke:'rgba(255,209,102,0.3)','stroke-width':'1','stroke-dasharray':'3,3'}))
-        svg.appendChild(mk('line',{x1:x2,y1,x2,y2,stroke:'rgba(255,209,102,0.3)','stroke-width':'1','stroke-dasharray':'3,3'}))
-        // Main diagonal
-        svg.appendChild(mk('line',{x1,y1,x2,y2,stroke:'#ffd166','stroke-width':'1.5'}))
-        // Dots
-        [[x1,y1],[x2,y2]].forEach(([cx,cy])=>svg.appendChild(mk('circle',{cx,cy,r:'3.5',fill:'#ffd166'})))
-        // Label
-        if (label) {
-          const mx=(x1+x2)/2, my=Math.min(y1,y2)-10
-          svg.appendChild(mk('rect',{x:mx-95,y:my-20,width:190,height:20,fill:'rgba(8,12,20,0.9)',rx:'3'}))
-          const txt=mk('text',{x:mx,y:my-5,fill:'#ffd166','font-size':'11','font-family':MONO,'text-anchor':'middle'})
-          txt.textContent=label; svg.appendChild(txt)
+      // ── Ruler SVG helpers ──
+      const svg = svgRef.current
+      const NS  = 'http://www.w3.org/2000/svg'
+      const mk  = (tag,attrs) => {
+        const el=document.createElementNS(NS,tag)
+        Object.entries(attrs).forEach(([k,v])=>el.setAttribute(k,v))
+        return el
+      }
+      const clearSvg = () => { if(svg) svg.innerHTML='' }
+
+      const drawRulerLine = (s, e) => {
+        if (!svg) return
+        clearSvg()
+        const {x:x1,y:y1}=s, {x:x2,y:y2,price:pe,time:te}=e
+        const sp=s.price, diff=pe-sp, pct=sp>0?(diff/sp)*100:0
+        let days=0
+        if(s.time&&te){
+          const t1=typeof s.time==='string'?new Date(s.time).getTime():s.time*1000
+          const t2=typeof te==='string'?new Date(te).getTime():te*1000
+          days=Math.round(Math.abs(t2-t1)/86400000)
         }
+        // Horizontal guide
+        svg.appendChild(mk('line',{x1,y1,x2,y2:y1,stroke:'rgba(255,209,102,0.25)','stroke-width':'1','stroke-dasharray':'4,3'}))
+        // Vertical guide
+        svg.appendChild(mk('line',{x1:x2,y1,x2,y2,stroke:'rgba(255,209,102,0.25)','stroke-width':'1','stroke-dasharray':'4,3'}))
+        // Main diagonal line
+        svg.appendChild(mk('line',{x1,y1,x2,y2,stroke:'#ffd166','stroke-width':'1.5'}))
+        // Endpoint circles
+        [[x1,y1],[x2,y2]].forEach(([cx,cy])=>svg.appendChild(mk('circle',{cx,cy,r:'3',fill:'#ffd166',stroke:'#080c14','stroke-width':'1'})))
+        // Label on line midpoint
+        const mx=(x1+x2)/2, my=(y1+y2)/2
+        const label=`${days}d  ${diff>=0?'+':''}${pct.toFixed(2)}%`
+        const bw=label.length*7+16
+        svg.appendChild(mk('rect',{x:mx-bw/2,y:my-13,width:bw,height:17,fill:'rgba(8,12,20,0.92)',rx:'3',stroke:'#ffd166','stroke-width':'0.5'}))
+        const txt=mk('text',{x:mx,y:my+1,fill:'#ffd166','font-size':'11','font-family':MONO,'text-anchor':'middle','dominant-baseline':'middle'})
+        txt.textContent=label; svg.appendChild(txt)
       }
 
-      const getCoords = (e) => {
+      const getPoint = (e) => {
         const rect=containerRef.current.getBoundingClientRect()
         const px=e.clientX-rect.left, py=e.clientY-rect.top
-        let price=candlesRef.current?.coordinateToPrice(py)
-        const timeVal=chartRef.current?.timeScale().coordinateToTime(px)
-        if (e.ctrlKey && timeVal && ohlcMap[timeVal]) price=ohlcMap[timeVal].close
-        const sy=(price!=null&&candlesRef.current) ? (candlesRef.current.priceToCoordinate(price)??py) : py
-        return {x:px, y:sy, price, time:timeVal}
+        const time=chartRef.current?.timeScale().coordinateToTime(px)
+        let price = candlesRef.current?.coordinateToPrice(py)
+        // Ctrl = magnet to close
+        if (e.ctrlKey && time && ohlcMap[time]) price = ohlcMap[time].close
+        const sy = (price!=null&&candlesRef.current) ? (candlesRef.current.priceToCoordinate(price)??py) : py
+        return {x:px, y:sy, price, time}
       }
 
-      const toMs=(t) => typeof t==='string' ? new Date(t).getTime() : t*1000
-
-      const onMove = (e) => {
-        if (!rulerRef.current||!rulerStart.current) return
-        const c=getCoords(e), s=rulerStart.current
-        if (!c.price||!s.price) return
-        const diff=c.price-s.price, pct=s.price>0?(diff/s.price)*100:0
-        const days=c.time&&s.time ? Math.round(Math.abs(toMs(c.time)-toMs(s.time))/86400000) : 0
-        drawRuler(s.x,s.y,c.x,c.y,`${diff>=0?'+':''}${f2(diff)} (${pct>=0?'+':''}${pct.toFixed(2)}%) · ${days}d`)
+      const onMouseMove = (e) => {
+        if (!rulerActiveR.current) return
+        if (rulerStart.current) drawRulerLine(rulerStart.current, getPoint(e))
       }
       const onClick = (e) => {
-        if (!rulerRef.current) return
-        const c=getCoords(e)
-        if (!rulerStart.current) { rulerStart.current=c }
+        if (!rulerActiveR.current) return
+        const pt=getPoint(e)
+        if (!rulerStart.current) { rulerStart.current=pt }
         else { rulerStart.current=null }
       }
-      const onDbl = () => {
-        if (!rulerRef.current) return
-        rulerStart.current=null
-        if (svgRef.current) svgRef.current.innerHTML=''
-      }
+      const onDblClick = () => { rulerStart.current=null; clearSvg() }
 
       const cnt=containerRef.current
-      cnt.addEventListener('mousemove',onMove)
-      cnt.addEventListener('click',onClick)
-      cnt.addEventListener('dblclick',onDbl)
+      cnt.addEventListener('mousemove', onMouseMove)
+      cnt.addEventListener('click', onClick)
+      cnt.addEventListener('dblclick', onDblClick)
 
-      // ── OHLC Legend + Tooltip ──
+      // ── OHLC Legend ──
       chart.subscribeCrosshairMove(param => {
         const leg=legendRef.current
         if (leg) {
           if (param.time) {
             const b=ohlcMap[param.time], er=erMap[param.time], el=elMap[param.time]
             if (b) {
-              const chg=b.close-b.open, chgPct=(chg/b.open)*100, cc=chg>=0?'#00e5a0':'#ff4d6d'
-              leg.innerHTML=`<span style="color:#7a9bc0;margin-right:8px">${b.date}</span>`+
-                `<span style="margin-right:8px">O&nbsp;<b>${f2(b.open)}</b></span>`+
-                `<span style="margin-right:8px">H&nbsp;<b style="color:#00e5a0">${f2(b.high)}</b></span>`+
-                `<span style="margin-right:8px">L&nbsp;<b style="color:#ff4d6d">${f2(b.low)}</b></span>`+
-                `<span style="margin-right:12px">C&nbsp;<b>${f2(b.close)}</b></span>`+
-                `<span style="color:${cc};margin-right:16px">${chg>=0?'+':''}${f2(chg)}&nbsp;(${chg>=0?'+':''}${chgPct.toFixed(2)}%)</span>`+
-                (er!=null?`<span style="margin-right:8px">EMA${emaRPeriod}&nbsp;<b style="color:#ffd166">${f2(er)}</b></span>`:'')+
-                (el!=null?`<span>EMA${emaLPeriod}&nbsp;<b style="color:#ff4d6d">${f2(el)}</b></span>`:'')
+              const chg=b.close-b.open, pct=(chg/b.open)*100, cc=chg>=0?'#00e5a0':'#ff4d6d'
+              leg.innerHTML=
+                `<span style="color:#7a9bc0;margin-right:8px">${b.date}</span>`+
+                `<span style="margin-right:8px">O <b>${f2(b.open)}</b></span>`+
+                `<span style="margin-right:8px">H <b style="color:#00e5a0">${f2(b.high)}</b></span>`+
+                `<span style="margin-right:8px">L <b style="color:#ff4d6d">${f2(b.low)}</b></span>`+
+                `<span style="margin-right:12px">C <b>${f2(b.close)}</b></span>`+
+                `<span style="color:${cc};margin-right:14px">${chg>=0?'+':''}${f2(chg)} (${pct>=0?'+':''}${pct.toFixed(2)}%)</span>`+
+                (er!=null?`<span style="margin-right:8px">EMA${emaRPeriod} <b style="color:#ffd166">${f2(er)}</b></span>`:'')+
+                (el!=null?`<span>EMA${emaLPeriod} <b style="color:#ff4d6d">${f2(el)}</b></span>`:'')
             }
           } else leg.innerHTML=''
         }
 
+        // Tooltip trades
         const tt=tooltipRef.current
         if (tt&&!showTradeLabels) {
           if (!param.time||!param.point) { tt.style.display='none'; return }
@@ -228,7 +248,7 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, showTradeLab
           const bc=trade.pnlPct>=0?'#00e5a0':'#ff4d6d'
           const w=containerRef.current?.clientWidth||600
           tt.style.display='block'
-          tt.style.left=((param.point.x+120>w)?param.point.x-200:param.point.x+16)+'px'
+          tt.style.left=((param.point.x+210>w)?param.point.x-220:param.point.x+16)+'px'
           tt.style.top=Math.max(8,param.point.y-70)+'px'
           tt.style.borderColor=bc
           tt.innerHTML=
@@ -236,7 +256,7 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, showTradeLab
             `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:#7a9bc0">Capital</span><b style="color:#e2eaf5">€${f2(trade.capitalTras)}</b></div>`+
             `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:#7a9bc0">Profit</span><b style="color:${bc}">${trade.pnlPct>=0?'+':''}${trade.pnlPct.toFixed(2)}%</b></div>`+
             `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:#7a9bc0">P&L</span><b style="color:${bc}">${trade.pnlSimple>=0?'€+':'€-'}${f2(Math.abs(trade.pnlSimple))}</b></div>`+
-            `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:#7a9bc0">Días</span><span style="color:#e2eaf5">${trade.dias}</span></div>`+
+            `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:#7a9bc0">Días</span><span>${trade.dias}</span></div>`+
             `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:#7a9bc0">Max DD</span><span style="color:#ff4d6d">${maxDD.toFixed(2)}%</span></div>`
         }
       })
@@ -245,73 +265,57 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, showTradeLab
       const ro=new ResizeObserver(()=>{ if(containerRef.current) chart.applyOptions({width:containerRef.current.clientWidth}) })
       ro.observe(containerRef.current)
 
-      return () => { cnt.removeEventListener('mousemove',onMove); cnt.removeEventListener('click',onClick); cnt.removeEventListener('dblclick',onDbl); ro.disconnect() }
+      return () => {
+        cnt.removeEventListener('mousemove',onMouseMove)
+        cnt.removeEventListener('click',onClick)
+        cnt.removeEventListener('dblclick',onDblClick)
+        ro.disconnect()
+      }
     })
     return () => { if(chartRef.current){chartRef.current.remove();chartRef.current=null} }
   }, [data, emaRPeriod, emaLPeriod, trades, maxDD, showTradeLabels])
 
   return (
     <div style={{position:'relative'}}>
-      {/* OHLC Legend */}
       <div ref={legendRef} style={{
         position:'absolute',top:8,left:8,zIndex:10,
         fontFamily:MONO,fontSize:12,color:'#7a9bc0',
         background:'rgba(8,12,20,0.82)',padding:'4px 10px',borderRadius:4,
-        pointerEvents:'none',whiteSpace:'nowrap',...SZ,
+        pointerEvents:'none',whiteSpace:'nowrap',
       }}/>
-
-      {/* Ruler button */}
-      <div style={{position:'absolute',top:8,right:8,zIndex:20}}>
-        <button onClick={toggleRuler} title="Regla: clic inicio · clic fin · Ctrl=imán · doble-clic=borrar" style={{
-          background:rulerOn?'rgba(255,209,102,0.15)':'rgba(13,21,32,0.88)',
-          border:`1px solid ${rulerOn?'#ffd166':'#1a2d45'}`,
-          color:rulerOn?'#ffd166':'#7a9bc0',
-          borderRadius:4,padding:'4px 10px',cursor:'pointer',
-          fontFamily:MONO,fontSize:11,display:'flex',alignItems:'center',gap:5,
-        }}>
-          <span>📏</span>{rulerOn?'Ctrl=imán  doble-clic=borrar':'Regla'}
-        </button>
-      </div>
-
-      {/* Trade labels above chart (absolute, no overlap with candles) */}
-      {showTradeLabels && trades.length>0 && (
+      {showTradeLabels&&trades.length>0&&(
         <div style={{
           position:'absolute',top:38,left:8,right:8,zIndex:10,
           display:'flex',flexWrap:'wrap',gap:3,pointerEvents:'none',
         }}>
           {trades.map((t,i)=>(
             <span key={i} style={{
-              background:t.pnlPct>=0?'rgba(0,229,160,0.13)':'rgba(255,77,109,0.13)',
+              background:t.pnlPct>=0?'rgba(0,229,160,0.12)':'rgba(255,77,109,0.12)',
               border:`1px solid ${t.pnlPct>=0?'#00e5a0':'#ff4d6d'}`,
               borderRadius:3,padding:'1px 5px',
               fontFamily:MONO,fontSize:9,
-              color:t.pnlPct>=0?'#00e5a0':'#ff4d6d',...SZ,
+              color:t.pnlPct>=0?'#00e5a0':'#ff4d6d',
             }}>
-              {fmtDate(t.entryDate)}&nbsp;{t.pnlPct>=0?'+':''}{t.pnlPct.toFixed(1)}%&nbsp;€{t.pnlSimple>=0?'+':''}{Math.round(t.pnlSimple)}&nbsp;{t.dias}d
+              {fmtDate(t.entryDate)} {t.pnlPct>=0?'+':''}{t.pnlPct.toFixed(1)}% €{t.pnlSimple>=0?'+':''}{Math.round(t.pnlSimple)} {t.dias}d
             </span>
           ))}
         </div>
       )}
-
       <div ref={containerRef} style={{minHeight:480}}/>
-
-      {/* SVG ruler overlay */}
       <svg ref={svgRef} style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',pointerEvents:'none',zIndex:5}}/>
-
-      {/* Trade tooltip */}
       <div ref={tooltipRef} style={{
         position:'absolute',display:'none',pointerEvents:'none',
         background:'rgba(8,12,20,0.96)',border:'1px solid #00e5a0',
         borderRadius:6,padding:'8px 12px',
         fontFamily:MONO,fontSize:12,color:'#e2eaf5',
-        zIndex:15,minWidth:200,boxShadow:'0 4px 20px rgba(0,0,0,0.5)',...SZ,
+        zIndex:15,minWidth:200,boxShadow:'0 4px 20px rgba(0,0,0,0.5)',
       }}/>
     </div>
   )
 }
 
 // ── EquityChart ───────────────────────────────────────────────
-function EquityChart({ strategyCurve, bhCurve, maxDDStrategy, maxDDBH, maxDDStrategyDate, maxDDBHDate, capitalIni }) {
+function EquityChart({strategyCurve,bhCurve,maxDDStrategy,maxDDBH,maxDDStrategyDate,maxDDBHDate,capitalIni}) {
   const ref=useRef(null), chartRef=useRef(null)
   useEffect(()=>{
     if(!ref.current||!strategyCurve?.length) return
@@ -326,12 +330,12 @@ function EquityChart({ strategyCurve, bhCurve, maxDDStrategy, maxDDBH, maxDDStra
         timeScale:{borderColor:'#1a2d45',timeVisible:false},
       })
       chartRef.current=chart
-      const st=chart.addLineSeries({color:'#00d4ff',lineWidth:2,title:'Estrategia'})
-      st.setData(strategyCurve.map(p=>({time:p.date,value:p.value})))
-      const bh=chart.addLineSeries({color:'#ffd166',lineWidth:2,lineStyle:LineStyle.Dashed,title:'B&H'})
-      bh.setData(bhCurve.map(p=>({time:p.date,value:p.value})))
-      const il=chart.addLineSeries({color:'#3d5a7a',lineWidth:1,lineStyle:LineStyle.Dotted,lastValueVisible:false,priceLineVisible:false})
-      il.setData([{time:strategyCurve[0].date,value:capitalIni},{time:strategyCurve[strategyCurve.length-1].date,value:capitalIni}])
+      chart.addLineSeries({color:'#00d4ff',lineWidth:2,title:'Estrategia'})
+        .setData(strategyCurve.map(p=>({time:p.date,value:p.value})))
+      chart.addLineSeries({color:'#ffd166',lineWidth:2,lineStyle:LineStyle.Dashed,title:'B&H'})
+        .setData(bhCurve.map(p=>({time:p.date,value:p.value})))
+      chart.addLineSeries({color:'#3d5a7a',lineWidth:1,lineStyle:LineStyle.Dotted,lastValueVisible:false,priceLineVisible:false})
+        .setData([{time:strategyCurve[0].date,value:capitalIni},{time:strategyCurve[strategyCurve.length-1].date,value:capitalIni}])
 
       const addDD=(curve,date,dd,color,label)=>{
         if(!date||!dd) return
@@ -341,9 +345,9 @@ function EquityChart({ strategyCurve, bhCurve, maxDDStrategy, maxDDBH, maxDDStra
         if(!trough||peak.date===trough.date) return
         const s=chart.addLineSeries({color,lineWidth:2,lastValueVisible:false,priceLineVisible:false})
         s.setData([{time:peak.date,value:peak.value},{time:trough.date,value:trough.value}])
-        s.setMarkers([{time:trough.date,position:'belowBar',color,shape:'arrowDown',text:`${label} -${dd.toFixed(1)}%`}])
+        s.setMarkers([{time:trough.date,position:'belowBar',color,shape:'circle',size:0,text:`↓${label} -${dd.toFixed(1)}%`}])
       }
-      addDD(strategyCurve,maxDDStrategyDate,maxDDStrategy,'#ff4d6d','DD Estrat.')
+      addDD(strategyCurve,maxDDStrategyDate,maxDDStrategy,'#ff4d6d','DD Est.')
       addDD(bhCurve,maxDDBHDate,maxDDBH,'#ff9a3c','DD B&H')
 
       chart.timeScale().fitContent()
@@ -358,49 +362,64 @@ function EquityChart({ strategyCurve, bhCurve, maxDDStrategy, maxDDBH, maxDDStra
 
 // ── Main ─────────────────────────────────────────────────────
 export default function Home() {
-  const [simbolo,        setSimbolo]        = useState('^GSPC')
-  const [emaR,           setEmaR]           = useState(10)
-  const [emaL,           setEmaL]           = useState(11)
-  const [years,          setYears]          = useState(5)
-  const [capitalIni,     setCapitalIni]     = useState(10000)
-  const [tipoStop,       setTipoStop]       = useState('tecnico')
-  const [atrP,           setAtrP]           = useState(14)
-  const [atrM,           setAtrM]           = useState(1.0)
-  const [sinPerdidas,    setSinPerdidas]    = useState(true)
-  const [reentry,        setReentry]        = useState(true)
-  const [tipoFiltro,     setTipoFiltro]     = useState('none')
-  const [sp500EmaR,      setSp500EmaR]      = useState(10)
-  const [sp500EmaL,      setSp500EmaL]      = useState(11)
-  const [result,         setResult]         = useState(null)
-  const [loading,        setLoading]        = useState(false)
-  const [error,          setError]          = useState(null)
-  const [showLabels,     setShowLabels]     = useState(false)
-  const [metricsLayout,  setMetricsLayout]  = useState('grid') // 'grid' | 'panel'
+  const [simbolo,       setSimbolo]       = useState('^GSPC')
+  const [emaR,          setEmaR]          = useState(10)
+  const [emaL,          setEmaL]          = useState(11)
+  const [years,         setYears]         = useState(5)
+  const [capitalIni,    setCapitalIni]    = useState(10000)
+  const [tipoStop,      setTipoStop]      = useState('tecnico')
+  const [atrP,          setAtrP]          = useState(14)
+  const [atrM,          setAtrM]          = useState(1.0)
+  const [sinPerdidas,   setSinPerdidas]   = useState(true)
+  const [reentry,       setReentry]       = useState(true)
+  const [tipoFiltro,    setTipoFiltro]    = useState('none')
+  const [sp500EmaR,     setSp500EmaR]     = useState(10)
+  const [sp500EmaL,     setSp500EmaL]     = useState(11)
+  const [result,        setResult]        = useState(null)
+  const [loading,       setLoading]       = useState(false)
+  const [error,         setError]         = useState(null)
+  const [showLabels,    setShowLabels]    = useState(false)
+  const [metricsLayout, setMetricsLayout] = useState('grid')
+  const [rulerOn,       setRulerOn]       = useState(false)
+  const debounceRef = useRef(null)
 
-  const run = useCallback(async () => {
+  const run = useCallback(async (sym,cfg) => {
     setLoading(true); setError(null)
     try {
       const res=await fetch('/api/datos',{
         method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({simbolo,cfg:{
-          emaR:Number(emaR),emaL:Number(emaL),years:Number(years),
-          capitalIni:Number(capitalIni),tipoStop,
-          atrPeriod:Number(atrP),atrMult:Number(atrM),
-          sinPerdidas,reentry,tipoFiltro,
-          sp500EmaR:Number(sp500EmaR),sp500EmaL:Number(sp500EmaL),
-        }})
+        body:JSON.stringify({simbolo:sym,cfg})
       })
       const json=await res.json()
       if(!res.ok) throw new Error(json.error||'Error')
       setResult(json)
     } catch(e){setError(e.message)}
     finally{setLoading(false)}
-  },[simbolo,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL])
+  },[])
 
-  const metrics=result ? calcMetrics(result.trades,Number(capitalIni),result.capitalReinv,result.gananciaSimple,result.ganBH||0,result.startDate,result.meta?.ultimaFecha) : null
+  // Auto-run on any parameter change (debounced 800ms)
+  useEffect(()=>{
+    if(debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current=setTimeout(()=>{
+      run(simbolo,{
+        emaR:Number(emaR), emaL:Number(emaL), years:Number(years),
+        capitalIni:Number(capitalIni), tipoStop,
+        atrPeriod:Number(atrP), atrMult:Number(atrM),
+        sinPerdidas, reentry, tipoFiltro,
+        sp500EmaR:Number(sp500EmaR), sp500EmaL:Number(sp500EmaL),
+      })
+    }, 800)
+    return ()=>clearTimeout(debounceRef.current)
+  },[simbolo,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL,run])
+
+  const metrics=result ? calcMetrics(
+    result.trades,Number(capitalIni),result.capitalReinv,
+    result.gananciaSimple,result.ganBH||0,
+    result.startDate,result.meta?.ultimaFecha
+  ) : null
 
   const sp5=result?.sp500Status
-  let spStatus='neutral',spTxt='SIN FILTRO'
+  let spStatus='neutral', spTxt='SIN FILTRO'
   if(sp5&&tipoFiltro!=='none'){
     const blq=tipoFiltro==='precio_ema'?sp5.precio<sp5.emaR:sp5.emaR<sp5.emaL
     spStatus=blq?'bad':'ok'; spTxt=blq?'⚠ EVITAR ENTRADAS':'✓ APTO PARA OPERAR'
@@ -409,30 +428,30 @@ export default function Home() {
   const TICKERS=['^GSPC','AAPL','^IBEX','^GDAXI','MSFT','BTC-USD','GC=F']
 
   const metricRows = metrics ? [
-    {label:'Total Operaciones',                           val:metrics.n,                      color:'#ffd166'},
-    {label:`Tiempo Invertido (${fmt(metrics.anios,2)}a)`, val:fmt(metrics.tiempoInv,0,'%'),   color:'#ffd166'},
-    {label:'Ganadoras',                                   val:metrics.wins,                   color:'#00e5a0'},
-    {label:'Perdedoras',                                  val:metrics.losses,                 color:'#ff4d6d'},
-    {label:'Win Rate',                                    val:fmt(metrics.winRate,1,'%'),      color:metrics.winRate>=50?'#00e5a0':'#ff4d6d'},
-    {label:'Ganancia Media (%)',                          val:fmt(metrics.avgWin,2,'%'),       color:'#00e5a0'},
-    {label:'Pérdida Media (%)',                           val:fmt(metrics.avgLoss,2,'%'),      color:'#ff4d6d'},
-    {label:'Días Promedio',                               val:fmt(metrics.diasProm,1,' días'), color:'#00d4ff'},
-    {label:'Total Días Invertido',                        val:metrics.totalDias,               color:'#00d4ff'},
-    {label:'Ganancia Simple (€)',                         val:fmt(metrics.ganSimple,2,'€'),    color:metrics.ganSimple>=0?'#00e5a0':'#ff4d6d'},
-    {label:'Ganancia Compuesta (€)',                      val:fmt(metrics.ganComp,2,'€'),      color:metrics.ganComp>=0?'#00e5a0':'#ff4d6d'},
-    {label:'Ganancia Buy&Hold (€)',                       val:fmt(metrics.ganBH,2,'€'),        color:metrics.ganBH>=0?'#00e5a0':'#ff4d6d'},
-    {label:'Ganancia Total (%)',                          val:fmt(metrics.ganTotalPct,2,'%'),  color:metrics.ganTotalPct>=0?'#00e5a0':'#ff4d6d'},
-    {label:'Factor de Beneficio',                         val:fmt(metrics.factorBen,2),        color:metrics.factorBen>=1?'#00e5a0':'#ff4d6d'},
-    {label:`CAGR Estrategia (${fmt(metrics.anios,1)}a)`,  val:fmt(metrics.cagrS,2,'%'),       color:metrics.cagrS>=0?'#00e5a0':'#ff4d6d'},
-    {label:'Max Drawdown (%)',                            val:fmt(metrics.ddSimple,2,'%'),     color:'#ff4d6d'},
-    {label:`CAGR Buy&Hold (${fmt(metrics.anios,1)}a)`,    val:fmt(metrics.cagrBH,2,'%'),      color:metrics.cagrBH>=0?'#00e5a0':'#ff4d6d'},
-    {label:'Max Drawdown Buy&Hold (%)',                   val:fmt(result?.maxDDBH,2,'%'),      color:'#ff4d6d'},
-    {label:`CAGR Compuesto (${fmt(metrics.anios,1)}a)`,   val:fmt(metrics.cagrC,2,'%'),       color:metrics.cagrC>=0?'#00e5a0':'#ff4d6d'},
-    {label:'Max DD Compuesto (%)',                        val:fmt(metrics.ddComp,2,'%'),       color:'#ff4d6d'},
+    {label:'Total Operaciones',                                     val:metrics.n,                         color:'#ffd166'},
+    {label:`Tiempo Invertido (${fmt(metrics.aniosInv,2)}a)`,        val:fmt(metrics.tiempoInvPct,0,'%'),   color:'#ffd166'},
+    {label:'Ganadoras',                                             val:metrics.wins,                      color:'#00e5a0'},
+    {label:'Perdedoras',                                            val:metrics.losses,                    color:'#ff4d6d'},
+    {label:'Win Rate',                                              val:fmt(metrics.winRate,1,'%'),         color:metrics.winRate>=50?'#00e5a0':'#ff4d6d'},
+    {label:'Ganancia Media (%)',                                    val:fmt(metrics.avgWin,2,'%'),          color:'#00e5a0'},
+    {label:'Pérdida Media (%)',                                     val:fmt(metrics.avgLoss,2,'%'),         color:'#ff4d6d'},
+    {label:'Días Promedio',                                         val:fmt(metrics.diasProm,1,' días'),    color:'#00d4ff'},
+    {label:'Total Días Invertido',                                  val:metrics.totalDias,                 color:'#00d4ff'},
+    {label:'Ganancia Simple (€)',                                   val:fmt(metrics.ganSimple,2,'€'),       color:metrics.ganSimple>=0?'#00e5a0':'#ff4d6d'},
+    {label:'Ganancia Compuesta (€)',                                val:fmt(metrics.ganComp,2,'€'),         color:metrics.ganComp>=0?'#00e5a0':'#ff4d6d'},
+    {label:'Ganancia Buy&Hold (€)',                                 val:fmt(metrics.ganBH,2,'€'),           color:metrics.ganBH>=0?'#00e5a0':'#ff4d6d'},
+    {label:'Ganancia Total (%)',                                    val:fmt(metrics.ganTotalPct,2,'%'),     color:metrics.ganTotalPct>=0?'#00e5a0':'#ff4d6d'},
+    {label:'Factor de Beneficio',                                   val:fmt(metrics.factorBen,2),           color:metrics.factorBen>=1?'#00e5a0':'#ff4d6d'},
+    {label:`CAGR Estrategia (${fmt(metrics.anios,2)}a)`,            val:fmt(metrics.cagrS,2,'%'),           color:metrics.cagrS>=0?'#00e5a0':'#ff4d6d'},
+    {label:'Max Drawdown (%)',                                      val:fmt(metrics.ddSimple,2,'%'),        color:'#ff4d6d'},
+    {label:`CAGR Buy&Hold (${fmt(metrics.anios,2)}a)`,              val:fmt(metrics.cagrBH,2,'%'),          color:metrics.cagrBH>=0?'#00e5a0':'#ff4d6d'},
+    {label:'Max Drawdown Buy&Hold (%)',                             val:fmt(result?.maxDDBH,2,'%'),         color:'#ff4d6d'},
+    {label:`CAGR Compuesto (${fmt(metrics.anios,2)}a)`,             val:fmt(metrics.cagrC,2,'%'),           color:metrics.cagrC>=0?'#00e5a0':'#ff4d6d'},
+    {label:'Max DD Compuesto (%)',                                  val:fmt(metrics.ddComp,2,'%'),          color:'#ff4d6d'},
   ] : []
 
   const MetricsTable = () => (
-    <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:12,...SZ}}>
+    <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:12}}>
       <tbody>
         {metricRows.map(m=>(
           <tr key={m.label} style={{borderBottom:'1px solid var(--border)'}}>
@@ -449,16 +468,28 @@ export default function Home() {
       <Head>
         <title>V50 — EMA Strategy</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
+        <link rel="preconnect" href="https://fonts.googleapis.com"/>
+        <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
       </Head>
       <div className="app">
         <header className="header">
           <div className="header-logo"><span className="dot"/>V50 · CRUCE EMAs</div>
-          <div style={{display:'flex',alignItems:'center',gap:10}}>
+          <div style={{display:'flex',alignItems:'center',gap:8}}>
+            {/* Ruler toggle in header */}
+            <button onClick={()=>setRulerOn(r=>!r)} title="Regla: clic inicio · mover · clic fin · Ctrl=imán · doble-clic=borrar" style={{
+              background:rulerOn?'rgba(255,209,102,0.15)':'rgba(13,21,32,0.9)',
+              border:`1px solid ${rulerOn?'#ffd166':'#2d3748'}`,
+              color:rulerOn?'#ffd166':'#7a9bc0',
+              fontFamily:MONO,fontSize:11,padding:'5px 10px',
+              borderRadius:4,cursor:'pointer',display:'flex',alignItems:'center',gap:5,
+            }}>
+              📏 Regla {rulerOn?'(ON)':''}
+            </button>
             {result&&(
               <button onClick={()=>window.open(`https://www.tradingview.com/chart/?symbol=${tvSym(simbolo)}`,'_blank')} style={{
                 background:'#131722',border:'1px solid #2d3748',color:'#00d4ff',
-                fontFamily:MONO,fontSize:11,padding:'5px 12px',borderRadius:4,
-                cursor:'pointer',display:'flex',alignItems:'center',gap:6,
+                fontFamily:MONO,fontSize:11,padding:'5px 10px',borderRadius:4,
+                cursor:'pointer',display:'flex',alignItems:'center',gap:5,
               }}
               onMouseOver={e=>e.currentTarget.style.borderColor='#00d4ff'}
               onMouseOut={e=>e.currentTarget.style.borderColor='#2d3748'}>
@@ -468,14 +499,13 @@ export default function Home() {
             )}
             {result&&metrics&&(
               <button onClick={()=>setMetricsLayout(l=>l==='grid'?'panel':'grid')} style={{
-                background:'rgba(13,21,32,0.88)',border:'1px solid #1a2d45',
-                color:'#7a9bc0',fontFamily:MONO,fontSize:11,
-                padding:'5px 12px',borderRadius:4,cursor:'pointer',
+                background:'rgba(13,21,32,0.9)',border:'1px solid #1a2d45',color:'#7a9bc0',
+                fontFamily:MONO,fontSize:11,padding:'5px 10px',borderRadius:4,cursor:'pointer',
               }}>
-                {metricsLayout==='grid'?'⊞ Panel lateral':'⊟ Vista cuadrícula'}
+                {metricsLayout==='grid'?'⊞ Panel lateral':'⊟ Cuadrícula'}
               </button>
             )}
-            <div style={{fontFamily:MONO,fontSize:11,color:'var(--text3)'}}>datos: Stooq · diario</div>
+            <div style={{fontFamily:MONO,fontSize:11,color:'var(--text3)'}}>Stooq · diario</div>
           </div>
         </header>
 
@@ -484,6 +514,9 @@ export default function Home() {
             <div className="sidebar-section">
               <div className="sidebar-title">Activo</div>
               <label>Símbolo<input type="text" value={simbolo} onChange={e=>setSimbolo(e.target.value.toUpperCase())} placeholder="^GSPC"/></label>
+              <div style={{display:'flex',flexWrap:'wrap',gap:4,marginTop:2}}>
+                {TICKERS.map(t=><div key={t} className="ticker-pill" onClick={()=>setSimbolo(t)}>{t}</div>)}
+              </div>
             </div>
             <div className="sidebar-section">
               <div className="sidebar-title">Estrategia</div>
@@ -511,8 +544,8 @@ export default function Home() {
                   <label>Mult.<input type="number" value={atrM} min={0.1} step={0.1} onChange={e=>setAtrM(e.target.value)}/></label>
                 </div>
               )}
-              <label className="checkbox-row"><input type="checkbox" checked={sinPerdidas} onChange={e=>setSinPerdidas(e.target.checked)}/>Modo Sin Pérdidas</label>
-              <label className="checkbox-row"><input type="checkbox" checked={reentry} onChange={e=>setReentry(e.target.checked)}/>Modo Re-Entry</label>
+              <label className="checkbox-row"><input type="checkbox" checked={sinPerdidas} onChange={e=>setSinPerdidas(e.target.checked)}/>Sin Pérdidas</label>
+              <label className="checkbox-row"><input type="checkbox" checked={reentry} onChange={e=>setReentry(e.target.checked)}/>Re-Entry</label>
             </div>
             <div className="sidebar-section">
               <div className="sidebar-title">Filtro SP500</div>
@@ -531,72 +564,59 @@ export default function Home() {
               )}
             </div>
             <div className="sidebar-section">
-              <div className="sidebar-title">Gráfico</div>
-              <label className="checkbox-row"><input type="checkbox" checked={showLabels} onChange={e=>setShowLabels(e.target.checked)}/>Etiquetas trades siempre visibles</label>
+              <div className="sidebar-title">Visualización</div>
+              <label className="checkbox-row"><input type="checkbox" checked={showLabels} onChange={e=>setShowLabels(e.target.checked)}/>Etiquetas trades visibles</label>
             </div>
-            <button className="btn-run" onClick={run} disabled={loading}>
-              {loading?'· Cargando...':'▶ Ejecutar'}
-            </button>
+            {loading&&<div style={{fontFamily:MONO,fontSize:11,color:'var(--accent)',textAlign:'center',padding:'8px 0'}}>⟳ Actualizando...</div>}
           </aside>
 
           <div className="content">
             {sp5&&(
               <div className="sp500-bar">
                 <span className="label">SP500</span>
-                <span className={`val ${sp5.changePct>=0?'green':'red'}`} style={SZ}>{fmt(sp5.precio,2)}</span>
-                <span className="label">EMA {sp500EmaR}</span>
-                <span className="val yellow" style={SZ}>{fmt(sp5.emaR,2)}</span>
-                <span className="label">EMA {sp500EmaL}</span>
-                <span className="val yellow" style={SZ}>{fmt(sp5.emaL,2)}</span>
+                <span className={`val ${sp5.changePct>=0?'green':'red'}`}>{fmt(sp5.precio,2)}</span>
+                <span className="label">EMA {sp500EmaR}</span><span className="val yellow">{fmt(sp5.emaR,2)}</span>
+                <span className="label">EMA {sp500EmaL}</span><span className="val yellow">{fmt(sp5.emaL,2)}</span>
                 <span className="label" style={{marginLeft:'auto',marginRight:8,fontSize:10}}>{fmtDate(sp5.date)}</span>
                 <span className={`status-badge ${spStatus}`}>{spTxt}</span>
               </div>
             )}
             {error&&<div className="error-msg">⚠ {error}</div>}
-            {loading&&(<div className="loading"><div className="spinner"/><div className="loading-text">CARGANDO · {simbolo}</div></div>)}
-            {!loading&&!result&&!error&&(
-              <div className="empty-state">
-                <div className="empty-icon">📈</div>
-                <div className="empty-title">V50 — Estrategia Cruce EMAs</div>
-                <div className="empty-desc">Configura los parámetros y pulsa <strong>▶ Ejecutar</strong></div>
-                <div style={{marginTop:16}}>
-                  <div style={{fontFamily:MONO,fontSize:11,color:'var(--text3)',marginBottom:8}}>SÍMBOLOS DE EJEMPLO</div>
-                  <div className="ticker-grid">{TICKERS.map(t=><div key={t} className="ticker-pill" onClick={()=>setSimbolo(t)}>{t}</div>)}</div>
-                </div>
-              </div>
+            {!result&&!error&&!loading&&(
+              <div className="loading"><div className="spinner"/><div className="loading-text">CARGANDO DATOS...</div></div>
             )}
 
-            {!loading&&result&&(
-              <div style={{display:'flex',flex:1,overflow:'hidden',height:'100%'}}>
-                {/* Main column */}
+            {result&&(
+              <div style={{display:'flex',flex:1,minHeight:0,overflow:'hidden',height:'100%'}}>
                 <div style={{flex:1,overflowY:'auto'}}>
                   <div className="chart-wrap">
                     <div className="chart-header">
                       <div className="chart-title">{simbolo}</div>
-                      <div className="chart-price" style={SZ}>{fmt(result.meta?.ultimoPrecio,2)}</div>
+                      <div className="chart-price">{fmt(result.meta?.ultimoPrecio,2)}</div>
                       <div className="chart-date">{fmtDate(result.meta?.ultimaFecha)}</div>
                     </div>
                     <CandleChart
                       data={result.chartData} emaRPeriod={emaR} emaLPeriod={emaL}
                       trades={result.trades||[]} maxDD={metrics?.ddSimple||0}
-                      showTradeLabels={showLabels}
+                      showTradeLabels={showLabels} rulerActive={rulerOn}
                     />
-                    <div style={{display:'flex',gap:14,marginTop:10,fontFamily:MONO,fontSize:11,color:'var(--text3)',flexWrap:'wrap'}}>
+                    <div style={{display:'flex',gap:14,marginTop:8,fontFamily:MONO,fontSize:11,color:'var(--text3)',flexWrap:'wrap'}}>
                       <span><span style={{color:'#ffd166'}}>─</span> EMA {emaR}</span>
                       <span><span style={{color:'#ff4d6d'}}>─</span> EMA {emaL}</span>
                       <span><span style={{color:'#00e5a0'}}>─</span> Trade +</span>
                       <span><span style={{color:'#ff4d6d'}}>─</span> Trade −</span>
-                      <span>↗ Cruce alcista &nbsp;↘ Cruce bajista</span>
+                      <span style={{color:'#00e5a0'}}>↗ Cruce alcista</span>
+                      <span style={{color:'#ff4d6d'}}>↘ Cruce bajista</span>
+                      {rulerOn&&<span style={{color:'#ffd166'}}>📏 Regla activa · Ctrl=imán · doble-clic=borrar</span>}
                     </div>
                   </div>
 
-                  {/* Metrics grid (only when layout=grid) */}
                   {metricsLayout==='grid'&&metrics&&(
                     <div className="metrics-section">
                       {metricRows.map(m=>(
                         <div key={m.label} className="metric-card">
                           <span className="metric-label">{m.label}</span>
-                          <span className="metric-val" style={{color:m.color,...SZ}}>{m.val}</span>
+                          <span className="metric-val" style={{color:m.color}}>{m.val}</span>
                         </div>
                       ))}
                     </div>
@@ -605,12 +625,12 @@ export default function Home() {
                   {result.strategyCurve?.length>0&&(
                     <div className="equity-section">
                       <div className="section-title">
-                        Equity — Estrategia vs Buy &amp; Hold
-                        <span style={{marginLeft:14,fontWeight:400,fontSize:10}}>
+                        Equity — Estrategia vs B&H
+                        <span style={{marginLeft:12,fontWeight:400,fontSize:10}}>
                           <span style={{color:'#00d4ff'}}>─ Estrategia</span>
-                          <span style={{marginLeft:10,color:'#ffd166'}}>- - B&H</span>
-                          <span style={{marginLeft:10,color:'#ff4d6d'}}>─ Max DD Estrat.</span>
-                          <span style={{marginLeft:10,color:'#ff9a3c'}}>─ Max DD B&H</span>
+                          <span style={{marginLeft:8,color:'#ffd166'}}>- - B&H</span>
+                          <span style={{marginLeft:8,color:'#ff4d6d'}}>─ Max DD Est.</span>
+                          <span style={{marginLeft:8,color:'#ff9a3c'}}>─ Max DD B&H</span>
                         </span>
                       </div>
                       <EquityChart
@@ -640,7 +660,7 @@ export default function Home() {
                     <div className="trades-section">
                       <div className="section-title">Historial — {result.trades.length} operaciones</div>
                       <div style={{overflowX:'auto'}}>
-                        <table className="trades-table" style={SZ}>
+                        <table className="trades-table" style={{fontFamily:MONO}}>
                           <thead><tr>
                             <th>#</th><th>Entrada</th><th>Salida</th>
                             <th>Px Entrada</th><th>Px Salida</th>
@@ -658,7 +678,7 @@ export default function Home() {
                                 <td style={{color:t.pnlSimple>=0?'var(--green)':'var(--red)'}}>
                                   {t.pnlSimple>=0?'+':''}{fmt(t.pnlSimple,2)}€
                                 </td>
-                                <td style={{color:'var(--text2)'}}>{t.dias}</td>
+                                <td>{t.dias}</td>
                                 <td><span className={`tag ${t.pnlPct>=0?'win':'loss'}`}>{t.tipo}</span></td>
                               </tr>
                             ))}
@@ -669,7 +689,6 @@ export default function Home() {
                   )}
                 </div>
 
-                {/* Right metrics panel */}
                 {metricsLayout==='panel'&&metrics&&(
                   <div style={{
                     width:290,flexShrink:0,borderLeft:'1px solid var(--border)',
