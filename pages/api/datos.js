@@ -1,14 +1,3 @@
-import yahooFinance from 'yahoo-finance2'
-
-const YF_OPTS = {
-  fetchOptions: {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-    }
-  }
-}
-
 function calcEMA(values, period) {
   const k = 2 / (period + 1)
   const result = new Array(values.length).fill(null)
@@ -39,6 +28,27 @@ function projectEMA(lastEMA, lastClose, period, bars = 20) {
     pts.push({ offset: i, value: v })
   }
   return pts
+}
+
+async function fetchAV(symbol, apiKey) {
+  // Alpha Vantage usa SPY como proxy del SP500
+  const sym = symbol === '^GSPC' ? 'SPY' : symbol.replace('^','')
+  const url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY_ADJUSTED&symbol=${sym}&outputsize=full&apikey=${apiKey}`
+  const res  = await fetch(url)
+  const json = await res.json()
+  if (json['Error Message'] || json['Note']) throw new Error(json['Error Message'] || 'API limit reached')
+  const ts = json['Time Series (Daily)']
+  if (!ts) throw new Error(`No data for ${symbol}`)
+  return Object.entries(ts)
+    .map(([date, v]) => ({
+      date,
+      open:   parseFloat(v['1. open']),
+      high:   parseFloat(v['2. high']),
+      low:    parseFloat(v['3. low']),
+      close:  parseFloat(v['5. adjusted close']),
+      volume: parseFloat(v['6. volume']),
+    }))
+    .sort((a, b) => a.date.localeCompare(b.date))
 }
 
 function runBacktest(data, sp500Data, cfg) {
@@ -178,8 +188,7 @@ function runBacktest(data, sp500Data, cfg) {
 function makeTrade(entryDate, exitDate, entryPx, exitPx, pnl, capitalReinv, capitalIni, tipo) {
   return {
     entryDate, exitDate, entryPx, exitPx,
-    pnlPct: pnl*100,
-    pnlSimple: pnl*capitalIni,
+    pnlPct: pnl*100, pnlSimple: pnl*capitalIni,
     capitalTras: capitalReinv,
     dias: Math.round((new Date(exitDate)-new Date(entryDate))/86400000),
     tipo,
@@ -189,50 +198,34 @@ function makeTrade(entryDate, exitDate, entryPx, exitPx, pnl, capitalReinv, capi
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
   const { simbolo, cfg } = req.body
+  const apiKey = process.env.ALPHA_VANTAGE_KEY
+  if (!apiKey) return res.status(500).json({ error: 'Falta ALPHA_VANTAGE_KEY en variables de entorno' })
+
   try {
-    const period2 = new Date()
-    const period1 = new Date()
-    period1.setFullYear(period1.getFullYear() - (cfg.years + 1))
-
-    const raw = await yahooFinance.historical(simbolo, { period1, period2, interval: '1d' }, YF_OPTS)
-    if (!raw || raw.length === 0) return res.status(404).json({ error: `No se encontraron datos para "${simbolo}"` })
-
-    const data = raw.filter(d => d.close != null).map(d => ({
-      date: d.date.toISOString().split('T')[0],
-      open: d.open, high: d.high, low: d.low, close: d.close, volume: d.volume
-    }))
+    const data = await fetchAV(simbolo, apiKey)
+    if (!data || data.length === 0) return res.status(404).json({ error: `No se encontraron datos para "${simbolo}"` })
 
     let sp500Data = null
     if (cfg.tipoFiltro !== 'none') {
-      try {
-        const rawSP = await yahooFinance.historical('^GSPC', { period1, period2, interval: '1d' }, YF_OPTS)
-        sp500Data = rawSP.filter(d => d.close != null).map(d => ({ date: d.date.toISOString().split('T')[0], close: d.close }))
-      } catch(_) {}
+      try { sp500Data = await fetchAV('^GSPC', apiKey) } catch(_) {}
     }
 
-    let sp500Quote = null
-    try {
-      const q = await yahooFinance.quote('^GSPC', {}, YF_OPTS)
-      sp500Quote = { price: q.regularMarketPrice, change: q.regularMarketChange, changePct: q.regularMarketChangePercent, date: q.regularMarketTime }
-    } catch(_) {}
-
     const { chartData, trades, capitalReinv, gananciaSimple, startDate } = runBacktest(data, sp500Data, cfg)
-    const last = chartData[chartData.length - 1]
-    const projR = projectEMA(last.emaR, last.close, cfg.emaR)
-    const projL = projectEMA(last.emaL, last.close, cfg.emaL)
-    const lastDate = new Date(last.date)
-    const projDates = projR.map(p => { const d = new Date(lastDate); d.setDate(d.getDate() + p.offset); return d.toISOString().split('T')[0] })
+    const last    = chartData[chartData.length - 1]
+    const projR   = projectEMA(last.emaR, last.close, cfg.emaR)
+    const projL   = projectEMA(last.emaL, last.close, cfg.emaL)
+    const lastDt  = new Date(last.date)
+    const projDates = projR.map(p => { const d = new Date(lastDt); d.setDate(d.getDate()+p.offset); return d.toISOString().split('T')[0] })
 
     let sp500Status = null
     if (sp500Data && sp500Data.length > 0) {
-      const spC = sp500Data.map(d => d.close)
+      const spC    = sp500Data.map(d => d.close)
       const spEmaR = calcEMA(spC, cfg.sp500EmaR)
       const spEmaL = calcEMA(spC, cfg.sp500EmaL)
+      const lastSP = sp500Data[sp500Data.length-1]
       sp500Status = {
-        precio: sp500Quote?.price ?? spC[spC.length-1],
-        emaR: spEmaR[spEmaR.length-1], emaL: spEmaL[spEmaL.length-1],
-        date: sp500Quote?.date ?? sp500Data[sp500Data.length-1].date,
-        change: sp500Quote?.change ?? 0, changePct: sp500Quote?.changePct ?? 0
+        precio: lastSP.close, emaR: spEmaR[spEmaR.length-1], emaL: spEmaL[spEmaL.length-1],
+        date: lastSP.date, change: 0, changePct: 0
       }
     }
 
