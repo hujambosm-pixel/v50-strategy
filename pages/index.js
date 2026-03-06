@@ -90,6 +90,36 @@ const WATCHLIST_FALLBACK=[
   {id:null,symbol:'BTC-USD',name:'Bitcoin',group_name:'Crypto',list_name:'General',favorite:false,observations:''},
 ]
 
+// ── Mapa de nombres conocidos ────────────────────────────────
+const SYM_NAMES={
+  '^GSPC':'S&P 500','^NDX':'Nasdaq 100','^IBEX':'IBEX 35','^GDAXI':'DAX 40',
+  '^FTSE':'FTSE 100','^N225':'Nikkei 225','^DJI':'Dow Jones','^RUT':'Russell 2000',
+  '^STOXX50E':'Euro Stoxx 50','^FCHI':'CAC 40','^AEX':'AEX Amsterdam',
+  'AAPL':'Apple','MSFT':'Microsoft','NVDA':'Nvidia','AMZN':'Amazon','META':'Meta',
+  'TSLA':'Tesla','GOOGL':'Alphabet','GOOG':'Alphabet','JPM':'JPMorgan',
+  'V':'Visa','MA':'Mastercard','UNH':'UnitedHealth','JNJ':'Johnson & Johnson',
+  'WMT':'Walmart','PG':'Procter & Gamble','XOM':'ExxonMobil','CVX':'Chevron',
+  'HD':'Home Depot','ABBV':'AbbVie','LLY':'Eli Lilly','MRK':'Merck',
+  'PFE':'Pfizer','KO':'Coca-Cola','PEP':'PepsiCo','COST':'Costco',
+  'AVGO':'Broadcom','ORCL':'Oracle','CRM':'Salesforce','ADBE':'Adobe',
+  'NFLX':'Netflix','DIS':'Disney','PYPL':'PayPal','SQ':'Block',
+  'AMD':'AMD','INTC':'Intel','QCOM':'Qualcomm','TXN':'Texas Instruments',
+  'BAC':'Bank of America','WFC':'Wells Fargo','GS':'Goldman Sachs','MS':'Morgan Stanley',
+  'BTC-USD':'Bitcoin','ETH-USD':'Ethereum','SOL-USD':'Solana','BNB-USD':'BNB',
+  'XRP-USD':'XRP','ADA-USD':'Cardano','DOGE-USD':'Dogecoin','AVAX-USD':'Avalanche',
+  'GC=F':'Oro','CL=F':'Petróleo WTI','SI=F':'Plata','NG=F':'Gas Natural',
+  'ZC=F':'Maíz','ZW=F':'Trigo','KC=F':'Café',
+  'SPY':'SPDR S&P 500 ETF','QQQ':'Invesco QQQ ETF','IWM':'iShares Russell 2000',
+  'GLD':'SPDR Gold ETF','TLT':'iShares 20Y Treasury',
+}
+function lookupName(sym) {
+  if(!sym) return ''
+  const up=sym.toUpperCase()
+  if(SYM_NAMES[up]) return SYM_NAMES[up]
+  // Fallback: limpiar el símbolo como nombre
+  return up.replace(/[\^=\.\-]/g,' ').replace(/USD$/,'').trim()
+}
+
 // ── CandleChart ───────────────────────────────────────────────
 function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, showTradeLabels, rulerActive, onChartReady }) {
   const containerRef=useRef(null), svgRef=useRef(null), legendRef=useRef(null), tooltipRef=useRef(null)
@@ -239,15 +269,34 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, showTradeLab
               g.appendChild(mkT(line1,labelY-4,'13'))
               g.appendChild(mkT(line2,labelY+13,'10.5'))
             } else {
-              // Solo % pequeño siempre visible, sobre la línea del trade
-              const py=candlesRef.current.priceToCoordinate(Math.max(t.entryPx,t.exitPx))
-              if(py==null) return
+              // % medio siempre visible — distribuido en franja alta del chart
+              const chartH=containerRef.current?.clientHeight||480
+              const ZONE_TOP=18
+              const ZONE_H=chartH*0.22
+              const labelY=ZONE_TOP + (idx % 4)*(ZONE_H/4) + 12
               const lbl=`${t.pnlPct>=0?'+':''}${t.pnlPct.toFixed(1)}%`
+              // Fondo semitransparente pequeño
+              const bw=lbl.length*8+14
+              const bg=document.createElementNS(NS,'rect')
+              Object.entries({
+                x:midX-bw/2, y:labelY-14, width:bw, height:20,
+                fill:isWin?'rgba(0,229,160,0.1)':'rgba(255,77,109,0.1)',
+                rx:'3', stroke:bc, 'stroke-width':'0.7', 'opacity':'0.9'
+              }).forEach(([k,v])=>bg.setAttribute(k,v))
+              g.appendChild(bg)
+              // Línea conectora al centro del trade
+              const lineConn=document.createElementNS(NS,'line')
+              Object.entries({
+                x1:midX,y1:labelY+6,
+                x2:midX,y2:pyBase-4,
+                stroke:bc,'stroke-width':'1','stroke-dasharray':'3,3','opacity':'0.45'
+              }).forEach(([k,v])=>lineConn.setAttribute(k,v))
+              g.appendChild(lineConn)
               const txt=document.createElementNS(NS,'text')
               Object.entries({
-                x:midX, y:py-8,
-                'font-size':'9', 'font-family':MONO,
-                'text-anchor':'middle', fill:bc, 'font-weight':'600'
+                x:midX, y:labelY,
+                'font-size':'12', 'font-family':MONO,
+                'text-anchor':'middle', fill:bc, 'font-weight':'700'
               }).forEach(([k,v])=>txt.setAttribute(k,v))
               txt.textContent=lbl
               g.appendChild(txt)
@@ -478,12 +527,53 @@ export default function Home() {
   const [strSaving,setStrSaving]=useState(false)
   const debounceRef=useRef(null),chartApiRef=useRef(null),contentRef=useRef(null)
 
+  const [emaStatus,setEmaStatus]=useState({}) // {symbol: 'bull'|'bear'|'loading'|null}
+
   const reloadWatchlist=()=>{
     setWlLoading(true)
     fetchWatchlist()
-      .then(data=>{ if(data.length>0) setWatchlist(data) })
+      .then(data=>{ if(data.length>0){setWatchlist(data);refreshEmaStatus(data)} })
       .catch(()=>{})
       .finally(()=>setWlLoading(false))
+  }
+
+  // Calcula EMA 10/11 para un símbolo y devuelve 'bull' o 'bear'
+  const calcEmaStatusFor=async(sym)=>{
+    try{
+      const rawSym=sym==='^GSPC'?'spy':sym.replace('^','').toLowerCase()
+      const res=await fetch(`https://stooq.com/q/d/l/?s=${rawSym}.us&i=d`)
+      const text=await res.text()
+      if(!text||text.includes('No data')||text.trim().length<50) return null
+      const rows=text.trim().split('\n').slice(1).filter(l=>l.trim())
+      const closes=rows.map(l=>parseFloat(l.split(',')[4])).filter(v=>!isNaN(v))
+      if(closes.length<20) return null
+      // calcEMA inline (periodo 10 y 11)
+      const ema=(vals,p)=>{
+        const k=2/(p+1); let e=null
+        for(const v of vals){if(e===null)e=v;else e=v*k+e*(1-k)}
+        return e
+      }
+      // Usar últimas 60 barras para eficiencia
+      const last60=closes.slice(-60)
+      const er=ema(last60,10), el=ema(last60,11)
+      return er!=null&&el!=null?(er>el?'bull':'bear'):null
+    }catch{return null}
+  }
+
+  const refreshEmaStatus=async(list)=>{
+    const items=list||watchlist
+    // Lanzar en paralelo con limit de 6 a la vez
+    const results={}
+    const chunks=[]
+    for(let i=0;i<items.length;i+=6) chunks.push(items.slice(i,i+6))
+    for(const chunk of chunks){
+      const pending=chunk.map(async(w)=>{
+        setEmaStatus(prev=>({...prev,[w.symbol]:'loading'}))
+        const st=await calcEmaStatusFor(w.symbol)
+        setEmaStatus(prev=>({...prev,[w.symbol]:st}))
+      })
+      await Promise.all(pending)
+    }
   }
   const reloadStrategies=()=>{
     setStrLoading(true)
@@ -683,6 +773,15 @@ export default function Home() {
             }}>
               📏 {rulerOn?'ON':'Regla'}
             </button>
+            <button onClick={()=>setShowLabels(l=>!l)} style={{
+              background:showLabels?'rgba(0,229,160,0.1)':'rgba(13,21,32,0.9)',
+              border:`1px solid ${showLabels?'#00e5a0':'#2d3748'}`,
+              color:showLabels?'#00e5a0':'#7a9bc0',
+              fontFamily:MONO,fontSize:11,padding:'3px 9px',borderRadius:4,cursor:'pointer',
+              display:'flex',alignItems:'center',gap:4
+            }}>
+              🏷 {showLabels?'Etiquetas':'%'}
+            </button>
             {result&&<button onClick={()=>window.open(`https://www.tradingview.com/chart/?symbol=${tvSym(simbolo)}`,'_blank')} style={{background:'#131722',border:'1px solid #2d3748',color:'#00d4ff',fontFamily:MONO,fontSize:11,padding:'3px 9px',borderRadius:4,cursor:'pointer',display:'flex',alignItems:'center',gap:4}}
               onMouseOver={e=>e.currentTarget.style.borderColor='#00d4ff'}
               onMouseOut={e=>e.currentTarget.style.borderColor='#2d3748'}>
@@ -771,10 +870,6 @@ export default function Home() {
                   <label>Filtro<select value={tipoFiltro} onChange={e=>setTipoFiltro(e.target.value)}><option value="none">Sin filtro</option><option value="precio_ema">Precio sobre EMA rápida</option><option value="ema_ema">EMA rápida sobre EMA lenta</option></select></label>
                   {tipoFiltro!=='none'&&<div className="row2"><label>EMA R<input type="number" value={sp500EmaR} min={1} onChange={e=>setSp500EmaR(e.target.value)}/></label><label>EMA L<input type="number" value={sp500EmaL} min={1} onChange={e=>setSp500EmaL(e.target.value)}/></label></div>}
                 </div>
-                <div className="sidebar-section">
-                  <div className="sidebar-title">Gráfico</div>
-                  <label className="checkbox-row"><input type="checkbox" checked={showLabels} onChange={e=>setShowLabels(e.target.checked)}/>Etiquetas trades visibles</label>
-                </div>
                 {loading&&<div style={{fontFamily:MONO,fontSize:11,color:'var(--accent)',textAlign:'center'}}>⟳ Actualizando...</div>}
                 {error&&<div style={{fontFamily:MONO,fontSize:11,color:'#ff4d6d',padding:'6px 0'}}>⚠ {error}</div>}
               </div>
@@ -810,7 +905,8 @@ export default function Home() {
                     })()}
                   </div>
                   <button onClick={newItem} title="Añadir activo" style={{background:'rgba(0,212,255,0.1)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:13,padding:'3px 8px',borderRadius:3,cursor:'pointer'}}>+</button>
-                  <button onClick={reloadWatchlist} title="Recargar" style={{background:'transparent',border:'1px solid var(--border)',color:'var(--text3)',fontFamily:MONO,fontSize:11,padding:'3px 6px',borderRadius:3,cursor:'pointer'}}>⟳</button>
+                  <button onClick={reloadWatchlist} title="Recargar watchlist" style={{background:'transparent',border:'1px solid var(--border)',color:'var(--text3)',fontFamily:MONO,fontSize:11,padding:'3px 6px',borderRadius:3,cursor:'pointer'}}>⟳</button>
+                  <button onClick={()=>refreshEmaStatus()} title="Actualizar estado EMA 10/11" style={{background:'transparent',border:'1px solid var(--border)',color:'#00e5a0',fontFamily:MONO,fontSize:11,padding:'3px 6px',borderRadius:3,cursor:'pointer'}}>▲▼</button>
                 </div>
 
                 {/* ── Lista de activos ── */}
@@ -837,6 +933,25 @@ export default function Home() {
                           <div style={{fontFamily:MONO,fontSize:11,color:simbolo===w.symbol?'var(--accent)':'var(--text)',fontWeight:600}}>{w.symbol}</div>
                           <div style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{w.name}</div>
                         </div>
+                        {/* Badge EMA 10/11 */}
+                        {(()=>{
+                          const st=emaStatus[w.symbol]
+                          if(!st) return null
+                          if(st==='loading') return <span style={{fontFamily:MONO,fontSize:8,color:'var(--text3)',flexShrink:0}}>⟳</span>
+                          return(
+                            <span title={st==='bull'?'EMA10 > EMA11 (alcista)':'EMA10 < EMA11 (bajista)'}
+                              style={{
+                                fontFamily:MONO,fontSize:8,fontWeight:700,
+                                color:st==='bull'?'#00e5a0':'#ff4d6d',
+                                background:st==='bull'?'rgba(0,229,160,0.1)':'rgba(255,77,109,0.1)',
+                                border:`1px solid ${st==='bull'?'rgba(0,229,160,0.3)':'rgba(255,77,109,0.3)'}`,
+                                padding:'1px 4px',borderRadius:3,flexShrink:0,
+                                lineHeight:'1.4'
+                              }}>
+                              {st==='bull'?'▲10':'▼10'}
+                            </span>
+                          )
+                        })()}
                         {/* Lista badge */}
                         <span style={{fontFamily:MONO,fontSize:8,color:'var(--text3)',background:'var(--bg2)',padding:'1px 4px',borderRadius:2,flexShrink:0}}>{w.list_name||'General'}</span>
                         {/* Editar */}
@@ -856,10 +971,14 @@ export default function Home() {
                       </div>
                       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
                         <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>Símbolo
-                          <input type="text" value={editForm.symbol||''} onChange={e=>setEditForm(p=>({...p,symbol:e.target.value.toUpperCase()}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'6px 8px',borderRadius:4}}/>
+                          <input type="text" value={editForm.symbol||''} onChange={e=>{
+                            const sym=e.target.value.toUpperCase()
+                            const nombre=lookupName(sym)
+                            setEditForm(p=>({...p,symbol:sym,name:p.name&&p._nameTouched?p.name:nombre}))
+                          }} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'6px 8px',borderRadius:4}}/>
                         </label>
                         <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>Nombre
-                          <input type="text" value={editForm.name||''} onChange={e=>setEditForm(p=>({...p,name:e.target.value}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'6px 8px',borderRadius:4}}/>
+                          <input type="text" value={editForm.name||''} onChange={e=>setEditForm(p=>({...p,name:e.target.value,_nameTouched:true}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'6px 8px',borderRadius:4}}/>
                         </label>
                         <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>Grupo
                           <select value={editForm.group_name||'Acciones'} onChange={e=>setEditForm(p=>({...p,group_name:e.target.value}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'6px 8px',borderRadius:4}}>
