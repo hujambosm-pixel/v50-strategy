@@ -1,14 +1,19 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import Head from 'next/head'
 
-function calcMetrics(trades, capitalIni, capitalReinv, gananciaSimple, ganBH, startDate, endDate) {
+function calcMetrics(trades, capitalIni, capitalReinv, gananciaSimple, ganBH, startDate, endDate, yearsConfig) {
   if (!trades||trades.length===0) return null
   const n=trades.length, wins=trades.filter(t=>t.pnlPct>=0), losses=trades.filter(t=>t.pnlPct<0)
   const winRate=(wins.length/n)*100
   const avgWin=wins.length?wins.reduce((s,t)=>s+t.pnlPct,0)/wins.length:0
   const avgLoss=losses.length?losses.reduce((s,t)=>s+Math.abs(t.pnlPct),0)/losses.length:0
   const totalDias=trades.reduce((s,t)=>s+t.dias,0)
-  const totalDiasNat=startDate&&endDate?(new Date(endDate)-new Date(startDate))/86400000:365
+  // Calcular días naturales del periodo — robusto con parsing explícito
+  let totalDiasNat = yearsConfig * 365.25 // fallback: años configurados
+  if (startDate && endDate) {
+    const ms = new Date(endDate).getTime() - new Date(startDate).getTime()
+    if (!isNaN(ms) && ms > 0) totalDiasNat = ms / 86400000
+  }
   const anios=totalDiasNat/365.25, safYears=Math.max(anios,0.01)
   const aniosInv=totalDias/365.25, tiempoInvPct=(totalDias/totalDiasNat)*100
   const cagrS=Math.pow(Math.max(capitalIni+gananciaSimple,0.01)/capitalIni,1/safYears)-1
@@ -106,7 +111,42 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, showTradeLab
       const ohlcMap={},erMap={},elMap={}
       data.forEach(d=>{ohlcMap[d.date]=d;if(d.emaR!=null)erMap[d.date]=d.emaR;if(d.emaL!=null)elMap[d.date]=d.emaL})
 
-      // ── Trade labels SVG — dinámicas con zoom ──
+      // ── Imán Ctrl — snap al O/H/L/C más cercano (independiente de la regla) ──
+      const snapToOHLC=(px,py,isCtrl)=>{
+        if(!isCtrl) return {
+          x:px, y:py,
+          price:candlesRef.current?.coordinateToPrice(py),
+          time:chart.timeScale().coordinateToTime(px)
+        }
+        const time=chart.timeScale().coordinateToTime(px)
+        const bar=time&&ohlcMap[time]
+        if(!bar) return {
+          x:px, y:py,
+          price:candlesRef.current?.coordinateToPrice(py),
+          time
+        }
+        const candidates=[bar.open,bar.high,bar.low,bar.close]
+        const snappedPrice=candidates.reduce((best,p)=>{
+          const coord=candlesRef.current?.priceToCoordinate(p)
+          const bestCoord=candlesRef.current?.priceToCoordinate(best)
+          if(coord==null) return best
+          return Math.abs(coord-py)<Math.abs(bestCoord-py)?p:best
+        })
+        const sy=candlesRef.current?.priceToCoordinate(snappedPrice)??py
+        return {x:px, y:sy, price:snappedPrice, time}
+      }
+
+      // Punto visual del imán en SVG
+      const NS2='http://www.w3.org/2000/svg'
+      const snapDot=document.createElementNS(NS2,'circle')
+      Object.entries({r:'4',fill:'none',stroke:'#ffd166','stroke-width':'1.5',display:'none',class:'snap-dot','pointer-events':'none'}).forEach(([k,v])=>snapDot.setAttribute(k,v))
+      svgRef.current?.appendChild(snapDot)
+
+      const ctrlState={pressed:false}
+      const onKeyDown=(e)=>{if(e.key==='Control'){ctrlState.pressed=true}}
+      const onKeyUp=(e)=>{if(e.key==='Control'){ctrlState.pressed=false;snapDot.setAttribute('display','none')}}
+      window.addEventListener('keydown',onKeyDown)
+      window.addEventListener('keyup',onKeyUp)
       const drawTradeLabels=()=>{
         const svg=svgRef.current; if(!svg||!candlesRef.current||!chartRef.current) return
         svg.querySelectorAll('.trade-label').forEach(el=>el.remove())
@@ -127,25 +167,29 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, showTradeLab
             const g=document.createElementNS(NS,'g'); g.setAttribute('class','trade-label')
 
             if(showTradeLabels){
-              // Etiqueta completa — más arriba del precio de entrada, legible
-              const line1=`${t.pnlPct>=0?'+':''}${t.pnlPct.toFixed(1)}%  €${t.pnlSimple>=0?'+':''}${Math.round(t.pnlSimple)}`
-              const line2=`${fmtDate(t.entryDate)} · ${t.dias}d`
-              const w=Math.max(line1.length,line2.length)*6.5+16
-              const labelY=pyBase-55  // bien por encima del precio
+              // Etiqueta completa — grande, bien por encima del gráfico
+              const line1=`${t.pnlPct>=0?'+':''}${t.pnlPct.toFixed(2)}%   €${t.pnlSimple>=0?'+':''}${Math.round(t.pnlSimple)}`
+              const line2=`${fmtDate(t.entryDate)} → ${fmtDate(t.exitDate)} · ${t.dias}d`
+              const w=Math.max(line1.length,line2.length)*7.8+20
+              const labelY=pyBase-90  // muy por encima, nunca solapa el gráfico
               const rect=document.createElementNS(NS,'rect')
               Object.entries({
-                x:midX-w/2, y:labelY-14, width:w, height:28,
-                fill:isWin?'rgba(0,229,160,0.13)':'rgba(255,77,109,0.13)',
-                rx:'3', stroke:bc, 'stroke-width':'0.9'
+                x:midX-w/2, y:labelY-18, width:w, height:38,
+                fill:isWin?'rgba(0,229,160,0.15)':'rgba(255,77,109,0.15)',
+                rx:'4', stroke:bc, 'stroke-width':'1.1'
               }).forEach(([k,v])=>rect.setAttribute(k,v))
               g.appendChild(rect)
-              const mkT=(txt,y)=>{
+              // Línea vertical desde etiqueta al precio de entrada
+              const lineConn=document.createElementNS(NS,'line')
+              Object.entries({x1:midX,y1:labelY+20,x2:midX,y2:pyBase-4,stroke:bc,'stroke-width':'0.7','stroke-dasharray':'3,3','opacity':'0.5'}).forEach(([k,v])=>lineConn.setAttribute(k,v))
+              g.appendChild(lineConn)
+              const mkT=(txt,y,sz='11')=>{
                 const el=document.createElementNS(NS,'text')
-                Object.entries({x:midX,y,'font-size':'9.5','font-family':MONO,'text-anchor':'middle',fill:bc,'font-weight':'600'}).forEach(([k,v])=>el.setAttribute(k,v))
+                Object.entries({x:midX,y,'font-size':sz,'font-family':MONO,'text-anchor':'middle',fill:bc,'font-weight':'700'}).forEach(([k,v])=>el.setAttribute(k,v))
                 el.textContent=txt; return el
               }
-              g.appendChild(mkT(line1,labelY-2))
-              g.appendChild(mkT(line2,labelY+9))
+              g.appendChild(mkT(line1,labelY-3,'11'))
+              g.appendChild(mkT(line2,labelY+11,'9.5'))
             } else {
               // Solo % pequeño siempre visible, sobre la línea del trade
               const py=candlesRef.current.priceToCoordinate(Math.max(t.entryPx,t.exitPx))
@@ -195,39 +239,25 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, showTradeLab
         txt.textContent=label
       }
 
-      // ── Imán Ctrl — snap al O/H/L/C más cercano ──
-      const snapToOHLC=(e,px,py)=>{
-        if(!e.ctrlKey) return {
-          x:px, y:py,
-          price:candlesRef.current?.coordinateToPrice(py),
-          time:chart.timeScale().coordinateToTime(px)
-        }
-        const time=chart.timeScale().coordinateToTime(px)
-        const bar=time&&ohlcMap[time]
-        if(!bar) return {
-          x:px, y:py,
-          price:candlesRef.current?.coordinateToPrice(py),
-          time
-        }
-        // Encontrar el O/H/L/C más cercano al cursor
-        const candidates=[bar.open,bar.high,bar.low,bar.close]
-        const snappedPrice=candidates.reduce((best,p)=>{
-          const coord=candlesRef.current?.priceToCoordinate(p)
-          const bestCoord=candlesRef.current?.priceToCoordinate(best)
-          if(coord==null) return best
-          return Math.abs(coord-py)<Math.abs(bestCoord-py)?p:best
-        })
-        const sy=candlesRef.current?.priceToCoordinate(snappedPrice)??py
-        return {x:px, y:sy, price:snappedPrice, time}
-      }
-
-      const getPoint=(e)=>{
-        const rect=containerRef.current.getBoundingClientRect()
-        return snapToOHLC(e, e.clientX-rect.left, e.clientY-rect.top)
-      }
+      const getPoint=(px,py)=>snapToOHLC(px,py,ctrlState.pressed)
       const cnt=containerRef.current
-      const onMove=e=>{if(!rulerActiveR.current||!rulerStart.current)return;drawRuler(rulerStart.current,getPoint(e))}
-      const onClick=e=>{if(!rulerActiveR.current)return;const pt=getPoint(e);if(!rulerStart.current)rulerStart.current=pt;else rulerStart.current=null}
+      const onMove=e=>{
+        const rect=containerRef.current.getBoundingClientRect()
+        const px=e.clientX-rect.left,py=e.clientY-rect.top
+        if(ctrlState.pressed){
+          const snapped=snapToOHLC(px,py,true)
+          snapDot.setAttribute('cx',String(snapped.x))
+          snapDot.setAttribute('cy',String(snapped.y))
+          snapDot.setAttribute('display','block')
+        } else { snapDot.setAttribute('display','none') }
+        if(rulerActiveR.current&&rulerStart.current) drawRuler(rulerStart.current,getPoint(px,py))
+      }
+      const onClick=e=>{
+        if(!rulerActiveR.current)return
+        const rect=containerRef.current.getBoundingClientRect()
+        const pt=getPoint(e.clientX-rect.left,e.clientY-rect.top)
+        if(!rulerStart.current)rulerStart.current=pt;else rulerStart.current=null
+      }
       const onDbl=()=>{rulerStart.current=null;clearRuler()}
       cnt.addEventListener('mousemove',onMove)
       cnt.addEventListener('click',onClick)
@@ -296,7 +326,7 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, showTradeLab
       ro.observe(containerRef.current)
       setTimeout(drawTradeLabels,200)
 
-      return()=>{cnt.removeEventListener('mousemove',onMove);cnt.removeEventListener('click',onClick);cnt.removeEventListener('dblclick',onDbl);ro.disconnect()}
+      return()=>{cnt.removeEventListener('mousemove',onMove);cnt.removeEventListener('click',onClick);cnt.removeEventListener('dblclick',onDbl);window.removeEventListener('keydown',onKeyDown);window.removeEventListener('keyup',onKeyUp);ro.disconnect()}
     })
     return()=>{if(chartRef.current){chartRef.current.remove();chartRef.current=null}}
   },[data,emaRPeriod,emaLPeriod,trades,maxDD,showTradeLabels])
@@ -404,15 +434,22 @@ export default function Home() {
     return()=>clearTimeout(debounceRef.current)
   },[simbolo,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL,run])
 
-  const metrics=result?calcMetrics(result.trades,Number(capitalIni),result.capitalReinv,result.gananciaSimple,result.ganBH||0,result.startDate,result.meta?.ultimaFecha):null
+  const metrics=result?calcMetrics(result.trades,Number(capitalIni),result.capitalReinv,result.gananciaSimple,result.ganBH||0,result.startDate,result.meta?.ultimaFecha,Number(years)):null
   const sp5=result?.sp500Status
   let spStatus='neutral',spTxt='SIN FILTRO'
   if(sp5&&tipoFiltro!=='none'){const blq=tipoFiltro==='precio_ema'?sp5.precio<sp5.emaR:sp5.emaR<sp5.emaL;spStatus=blq?'bad':'ok';spTxt=blq?'⚠ EVITAR ENTRADAS':'✓ APTO PARA OPERAR'}
 
   // Navegar al trade: scroll arriba + zoom en el gráfico
+  const chartWrapRef=useRef(null)
   const navigateToTrade=(trade)=>{
-    contentRef.current?.scrollTo({top:0,behavior:'smooth'})
-    setTimeout(()=>chartApiRef.current?.navigateTo(trade.entryDate,trade.exitDate),350)
+    // 1. Scroll al contenedor scrollable hasta mostrar el gráfico
+    if(contentRef.current){
+      contentRef.current.scrollTo({top:0,behavior:'smooth'})
+    }
+    // 2. Zoom al trade tras esperar que termine el scroll
+    setTimeout(()=>{
+      chartApiRef.current?.navigateTo(trade.entryDate,trade.exitDate)
+    },400)
   }
 
   const metricRows=metrics?[
@@ -602,7 +639,7 @@ export default function Home() {
                 {/* Columna principal */}
                 <div ref={contentRef} style={{flex:1,overflowY:'auto'}}>
                   {/* Gráfico de velas */}
-                  <div className="chart-wrap">
+                  <div className="chart-wrap" ref={chartWrapRef}>
                     <div className="chart-header">
                       <div className="chart-title">{simbolo}</div>
                       <div className="chart-price">{fmt(result.meta?.ultimoPrecio,2)}</div>
