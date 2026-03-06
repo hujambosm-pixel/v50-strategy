@@ -49,9 +49,11 @@ async function fetchWatchlist() {
 async function upsertWatchlistItem(item) {
   const method=item.id?'PATCH':'POST'
   const url=item.id?`${SUPA_URL}/rest/v1/watchlist?id=eq.${item.id}`:`${SUPA_URL}/rest/v1/watchlist`
-  const body={...item}; delete body.id
+  // Limpiar campos internos (prefijo _) y campos no existentes en la tabla
+  const ALLOWED=['symbol','name','group_name','list_name','position','active','favorite','observations']
+  const body={}; ALLOWED.forEach(k=>{if(item[k]!==undefined)body[k]=item[k]})
   const res=await fetch(url,{method,headers:{...SUPA_H,'Prefer':'return=representation'},body:JSON.stringify(body)})
-  if(!res.ok) throw new Error('Error guardando')
+  if(!res.ok){const t=await res.text();throw new Error('Error guardando: '+t)}
   return (await res.json())[0]
 }
 async function deleteWatchlistItem(id) {
@@ -76,6 +78,38 @@ async function upsertStrategy(item) {
 async function deleteStrategy(id) {
   const res=await fetch(`${SUPA_URL}/rest/v1/strategies?id=eq.${id}`,{method:'DELETE',headers:SUPA_H})
   if(!res.ok) throw new Error('Error eliminando estrategia')
+}
+
+// ── Alarms API ───────────────────────────────────────────────
+async function fetchAlarms() {
+  const res=await fetch(`${SUPA_URL}/rest/v1/alarms?active=eq.true&order=symbol.asc`,{headers:SUPA_H})
+  if(!res.ok) throw new Error('Error cargando alarmas')
+  return await res.json()
+}
+async function upsertAlarm(item) {
+  const method=item.id?'PATCH':'POST'
+  const url=item.id?`${SUPA_URL}/rest/v1/alarms?id=eq.${item.id}`:`${SUPA_URL}/rest/v1/alarms`
+  const {id,...body}=item
+  const res=await fetch(url,{method,headers:{...SUPA_H,'Prefer':'return=representation'},body:JSON.stringify(body)})
+  if(!res.ok){const t=await res.text();throw new Error('Error guardando alarma: '+t)}
+  return (await res.json())[0]
+}
+async function deleteAlarm(id) {
+  const res=await fetch(`${SUPA_URL}/rest/v1/alarms?id=eq.${id}`,{method:'DELETE',headers:SUPA_H})
+  if(!res.ok) throw new Error('Error eliminando alarma')
+}
+
+// ── Búsqueda de nombre vía Yahoo Finance (proxy local) ───────
+async function searchSymbolName(sym) {
+  if(!sym||sym.length<1) return ''
+  try{
+    const res=await fetch(`/api/search?q=${encodeURIComponent(sym)}`)
+    if(!res.ok) return ''
+    const data=await res.json()
+    // Buscar coincidencia exacta primero
+    const exact=data.find(d=>d.symbol.toUpperCase()===sym.toUpperCase())
+    return exact?exact.name:(data[0]?.name||'')
+  }catch{return ''}
 }
 
 // Fallback local por si Supabase no responde
@@ -522,9 +556,20 @@ export default function Home() {
   const [editSaving,setEditSaving]=useState(false)
   const [strategies,setStrategies]=useState([])
   const [strLoading,setStrLoading]=useState(true)
-  const [editingStr,setEditingStr]=useState(null) // estrategia en edición
+  const [editingStr,setEditingStr]=useState(null)
   const [strForm,setStrForm]=useState({})
   const [strSaving,setStrSaving]=useState(false)
+  // Alarmas
+  const [alarms,setAlarms]=useState([])
+  const [alarmLoading,setAlarmLoading]=useState(true)
+  const [alarmStatus,setAlarmStatus]=useState({}) // {id: 'active'|'inactive'|'loading'}
+  const [editingAlarm,setEditingAlarm]=useState(null)
+  const [alarmForm,setAlarmForm]=useState({})
+  const [alarmSaving,setAlarmSaving]=useState(false)
+  // Buscador global watchlist
+  const [wlSearch,setWlSearch]=useState('')
+  // Búsqueda async de nombre
+  const symSearchRef=useRef(null)
   const debounceRef=useRef(null),chartApiRef=useRef(null),contentRef=useRef(null)
 
   const [emaStatus,setEmaStatus]=useState({}) // {symbol: 'bull'|'bear'|'loading'|null}
@@ -582,11 +627,19 @@ export default function Home() {
       .catch(()=>{})
       .finally(()=>setStrLoading(false))
   }
+  const reloadAlarms=()=>{
+    setAlarmLoading(true)
+    fetchAlarms()
+      .then(data=>setAlarms(data))
+      .catch(()=>{})
+      .finally(()=>setAlarmLoading(false))
+  }
 
   // Cargar datos al montar
   useEffect(()=>{
     reloadWatchlist()
     reloadStrategies()
+    reloadAlarms()
   },[])
 
   // Abrir editor watchlist
@@ -650,6 +703,75 @@ export default function Home() {
   }
   const newStrategy=()=>openEditStr({id:null})
   const duplicateStr=(s)=>openEditStr({...s,id:null,name:s.name+' (copia)'})
+
+  // ── Alarmas ──
+  const openEditAlarm=(a)=>{
+    setEditingAlarm(a)
+    setAlarmForm({
+      symbol:a.symbol||'',name:a.name||'',
+      condition:a.condition||'ema_cross_up',
+      ema_r:a.ema_r||10,ema_l:a.ema_l||11,
+      notes:a.notes||''
+    })
+  }
+  const closeEditAlarm=()=>{setEditingAlarm(null);setAlarmForm({})}
+  const saveAlarm=async()=>{
+    setAlarmSaving(true)
+    try{
+      await upsertAlarm({...alarmForm,id:editingAlarm?.id||undefined,active:true})
+      reloadAlarms(); closeEditAlarm()
+    }catch(e){alert('Error: '+e.message)}
+    finally{setAlarmSaving(false)}
+  }
+  const removeAlarm=async(id)=>{
+    if(!confirm('¿Eliminar esta alarma?')) return
+    await deleteAlarm(id); reloadAlarms()
+  }
+  const newAlarm=()=>openEditAlarm({id:null})
+
+  // Evaluar condición de una alarma contra datos de mercado
+  const evalCondition=(condition,closes,emaR,emaL)=>{
+    if(!closes||closes.length<20) return null
+    const ema=(vals,p)=>{const k=2/(p+1);let e=null;for(const v of vals){if(e===null)e=v;else e=v*k+e*(1-k)};return e}
+    const last=closes.slice(-60)
+    const er=ema(last,emaR), el=ema(last,emaL), price=last[last.length-1]
+    if(er==null||el==null) return null
+    if(condition==='ema_cross_up')    return er>el
+    if(condition==='ema_cross_down')  return er<el
+    if(condition==='price_above_ema') return price>er
+    if(condition==='price_below_ema') return price<er
+    return null
+  }
+
+  const refreshAlarmStatus=async(list)=>{
+    const items=list||alarms
+    if(!items.length) return
+    // Agrupar por símbolo para no repetir fetch
+    const bySymbol={}
+    items.forEach(a=>{if(!bySymbol[a.symbol])bySymbol[a.symbol]=[]; bySymbol[a.symbol].push(a)})
+    const syms=Object.keys(bySymbol)
+    // Chunks de 4
+    for(let i=0;i<syms.length;i+=4){
+      const chunk=syms.slice(i,i+4)
+      await Promise.all(chunk.map(async sym=>{
+        try{
+          const rawSym=sym==='^GSPC'?'spy':sym.replace('^','').toLowerCase()
+          const res=await fetch(`https://stooq.com/q/d/l/?s=${rawSym}.us&i=d`)
+          const text=await res.text()
+          if(!text||text.includes('No data')) return
+          const rows=text.trim().split('\n').slice(1).filter(l=>l.trim())
+          const closes=rows.map(l=>parseFloat(l.split(',')[4])).filter(v=>!isNaN(v))
+          bySymbol[sym].forEach(a=>{
+            const result=evalCondition(a.condition,closes,a.ema_r,a.ema_l)
+            setAlarmStatus(prev=>({...prev,[a.id]:result===null?'unknown':result?'active':'inactive'}))
+          })
+        }catch{bySymbol[sym].forEach(a=>setAlarmStatus(prev=>({...prev,[a.id]:'unknown'})))}
+      }))
+    }
+  }
+
+  // Refrescar estado de alarmas cuando se cargan
+  useEffect(()=>{if(alarms.length>0) refreshAlarmStatus(alarms)},[alarms])
 
   const run=useCallback(async(sym,cfg)=>{
     setLoading(true);setError(null)
@@ -799,7 +921,7 @@ export default function Home() {
           {/* ── SIDEBAR ── */}
           <aside className="sidebar" style={{padding:0,gap:0,position:'relative'}}>
             <div style={{display:'flex',borderBottom:'1px solid var(--border)'}}>
-              {[{id:'config',label:'⚙',title:'Configuración'},{id:'watchlist',label:'☰',title:'Watchlist'}].map(tab=>(
+              {[{id:'config',label:'⚙',title:'Configuración'},{id:'watchlist',label:'☰',title:'Watchlist'},{id:'alarms',label:'🔔',title:'Alarmas'}].map(tab=>(
                 <button key={tab.id} onClick={()=>setSidePanel(tab.id)} title={tab.title} style={{
                   flex:1,padding:'8px 4px',
                   background:sidePanel===tab.id?'var(--bg3)':'transparent',
@@ -877,8 +999,18 @@ export default function Home() {
 
             {sidePanel==='watchlist'&&(
               <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
+                {/* ── Buscador global ── */}
+                <div style={{padding:'6px 8px',borderBottom:'1px solid var(--border)',flexShrink:0}}>
+                  <input
+                    type="text"
+                    placeholder="🔍 Buscar activo…"
+                    value={wlSearch}
+                    onChange={e=>setWlSearch(e.target.value)}
+                    style={{width:'100%',background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'5px 8px',borderRadius:4,boxSizing:'border-box'}}
+                  />
+                </div>
                 {/* ── Toolbar watchlist ── */}
-                <div style={{padding:'6px 8px',borderBottom:'1px solid var(--border)',display:'flex',gap:4,alignItems:'center',flexShrink:0}}>
+                <div style={{padding:'4px 8px',borderBottom:'1px solid var(--border)',display:'flex',gap:4,alignItems:'center',flexShrink:0}}>
                   {/* Desplegable multiselección de listas */}
                   <div style={{position:'relative',flex:1}}>
                     <button onClick={()=>setListDropOpen(o=>!o)} style={{width:'100%',background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:10,padding:'4px 8px',borderRadius:3,cursor:'pointer',textAlign:'left',display:'flex',justifyContent:'space-between'}}>
@@ -913,7 +1045,12 @@ export default function Home() {
                 <div style={{overflowY:'auto',flex:1}}>
                   {wlLoading&&<div style={{padding:'10px 12px',fontFamily:MONO,fontSize:10,color:'var(--text3)'}}>⟳ Cargando…</div>}
                   {!wlLoading&&(()=>{
-                    const filtered=watchlist.filter(w=>selectedLists.length===0||selectedLists.includes(w.list_name||'General'))
+                    const searchLower=wlSearch.toLowerCase()
+                    const filtered=watchlist.filter(w=>{
+                      const matchList=selectedLists.length===0||selectedLists.includes(w.list_name||'General')
+                      const matchSearch=!wlSearch||(w.symbol||'').toLowerCase().includes(searchLower)||(w.name||'').toLowerCase().includes(searchLower)
+                      return matchList&&matchSearch
+                    })
                     const favs=filtered.filter(w=>w.favorite)
                     const rest=filtered.filter(w=>!w.favorite).sort((a,b)=>a.name.localeCompare(b.name))
                     const all=[...favs,...rest]
@@ -973,8 +1110,18 @@ export default function Home() {
                         <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>Símbolo
                           <input type="text" value={editForm.symbol||''} onChange={e=>{
                             const sym=e.target.value.toUpperCase()
-                            const nombre=lookupName(sym)
-                            setEditForm(p=>({...p,symbol:sym,name:p.name&&p._nameTouched?p.name:nombre}))
+                            setEditForm(p=>({...p,symbol:sym}))
+                            // Cancelar búsqueda anterior
+                            if(symSearchRef.current) clearTimeout(symSearchRef.current)
+                            // Nombre local inmediato como placeholder
+                            const nameLocal=lookupName(sym)
+                            if(nameLocal&&!(editForm._nameTouched)) setEditForm(p=>({...p,symbol:sym,name:nameLocal}))
+                            // Búsqueda real con debounce 600ms
+                            symSearchRef.current=setTimeout(async()=>{
+                              if(sym.length<1) return
+                              const realName=await searchSymbolName(sym)
+                              if(realName) setEditForm(p=>p._nameTouched?p:{...p,name:realName})
+                            },600)
                           }} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'6px 8px',borderRadius:4}}/>
                         </label>
                         <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>Nombre
@@ -986,7 +1133,17 @@ export default function Home() {
                           </select>
                         </label>
                         <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>Lista
-                          <input type="text" value={editForm.list_name||'General'} onChange={e=>setEditForm(p=>({...p,list_name:e.target.value}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'6px 8px',borderRadius:4}}/>
+                          {(()=>{
+                            const allLists=[...new Set(watchlist.map(w=>w.list_name||'General').filter(Boolean))]
+                            return(<>
+                              <input type="text" list="wl-lists" value={editForm.list_name||'General'}
+                                onChange={e=>setEditForm(p=>({...p,list_name:e.target.value}))}
+                                style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'6px 8px',borderRadius:4}}/>
+                              <datalist id="wl-lists">
+                                {allLists.map(l=><option key={l} value={l}/>)}
+                              </datalist>
+                            </>)
+                          })()}
                         </label>
                       </div>
                       <label style={{display:'flex',alignItems:'center',gap:8,color:'var(--text3)',cursor:'pointer',padding:'4px 0'}}>
@@ -1009,6 +1166,50 @@ export default function Home() {
               </div>
             )}
 
+            {sidePanel==='alarms'&&(
+              <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
+                <div style={{padding:'6px 8px',borderBottom:'1px solid var(--border)',display:'flex',gap:4,alignItems:'center',flexShrink:0}}>
+                  <span style={{fontFamily:MONO,fontSize:10,color:'var(--text3)',flex:1}}>Condiciones / Alarmas</span>
+                  <button onClick={newAlarm} title="Nueva alarma" style={{background:'rgba(0,212,255,0.1)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:13,padding:'3px 8px',borderRadius:3,cursor:'pointer'}}>+</button>
+                  <button onClick={()=>refreshAlarmStatus()} title="Actualizar estado" style={{background:'transparent',border:'1px solid var(--border)',color:'#ffd166',fontFamily:MONO,fontSize:11,padding:'3px 6px',borderRadius:3,cursor:'pointer'}}>⟳</button>
+                </div>
+                <div style={{overflowY:'auto',flex:1}}>
+                  {alarmLoading&&<div style={{padding:'10px 12px',fontFamily:MONO,fontSize:10,color:'var(--text3)'}}>⟳ Cargando…</div>}
+                  {!alarmLoading&&!alarms.length&&<div style={{padding:'14px 12px',fontFamily:MONO,fontSize:10,color:'var(--text3)'}}>Sin alarmas. Pulsa + para crear una.</div>}
+                  {!alarmLoading&&alarms.map(a=>{
+                    const st=alarmStatus[a.id]
+                    const condLabel={
+                      ema_cross_up:'EMA↑ alcista',ema_cross_down:'EMA↓ bajista',
+                      price_above_ema:'Precio>EMA','price_below_ema':'Precio<EMA'
+                    }[a.condition]||a.condition
+                    return(
+                      <div key={a.id} style={{padding:'7px 10px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:6}}>
+                        {/* Badge estado */}
+                        <span style={{
+                          width:8,height:8,borderRadius:'50%',flexShrink:0,
+                          background:st==='active'?'#00e5a0':st==='inactive'?'#ff4d6d':st==='loading'?'#ffd166':'#3d5a7a',
+                          boxShadow:st==='active'?'0 0 6px #00e5a0':st==='inactive'?'0 0 6px #ff4d6d':undefined
+                        }}/>
+                        {/* Info */}
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontFamily:MONO,fontSize:11,color:'var(--text)',fontWeight:600}}
+                            onClick={()=>setSimbolo(a.symbol)} >{a.symbol}
+                            <span style={{color:'var(--text3)',fontWeight:400,marginLeft:6,fontSize:9}}>{a.name}</span>
+                          </div>
+                          <div style={{fontFamily:MONO,fontSize:9,color:'var(--text3)'}}>
+                            {condLabel} · EMA {a.ema_r}/{a.ema_l}
+                            {st==='active'&&<span style={{color:'#00e5a0',marginLeft:6,fontWeight:700}}>● ACTIVA</span>}
+                            {st==='inactive'&&<span style={{color:'#ff4d6d',marginLeft:6}}>● inactiva</span>}
+                          </div>
+                          {a.notes&&<div style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',fontStyle:'italic',marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.notes}</div>}
+                        </div>
+                        <button onClick={()=>openEditAlarm(a)} style={{background:'transparent',border:'1px solid var(--border)',color:'var(--text3)',fontFamily:MONO,fontSize:10,padding:'2px 5px',borderRadius:3,cursor:'pointer'}}>✎</button>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
           </aside>
 
           {/* ── CONTENT ── */}
@@ -1140,6 +1341,74 @@ export default function Home() {
           </div>
         </div>
       </div>
+      {/* ══ MODAL ALARMA — fixed sobre gráfico ══ */}
+      {editingAlarm!==null&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.72)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center'}} onClick={e=>{if(e.target===e.currentTarget)closeEditAlarm()}}>
+          <div style={{background:'#0d1824',border:'1px solid #1e3a52',borderRadius:8,padding:28,width:460,maxHeight:'85vh',overflowY:'auto',display:'flex',flexDirection:'column',gap:14,fontFamily:MONO,fontSize:12,boxShadow:'0 8px 48px rgba(0,0,0,0.8)'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+              <span style={{fontWeight:700,color:'var(--text)',fontSize:15}}>{editingAlarm.id?'Editar alarma':'Nueva alarma'}</span>
+              <button onClick={closeEditAlarm} style={{background:'transparent',border:'none',color:'var(--text3)',fontSize:18,cursor:'pointer'}}>✕</button>
+            </div>
+
+            {/* Símbolo y nombre */}
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+              <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>Símbolo
+                <input type="text" value={alarmForm.symbol||''} onChange={async e=>{
+                  const sym=e.target.value.toUpperCase()
+                  setAlarmForm(p=>({...p,symbol:sym}))
+                  if(sym.length>1){
+                    const local=lookupName(sym)
+                    if(local) setAlarmForm(p=>({...p,symbol:sym,name:local}))
+                    if(symSearchRef.current) clearTimeout(symSearchRef.current)
+                    symSearchRef.current=setTimeout(async()=>{
+                      const n=await searchSymbolName(sym)
+                      if(n) setAlarmForm(p=>({...p,name:n}))
+                    },600)
+                  }
+                }} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'7px 10px',borderRadius:4}}/>
+              </label>
+              <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>Nombre
+                <input type="text" value={alarmForm.name||''} onChange={e=>setAlarmForm(p=>({...p,name:e.target.value}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'7px 10px',borderRadius:4}}/>
+              </label>
+            </div>
+
+            {/* Condición */}
+            <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>
+              Condición
+              <select value={alarmForm.condition||'ema_cross_up'} onChange={e=>setAlarmForm(p=>({...p,condition:e.target.value}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'7px 10px',borderRadius:4}}>
+                <option value="ema_cross_up">EMA rápida &gt; EMA lenta — cruce alcista ↑</option>
+                <option value="ema_cross_down">EMA rápida &lt; EMA lenta — cruce bajista ↓</option>
+                <option value="price_above_ema">Precio cierre &gt; EMA rápida</option>
+                <option value="price_below_ema">Precio cierre &lt; EMA rápida</option>
+              </select>
+            </label>
+
+            {/* EMAs */}
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+              <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>EMA Rápida
+                <input type="number" value={alarmForm.ema_r||10} min={1} onChange={e=>setAlarmForm(p=>({...p,ema_r:Number(e.target.value)}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'#ffd166',fontFamily:MONO,fontSize:13,padding:'7px 10px',borderRadius:4,fontWeight:600}}/>
+              </label>
+              <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>EMA Lenta
+                <input type="number" value={alarmForm.ema_l||11} min={1} onChange={e=>setAlarmForm(p=>({...p,ema_l:Number(e.target.value)}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'#ff4d6d',fontFamily:MONO,fontSize:13,padding:'7px 10px',borderRadius:4,fontWeight:600}}/>
+              </label>
+            </div>
+
+            {/* Notas */}
+            <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>
+              Notas
+              <textarea value={alarmForm.notes||''} onChange={e=>setAlarmForm(p=>({...p,notes:e.target.value}))} rows={2} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'7px 10px',borderRadius:4,resize:'vertical'}}/>
+            </label>
+
+            <div style={{display:'flex',gap:8,paddingTop:4,borderTop:'1px solid var(--border)'}}>
+              <button onClick={saveAlarm} disabled={alarmSaving} style={{flex:1,background:'rgba(0,212,255,0.15)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:13,padding:'9px',borderRadius:5,cursor:'pointer',fontWeight:600}}>
+                {alarmSaving?'Guardando…':'Guardar alarma'}
+              </button>
+              {editingAlarm.id&&<button onClick={()=>removeAlarm(editingAlarm.id)} style={{background:'rgba(255,77,109,0.12)',border:'1px solid #ff4d6d',color:'#ff4d6d',fontFamily:MONO,fontSize:12,padding:'9px 16px',borderRadius:5,cursor:'pointer'}}>🗑</button>}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ══ MODAL ESTRATEGIA — fixed sobre gráfico ══ */}
       {editingStr!==null&&(
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.72)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center'}} onClick={e=>{if(e.target===e.currentTarget)closeEditStr()}}>
