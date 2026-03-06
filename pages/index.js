@@ -20,6 +20,7 @@ function calcMetrics(trades, capitalIni, capitalReinv, gananciaSimple, ganBH, st
   let peakR=capitalIni,maxDDR=0; trades.forEach(t=>{if(t.capitalTras>peakR)peakR=t.capitalTras;const dd=(peakR-t.capitalTras)/peakR*100;if(dd>maxDDR)maxDDR=dd})
   return {n,wins:wins.length,losses:losses.length,winRate,avgWin,avgLoss,totalDias,diasProm:totalDias/n,ganSimple:gananciaSimple,ganComp:capitalReinv-capitalIni,ganBH,ganTotalPct:(gananciaSimple/capitalIni)*100,cagrS:cagrS*100,cagrC:cagrC*100,cagrBH:cagrBH*100,factorBen,ddSimple:maxDDS,ddComp:maxDDR,tiempoInvPct,aniosInv,anios:safYears}
 }
+
 const MONO='"JetBrains Mono","Fira Code","IBM Plex Mono",monospace'
 function fmt(v,dec=2,suf=''){if(v==null||isNaN(v))return'—';return v.toLocaleString('es-ES',{minimumFractionDigits:dec,maximumFractionDigits:dec})+suf}
 function fmtDate(s){if(!s)return'—';return new Date(s).toLocaleDateString('es-ES',{day:'2-digit',month:'2-digit',year:'numeric'})}
@@ -67,64 +68,107 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, showTradeLab
         timeScale:{borderColor:'#1a2d45',timeVisible:true},
       })
       chartRef.current=chart
-      const candles=chart.addCandlestickSeries({upColor:'#00e5a0',downColor:'#ff4d6d',borderUpColor:'#00e5a0',borderDownColor:'#ff4d6d',wickUpColor:'#00e5a0',wickDownColor:'#ff4d6d'})
+
+      const candles=chart.addCandlestickSeries({
+        upColor:'#00e5a0',downColor:'#ff4d6d',
+        borderUpColor:'#00e5a0',borderDownColor:'#ff4d6d',
+        wickUpColor:'#00e5a0',wickDownColor:'#ff4d6d'
+      })
       candles.setData(data.map(d=>({time:d.date,open:d.open,high:d.high,low:d.low,close:d.close})))
       candlesRef.current=candles
-      const erS=chart.addLineSeries({color:'#ffd166',lineWidth:2,title:`EMA ${emaRPeriod}`,lastValueVisible:true,priceLineVisible:false})
+
+      // EMA series — sin title para no generar leyenda inferior
+      const erS=chart.addLineSeries({color:'#ffd166',lineWidth:2,lastValueVisible:false,priceLineVisible:false})
       erS.setData(data.filter(d=>d.emaR!=null).map(d=>({time:d.date,value:d.emaR})))
-      const elS=chart.addLineSeries({color:'#ff4d6d',lineWidth:2,title:`EMA ${emaLPeriod}`,lastValueVisible:true,priceLineVisible:false})
+      const elS=chart.addLineSeries({color:'#ff4d6d',lineWidth:2,lastValueVisible:false,priceLineVisible:false})
       elS.setData(data.filter(d=>d.emaL!=null).map(d=>({time:d.date,value:d.emaL})))
+
+      // Líneas de trades — sin title
       trades.forEach(t=>{
         if(!t.entryDate||!t.exitDate) return
         const ls=chart.addLineSeries({color:t.pnlPct>=0?'#00e5a0':'#ff4d6d',lineWidth:2,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
         ls.setData([{time:t.entryDate,value:t.entryPx},{time:t.exitDate,value:t.exitPx}])
       })
-      // EMA cross markers — large diagonal arrows
+
+      // ── Flechas de cruce EMA ──
+      // shape:'circle' size:1 → punto invisible, solo muestra el texto diagonal ↗↘
       const marks=[]
       for(let i=1;i<data.length;i++){
         const p=data[i-1],c=data[i]
         if(!p.emaR||!p.emaL||!c.emaR||!c.emaL) continue
-        if(p.emaR<p.emaL&&c.emaR>=c.emaL) marks.push({time:c.date,position:'belowBar',color:'#00e5a0',shape:'arrowUp',size:2,text:'↗'})
-        else if(p.emaR>p.emaL&&c.emaR<=c.emaL) marks.push({time:c.date,position:'aboveBar',color:'#ff4d6d',shape:'arrowDown',size:2,text:'↘'})
+        if(p.emaR<p.emaL&&c.emaR>=c.emaL)
+          marks.push({time:c.date,position:'belowBar',color:'#00e5a0',shape:'circle',size:1,text:'↗'})
+        else if(p.emaR>p.emaL&&c.emaR<=c.emaL)
+          marks.push({time:c.date,position:'aboveBar',color:'#ff4d6d',shape:'circle',size:1,text:'↘'})
       }
       if(marks.length) candles.setMarkers(marks)
 
       const ohlcMap={},erMap={},elMap={}
       data.forEach(d=>{ohlcMap[d.date]=d;if(d.emaR!=null)erMap[d.date]=d.emaR;if(d.emaL!=null)elMap[d.date]=d.emaL})
 
-      // Trade labels as SVG boxes when showTradeLabels
+      // ── Trade labels SVG — dinámicas con zoom ──
       const drawTradeLabels=()=>{
         const svg=svgRef.current; if(!svg||!candlesRef.current||!chartRef.current) return
-        // Remove old labels (keep ruler elements)
         svg.querySelectorAll('.trade-label').forEach(el=>el.remove())
-        if(!showTradeLabels) return
         const NS='http://www.w3.org/2000/svg'
-        trades.forEach((t,idx)=>{
+        trades.forEach(t=>{
           if(!t.entryDate||!t.exitDate) return
           try {
             const ts=chartRef.current.timeScale()
             const x1=ts.timeToCoordinate(t.entryDate), x2=ts.timeToCoordinate(t.exitDate)
-            const midPx=t.entryPx, py=candlesRef.current.priceToCoordinate(midPx)
-            if(x1==null||x2==null||py==null) return
-            const mx=(x1+x2)/2, my=py-30
+            if(x1==null||x2==null) return
+            const midX=(x1+x2)/2
+            // Precio medio del trade para la posición Y base
+            const midPrice=(t.entryPx+t.exitPx)/2
+            const pyBase=candlesRef.current.priceToCoordinate(midPrice)
+            if(pyBase==null) return
             const isWin=t.pnlPct>=0
             const bc=isWin?'#00e5a0':'#ff4d6d'
-            const bg=isWin?'rgba(0,229,160,0.12)':'rgba(255,77,109,0.12)'
-            const line1=`${t.pnlPct>=0?'+':''}${t.pnlPct.toFixed(1)}%  €${t.pnlSimple>=0?'+':''}${Math.round(t.pnlSimple)}`
-            const line2=`${fmtDate(t.entryDate)} · ${t.dias}d`
-            const w=Math.max(line1.length,line2.length)*6.5+16
             const g=document.createElementNS(NS,'g'); g.setAttribute('class','trade-label')
-            const rect=document.createElementNS(NS,'rect')
-            Object.entries({x:mx-w/2,y:my-26,width:w,height:28,fill:bg,rx:'3',stroke:bc,'stroke-width':'0.8'}).forEach(([k,v])=>rect.setAttribute(k,v))
-            g.appendChild(rect)
-            const mk=(txt,y)=>{const t=document.createElementNS(NS,'text');Object.entries({x:mx,y,'font-size':'9','font-family':MONO,'text-anchor':'middle',fill:bc}).forEach(([k,v])=>t.setAttribute(k,v));t.textContent=txt;return t}
-            g.appendChild(mk(line1,my-14)); g.appendChild(mk(line2,my-4))
+
+            if(showTradeLabels){
+              // Etiqueta completa — más arriba del precio de entrada, legible
+              const line1=`${t.pnlPct>=0?'+':''}${t.pnlPct.toFixed(1)}%  €${t.pnlSimple>=0?'+':''}${Math.round(t.pnlSimple)}`
+              const line2=`${fmtDate(t.entryDate)} · ${t.dias}d`
+              const w=Math.max(line1.length,line2.length)*6.5+16
+              const labelY=pyBase-55  // bien por encima del precio
+              const rect=document.createElementNS(NS,'rect')
+              Object.entries({
+                x:midX-w/2, y:labelY-14, width:w, height:28,
+                fill:isWin?'rgba(0,229,160,0.13)':'rgba(255,77,109,0.13)',
+                rx:'3', stroke:bc, 'stroke-width':'0.9'
+              }).forEach(([k,v])=>rect.setAttribute(k,v))
+              g.appendChild(rect)
+              const mkT=(txt,y)=>{
+                const el=document.createElementNS(NS,'text')
+                Object.entries({x:midX,y,'font-size':'9.5','font-family':MONO,'text-anchor':'middle',fill:bc,'font-weight':'600'}).forEach(([k,v])=>el.setAttribute(k,v))
+                el.textContent=txt; return el
+              }
+              g.appendChild(mkT(line1,labelY-2))
+              g.appendChild(mkT(line2,labelY+9))
+            } else {
+              // Solo % pequeño siempre visible, sobre la línea del trade
+              const py=candlesRef.current.priceToCoordinate(Math.max(t.entryPx,t.exitPx))
+              if(py==null) return
+              const lbl=`${t.pnlPct>=0?'+':''}${t.pnlPct.toFixed(1)}%`
+              const txt=document.createElementNS(NS,'text')
+              Object.entries({
+                x:midX, y:py-8,
+                'font-size':'9', 'font-family':MONO,
+                'text-anchor':'middle', fill:bc, 'font-weight':'600'
+              }).forEach(([k,v])=>txt.setAttribute(k,v))
+              txt.textContent=lbl
+              g.appendChild(txt)
+            }
             svg.appendChild(g)
           } catch(_){}
         })
       }
 
-      // Ruler
+      // Redibujar etiquetas al hacer zoom/scroll
+      chart.timeScale().subscribeVisibleTimeRangeChange(()=>setTimeout(drawTradeLabels,30))
+
+      // ── Regla SVG ──
       const svg=svgRef.current, NS='http://www.w3.org/2000/svg'
       const mk=(tag,attrs)=>{const el=document.createElementNS(NS,tag);Object.entries(attrs).forEach(([k,v])=>el.setAttribute(k,v));return el}
       const clearRuler=()=>{svg?.querySelectorAll('.ruler-el').forEach(el=>el.remove())}
@@ -150,14 +194,36 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, showTradeLab
         const txt=addC(mk('text',{x:mx,y:my+1,fill:'#ffd166','font-size':'10','font-family':MONO,'text-anchor':'middle','dominant-baseline':'middle'}))
         txt.textContent=label
       }
+
+      // ── Imán Ctrl — snap al O/H/L/C más cercano ──
+      const snapToOHLC=(e,px,py)=>{
+        if(!e.ctrlKey) return {
+          x:px, y:py,
+          price:candlesRef.current?.coordinateToPrice(py),
+          time:chart.timeScale().coordinateToTime(px)
+        }
+        const time=chart.timeScale().coordinateToTime(px)
+        const bar=time&&ohlcMap[time]
+        if(!bar) return {
+          x:px, y:py,
+          price:candlesRef.current?.coordinateToPrice(py),
+          time
+        }
+        // Encontrar el O/H/L/C más cercano al cursor
+        const candidates=[bar.open,bar.high,bar.low,bar.close]
+        const snappedPrice=candidates.reduce((best,p)=>{
+          const coord=candlesRef.current?.priceToCoordinate(p)
+          const bestCoord=candlesRef.current?.priceToCoordinate(best)
+          if(coord==null) return best
+          return Math.abs(coord-py)<Math.abs(bestCoord-py)?p:best
+        })
+        const sy=candlesRef.current?.priceToCoordinate(snappedPrice)??py
+        return {x:px, y:sy, price:snappedPrice, time}
+      }
+
       const getPoint=(e)=>{
         const rect=containerRef.current.getBoundingClientRect()
-        const px=e.clientX-rect.left, py=e.clientY-rect.top
-        const time=chart.timeScale().coordinateToTime(px)
-        let price=candlesRef.current?.coordinateToPrice(py)
-        if(e.ctrlKey&&time&&ohlcMap[time]) price=ohlcMap[time].close
-        const sy=(price!=null&&candlesRef.current)?(candlesRef.current.priceToCoordinate(price)??py):py
-        return{x:px,y:sy,price,time}
+        return snapToOHLC(e, e.clientX-rect.left, e.clientY-rect.top)
       }
       const cnt=containerRef.current
       const onMove=e=>{if(!rulerActiveR.current||!rulerStart.current)return;drawRuler(rulerStart.current,getPoint(e))}
@@ -167,6 +233,7 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, showTradeLab
       cnt.addEventListener('click',onClick)
       cnt.addEventListener('dblclick',onDbl)
 
+      // ── Leyenda OHLC + EMAs ──
       chart.subscribeCrosshairMove(param=>{
         const leg=legendRef.current
         if(leg){
@@ -174,7 +241,8 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, showTradeLab
             const b=ohlcMap[param.time],er=erMap[param.time],el=elMap[param.time]
             if(b){
               const chg=b.close-b.open,pct=(chg/b.open)*100,cc=chg>=0?'#00e5a0':'#ff4d6d'
-              leg.innerHTML=`<span style="color:#7a9bc0;margin-right:8px">${b.date}</span>`+
+              leg.innerHTML=
+                `<span style="color:#7a9bc0;margin-right:8px">${b.date}</span>`+
                 `<span style="margin-right:7px">O <b>${f2(b.open)}</b></span>`+
                 `<span style="margin-right:7px">H <b style="color:#00e5a0">${f2(b.high)}</b></span>`+
                 `<span style="margin-right:7px">L <b style="color:#ff4d6d">${f2(b.low)}</b></span>`+
@@ -185,8 +253,9 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, showTradeLab
             }
           } else leg.innerHTML=''
         }
+        // Tooltip de trade (solo cuando etiquetas OFF)
         const tt=tooltipRef.current
-        if(tt&&!showTradeLabels){
+        if(tt){
           if(!param.time||!param.point){tt.style.display='none';return}
           const trade=trades.find(t=>t.entryDate<=param.time&&param.time<=t.exitDate)
           if(!trade){tt.style.display='none';return}
@@ -196,7 +265,8 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, showTradeLab
           tt.style.left=((param.point.x+210>w)?param.point.x-220:param.point.x+16)+'px'
           tt.style.top=Math.max(8,param.point.y-70)+'px'
           tt.style.borderColor=bc
-          tt.innerHTML=`<div style="font-size:10px;color:#7a9bc0;margin-bottom:4px">${fmtDate(trade.entryDate)} → ${fmtDate(trade.exitDate)}</div>`+
+          tt.innerHTML=
+            `<div style="font-size:10px;color:#7a9bc0;margin-bottom:4px">${fmtDate(trade.entryDate)} → ${fmtDate(trade.exitDate)}</div>`+
             `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:#7a9bc0">Capital</span><b style="color:#e2eaf5">€${f2(trade.capitalTras)}</b></div>`+
             `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:#7a9bc0">Profit</span><b style="color:${bc}">${trade.pnlPct>=0?'+':''}${trade.pnlPct.toFixed(2)}%</b></div>`+
             `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:#7a9bc0">P&L</span><b style="color:${bc}">${trade.pnlSimple>=0?'€+':'€-'}${f2(Math.abs(trade.pnlSimple))}</b></div>`+
@@ -206,18 +276,16 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, showTradeLab
       })
 
       chart.timeScale().fitContent()
-      // Expose navigate function
+
+      // Exponer navigateTo
       if(onChartReady) onChartReady({
         navigateTo:(entryDate,exitDate)=>{
-          try {
-            const pad=Math.max(5, Math.round((new Date(exitDate)-new Date(entryDate))/86400000*0.3))
+          try{
+            const pad=Math.max(5,Math.round((new Date(exitDate)-new Date(entryDate))/86400000*0.3))
             const d1=new Date(entryDate); d1.setDate(d1.getDate()-pad)
             const d2=new Date(exitDate); d2.setDate(d2.getDate()+pad)
-            chart.timeScale().setVisibleRange({
-              from:d1.toISOString().split('T')[0],
-              to:d2.toISOString().split('T')[0],
-            })
-          } catch(_){}
+            chart.timeScale().setVisibleRange({from:d1.toISOString().split('T')[0],to:d2.toISOString().split('T')[0]})
+          }catch(_){}
         }
       })
 
@@ -228,9 +296,9 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, showTradeLab
       ro.observe(containerRef.current)
       setTimeout(drawTradeLabels,200)
 
-      return ()=>{cnt.removeEventListener('mousemove',onMove);cnt.removeEventListener('click',onClick);cnt.removeEventListener('dblclick',onDbl);ro.disconnect()}
+      return()=>{cnt.removeEventListener('mousemove',onMove);cnt.removeEventListener('click',onClick);cnt.removeEventListener('dblclick',onDbl);ro.disconnect()}
     })
-    return ()=>{if(chartRef.current){chartRef.current.remove();chartRef.current=null}}
+    return()=>{if(chartRef.current){chartRef.current.remove();chartRef.current=null}}
   },[data,emaRPeriod,emaLPeriod,trades,maxDD,showTradeLabels])
 
   return (
@@ -243,8 +311,13 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, showTradeLab
   )
 }
 
-// ── EquityChart ───────────────────────────────────────────────
-function EquityChart({strategyCurve,bhCurve,sp500BHCurve,maxDDStrategy,maxDDBH,maxDDSP500,maxDDStrategyDate,maxDDBHDate,maxDDSP500Date,capitalIni,showStrategy,showBH,showSP500}) {
+// ── EquityChart — con curva compuesta ────────────────────────
+function EquityChart({
+  strategyCurve,bhCurve,sp500BHCurve,compoundCurve,
+  maxDDStrategy,maxDDBH,maxDDSP500,maxDDCompound,
+  maxDDStrategyDate,maxDDBHDate,maxDDSP500Date,maxDDCompoundDate,
+  capitalIni,showStrategy,showBH,showSP500,showCompound
+}) {
   const ref=useRef(null),chartRef=useRef(null)
   useEffect(()=>{
     if(!ref.current) return
@@ -259,24 +332,22 @@ function EquityChart({strategyCurve,bhCurve,sp500BHCurve,maxDDStrategy,maxDDBH,m
         timeScale:{borderColor:'#1a2d45',timeVisible:false},
       })
       chartRef.current=chart
-      let strat=null
-      if(showStrategy&&strategyCurve?.length){
-        strat=chart.addLineSeries({color:'#00d4ff',lineWidth:2,title:'Estrategia'})
-        strat.setData(strategyCurve.map(p=>({time:p.date,value:p.value})))
-      }
-      if(showBH&&bhCurve?.length){
-        chart.addLineSeries({color:'#ffd166',lineWidth:2,lineStyle:LineStyle.Dashed,title:'B&H Activo'})
+      if(showStrategy&&strategyCurve?.length)
+        chart.addLineSeries({color:'#00d4ff',lineWidth:2,lastValueVisible:false,priceLineVisible:false})
+          .setData(strategyCurve.map(p=>({time:p.date,value:p.value})))
+      if(showCompound&&compoundCurve?.length)
+        chart.addLineSeries({color:'#00e5a0',lineWidth:2,lastValueVisible:false,priceLineVisible:false})
+          .setData(compoundCurve.map(p=>({time:p.date,value:p.value})))
+      if(showBH&&bhCurve?.length)
+        chart.addLineSeries({color:'#ffd166',lineWidth:2,lineStyle:LineStyle.Dashed,lastValueVisible:false,priceLineVisible:false})
           .setData(bhCurve.map(p=>({time:p.date,value:p.value})))
-      }
-      if(showSP500&&sp500BHCurve?.length){
-        chart.addLineSeries({color:'#9b72ff',lineWidth:2,lineStyle:LineStyle.Dotted,title:'B&H SP500'})
+      if(showSP500&&sp500BHCurve?.length)
+        chart.addLineSeries({color:'#9b72ff',lineWidth:2,lineStyle:LineStyle.Dotted,lastValueVisible:false,priceLineVisible:false})
           .setData(sp500BHCurve.map(p=>({time:p.date,value:p.value})))
-      }
-      const base=strategyCurve||bhCurve||sp500BHCurve
-      if(base?.length){
+      const base=strategyCurve||compoundCurve||bhCurve||sp500BHCurve
+      if(base?.length)
         chart.addLineSeries({color:'#3d5a7a',lineWidth:1,lineStyle:LineStyle.Dotted,lastValueVisible:false,priceLineVisible:false})
           .setData([{time:base[0].date,value:capitalIni},{time:base[base.length-1].date,value:capitalIni}])
-      }
       const addDD=(curve,date,dd,color,label)=>{
         if(!date||!dd||!curve?.length) return
         let peak={date:curve[0].date,value:curve[0].value}
@@ -288,15 +359,16 @@ function EquityChart({strategyCurve,bhCurve,sp500BHCurve,maxDDStrategy,maxDDBH,m
         s.setMarkers([{time:trough.date,position:'belowBar',color,shape:'circle',size:0,text:`↓${label} -${dd.toFixed(1)}%`}])
       }
       if(showStrategy) addDD(strategyCurve,maxDDStrategyDate,maxDDStrategy,'#ff4d6d','DD Est.')
-      if(showBH) addDD(bhCurve,maxDDBHDate,maxDDBH,'#ff9a3c','DD B&H')
-      if(showSP500) addDD(sp500BHCurve,maxDDSP500Date,maxDDSP500,'#7b5fe0','DD SP500')
+      if(showCompound) addDD(compoundCurve,maxDDCompoundDate,maxDDCompound,'#00a870','DD Comp.')
+      if(showBH)       addDD(bhCurve,maxDDBHDate,maxDDBH,'#ff9a3c','DD B&H')
+      if(showSP500)    addDD(sp500BHCurve,maxDDSP500Date,maxDDSP500,'#7b5fe0','DD SP500')
       chart.timeScale().fitContent()
       const ro=new ResizeObserver(()=>{if(ref.current)chart.applyOptions({width:ref.current.clientWidth})})
       ro.observe(ref.current)
-      return ()=>ro.disconnect()
+      return()=>ro.disconnect()
     })
-    return ()=>{if(chartRef.current){chartRef.current.remove();chartRef.current=null}}
-  },[strategyCurve,bhCurve,sp500BHCurve,maxDDStrategy,maxDDBH,maxDDSP500,maxDDStrategyDate,maxDDBHDate,maxDDSP500Date,capitalIni,showStrategy,showBH,showSP500])
+    return()=>{if(chartRef.current){chartRef.current.remove();chartRef.current=null}}
+  },[strategyCurve,bhCurve,sp500BHCurve,compoundCurve,maxDDStrategy,maxDDBH,maxDDSP500,maxDDCompound,maxDDStrategyDate,maxDDBHDate,maxDDSP500Date,maxDDCompoundDate,capitalIni,showStrategy,showBH,showSP500,showCompound])
   return <div ref={ref} style={{minHeight:260}}/>
 }
 
@@ -310,10 +382,11 @@ export default function Home() {
   const [tipoFiltro,setTipoFiltro]=useState('none'),[sp500EmaR,setSp500EmaR]=useState(10),[sp500EmaL,setSp500EmaL]=useState(11)
   const [result,setResult]=useState(null),[loading,setLoading]=useState(false),[error,setError]=useState(null)
   const [showLabels,setShowLabels]=useState(false),[rulerOn,setRulerOn]=useState(false)
-  const [sidePanel,setSidePanel]=useState('resumen') // 'resumen' | 'watchlist'
-  const [metricsLayout,setMetricsLayout]=useState('panel') // 'grid' | 'panel'
-  const [showStrategy,setShowStrategy]=useState(true),[showBH,setShowBH]=useState(true),[showSP500,setShowSP500]=useState(true)
-  const debounceRef=useRef(null), chartApiRef=useRef(null)
+  const [sidePanel,setSidePanel]=useState('config')
+  const [metricsLayout,setMetricsLayout]=useState('panel')
+  const [showStrategy,setShowStrategy]=useState(true),[showBH,setShowBH]=useState(true)
+  const [showSP500,setShowSP500]=useState(true),[showCompound,setShowCompound]=useState(true)
+  const debounceRef=useRef(null),chartApiRef=useRef(null),contentRef=useRef(null)
 
   const run=useCallback(async(sym,cfg)=>{
     setLoading(true);setError(null)
@@ -336,7 +409,11 @@ export default function Home() {
   let spStatus='neutral',spTxt='SIN FILTRO'
   if(sp5&&tipoFiltro!=='none'){const blq=tipoFiltro==='precio_ema'?sp5.precio<sp5.emaR:sp5.emaR<sp5.emaL;spStatus=blq?'bad':'ok';spTxt=blq?'⚠ EVITAR ENTRADAS':'✓ APTO PARA OPERAR'}
 
-  const navigateToTrade=(trade)=>{ chartApiRef.current?.navigateTo(trade.entryDate,trade.exitDate) }
+  // Navegar al trade: scroll arriba + zoom en el gráfico
+  const navigateToTrade=(trade)=>{
+    contentRef.current?.scrollTo({top:0,behavior:'smooth'})
+    setTimeout(()=>chartApiRef.current?.navigateTo(trade.entryDate,trade.exitDate),350)
+  }
 
   const metricRows=metrics?[
     {label:'Total Operaciones',val:metrics.n,color:'#ffd166'},
@@ -372,8 +449,10 @@ export default function Home() {
     </table>
   )
 
-  // Group watchlist
   const wlGroups=[...new Set(WATCHLIST.map(w=>w.grp))]
+
+  // Altura de los tabs = 33px aprox. (padding 8px top+bottom + 17px línea)
+  const TAB_H=33
 
   return (
     <>
@@ -381,40 +460,79 @@ export default function Home() {
         <title>V50 — EMA Strategy</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
-        <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+        <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
       </Head>
       <div className="app">
-        <header className="header">
-          <div className="header-logo"><span className="dot"/>V50 · CRUCE EMAs</div>
-          <div style={{display:'flex',alignItems:'center',gap:8}}>
-            <button onClick={()=>setRulerOn(r=>!r)} style={{background:rulerOn?'rgba(255,209,102,0.15)':'rgba(13,21,32,0.9)',border:`1px solid ${rulerOn?'#ffd166':'#2d3748'}`,color:rulerOn?'#ffd166':'#7a9bc0',fontFamily:MONO,fontSize:11,padding:'5px 9px',borderRadius:4,cursor:'pointer',display:'flex',alignItems:'center',gap:4}}>
+        {/* ── HEADER ── */}
+        <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
+          {/* Logo */}
+          <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
+            <span className="dot"/>V50 · CRUCE EMAs
+          </div>
+
+          {/* SP500 bar — misma altura que tabs, inline en header */}
+          {sp5&&(
+            <div style={{
+              display:'flex',alignItems:'center',gap:6,
+              padding:'0 12px',
+              borderLeft:'1px solid var(--border)',borderRight:'1px solid var(--border)',
+              fontFamily:MONO,fontSize:11,flexShrink:0
+            }}>
+              <span style={{color:'var(--text3)'}}>SP500</span>
+              <span style={{color:'var(--text)',fontWeight:600}}>{fmt(sp5.precio,2)}</span>
+              <span style={{color:'var(--text3)'}}>EMA{sp500EmaR}</span>
+              <span style={{color:'#ffd166'}}>{fmt(sp5.emaR,2)}</span>
+              <span style={{color:'var(--text3)'}}>EMA{sp500EmaL}</span>
+              <span style={{color:'#ffd166'}}>{fmt(sp5.emaL,2)}</span>
+              <span style={{color:'var(--text3)',fontSize:10}}>{fmtDate(sp5.date)}</span>
+              <span className={`status-badge ${spStatus}`} style={{fontSize:10,padding:'1px 6px'}}>{spTxt}</span>
+            </div>
+          )}
+
+          {/* Botones derecha */}
+          <div style={{display:'flex',alignItems:'center',gap:8,marginLeft:'auto',padding:'0 12px'}}>
+            <button onClick={()=>setRulerOn(r=>!r)} style={{
+              background:rulerOn?'rgba(255,209,102,0.15)':'rgba(13,21,32,0.9)',
+              border:`1px solid ${rulerOn?'#ffd166':'#2d3748'}`,
+              color:rulerOn?'#ffd166':'#7a9bc0',
+              fontFamily:MONO,fontSize:11,padding:'3px 9px',borderRadius:4,cursor:'pointer',
+              display:'flex',alignItems:'center',gap:4
+            }}>
               📏 {rulerOn?'ON':'Regla'}
             </button>
-            {result&&<button onClick={()=>window.open(`https://www.tradingview.com/chart/?symbol=${tvSym(simbolo)}`,'_blank')} style={{background:'#131722',border:'1px solid #2d3748',color:'#00d4ff',fontFamily:MONO,fontSize:11,padding:'5px 9px',borderRadius:4,cursor:'pointer',display:'flex',alignItems:'center',gap:4}} onMouseOver={e=>e.currentTarget.style.borderColor='#00d4ff'} onMouseOut={e=>e.currentTarget.style.borderColor='#2d3748'}>
+            {result&&<button onClick={()=>window.open(`https://www.tradingview.com/chart/?symbol=${tvSym(simbolo)}`,'_blank')} style={{background:'#131722',border:'1px solid #2d3748',color:'#00d4ff',fontFamily:MONO,fontSize:11,padding:'3px 9px',borderRadius:4,cursor:'pointer',display:'flex',alignItems:'center',gap:4}}
+              onMouseOver={e=>e.currentTarget.style.borderColor='#00d4ff'}
+              onMouseOut={e=>e.currentTarget.style.borderColor='#2d3748'}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="#00d4ff"><path d="M3 3h7v2H5v14h14v-5h2v7H3V3zm11 0h7v7h-2V6.41l-9.29 9.3-1.42-1.42L17.59 5H14V3z"/></svg>
               TradingView
             </button>}
-            {result&&metrics&&<button onClick={()=>setMetricsLayout(l=>l==='grid'?'panel':'grid')} style={{background:'rgba(13,21,32,0.9)',border:'1px solid #1a2d45',color:'#7a9bc0',fontFamily:MONO,fontSize:11,padding:'5px 9px',borderRadius:4,cursor:'pointer'}}>
+            {result&&metrics&&<button onClick={()=>setMetricsLayout(l=>l==='grid'?'panel':'grid')} style={{background:'rgba(13,21,32,0.9)',border:'1px solid #1a2d45',color:'#7a9bc0',fontFamily:MONO,fontSize:11,padding:'3px 9px',borderRadius:4,cursor:'pointer'}}>
               {metricsLayout==='grid'?'⊞ Panel':'⊟ Grid'}
             </button>}
-            <div style={{fontFamily:MONO,fontSize:11,color:'var(--text3)'}}>Stooq · diario</div>
+            <div style={{fontFamily:MONO,fontSize:10,color:'var(--text3)'}}>Stooq · diario</div>
           </div>
         </header>
 
         <div className="main">
-          {/* Left sidebar */}
+          {/* ── SIDEBAR ── */}
           <aside className="sidebar" style={{padding:0,gap:0}}>
-            {/* Toggle tabs */}
             <div style={{display:'flex',borderBottom:'1px solid var(--border)'}}>
-              {['resumen','watchlist'].map(tab=>(
-                <button key={tab} onClick={()=>setSidePanel(tab)} style={{flex:1,padding:'8px 4px',background:sidePanel===tab?'var(--bg3)':'transparent',border:'none',borderBottom:sidePanel===tab?'2px solid var(--accent)':'2px solid transparent',color:sidePanel===tab?'var(--accent)':'var(--text3)',fontFamily:MONO,fontSize:10,cursor:'pointer',letterSpacing:'0.08em',textTransform:'uppercase'}}>
-                  {tab==='resumen'?'⚙ Config':'☰ Watch'}
+              {[{id:'config',label:'⚙ Config'},{id:'watchlist',label:'☰ Watch'}].map(tab=>(
+                <button key={tab.id} onClick={()=>setSidePanel(tab.id)} style={{
+                  flex:1,padding:'8px 4px',
+                  background:sidePanel===tab.id?'var(--bg3)':'transparent',
+                  border:'none',
+                  borderBottom:sidePanel===tab.id?'2px solid var(--accent)':'2px solid transparent',
+                  color:sidePanel===tab.id?'var(--accent)':'var(--text3)',
+                  fontFamily:MONO,fontSize:10,cursor:'pointer',letterSpacing:'0.06em',textTransform:'uppercase'
+                }}>
+                  {tab.label}
                 </button>
               ))}
             </div>
 
-            {sidePanel==='resumen'&&(
-              <div style={{padding:16,display:'flex',flexDirection:'column',gap:16,overflowY:'auto',flex:1}}>
+            {sidePanel==='config'&&(
+              <div style={{padding:14,display:'flex',flexDirection:'column',gap:14,overflowY:'auto',flex:1}}>
                 <div className="sidebar-section">
                   <div className="sidebar-title">Activo</div>
                   <label>Símbolo<input type="text" value={simbolo} onChange={e=>setSimbolo(e.target.value.toUpperCase())} placeholder="^GSPC"/></label>
@@ -433,7 +551,7 @@ export default function Home() {
                 <div className="sidebar-section">
                   <div className="sidebar-title">Stop Loss</div>
                   <label>Tipo<select value={tipoStop} onChange={e=>setTipoStop(e.target.value)}><option value="tecnico">Stop Técnico (EMA)</option><option value="atr">Stop ATR</option><option value="none">Ninguno</option></select></label>
-                  {tipoStop==='atr'&&<div className="row2"><label>Periodo ATR<input type="number" value={atrP} min={1} onChange={e=>setAtrP(e.target.value)}/></label><label>Mult.<input type="number" value={atrM} min={0.1} step={0.1} onChange={e=>setAtrM(e.target.value)}/></label></div>}
+                  {tipoStop==='atr'&&<div className="row2"><label>ATR<input type="number" value={atrP} min={1} onChange={e=>setAtrP(e.target.value)}/></label><label>Mult.<input type="number" value={atrM} min={0.1} step={0.1} onChange={e=>setAtrM(e.target.value)}/></label></div>}
                   <label className="checkbox-row"><input type="checkbox" checked={sinPerdidas} onChange={e=>setSinPerdidas(e.target.checked)}/>Sin Pérdidas</label>
                   <label className="checkbox-row"><input type="checkbox" checked={reentry} onChange={e=>setReentry(e.target.checked)}/>Re-Entry</label>
                 </div>
@@ -443,10 +561,11 @@ export default function Home() {
                   {tipoFiltro!=='none'&&<div className="row2"><label>EMA R<input type="number" value={sp500EmaR} min={1} onChange={e=>setSp500EmaR(e.target.value)}/></label><label>EMA L<input type="number" value={sp500EmaL} min={1} onChange={e=>setSp500EmaL(e.target.value)}/></label></div>}
                 </div>
                 <div className="sidebar-section">
-                  <div className="sidebar-title">Visualización</div>
+                  <div className="sidebar-title">Gráfico</div>
                   <label className="checkbox-row"><input type="checkbox" checked={showLabels} onChange={e=>setShowLabels(e.target.checked)}/>Etiquetas trades visibles</label>
                 </div>
                 {loading&&<div style={{fontFamily:MONO,fontSize:11,color:'var(--accent)',textAlign:'center'}}>⟳ Actualizando...</div>}
+                {error&&<div style={{fontFamily:MONO,fontSize:11,color:'#ff4d6d',padding:'6px 0'}}>⚠ {error}</div>}
               </div>
             )}
 
@@ -454,9 +573,10 @@ export default function Home() {
               <div style={{overflowY:'auto',flex:1}}>
                 {wlGroups.map(grp=>(
                   <div key={grp}>
-                    <div style={{padding:'6px 12px',fontFamily:MONO,fontSize:9,color:'var(--text3)',letterSpacing:'0.1em',textTransform:'uppercase',background:'var(--bg2)',borderBottom:'1px solid var(--border)'}}>{grp}</div>
+                    <div style={{padding:'5px 12px',fontFamily:MONO,fontSize:9,color:'var(--text3)',letterSpacing:'0.1em',textTransform:'uppercase',background:'var(--bg2)',borderBottom:'1px solid var(--border)'}}>{grp}</div>
                     {WATCHLIST.filter(w=>w.grp===grp).map(w=>(
-                      <div key={w.sym} onClick={()=>setSimbolo(w.sym)} style={{padding:'8px 12px',cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'center',borderBottom:'1px solid var(--border)',background:simbolo===w.sym?'rgba(0,212,255,0.07)':'transparent',transition:'background 0.15s'}}
+                      <div key={w.sym} onClick={()=>setSimbolo(w.sym)}
+                        style={{padding:'7px 12px',cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'center',borderBottom:'1px solid var(--border)',background:simbolo===w.sym?'rgba(0,212,255,0.07)':'transparent'}}
                         onMouseOver={e=>e.currentTarget.style.background='rgba(255,255,255,0.03)'}
                         onMouseOut={e=>e.currentTarget.style.background=simbolo===w.sym?'rgba(0,212,255,0.07)':'transparent'}>
                         <div>
@@ -472,46 +592,33 @@ export default function Home() {
             )}
           </aside>
 
+          {/* ── CONTENT ── */}
           <div className="content">
-            {sp5&&(
-              <div className="sp500-bar">
-                <span className="label">SP500</span>
-                <span className={`val ${sp5.changePct>=0?'green':'red'}`}>{fmt(sp5.precio,2)}</span>
-                <span className="label">EMA {sp500EmaR}</span><span className="val yellow">{fmt(sp5.emaR,2)}</span>
-                <span className="label">EMA {sp500EmaL}</span><span className="val yellow">{fmt(sp5.emaL,2)}</span>
-                <span className="label" style={{marginLeft:'auto',marginRight:8,fontSize:10}}>{fmtDate(sp5.date)}</span>
-                <span className={`status-badge ${spStatus}`}>{spTxt}</span>
-              </div>
-            )}
-            {error&&<div className="error-msg">⚠ {error}</div>}
             {!result&&!error&&<div className="loading"><div className="spinner"/><div className="loading-text">CARGANDO DATOS...</div></div>}
+            {error&&<div className="error-msg">⚠ {error}</div>}
 
             {result&&(
               <div style={{display:'flex',flex:1,minHeight:0,overflow:'hidden',height:'100%'}}>
-                <div style={{flex:1,overflowY:'auto'}}>
+                {/* Columna principal */}
+                <div ref={contentRef} style={{flex:1,overflowY:'auto'}}>
+                  {/* Gráfico de velas */}
                   <div className="chart-wrap">
                     <div className="chart-header">
                       <div className="chart-title">{simbolo}</div>
                       <div className="chart-price">{fmt(result.meta?.ultimoPrecio,2)}</div>
                       <div className="chart-date">{fmtDate(result.meta?.ultimaFecha)}</div>
+                      {rulerOn&&<div style={{fontFamily:MONO,fontSize:10,color:'#ffd166',marginLeft:'auto'}}>📏 Regla ON · Ctrl=imán · dbl-clic=borrar</div>}
                     </div>
                     <CandleChart
                       data={result.chartData} emaRPeriod={emaR} emaLPeriod={emaL}
                       trades={result.trades||[]} maxDD={metrics?.ddSimple||0}
                       showTradeLabels={showLabels} rulerActive={rulerOn}
-                      onChartReady={api=>{ chartApiRef.current=api }}
+                      onChartReady={api=>{chartApiRef.current=api}}
                     />
-                    <div style={{display:'flex',gap:12,marginTop:8,fontFamily:MONO,fontSize:11,color:'var(--text3)',flexWrap:'wrap'}}>
-                      <span><span style={{color:'#ffd166'}}>─</span> EMA {emaR}</span>
-                      <span><span style={{color:'#ff4d6d'}}>─</span> EMA {emaL}</span>
-                      <span><span style={{color:'#00e5a0'}}>─</span> Trade +</span>
-                      <span><span style={{color:'#ff4d6d'}}>─</span> Trade −</span>
-                      <span style={{color:'#00e5a0'}}>↗ Alcista</span>
-                      <span style={{color:'#ff4d6d'}}>↘ Bajista</span>
-                      {rulerOn&&<span style={{color:'#ffd166'}}>📏 Regla ON · Ctrl=imán · dbl-clic=borrar</span>}
-                    </div>
+                    {/* Leyenda mínima bajo el gráfico — ELIMINADA según instrucciones */}
                   </div>
 
+                  {/* Métricas en cuadrícula (si layout=grid) */}
                   {metricsLayout==='grid'&&metrics&&(
                     <div className="metrics-section">
                       {metricRows.map(m=>(
@@ -523,59 +630,67 @@ export default function Home() {
                     </div>
                   )}
 
-                  {/* Equity chart with toggles */}
+                  {/* Equity con toggles */}
                   <div className="equity-section">
-                    <div className="section-title" style={{display:'flex',alignItems:'center',flexWrap:'wrap',gap:8}}>
+                    <div className="section-title" style={{display:'flex',alignItems:'center',flexWrap:'wrap',gap:6}}>
                       <span>Equity</span>
                       {[
-                        {key:'strategy',label:'Estrategia',color:'#00d4ff',state:showStrategy,set:setShowStrategy},
+                        {key:'st',label:'Estrategia',color:'#00d4ff',state:showStrategy,set:setShowStrategy},
+                        {key:'co',label:'Compuesta',color:'#00e5a0',state:showCompound,set:setShowCompound},
                         {key:'bh',label:'B&H Activo',color:'#ffd166',state:showBH,set:setShowBH},
-                        {key:'sp500',label:'B&H SP500',color:'#9b72ff',state:showSP500,set:setShowSP500},
+                        {key:'sp',label:'B&H SP500',color:'#9b72ff',state:showSP500,set:setShowSP500},
                       ].map(({key,label,color,state,set})=>(
-                        <button key={key} onClick={()=>set(s=>!s)} style={{fontFamily:MONO,fontSize:10,padding:'2px 8px',borderRadius:3,cursor:'pointer',border:`1px solid ${state?color:'#3d5a7a'}`,background:state?`${color}20`:'transparent',color:state?color:'#3d5a7a',transition:'all 0.15s'}}>
-                          {state?'─':' '} {label}
+                        <button key={key} onClick={()=>set(s=>!s)} style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',border:`1px solid ${state?color:'#3d5a7a'}`,background:state?`${color}18`:'transparent',color:state?color:'#3d5a7a'}}>
+                          {label}
                         </button>
                       ))}
                     </div>
-                    {(result.strategyCurve?.length>0||result.bhCurve?.length>0)&&(
-                      <EquityChart
-                        strategyCurve={result.strategyCurve} bhCurve={result.bhCurve} sp500BHCurve={result.sp500BHCurve||[]}
-                        maxDDStrategy={result.maxDDStrategy} maxDDBH={result.maxDDBH} maxDDSP500={result.maxDDSP500||0}
-                        maxDDStrategyDate={result.maxDDStrategyDate} maxDDBHDate={result.maxDDBHDate} maxDDSP500Date={result.maxDDSP500Date||null}
-                        capitalIni={Number(capitalIni)}
-                        showStrategy={showStrategy} showBH={showBH} showSP500={showSP500}
-                      />
-                    )}
+                    <EquityChart
+                      strategyCurve={result.strategyCurve}
+                      bhCurve={result.bhCurve}
+                      sp500BHCurve={result.sp500BHCurve||[]}
+                      compoundCurve={result.compoundCurve||[]}
+                      maxDDStrategy={result.maxDDStrategy}
+                      maxDDBH={result.maxDDBH}
+                      maxDDSP500={result.maxDDSP500||0}
+                      maxDDCompound={result.maxDDCompound||0}
+                      maxDDStrategyDate={result.maxDDStrategyDate}
+                      maxDDBHDate={result.maxDDBHDate}
+                      maxDDSP500Date={result.maxDDSP500Date||null}
+                      maxDDCompoundDate={result.maxDDCompoundDate||null}
+                      capitalIni={Number(capitalIni)}
+                      showStrategy={showStrategy} showBH={showBH}
+                      showSP500={showSP500} showCompound={showCompound}
+                    />
                   </div>
 
-                  {/* Trade bars — clickable */}
+                  {/* Barras de resultados — clic navega al trade */}
                   {result.trades?.length>0&&(
                     <div className="equity-section">
-                      <div className="section-title">Resultados por Operación <span style={{fontWeight:400,fontSize:10,color:'var(--text3)'}}>clic = ir al trade</span></div>
+                      <div className="section-title">Resultados por Operación <span style={{fontWeight:400,fontSize:10,color:'var(--text3)'}}>· clic = ir al trade</span></div>
                       <div className="equity-bars">
                         {result.trades.map((t,i)=>{
                           const mx=Math.max(...result.trades.map(x=>Math.abs(x.pnlPct)))
-                          return <div key={i} className="equity-bar"
-                            onClick={()=>navigateToTrade(t)}
-                            style={{height:Math.max(4,Math.abs(t.pnlPct)/mx*56),background:t.pnlPct>=0?'var(--green)':'var(--red)',cursor:'pointer',transition:'opacity 0.15s'}}
+                          return <div key={i} className="equity-bar" onClick={()=>navigateToTrade(t)}
+                            style={{height:Math.max(4,Math.abs(t.pnlPct)/mx*56),background:t.pnlPct>=0?'var(--green)':'var(--red)',cursor:'pointer'}}
                             onMouseOver={e=>e.currentTarget.style.opacity='0.7'}
                             onMouseOut={e=>e.currentTarget.style.opacity='1'}
-                            title={`${fmtDate(t.exitDate)}: ${fmt(t.pnlPct,2)}% · clic para ir al trade`}/>
+                            title={`${fmtDate(t.exitDate)}: ${fmt(t.pnlPct,2)}%`}/>
                         })}
                       </div>
                     </div>
                   )}
 
-                  {/* Trade history — clickable rows */}
+                  {/* Historial — clic fila navega al trade */}
                   {result.trades?.length>0&&(
                     <div className="trades-section">
-                      <div className="section-title">Historial — {result.trades.length} operaciones <span style={{fontWeight:400,fontSize:10,color:'var(--text3)'}}>clic fila = ir al trade</span></div>
+                      <div className="section-title">Historial — {result.trades.length} operaciones <span style={{fontWeight:400,fontSize:10,color:'var(--text3)'}}>· clic fila = ir al trade</span></div>
                       <div style={{overflowX:'auto'}}>
                         <table className="trades-table" style={{fontFamily:MONO}}>
                           <thead><tr><th>#</th><th>Entrada</th><th>Salida</th><th>Px Entrada</th><th>Px Salida</th><th>P&L %</th><th>P&L €</th><th>Días</th><th>Tipo</th></tr></thead>
                           <tbody>
                             {[...result.trades].reverse().map((t,i)=>(
-                              <tr key={i} onClick={()=>navigateToTrade(t)} style={{cursor:'pointer',transition:'background 0.12s'}}
+                              <tr key={i} onClick={()=>navigateToTrade(t)} style={{cursor:'pointer'}}
                                 onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.06)'}
                                 onMouseOut={e=>e.currentTarget.style.background='transparent'}>
                                 <td style={{color:'var(--text3)'}}>{result.trades.length-i}</td>
@@ -594,10 +709,10 @@ export default function Home() {
                   )}
                 </div>
 
-                {/* Right metrics panel */}
+                {/* Panel derecho de métricas */}
                 {metricsLayout==='panel'&&metrics&&(
-                  <div style={{width:280,flexShrink:0,borderLeft:'1px solid var(--border)',background:'var(--bg2)',overflowY:'auto'}}>
-                    <div style={{padding:'8px 12px',borderBottom:'1px solid var(--border)',fontFamily:MONO,fontSize:9,color:'var(--text3)',letterSpacing:'0.1em',textTransform:'uppercase'}}>RESUMEN · {simbolo}</div>
+                  <div style={{width:275,flexShrink:0,borderLeft:'1px solid var(--border)',background:'var(--bg2)',overflowY:'auto'}}>
+                    <div style={{padding:'7px 12px',borderBottom:'1px solid var(--border)',fontFamily:MONO,fontSize:9,color:'var(--text3)',letterSpacing:'0.1em'}}>RESUMEN · {simbolo}</div>
                     <MetricsTable/>
                   </div>
                 )}
