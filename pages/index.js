@@ -155,7 +155,7 @@ function lookupName(sym) {
 }
 
 // ── CandleChart ───────────────────────────────────────────────
-function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, showTradeLabels, rulerActive, onChartReady }) {
+function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady }) {
   const containerRef=useRef(null), svgRef=useRef(null), legendRef=useRef(null), tooltipRef=useRef(null)
   const chartRef=useRef(null), candlesRef=useRef(null)
   const rulerStart=useRef(null), rulerActiveR=useRef(rulerActive)
@@ -267,18 +267,22 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, showTradeLab
             const bc=isWin?'#00e5a0':'#ff4d6d'
             const g=document.createElementNS(NS,'g'); g.setAttribute('class','trade-label')
 
-            if(showTradeLabels){
-              // Etiqueta grande — siempre en la franja superior del chart (zona fija)
-              const line1=`${t.pnlPct>=0?'+':''}${t.pnlPct.toFixed(2)}%   €${t.pnlSimple>=0?'+':''}${Math.round(t.pnlSimple)}`
-              const line2=`${fmtDate(t.entryDate)} → ${fmtDate(t.exitDate)} · ${t.dias}d`
-              const charW=8.5  // px por carácter aprox con font-size 13
-              const w=Math.max(line1.length,line2.length)*charW+28
-              const BOX_H=46
-              // Posición fija en el tercio superior del chart, nunca solapa velas
-              // Distribuir verticalmente los trades para evitar solapamientos entre sí
-              const chartH=containerRef.current?.clientHeight||480
-              const ZONE_TOP=24  // margen superior del chart
-              const ZONE_H=chartH*0.28  // usar el 28% superior del chart
+            const chartH=containerRef.current?.clientHeight||480
+            const mkConnector=(y1start,y2end)=>{
+              const l=document.createElementNS(NS,'line')
+              Object.entries({x1:midX,y1:y1start,x2:midX,y2:y2end,
+                stroke:bc,'stroke-width':'1','stroke-dasharray':'3,3','opacity':'0.45'
+              }).forEach(([k,v])=>l.setAttribute(k,v))
+              return l
+            }
+
+            if(labelMode===2){
+              // ── Modo completo: % + € (sin fechas) ──
+              const line1=`${t.pnlPct>=0?'+':''}${t.pnlPct.toFixed(2)}%`
+              const line2=`€${t.pnlSimple>=0?'+':''}${Math.round(t.pnlSimple)}  ·  ${t.dias}d`
+              const charW=8, BOX_H=40
+              const w=Math.max(line1.length,line2.length)*charW+24
+              const ZONE_TOP=22, ZONE_H=chartH*0.26
               const labelY=ZONE_TOP + (idx % 3)*(ZONE_H/3) + BOX_H/2
               const rect=document.createElementNS(NS,'rect')
               Object.entries({
@@ -287,54 +291,38 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, showTradeLab
                 rx:'5', stroke:bc, 'stroke-width':'1.5'
               }).forEach(([k,v])=>rect.setAttribute(k,v))
               g.appendChild(rect)
-              // Línea vertical conectora desde etiqueta al precio del trade
-              const lineConn=document.createElementNS(NS,'line')
-              Object.entries({
-                x1:midX,y1:labelY+BOX_H/2+2,
-                x2:midX,y2:Math.max(labelY+BOX_H/2+4,pyBase-4),
-                stroke:bc,'stroke-width':'1','stroke-dasharray':'4,3','opacity':'0.6'
-              }).forEach(([k,v])=>lineConn.setAttribute(k,v))
-              g.appendChild(lineConn)
-              const mkT=(txt,y,sz='13')=>{
+              g.appendChild(mkConnector(labelY+BOX_H/2+2, Math.max(labelY+BOX_H/2+4,pyBase-4)))
+              const mkT=(txt,y,sz)=>{
                 const el=document.createElementNS(NS,'text')
                 Object.entries({x:midX,y,'font-size':sz,'font-family':MONO,'text-anchor':'middle',fill:bc,'font-weight':'700'}).forEach(([k,v])=>el.setAttribute(k,v))
                 el.textContent=txt; return el
               }
               g.appendChild(mkT(line1,labelY-4,'13'))
-              g.appendChild(mkT(line2,labelY+13,'10.5'))
-            } else {
-              // % medio siempre visible — distribuido en franja alta del chart
-              const chartH=containerRef.current?.clientHeight||480
-              const ZONE_TOP=18
-              const ZONE_H=chartH*0.22
+              g.appendChild(mkT(line2,labelY+12,'10.5'))
+
+            } else if(labelMode===1){
+              // ── Modo solo %: más grande, franja alta ──
+              const ZONE_TOP=18, ZONE_H=chartH*0.22
               const labelY=ZONE_TOP + (idx % 4)*(ZONE_H/4) + 12
               const lbl=`${t.pnlPct>=0?'+':''}${t.pnlPct.toFixed(1)}%`
-              // Fondo semitransparente pequeño
               const bw=lbl.length*8+14
               const bg=document.createElementNS(NS,'rect')
               Object.entries({
                 x:midX-bw/2, y:labelY-14, width:bw, height:20,
                 fill:isWin?'rgba(0,229,160,0.1)':'rgba(255,77,109,0.1)',
-                rx:'3', stroke:bc, 'stroke-width':'0.7', 'opacity':'0.9'
+                rx:'3', stroke:bc, 'stroke-width':'0.7', opacity:'0.9'
               }).forEach(([k,v])=>bg.setAttribute(k,v))
               g.appendChild(bg)
-              // Línea conectora al centro del trade
-              const lineConn=document.createElementNS(NS,'line')
-              Object.entries({
-                x1:midX,y1:labelY+6,
-                x2:midX,y2:pyBase-4,
-                stroke:bc,'stroke-width':'1','stroke-dasharray':'3,3','opacity':'0.45'
-              }).forEach(([k,v])=>lineConn.setAttribute(k,v))
-              g.appendChild(lineConn)
+              g.appendChild(mkConnector(labelY+6, pyBase-4))
               const txt=document.createElementNS(NS,'text')
               Object.entries({
-                x:midX, y:labelY,
-                'font-size':'12', 'font-family':MONO,
+                x:midX, y:labelY, 'font-size':'12', 'font-family':MONO,
                 'text-anchor':'middle', fill:bc, 'font-weight':'700'
               }).forEach(([k,v])=>txt.setAttribute(k,v))
               txt.textContent=lbl
               g.appendChild(txt)
             }
+            // labelMode===0 → no se añade nada al svg
             svg.appendChild(g)
           } catch(_){}
         })
@@ -460,7 +448,7 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, showTradeLab
       return()=>{cnt.removeEventListener('mousemove',onMove);cnt.removeEventListener('click',onClick);cnt.removeEventListener('dblclick',onDbl);window.removeEventListener('keydown',onKeyDown);window.removeEventListener('keyup',onKeyUp);ro.disconnect()}
     })
     return()=>{if(chartRef.current){chartRef.current.remove();chartRef.current=null}}
-  },[data,emaRPeriod,emaLPeriod,trades,maxDD,showTradeLabels])
+  },[data,emaRPeriod,emaLPeriod,trades,maxDD,labelMode])
 
   return (
     <div style={{position:'relative'}}>
@@ -542,7 +530,7 @@ export default function Home() {
   const [sinPerdidas,setSinPerdidas]=useState(true),[reentry,setReentry]=useState(true)
   const [tipoFiltro,setTipoFiltro]=useState('none'),[sp500EmaR,setSp500EmaR]=useState(10),[sp500EmaL,setSp500EmaL]=useState(11)
   const [result,setResult]=useState(null),[loading,setLoading]=useState(false),[error,setError]=useState(null)
-  const [showLabels,setShowLabels]=useState(false),[rulerOn,setRulerOn]=useState(false)
+  const [labelMode,setLabelMode]=useState(0),[rulerOn,setRulerOn]=useState(false)
   const [sidePanel,setSidePanel]=useState('config')
   const [metricsLayout,setMetricsLayout]=useState('panel')
   const [showStrategy,setShowStrategy]=useState(true),[showBH,setShowBH]=useState(true)
@@ -568,6 +556,7 @@ export default function Home() {
   const [alarmSaving,setAlarmSaving]=useState(false)
   // Buscador global watchlist
   const [wlSearch,setWlSearch]=useState('')
+  const [onlyBull,setOnlyBull]=useState(false)  // filtro EMA alcista
   // Búsqueda async de nombre
   const symSearchRef=useRef(null)
   const debounceRef=useRef(null),chartApiRef=useRef(null),contentRef=useRef(null)
@@ -895,15 +884,23 @@ export default function Home() {
             }}>
               📏 {rulerOn?'ON':'Regla'}
             </button>
-            <button onClick={()=>setShowLabels(l=>!l)} style={{
-              background:showLabels?'rgba(0,229,160,0.1)':'rgba(13,21,32,0.9)',
-              border:`1px solid ${showLabels?'#00e5a0':'#2d3748'}`,
-              color:showLabels?'#00e5a0':'#7a9bc0',
-              fontFamily:MONO,fontSize:11,padding:'3px 9px',borderRadius:4,cursor:'pointer',
-              display:'flex',alignItems:'center',gap:4
-            }}>
-              🏷 {showLabels?'Etiquetas':'%'}
-            </button>
+            {(()=>{
+              const modes=[
+                {label:'🏷 OFF',bg:'rgba(13,21,32,0.9)',border:'#2d3748',color:'#7a9bc0'},
+                {label:'🏷 %',bg:'rgba(0,229,160,0.08)',border:'#00e5a0',color:'#00e5a0'},
+                {label:'🏷 Full',bg:'rgba(0,229,160,0.15)',border:'#00e5a0',color:'#00e5a0'},
+              ]
+              const m=modes[labelMode]
+              return(
+                <button onClick={()=>setLabelMode(l=>(l+1)%3)} title={['Sin etiquetas','Solo porcentaje','Porcentaje + euros + días'][labelMode]} style={{
+                  background:m.bg, border:`1px solid ${m.border}`, color:m.color,
+                  fontFamily:MONO,fontSize:11,padding:'3px 9px',borderRadius:4,cursor:'pointer',
+                  display:'flex',alignItems:'center',gap:4
+                }}>
+                  {m.label}
+                </button>
+              )
+            })()}
             {result&&<button onClick={()=>window.open(`https://www.tradingview.com/chart/?symbol=${tvSym(simbolo)}`,'_blank')} style={{background:'#131722',border:'1px solid #2d3748',color:'#00d4ff',fontFamily:MONO,fontSize:11,padding:'3px 9px',borderRadius:4,cursor:'pointer',display:'flex',alignItems:'center',gap:4}}
               onMouseOver={e=>e.currentTarget.style.borderColor='#00d4ff'}
               onMouseOut={e=>e.currentTarget.style.borderColor='#2d3748'}>
@@ -1000,14 +997,31 @@ export default function Home() {
             {sidePanel==='watchlist'&&(
               <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
                 {/* ── Buscador global ── */}
-                <div style={{padding:'6px 8px',borderBottom:'1px solid var(--border)',flexShrink:0}}>
-                  <input
-                    type="text"
-                    placeholder="🔍 Buscar activo…"
-                    value={wlSearch}
-                    onChange={e=>setWlSearch(e.target.value)}
-                    style={{width:'100%',background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'5px 8px',borderRadius:4,boxSizing:'border-box'}}
-                  />
+                <div style={{padding:'5px 8px',borderBottom:'1px solid var(--border)',flexShrink:0,display:'flex',gap:4,alignItems:'center'}}>
+                  <div style={{position:'relative',flex:1}}>
+                    <input
+                      type="text"
+                      placeholder="🔍 Buscar…"
+                      value={wlSearch}
+                      onChange={e=>setWlSearch(e.target.value)}
+                      style={{width:'100%',background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'5px 28px 5px 8px',borderRadius:4,boxSizing:'border-box'}}
+                    />
+                    {wlSearch&&(
+                      <span onClick={()=>setWlSearch('')} style={{position:'absolute',right:6,top:'50%',transform:'translateY(-50%)',cursor:'pointer',color:'var(--text3)',fontSize:13,lineHeight:1}}>✕</span>
+                    )}
+                  </div>
+                  <button
+                    onClick={()=>setOnlyBull(b=>!b)}
+                    title={onlyBull?'Mostrando solo alcistas (EMA↑) — clic para ver todos':'Filtrar solo alcistas EMA 10>11'}
+                    style={{
+                      background:onlyBull?'rgba(0,229,160,0.15)':'transparent',
+                      border:`1px solid ${onlyBull?'#00e5a0':'var(--border)'}`,
+                      color:onlyBull?'#00e5a0':'var(--text3)',
+                      fontFamily:MONO,fontSize:10,padding:'4px 7px',borderRadius:4,cursor:'pointer',
+                      fontWeight:onlyBull?700:400,whiteSpace:'nowrap'
+                    }}>
+                    ▲ EMA
+                  </button>
                 </div>
                 {/* ── Toolbar watchlist ── */}
                 <div style={{padding:'4px 8px',borderBottom:'1px solid var(--border)',display:'flex',gap:4,alignItems:'center',flexShrink:0}}>
@@ -1021,14 +1035,16 @@ export default function Home() {
                       const allLists=[...new Set(watchlist.map(w=>w.list_name||'General').filter(Boolean))]
                       return(
                         <div style={{position:'absolute',top:'100%',left:0,right:0,background:'var(--bg3)',border:'1px solid var(--border)',borderRadius:3,zIndex:50,boxShadow:'0 4px 16px rgba(0,0,0,0.5)'}}>
-                          <div onClick={()=>{setSelectedLists([]);setListDropOpen(false)}} style={{padding:'5px 10px',fontFamily:MONO,fontSize:10,cursor:'pointer',color:selectedLists.length===0?'var(--accent)':'var(--text)',borderBottom:'1px solid var(--border)'}}>
+                          <div onClick={()=>{setSelectedLists([]);setWlSearch('');setListDropOpen(false)}} style={{padding:'5px 10px',fontFamily:MONO,fontSize:10,cursor:'pointer',color:selectedLists.length===0?'var(--accent)':'var(--text)',borderBottom:'1px solid var(--border)'}}>
                             Todas las listas
                           </div>
                           {allLists.map(l=>(
                             <div key={l} onClick={()=>{
-                              setSelectedLists(prev=>prev.includes(l)?prev.filter(x=>x!==l):[...prev,l])
+                              setSelectedLists([l])
+                              setWlSearch('')
+                              setListDropOpen(false)
                             }} style={{padding:'5px 10px',fontFamily:MONO,fontSize:10,cursor:'pointer',display:'flex',alignItems:'center',gap:6,color:'var(--text)'}}>
-                              <span style={{color:selectedLists.includes(l)?'var(--accent)':'var(--text3)',fontSize:12}}>{selectedLists.includes(l)?'☑':'☐'}</span>
+                              <span style={{color:selectedLists.includes(l)?'var(--accent)':'var(--text3)',fontSize:12}}>{selectedLists.includes(l)?'●':'○'}</span>
                               {l}
                             </div>
                           ))}
@@ -1038,7 +1054,13 @@ export default function Home() {
                   </div>
                   <button onClick={newItem} title="Añadir activo" style={{background:'rgba(0,212,255,0.1)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:13,padding:'3px 8px',borderRadius:3,cursor:'pointer'}}>+</button>
                   <button onClick={reloadWatchlist} title="Recargar watchlist" style={{background:'transparent',border:'1px solid var(--border)',color:'var(--text3)',fontFamily:MONO,fontSize:11,padding:'3px 6px',borderRadius:3,cursor:'pointer'}}>⟳</button>
-                  <button onClick={()=>refreshEmaStatus()} title="Actualizar estado EMA 10/11" style={{background:'transparent',border:'1px solid var(--border)',color:'#00e5a0',fontFamily:MONO,fontSize:11,padding:'3px 6px',borderRadius:3,cursor:'pointer'}}>▲▼</button>
+                  <button onClick={()=>refreshEmaStatus()} title="Recalcular EMA 10/11 de todos los activos" style={{background:'transparent',border:'1px solid var(--border)',color:'#00e5a0',fontFamily:MONO,fontSize:11,padding:'3px 6px',borderRadius:3,cursor:'pointer'}}>
+                    {(()=>{
+                      const bulls=watchlist.filter(w=>emaStatus[w.symbol]==='bull').length
+                      const total=Object.keys(emaStatus).length
+                      return total>0?`▲${bulls}/${total}`:'▲▼'
+                    })()}
+                  </button>
                 </div>
 
                 {/* ── Lista de activos ── */}
@@ -1049,7 +1071,8 @@ export default function Home() {
                     const filtered=watchlist.filter(w=>{
                       const matchList=selectedLists.length===0||selectedLists.includes(w.list_name||'General')
                       const matchSearch=!wlSearch||(w.symbol||'').toLowerCase().includes(searchLower)||(w.name||'').toLowerCase().includes(searchLower)
-                      return matchList&&matchSearch
+                      const matchEma=!onlyBull||(emaStatus[w.symbol]==='bull')
+                      return matchList&&matchSearch&&matchEma
                     })
                     const favs=filtered.filter(w=>w.favorite)
                     const rest=filtered.filter(w=>!w.favorite).sort((a,b)=>a.name.localeCompare(b.name))
@@ -1232,7 +1255,7 @@ export default function Home() {
                     <CandleChart
                       data={result.chartData} emaRPeriod={emaR} emaLPeriod={emaL}
                       trades={result.trades||[]} maxDD={metrics?.ddSimple||0}
-                      showTradeLabels={showLabels} rulerActive={rulerOn}
+                      labelMode={labelMode} rulerActive={rulerOn}
                       onChartReady={api=>{chartApiRef.current=api}}
                     />
                     {/* Leyenda mínima bajo el gráfico — ELIMINADA según instrucciones */}
