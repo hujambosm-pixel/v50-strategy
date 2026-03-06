@@ -89,7 +89,8 @@ async function fetchAlarms() {
 async function upsertAlarm(item) {
   const method=item.id?'PATCH':'POST'
   const url=item.id?`${SUPA_URL}/rest/v1/alarms?id=eq.${item.id}`:`${SUPA_URL}/rest/v1/alarms`
-  const {id,...body}=item
+  const ALLOWED=['name','condition','ema_r','ema_l','active']
+  const body={}; ALLOWED.forEach(k=>{if(item[k]!==undefined)body[k]=item[k]})
   const res=await fetch(url,{method,headers:{...SUPA_H,'Prefer':'return=representation'},body:JSON.stringify(body)})
   if(!res.ok){const t=await res.text();throw new Error('Error guardando alarma: '+t)}
   return (await res.json())[0]
@@ -550,64 +551,28 @@ export default function Home() {
   // Alarmas
   const [alarms,setAlarms]=useState([])
   const [alarmLoading,setAlarmLoading]=useState(true)
-  const [alarmStatus,setAlarmStatus]=useState({}) // {id: 'active'|'inactive'|'loading'}
   const [editingAlarm,setEditingAlarm]=useState(null)
   const [alarmForm,setAlarmForm]=useState({})
   const [alarmSaving,setAlarmSaving]=useState(false)
   // Buscador global watchlist
   const [wlSearch,setWlSearch]=useState('')
-  const [onlyBull,setOnlyBull]=useState(false)  // filtro EMA alcista
+  const [selectedAlarmIds,setSelectedAlarmIds]=useState([])  // IDs de alarmas activas en filtro
+  const [onlyFavs,setOnlyFavs]=useState(false)  // filtro solo favoritos
+  const [alarmDropOpen,setAlarmDropOpen]=useState(false)  // desplegable alarmas
   // Búsqueda async de nombre
   const symSearchRef=useRef(null)
   const debounceRef=useRef(null),chartApiRef=useRef(null),contentRef=useRef(null)
 
-  const [emaStatus,setEmaStatus]=useState({}) // {symbol: 'bull'|'bear'|'loading'|null}
+  // alarmStatus[symbol][alarmId] = true|false|null
+  const [alarmStatus,setAlarmStatus]=useState({})
+  const [alarmStatusLoading,setAlarmStatusLoading]=useState(false)
 
   const reloadWatchlist=()=>{
     setWlLoading(true)
     fetchWatchlist()
-      .then(data=>{ if(data.length>0){setWatchlist(data);refreshEmaStatus(data)} })
+      .then(data=>{ if(data.length>0) setWatchlist(data) })
       .catch(()=>{})
       .finally(()=>setWlLoading(false))
-  }
-
-  // Calcula EMA 10/11 para un símbolo y devuelve 'bull' o 'bear'
-  const calcEmaStatusFor=async(sym)=>{
-    try{
-      const rawSym=sym==='^GSPC'?'spy':sym.replace('^','').toLowerCase()
-      const res=await fetch(`https://stooq.com/q/d/l/?s=${rawSym}.us&i=d`)
-      const text=await res.text()
-      if(!text||text.includes('No data')||text.trim().length<50) return null
-      const rows=text.trim().split('\n').slice(1).filter(l=>l.trim())
-      const closes=rows.map(l=>parseFloat(l.split(',')[4])).filter(v=>!isNaN(v))
-      if(closes.length<20) return null
-      // calcEMA inline (periodo 10 y 11)
-      const ema=(vals,p)=>{
-        const k=2/(p+1); let e=null
-        for(const v of vals){if(e===null)e=v;else e=v*k+e*(1-k)}
-        return e
-      }
-      // Usar últimas 60 barras para eficiencia
-      const last60=closes.slice(-60)
-      const er=ema(last60,10), el=ema(last60,11)
-      return er!=null&&el!=null?(er>el?'bull':'bear'):null
-    }catch{return null}
-  }
-
-  const refreshEmaStatus=async(list)=>{
-    const items=list||watchlist
-    // Lanzar en paralelo con limit de 6 a la vez
-    const results={}
-    const chunks=[]
-    for(let i=0;i<items.length;i+=6) chunks.push(items.slice(i,i+6))
-    for(const chunk of chunks){
-      const pending=chunk.map(async(w)=>{
-        setEmaStatus(prev=>({...prev,[w.symbol]:'loading'}))
-        const st=await calcEmaStatusFor(w.symbol)
-        setEmaStatus(prev=>({...prev,[w.symbol]:st}))
-      })
-      await Promise.all(pending)
-    }
   }
   const reloadStrategies=()=>{
     setStrLoading(true)
@@ -697,10 +662,9 @@ export default function Home() {
   const openEditAlarm=(a)=>{
     setEditingAlarm(a)
     setAlarmForm({
-      symbol:a.symbol||'',name:a.name||'',
+      name:a.name||'',
       condition:a.condition||'ema_cross_up',
       ema_r:a.ema_r||10,ema_l:a.ema_l||11,
-      notes:a.notes||''
     })
   }
   const closeEditAlarm=()=>{setEditingAlarm(null);setAlarmForm({})}
@@ -718,7 +682,7 @@ export default function Home() {
   }
   const newAlarm=()=>openEditAlarm({id:null})
 
-  // Evaluar condición de una alarma contra datos de mercado
+  // Evalúa una condición sobre closes
   const evalCondition=(condition,closes,emaR,emaL)=>{
     if(!closes||closes.length<20) return null
     const ema=(vals,p)=>{const k=2/(p+1);let e=null;for(const v of vals){if(e===null)e=v;else e=v*k+e*(1-k)};return e}
@@ -732,16 +696,14 @@ export default function Home() {
     return null
   }
 
-  const refreshAlarmStatus=async(list)=>{
-    const items=list||alarms
-    if(!items.length) return
-    // Agrupar por símbolo para no repetir fetch
-    const bySymbol={}
-    items.forEach(a=>{if(!bySymbol[a.symbol])bySymbol[a.symbol]=[]; bySymbol[a.symbol].push(a)})
-    const syms=Object.keys(bySymbol)
-    // Chunks de 4
-    for(let i=0;i<syms.length;i+=4){
-      const chunk=syms.slice(i,i+4)
+  // Para cada símbolo de la watchlist, evalúa todas las alarmas globales
+  const refreshAlarmStatus=async(wl,al)=>{
+    const symbols=(wl||watchlist).map(w=>w.symbol)
+    const alarmList=al||alarms
+    if(!symbols.length||!alarmList.length) return
+    setAlarmStatusLoading(true)
+    for(let i=0;i<symbols.length;i+=5){
+      const chunk=symbols.slice(i,i+5)
       await Promise.all(chunk.map(async sym=>{
         try{
           const rawSym=sym==='^GSPC'?'spy':sym.replace('^','').toLowerCase()
@@ -750,17 +712,19 @@ export default function Home() {
           if(!text||text.includes('No data')) return
           const rows=text.trim().split('\n').slice(1).filter(l=>l.trim())
           const closes=rows.map(l=>parseFloat(l.split(',')[4])).filter(v=>!isNaN(v))
-          bySymbol[sym].forEach(a=>{
-            const result=evalCondition(a.condition,closes,a.ema_r,a.ema_l)
-            setAlarmStatus(prev=>({...prev,[a.id]:result===null?'unknown':result?'active':'inactive'}))
-          })
-        }catch{bySymbol[sym].forEach(a=>setAlarmStatus(prev=>({...prev,[a.id]:'unknown'})))}
+          const symResult={}
+          alarmList.forEach(a=>{symResult[a.id]=evalCondition(a.condition,closes,a.ema_r,a.ema_l)})
+          setAlarmStatus(prev=>({...prev,[sym]:symResult}))
+        }catch{/* ignora error por símbolo */}
       }))
     }
+    setAlarmStatusLoading(false)
   }
 
-  // Refrescar estado de alarmas cuando se cargan
-  useEffect(()=>{if(alarms.length>0) refreshAlarmStatus(alarms)},[alarms])
+  // Cuando cargan las alarmas Y la watchlist, recalcular
+  useEffect(()=>{
+    if(watchlist.length>0&&alarms.length>0) refreshAlarmStatus(watchlist,alarms)
+  },[alarms])
 
   const run=useCallback(async(sym,cfg)=>{
     setLoading(true);setError(null)
@@ -996,71 +960,79 @@ export default function Home() {
 
             {sidePanel==='watchlist'&&(
               <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
-                {/* ── Buscador global ── */}
+                {/* ══ Barra de filtros watchlist ══ */}
                 <div style={{padding:'5px 8px',borderBottom:'1px solid var(--border)',flexShrink:0,display:'flex',gap:4,alignItems:'center'}}>
-                  <div style={{position:'relative',flex:1}}>
-                    <input
-                      type="text"
-                      placeholder="🔍 Buscar…"
-                      value={wlSearch}
-                      onChange={e=>setWlSearch(e.target.value)}
-                      style={{width:'100%',background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'5px 28px 5px 8px',borderRadius:4,boxSizing:'border-box'}}
-                    />
-                    {wlSearch&&(
-                      <span onClick={()=>setWlSearch('')} style={{position:'absolute',right:6,top:'50%',transform:'translateY(-50%)',cursor:'pointer',color:'var(--text3)',fontSize:13,lineHeight:1}}>✕</span>
-                    )}
+                  {/* Buscador compacto */}
+                  <div style={{position:'relative',flex:'0 0 90px'}}>
+                    <input type="text" placeholder="🔍" value={wlSearch} onChange={e=>setWlSearch(e.target.value)}
+                      style={{width:'100%',background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:10,padding:'4px 20px 4px 7px',borderRadius:4,boxSizing:'border-box'}}/>
+                    {wlSearch&&<span onClick={()=>setWlSearch('')} style={{position:'absolute',right:5,top:'50%',transform:'translateY(-50%)',cursor:'pointer',color:'var(--text3)',fontSize:11}}>✕</span>}
                   </div>
-                  <button
-                    onClick={()=>setOnlyBull(b=>!b)}
-                    title={onlyBull?'Mostrando solo alcistas (EMA↑) — clic para ver todos':'Filtrar solo alcistas EMA 10>11'}
-                    style={{
-                      background:onlyBull?'rgba(0,229,160,0.15)':'transparent',
-                      border:`1px solid ${onlyBull?'#00e5a0':'var(--border)'}`,
-                      color:onlyBull?'#00e5a0':'var(--text3)',
-                      fontFamily:MONO,fontSize:10,padding:'4px 7px',borderRadius:4,cursor:'pointer',
-                      fontWeight:onlyBull?700:400,whiteSpace:'nowrap'
-                    }}>
-                    ▲ EMA
-                  </button>
-                </div>
-                {/* ── Toolbar watchlist ── */}
-                <div style={{padding:'4px 8px',borderBottom:'1px solid var(--border)',display:'flex',gap:4,alignItems:'center',flexShrink:0}}>
-                  {/* Desplegable multiselección de listas */}
-                  <div style={{position:'relative',flex:1}}>
-                    <button onClick={()=>setListDropOpen(o=>!o)} style={{width:'100%',background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:10,padding:'4px 8px',borderRadius:3,cursor:'pointer',textAlign:'left',display:'flex',justifyContent:'space-between'}}>
-                      <span>{selectedLists.length===0?'Todas':selectedLists.join(', ')}</span>
-                      <span>{listDropOpen?'▲':'▼'}</span>
+                  {/* Selector de lista */}
+                  <div style={{position:'relative',flex:1,minWidth:0}}>
+                    <button onClick={()=>{setListDropOpen(o=>!o);setAlarmDropOpen(false)}} style={{width:'100%',background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:9,padding:'4px 6px',borderRadius:3,cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'center',overflow:'hidden'}}>
+                      <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{selectedLists.length===0?'Lista: Todas':selectedLists[0]}</span>
+                      <span style={{flexShrink:0,marginLeft:2}}>{listDropOpen?'▲':'▼'}</span>
                     </button>
                     {listDropOpen&&(()=>{
                       const allLists=[...new Set(watchlist.map(w=>w.list_name||'General').filter(Boolean))]
                       return(
-                        <div style={{position:'absolute',top:'100%',left:0,right:0,background:'var(--bg3)',border:'1px solid var(--border)',borderRadius:3,zIndex:50,boxShadow:'0 4px 16px rgba(0,0,0,0.5)'}}>
-                          <div onClick={()=>{setSelectedLists([]);setWlSearch('');setListDropOpen(false)}} style={{padding:'5px 10px',fontFamily:MONO,fontSize:10,cursor:'pointer',color:selectedLists.length===0?'var(--accent)':'var(--text)',borderBottom:'1px solid var(--border)'}}>
+                        <div style={{position:'absolute',top:'100%',left:0,right:0,background:'var(--bg3)',border:'1px solid var(--border)',borderRadius:3,zIndex:60,boxShadow:'0 4px 16px rgba(0,0,0,0.7)',minWidth:120}}>
+                          <div onClick={()=>{setSelectedLists([]);setWlSearch('');setListDropOpen(false)}} style={{padding:'6px 10px',fontFamily:MONO,fontSize:10,cursor:'pointer',color:selectedLists.length===0?'var(--accent)':'var(--text)',borderBottom:'1px solid var(--border)'}}>
                             Todas las listas
                           </div>
                           {allLists.map(l=>(
-                            <div key={l} onClick={()=>{
-                              setSelectedLists([l])
-                              setWlSearch('')
-                              setListDropOpen(false)
-                            }} style={{padding:'5px 10px',fontFamily:MONO,fontSize:10,cursor:'pointer',display:'flex',alignItems:'center',gap:6,color:'var(--text)'}}>
-                              <span style={{color:selectedLists.includes(l)?'var(--accent)':'var(--text3)',fontSize:12}}>{selectedLists.includes(l)?'●':'○'}</span>
-                              {l}
+                            <div key={l} onClick={()=>{setSelectedLists([l]);setWlSearch('');setListDropOpen(false)}}
+                              style={{padding:'6px 10px',fontFamily:MONO,fontSize:10,cursor:'pointer',display:'flex',alignItems:'center',gap:6,color:'var(--text)'}}>
+                              <span style={{color:selectedLists.includes(l)?'var(--accent)':'var(--text3)',fontSize:11}}>{selectedLists.includes(l)?'●':'○'}</span>{l}
                             </div>
                           ))}
                         </div>
                       )
                     })()}
                   </div>
-                  <button onClick={newItem} title="Añadir activo" style={{background:'rgba(0,212,255,0.1)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:13,padding:'3px 8px',borderRadius:3,cursor:'pointer'}}>+</button>
-                  <button onClick={reloadWatchlist} title="Recargar watchlist" style={{background:'transparent',border:'1px solid var(--border)',color:'var(--text3)',fontFamily:MONO,fontSize:11,padding:'3px 6px',borderRadius:3,cursor:'pointer'}}>⟳</button>
-                  <button onClick={()=>refreshEmaStatus()} title="Recalcular EMA 10/11 de todos los activos" style={{background:'transparent',border:'1px solid var(--border)',color:'#00e5a0',fontFamily:MONO,fontSize:11,padding:'3px 6px',borderRadius:3,cursor:'pointer'}}>
-                    {(()=>{
-                      const bulls=watchlist.filter(w=>emaStatus[w.symbol]==='bull').length
-                      const total=Object.keys(emaStatus).length
-                      return total>0?`▲${bulls}/${total}`:'▲▼'
-                    })()}
+                  {/* Filtro favoritos */}
+                  <button onClick={()=>setOnlyFavs(f=>!f)} title={onlyFavs?'Mostrando solo favoritos':'Filtrar solo favoritos'}
+                    style={{background:onlyFavs?'rgba(255,209,102,0.15)':'transparent',border:`1px solid ${onlyFavs?'#ffd166':'var(--border)'}`,color:onlyFavs?'#ffd166':'var(--text3)',fontFamily:MONO,fontSize:12,padding:'3px 6px',borderRadius:4,cursor:'pointer',flexShrink:0}}>
+                    ★
                   </button>
+                  {/* Filtro alarmas multiselección */}
+                  <div style={{position:'relative',flexShrink:0}}>
+                    <button onClick={()=>{setAlarmDropOpen(o=>!o);setListDropOpen(false)}}
+                      title="Filtrar por condición de alarma"
+                      style={{background:selectedAlarmIds.length>0?'rgba(255,209,102,0.1)':'transparent',border:`1px solid ${selectedAlarmIds.length>0?'#ffd166':'var(--border)'}`,color:selectedAlarmIds.length>0?'#ffd166':'var(--text3)',fontFamily:MONO,fontSize:10,padding:'3px 7px',borderRadius:4,cursor:'pointer',whiteSpace:'nowrap'}}>
+                      🔔{selectedAlarmIds.length>0?` ${selectedAlarmIds.length}`:''}
+                    </button>
+                    {alarmDropOpen&&(
+                      <div style={{position:'absolute',top:'100%',right:0,background:'var(--bg3)',border:'1px solid var(--border)',borderRadius:4,zIndex:60,boxShadow:'0 4px 20px rgba(0,0,0,0.7)',minWidth:190,padding:'4px 0'}}>
+                        <div style={{padding:'4px 10px 6px',fontFamily:MONO,fontSize:9,color:'var(--text3)',borderBottom:'1px solid var(--border)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                          <span>FILTRAR POR ALARMA</span>
+                          {selectedAlarmIds.length>0&&<span onClick={()=>setSelectedAlarmIds([])} style={{cursor:'pointer',color:'var(--accent)'}}>limpiar</span>}
+                        </div>
+                        {alarms.length===0&&<div style={{padding:'8px 10px',fontFamily:MONO,fontSize:10,color:'var(--text3)'}}>Sin alarmas definidas</div>}
+                        {alarms.map(a=>{
+                          const sel=selectedAlarmIds.includes(a.id)
+                          return(
+                            <div key={a.id} onClick={()=>setSelectedAlarmIds(prev=>sel?prev.filter(x=>x!==a.id):[...prev,a.id])}
+                              style={{padding:'6px 10px',fontFamily:MONO,fontSize:10,cursor:'pointer',display:'flex',alignItems:'center',gap:8,color:'var(--text)',background:sel?'rgba(255,209,102,0.06)':'transparent'}}>
+                              <span style={{color:sel?'#ffd166':'var(--text3)',fontSize:12,flexShrink:0}}>{sel?'☑':'☐'}</span>
+                              <div style={{minWidth:0}}>
+                                <div style={{fontWeight:sel?700:400,color:sel?'var(--text)':'var(--text3)'}}>{a.name}</div>
+                                <div style={{fontSize:9,color:'var(--text3)'}}>{({ema_cross_up:'EMA↑ alcista',ema_cross_down:'EMA↓ bajista',price_above_ema:'Precio>EMA',price_below_ema:'Precio<EMA'})[a.condition]} · {a.ema_r}/{a.ema_l}</div>
+                              </div>
+                            </div>
+                          )
+                        })}
+                        <div style={{padding:'6px 8px',borderTop:'1px solid var(--border)',display:'flex',gap:4,justifyContent:'flex-end'}}>
+                          <button onClick={()=>{refreshAlarmStatus();setAlarmDropOpen(false)}} style={{background:'rgba(0,212,255,0.1)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:9,padding:'3px 8px',borderRadius:3,cursor:'pointer'}}>⟳ Actualizar</button>
+                          <button onClick={()=>setAlarmDropOpen(false)} style={{background:'transparent',border:'1px solid var(--border)',color:'var(--text3)',fontFamily:MONO,fontSize:9,padding:'3px 8px',borderRadius:3,cursor:'pointer'}}>Cerrar</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  {/* Botones acción */}
+                  <button onClick={newItem} title="Añadir activo" style={{background:'rgba(0,212,255,0.1)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:13,padding:'2px 7px',borderRadius:3,cursor:'pointer',flexShrink:0}}>+</button>
+                  <button onClick={reloadWatchlist} title="Recargar" style={{background:'transparent',border:'1px solid var(--border)',color:'var(--text3)',fontFamily:MONO,fontSize:10,padding:'3px 5px',borderRadius:3,cursor:'pointer',flexShrink:0}}>⟳</button>
                 </div>
 
                 {/* ── Lista de activos ── */}
@@ -1071,8 +1043,10 @@ export default function Home() {
                     const filtered=watchlist.filter(w=>{
                       const matchList=selectedLists.length===0||selectedLists.includes(w.list_name||'General')
                       const matchSearch=!wlSearch||(w.symbol||'').toLowerCase().includes(searchLower)||(w.name||'').toLowerCase().includes(searchLower)
-                      const matchEma=!onlyBull||(emaStatus[w.symbol]==='bull')
-                      return matchList&&matchSearch&&matchEma
+                      const matchFav=!onlyFavs||w.favorite
+                      const symAlarms=alarmStatus[w.symbol]||{}
+                      const matchAlarm=selectedAlarmIds.length===0||selectedAlarmIds.some(id=>symAlarms[id]===true)
+                      return matchList&&matchSearch&&matchFav&&matchAlarm
                     })
                     const favs=filtered.filter(w=>w.favorite)
                     const rest=filtered.filter(w=>!w.favorite).sort((a,b)=>a.name.localeCompare(b.name))
@@ -1093,24 +1067,18 @@ export default function Home() {
                           <div style={{fontFamily:MONO,fontSize:11,color:simbolo===w.symbol?'var(--accent)':'var(--text)',fontWeight:600}}>{w.symbol}</div>
                           <div style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{w.name}</div>
                         </div>
-                        {/* Badge EMA 10/11 */}
+                        {/* Badges alarmas activas */}
                         {(()=>{
-                          const st=emaStatus[w.symbol]
-                          if(!st) return null
-                          if(st==='loading') return <span style={{fontFamily:MONO,fontSize:8,color:'var(--text3)',flexShrink:0}}>⟳</span>
-                          return(
-                            <span title={st==='bull'?'EMA10 > EMA11 (alcista)':'EMA10 < EMA11 (bajista)'}
-                              style={{
-                                fontFamily:MONO,fontSize:8,fontWeight:700,
-                                color:st==='bull'?'#00e5a0':'#ff4d6d',
-                                background:st==='bull'?'rgba(0,229,160,0.1)':'rgba(255,77,109,0.1)',
-                                border:`1px solid ${st==='bull'?'rgba(0,229,160,0.3)':'rgba(255,77,109,0.3)'}`,
-                                padding:'1px 4px',borderRadius:3,flexShrink:0,
-                                lineHeight:'1.4'
-                              }}>
-                              {st==='bull'?'▲10':'▼10'}
+                          const symAlarms=alarmStatus[w.symbol]
+                          if(!symAlarms) return null
+                          return alarms.filter(a=>symAlarms[a.id]===true).map(a=>(
+                            <span key={a.id} title={`${a.name} activa`}
+                              style={{fontFamily:MONO,fontSize:8,fontWeight:700,color:'#00e5a0',
+                                background:'rgba(0,229,160,0.1)',border:'1px solid rgba(0,229,160,0.35)',
+                                padding:'1px 4px',borderRadius:3,flexShrink:0,lineHeight:'1.5',whiteSpace:'nowrap',maxWidth:52,overflow:'hidden',textOverflow:'ellipsis'}}>
+                              {a.name}
                             </span>
-                          )
+                          ))
                         })()}
                         {/* Lista badge */}
                         <span style={{fontFamily:MONO,fontSize:8,color:'var(--text3)',background:'var(--bg2)',padding:'1px 4px',borderRadius:2,flexShrink:0}}>{w.list_name||'General'}</span>
@@ -1181,7 +1149,10 @@ export default function Home() {
                         <button onClick={saveEditItem} disabled={editSaving} style={{flex:1,background:'rgba(0,212,255,0.15)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:12,padding:'8px',borderRadius:4,cursor:'pointer',fontWeight:600}}>
                           {editSaving?'Guardando…':'Guardar'}
                         </button>
-                        {editingItem.id&&<button onClick={()=>deleteItem(editingItem.id)} style={{background:'rgba(255,77,109,0.12)',border:'1px solid #ff4d6d',color:'#ff4d6d',fontFamily:MONO,fontSize:12,padding:'8px 14px',borderRadius:4,cursor:'pointer'}}>🗑 Eliminar</button>}
+                        {editingItem.id&&<button onClick={()=>deleteItem(editingItem.id)} style={{background:'rgba(255,77,109,0.12)',border:'1px solid #ff4d6d',color:'#ff4d6d',fontFamily:MONO,fontSize:12,padding:'8px 14px',borderRadius:4,cursor:'pointer',display:'flex',alignItems:'center',gap:5}}>
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3,6 5,6 21,6"/><path d="M19,6l-1,14a2,2,0,0,1-2,2H8a2,2,0,0,1-2-2L5,6"/><path d="M10,11v6"/><path d="M14,11v6"/><path d="M9,6V4a1,1,0,0,1,1-1h4a1,1,0,0,1,1,1v2"/></svg>
+                          Eliminar
+                        </button>}
                       </div>
                     </div>
                   </div>
@@ -1200,33 +1171,28 @@ export default function Home() {
                   {alarmLoading&&<div style={{padding:'10px 12px',fontFamily:MONO,fontSize:10,color:'var(--text3)'}}>⟳ Cargando…</div>}
                   {!alarmLoading&&!alarms.length&&<div style={{padding:'14px 12px',fontFamily:MONO,fontSize:10,color:'var(--text3)'}}>Sin alarmas. Pulsa + para crear una.</div>}
                   {!alarmLoading&&alarms.map(a=>{
-                    const st=alarmStatus[a.id]
                     const condLabel={
-                      ema_cross_up:'EMA↑ alcista',ema_cross_down:'EMA↓ bajista',
-                      price_above_ema:'Precio>EMA','price_below_ema':'Precio<EMA'
+                      ema_cross_up:'EMA rápida > EMA lenta ↑',ema_cross_down:'EMA rápida < EMA lenta ↓',
+                      price_above_ema:'Precio cierre > EMA rápida',price_below_ema:'Precio cierre < EMA rápida'
                     }[a.condition]||a.condition
+                    // Contar cuántos símbolos tienen esta alarma activa
+                    const activeCount=watchlist.filter(w=>alarmStatus[w.symbol]?.[a.id]===true).length
+                    const totalEval=watchlist.filter(w=>alarmStatus[w.symbol]?.[a.id]!==undefined).length
                     return(
-                      <div key={a.id} style={{padding:'7px 10px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:6}}>
-                        {/* Badge estado */}
-                        <span style={{
-                          width:8,height:8,borderRadius:'50%',flexShrink:0,
-                          background:st==='active'?'#00e5a0':st==='inactive'?'#ff4d6d':st==='loading'?'#ffd166':'#3d5a7a',
-                          boxShadow:st==='active'?'0 0 6px #00e5a0':st==='inactive'?'0 0 6px #ff4d6d':undefined
-                        }}/>
-                        {/* Info */}
+                      <div key={a.id} style={{padding:'8px 10px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:8}}>
+                        {/* Dot indicador */}
+                        <span style={{width:8,height:8,borderRadius:'50%',flexShrink:0,
+                          background:activeCount>0?'#00e5a0':'#3d5a7a',
+                          boxShadow:activeCount>0?'0 0 6px #00e5a0':undefined}}/>
                         <div style={{flex:1,minWidth:0}}>
-                          <div style={{fontFamily:MONO,fontSize:11,color:'var(--text)',fontWeight:600}}
-                            onClick={()=>setSimbolo(a.symbol)} >{a.symbol}
-                            <span style={{color:'var(--text3)',fontWeight:400,marginLeft:6,fontSize:9}}>{a.name}</span>
-                          </div>
-                          <div style={{fontFamily:MONO,fontSize:9,color:'var(--text3)'}}>
-                            {condLabel} · EMA {a.ema_r}/{a.ema_l}
-                            {st==='active'&&<span style={{color:'#00e5a0',marginLeft:6,fontWeight:700}}>● ACTIVA</span>}
-                            {st==='inactive'&&<span style={{color:'#ff4d6d',marginLeft:6}}>● inactiva</span>}
-                          </div>
-                          {a.notes&&<div style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',fontStyle:'italic',marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.notes}</div>}
+                          <div style={{fontFamily:MONO,fontSize:11,color:'var(--text)',fontWeight:700}}>{a.name}</div>
+                          <div style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',marginTop:1}}>{condLabel} · EMA {a.ema_r}/{a.ema_l}</div>
+                          {totalEval>0&&<div style={{fontFamily:MONO,fontSize:9,marginTop:2}}>
+                            <span style={{color:'#00e5a0',fontWeight:600}}>{activeCount} activos</span>
+                            <span style={{color:'var(--text3)'}}> / {totalEval} evaluados</span>
+                          </div>}
                         </div>
-                        <button onClick={()=>openEditAlarm(a)} style={{background:'transparent',border:'1px solid var(--border)',color:'var(--text3)',fontFamily:MONO,fontSize:10,padding:'2px 5px',borderRadius:3,cursor:'pointer'}}>✎</button>
+                        <button onClick={()=>openEditAlarm(a)} style={{background:'transparent',border:'1px solid var(--border)',color:'var(--text3)',fontFamily:MONO,fontSize:10,padding:'3px 6px',borderRadius:3,cursor:'pointer'}}>✎</button>
                       </div>
                     )
                   })}
@@ -1367,66 +1333,57 @@ export default function Home() {
       {/* ══ MODAL ALARMA — fixed sobre gráfico ══ */}
       {editingAlarm!==null&&(
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.72)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center'}} onClick={e=>{if(e.target===e.currentTarget)closeEditAlarm()}}>
-          <div style={{background:'#0d1824',border:'1px solid #1e3a52',borderRadius:8,padding:28,width:460,maxHeight:'85vh',overflowY:'auto',display:'flex',flexDirection:'column',gap:14,fontFamily:MONO,fontSize:12,boxShadow:'0 8px 48px rgba(0,0,0,0.8)'}}>
+          <div style={{background:'#0d1824',border:'1px solid #1e3a52',borderRadius:8,padding:28,width:380,display:'flex',flexDirection:'column',gap:16,fontFamily:MONO,fontSize:12,boxShadow:'0 8px 48px rgba(0,0,0,0.8)'}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-              <span style={{fontWeight:700,color:'var(--text)',fontSize:15}}>{editingAlarm.id?'Editar alarma':'Nueva alarma'}</span>
+              <span style={{fontWeight:700,color:'var(--text)',fontSize:15}}>{editingAlarm.id?'Editar condición':'Nueva condición'}</span>
               <button onClick={closeEditAlarm} style={{background:'transparent',border:'none',color:'var(--text3)',fontSize:18,cursor:'pointer'}}>✕</button>
             </div>
 
-            {/* Símbolo y nombre */}
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-              <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>Símbolo
-                <input type="text" value={alarmForm.symbol||''} onChange={async e=>{
-                  const sym=e.target.value.toUpperCase()
-                  setAlarmForm(p=>({...p,symbol:sym}))
-                  if(sym.length>1){
-                    const local=lookupName(sym)
-                    if(local) setAlarmForm(p=>({...p,symbol:sym,name:local}))
-                    if(symSearchRef.current) clearTimeout(symSearchRef.current)
-                    symSearchRef.current=setTimeout(async()=>{
-                      const n=await searchSymbolName(sym)
-                      if(n) setAlarmForm(p=>({...p,name:n}))
-                    },600)
-                  }
-                }} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'7px 10px',borderRadius:4}}/>
-              </label>
-              <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>Nombre
-                <input type="text" value={alarmForm.name||''} onChange={e=>setAlarmForm(p=>({...p,name:e.target.value}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'7px 10px',borderRadius:4}}/>
-              </label>
-            </div>
+            <label style={{display:'flex',flexDirection:'column',gap:5,color:'var(--text3)'}}>
+              Nombre de la condición
+              <input type="text" value={alarmForm.name||''} placeholder="Ej: V50 EMA 10/11"
+                onChange={e=>setAlarmForm(p=>({...p,name:e.target.value}))}
+                style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:13,padding:'8px 12px',borderRadius:4}}/>
+            </label>
 
-            {/* Condición */}
-            <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>
+            <label style={{display:'flex',flexDirection:'column',gap:5,color:'var(--text3)'}}>
               Condición
-              <select value={alarmForm.condition||'ema_cross_up'} onChange={e=>setAlarmForm(p=>({...p,condition:e.target.value}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'7px 10px',borderRadius:4}}>
-                <option value="ema_cross_up">EMA rápida &gt; EMA lenta — cruce alcista ↑</option>
-                <option value="ema_cross_down">EMA rápida &lt; EMA lenta — cruce bajista ↓</option>
+              <select value={alarmForm.condition||'ema_cross_up'} onChange={e=>setAlarmForm(p=>({...p,condition:e.target.value}))}
+                style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'8px 12px',borderRadius:4}}>
+                <option value="ema_cross_up">EMA rápida &gt; EMA lenta — alcista ↑</option>
+                <option value="ema_cross_down">EMA rápida &lt; EMA lenta — bajista ↓</option>
                 <option value="price_above_ema">Precio cierre &gt; EMA rápida</option>
                 <option value="price_below_ema">Precio cierre &lt; EMA rápida</option>
               </select>
             </label>
 
-            {/* EMAs */}
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-              <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>EMA Rápida
-                <input type="number" value={alarmForm.ema_r||10} min={1} onChange={e=>setAlarmForm(p=>({...p,ema_r:Number(e.target.value)}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'#ffd166',fontFamily:MONO,fontSize:13,padding:'7px 10px',borderRadius:4,fontWeight:600}}/>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+              <label style={{display:'flex',flexDirection:'column',gap:5,color:'var(--text3)'}}>
+                EMA Rápida
+                <input type="number" value={alarmForm.ema_r||10} min={1}
+                  onChange={e=>setAlarmForm(p=>({...p,ema_r:Number(e.target.value)}))}
+                  style={{background:'var(--bg3)',border:'1px solid rgba(255,209,102,0.4)',color:'#ffd166',fontFamily:MONO,fontSize:16,padding:'8px 12px',borderRadius:4,fontWeight:700,textAlign:'center'}}/>
               </label>
-              <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>EMA Lenta
-                <input type="number" value={alarmForm.ema_l||11} min={1} onChange={e=>setAlarmForm(p=>({...p,ema_l:Number(e.target.value)}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'#ff4d6d',fontFamily:MONO,fontSize:13,padding:'7px 10px',borderRadius:4,fontWeight:600}}/>
+              <label style={{display:'flex',flexDirection:'column',gap:5,color:'var(--text3)'}}>
+                EMA Lenta
+                <input type="number" value={alarmForm.ema_l||11} min={1}
+                  onChange={e=>setAlarmForm(p=>({...p,ema_l:Number(e.target.value)}))}
+                  style={{background:'var(--bg3)',border:'1px solid rgba(255,77,109,0.4)',color:'#ff4d6d',fontFamily:MONO,fontSize:16,padding:'8px 12px',borderRadius:4,fontWeight:700,textAlign:'center'}}/>
               </label>
             </div>
 
-            {/* Notas */}
-            <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>
-              Notas
-              <textarea value={alarmForm.notes||''} onChange={e=>setAlarmForm(p=>({...p,notes:e.target.value}))} rows={2} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'7px 10px',borderRadius:4,resize:'vertical'}}/>
-            </label>
-
             <div style={{display:'flex',gap:8,paddingTop:4,borderTop:'1px solid var(--border)'}}>
-              <button onClick={saveAlarm} disabled={alarmSaving} style={{flex:1,background:'rgba(0,212,255,0.15)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:13,padding:'9px',borderRadius:5,cursor:'pointer',fontWeight:600}}>
-                {alarmSaving?'Guardando…':'Guardar alarma'}
+              <button onClick={saveAlarm} disabled={alarmSaving}
+                style={{flex:1,background:'rgba(0,212,255,0.15)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:13,padding:'10px',borderRadius:5,cursor:'pointer',fontWeight:600}}>
+                {alarmSaving?'Guardando…':'Guardar'}
               </button>
-              {editingAlarm.id&&<button onClick={()=>removeAlarm(editingAlarm.id)} style={{background:'rgba(255,77,109,0.12)',border:'1px solid #ff4d6d',color:'#ff4d6d',fontFamily:MONO,fontSize:12,padding:'9px 16px',borderRadius:5,cursor:'pointer'}}>🗑</button>}
+              {editingAlarm.id&&(
+                <button onClick={()=>removeAlarm(editingAlarm.id)}
+                  style={{background:'rgba(255,77,109,0.12)',border:'1px solid #ff4d6d',color:'#ff4d6d',fontFamily:MONO,fontSize:11,padding:'10px 14px',borderRadius:5,cursor:'pointer',display:'flex',alignItems:'center',gap:5}}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3,6 5,6 21,6"/><path d="M19,6l-1,14a2,2,0,0,1-2,2H8a2,2,0,0,1-2-2L5,6"/><path d="M10,11v6"/><path d="M14,11v6"/><path d="M9,6V4a1,1,0,0,1,1-1h4a1,1,0,0,1,1,1v2"/></svg>
+                  Eliminar
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -1546,7 +1503,10 @@ export default function Home() {
               <button onClick={saveEditStr} disabled={strSaving} style={{flex:1,background:'rgba(0,212,255,0.15)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:13,padding:'9px',borderRadius:5,cursor:'pointer',fontWeight:600}}>
                 {strSaving?'Guardando…':'Guardar estrategia'}
               </button>
-              {editingStr.id&&<button onClick={()=>deleteStr(editingStr.id)} style={{background:'rgba(255,77,109,0.12)',border:'1px solid #ff4d6d',color:'#ff4d6d',fontFamily:MONO,fontSize:12,padding:'9px 16px',borderRadius:5,cursor:'pointer'}}>🗑 Eliminar</button>}
+              {editingStr.id&&<button onClick={()=>deleteStr(editingStr.id)} style={{background:'rgba(255,77,109,0.12)',border:'1px solid #ff4d6d',color:'#ff4d6d',fontFamily:MONO,fontSize:12,padding:'9px 16px',borderRadius:5,cursor:'pointer',display:'flex',alignItems:'center',gap:6}}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3,6 5,6 21,6"/><path d="M19,6l-1,14a2,2,0,0,1-2,2H8a2,2,0,0,1-2-2L5,6"/><path d="M10,11v6"/><path d="M14,11v6"/><path d="M9,6V4a1,1,0,0,1,1-1h4a1,1,0,0,1,1,1v2"/></svg>
+                Eliminar
+              </button>}
             </div>
           </div>
         </div>
