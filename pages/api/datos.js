@@ -17,13 +17,6 @@ function calcATR(highs, lows, closes, period) {
   })
   return calcEMA(tr, period)
 }
-function projectEMA(lastEMA, lastClose, period, bars = 20) {
-  const k = 2 / (period + 1)
-  let v = lastEMA
-  const pts = [{ offset: 0, value: v }]
-  for (let i = 1; i <= bars; i++) { v = lastClose * k + v * (1 - k); pts.push({ offset: i, value: v }) }
-  return pts
-}
 async function fetchAV(symbol) {
   const sym = symbol === '^GSPC' ? 'spy' : symbol.replace('^','').toLowerCase()
   const url = `https://stooq.com/q/d/l/?s=${sym}.us&i=d`
@@ -130,26 +123,29 @@ function makeTrade(entryDate,exitDate,entryPx,exitPx,pnl,capitalReinv,capitalIni
 }
 function calcEquityCurves(trades, data, capitalIni, startDate, sp500Data) {
   const filtered = data.filter(d=>new Date(d.date)>=new Date(startDate))
-  if (!filtered.length) return {strategyCurve:[],bhCurve:[],sp500BHCurve:[],maxDDStrategy:0,maxDDBH:0,maxDDSP500:0,maxDDStrategyDate:null,maxDDBHDate:null,maxDDSP500Date:null}
+  if (!filtered.length) return {
+    strategyCurve:[],bhCurve:[],sp500BHCurve:[],compoundCurve:[],
+    maxDDStrategy:0,maxDDBH:0,maxDDSP500:0,maxDDCompound:0,
+    maxDDStrategyDate:null,maxDDBHDate:null,maxDDSP500Date:null,maxDDCompoundDate:null
+  }
   const p0 = filtered[0].close
   const step = Math.max(1, Math.floor(filtered.length/300))
   const sampled = filtered.filter((_,i)=>i%step===0||i===filtered.length-1)
-
-  // Strategy curve
-  const strategyCurve=[], bhCurve=[], sp500BHCurve=[]
-  let lastStrat=capitalIni
-
-  // SP500 start price
+  const strategyCurve=[], bhCurve=[], sp500BHCurve=[], compoundCurve=[]
+  let lastStrat=capitalIni, lastCompound=capitalIni
   let sp0Close=null
   if (sp500Data) {
     const sp0=sp500Data.find(d=>d.date>=filtered[0].date)
     if(sp0) sp0Close=sp0.close
   }
-
   sampled.forEach(d=>{
     const exits=trades.filter(t=>t.exitDate<=d.date)
-    if(exits.length) lastStrat=capitalIni+exits.reduce((s,t)=>s+t.pnlSimple,0)
+    if(exits.length){
+      lastStrat=capitalIni+exits.reduce((s,t)=>s+t.pnlSimple,0)
+      lastCompound=exits[exits.length-1].capitalTras
+    }
     strategyCurve.push({date:d.date,value:lastStrat})
+    compoundCurve.push({date:d.date,value:lastCompound})
     bhCurve.push({date:d.date,value:capitalIni*(d.close/p0)})
     if(sp500Data&&sp0Close){
       let spBar=null
@@ -157,7 +153,6 @@ function calcEquityCurves(trades, data, capitalIni, startDate, sp500Data) {
       if(spBar) sp500BHCurve.push({date:d.date,value:capitalIni*(spBar.close/sp0Close)})
     }
   })
-
   const calcDD=(curve)=>{
     let peak=curve[0]?.value||capitalIni, maxDD=0, maxDDDate=null
     curve.forEach(p=>{
@@ -170,7 +165,12 @@ function calcEquityCurves(trades, data, capitalIni, startDate, sp500Data) {
   const {maxDD:maxDDStrategy,maxDDDate:maxDDStrategyDate}=calcDD(strategyCurve)
   const {maxDD:maxDDBH,maxDDDate:maxDDBHDate}=calcDD(bhCurve)
   const {maxDD:maxDDSP500,maxDDDate:maxDDSP500Date}=calcDD(sp500BHCurve)
-  return {strategyCurve,bhCurve,sp500BHCurve,maxDDStrategy,maxDDBH,maxDDSP500,maxDDStrategyDate,maxDDBHDate,maxDDSP500Date}
+  const {maxDD:maxDDCompound,maxDDDate:maxDDCompoundDate}=calcDD(compoundCurve)
+  return {
+    strategyCurve,bhCurve,sp500BHCurve,compoundCurve,
+    maxDDStrategy,maxDDBH,maxDDSP500,maxDDCompound,
+    maxDDStrategyDate,maxDDBHDate,maxDDSP500Date,maxDDCompoundDate
+  }
 }
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
@@ -178,14 +178,17 @@ export default async function handler(req, res) {
   try {
     const data = await fetchAV(simbolo)
     if (!data||data.length===0) return res.status(404).json({error:`No se encontraron datos para "${simbolo}"`})
-    // Always fetch SP500
     let sp500Data=null
     try { sp500Data=await fetchAV('^GSPC') } catch(_) {}
     const {chartData,trades,capitalReinv,gananciaSimple,startDate}=runBacktest(data,sp500Data,cfg)
     const filteredData=data.filter(d=>new Date(d.date)>=new Date(startDate))
     let ganBH=0
     if(filteredData.length>=2) ganBH=cfg.capitalIni*(filteredData[filteredData.length-1].close/filteredData[0].close)-cfg.capitalIni
-    const {strategyCurve,bhCurve,sp500BHCurve,maxDDStrategy,maxDDBH,maxDDSP500,maxDDStrategyDate,maxDDBHDate,maxDDSP500Date}=calcEquityCurves(trades,data,cfg.capitalIni,startDate,sp500Data)
+    const {
+      strategyCurve,bhCurve,sp500BHCurve,compoundCurve,
+      maxDDStrategy,maxDDBH,maxDDSP500,maxDDCompound,
+      maxDDStrategyDate,maxDDBHDate,maxDDSP500Date,maxDDCompoundDate
+    }=calcEquityCurves(trades,data,cfg.capitalIni,startDate,sp500Data)
     let sp500Status=null
     if(sp500Data&&sp500Data.length>0){
       const spC=sp500Data.map(d=>d.close)
@@ -197,9 +200,9 @@ export default async function handler(req, res) {
       chartData:chartData.filter(d=>new Date(d.date)>=new Date(startDate)),
       trades,capitalReinv,gananciaSimple,ganBH,
       startDate:startDate.toISOString().split('T')[0],
-      sp500Status,strategyCurve,bhCurve,sp500BHCurve,
-      maxDDStrategy,maxDDBH,maxDDSP500,
-      maxDDStrategyDate,maxDDBHDate,maxDDSP500Date,
+      sp500Status,strategyCurve,bhCurve,sp500BHCurve,compoundCurve,
+      maxDDStrategy,maxDDBH,maxDDSP500,maxDDCompound,
+      maxDDStrategyDate,maxDDBHDate,maxDDSP500Date,maxDDCompoundDate,
       meta:{simbolo,ultimaFecha:data[data.length-1].date,ultimoPrecio:data[data.length-1].close,totalBars:data.length}
     })
   } catch(err) {
