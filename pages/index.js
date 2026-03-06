@@ -555,6 +555,7 @@ export default function Home() {
     setAtrP(s.atr_period);setAtrM(s.atr_mult)
     setSinPerdidas(s.sin_perdidas);setReentry(s.reentry)
     setTipoFiltro(s.tipo_filtro);setSp500EmaR(s.sp500_ema_r);setSp500EmaL(s.sp500_ema_l)
+    setStrForm(f=>({...f,_loadedName:s.name}))
     setSidePanel('config')
   }
   const newStrategy=()=>openEditStr({id:null})
@@ -699,8 +700,8 @@ export default function Home() {
           {/* ── SIDEBAR ── */}
           <aside className="sidebar" style={{padding:0,gap:0,position:'relative'}}>
             <div style={{display:'flex',borderBottom:'1px solid var(--border)'}}>
-              {[{id:'config',label:'⚙'},{id:'watchlist',label:'☰'},{id:'strategies',label:'⚡'}].map(tab=>(
-                <button key={tab.id} onClick={()=>setSidePanel(tab.id)} title={tab.id==='config'?'Config':tab.id==='watchlist'?'Watchlist':'Estrategias'} style={{
+              {[{id:'config',label:'⚙',title:'Configuración'},{id:'watchlist',label:'☰',title:'Watchlist'}].map(tab=>(
+                <button key={tab.id} onClick={()=>setSidePanel(tab.id)} title={tab.title} style={{
                   flex:1,padding:'8px 4px',
                   background:sidePanel===tab.id?'var(--bg3)':'transparent',
                   border:'none',
@@ -715,6 +716,34 @@ export default function Home() {
 
             {sidePanel==='config'&&(
               <div style={{padding:14,display:'flex',flexDirection:'column',gap:14,overflowY:'auto',flex:1}}>
+                {/* ── Selector de estrategia ── */}
+                <div className="sidebar-section">
+                  <div className="sidebar-title" style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                    <span>Estrategia</span>
+                    <div style={{display:'flex',gap:4}}>
+                      <button onClick={newStrategy} title="Nueva estrategia" style={{background:'rgba(0,212,255,0.1)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:11,padding:'1px 6px',borderRadius:3,cursor:'pointer'}}>+</button>
+                      <button onClick={()=>strategies.length>0&&openEditStr(strategies.find(s=>s.name===strForm._loadedName)||strategies[0])} title="Gestionar estrategias" style={{background:'transparent',border:'1px solid var(--border)',color:'var(--text3)',fontFamily:MONO,fontSize:11,padding:'1px 6px',borderRadius:3,cursor:'pointer'}}>✎</button>
+                    </div>
+                  </div>
+                  {strLoading
+                    ? <div style={{fontFamily:MONO,fontSize:10,color:'var(--text3)'}}>⟳ Cargando…</div>
+                    : <label>
+                        <select
+                          value={strForm._loadedName||''}
+                          onChange={e=>{
+                            const s=strategies.find(x=>x.name===e.target.value)
+                            if(s) loadStrategy(s)
+                          }}
+                          style={{width:'100%'}}
+                        >
+                          <option value="">— seleccionar —</option>
+                          {strategies.map(s=>(
+                            <option key={s.id} value={s.name}>{s.name}</option>
+                          ))}
+                        </select>
+                      </label>
+                  }
+                </div>
                 <div className="sidebar-section">
                   <div className="sidebar-title">Activo</div>
                   <label>Símbolo<input type="text" value={simbolo} onChange={e=>setSimbolo(e.target.value.toUpperCase())} placeholder="^GSPC"/></label>
@@ -817,41 +846,43 @@ export default function Home() {
                   })()}
                 </div>
 
-                {/* ── Modal editor activo ── */}
+                {/* ── Modal editor activo — fixed sobre gráfico ── */}
                 {editingItem!==null&&(
-                  <div style={{position:'absolute',inset:0,background:'rgba(0,0,0,0.7)',zIndex:100,display:'flex',alignItems:'center',justifyContent:'center'}}>
-                    <div style={{background:'var(--bg2)',border:'1px solid var(--border)',borderRadius:6,padding:16,width:240,display:'flex',flexDirection:'column',gap:8,fontFamily:MONO,fontSize:11}}>
-                      <div style={{fontWeight:700,color:'var(--text)',fontSize:12,marginBottom:2}}>{editingItem.id?'Editar activo':'Nuevo activo'}</div>
-                      {[
-                        {key:'symbol',label:'Símbolo',type:'text'},
-                        {key:'name',label:'Nombre',type:'text'},
-                        {key:'group_name',label:'Grupo',type:'select',opts:['Índices','Acciones','Crypto','Materias Primas']},
-                        {key:'list_name',label:'Lista',type:'text'},
-                      ].map(f=>(
-                        <label key={f.key} style={{display:'flex',flexDirection:'column',gap:2,color:'var(--text3)'}}>
-                          {f.label}
-                          {f.type==='select'
-                            ?<select value={editForm[f.key]||''} onChange={e=>setEditForm(p=>({...p,[f.key]:e.target.value}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'3px 6px',borderRadius:3}}>
-                              {f.opts.map(o=><option key={o} value={o}>{o}</option>)}
-                            </select>
-                            :<input type="text" value={editForm[f.key]||''} onChange={e=>setEditForm(p=>({...p,[f.key]:e.target.value}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'3px 6px',borderRadius:3}}/>
-                          }
+                  <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.72)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center'}} onClick={e=>{if(e.target===e.currentTarget)closeEditItem()}}>
+                    <div style={{background:'#0d1824',border:'1px solid #1e3a52',borderRadius:8,padding:24,width:440,maxHeight:'85vh',overflowY:'auto',display:'flex',flexDirection:'column',gap:12,fontFamily:MONO,fontSize:12,boxShadow:'0 8px 48px rgba(0,0,0,0.8)'}}>
+                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
+                        <span style={{fontWeight:700,color:'var(--text)',fontSize:14}}>{editingItem.id?'Editar activo':'Nuevo activo'}</span>
+                        <button onClick={closeEditItem} style={{background:'transparent',border:'none',color:'var(--text3)',fontSize:16,cursor:'pointer',lineHeight:1}}>✕</button>
+                      </div>
+                      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+                        <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>Símbolo
+                          <input type="text" value={editForm.symbol||''} onChange={e=>setEditForm(p=>({...p,symbol:e.target.value.toUpperCase()}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'6px 8px',borderRadius:4}}/>
                         </label>
-                      ))}
-                      <label style={{display:'flex',alignItems:'center',gap:6,color:'var(--text3)',cursor:'pointer'}}>
-                        <input type="checkbox" checked={editForm.favorite||false} onChange={e=>setEditForm(p=>({...p,favorite:e.target.checked}))}/>
-                        ★ Favorito
+                        <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>Nombre
+                          <input type="text" value={editForm.name||''} onChange={e=>setEditForm(p=>({...p,name:e.target.value}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'6px 8px',borderRadius:4}}/>
+                        </label>
+                        <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>Grupo
+                          <select value={editForm.group_name||'Acciones'} onChange={e=>setEditForm(p=>({...p,group_name:e.target.value}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'6px 8px',borderRadius:4}}>
+                            {['Índices','Acciones','Crypto','Materias Primas'].map(o=><option key={o} value={o}>{o}</option>)}
+                          </select>
+                        </label>
+                        <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>Lista
+                          <input type="text" value={editForm.list_name||'General'} onChange={e=>setEditForm(p=>({...p,list_name:e.target.value}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'6px 8px',borderRadius:4}}/>
+                        </label>
+                      </div>
+                      <label style={{display:'flex',alignItems:'center',gap:8,color:'var(--text3)',cursor:'pointer',padding:'4px 0'}}>
+                        <input type="checkbox" checked={editForm.favorite||false} onChange={e=>setEditForm(p=>({...p,favorite:e.target.checked}))} style={{width:14,height:14}}/>
+                        <span style={{color:'#ffd166'}}>★</span> Marcar como favorito
                       </label>
-                      <label style={{display:'flex',flexDirection:'column',gap:2,color:'var(--text3)'}}>
+                      <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>
                         Observaciones
-                        <textarea value={editForm.observations||''} onChange={e=>setEditForm(p=>({...p,observations:e.target.value}))} rows={3} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:10,padding:'4px 6px',borderRadius:3,resize:'vertical'}}/>
+                        <textarea value={editForm.observations||''} onChange={e=>setEditForm(p=>({...p,observations:e.target.value}))} rows={3} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'6px 8px',borderRadius:4,resize:'vertical'}}/>
                       </label>
-                      <div style={{display:'flex',gap:6,marginTop:4}}>
-                        <button onClick={saveEditItem} disabled={editSaving} style={{flex:1,background:'rgba(0,212,255,0.15)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:11,padding:'5px',borderRadius:3,cursor:'pointer'}}>
-                          {editSaving?'…':'Guardar'}
+                      <div style={{display:'flex',gap:8,marginTop:6,paddingTop:12,borderTop:'1px solid var(--border)'}}>
+                        <button onClick={saveEditItem} disabled={editSaving} style={{flex:1,background:'rgba(0,212,255,0.15)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:12,padding:'8px',borderRadius:4,cursor:'pointer',fontWeight:600}}>
+                          {editSaving?'Guardando…':'Guardar'}
                         </button>
-                        {editingItem.id&&<button onClick={()=>deleteItem(editingItem.id)} style={{background:'rgba(255,77,109,0.12)',border:'1px solid #ff4d6d',color:'#ff4d6d',fontFamily:MONO,fontSize:11,padding:'5px 8px',borderRadius:3,cursor:'pointer'}}>🗑</button>}
-                        <button onClick={closeEditItem} style={{background:'transparent',border:'1px solid var(--border)',color:'var(--text3)',fontFamily:MONO,fontSize:11,padding:'5px 8px',borderRadius:3,cursor:'pointer'}}>✕</button>
+                        {editingItem.id&&<button onClick={()=>deleteItem(editingItem.id)} style={{background:'rgba(255,77,109,0.12)',border:'1px solid #ff4d6d',color:'#ff4d6d',fontFamily:MONO,fontSize:12,padding:'8px 14px',borderRadius:4,cursor:'pointer'}}>🗑 Eliminar</button>}
                       </div>
                     </div>
                   </div>
@@ -859,86 +890,6 @@ export default function Home() {
               </div>
             )}
 
-            {sidePanel==='strategies'&&(
-              <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
-                <div style={{padding:'6px 8px',borderBottom:'1px solid var(--border)',display:'flex',gap:4,alignItems:'center',flexShrink:0}}>
-                  <span style={{fontFamily:MONO,fontSize:10,color:'var(--text3)',flex:1}}>Estrategias guardadas</span>
-                  <button onClick={newStrategy} title="Nueva estrategia" style={{background:'rgba(0,212,255,0.1)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:13,padding:'3px 8px',borderRadius:3,cursor:'pointer'}}>+</button>
-                  <button onClick={reloadStrategies} title="Recargar" style={{background:'transparent',border:'1px solid var(--border)',color:'var(--text3)',fontFamily:MONO,fontSize:11,padding:'3px 6px',borderRadius:3,cursor:'pointer'}}>⟳</button>
-                </div>
-                <div style={{overflowY:'auto',flex:1}}>
-                  {strLoading&&<div style={{padding:'10px 12px',fontFamily:MONO,fontSize:10,color:'var(--text3)'}}>⟳ Cargando…</div>}
-                  {!strLoading&&strategies.map(s=>(
-                    <div key={s.id} style={{padding:'7px 10px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:4}}>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontFamily:MONO,fontSize:11,color:'var(--text)',fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.name}</div>
-                        <div style={{fontFamily:MONO,fontSize:9,color:'var(--text3)'}}>EMA {s.ema_r}/{s.ema_l} · {s.years}a · {s.symbol}</div>
-                      </div>
-                      <span style={{width:8,height:8,borderRadius:'50%',background:s.color||'#00d4ff',flexShrink:0,display:'inline-block'}}/>
-                      {/* Cargar estrategia */}
-                      <button onClick={()=>loadStrategy(s)} title="Cargar" style={{background:'rgba(0,212,255,0.1)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:10,padding:'2px 6px',borderRadius:3,cursor:'pointer'}}>▶</button>
-                      {/* Duplicar */}
-                      <button onClick={()=>duplicateStr(s)} title="Duplicar" style={{background:'transparent',border:'1px solid var(--border)',color:'var(--text3)',fontFamily:MONO,fontSize:10,padding:'2px 5px',borderRadius:3,cursor:'pointer'}}>⎘</button>
-                      {/* Editar */}
-                      <button onClick={()=>openEditStr(s)} title="Editar" style={{background:'transparent',border:'1px solid var(--border)',color:'var(--text3)',fontFamily:MONO,fontSize:10,padding:'2px 5px',borderRadius:3,cursor:'pointer'}}>✎</button>
-                    </div>
-                  ))}
-                  {!strLoading&&!strategies.length&&<div style={{padding:'12px',fontFamily:MONO,fontSize:10,color:'var(--text3)'}}>Sin estrategias guardadas</div>}
-                </div>
-
-                {/* ── Modal editor estrategia ── */}
-                {editingStr!==null&&(
-                  <div style={{position:'absolute',inset:0,background:'rgba(0,0,0,0.75)',zIndex:100,display:'flex',alignItems:'flex-start',justifyContent:'center',overflowY:'auto',paddingTop:8}}>
-                    <div style={{background:'var(--bg2)',border:'1px solid var(--border)',borderRadius:6,padding:16,width:240,display:'flex',flexDirection:'column',gap:8,fontFamily:MONO,fontSize:11,margin:'auto'}}>
-                      <div style={{fontWeight:700,color:'var(--text)',fontSize:12}}>{editingStr.id?'Editar estrategia':'Nueva estrategia'}</div>
-                      {[
-                        {key:'name',label:'Nombre',type:'text'},
-                        {key:'symbol',label:'Símbolo',type:'text'},
-                        {key:'color',label:'Color',type:'color'},
-                      ].map(f=>(
-                        <label key={f.key} style={{display:'flex',flexDirection:'column',gap:2,color:'var(--text3)'}}>
-                          {f.label}
-                          <input type={f.type} value={strForm[f.key]||''} onChange={e=>setStrForm(p=>({...p,[f.key]:e.target.value}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'3px 6px',borderRadius:3}}/>
-                        </label>
-                      ))}
-                      <div style={{display:'flex',gap:6}}>
-                        <label style={{flex:1,display:'flex',flexDirection:'column',gap:2,color:'var(--text3)'}}>EMA R<input type="number" value={strForm.ema_r||10} onChange={e=>setStrForm(p=>({...p,ema_r:Number(e.target.value)}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'3px 6px',borderRadius:3}}/></label>
-                        <label style={{flex:1,display:'flex',flexDirection:'column',gap:2,color:'var(--text3)'}}>EMA L<input type="number" value={strForm.ema_l||11} onChange={e=>setStrForm(p=>({...p,ema_l:Number(e.target.value)}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'3px 6px',borderRadius:3}}/></label>
-                      </div>
-                      <div style={{display:'flex',gap:6}}>
-                        <label style={{flex:1,display:'flex',flexDirection:'column',gap:2,color:'var(--text3)'}}>Años<input type="number" value={strForm.years||5} onChange={e=>setStrForm(p=>({...p,years:Number(e.target.value)}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'3px 6px',borderRadius:3}}/></label>
-                        <label style={{flex:1,display:'flex',flexDirection:'column',gap:2,color:'var(--text3)'}}>Capital<input type="number" value={strForm.capital_ini||10000} onChange={e=>setStrForm(p=>({...p,capital_ini:Number(e.target.value)}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'3px 6px',borderRadius:3}}/></label>
-                      </div>
-                      <label style={{display:'flex',flexDirection:'column',gap:2,color:'var(--text3)'}}>Stop
-                        <select value={strForm.tipo_stop||'tecnico'} onChange={e=>setStrForm(p=>({...p,tipo_stop:e.target.value}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'3px 6px',borderRadius:3}}>
-                          <option value="tecnico">Técnico</option><option value="atr">ATR</option><option value="none">Ninguno</option>
-                        </select>
-                      </label>
-                      <label style={{display:'flex',flexDirection:'column',gap:2,color:'var(--text3)'}}>Filtro SP500
-                        <select value={strForm.tipo_filtro||'none'} onChange={e=>setStrForm(p=>({...p,tipo_filtro:e.target.value}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'3px 6px',borderRadius:3}}>
-                          <option value="none">Sin filtro</option><option value="precio_ema">Precio/EMA</option><option value="ema_ema">EMA/EMA</option>
-                        </select>
-                      </label>
-                      <div style={{display:'flex',gap:6}}>
-                        <label style={{display:'flex',alignItems:'center',gap:4,color:'var(--text3)',cursor:'pointer'}}><input type="checkbox" checked={strForm.sin_perdidas!==false} onChange={e=>setStrForm(p=>({...p,sin_perdidas:e.target.checked}))}/>Sin pérd.</label>
-                        <label style={{display:'flex',alignItems:'center',gap:4,color:'var(--text3)',cursor:'pointer'}}><input type="checkbox" checked={strForm.reentry!==false} onChange={e=>setStrForm(p=>({...p,reentry:e.target.checked}))}/>Re-entry</label>
-                      </div>
-                      <label style={{display:'flex',flexDirection:'column',gap:2,color:'var(--text3)'}}>
-                        Observaciones
-                        <textarea value={strForm.observations||''} onChange={e=>setStrForm(p=>({...p,observations:e.target.value}))} rows={2} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:10,padding:'4px 6px',borderRadius:3,resize:'vertical'}}/>
-                      </label>
-                      <div style={{display:'flex',gap:6,marginTop:4}}>
-                        <button onClick={saveEditStr} disabled={strSaving} style={{flex:1,background:'rgba(0,212,255,0.15)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:11,padding:'5px',borderRadius:3,cursor:'pointer'}}>
-                          {strSaving?'…':'Guardar'}
-                        </button>
-                        {editingStr.id&&<button onClick={()=>deleteStr(editingStr.id)} style={{background:'rgba(255,77,109,0.12)',border:'1px solid #ff4d6d',color:'#ff4d6d',fontFamily:MONO,fontSize:11,padding:'5px 8px',borderRadius:3,cursor:'pointer'}}>🗑</button>}
-                        <button onClick={closeEditStr} style={{background:'transparent',border:'1px solid var(--border)',color:'var(--text3)',fontFamily:MONO,fontSize:11,padding:'5px 8px',borderRadius:3,cursor:'pointer'}}>✕</button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
           </aside>
 
           {/* ── CONTENT ── */}
@@ -1070,6 +1021,125 @@ export default function Home() {
           </div>
         </div>
       </div>
+      {/* ══ MODAL ESTRATEGIA — fixed sobre gráfico ══ */}
+      {editingStr!==null&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.72)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center'}} onClick={e=>{if(e.target===e.currentTarget)closeEditStr()}}>
+          <div style={{background:'#0d1824',border:'1px solid #1e3a52',borderRadius:8,padding:28,width:520,maxHeight:'85vh',overflowY:'auto',display:'flex',flexDirection:'column',gap:14,fontFamily:MONO,fontSize:12,boxShadow:'0 8px 48px rgba(0,0,0,0.8)'}}>
+            {/* Header */}
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+              <span style={{fontWeight:700,color:'var(--text)',fontSize:15}}>{editingStr.id?'Editar estrategia':'Nueva estrategia'}</span>
+              <button onClick={closeEditStr} style={{background:'transparent',border:'none',color:'var(--text3)',fontSize:18,cursor:'pointer'}}>✕</button>
+            </div>
+
+            {/* Fila 1: Nombre + Símbolo + Color */}
+            <div style={{display:'grid',gridTemplateColumns:'2fr 1fr auto',gap:10,alignItems:'end'}}>
+              <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>Nombre
+                <input type="text" value={strForm.name||''} onChange={e=>setStrForm(p=>({...p,name:e.target.value}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'7px 10px',borderRadius:4}}/>
+              </label>
+              <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>Símbolo
+                <input type="text" value={strForm.symbol||''} onChange={e=>setStrForm(p=>({...p,symbol:e.target.value.toUpperCase()}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'7px 10px',borderRadius:4}}/>
+              </label>
+              <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)',alignItems:'center'}}>Color
+                <input type="color" value={strForm.color||'#00d4ff'} onChange={e=>setStrForm(p=>({...p,color:e.target.value}))} style={{width:38,height:36,padding:2,borderRadius:4,border:'1px solid var(--border)',background:'var(--bg3)',cursor:'pointer'}}/>
+              </label>
+            </div>
+
+            {/* Separador */}
+            <div style={{borderTop:'1px solid var(--border)',marginTop:2}}/>
+            <div style={{fontWeight:600,color:'var(--text3)',fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase'}}>Parámetros EMAs</div>
+
+            {/* Fila 2: EMAs + Años + Capital */}
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:10}}>
+              <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>EMA Rápida
+                <input type="number" value={strForm.ema_r||10} onChange={e=>setStrForm(p=>({...p,ema_r:Number(e.target.value)}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'#ffd166',fontFamily:MONO,fontSize:13,padding:'7px 10px',borderRadius:4,fontWeight:600}}/>
+              </label>
+              <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>EMA Lenta
+                <input type="number" value={strForm.ema_l||11} onChange={e=>setStrForm(p=>({...p,ema_l:Number(e.target.value)}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'#ff4d6d',fontFamily:MONO,fontSize:13,padding:'7px 10px',borderRadius:4,fontWeight:600}}/>
+              </label>
+              <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>Años BT
+                <input type="number" value={strForm.years||5} onChange={e=>setStrForm(p=>({...p,years:Number(e.target.value)}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'7px 10px',borderRadius:4}}/>
+              </label>
+              <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>Capital (€)
+                <input type="number" value={strForm.capital_ini||10000} onChange={e=>setStrForm(p=>({...p,capital_ini:Number(e.target.value)}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'7px 10px',borderRadius:4}}/>
+              </label>
+            </div>
+
+            {/* Fila 3: Stop + Filtro + checkboxes */}
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+              <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>Stop Loss
+                <select value={strForm.tipo_stop||'tecnico'} onChange={e=>setStrForm(p=>({...p,tipo_stop:e.target.value}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'7px 10px',borderRadius:4}}>
+                  <option value="tecnico">Técnico (EMA)</option>
+                  <option value="atr">ATR</option>
+                  <option value="none">Sin stop</option>
+                </select>
+              </label>
+              <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>Filtro SP500
+                <select value={strForm.tipo_filtro||'none'} onChange={e=>setStrForm(p=>({...p,tipo_filtro:e.target.value}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'7px 10px',borderRadius:4}}>
+                  <option value="none">Sin filtro</option>
+                  <option value="precio_ema">Precio sobre EMA rápida</option>
+                  <option value="ema_ema">EMA rápida sobre EMA lenta</option>
+                </select>
+              </label>
+            </div>
+            {strForm.tipo_filtro!=='none'&&(
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+                <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>SP500 EMA R
+                  <input type="number" value={strForm.sp500_ema_r||10} onChange={e=>setStrForm(p=>({...p,sp500_ema_r:Number(e.target.value)}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'7px 10px',borderRadius:4}}/>
+                </label>
+                <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>SP500 EMA L
+                  <input type="number" value={strForm.sp500_ema_l||11} onChange={e=>setStrForm(p=>({...p,sp500_ema_l:Number(e.target.value)}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'7px 10px',borderRadius:4}}/>
+                </label>
+              </div>
+            )}
+            <div style={{display:'flex',gap:20}}>
+              <label style={{display:'flex',alignItems:'center',gap:8,color:'var(--text3)',cursor:'pointer'}}>
+                <input type="checkbox" checked={strForm.sin_perdidas!==false} onChange={e=>setStrForm(p=>({...p,sin_perdidas:e.target.checked}))} style={{width:14,height:14}}/>
+                Sin Pérdidas
+              </label>
+              <label style={{display:'flex',alignItems:'center',gap:8,color:'var(--text3)',cursor:'pointer'}}>
+                <input type="checkbox" checked={strForm.reentry!==false} onChange={e=>setStrForm(p=>({...p,reentry:e.target.checked}))} style={{width:14,height:14}}/>
+                Re-Entry
+              </label>
+            </div>
+
+            {/* Observaciones */}
+            <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>
+              Observaciones
+              <textarea value={strForm.observations||''} onChange={e=>setStrForm(p=>({...p,observations:e.target.value}))} rows={3} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'7px 10px',borderRadius:4,resize:'vertical'}}/>
+            </label>
+
+            {/* Lista de estrategias existentes */}
+            {strategies.length>0&&(
+              <div style={{borderTop:'1px solid var(--border)',paddingTop:12}}>
+                <div style={{fontWeight:600,color:'var(--text3)',fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:8}}>Estrategias guardadas</div>
+                <div style={{display:'flex',flexDirection:'column',gap:4,maxHeight:140,overflowY:'auto'}}>
+                  {strategies.map(s=>(
+                    <div key={s.id} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 8px',borderRadius:4,background:editingStr?.id===s.id?'rgba(0,212,255,0.08)':'transparent',border:editingStr?.id===s.id?'1px solid rgba(0,212,255,0.3)':'1px solid transparent'}}>
+                      <span style={{width:8,height:8,borderRadius:'50%',background:s.color||'#00d4ff',flexShrink:0,display:'inline-block'}}/>
+                      <div style={{flex:1,minWidth:0}}>
+                        <span style={{color:'var(--text)',fontSize:11,fontWeight:600}}>{s.name}</span>
+                        <span style={{color:'var(--text3)',fontSize:10,marginLeft:8}}>EMA {s.ema_r}/{s.ema_l} · {s.years}a · {s.symbol}</span>
+                      </div>
+                      <button onClick={()=>openEditStr(s)} style={{background:'transparent',border:'1px solid var(--border)',color:'var(--text3)',fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer'}}>✎</button>
+                      <button onClick={()=>duplicateStr(s)} title="Duplicar" style={{background:'transparent',border:'1px solid var(--border)',color:'var(--text3)',fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer'}}>⎘</button>
+                      <button onClick={()=>{loadStrategy(s);closeEditStr()}} style={{background:'rgba(0,212,255,0.1)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer'}}>▶</button>
+                    </div>
+                  ))}
+                </div>
+                <button onClick={()=>openEditStr({id:null})} style={{marginTop:8,width:'100%',background:'transparent',border:'1px dashed var(--border)',color:'var(--text3)',fontFamily:MONO,fontSize:11,padding:'6px',borderRadius:4,cursor:'pointer'}}>+ Nueva estrategia</button>
+              </div>
+            )}
+
+            {/* Botones acción */}
+            <div style={{display:'flex',gap:8,paddingTop:4,borderTop:'1px solid var(--border)'}}>
+              <button onClick={saveEditStr} disabled={strSaving} style={{flex:1,background:'rgba(0,212,255,0.15)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:13,padding:'9px',borderRadius:5,cursor:'pointer',fontWeight:600}}>
+                {strSaving?'Guardando…':'Guardar estrategia'}
+              </button>
+              {editingStr.id&&<button onClick={()=>deleteStr(editingStr.id)} style={{background:'rgba(255,77,109,0.12)',border:'1px solid #ff4d6d',color:'#ff4d6d',fontFamily:MONO,fontSize:12,padding:'9px 16px',borderRadius:5,cursor:'pointer'}}>🗑 Eliminar</button>}
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }
