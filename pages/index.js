@@ -38,38 +38,56 @@ function tvSym(sym){if(sym==='^GSPC')return'SP:SPX';if(sym==='^IBEX')return'BME:
 // ── Supabase config ──────────────────────────────────────────
 const SUPA_URL='https://uqjngxxbdlquiuhywiuc.supabase.co'
 const SUPA_KEY='sb_publishable_st9QJ3zcQbY5ec-JhxwqXQ_joy3udz3'
+const SUPA_H={apikey:SUPA_KEY,Authorization:`Bearer ${SUPA_KEY}`,'Content-Type':'application/json'}
 
+// ── Watchlist API ─────────────────────────────────────────────
 async function fetchWatchlist() {
-  const res = await fetch(
-    `${SUPA_URL}/rest/v1/watchlist?active=eq.true&order=group_name.asc,position.asc`,
-    { headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` } }
-  )
-  if (!res.ok) throw new Error('Error cargando watchlist')
-  const rows = await res.json()
-  // Mapear columnas Supabase → formato interno {sym, name, grp}
-  return rows.map(r => ({ sym: r.symbol, name: r.name, grp: r.group_name }))
+  const res=await fetch(`${SUPA_URL}/rest/v1/watchlist?order=favorite.desc,name.asc`,{headers:SUPA_H})
+  if(!res.ok) throw new Error('Error cargando watchlist')
+  return await res.json() // devuelve filas completas con todos los campos
+}
+async function upsertWatchlistItem(item) {
+  const method=item.id?'PATCH':'POST'
+  const url=item.id?`${SUPA_URL}/rest/v1/watchlist?id=eq.${item.id}`:`${SUPA_URL}/rest/v1/watchlist`
+  const body={...item}; delete body.id
+  const res=await fetch(url,{method,headers:{...SUPA_H,'Prefer':'return=representation'},body:JSON.stringify(body)})
+  if(!res.ok) throw new Error('Error guardando')
+  return (await res.json())[0]
+}
+async function deleteWatchlistItem(id) {
+  const res=await fetch(`${SUPA_URL}/rest/v1/watchlist?id=eq.${id}`,{method:'DELETE',headers:SUPA_H})
+  if(!res.ok) throw new Error('Error eliminando')
+}
+
+// ── Strategies API ────────────────────────────────────────────
+async function fetchStrategies() {
+  const res=await fetch(`${SUPA_URL}/rest/v1/strategies?active=eq.true&order=name.asc`,{headers:SUPA_H})
+  if(!res.ok) throw new Error('Error cargando estrategias')
+  return await res.json()
+}
+async function upsertStrategy(item) {
+  const method=item.id?'PATCH':'POST'
+  const url=item.id?`${SUPA_URL}/rest/v1/strategies?id=eq.${item.id}`:`${SUPA_URL}/rest/v1/strategies`
+  const body={...item}; delete body.id
+  const res=await fetch(url,{method,headers:{...SUPA_H,'Prefer':'return=representation'},body:JSON.stringify(body)})
+  if(!res.ok) throw new Error('Error guardando estrategia')
+  return (await res.json())[0]
+}
+async function deleteStrategy(id) {
+  const res=await fetch(`${SUPA_URL}/rest/v1/strategies?id=eq.${id}`,{method:'DELETE',headers:SUPA_H})
+  if(!res.ok) throw new Error('Error eliminando estrategia')
 }
 
 // Fallback local por si Supabase no responde
 const WATCHLIST_FALLBACK=[
-  {sym:'^GSPC',name:'S&P 500',grp:'Índices'},
-  {sym:'^NDX',name:'Nasdaq 100',grp:'Índices'},
-  {sym:'^IBEX',name:'IBEX 35',grp:'Índices'},
-  {sym:'^GDAXI',name:'DAX 40',grp:'Índices'},
-  {sym:'^FTSE',name:'FTSE 100',grp:'Índices'},
-  {sym:'^N225',name:'Nikkei 225',grp:'Índices'},
-  {sym:'AAPL',name:'Apple',grp:'Acciones'},
-  {sym:'MSFT',name:'Microsoft',grp:'Acciones'},
-  {sym:'NVDA',name:'Nvidia',grp:'Acciones'},
-  {sym:'AMZN',name:'Amazon',grp:'Acciones'},
-  {sym:'META',name:'Meta',grp:'Acciones'},
-  {sym:'TSLA',name:'Tesla',grp:'Acciones'},
-  {sym:'GOOGL',name:'Alphabet',grp:'Acciones'},
-  {sym:'JPM',name:'JPMorgan',grp:'Acciones'},
-  {sym:'BTC-USD',name:'Bitcoin',grp:'Crypto'},
-  {sym:'ETH-USD',name:'Ethereum',grp:'Crypto'},
-  {sym:'GC=F',name:'Oro',grp:'Materias Primas'},
-  {sym:'CL=F',name:'Petróleo WTI',grp:'Materias Primas'},
+  {id:null,symbol:'^GSPC',name:'S&P 500',group_name:'Índices',list_name:'General',favorite:false,observations:''},
+  {id:null,symbol:'^NDX',name:'Nasdaq 100',group_name:'Índices',list_name:'General',favorite:false,observations:''},
+  {id:null,symbol:'^IBEX',name:'IBEX 35',group_name:'Índices',list_name:'General',favorite:false,observations:''},
+  {id:null,symbol:'^GDAXI',name:'DAX 40',group_name:'Índices',list_name:'General',favorite:false,observations:''},
+  {id:null,symbol:'AAPL',name:'Apple',group_name:'Acciones',list_name:'General',favorite:false,observations:''},
+  {id:null,symbol:'MSFT',name:'Microsoft',group_name:'Acciones',list_name:'General',favorite:false,observations:''},
+  {id:null,symbol:'NVDA',name:'Nvidia',group_name:'Acciones',list_name:'General',favorite:false,observations:''},
+  {id:null,symbol:'BTC-USD',name:'Bitcoin',group_name:'Crypto',list_name:'General',favorite:false,observations:''},
 ]
 
 // ── CandleChart ───────────────────────────────────────────────
@@ -448,15 +466,99 @@ export default function Home() {
   const [showSP500,setShowSP500]=useState(true),[showCompound,setShowCompound]=useState(true)
   const [watchlist,setWatchlist]=useState(WATCHLIST_FALLBACK)
   const [wlLoading,setWlLoading]=useState(true)
+  const [selectedLists,setSelectedLists]=useState(['General'])
+  const [listDropOpen,setListDropOpen]=useState(false)
+  const [editingItem,setEditingItem]=useState(null) // item watchlist en edición
+  const [editForm,setEditForm]=useState({})
+  const [editSaving,setEditSaving]=useState(false)
+  const [strategies,setStrategies]=useState([])
+  const [strLoading,setStrLoading]=useState(true)
+  const [editingStr,setEditingStr]=useState(null) // estrategia en edición
+  const [strForm,setStrForm]=useState({})
+  const [strSaving,setStrSaving]=useState(false)
   const debounceRef=useRef(null),chartApiRef=useRef(null),contentRef=useRef(null)
 
-  // Cargar watchlist desde Supabase al montar
-  useEffect(()=>{
+  const reloadWatchlist=()=>{
+    setWlLoading(true)
     fetchWatchlist()
       .then(data=>{ if(data.length>0) setWatchlist(data) })
-      .catch(()=>{ /* fallback ya cargado */ })
+      .catch(()=>{})
       .finally(()=>setWlLoading(false))
+  }
+  const reloadStrategies=()=>{
+    setStrLoading(true)
+    fetchStrategies()
+      .then(data=>setStrategies(data))
+      .catch(()=>{})
+      .finally(()=>setStrLoading(false))
+  }
+
+  // Cargar datos al montar
+  useEffect(()=>{
+    reloadWatchlist()
+    reloadStrategies()
   },[])
+
+  // Abrir editor watchlist
+  const openEditItem=(item)=>{
+    setEditingItem(item)
+    setEditForm({
+      symbol:item.symbol,name:item.name,group_name:item.group_name,
+      list_name:item.list_name||'General',favorite:item.favorite||false,
+      observations:item.observations||''
+    })
+  }
+  const closeEditItem=()=>{setEditingItem(null);setEditForm({})}
+  const saveEditItem=async()=>{
+    setEditSaving(true)
+    try{
+      await upsertWatchlistItem({...editForm,id:editingItem?.id||undefined})
+      reloadWatchlist(); closeEditItem()
+    }catch(e){alert('Error: '+e.message)}
+    finally{setEditSaving(false)}
+  }
+  const deleteItem=async(id)=>{
+    if(!confirm('¿Eliminar este activo?')) return
+    await deleteWatchlistItem(id); reloadWatchlist()
+  }
+  const newItem=()=>openEditItem({id:null,symbol:'',name:'',group_name:'Acciones',list_name:'General',favorite:false,observations:''})
+
+  // Abrir editor estrategia
+  const openEditStr=(s)=>{
+    setEditingStr(s)
+    setStrForm({
+      name:s.name||'',symbol:s.symbol||'^GSPC',ema_r:s.ema_r||10,ema_l:s.ema_l||11,
+      years:s.years||5,capital_ini:s.capital_ini||10000,tipo_stop:s.tipo_stop||'tecnico',
+      atr_period:s.atr_period||14,atr_mult:s.atr_mult||1.0,
+      sin_perdidas:s.sin_perdidas!==false,reentry:s.reentry!==false,
+      tipo_filtro:s.tipo_filtro||'none',sp500_ema_r:s.sp500_ema_r||10,sp500_ema_l:s.sp500_ema_l||11,
+      color:s.color||'#00d4ff',observations:s.observations||''
+    })
+  }
+  const closeEditStr=()=>{setEditingStr(null);setStrForm({})}
+  const saveEditStr=async()=>{
+    setStrSaving(true)
+    try{
+      await upsertStrategy({...strForm,id:editingStr?.id||undefined})
+      reloadStrategies(); closeEditStr()
+    }catch(e){alert('Error: '+e.message)}
+    finally{setStrSaving(false)}
+  }
+  const deleteStr=async(id)=>{
+    if(!confirm('¿Eliminar esta estrategia?')) return
+    await deleteStrategy(id); reloadStrategies()
+  }
+  const loadStrategy=(s)=>{
+    setSimbolo(s.symbol||simbolo)
+    setEmaR(s.ema_r);setEmaL(s.ema_l);setYears(s.years)
+    setCapitalIni(s.capital_ini);setTipoStop(s.tipo_stop)
+    setAtrP(s.atr_period);setAtrM(s.atr_mult)
+    setSinPerdidas(s.sin_perdidas);setReentry(s.reentry)
+    setTipoFiltro(s.tipo_filtro);setSp500EmaR(s.sp500_ema_r);setSp500EmaL(s.sp500_ema_l)
+    setSidePanel('config')
+  }
+  const newStrategy=()=>openEditStr({id:null})
+  const duplicateStr=(s)=>openEditStr({...s,id:null,name:s.name+' (copia)'})
 
   const run=useCallback(async(sym,cfg)=>{
     setLoading(true);setError(null)
@@ -531,8 +633,6 @@ export default function Home() {
     </table>
   )
 
-  const wlGroups=[...new Set(watchlist.map(w=>w.grp))]
-
   // Altura de los tabs = 33px aprox. (padding 8px top+bottom + 17px línea)
   const TAB_H=33
 
@@ -597,16 +697,16 @@ export default function Home() {
 
         <div className="main">
           {/* ── SIDEBAR ── */}
-          <aside className="sidebar" style={{padding:0,gap:0}}>
+          <aside className="sidebar" style={{padding:0,gap:0,position:'relative'}}>
             <div style={{display:'flex',borderBottom:'1px solid var(--border)'}}>
-              {[{id:'config',label:'⚙ Config'},{id:'watchlist',label:'☰ Watch'}].map(tab=>(
-                <button key={tab.id} onClick={()=>setSidePanel(tab.id)} style={{
+              {[{id:'config',label:'⚙'},{id:'watchlist',label:'☰'},{id:'strategies',label:'⚡'}].map(tab=>(
+                <button key={tab.id} onClick={()=>setSidePanel(tab.id)} title={tab.id==='config'?'Config':tab.id==='watchlist'?'Watchlist':'Estrategias'} style={{
                   flex:1,padding:'8px 4px',
                   background:sidePanel===tab.id?'var(--bg3)':'transparent',
                   border:'none',
                   borderBottom:sidePanel===tab.id?'2px solid var(--accent)':'2px solid transparent',
                   color:sidePanel===tab.id?'var(--accent)':'var(--text3)',
-                  fontFamily:MONO,fontSize:10,cursor:'pointer',letterSpacing:'0.06em',textTransform:'uppercase'
+                  fontFamily:MONO,fontSize:13,cursor:'pointer'
                 }}>
                   {tab.label}
                 </button>
@@ -652,32 +752,191 @@ export default function Home() {
             )}
 
             {sidePanel==='watchlist'&&(
-              <div style={{overflowY:'auto',flex:1}}>
-                {/* Indicador cargando desde Supabase */}
-                {wlLoading&&(
-                  <div style={{padding:'10px 12px',fontFamily:MONO,fontSize:10,color:'var(--text3)',display:'flex',alignItems:'center',gap:6}}>
-                    <span style={{animation:'spin 1s linear infinite',display:'inline-block'}}>⟳</span> Cargando watchlist…
+              <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
+                {/* ── Toolbar watchlist ── */}
+                <div style={{padding:'6px 8px',borderBottom:'1px solid var(--border)',display:'flex',gap:4,alignItems:'center',flexShrink:0}}>
+                  {/* Desplegable multiselección de listas */}
+                  <div style={{position:'relative',flex:1}}>
+                    <button onClick={()=>setListDropOpen(o=>!o)} style={{width:'100%',background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:10,padding:'4px 8px',borderRadius:3,cursor:'pointer',textAlign:'left',display:'flex',justifyContent:'space-between'}}>
+                      <span>{selectedLists.length===0?'Todas':selectedLists.join(', ')}</span>
+                      <span>{listDropOpen?'▲':'▼'}</span>
+                    </button>
+                    {listDropOpen&&(()=>{
+                      const allLists=[...new Set(watchlist.map(w=>w.list_name||'General').filter(Boolean))]
+                      return(
+                        <div style={{position:'absolute',top:'100%',left:0,right:0,background:'var(--bg3)',border:'1px solid var(--border)',borderRadius:3,zIndex:50,boxShadow:'0 4px 16px rgba(0,0,0,0.5)'}}>
+                          <div onClick={()=>{setSelectedLists([]);setListDropOpen(false)}} style={{padding:'5px 10px',fontFamily:MONO,fontSize:10,cursor:'pointer',color:selectedLists.length===0?'var(--accent)':'var(--text)',borderBottom:'1px solid var(--border)'}}>
+                            Todas las listas
+                          </div>
+                          {allLists.map(l=>(
+                            <div key={l} onClick={()=>{
+                              setSelectedLists(prev=>prev.includes(l)?prev.filter(x=>x!==l):[...prev,l])
+                            }} style={{padding:'5px 10px',fontFamily:MONO,fontSize:10,cursor:'pointer',display:'flex',alignItems:'center',gap:6,color:'var(--text)'}}>
+                              <span style={{color:selectedLists.includes(l)?'var(--accent)':'var(--text3)',fontSize:12}}>{selectedLists.includes(l)?'☑':'☐'}</span>
+                              {l}
+                            </div>
+                          ))}
+                        </div>
+                      )
+                    })()}
+                  </div>
+                  <button onClick={newItem} title="Añadir activo" style={{background:'rgba(0,212,255,0.1)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:13,padding:'3px 8px',borderRadius:3,cursor:'pointer'}}>+</button>
+                  <button onClick={reloadWatchlist} title="Recargar" style={{background:'transparent',border:'1px solid var(--border)',color:'var(--text3)',fontFamily:MONO,fontSize:11,padding:'3px 6px',borderRadius:3,cursor:'pointer'}}>⟳</button>
+                </div>
+
+                {/* ── Lista de activos ── */}
+                <div style={{overflowY:'auto',flex:1}}>
+                  {wlLoading&&<div style={{padding:'10px 12px',fontFamily:MONO,fontSize:10,color:'var(--text3)'}}>⟳ Cargando…</div>}
+                  {!wlLoading&&(()=>{
+                    const filtered=watchlist.filter(w=>selectedLists.length===0||selectedLists.includes(w.list_name||'General'))
+                    const favs=filtered.filter(w=>w.favorite)
+                    const rest=filtered.filter(w=>!w.favorite).sort((a,b)=>a.name.localeCompare(b.name))
+                    const all=[...favs,...rest]
+                    if(!all.length) return <div style={{padding:'12px',fontFamily:MONO,fontSize:10,color:'var(--text3)'}}>Sin activos en esta lista</div>
+                    return all.map(w=>(
+                      <div key={w.id||w.symbol}
+                        style={{padding:'6px 10px',display:'flex',alignItems:'center',gap:6,borderBottom:'1px solid var(--border)',background:simbolo===w.symbol?'rgba(0,212,255,0.07)':'transparent'}}
+                        onMouseOver={e=>e.currentTarget.style.background='rgba(255,255,255,0.03)'}
+                        onMouseOut={e=>e.currentTarget.style.background=simbolo===w.symbol?'rgba(0,212,255,0.07)':'transparent'}>
+                        {/* Estrella favorito */}
+                        <span onClick={async(e)=>{e.stopPropagation();await upsertWatchlistItem({...w,favorite:!w.favorite});reloadWatchlist()}}
+                          style={{cursor:'pointer',fontSize:12,color:w.favorite?'#ffd166':'var(--text3)',flexShrink:0}} title="Favorito">
+                          {w.favorite?'★':'☆'}
+                        </span>
+                        {/* Nombre — clic carga el activo */}
+                        <div onClick={()=>setSimbolo(w.symbol)} style={{flex:1,cursor:'pointer',minWidth:0}}>
+                          <div style={{fontFamily:MONO,fontSize:11,color:simbolo===w.symbol?'var(--accent)':'var(--text)',fontWeight:600}}>{w.symbol}</div>
+                          <div style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{w.name}</div>
+                        </div>
+                        {/* Lista badge */}
+                        <span style={{fontFamily:MONO,fontSize:8,color:'var(--text3)',background:'var(--bg2)',padding:'1px 4px',borderRadius:2,flexShrink:0}}>{w.list_name||'General'}</span>
+                        {/* Editar */}
+                        <span onClick={e=>{e.stopPropagation();openEditItem(w)}} style={{cursor:'pointer',color:'var(--text3)',fontSize:11,padding:'0 2px',flexShrink:0}} title="Editar">✎</span>
+                      </div>
+                    ))
+                  })()}
+                </div>
+
+                {/* ── Modal editor activo ── */}
+                {editingItem!==null&&(
+                  <div style={{position:'absolute',inset:0,background:'rgba(0,0,0,0.7)',zIndex:100,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                    <div style={{background:'var(--bg2)',border:'1px solid var(--border)',borderRadius:6,padding:16,width:240,display:'flex',flexDirection:'column',gap:8,fontFamily:MONO,fontSize:11}}>
+                      <div style={{fontWeight:700,color:'var(--text)',fontSize:12,marginBottom:2}}>{editingItem.id?'Editar activo':'Nuevo activo'}</div>
+                      {[
+                        {key:'symbol',label:'Símbolo',type:'text'},
+                        {key:'name',label:'Nombre',type:'text'},
+                        {key:'group_name',label:'Grupo',type:'select',opts:['Índices','Acciones','Crypto','Materias Primas']},
+                        {key:'list_name',label:'Lista',type:'text'},
+                      ].map(f=>(
+                        <label key={f.key} style={{display:'flex',flexDirection:'column',gap:2,color:'var(--text3)'}}>
+                          {f.label}
+                          {f.type==='select'
+                            ?<select value={editForm[f.key]||''} onChange={e=>setEditForm(p=>({...p,[f.key]:e.target.value}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'3px 6px',borderRadius:3}}>
+                              {f.opts.map(o=><option key={o} value={o}>{o}</option>)}
+                            </select>
+                            :<input type="text" value={editForm[f.key]||''} onChange={e=>setEditForm(p=>({...p,[f.key]:e.target.value}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'3px 6px',borderRadius:3}}/>
+                          }
+                        </label>
+                      ))}
+                      <label style={{display:'flex',alignItems:'center',gap:6,color:'var(--text3)',cursor:'pointer'}}>
+                        <input type="checkbox" checked={editForm.favorite||false} onChange={e=>setEditForm(p=>({...p,favorite:e.target.checked}))}/>
+                        ★ Favorito
+                      </label>
+                      <label style={{display:'flex',flexDirection:'column',gap:2,color:'var(--text3)'}}>
+                        Observaciones
+                        <textarea value={editForm.observations||''} onChange={e=>setEditForm(p=>({...p,observations:e.target.value}))} rows={3} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:10,padding:'4px 6px',borderRadius:3,resize:'vertical'}}/>
+                      </label>
+                      <div style={{display:'flex',gap:6,marginTop:4}}>
+                        <button onClick={saveEditItem} disabled={editSaving} style={{flex:1,background:'rgba(0,212,255,0.15)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:11,padding:'5px',borderRadius:3,cursor:'pointer'}}>
+                          {editSaving?'…':'Guardar'}
+                        </button>
+                        {editingItem.id&&<button onClick={()=>deleteItem(editingItem.id)} style={{background:'rgba(255,77,109,0.12)',border:'1px solid #ff4d6d',color:'#ff4d6d',fontFamily:MONO,fontSize:11,padding:'5px 8px',borderRadius:3,cursor:'pointer'}}>🗑</button>}
+                        <button onClick={closeEditItem} style={{background:'transparent',border:'1px solid var(--border)',color:'var(--text3)',fontFamily:MONO,fontSize:11,padding:'5px 8px',borderRadius:3,cursor:'pointer'}}>✕</button>
+                      </div>
+                    </div>
                   </div>
                 )}
-                {!wlLoading&&wlGroups.map(grp=>(
-                  <div key={grp}>
-                    <div style={{padding:'5px 12px',fontFamily:MONO,fontSize:9,color:'var(--text3)',letterSpacing:'0.1em',textTransform:'uppercase',background:'var(--bg2)',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                      <span>{grp}</span>
-                    </div>
-                    {watchlist.filter(w=>w.grp===grp).map(w=>(
-                      <div key={w.sym} onClick={()=>setSimbolo(w.sym)}
-                        style={{padding:'7px 12px',cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'center',borderBottom:'1px solid var(--border)',background:simbolo===w.sym?'rgba(0,212,255,0.07)':'transparent'}}
-                        onMouseOver={e=>e.currentTarget.style.background='rgba(255,255,255,0.03)'}
-                        onMouseOut={e=>e.currentTarget.style.background=simbolo===w.sym?'rgba(0,212,255,0.07)':'transparent'}>
-                        <div>
-                          <div style={{fontFamily:MONO,fontSize:12,color:simbolo===w.sym?'var(--accent)':'var(--text)',fontWeight:600}}>{w.sym}</div>
-                          <div style={{fontFamily:MONO,fontSize:10,color:'var(--text3)'}}>{w.name}</div>
-                        </div>
-                        {simbolo===w.sym&&<span style={{color:'var(--accent)',fontSize:10}}>●</span>}
+              </div>
+            )}
+
+            {sidePanel==='strategies'&&(
+              <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
+                <div style={{padding:'6px 8px',borderBottom:'1px solid var(--border)',display:'flex',gap:4,alignItems:'center',flexShrink:0}}>
+                  <span style={{fontFamily:MONO,fontSize:10,color:'var(--text3)',flex:1}}>Estrategias guardadas</span>
+                  <button onClick={newStrategy} title="Nueva estrategia" style={{background:'rgba(0,212,255,0.1)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:13,padding:'3px 8px',borderRadius:3,cursor:'pointer'}}>+</button>
+                  <button onClick={reloadStrategies} title="Recargar" style={{background:'transparent',border:'1px solid var(--border)',color:'var(--text3)',fontFamily:MONO,fontSize:11,padding:'3px 6px',borderRadius:3,cursor:'pointer'}}>⟳</button>
+                </div>
+                <div style={{overflowY:'auto',flex:1}}>
+                  {strLoading&&<div style={{padding:'10px 12px',fontFamily:MONO,fontSize:10,color:'var(--text3)'}}>⟳ Cargando…</div>}
+                  {!strLoading&&strategies.map(s=>(
+                    <div key={s.id} style={{padding:'7px 10px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:4}}>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontFamily:MONO,fontSize:11,color:'var(--text)',fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.name}</div>
+                        <div style={{fontFamily:MONO,fontSize:9,color:'var(--text3)'}}>EMA {s.ema_r}/{s.ema_l} · {s.years}a · {s.symbol}</div>
                       </div>
-                    ))}
+                      <span style={{width:8,height:8,borderRadius:'50%',background:s.color||'#00d4ff',flexShrink:0,display:'inline-block'}}/>
+                      {/* Cargar estrategia */}
+                      <button onClick={()=>loadStrategy(s)} title="Cargar" style={{background:'rgba(0,212,255,0.1)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:10,padding:'2px 6px',borderRadius:3,cursor:'pointer'}}>▶</button>
+                      {/* Duplicar */}
+                      <button onClick={()=>duplicateStr(s)} title="Duplicar" style={{background:'transparent',border:'1px solid var(--border)',color:'var(--text3)',fontFamily:MONO,fontSize:10,padding:'2px 5px',borderRadius:3,cursor:'pointer'}}>⎘</button>
+                      {/* Editar */}
+                      <button onClick={()=>openEditStr(s)} title="Editar" style={{background:'transparent',border:'1px solid var(--border)',color:'var(--text3)',fontFamily:MONO,fontSize:10,padding:'2px 5px',borderRadius:3,cursor:'pointer'}}>✎</button>
+                    </div>
+                  ))}
+                  {!strLoading&&!strategies.length&&<div style={{padding:'12px',fontFamily:MONO,fontSize:10,color:'var(--text3)'}}>Sin estrategias guardadas</div>}
+                </div>
+
+                {/* ── Modal editor estrategia ── */}
+                {editingStr!==null&&(
+                  <div style={{position:'absolute',inset:0,background:'rgba(0,0,0,0.75)',zIndex:100,display:'flex',alignItems:'flex-start',justifyContent:'center',overflowY:'auto',paddingTop:8}}>
+                    <div style={{background:'var(--bg2)',border:'1px solid var(--border)',borderRadius:6,padding:16,width:240,display:'flex',flexDirection:'column',gap:8,fontFamily:MONO,fontSize:11,margin:'auto'}}>
+                      <div style={{fontWeight:700,color:'var(--text)',fontSize:12}}>{editingStr.id?'Editar estrategia':'Nueva estrategia'}</div>
+                      {[
+                        {key:'name',label:'Nombre',type:'text'},
+                        {key:'symbol',label:'Símbolo',type:'text'},
+                        {key:'color',label:'Color',type:'color'},
+                      ].map(f=>(
+                        <label key={f.key} style={{display:'flex',flexDirection:'column',gap:2,color:'var(--text3)'}}>
+                          {f.label}
+                          <input type={f.type} value={strForm[f.key]||''} onChange={e=>setStrForm(p=>({...p,[f.key]:e.target.value}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'3px 6px',borderRadius:3}}/>
+                        </label>
+                      ))}
+                      <div style={{display:'flex',gap:6}}>
+                        <label style={{flex:1,display:'flex',flexDirection:'column',gap:2,color:'var(--text3)'}}>EMA R<input type="number" value={strForm.ema_r||10} onChange={e=>setStrForm(p=>({...p,ema_r:Number(e.target.value)}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'3px 6px',borderRadius:3}}/></label>
+                        <label style={{flex:1,display:'flex',flexDirection:'column',gap:2,color:'var(--text3)'}}>EMA L<input type="number" value={strForm.ema_l||11} onChange={e=>setStrForm(p=>({...p,ema_l:Number(e.target.value)}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'3px 6px',borderRadius:3}}/></label>
+                      </div>
+                      <div style={{display:'flex',gap:6}}>
+                        <label style={{flex:1,display:'flex',flexDirection:'column',gap:2,color:'var(--text3)'}}>Años<input type="number" value={strForm.years||5} onChange={e=>setStrForm(p=>({...p,years:Number(e.target.value)}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'3px 6px',borderRadius:3}}/></label>
+                        <label style={{flex:1,display:'flex',flexDirection:'column',gap:2,color:'var(--text3)'}}>Capital<input type="number" value={strForm.capital_ini||10000} onChange={e=>setStrForm(p=>({...p,capital_ini:Number(e.target.value)}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'3px 6px',borderRadius:3}}/></label>
+                      </div>
+                      <label style={{display:'flex',flexDirection:'column',gap:2,color:'var(--text3)'}}>Stop
+                        <select value={strForm.tipo_stop||'tecnico'} onChange={e=>setStrForm(p=>({...p,tipo_stop:e.target.value}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'3px 6px',borderRadius:3}}>
+                          <option value="tecnico">Técnico</option><option value="atr">ATR</option><option value="none">Ninguno</option>
+                        </select>
+                      </label>
+                      <label style={{display:'flex',flexDirection:'column',gap:2,color:'var(--text3)'}}>Filtro SP500
+                        <select value={strForm.tipo_filtro||'none'} onChange={e=>setStrForm(p=>({...p,tipo_filtro:e.target.value}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'3px 6px',borderRadius:3}}>
+                          <option value="none">Sin filtro</option><option value="precio_ema">Precio/EMA</option><option value="ema_ema">EMA/EMA</option>
+                        </select>
+                      </label>
+                      <div style={{display:'flex',gap:6}}>
+                        <label style={{display:'flex',alignItems:'center',gap:4,color:'var(--text3)',cursor:'pointer'}}><input type="checkbox" checked={strForm.sin_perdidas!==false} onChange={e=>setStrForm(p=>({...p,sin_perdidas:e.target.checked}))}/>Sin pérd.</label>
+                        <label style={{display:'flex',alignItems:'center',gap:4,color:'var(--text3)',cursor:'pointer'}}><input type="checkbox" checked={strForm.reentry!==false} onChange={e=>setStrForm(p=>({...p,reentry:e.target.checked}))}/>Re-entry</label>
+                      </div>
+                      <label style={{display:'flex',flexDirection:'column',gap:2,color:'var(--text3)'}}>
+                        Observaciones
+                        <textarea value={strForm.observations||''} onChange={e=>setStrForm(p=>({...p,observations:e.target.value}))} rows={2} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:10,padding:'4px 6px',borderRadius:3,resize:'vertical'}}/>
+                      </label>
+                      <div style={{display:'flex',gap:6,marginTop:4}}>
+                        <button onClick={saveEditStr} disabled={strSaving} style={{flex:1,background:'rgba(0,212,255,0.15)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:11,padding:'5px',borderRadius:3,cursor:'pointer'}}>
+                          {strSaving?'…':'Guardar'}
+                        </button>
+                        {editingStr.id&&<button onClick={()=>deleteStr(editingStr.id)} style={{background:'rgba(255,77,109,0.12)',border:'1px solid #ff4d6d',color:'#ff4d6d',fontFamily:MONO,fontSize:11,padding:'5px 8px',borderRadius:3,cursor:'pointer'}}>🗑</button>}
+                        <button onClick={closeEditStr} style={{background:'transparent',border:'1px solid var(--border)',color:'var(--text3)',fontFamily:MONO,fontSize:11,padding:'5px 8px',borderRadius:3,cursor:'pointer'}}>✕</button>
+                      </div>
+                    </div>
                   </div>
-                ))}
+                )}
               </div>
             )}
           </aside>
