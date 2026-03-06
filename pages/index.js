@@ -8,13 +8,16 @@ function calcMetrics(trades, capitalIni, capitalReinv, gananciaSimple, ganBH, st
   const avgWin=wins.length?wins.reduce((s,t)=>s+t.pnlPct,0)/wins.length:0
   const avgLoss=losses.length?losses.reduce((s,t)=>s+Math.abs(t.pnlPct),0)/losses.length:0
   const totalDias=trades.reduce((s,t)=>s+t.dias,0)
-  // Calcular días naturales del periodo — robusto con parsing explícito
-  let totalDiasNat = yearsConfig * 365.25 // fallback: años configurados
+  // Periodo CAGR: usar directamente los años configurados (el backend calcula
+  // startDate como exactamente yearsConfig años antes del último dato).
+  const safYears = Math.max(Number(yearsConfig) || 5, 0.01)
+  const anios = safYears
+  // Para "Tiempo invertido" sí usamos fechas reales del calendario
+  let totalDiasNat = safYears * 365.25
   if (startDate && endDate) {
     const ms = new Date(endDate).getTime() - new Date(startDate).getTime()
     if (!isNaN(ms) && ms > 0) totalDiasNat = ms / 86400000
   }
-  const anios=totalDiasNat/365.25, safYears=Math.max(anios,0.01)
   const aniosInv=totalDias/365.25, tiempoInvPct=(totalDias/totalDiasNat)*100
   const cagrS=Math.pow(Math.max(capitalIni+gananciaSimple,0.01)/capitalIni,1/safYears)-1
   const cagrC=capitalReinv>0?Math.pow(capitalReinv/capitalIni,1/safYears)-1:0
@@ -151,7 +154,7 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, showTradeLab
         const svg=svgRef.current; if(!svg||!candlesRef.current||!chartRef.current) return
         svg.querySelectorAll('.trade-label').forEach(el=>el.remove())
         const NS='http://www.w3.org/2000/svg'
-        trades.forEach(t=>{
+        trades.forEach((t,idx)=>{
           if(!t.entryDate||!t.exitDate) return
           try {
             const ts=chartRef.current.timeScale()
@@ -167,29 +170,40 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, showTradeLab
             const g=document.createElementNS(NS,'g'); g.setAttribute('class','trade-label')
 
             if(showTradeLabels){
-              // Etiqueta completa — grande, bien por encima del gráfico
+              // Etiqueta grande — siempre en la franja superior del chart (zona fija)
               const line1=`${t.pnlPct>=0?'+':''}${t.pnlPct.toFixed(2)}%   €${t.pnlSimple>=0?'+':''}${Math.round(t.pnlSimple)}`
               const line2=`${fmtDate(t.entryDate)} → ${fmtDate(t.exitDate)} · ${t.dias}d`
-              const w=Math.max(line1.length,line2.length)*7.8+20
-              const labelY=pyBase-90  // muy por encima, nunca solapa el gráfico
+              const charW=8.5  // px por carácter aprox con font-size 13
+              const w=Math.max(line1.length,line2.length)*charW+28
+              const BOX_H=46
+              // Posición fija en el tercio superior del chart, nunca solapa velas
+              // Distribuir verticalmente los trades para evitar solapamientos entre sí
+              const chartH=containerRef.current?.clientHeight||480
+              const ZONE_TOP=24  // margen superior del chart
+              const ZONE_H=chartH*0.28  // usar el 28% superior del chart
+              const labelY=ZONE_TOP + (idx % 3)*(ZONE_H/3) + BOX_H/2
               const rect=document.createElementNS(NS,'rect')
               Object.entries({
-                x:midX-w/2, y:labelY-18, width:w, height:38,
-                fill:isWin?'rgba(0,229,160,0.15)':'rgba(255,77,109,0.15)',
-                rx:'4', stroke:bc, 'stroke-width':'1.1'
+                x:midX-w/2, y:labelY-BOX_H/2, width:w, height:BOX_H,
+                fill:isWin?'rgba(0,229,160,0.18)':'rgba(255,77,109,0.18)',
+                rx:'5', stroke:bc, 'stroke-width':'1.5'
               }).forEach(([k,v])=>rect.setAttribute(k,v))
               g.appendChild(rect)
-              // Línea vertical desde etiqueta al precio de entrada
+              // Línea vertical conectora desde etiqueta al precio del trade
               const lineConn=document.createElementNS(NS,'line')
-              Object.entries({x1:midX,y1:labelY+20,x2:midX,y2:pyBase-4,stroke:bc,'stroke-width':'0.7','stroke-dasharray':'3,3','opacity':'0.5'}).forEach(([k,v])=>lineConn.setAttribute(k,v))
+              Object.entries({
+                x1:midX,y1:labelY+BOX_H/2+2,
+                x2:midX,y2:Math.max(labelY+BOX_H/2+4,pyBase-4),
+                stroke:bc,'stroke-width':'1','stroke-dasharray':'4,3','opacity':'0.6'
+              }).forEach(([k,v])=>lineConn.setAttribute(k,v))
               g.appendChild(lineConn)
-              const mkT=(txt,y,sz='11')=>{
+              const mkT=(txt,y,sz='13')=>{
                 const el=document.createElementNS(NS,'text')
                 Object.entries({x:midX,y,'font-size':sz,'font-family':MONO,'text-anchor':'middle',fill:bc,'font-weight':'700'}).forEach(([k,v])=>el.setAttribute(k,v))
                 el.textContent=txt; return el
               }
-              g.appendChild(mkT(line1,labelY-3,'11'))
-              g.appendChild(mkT(line2,labelY+11,'9.5'))
+              g.appendChild(mkT(line1,labelY-4,'13'))
+              g.appendChild(mkT(line2,labelY+13,'10.5'))
             } else {
               // Solo % pequeño siempre visible, sobre la línea del trade
               const py=candlesRef.current.priceToCoordinate(Math.max(t.entryPx,t.exitPx))
@@ -442,14 +456,19 @@ export default function Home() {
   // Navegar al trade: scroll arriba + zoom en el gráfico
   const chartWrapRef=useRef(null)
   const navigateToTrade=(trade)=>{
-    // 1. Scroll al contenedor scrollable hasta mostrar el gráfico
-    if(contentRef.current){
-      contentRef.current.scrollTo({top:0,behavior:'smooth'})
+    // Scroll instantáneo al top del contenedor + zoom al trade
+    const el=contentRef.current
+    if(el){
+      // scrollTop directo: más fiable que scrollTo en todos los browsers
+      el.scrollTop=0
+      // Flash visual en el chart-wrap para confirmar navegación
+      if(chartWrapRef.current){
+        chartWrapRef.current.style.outline='1px solid #ffd166'
+        setTimeout(()=>{if(chartWrapRef.current)chartWrapRef.current.style.outline=''},600)
+      }
     }
-    // 2. Zoom al trade tras esperar que termine el scroll
-    setTimeout(()=>{
-      chartApiRef.current?.navigateTo(trade.entryDate,trade.exitDate)
-    },400)
+    // Zoom al trade tras un tick (el scroll es síncrono, no necesitamos 400ms)
+    setTimeout(()=>chartApiRef.current?.navigateTo(trade.entryDate,trade.exitDate),50)
   }
 
   const metricRows=metrics?[
