@@ -35,7 +35,23 @@ function fmtDate(s){if(!s)return'—';return new Date(s).toLocaleDateString('es-
 function f2(v){if(v==null||isNaN(v))return'—';return v.toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2})}
 function tvSym(sym){if(sym==='^GSPC')return'SP:SPX';if(sym==='^IBEX')return'BME:IBC';if(sym==='^GDAXI')return'XETR:DAX';if(sym==='^NDX')return'NASDAQ:NDX';if(sym.includes('-USD'))return`BINANCE:${sym.replace('-','')}`;return sym}
 
-const WATCHLIST=[
+// ── Supabase config ──────────────────────────────────────────
+const SUPA_URL='https://uqjngxxbdlquiuhywiuc.supabase.co'
+const SUPA_KEY='sb_publishable_st9QJ3zcQbY5ec-JhxwqXQ_joy3udz3'
+
+async function fetchWatchlist() {
+  const res = await fetch(
+    `${SUPA_URL}/rest/v1/watchlist?active=eq.true&order=group_name.asc,position.asc`,
+    { headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` } }
+  )
+  if (!res.ok) throw new Error('Error cargando watchlist')
+  const rows = await res.json()
+  // Mapear columnas Supabase → formato interno {sym, name, grp}
+  return rows.map(r => ({ sym: r.symbol, name: r.name, grp: r.group_name }))
+}
+
+// Fallback local por si Supabase no responde
+const WATCHLIST_FALLBACK=[
   {sym:'^GSPC',name:'S&P 500',grp:'Índices'},
   {sym:'^NDX',name:'Nasdaq 100',grp:'Índices'},
   {sym:'^IBEX',name:'IBEX 35',grp:'Índices'},
@@ -430,7 +446,17 @@ export default function Home() {
   const [metricsLayout,setMetricsLayout]=useState('panel')
   const [showStrategy,setShowStrategy]=useState(true),[showBH,setShowBH]=useState(true)
   const [showSP500,setShowSP500]=useState(true),[showCompound,setShowCompound]=useState(true)
+  const [watchlist,setWatchlist]=useState(WATCHLIST_FALLBACK)
+  const [wlLoading,setWlLoading]=useState(true)
   const debounceRef=useRef(null),chartApiRef=useRef(null),contentRef=useRef(null)
+
+  // Cargar watchlist desde Supabase al montar
+  useEffect(()=>{
+    fetchWatchlist()
+      .then(data=>{ if(data.length>0) setWatchlist(data) })
+      .catch(()=>{ /* fallback ya cargado */ })
+      .finally(()=>setWlLoading(false))
+  },[])
 
   const run=useCallback(async(sym,cfg)=>{
     setLoading(true);setError(null)
@@ -505,7 +531,7 @@ export default function Home() {
     </table>
   )
 
-  const wlGroups=[...new Set(WATCHLIST.map(w=>w.grp))]
+  const wlGroups=[...new Set(watchlist.map(w=>w.grp))]
 
   // Altura de los tabs = 33px aprox. (padding 8px top+bottom + 17px línea)
   const TAB_H=33
@@ -627,10 +653,18 @@ export default function Home() {
 
             {sidePanel==='watchlist'&&(
               <div style={{overflowY:'auto',flex:1}}>
-                {wlGroups.map(grp=>(
+                {/* Indicador cargando desde Supabase */}
+                {wlLoading&&(
+                  <div style={{padding:'10px 12px',fontFamily:MONO,fontSize:10,color:'var(--text3)',display:'flex',alignItems:'center',gap:6}}>
+                    <span style={{animation:'spin 1s linear infinite',display:'inline-block'}}>⟳</span> Cargando watchlist…
+                  </div>
+                )}
+                {!wlLoading&&wlGroups.map(grp=>(
                   <div key={grp}>
-                    <div style={{padding:'5px 12px',fontFamily:MONO,fontSize:9,color:'var(--text3)',letterSpacing:'0.1em',textTransform:'uppercase',background:'var(--bg2)',borderBottom:'1px solid var(--border)'}}>{grp}</div>
-                    {WATCHLIST.filter(w=>w.grp===grp).map(w=>(
+                    <div style={{padding:'5px 12px',fontFamily:MONO,fontSize:9,color:'var(--text3)',letterSpacing:'0.1em',textTransform:'uppercase',background:'var(--bg2)',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                      <span>{grp}</span>
+                    </div>
+                    {watchlist.filter(w=>w.grp===grp).map(w=>(
                       <div key={w.sym} onClick={()=>setSimbolo(w.sym)}
                         style={{padding:'7px 12px',cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'center',borderBottom:'1px solid var(--border)',background:simbolo===w.sym?'rgba(0,212,255,0.07)':'transparent'}}
                         onMouseOver={e=>e.currentTarget.style.background='rgba(255,255,255,0.03)'}
