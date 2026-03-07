@@ -686,7 +686,7 @@ export default function Home() {
   const evalCondition=(condition,closes,emaR,emaL)=>{
     if(!closes||closes.length<20) return null
     const ema=(vals,p)=>{const k=2/(p+1);let e=null;for(const v of vals){if(e===null)e=v;else e=v*k+e*(1-k)};return e}
-    const last=closes.slice(-60)
+    const last=closes.slice(-200)
     const er=ema(last,emaR), el=ema(last,emaL), price=last[last.length-1]
     if(er==null||el==null) return null
     if(condition==='ema_cross_up')    return er>el
@@ -792,7 +792,7 @@ export default function Home() {
     <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:12}}>
       <tbody>{metricRows.map(m=>(
         <tr key={m.label} style={{borderBottom:'1px solid var(--border)'}}>
-          <td style={{padding:'6px 10px',color:'var(--text2)',fontSize:11}}>{m.label}</td>
+          <td style={{padding:'6px 10px',color:'#a8c4dc',fontSize:11}}>{m.label}</td>
           <td style={{padding:'6px 10px',textAlign:'right',color:m.color,fontWeight:600}}>{m.val}</td>
         </tr>
       ))}</tbody>
@@ -805,17 +805,23 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>V50 — EMA Strategy</title>
+        <title>Trading Simulator</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+        <style>{`
+          .sidebar .sidebar-title { color: #a8c8e8 !important; font-weight: 600; }
+          .sidebar label { color: #c0d8f0 !important; }
+          .sidebar select, .sidebar input[type=text], .sidebar input[type=number] { color: #e0eefa !important; }
+          .sidebar .checkbox-row { color: #c0d8f0 !important; }
+        `}</style>
       </Head>
       <div className="app">
         {/* ── HEADER ── */}
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>V50 · CRUCE EMAs
+            <span className="dot"/>Trading Simulator
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -1004,28 +1010,36 @@ export default function Home() {
                       🔔{selectedAlarmIds.length>0?` ${selectedAlarmIds.length}`:''}
                     </button>
                     {alarmDropOpen&&(
-                      <div style={{position:'absolute',top:'100%',right:0,background:'var(--bg3)',border:'1px solid var(--border)',borderRadius:4,zIndex:60,boxShadow:'0 4px 20px rgba(0,0,0,0.7)',minWidth:190,padding:'4px 0'}}>
-                        <div style={{padding:'4px 10px 6px',fontFamily:MONO,fontSize:9,color:'var(--text3)',borderBottom:'1px solid var(--border)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                          <span>FILTRAR POR ALARMA</span>
-                          {selectedAlarmIds.length>0&&<span onClick={()=>setSelectedAlarmIds([])} style={{cursor:'pointer',color:'var(--accent)'}}>limpiar</span>}
+                      <div style={{position:'absolute',top:'100%',right:0,background:'var(--bg3)',border:'1px solid var(--border)',borderRadius:4,zIndex:60,boxShadow:'0 4px 20px rgba(0,0,0,0.7)',width:252,padding:'10px'}}>
+                        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8,paddingBottom:6,borderBottom:'1px solid var(--border)'}}>
+                          <span style={{fontFamily:MONO,fontSize:9,color:'#8fb5d5',letterSpacing:'0.08em',textTransform:'uppercase'}}>Filtrar por alarma</span>
+                          {selectedAlarmIds.length>0&&<span onClick={()=>setSelectedAlarmIds([])} style={{cursor:'pointer',color:'#ffd166',fontFamily:MONO,fontSize:9,textDecoration:'underline'}}>limpiar</span>}
                         </div>
-                        {alarms.length===0&&<div style={{padding:'8px 10px',fontFamily:MONO,fontSize:10,color:'var(--text3)'}}>Sin alarmas definidas</div>}
-                        {alarms.map(a=>{
-                          const sel=selectedAlarmIds.includes(a.id)
-                          return(
-                            <div key={a.id} onClick={()=>setSelectedAlarmIds(prev=>sel?prev.filter(x=>x!==a.id):[...prev,a.id])}
-                              style={{padding:'6px 10px',fontFamily:MONO,fontSize:10,cursor:'pointer',display:'flex',alignItems:'center',gap:8,color:'var(--text)',background:sel?'rgba(255,209,102,0.06)':'transparent'}}>
-                              <span style={{color:sel?'#ffd166':'var(--text3)',fontSize:12,flexShrink:0}}>{sel?'☑':'☐'}</span>
-                              <div style={{minWidth:0}}>
-                                <div style={{fontWeight:sel?700:400,color:sel?'var(--text)':'var(--text3)'}}>{a.name}</div>
-                                <div style={{fontSize:9,color:'var(--text3)'}}>{({ema_cross_up:'EMA↑ alcista',ema_cross_down:'EMA↓ bajista',price_above_ema:'Precio>EMA',price_below_ema:'Precio<EMA'})[a.condition]} · {a.ema_r}/{a.ema_l}</div>
+                        {alarms.length===0&&<div style={{padding:'4px 0',fontFamily:MONO,fontSize:10,color:'var(--text3)'}}>Sin alarmas definidas</div>}
+                        {alarms.length>0&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:5}}>
+                          {alarms.map(a=>{
+                            const sel=selectedAlarmIds.includes(a.id)
+                            const activeCount=watchlist.filter(w=>alarmStatus[w.symbol]?.[a.id]===true).length
+                            return(
+                              <div key={a.id} onClick={()=>setSelectedAlarmIds(prev=>sel?prev.filter(x=>x!==a.id):[...prev,a.id])}
+                                style={{padding:'7px 8px',cursor:'pointer',display:'flex',flexDirection:'column',gap:3,
+                                  border:`1px solid ${sel?'#ffd166':'#1e3a52'}`,borderRadius:4,
+                                  background:sel?'rgba(255,209,102,0.08)':'rgba(255,255,255,0.02)'}}>
+                                <div style={{display:'flex',alignItems:'center',gap:5}}>
+                                  <span style={{color:sel?'#ffd166':'var(--text3)',fontSize:11,flexShrink:0}}>{sel?'☑':'☐'}</span>
+                                  <span style={{fontFamily:MONO,fontWeight:sel?700:500,color:sel?'#e8d48a':'#c0d8f0',fontSize:10,lineHeight:1.2,wordBreak:'break-word'}}>{a.name}</span>
+                                </div>
+                                <div style={{fontFamily:MONO,fontSize:9,color:'#7a9bc0',paddingLeft:16}}>{({ema_cross_up:'EMA alcista ↑',ema_cross_down:'EMA bajista ↓',price_above_ema:'Precio > EMA',price_below_ema:'Precio < EMA'})[a.condition]}</div>
+                                <div style={{fontFamily:MONO,fontSize:9,color:'#7a9bc0',paddingLeft:16}}>
+                                  EMA {a.ema_r}/{a.ema_l}
+                                  {activeCount>0&&<span style={{color:'#00e5a0',marginLeft:4,fontWeight:700}}>{activeCount}✓</span>}
+                                </div>
                               </div>
-                            </div>
-                          )
-                        })}
-                        <div style={{padding:'6px 8px',borderTop:'1px solid var(--border)',display:'flex',gap:4,justifyContent:'flex-end'}}>
-                          <button onClick={()=>{refreshAlarmStatus();setAlarmDropOpen(false)}} style={{background:'rgba(0,212,255,0.1)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:9,padding:'3px 8px',borderRadius:3,cursor:'pointer'}}>⟳ Actualizar</button>
-                          <button onClick={()=>setAlarmDropOpen(false)} style={{background:'transparent',border:'1px solid var(--border)',color:'var(--text3)',fontFamily:MONO,fontSize:9,padding:'3px 8px',borderRadius:3,cursor:'pointer'}}>Cerrar</button>
+                            )
+                          })}
+                        </div>}
+                        <div style={{marginTop:8,display:'flex',justifyContent:'flex-end'}}>
+                          <button onClick={()=>setAlarmDropOpen(false)} style={{background:'transparent',border:'1px solid var(--border)',color:'var(--text3)',fontFamily:MONO,fontSize:9,padding:'3px 10px',borderRadius:3,cursor:'pointer'}}>Cerrar</button>
                         </div>
                       </div>
                     )}
@@ -1064,8 +1078,8 @@ export default function Home() {
                         </span>
                         {/* Nombre — clic carga el activo */}
                         <div onClick={()=>setSimbolo(w.symbol)} style={{flex:1,cursor:'pointer',minWidth:0}}>
-                          <div style={{fontFamily:MONO,fontSize:11,color:simbolo===w.symbol?'var(--accent)':'var(--text)',fontWeight:600}}>{w.symbol}</div>
-                          <div style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{w.name}</div>
+                          <div style={{fontFamily:MONO,fontSize:11,color:simbolo===w.symbol?'var(--accent)':'#d0e8fa',fontWeight:600}}>{w.symbol}</div>
+                          <div style={{fontFamily:MONO,fontSize:9,color:'#8aadcc',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{w.name}</div>
                         </div>
                         {/* Badges alarmas activas */}
                         {(()=>{
