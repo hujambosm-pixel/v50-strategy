@@ -270,9 +270,15 @@ export default async function handler(req, res) {
       ? curves.occupancyCurve.reduce((s,p)=>s+p.value,0)/curves.occupancyCurve.length
       : 0
 
+    // Historial combinado: todos los trades de todos los activos, ordenados por fecha salida
+    const allTrades = assetResults.flatMap(ar =>
+      ar.trades.map(t => ({ ...t, symbol: ar.symbol }))
+    ).sort((a,b) => a.exitDate.localeCompare(b.exitDate))
+
     res.status(200).json({
       ...curves,
       assetStats,
+      allTrades,
       avgOccupancy,
       n,
       slotCapital,
