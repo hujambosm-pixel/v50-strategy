@@ -1166,19 +1166,47 @@ export default function Home() {
   const openEditStr=(s)=>{
     setEditingStr(s)
     setStrForm({
-      name:s.name||'',symbol:s.symbol||'^GSPC',ema_r:s.ema_r||10,ema_l:s.ema_l||11,
-      years:s.years||5,capital_ini:s.capital_ini||10000,tipo_stop:s.tipo_stop||'tecnico',
-      atr_period:s.atr_period||14,atr_mult:s.atr_mult||1.0,
-      sin_perdidas:s.sin_perdidas!==false,reentry:s.reentry!==false,
-      tipo_filtro:s.tipo_filtro||'none',sp500_ema_r:s.sp500_ema_r||10,sp500_ema_l:s.sp500_ema_l||11,
+      name:s.name||'',symbol:s.symbol||'^GSPC',
+      years:s.years||5,capital_ini:s.capital_ini||10000,
       color:s.color||'#00d4ff',observations:s.observations||''
     })
+    // Cargar definition: si tiene la nueva, usarla; si es estrategia legacy, convertirla
+    const def = s.definition && Object.keys(s.definition).length>0
+      ? s.definition
+      : {
+          entry:{ type:'breakout_high_above_ma',ma_type:'EMA',ma_fast:s.ema_r||10,ma_slow:s.ema_l||11 },
+          exit: { type:'breakout_low_below_ma', ma_type:'EMA',ma_period:s.ema_r||10 },
+          stop: s.tipo_stop==='atr'
+            ? { type:'atr_based',atr_period:s.atr_period||14,atr_mult:s.atr_mult||1.0 }
+            : s.tipo_stop==='none' ? { type:'none' }
+            : { type:'below_ma_at_signal',ma_type:'EMA',ma_period:s.ema_r||10 },
+          management:{ sin_perdidas:s.sin_perdidas!==false, reentry:s.reentry!==false },
+          filters:{
+            market: s.tipo_filtro&&s.tipo_filtro!=='none'
+              ? [{ type:'external_ma',condition:s.tipo_filtro,ma_type:'EMA',ma_fast:s.sp500_ema_r||10,ma_slow:s.sp500_ema_l||11 }]
+              : [],
+            signal:[{type:'breakout_rolling',max_candles:null}]
+          }
+        }
+    setDefinition(def)
   }
   const closeEditStr=()=>{setEditingStr(null);setStrForm({})}
   const saveEditStr=async()=>{
     setStrSaving(true)
     try{
-      await upsertStrategy({...strForm,id:editingStr?.id||undefined})
+      // Guarda con definition (nuevo formato) + campos legacy para compatibilidad
+      const entry=definition?.entry||{}
+      const payload={
+        ...strForm,
+        id:editingStr?.id||undefined,
+        definition,
+        // Mantener campos legacy sincronizados para el motor cfg
+        ema_r:entry.ma_fast||entry.ma_period||10,
+        ema_l:entry.ma_slow||11,
+        years:Number(strForm.years||5),
+        capital_ini:Number(strForm.capital_ini||10000),
+      }
+      await upsertStrategy(payload)
       reloadStrategies(); closeEditStr()
     }catch(e){alert('Error: '+e.message)}
     finally{setStrSaving(false)}
@@ -1641,7 +1669,7 @@ export default function Home() {
               onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.25)'}
               onMouseOut={e=>e.currentTarget.style.background='transparent'}/>
             <div style={{display:'flex',borderBottom:'1px solid var(--border)'}}>
-              {[{id:'config',label:'⚙',title:'Configuración'},{id:'watchlist',label:'☰',title:'Watchlist'},{id:'alarms',label:'🔔',title:'Alarmas'},{id:'multi',label:'📊',title:'Multicartera'},{id:'strats',label:'⚡',title:'Estrategias'}].map(tab=>(
+              {[{id:'config',label:'⚙',title:'Configuración'},{id:'watchlist',label:'☰',title:'Watchlist'},{id:'alarms',label:'🔔',title:'Alarmas'},{id:'multi',label:'📊',title:'Multicartera'}].map(tab=>(
                 <button key={tab.id} onClick={()=>setSidePanel(tab.id)} title={tab.title} style={{
                   flex:1,padding:'8px 4px',
                   background:sidePanel===tab.id?'var(--bg3)':'transparent',
@@ -1987,94 +2015,6 @@ export default function Home() {
               </div>
             )}
 
-            {/* ── Tab ⚡ Estrategias (sidebar) ── */}
-            {sidePanel==='strats'&&(
-              <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
-                <div style={{display:'flex',borderBottom:'1px solid var(--border)'}}>
-                  {[{id:'build',label:'Constructor'},{id:'saved',label:`Guardadas (${strategies.length})`}].map(st=>(
-                    <button key={st.id} onClick={()=>setStratTab(st.id)}
-                      style={{flex:1,padding:'6px 4px',background:stratTab===st.id?'var(--bg3)':'transparent',
-                        border:'none',borderBottom:stratTab===st.id?'2px solid #ffd166':'2px solid transparent',
-                        color:stratTab===st.id?'#ffd166':'var(--text3)',fontFamily:MONO,fontSize:10,
-                        cursor:'pointer',letterSpacing:'0.05em',textTransform:'uppercase'}}>
-                      {st.label}
-                    </button>
-                  ))}
-                </div>
-                {stratTab==='build'&&(
-                  <div style={{flex:1,overflowY:'auto',padding:14,display:'flex',flexDirection:'column',gap:12}}>
-                    <div className="sidebar-section">
-                      <div className="sidebar-title">Global</div>
-                      <div className="row2">
-                        <label>Capital (€)<input type="number" value={capitalIni} min={100} onChange={e=>setCapitalIni(e.target.value)}/></label>
-                        <label>Años BT<input type="number" value={years} min={1} max={20} onChange={e=>setYears(e.target.value)}/></label>
-                      </div>
-                    </div>
-                    <StrategyBuilder definition={definition} setDefinition={setDefinition}/>
-                    <div className="sidebar-section">
-                      <div className="sidebar-title">Guardar en Supabase</div>
-                      <label>Nombre<input type="text" value={stratName} onChange={e=>setStratName(e.target.value)} placeholder="Nombre de la estrategia"/></label>
-                      <label>Descripción<input type="text" value={stratDesc} onChange={e=>setStratDesc(e.target.value)} placeholder="Opcional"/></label>
-                      <div className="row2">
-                        <label>Color<input type="color" value={stratColor} onChange={e=>setStratColor(e.target.value)}
-                          style={{width:'100%',height:28,border:'1px solid var(--border)',borderRadius:3,cursor:'pointer',background:'transparent'}}/></label>
-                        <div style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',alignSelf:'flex-end',paddingBottom:4}}>
-                          {currentStratId?currentStratId.slice(0,8)+'…':'nueva'}
-                        </div>
-                      </div>
-                      <div style={{display:'flex',gap:6,marginTop:4}}>
-                        <button onClick={()=>saveStrategy(null)} disabled={stratSaving||!stratName}
-                          style={{flex:1,fontFamily:MONO,fontSize:11,padding:'5px 0',borderRadius:3,cursor:'pointer',
-                            background:'rgba(255,209,102,0.12)',border:'1px solid #ffd166',color:'#ffd166',
-                            opacity:stratSaving||!stratName?0.5:1}}>
-                          {stratSaving?'Guardando...':'💾 Guardar nueva'}
-                        </button>
-                        {currentStratId&&<button onClick={()=>saveStrategy(currentStratId)} disabled={stratSaving}
-                          style={{fontFamily:MONO,fontSize:11,padding:'5px 8px',borderRadius:3,cursor:'pointer',
-                            background:'rgba(0,212,255,0.08)',border:'1px solid var(--accent)',color:'var(--accent)',
-                            opacity:stratSaving?0.5:1}}>✏</button>}
-                      </div>
-                      {stratMsg&&<div style={{fontFamily:MONO,fontSize:10,padding:'4px 6px',borderRadius:3,marginTop:4,
-                        background:stratMsg.type==='ok'?'rgba(0,229,160,0.1)':'rgba(255,77,109,0.1)',
-                        color:stratMsg.type==='ok'?'#00e5a0':'#ff4d6d',
-                        border:`1px solid ${stratMsg.type==='ok'?'rgba(0,229,160,0.3)':'rgba(255,77,109,0.3)'}`}}>
-                        {stratMsg.text}
-                      </div>}
-                    </div>
-                    {loading&&<div style={{fontFamily:MONO,fontSize:11,color:'var(--accent)',textAlign:'center'}}>⟳ Calculando...</div>}
-                    {error&&<div style={{fontFamily:MONO,fontSize:11,color:'#ff4d6d'}}>⚠ {error}</div>}
-                  </div>
-                )}
-                {stratTab==='saved'&&(
-                  <div style={{flex:1,overflowY:'auto'}}>
-                    {strategies.length===0
-                      ? <div style={{padding:20,textAlign:'center',fontFamily:MONO,fontSize:11,color:'var(--text3)'}}>Aún no hay estrategias guardadas</div>
-                      : strategies.map(st=>(
-                        <div key={st.id} style={{borderBottom:'1px solid var(--border)',padding:'8px 12px',
-                          background:currentStratId===st.id?'rgba(0,212,255,0.05)':'transparent'}}>
-                          <div style={{display:'flex',alignItems:'center',gap:6}}>
-                            <div style={{width:8,height:8,borderRadius:'50%',background:st.color||'#00d4ff',flexShrink:0}}/>
-                            <span style={{fontFamily:MONO,fontSize:11,color:'var(--text)',fontWeight:600,flex:1,
-                              overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{st.name}</span>
-                            <button onClick={()=>loadStrategy(st)}
-                              style={{fontFamily:MONO,fontSize:9,padding:'2px 6px',borderRadius:2,cursor:'pointer',
-                                background:'rgba(0,212,255,0.1)',border:'1px solid var(--accent)',color:'var(--accent)'}}>Cargar</button>
-                            <button onClick={()=>deleteStrategy(st.id)}
-                              style={{fontFamily:MONO,fontSize:9,padding:'2px 6px',borderRadius:2,cursor:'pointer',
-                                background:'rgba(255,77,109,0.1)',border:'1px solid #ff4d6d',color:'#ff4d6d'}}>✕</button>
-                          </div>
-                          {st.description&&<div style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',marginTop:3,paddingLeft:14}}>{st.description}</div>}
-                          <div style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',marginTop:2,paddingLeft:14}}>
-                            {st.symbol||'—'} · {st.years||'?'}a · €{(st.capital_ini||0).toLocaleString('es-ES')}
-                            <span style={{color:'#5a7a90',marginLeft:6}}>{new Date(st.created_at).toLocaleDateString('es-ES')}</span>
-                          </div>
-                        </div>
-                      ))
-                    }
-                  </div>
-                )}
-              </div>
-            )}
 
             {/* ══ PANEL MULTICARTERA ══ */}
             {sidePanel==='multi'&&(
@@ -2935,7 +2875,7 @@ export default function Home() {
       {/* ══ MODAL ESTRATEGIA — fixed sobre gráfico ══ */}
       {editingStr!==null&&(
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.72)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center'}} onClick={e=>{if(e.target===e.currentTarget)closeEditStr()}}>
-          <div style={{background:'#0d1824',border:'1px solid #1e3a52',borderRadius:8,padding:28,width:520,maxHeight:'85vh',overflowY:'auto',display:'flex',flexDirection:'column',gap:14,fontFamily:MONO,fontSize:12,boxShadow:'0 8px 48px rgba(0,0,0,0.8)'}}>
+          <div style={{background:'#0d1824',border:'1px solid #1e3a52',borderRadius:8,padding:28,width:680,maxHeight:'90vh',overflowY:'auto',display:'flex',flexDirection:'column',gap:14,fontFamily:MONO,fontSize:12,boxShadow:'0 8px 48px rgba(0,0,0,0.8)'}}>
             {/* Header */}
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
               <span style={{fontWeight:700,color:'var(--text)',fontSize:15}}>{editingStr.id?'Editar estrategia':'Nueva estrategia'}</span>
@@ -2957,60 +2897,24 @@ export default function Home() {
 
             {/* Separador */}
             <div style={{borderTop:'1px solid var(--border)',marginTop:2}}/>
-            <div style={{fontWeight:600,color:'var(--text3)',fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase'}}>Parámetros EMAs</div>
 
-            {/* Fila 2: EMAs + Años + Capital */}
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:10}}>
-              <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>EMA Rápida
-                <input type="number" value={strForm.ema_r||10} onChange={e=>setStrForm(p=>({...p,ema_r:Number(e.target.value)}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'#ffd166',fontFamily:MONO,fontSize:13,padding:'7px 10px',borderRadius:4,fontWeight:600}}/>
-              </label>
-              <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>EMA Lenta
-                <input type="number" value={strForm.ema_l||11} onChange={e=>setStrForm(p=>({...p,ema_l:Number(e.target.value)}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'#ff4d6d',fontFamily:MONO,fontSize:13,padding:'7px 10px',borderRadius:4,fontWeight:600}}/>
-              </label>
-              <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>Años BT
-                <input type="number" value={strForm.years||5} onChange={e=>setStrForm(p=>({...p,years:Number(e.target.value)}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'7px 10px',borderRadius:4}}/>
-              </label>
-              <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>Capital (€)
-                <input type="number" value={strForm.capital_ini||10000} onChange={e=>setStrForm(p=>({...p,capital_ini:Number(e.target.value)}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'7px 10px',borderRadius:4}}/>
-              </label>
-            </div>
-
-            {/* Fila 3: Stop + Filtro + checkboxes */}
+            {/* Parámetros globales: Años + Capital */}
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-              <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>Stop Loss
-                <select value={strForm.tipo_stop||'tecnico'} onChange={e=>setStrForm(p=>({...p,tipo_stop:e.target.value}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'7px 10px',borderRadius:4}}>
-                  <option value="tecnico">Técnico (EMA)</option>
-                  <option value="atr">ATR</option>
-                  <option value="none">Sin stop</option>
-                </select>
+              <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)',fontFamily:MONO,fontSize:11}}>Años BT
+                <input type="number" value={strForm.years||5} min={1} max={20}
+                  onChange={e=>setStrForm(p=>({...p,years:Number(e.target.value)}))}
+                  style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'7px 10px',borderRadius:4}}/>
               </label>
-              <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>Filtro SP500
-                <select value={strForm.tipo_filtro||'none'} onChange={e=>setStrForm(p=>({...p,tipo_filtro:e.target.value}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'7px 10px',borderRadius:4}}>
-                  <option value="none">Sin filtro</option>
-                  <option value="precio_ema">Precio sobre EMA rápida</option>
-                  <option value="ema_ema">EMA rápida sobre EMA lenta</option>
-                </select>
+              <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)',fontFamily:MONO,fontSize:11}}>Capital (€)
+                <input type="number" value={strForm.capital_ini||10000} min={100}
+                  onChange={e=>setStrForm(p=>({...p,capital_ini:Number(e.target.value)}))}
+                  style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'7px 10px',borderRadius:4}}/>
               </label>
             </div>
-            {strForm.tipo_filtro!=='none'&&(
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-                <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>SP500 EMA R
-                  <input type="number" value={strForm.sp500_ema_r||10} onChange={e=>setStrForm(p=>({...p,sp500_ema_r:Number(e.target.value)}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'7px 10px',borderRadius:4}}/>
-                </label>
-                <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>SP500 EMA L
-                  <input type="number" value={strForm.sp500_ema_l||11} onChange={e=>setStrForm(p=>({...p,sp500_ema_l:Number(e.target.value)}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'7px 10px',borderRadius:4}}/>
-                </label>
-              </div>
-            )}
-            <div style={{display:'flex',gap:20}}>
-              <label style={{display:'flex',alignItems:'center',gap:8,color:'var(--text3)',cursor:'pointer'}}>
-                <input type="checkbox" checked={strForm.sin_perdidas!==false} onChange={e=>setStrForm(p=>({...p,sin_perdidas:e.target.checked}))} style={{width:14,height:14}}/>
-                Sin Pérdidas
-              </label>
-              <label style={{display:'flex',alignItems:'center',gap:8,color:'var(--text3)',cursor:'pointer'}}>
-                <input type="checkbox" checked={strForm.reentry!==false} onChange={e=>setStrForm(p=>({...p,reentry:e.target.checked}))} style={{width:14,height:14}}/>
-                Re-Entry
-              </label>
+
+            {/* Constructor modular */}
+            <div style={{borderTop:'1px solid var(--border)',paddingTop:10}}>
+              <StrategyBuilder definition={definition} setDefinition={setDefinition}/>
             </div>
 
             {/* Observaciones */}
@@ -3029,7 +2933,7 @@ export default function Home() {
                       <span style={{width:8,height:8,borderRadius:'50%',background:s.color||'#00d4ff',flexShrink:0,display:'inline-block'}}/>
                       <div style={{flex:1,minWidth:0}}>
                         <span style={{color:'var(--text)',fontSize:11,fontWeight:600}}>{s.name}</span>
-                        <span style={{color:'var(--text3)',fontSize:10,marginLeft:8}}>EMA {s.ema_r}/{s.ema_l} · {s.years}a · {s.symbol}</span>
+                        <span style={{color:'var(--text3)',fontSize:10,marginLeft:8}}>{s.symbol} · {s.years}a · {(s.definition?.entry?.type||'legacy').replace(/_/g,' ')}</span>
                       </div>
                       <button onClick={()=>openEditStr(s)} style={{background:'transparent',border:'1px solid var(--border)',color:'var(--text3)',fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer'}}>✎</button>
                       <button onClick={()=>duplicateStr(s)} title="Duplicar" style={{background:'transparent',border:'1px solid var(--border)',color:'var(--text3)',fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer'}}>⎘</button>
