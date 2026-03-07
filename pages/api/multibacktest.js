@@ -275,8 +275,30 @@ export default async function handler(req, res) {
       ar.trades.map(t => ({ ...t, symbol: ar.symbol }))
     ).sort((a,b) => a.exitDate.localeCompare(b.exitDate))
 
+    // SP500 B&H curve for benchmark comparison
+    let sp500BHCurve = []
+    if (sp500Data && sp500Data.length) {
+      const startD = curves.startDate
+      const filteredDates = curves.simpleCurve.map(p => p.date)
+      if (filteredDates.length && startD) {
+        const sp0 = sp500Data.find(d => d.date >= startD)
+        if (sp0) {
+          const sp0Close = sp0.close
+          const capIniSlot = cfg.capitalIni / n
+          sp500BHCurve = filteredDates.map(date => {
+            let spBar = null
+            for (let i = sp500Data.length - 1; i >= 0; i--) {
+              if (sp500Data[i].date <= date) { spBar = sp500Data[i]; break }
+            }
+            return spBar ? { date, value: capIniSlot * n * (spBar.close / sp0Close) } : null
+          }).filter(Boolean)
+        }
+      }
+    }
+
     res.status(200).json({
       ...curves,
+      sp500BHCurve,
       assetStats,
       allTrades,
       avgOccupancy,
