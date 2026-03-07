@@ -805,7 +805,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator</title>
+        <title>Trading Simulator 1.1</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -821,7 +821,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator
+            <span className="dot"/>Trading Simulator 1.1
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -965,7 +965,7 @@ export default function Home() {
             )}
 
             {sidePanel==='watchlist'&&(
-              <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
+              <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'visible',minHeight:0}}>
                 {/* ══ Barra de filtros watchlist ══ */}
                 <div style={{padding:'5px 8px',borderBottom:'1px solid var(--border)',flexShrink:0,display:'flex',gap:4,alignItems:'center'}}>
                   {/* Buscador compacto */}
@@ -1021,7 +1021,11 @@ export default function Home() {
                             const sel=selectedAlarmIds.includes(a.id)
                             const activeCount=watchlist.filter(w=>alarmStatus[w.symbol]?.[a.id]===true).length
                             return(
-                              <div key={a.id} onClick={()=>setSelectedAlarmIds(prev=>sel?prev.filter(x=>x!==a.id):[...prev,a.id])}
+                              <div key={a.id} onClick={()=>{
+                                const nowSel=!sel
+                                setSelectedAlarmIds(prev=>sel?prev.filter(x=>x!==a.id):[...prev,a.id])
+                                if(nowSel&&Object.keys(alarmStatus).length===0) refreshAlarmStatus()
+                              }}
                                 style={{padding:'7px 8px',cursor:'pointer',display:'flex',flexDirection:'column',gap:3,
                                   border:`1px solid ${sel?'#ffd166':'#1e3a52'}`,borderRadius:4,
                                   background:sel?'rgba(255,209,102,0.08)':'rgba(255,255,255,0.02)'}}>
@@ -1095,7 +1099,7 @@ export default function Home() {
                           ))
                         })()}
                         {/* Lista badge */}
-                        <span style={{fontFamily:MONO,fontSize:8,color:'var(--text3)',background:'var(--bg2)',padding:'1px 4px',borderRadius:2,flexShrink:0}}>{w.list_name||'General'}</span>
+                        <span style={{fontFamily:MONO,fontSize:8,color:'#7fb8d8',background:'var(--bg2)',padding:'1px 4px',borderRadius:2,flexShrink:0}}>{w.list_name||'General'}</span>
                         {/* Editar */}
                         <span onClick={e=>{e.stopPropagation();openEditItem(w)}} style={{cursor:'pointer',color:'var(--text3)',fontSize:11,padding:'0 2px',flexShrink:0}} title="Editar">✎</span>
                       </div>
@@ -1335,7 +1339,7 @@ export default function Home() {
                 {/* Panel derecho de métricas */}
                 {metricsLayout==='panel'&&metrics&&(
                   <div style={{width:275,flexShrink:0,borderLeft:'1px solid var(--border)',background:'var(--bg2)',overflowY:'auto'}}>
-                    <div style={{padding:'7px 12px',borderBottom:'1px solid var(--border)',fontFamily:MONO,fontSize:9,color:'var(--text3)',letterSpacing:'0.1em'}}>RESUMEN · {simbolo}</div>
+                    <div style={{padding:'7px 12px',borderBottom:'1px solid var(--border)',fontFamily:MONO,fontSize:9,color:'#8aadcc',letterSpacing:'0.1em'}}>RESUMEN · {simbolo}</div>
                     <MetricsTable/>
                   </div>
                 )}
