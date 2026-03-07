@@ -682,6 +682,30 @@ export default function Home() {
   const [alarmDropOpen,setAlarmDropOpen]=useState(false)  // desplegable alarmas
   // Búsqueda async de nombre
   const symSearchRef=useRef(null)
+  // ── Resizable panels ────────────────────────────────────────
+  const [sidebarW,setSidebarW]=useState(240)
+  const [rightPanelW,setRightPanelW]=useState(275)
+  const sidebarResizing=useRef(false), rightResizing=useRef(false)
+  const sidebarStartX=useRef(0), sidebarStartW=useRef(0)
+  const rightStartX=useRef(0), rightStartW=useRef(0)
+
+  useEffect(()=>{
+    const onMove=e=>{
+      if(sidebarResizing.current){
+        const delta=e.clientX-sidebarStartX.current
+        setSidebarW(Math.max(180,Math.min(420,sidebarStartW.current+delta)))
+      }
+      if(rightResizing.current){
+        const delta=rightStartX.current-e.clientX
+        setRightPanelW(Math.max(200,Math.min(480,rightStartW.current+delta)))
+      }
+    }
+    const onUp=()=>{sidebarResizing.current=false;rightResizing.current=false;document.body.style.cursor='';document.body.style.userSelect=''}
+    window.addEventListener('mousemove',onMove)
+    window.addEventListener('mouseup',onUp)
+    return()=>{window.removeEventListener('mousemove',onMove);window.removeEventListener('mouseup',onUp)}
+  },[])
+
   // ── Multicartera state ──────────────────────────────────────
   const [mcSelected,setMcSelected]=useState([])          // symbols seleccionados
   const [mcMode,setMcMode]=useState('slots')             // 'slots' | 'rotativo' | 'custom'
@@ -973,15 +997,18 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator 1.7</title>
+        <title>Trading Simulator 1.8</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
         <style>{`
-          .sidebar .sidebar-title { color: #a8c8e8 !important; font-weight: 600; }
-          .sidebar label { color: #c0d8f0 !important; }
-          .sidebar select, .sidebar input[type=text], .sidebar input[type=number] { color: #e0eefa !important; }
-          .sidebar .checkbox-row { color: #c0d8f0 !important; }
+          .sidebar .sidebar-title { color: #c8dff5 !important; font-weight: 700; font-size:12px; letter-spacing:0.06em; }
+          .sidebar label { color: #d8ecff !important; font-size: 12px; }
+          .sidebar select, .sidebar input[type=text], .sidebar input[type=number] { color: #f0f8ff !important; font-size:12px; }
+          .sidebar .checkbox-row { color: #d8ecff !important; font-size:12px; }
+          .sidebar .sidebar-section { gap: 8px; }
+          .sidebar select { background: var(--bg3); }
+          .sidebar-title { margin-bottom: 4px; }
         `}</style>
       </Head>
       <div className="app">
@@ -989,7 +1016,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator 1.7
+            <span className="dot"/>Trading Simulator 1.8
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -1054,7 +1081,13 @@ export default function Home() {
 
         <div className="main">
           {/* ── SIDEBAR ── */}
-          <aside className="sidebar" style={{padding:0,gap:0,position:'relative'}}>
+          <aside className="sidebar" style={{padding:0,gap:0,position:'relative',width:sidebarW,flexShrink:0,flexGrow:0}}>
+            {/* Resize handle — right edge */}
+            <div onMouseDown={e=>{sidebarResizing.current=true;sidebarStartX.current=e.clientX;sidebarStartW.current=sidebarW;document.body.style.cursor='col-resize';document.body.style.userSelect='none'}}
+              style={{position:'absolute',top:0,right:0,width:4,height:'100%',cursor:'col-resize',zIndex:20,
+                background:'transparent',transition:'background 0.15s'}}
+              onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.25)'}
+              onMouseOut={e=>e.currentTarget.style.background='transparent'}/>
             <div style={{display:'flex',borderBottom:'1px solid var(--border)'}}>
               {[{id:'config',label:'⚙',title:'Configuración'},{id:'watchlist',label:'☰',title:'Watchlist'},{id:'alarms',label:'🔔',title:'Alarmas'},{id:'multi',label:'📊',title:'Multicartera'}].map(tab=>(
                 <button key={tab.id} onClick={()=>setSidePanel(tab.id)} title={tab.title} style={{
@@ -1225,8 +1258,19 @@ export default function Home() {
                     const favs=filtered.filter(w=>w.favorite)
                     const rest=filtered.filter(w=>!w.favorite).sort((a,b)=>a.name.localeCompare(b.name))
                     const all=[...favs,...rest]
-                    if(!all.length) return <div style={{padding:'12px',fontFamily:MONO,fontSize:10,color:'var(--text3)'}}>Sin activos en esta lista</div>
-                    return all.map(w=>(
+                    const totalWl=watchlist.length
+                    if(!all.length) return <div style={{padding:'12px',fontFamily:MONO,fontSize:11,color:'#8aadcc'}}>Sin activos para los filtros activos</div>
+                    // Count badge above list
+                    const countBadge=(
+                      <div style={{padding:'3px 10px 3px',fontFamily:MONO,fontSize:10,color:'#7a9bc0',background:'var(--bg2)',borderBottom:'1px solid var(--border)',display:'flex',gap:6,alignItems:'center'}}>
+                        <span style={{color:'#a8c8e8',fontWeight:600}}>{all.length}</span>
+                        <span style={{color:'#4a6a88'}}>de</span>
+                        <span style={{color:'#a8c8e8',fontWeight:600}}>{totalWl}</span>
+                        <span style={{color:'#4a6a88'}}>activos</span>
+                        {filtered.length<totalWl&&<span style={{marginLeft:'auto',color:'#ffd166',fontSize:9}}>{totalWl-filtered.length} filtrado{totalWl-filtered.length!==1?'s':''}</span>}
+                      </div>
+                    )
+                    return <>{countBadge}{all.map(w=>{return (
                       <div key={w.id||w.symbol}
                         style={{padding:'6px 10px',display:'flex',alignItems:'center',gap:6,borderBottom:'1px solid var(--border)',background:simbolo===w.symbol?'rgba(0,212,255,0.07)':'transparent'}}
                         onMouseOver={e=>e.currentTarget.style.background='rgba(255,255,255,0.03)'}
@@ -1275,7 +1319,9 @@ export default function Home() {
                         {/* Editar */}
                         <span onClick={e=>{e.stopPropagation();openEditItem(w)}} style={{cursor:'pointer',color:'var(--text3)',fontSize:11,padding:'0 2px',flexShrink:0}} title="Editar">✎</span>
                       </div>
-                    ))
+                    )})}
+                  </>
+                  )
                   })()}
                 </div>
 
@@ -1622,7 +1668,7 @@ export default function Home() {
                       <div className="section-title">Historial — {result.trades.length} operaciones <span style={{fontWeight:400,fontSize:10,color:'var(--text3)'}}>· clic fila = ir al trade</span></div>
                       <div style={{overflowX:'auto'}}>
                         <table className="trades-table" style={{fontFamily:MONO}}>
-                          <thead><tr><th>#</th><th>Entrada</th><th>Salida</th><th>Px Entrada</th><th>Px Salida</th><th>P&L %</th><th>P&L €</th><th>Días</th><th>Tipo</th></tr></thead>
+                          <thead><tr><th>#</th><th>Entrada</th><th>Salida</th><th style={{color:'#9b72ff'}}>Capital inv.</th><th>Px Entrada</th><th>Px Salida</th><th>P&L %</th><th>P&L €</th><th>Días</th><th>Tipo</th></tr></thead>
                           <tbody>
                             {[...result.trades].reverse().map((t,i)=>(
                               <tr key={i} onClick={()=>navigateToTrade(t)} style={{cursor:'pointer'}}
@@ -1630,6 +1676,7 @@ export default function Home() {
                                 onMouseOut={e=>e.currentTarget.style.background='transparent'}>
                                 <td style={{color:'var(--text3)'}}>{result.trades.length-i}</td>
                                 <td>{fmtDate(t.entryDate)}</td><td>{fmtDate(t.exitDate)}</td>
+                                <td style={{color:'#9b72ff',fontWeight:600}}>€{fmt(t.capitalTras-t.pnlSimple,0)}</td>
                                 <td>{fmt(t.entryPx,2)}</td><td>{fmt(t.exitPx,2)}</td>
                                 <td style={{color:t.pnlPct>=0?'var(--green)':'var(--red)',fontWeight:600}}>{t.pnlPct>=0?'+':''}{fmt(t.pnlPct,2)}%</td>
                                 <td style={{color:t.pnlSimple>=0?'var(--green)':'var(--red)'}}>{t.pnlSimple>=0?'+':''}{fmt(t.pnlSimple,2)}€</td>
@@ -1646,7 +1693,13 @@ export default function Home() {
 
                 {/* Panel derecho de métricas */}
                 {sidePanel!=='multi'&&metricsLayout==='panel'&&metrics&&(
-                  <div style={{width:275,flexShrink:0,borderLeft:'1px solid var(--border)',background:'var(--bg2)',overflowY:'auto'}}>
+                  <div style={{width:rightPanelW,flexShrink:0,borderLeft:'1px solid var(--border)',background:'var(--bg2)',overflowY:'auto',position:'relative'}}>
+                    {/* Resize handle — left edge */}
+                    <div onMouseDown={e=>{rightResizing.current=true;rightStartX.current=e.clientX;rightStartW.current=rightPanelW;document.body.style.cursor='col-resize';document.body.style.userSelect='none'}}
+                      style={{position:'absolute',top:0,left:0,width:4,height:'100%',cursor:'col-resize',zIndex:20,
+                        background:'transparent',transition:'background 0.15s'}}
+                      onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.25)'}
+                      onMouseOut={e=>e.currentTarget.style.background='transparent'}/>
                     <div style={{padding:'7px 12px',borderBottom:'1px solid var(--border)',fontFamily:MONO,fontSize:9,color:'#8aadcc',letterSpacing:'0.1em'}}>RESUMEN · {simbolo}</div>
                     <MetricsTable/>
                   </div>
@@ -1667,6 +1720,8 @@ export default function Home() {
 
             {/* ══ MULTICARTERA RESULTS ══ */}
             {mcResult&&sidePanel==='multi'&&(
+              <div style={{display:'flex',flex:1,minHeight:0,overflow:'hidden',height:'100%'}}>
+              {/* Left: scrollable content */}
               <div style={{flex:1,overflowY:'auto',padding:'0 0 20px 0'}}>
                 {/* Header resumen */}
                 <div style={{padding:'10px 16px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:14,flexWrap:'wrap'}}>
@@ -1737,7 +1792,9 @@ export default function Home() {
                         <div style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',marginBottom:3}}>{c.label}</div>
                         <div style={{fontFamily:MONO,fontSize:14,color:c.color,fontWeight:700}}>{c.val}</div>
                       </div>
-                    ))
+                    )})}
+                  </>
+                  )
                   })()}
                 </div>
 
@@ -1783,8 +1840,8 @@ export default function Home() {
                       <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:11}}>
                         <thead>
                           <tr style={{borderBottom:'1px solid var(--border)',position:'sticky',top:0,background:'var(--bg)'}}>
-                            {['#','Activo','Entrada','Salida','Px Ent.','Px Sal.','P&L %','P&L €','Días','Tipo'].map(h=>(
-                              <th key={h} style={{padding:'4px 8px',textAlign:'left',color:'var(--text3)',fontWeight:400,fontSize:9,whiteSpace:'nowrap'}}>{h}</th>
+                            {['#','Activo','Entrada','Salida','Capital inv.','Px Ent.','Px Sal.','P&L %','P&L €','Días','Tipo'].map((h,hi)=>(
+                              <th key={h} style={{padding:'4px 8px',textAlign:'left',color:hi===4?'#9b72ff':'var(--text3)',fontWeight:400,fontSize:9,whiteSpace:'nowrap'}}>{h}</th>
                             ))}
                           </tr>
                         </thead>
@@ -1799,6 +1856,7 @@ export default function Home() {
                               <td style={{padding:'4px 8px',color:'var(--accent)',fontWeight:700}}>{t.symbol}</td>
                               <td style={{padding:'4px 8px',color:'var(--text)',whiteSpace:'nowrap'}}>{fmtDate(t.entryDate)}</td>
                               <td style={{padding:'4px 8px',color:'var(--text)',whiteSpace:'nowrap'}}>{fmtDate(t.exitDate)}</td>
+                              <td style={{padding:'4px 8px',color:'#9b72ff',fontWeight:600,whiteSpace:'nowrap'}}>€{fmt(t.capitalTras-t.pnlSimple,0)}</td>
                               <td style={{padding:'4px 8px'}}>{fmt(t.entryPx,2)}</td>
                               <td style={{padding:'4px 8px'}}>{fmt(t.exitPx,2)}</td>
                               <td style={{padding:'4px 8px',color:t.pnlPct>=0?'#00e5a0':'#ff4d6d',fontWeight:600}}>{t.pnlPct>=0?'+':''}{fmt(t.pnlPct,2)}%</td>
@@ -1818,6 +1876,71 @@ export default function Home() {
                     </div>
                   </div>
                 )}
+              </div>
+              {/* Right: metrics summary panel — same style as single-asset */}
+              <div style={{width:rightPanelW,flexShrink:0,borderLeft:'1px solid var(--border)',background:'var(--bg2)',overflowY:'auto',position:'relative'}}>
+                {/* Resize handle */}
+                <div onMouseDown={e=>{rightResizing.current=true;rightStartX.current=e.clientX;rightStartW.current=rightPanelW;document.body.style.cursor='col-resize';document.body.style.userSelect='none'}}
+                  style={{position:'absolute',top:0,left:0,width:4,height:'100%',cursor:'col-resize',zIndex:20,background:'transparent'}}
+                  onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.25)'}
+                  onMouseOut={e=>e.currentTarget.style.background='transparent'}/>
+                <div style={{padding:'7px 12px',borderBottom:'1px solid var(--border)',fontFamily:MONO,fontSize:9,color:'var(--text3)',letterSpacing:'0.1em'}}>RESUMEN MULTICARTERA</div>
+                {(()=>{
+                  const lastS=mcResult.simpleCurve.slice(-1)[0]?.value||Number(capitalIni)
+                  const lastC=mcResult.compoundCurve.slice(-1)[0]?.value||Number(capitalIni)
+                  const lastBH=mcResult.bhCurve.slice(-1)[0]?.value||Number(capitalIni)
+                  const capIni=Number(capitalIni)
+                  const totalDiasNat=mcResult.startDate?(new Date(mcResult.simpleCurve.slice(-1)[0]?.date)-new Date(mcResult.startDate))/86400000:365
+                  const anios=Math.max(totalDiasNat/365.25,0.01)
+                  const cagrS=(Math.pow(Math.max(lastS,0.01)/capIni,1/anios)-1)*100
+                  const cagrC=(Math.pow(Math.max(lastC,0.01)/capIni,1/anios)-1)*100
+                  const cagrBH=(Math.pow(Math.max(lastBH,0.01)/capIni,1/anios)-1)*100
+                  const allT=mcResult.allTrades||[]
+                  const wins=allT.filter(t=>t.pnlPct>=0), losses=allT.filter(t=>t.pnlPct<0)
+                  const winRate=allT.length?wins.length/allT.length*100:0
+                  const avgWin=wins.length?wins.reduce((s,t)=>s+t.pnlPct,0)/wins.length:0
+                  const avgLoss=losses.length?losses.reduce((s,t)=>s+Math.abs(t.pnlPct),0)/losses.length:0
+                  const totalDias=allT.reduce((s,t)=>s+t.dias,0)
+                  const tiempoInvPct=totalDiasNat>0?(totalDias/totalDiasNat)*100:0
+                  const aniosInv=totalDias/365.25
+                  const gBrute=wins.reduce((s,t)=>s+t.pnlSimple,0)
+                  const lBrute=losses.reduce((s,t)=>s+Math.abs(t.pnlSimple),0)
+                  const factorBen=lBrute>0?gBrute/lBrute:999
+                  const diasProm=allT.length?totalDias/allT.length:0
+                  const rows=[
+                    {label:'Total Operaciones',val:allT.length,color:'#ffd166'},
+                    {label:`Tiempo Invertido (${fmt(aniosInv,2)}a)`,val:fmt(tiempoInvPct,0,'%'),color:'#ffd166'},
+                    {label:'Ganadoras',val:wins.length,color:'#00e5a0'},
+                    {label:'Perdedoras',val:losses.length,color:'#ff4d6d'},
+                    {label:'Win Rate',val:fmt(winRate,1,'%'),color:winRate>=50?'#00e5a0':'#ff4d6d'},
+                    {label:'Ganancia Media (%)',val:fmt(avgWin,2,'%'),color:'#00e5a0'},
+                    {label:'Pérdida Media (%)',val:fmt(avgLoss,2,'%'),color:'#ff4d6d'},
+                    {label:'Días Promedio',val:fmt(diasProm,1,' días'),color:'#00d4ff'},
+                    {label:'Total Días Invertido',val:totalDias,color:'#00d4ff'},
+                    {label:'Ganancia Simple (€)',val:fmt(lastS-capIni,2,'€'),color:lastS>=capIni?'#00e5a0':'#ff4d6d'},
+                    {label:'Ganancia Compuesta (€)',val:fmt(lastC-capIni,2,'€'),color:lastC>=capIni?'#00e5a0':'#ff4d6d'},
+                    {label:'Ganancia B&H Divers. (€)',val:fmt(lastBH-capIni,2,'€'),color:lastBH>=capIni?'#00e5a0':'#ff4d6d'},
+                    {label:'Ganancia Total (%)',val:fmt((lastS-capIni)/capIni*100,2,'%'),color:lastS>=capIni?'#00e5a0':'#ff4d6d'},
+                    {label:'Factor de Beneficio',val:fmt(factorBen,2),color:factorBen>=1?'#00e5a0':'#ff4d6d'},
+                    {label:`CAGR Simple (${fmt(anios,2)}a)`,val:fmt(cagrS,2,'%'),color:cagrS>=0?'#00e5a0':'#ff4d6d'},
+                    {label:'Max DD Simple (%)',val:fmt(mcResult.maxDDSimple,2,'%'),color:'#ff4d6d'},
+                    {label:`CAGR B&H (${fmt(anios,2)}a)`,val:fmt(cagrBH,2,'%'),color:cagrBH>=0?'#00e5a0':'#ff4d6d'},
+                    {label:`CAGR Compuesto (${fmt(anios,2)}a)`,val:fmt(cagrC,2,'%'),color:cagrC>=0?'#00e5a0':'#ff4d6d'},
+                    {label:'Max DD Compuesto (%)',val:fmt(mcResult.maxDDCompound,2,'%'),color:'#ff4d6d'},
+                    {label:'Capital inv. medio',val:fmt(mcResult.avgOccupancy,1,'%'),color:'#ffd166'},
+                  ]
+                  return(
+                    <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:12}}>
+                      <tbody>{rows.map(m=>(
+                        <tr key={m.label} style={{borderBottom:'1px solid var(--border)'}}>
+                          <td style={{padding:'6px 10px',color:'var(--text2)',fontSize:11}}>{m.label}</td>
+                          <td style={{padding:'6px 10px',textAlign:'right',color:m.color,fontWeight:600}}>{m.val}</td>
+                        </tr>
+                      ))}</tbody>
+                    </table>
+                  )
+                })()}
+              </div>
               </div>
             )}
           </div>
