@@ -489,6 +489,11 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
     return()=>{if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null}}
   },[data,emaRPeriod,emaLPeriod,trades,maxDD,labelMode])
 
+  // Apply height changes without recreating chart
+  useEffect(()=>{
+    if(chartRef.current) try{chartRef.current.applyOptions({height:chartHeight})}catch(_){}
+  },[chartHeight])
+
   return (
     <div style={{position:'relative'}}>
       <div ref={legendRef} style={{position:'absolute',top:8,left:8,zIndex:10,fontFamily:MONO,fontSize:12,color:'#7a9bc0',background:'rgba(8,12,20,0.82)',padding:'4px 10px',borderRadius:4,pointerEvents:'none',whiteSpace:'nowrap'}}/>
@@ -570,6 +575,10 @@ function EquityChart({
     })
     return()=>{if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null}}
   },[strategyCurve,bhCurve,sp500BHCurve,compoundCurve,maxDDStrategy,maxDDBH,maxDDSP500,maxDDCompound,maxDDStrategyDate,maxDDBHDate,maxDDSP500Date,maxDDCompoundDate,capitalIni,showStrategy,showBH,showSP500,showCompound])
+
+  useEffect(()=>{
+    if(chartRef.current) try{chartRef.current.applyOptions({height:chartHeight})}catch(_){}
+  },[chartHeight])
   return <div ref={ref} style={{minHeight:260}}/>
 }
 
@@ -632,6 +641,10 @@ function MultiCartChart({simpleCurve,compoundCurve,bhCurve,occupancyCurve,capita
     })
     return()=>{if(chartRef.current){chartRef.current.remove();chartRef.current=null}}
   },[simpleCurve,compoundCurve,bhCurve,capitalIni,maxDDSimple,maxDDSimpleDate,maxDDCompound,maxDDCompoundDate,maxDDBH,maxDDBHDate,showSimple,showCompound,showBH])
+
+  useEffect(()=>{
+    if(chartRef.current) try{chartRef.current.applyOptions({height:chartHeight})}catch(_){}
+  },[chartHeight])
 
   // Occupancy chart — barras € (izquierda) + línea % (derecha)
   useEffect(()=>{
@@ -884,6 +897,7 @@ export default function Home() {
   const [mcShowCompound,setMcShowCompound]=useState(true)
   const [mcShowBH,setMcShowBH]=useState(true)
   const [mcShowOccupancy,setMcShowOccupancy]=useState(true)
+  const [mcOccMode,setMcOccMode]=useState('compound')  // own filter for MC capital chart
   const mcChartRef=useRef(null)
   const savedRangeRef=useRef(null)   // preserve zoom when changing asset
   const [metricsStrats,setMetricsStrats]=useState(['simple','compound','bh'])  // which strat panels to show
@@ -1267,7 +1281,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator 2.3</title>
+        <title>Trading Simulator 2.4</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -1323,7 +1337,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator 2.3
+            <span className="dot"/>Trading Simulator 2.4
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -1947,9 +1961,12 @@ export default function Home() {
                     />
                     {/* Drag handle — resize equity chart height */}
                     <div onMouseDown={e=>{equityResizing.current=true;equityStartY.current=e.clientY;equityStartH.current=equityH;document.body.style.cursor='row-resize';document.body.style.userSelect='none'}}
-                      style={{height:5,cursor:'row-resize',background:'transparent',transition:'background 0.15s',borderTop:'1px solid var(--border)'}}
-                      onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.2)'}
-                      onMouseOut={e=>e.currentTarget.style.background='transparent'}/>
+                      style={{height:6,cursor:'row-resize',background:'transparent',transition:'background 0.15s',
+                        borderTop:'2px solid var(--border)',display:'flex',alignItems:'center',justifyContent:'center'}}
+                      onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.15)'}
+                      onMouseOut={e=>e.currentTarget.style.background='transparent'}>
+                      <div style={{width:32,height:2,borderRadius:1,background:'rgba(0,212,255,0.3)'}}/>
+                    </div>
                     {/* Capital invertido — filtro propio independiente */}
                     {result.trades?.length>0&&(
                       <div style={{borderTop:'1px solid var(--border)'}}>
@@ -1983,7 +2000,7 @@ export default function Home() {
                   {/* Barras de resultados — clic navega al trade */}
                   {result.trades?.length>0&&(
                     <div className="equity-section">
-                      <div className="section-title">Resultados por Operación <span style={{fontWeight:400,fontSize:10,color:'var(--text3)'}}>· clic = ir al trade</span></div>
+                      <div className="section-title" style={{fontSize:14}}>Resultados por Operación <span style={{fontWeight:400,fontSize:11,color:'#9acce0'}}>· clic = ir al trade</span></div>
                       <div className="equity-bars">
                         {result.trades.map((t,i)=>{
                           const mx=Math.max(...result.trades.map(x=>Math.abs(x.pnlPct)))
@@ -2138,30 +2155,22 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* Equity chart toggles */}
-                <div style={{padding:'6px 16px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:5,flexWrap:'wrap'}}>
-                  <span style={{fontFamily:MONO,fontSize:10,color:'#b0d4ec',marginRight:3}}>Curvas</span>
-                  {[
-                    {key:'simple',label:'Simple',color:'#00d4ff',state:mcShowSimple,set:setMcShowSimple},
-                    {key:'compound',label:'Compuesto',color:'#00e5a0',state:mcShowCompound,set:setMcShowCompound},
-                    {key:'bh',label:'B&H Diversificado',color:'#ffd166',state:mcShowBH,set:setMcShowBH},
-                    {key:'occ',label:'% Capital inv.',color:'#9b72ff',state:mcShowOccupancy,set:setMcShowOccupancy},
-                  ].map(({key,label,color,state,set})=>(
-                    <button key={key} onClick={()=>set(s=>!s)}
-                      style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',
-                        border:`1px solid ${state?color:'#3d5a7a'}`,background:state?`${color}18`:'transparent',color:state?color:'#3d5a7a'}}>
-                      {label}
-                    </button>
-                  ))}
-                  {mcShowOccupancy&&(mcShowCompound||mcShowSimple)&&(
-                    <span style={{fontFamily:MONO,fontSize:10,color:'#6a8aaa',marginLeft:4}}>
-                      ↳ {mcShowCompound?'€ compuesto':'€ simple'}
-                    </span>
-                  )}
-                </div>
-
-                {/* Equity chart */}
-                <div style={{padding:'0 0 4px 0'}}>
+                {/* ── Equity (same structure as individual) ── */}
+                <div className="equity-section">
+                  <div className="section-title" style={{display:'flex',alignItems:'center',flexWrap:'wrap',gap:6,fontSize:14}}>
+                    <span>Equity</span>
+                    {[
+                      {key:'simple',label:'Simple',color:'#00d4ff',state:mcShowSimple,set:setMcShowSimple},
+                      {key:'compound',label:'Compuesto',color:'#00e5a0',state:mcShowCompound,set:setMcShowCompound},
+                      {key:'bh',label:'B&H Diversificado',color:'#ffd166',state:mcShowBH,set:setMcShowBH},
+                    ].map(({key,label,color,state,set})=>(
+                      <button key={key} onClick={()=>set(s=>!s)}
+                        style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',
+                          border:`1px solid ${state?color:'#3d5a7a'}`,background:state?`${color}18`:'transparent',color:state?color:'#3d5a7a'}}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
                   <MultiCartChart
                     simpleCurve={mcResult.simpleCurve}
                     compoundCurve={mcResult.compoundCurve}
@@ -2172,14 +2181,11 @@ export default function Home() {
                     maxDDCompound={mcResult.maxDDCompound} maxDDCompoundDate={mcResult.maxDDCompoundDate}
                     maxDDBH={mcResult.maxDDBH} maxDDBHDate={mcResult.maxDDBHDate}
                     showSimple={mcShowSimple} showCompound={mcShowCompound}
-                    showBH={mcShowBH}
-                    showOccupancy={mcShowOccupancy&&(mcShowSimple||mcShowCompound)}
-                    occMode={mcShowCompound?'compound':'simple'}
+                    showBH={mcShowBH} showOccupancy={false}
                     onReady={api=>{mcChartApiRef.current=api}}
                     syncRef={chartSyncRef}
                     chartHeight={mcEquityH}
                   />
-                  {/* Drag handle — resize MC equity chart */}
                   <div onMouseDown={e=>{mcEquityResizing.current=true;mcEquityStartY.current=e.clientY;mcEquityStartH.current=mcEquityH;document.body.style.cursor='row-resize';document.body.style.userSelect='none'}}
                     style={{height:6,cursor:'row-resize',background:'transparent',transition:'background 0.15s',
                       borderTop:'2px solid var(--border)',display:'flex',alignItems:'center',justifyContent:'center'}}
@@ -2189,6 +2195,43 @@ export default function Home() {
                   </div>
                 </div>
 
+                {/* ── Capital invertido MC — filtro propio ── */}
+                {mcResult.occupancyCurve?.length>0&&(
+                  <div style={{borderTop:'1px solid var(--border)'}}>
+                    <div style={{padding:'3px 12px',display:'flex',alignItems:'center',gap:6,fontFamily:MONO,fontSize:11}}>
+                      <span style={{color:mcOccMode==='compound'?'#00e5a0':'#00d4ff',fontWeight:600}}>
+                        € Capital {mcOccMode==='compound'?'Compuesto':'Simple'} invertido
+                      </span>
+                      <div style={{display:'flex',gap:3,marginLeft:'auto'}}>
+                        {[{id:'compound',label:'Compuesto',c:'#00e5a0'},{id:'simple',label:'Simple',c:'#00d4ff'}].map(m=>(
+                          <button key={m.id} onClick={()=>setMcOccMode(m.id)}
+                            style={{fontFamily:MONO,fontSize:10,padding:'1px 6px',borderRadius:3,cursor:'pointer',
+                              border:`1px solid ${mcOccMode===m.id?m.c:'#2a3f55'}`,
+                              background:mcOccMode===m.id?`${m.c}18`:'transparent',
+                              color:mcOccMode===m.id?m.c:'#4a6a88'}}>
+                            {m.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <MultiCartChart
+                      simpleCurve={mcResult.simpleCurve}
+                      compoundCurve={mcResult.compoundCurve}
+                      bhCurve={[]}
+                      occupancyCurve={mcResult.occupancyCurve}
+                      capitalIni={Number(capitalIni)}
+                      maxDDSimple={0} maxDDSimpleDate={null}
+                      maxDDCompound={0} maxDDCompoundDate={null}
+                      maxDDBH={0} maxDDBHDate={null}
+                      showSimple={false} showCompound={false}
+                      showBH={false} showOccupancy={true}
+                      occMode={mcOccMode}
+                      onReady={null}
+                      syncRef={chartSyncRef}
+                      chartHeight={120}
+                    />
+                  </div>
+                )}
                 {/* Métricas en grid cuando mcLayout==='grid' */}
                 {mcLayout==='grid'&&(()=>{
                   const lastS=mcResult.simpleCurve.slice(-1)[0]?.value||Number(capitalIni)
@@ -2258,36 +2301,47 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* Barras de resultados multicartera */}
+                {/* Barras de resultados multicartera — same style as individual */}
                 {mcResult.allTrades?.length>0&&(
                   <div className="equity-section">
-                    <div className="section-title">Resultados por Operación</div>
+                    <div className="section-title" style={{fontSize:14}}>
+                      Resultados por Operación <span style={{fontWeight:400,fontSize:11,color:'#9acce0'}}>· clic = ir al trade</span>
+                    </div>
                     <div className="equity-bars">
                       {(()=>{
                         const allT=mcResult.allTrades||[]
                         const mx=Math.max(...allT.map(x=>Math.abs(x.pnlPct)),1)
                         return allT.map((t,i)=>(
                           <div key={i} className="equity-bar"
-                            style={{height:Math.max(4,Math.abs(t.pnlPct)/mx*56),background:t.pnlPct>=0?'var(--green)':'var(--red)',cursor:'default'}}
+                            style={{height:Math.max(4,Math.abs(t.pnlPct)/mx*56),background:t.pnlPct>=0?'var(--green)':'var(--red)',cursor:'pointer'}}
+                            onClick={()=>{
+                              const mcDivRef=document.querySelector('.mc-scroll')
+                              if(mcDivRef)mcDivRef.scrollTo({top:0,behavior:'smooth'})
+                            }}
                             onMouseOver={e=>e.currentTarget.style.opacity='0.7'}
                             onMouseOut={e=>e.currentTarget.style.opacity='1'}
-                            title={`${t.symbol} · ${fmtDate(t.exitDate)}: ${fmt(t.pnlPct,2)}%`}/>
+                            title={`${t.symbol||''} · ${fmtDate(t.exitDate)}: ${fmt(t.pnlPct,2)}%`}/>
                         ))
                       })()}
                     </div>
                   </div>
                 )}
 
-                {/* Historial combinado de operaciones */}
+                {/* Historial combinado — same style as individual */}
                 {mcResult.allTrades?.length>0&&(
-                  <div style={{padding:'12px 16px'}}>
-                    <div style={{fontFamily:MONO,fontSize:11,color:'#8ab8d4',marginBottom:6,letterSpacing:'0.05em',display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:6}}>
-                      <span>HISTORIAL COMBINADO · {mcResult.allTrades.length} operaciones</span>
-                      <div style={{display:'flex',gap:6,alignItems:'center'}}>
-                        <span style={{fontSize:9,color:'var(--text3)'}}>clic activo → ver gráfico</span>
+                  <div className="trades-section">
+                    <div className="section-title" style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',fontSize:14}}>
+                      <span>Historial Multicartera — {mcResult.allTrades.length} operaciones
+                        <span style={{fontWeight:400,fontSize:11,color:'#9acce0'}}> · clic activo → ver gráfico</span>
+                      </span>
+                      <div style={{display:'flex',gap:4,marginLeft:'auto',alignItems:'center'}}>
+                        <input value={mcTradeFilter} onChange={e=>setMcTradeFilter(e.target.value)}
+                          placeholder="Filtrar activo…"
+                          style={{fontFamily:MONO,fontSize:11,padding:'2px 7px',borderRadius:3,
+                            background:'#0d1828',border:'1px solid #274462',color:'#e8f4ff',width:110}}/>
                         {[{id:'compound',label:'Compuesto'},{id:'simple',label:'Simple'}].map(m=>(
                           <button key={m.id} onClick={()=>setMcTradeHistMode(m.id)}
-                            style={{fontFamily:MONO,fontSize:9,padding:'2px 6px',borderRadius:3,cursor:'pointer',
+                            style={{fontFamily:MONO,fontSize:10,padding:'2px 6px',borderRadius:3,cursor:'pointer',
                               border:`1px solid ${mcTradeHistMode===m.id?'var(--accent)':'#2a3f55'}`,
                               background:mcTradeHistMode===m.id?'rgba(0,212,255,0.1)':'transparent',
                               color:mcTradeHistMode===m.id?'var(--accent)':'#4a6a88'}}>
@@ -2296,90 +2350,63 @@ export default function Home() {
                         ))}
                       </div>
                     </div>
-                    {/* Filtro por activo */}
-                    <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:8}}>
-                      <div style={{position:'relative',flex:'0 0 140px'}}>
-                        <input type="text" placeholder="🔍 Filtrar activo..." value={mcTradeFilter}
-                          onChange={e=>setMcTradeFilter(e.target.value.toUpperCase())}
-                          style={{width:'100%',background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',
-                            fontFamily:MONO,fontSize:10,padding:'4px 22px 4px 7px',borderRadius:4,boxSizing:'border-box'}}/>
-                        {mcTradeFilter&&<span onClick={()=>setMcTradeFilter('')}
-                          style={{position:'absolute',right:6,top:'50%',transform:'translateY(-50%)',cursor:'pointer',color:'var(--text3)',fontSize:11}}>✕</span>}
-                      </div>
-                      {mcTradeFilter&&(
-                        <span style={{fontFamily:MONO,fontSize:10,color:'#ffd166'}}>
-                          {mcResult.allTrades.filter(t=>t.symbol.includes(mcTradeFilter)).length} ops
-                        </span>
-                      )}
-                    </div>
                     <div style={{overflowX:'auto'}}>
                       <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:11}}>
-                        <thead>
-                          <tr style={{borderBottom:'1px solid var(--border)',position:'sticky',top:0,background:'var(--bg)'}}>
-                            {['#','Activo','Entrada','Salida','Capital inv.','Capital final','Px Ent.','Px Sal.','P&L %','P&L €','Días','Tipo'].map((h,hi)=>(
-                              <th key={h} style={{padding:'4px 8px',textAlign:'left',color:hi===4?'#9b72ff':hi===5?'#00d4ff':'var(--text3)',fontWeight:400,fontSize:9,whiteSpace:'nowrap'}}>{h}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {[...mcResult.allTrades].filter(t=>!mcTradeFilter||t.symbol.includes(mcTradeFilter)).reverse().map((t,i)=>(
-                            <tr key={i}
-                              style={{borderBottom:'1px solid rgba(255,255,255,0.03)',cursor:'pointer'}}
-                              onClick={()=>{setSimbolo(t.symbol);setSidePanel('config')}}
-                              onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.05)'}
-                              onMouseOut={e=>e.currentTarget.style.background='transparent'}>
-                              <td style={{padding:'4px 8px',color:'var(--text3)',fontSize:9}}>{i+1}</td>
-                              <td style={{padding:'4px 8px',color:'var(--accent)',fontWeight:700}}>{t.symbol}</td>
-                              <td style={{padding:'4px 8px',color:'var(--text)',whiteSpace:'nowrap'}}>{fmtDate(t.entryDate)}</td>
-                              <td style={{padding:'4px 8px',color:'var(--text)',whiteSpace:'nowrap'}}>{fmtDate(t.exitDate)}</td>
-                              <td style={{padding:'4px 8px',whiteSpace:'nowrap'}}>{(()=>{
-                                const capIni2=Number(capitalIni)
-                                const allT2=mcResult.allTrades
-                                const idx=allT2.indexOf(t)
-                                const isC=mcTradeHistMode==='compound'
-                                const capInv=isC?(idx>0?allT2[idx-1].capitalTras:capIni2):capIni2
-                                return <span style={{color:'#e8f4ff',fontWeight:600}}>€{fmt(capInv,0)}</span>
-                              })()}</td>
-                              <td style={{padding:'4px 8px',whiteSpace:'nowrap'}}>{(()=>{
-                                const capIni2=Number(capitalIni)
-                                const allT2=mcResult.allTrades
-                                const idx=allT2.indexOf(t)
-                                const isC=mcTradeHistMode==='compound'
-                                const capFinalS=capIni2+allT2.slice(0,idx+1).reduce((s,x)=>s+x.pnlSimple,0)
-                                const capFinalC=t.capitalTras
-                                const capFinal=isC?capFinalC:capFinalS
-                                let peak=capIni2
-                                for(let pi=0;pi<=idx;pi++){
-                                  const pv=isC?allT2[pi].capitalTras:(capIni2+allT2.slice(0,pi+1).reduce((s,x)=>s+x.pnlSimple,0))
-                                  if(pv>peak)peak=pv
-                                }
-                                return <span style={{color:capFinal>=peak?'#00d4ff':'#ff9a3c',fontWeight:600}}>€{fmt(capFinal,0)}</span>
-                              })()}</td>
-                              <td style={{padding:'4px 8px'}}>{fmt(t.entryPx,2)}</td>
-                              <td style={{padding:'4px 8px'}}>{fmt(t.exitPx,2)}</td>
-                              {(()=>{
-                                const capIni2=Number(capitalIni)
-                                const allT2=mcResult.allTrades
-                                const idx2=allT2.indexOf(t)
-                                const isC2=mcTradeHistMode==='compound'
-                                const capInvC2=idx2>0?allT2[idx2-1].capitalTras:capIni2
-                                const pnlE=isC2?(capInvC2*(t.pnlPct/100)):t.pnlSimple
-                                const pc=pnlE>=0?'#00e5a0':'#ff4d6d'
-                                return(<>
-                                  <td style={{padding:'4px 8px',color:pc,fontWeight:600}}>{t.pnlPct>=0?'+':''}{fmt(t.pnlPct,2)}%</td>
-                                  <td style={{padding:'4px 8px',color:pc}}>{pnlE>=0?'+':''}{fmt(pnlE,2)}€</td>
-                                </>)
-                              })()}
-                              <td style={{padding:'4px 8px',color:'var(--text3)'}}>{t.dias}</td>
-                              <td style={{padding:'4px 8px'}}>
-                                <span style={{fontSize:8,padding:'1px 4px',borderRadius:2,
-                                  background:t.pnlPct>=0?'rgba(0,229,160,0.1)':'rgba(255,77,109,0.1)',
-                                  color:t.pnlPct>=0?'#00e5a0':'#ff4d6d',border:`1px solid ${t.pnlPct>=0?'rgba(0,229,160,0.3)':'rgba(255,77,109,0.3)'}`}}>
-                                  {t.tipo}
-                                </span>
-                              </td>
-                            </tr>
+                        <thead><tr style={{borderBottom:'1px solid var(--border)',position:'sticky',top:0,background:'var(--bg)'}}>
+                          {['#','Activo','Entrada','Salida','Capital inv.','Capital final','P&L %','P&L €','Días','Tipo'].map((h,hi)=>(
+                            <th key={h} style={{padding:'4px 8px',textAlign:'left',
+                              color:hi===4?'#9b72ff':hi===5?'#00d4ff':'#9acce0',
+                              fontWeight:400,fontSize:11,whiteSpace:'nowrap'}}>{h}</th>
                           ))}
+                        </tr></thead>
+                        <tbody>
+                          {(()=>{
+                            const capIni2=Number(capitalIni)
+                            const allT2=(mcTradeFilter
+                              ?mcResult.allTrades.filter(t=>(t.symbol||'').toUpperCase().includes(mcTradeFilter.toUpperCase()))
+                              :mcResult.allTrades)
+                            const fwdS=mcResult.allTrades.map((_,i)=>capIni2+mcResult.allTrades.slice(0,i+1).reduce((s,x)=>s+x.pnlSimple,0))
+                            const fwdC=mcResult.allTrades.map(t=>t.capitalTras)
+                            let pkS=capIni2,pkC=capIni2
+                            const peaksS2=fwdS.map(v=>{pkS=Math.max(pkS,v);return pkS})
+                            const peaksC2=fwdC.map(v=>{pkC=Math.max(pkC,v);return pkC})
+                            return [...allT2].reverse().map((t,i)=>{
+                              const origIdx=mcResult.allTrades.indexOf(t)
+                              const isC=mcTradeHistMode==='compound'
+                              const capInv=isC?(origIdx>0?mcResult.allTrades[origIdx-1].capitalTras:capIni2):capIni2
+                              const capFinalS=fwdS[origIdx],capFinalC=fwdC[origIdx]
+                              const capFinal=isC?capFinalC:capFinalS
+                              const peak=isC?peaksC2[origIdx]:peaksS2[origIdx]
+                              const capFinalColor=capFinal>=peak?'#00d4ff':'#ff9a3c'
+                              const pnlEur=isC?(capInv*(t.pnlPct/100)):t.pnlSimple
+                              const pnlColor=pnlEur>=0?'var(--green)':'var(--red)'
+                              return(
+                                <tr key={i}
+                                  style={{borderBottom:'1px solid rgba(255,255,255,0.03)',cursor:'pointer'}}
+                                  onClick={()=>{setSimbolo(t.symbol);setSidePanel('watchlist')}}
+                                  onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.05)'}
+                                  onMouseOut={e=>e.currentTarget.style.background='transparent'}>
+                                  <td style={{padding:'4px 8px',color:'#7a9bc0',fontSize:11}}>{allT2.length-i}</td>
+                                  <td style={{padding:'4px 8px',color:'var(--accent)',fontWeight:700}}>{t.symbol}</td>
+                                  <td style={{padding:'4px 8px',color:'#d8ecff',whiteSpace:'nowrap'}}>{fmtDate(t.entryDate)}</td>
+                                  <td style={{padding:'4px 8px',color:'#d8ecff',whiteSpace:'nowrap'}}>{fmtDate(t.exitDate)}</td>
+                                  <td style={{padding:'4px 8px',color:'#e8f4ff',fontWeight:600,whiteSpace:'nowrap'}}>€{fmt(capInv,0)}</td>
+                                  <td style={{padding:'4px 8px',color:capFinalColor,fontWeight:600,whiteSpace:'nowrap'}}>€{fmt(capFinal,0)}</td>
+                                  <td style={{padding:'4px 8px',color:pnlColor,fontWeight:600}}>{t.pnlPct>=0?'+':''}{fmt(t.pnlPct,2)}%</td>
+                                  <td style={{padding:'4px 8px',color:pnlColor}}>{pnlEur>=0?'+':''}{fmt(pnlEur,2)}€</td>
+                                  <td style={{padding:'4px 8px',color:'#a8c4dc'}}>{t.dias}</td>
+                                  <td style={{padding:'4px 8px'}}>
+                                    <span style={{fontSize:9,padding:'1px 5px',borderRadius:2,
+                                      background:t.pnlPct>=0?'rgba(0,229,160,0.1)':'rgba(255,77,109,0.1)',
+                                      color:t.pnlPct>=0?'#00e5a0':'#ff4d6d',
+                                      border:`1px solid ${t.pnlPct>=0?'rgba(0,229,160,0.3)':'rgba(255,77,109,0.3)'}`}}>
+                                      {t.tipo}
+                                    </span>
+                                  </td>
+                                </tr>
+                              )
+                            })
+                          })()}
                         </tbody>
                       </table>
                     </div>
