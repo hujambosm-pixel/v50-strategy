@@ -1270,7 +1270,7 @@ export default function Home() {
                         {filtered.length<totalWl&&<span style={{marginLeft:'auto',color:'#ffd166',fontSize:9}}>{totalWl-filtered.length} filtrado{totalWl-filtered.length!==1?'s':''}</span>}
                       </div>
                     )
-                    return <>{countBadge}{all.map(w=>{return (
+                    return (<>{countBadge}{all.map(w=>(
                       <div key={w.id||w.symbol}
                         style={{padding:'6px 10px',display:'flex',alignItems:'center',gap:6,borderBottom:'1px solid var(--border)',background:simbolo===w.symbol?'rgba(0,212,255,0.07)':'transparent'}}
                         onMouseOver={e=>e.currentTarget.style.background='rgba(255,255,255,0.03)'}
@@ -1319,9 +1319,8 @@ export default function Home() {
                         {/* Editar */}
                         <span onClick={e=>{e.stopPropagation();openEditItem(w)}} style={{cursor:'pointer',color:'var(--text3)',fontSize:11,padding:'0 2px',flexShrink:0}} title="Editar">✎</span>
                       </div>
-                    )})}
-                  </>
-                  )
+                    ))}
+                  </>)
                   })()}
                 </div>
 
@@ -1792,9 +1791,8 @@ export default function Home() {
                         <div style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',marginBottom:3}}>{c.label}</div>
                         <div style={{fontFamily:MONO,fontSize:14,color:c.color,fontWeight:700}}>{c.val}</div>
                       </div>
-                    )})}
-                  </>
-                  )
+                    ))}
+                  </>)
                   })()}
                 </div>
 
