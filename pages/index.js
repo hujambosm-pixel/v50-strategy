@@ -1102,18 +1102,19 @@ export default function Home() {
     const fb=m.factorBen>=1?'#00e5a0':'#ff4d6d'
     // Strategy-specific gains
     const cS=m.ganSimple>=0?'#00e5a0':'#ff4d6d', cC=m.ganComp>=0?'#00e5a0':'#ff4d6d', cBH=m.ganBH>=0?'#00e5a0':'#ff4d6d'
+    // B&H = buy & hold, no individual trades → trade-specific stats = null (—)
     return [
-      {label:'Total Operaciones',     compound:v(m.n,'#ffd166'),            bh:v(m.n,'#ffd166'),       simple:v(m.n,'#ffd166')},
-      {label:'Total Días Invertido',  compound:v(m.totalDias,'#00d4ff'),    bh:v(m.totalDias,'#00d4ff'),simple:v(m.totalDias,'#00d4ff')},
-      {label:'Días Promedio',         compound:v(fmt(m.diasProm,1,' días'),'#00d4ff'), bh:null, simple:v(fmt(m.diasProm,1,' días'),'#00d4ff')},
+      {label:'Total Operaciones',     compound:v(m.n,'#ffd166'),            bh:null,                   simple:v(m.n,'#ffd166')},
+      {label:'Total Días Invertido',  compound:v(m.totalDias,'#00d4ff'),    bh:null,                   simple:v(m.totalDias,'#00d4ff')},
+      {label:'Días Promedio',         compound:v(fmt(m.diasProm,1,' días'),'#00d4ff'), bh:null,        simple:v(fmt(m.diasProm,1,' días'),'#00d4ff')},
       {label:`Tiempo Invertido (${fmt(m.aniosInv,2)}a)`, compound:v(fmt(m.tiempoInvPct,0,'%'),'#ffd166'), bh:null, simple:v(fmt(m.tiempoInvPct,0,'%'),'#ffd166')},
-      {label:'Capital inv. medio',    compound:v(fmt(m.tiempoInvPct,1,'%'),'#9b72ff'), bh:null, simple:v(fmt(m.tiempoInvPct,1,'%'),'#9b72ff')},
-      {label:'Ganadoras',             compound:v(m.wins,'#00e5a0'),         bh:v(m.wins,'#00e5a0'),    simple:v(m.wins,'#00e5a0')},
-      {label:'Perdedoras',            compound:v(m.losses,'#ff4d6d'),       bh:v(m.losses,'#ff4d6d'),  simple:v(m.losses,'#ff4d6d')},
-      {label:'Win Rate',              compound:v(fmt(m.winRate,1,'%'),wr),  bh:v(fmt(m.winRate,1,'%'),wr), simple:v(fmt(m.winRate,1,'%'),wr)},
-      {label:'Factor de Beneficio',   compound:v(fmt(m.factorBen,2),fb),   bh:null, simple:v(fmt(m.factorBen,2),fb)},
-      {label:'Ganancia Media (%)',    compound:v(fmt(m.avgWin,2,'%'),'#00e5a0'),  bh:null, simple:v(fmt(m.avgWin,2,'%'),'#00e5a0')},
-      {label:'Pérdida Media (%)',     compound:v(fmt(m.avgLoss,2,'%'),'#ff4d6d'), bh:null, simple:v(fmt(m.avgLoss,2,'%'),'#ff4d6d')},
+      {label:'Capital inv. medio',    compound:v(fmt(m.tiempoInvPct,1,'%'),'#9b72ff'), bh:null,       simple:v(fmt(m.tiempoInvPct,1,'%'),'#9b72ff')},
+      {label:'Ganadoras',             compound:v(m.wins,'#00e5a0'),         bh:null,                   simple:v(m.wins,'#00e5a0')},
+      {label:'Perdedoras',            compound:v(m.losses,'#ff4d6d'),       bh:null,                   simple:v(m.losses,'#ff4d6d')},
+      {label:'Win Rate',              compound:v(fmt(m.winRate,1,'%'),wr),  bh:null,                   simple:v(fmt(m.winRate,1,'%'),wr)},
+      {label:'Factor de Beneficio',   compound:v(fmt(m.factorBen,2),fb),   bh:null,                   simple:v(fmt(m.factorBen,2),fb)},
+      {label:'Ganancia Media (%)',    compound:v(fmt(m.avgWin,2,'%'),'#00e5a0'),  bh:null,            simple:v(fmt(m.avgWin,2,'%'),'#00e5a0')},
+      {label:'Pérdida Media (%)',     compound:v(fmt(m.avgLoss,2,'%'),'#ff4d6d'), bh:null,            simple:v(fmt(m.avgLoss,2,'%'),'#ff4d6d')},
       {label:'Ganancia (€)',          compound:v(fmt(m.ganComp,2,'€'),cC),  bh:v(fmt(m.ganBH,2,'€'),cBH), simple:v(fmt(m.ganSimple,2,'€'),cS)},
       {label:'Ganancia (%)',          compound:v(fmt(m.ganComp/Number(capitalIni)*100,2,'%'),cC), bh:v(fmt(m.ganBH/Number(capitalIni)*100,2,'%'),cBH), simple:v(fmt(m.ganTotalPct,2,'%'),cS)},
       {label:`CAGR (${fmt(m.anios,2)}a)`, compound:v(fmt(m.cagrC,2,'%'),m.cagrC>=0?'#00e5a0':'#ff4d6d'), bh:v(fmt(m.cagrBH,2,'%'),m.cagrBH>=0?'#00e5a0':'#ff4d6d'), simple:v(fmt(m.cagrS,2,'%'),m.cagrS>=0?'#00e5a0':'#ff4d6d')},
@@ -1121,12 +1122,7 @@ export default function Home() {
     ]
   }
 
-  // ── StratSelector — sync with equity chart toggles ──
-  const syncStratToCharts=(strats)=>{
-    setShowCompound(strats.includes('compound'))
-    setShowBH(strats.includes('bh'))
-    setShowStrategy(strats.includes('simple'))
-  }
+  // ── StratSelector — only controls metrics table, independent of charts ──
   const StratSelector=({strats,setStrats})=>(
     <div style={{display:'flex',gap:3,padding:'5px 10px',borderBottom:'1px solid var(--border)',flexWrap:'wrap',alignItems:'center',background:'rgba(0,0,0,0.18)'}}>
       <span style={{fontFamily:MONO,fontSize:10,color:'#7a9bc0',marginRight:3}}>Estrategia:</span>
@@ -1134,7 +1130,6 @@ export default function Home() {
         <button key={s} onClick={()=>{
           const next=strats.includes(s)?strats.length>1?strats.filter(x=>x!==s):strats:[...strats,s]
           setStrats(next)
-          syncStratToCharts(next)
         }}
           style={{fontFamily:MONO,fontSize:10,padding:'2px 8px',borderRadius:3,cursor:'pointer',
             border:`1px solid ${strats.includes(s)?STRAT_META[s].color:'#2a3f55'}`,
@@ -1150,26 +1145,27 @@ export default function Home() {
   const UnifiedMetricsTable=({rows, strats})=>{
     const activeCols=STRAT_ORDER.filter(s=>strats.includes(s))
     if(!rows.length) return null
+    const sepStyle=(si)=>si>0?{borderLeft:'1px solid rgba(26,55,85,0.9)'}:{}
     return(
       <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:11.5}}>
         <thead>
-          <tr style={{background:'rgba(0,0,0,0.25)'}}>
-            <th style={{padding:'5px 10px',textAlign:'left',color:'#5a8aaa',fontSize:10,fontWeight:400,letterSpacing:'0.06em',borderBottom:'1px solid var(--border)'}}>MÉTRICA</th>
-            {activeCols.map(s=>(
-              <th key={s} style={{padding:'5px 10px',textAlign:'right',color:STRAT_META[s].color,fontSize:10,fontWeight:700,letterSpacing:'0.06em',borderBottom:`2px solid ${STRAT_META[s].color}`,background:STRAT_META[s].bg}}>
+          <tr style={{background:'rgba(0,0,0,0.3)'}}>
+            <th style={{padding:'5px 10px',textAlign:'left',color:'#7aaac8',fontSize:10,fontWeight:400,letterSpacing:'0.07em',borderBottom:'1px solid var(--border)',whiteSpace:'nowrap'}}>MÉTRICA</th>
+            {activeCols.map((s,si)=>(
+              <th key={s} style={{padding:'5px 12px',textAlign:'right',color:STRAT_META[s].color,fontSize:10,fontWeight:700,letterSpacing:'0.07em',borderBottom:`2px solid ${STRAT_META[s].color}`,background:STRAT_META[s].bg,...sepStyle(si)}}>
                 {STRAT_META[s].label.toUpperCase()}
               </th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {rows.map(row=>(
-            <tr key={row.label} style={{borderBottom:'1px solid rgba(26,45,69,0.7)'}}>
-              <td style={{padding:'5px 10px',color:'#8ab8d4',fontSize:11,whiteSpace:'nowrap'}}>{row.label}</td>
-              {activeCols.map(s=>{
+          {rows.map((row,ri)=>(
+            <tr key={row.label} style={{borderBottom:'1px solid rgba(20,40,65,0.9)',background:ri%2===0?'transparent':'rgba(255,255,255,0.012)'}}>
+              <td style={{padding:'5px 10px',color:'#9ac8e2',fontSize:11,whiteSpace:'nowrap'}}>{row.label}</td>
+              {activeCols.map((s,si)=>{
                 const cell=row[s]
                 return(
-                  <td key={s} style={{padding:'5px 10px',textAlign:'right',fontWeight:600,color:cell?cell.color:'transparent',fontSize:12}}>
+                  <td key={s} style={{padding:'5px 12px',textAlign:'right',fontWeight:600,color:cell?cell.color:'#2a4a6a',fontSize:12,...sepStyle(si)}}>
                     {cell?cell.val:'—'}
                   </td>
                 )
@@ -1189,53 +1185,55 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator 2.0</title>
+        <title>Trading Simulator 2.1</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
         <style>{`
-          /* ══ GLOBAL LEGIBILITY v3 ══ */
+          /* ══ GLOBAL LEGIBILITY v4 ══ */
           :root {
-            --text:#e8f4ff; --text2:#c8dff5; --text3:#8ec8e4;
+            --text:#eef5ff; --text2:#cce0f8; --text3:#9acce8;
             --bg:#080c14; --bg2:#0a101a; --bg3:#0d1520;
             --border:#1a2d45; --accent:#00d4ff; --green:#00e5a0; --red:#ff4d6d;
           }
           body { font-size:14px; color:#e0eeff; }
-          /* ── Sidebar — todos los textos claramente legibles ── */
+          /* ── Sidebar ── */
           .sidebar { font-size:13px; }
-          .sidebar .sidebar-title { color:#f0f8ff !important; font-weight:700; font-size:12px !important; letter-spacing:0.08em; text-transform:uppercase; padding-bottom:4px; border-bottom:1px solid #1a3050; margin-bottom:6px; }
-          .sidebar label { color:#e4f2ff !important; font-size:13px !important; display:flex; flex-direction:column; gap:4px; font-weight:500; }
+          .sidebar .sidebar-title { color:#f5fbff !important; font-weight:700; font-size:12px !important; letter-spacing:0.08em; text-transform:uppercase; padding-bottom:4px; border-bottom:1px solid #1a3050; margin-bottom:6px; }
+          .sidebar label { color:#ecf5ff !important; font-size:13px !important; display:flex; flex-direction:column; gap:4px; font-weight:500; }
           .sidebar select, .sidebar input[type=text], .sidebar input[type=number] { color:#f5fbff !important; font-size:13px !important; background:#0d1828; border:1px solid #274462; padding:5px 8px; border-radius:4px; width:100%; box-sizing:border-box; }
-          .sidebar .checkbox-row { color:#e4f2ff !important; font-size:13px !important; flex-direction:row !important; align-items:center; gap:8px; }
+          .sidebar .checkbox-row { color:#ecf5ff !important; font-size:13px !important; flex-direction:row !important; align-items:center; gap:8px; }
           .sidebar .sidebar-section { gap:10px; }
           .sidebar-title { margin-bottom:5px; }
-          /* ── Section headers inside sidebar ── */
-          .sidebar [style*="font-size:9"] { font-size:11px !important; color:#9dd0eb !important; }
-          .sidebar [style*="font-size:10"] { font-size:12px !important; }
-          .sidebar [style*="color:'var(--text3)'"] { color:#9dd0eb !important; }
-          /* ── Section titles (main content) ── */
-          .section-title { font-size:13px !important; color:#d8eeff !important; letter-spacing:0.04em; font-weight:600; }
+          /* ── Section titles ── */
+          .section-title { font-size:13px !important; color:#dceeff !important; letter-spacing:0.04em; font-weight:600; }
           /* ── Metrics panel ── */
-          .metric-label { font-size:12px !important; color:#c8e0f4 !important; }
+          .metric-label { font-size:12px !important; color:#cce0f5 !important; }
           .metric-val { font-size:14px !important; font-weight:700; }
           /* ── Trade tables ── */
-          .trades-table th { font-size:12px !important; color:#b8d8f0 !important; font-weight:600; padding:7px 10px !important; background:#0a111c; }
-          .trades-table td { font-size:12px !important; color:#e0eeff !important; padding:6px 10px !important; }
+          .trades-table th { font-size:12px !important; color:#c0dcf0 !important; font-weight:600; padding:7px 10px !important; background:#0a111c; }
+          .trades-table td { font-size:12.5px !important; color:#e8f2ff !important; padding:6px 10px !important; }
           .trades-table .tag { font-size:10px !important; padding:2px 6px !important; }
-          /* ── Watchlist ── */
-          .sidebar .wl-sym { font-size:13px !important; color:#f0f8ff !important; font-weight:600; }
-          .sidebar .wl-name { font-size:11px !important; color:#8ec8e4 !important; }
+          /* ── Watchlist — symbol name clearly readable ── */
+          .sidebar .wl-sym { font-size:13px !important; color:#f5fbff !important; font-weight:600; }
+          .sidebar .wl-name { font-size:12px !important; color:#a8d4ec !important; font-weight:400; }
           /* ── MC sidebar ── */
-          .sidebar .mc-sym { font-size:13px !important; color:#f0f8ff !important; font-weight:600; }
-          .sidebar .mc-name { font-size:11px !important; color:#8ec8e4 !important; }
-          /* ── Header ── */
-          .header-logo { font-size:14px !important; color:#f0f8ff !important; font-weight:600; }
+          .sidebar .mc-sym { font-size:13px !important; color:#f5fbff !important; font-weight:600; }
+          .sidebar .mc-name { font-size:12px !important; color:#a8d4ec !important; }
+          /* ── Header SP500 bar — numbers clearly visible ── */
+          .header-logo { font-size:14px !important; color:#f5fbff !important; font-weight:600; }
+          .header-sp500-label { font-size:12px !important; color:#a8d4ec !important; }
+          .header-sp500-val   { font-size:13px !important; color:#f0f8ff !important; font-weight:600; }
+          .header-sp500-ema   { font-size:12px !important; color:#ffd166 !important; font-weight:600; }
+          .header-sp500-date  { font-size:11px !important; color:#90c4de !important; }
           .status-badge { font-size:11px !important; }
+          /* ── Alarm badge numbers ── */
+          .alarm-badge { font-size:11px !important; color:#f5fbff !important; font-weight:700; }
           /* ── Equity section ── */
           .equity-section .section-title { margin-bottom:4px; }
-          /* ── Generic small text override ── */
-          .sidebar div[style*="font-size:9px"] { font-size:11px !important; color:#9dd0eb !important; }
-          .sidebar div[style*="font-size:10px"] { font-size:12px !important; }
+          /* ── Sidebar group/tab labels ── */
+          .sidebar-tab { font-size:11px !important; color:#a8c8e0; }
+          .sidebar-group-header { font-size:11px !important; color:#b0d0e8 !important; }
         `}</style>
       </Head>
       <div className="app">
@@ -1243,7 +1241,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator 2.0
+            <span className="dot"/>Trading Simulator 2.1
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -1254,13 +1252,13 @@ export default function Home() {
               borderLeft:'1px solid var(--border)',borderRight:'1px solid var(--border)',
               fontFamily:MONO,fontSize:11,flexShrink:0
             }}>
-              <span style={{color:'var(--text3)'}}>SP500</span>
-              <span style={{color:'var(--text)',fontWeight:600}}>{fmt(sp5.precio,2)}</span>
-              <span style={{color:'var(--text3)'}}>EMA{sp500EmaR}</span>
-              <span style={{color:'#ffd166'}}>{fmt(sp5.emaR,2)}</span>
-              <span style={{color:'var(--text3)'}}>EMA{sp500EmaL}</span>
-              <span style={{color:'#ffd166'}}>{fmt(sp5.emaL,2)}</span>
-              <span style={{color:'var(--text3)',fontSize:10}}>{fmtDate(sp5.date)}</span>
+              <span className="header-sp500-label">SP500</span>
+              <span className="header-sp500-val">{fmt(sp5.precio,2)}</span>
+              <span className="header-sp500-label">EMA{sp500EmaR}</span>
+              <span className="header-sp500-ema">{fmt(sp5.emaR,2)}</span>
+              <span className="header-sp500-label">EMA{sp500EmaL}</span>
+              <span className="header-sp500-ema">{fmt(sp5.emaL,2)}</span>
+              <span className="header-sp500-date">{fmtDate(sp5.date)}</span>
               <span className={`status-badge ${spStatus}`} style={{fontSize:10,padding:'1px 6px'}}>{spTxt}</span>
             </div>
           )}
@@ -1820,20 +1818,13 @@ export default function Home() {
                     <div className="section-title" style={{display:'flex',alignItems:'center',flexWrap:'wrap',gap:6}}>
                       <span>Equity</span>
                       {[
-                        {key:'st',label:'Simple',color:'#00d4ff',state:showStrategy,set:setShowStrategy,strat:'simple'},
-                        {key:'co',label:'Compuesta',color:'#00e5a0',state:showCompound,set:setShowCompound,strat:'compound'},
-                        {key:'bh',label:'B&H Activo',color:'#ffd166',state:showBH,set:setShowBH,strat:'bh'},
-                        {key:'sp',label:'B&H SP500',color:'#9b72ff',state:showSP500,set:setShowSP500,strat:null},
-                      ].map(({key,label,color,state,set,strat})=>(
-                        <button key={key} onClick={()=>{
-                          const next=!state; set(next)
-                          if(strat){
-                            const updated=next
-                              ?[...new Set([...metricsStrats,strat])]
-                              :metricsStrats.length>1?metricsStrats.filter(x=>x!==strat):metricsStrats
-                            setMetricsStrats(updated)
-                          }
-                        }} style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',border:`1px solid ${state?color:'#3d5a7a'}`,background:state?`${color}18`:'transparent',color:state?color:'#3d5a7a'}}>
+                        {key:'st',label:'Simple',color:'#00d4ff',state:showStrategy,set:setShowStrategy},
+                        {key:'co',label:'Compuesta',color:'#00e5a0',state:showCompound,set:setShowCompound},
+                        {key:'bh',label:'B&H Activo',color:'#ffd166',state:showBH,set:setShowBH},
+                        {key:'sp',label:'B&H SP500',color:'#9b72ff',state:showSP500,set:setShowSP500},
+                      ].map(({key,label,color,state,set})=>(
+                        <button key={key} onClick={()=>set(s=>!s)}
+                          style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',border:`1px solid ${state?color:'#3d5a7a'}`,background:state?`${color}18`:'transparent',color:state?color:'#3d5a7a'}}>
                           {label}
                         </button>
                       ))}
@@ -1937,21 +1928,23 @@ export default function Home() {
                                 const capInv=isCompound?capInvC:capInvS
                                 const capFinal=isCompound?capFinalC:capFinalS
                                 const peak=isCompound?peaksC[idx]:peaksS[idx]
-                                // DD color: orange if in drawdown (below previous peak)
                                 const prevPeak=idx>0?(isCompound?peaksC[idx-1]:peaksS[idx-1]):capIni
-                                const capInvColor=capInv>=prevPeak?'#00d4ff':'#ff9a3c'
+                                // Capital final: blue=at-peak, orange=in-drawdown
                                 const capFinalColor=capFinal>=peak?'#00d4ff':'#ff9a3c'
+                                // P&L € in compound mode = actual money earned on compounded capital
+                                const pnlEur=isCompound?(capInvC*(t.pnlPct/100)):t.pnlSimple
+                                const pnlColor=pnlEur>=0?'var(--green)':'var(--red)'
                                 return(
                                   <tr key={i} onClick={()=>navigateToTrade(t)} style={{cursor:'pointer'}}
                                     onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.06)'}
                                     onMouseOut={e=>e.currentTarget.style.background='transparent'}>
                                     <td style={{color:'var(--text3)'}}>{result.trades.length-i}</td>
                                     <td>{fmtDate(t.entryDate)}</td><td>{fmtDate(t.exitDate)}</td>
-                                    <td style={{color:capInvColor,fontWeight:600}}>€{fmt(capInv,0)}</td>
+                                    <td style={{color:'#e8f4ff',fontWeight:600}}>€{fmt(capInv,0)}</td>
                                     <td style={{color:capFinalColor,fontWeight:600}}>€{fmt(capFinal,0)}</td>
                                     <td>{fmt(t.entryPx,2)}</td><td>{fmt(t.exitPx,2)}</td>
-                                    <td style={{color:t.pnlPct>=0?'var(--green)':'var(--red)',fontWeight:600}}>{t.pnlPct>=0?'+':''}{fmt(t.pnlPct,2)}%</td>
-                                    <td style={{color:t.pnlSimple>=0?'var(--green)':'var(--red)'}}>{t.pnlSimple>=0?'+':''}{fmt(t.pnlSimple,2)}€</td>
+                                    <td style={{color:pnlColor,fontWeight:600}}>{t.pnlPct>=0?'+':''}{fmt(t.pnlPct,2)}%</td>
+                                    <td style={{color:pnlColor}}>{pnlEur>=0?'+':''}{fmt(pnlEur,2)}€</td>
                                     <td>{t.dias}</td>
                                     <td><span className={`tag ${t.pnlPct>=0?'win':'loss'}`}>{t.tipo}</span></td>
                                   </tr>
@@ -2229,16 +2222,8 @@ export default function Home() {
                                 const allT2=mcResult.allTrades
                                 const idx=allT2.indexOf(t)
                                 const isC=mcTradeHistMode==='compound'
-                                const capInvC=idx>0?allT2[idx-1].capitalTras:capIni2
-                                const capInvS=capIni2
-                                const capInv=isC?capInvC:capInvS
-                                // Determine if in drawdown (compare to running peak up to prev trade)
-                                let prevPeak=capIni2
-                                for(let pi=0;pi<idx;pi++){
-                                  const pv=isC?allT2[pi].capitalTras:(capIni2+allT2.slice(0,pi+1).reduce((s,x)=>s+x.pnlSimple,0))
-                                  if(pv>prevPeak)prevPeak=pv
-                                }
-                                return <span style={{color:capInv>=prevPeak?'#00d4ff':'#ff9a3c',fontWeight:600}}>€{fmt(capInv,0)}</span>
+                                const capInv=isC?(idx>0?allT2[idx-1].capitalTras:capIni2):capIni2
+                                return <span style={{color:'#e8f4ff',fontWeight:600}}>€{fmt(capInv,0)}</span>
                               })()}</td>
                               <td style={{padding:'4px 8px',whiteSpace:'nowrap'}}>{(()=>{
                                 const capIni2=Number(capitalIni)
@@ -2248,7 +2233,6 @@ export default function Home() {
                                 const capFinalS=capIni2+allT2.slice(0,idx+1).reduce((s,x)=>s+x.pnlSimple,0)
                                 const capFinalC=t.capitalTras
                                 const capFinal=isC?capFinalC:capFinalS
-                                // Peak up to and including this trade
                                 let peak=capIni2
                                 for(let pi=0;pi<=idx;pi++){
                                   const pv=isC?allT2[pi].capitalTras:(capIni2+allT2.slice(0,pi+1).reduce((s,x)=>s+x.pnlSimple,0))
@@ -2258,8 +2242,19 @@ export default function Home() {
                               })()}</td>
                               <td style={{padding:'4px 8px'}}>{fmt(t.entryPx,2)}</td>
                               <td style={{padding:'4px 8px'}}>{fmt(t.exitPx,2)}</td>
-                              <td style={{padding:'4px 8px',color:t.pnlPct>=0?'#00e5a0':'#ff4d6d',fontWeight:600}}>{t.pnlPct>=0?'+':''}{fmt(t.pnlPct,2)}%</td>
-                              <td style={{padding:'4px 8px',color:t.pnlSimple>=0?'#00e5a0':'#ff4d6d'}}>{t.pnlSimple>=0?'+':''}{fmt(t.pnlSimple,2)}€</td>
+                              {(()=>{
+                                const capIni2=Number(capitalIni)
+                                const allT2=mcResult.allTrades
+                                const idx2=allT2.indexOf(t)
+                                const isC2=mcTradeHistMode==='compound'
+                                const capInvC2=idx2>0?allT2[idx2-1].capitalTras:capIni2
+                                const pnlE=isC2?(capInvC2*(t.pnlPct/100)):t.pnlSimple
+                                const pc=pnlE>=0?'#00e5a0':'#ff4d6d'
+                                return(<>
+                                  <td style={{padding:'4px 8px',color:pc,fontWeight:600}}>{t.pnlPct>=0?'+':''}{fmt(t.pnlPct,2)}%</td>
+                                  <td style={{padding:'4px 8px',color:pc}}>{pnlE>=0?'+':''}{fmt(pnlE,2)}€</td>
+                                </>)
+                              })()}
                               <td style={{padding:'4px 8px',color:'var(--text3)'}}>{t.dias}</td>
                               <td style={{padding:'4px 8px'}}>
                                 <span style={{fontSize:8,padding:'1px 4px',borderRadius:2,
@@ -2313,14 +2308,14 @@ export default function Home() {
                   const cC2=lastC>=capIni?'#00e5a0':'#ff4d6d'
                   const cBH2=lastBH>=capIni?'#00e5a0':'#ff4d6d'
                   const mcRows=[
-                    {label:'Total Operaciones',     compound:v2(allT.length,'#ffd166'),  bh:v2(allT.length,'#ffd166'), simple:v2(allT.length,'#ffd166')},
-                    {label:'Total Días Invertido',  compound:v2(totalDias,'#00d4ff'),    bh:v2(totalDias,'#00d4ff'),   simple:v2(totalDias,'#00d4ff')},
-                    {label:'Días Promedio',         compound:v2(fmt(diasProm,1,' días'),'#00d4ff'), bh:null,         simple:v2(fmt(diasProm,1,' días'),'#00d4ff')},
+                    {label:'Total Operaciones',     compound:v2(allT.length,'#ffd166'),  bh:null, simple:v2(allT.length,'#ffd166')},
+                    {label:'Total Días Invertido',  compound:v2(totalDias,'#00d4ff'),    bh:null, simple:v2(totalDias,'#00d4ff')},
+                    {label:'Días Promedio',         compound:v2(fmt(diasProm,1,' días'),'#00d4ff'), bh:null, simple:v2(fmt(diasProm,1,' días'),'#00d4ff')},
                     {label:`Tiempo Invertido (${fmt(aniosInv,2)}a)`, compound:v2(fmt(tiempoInvPct,0,'%'),'#ffd166'), bh:null, simple:v2(fmt(tiempoInvPct,0,'%'),'#ffd166')},
                     {label:'Capital inv. medio',    compound:v2(fmt(mcResult.avgOccupancy,1,'%'),'#9b72ff'), bh:null, simple:v2(fmt(mcResult.avgOccupancy,1,'%'),'#9b72ff')},
-                    {label:'Ganadoras',             compound:v2(wins.length,'#00e5a0'), bh:v2(wins.length,'#00e5a0'), simple:v2(wins.length,'#00e5a0')},
-                    {label:'Perdedoras',            compound:v2(losses.length,'#ff4d6d'), bh:v2(losses.length,'#ff4d6d'), simple:v2(losses.length,'#ff4d6d')},
-                    {label:'Win Rate',              compound:v2(fmt(winRate,1,'%'),wr2), bh:v2(fmt(winRate,1,'%'),wr2), simple:v2(fmt(winRate,1,'%'),wr2)},
+                    {label:'Ganadoras',             compound:v2(wins.length,'#00e5a0'), bh:null, simple:v2(wins.length,'#00e5a0')},
+                    {label:'Perdedoras',            compound:v2(losses.length,'#ff4d6d'), bh:null, simple:v2(losses.length,'#ff4d6d')},
+                    {label:'Win Rate',              compound:v2(fmt(winRate,1,'%'),wr2), bh:null, simple:v2(fmt(winRate,1,'%'),wr2)},
                     {label:'Factor de Beneficio',   compound:v2(fmt(factorBen,2),fb2), bh:null, simple:v2(fmt(factorBen,2),fb2)},
                     {label:'Ganancia Media (%)',    compound:v2(fmt(avgWin,2,'%'),'#00e5a0'), bh:null, simple:v2(fmt(avgWin,2,'%'),'#00e5a0')},
                     {label:'Pérdida Media (%)',     compound:v2(fmt(avgLoss,2,'%'),'#ff4d6d'), bh:null, simple:v2(fmt(avgLoss,2,'%'),'#ff4d6d')},
