@@ -156,7 +156,7 @@ function lookupName(sym) {
 }
 
 // ── CandleChart ───────────────────────────────────────────────
-function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady }) {
+function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, syncRef }) {
   const containerRef=useRef(null), svgRef=useRef(null), legendRef=useRef(null), tooltipRef=useRef(null)
   const chartRef=useRef(null), candlesRef=useRef(null)
   const rulerStart=useRef(null), rulerActiveR=useRef(rulerActive)
@@ -439,6 +439,23 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
         }
       } catch(_){ chart.timeScale().fitContent() }
 
+      // ── Cross-chart time sync ──
+      if(syncRef?.current){
+        const syncId=Symbol()
+        const unsub=chart.timeScale().subscribeVisibleTimeRangeChange(range=>{
+          if(!range||syncRef.current.syncing) return
+          syncRef.current.syncing=true
+          syncRef.current.listeners.forEach(fn=>{if(fn.id!==syncId)try{fn.handler(range)}catch(_){}})
+          syncRef.current.syncing=false
+        })
+        const handler=(range)=>{try{chart.timeScale().setVisibleRange(range)}catch(_){}}
+        syncRef.current.listeners.push({id:syncId,handler})
+        chart.__syncCleanup=()=>{
+          try{unsub()}catch(_){}
+          if(syncRef.current) syncRef.current.listeners=syncRef.current.listeners.filter(e=>e.id!==syncId)
+        }
+      }
+
       // Exponer navigateTo + fitAll
       if(onChartReady) onChartReady({
         navigateTo:(entryDate,exitDate)=>{
@@ -461,7 +478,7 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
 
       return()=>{cnt.removeEventListener('mousemove',onMove);cnt.removeEventListener('click',onClick);cnt.removeEventListener('dblclick',onDbl);window.removeEventListener('keydown',onKeyDown);window.removeEventListener('keyup',onKeyUp);ro.disconnect()}
     })
-    return()=>{if(chartRef.current){chartRef.current.remove();chartRef.current=null}}
+    return()=>{if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null}}
   },[data,emaRPeriod,emaLPeriod,trades,maxDD,labelMode])
 
   return (
@@ -479,7 +496,7 @@ function EquityChart({
   strategyCurve,bhCurve,sp500BHCurve,compoundCurve,
   maxDDStrategy,maxDDBH,maxDDSP500,maxDDCompound,
   maxDDStrategyDate,maxDDBHDate,maxDDSP500Date,maxDDCompoundDate,
-  capitalIni,showStrategy,showBH,showSP500,showCompound
+  capitalIni,showStrategy,showBH,showSP500,showCompound,syncRef
 }) {
   const ref=useRef(null),chartRef=useRef(null)
   useEffect(()=>{
@@ -525,12 +542,25 @@ function EquityChart({
       if(showCompound) addDD(compoundCurve,maxDDCompoundDate,maxDDCompound,'#00a870','DD Comp.')
       if(showBH)       addDD(bhCurve,maxDDBHDate,maxDDBH,'#ff9a3c','DD B&H')
       if(showSP500)    addDD(sp500BHCurve,maxDDSP500Date,maxDDSP500,'#7b5fe0','DD SP500')
+      // ── Cross-chart time sync ──
+      if(syncRef?.current){
+        const syncId=Symbol()
+        const unsub=chart.timeScale().subscribeVisibleTimeRangeChange(range=>{
+          if(!range||syncRef.current.syncing) return
+          syncRef.current.syncing=true
+          syncRef.current.listeners.forEach(fn=>{if(fn.id!==syncId)try{fn.handler(range)}catch(_){}})
+          syncRef.current.syncing=false
+        })
+        const handler=(range)=>{try{chart.timeScale().setVisibleRange(range)}catch(_){}}
+        syncRef.current.listeners.push({id:syncId,handler})
+        chart.__syncCleanup=()=>{try{unsub()}catch(_){};if(syncRef.current) syncRef.current.listeners=syncRef.current.listeners.filter(e=>e.id!==syncId)}
+      }
       chart.timeScale().fitContent()
       const ro=new ResizeObserver(()=>{if(ref.current)chart.applyOptions({width:ref.current.clientWidth})})
       ro.observe(ref.current)
       return()=>ro.disconnect()
     })
-    return()=>{if(chartRef.current){chartRef.current.remove();chartRef.current=null}}
+    return()=>{if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null}}
   },[strategyCurve,bhCurve,sp500BHCurve,compoundCurve,maxDDStrategy,maxDDBH,maxDDSP500,maxDDCompound,maxDDStrategyDate,maxDDBHDate,maxDDSP500Date,maxDDCompoundDate,capitalIni,showStrategy,showBH,showSP500,showCompound])
   return <div ref={ref} style={{minHeight:260}}/>
 }
@@ -538,7 +568,7 @@ function EquityChart({
 // ── MultiCartChart ───────────────────────────────────────────
 function MultiCartChart({simpleCurve,compoundCurve,bhCurve,occupancyCurve,capitalIni,
   maxDDSimple,maxDDSimpleDate,maxDDCompound,maxDDCompoundDate,maxDDBH,maxDDBHDate,
-  showSimple,showCompound,showBH,showOccupancy,onReady}) {
+  showSimple,showCompound,showBH,showOccupancy,onReady,syncRef}) {
   const ref=useRef(null),chartRef=useRef(null),ref2=useRef(null),chart2Ref=useRef(null)
 
   useEffect(()=>{
@@ -573,6 +603,19 @@ function MultiCartChart({simpleCurve,compoundCurve,bhCurve,occupancyCurve,capita
       if(showSimple) addDD(simpleCurve,maxDDSimpleDate,maxDDSimple,'#ff4d6d')
       if(showCompound) addDD(compoundCurve,maxDDCompoundDate,maxDDCompound,'#00a870')
       if(showBH) addDD(bhCurve,maxDDBHDate,maxDDBH,'#ff9a3c')
+      // Cross-chart sync
+      if(syncRef?.current){
+        const syncId=Symbol()
+        const unsub=chart.timeScale().subscribeVisibleTimeRangeChange(range=>{
+          if(!range||syncRef.current.syncing) return
+          syncRef.current.syncing=true
+          syncRef.current.listeners.forEach(fn=>{if(fn.id!==syncId)try{fn.handler(range)}catch(_){}})
+          syncRef.current.syncing=false
+        })
+        const handler=(range)=>{try{chart.timeScale().setVisibleRange(range)}catch(_){}}
+        syncRef.current.listeners.push({id:syncId,handler})
+        chart.__syncCleanup=()=>{try{unsub()}catch(_){};if(syncRef.current)syncRef.current.listeners=syncRef.current.listeners.filter(e=>e.id!==syncId)}
+      }
       chart.timeScale().fitContent()
       if(onReady) onReady({fitAll:()=>{try{chart.timeScale().fitContent()}catch(_){}}})
       const ro=new ResizeObserver(()=>{if(ref.current)chart.applyOptions({width:ref.current.clientWidth})})
@@ -684,6 +727,16 @@ export default function Home() {
   // Búsqueda async de nombre
   const symSearchRef=useRef(null)
   const [mcTradeFilter,setMcTradeFilter]=useState('')
+  const [tradeHistMode,setTradeHistMode]=useState('compound')   // 'compound'|'simple' for trade history capital column
+  const [mcTradeHistMode,setMcTradeHistMode]=useState('compound')
+  const chartSyncRef=useRef({syncing:false,listeners:[]})  // cross-chart time sync
+
+  // Reset sync listeners when symbol/result changes to prevent stale refs
+  const prevSymboloRef=useRef(null)
+  if(simbolo!==prevSymboloRef.current){
+    chartSyncRef.current={syncing:false,listeners:[]}
+    prevSymboloRef.current=simbolo
+  }
   const [mcLayout,setMcLayout]=useState('panel')  // 'panel' | 'grid'
   // ── Resizable panels ────────────────────────────────────────
   const [sidebarW,setSidebarW]=useState(240)
@@ -962,30 +1015,30 @@ export default function Home() {
 
   const metricRows=metrics?[
     {label:'Total Operaciones',val:metrics.n,color:'#ffd166'},
+    {label:'Total Días Invertido',val:metrics.totalDias,color:'#00d4ff'},
+    {label:'Días Promedio',val:fmt(metrics.diasProm,1,' días'),color:'#00d4ff'},
     {label:`Tiempo Invertido (${fmt(metrics.aniosInv,2)}a)`,val:fmt(metrics.tiempoInvPct,0,'%'),color:'#ffd166'},
     {label:'Capital inv. medio',val:fmt(metrics.tiempoInvPct,1,'%'),color:'#9b72ff'},
     {label:'Ganadoras',val:metrics.wins,color:'#00e5a0'},
     {label:'Perdedoras',val:metrics.losses,color:'#ff4d6d'},
     {label:'Win Rate',val:fmt(metrics.winRate,1,'%'),color:metrics.winRate>=50?'#00e5a0':'#ff4d6d'},
+    {label:'Factor de Beneficio',val:fmt(metrics.factorBen,2),color:metrics.factorBen>=1?'#00e5a0':'#ff4d6d'},
     {label:'Ganancia Media (%)',val:fmt(metrics.avgWin,2,'%'),color:'#00e5a0'},
     {label:'Pérdida Media (%)',val:fmt(metrics.avgLoss,2,'%'),color:'#ff4d6d'},
-    {label:'Días Promedio',val:fmt(metrics.diasProm,1,' días'),color:'#00d4ff'},
-    {label:'Total Días Invertido',val:metrics.totalDias,color:'#00d4ff'},
     {label:'Ganancia Simple (€)',val:fmt(metrics.ganSimple,2,'€'),color:metrics.ganSimple>=0?'#00e5a0':'#ff4d6d'},
-    {label:'Ganancia Compuesta (€)',val:fmt(metrics.ganComp,2,'€'),color:metrics.ganComp>=0?'#00e5a0':'#ff4d6d'},
-    {label:'Ganancia Buy&Hold (€)',val:fmt(metrics.ganBH,2,'€'),color:metrics.ganBH>=0?'#00e5a0':'#ff4d6d'},
     {label:'Ganancia Total (%)',val:fmt(metrics.ganTotalPct,2,'%'),color:metrics.ganTotalPct>=0?'#00e5a0':'#ff4d6d'},
-    {label:'Factor de Beneficio',val:fmt(metrics.factorBen,2),color:metrics.factorBen>=1?'#00e5a0':'#ff4d6d'},
     {label:`CAGR Estrategia (${fmt(metrics.anios,2)}a)`,val:fmt(metrics.cagrS,2,'%'),color:metrics.cagrS>=0?'#00e5a0':'#ff4d6d'},
     {label:'Max Drawdown (%)',val:fmt(metrics.ddSimple,2,'%'),color:'#ff4d6d'},
-    {label:`CAGR Buy&Hold (${fmt(metrics.anios,2)}a)`,val:fmt(metrics.cagrBH,2,'%'),color:metrics.cagrBH>=0?'#00e5a0':'#ff4d6d'},
-    {label:'Max Drawdown Buy&Hold (%)',val:fmt(result?.maxDDBH,2,'%'),color:'#ff4d6d'},
+    {label:'Ganancia Compuesta (€)',val:fmt(metrics.ganComp,2,'€'),color:metrics.ganComp>=0?'#00e5a0':'#ff4d6d'},
     {label:`CAGR Compuesto (${fmt(metrics.anios,2)}a)`,val:fmt(metrics.cagrC,2,'%'),color:metrics.cagrC>=0?'#00e5a0':'#ff4d6d'},
     {label:'Max DD Compuesto (%)',val:fmt(metrics.ddComp,2,'%'),color:'#ff4d6d'},
+    {label:'Ganancia Buy&Hold (€)',val:fmt(metrics.ganBH,2,'€'),color:metrics.ganBH>=0?'#00e5a0':'#ff4d6d'},
+    {label:`CAGR Buy&Hold (${fmt(metrics.anios,2)}a)`,val:fmt(metrics.cagrBH,2,'%'),color:metrics.cagrBH>=0?'#00e5a0':'#ff4d6d'},
+    {label:'Max Drawdown Buy&Hold (%)',val:fmt(result?.maxDDBH,2,'%'),color:'#ff4d6d'},
   ]:[]
 
   const MetricsTable=()=>(
-    <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:12}}>
+    <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:12.5}}>
       <tbody>{metricRows.map(m=>(
         <tr key={m.label} style={{borderBottom:'1px solid var(--border)'}}>
           <td style={{padding:'6px 10px',color:'#a8c4dc',fontSize:11}}>{m.label}</td>
@@ -1001,18 +1054,27 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator 1.9</title>
+        <title>Trading Simulator 2.0</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
         <style>{`
-          .sidebar .sidebar-title { color: #c8dff5 !important; font-weight: 700; font-size:12px; letter-spacing:0.06em; }
-          .sidebar label { color: #d8ecff !important; font-size: 12px; }
-          .sidebar select, .sidebar input[type=text], .sidebar input[type=number] { color: #f0f8ff !important; font-size:12px; }
-          .sidebar .checkbox-row { color: #d8ecff !important; font-size:12px; }
+          /* ── Sidebar text upgrades ── */
+          .sidebar .sidebar-title { color: #cde5ff !important; font-weight: 700; font-size:11px; letter-spacing:0.08em; text-transform:uppercase; }
+          .sidebar label { color: #d8ecff !important; font-size: 12px; display:flex; flex-direction:column; gap:3px; }
+          .sidebar select, .sidebar input[type=text], .sidebar input[type=number] { color: #f0f8ff !important; font-size:12px; background:var(--bg3); border:1px solid #1e3448; }
+          .sidebar .checkbox-row { color: #d8ecff !important; font-size:12px; flex-direction:row !important; align-items:center; gap:6px; }
           .sidebar .sidebar-section { gap: 8px; }
-          .sidebar select { background: var(--bg3); }
           .sidebar-title { margin-bottom: 4px; }
+          /* ── Global readability ── */
+          .section-title { font-size:12px !important; color:#a8c8e8 !important; letter-spacing:0.05em; }
+          .metric-label { font-size:11px !important; color:#b0cce0 !important; }
+          .metric-val { font-size:13px !important; }
+          .trades-table th { font-size:10px !important; color:#8ab8d4 !important; font-weight:500; }
+          .trades-table td { font-size:11px !important; color:#d0e8fa; }
+          .trades-table .tag { font-size:9px !important; }
+          /* ── Watchlist items ── */
+          .sidebar .wl-name { font-size:10px; color:#8ab8d4; }
         `}</style>
       </Head>
       <div className="app">
@@ -1020,7 +1082,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator 1.9
+            <span className="dot"/>Trading Simulator 2.0
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -1076,10 +1138,10 @@ export default function Home() {
               <svg width="12" height="12" viewBox="0 0 24 24" fill="#00d4ff"><path d="M3 3h7v2H5v14h14v-5h2v7H3V3zm11 0h7v7h-2V6.41l-9.29 9.3-1.42-1.42L17.59 5H14V3z"/></svg>
               TradingView
             </button>}
-            {result&&metrics&&<button onClick={()=>setMetricsLayout(l=>l==='grid'?'panel':'grid')} style={{background:'rgba(13,21,32,0.9)',border:'1px solid #1a2d45',color:'#7a9bc0',fontFamily:MONO,fontSize:11,padding:'3px 9px',borderRadius:4,cursor:'pointer'}}>
+            {result&&metrics&&sidePanel!=='multi'&&<button onClick={()=>setMetricsLayout(l=>l==='grid'?'panel':'grid')} style={{background:'rgba(13,21,32,0.9)',border:'1px solid #1a2d45',color:'#7a9bc0',fontFamily:MONO,fontSize:11,padding:'3px 9px',borderRadius:4,cursor:'pointer'}}>
               {metricsLayout==='grid'?'⊞ Panel':'⊟ Grid'}
             </button>}
-            <div style={{fontFamily:MONO,fontSize:10,color:'var(--text3)'}}>Stooq · diario</div>
+            <div style={{fontFamily:MONO,fontSize:11,color:'#5a7a95'}}>Stooq · diario</div>
           </div>
         </header>
 
@@ -1164,7 +1226,7 @@ export default function Home() {
                   <label>Filtro<select value={tipoFiltro} onChange={e=>setTipoFiltro(e.target.value)}><option value="none">Sin filtro</option><option value="precio_ema">Precio sobre EMA rápida</option><option value="ema_ema">EMA rápida sobre EMA lenta</option></select></label>
                   {tipoFiltro!=='none'&&<div className="row2"><label>EMA R<input type="number" value={sp500EmaR} min={1} onChange={e=>setSp500EmaR(e.target.value)}/></label><label>EMA L<input type="number" value={sp500EmaL} min={1} onChange={e=>setSp500EmaL(e.target.value)}/></label></div>}
                 </div>
-                {loading&&<div style={{fontFamily:MONO,fontSize:11,color:'var(--accent)',textAlign:'center'}}>⟳ Actualizando...</div>}
+                {loading&&<div style={{fontFamily:MONO,fontSize:12,color:'var(--accent)',textAlign:'center',fontWeight:600}}>⟳ Actualizando...</div>}
                 {error&&<div style={{fontFamily:MONO,fontSize:11,color:'#ff4d6d',padding:'6px 0'}}>⚠ {error}</div>}
               </div>
             )}
@@ -1462,7 +1524,7 @@ export default function Home() {
 
                 {/* Modo de asignación */}
                 <div style={{padding:'10px 12px',borderBottom:'1px solid var(--border)'}}>
-                  <div style={{fontFamily:MONO,fontSize:9,color:'#a8c8e8',marginBottom:6,letterSpacing:'0.05em'}}>MODO DE ASIGNACIÓN</div>
+                  <div style={{fontFamily:MONO,fontSize:10,color:'#c8dff5',marginBottom:6,letterSpacing:'0.05em',fontWeight:600}}>MODO DE ASIGNACIÓN</div>
                   {[
                     {id:'slots',label:'Slots iguales',desc:'Capital dividido en N partes fijas',ready:true},
                     {id:'rotativo',label:'Capital rotativo',desc:'Próximamente',ready:false},
@@ -1476,35 +1538,19 @@ export default function Home() {
                       <div style={{width:14,height:14,borderRadius:'50%',border:`2px solid ${mcMode===m.id?'var(--accent)':'#3d5a7a'}`,
                         background:mcMode===m.id?'var(--accent)':'transparent',flexShrink:0,marginTop:1}}/>
                       <div>
-                        <div style={{fontFamily:MONO,fontSize:11,color:mcMode===m.id?'var(--accent)':'#c0d8f0',fontWeight:600}}>
+                        <div style={{fontFamily:MONO,fontSize:12,color:mcMode===m.id?'var(--accent)':'#c8dff5',fontWeight:600}}>
                           {m.label}{!m.ready&&<span style={{fontSize:8,color:'#ffd166',marginLeft:5,verticalAlign:'middle'}}>⏳</span>}
                         </div>
-                        <div style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',marginTop:1}}>{m.desc}</div>
+                        <div style={{fontFamily:MONO,fontSize:10,color:'#6a8caa',marginTop:1}}>{m.desc}</div>
                       </div>
                     </div>
                   ))}
                 </div>
 
-                {/* Tipo de capital */}
-                <div style={{padding:'10px 12px',borderBottom:'1px solid var(--border)'}}>
-                  <div style={{fontFamily:MONO,fontSize:9,color:'#a8c8e8',marginBottom:6,letterSpacing:'0.05em'}}>TIPO DE CAPITAL</div>
-                  <div style={{display:'flex',gap:6}}>
-                    {[{id:'compound',label:'Compuesto'},{id:'simple',label:'Simple'}].map(t=>(
-                      <button key={t.id} onClick={()=>setMcCapital(t.id)}
-                        style={{flex:1,fontFamily:MONO,fontSize:10,padding:'5px 4px',borderRadius:4,cursor:'pointer',
-                          border:`1px solid ${mcCapital===t.id?'var(--accent)':'var(--border)'}`,
-                          background:mcCapital===t.id?'rgba(0,212,255,0.1)':'transparent',
-                          color:mcCapital===t.id?'var(--accent)':'#8aadcc'}}>
-                        {t.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
                 {/* Selector de activos */}
                 <div style={{padding:'10px 12px',borderBottom:'1px solid var(--border)',flex:1,overflowY:'auto',minHeight:0}}>
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
-                    <div style={{fontFamily:MONO,fontSize:9,color:'#a8c8e8',letterSpacing:'0.05em'}}>ACTIVOS ({mcSelected.length} sel.)</div>
+                    <div style={{fontFamily:MONO,fontSize:11,color:'#cde5ff',letterSpacing:'0.05em',fontWeight:700}}>ACTIVOS ({mcSelected.length} sel.)</div>
                     <div style={{display:'flex',gap:4}}>
                       <button onClick={()=>setMcSelected(watchlist.map(w=>w.symbol))}
                         style={{fontFamily:MONO,fontSize:8,padding:'2px 5px',borderRadius:3,border:'1px solid var(--border)',background:'transparent',color:'var(--text3)',cursor:'pointer'}}>
@@ -1531,7 +1577,7 @@ export default function Home() {
                           {sel&&<span style={{color:'#000',fontSize:9,lineHeight:1,fontWeight:900}}>✓</span>}
                         </div>
                         <div style={{flex:1,minWidth:0}}>
-                          <div style={{fontFamily:MONO,fontSize:11,color:sel?'var(--accent)':'#c0d8f0',fontWeight:600}}>{w.symbol}</div>
+                          <div style={{fontFamily:MONO,fontSize:12,color:sel?'var(--accent)':'#d0e8fa',fontWeight:600}}>{w.symbol}</div>
                           <div style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{w.name}</div>
                         </div>
                         {w.favorite&&<span style={{color:'#ffd166',fontSize:10}}>★</span>}
@@ -1594,6 +1640,7 @@ export default function Home() {
                       trades={result.trades||[]} maxDD={metrics?.ddSimple||0}
                       labelMode={labelMode} rulerActive={rulerOn}
                       onChartReady={api=>{chartApiRef.current=api}}
+                      syncRef={chartSyncRef}
                     />
                     {/* Leyenda mínima bajo el gráfico — ELIMINADA según instrucciones */}
                   </div>
@@ -1641,6 +1688,7 @@ export default function Home() {
                       capitalIni={Number(capitalIni)}
                       showStrategy={showStrategy} showBH={showBH}
                       showSP500={showSP500} showCompound={showCompound}
+                      syncRef={chartSyncRef}
                     />
                   </div>
 
@@ -1664,7 +1712,20 @@ export default function Home() {
                   {/* Historial — clic fila navega al trade */}
                   {result.trades?.length>0&&(
                     <div className="trades-section">
-                      <div className="section-title">Historial — {result.trades.length} operaciones <span style={{fontWeight:400,fontSize:10,color:'var(--text3)'}}>· clic fila = ir al trade</span></div>
+                      <div className="section-title" style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+                        <span>Historial — {result.trades.length} operaciones <span style={{fontWeight:400,fontSize:10,color:'var(--text3)'}}>· clic fila = ir al trade</span></span>
+                        <div style={{display:'flex',gap:4,marginLeft:'auto'}}>
+                          {[{id:'compound',label:'Compuesto'},{id:'simple',label:'Simple'}].map(m=>(
+                            <button key={m.id} onClick={()=>setTradeHistMode(m.id)}
+                              style={{fontFamily:MONO,fontSize:9,padding:'2px 6px',borderRadius:3,cursor:'pointer',
+                                border:`1px solid ${tradeHistMode===m.id?'var(--accent)':'#2a3f55'}`,
+                                background:tradeHistMode===m.id?'rgba(0,212,255,0.1)':'transparent',
+                                color:tradeHistMode===m.id?'var(--accent)':'#4a6a88'}}>
+                              {m.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                       <div style={{overflowX:'auto'}}>
                         <table className="trades-table" style={{fontFamily:MONO}}>
                           <thead><tr><th>#</th><th>Entrada</th><th>Salida</th><th style={{color:'#9b72ff'}}>Capital inv.</th><th>Px Entrada</th><th>Px Salida</th><th>P&L %</th><th>P&L €</th><th>Días</th><th>Tipo</th></tr></thead>
@@ -1675,7 +1736,11 @@ export default function Home() {
                                 onMouseOut={e=>e.currentTarget.style.background='transparent'}>
                                 <td style={{color:'var(--text3)'}}>{result.trades.length-i}</td>
                                 <td>{fmtDate(t.entryDate)}</td><td>{fmtDate(t.exitDate)}</td>
-                                <td style={{color:'#9b72ff',fontWeight:600}}>€{fmt(t.capitalTras-t.pnlSimple,0)}</td>
+                                <td style={{color:'#9b72ff',fontWeight:600}}>
+                                  {tradeHistMode==='compound'
+                                    ? `€${fmt(t.capitalTras,0)}`
+                                    : `€${fmt(Number(capitalIni)+result.trades.slice(0,result.trades.indexOf(t)+1).reduce((s,x)=>s+x.pnlSimple,0),0)}`}
+                                </td>
                                 <td>{fmt(t.entryPx,2)}</td><td>{fmt(t.exitPx,2)}</td>
                                 <td style={{color:t.pnlPct>=0?'var(--green)':'var(--red)',fontWeight:600}}>{t.pnlPct>=0?'+':''}{fmt(t.pnlPct,2)}%</td>
                                 <td style={{color:t.pnlSimple>=0?'var(--green)':'var(--red)'}}>{t.pnlSimple>=0?'+':''}{fmt(t.pnlSimple,2)}€</td>
@@ -1724,9 +1789,9 @@ export default function Home() {
               <div style={{flex:1,overflowY:'auto',padding:'0 0 20px 0'}}>
                 {/* Header resumen */}
                 <div style={{padding:'7px 16px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
-                  <span style={{fontFamily:MONO,fontSize:12,color:'var(--accent)',fontWeight:700}}>📊 Multicartera</span>
-                  <span style={{fontFamily:MONO,fontSize:11,color:'var(--text3)'}}>{mcResult.n} activos · {fmt(mcResult.slotCapital,0,'€')}/slot</span>
-                  <span style={{fontFamily:MONO,fontSize:10,color:'var(--text3)'}}>Desde {fmtDate(mcResult.startDate)}</span>
+                  <span style={{fontFamily:MONO,fontSize:13,color:'var(--accent)',fontWeight:700}}>📊 Multicartera</span>
+                  <span style={{fontFamily:MONO,fontSize:11,color:'#8ab8d4'}}>{mcResult.n} activos · {fmt(mcResult.slotCapital,0,'€')}/slot</span>
+                  <span style={{fontFamily:MONO,fontSize:11,color:'#8ab8d4'}}>Desde {fmtDate(mcResult.startDate)}</span>
                   <div style={{marginLeft:'auto',display:'flex',gap:6,alignItems:'center'}}>
                     <button onClick={()=>mcChartApiRef.current?.fitAll()}
                       style={{fontFamily:MONO,fontSize:10,padding:'3px 8px',borderRadius:3,cursor:'pointer',border:'1px solid #1a2d45',background:'rgba(0,212,255,0.07)',color:'#7a9bc0'}}
@@ -1740,7 +1805,7 @@ export default function Home() {
 
                 {/* Equity chart toggles */}
                 <div style={{padding:'6px 16px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:5,flexWrap:'wrap'}}>
-                  <span style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',marginRight:3}}>Curvas</span>
+                  <span style={{fontFamily:MONO,fontSize:10,color:'#8ab8d4',marginRight:3}}>Curvas</span>
                   {[
                     {key:'simple',label:'Simple',color:'#00d4ff',state:mcShowSimple,set:setMcShowSimple},
                     {key:'compound',label:'Compuesto',color:'#00e5a0',state:mcShowCompound,set:setMcShowCompound},
@@ -1769,6 +1834,7 @@ export default function Home() {
                     showSimple={mcShowSimple} showCompound={mcShowCompound}
                     showBH={mcShowBH} showOccupancy={mcShowOccupancy}
                     onReady={api=>{mcChartApiRef.current=api}}
+                    syncRef={chartSyncRef}
                   />
                 </div>
 
@@ -1873,13 +1939,42 @@ export default function Home() {
                   </div>
                 </div>
 
+                {/* Barras de resultados multicartera */}
+                {mcResult.allTrades?.length>0&&(
+                  <div className="equity-section">
+                    <div className="section-title">Resultados por Operación</div>
+                    <div className="equity-bars">
+                      {(()=>{
+                        const allT=mcResult.allTrades||[]
+                        const mx=Math.max(...allT.map(x=>Math.abs(x.pnlPct)),1)
+                        return allT.map((t,i)=>(
+                          <div key={i} className="equity-bar"
+                            style={{height:Math.max(4,Math.abs(t.pnlPct)/mx*56),background:t.pnlPct>=0?'var(--green)':'var(--red)',cursor:'default'}}
+                            onMouseOver={e=>e.currentTarget.style.opacity='0.7'}
+                            onMouseOut={e=>e.currentTarget.style.opacity='1'}
+                            title={`${t.symbol} · ${fmtDate(t.exitDate)}: ${fmt(t.pnlPct,2)}%`}/>
+                        ))
+                      })()}
+                    </div>
+                  </div>
+                )}
+
                 {/* Historial combinado de operaciones */}
                 {mcResult.allTrades?.length>0&&(
                   <div style={{padding:'12px 16px'}}>
-                    <div style={{fontFamily:MONO,fontSize:10,color:'var(--text3)',marginBottom:6,letterSpacing:'0.05em',display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:6}}>
+                    <div style={{fontFamily:MONO,fontSize:11,color:'#8ab8d4',marginBottom:6,letterSpacing:'0.05em',display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:6}}>
                       <span>HISTORIAL COMBINADO · {mcResult.allTrades.length} operaciones</span>
                       <div style={{display:'flex',gap:6,alignItems:'center'}}>
                         <span style={{fontSize:9,color:'var(--text3)'}}>clic activo → ver gráfico</span>
+                        {[{id:'compound',label:'Compuesto'},{id:'simple',label:'Simple'}].map(m=>(
+                          <button key={m.id} onClick={()=>setMcTradeHistMode(m.id)}
+                            style={{fontFamily:MONO,fontSize:9,padding:'2px 6px',borderRadius:3,cursor:'pointer',
+                              border:`1px solid ${mcTradeHistMode===m.id?'var(--accent)':'#2a3f55'}`,
+                              background:mcTradeHistMode===m.id?'rgba(0,212,255,0.1)':'transparent',
+                              color:mcTradeHistMode===m.id?'var(--accent)':'#4a6a88'}}>
+                            {m.label}
+                          </button>
+                        ))}
                       </div>
                     </div>
                     {/* Filtro por activo */}
@@ -1918,7 +2013,11 @@ export default function Home() {
                               <td style={{padding:'4px 8px',color:'var(--accent)',fontWeight:700}}>{t.symbol}</td>
                               <td style={{padding:'4px 8px',color:'var(--text)',whiteSpace:'nowrap'}}>{fmtDate(t.entryDate)}</td>
                               <td style={{padding:'4px 8px',color:'var(--text)',whiteSpace:'nowrap'}}>{fmtDate(t.exitDate)}</td>
-                              <td style={{padding:'4px 8px',color:'#9b72ff',fontWeight:600,whiteSpace:'nowrap'}}>€{fmt(t.capitalTras-t.pnlSimple,0)}</td>
+                              <td style={{padding:'4px 8px',color:'#9b72ff',fontWeight:600,whiteSpace:'nowrap'}}>
+                                {mcTradeHistMode==='compound'
+                                  ? `€${fmt(t.capitalTras,0)}`
+                                  : `€${fmt(Number(capitalIni)+mcResult.allTrades.slice(0,mcResult.allTrades.indexOf(t)+1).reduce((s,x)=>s+x.pnlSimple,0),0)}`}
+                              </td>
                               <td style={{padding:'4px 8px'}}>{fmt(t.entryPx,2)}</td>
                               <td style={{padding:'4px 8px'}}>{fmt(t.exitPx,2)}</td>
                               <td style={{padding:'4px 8px',color:t.pnlPct>=0?'#00e5a0':'#ff4d6d',fontWeight:600}}>{t.pnlPct>=0?'+':''}{fmt(t.pnlPct,2)}%</td>
@@ -1946,7 +2045,7 @@ export default function Home() {
                   style={{position:'absolute',top:0,left:0,width:4,height:'100%',cursor:'col-resize',zIndex:20,background:'transparent'}}
                   onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.25)'}
                   onMouseOut={e=>e.currentTarget.style.background='transparent'}/>
-                <div style={{padding:'7px 12px',borderBottom:'1px solid var(--border)',fontFamily:MONO,fontSize:9,color:'var(--text3)',letterSpacing:'0.1em'}}>RESUMEN MULTICARTERA</div>
+                <div style={{padding:'7px 12px',borderBottom:'1px solid var(--border)',fontFamily:MONO,fontSize:10,color:'#8ab8d4',letterSpacing:'0.1em',fontWeight:600}}>RESUMEN MULTICARTERA</div>
                 {(()=>{
                   const lastS=mcResult.simpleCurve.slice(-1)[0]?.value||Number(capitalIni)
                   const lastC=mcResult.compoundCurve.slice(-1)[0]?.value||Number(capitalIni)
@@ -1971,26 +2070,26 @@ export default function Home() {
                   const diasProm=allT.length?totalDias/allT.length:0
                   const rows=[
                     {label:'Total Operaciones',val:allT.length,color:'#ffd166'},
+                    {label:'Total Días Invertido',val:totalDias,color:'#00d4ff'},
+                    {label:'Días Promedio',val:fmt(diasProm,1,' días'),color:'#00d4ff'},
                     {label:`Tiempo Invertido (${fmt(aniosInv,2)}a)`,val:fmt(tiempoInvPct,0,'%'),color:'#ffd166'},
                     {label:'Capital inv. medio',val:fmt(mcResult.avgOccupancy,1,'%'),color:'#9b72ff'},
                     {label:'Ganadoras',val:wins.length,color:'#00e5a0'},
                     {label:'Perdedoras',val:losses.length,color:'#ff4d6d'},
                     {label:'Win Rate',val:fmt(winRate,1,'%'),color:winRate>=50?'#00e5a0':'#ff4d6d'},
+                    {label:'Factor de Beneficio',val:fmt(factorBen,2),color:factorBen>=1?'#00e5a0':'#ff4d6d'},
                     {label:'Ganancia Media (%)',val:fmt(avgWin,2,'%'),color:'#00e5a0'},
                     {label:'Pérdida Media (%)',val:fmt(avgLoss,2,'%'),color:'#ff4d6d'},
-                    {label:'Días Promedio',val:fmt(diasProm,1,' días'),color:'#00d4ff'},
-                    {label:'Total Días Invertido',val:totalDias,color:'#00d4ff'},
                     {label:'Ganancia Simple (€)',val:fmt(lastS-capIni,2,'€'),color:lastS>=capIni?'#00e5a0':'#ff4d6d'},
-                    {label:'Ganancia Compuesta (€)',val:fmt(lastC-capIni,2,'€'),color:lastC>=capIni?'#00e5a0':'#ff4d6d'},
-                    {label:'Ganancia B&H Divers. (€)',val:fmt(lastBH-capIni,2,'€'),color:lastBH>=capIni?'#00e5a0':'#ff4d6d'},
                     {label:'Ganancia Total (%)',val:fmt((lastS-capIni)/capIni*100,2,'%'),color:lastS>=capIni?'#00e5a0':'#ff4d6d'},
-                    {label:'Factor de Beneficio',val:fmt(factorBen,2),color:factorBen>=1?'#00e5a0':'#ff4d6d'},
                     {label:`CAGR Simple (${fmt(anios,2)}a)`,val:fmt(cagrS,2,'%'),color:cagrS>=0?'#00e5a0':'#ff4d6d'},
                     {label:'Max Drawdown (%)',val:fmt(mcResult.maxDDSimple,2,'%'),color:'#ff4d6d'},
-                    {label:`CAGR B&H (${fmt(anios,2)}a)`,val:fmt(cagrBH,2,'%'),color:cagrBH>=0?'#00e5a0':'#ff4d6d'},
-                    {label:'Max Drawdown B&H (%)',val:fmt(mcResult.maxDDBH,2,'%'),color:'#ff4d6d'},
+                    {label:'Ganancia Compuesta (€)',val:fmt(lastC-capIni,2,'€'),color:lastC>=capIni?'#00e5a0':'#ff4d6d'},
                     {label:`CAGR Compuesto (${fmt(anios,2)}a)`,val:fmt(cagrC,2,'%'),color:cagrC>=0?'#00e5a0':'#ff4d6d'},
                     {label:'Max DD Compuesto (%)',val:fmt(mcResult.maxDDCompound,2,'%'),color:'#ff4d6d'},
+                    {label:'Ganancia B&H Divers. (€)',val:fmt(lastBH-capIni,2,'€'),color:lastBH>=capIni?'#00e5a0':'#ff4d6d'},
+                    {label:`CAGR B&H (${fmt(anios,2)}a)`,val:fmt(cagrBH,2,'%'),color:cagrBH>=0?'#00e5a0':'#ff4d6d'},
+                    {label:'Max Drawdown B&H (%)',val:fmt(mcResult.maxDDBH,2,'%'),color:'#ff4d6d'},
                   ]
                   return(
                     <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:12}}>
