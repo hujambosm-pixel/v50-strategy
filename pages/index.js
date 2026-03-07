@@ -576,7 +576,7 @@ function EquityChart({
 // ── MultiCartChart ───────────────────────────────────────────
 function MultiCartChart({simpleCurve,compoundCurve,bhCurve,occupancyCurve,capitalIni,
   maxDDSimple,maxDDSimpleDate,maxDDCompound,maxDDCompoundDate,maxDDBH,maxDDBHDate,
-  showSimple,showCompound,showBH,showOccupancy,onReady,syncRef}) {
+  showSimple,showCompound,showBH,showOccupancy,occMode='compound',onReady,syncRef}) {
   const ref=useRef(null),chartRef=useRef(null),ref2=useRef(null),chart2Ref=useRef(null)
 
   useEffect(()=>{
@@ -656,7 +656,13 @@ function MultiCartChart({simpleCurve,compoundCurve,bhCurve,occupancyCurve,capita
         lastValueVisible:true,
         priceLineVisible:false,
       })
-      bars.setData(occupancyCurve.map(p=>({time:p.date,value:(p.value/100)*capitalIni,color:p.value>=75?'rgba(0,229,160,0.45)':p.value>=40?'rgba(155,114,255,0.45)':'rgba(255,209,102,0.35)'})))
+      const occBaseColor=occMode==='compound'?'#00e5a0':'#00d4ff'
+      bars.setData(occupancyCurve.map(p=>{
+        const v=(p.value/100)*(occMode==='compound'?(compoundCurve?.slice(-1)[0]?.value||capitalIni):capitalIni)
+        const alpha=p.value>=75?0.5:p.value>=40?0.35:0.2
+        const col=occMode==='compound'?`rgba(0,229,160,${alpha})`:`rgba(0,212,255,${alpha})`
+        return{time:p.date,value:v,color:col}
+      }))
       // Línea: % (escala derecha)
       const line=chart.addLineSeries({
         color:'#9b72ff',lineWidth:1,
@@ -684,7 +690,7 @@ function MultiCartChart({simpleCurve,compoundCurve,bhCurve,occupancyCurve,capita
       return()=>ro.disconnect()
     })
     return()=>{if(chart2Ref.current){try{chart2Ref.current.__syncCleanup?.()}catch(_){};chart2Ref.current.remove();chart2Ref.current=null}}
-  },[occupancyCurve,showOccupancy,capitalIni,syncRef])
+  },[occupancyCurve,showOccupancy,capitalIni,syncRef,occMode,compoundCurve])
 
   return(
     <div>
@@ -706,10 +712,11 @@ function MultiCartChart({simpleCurve,compoundCurve,bhCurve,occupancyCurve,capita
 }
 
 // ── OccupancyBarChart — individual asset in/out position ────
-function OccupancyBarChart({trades, chartData, capitalIni, syncRef}) {
+// showMode: 'compound'|'simple'|'none' — controlled by equity curve toggles
+function OccupancyBarChart({trades, chartData, capitalIni, syncRef, showMode='compound'}) {
   const ref=useRef(null), chartRef=useRef(null)
   useEffect(()=>{
-    if(!ref.current||!trades?.length||!chartData?.length) return
+    if(!ref.current||!trades?.length||!chartData?.length||showMode==='none') return
     import('lightweight-charts').then(({createChart,CrosshairMode})=>{
       if(chartRef.current){chartRef.current.__syncCleanup?.();chartRef.current.remove();chartRef.current=null}
       const chart=createChart(ref.current,{
@@ -721,14 +728,32 @@ function OccupancyBarChart({trades, chartData, capitalIni, syncRef}) {
         timeScale:{borderColor:'#1a2d45',timeVisible:false},
       })
       chartRef.current=chart
+      // Build capital-at-date map for compound mode
+      const capMap={}
+      if(showMode==='compound'){
+        let cap=capitalIni
+        trades.forEach(t=>{cap=t.capitalTras;capMap[t.exitDate]=cap})
+      }
+      // Bar series: height = capital when in position, 0 when out
       const bars=chart.addHistogramSeries({
-        color:'rgba(155,114,255,0.4)',
+        color:'rgba(0,229,160,0.4)',
         priceFormat:{type:'price',precision:0,minMove:1},
         lastValueVisible:false,priceLineVisible:false,
       })
+      let lastCap=capitalIni
       bars.setData(chartData.map(d=>{
         const inPos=trades.some(t=>d.date>=t.entryDate&&d.date<=t.exitDate)
-        return{time:d.date,value:inPos?100:0,color:inPos?'rgba(0,229,160,0.35)':'rgba(255,255,255,0.04)'}
+        if(showMode==='compound'){
+          // Track capital up to this date
+          const t=trades.filter(x=>x.exitDate<=d.date)
+          if(t.length) lastCap=t[t.length-1].capitalTras
+        } else {
+          lastCap=capitalIni
+        }
+        const col=inPos
+          ?(showMode==='compound'?'rgba(0,229,160,0.45)':'rgba(0,212,255,0.45)')
+          :'rgba(255,255,255,0.03)'
+        return{time:d.date,value:inPos?lastCap:0,color:col}
       }))
       if(syncRef?.current){
         const syncId=Symbol()
@@ -748,7 +773,8 @@ function OccupancyBarChart({trades, chartData, capitalIni, syncRef}) {
       return()=>ro.disconnect()
     })
     return()=>{if(chartRef.current){chartRef.current.__syncCleanup?.();chartRef.current.remove();chartRef.current=null}}
-  },[trades,chartData])
+  },[trades,chartData,showMode,capitalIni])
+  if(showMode==='none') return null
   return <div ref={ref} style={{minHeight:80}}/>
 }
 
@@ -1185,7 +1211,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator 2.1</title>
+        <title>Trading Simulator 2.2</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -1241,7 +1267,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator 2.1
+            <span className="dot"/>Trading Simulator 2.2
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -1321,7 +1347,7 @@ export default function Home() {
                   border:'none',
                   borderBottom:sidePanel===tab.id?'2px solid var(--accent)':'2px solid transparent',
                   color:sidePanel===tab.id?'var(--accent)':'var(--text3)',
-                  fontFamily:MONO,fontSize:13,cursor:'pointer'
+                  fontFamily:MONO,fontSize:14,cursor:'pointer'
                 }}>
                   {tab.label}
                 </button>
@@ -1336,11 +1362,11 @@ export default function Home() {
                     <span>Estrategia</span>
                     <div style={{display:'flex',gap:4}}>
                       <button onClick={newStrategy} title="Nueva estrategia" style={{background:'rgba(0,212,255,0.1)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:11,padding:'1px 6px',borderRadius:3,cursor:'pointer'}}>+</button>
-                      <button onClick={()=>strategies.length>0&&openEditStr(strategies.find(s=>s.name===strForm._loadedName)||strategies[0])} title="Gestionar estrategias" style={{background:'transparent',border:'1px solid var(--border)',color:'var(--text3)',fontFamily:MONO,fontSize:11,padding:'1px 6px',borderRadius:3,cursor:'pointer'}}>✎</button>
+                      <button onClick={()=>strategies.length>0&&openEditStr(strategies.find(s=>s.name===strForm._loadedName)||strategies[0])} title="Gestionar estrategias" style={{background:'transparent',border:'1px solid var(--border)',color:'#a8ccdf',fontFamily:MONO,fontSize:11,padding:'1px 6px',borderRadius:3,cursor:'pointer'}}>✎</button>
                     </div>
                   </div>
                   {strLoading
-                    ? <div style={{fontFamily:MONO,fontSize:10,color:'var(--text3)'}}>⟳ Cargando…</div>
+                    ? <div style={{fontFamily:MONO,fontSize:12,color:'#a8ccdf'}}>⟳ Cargando…</div>
                     : <label>
                         <select
                           value={strForm._loadedName||''}
@@ -1397,12 +1423,12 @@ export default function Home() {
                   {/* Buscador compacto */}
                   <div style={{position:'relative',flex:'0 0 90px'}}>
                     <input type="text" placeholder="🔍" value={wlSearch} onChange={e=>setWlSearch(e.target.value)}
-                      style={{width:'100%',background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:10,padding:'4px 20px 4px 7px',borderRadius:4,boxSizing:'border-box'}}/>
-                    {wlSearch&&<span onClick={()=>setWlSearch('')} style={{position:'absolute',right:5,top:'50%',transform:'translateY(-50%)',cursor:'pointer',color:'var(--text3)',fontSize:11}}>✕</span>}
+                      style={{width:'100%',background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'4px 20px 4px 7px',borderRadius:4,boxSizing:'border-box'}}/>
+                    {wlSearch&&<span onClick={()=>setWlSearch('')} style={{position:'absolute',right:5,top:'50%',transform:'translateY(-50%)',cursor:'pointer',color:'#a8ccdf',fontSize:11}}>✕</span>}
                   </div>
                   {/* Selector de lista */}
                   <div style={{position:'relative',flex:1,minWidth:0}}>
-                    <button onClick={()=>{setListDropOpen(o=>!o);setAlarmDropOpen(false)}} style={{width:'100%',background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:9,padding:'4px 6px',borderRadius:3,cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'center',overflow:'hidden'}}>
+                    <button onClick={()=>{setListDropOpen(o=>!o);setAlarmDropOpen(false)}} style={{width:'100%',background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'4px 6px',borderRadius:3,cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'center',overflow:'hidden'}}>
                       <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{selectedLists.length===0?'Lista: Todas':selectedLists[0]}</span>
                       <span style={{flexShrink:0,marginLeft:2}}>{listDropOpen?'▲':'▼'}</span>
                     </button>
@@ -1410,12 +1436,12 @@ export default function Home() {
                       const allLists=[...new Set(watchlist.map(w=>w.list_name||'General').filter(Boolean))]
                       return(
                         <div style={{position:'absolute',top:'100%',left:0,right:0,background:'var(--bg3)',border:'1px solid var(--border)',borderRadius:3,zIndex:60,boxShadow:'0 4px 16px rgba(0,0,0,0.7)',minWidth:120}}>
-                          <div onClick={()=>{setSelectedLists([]);setWlSearch('');setListDropOpen(false)}} style={{padding:'6px 10px',fontFamily:MONO,fontSize:10,cursor:'pointer',color:selectedLists.length===0?'var(--accent)':'var(--text)',borderBottom:'1px solid var(--border)'}}>
+                          <div onClick={()=>{setSelectedLists([]);setWlSearch('');setListDropOpen(false)}} style={{padding:'6px 10px',fontFamily:MONO,fontSize:12,cursor:'pointer',color:selectedLists.length===0?'var(--accent)':'var(--text)',borderBottom:'1px solid var(--border)'}}>
                             Todas las listas
                           </div>
                           {allLists.map(l=>(
                             <div key={l} onClick={()=>{setSelectedLists([l]);setWlSearch('');setListDropOpen(false)}}
-                              style={{padding:'6px 10px',fontFamily:MONO,fontSize:10,cursor:'pointer',display:'flex',alignItems:'center',gap:6,color:'var(--text)'}}>
+                              style={{padding:'6px 10px',fontFamily:MONO,fontSize:12,cursor:'pointer',display:'flex',alignItems:'center',gap:6,color:'var(--text)'}}>
                               <span style={{color:selectedLists.includes(l)?'var(--accent)':'var(--text3)',fontSize:11}}>{selectedLists.includes(l)?'●':'○'}</span>{l}
                             </div>
                           ))}
@@ -1429,12 +1455,12 @@ export default function Home() {
                     ★
                   </button>
 
-                  <button onClick={()=>{setWlSearch('');setSelectedLists([]);setOnlyFavs(false);setSelectedAlarmIds([])}} title="Limpiar todos los filtros" style={{background:'rgba(255,77,109,0.08)',border:'1px solid #ff4d6d',color:'#ff4d6d',fontFamily:MONO,fontSize:9,padding:'3px 7px',borderRadius:3,cursor:'pointer',flexShrink:0}}>✕</button>
+                  <button onClick={()=>{setWlSearch('');setSelectedLists([]);setOnlyFavs(false);setSelectedAlarmIds([])}} title="Limpiar todos los filtros" style={{background:'rgba(255,77,109,0.08)',border:'1px solid #ff4d6d',color:'#ff4d6d',fontFamily:MONO,fontSize:11,padding:'3px 7px',borderRadius:3,cursor:'pointer',flexShrink:0}}>✕</button>
                 </div>
                 {/* ══ Fila 2: filtro alarmas (chips inline, ancho completo) ══ */}
                 {alarms.length>0&&(
                   <div style={{padding:'4px 8px 5px',borderBottom:'1px solid var(--border)',flexShrink:0,display:'flex',gap:4,alignItems:'center',flexWrap:'wrap'}}>
-                    <span style={{fontFamily:MONO,fontSize:9,color:'#7a9bc0',flexShrink:0,marginRight:2}}>🔔</span>
+                    <span style={{fontFamily:MONO,fontSize:11,color:'#a8ccdf',flexShrink:0,marginRight:2}}>🔔</span>
                     {alarms.map((a,ai)=>{
                       const sel=selectedAlarmIds.includes(a.id)
                       const activeCount=watchlist.filter(w=>alarmStatus[w.symbol]?.[a.id]?.active===true).length
@@ -1448,7 +1474,7 @@ export default function Home() {
                             if(nowSel&&Object.keys(alarmStatus).length===0) refreshAlarmStatus()
                           }}
                           style={{
-                            fontFamily:MONO,fontSize:9,padding:'3px 7px',borderRadius:12,cursor:'pointer',
+                            fontFamily:MONO,fontSize:11,padding:'3px 7px',borderRadius:12,cursor:'pointer',
                             border:`1px solid ${sel?col:'#1e3a52'}`,
                             background:sel?`${col}18`:'rgba(255,255,255,0.03)',
                             color:sel?col:'#8aadcc',
@@ -1456,20 +1482,20 @@ export default function Home() {
                           }}>
                           <span style={{width:8,height:8,borderRadius:'50%',background:activeCount>0?col:'#2a3f55',flexShrink:0,display:'inline-block'}}/>
                           {a.name}
-                          {activeCount>0&&<span style={{color:col,fontWeight:700,fontSize:9}}>{activeCount}</span>}
+                          {activeCount>0&&<span style={{color:col,fontWeight:700,fontSize:11}}>{activeCount}</span>}
                         </button>
                       )
                     })}
                     {selectedAlarmIds.length>0&&(
-                      <span onClick={()=>setSelectedAlarmIds([])} style={{fontFamily:MONO,fontSize:9,color:'#ff4d6d',cursor:'pointer',marginLeft:2,flexShrink:0}}>✕</span>
+                      <span onClick={()=>setSelectedAlarmIds([])} style={{fontFamily:MONO,fontSize:11,color:'#ff4d6d',cursor:'pointer',marginLeft:2,flexShrink:0}}>✕</span>
                     )}
-                    {alarmStatusLoading&&<span style={{fontFamily:MONO,fontSize:9,color:'#ffd166'}}>⟳</span>}
+                    {alarmStatusLoading&&<span style={{fontFamily:MONO,fontSize:11,color:'#ffd166'}}>⟳</span>}
                   </div>
                 )}
 
                 {/* ── Lista de activos ── */}
                 <div style={{overflowY:'auto',flex:1}}>
-                  {wlLoading&&<div style={{padding:'10px 12px',fontFamily:MONO,fontSize:10,color:'var(--text3)'}}>⟳ Cargando…</div>}
+                  {wlLoading&&<div style={{padding:'10px 12px',fontFamily:MONO,fontSize:12,color:'#a8ccdf'}}>⟳ Cargando…</div>}
                   {!wlLoading&&(()=>{
                     const searchLower=wlSearch.toLowerCase()
                     const filtered=watchlist.filter(w=>{
@@ -1487,12 +1513,12 @@ export default function Home() {
                     if(!all.length) return <div style={{padding:'12px',fontFamily:MONO,fontSize:11,color:'#8aadcc'}}>Sin activos para los filtros activos</div>
                     // Count badge above list
                     const countBadge=(
-                      <div style={{padding:'3px 10px 3px',fontFamily:MONO,fontSize:10,color:'#7a9bc0',background:'var(--bg2)',borderBottom:'1px solid var(--border)',display:'flex',gap:6,alignItems:'center'}}>
+                      <div style={{padding:'3px 10px 3px',fontFamily:MONO,fontSize:12,color:'#a8ccdf',background:'var(--bg2)',borderBottom:'1px solid var(--border)',display:'flex',gap:6,alignItems:'center'}}>
                         <span style={{color:'#a8c8e8',fontWeight:600}}>{all.length}</span>
-                        <span style={{color:'#4a6a88'}}>de</span>
+                        <span style={{color:'#8abcd4'}}>de</span>
                         <span style={{color:'#a8c8e8',fontWeight:600}}>{totalWl}</span>
-                        <span style={{color:'#4a6a88'}}>activos</span>
-                        {filtered.length<totalWl&&<span style={{marginLeft:'auto',color:'#ffd166',fontSize:9}}>{totalWl-filtered.length} filtrado{totalWl-filtered.length!==1?'s':''}</span>}
+                        <span style={{color:'#8abcd4'}}>activos</span>
+                        {filtered.length<totalWl&&<span style={{marginLeft:'auto',color:'#ffd166',fontSize:11}}>{totalWl-filtered.length} filtrado{totalWl-filtered.length!==1?'s':''}</span>}
                       </div>
                     )
                     return (<>{countBadge}{all.map(w=>(
@@ -1508,7 +1534,7 @@ export default function Home() {
                         {/* Nombre — clic carga el activo */}
                         <div onClick={()=>setSimbolo(w.symbol)} style={{flex:1,cursor:'pointer',minWidth:0}}>
                           <div style={{fontFamily:MONO,fontSize:11,color:simbolo===w.symbol?'var(--accent)':'#d0e8fa',fontWeight:600}}>{w.symbol}</div>
-                          <div style={{fontFamily:MONO,fontSize:9,color:'#8aadcc',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{w.name}</div>
+                          <div style={{fontFamily:MONO,fontSize:11,color:'#8aadcc',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{w.name}</div>
                         </div>
                         {/* Badges alarmas — círculos de color con velas */}
                         {(()=>{
@@ -1542,7 +1568,7 @@ export default function Home() {
                         {/* Lista badge */}
                         <span style={{fontFamily:MONO,fontSize:8,color:'#7fb8d8',background:'var(--bg2)',padding:'1px 4px',borderRadius:2,flexShrink:0}}>{w.list_name||'General'}</span>
                         {/* Editar */}
-                        <span onClick={e=>{e.stopPropagation();openEditItem(w)}} style={{cursor:'pointer',color:'var(--text3)',fontSize:11,padding:'0 2px',flexShrink:0}} title="Editar">✎</span>
+                        <span onClick={e=>{e.stopPropagation();openEditItem(w)}} style={{cursor:'pointer',color:'#a8ccdf',fontSize:11,padding:'0 2px',flexShrink:0}} title="Editar">✎</span>
                       </div>
                     ))}
                   </>)
@@ -1555,10 +1581,10 @@ export default function Home() {
                     <div style={{background:'#0d1824',border:'1px solid #1e3a52',borderRadius:8,padding:24,width:440,maxHeight:'85vh',overflowY:'auto',display:'flex',flexDirection:'column',gap:12,fontFamily:MONO,fontSize:12,boxShadow:'0 8px 48px rgba(0,0,0,0.8)'}}>
                       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
                         <span style={{fontWeight:700,color:'var(--text)',fontSize:14}}>{editingItem.id?'Editar activo':'Nuevo activo'}</span>
-                        <button onClick={closeEditItem} style={{background:'transparent',border:'none',color:'var(--text3)',fontSize:16,cursor:'pointer',lineHeight:1}}>✕</button>
+                        <button onClick={closeEditItem} style={{background:'transparent',border:'none',color:'#a8ccdf',fontSize:16,cursor:'pointer',lineHeight:1}}>✕</button>
                       </div>
                       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-                        <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>Símbolo
+                        <label style={{display:'flex',flexDirection:'column',gap:4,color:'#a8ccdf'}}>Símbolo
                           <input type="text" value={editForm.symbol||''} onChange={e=>{
                             const sym=e.target.value.toUpperCase()
                             setEditForm(p=>({...p,symbol:sym}))
@@ -1575,15 +1601,15 @@ export default function Home() {
                             },600)
                           }} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'6px 8px',borderRadius:4}}/>
                         </label>
-                        <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>Nombre
+                        <label style={{display:'flex',flexDirection:'column',gap:4,color:'#a8ccdf'}}>Nombre
                           <input type="text" value={editForm.name||''} onChange={e=>setEditForm(p=>({...p,name:e.target.value,_nameTouched:true}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'6px 8px',borderRadius:4}}/>
                         </label>
-                        <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>Grupo
+                        <label style={{display:'flex',flexDirection:'column',gap:4,color:'#a8ccdf'}}>Grupo
                           <select value={editForm.group_name||'Acciones'} onChange={e=>setEditForm(p=>({...p,group_name:e.target.value}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'6px 8px',borderRadius:4}}>
                             {['Índices','Acciones','Crypto','Materias Primas'].map(o=><option key={o} value={o}>{o}</option>)}
                           </select>
                         </label>
-                        <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>Lista
+                        <label style={{display:'flex',flexDirection:'column',gap:4,color:'#a8ccdf'}}>Lista
                           {(()=>{
                             const allLists=[...new Set(watchlist.map(w=>w.list_name||'General').filter(Boolean))]
                             return(<>
@@ -1597,11 +1623,11 @@ export default function Home() {
                           })()}
                         </label>
                       </div>
-                      <label style={{display:'flex',alignItems:'center',gap:8,color:'var(--text3)',cursor:'pointer',padding:'4px 0'}}>
+                      <label style={{display:'flex',alignItems:'center',gap:8,color:'#a8ccdf',cursor:'pointer',padding:'4px 0'}}>
                         <input type="checkbox" checked={editForm.favorite||false} onChange={e=>setEditForm(p=>({...p,favorite:e.target.checked}))} style={{width:14,height:14}}/>
                         <span style={{color:'#ffd166'}}>★</span> Marcar como favorito
                       </label>
-                      <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>
+                      <label style={{display:'flex',flexDirection:'column',gap:4,color:'#a8ccdf'}}>
                         Observaciones
                         <textarea value={editForm.observations||''} onChange={e=>setEditForm(p=>({...p,observations:e.target.value}))} rows={3} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'6px 8px',borderRadius:4,resize:'vertical'}}/>
                       </label>
@@ -1623,12 +1649,12 @@ export default function Home() {
             {sidePanel==='alarms'&&(
               <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
                 <div style={{padding:'6px 8px',borderBottom:'1px solid var(--border)',display:'flex',gap:4,alignItems:'center',flexShrink:0}}>
-                  <span style={{fontFamily:MONO,fontSize:10,color:'var(--text3)',flex:1}}>Condiciones / Alarmas</span>
+                  <span style={{fontFamily:MONO,fontSize:12,color:'#a8ccdf',flex:1}}>Condiciones / Alarmas</span>
                   <button onClick={newAlarm} title="Nueva alarma" style={{background:'rgba(0,212,255,0.1)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:13,padding:'3px 8px',borderRadius:3,cursor:'pointer'}}>+</button>
                 </div>
                 <div style={{overflowY:'auto',flex:1}}>
-                  {alarmLoading&&<div style={{padding:'10px 12px',fontFamily:MONO,fontSize:10,color:'var(--text3)'}}>⟳ Cargando…</div>}
-                  {!alarmLoading&&!alarms.length&&<div style={{padding:'14px 12px',fontFamily:MONO,fontSize:10,color:'var(--text3)'}}>Sin alarmas. Pulsa + para crear una.</div>}
+                  {alarmLoading&&<div style={{padding:'10px 12px',fontFamily:MONO,fontSize:12,color:'#a8ccdf'}}>⟳ Cargando…</div>}
+                  {!alarmLoading&&!alarms.length&&<div style={{padding:'14px 12px',fontFamily:MONO,fontSize:12,color:'#a8ccdf'}}>Sin alarmas. Pulsa + para crear una.</div>}
                   {!alarmLoading&&alarms.map((a,ai)=>{
                     const condLabel={
                       ema_cross_up:'EMA rápida > EMA lenta ↑',ema_cross_down:'EMA rápida < EMA lenta ↓',
@@ -1645,14 +1671,14 @@ export default function Home() {
                           background:activeCount>0?col:'#2a3f55',
                           boxShadow:activeCount>0?`0 0 6px ${col}`:undefined}}/>
                         <div style={{flex:1,minWidth:0}}>
-                          <div style={{fontFamily:MONO,fontSize:11,color:'var(--text)',fontWeight:700}}>{a.name}</div>
-                          <div style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',marginTop:1}}>{condLabel} · EMA {a.ema_r}/{a.ema_l}</div>
-                          {totalEval>0&&<div style={{fontFamily:MONO,fontSize:9,marginTop:2}}>
+                          <div style={{fontFamily:MONO,fontSize:12,color:'#e8f4ff',fontWeight:700}}>{a.name}</div>
+                          <div style={{fontFamily:MONO,fontSize:11,color:'#b0d0e8',marginTop:1}}>{condLabel} · EMA {a.ema_r}/{a.ema_l}</div>
+                          {totalEval>0&&<div style={{fontFamily:MONO,fontSize:11,marginTop:2}}>
                             <span style={{color:col,fontWeight:600}}>{activeCount} activos</span>
-                            <span style={{color:'var(--text3)'}}> / {totalEval} evaluados</span>
+                            <span style={{color:'#a8ccdf'}}> / {totalEval} evaluados</span>
                           </div>}
                         </div>
-                        <button onClick={()=>openEditAlarm(a)} style={{background:'transparent',border:'1px solid var(--border)',color:'var(--text3)',fontFamily:MONO,fontSize:10,padding:'3px 6px',borderRadius:3,cursor:'pointer'}}>✎</button>
+                        <button onClick={()=>openEditAlarm(a)} style={{background:'transparent',border:'1px solid var(--border)',color:'#a8ccdf',fontFamily:MONO,fontSize:12,padding:'3px 6px',borderRadius:3,cursor:'pointer'}}>✎</button>
                       </div>
                     )
                   })}
@@ -1673,17 +1699,17 @@ export default function Home() {
                       {mcLoading?'⟳ Calculando...':'▶ EJECUTAR MULTICARTERA'}
                     </button>
                   ):(
-                    <button disabled style={{width:'100%',fontFamily:MONO,fontSize:10,padding:'7px 10px',borderRadius:4,cursor:'not-allowed',
-                      background:'transparent',border:'1px solid #2a3f55',color:'#3d5a7a',letterSpacing:'0.05em'}}>
+                    <button disabled style={{width:'100%',fontFamily:MONO,fontSize:12,padding:'7px 10px',borderRadius:4,cursor:'not-allowed',
+                      background:'transparent',border:'1px solid #2a3f55',color:'#7aabc8',letterSpacing:'0.05em'}}>
                       ▶ EJECUTAR — selecciona 2+
                     </button>
                   )}
-                  {mcError&&<div style={{fontFamily:MONO,fontSize:10,color:'#ff4d6d',marginTop:5}}>⚠ {mcError}</div>}
+                  {mcError&&<div style={{fontFamily:MONO,fontSize:12,color:'#ff4d6d',marginTop:5}}>⚠ {mcError}</div>}
                 </div>
 
                 {/* Modo de asignación */}
                 <div style={{padding:'10px 12px',borderBottom:'1px solid var(--border)'}}>
-                  <div style={{fontFamily:MONO,fontSize:10,color:'#c8dff5',marginBottom:6,letterSpacing:'0.05em',fontWeight:600}}>MODO DE ASIGNACIÓN</div>
+                  <div style={{fontFamily:MONO,fontSize:12,color:'#c8dff5',marginBottom:6,letterSpacing:'0.05em',fontWeight:600}}>MODO DE ASIGNACIÓN</div>
                   {[
                     {id:'slots',label:'Slots iguales',desc:'Capital dividido en N partes fijas',ready:true},
                     {id:'rotativo',label:'Capital rotativo',desc:'Próximamente',ready:false},
@@ -1700,7 +1726,7 @@ export default function Home() {
                         <div style={{fontFamily:MONO,fontSize:12,color:mcMode===m.id?'var(--accent)':'#c8dff5',fontWeight:600}}>
                           {m.label}{!m.ready&&<span style={{fontSize:8,color:'#ffd166',marginLeft:5,verticalAlign:'middle'}}>⏳</span>}
                         </div>
-                        <div style={{fontFamily:MONO,fontSize:10,color:'#6a8caa',marginTop:1}}>{m.desc}</div>
+                        <div style={{fontFamily:MONO,fontSize:12,color:'#6a8caa',marginTop:1}}>{m.desc}</div>
                       </div>
                     </div>
                   ))}
@@ -1712,7 +1738,7 @@ export default function Home() {
                     <div style={{fontFamily:MONO,fontSize:11,color:'#cde5ff',letterSpacing:'0.05em',fontWeight:700}}>ACTIVOS ({mcSelected.length} sel.)</div>
                     <div style={{display:'flex',gap:4}}>
                       <button onClick={()=>setMcSelected(watchlist.map(w=>w.symbol))}
-                        style={{fontFamily:MONO,fontSize:8,padding:'2px 5px',borderRadius:3,border:'1px solid var(--border)',background:'transparent',color:'var(--text3)',cursor:'pointer'}}>
+                        style={{fontFamily:MONO,fontSize:8,padding:'2px 5px',borderRadius:3,border:'1px solid var(--border)',background:'transparent',color:'#a8ccdf',cursor:'pointer'}}>
                         Todos
                       </button>
                       <button onClick={()=>setMcSelected([])}
@@ -1733,13 +1759,13 @@ export default function Home() {
                         <div style={{width:14,height:14,borderRadius:3,border:`1.5px solid ${sel?'var(--accent)':'#3d5a7a'}`,
                           background:sel?'var(--accent)':'transparent',flexShrink:0,
                           display:'flex',alignItems:'center',justifyContent:'center'}}>
-                          {sel&&<span style={{color:'#000',fontSize:9,lineHeight:1,fontWeight:900}}>✓</span>}
+                          {sel&&<span style={{color:'#000',fontSize:11,lineHeight:1,fontWeight:900}}>✓</span>}
                         </div>
                         <div style={{flex:1,minWidth:0}}>
                           <div style={{fontFamily:MONO,fontSize:12,color:sel?'var(--accent)':'#d0e8fa',fontWeight:600}}>{w.symbol}</div>
-                          <div style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{w.name}</div>
+                          <div style={{fontFamily:MONO,fontSize:11,color:'#b0d0e8',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{w.name}</div>
                         </div>
-                        {w.favorite&&<span style={{color:'#ffd166',fontSize:10}}>★</span>}
+                        {w.favorite&&<span style={{color:'#ffd166',fontSize:12}}>★</span>}
                       </div>
                     )
                   })}
@@ -1847,29 +1873,27 @@ export default function Home() {
                       showSP500={showSP500} showCompound={showCompound}
                       syncRef={chartSyncRef}
                     />
-                    {/* % Capital invertido — individual */}
-                    {result.trades?.length>0&&(
-                      <div>
-                        <div style={{padding:'3px 12px',display:'flex',alignItems:'center',gap:8,fontFamily:MONO,fontSize:10,borderTop:'1px solid var(--border)',color:'#9b72ff'}}>
-                          <span>% Capital invertido</span>
-                          <button onClick={()=>setShowIndivOccupancy(v=>!v)}
-                            style={{fontFamily:MONO,fontSize:9,padding:'1px 5px',borderRadius:3,cursor:'pointer',
-                              border:`1px solid ${showIndivOccupancy?'#9b72ff':'#2a3f55'}`,
-                              background:showIndivOccupancy?'rgba(155,114,255,0.15)':'transparent',
-                              color:showIndivOccupancy?'#9b72ff':'#4a6a88'}}>
-                            {showIndivOccupancy?'ON':'OFF'}
-                          </button>
-                        </div>
-                        {showIndivOccupancy&&(
+                    {/* % Capital invertido — individual — sigue filtros equity */}
+                    {result.trades?.length>0&&(()=>{
+                      const occMode=showCompound?'compound':showStrategy?'simple':'none'
+                      if(occMode==='none') return null
+                      const occLabel=showCompound?'€ Capital compuesto invertido':'€ Capital simple invertido'
+                      const occColor=showCompound?'#00e5a0':'#00d4ff'
+                      return(
+                        <div>
+                          <div style={{padding:'3px 12px',fontFamily:MONO,fontSize:10,borderTop:'1px solid var(--border)',color:occColor}}>
+                            {occLabel}
+                          </div>
                           <OccupancyBarChart
                             trades={result.trades}
                             chartData={result.chartData}
                             capitalIni={Number(capitalIni)}
                             syncRef={chartSyncRef}
+                            showMode={occMode}
                           />
-                        )}
-                      </div>
-                    )}
+                        </div>
+                      )
+                    })()}
                   </div>
 
                   {/* Barras de resultados — clic navega al trade */}
@@ -1907,8 +1931,12 @@ export default function Home() {
                         </div>
                       </div>
                       <div style={{overflowX:'auto'}}>
-                        <table className="trades-table" style={{fontFamily:MONO}}>
-                          <thead><tr><th>#</th><th>Entrada</th><th>Salida</th><th style={{color:'#9b72ff'}}>Capital inv.</th><th style={{color:'#00d4ff'}}>Capital final</th><th>Px Entrada</th><th>Px Salida</th><th>P&L %</th><th>P&L €</th><th>Días</th><th>Tipo</th></tr></thead>
+                        <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:11}}>
+                          <thead><tr style={{borderBottom:'1px solid var(--border)',position:'sticky',top:0,background:'var(--bg)'}}>
+                            {['#','Entrada','Salida','Capital inv.','Capital final','Px Ent.','Px Sal.','P&L %','P&L €','Días','Tipo'].map((h,hi)=>(
+                              <th key={h} style={{padding:'4px 8px',textAlign:'left',color:hi===3?'#9b72ff':hi===4?'#00d4ff':'#9acce0',fontWeight:400,fontSize:11,whiteSpace:'nowrap'}}>{h}</th>
+                            ))}
+                          </tr></thead>
                           <tbody>
                             {(()=>{
                               const capIni=Number(capitalIni)
@@ -1935,18 +1963,29 @@ export default function Home() {
                                 const pnlEur=isCompound?(capInvC*(t.pnlPct/100)):t.pnlSimple
                                 const pnlColor=pnlEur>=0?'var(--green)':'var(--red)'
                                 return(
-                                  <tr key={i} onClick={()=>navigateToTrade(t)} style={{cursor:'pointer'}}
-                                    onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.06)'}
+                                  <tr key={i}
+                                    style={{borderBottom:'1px solid rgba(255,255,255,0.03)',cursor:'pointer'}}
+                                    onClick={()=>navigateToTrade(t)}
+                                    onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.05)'}
                                     onMouseOut={e=>e.currentTarget.style.background='transparent'}>
-                                    <td style={{color:'var(--text3)'}}>{result.trades.length-i}</td>
-                                    <td>{fmtDate(t.entryDate)}</td><td>{fmtDate(t.exitDate)}</td>
-                                    <td style={{color:'#e8f4ff',fontWeight:600}}>€{fmt(capInv,0)}</td>
-                                    <td style={{color:capFinalColor,fontWeight:600}}>€{fmt(capFinal,0)}</td>
-                                    <td>{fmt(t.entryPx,2)}</td><td>{fmt(t.exitPx,2)}</td>
-                                    <td style={{color:pnlColor,fontWeight:600}}>{t.pnlPct>=0?'+':''}{fmt(t.pnlPct,2)}%</td>
-                                    <td style={{color:pnlColor}}>{pnlEur>=0?'+':''}{fmt(pnlEur,2)}€</td>
-                                    <td>{t.dias}</td>
-                                    <td><span className={`tag ${t.pnlPct>=0?'win':'loss'}`}>{t.tipo}</span></td>
+                                    <td style={{padding:'4px 8px',color:'#7a9bc0',fontSize:11}}>{result.trades.length-i}</td>
+                                    <td style={{padding:'4px 8px',color:'#d8ecff',whiteSpace:'nowrap'}}>{fmtDate(t.entryDate)}</td>
+                                    <td style={{padding:'4px 8px',color:'#d8ecff',whiteSpace:'nowrap'}}>{fmtDate(t.exitDate)}</td>
+                                    <td style={{padding:'4px 8px',color:'#e8f4ff',fontWeight:600,whiteSpace:'nowrap'}}>€{fmt(capInv,0)}</td>
+                                    <td style={{padding:'4px 8px',color:capFinalColor,fontWeight:600,whiteSpace:'nowrap'}}>€{fmt(capFinal,0)}</td>
+                                    <td style={{padding:'4px 8px'}}>{fmt(t.entryPx,2)}</td>
+                                    <td style={{padding:'4px 8px'}}>{fmt(t.exitPx,2)}</td>
+                                    <td style={{padding:'4px 8px',color:pnlColor,fontWeight:600}}>{t.pnlPct>=0?'+':''}{fmt(t.pnlPct,2)}%</td>
+                                    <td style={{padding:'4px 8px',color:pnlColor}}>{pnlEur>=0?'+':''}{fmt(pnlEur,2)}€</td>
+                                    <td style={{padding:'4px 8px',color:'#a8c4dc'}}>{t.dias}</td>
+                                    <td style={{padding:'4px 8px'}}>
+                                      <span style={{fontSize:9,padding:'1px 5px',borderRadius:2,
+                                        background:t.pnlPct>=0?'rgba(0,229,160,0.1)':'rgba(255,77,109,0.1)',
+                                        color:t.pnlPct>=0?'#00e5a0':'#ff4d6d',
+                                        border:`1px solid ${t.pnlPct>=0?'rgba(0,229,160,0.3)':'rgba(255,77,109,0.3)'}`}}>
+                                        {t.tipo}
+                                      </span>
+                                    </td>
                                   </tr>
                                 )
                               })
@@ -2009,7 +2048,7 @@ export default function Home() {
 
                 {/* Equity chart toggles */}
                 <div style={{padding:'6px 16px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:5,flexWrap:'wrap'}}>
-                  <span style={{fontFamily:MONO,fontSize:10,color:'#8ab8d4',marginRight:3}}>Curvas</span>
+                  <span style={{fontFamily:MONO,fontSize:10,color:'#b0d4ec',marginRight:3}}>Curvas</span>
                   {[
                     {key:'simple',label:'Simple',color:'#00d4ff',state:mcShowSimple,set:setMcShowSimple},
                     {key:'compound',label:'Compuesto',color:'#00e5a0',state:mcShowCompound,set:setMcShowCompound},
@@ -2022,6 +2061,11 @@ export default function Home() {
                       {label}
                     </button>
                   ))}
+                  {mcShowOccupancy&&(mcShowCompound||mcShowSimple)&&(
+                    <span style={{fontFamily:MONO,fontSize:10,color:'#6a8aaa',marginLeft:4}}>
+                      ↳ {mcShowCompound?'€ compuesto':'€ simple'}
+                    </span>
+                  )}
                 </div>
 
                 {/* Equity chart */}
@@ -2036,42 +2080,12 @@ export default function Home() {
                     maxDDCompound={mcResult.maxDDCompound} maxDDCompoundDate={mcResult.maxDDCompoundDate}
                     maxDDBH={mcResult.maxDDBH} maxDDBHDate={mcResult.maxDDBHDate}
                     showSimple={mcShowSimple} showCompound={mcShowCompound}
-                    showBH={mcShowBH} showOccupancy={mcShowOccupancy}
+                    showBH={mcShowBH}
+                    showOccupancy={mcShowOccupancy&&(mcShowSimple||mcShowCompound)}
+                    occMode={mcShowCompound?'compound':'simple'}
                     onReady={api=>{mcChartApiRef.current=api}}
                     syncRef={chartSyncRef}
                   />
-                </div>
-
-                {/* Métricas globales */}
-                <div style={{padding:'8px 16px',borderBottom:'1px solid var(--border)',display:'flex',gap:0,flexWrap:'wrap'}}>
-                  {(()=>{
-                    const lastS=mcResult.simpleCurve.slice(-1)[0]?.value||Number(capitalIni)
-                    const lastC=mcResult.compoundCurve.slice(-1)[0]?.value||Number(capitalIni)
-                    const lastBH=mcResult.bhCurve.slice(-1)[0]?.value||Number(capitalIni)
-                    const capIni=Number(capitalIni)
-                    const totalDiasNat=mcResult.startDate?(new Date(mcResult.simpleCurve.slice(-1)[0]?.date)-new Date(mcResult.startDate))/86400000:365
-                    const anios=Math.max(totalDiasNat/365.25,0.01)
-                    const cagrS=Math.pow(Math.max(lastS,0.01)/capIni,1/anios)-1
-                    const cagrC=Math.pow(Math.max(lastC,0.01)/capIni,1/anios)-1
-                    const cagrBH=Math.pow(Math.max(lastBH,0.01)/capIni,1/anios)-1
-                    const cols=[
-                      {label:'Ganancia Simple',val:`${lastS>=capIni?'+':''}${fmt(lastS-capIni,0,'€')}`,color:lastS>=capIni?'#00e5a0':'#ff4d6d'},
-                      {label:'Ganancia Compuesta',val:`${lastC>=capIni?'+':''}${fmt(lastC-capIni,0,'€')}`,color:lastC>=capIni?'#00e5a0':'#ff4d6d'},
-                      {label:'B&H Diversificado',val:`${lastBH>=capIni?'+':''}${fmt(lastBH-capIni,0,'€')}`,color:lastBH>=capIni?'#00e5a0':'#ff4d6d'},
-                      {label:'CAGR Simple',val:fmt(cagrS*100,2,'%'),color:cagrS>=0?'#00e5a0':'#ff4d6d'},
-                      {label:'CAGR Compuesto',val:fmt(cagrC*100,2,'%'),color:cagrC>=0?'#00e5a0':'#ff4d6d'},
-                      {label:'CAGR B&H',val:fmt(cagrBH*100,2,'%'),color:cagrBH>=0?'#00e5a0':'#ff4d6d'},
-                      {label:'Max DD Simple',val:fmt(mcResult.maxDDSimple,2,'%'),color:'#ff4d6d'},
-                      {label:'Max DD Compuesto',val:fmt(mcResult.maxDDCompound,2,'%'),color:'#ff4d6d'},
-                      {label:'Capital inv. medio',val:fmt(mcResult.avgOccupancy,1,'%'),color:'#ffd166'},
-                    ]
-                    return cols.map(c=>(
-                      <div key={c.label} style={{flex:'1 1 140px',padding:'8px 12px',borderRight:'1px solid var(--border)',borderBottom:'1px solid var(--border)'}}>
-                        <div style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',marginBottom:3}}>{c.label}</div>
-                        <div style={{fontFamily:MONO,fontSize:14,color:c.color,fontWeight:700}}>{c.val}</div>
-                      </div>
-                    ))
-                  })()}
                 </div>
 
                 {/* Métricas en grid cuando mcLayout==='grid' */}
