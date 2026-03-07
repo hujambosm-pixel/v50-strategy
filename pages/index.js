@@ -156,7 +156,7 @@ function lookupName(sym) {
 }
 
 // ── CandleChart ───────────────────────────────────────────────
-function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, syncRef }) {
+function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, syncRef, savedRangeRef }) {
   const containerRef=useRef(null), svgRef=useRef(null), legendRef=useRef(null), tooltipRef=useRef(null)
   const chartRef=useRef(null), candlesRef=useRef(null)
   const rulerStart=useRef(null), rulerActiveR=useRef(rulerActive)
@@ -425,19 +425,27 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
         }
       })
 
-      // Vista por defecto: últimos 3 meses
+      // Restore saved range OR default to last 3 months
       try {
-        const lastBar = data[data.length-1]
-        if(lastBar){
-          const to = new Date(lastBar.date)
-          const from = new Date(lastBar.date)
-          from.setMonth(from.getMonth()-3)
-          chart.timeScale().setVisibleRange({
-            from: from.toISOString().split('T')[0],
-            to:   to.toISOString().split('T')[0]
-          })
+        if(savedRangeRef?.current){
+          chart.timeScale().setVisibleRange(savedRangeRef.current)
+        } else {
+          const lastBar = data[data.length-1]
+          if(lastBar){
+            const to = new Date(lastBar.date)
+            const from = new Date(lastBar.date)
+            from.setMonth(from.getMonth()-3)
+            chart.timeScale().setVisibleRange({
+              from: from.toISOString().split('T')[0],
+              to:   to.toISOString().split('T')[0]
+            })
+          }
         }
       } catch(_){ chart.timeScale().fitContent() }
+      // Save range whenever user zooms/scrolls
+      chart.timeScale().subscribeVisibleTimeRangeChange(range=>{
+        if(range && savedRangeRef) savedRangeRef.current = range
+      })
 
       // ── Cross-chart time sync ──
       if(syncRef?.current){
@@ -658,12 +666,25 @@ function MultiCartChart({simpleCurve,compoundCurve,bhCurve,occupancyCurve,capita
       })
       line.setData(occupancyCurve.map(p=>({time:p.date,value:p.value})))
       chart.timeScale().fitContent()
+      // Sync occupancy chart with others
+      if(syncRef?.current){
+        const syncId=Symbol()
+        const unsub=chart.timeScale().subscribeVisibleTimeRangeChange(range=>{
+          if(!range||syncRef.current.syncing) return
+          syncRef.current.syncing=true
+          syncRef.current.listeners.forEach(fn=>{if(fn.id!==syncId)try{fn.handler(range)}catch(_){}})
+          syncRef.current.syncing=false
+        })
+        const handler=(range)=>{try{chart.timeScale().setVisibleRange(range)}catch(_){}}
+        syncRef.current.listeners.push({id:syncId,handler})
+        chart.__syncCleanup=()=>{try{unsub()}catch(_){};if(syncRef.current)syncRef.current.listeners=syncRef.current.listeners.filter(e=>e.id!==syncId)}
+      }
       const ro=new ResizeObserver(()=>{if(ref2.current)chart.applyOptions({width:ref2.current.clientWidth})})
       ro.observe(ref2.current)
       return()=>ro.disconnect()
     })
-    return()=>{if(chart2Ref.current){chart2Ref.current.remove();chart2Ref.current=null}}
-  },[occupancyCurve,showOccupancy,capitalIni])
+    return()=>{if(chart2Ref.current){try{chart2Ref.current.__syncCleanup?.()}catch(_){};chart2Ref.current.remove();chart2Ref.current=null}}
+  },[occupancyCurve,showOccupancy,capitalIni,syncRef])
 
   return(
     <div>
@@ -682,6 +703,53 @@ function MultiCartChart({simpleCurve,compoundCurve,bhCurve,occupancyCurve,capita
       )}
     </div>
   )
+}
+
+// ── OccupancyBarChart — individual asset in/out position ────
+function OccupancyBarChart({trades, chartData, capitalIni, syncRef}) {
+  const ref=useRef(null), chartRef=useRef(null)
+  useEffect(()=>{
+    if(!ref.current||!trades?.length||!chartData?.length) return
+    import('lightweight-charts').then(({createChart,CrosshairMode})=>{
+      if(chartRef.current){chartRef.current.__syncCleanup?.();chartRef.current.remove();chartRef.current=null}
+      const chart=createChart(ref.current,{
+        width:ref.current.clientWidth,height:80,
+        layout:{background:{color:'#080c14'},textColor:'#7a9bc0'},
+        grid:{vertLines:{color:'#0d1520'},horzLines:{color:'#0d1520'}},
+        crosshair:{mode:CrosshairMode.Normal},
+        rightPriceScale:{borderColor:'#1a2d45',scaleMargins:{top:0.1,bottom:0.1}},
+        timeScale:{borderColor:'#1a2d45',timeVisible:false},
+      })
+      chartRef.current=chart
+      const bars=chart.addHistogramSeries({
+        color:'rgba(155,114,255,0.4)',
+        priceFormat:{type:'price',precision:0,minMove:1},
+        lastValueVisible:false,priceLineVisible:false,
+      })
+      bars.setData(chartData.map(d=>{
+        const inPos=trades.some(t=>d.date>=t.entryDate&&d.date<=t.exitDate)
+        return{time:d.date,value:inPos?100:0,color:inPos?'rgba(0,229,160,0.35)':'rgba(255,255,255,0.04)'}
+      }))
+      if(syncRef?.current){
+        const syncId=Symbol()
+        const unsub=chart.timeScale().subscribeVisibleTimeRangeChange(range=>{
+          if(!range||syncRef.current.syncing) return
+          syncRef.current.syncing=true
+          syncRef.current.listeners.forEach(fn=>{if(fn.id!==syncId)try{fn.handler(range)}catch(_){}})
+          syncRef.current.syncing=false
+        })
+        const handler=(range)=>{try{chart.timeScale().setVisibleRange(range)}catch(_){}}
+        syncRef.current.listeners.push({id:syncId,handler})
+        chart.__syncCleanup=()=>{try{unsub()}catch(_){};if(syncRef.current)syncRef.current.listeners=syncRef.current.listeners.filter(e=>e.id!==syncId)}
+      }
+      chart.timeScale().fitContent()
+      const ro=new ResizeObserver(()=>{if(ref.current)chart.applyOptions({width:ref.current.clientWidth})})
+      ro.observe(ref.current)
+      return()=>ro.disconnect()
+    })
+    return()=>{if(chartRef.current){chartRef.current.__syncCleanup?.();chartRef.current.remove();chartRef.current=null}}
+  },[trades,chartData])
+  return <div ref={ref} style={{minHeight:80}}/>
 }
 
 // ── Main ─────────────────────────────────────────────────────
@@ -774,6 +842,9 @@ export default function Home() {
   const [mcShowBH,setMcShowBH]=useState(true)
   const [mcShowOccupancy,setMcShowOccupancy]=useState(true)
   const mcChartRef=useRef(null)
+  const savedRangeRef=useRef(null)   // preserve zoom when changing asset
+  const [metricsStrats,setMetricsStrats]=useState(['simple','compound','bh'])  // which strat panels to show
+  const [showIndivOccupancy,setShowIndivOccupancy]=useState(true)  // % capital invertido chart for individual
 
   const debounceRef=useRef(null),chartApiRef=useRef(null),contentRef=useRef(null),mcChartApiRef=useRef(null)
 
@@ -1013,40 +1084,87 @@ export default function Home() {
     setTimeout(()=>chartApiRef.current?.navigateTo(trade.entryDate,trade.exitDate),50)
   }
 
-  const metricRows=metrics?[
+  // ── Per-strategy metric row builders ──
+  const STRAT_META={
+    simple:{label:'Simple',color:'#00d4ff',bg:'rgba(0,212,255,0.10)'},
+    compound:{label:'Compuesta',color:'#00e5a0',bg:'rgba(0,229,160,0.10)'},
+    bh:{label:'Buy&Hold',color:'#ffd166',bg:'rgba(255,209,102,0.10)'},
+  }
+  const sharedRows=metrics?[
     {label:'Total Operaciones',val:metrics.n,color:'#ffd166'},
+    {label:'Capital inv. medio',val:fmt(metrics.tiempoInvPct,1,'%'),color:'#9b72ff'},
     {label:'Total Días Invertido',val:metrics.totalDias,color:'#00d4ff'},
     {label:'Días Promedio',val:fmt(metrics.diasProm,1,' días'),color:'#00d4ff'},
     {label:`Tiempo Invertido (${fmt(metrics.aniosInv,2)}a)`,val:fmt(metrics.tiempoInvPct,0,'%'),color:'#ffd166'},
-    {label:'Capital inv. medio',val:fmt(metrics.tiempoInvPct,1,'%'),color:'#9b72ff'},
-    {label:'Ganadoras',val:metrics.wins,color:'#00e5a0'},
-    {label:'Perdedoras',val:metrics.losses,color:'#ff4d6d'},
     {label:'Win Rate',val:fmt(metrics.winRate,1,'%'),color:metrics.winRate>=50?'#00e5a0':'#ff4d6d'},
     {label:'Factor de Beneficio',val:fmt(metrics.factorBen,2),color:metrics.factorBen>=1?'#00e5a0':'#ff4d6d'},
+    {label:'Ganadoras',val:metrics.wins,color:'#00e5a0'},
+    {label:'Perdedoras',val:metrics.losses,color:'#ff4d6d'},
     {label:'Ganancia Media (%)',val:fmt(metrics.avgWin,2,'%'),color:'#00e5a0'},
     {label:'Pérdida Media (%)',val:fmt(metrics.avgLoss,2,'%'),color:'#ff4d6d'},
-    {label:'Ganancia Simple (€)',val:fmt(metrics.ganSimple,2,'€'),color:metrics.ganSimple>=0?'#00e5a0':'#ff4d6d'},
-    {label:'Ganancia Total (%)',val:fmt(metrics.ganTotalPct,2,'%'),color:metrics.ganTotalPct>=0?'#00e5a0':'#ff4d6d'},
-    {label:`CAGR Estrategia (${fmt(metrics.anios,2)}a)`,val:fmt(metrics.cagrS,2,'%'),color:metrics.cagrS>=0?'#00e5a0':'#ff4d6d'},
-    {label:'Max Drawdown (%)',val:fmt(metrics.ddSimple,2,'%'),color:'#ff4d6d'},
-    {label:'Ganancia Compuesta (€)',val:fmt(metrics.ganComp,2,'€'),color:metrics.ganComp>=0?'#00e5a0':'#ff4d6d'},
-    {label:`CAGR Compuesto (${fmt(metrics.anios,2)}a)`,val:fmt(metrics.cagrC,2,'%'),color:metrics.cagrC>=0?'#00e5a0':'#ff4d6d'},
-    {label:'Max DD Compuesto (%)',val:fmt(metrics.ddComp,2,'%'),color:'#ff4d6d'},
-    {label:'Ganancia Buy&Hold (€)',val:fmt(metrics.ganBH,2,'€'),color:metrics.ganBH>=0?'#00e5a0':'#ff4d6d'},
-    {label:`CAGR Buy&Hold (${fmt(metrics.anios,2)}a)`,val:fmt(metrics.cagrBH,2,'%'),color:metrics.cagrBH>=0?'#00e5a0':'#ff4d6d'},
-    {label:'Max Drawdown Buy&Hold (%)',val:fmt(result?.maxDDBH,2,'%'),color:'#ff4d6d'},
   ]:[]
+  const buildIndivStratRows=(strat)=>{
+    if(!metrics) return []
+    if(strat==='simple') return [...sharedRows,
+      {label:'Ganancia Simple (€)',val:fmt(metrics.ganSimple,2,'€'),color:metrics.ganSimple>=0?'#00e5a0':'#ff4d6d'},
+      {label:'Ganancia Total (%)',val:fmt(metrics.ganTotalPct,2,'%'),color:metrics.ganTotalPct>=0?'#00e5a0':'#ff4d6d'},
+      {label:`CAGR Simple (${fmt(metrics.anios,2)}a)`,val:fmt(metrics.cagrS,2,'%'),color:metrics.cagrS>=0?'#00e5a0':'#ff4d6d'},
+      {label:'Max Drawdown (%)',val:fmt(metrics.ddSimple,2,'%'),color:'#ff4d6d'},
+    ]
+    if(strat==='compound') return [...sharedRows,
+      {label:'Ganancia Compuesta (€)',val:fmt(metrics.ganComp,2,'€'),color:metrics.ganComp>=0?'#00e5a0':'#ff4d6d'},
+      {label:`CAGR Compuesto (${fmt(metrics.anios,2)}a)`,val:fmt(metrics.cagrC,2,'%'),color:metrics.cagrC>=0?'#00e5a0':'#ff4d6d'},
+      {label:'Max DD Compuesto (%)',val:fmt(metrics.ddComp,2,'%'),color:'#ff4d6d'},
+    ]
+    if(strat==='bh') return [
+      {label:'Ganancia Buy&Hold (€)',val:fmt(metrics.ganBH,2,'€'),color:metrics.ganBH>=0?'#00e5a0':'#ff4d6d'},
+      {label:`CAGR Buy&Hold (${fmt(metrics.anios,2)}a)`,val:fmt(metrics.cagrBH,2,'%'),color:metrics.cagrBH>=0?'#00e5a0':'#ff4d6d'},
+      {label:'Max Drawdown B&H (%)',val:fmt(result?.maxDDBH,2,'%'),color:'#ff4d6d'},
+    ]
+    return []
+  }
+  // legacy — used only by grid card view
+  const metricRows=buildIndivStratRows('simple')
 
-  const MetricsTable=()=>(
-    <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:12.5}}>
-      <tbody>{metricRows.map(m=>(
-        <tr key={m.label} style={{borderBottom:'1px solid var(--border)'}}>
-          <td style={{padding:'6px 10px',color:'#a8c4dc',fontSize:11}}>{m.label}</td>
-          <td style={{padding:'6px 10px',textAlign:'right',color:m.color,fontWeight:600}}>{m.val}</td>
-        </tr>
-      ))}</tbody>
-    </table>
+  // ── Generic multi-strat panel ──
+  const StratSelector=({strats,setStrats})=>(
+    <div style={{display:'flex',gap:3,padding:'4px 8px',borderBottom:'1px solid var(--border)',flexWrap:'wrap',alignItems:'center',background:'rgba(0,0,0,0.15)'}}>
+      <span style={{fontFamily:MONO,fontSize:10,color:'#7a9bc0',marginRight:3}}>Estrategia:</span>
+      {['simple','compound','bh'].map(s=>(
+        <button key={s} onClick={()=>setStrats(prev=>prev.includes(s)?prev.length>1?prev.filter(x=>x!==s):prev:[...prev,s])}
+          style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',
+            border:`1px solid ${strats.includes(s)?STRAT_META[s].color:'#2a3f55'}`,
+            background:strats.includes(s)?STRAT_META[s].bg:'transparent',
+            color:strats.includes(s)?STRAT_META[s].color:'#4a6a88',fontWeight:strats.includes(s)?600:400}}>
+          {STRAT_META[s].label}
+        </button>
+      ))}
+    </div>
   )
+  const MetricsPanel=({buildRows})=>(
+    <div style={{display:'flex',flex:1,minWidth:0,height:'100%'}}>
+      {metricsStrats.map((s,si)=>{
+        const rows=buildRows(s)
+        const meta=STRAT_META[s]
+        return(
+          <div key={s} style={{flex:1,minWidth:0,borderRight:si<metricsStrats.length-1?'1px solid var(--border)':'none',overflowY:'auto'}}>
+            <div style={{padding:'5px 8px',background:meta.bg,borderBottom:'1px solid var(--border)',fontFamily:MONO,fontSize:11,color:meta.color,fontWeight:700,textAlign:'center',letterSpacing:'0.05em',position:'sticky',top:0,zIndex:2}}>
+              {meta.label}
+            </div>
+            <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:12}}>
+              <tbody>{rows.map(m=>(
+                <tr key={m.label} style={{borderBottom:'1px solid var(--border)'}}>
+                  <td style={{padding:'6px 9px',color:'#b8d4ea',fontSize:11}}>{m.label}</td>
+                  <td style={{padding:'6px 9px',textAlign:'right',color:m.color,fontWeight:600}}>{m.val}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+        )
+      })}
+    </div>
+  )
+  const MetricsTable=()=>(<MetricsPanel buildRows={buildIndivStratRows}/>)
 
   // Altura de los tabs = 33px aprox. (padding 8px top+bottom + 17px línea)
   const TAB_H=33
@@ -1059,22 +1177,48 @@ export default function Home() {
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
         <style>{`
-          /* ── Sidebar text upgrades ── */
-          .sidebar .sidebar-title { color: #cde5ff !important; font-weight: 700; font-size:11px; letter-spacing:0.08em; text-transform:uppercase; }
-          .sidebar label { color: #d8ecff !important; font-size: 12px; display:flex; flex-direction:column; gap:3px; }
-          .sidebar select, .sidebar input[type=text], .sidebar input[type=number] { color: #f0f8ff !important; font-size:12px; background:var(--bg3); border:1px solid #1e3448; }
-          .sidebar .checkbox-row { color: #d8ecff !important; font-size:12px; flex-direction:row !important; align-items:center; gap:6px; }
-          .sidebar .sidebar-section { gap: 8px; }
-          .sidebar-title { margin-bottom: 4px; }
-          /* ── Global readability ── */
-          .section-title { font-size:12px !important; color:#a8c8e8 !important; letter-spacing:0.05em; }
-          .metric-label { font-size:11px !important; color:#b0cce0 !important; }
-          .metric-val { font-size:13px !important; }
-          .trades-table th { font-size:10px !important; color:#8ab8d4 !important; font-weight:500; }
-          .trades-table td { font-size:11px !important; color:#d0e8fa; }
-          .trades-table .tag { font-size:9px !important; }
-          /* ── Watchlist items ── */
-          .sidebar .wl-name { font-size:10px; color:#8ab8d4; }
+          /* ══ GLOBAL LEGIBILITY v3 ══ */
+          :root {
+            --text:#e8f4ff; --text2:#c8dff5; --text3:#8ec8e4;
+            --bg:#080c14; --bg2:#0a101a; --bg3:#0d1520;
+            --border:#1a2d45; --accent:#00d4ff; --green:#00e5a0; --red:#ff4d6d;
+          }
+          body { font-size:14px; color:#e0eeff; }
+          /* ── Sidebar — todos los textos claramente legibles ── */
+          .sidebar { font-size:13px; }
+          .sidebar .sidebar-title { color:#f0f8ff !important; font-weight:700; font-size:12px !important; letter-spacing:0.08em; text-transform:uppercase; padding-bottom:4px; border-bottom:1px solid #1a3050; margin-bottom:6px; }
+          .sidebar label { color:#e4f2ff !important; font-size:13px !important; display:flex; flex-direction:column; gap:4px; font-weight:500; }
+          .sidebar select, .sidebar input[type=text], .sidebar input[type=number] { color:#f5fbff !important; font-size:13px !important; background:#0d1828; border:1px solid #274462; padding:5px 8px; border-radius:4px; width:100%; box-sizing:border-box; }
+          .sidebar .checkbox-row { color:#e4f2ff !important; font-size:13px !important; flex-direction:row !important; align-items:center; gap:8px; }
+          .sidebar .sidebar-section { gap:10px; }
+          .sidebar-title { margin-bottom:5px; }
+          /* ── Section headers inside sidebar ── */
+          .sidebar [style*="font-size:9"] { font-size:11px !important; color:#9dd0eb !important; }
+          .sidebar [style*="font-size:10"] { font-size:12px !important; }
+          .sidebar [style*="color:'var(--text3)'"] { color:#9dd0eb !important; }
+          /* ── Section titles (main content) ── */
+          .section-title { font-size:13px !important; color:#d8eeff !important; letter-spacing:0.04em; font-weight:600; }
+          /* ── Metrics panel ── */
+          .metric-label { font-size:12px !important; color:#c8e0f4 !important; }
+          .metric-val { font-size:14px !important; font-weight:700; }
+          /* ── Trade tables ── */
+          .trades-table th { font-size:12px !important; color:#b8d8f0 !important; font-weight:600; padding:7px 10px !important; background:#0a111c; }
+          .trades-table td { font-size:12px !important; color:#e0eeff !important; padding:6px 10px !important; }
+          .trades-table .tag { font-size:10px !important; padding:2px 6px !important; }
+          /* ── Watchlist ── */
+          .sidebar .wl-sym { font-size:13px !important; color:#f0f8ff !important; font-weight:600; }
+          .sidebar .wl-name { font-size:11px !important; color:#8ec8e4 !important; }
+          /* ── MC sidebar ── */
+          .sidebar .mc-sym { font-size:13px !important; color:#f0f8ff !important; font-weight:600; }
+          .sidebar .mc-name { font-size:11px !important; color:#8ec8e4 !important; }
+          /* ── Header ── */
+          .header-logo { font-size:14px !important; color:#f0f8ff !important; font-weight:600; }
+          .status-badge { font-size:11px !important; }
+          /* ── Equity section ── */
+          .equity-section .section-title { margin-bottom:4px; }
+          /* ── Generic small text override ── */
+          .sidebar div[style*="font-size:9px"] { font-size:11px !important; color:#9dd0eb !important; }
+          .sidebar div[style*="font-size:10px"] { font-size:12px !important; }
         `}</style>
       </Head>
       <div className="app">
@@ -1640,6 +1784,7 @@ export default function Home() {
                       trades={result.trades||[]} maxDD={metrics?.ddSimple||0}
                       labelMode={labelMode} rulerActive={rulerOn}
                       onChartReady={api=>{chartApiRef.current=api}}
+                      savedRangeRef={savedRangeRef}
                       syncRef={chartSyncRef}
                     />
                     {/* Leyenda mínima bajo el gráfico — ELIMINADA según instrucciones */}
@@ -1647,13 +1792,25 @@ export default function Home() {
 
                   {/* Métricas en cuadrícula (si layout=grid) */}
                   {metricsLayout==='grid'&&metrics&&(
-                    <div className="metrics-section">
-                      {metricRows.map(m=>(
-                        <div key={m.label} className="metric-card">
-                          <span className="metric-label">{m.label}</span>
-                          <span className="metric-val" style={{color:m.color}}>{m.val}</span>
-                        </div>
-                      ))}
+                    <div>
+                      <StratSelector strats={metricsStrats} setStrats={setMetricsStrats}/>
+                      <div style={{display:'flex',gap:0,overflowX:'auto'}}>
+                        {metricsStrats.map(s=>(
+                          <div key={s} style={{flex:'1 1 220px',minWidth:200}}>
+                            <div style={{padding:'5px 12px',background:STRAT_META[s].bg,borderBottom:'1px solid var(--border)',fontFamily:MONO,fontSize:11,color:STRAT_META[s].color,fontWeight:700,textAlign:'center'}}>
+                              {STRAT_META[s].label}
+                            </div>
+                            <div className="metrics-section" style={{padding:'0 4px'}}>
+                              {buildIndivStratRows(s).map(m=>(
+                                <div key={m.label} className="metric-card">
+                                  <span className="metric-label">{m.label}</span>
+                                  <span className="metric-val" style={{color:m.color}}>{m.val}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
 
@@ -1690,6 +1847,29 @@ export default function Home() {
                       showSP500={showSP500} showCompound={showCompound}
                       syncRef={chartSyncRef}
                     />
+                    {/* % Capital invertido — individual */}
+                    {result.trades?.length>0&&(
+                      <div>
+                        <div style={{padding:'3px 12px',display:'flex',alignItems:'center',gap:8,fontFamily:MONO,fontSize:10,borderTop:'1px solid var(--border)',color:'#9b72ff'}}>
+                          <span>% Capital invertido</span>
+                          <button onClick={()=>setShowIndivOccupancy(v=>!v)}
+                            style={{fontFamily:MONO,fontSize:9,padding:'1px 5px',borderRadius:3,cursor:'pointer',
+                              border:`1px solid ${showIndivOccupancy?'#9b72ff':'#2a3f55'}`,
+                              background:showIndivOccupancy?'rgba(155,114,255,0.15)':'transparent',
+                              color:showIndivOccupancy?'#9b72ff':'#4a6a88'}}>
+                            {showIndivOccupancy?'ON':'OFF'}
+                          </button>
+                        </div>
+                        {showIndivOccupancy&&(
+                          <OccupancyBarChart
+                            trades={result.trades}
+                            chartData={result.chartData}
+                            capitalIni={Number(capitalIni)}
+                            syncRef={chartSyncRef}
+                          />
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* Barras de resultados — clic navega al trade */}
@@ -1728,26 +1908,33 @@ export default function Home() {
                       </div>
                       <div style={{overflowX:'auto'}}>
                         <table className="trades-table" style={{fontFamily:MONO}}>
-                          <thead><tr><th>#</th><th>Entrada</th><th>Salida</th><th style={{color:'#9b72ff'}}>Capital inv.</th><th>Px Entrada</th><th>Px Salida</th><th>P&L %</th><th>P&L €</th><th>Días</th><th>Tipo</th></tr></thead>
+                          <thead><tr><th>#</th><th>Entrada</th><th>Salida</th><th style={{color:'#9b72ff'}}>Capital inv.</th><th style={{color:'#00d4ff'}}>Capital final</th><th>Px Entrada</th><th>Px Salida</th><th>P&L %</th><th>P&L €</th><th>Días</th><th>Tipo</th></tr></thead>
                           <tbody>
-                            {[...result.trades].reverse().map((t,i)=>(
-                              <tr key={i} onClick={()=>navigateToTrade(t)} style={{cursor:'pointer'}}
-                                onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.06)'}
-                                onMouseOut={e=>e.currentTarget.style.background='transparent'}>
-                                <td style={{color:'var(--text3)'}}>{result.trades.length-i}</td>
-                                <td>{fmtDate(t.entryDate)}</td><td>{fmtDate(t.exitDate)}</td>
-                                <td style={{color:'#9b72ff',fontWeight:600}}>
-                                  {tradeHistMode==='compound'
-                                    ? `€${fmt(t.capitalTras,0)}`
-                                    : `€${fmt(Number(capitalIni)+result.trades.slice(0,result.trades.indexOf(t)+1).reduce((s,x)=>s+x.pnlSimple,0),0)}`}
-                                </td>
-                                <td>{fmt(t.entryPx,2)}</td><td>{fmt(t.exitPx,2)}</td>
-                                <td style={{color:t.pnlPct>=0?'var(--green)':'var(--red)',fontWeight:600}}>{t.pnlPct>=0?'+':''}{fmt(t.pnlPct,2)}%</td>
-                                <td style={{color:t.pnlSimple>=0?'var(--green)':'var(--red)'}}>{t.pnlSimple>=0?'+':''}{fmt(t.pnlSimple,2)}€</td>
-                                <td>{t.dias}</td>
-                                <td><span className={`tag ${t.pnlPct>=0?'win':'loss'}`}>{t.tipo}</span></td>
-                              </tr>
-                            ))}
+                            {(()=>{
+                              const reversed=[...result.trades].reverse()
+                              let runSimple=Number(capitalIni)
+                              return reversed.map((t,i)=>{
+                                const idx=result.trades.indexOf(t)
+                                const capFinalS=Number(capitalIni)+result.trades.slice(0,idx+1).reduce((s,x)=>s+x.pnlSimple,0)
+                                const capFinalC=t.capitalTras
+                                const capFinal=tradeHistMode==='compound'?capFinalC:capFinalS
+                                return(
+                                  <tr key={i} onClick={()=>navigateToTrade(t)} style={{cursor:'pointer'}}
+                                    onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.06)'}
+                                    onMouseOut={e=>e.currentTarget.style.background='transparent'}>
+                                    <td style={{color:'var(--text3)'}}>{result.trades.length-i}</td>
+                                    <td>{fmtDate(t.entryDate)}</td><td>{fmtDate(t.exitDate)}</td>
+                                    <td style={{color:'#9b72ff',fontWeight:600}}>€{fmt(Number(capitalIni),0)}</td>
+                                    <td style={{color:capFinal>=Number(capitalIni)?'#00d4ff':'#ff9a3c',fontWeight:600}}>€{fmt(capFinal,0)}</td>
+                                    <td>{fmt(t.entryPx,2)}</td><td>{fmt(t.exitPx,2)}</td>
+                                    <td style={{color:t.pnlPct>=0?'var(--green)':'var(--red)',fontWeight:600}}>{t.pnlPct>=0?'+':''}{fmt(t.pnlPct,2)}%</td>
+                                    <td style={{color:t.pnlSimple>=0?'var(--green)':'var(--red)'}}>{t.pnlSimple>=0?'+':''}{fmt(t.pnlSimple,2)}€</td>
+                                    <td>{t.dias}</td>
+                                    <td><span className={`tag ${t.pnlPct>=0?'win':'loss'}`}>{t.tipo}</span></td>
+                                  </tr>
+                                )
+                              })
+                            })()}
                           </tbody>
                         </table>
                       </div>
@@ -1764,8 +1951,11 @@ export default function Home() {
                         background:'transparent',transition:'background 0.15s'}}
                       onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.25)'}
                       onMouseOut={e=>e.currentTarget.style.background='transparent'}/>
-                    <div style={{padding:'7px 12px',borderBottom:'1px solid var(--border)',fontFamily:MONO,fontSize:9,color:'#8aadcc',letterSpacing:'0.1em'}}>RESUMEN · {simbolo}</div>
-                    <MetricsTable/>
+                    <div style={{padding:'7px 12px',borderBottom:'1px solid var(--border)',fontFamily:MONO,fontSize:10,color:'#b8d8f0',letterSpacing:'0.08em',fontWeight:600}}>RESUMEN · {simbolo}</div>
+                    <StratSelector strats={metricsStrats} setStrats={setMetricsStrats}/>
+                    <div style={{display:'flex',flex:1,minHeight:0}}>
+                      <MetricsTable/>
+                    </div>
                   </div>
                 )}
               </div>
@@ -1997,8 +2187,8 @@ export default function Home() {
                       <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:11}}>
                         <thead>
                           <tr style={{borderBottom:'1px solid var(--border)',position:'sticky',top:0,background:'var(--bg)'}}>
-                            {['#','Activo','Entrada','Salida','Capital inv.','Px Ent.','Px Sal.','P&L %','P&L €','Días','Tipo'].map((h,hi)=>(
-                              <th key={h} style={{padding:'4px 8px',textAlign:'left',color:hi===4?'#9b72ff':'var(--text3)',fontWeight:400,fontSize:9,whiteSpace:'nowrap'}}>{h}</th>
+                            {['#','Activo','Entrada','Salida','Capital inv.','Capital final','Px Ent.','Px Sal.','P&L %','P&L €','Días','Tipo'].map((h,hi)=>(
+                              <th key={h} style={{padding:'4px 8px',textAlign:'left',color:hi===4?'#9b72ff':hi===5?'#00d4ff':'var(--text3)',fontWeight:400,fontSize:9,whiteSpace:'nowrap'}}>{h}</th>
                             ))}
                           </tr>
                         </thead>
@@ -2013,11 +2203,14 @@ export default function Home() {
                               <td style={{padding:'4px 8px',color:'var(--accent)',fontWeight:700}}>{t.symbol}</td>
                               <td style={{padding:'4px 8px',color:'var(--text)',whiteSpace:'nowrap'}}>{fmtDate(t.entryDate)}</td>
                               <td style={{padding:'4px 8px',color:'var(--text)',whiteSpace:'nowrap'}}>{fmtDate(t.exitDate)}</td>
-                              <td style={{padding:'4px 8px',color:'#9b72ff',fontWeight:600,whiteSpace:'nowrap'}}>
-                                {mcTradeHistMode==='compound'
-                                  ? `€${fmt(t.capitalTras,0)}`
-                                  : `€${fmt(Number(capitalIni)+mcResult.allTrades.slice(0,mcResult.allTrades.indexOf(t)+1).reduce((s,x)=>s+x.pnlSimple,0),0)}`}
-                              </td>
+                              <td style={{padding:'4px 8px',color:'#9b72ff',fontWeight:600,whiteSpace:'nowrap'}}>€{fmt(Number(capitalIni),0)}</td>
+                              <td style={{padding:'4px 8px',whiteSpace:'nowrap'}}>{(()=>{
+                                const idx=mcResult.allTrades.indexOf(t)
+                                const capFinalS=Number(capitalIni)+mcResult.allTrades.slice(0,idx+1).reduce((s,x)=>s+x.pnlSimple,0)
+                                const capFinalC=t.capitalTras
+                                const v=mcTradeHistMode==='compound'?capFinalC:capFinalS
+                                return <span style={{color:v>=Number(capitalIni)?'#00d4ff':'#ff9a3c',fontWeight:600}}>€{fmt(v,0)}</span>
+                              })()}</td>
                               <td style={{padding:'4px 8px'}}>{fmt(t.entryPx,2)}</td>
                               <td style={{padding:'4px 8px'}}>{fmt(t.exitPx,2)}</td>
                               <td style={{padding:'4px 8px',color:t.pnlPct>=0?'#00e5a0':'#ff4d6d',fontWeight:600}}>{t.pnlPct>=0?'+':''}{fmt(t.pnlPct,2)}%</td>
@@ -2068,38 +2261,62 @@ export default function Home() {
                   const lBrute=losses.reduce((s,t)=>s+Math.abs(t.pnlSimple),0)
                   const factorBen=lBrute>0?gBrute/lBrute:999
                   const diasProm=allT.length?totalDias/allT.length:0
-                  const rows=[
+                  const mcSharedRows=[
                     {label:'Total Operaciones',val:allT.length,color:'#ffd166'},
+                    {label:'Capital inv. medio',val:fmt(mcResult.avgOccupancy,1,'%'),color:'#9b72ff'},
                     {label:'Total Días Invertido',val:totalDias,color:'#00d4ff'},
                     {label:'Días Promedio',val:fmt(diasProm,1,' días'),color:'#00d4ff'},
                     {label:`Tiempo Invertido (${fmt(aniosInv,2)}a)`,val:fmt(tiempoInvPct,0,'%'),color:'#ffd166'},
-                    {label:'Capital inv. medio',val:fmt(mcResult.avgOccupancy,1,'%'),color:'#9b72ff'},
-                    {label:'Ganadoras',val:wins.length,color:'#00e5a0'},
-                    {label:'Perdedoras',val:losses.length,color:'#ff4d6d'},
                     {label:'Win Rate',val:fmt(winRate,1,'%'),color:winRate>=50?'#00e5a0':'#ff4d6d'},
                     {label:'Factor de Beneficio',val:fmt(factorBen,2),color:factorBen>=1?'#00e5a0':'#ff4d6d'},
+                    {label:'Ganadoras',val:wins.length,color:'#00e5a0'},
+                    {label:'Perdedoras',val:losses.length,color:'#ff4d6d'},
                     {label:'Ganancia Media (%)',val:fmt(avgWin,2,'%'),color:'#00e5a0'},
                     {label:'Pérdida Media (%)',val:fmt(avgLoss,2,'%'),color:'#ff4d6d'},
-                    {label:'Ganancia Simple (€)',val:fmt(lastS-capIni,2,'€'),color:lastS>=capIni?'#00e5a0':'#ff4d6d'},
-                    {label:'Ganancia Total (%)',val:fmt((lastS-capIni)/capIni*100,2,'%'),color:lastS>=capIni?'#00e5a0':'#ff4d6d'},
-                    {label:`CAGR Simple (${fmt(anios,2)}a)`,val:fmt(cagrS,2,'%'),color:cagrS>=0?'#00e5a0':'#ff4d6d'},
-                    {label:'Max Drawdown (%)',val:fmt(mcResult.maxDDSimple,2,'%'),color:'#ff4d6d'},
-                    {label:'Ganancia Compuesta (€)',val:fmt(lastC-capIni,2,'€'),color:lastC>=capIni?'#00e5a0':'#ff4d6d'},
-                    {label:`CAGR Compuesto (${fmt(anios,2)}a)`,val:fmt(cagrC,2,'%'),color:cagrC>=0?'#00e5a0':'#ff4d6d'},
-                    {label:'Max DD Compuesto (%)',val:fmt(mcResult.maxDDCompound,2,'%'),color:'#ff4d6d'},
-                    {label:'Ganancia B&H Divers. (€)',val:fmt(lastBH-capIni,2,'€'),color:lastBH>=capIni?'#00e5a0':'#ff4d6d'},
-                    {label:`CAGR B&H (${fmt(anios,2)}a)`,val:fmt(cagrBH,2,'%'),color:cagrBH>=0?'#00e5a0':'#ff4d6d'},
-                    {label:'Max Drawdown B&H (%)',val:fmt(mcResult.maxDDBH,2,'%'),color:'#ff4d6d'},
                   ]
+                  const mcStratRows={
+                    simple:[...mcSharedRows,
+                      {label:'Ganancia Simple (€)',val:fmt(lastS-capIni,2,'€'),color:lastS>=capIni?'#00e5a0':'#ff4d6d'},
+                      {label:'Ganancia Total (%)',val:fmt((lastS-capIni)/capIni*100,2,'%'),color:lastS>=capIni?'#00e5a0':'#ff4d6d'},
+                      {label:`CAGR Simple (${fmt(anios,2)}a)`,val:fmt(cagrS,2,'%'),color:cagrS>=0?'#00e5a0':'#ff4d6d'},
+                      {label:'Max Drawdown (%)',val:fmt(mcResult.maxDDSimple,2,'%'),color:'#ff4d6d'},
+                    ],
+                    compound:[...mcSharedRows,
+                      {label:'Ganancia Compuesta (€)',val:fmt(lastC-capIni,2,'€'),color:lastC>=capIni?'#00e5a0':'#ff4d6d'},
+                      {label:`CAGR Compuesto (${fmt(anios,2)}a)`,val:fmt(cagrC,2,'%'),color:cagrC>=0?'#00e5a0':'#ff4d6d'},
+                      {label:'Max DD Compuesto (%)',val:fmt(mcResult.maxDDCompound,2,'%'),color:'#ff4d6d'},
+                    ],
+                    bh:[
+                      {label:'Ganancia B&H Divers. (€)',val:fmt(lastBH-capIni,2,'€'),color:lastBH>=capIni?'#00e5a0':'#ff4d6d'},
+                      {label:`CAGR B&H (${fmt(anios,2)}a)`,val:fmt(cagrBH,2,'%'),color:cagrBH>=0?'#00e5a0':'#ff4d6d'},
+                      {label:'Max Drawdown B&H (%)',val:fmt(mcResult.maxDDBH,2,'%'),color:'#ff4d6d'},
+                    ],
+                  }
                   return(
-                    <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:12}}>
-                      <tbody>{rows.map(m=>(
-                        <tr key={m.label} style={{borderBottom:'1px solid var(--border)'}}>
-                          <td style={{padding:'6px 10px',color:'var(--text2)',fontSize:11}}>{m.label}</td>
-                          <td style={{padding:'6px 10px',textAlign:'right',color:m.color,fontWeight:600}}>{m.val}</td>
-                        </tr>
-                      ))}</tbody>
-                    </table>
+                    <div style={{display:'flex',flexDirection:'column',height:'100%'}}>
+                      <StratSelector strats={metricsStrats} setStrats={setMetricsStrats}/>
+                      <div style={{display:'flex',flex:1,minWidth:0}}>
+                        {metricsStrats.map((s,si)=>{
+                          const rows=mcStratRows[s]||[]
+                          const meta=STRAT_META[s]
+                          return(
+                            <div key={s} style={{flex:1,minWidth:0,borderRight:si<metricsStrats.length-1?'1px solid var(--border)':'none',overflowY:'auto'}}>
+                              <div style={{padding:'4px 8px',background:meta.bg,borderBottom:'1px solid var(--border)',fontFamily:MONO,fontSize:11,color:meta.color,fontWeight:700,textAlign:'center',position:'sticky',top:0,zIndex:2}}>
+                                {meta.label}
+                              </div>
+                              <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:12}}>
+                                <tbody>{rows.map(m=>(
+                                  <tr key={m.label} style={{borderBottom:'1px solid var(--border)'}}>
+                                    <td style={{padding:'6px 9px',color:'#b8d4ea',fontSize:11}}>{m.label}</td>
+                                    <td style={{padding:'6px 9px',textAlign:'right',color:m.color,fontWeight:600}}>{m.val}</td>
+                                  </tr>
+                                ))}</tbody>
+                              </table>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
                   )
                 })()}
               </div>}
