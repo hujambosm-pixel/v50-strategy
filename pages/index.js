@@ -185,9 +185,9 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
       candlesRef.current=candles
 
       // EMA series — sin title para no generar leyenda inferior
-      const erS=chart.addLineSeries({color:'#ffd166',lineWidth:2,lastValueVisible:false,priceLineVisible:false})
+      const erS=chart.addLineSeries({color:'#ffd166',lineWidth:1,lastValueVisible:false,priceLineVisible:false})
       erS.setData(data.filter(d=>d.emaR!=null).map(d=>({time:d.date,value:d.emaR})))
-      const elS=chart.addLineSeries({color:'#ff4d6d',lineWidth:2,lastValueVisible:false,priceLineVisible:false})
+      const elS=chart.addLineSeries({color:'#ff4d6d',lineWidth:1,lastValueVisible:false,priceLineVisible:false})
       elS.setData(data.filter(d=>d.emaL!=null).map(d=>({time:d.date,value:d.emaL})))
 
       // Líneas de trades — sin title
@@ -425,7 +425,19 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
         }
       })
 
-      chart.timeScale().fitContent()
+      // Vista por defecto: últimos 3 meses
+      try {
+        const lastBar = data[data.length-1]
+        if(lastBar){
+          const to = new Date(lastBar.date)
+          const from = new Date(lastBar.date)
+          from.setMonth(from.getMonth()-3)
+          chart.timeScale().setVisibleRange({
+            from: from.toISOString().split('T')[0],
+            to:   to.toISOString().split('T')[0]
+          })
+        }
+      } catch(_){ chart.timeScale().fitContent() }
 
       // Exponer navigateTo
       if(onChartReady) onChartReady({
@@ -715,10 +727,10 @@ export default function Home() {
     finally{setAlarmStatusLoading(false)}
   },[watchlist,alarms])
 
-  // Cuando cargan las alarmas Y la watchlist, recalcular
+  // Recalcular cuando cargan alarmas O watchlist (ambos deben estar listos)
   useEffect(()=>{
     if(watchlist.length>0&&alarms.length>0) refreshAlarmStatus(watchlist,alarms)
-  },[alarms])
+  },[alarms,watchlist.length]) // eslint-disable-line
 
   const run=useCallback(async(sym,cfg)=>{
     setLoading(true);setError(null)
@@ -799,7 +811,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator 1.2</title>
+        <title>Trading Simulator 1.3</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -815,7 +827,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator 1.2
+            <span className="dot"/>Trading Simulator 1.3
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -997,7 +1009,7 @@ export default function Home() {
                     ★
                   </button>
                   <button onClick={newItem} title="Añadir activo" style={{background:'rgba(0,212,255,0.1)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:13,padding:'2px 7px',borderRadius:3,cursor:'pointer',flexShrink:0}}>+</button>
-                  <button onClick={reloadWatchlist} title="Recargar" style={{background:'transparent',border:'1px solid var(--border)',color:'var(--text3)',fontFamily:MONO,fontSize:10,padding:'3px 5px',borderRadius:3,cursor:'pointer',flexShrink:0}}>⟳</button>
+                  <button onClick={()=>{setWlSearch('');setSelectedLists([]);setOnlyFavs(false);setSelectedAlarmIds([])}} title="Limpiar todos los filtros" style={{background:'rgba(255,77,109,0.08)',border:'1px solid #ff4d6d',color:'#ff4d6d',fontFamily:MONO,fontSize:9,padding:'3px 7px',borderRadius:3,cursor:'pointer',flexShrink:0}}>✕</button>
                 </div>
                 {/* ══ Fila 2: filtro alarmas (chips inline, ancho completo) ══ */}
                 {alarms.length>0&&(
@@ -1043,7 +1055,7 @@ export default function Home() {
                       const matchSearch=!wlSearch||(w.symbol||'').toLowerCase().includes(searchLower)||(w.name||'').toLowerCase().includes(searchLower)
                       const matchFav=!onlyFavs||w.favorite
                       const symAlarms=alarmStatus[w.symbol]||{}
-                      const matchAlarm=selectedAlarmIds.length===0||selectedAlarmIds.some(id=>symAlarms[id]===true)
+                      const matchAlarm=selectedAlarmIds.length===0||selectedAlarmIds.every(id=>symAlarms[id]===true)
                       return matchList&&matchSearch&&matchFav&&matchAlarm
                     })
                     const favs=filtered.filter(w=>w.favorite)
