@@ -1187,13 +1187,13 @@ export default function Home() {
     if(!confirm('¿Eliminar esta estrategia?')) return
     await deleteStrategy(id); reloadStrategies()
   }
-  const loadStrategy=(s)=>{
+  const loadStrategyLegacy=(s)=>{
     setSimbolo(s.symbol||simbolo)
-    setEmaR(s.ema_r);setEmaL(s.ema_l);setYears(s.years)
-    setCapitalIni(s.capital_ini);setTipoStop(s.tipo_stop)
-    setAtrP(s.atr_period);setAtrM(s.atr_mult)
-    setSinPerdidas(s.sin_perdidas);setReentry(s.reentry)
-    setTipoFiltro(s.tipo_filtro);setSp500EmaR(s.sp500_ema_r);setSp500EmaL(s.sp500_ema_l)
+    setEmaR(s.ema_r||10);setEmaL(s.ema_l||11);setYears(s.years||5)
+    setCapitalIni(s.capital_ini||10000);setTipoStop(s.tipo_stop||'tecnico')
+    setAtrP(s.atr_period||14);setAtrM(s.atr_mult||1.0)
+    setSinPerdidas(s.sin_perdidas??true);setReentry(s.reentry??true)
+    setTipoFiltro(s.tipo_filtro||'none');setSp500EmaR(s.sp500_ema_r||10);setSp500EmaL(s.sp500_ema_l||11)
     setStrForm(f=>({...f,_loadedName:s.name}))
     setSidePanel('config')
   }
@@ -1673,7 +1673,7 @@ export default function Home() {
                           value={strForm._loadedName||''}
                           onChange={e=>{
                             const s=strategies.find(x=>x.name===e.target.value)
-                            if(s) loadStrategy(s)
+                            if(s) loadStrategyLegacy(s)
                           }}
                           style={{width:'100%'}}
                         >
@@ -3033,7 +3033,7 @@ export default function Home() {
                       </div>
                       <button onClick={()=>openEditStr(s)} style={{background:'transparent',border:'1px solid var(--border)',color:'var(--text3)',fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer'}}>✎</button>
                       <button onClick={()=>duplicateStr(s)} title="Duplicar" style={{background:'transparent',border:'1px solid var(--border)',color:'var(--text3)',fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer'}}>⎘</button>
-                      <button onClick={()=>{loadStrategy(s);closeEditStr()}} style={{background:'rgba(0,212,255,0.1)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer'}}>▶</button>
+                      <button onClick={()=>{loadStrategyLegacy(s);closeEditStr()}} style={{background:'rgba(0,212,255,0.1)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer'}}>▶</button>
                     </div>
                   ))}
                 </div>
