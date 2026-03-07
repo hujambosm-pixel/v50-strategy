@@ -439,7 +439,7 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
         }
       } catch(_){ chart.timeScale().fitContent() }
 
-      // Exponer navigateTo
+      // Exponer navigateTo + fitAll
       if(onChartReady) onChartReady({
         navigateTo:(entryDate,exitDate)=>{
           try{
@@ -448,7 +448,8 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
             const d2=new Date(exitDate); d2.setDate(d2.getDate()+pad)
             chart.timeScale().setVisibleRange({from:d1.toISOString().split('T')[0],to:d2.toISOString().split('T')[0]})
           }catch(_){}
-        }
+        },
+        fitAll:()=>{ try{ chart.timeScale().fitContent() }catch(_){} }
       })
 
       const ro=new ResizeObserver(()=>{
@@ -833,7 +834,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator 1.4</title>
+        <title>Trading Simulator 1.5</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -849,7 +850,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator 1.4
+            <span className="dot"/>Trading Simulator 1.5
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -1030,16 +1031,18 @@ export default function Home() {
                     style={{background:onlyFavs?'rgba(255,209,102,0.15)':'transparent',border:`1px solid ${onlyFavs?'#ffd166':'var(--border)'}`,color:onlyFavs?'#ffd166':'var(--text3)',fontFamily:MONO,fontSize:12,padding:'3px 6px',borderRadius:4,cursor:'pointer',flexShrink:0}}>
                     ★
                   </button>
-                  <button onClick={newItem} title="Añadir activo" style={{background:'rgba(0,212,255,0.1)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:13,padding:'2px 7px',borderRadius:3,cursor:'pointer',flexShrink:0}}>+</button>
+
                   <button onClick={()=>{setWlSearch('');setSelectedLists([]);setOnlyFavs(false);setSelectedAlarmIds([])}} title="Limpiar todos los filtros" style={{background:'rgba(255,77,109,0.08)',border:'1px solid #ff4d6d',color:'#ff4d6d',fontFamily:MONO,fontSize:9,padding:'3px 7px',borderRadius:3,cursor:'pointer',flexShrink:0}}>✕</button>
                 </div>
                 {/* ══ Fila 2: filtro alarmas (chips inline, ancho completo) ══ */}
                 {alarms.length>0&&(
                   <div style={{padding:'4px 8px 5px',borderBottom:'1px solid var(--border)',flexShrink:0,display:'flex',gap:4,alignItems:'center',flexWrap:'wrap'}}>
                     <span style={{fontFamily:MONO,fontSize:9,color:'#7a9bc0',flexShrink:0,marginRight:2}}>🔔</span>
-                    {alarms.map(a=>{
+                    {alarms.map((a,ai)=>{
                       const sel=selectedAlarmIds.includes(a.id)
-                      const activeCount=watchlist.filter(w=>alarmStatus[w.symbol]?.[a.id]===true).length
+                      const activeCount=watchlist.filter(w=>alarmStatus[w.symbol]?.[a.id]?.active===true).length
+                      const ALARM_COLORS=['#00e5a0','#ffd166','#00d4ff','#ff7eb3','#9b72ff','#ff4d6d']
+                      const col=ALARM_COLORS[ai%ALARM_COLORS.length]
                       return(
                         <button key={a.id}
                           onClick={()=>{
@@ -1049,14 +1052,14 @@ export default function Home() {
                           }}
                           style={{
                             fontFamily:MONO,fontSize:9,padding:'3px 7px',borderRadius:12,cursor:'pointer',
-                            border:`1px solid ${sel?'#ffd166':'#1e3a52'}`,
-                            background:sel?'rgba(255,209,102,0.12)':'rgba(255,255,255,0.03)',
-                            color:sel?'#ffd166':'#8aadcc',
+                            border:`1px solid ${sel?col:'#1e3a52'}`,
+                            background:sel?`${col}18`:'rgba(255,255,255,0.03)',
+                            color:sel?col:'#8aadcc',
                             display:'flex',alignItems:'center',gap:4,whiteSpace:'nowrap'
                           }}>
-                          {sel?'☑ ':''}
+                          <span style={{width:8,height:8,borderRadius:'50%',background:activeCount>0?col:'#2a3f55',flexShrink:0,display:'inline-block'}}/>
                           {a.name}
-                          {activeCount>0&&<span style={{color:'#00e5a0',fontWeight:700,fontSize:9}}>{activeCount}</span>}
+                          {activeCount>0&&<span style={{color:col,fontWeight:700,fontSize:9}}>{activeCount}</span>}
                         </button>
                       )
                     })}
@@ -1077,7 +1080,7 @@ export default function Home() {
                       const matchSearch=!wlSearch||(w.symbol||'').toLowerCase().includes(searchLower)||(w.name||'').toLowerCase().includes(searchLower)
                       const matchFav=!onlyFavs||w.favorite
                       const symAlarms=alarmStatus[w.symbol]||{}
-                      const matchAlarm=selectedAlarmIds.length===0||selectedAlarmIds.every(id=>symAlarms[id]===true)
+                      const matchAlarm=selectedAlarmIds.length===0||selectedAlarmIds.every(id=>symAlarms[id]?.active===true)
                       return matchList&&matchSearch&&matchFav&&matchAlarm
                     })
                     const favs=filtered.filter(w=>w.favorite)
@@ -1099,18 +1102,34 @@ export default function Home() {
                           <div style={{fontFamily:MONO,fontSize:11,color:simbolo===w.symbol?'var(--accent)':'#d0e8fa',fontWeight:600}}>{w.symbol}</div>
                           <div style={{fontFamily:MONO,fontSize:9,color:'#8aadcc',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{w.name}</div>
                         </div>
-                        {/* Badges alarmas activas */}
+                        {/* Badges alarmas — círculos de color con velas */}
                         {(()=>{
                           const symAlarms=alarmStatus[w.symbol]
                           if(!symAlarms) return null
-                          return alarms.filter(a=>symAlarms[a.id]===true).map(a=>(
-                            <span key={a.id} title={`${a.name} activa`}
-                              style={{fontFamily:MONO,fontSize:8,fontWeight:700,color:'#00e5a0',
-                                background:'rgba(0,229,160,0.1)',border:'1px solid rgba(0,229,160,0.35)',
-                                padding:'1px 4px',borderRadius:3,flexShrink:0,lineHeight:'1.5',whiteSpace:'nowrap',maxWidth:52,overflow:'hidden',textOverflow:'ellipsis'}}>
-                              {a.name}
-                            </span>
-                          ))
+                          const ALARM_COLORS=['#00e5a0','#ffd166','#00d4ff','#ff7eb3','#9b72ff','#ff4d6d']
+                          return alarms.map((a,ai)=>{
+                            const st=symAlarms[a.id]
+                            if(!st) return null
+                            const active=st?.active===true
+                            const bars=st?.bars
+                            const col=ALARM_COLORS[ai%ALARM_COLORS.length]
+                            const label=bars!=null?String(bars):'?'
+                            return(
+                              <span key={a.id} title={`${a.name}${active?' · activa'+( bars!=null?' · '+bars+' velas':''): ' · inactiva'}`}
+                                style={{
+                                  display:'inline-flex',alignItems:'center',justifyContent:'center',
+                                  width:18,height:18,borderRadius:'50%',flexShrink:0,
+                                  background:active?col:'rgba(61,90,122,0.2)',
+                                  border:`1.5px solid ${active?col:'#2a3f55'}`,
+                                  color:active?'#000':'#3d5a7a',
+                                  fontFamily:MONO,fontSize:8,fontWeight:800,lineHeight:1,
+                                  boxShadow:active?`0 0 6px ${col}55`:undefined,
+                                  cursor:'default',
+                                }}>
+                                {active?label:''}
+                              </span>
+                            )
+                          })
                         })()}
                         {/* Lista badge */}
                         <span style={{fontFamily:MONO,fontSize:8,color:'#7fb8d8',background:'var(--bg2)',padding:'1px 4px',borderRadius:2,flexShrink:0}}>{w.list_name||'General'}</span>
@@ -1201,25 +1220,26 @@ export default function Home() {
                 <div style={{overflowY:'auto',flex:1}}>
                   {alarmLoading&&<div style={{padding:'10px 12px',fontFamily:MONO,fontSize:10,color:'var(--text3)'}}>⟳ Cargando…</div>}
                   {!alarmLoading&&!alarms.length&&<div style={{padding:'14px 12px',fontFamily:MONO,fontSize:10,color:'var(--text3)'}}>Sin alarmas. Pulsa + para crear una.</div>}
-                  {!alarmLoading&&alarms.map(a=>{
+                  {!alarmLoading&&alarms.map((a,ai)=>{
                     const condLabel={
                       ema_cross_up:'EMA rápida > EMA lenta ↑',ema_cross_down:'EMA rápida < EMA lenta ↓',
                       price_above_ema:'Precio cierre > EMA rápida',price_below_ema:'Precio cierre < EMA rápida'
                     }[a.condition]||a.condition
-                    // Contar cuántos símbolos tienen esta alarma activa
-                    const activeCount=watchlist.filter(w=>alarmStatus[w.symbol]?.[a.id]===true).length
+                    const ALARM_COLORS=['#00e5a0','#ffd166','#00d4ff','#ff7eb3','#9b72ff','#ff4d6d']
+                    const col=ALARM_COLORS[ai%ALARM_COLORS.length]
+                    const activeCount=watchlist.filter(w=>alarmStatus[w.symbol]?.[a.id]?.active===true).length
                     const totalEval=watchlist.filter(w=>alarmStatus[w.symbol]?.[a.id]!==undefined).length
                     return(
                       <div key={a.id} style={{padding:'8px 10px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:8}}>
-                        {/* Dot indicador */}
-                        <span style={{width:8,height:8,borderRadius:'50%',flexShrink:0,
-                          background:activeCount>0?'#00e5a0':'#3d5a7a',
-                          boxShadow:activeCount>0?'0 0 6px #00e5a0':undefined}}/>
+                        {/* Dot indicador con color de alarma */}
+                        <span style={{width:10,height:10,borderRadius:'50%',flexShrink:0,
+                          background:activeCount>0?col:'#2a3f55',
+                          boxShadow:activeCount>0?`0 0 6px ${col}`:undefined}}/>
                         <div style={{flex:1,minWidth:0}}>
                           <div style={{fontFamily:MONO,fontSize:11,color:'var(--text)',fontWeight:700}}>{a.name}</div>
                           <div style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',marginTop:1}}>{condLabel} · EMA {a.ema_r}/{a.ema_l}</div>
                           {totalEval>0&&<div style={{fontFamily:MONO,fontSize:9,marginTop:2}}>
-                            <span style={{color:'#00e5a0',fontWeight:600}}>{activeCount} activos</span>
+                            <span style={{color:col,fontWeight:600}}>{activeCount} activos</span>
                             <span style={{color:'var(--text3)'}}> / {totalEval} evaluados</span>
                           </div>}
                         </div>
@@ -1243,11 +1263,39 @@ export default function Home() {
                 <div ref={contentRef} style={{flex:1,overflowY:'auto'}}>
                   {/* Gráfico de velas */}
                   <div className="chart-wrap" ref={chartWrapRef}>
-                    <div className="chart-header">
-                      <div className="chart-title">{simbolo}</div>
+                    <div className="chart-header" style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+                      {/* Estrella favorito del activo activo */}
+                      {(()=>{
+                        const wItem=watchlist.find(w=>w.symbol===simbolo)
+                        if(!wItem) return null
+                        return(
+                          <span onClick={async()=>{await upsertWatchlistItem({...wItem,favorite:!wItem.favorite});reloadWatchlist()}}
+                            title={wItem.favorite?'Quitar favorito':'Marcar favorito'}
+                            style={{cursor:'pointer',fontSize:16,color:wItem.favorite?'#ffd166':'#3d5a7a',flexShrink:0,lineHeight:1}}>
+                            {wItem.favorite?'★':'☆'}
+                          </span>
+                        )
+                      })()}
+                      <div className="chart-title" style={{cursor:'pointer'}} onClick={()=>setSymSearchOpen(true)} title="Buscar símbolo">{simbolo}</div>
+                      {/* Nombre del activo */}
+                      <div style={{fontFamily:MONO,fontSize:12,color:'#7a9bc0',fontWeight:400}}>{lookupName(simbolo)}</div>
                       <div className="chart-price">{fmt(result.meta?.ultimoPrecio,2)}</div>
                       <div className="chart-date">{fmtDate(result.meta?.ultimaFecha)}</div>
-                      {rulerOn&&<div style={{fontFamily:MONO,fontSize:10,color:'#ffd166',marginLeft:'auto'}}>📏 Regla ON · Ctrl=imán · dbl-clic=borrar</div>}
+                      <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:6}}>
+                        {rulerOn&&<span style={{fontFamily:MONO,fontSize:10,color:'#ffd166'}}>📏 Regla ON · Ctrl=imán · dbl-clic=borrar</span>}
+                        {/* Botón Fit All */}
+                        <button onClick={()=>chartApiRef.current?.fitAll()}
+                          title="Ver período completo de la estrategia"
+                          style={{background:'rgba(0,212,255,0.08)',border:'1px solid #1e3a52',color:'#00d4ff',fontFamily:MONO,fontSize:10,padding:'3px 8px',borderRadius:4,cursor:'pointer',whiteSpace:'nowrap'}}>
+                          ⊞ Todo
+                        </button>
+                        {/* Botón Añadir activo */}
+                        <button onClick={newItem}
+                          title="Añadir activo a la watchlist"
+                          style={{background:'rgba(0,212,255,0.08)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:13,padding:'2px 8px',borderRadius:4,cursor:'pointer',lineHeight:1}}>
+                          +
+                        </button>
+                      </div>
                     </div>
                     <CandleChart
                       data={result.chartData} emaRPeriod={emaR} emaLPeriod={emaL}
