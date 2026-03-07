@@ -535,6 +535,89 @@ function EquityChart({
   return <div ref={ref} style={{minHeight:260}}/>
 }
 
+// ── MultiCartChart ───────────────────────────────────────────
+function MultiCartChart({simpleCurve,compoundCurve,bhCurve,occupancyCurve,capitalIni,
+  maxDDSimple,maxDDSimpleDate,maxDDCompound,maxDDCompoundDate,maxDDBH,maxDDBHDate,
+  showSimple,showCompound,showBH,showOccupancy}) {
+  const ref=useRef(null),chartRef=useRef(null),ref2=useRef(null),chart2Ref=useRef(null)
+  useEffect(()=>{
+    if(!ref.current) return
+    import('lightweight-charts').then(({createChart,CrosshairMode,LineStyle})=>{
+      if(chartRef.current){chartRef.current.remove();chartRef.current=null}
+      const chart=createChart(ref.current,{
+        width:ref.current.clientWidth,height:300,
+        layout:{background:{color:'#080c14'},textColor:'#7a9bc0'},
+        grid:{vertLines:{color:'#0d1520'},horzLines:{color:'#0d1520'}},
+        crosshair:{mode:CrosshairMode.Normal},
+        rightPriceScale:{borderColor:'#1a2d45'},
+        timeScale:{borderColor:'#1a2d45',timeVisible:false},
+      })
+      chartRef.current=chart
+      const base=simpleCurve||compoundCurve||bhCurve
+      if(base?.length) chart.addLineSeries({color:'#2a3f55',lineWidth:1,lineStyle:LineStyle.Dotted,lastValueVisible:false,priceLineVisible:false})
+        .setData([{time:base[0].date,value:capitalIni},{time:base[base.length-1].date,value:capitalIni}])
+      if(showSimple&&simpleCurve?.length) chart.addLineSeries({color:'#00d4ff',lineWidth:2,title:'Simple'}).setData(simpleCurve.map(p=>({time:p.date,value:p.value})))
+      if(showCompound&&compoundCurve?.length) chart.addLineSeries({color:'#00e5a0',lineWidth:2,title:'Compuesto'}).setData(compoundCurve.map(p=>({time:p.date,value:p.value})))
+      if(showBH&&bhCurve?.length) chart.addLineSeries({color:'#ffd166',lineWidth:2,lineStyle:LineStyle.Dashed,title:'B&H'}).setData(bhCurve.map(p=>({time:p.date,value:p.value})))
+      // Drawdown lines
+      const addDD=(curve,date,dd,color,label)=>{
+        if(!date||!dd||!curve?.length) return
+        let peak={date:curve[0].date,value:curve[0].value}
+        for(const p of curve){if(p.date>date)break;if(p.value>peak.value)peak=p}
+        const trough=curve.find(p=>p.date===date)
+        if(!trough||peak.date===trough.date) return
+        const s=chart.addLineSeries({color,lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:false,priceLineVisible:false})
+        s.setData([{time:peak.date,value:peak.value},{time:trough.date,value:trough.value}])
+        s.setMarkers([{time:trough.date,position:'belowBar',color,shape:'circle',size:0,text:`↓ -${dd.toFixed(1)}%`}])
+      }
+      if(showSimple) addDD(simpleCurve,maxDDSimpleDate,maxDDSimple,'#ff4d6d','DD S')
+      if(showCompound) addDD(compoundCurve,maxDDCompoundDate,maxDDCompound,'#00a870','DD C')
+      if(showBH) addDD(bhCurve,maxDDBHDate,maxDDBH,'#ff9a3c','DD BH')
+      chart.timeScale().fitContent()
+      const ro=new ResizeObserver(()=>{if(ref.current)chart.applyOptions({width:ref.current.clientWidth})})
+      ro.observe(ref.current)
+      return()=>ro.disconnect()
+    })
+    return()=>{if(chartRef.current){chartRef.current.remove();chartRef.current=null}}
+  },[simpleCurve,compoundCurve,bhCurve,capitalIni,maxDDSimple,maxDDSimpleDate,maxDDCompound,maxDDCompoundDate,maxDDBH,maxDDBHDate,showSimple,showCompound,showBH])
+
+  // Occupancy chart (secondary)
+  useEffect(()=>{
+    if(!ref2.current||!showOccupancy||!occupancyCurve?.length) return
+    import('lightweight-charts').then(({createChart,CrosshairMode})=>{
+      if(chart2Ref.current){chart2Ref.current.remove();chart2Ref.current=null}
+      const chart=createChart(ref2.current,{
+        width:ref2.current.clientWidth,height:100,
+        layout:{background:{color:'#080c14'},textColor:'#7a9bc0'},
+        grid:{vertLines:{color:'#0d1520'},horzLines:{color:'#0d1520'}},
+        crosshair:{mode:CrosshairMode.Normal},
+        rightPriceScale:{borderColor:'#1a2d45',scaleMargins:{top:0.05,bottom:0.05}},
+        timeScale:{borderColor:'#1a2d45',timeVisible:false},
+      })
+      chart2Ref.current=chart
+      const s=chart.addLineSeries({color:'#9b72ff',lineWidth:1,title:'% Capital inv.',lastValueVisible:true,priceLineVisible:false})
+      s.setData(occupancyCurve.map(p=>({time:p.date,value:p.value})))
+      chart.timeScale().fitContent()
+      const ro=new ResizeObserver(()=>{if(ref2.current)chart.applyOptions({width:ref2.current.clientWidth})})
+      ro.observe(ref2.current)
+      return()=>ro.disconnect()
+    })
+    return()=>{if(chart2Ref.current){chart2Ref.current.remove();chart2Ref.current=null}}
+  },[occupancyCurve,showOccupancy])
+
+  return(
+    <div>
+      <div ref={ref} style={{minHeight:300}}/>
+      {showOccupancy&&occupancyCurve?.length>0&&(
+        <div>
+          <div style={{padding:'3px 12px',fontFamily:MONO,fontSize:9,color:'#9b72ff',borderTop:'1px solid var(--border)'}}>% CAPITAL INVERTIDO</div>
+          <div ref={ref2} style={{minHeight:100}}/>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Main ─────────────────────────────────────────────────────
 export default function Home() {
   const [simbolo,setSimbolo]=useState('^GSPC')
@@ -577,6 +660,19 @@ export default function Home() {
   const [alarmDropOpen,setAlarmDropOpen]=useState(false)  // desplegable alarmas
   // Búsqueda async de nombre
   const symSearchRef=useRef(null)
+  // ── Multicartera state ──────────────────────────────────────
+  const [mcSelected,setMcSelected]=useState([])          // symbols seleccionados
+  const [mcMode,setMcMode]=useState('slots')             // 'slots' | 'rotativo' | 'custom'
+  const [mcCapital,setMcCapital]=useState('compound')    // 'simple' | 'compound'
+  const [mcResult,setMcResult]=useState(null)
+  const [mcLoading,setMcLoading]=useState(false)
+  const [mcError,setMcError]=useState(null)
+  const [mcShowSimple,setMcShowSimple]=useState(true)
+  const [mcShowCompound,setMcShowCompound]=useState(true)
+  const [mcShowBH,setMcShowBH]=useState(true)
+  const [mcShowOccupancy,setMcShowOccupancy]=useState(true)
+  const mcChartRef=useRef(null)
+
   const debounceRef=useRef(null),chartApiRef=useRef(null),contentRef=useRef(null)
 
   // Abrir búsqueda de símbolo al escribir cualquier letra/número fuera de inputs
@@ -771,6 +867,27 @@ export default function Home() {
     return()=>clearTimeout(debounceRef.current)
   },[simbolo,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL,run])
 
+  // ── Multicartera runner ─────────────────────────────────────
+  const runMulticartera=useCallback(async()=>{
+    if(mcSelected.length<2){setMcError('Selecciona al menos 2 activos');return}
+    setMcLoading(true);setMcError(null);setMcResult(null)
+    try{
+      const res=await fetch('/api/multibacktest',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          symbols:mcSelected,
+          cfg:{emaR:Number(emaR),emaL:Number(emaL),years:Number(years),capitalIni:Number(capitalIni),
+            tipoStop,atrPeriod:Number(atrP),atrMult:Number(atrM),sinPerdidas,reentry,
+            tipoFiltro,sp500EmaR:Number(sp500EmaR),sp500EmaL:Number(sp500EmaL),tipoCapital:mcCapital}
+        })
+      })
+      const json=await res.json()
+      if(!res.ok) throw new Error(json.error||'Error')
+      setMcResult(json)
+    }catch(e){setMcError(e.message)}finally{setMcLoading(false)}
+  },[mcSelected,mcCapital,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL])
+
   const metrics=result?calcMetrics(result.trades,Number(capitalIni),result.capitalReinv,result.gananciaSimple,result.ganBH||0,result.startDate,result.meta?.ultimaFecha,Number(years)):null
   const sp5=result?.sp500Status
   let spStatus='neutral',spTxt='SIN FILTRO'
@@ -834,7 +951,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator 1.5</title>
+        <title>Trading Simulator 1.6</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -850,7 +967,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator 1.5
+            <span className="dot"/>Trading Simulator 1.6
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -917,7 +1034,7 @@ export default function Home() {
           {/* ── SIDEBAR ── */}
           <aside className="sidebar" style={{padding:0,gap:0,position:'relative'}}>
             <div style={{display:'flex',borderBottom:'1px solid var(--border)'}}>
-              {[{id:'config',label:'⚙',title:'Configuración'},{id:'watchlist',label:'☰',title:'Watchlist'},{id:'alarms',label:'🔔',title:'Alarmas'}].map(tab=>(
+              {[{id:'config',label:'⚙',title:'Configuración'},{id:'watchlist',label:'☰',title:'Watchlist'},{id:'alarms',label:'🔔',title:'Alarmas'},{id:'multi',label:'📊',title:'Multicartera'}].map(tab=>(
                 <button key={tab.id} onClick={()=>setSidePanel(tab.id)} title={tab.title} style={{
                   flex:1,padding:'8px 4px',
                   background:sidePanel===tab.id?'var(--bg3)':'transparent',
@@ -1250,6 +1367,113 @@ export default function Home() {
                 </div>
               </div>
             )}
+
+            {/* ══ PANEL MULTICARTERA ══ */}
+            {sidePanel==='multi'&&(
+              <div style={{display:'flex',flexDirection:'column',flex:1,overflowY:'auto'}}>
+                {/* Header */}
+                <div style={{padding:'8px 12px',borderBottom:'1px solid var(--border)',fontFamily:MONO,fontSize:9,color:'var(--text3)',letterSpacing:'0.1em',textTransform:'uppercase'}}>
+                  Multicartera — Slots iguales
+                </div>
+
+                {/* Modo de asignación */}
+                <div style={{padding:'10px 12px',borderBottom:'1px solid var(--border)'}}>
+                  <div style={{fontFamily:MONO,fontSize:9,color:'#a8c8e8',marginBottom:6,letterSpacing:'0.05em'}}>MODO DE ASIGNACIÓN</div>
+                  {[
+                    {id:'slots',label:'Slots iguales',desc:'Capital dividido en N partes fijas',ready:true},
+                    {id:'rotativo',label:'Capital rotativo',desc:'Próximamente',ready:false},
+                    {id:'custom',label:'Pesos personalizados',desc:'Próximamente',ready:false},
+                  ].map(m=>(
+                    <div key={m.id} onClick={()=>m.ready&&setMcMode(m.id)}
+                      style={{display:'flex',alignItems:'flex-start',gap:8,padding:'6px 8px',borderRadius:4,marginBottom:3,
+                        background:mcMode===m.id?'rgba(0,212,255,0.08)':'transparent',
+                        border:`1px solid ${mcMode===m.id?'var(--accent)':'var(--border)'}`,
+                        cursor:m.ready?'pointer':'not-allowed',opacity:m.ready?1:0.45}}>
+                      <div style={{width:14,height:14,borderRadius:'50%',border:`2px solid ${mcMode===m.id?'var(--accent)':'#3d5a7a'}`,
+                        background:mcMode===m.id?'var(--accent)':'transparent',flexShrink:0,marginTop:1}}/>
+                      <div>
+                        <div style={{fontFamily:MONO,fontSize:11,color:mcMode===m.id?'var(--accent)':'#c0d8f0',fontWeight:600}}>
+                          {m.label}{!m.ready&&<span style={{fontSize:8,color:'#ffd166',marginLeft:5,verticalAlign:'middle'}}>⏳</span>}
+                        </div>
+                        <div style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',marginTop:1}}>{m.desc}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Tipo de capital */}
+                <div style={{padding:'10px 12px',borderBottom:'1px solid var(--border)'}}>
+                  <div style={{fontFamily:MONO,fontSize:9,color:'#a8c8e8',marginBottom:6,letterSpacing:'0.05em'}}>TIPO DE CAPITAL</div>
+                  <div style={{display:'flex',gap:6}}>
+                    {[{id:'compound',label:'Compuesto'},{id:'simple',label:'Simple'}].map(t=>(
+                      <button key={t.id} onClick={()=>setMcCapital(t.id)}
+                        style={{flex:1,fontFamily:MONO,fontSize:10,padding:'5px 4px',borderRadius:4,cursor:'pointer',
+                          border:`1px solid ${mcCapital===t.id?'var(--accent)':'var(--border)'}`,
+                          background:mcCapital===t.id?'rgba(0,212,255,0.1)':'transparent',
+                          color:mcCapital===t.id?'var(--accent)':'#8aadcc'}}>
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Selector de activos */}
+                <div style={{padding:'10px 12px',borderBottom:'1px solid var(--border)',flex:1,overflowY:'auto',minHeight:0}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
+                    <div style={{fontFamily:MONO,fontSize:9,color:'#a8c8e8',letterSpacing:'0.05em'}}>ACTIVOS ({mcSelected.length} sel.)</div>
+                    <div style={{display:'flex',gap:4}}>
+                      <button onClick={()=>setMcSelected(watchlist.map(w=>w.symbol))}
+                        style={{fontFamily:MONO,fontSize:8,padding:'2px 5px',borderRadius:3,border:'1px solid var(--border)',background:'transparent',color:'var(--text3)',cursor:'pointer'}}>
+                        Todos
+                      </button>
+                      <button onClick={()=>setMcSelected([])}
+                        style={{fontFamily:MONO,fontSize:8,padding:'2px 5px',borderRadius:3,border:'1px solid var(--border)',background:'transparent',color:'#ff4d6d',cursor:'pointer'}}>
+                        Ninguno
+                      </button>
+                    </div>
+                  </div>
+                  {watchlist.map(w=>{
+                    const sel=mcSelected.includes(w.symbol)
+                    return(
+                      <div key={w.symbol} onClick={()=>setMcSelected(prev=>sel?prev.filter(s=>s!==w.symbol):[...prev,w.symbol])}
+                        style={{display:'flex',alignItems:'center',gap:7,padding:'5px 6px',borderRadius:3,marginBottom:2,cursor:'pointer',
+                          background:sel?'rgba(0,212,255,0.07)':'transparent',
+                          border:`1px solid ${sel?'rgba(0,212,255,0.2)':'transparent'}`}}
+                        onMouseOver={e=>e.currentTarget.style.background=sel?'rgba(0,212,255,0.1)':'rgba(255,255,255,0.03)'}
+                        onMouseOut={e=>e.currentTarget.style.background=sel?'rgba(0,212,255,0.07)':'transparent'}>
+                        <div style={{width:14,height:14,borderRadius:3,border:`1.5px solid ${sel?'var(--accent)':'#3d5a7a'}`,
+                          background:sel?'var(--accent)':'transparent',flexShrink:0,
+                          display:'flex',alignItems:'center',justifyContent:'center'}}>
+                          {sel&&<span style={{color:'#000',fontSize:9,lineHeight:1,fontWeight:900}}>✓</span>}
+                        </div>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontFamily:MONO,fontSize:11,color:sel?'var(--accent)':'#c0d8f0',fontWeight:600}}>{w.symbol}</div>
+                          <div style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{w.name}</div>
+                        </div>
+                        {w.favorite&&<span style={{color:'#ffd166',fontSize:10}}>★</span>}
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {/* Botón ejecutar */}
+                <div style={{padding:'10px 12px'}}>
+                  {mcSelected.length>=2?(
+                    <button onClick={runMulticartera} disabled={mcLoading}
+                      style={{width:'100%',fontFamily:MONO,fontSize:11,padding:'8px 12px',borderRadius:4,cursor:mcLoading?'wait':'pointer',
+                        background:mcLoading?'rgba(0,212,255,0.05)':'rgba(0,212,255,0.15)',
+                        border:'1px solid var(--accent)',color:'var(--accent)',fontWeight:600,letterSpacing:'0.05em'}}>
+                      {mcLoading?'⟳ Calculando...':'▶ EJECUTAR MULTICARTERA'}
+                    </button>
+                  ):(
+                    <div style={{fontFamily:MONO,fontSize:10,color:'var(--text3)',textAlign:'center',padding:'6px 0'}}>
+                      Selecciona al menos 2 activos
+                    </div>
+                  )}
+                  {mcError&&<div style={{fontFamily:MONO,fontSize:10,color:'#ff4d6d',marginTop:6}}>⚠ {mcError}</div>}
+                </div>
+              </div>
+            )}
           </aside>
 
           {/* ── CONTENT ── */}
@@ -1404,6 +1628,115 @@ export default function Home() {
                     <MetricsTable/>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* ══ MULTICARTERA RESULTS ══ */}
+            {mcResult&&sidePanel==='multi'&&(
+              <div style={{flex:1,overflowY:'auto',padding:'0 0 20px 0'}}>
+                {/* Header resumen */}
+                <div style={{padding:'10px 16px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:14,flexWrap:'wrap'}}>
+                  <span style={{fontFamily:MONO,fontSize:13,color:'var(--accent)',fontWeight:700}}>📊 Multicartera</span>
+                  <span style={{fontFamily:MONO,fontSize:11,color:'var(--text3)'}}>{mcResult.n} activos · {fmt(mcResult.slotCapital,0,'€')}/slot</span>
+                  <span style={{fontFamily:MONO,fontSize:11,color:'#ffd166'}}>Capital investido medio: {fmt(mcResult.avgOccupancy,1,'%')}</span>
+                  <span style={{fontFamily:MONO,fontSize:10,color:'var(--text3)'}}>Desde {fmtDate(mcResult.startDate)}</span>
+                </div>
+
+                {/* Equity chart toggles */}
+                <div style={{padding:'8px 16px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
+                  <span style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',marginRight:4}}>Curvas</span>
+                  {[
+                    {key:'simple',label:'Simple',color:'#00d4ff',state:mcShowSimple,set:setMcShowSimple},
+                    {key:'compound',label:'Compuesto',color:'#00e5a0',state:mcShowCompound,set:setMcShowCompound},
+                    {key:'bh',label:'B&H Diversificado',color:'#ffd166',state:mcShowBH,set:setMcShowBH},
+                    {key:'occ',label:'% Capital inv.',color:'#9b72ff',state:mcShowOccupancy,set:setMcShowOccupancy},
+                  ].map(({key,label,color,state,set})=>(
+                    <button key={key} onClick={()=>set(s=>!s)}
+                      style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',
+                        border:`1px solid ${state?color:'#3d5a7a'}`,background:state?`${color}18`:'transparent',color:state?color:'#3d5a7a'}}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Equity chart */}
+                <div style={{padding:'0 0 4px 0'}}>
+                  <MultiCartChart
+                    simpleCurve={mcResult.simpleCurve}
+                    compoundCurve={mcResult.compoundCurve}
+                    bhCurve={mcResult.bhCurve}
+                    occupancyCurve={mcResult.occupancyCurve}
+                    capitalIni={Number(capitalIni)}
+                    maxDDSimple={mcResult.maxDDSimple} maxDDSimpleDate={mcResult.maxDDSimpleDate}
+                    maxDDCompound={mcResult.maxDDCompound} maxDDCompoundDate={mcResult.maxDDCompoundDate}
+                    maxDDBH={mcResult.maxDDBH} maxDDBHDate={mcResult.maxDDBHDate}
+                    showSimple={mcShowSimple} showCompound={mcShowCompound}
+                    showBH={mcShowBH} showOccupancy={mcShowOccupancy}
+                  />
+                </div>
+
+                {/* Métricas globales */}
+                <div style={{padding:'8px 16px',borderBottom:'1px solid var(--border)',display:'flex',gap:0,flexWrap:'wrap'}}>
+                  {(()=>{
+                    const lastS=mcResult.simpleCurve.slice(-1)[0]?.value||Number(capitalIni)
+                    const lastC=mcResult.compoundCurve.slice(-1)[0]?.value||Number(capitalIni)
+                    const lastBH=mcResult.bhCurve.slice(-1)[0]?.value||Number(capitalIni)
+                    const capIni=Number(capitalIni)
+                    const totalDiasNat=mcResult.startDate?(new Date(mcResult.simpleCurve.slice(-1)[0]?.date)-new Date(mcResult.startDate))/86400000:365
+                    const anios=Math.max(totalDiasNat/365.25,0.01)
+                    const cagrS=Math.pow(Math.max(lastS,0.01)/capIni,1/anios)-1
+                    const cagrC=Math.pow(Math.max(lastC,0.01)/capIni,1/anios)-1
+                    const cagrBH=Math.pow(Math.max(lastBH,0.01)/capIni,1/anios)-1
+                    const cols=[
+                      {label:'Ganancia Simple',val:`${lastS>=capIni?'+':''}${fmt(lastS-capIni,0,'€')}`,color:lastS>=capIni?'#00e5a0':'#ff4d6d'},
+                      {label:'Ganancia Compuesta',val:`${lastC>=capIni?'+':''}${fmt(lastC-capIni,0,'€')}`,color:lastC>=capIni?'#00e5a0':'#ff4d6d'},
+                      {label:'B&H Diversificado',val:`${lastBH>=capIni?'+':''}${fmt(lastBH-capIni,0,'€')}`,color:lastBH>=capIni?'#00e5a0':'#ff4d6d'},
+                      {label:'CAGR Simple',val:fmt(cagrS*100,2,'%'),color:cagrS>=0?'#00e5a0':'#ff4d6d'},
+                      {label:'CAGR Compuesto',val:fmt(cagrC*100,2,'%'),color:cagrC>=0?'#00e5a0':'#ff4d6d'},
+                      {label:'CAGR B&H',val:fmt(cagrBH*100,2,'%'),color:cagrBH>=0?'#00e5a0':'#ff4d6d'},
+                      {label:'Max DD Simple',val:fmt(mcResult.maxDDSimple,2,'%'),color:'#ff4d6d'},
+                      {label:'Max DD Compuesto',val:fmt(mcResult.maxDDCompound,2,'%'),color:'#ff4d6d'},
+                      {label:'Capital inv. medio',val:fmt(mcResult.avgOccupancy,1,'%'),color:'#ffd166'},
+                    ]
+                    return cols.map(c=>(
+                      <div key={c.label} style={{flex:'1 1 140px',padding:'8px 12px',borderRight:'1px solid var(--border)',borderBottom:'1px solid var(--border)'}}>
+                        <div style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',marginBottom:3}}>{c.label}</div>
+                        <div style={{fontFamily:MONO,fontSize:14,color:c.color,fontWeight:700}}>{c.val}</div>
+                      </div>
+                    ))
+                  })()}
+                </div>
+
+                {/* Tabla por activo */}
+                <div style={{padding:'12px 16px'}}>
+                  <div style={{fontFamily:MONO,fontSize:10,color:'var(--text3)',marginBottom:8,letterSpacing:'0.05em'}}>DETALLE POR ACTIVO</div>
+                  <div style={{overflowX:'auto'}}>
+                    <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:11}}>
+                      <thead>
+                        <tr style={{borderBottom:'1px solid var(--border)'}}>
+                          {['Activo','Trades','Win%','G.Simple','G.Comp','Días inv.'].map(h=>(
+                            <th key={h} style={{padding:'4px 10px',textAlign:'left',color:'var(--text3)',fontWeight:400,fontSize:9}}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {mcResult.assetStats.map(a=>(
+                          <tr key={a.symbol} style={{borderBottom:'1px solid rgba(255,255,255,0.03)',cursor:'pointer'}}
+                            onClick={()=>setSimbolo(a.symbol)}
+                            onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.05)'}
+                            onMouseOut={e=>e.currentTarget.style.background='transparent'}>
+                            <td style={{padding:'5px 10px',color:'var(--accent)',fontWeight:700}}>{a.symbol}</td>
+                            <td style={{padding:'5px 10px',color:'var(--text)'}}>{a.trades}</td>
+                            <td style={{padding:'5px 10px',color:a.winRate>=50?'#00e5a0':'#ff4d6d'}}>{fmt(a.winRate,1,'%')}</td>
+                            <td style={{padding:'5px 10px',color:a.ganSimple>=0?'#00e5a0':'#ff4d6d'}}>{a.ganSimple>=0?'+':''}{fmt(a.ganSimple,0,'€')}</td>
+                            <td style={{padding:'5px 10px',color:a.ganComp>=0?'#00e5a0':'#ff4d6d'}}>{a.ganComp>=0?'+':''}{fmt(a.ganComp,0,'€')}</td>
+                            <td style={{padding:'5px 10px',color:'#00d4ff'}}>{a.totalDias}d</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
             )}
           </div>
