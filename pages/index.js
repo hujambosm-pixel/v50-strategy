@@ -156,7 +156,7 @@ function lookupName(sym) {
 }
 
 // ── CandleChart ───────────────────────────────────────────────
-function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, syncRef, savedRangeRef }) {
+function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, syncRef, savedRangeRef, chartHeight=480 }) {
   const containerRef=useRef(null), svgRef=useRef(null), legendRef=useRef(null), tooltipRef=useRef(null)
   const chartRef=useRef(null), candlesRef=useRef(null)
   const rulerStart=useRef(null), rulerActiveR=useRef(rulerActive)
@@ -167,7 +167,7 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
     import('lightweight-charts').then(({createChart,CrosshairMode,LineStyle})=>{
       if(chartRef.current){chartRef.current.remove();chartRef.current=null}
       const chart=createChart(containerRef.current,{
-        width:containerRef.current.clientWidth,height:480,
+        width:containerRef.current.clientWidth,height:chartHeight,
         layout:{background:{color:'#080c14'},textColor:'#7a9bc0'},
         grid:{vertLines:{color:'#0d1520'},horzLines:{color:'#0d1520'}},
         crosshair:{mode:CrosshairMode.Normal},
@@ -504,7 +504,7 @@ function EquityChart({
   strategyCurve,bhCurve,sp500BHCurve,compoundCurve,
   maxDDStrategy,maxDDBH,maxDDSP500,maxDDCompound,
   maxDDStrategyDate,maxDDBHDate,maxDDSP500Date,maxDDCompoundDate,
-  capitalIni,showStrategy,showBH,showSP500,showCompound,syncRef
+  capitalIni,showStrategy,showBH,showSP500,showCompound,syncRef,chartHeight=260
 }) {
   const ref=useRef(null),chartRef=useRef(null)
   useEffect(()=>{
@@ -512,7 +512,7 @@ function EquityChart({
     import('lightweight-charts').then(({createChart,CrosshairMode,LineStyle})=>{
       if(chartRef.current){chartRef.current.remove();chartRef.current=null}
       const chart=createChart(ref.current,{
-        width:ref.current.clientWidth,height:260,
+        width:ref.current.clientWidth,height:chartHeight,
         layout:{background:{color:'#080c14'},textColor:'#7a9bc0'},
         grid:{vertLines:{color:'#0d1520'},horzLines:{color:'#0d1520'}},
         crosshair:{mode:CrosshairMode.Normal},
@@ -576,7 +576,7 @@ function EquityChart({
 // ── MultiCartChart ───────────────────────────────────────────
 function MultiCartChart({simpleCurve,compoundCurve,bhCurve,occupancyCurve,capitalIni,
   maxDDSimple,maxDDSimpleDate,maxDDCompound,maxDDCompoundDate,maxDDBH,maxDDBHDate,
-  showSimple,showCompound,showBH,showOccupancy,occMode='compound',onReady,syncRef}) {
+  showSimple,showCompound,showBH,showOccupancy,occMode='compound',onReady,syncRef,chartHeight=300}) {
   const ref=useRef(null),chartRef=useRef(null),ref2=useRef(null),chart2Ref=useRef(null)
 
   useEffect(()=>{
@@ -584,7 +584,7 @@ function MultiCartChart({simpleCurve,compoundCurve,bhCurve,occupancyCurve,capita
     import('lightweight-charts').then(({createChart,CrosshairMode,LineStyle})=>{
       if(chartRef.current){chartRef.current.remove();chartRef.current=null}
       const chart=createChart(ref.current,{
-        width:ref.current.clientWidth,height:300,
+        width:ref.current.clientWidth,height:chartHeight,
         layout:{background:{color:'#080c14'},textColor:'#7a9bc0'},
         grid:{vertLines:{color:'#0d1520'},horzLines:{color:'#0d1520'}},
         crosshair:{mode:CrosshairMode.Normal},
@@ -656,12 +656,11 @@ function MultiCartChart({simpleCurve,compoundCurve,bhCurve,occupancyCurve,capita
         lastValueVisible:true,
         priceLineVisible:false,
       })
-      const occBaseColor=occMode==='compound'?'#00e5a0':'#00d4ff'
+      const occBaseColor=occMode==='compound'?'rgba(0,229,160,':'rgba(0,212,255,'
+      // Replace histogram with area for cleaner look
       bars.setData(occupancyCurve.map(p=>{
         const v=(p.value/100)*(occMode==='compound'?(compoundCurve?.slice(-1)[0]?.value||capitalIni):capitalIni)
-        const alpha=p.value>=75?0.5:p.value>=40?0.35:0.2
-        const col=occMode==='compound'?`rgba(0,229,160,${alpha})`:`rgba(0,212,255,${alpha})`
-        return{time:p.date,value:v,color:col}
+        return{time:p.date,value:v,color:`${occBaseColor}0.45)`}
       }))
       // Línea: % (escala derecha)
       const line=chart.addLineSeries({
@@ -711,50 +710,46 @@ function MultiCartChart({simpleCurve,compoundCurve,bhCurve,occupancyCurve,capita
   )
 }
 
-// ── OccupancyBarChart — individual asset in/out position ────
-// showMode: 'compound'|'simple'|'none' — controlled by equity curve toggles
+// ── OccupancyBarChart — individual asset capital invested chart ────
+// showMode: 'compound'|'simple' — independent filter, own toggle
 function OccupancyBarChart({trades, chartData, capitalIni, syncRef, showMode='compound'}) {
   const ref=useRef(null), chartRef=useRef(null)
   useEffect(()=>{
-    if(!ref.current||!trades?.length||!chartData?.length||showMode==='none') return
+    if(!ref.current||!trades?.length||!chartData?.length) return
     import('lightweight-charts').then(({createChart,CrosshairMode})=>{
       if(chartRef.current){chartRef.current.__syncCleanup?.();chartRef.current.remove();chartRef.current=null}
       const chart=createChart(ref.current,{
-        width:ref.current.clientWidth,height:80,
+        width:ref.current.clientWidth,height:100,
         layout:{background:{color:'#080c14'},textColor:'#7a9bc0'},
-        grid:{vertLines:{color:'#0d1520'},horzLines:{color:'#0d1520'}},
+        grid:{vertLines:{color:'transparent'},horzLines:{color:'rgba(26,45,69,0.4)'}},
         crosshair:{mode:CrosshairMode.Normal},
-        rightPriceScale:{borderColor:'#1a2d45',scaleMargins:{top:0.1,bottom:0.1}},
+        rightPriceScale:{borderColor:'#1a2d45',scaleMargins:{top:0.08,bottom:0.0}},
         timeScale:{borderColor:'#1a2d45',timeVisible:false},
+        leftPriceScale:{visible:false},
       })
       chartRef.current=chart
-      // Build capital-at-date map for compound mode
-      const capMap={}
-      if(showMode==='compound'){
-        let cap=capitalIni
-        trades.forEach(t=>{cap=t.capitalTras;capMap[t.exitDate]=cap})
-      }
-      // Bar series: height = capital when in position, 0 when out
-      const bars=chart.addHistogramSeries({
-        color:'rgba(0,229,160,0.4)',
-        priceFormat:{type:'price',precision:0,minMove:1},
-        lastValueVisible:false,priceLineVisible:false,
-      })
+      // Accumulate capital at each bar
+      const color=showMode==='compound'?'rgba(0,229,160,':'rgba(0,212,255,'
       let lastCap=capitalIni
-      bars.setData(chartData.map(d=>{
+      const barData=chartData.map(d=>{
         const inPos=trades.some(t=>d.date>=t.entryDate&&d.date<=t.exitDate)
         if(showMode==='compound'){
-          // Track capital up to this date
           const t=trades.filter(x=>x.exitDate<=d.date)
           if(t.length) lastCap=t[t.length-1].capitalTras
-        } else {
-          lastCap=capitalIni
-        }
-        const col=inPos
-          ?(showMode==='compound'?'rgba(0,229,160,0.45)':'rgba(0,212,255,0.45)')
-          :'rgba(255,255,255,0.03)'
-        return{time:d.date,value:inPos?lastCap:0,color:col}
-      }))
+          else lastCap=capitalIni
+        } else { lastCap=capitalIni }
+        return{time:d.date,value:inPos?lastCap:0}
+      })
+      // Area series for smooth filled look
+      const area=chart.addAreaSeries({
+        topColor:`${color}0.5)`,
+        bottomColor:`${color}0.03)`,
+        lineColor:`${color}0.9)`,
+        lineWidth:1,
+        crosshairMarkerVisible:false,
+        lastValueVisible:false,priceLineVisible:false,
+      })
+      area.setData(barData)
       if(syncRef?.current){
         const syncId=Symbol()
         const unsub=chart.timeScale().subscribeVisibleTimeRangeChange(range=>{
@@ -774,8 +769,7 @@ function OccupancyBarChart({trades, chartData, capitalIni, syncRef, showMode='co
     })
     return()=>{if(chartRef.current){chartRef.current.__syncCleanup?.();chartRef.current.remove();chartRef.current=null}}
   },[trades,chartData,showMode,capitalIni])
-  if(showMode==='none') return null
-  return <div ref={ref} style={{minHeight:80}}/>
+  return <div ref={ref} style={{minHeight:100}}/>
 }
 
 // ── Main ─────────────────────────────────────────────────────
@@ -793,6 +787,7 @@ export default function Home() {
   const [labelMode,setLabelMode]=useState(0),[rulerOn,setRulerOn]=useState(false)
   const [sidePanel,setSidePanel]=useState('config')
   const [metricsLayout,setMetricsLayout]=useState('panel')
+  const [metricsView,setMetricsView]=useState('multi')   // 'multi'=3col | 'single'=one strat per block
   const [showStrategy,setShowStrategy]=useState(true),[showBH,setShowBH]=useState(true)
   const [showSP500,setShowSP500]=useState(true),[showCompound,setShowCompound]=useState(true)
   const [watchlist,setWatchlist]=useState(WATCHLIST_FALLBACK)
@@ -835,6 +830,12 @@ export default function Home() {
   // ── Resizable panels ────────────────────────────────────────
   const [sidebarW,setSidebarW]=useState(240)
   const [rightPanelW,setRightPanelW]=useState(275)
+  const [candleH,setCandleH]=useState(480)     // resizable candle chart height
+  const [equityH,setEquityH]=useState(260)     // resizable equity chart height
+  const [mcEquityH,setMcEquityH]=useState(300) // resizable MC equity chart height
+  const candleResizing=useRef(false),candleStartY=useRef(0),candleStartH=useRef(0)
+  const equityResizing=useRef(false),equityStartY=useRef(0),equityStartH=useRef(0)
+  const mcEquityResizing=useRef(false),mcEquityStartY=useRef(0),mcEquityStartH=useRef(0)
   const sidebarResizing=useRef(false), rightResizing=useRef(false)
   const sidebarStartX=useRef(0), sidebarStartW=useRef(0)
   const rightStartX=useRef(0), rightStartW=useRef(0)
@@ -849,8 +850,24 @@ export default function Home() {
         const delta=rightStartX.current-e.clientX
         setRightPanelW(Math.max(200,Math.min(480,rightStartW.current+delta)))
       }
+      if(candleResizing.current){
+        const dy=e.clientY-candleStartY.current
+        setCandleH(Math.max(200,Math.min(900,candleStartH.current+dy)))
+      }
+      if(equityResizing.current){
+        const dy=e.clientY-equityStartY.current
+        setEquityH(Math.max(120,Math.min(600,equityStartH.current+dy)))
+      }
+      if(mcEquityResizing.current){
+        const dy=e.clientY-mcEquityStartY.current
+        setMcEquityH(Math.max(120,Math.min(600,mcEquityStartH.current+dy)))
+      }
     }
-    const onUp=()=>{sidebarResizing.current=false;rightResizing.current=false;document.body.style.cursor='';document.body.style.userSelect=''}
+    const onUp=()=>{
+    sidebarResizing.current=false;rightResizing.current=false
+    candleResizing.current=false;equityResizing.current=false;mcEquityResizing.current=false
+    document.body.style.cursor='';document.body.style.userSelect=''
+  }
     window.addEventListener('mousemove',onMove)
     window.addEventListener('mouseup',onUp)
     return()=>{window.removeEventListener('mousemove',onMove);window.removeEventListener('mouseup',onUp)}
@@ -871,6 +888,7 @@ export default function Home() {
   const savedRangeRef=useRef(null)   // preserve zoom when changing asset
   const [metricsStrats,setMetricsStrats]=useState(['simple','compound','bh'])  // which strat panels to show
   const [showIndivOccupancy,setShowIndivOccupancy]=useState(true)  // % capital invertido chart for individual
+  const [indivOccMode,setIndivOccMode]=useState('compound')  // independent filter for indiv occupancy chart
 
   const debounceRef=useRef(null),chartApiRef=useRef(null),contentRef=useRef(null),mcChartApiRef=useRef(null)
 
@@ -1202,8 +1220,46 @@ export default function Home() {
       </table>
     )
   }
+  // ── Single-column view: each active strat as its own block ──
+  const SingleColumnTable=({rows, strats})=>{
+    const activeCols=STRAT_ORDER.filter(s=>strats.includes(s))
+    if(!rows.length||!activeCols.length) return null
+    return(
+      <div>
+        {activeCols.map(s=>(
+          <div key={s} style={{borderBottom:`2px solid ${STRAT_META[s].color}`,marginBottom:0}}>
+            <div style={{padding:'4px 12px',background:STRAT_META[s].bg,borderBottom:`1px solid ${STRAT_META[s].color}40`,display:'flex',alignItems:'center',gap:6}}>
+              <span style={{fontFamily:MONO,fontSize:11,color:STRAT_META[s].color,fontWeight:700,letterSpacing:'0.08em'}}>{STRAT_META[s].label.toUpperCase()}</span>
+            </div>
+            <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:11.5}}>
+              <tbody>
+                {rows.map((row,ri)=>{
+                  const cell=row[s]
+                  if(!cell) return null
+                  return(
+                    <tr key={row.label} style={{borderBottom:'1px solid rgba(20,40,65,0.9)',background:ri%2===0?'transparent':'rgba(255,255,255,0.012)'}}>
+                      <td style={{padding:'5px 12px',color:'#9ac8e2',fontSize:11,whiteSpace:'nowrap'}}>{row.label}</td>
+                      <td style={{padding:'5px 12px',textAlign:'right',fontWeight:600,color:cell.color,fontSize:12}}>{cell.val}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  // ── MetricsWrapper: respects metricsView ──
+  const MetricsWrapper=({rows, strats})=>(
+    metricsView==='single'
+      ? <SingleColumnTable rows={rows} strats={strats}/>
+      : <UnifiedMetricsTable rows={rows} strats={strats}/>
+  )
+
   const metricRows=[] // legacy: no longer used
-  const MetricsTable=()=>{ const rows=buildUnifiedRows(metrics, result?.maxDDBH||0); return <UnifiedMetricsTable rows={rows} strats={metricsStrats}/> }
+  const MetricsTable=()=>{ const rows=buildUnifiedRows(metrics, result?.maxDDBH||0); return <MetricsWrapper rows={rows} strats={metricsStrats}/> }
 
   // Altura de los tabs = 33px aprox. (padding 8px top+bottom + 17px línea)
   const TAB_H=33
@@ -1211,7 +1267,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator 2.2</title>
+        <title>Trading Simulator 2.3</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -1267,7 +1323,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator 2.2
+            <span className="dot"/>Trading Simulator 2.3
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -1786,7 +1842,7 @@ export default function Home() {
                 <div ref={contentRef} style={{flex:1,overflowY:'auto'}}>
                   {/* Gráfico de velas */}
                   <div className="chart-wrap" ref={chartWrapRef}>
-                    <div className="chart-header" style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+                    <div className="chart-header" style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',fontSize:14}}>
                       {/* Estrella favorito del activo activo */}
                       {(()=>{
                         const wItem=watchlist.find(w=>w.symbol===simbolo)
@@ -1827,21 +1883,36 @@ export default function Home() {
                       onChartReady={api=>{chartApiRef.current=api}}
                       savedRangeRef={savedRangeRef}
                       syncRef={chartSyncRef}
+                      chartHeight={candleH}
                     />
-                    {/* Leyenda mínima bajo el gráfico — ELIMINADA según instrucciones */}
+                    {/* Drag handle — resize candle chart */}
+                    <div onMouseDown={e=>{candleResizing.current=true;candleStartY.current=e.clientY;candleStartH.current=candleH;document.body.style.cursor='row-resize';document.body.style.userSelect='none'}}
+                      style={{height:6,cursor:'row-resize',background:'transparent',transition:'background 0.15s',
+                        borderTop:'2px solid var(--border)',display:'flex',alignItems:'center',justifyContent:'center'}}
+                      onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.15)'}
+                      onMouseOut={e=>e.currentTarget.style.background='transparent'}>
+                      <div style={{width:32,height:2,borderRadius:1,background:'rgba(0,212,255,0.3)'}}/>
+                    </div>
                   </div>
 
                   {/* Métricas en cuadrícula (si layout=grid) */}
                   {metricsLayout==='grid'&&metrics&&(
                     <div style={{border:'1px solid var(--border)',borderRadius:4,margin:'8px 0',overflow:'hidden'}}>
+                      <div style={{display:'flex',alignItems:'center',gap:6,padding:'4px 10px 0'}}>
+                        <button onClick={()=>setMetricsView(v=>v==='multi'?'single':'multi')}
+                          style={{marginLeft:'auto',fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',
+                            border:'1px solid #2a4060',background:'rgba(0,0,0,0.3)',color:'#7aabc8'}}>
+                          {metricsView==='multi'?'⊟ 1col':'⊞ 3col'}
+                        </button>
+                      </div>
                       <StratSelector strats={metricsStrats} setStrats={setMetricsStrats}/>
-                      <UnifiedMetricsTable rows={buildUnifiedRows(metrics,result?.maxDDBH||0)} strats={metricsStrats}/>
+                      <MetricsWrapper rows={buildUnifiedRows(metrics,result?.maxDDBH||0)} strats={metricsStrats}/>
                     </div>
                   )}
 
                   {/* Equity con toggles */}
                   <div className="equity-section">
-                    <div className="section-title" style={{display:'flex',alignItems:'center',flexWrap:'wrap',gap:6}}>
+                    <div className="section-title" style={{display:'flex',alignItems:'center',flexWrap:'wrap',gap:6,fontSize:14}}>
                       <span>Equity</span>
                       {[
                         {key:'st',label:'Simple',color:'#00d4ff',state:showStrategy,set:setShowStrategy},
@@ -1872,28 +1943,41 @@ export default function Home() {
                       showStrategy={showStrategy} showBH={showBH}
                       showSP500={showSP500} showCompound={showCompound}
                       syncRef={chartSyncRef}
+                      chartHeight={equityH}
                     />
-                    {/* % Capital invertido — individual — sigue filtros equity */}
-                    {result.trades?.length>0&&(()=>{
-                      const occMode=showCompound?'compound':showStrategy?'simple':'none'
-                      if(occMode==='none') return null
-                      const occLabel=showCompound?'€ Capital compuesto invertido':'€ Capital simple invertido'
-                      const occColor=showCompound?'#00e5a0':'#00d4ff'
-                      return(
-                        <div>
-                          <div style={{padding:'3px 12px',fontFamily:MONO,fontSize:10,borderTop:'1px solid var(--border)',color:occColor}}>
-                            {occLabel}
+                    {/* Drag handle — resize equity chart height */}
+                    <div onMouseDown={e=>{equityResizing.current=true;equityStartY.current=e.clientY;equityStartH.current=equityH;document.body.style.cursor='row-resize';document.body.style.userSelect='none'}}
+                      style={{height:5,cursor:'row-resize',background:'transparent',transition:'background 0.15s',borderTop:'1px solid var(--border)'}}
+                      onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.2)'}
+                      onMouseOut={e=>e.currentTarget.style.background='transparent'}/>
+                    {/* Capital invertido — filtro propio independiente */}
+                    {result.trades?.length>0&&(
+                      <div style={{borderTop:'1px solid var(--border)'}}>
+                        <div style={{padding:'3px 12px',display:'flex',alignItems:'center',gap:6,fontFamily:MONO,fontSize:11}}>
+                          <span style={{color:indivOccMode==='compound'?'#00e5a0':'#00d4ff',fontWeight:600}}>
+                            € Capital {indivOccMode==='compound'?'Compuesto':'Simple'} invertido
+                          </span>
+                          <div style={{display:'flex',gap:3,marginLeft:'auto'}}>
+                            {[{id:'compound',label:'Compuesto',c:'#00e5a0'},{id:'simple',label:'Simple',c:'#00d4ff'}].map(m=>(
+                              <button key={m.id} onClick={()=>setIndivOccMode(m.id)}
+                                style={{fontFamily:MONO,fontSize:10,padding:'1px 6px',borderRadius:3,cursor:'pointer',
+                                  border:`1px solid ${indivOccMode===m.id?m.c:'#2a3f55'}`,
+                                  background:indivOccMode===m.id?`${m.c}18`:'transparent',
+                                  color:indivOccMode===m.id?m.c:'#4a6a88'}}>
+                                {m.label}
+                              </button>
+                            ))}
                           </div>
-                          <OccupancyBarChart
-                            trades={result.trades}
-                            chartData={result.chartData}
-                            capitalIni={Number(capitalIni)}
-                            syncRef={chartSyncRef}
-                            showMode={occMode}
-                          />
                         </div>
-                      )
-                    })()}
+                        <OccupancyBarChart
+                          trades={result.trades}
+                          chartData={result.chartData}
+                          capitalIni={Number(capitalIni)}
+                          syncRef={chartSyncRef}
+                          showMode={indivOccMode}
+                        />
+                      </div>
+                    )}
                   </div>
 
                   {/* Barras de resultados — clic navega al trade */}
@@ -1916,8 +2000,8 @@ export default function Home() {
                   {/* Historial — clic fila navega al trade */}
                   {result.trades?.length>0&&(
                     <div className="trades-section">
-                      <div className="section-title" style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
-                        <span>Historial — {result.trades.length} operaciones <span style={{fontWeight:400,fontSize:10,color:'var(--text3)'}}>· clic fila = ir al trade</span></span>
+                      <div className="section-title" style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',fontSize:14}}>
+                        <span>Historial — {result.trades.length} operaciones <span style={{fontWeight:400,fontSize:11,color:'#9acce0'}}>· clic fila = ir al trade</span></span>
                         <div style={{display:'flex',gap:4,marginLeft:'auto'}}>
                           {[{id:'compound',label:'Compuesto'},{id:'simple',label:'Simple'}].map(m=>(
                             <button key={m.id} onClick={()=>setTradeHistMode(m.id)}
@@ -2006,7 +2090,15 @@ export default function Home() {
                         background:'transparent',transition:'background 0.15s'}}
                       onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.25)'}
                       onMouseOut={e=>e.currentTarget.style.background='transparent'}/>
-                    <div style={{padding:'7px 12px',borderBottom:'1px solid var(--border)',fontFamily:MONO,fontSize:10,color:'#b8d8f0',letterSpacing:'0.08em',fontWeight:600}}>RESUMEN · {simbolo}</div>
+                    <div style={{padding:'6px 12px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:6}}>
+                      <span style={{fontFamily:MONO,fontSize:10,color:'#b8d8f0',letterSpacing:'0.08em',fontWeight:600,flex:1}}>RESUMEN · {simbolo}</span>
+                      <button onClick={()=>setMetricsView(v=>v==='multi'?'single':'multi')}
+                        title={metricsView==='multi'?'Vista columna única':'Vista multi-columna'}
+                        style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',
+                          border:'1px solid #2a4060',background:'rgba(0,0,0,0.3)',color:'#7aabc8'}}>
+                        {metricsView==='multi'?'⊟ 1col':'⊞ 3col'}
+                      </button>
+                    </div>
                     <StratSelector strats={metricsStrats} setStrats={setMetricsStrats}/>
                     <MetricsTable/>
                   </div>
@@ -2085,7 +2177,16 @@ export default function Home() {
                     occMode={mcShowCompound?'compound':'simple'}
                     onReady={api=>{mcChartApiRef.current=api}}
                     syncRef={chartSyncRef}
+                    chartHeight={mcEquityH}
                   />
+                  {/* Drag handle — resize MC equity chart */}
+                  <div onMouseDown={e=>{mcEquityResizing.current=true;mcEquityStartY.current=e.clientY;mcEquityStartH.current=mcEquityH;document.body.style.cursor='row-resize';document.body.style.userSelect='none'}}
+                    style={{height:6,cursor:'row-resize',background:'transparent',transition:'background 0.15s',
+                      borderTop:'2px solid var(--border)',display:'flex',alignItems:'center',justifyContent:'center'}}
+                    onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.15)'}
+                    onMouseOut={e=>e.currentTarget.style.background='transparent'}>
+                    <div style={{width:32,height:2,borderRadius:1,background:'rgba(0,212,255,0.3)'}}/>
+                  </div>
                 </div>
 
                 {/* Métricas en grid cuando mcLayout==='grid' */}
@@ -2340,9 +2441,17 @@ export default function Home() {
                   ]
                   return(
                     <div style={{display:'flex',flexDirection:'column',height:'100%'}}>
+                      <div style={{display:'flex',alignItems:'center',padding:'4px 12px',borderBottom:'1px solid var(--border)'}}>
+                        <span style={{fontFamily:MONO,fontSize:10,color:'#9acce0',flex:1}}>MULTICARTERA</span>
+                        <button onClick={()=>setMetricsView(v=>v==='multi'?'single':'multi')}
+                          style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',
+                            border:'1px solid #2a4060',background:'rgba(0,0,0,0.3)',color:'#7aabc8'}}>
+                          {metricsView==='multi'?'⊟ 1col':'⊞ 3col'}
+                        </button>
+                      </div>
                       <StratSelector strats={metricsStrats} setStrats={setMetricsStrats}/>
                       <div style={{overflowY:'auto',flex:1}}>
-                        <UnifiedMetricsTable rows={mcRows} strats={metricsStrats}/>
+                        <MetricsWrapper rows={mcRows} strats={metricsStrats}/>
                       </div>
                     </div>
                   )
