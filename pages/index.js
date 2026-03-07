@@ -537,6 +537,9 @@ function EquityChart({
 // ── Main ─────────────────────────────────────────────────────
 export default function Home() {
   const [simbolo,setSimbolo]=useState('^GSPC')
+  const [symSearchOpen,setSymSearchOpen]=useState(false)
+  const [symSearchQ,setSymSearchQ]=useState('')
+  const symSearchInputRef=useRef(null)
   const [emaR,setEmaR]=useState(10),[emaL,setEmaL]=useState(11)
   const [years,setYears]=useState(5),[capitalIni,setCapitalIni]=useState(10000)
   const [tipoStop,setTipoStop]=useState('tecnico'),[atrP,setAtrP]=useState(14),[atrM,setAtrM]=useState(1.0)
@@ -574,6 +577,25 @@ export default function Home() {
   // Búsqueda async de nombre
   const symSearchRef=useRef(null)
   const debounceRef=useRef(null),chartApiRef=useRef(null),contentRef=useRef(null)
+
+  // Abrir búsqueda de símbolo al escribir cualquier letra/número fuera de inputs
+  useEffect(()=>{
+    const onKey=(e)=>{
+      if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA'||e.target.tagName==='SELECT') return
+      if(e.key==='Escape'){setSymSearchOpen(false);setSymSearchQ('');return}
+      if(symSearchOpen) return
+      if(e.key.length===1&&!e.ctrlKey&&!e.metaKey&&!e.altKey){
+        setSymSearchQ(e.key.toUpperCase())
+        setSymSearchOpen(true)
+      }
+    }
+    window.addEventListener('keydown',onKey)
+    return()=>window.removeEventListener('keydown',onKey)
+  },[symSearchOpen])
+
+  useEffect(()=>{
+    if(symSearchOpen) setTimeout(()=>symSearchInputRef.current?.focus(),50)
+  },[symSearchOpen])
 
   // alarmStatus[symbol][alarmId] = true|false|null
   const [alarmStatus,setAlarmStatus]=useState({})
@@ -811,7 +833,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator 1.3</title>
+        <title>Trading Simulator 1.4</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -827,7 +849,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator 1.3
+            <span className="dot"/>Trading Simulator 1.4
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -1339,6 +1361,77 @@ export default function Home() {
           </div>
         </div>
       </div>
+
+      {/* ══ MODAL BÚSQUEDA DE SÍMBOLO ══ */}
+      {symSearchOpen&&(()=>{
+        const q=symSearchQ.trim().toUpperCase()
+        // 1. Watchlist exactos/parciales primero
+        const wlMatches=watchlist.filter(w=>
+          w.symbol.toUpperCase().includes(q)||(w.name||'').toUpperCase().includes(q)
+        ).map(w=>({symbol:w.symbol,name:w.name||lookupName(w.symbol),src:'watchlist'}))
+        // 2. SYM_NAMES que no estén ya
+        const wlSyms=new Set(wlMatches.map(x=>x.symbol))
+        const dictMatches=Object.entries(SYM_NAMES)
+          .filter(([s,n])=>!wlSyms.has(s)&&(s.includes(q)||n.toUpperCase().includes(q)))
+          .map(([s,n])=>({symbol:s,name:n,src:'dict'}))
+        // 3. El propio texto como símbolo literal al final
+        const allSyms=new Set([...wlMatches,...dictMatches].map(x=>x.symbol))
+        const literal=q.length>=1&&!allSyms.has(q)?[{symbol:q,name:'Buscar símbolo directo',src:'literal'}]:[]
+        const results=[...wlMatches,...dictMatches,...literal].slice(0,12)
+        return(
+          <div style={{position:'fixed',inset:0,zIndex:300,display:'flex',alignItems:'flex-start',justifyContent:'center',paddingTop:80}}
+            onClick={()=>{setSymSearchOpen(false);setSymSearchQ('')}}>
+            <div style={{background:'#0d1824',border:'1px solid #1e3a52',borderRadius:10,width:520,maxHeight:480,display:'flex',flexDirection:'column',boxShadow:'0 16px 60px rgba(0,0,0,0.85)',overflow:'hidden',fontFamily:MONO}}
+              onClick={e=>e.stopPropagation()}>
+              {/* Input */}
+              <div style={{display:'flex',alignItems:'center',gap:8,padding:'12px 16px',borderBottom:'1px solid #1e3a52'}}>
+                <span style={{fontSize:18,color:'#00d4ff'}}>🔍</span>
+                <input ref={symSearchInputRef} type="text" value={symSearchQ}
+                  onChange={e=>setSymSearchQ(e.target.value.toUpperCase())}
+                  onKeyDown={e=>{
+                    if(e.key==='Escape'){setSymSearchOpen(false);setSymSearchQ('')}
+                    if(e.key==='Enter'&&results.length>0){
+                      setSimbolo(results[0].symbol);setSymSearchOpen(false);setSymSearchQ('')
+                    }
+                  }}
+                  placeholder="Escribe símbolo o nombre... ej: NVDA, Apple, BTC"
+                  style={{flex:1,background:'transparent',border:'none',outline:'none',color:'#e2eaf5',fontFamily:MONO,fontSize:18,fontWeight:600,letterSpacing:'0.05em'}}
+                />
+                <button onClick={()=>{setSymSearchOpen(false);setSymSearchQ('')}}
+                  style={{background:'transparent',border:'none',color:'#3d5a7a',fontSize:18,cursor:'pointer',lineHeight:1}}>✕</button>
+              </div>
+              {/* Resultados */}
+              <div style={{overflowY:'auto',maxHeight:380}}>
+                {results.length===0&&q.length>0&&(
+                  <div style={{padding:'20px 16px',color:'#3d5a7a',fontSize:12,textAlign:'center'}}>Sin resultados para «{q}»</div>
+                )}
+                {results.map((r,i)=>(
+                  <div key={r.symbol} onClick={()=>{setSimbolo(r.symbol);setSymSearchOpen(false);setSymSearchQ('')}}
+                    style={{display:'flex',alignItems:'center',gap:12,padding:'10px 16px',cursor:'pointer',
+                      background:i===0?'rgba(0,212,255,0.06)':'transparent',
+                      borderBottom:'1px solid rgba(255,255,255,0.03)'}}
+                    onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.1)'}
+                    onMouseOut={e=>e.currentTarget.style.background=i===0?'rgba(0,212,255,0.06)':'transparent'}>
+                    <div style={{width:28,height:28,borderRadius:6,background:'rgba(0,212,255,0.1)',border:'1px solid rgba(0,212,255,0.25)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                      <span style={{fontSize:10,color:'#00d4ff',fontWeight:700}}>{r.symbol.replace('^','').slice(0,3)}</span>
+                    </div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{color:'#e2eaf5',fontWeight:700,fontSize:14}}>{r.symbol}</div>
+                      <div style={{color:'#7a9bc0',fontSize:11,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.name}</div>
+                    </div>
+                    {r.src==='watchlist'&&<span style={{fontSize:9,color:'#00d4ff',background:'rgba(0,212,255,0.1)',padding:'2px 6px',borderRadius:3}}>WL</span>}
+                    {i===0&&<span style={{fontSize:9,color:'#3d5a7a'}}>↵</span>}
+                  </div>
+                ))}
+                {q.length===0&&(
+                  <div style={{padding:'12px 16px',color:'#3d5a7a',fontSize:11,textAlign:'center'}}>Escribe para buscar · Esc para cerrar</div>
+                )}
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
       {/* ══ MODAL ALARMA — fixed sobre gráfico ══ */}
       {editingAlarm!==null&&(
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.72)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center'}} onClick={e=>{if(e.target===e.currentTarget)closeEditAlarm()}}>
