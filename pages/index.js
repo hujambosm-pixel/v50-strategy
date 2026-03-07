@@ -1791,8 +1791,7 @@ export default function Home() {
                         <div style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',marginBottom:3}}>{c.label}</div>
                         <div style={{fontFamily:MONO,fontSize:14,color:c.color,fontWeight:700}}>{c.val}</div>
                       </div>
-                    ))}
-                  </>)
+                    ))
                   })()}
                 </div>
 
