@@ -6,31 +6,41 @@ function calcEMA(values, period) {
   let ema = null
   for (const v of values) {
     if (v == null || isNaN(v)) continue
-    if (ema === null) { ema = v; continue }
-    ema = v * k + ema * (1 - k)
+    ema = ema === null ? v : v * k + ema * (1 - k)
   }
   return ema
 }
 
-async function fetchCloses(symbol) {
-  const raw = symbol === '^GSPC' ? 'spy'
-    : symbol.includes('-USD') ? symbol.replace('-USD', '').toLowerCase() + '.us'
-    : symbol.replace('^', '').toLowerCase() + '.us'
+// Misma lógica exacta que datos.js
+function toStooqSym(symbol) {
+  if (symbol === '^GSPC') return 'spy.us'
+  return symbol.replace('^', '').toLowerCase() + '.us'
+}
 
-  const sym = raw.includes('.us') ? raw : raw + '.us'
+async function fetchCloses(symbol) {
+  const sym = toStooqSym(symbol)
   const url = `https://stooq.com/q/d/l/?s=${sym}&i=d`
-  const res = await fetch(url)
-  const text = await res.text()
-  if (!text || text.includes('No data') || text.trim().length < 50) return null
-  return text.trim().split('\n').slice(1)
-    .filter(l => l.trim())
-    .map(l => parseFloat(l.split(',')[4]))
-    .filter(v => !isNaN(v))
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 8000)
+  try {
+    const res = await fetch(url, { signal: controller.signal })
+    const text = await res.text()
+    if (!text || text.includes('No data') || text.trim().length < 50) return null
+    const closes = text.trim().split('\n').slice(1)
+      .filter(l => l.trim())
+      .map(l => parseFloat(l.split(',')[4]))
+      .filter(v => !isNaN(v))
+    return closes.length >= 20 ? closes : null
+  } catch {
+    return null
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 function evalCondition(condition, closes, emaR, emaL) {
-  if (!closes || closes.length < Math.max(emaR, emaL) + 10) return null
-  const last = closes.slice(-200)
+  if (!closes || closes.length < Math.max(emaR, emaL) + 5) return null
+  const last = closes.slice(-Math.max(200, emaL * 3))
   const er = calcEMA(last, emaR)
   const el = calcEMA(last, emaL)
   const price = last[last.length - 1]
@@ -42,6 +52,8 @@ function evalCondition(condition, closes, emaR, emaL) {
   return null
 }
 
+const sleep = ms => new Promise(r => setTimeout(r, ms))
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
 
@@ -51,22 +63,28 @@ export default async function handler(req, res) {
   }
 
   const result = {}
+  const BATCH = 4
+  const DELAY = 300
 
-  await Promise.all(
-    symbols.map(async sym => {
-      try {
-        const closes = await fetchCloses(sym)
-        if (!closes) { result[sym] = null; return }
-        const symResult = {}
-        alarms.forEach(a => {
-          symResult[a.id] = evalCondition(a.condition, closes, a.ema_r, a.ema_l)
-        })
-        result[sym] = symResult
-      } catch {
-        result[sym] = null
-      }
-    })
-  )
+  for (let i = 0; i < symbols.length; i += BATCH) {
+    const chunk = symbols.slice(i, i + BATCH)
+    await Promise.all(
+      chunk.map(async sym => {
+        try {
+          const closes = await fetchCloses(sym)
+          if (!closes) { result[sym] = null; return }
+          const symResult = {}
+          alarms.forEach(a => {
+            symResult[a.id] = evalCondition(a.condition, closes, Number(a.ema_r), Number(a.ema_l))
+          })
+          result[sym] = symResult
+        } catch {
+          result[sym] = null
+        }
+      })
+    )
+    if (i + BATCH < symbols.length) await sleep(DELAY)
+  }
 
   res.status(200).json(result)
 }
