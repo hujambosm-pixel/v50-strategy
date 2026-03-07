@@ -1084,55 +1084,59 @@ export default function Home() {
     setTimeout(()=>chartApiRef.current?.navigateTo(trade.entryDate,trade.exitDate),50)
   }
 
-  // ── Per-strategy metric row builders ──
+  // ── Strategy metadata (column order matches image: compound | bh | simple) ──
+  const STRAT_ORDER=['compound','bh','simple']
   const STRAT_META={
-    simple:{label:'Simple',color:'#00d4ff',bg:'rgba(0,212,255,0.10)'},
-    compound:{label:'Compuesta',color:'#00e5a0',bg:'rgba(0,229,160,0.10)'},
-    bh:{label:'Buy&Hold',color:'#ffd166',bg:'rgba(255,209,102,0.10)'},
+    simple:  {label:'Simple',   color:'#00d4ff', bg:'rgba(0,212,255,0.08)'},
+    compound:{label:'Compuesta',color:'#00e5a0', bg:'rgba(0,229,160,0.08)'},
+    bh:      {label:'Buy&Hold', color:'#ffd166', bg:'rgba(255,209,102,0.08)'},
   }
-  const sharedRows=metrics?[
-    {label:'Total Operaciones',val:metrics.n,color:'#ffd166'},
-    {label:'Capital inv. medio',val:fmt(metrics.tiempoInvPct,1,'%'),color:'#9b72ff'},
-    {label:'Total Días Invertido',val:metrics.totalDias,color:'#00d4ff'},
-    {label:'Días Promedio',val:fmt(metrics.diasProm,1,' días'),color:'#00d4ff'},
-    {label:`Tiempo Invertido (${fmt(metrics.aniosInv,2)}a)`,val:fmt(metrics.tiempoInvPct,0,'%'),color:'#ffd166'},
-    {label:'Win Rate',val:fmt(metrics.winRate,1,'%'),color:metrics.winRate>=50?'#00e5a0':'#ff4d6d'},
-    {label:'Factor de Beneficio',val:fmt(metrics.factorBen,2),color:metrics.factorBen>=1?'#00e5a0':'#ff4d6d'},
-    {label:'Ganadoras',val:metrics.wins,color:'#00e5a0'},
-    {label:'Perdedoras',val:metrics.losses,color:'#ff4d6d'},
-    {label:'Ganancia Media (%)',val:fmt(metrics.avgWin,2,'%'),color:'#00e5a0'},
-    {label:'Pérdida Media (%)',val:fmt(metrics.avgLoss,2,'%'),color:'#ff4d6d'},
-  ]:[]
-  const buildIndivStratRows=(strat)=>{
-    if(!metrics) return []
-    if(strat==='simple') return [...sharedRows,
-      {label:'Ganancia Simple (€)',val:fmt(metrics.ganSimple,2,'€'),color:metrics.ganSimple>=0?'#00e5a0':'#ff4d6d'},
-      {label:'Ganancia Total (%)',val:fmt(metrics.ganTotalPct,2,'%'),color:metrics.ganTotalPct>=0?'#00e5a0':'#ff4d6d'},
-      {label:`CAGR Simple (${fmt(metrics.anios,2)}a)`,val:fmt(metrics.cagrS,2,'%'),color:metrics.cagrS>=0?'#00e5a0':'#ff4d6d'},
-      {label:'Max Drawdown (%)',val:fmt(metrics.ddSimple,2,'%'),color:'#ff4d6d'},
-    ]
-    if(strat==='compound') return [...sharedRows,
-      {label:'Ganancia Compuesta (€)',val:fmt(metrics.ganComp,2,'€'),color:metrics.ganComp>=0?'#00e5a0':'#ff4d6d'},
-      {label:`CAGR Compuesto (${fmt(metrics.anios,2)}a)`,val:fmt(metrics.cagrC,2,'%'),color:metrics.cagrC>=0?'#00e5a0':'#ff4d6d'},
-      {label:'Max DD Compuesto (%)',val:fmt(metrics.ddComp,2,'%'),color:'#ff4d6d'},
-    ]
-    if(strat==='bh') return [
-      {label:'Ganancia Buy&Hold (€)',val:fmt(metrics.ganBH,2,'€'),color:metrics.ganBH>=0?'#00e5a0':'#ff4d6d'},
-      {label:`CAGR Buy&Hold (${fmt(metrics.anios,2)}a)`,val:fmt(metrics.cagrBH,2,'%'),color:metrics.cagrBH>=0?'#00e5a0':'#ff4d6d'},
-      {label:'Max Drawdown B&H (%)',val:fmt(result?.maxDDBH,2,'%'),color:'#ff4d6d'},
-    ]
-    return []
-  }
-  // legacy — used only by grid card view
-  const metricRows=buildIndivStratRows('simple')
 
-  // ── Generic multi-strat panel ──
+  // ── Unified metrics table definition ──
+  // Each row: { label, strats: {compound:val, bh:val, simple:val} or 'all'/'trade'/'notbh' }
+  // null = empty cell for that strategy
+  const buildUnifiedRows=(m, maxDDBH)=>{
+    if(!m) return []
+    const v=(val,color)=>({val,color})
+    const wr=m.winRate>=50?'#00e5a0':'#ff4d6d'
+    const fb=m.factorBen>=1?'#00e5a0':'#ff4d6d'
+    // Strategy-specific gains
+    const cS=m.ganSimple>=0?'#00e5a0':'#ff4d6d', cC=m.ganComp>=0?'#00e5a0':'#ff4d6d', cBH=m.ganBH>=0?'#00e5a0':'#ff4d6d'
+    return [
+      {label:'Total Operaciones',     compound:v(m.n,'#ffd166'),            bh:v(m.n,'#ffd166'),       simple:v(m.n,'#ffd166')},
+      {label:'Total Días Invertido',  compound:v(m.totalDias,'#00d4ff'),    bh:v(m.totalDias,'#00d4ff'),simple:v(m.totalDias,'#00d4ff')},
+      {label:'Días Promedio',         compound:v(fmt(m.diasProm,1,' días'),'#00d4ff'), bh:null, simple:v(fmt(m.diasProm,1,' días'),'#00d4ff')},
+      {label:`Tiempo Invertido (${fmt(m.aniosInv,2)}a)`, compound:v(fmt(m.tiempoInvPct,0,'%'),'#ffd166'), bh:null, simple:v(fmt(m.tiempoInvPct,0,'%'),'#ffd166')},
+      {label:'Capital inv. medio',    compound:v(fmt(m.tiempoInvPct,1,'%'),'#9b72ff'), bh:null, simple:v(fmt(m.tiempoInvPct,1,'%'),'#9b72ff')},
+      {label:'Ganadoras',             compound:v(m.wins,'#00e5a0'),         bh:v(m.wins,'#00e5a0'),    simple:v(m.wins,'#00e5a0')},
+      {label:'Perdedoras',            compound:v(m.losses,'#ff4d6d'),       bh:v(m.losses,'#ff4d6d'),  simple:v(m.losses,'#ff4d6d')},
+      {label:'Win Rate',              compound:v(fmt(m.winRate,1,'%'),wr),  bh:v(fmt(m.winRate,1,'%'),wr), simple:v(fmt(m.winRate,1,'%'),wr)},
+      {label:'Factor de Beneficio',   compound:v(fmt(m.factorBen,2),fb),   bh:null, simple:v(fmt(m.factorBen,2),fb)},
+      {label:'Ganancia Media (%)',    compound:v(fmt(m.avgWin,2,'%'),'#00e5a0'),  bh:null, simple:v(fmt(m.avgWin,2,'%'),'#00e5a0')},
+      {label:'Pérdida Media (%)',     compound:v(fmt(m.avgLoss,2,'%'),'#ff4d6d'), bh:null, simple:v(fmt(m.avgLoss,2,'%'),'#ff4d6d')},
+      {label:'Ganancia (€)',          compound:v(fmt(m.ganComp,2,'€'),cC),  bh:v(fmt(m.ganBH,2,'€'),cBH), simple:v(fmt(m.ganSimple,2,'€'),cS)},
+      {label:'Ganancia (%)',          compound:v(fmt(m.ganComp/Number(capitalIni)*100,2,'%'),cC), bh:v(fmt(m.ganBH/Number(capitalIni)*100,2,'%'),cBH), simple:v(fmt(m.ganTotalPct,2,'%'),cS)},
+      {label:`CAGR (${fmt(m.anios,2)}a)`, compound:v(fmt(m.cagrC,2,'%'),m.cagrC>=0?'#00e5a0':'#ff4d6d'), bh:v(fmt(m.cagrBH,2,'%'),m.cagrBH>=0?'#00e5a0':'#ff4d6d'), simple:v(fmt(m.cagrS,2,'%'),m.cagrS>=0?'#00e5a0':'#ff4d6d')},
+      {label:'Max Drawdown (%)',      compound:v(fmt(m.ddComp,2,'%'),'#ff4d6d'), bh:v(fmt(maxDDBH,2,'%'),'#ff4d6d'), simple:v(fmt(m.ddSimple,2,'%'),'#ff4d6d')},
+    ]
+  }
+
+  // ── StratSelector — sync with equity chart toggles ──
+  const syncStratToCharts=(strats)=>{
+    setShowCompound(strats.includes('compound'))
+    setShowBH(strats.includes('bh'))
+    setShowStrategy(strats.includes('simple'))
+  }
   const StratSelector=({strats,setStrats})=>(
-    <div style={{display:'flex',gap:3,padding:'4px 8px',borderBottom:'1px solid var(--border)',flexWrap:'wrap',alignItems:'center',background:'rgba(0,0,0,0.15)'}}>
+    <div style={{display:'flex',gap:3,padding:'5px 10px',borderBottom:'1px solid var(--border)',flexWrap:'wrap',alignItems:'center',background:'rgba(0,0,0,0.18)'}}>
       <span style={{fontFamily:MONO,fontSize:10,color:'#7a9bc0',marginRight:3}}>Estrategia:</span>
-      {['simple','compound','bh'].map(s=>(
-        <button key={s} onClick={()=>setStrats(prev=>prev.includes(s)?prev.length>1?prev.filter(x=>x!==s):prev:[...prev,s])}
-          style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',
+      {STRAT_ORDER.map(s=>(
+        <button key={s} onClick={()=>{
+          const next=strats.includes(s)?strats.length>1?strats.filter(x=>x!==s):strats:[...strats,s]
+          setStrats(next)
+          syncStratToCharts(next)
+        }}
+          style={{fontFamily:MONO,fontSize:10,padding:'2px 8px',borderRadius:3,cursor:'pointer',
             border:`1px solid ${strats.includes(s)?STRAT_META[s].color:'#2a3f55'}`,
             background:strats.includes(s)?STRAT_META[s].bg:'transparent',
             color:strats.includes(s)?STRAT_META[s].color:'#4a6a88',fontWeight:strats.includes(s)?600:400}}>
@@ -1141,30 +1145,43 @@ export default function Home() {
       ))}
     </div>
   )
-  const MetricsPanel=({buildRows})=>(
-    <div style={{display:'flex',flex:1,minWidth:0,height:'100%'}}>
-      {metricsStrats.map((s,si)=>{
-        const rows=buildRows(s)
-        const meta=STRAT_META[s]
-        return(
-          <div key={s} style={{flex:1,minWidth:0,borderRight:si<metricsStrats.length-1?'1px solid var(--border)':'none',overflowY:'auto'}}>
-            <div style={{padding:'5px 8px',background:meta.bg,borderBottom:'1px solid var(--border)',fontFamily:MONO,fontSize:11,color:meta.color,fontWeight:700,textAlign:'center',letterSpacing:'0.05em',position:'sticky',top:0,zIndex:2}}>
-              {meta.label}
-            </div>
-            <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:12}}>
-              <tbody>{rows.map(m=>(
-                <tr key={m.label} style={{borderBottom:'1px solid var(--border)'}}>
-                  <td style={{padding:'6px 9px',color:'#b8d4ea',fontSize:11}}>{m.label}</td>
-                  <td style={{padding:'6px 9px',textAlign:'right',color:m.color,fontWeight:600}}>{m.val}</td>
-                </tr>
-              ))}</tbody>
-            </table>
-          </div>
-        )
-      })}
-    </div>
-  )
-  const MetricsTable=()=>(<MetricsPanel buildRows={buildIndivStratRows}/>)
+
+  // ── Unified metrics table: one concept column + per-strategy value columns ──
+  const UnifiedMetricsTable=({rows, strats})=>{
+    const activeCols=STRAT_ORDER.filter(s=>strats.includes(s))
+    if(!rows.length) return null
+    return(
+      <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:11.5}}>
+        <thead>
+          <tr style={{background:'rgba(0,0,0,0.25)'}}>
+            <th style={{padding:'5px 10px',textAlign:'left',color:'#5a8aaa',fontSize:10,fontWeight:400,letterSpacing:'0.06em',borderBottom:'1px solid var(--border)'}}>MÉTRICA</th>
+            {activeCols.map(s=>(
+              <th key={s} style={{padding:'5px 10px',textAlign:'right',color:STRAT_META[s].color,fontSize:10,fontWeight:700,letterSpacing:'0.06em',borderBottom:`2px solid ${STRAT_META[s].color}`,background:STRAT_META[s].bg}}>
+                {STRAT_META[s].label.toUpperCase()}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(row=>(
+            <tr key={row.label} style={{borderBottom:'1px solid rgba(26,45,69,0.7)'}}>
+              <td style={{padding:'5px 10px',color:'#8ab8d4',fontSize:11,whiteSpace:'nowrap'}}>{row.label}</td>
+              {activeCols.map(s=>{
+                const cell=row[s]
+                return(
+                  <td key={s} style={{padding:'5px 10px',textAlign:'right',fontWeight:600,color:cell?cell.color:'transparent',fontSize:12}}>
+                    {cell?cell.val:'—'}
+                  </td>
+                )
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    )
+  }
+  const metricRows=[] // legacy: no longer used
+  const MetricsTable=()=>{ const rows=buildUnifiedRows(metrics, result?.maxDDBH||0); return <UnifiedMetricsTable rows={rows} strats={metricsStrats}/> }
 
   // Altura de los tabs = 33px aprox. (padding 8px top+bottom + 17px línea)
   const TAB_H=33
@@ -1792,25 +1809,9 @@ export default function Home() {
 
                   {/* Métricas en cuadrícula (si layout=grid) */}
                   {metricsLayout==='grid'&&metrics&&(
-                    <div>
+                    <div style={{border:'1px solid var(--border)',borderRadius:4,margin:'8px 0',overflow:'hidden'}}>
                       <StratSelector strats={metricsStrats} setStrats={setMetricsStrats}/>
-                      <div style={{display:'flex',gap:0,overflowX:'auto'}}>
-                        {metricsStrats.map(s=>(
-                          <div key={s} style={{flex:'1 1 220px',minWidth:200}}>
-                            <div style={{padding:'5px 12px',background:STRAT_META[s].bg,borderBottom:'1px solid var(--border)',fontFamily:MONO,fontSize:11,color:STRAT_META[s].color,fontWeight:700,textAlign:'center'}}>
-                              {STRAT_META[s].label}
-                            </div>
-                            <div className="metrics-section" style={{padding:'0 4px'}}>
-                              {buildIndivStratRows(s).map(m=>(
-                                <div key={m.label} className="metric-card">
-                                  <span className="metric-label">{m.label}</span>
-                                  <span className="metric-val" style={{color:m.color}}>{m.val}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
+                      <UnifiedMetricsTable rows={buildUnifiedRows(metrics,result?.maxDDBH||0)} strats={metricsStrats}/>
                     </div>
                   )}
 
@@ -1819,12 +1820,20 @@ export default function Home() {
                     <div className="section-title" style={{display:'flex',alignItems:'center',flexWrap:'wrap',gap:6}}>
                       <span>Equity</span>
                       {[
-                        {key:'st',label:'Estrategia',color:'#00d4ff',state:showStrategy,set:setShowStrategy},
-                        {key:'co',label:'Compuesta',color:'#00e5a0',state:showCompound,set:setShowCompound},
-                        {key:'bh',label:'B&H Activo',color:'#ffd166',state:showBH,set:setShowBH},
-                        {key:'sp',label:'B&H SP500',color:'#9b72ff',state:showSP500,set:setShowSP500},
-                      ].map(({key,label,color,state,set})=>(
-                        <button key={key} onClick={()=>set(s=>!s)} style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',border:`1px solid ${state?color:'#3d5a7a'}`,background:state?`${color}18`:'transparent',color:state?color:'#3d5a7a'}}>
+                        {key:'st',label:'Simple',color:'#00d4ff',state:showStrategy,set:setShowStrategy,strat:'simple'},
+                        {key:'co',label:'Compuesta',color:'#00e5a0',state:showCompound,set:setShowCompound,strat:'compound'},
+                        {key:'bh',label:'B&H Activo',color:'#ffd166',state:showBH,set:setShowBH,strat:'bh'},
+                        {key:'sp',label:'B&H SP500',color:'#9b72ff',state:showSP500,set:setShowSP500,strat:null},
+                      ].map(({key,label,color,state,set,strat})=>(
+                        <button key={key} onClick={()=>{
+                          const next=!state; set(next)
+                          if(strat){
+                            const updated=next
+                              ?[...new Set([...metricsStrats,strat])]
+                              :metricsStrats.length>1?metricsStrats.filter(x=>x!==strat):metricsStrats
+                            setMetricsStrats(updated)
+                          }
+                        }} style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',border:`1px solid ${state?color:'#3d5a7a'}`,background:state?`${color}18`:'transparent',color:state?color:'#3d5a7a'}}>
                           {label}
                         </button>
                       ))}
@@ -1911,21 +1920,35 @@ export default function Home() {
                           <thead><tr><th>#</th><th>Entrada</th><th>Salida</th><th style={{color:'#9b72ff'}}>Capital inv.</th><th style={{color:'#00d4ff'}}>Capital final</th><th>Px Entrada</th><th>Px Salida</th><th>P&L %</th><th>P&L €</th><th>Días</th><th>Tipo</th></tr></thead>
                           <tbody>
                             {(()=>{
-                              const reversed=[...result.trades].reverse()
-                              let runSimple=Number(capitalIni)
-                              return reversed.map((t,i)=>{
-                                const idx=result.trades.indexOf(t)
-                                const capFinalS=Number(capitalIni)+result.trades.slice(0,idx+1).reduce((s,x)=>s+x.pnlSimple,0)
-                                const capFinalC=t.capitalTras
-                                const capFinal=tradeHistMode==='compound'?capFinalC:capFinalS
+                              const capIni=Number(capitalIni)
+                              // Precompute cumulative values (forward order) for peak tracking
+                              const fwdSimple=result.trades.map((_,i)=>capIni+result.trades.slice(0,i+1).reduce((s,x)=>s+x.pnlSimple,0))
+                              const fwdCompound=result.trades.map(t=>t.capitalTras)
+                              let peakS=capIni, peakC=capIni
+                              const peaksS=fwdSimple.map(v=>{peakS=Math.max(peakS,v);return peakS})
+                              const peaksC=fwdCompound.map(v=>{peakC=Math.max(peakC,v);return peakC})
+                              return [...result.trades].reverse().map((t,i)=>{
+                                const idx=result.trades.length-1-i  // original index
+                                // Capital at entry = prev trade final (or capIni)
+                                const capInvS=capIni  // simple always uses fixed slot
+                                const capInvC=idx>0?result.trades[idx-1].capitalTras:capIni
+                                const capFinalS=fwdSimple[idx], capFinalC=fwdCompound[idx]
+                                const isCompound=tradeHistMode==='compound'
+                                const capInv=isCompound?capInvC:capInvS
+                                const capFinal=isCompound?capFinalC:capFinalS
+                                const peak=isCompound?peaksC[idx]:peaksS[idx]
+                                // DD color: orange if in drawdown (below previous peak)
+                                const prevPeak=idx>0?(isCompound?peaksC[idx-1]:peaksS[idx-1]):capIni
+                                const capInvColor=capInv>=prevPeak?'#00d4ff':'#ff9a3c'
+                                const capFinalColor=capFinal>=peak?'#00d4ff':'#ff9a3c'
                                 return(
                                   <tr key={i} onClick={()=>navigateToTrade(t)} style={{cursor:'pointer'}}
                                     onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.06)'}
                                     onMouseOut={e=>e.currentTarget.style.background='transparent'}>
                                     <td style={{color:'var(--text3)'}}>{result.trades.length-i}</td>
                                     <td>{fmtDate(t.entryDate)}</td><td>{fmtDate(t.exitDate)}</td>
-                                    <td style={{color:'#9b72ff',fontWeight:600}}>€{fmt(Number(capitalIni),0)}</td>
-                                    <td style={{color:capFinal>=Number(capitalIni)?'#00d4ff':'#ff9a3c',fontWeight:600}}>€{fmt(capFinal,0)}</td>
+                                    <td style={{color:capInvColor,fontWeight:600}}>€{fmt(capInv,0)}</td>
+                                    <td style={{color:capFinalColor,fontWeight:600}}>€{fmt(capFinal,0)}</td>
                                     <td>{fmt(t.entryPx,2)}</td><td>{fmt(t.exitPx,2)}</td>
                                     <td style={{color:t.pnlPct>=0?'var(--green)':'var(--red)',fontWeight:600}}>{t.pnlPct>=0?'+':''}{fmt(t.pnlPct,2)}%</td>
                                     <td style={{color:t.pnlSimple>=0?'var(--green)':'var(--red)'}}>{t.pnlSimple>=0?'+':''}{fmt(t.pnlSimple,2)}€</td>
@@ -1953,9 +1976,7 @@ export default function Home() {
                       onMouseOut={e=>e.currentTarget.style.background='transparent'}/>
                     <div style={{padding:'7px 12px',borderBottom:'1px solid var(--border)',fontFamily:MONO,fontSize:10,color:'#b8d8f0',letterSpacing:'0.08em',fontWeight:600}}>RESUMEN · {simbolo}</div>
                     <StratSelector strats={metricsStrats} setStrats={setMetricsStrats}/>
-                    <div style={{display:'flex',flex:1,minHeight:0}}>
-                      <MetricsTable/>
-                    </div>
+                    <MetricsTable/>
                   </div>
                 )}
               </div>
@@ -2203,13 +2224,37 @@ export default function Home() {
                               <td style={{padding:'4px 8px',color:'var(--accent)',fontWeight:700}}>{t.symbol}</td>
                               <td style={{padding:'4px 8px',color:'var(--text)',whiteSpace:'nowrap'}}>{fmtDate(t.entryDate)}</td>
                               <td style={{padding:'4px 8px',color:'var(--text)',whiteSpace:'nowrap'}}>{fmtDate(t.exitDate)}</td>
-                              <td style={{padding:'4px 8px',color:'#9b72ff',fontWeight:600,whiteSpace:'nowrap'}}>€{fmt(Number(capitalIni),0)}</td>
                               <td style={{padding:'4px 8px',whiteSpace:'nowrap'}}>{(()=>{
-                                const idx=mcResult.allTrades.indexOf(t)
-                                const capFinalS=Number(capitalIni)+mcResult.allTrades.slice(0,idx+1).reduce((s,x)=>s+x.pnlSimple,0)
+                                const capIni2=Number(capitalIni)
+                                const allT2=mcResult.allTrades
+                                const idx=allT2.indexOf(t)
+                                const isC=mcTradeHistMode==='compound'
+                                const capInvC=idx>0?allT2[idx-1].capitalTras:capIni2
+                                const capInvS=capIni2
+                                const capInv=isC?capInvC:capInvS
+                                // Determine if in drawdown (compare to running peak up to prev trade)
+                                let prevPeak=capIni2
+                                for(let pi=0;pi<idx;pi++){
+                                  const pv=isC?allT2[pi].capitalTras:(capIni2+allT2.slice(0,pi+1).reduce((s,x)=>s+x.pnlSimple,0))
+                                  if(pv>prevPeak)prevPeak=pv
+                                }
+                                return <span style={{color:capInv>=prevPeak?'#00d4ff':'#ff9a3c',fontWeight:600}}>€{fmt(capInv,0)}</span>
+                              })()}</td>
+                              <td style={{padding:'4px 8px',whiteSpace:'nowrap'}}>{(()=>{
+                                const capIni2=Number(capitalIni)
+                                const allT2=mcResult.allTrades
+                                const idx=allT2.indexOf(t)
+                                const isC=mcTradeHistMode==='compound'
+                                const capFinalS=capIni2+allT2.slice(0,idx+1).reduce((s,x)=>s+x.pnlSimple,0)
                                 const capFinalC=t.capitalTras
-                                const v=mcTradeHistMode==='compound'?capFinalC:capFinalS
-                                return <span style={{color:v>=Number(capitalIni)?'#00d4ff':'#ff9a3c',fontWeight:600}}>€{fmt(v,0)}</span>
+                                const capFinal=isC?capFinalC:capFinalS
+                                // Peak up to and including this trade
+                                let peak=capIni2
+                                for(let pi=0;pi<=idx;pi++){
+                                  const pv=isC?allT2[pi].capitalTras:(capIni2+allT2.slice(0,pi+1).reduce((s,x)=>s+x.pnlSimple,0))
+                                  if(pv>peak)peak=pv
+                                }
+                                return <span style={{color:capFinal>=peak?'#00d4ff':'#ff9a3c',fontWeight:600}}>€{fmt(capFinal,0)}</span>
                               })()}</td>
                               <td style={{padding:'4px 8px'}}>{fmt(t.entryPx,2)}</td>
                               <td style={{padding:'4px 8px'}}>{fmt(t.exitPx,2)}</td>
@@ -2261,60 +2306,34 @@ export default function Home() {
                   const lBrute=losses.reduce((s,t)=>s+Math.abs(t.pnlSimple),0)
                   const factorBen=lBrute>0?gBrute/lBrute:999
                   const diasProm=allT.length?totalDias/allT.length:0
-                  const mcSharedRows=[
-                    {label:'Total Operaciones',val:allT.length,color:'#ffd166'},
-                    {label:'Capital inv. medio',val:fmt(mcResult.avgOccupancy,1,'%'),color:'#9b72ff'},
-                    {label:'Total Días Invertido',val:totalDias,color:'#00d4ff'},
-                    {label:'Días Promedio',val:fmt(diasProm,1,' días'),color:'#00d4ff'},
-                    {label:`Tiempo Invertido (${fmt(aniosInv,2)}a)`,val:fmt(tiempoInvPct,0,'%'),color:'#ffd166'},
-                    {label:'Win Rate',val:fmt(winRate,1,'%'),color:winRate>=50?'#00e5a0':'#ff4d6d'},
-                    {label:'Factor de Beneficio',val:fmt(factorBen,2),color:factorBen>=1?'#00e5a0':'#ff4d6d'},
-                    {label:'Ganadoras',val:wins.length,color:'#00e5a0'},
-                    {label:'Perdedoras',val:losses.length,color:'#ff4d6d'},
-                    {label:'Ganancia Media (%)',val:fmt(avgWin,2,'%'),color:'#00e5a0'},
-                    {label:'Pérdida Media (%)',val:fmt(avgLoss,2,'%'),color:'#ff4d6d'},
+                  const v2=(val,color)=>({val,color})
+                  const wr2=winRate>=50?'#00e5a0':'#ff4d6d'
+                  const fb2=factorBen>=1?'#00e5a0':'#ff4d6d'
+                  const cS2=lastS>=capIni?'#00e5a0':'#ff4d6d'
+                  const cC2=lastC>=capIni?'#00e5a0':'#ff4d6d'
+                  const cBH2=lastBH>=capIni?'#00e5a0':'#ff4d6d'
+                  const mcRows=[
+                    {label:'Total Operaciones',     compound:v2(allT.length,'#ffd166'),  bh:v2(allT.length,'#ffd166'), simple:v2(allT.length,'#ffd166')},
+                    {label:'Total Días Invertido',  compound:v2(totalDias,'#00d4ff'),    bh:v2(totalDias,'#00d4ff'),   simple:v2(totalDias,'#00d4ff')},
+                    {label:'Días Promedio',         compound:v2(fmt(diasProm,1,' días'),'#00d4ff'), bh:null,         simple:v2(fmt(diasProm,1,' días'),'#00d4ff')},
+                    {label:`Tiempo Invertido (${fmt(aniosInv,2)}a)`, compound:v2(fmt(tiempoInvPct,0,'%'),'#ffd166'), bh:null, simple:v2(fmt(tiempoInvPct,0,'%'),'#ffd166')},
+                    {label:'Capital inv. medio',    compound:v2(fmt(mcResult.avgOccupancy,1,'%'),'#9b72ff'), bh:null, simple:v2(fmt(mcResult.avgOccupancy,1,'%'),'#9b72ff')},
+                    {label:'Ganadoras',             compound:v2(wins.length,'#00e5a0'), bh:v2(wins.length,'#00e5a0'), simple:v2(wins.length,'#00e5a0')},
+                    {label:'Perdedoras',            compound:v2(losses.length,'#ff4d6d'), bh:v2(losses.length,'#ff4d6d'), simple:v2(losses.length,'#ff4d6d')},
+                    {label:'Win Rate',              compound:v2(fmt(winRate,1,'%'),wr2), bh:v2(fmt(winRate,1,'%'),wr2), simple:v2(fmt(winRate,1,'%'),wr2)},
+                    {label:'Factor de Beneficio',   compound:v2(fmt(factorBen,2),fb2), bh:null, simple:v2(fmt(factorBen,2),fb2)},
+                    {label:'Ganancia Media (%)',    compound:v2(fmt(avgWin,2,'%'),'#00e5a0'), bh:null, simple:v2(fmt(avgWin,2,'%'),'#00e5a0')},
+                    {label:'Pérdida Media (%)',     compound:v2(fmt(avgLoss,2,'%'),'#ff4d6d'), bh:null, simple:v2(fmt(avgLoss,2,'%'),'#ff4d6d')},
+                    {label:'Ganancia (€)',          compound:v2(fmt(lastC-capIni,2,'€'),cC2), bh:v2(fmt(lastBH-capIni,2,'€'),cBH2), simple:v2(fmt(lastS-capIni,2,'€'),cS2)},
+                    {label:'Ganancia (%)',          compound:v2(fmt((lastC-capIni)/capIni*100,2,'%'),cC2), bh:v2(fmt((lastBH-capIni)/capIni*100,2,'%'),cBH2), simple:v2(fmt((lastS-capIni)/capIni*100,2,'%'),cS2)},
+                    {label:`CAGR (${fmt(anios,2)}a)`, compound:v2(fmt(cagrC,2,'%'),cagrC>=0?'#00e5a0':'#ff4d6d'), bh:v2(fmt(cagrBH,2,'%'),cagrBH>=0?'#00e5a0':'#ff4d6d'), simple:v2(fmt(cagrS,2,'%'),cagrS>=0?'#00e5a0':'#ff4d6d')},
+                    {label:'Max Drawdown (%)',      compound:v2(fmt(mcResult.maxDDCompound,2,'%'),'#ff4d6d'), bh:v2(fmt(mcResult.maxDDBH,2,'%'),'#ff4d6d'), simple:v2(fmt(mcResult.maxDDSimple,2,'%'),'#ff4d6d')},
                   ]
-                  const mcStratRows={
-                    simple:[...mcSharedRows,
-                      {label:'Ganancia Simple (€)',val:fmt(lastS-capIni,2,'€'),color:lastS>=capIni?'#00e5a0':'#ff4d6d'},
-                      {label:'Ganancia Total (%)',val:fmt((lastS-capIni)/capIni*100,2,'%'),color:lastS>=capIni?'#00e5a0':'#ff4d6d'},
-                      {label:`CAGR Simple (${fmt(anios,2)}a)`,val:fmt(cagrS,2,'%'),color:cagrS>=0?'#00e5a0':'#ff4d6d'},
-                      {label:'Max Drawdown (%)',val:fmt(mcResult.maxDDSimple,2,'%'),color:'#ff4d6d'},
-                    ],
-                    compound:[...mcSharedRows,
-                      {label:'Ganancia Compuesta (€)',val:fmt(lastC-capIni,2,'€'),color:lastC>=capIni?'#00e5a0':'#ff4d6d'},
-                      {label:`CAGR Compuesto (${fmt(anios,2)}a)`,val:fmt(cagrC,2,'%'),color:cagrC>=0?'#00e5a0':'#ff4d6d'},
-                      {label:'Max DD Compuesto (%)',val:fmt(mcResult.maxDDCompound,2,'%'),color:'#ff4d6d'},
-                    ],
-                    bh:[
-                      {label:'Ganancia B&H Divers. (€)',val:fmt(lastBH-capIni,2,'€'),color:lastBH>=capIni?'#00e5a0':'#ff4d6d'},
-                      {label:`CAGR B&H (${fmt(anios,2)}a)`,val:fmt(cagrBH,2,'%'),color:cagrBH>=0?'#00e5a0':'#ff4d6d'},
-                      {label:'Max Drawdown B&H (%)',val:fmt(mcResult.maxDDBH,2,'%'),color:'#ff4d6d'},
-                    ],
-                  }
                   return(
                     <div style={{display:'flex',flexDirection:'column',height:'100%'}}>
                       <StratSelector strats={metricsStrats} setStrats={setMetricsStrats}/>
-                      <div style={{display:'flex',flex:1,minWidth:0}}>
-                        {metricsStrats.map((s,si)=>{
-                          const rows=mcStratRows[s]||[]
-                          const meta=STRAT_META[s]
-                          return(
-                            <div key={s} style={{flex:1,minWidth:0,borderRight:si<metricsStrats.length-1?'1px solid var(--border)':'none',overflowY:'auto'}}>
-                              <div style={{padding:'4px 8px',background:meta.bg,borderBottom:'1px solid var(--border)',fontFamily:MONO,fontSize:11,color:meta.color,fontWeight:700,textAlign:'center',position:'sticky',top:0,zIndex:2}}>
-                                {meta.label}
-                              </div>
-                              <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:12}}>
-                                <tbody>{rows.map(m=>(
-                                  <tr key={m.label} style={{borderBottom:'1px solid var(--border)'}}>
-                                    <td style={{padding:'6px 9px',color:'#b8d4ea',fontSize:11}}>{m.label}</td>
-                                    <td style={{padding:'6px 9px',textAlign:'right',color:m.color,fontWeight:600}}>{m.val}</td>
-                                  </tr>
-                                ))}</tbody>
-                              </table>
-                            </div>
-                          )
-                        })}
+                      <div style={{overflowY:'auto',flex:1}}>
+                        <UnifiedMetricsTable rows={mcRows} strats={metricsStrats}/>
                       </div>
                     </div>
                   )
