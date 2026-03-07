@@ -583,10 +583,11 @@ function EquityChart({
 }
 
 // ── MultiCartChart ───────────────────────────────────────────
-function MultiCartChart({simpleCurve,compoundCurve,bhCurve,occupancyCurve,capitalIni,
+function MultiCartChart({simpleCurve,compoundCurve,bhCurve,sp500BHCurve,capitalIni,
   maxDDSimple,maxDDSimpleDate,maxDDCompound,maxDDCompoundDate,maxDDBH,maxDDBHDate,
-  showSimple,showCompound,showBH,showOccupancy,occMode='compound',onReady,syncRef,chartHeight=300}) {
-  const ref=useRef(null),chartRef=useRef(null),ref2=useRef(null),chart2Ref=useRef(null)
+  maxDDSP500,maxDDSP500Date,
+  showSimple,showCompound,showBH,showSP500,onReady,syncRef,chartHeight=300}) {
+  const ref=useRef(null),chartRef=useRef(null)
 
   useEffect(()=>{
     if(!ref.current) return
@@ -601,12 +602,13 @@ function MultiCartChart({simpleCurve,compoundCurve,bhCurve,occupancyCurve,capita
         timeScale:{borderColor:'#1a2d45',timeVisible:false},
       })
       chartRef.current=chart
-      const base=simpleCurve||compoundCurve||bhCurve
+      const base=simpleCurve||compoundCurve||bhCurve||sp500BHCurve
       if(base?.length) chart.addLineSeries({color:'#2a3f55',lineWidth:1,lineStyle:LineStyle.Dotted,lastValueVisible:false,priceLineVisible:false})
         .setData([{time:base[0].date,value:capitalIni},{time:base[base.length-1].date,value:capitalIni}])
       if(showSimple&&simpleCurve?.length) chart.addLineSeries({color:'#00d4ff',lineWidth:2,title:'Simple'}).setData(simpleCurve.map(p=>({time:p.date,value:p.value})))
       if(showCompound&&compoundCurve?.length) chart.addLineSeries({color:'#00e5a0',lineWidth:2,title:'Compuesto'}).setData(compoundCurve.map(p=>({time:p.date,value:p.value})))
-      if(showBH&&bhCurve?.length) chart.addLineSeries({color:'#ffd166',lineWidth:2,lineStyle:LineStyle.Dashed,title:'B&H'}).setData(bhCurve.map(p=>({time:p.date,value:p.value})))
+      if(showBH&&bhCurve?.length) chart.addLineSeries({color:'#ffd166',lineWidth:2,lineStyle:LineStyle.Dashed,title:'B&H Divers.'}).setData(bhCurve.map(p=>({time:p.date,value:p.value})))
+      if(showSP500&&sp500BHCurve?.length) chart.addLineSeries({color:'#9b72ff',lineWidth:2,lineStyle:LineStyle.Dotted,title:'B&H SP500'}).setData(sp500BHCurve.map(p=>({time:p.date,value:p.value})))
       const addDD=(curve,date,dd,color)=>{
         if(!date||!dd||!curve?.length) return
         let peak={date:curve[0].date,value:curve[0].value}
@@ -620,6 +622,7 @@ function MultiCartChart({simpleCurve,compoundCurve,bhCurve,occupancyCurve,capita
       if(showSimple) addDD(simpleCurve,maxDDSimpleDate,maxDDSimple,'#ff4d6d')
       if(showCompound) addDD(compoundCurve,maxDDCompoundDate,maxDDCompound,'#00a870')
       if(showBH) addDD(bhCurve,maxDDBHDate,maxDDBH,'#ff9a3c')
+      if(showSP500) addDD(sp500BHCurve,maxDDSP500Date,maxDDSP500,'#7b5fe0')
       // Cross-chart sync
       if(syncRef?.current){
         const syncId=Symbol()
@@ -640,87 +643,15 @@ function MultiCartChart({simpleCurve,compoundCurve,bhCurve,occupancyCurve,capita
       return()=>ro.disconnect()
     })
     return()=>{if(chartRef.current){chartRef.current.remove();chartRef.current=null}}
-  },[simpleCurve,compoundCurve,bhCurve,capitalIni,maxDDSimple,maxDDSimpleDate,maxDDCompound,maxDDCompoundDate,maxDDBH,maxDDBHDate,showSimple,showCompound,showBH])
+  },[simpleCurve,compoundCurve,bhCurve,sp500BHCurve,capitalIni,maxDDSimple,maxDDSimpleDate,maxDDCompound,maxDDCompoundDate,maxDDBH,maxDDBHDate,maxDDSP500,maxDDSP500Date,showSimple,showCompound,showBH,showSP500])
 
   useEffect(()=>{
     if(chartRef.current) try{chartRef.current.applyOptions({height:chartHeight})}catch(_){}
   },[chartHeight])
 
-  // Occupancy chart — barras € (izquierda) + línea % (derecha)
-  useEffect(()=>{
-    if(!ref2.current||!showOccupancy||!occupancyCurve?.length) return
-    import('lightweight-charts').then(({createChart,CrosshairMode})=>{
-      if(chart2Ref.current){chart2Ref.current.remove();chart2Ref.current=null}
-      const chart=createChart(ref2.current,{
-        width:ref2.current.clientWidth,height:120,
-        layout:{background:{color:'#080c14'},textColor:'#7a9bc0'},
-        grid:{vertLines:{color:'#0d1520'},horzLines:{color:'#0d1520'}},
-        crosshair:{mode:CrosshairMode.Normal},
-        leftPriceScale:{visible:true,borderColor:'#1a2d45',scaleMargins:{top:0.05,bottom:0.0}},
-        rightPriceScale:{visible:true,borderColor:'#1a2d45',scaleMargins:{top:0.05,bottom:0.0}},
-        timeScale:{borderColor:'#1a2d45',timeVisible:false},
-      })
-      chart2Ref.current=chart
-      // Barras: importe € invertido (escala izquierda)
-      const bars=chart.addHistogramSeries({
-        color:'rgba(155,114,255,0.35)',
-        priceScaleId:'left',
-        priceFormat:{type:'price',precision:0,minMove:1},
-        lastValueVisible:true,
-        priceLineVisible:false,
-      })
-      const occBaseColor=occMode==='compound'?'rgba(0,229,160,':'rgba(0,212,255,'
-      // Replace histogram with area for cleaner look
-      bars.setData(occupancyCurve.map(p=>{
-        const v=(p.value/100)*(occMode==='compound'?(compoundCurve?.slice(-1)[0]?.value||capitalIni):capitalIni)
-        return{time:p.date,value:v,color:`${occBaseColor}0.45)`}
-      }))
-      // Línea: % (escala derecha)
-      const line=chart.addLineSeries({
-        color:'#9b72ff',lineWidth:1,
-        priceScaleId:'right',
-        priceFormat:{type:'percent'},
-        lastValueVisible:true,priceLineVisible:false,title:'%'
-      })
-      line.setData(occupancyCurve.map(p=>({time:p.date,value:p.value})))
-      chart.timeScale().fitContent()
-      // Sync occupancy chart with others
-      if(syncRef?.current){
-        const syncId=Symbol()
-        const unsub=chart.timeScale().subscribeVisibleTimeRangeChange(range=>{
-          if(!range||syncRef.current.syncing) return
-          syncRef.current.syncing=true
-          syncRef.current.listeners.forEach(fn=>{if(fn.id!==syncId)try{fn.handler(range)}catch(_){}})
-          syncRef.current.syncing=false
-        })
-        const handler=(range)=>{try{chart.timeScale().setVisibleRange(range)}catch(_){}}
-        syncRef.current.listeners.push({id:syncId,handler})
-        chart.__syncCleanup=()=>{try{unsub()}catch(_){};if(syncRef.current)syncRef.current.listeners=syncRef.current.listeners.filter(e=>e.id!==syncId)}
-      }
-      const ro=new ResizeObserver(()=>{if(ref2.current)chart.applyOptions({width:ref2.current.clientWidth})})
-      ro.observe(ref2.current)
-      return()=>ro.disconnect()
-    })
-    return()=>{if(chart2Ref.current){try{chart2Ref.current.__syncCleanup?.()}catch(_){};chart2Ref.current.remove();chart2Ref.current=null}}
-  },[occupancyCurve,showOccupancy,capitalIni,syncRef,occMode,compoundCurve])
 
-  return(
-    <div>
-      <div ref={ref} style={{minHeight:300}}/>
-      {showOccupancy&&occupancyCurve?.length>0&&(
-        <div>
-          <div style={{padding:'3px 12px',display:'flex',gap:14,fontFamily:MONO,fontSize:9,borderTop:'1px solid var(--border)'}}>
-            <span style={{color:'rgba(155,114,255,0.8)'}}>▐ € Capital invertido</span>
-            <span style={{color:'#9b72ff'}}>— % Capital invertido</span>
-            <span style={{color:'rgba(0,229,160,0.8)'}}>▐ &gt;75%</span>
-            <span style={{color:'rgba(155,114,255,0.8)'}}>▐ 40-75%</span>
-            <span style={{color:'rgba(255,209,102,0.7)'}}>▐ &lt;40%</span>
-          </div>
-          <div ref={ref2} style={{minHeight:120}}/>
-        </div>
-      )}
-    </div>
-  )
+
+  return <div ref={ref} style={{minHeight:chartHeight}}/>
 }
 
 // ── OccupancyBarChart — individual asset capital invested chart ────
@@ -784,6 +715,60 @@ function OccupancyBarChart({trades, chartData, capitalIni, syncRef, showMode='co
   },[trades,chartData,showMode,capitalIni])
   return <div ref={ref} style={{minHeight:100}}/>
 }
+
+// ── McOccupancyChart — MC capital invertido chart (same style as OccupancyBarChart) ──
+function McOccupancyChart({occupancyCurve, compoundCurve, capitalIni, occMode='compound', syncRef}) {
+  const ref=useRef(null), chartRef=useRef(null)
+  useEffect(()=>{
+    if(!ref.current||!occupancyCurve?.length) return
+    import('lightweight-charts').then(({createChart,CrosshairMode})=>{
+      if(chartRef.current){chartRef.current.__syncCleanup?.();chartRef.current.remove();chartRef.current=null}
+      const chart=createChart(ref.current,{
+        width:ref.current.clientWidth,height:100,
+        layout:{background:{color:'#080c14'},textColor:'#7a9bc0'},
+        grid:{vertLines:{color:'transparent'},horzLines:{color:'rgba(26,45,69,0.4)'}},
+        crosshair:{mode:CrosshairMode.Normal},
+        rightPriceScale:{borderColor:'#1a2d45',scaleMargins:{top:0.08,bottom:0.0}},
+        timeScale:{borderColor:'#1a2d45',timeVisible:false},
+      })
+      chartRef.current=chart
+      const isComp=occMode==='compound'
+      const color=isComp?'#00e5a0':'#00d4ff'
+      const area=chart.addAreaSeries({
+        lineColor:color,topColor:`${color}55`,bottomColor:`${color}08`,
+        lineWidth:2,lastValueVisible:true,priceLineVisible:false,
+        priceFormat:{type:'price',precision:0,minMove:1},
+      })
+      // Convert % occupancy → € amount invested
+      const lastCompound=compoundCurve?.slice(-1)[0]?.value||capitalIni
+      area.setData(occupancyCurve.map(p=>{
+        const pct=p.value/100
+        const total=isComp?lastCompound:capitalIni
+        return{time:p.date,value:pct*total}
+      }))
+      // Sync
+      if(syncRef?.current){
+        const syncId=Symbol()
+        const unsub=chart.timeScale().subscribeVisibleTimeRangeChange(range=>{
+          if(!range||syncRef.current.syncing) return
+          syncRef.current.syncing=true
+          syncRef.current.listeners.forEach(fn=>{if(fn.id!==syncId)try{fn.handler(range)}catch(_){}})
+          syncRef.current.syncing=false
+        })
+        const handler=(range)=>{try{chart.timeScale().setVisibleRange(range)}catch(_){}}
+        syncRef.current.listeners.push({id:syncId,handler})
+        chart.__syncCleanup=()=>{try{unsub()}catch(_){};if(syncRef.current)syncRef.current.listeners=syncRef.current.listeners.filter(e=>e.id!==syncId)}
+      }
+      chart.timeScale().fitContent()
+      const ro=new ResizeObserver(()=>{if(ref.current)chart.applyOptions({width:ref.current.clientWidth})})
+      ro.observe(ref.current)
+      return()=>ro.disconnect()
+    })
+    return()=>{if(chartRef.current){chartRef.current.__syncCleanup?.();chartRef.current.remove();chartRef.current=null}}
+  },[occupancyCurve,compoundCurve,capitalIni,occMode,syncRef])
+  return <div ref={ref} style={{minHeight:100}}/>
+}
+
 
 // ── Main ─────────────────────────────────────────────────────
 export default function Home() {
@@ -896,6 +881,7 @@ export default function Home() {
   const [mcShowSimple,setMcShowSimple]=useState(true)
   const [mcShowCompound,setMcShowCompound]=useState(true)
   const [mcShowBH,setMcShowBH]=useState(true)
+  const [mcShowSP500,setMcShowSP500]=useState(true)
   const [mcShowOccupancy,setMcShowOccupancy]=useState(true)
   const [mcOccMode,setMcOccMode]=useState('compound')  // own filter for MC capital chart
   const mcChartRef=useRef(null)
@@ -2155,14 +2141,15 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* ── Equity (same structure as individual) ── */}
+                {/* ── Equity — misma estructura que activos individuales ── */}
                 <div className="equity-section">
                   <div className="section-title" style={{display:'flex',alignItems:'center',flexWrap:'wrap',gap:6,fontSize:14}}>
                     <span>Equity</span>
                     {[
-                      {key:'simple',label:'Simple',color:'#00d4ff',state:mcShowSimple,set:setMcShowSimple},
-                      {key:'compound',label:'Compuesto',color:'#00e5a0',state:mcShowCompound,set:setMcShowCompound},
-                      {key:'bh',label:'B&H Diversificado',color:'#ffd166',state:mcShowBH,set:setMcShowBH},
+                      {key:'simple',  label:'Simple',           color:'#00d4ff',state:mcShowSimple,  set:setMcShowSimple},
+                      {key:'compound',label:'Compuesto',        color:'#00e5a0',state:mcShowCompound,set:setMcShowCompound},
+                      {key:'bh',      label:'B&H Diversificado',color:'#ffd166',state:mcShowBH,      set:setMcShowBH},
+                      {key:'sp500',   label:'B&H SP500',        color:'#9b72ff',state:mcShowSP500,   set:setMcShowSP500},
                     ].map(({key,label,color,state,set})=>(
                       <button key={key} onClick={()=>set(s=>!s)}
                         style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',
@@ -2175,13 +2162,14 @@ export default function Home() {
                     simpleCurve={mcResult.simpleCurve}
                     compoundCurve={mcResult.compoundCurve}
                     bhCurve={mcResult.bhCurve}
-                    occupancyCurve={mcResult.occupancyCurve}
+                    sp500BHCurve={mcResult.sp500BHCurve||[]}
                     capitalIni={Number(capitalIni)}
-                    maxDDSimple={mcResult.maxDDSimple} maxDDSimpleDate={mcResult.maxDDSimpleDate}
+                    maxDDSimple={mcResult.maxDDSimple}   maxDDSimpleDate={mcResult.maxDDSimpleDate}
                     maxDDCompound={mcResult.maxDDCompound} maxDDCompoundDate={mcResult.maxDDCompoundDate}
-                    maxDDBH={mcResult.maxDDBH} maxDDBHDate={mcResult.maxDDBHDate}
+                    maxDDBH={mcResult.maxDDBH}           maxDDBHDate={mcResult.maxDDBHDate}
+                    maxDDSP500={mcResult.maxDDSP500||0}  maxDDSP500Date={mcResult.maxDDSP500Date||null}
                     showSimple={mcShowSimple} showCompound={mcShowCompound}
-                    showBH={mcShowBH} showOccupancy={false}
+                    showBH={mcShowBH} showSP500={mcShowSP500}
                     onReady={api=>{mcChartApiRef.current=api}}
                     syncRef={chartSyncRef}
                     chartHeight={mcEquityH}
@@ -2195,10 +2183,10 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* ── Capital invertido MC — filtro propio ── */}
+                {/* ── € Capital invertido MC — mismo estilo que activos individuales ── */}
                 {mcResult.occupancyCurve?.length>0&&(
                   <div style={{borderTop:'1px solid var(--border)'}}>
-                    <div style={{padding:'3px 12px',display:'flex',alignItems:'center',gap:6,fontFamily:MONO,fontSize:11}}>
+                    <div style={{padding:'3px 12px 2px',display:'flex',alignItems:'center',gap:6,fontFamily:MONO,fontSize:11}}>
                       <span style={{color:mcOccMode==='compound'?'#00e5a0':'#00d4ff',fontWeight:600}}>
                         € Capital {mcOccMode==='compound'?'Compuesto':'Simple'} invertido
                       </span>
@@ -2214,21 +2202,12 @@ export default function Home() {
                         ))}
                       </div>
                     </div>
-                    <MultiCartChart
-                      simpleCurve={mcResult.simpleCurve}
-                      compoundCurve={mcResult.compoundCurve}
-                      bhCurve={[]}
+                    <McOccupancyChart
                       occupancyCurve={mcResult.occupancyCurve}
+                      compoundCurve={mcResult.compoundCurve}
                       capitalIni={Number(capitalIni)}
-                      maxDDSimple={0} maxDDSimpleDate={null}
-                      maxDDCompound={0} maxDDCompoundDate={null}
-                      maxDDBH={0} maxDDBHDate={null}
-                      showSimple={false} showCompound={false}
-                      showBH={false} showOccupancy={true}
                       occMode={mcOccMode}
-                      onReady={null}
                       syncRef={chartSyncRef}
-                      chartHeight={120}
                     />
                   </div>
                 )}
