@@ -1454,7 +1454,7 @@ export default function Home() {
                   ):(
                     <button disabled style={{width:'100%',fontFamily:MONO,fontSize:10,padding:'7px 10px',borderRadius:4,cursor:'not-allowed',
                       background:'transparent',border:'1px solid #2a3f55',color:'#3d5a7a',letterSpacing:'0.05em'}}>
-                      ▶ EJECUTAR — selecciona ≥2
+                      ▶ EJECUTAR — selecciona 2+
                     </button>
                   )}
                   {mcError&&<div style={{fontFamily:MONO,fontSize:10,color:'#ff4d6d',marginTop:5}}>⚠ {mcError}</div>}
@@ -1538,8 +1538,6 @@ export default function Home() {
                       </div>
                     )
                   })}
-                </div>
-
                 </div>
               </div>
             )}
