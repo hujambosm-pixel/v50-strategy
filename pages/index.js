@@ -540,6 +540,7 @@ function MultiCartChart({simpleCurve,compoundCurve,bhCurve,occupancyCurve,capita
   maxDDSimple,maxDDSimpleDate,maxDDCompound,maxDDCompoundDate,maxDDBH,maxDDBHDate,
   showSimple,showCompound,showBH,showOccupancy}) {
   const ref=useRef(null),chartRef=useRef(null),ref2=useRef(null),chart2Ref=useRef(null)
+
   useEffect(()=>{
     if(!ref.current) return
     import('lightweight-charts').then(({createChart,CrosshairMode,LineStyle})=>{
@@ -559,8 +560,7 @@ function MultiCartChart({simpleCurve,compoundCurve,bhCurve,occupancyCurve,capita
       if(showSimple&&simpleCurve?.length) chart.addLineSeries({color:'#00d4ff',lineWidth:2,title:'Simple'}).setData(simpleCurve.map(p=>({time:p.date,value:p.value})))
       if(showCompound&&compoundCurve?.length) chart.addLineSeries({color:'#00e5a0',lineWidth:2,title:'Compuesto'}).setData(compoundCurve.map(p=>({time:p.date,value:p.value})))
       if(showBH&&bhCurve?.length) chart.addLineSeries({color:'#ffd166',lineWidth:2,lineStyle:LineStyle.Dashed,title:'B&H'}).setData(bhCurve.map(p=>({time:p.date,value:p.value})))
-      // Drawdown lines
-      const addDD=(curve,date,dd,color,label)=>{
+      const addDD=(curve,date,dd,color)=>{
         if(!date||!dd||!curve?.length) return
         let peak={date:curve[0].date,value:curve[0].value}
         for(const p of curve){if(p.date>date)break;if(p.value>peak.value)peak=p}
@@ -570,9 +570,9 @@ function MultiCartChart({simpleCurve,compoundCurve,bhCurve,occupancyCurve,capita
         s.setData([{time:peak.date,value:peak.value},{time:trough.date,value:trough.value}])
         s.setMarkers([{time:trough.date,position:'belowBar',color,shape:'circle',size:0,text:`↓ -${dd.toFixed(1)}%`}])
       }
-      if(showSimple) addDD(simpleCurve,maxDDSimpleDate,maxDDSimple,'#ff4d6d','DD S')
-      if(showCompound) addDD(compoundCurve,maxDDCompoundDate,maxDDCompound,'#00a870','DD C')
-      if(showBH) addDD(bhCurve,maxDDBHDate,maxDDBH,'#ff9a3c','DD BH')
+      if(showSimple) addDD(simpleCurve,maxDDSimpleDate,maxDDSimple,'#ff4d6d')
+      if(showCompound) addDD(compoundCurve,maxDDCompoundDate,maxDDCompound,'#00a870')
+      if(showBH) addDD(bhCurve,maxDDBHDate,maxDDBH,'#ff9a3c')
       chart.timeScale().fitContent()
       const ro=new ResizeObserver(()=>{if(ref.current)chart.applyOptions({width:ref.current.clientWidth})})
       ro.observe(ref.current)
@@ -581,37 +581,59 @@ function MultiCartChart({simpleCurve,compoundCurve,bhCurve,occupancyCurve,capita
     return()=>{if(chartRef.current){chartRef.current.remove();chartRef.current=null}}
   },[simpleCurve,compoundCurve,bhCurve,capitalIni,maxDDSimple,maxDDSimpleDate,maxDDCompound,maxDDCompoundDate,maxDDBH,maxDDBHDate,showSimple,showCompound,showBH])
 
-  // Occupancy chart (secondary)
+  // Occupancy chart — barras € (izquierda) + línea % (derecha)
   useEffect(()=>{
     if(!ref2.current||!showOccupancy||!occupancyCurve?.length) return
     import('lightweight-charts').then(({createChart,CrosshairMode})=>{
       if(chart2Ref.current){chart2Ref.current.remove();chart2Ref.current=null}
       const chart=createChart(ref2.current,{
-        width:ref2.current.clientWidth,height:100,
+        width:ref2.current.clientWidth,height:120,
         layout:{background:{color:'#080c14'},textColor:'#7a9bc0'},
         grid:{vertLines:{color:'#0d1520'},horzLines:{color:'#0d1520'}},
         crosshair:{mode:CrosshairMode.Normal},
-        rightPriceScale:{borderColor:'#1a2d45',scaleMargins:{top:0.05,bottom:0.05}},
+        leftPriceScale:{visible:true,borderColor:'#1a2d45',scaleMargins:{top:0.05,bottom:0.0}},
+        rightPriceScale:{visible:true,borderColor:'#1a2d45',scaleMargins:{top:0.05,bottom:0.0}},
         timeScale:{borderColor:'#1a2d45',timeVisible:false},
       })
       chart2Ref.current=chart
-      const s=chart.addLineSeries({color:'#9b72ff',lineWidth:1,title:'% Capital inv.',lastValueVisible:true,priceLineVisible:false})
-      s.setData(occupancyCurve.map(p=>({time:p.date,value:p.value})))
+      // Barras: importe € invertido (escala izquierda)
+      const bars=chart.addHistogramSeries({
+        color:'rgba(155,114,255,0.35)',
+        priceScaleId:'left',
+        priceFormat:{type:'price',precision:0,minMove:1},
+        lastValueVisible:true,
+        priceLineVisible:false,
+      })
+      bars.setData(occupancyCurve.map(p=>({time:p.date,value:(p.value/100)*capitalIni,color:p.value>=75?'rgba(0,229,160,0.45)':p.value>=40?'rgba(155,114,255,0.45)':'rgba(255,209,102,0.35)'})))
+      // Línea: % (escala derecha)
+      const line=chart.addLineSeries({
+        color:'#9b72ff',lineWidth:1,
+        priceScaleId:'right',
+        priceFormat:{type:'percent'},
+        lastValueVisible:true,priceLineVisible:false,title:'%'
+      })
+      line.setData(occupancyCurve.map(p=>({time:p.date,value:p.value})))
       chart.timeScale().fitContent()
       const ro=new ResizeObserver(()=>{if(ref2.current)chart.applyOptions({width:ref2.current.clientWidth})})
       ro.observe(ref2.current)
       return()=>ro.disconnect()
     })
     return()=>{if(chart2Ref.current){chart2Ref.current.remove();chart2Ref.current=null}}
-  },[occupancyCurve,showOccupancy])
+  },[occupancyCurve,showOccupancy,capitalIni])
 
   return(
     <div>
       <div ref={ref} style={{minHeight:300}}/>
       {showOccupancy&&occupancyCurve?.length>0&&(
         <div>
-          <div style={{padding:'3px 12px',fontFamily:MONO,fontSize:9,color:'#9b72ff',borderTop:'1px solid var(--border)'}}>% CAPITAL INVERTIDO</div>
-          <div ref={ref2} style={{minHeight:100}}/>
+          <div style={{padding:'3px 12px',display:'flex',gap:14,fontFamily:MONO,fontSize:9,borderTop:'1px solid var(--border)'}}>
+            <span style={{color:'rgba(155,114,255,0.8)'}}>▐ € Capital invertido</span>
+            <span style={{color:'#9b72ff'}}>— % Capital invertido</span>
+            <span style={{color:'rgba(0,229,160,0.8)'}}>▐ &gt;75%</span>
+            <span style={{color:'rgba(155,114,255,0.8)'}}>▐ 40-75%</span>
+            <span style={{color:'rgba(255,209,102,0.7)'}}>▐ &lt;40%</span>
+          </div>
+          <div ref={ref2} style={{minHeight:120}}/>
         </div>
       )}
     </div>
@@ -951,7 +973,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator 1.6</title>
+        <title>Trading Simulator 1.7</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -967,7 +989,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator 1.6
+            <span className="dot"/>Trading Simulator 1.7
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -1478,10 +1500,11 @@ export default function Home() {
 
           {/* ── CONTENT ── */}
           <div className="content">
-            {!result&&!error&&<div className="loading"><div className="spinner"/><div className="loading-text">CARGANDO DATOS...</div></div>}
-            {error&&<div className="error-msg">⚠ {error}</div>}
+            {/* Single-asset view — oculto cuando multicartera activa */}
+            {sidePanel!=='multi'&&!result&&!error&&<div className="loading"><div className="spinner"/><div className="loading-text">CARGANDO DATOS...</div></div>}
+            {sidePanel!=='multi'&&error&&<div className="error-msg">⚠ {error}</div>}
 
-            {result&&(
+            {sidePanel!=='multi'&&result&&(
               <div style={{display:'flex',flex:1,minHeight:0,overflow:'hidden',height:'100%'}}>
                 {/* Columna principal */}
                 <div ref={contentRef} style={{flex:1,overflowY:'auto'}}>
@@ -1622,12 +1645,23 @@ export default function Home() {
                 </div>
 
                 {/* Panel derecho de métricas */}
-                {metricsLayout==='panel'&&metrics&&(
+                {sidePanel!=='multi'&&metricsLayout==='panel'&&metrics&&(
                   <div style={{width:275,flexShrink:0,borderLeft:'1px solid var(--border)',background:'var(--bg2)',overflowY:'auto'}}>
                     <div style={{padding:'7px 12px',borderBottom:'1px solid var(--border)',fontFamily:MONO,fontSize:9,color:'#8aadcc',letterSpacing:'0.1em'}}>RESUMEN · {simbolo}</div>
                     <MetricsTable/>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* ══ MULTICARTERA — loading / empty state ══ */}
+            {sidePanel==='multi'&&mcLoading&&(
+              <div className="loading"><div className="spinner"/><div className="loading-text">CALCULANDO MULTICARTERA...</div></div>
+            )}
+            {sidePanel==='multi'&&!mcLoading&&!mcResult&&(
+              <div style={{display:'flex',flex:1,alignItems:'center',justifyContent:'center',flexDirection:'column',gap:12,color:'var(--text3)',fontFamily:MONO,fontSize:12}}>
+                <span style={{fontSize:32}}>📊</span>
+                <span>Selecciona activos y ejecuta la multicartera</span>
               </div>
             )}
 
@@ -1708,8 +1742,8 @@ export default function Home() {
                 </div>
 
                 {/* Tabla por activo */}
-                <div style={{padding:'12px 16px'}}>
-                  <div style={{fontFamily:MONO,fontSize:10,color:'var(--text3)',marginBottom:8,letterSpacing:'0.05em'}}>DETALLE POR ACTIVO</div>
+                <div style={{padding:'12px 16px',borderBottom:'1px solid var(--border)'}}>
+                  <div style={{fontFamily:MONO,fontSize:10,color:'var(--text3)',marginBottom:8,letterSpacing:'0.05em'}}>RESUMEN POR ACTIVO</div>
                   <div style={{overflowX:'auto'}}>
                     <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:11}}>
                       <thead>
@@ -1722,7 +1756,7 @@ export default function Home() {
                       <tbody>
                         {mcResult.assetStats.map(a=>(
                           <tr key={a.symbol} style={{borderBottom:'1px solid rgba(255,255,255,0.03)',cursor:'pointer'}}
-                            onClick={()=>setSimbolo(a.symbol)}
+                            onClick={()=>{setSimbolo(a.symbol);setSidePanel('watchlist')}}
                             onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.05)'}
                             onMouseOut={e=>e.currentTarget.style.background='transparent'}>
                             <td style={{padding:'5px 10px',color:'var(--accent)',fontWeight:700}}>{a.symbol}</td>
@@ -1737,6 +1771,53 @@ export default function Home() {
                     </table>
                   </div>
                 </div>
+
+                {/* Historial combinado de operaciones */}
+                {mcResult.allTrades?.length>0&&(
+                  <div style={{padding:'12px 16px'}}>
+                    <div style={{fontFamily:MONO,fontSize:10,color:'var(--text3)',marginBottom:8,letterSpacing:'0.05em',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                      <span>HISTORIAL COMBINADO · {mcResult.allTrades.length} operaciones</span>
+                      <span style={{fontSize:9}}>clic activo → ver gráfico</span>
+                    </div>
+                    <div style={{overflowX:'auto'}}>
+                      <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:11}}>
+                        <thead>
+                          <tr style={{borderBottom:'1px solid var(--border)',position:'sticky',top:0,background:'var(--bg)'}}>
+                            {['#','Activo','Entrada','Salida','Px Ent.','Px Sal.','P&L %','P&L €','Días','Tipo'].map(h=>(
+                              <th key={h} style={{padding:'4px 8px',textAlign:'left',color:'var(--text3)',fontWeight:400,fontSize:9,whiteSpace:'nowrap'}}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {[...mcResult.allTrades].reverse().map((t,i)=>(
+                            <tr key={i}
+                              style={{borderBottom:'1px solid rgba(255,255,255,0.03)',cursor:'pointer'}}
+                              onClick={()=>{setSimbolo(t.symbol);setSidePanel('config')}}
+                              onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.05)'}
+                              onMouseOut={e=>e.currentTarget.style.background='transparent'}>
+                              <td style={{padding:'4px 8px',color:'var(--text3)',fontSize:9}}>{mcResult.allTrades.length-i}</td>
+                              <td style={{padding:'4px 8px',color:'var(--accent)',fontWeight:700}}>{t.symbol}</td>
+                              <td style={{padding:'4px 8px',color:'var(--text)',whiteSpace:'nowrap'}}>{fmtDate(t.entryDate)}</td>
+                              <td style={{padding:'4px 8px',color:'var(--text)',whiteSpace:'nowrap'}}>{fmtDate(t.exitDate)}</td>
+                              <td style={{padding:'4px 8px'}}>{fmt(t.entryPx,2)}</td>
+                              <td style={{padding:'4px 8px'}}>{fmt(t.exitPx,2)}</td>
+                              <td style={{padding:'4px 8px',color:t.pnlPct>=0?'#00e5a0':'#ff4d6d',fontWeight:600}}>{t.pnlPct>=0?'+':''}{fmt(t.pnlPct,2)}%</td>
+                              <td style={{padding:'4px 8px',color:t.pnlSimple>=0?'#00e5a0':'#ff4d6d'}}>{t.pnlSimple>=0?'+':''}{fmt(t.pnlSimple,2)}€</td>
+                              <td style={{padding:'4px 8px',color:'var(--text3)'}}>{t.dias}</td>
+                              <td style={{padding:'4px 8px'}}>
+                                <span style={{fontSize:8,padding:'1px 4px',borderRadius:2,
+                                  background:t.pnlPct>=0?'rgba(0,229,160,0.1)':'rgba(255,77,109,0.1)',
+                                  color:t.pnlPct>=0?'#00e5a0':'#ff4d6d',border:`1px solid ${t.pnlPct>=0?'rgba(0,229,160,0.3)':'rgba(255,77,109,0.3)'}`}}>
+                                  {t.tipo}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
