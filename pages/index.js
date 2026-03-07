@@ -770,6 +770,189 @@ function McOccupancyChart({occupancyCurve, compoundCurve, capitalIni, occMode='c
 }
 
 
+// ── Strategy Builder — catálogo de tipos ────────────────────
+const DEFAULT_DEFINITION = {
+  entry: { type:'breakout_high_above_ma', ma_type:'EMA', ma_fast:10, ma_slow:11 },
+  exit:  { type:'breakout_low_below_ma',  ma_type:'EMA', ma_period:10 },
+  stop:  { type:'below_ma_at_signal',     ma_type:'EMA', ma_period:10 },
+  management: { sin_perdidas:true, reentry:true },
+  filters: {
+    market: [],
+    signal: [{ type:'breakout_rolling', max_candles:null }],
+  },
+}
+
+const ENTRY_TYPES = [
+  { value:'breakout_high_above_ma', label:'Breakout máximo tras cruce EMA' },
+  { value:'next_open_after_cross',  label:'Apertura siguiente tras cruce EMA' },
+  { value:'next_open_above_ma',     label:'Apertura siguiente tras cierre sobre MA' },
+  { value:'pullback_pct_from_high', label:'Caída % desde máximo reciente' },
+  { value:'rsi_level',              label:'RSI cruza nivel (sobrevendido)' },
+]
+const EXIT_TYPES = [
+  { value:'breakout_low_below_ma',          label:'Breakout mínimo tras cierre bajo MA' },
+  { value:'next_open_below_ma',             label:'Apertura siguiente tras cierre bajo MA' },
+  { value:'next_open_after_bearish_cross',  label:'Apertura siguiente tras cruce bajista EMA' },
+  { value:'rsi_level',                      label:'RSI cruza nivel (sobrecomprado)' },
+]
+const STOP_TYPES = [
+  { value:'below_ma_at_signal',  label:'Bajo MA en vela de señal' },
+  { value:'low_of_signal_candle',label:'Mínimo vela de señal' },
+  { value:'low_of_entry_candle', label:'Mínimo vela de entrada' },
+  { value:'atr_based',           label:'ATR × multiplicador' },
+  { value:'none',                label:'Sin stop' },
+]
+
+// ── StrategyBuilder component ────────────────────────────────
+function StrategyBuilder({ definition, setDefinition }) {
+  const def = definition || DEFAULT_DEFINITION
+  const upd = (path, val) => {
+    const d = JSON.parse(JSON.stringify(def))
+    const keys = path.split('.'); let o = d
+    for (let i=0; i<keys.length-1; i++) o = o[keys[i]]
+    o[keys[keys.length-1]] = val
+    setDefinition(d)
+  }
+  const sec = (title, children) => (
+    <div className="sidebar-section" key={title}>
+      <div className="sidebar-title">{title}</div>
+      {children}
+    </div>
+  )
+  const row2 = (a, b) => <div className="row2">{a}{b}</div>
+  const lbl = (name, child) => <label key={name}>{name}{child}</label>
+  const num = (path, val, min=1, max=500, step=1) => (
+    <input type="number" value={val} min={min} max={max} step={step}
+      onChange={e=>upd(path, Number(e.target.value))}/>
+  )
+  const sel = (path, val, opts) => (
+    <select value={val} onChange={e=>upd(path, e.target.value)}>
+      {opts.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
+    </select>
+  )
+  const maTypeOpts = [{value:'EMA',label:'EMA'},{value:'SMA',label:'SMA'}]
+  const e=def.entry, x=def.exit, s=def.stop, m=def.management
+  const mktFilt = def.filters?.market?.[0] || null
+  const sigRolling = def.filters?.signal?.some(f=>f.type==='breakout_rolling')
+  const maxCandles = def.filters?.signal?.find(f=>f.type==='breakout_rolling')?.max_candles
+
+  const setMktFilt = (filt) => {
+    const d = JSON.parse(JSON.stringify(def))
+    d.filters = d.filters || { market:[], signal:[] }
+    if (filt===null) d.filters.market=[]
+    else d.filters.market=[filt]
+    setDefinition(d)
+  }
+  const setSigRolling = (on, maxC) => {
+    const d = JSON.parse(JSON.stringify(def))
+    d.filters = d.filters || { market:[], signal:[] }
+    const prev = d.filters.signal?.filter(f=>f.type!=='breakout_rolling') || []
+    d.filters.signal = on ? [...prev, {type:'breakout_rolling', max_candles:maxC}] : prev
+    setDefinition(d)
+  }
+
+  return (
+    <div style={{display:'flex',flexDirection:'column',gap:14}}>
+      {/* ENTRADA */}
+      {sec('Entrada',<>
+        {lbl('Tipo', sel('entry.type', e.type, ENTRY_TYPES))}
+        {['breakout_high_above_ma','next_open_after_cross'].includes(e.type)&&row2(
+          lbl('Tipo MA', sel('entry.ma_type', e.ma_type||'EMA', maTypeOpts)),
+          <>{lbl('Rápida', num('entry.ma_fast', e.ma_fast||10))}{lbl('Lenta', num('entry.ma_slow', e.ma_slow||11))}</>
+        )}
+        {e.type==='next_open_above_ma'&&row2(
+          lbl('Tipo MA', sel('entry.ma_type', e.ma_type||'EMA', maTypeOpts)),
+          lbl('Período', num('entry.ma_period', e.ma_period||10))
+        )}
+        {e.type==='pullback_pct_from_high'&&row2(
+          lbl('Caída (%)', num('entry.pct', e.pct||5, 0.1, 50, 0.1)),
+          lbl('Lookback (velas)', num('entry.lookback', e.lookback||20, 5, 200))
+        )}
+        {e.type==='rsi_level'&&row2(
+          lbl('Período RSI', num('entry.rsi_period', e.rsi_period||14)),
+          lbl('Nivel (< X)', num('entry.rsi_level', e.rsi_level||30, 1, 99))
+        )}
+      </>)}
+
+      {/* SALIDA */}
+      {sec('Salida',<>
+        {lbl('Tipo', sel('exit.type', x.type, EXIT_TYPES))}
+        {['breakout_low_below_ma','next_open_below_ma'].includes(x.type)&&row2(
+          lbl('Tipo MA', sel('exit.ma_type', x.ma_type||'EMA', maTypeOpts)),
+          lbl('Período', num('exit.ma_period', x.ma_period||10))
+        )}
+        {x.type==='next_open_after_bearish_cross'&&row2(
+          lbl('Tipo MA', sel('exit.ma_type', x.ma_type||'EMA', maTypeOpts)),
+          <>{lbl('Rápida', num('exit.ma_fast', x.ma_fast||10))}{lbl('Lenta', num('exit.ma_slow', x.ma_slow||11))}</>
+        )}
+        {x.type==='rsi_level'&&row2(
+          lbl('Período RSI', num('exit.rsi_period', x.rsi_period||14)),
+          lbl('Nivel (> X)', num('exit.rsi_level', x.rsi_level||70, 1, 99))
+        )}
+      </>)}
+
+      {/* STOP */}
+      {sec('Stop',<>
+        {lbl('Tipo', sel('stop.type', s.type, STOP_TYPES))}
+        {s.type==='below_ma_at_signal'&&row2(
+          lbl('Tipo MA', sel('stop.ma_type', s.ma_type||'EMA', maTypeOpts)),
+          lbl('Período', num('stop.ma_period', s.ma_period||10))
+        )}
+        {s.type==='atr_based'&&row2(
+          lbl('ATR período', num('stop.atr_period', s.atr_period||14)),
+          lbl('Multiplicador', num('stop.atr_mult', s.atr_mult||1.0, 0.1, 10, 0.1))
+        )}
+      </>)}
+
+      {/* GESTIÓN */}
+      {sec('Gestión',<>
+        <label className="checkbox-row">
+          <input type="checkbox" checked={!!m?.sin_perdidas} onChange={e=>upd('management.sin_perdidas',e.target.checked)}/>
+          Sin Pérdidas
+        </label>
+        <label className="checkbox-row">
+          <input type="checkbox" checked={!!m?.reentry} onChange={e=>upd('management.reentry',e.target.checked)}/>
+          Re-Entry
+        </label>
+      </>)}
+
+      {/* FILTROS */}
+      {sec('Filtros de Mercado',<>
+        <label>Tipo
+          <select value={mktFilt?.condition||'none'}
+            onChange={ev=>{
+              if(ev.target.value==='none'){setMktFilt(null)}
+              else setMktFilt({type:'external_ma',condition:ev.target.value,ma_type:'EMA',ma_fast:mktFilt?.ma_fast||10,ma_slow:mktFilt?.ma_slow||11})
+            }}>
+            <option value="none">Sin filtro</option>
+            <option value="precio_ema">SP500 precio sobre EMA rápida</option>
+            <option value="ema_ema">SP500 EMA rápida sobre EMA lenta</option>
+          </select>
+        </label>
+        {mktFilt&&mktFilt.condition!=='none'&&<div className="row2">
+          <label>EMA R<input type="number" value={mktFilt.ma_fast||10} min={1}
+            onChange={ev=>setMktFilt({...mktFilt,ma_fast:Number(ev.target.value)})}/></label>
+          <label>EMA L<input type="number" value={mktFilt.ma_slow||11} min={1}
+            onChange={ev=>setMktFilt({...mktFilt,ma_slow:Number(ev.target.value)})}/></label>
+        </div>}
+      </>)}
+
+      {sec('Filtros de Señal',<>
+        <label className="checkbox-row">
+          <input type="checkbox" checked={!!sigRolling}
+            onChange={e=>setSigRolling(e.target.checked, maxCandles)}/>
+          Breakout rolling (máximo se actualiza)
+        </label>
+        {sigRolling&&<label>Máx. velas en espera
+          <input type="number" value={maxCandles||''} min={1} max={50} placeholder="ilimitado"
+            onChange={e=>setSigRolling(true, e.target.value?Number(e.target.value):null)}/>
+        </label>}
+      </>)}
+    </div>
+  )
+}
+
+
 // ── Main ─────────────────────────────────────────────────────
 export default function Home() {
   const [simbolo,setSimbolo]=useState('^GSPC')
@@ -800,6 +983,15 @@ export default function Home() {
   const [editingStr,setEditingStr]=useState(null)
   const [strForm,setStrForm]=useState({})
   const [strSaving,setStrSaving]=useState(false)
+  // ── Strategy Builder (definition-based) ──
+  const [definition, setDefinition]   = useState(DEFAULT_DEFINITION)
+  const [stratName, setStratName]     = useState('Mi Estrategia')
+  const [stratDesc, setStratDesc]     = useState('')
+  const [stratColor, setStratColor]   = useState('#00d4ff')
+  const [currentStratId, setCurrentStratId] = useState(null)
+  const [stratSaving, setStratSaving] = useState(false)
+  const [stratMsg, setStratMsg]       = useState(null)
+  const [stratTab, setStratTab]       = useState('build')
   // Alarmas
   const [alarms,setAlarms]=useState([])
   const [alarmLoading,setAlarmLoading]=useState(true)
@@ -890,7 +1082,9 @@ export default function Home() {
   const [showIndivOccupancy,setShowIndivOccupancy]=useState(true)  // % capital invertido chart for individual
   const [indivOccMode,setIndivOccMode]=useState('compound')  // independent filter for indiv occupancy chart
 
-  const debounceRef=useRef(null),chartApiRef=useRef(null),contentRef=useRef(null),mcChartApiRef=useRef(null)
+  const debounceRef=useRef(null),chartApiRef=useRef(null),contentRef=useRef(null)
+
+  const mcChartApiRef=useRef(null)
 
   // Abrir búsqueda de símbolo al escribir cualquier letra/número fuera de inputs
   useEffect(()=>{
@@ -1068,21 +1262,72 @@ export default function Home() {
     if(watchlist.length>0&&alarms.length>0) refreshAlarmStatus(watchlist,alarms)
   },[alarms,watchlist.length]) // eslint-disable-line
 
-  const run=useCallback(async(sym,cfg)=>{
+  const run=useCallback(async(sym,payload)=>{
     setLoading(true);setError(null)
     try{
-      const res=await fetch('/api/datos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({simbolo:sym,cfg})})
+      const body = payload.definition
+        ? { simbolo:sym, definition:payload.definition }
+        : { simbolo:sym, cfg:payload.cfg||payload }
+      const res=await fetch('/api/datos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
       const json=await res.json()
       if(!res.ok)throw new Error(json.error||'Error')
       setResult(json)
     }catch(e){setError(e.message)}finally{setLoading(false)}
   },[])
 
+  // ── Guardar estrategia en Supabase ──
+  const saveStrategy=useCallback(async(overwriteId=null)=>{
+    setStratSaving(true); setStratMsg(null)
+    try{
+      const body={ name:stratName, description:stratDesc, symbol:simbolo,
+        years:Number(years), capital_ini:Number(capitalIni),
+        definition:{ ...definition }, color:stratColor }
+      const method = overwriteId ? 'PUT' : 'POST'
+      if(overwriteId) body.id = overwriteId
+      const res=await fetch('/api/strategies',{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+      const json=await res.json()
+      if(!res.ok) throw new Error(json.error||'Error')
+      // Recargar lista
+      const list=await fetch('/api/strategies').then(r=>r.json())
+      if(Array.isArray(list)) setStrategies(list)
+      setCurrentStratId(json?.id||overwriteId||null)
+      setStratMsg({type:'ok',text:'Estrategia guardada ✓'})
+    }catch(e){ setStratMsg({type:'err',text:e.message}) }
+    finally{ setStratSaving(false) }
+  },[stratName,stratDesc,simbolo,years,capitalIni,definition,stratColor])
+
+  // ── Cargar estrategia guardada en el builder ──
+  const loadStrategy=useCallback((strat)=>{
+    setDefinition(strat.definition||DEFAULT_DEFINITION)
+    setStratName(strat.name||'')
+    setStratDesc(strat.description||'')
+    setStratColor(strat.color||'#00d4ff')
+    setCurrentStratId(strat.id)
+    if(strat.symbol) setSimbolo(strat.symbol)
+    setStratTab('build')
+    setStratMsg({type:'ok',text:`Cargada: ${strat.name}`})
+  },[])
+
+  // ── Eliminar estrategia ──
+  const deleteStrategy=useCallback(async(id)=>{
+    if(!confirm('¿Eliminar esta estrategia?')) return
+    await fetch(`/api/strategies?id=${id}`,{method:'DELETE'})
+    setStrategies(prev=>prev.filter(s=>s.id!==id))
+    if(currentStratId===id){setCurrentStratId(null);setStratMsg({type:'ok',text:'Estrategia eliminada'})}
+  },[currentStratId])
+
+  // ── Debounce: lanza backtest automáticamente al cambiar parámetros ──
   useEffect(()=>{
     if(debounceRef.current)clearTimeout(debounceRef.current)
-    debounceRef.current=setTimeout(()=>run(simbolo,{emaR:Number(emaR),emaL:Number(emaL),years:Number(years),capitalIni:Number(capitalIni),tipoStop,atrPeriod:Number(atrP),atrMult:Number(atrM),sinPerdidas,reentry,tipoFiltro,sp500EmaR:Number(sp500EmaR),sp500EmaL:Number(sp500EmaL)}),800)
+    const payload = sidePanel==='strats'
+      ? { definition:{ ...definition, capitalIni:Number(capitalIni), years:Number(years) } }
+      : { cfg:{emaR:Number(emaR),emaL:Number(emaL),years:Number(years),capitalIni:Number(capitalIni),
+              tipoStop,atrPeriod:Number(atrP),atrMult:Number(atrM),sinPerdidas,reentry,
+              tipoFiltro,sp500EmaR:Number(sp500EmaR),sp500EmaL:Number(sp500EmaL)} }
+    debounceRef.current=setTimeout(()=>run(simbolo, payload),800)
     return()=>clearTimeout(debounceRef.current)
-  },[simbolo,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL,run])
+  },[simbolo,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,
+     sp500EmaR,sp500EmaL,definition,sidePanel,run])
 
   // ── Multicartera runner ─────────────────────────────────────
   const runMulticartera=useCallback(async()=>{
@@ -1267,7 +1512,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator 2.4</title>
+        <title>Trading Simulator 2.5</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -1323,7 +1568,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator 2.4
+            <span className="dot"/>Trading Simulator 2.5
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -1396,7 +1641,7 @@ export default function Home() {
               onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.25)'}
               onMouseOut={e=>e.currentTarget.style.background='transparent'}/>
             <div style={{display:'flex',borderBottom:'1px solid var(--border)'}}>
-              {[{id:'config',label:'⚙',title:'Configuración'},{id:'watchlist',label:'☰',title:'Watchlist'},{id:'alarms',label:'🔔',title:'Alarmas'},{id:'multi',label:'📊',title:'Multicartera'}].map(tab=>(
+              {[{id:'config',label:'⚙',title:'Configuración'},{id:'watchlist',label:'☰',title:'Watchlist'},{id:'alarms',label:'🔔',title:'Alarmas'},{id:'multi',label:'📊',title:'Multicartera'},{id:'strats',label:'⚡',title:'Estrategias'}].map(tab=>(
                 <button key={tab.id} onClick={()=>setSidePanel(tab.id)} title={tab.title} style={{
                   flex:1,padding:'8px 4px',
                   background:sidePanel===tab.id?'var(--bg3)':'transparent',
@@ -1739,6 +1984,95 @@ export default function Home() {
                     )
                   })}
                 </div>
+              </div>
+            )}
+
+            {/* ── Tab ⚡ Estrategias (sidebar) ── */}
+            {sidePanel==='strats'&&(
+              <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
+                <div style={{display:'flex',borderBottom:'1px solid var(--border)'}}>
+                  {[{id:'build',label:'Constructor'},{id:'saved',label:`Guardadas (${strategies.length})`}].map(st=>(
+                    <button key={st.id} onClick={()=>setStratTab(st.id)}
+                      style={{flex:1,padding:'6px 4px',background:stratTab===st.id?'var(--bg3)':'transparent',
+                        border:'none',borderBottom:stratTab===st.id?'2px solid #ffd166':'2px solid transparent',
+                        color:stratTab===st.id?'#ffd166':'var(--text3)',fontFamily:MONO,fontSize:10,
+                        cursor:'pointer',letterSpacing:'0.05em',textTransform:'uppercase'}}>
+                      {st.label}
+                    </button>
+                  ))}
+                </div>
+                {stratTab==='build'&&(
+                  <div style={{flex:1,overflowY:'auto',padding:14,display:'flex',flexDirection:'column',gap:12}}>
+                    <div className="sidebar-section">
+                      <div className="sidebar-title">Global</div>
+                      <div className="row2">
+                        <label>Capital (€)<input type="number" value={capitalIni} min={100} onChange={e=>setCapitalIni(e.target.value)}/></label>
+                        <label>Años BT<input type="number" value={years} min={1} max={20} onChange={e=>setYears(e.target.value)}/></label>
+                      </div>
+                    </div>
+                    <StrategyBuilder definition={definition} setDefinition={setDefinition}/>
+                    <div className="sidebar-section">
+                      <div className="sidebar-title">Guardar en Supabase</div>
+                      <label>Nombre<input type="text" value={stratName} onChange={e=>setStratName(e.target.value)} placeholder="Nombre de la estrategia"/></label>
+                      <label>Descripción<input type="text" value={stratDesc} onChange={e=>setStratDesc(e.target.value)} placeholder="Opcional"/></label>
+                      <div className="row2">
+                        <label>Color<input type="color" value={stratColor} onChange={e=>setStratColor(e.target.value)}
+                          style={{width:'100%',height:28,border:'1px solid var(--border)',borderRadius:3,cursor:'pointer',background:'transparent'}}/></label>
+                        <div style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',alignSelf:'flex-end',paddingBottom:4}}>
+                          {currentStratId?currentStratId.slice(0,8)+'…':'nueva'}
+                        </div>
+                      </div>
+                      <div style={{display:'flex',gap:6,marginTop:4}}>
+                        <button onClick={()=>saveStrategy(null)} disabled={stratSaving||!stratName}
+                          style={{flex:1,fontFamily:MONO,fontSize:11,padding:'5px 0',borderRadius:3,cursor:'pointer',
+                            background:'rgba(255,209,102,0.12)',border:'1px solid #ffd166',color:'#ffd166',
+                            opacity:stratSaving||!stratName?0.5:1}}>
+                          {stratSaving?'Guardando...':'💾 Guardar nueva'}
+                        </button>
+                        {currentStratId&&<button onClick={()=>saveStrategy(currentStratId)} disabled={stratSaving}
+                          style={{fontFamily:MONO,fontSize:11,padding:'5px 8px',borderRadius:3,cursor:'pointer',
+                            background:'rgba(0,212,255,0.08)',border:'1px solid var(--accent)',color:'var(--accent)',
+                            opacity:stratSaving?0.5:1}}>✏</button>}
+                      </div>
+                      {stratMsg&&<div style={{fontFamily:MONO,fontSize:10,padding:'4px 6px',borderRadius:3,marginTop:4,
+                        background:stratMsg.type==='ok'?'rgba(0,229,160,0.1)':'rgba(255,77,109,0.1)',
+                        color:stratMsg.type==='ok'?'#00e5a0':'#ff4d6d',
+                        border:`1px solid ${stratMsg.type==='ok'?'rgba(0,229,160,0.3)':'rgba(255,77,109,0.3)'}`}}>
+                        {stratMsg.text}
+                      </div>}
+                    </div>
+                    {loading&&<div style={{fontFamily:MONO,fontSize:11,color:'var(--accent)',textAlign:'center'}}>⟳ Calculando...</div>}
+                    {error&&<div style={{fontFamily:MONO,fontSize:11,color:'#ff4d6d'}}>⚠ {error}</div>}
+                  </div>
+                )}
+                {stratTab==='saved'&&(
+                  <div style={{flex:1,overflowY:'auto'}}>
+                    {strategies.length===0
+                      ? <div style={{padding:20,textAlign:'center',fontFamily:MONO,fontSize:11,color:'var(--text3)'}}>Aún no hay estrategias guardadas</div>
+                      : strategies.map(st=>(
+                        <div key={st.id} style={{borderBottom:'1px solid var(--border)',padding:'8px 12px',
+                          background:currentStratId===st.id?'rgba(0,212,255,0.05)':'transparent'}}>
+                          <div style={{display:'flex',alignItems:'center',gap:6}}>
+                            <div style={{width:8,height:8,borderRadius:'50%',background:st.color||'#00d4ff',flexShrink:0}}/>
+                            <span style={{fontFamily:MONO,fontSize:11,color:'var(--text)',fontWeight:600,flex:1,
+                              overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{st.name}</span>
+                            <button onClick={()=>loadStrategy(st)}
+                              style={{fontFamily:MONO,fontSize:9,padding:'2px 6px',borderRadius:2,cursor:'pointer',
+                                background:'rgba(0,212,255,0.1)',border:'1px solid var(--accent)',color:'var(--accent)'}}>Cargar</button>
+                            <button onClick={()=>deleteStrategy(st.id)}
+                              style={{fontFamily:MONO,fontSize:9,padding:'2px 6px',borderRadius:2,cursor:'pointer',
+                                background:'rgba(255,77,109,0.1)',border:'1px solid #ff4d6d',color:'#ff4d6d'}}>✕</button>
+                          </div>
+                          {st.description&&<div style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',marginTop:3,paddingLeft:14}}>{st.description}</div>}
+                          <div style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',marginTop:2,paddingLeft:14}}>
+                            {st.symbol||'—'} · {st.years||'?'}a · €{(st.capital_ini||0).toLocaleString('es-ES')}
+                            <span style={{color:'#5a7a90',marginLeft:6}}>{new Date(st.created_at).toLocaleDateString('es-ES')}</span>
+                          </div>
+                        </div>
+                      ))
+                    }
+                  </div>
+                )}
               </div>
             )}
 
