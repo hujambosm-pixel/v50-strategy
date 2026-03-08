@@ -21,9 +21,21 @@ function calcATR(highs, lows, closes, period) {
   return calcEMA(tr, period)
 }
 
+function stooqSym(symbol) {
+  const MAP={
+    '^GSPC':'spy.us','^NDX':'ndx.us','^IBEX':'ibex.es','^GDAXI':'dax.de',
+    '^FTSE':'ftse.uk','^N225':'n225.jp','BTC-USD':'btc-usd.v','ETH-USD':'eth-usd.v',
+    'GC=F':'gc.f','CL=F':'cl.f',
+  }
+  if(MAP[symbol]) return MAP[symbol]
+  if(symbol.endsWith('=F')) return symbol.replace('=F','').toLowerCase()+'.f'
+  if(symbol.includes('-')) return symbol.toLowerCase()+'.v'
+  if(symbol.startsWith('^')) return symbol.slice(1).toLowerCase()+'.us'
+  return symbol.toLowerCase()+'.us'
+}
 async function fetchData(symbol) {
-  const sym = symbol === '^GSPC' ? 'spy' : symbol.replace('^','').toLowerCase()
-  const url = `https://stooq.com/q/d/l/?s=${sym}.us&i=d`
+  const sym = stooqSym(symbol)
+  const url = `https://stooq.com/q/d/l/?s=${sym}&i=d`
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 10000)
   try {
