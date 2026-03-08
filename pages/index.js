@@ -32,37 +32,111 @@ function calcMetrics(trades, capitalIni, capitalReinv, gananciaSimple, ganBH, st
 const MONO='"JetBrains Mono","Fira Code","IBM Plex Mono",monospace'
 
 // ── Tip — icono ⓘ con tooltip explicativo (Groq AI) ─────────
-const TIP_LABELS={
-  emaR:'EMA Rápida (periodo)',emaL:'EMA Lenta (periodo)',capital:'Capital inicial (€)',
-  years:'Años de backtest',tipoStop:'Tipo de Stop Loss',atr:'Periodo ATR',
-  atrMult:'Multiplicador ATR',sinPerdidas:'Modo Sin Pérdidas',reentry:'Modo Re-Entry',
-  filtroSP500:'Filtro de mercado SP500',sp500Emas:'EMAs del SP500'
+// ── Ayuda precisa por parámetro — sin llamada a IA, 100% exacto ─
+const TIP_DATA = {
+  // ── Config rápida ──────────────────────────────────────────
+  emaR: {
+    title: 'EMA Rápida',
+    text: 'Media exponencial de corto plazo. Un cruce alcista (EMA rápida > EMA lenta) genera el SETUP de entrada. En la V50 por defecto es EMA(10). Cuanto menor el periodo, más sensible y más señales falsas.'
+  },
+  emaL: {
+    title: 'EMA Lenta',
+    text: 'Media exponencial de largo plazo. Define la tendencia principal. En la V50 por defecto es EMA(11). El setup se dispara cuando EMA rápida cruza al alza esta línea. Debe ser siempre mayor que la EMA rápida.'
+  },
+  capital: {
+    title: 'Capital inicial (€)',
+    text: 'Capital de partida en euros. Se usa como base para calcular P&L simple (siempre sobre este valor fijo) y P&L compuesto (se reinvierte tras cada trade). No afecta al número de señales, solo a los importes en euros.'
+  },
+  years: {
+    title: 'Años de backtest',
+    text: 'Número de años hacia atrás desde la última fecha disponible en Stooq. El motor filtra los datos y solo ejecuta trades dentro de esta ventana. Más años = más trades = estadística más robusta, pero puede incluir regímenes de mercado distintos.'
+  },
+  tipoStop: {
+    title: 'Tipo de Stop Loss',
+    text: 'Técnico (EMA): stop fijo en min(EMA rápida, mínimo de la vela de setup) — nunca se mueve una vez colocado. ATR: stop dinámico = precio entrada − ATR(n) × multiplicador. Ninguno: sin stop, solo sale por señal de EMA.'
+  },
+  atr: {
+    title: 'Periodo ATR',
+    text: 'Número de velas para calcular el Average True Range (ATR). El ATR mide la volatilidad media real de cada vela. A mayor periodo, el ATR es más suave y el stop queda más lejos. En la V50 el stop ATR se calcula en el momento de la entrada, no antes.'
+  },
+  atrMult: {
+    title: 'Multiplicador ATR',
+    text: 'Factor que amplía o reduce la distancia del stop ATR. Stop = Precio entrada − ATR(n) × multiplicador. Con 1.0 el stop queda a exactamente 1 ATR de distancia. Valores más altos dan más margen pero aumentan la pérdida máxima por trade.'
+  },
+  sinPerdidas: {
+    title: 'Modo Sin Pérdidas',
+    text: 'Cuando el mínimo de la vela actual supera el precio de entrada, el stop de salida se activa solo si el precio cae por debajo del precio de entrada. Protege los trades ganadores de convertirse en perdedores. En Pine Script: low > precio_entrada_ejecutado → salida_sin_perdidas_activa = true.'
+  },
+  reentry: {
+    title: 'Modo Re-Entry',
+    text: 'Tras una salida, si EMA rápida sigue por encima de EMA lenta, el motor busca una nueva entrada: espera la primera vela cuyo cierre supere la EMA rápida y hace breakout del máximo de esa vela (rolling). Permite capturar continuaciones de tendencia sin necesidad de un cruce alcista nuevo.'
+  },
+  filtroSP500: {
+    title: 'Filtro de mercado SP500',
+    text: '"Precio sobre EMA rápida": bloquea nuevas entradas si el precio del SP500 está por debajo de su EMA rápida. "EMA rápida sobre EMA lenta": bloquea si la EMA rápida del SP500 está por debajo de la lenta. En ambos casos, las entradas pendientes también se cancelan cuando el filtro se activa.'
+  },
+  sp500Emas: {
+    title: 'EMAs del SP500 (filtro)',
+    text: 'Periodos de las medias exponenciales aplicadas al SP500 para el filtro de mercado. Son independientes de las EMAs del activo principal. Por defecto EMA(10) y EMA(11), igual que la estrategia V50 original. Puedes usar periodos más lentos (ej. 50/200) para filtrar solo tendencias de largo plazo.'
+  },
+  // ── Constructor de estrategia ──────────────────────────────
+  filter: {
+    title: 'FILTER — Condición de mercado',
+    text: 'Define si el mercado global está en condición favorable para abrir posiciones. Si la condición NO se cumple, todas las entradas quedan bloqueadas y las pendientes se cancelan. Se evalúa barra a barra. Ejemplo: SP500 precio > EMA(10) → mercado alcista, permitir entradas.'
+  },
+  setup: {
+    title: 'SETUP — Señal de alerta',
+    text: 'El evento técnico que activa el estado de "alerta de entrada". En la V50 es el cruce alcista EMA(10) > EMA(11): ta.crossover(ema_rapida, ema_lenta) en Pine Script. Cuando ocurre, el motor guarda el máximo de esa vela como nivel de breakout y activa la espera del TRIGGER.'
+  },
+  trigger: {
+    title: 'TRIGGER — Ejecución de entrada',
+    text: 'Cómo se ejecuta la entrada real. En la V50: breakout del máximo de la vela de setup. Rolling: si en las siguientes velas no hay breakout y el nuevo máximo es menor, el nivel se actualiza al nuevo mínimo de máximos. La entrada se ejecuta cuando el precio intradía supera el nivel de breakout vigente.'
+  },
+  abort: {
+    title: 'ABORT — Cancelación de entrada pendiente',
+    text: 'Condiciones que cancelan la entrada mientras está pendiente (antes de ejecutarse). Cruce bajista: EMA rápida cruza por debajo de EMA lenta. Cierre bajo MA: el precio cierra por debajo de la EMA rápida. Cualquiera de los dos reinicia el estado y cancela el nivel de breakout.'
+  },
+  stopLoss: {
+    title: 'STOP LOSS — Límite de pérdida',
+    text: 'Nivel de precio que, si se toca, cierra la posición con pérdida. En la V50: min(EMA rápida, mínimo de la vela de setup) — se fija en el momento del setup y NO se actualiza durante el rolling. Con ATR: precio_entrada − ATR(n) × multiplicador, calculado en la vela de entrada.'
+  },
+  exit: {
+    title: 'EXIT — Salida en profit',
+    text: 'Señal de salida normal (ganando o perdiendo según evolución). En la V50: primera vela cuyo cierre cruza por debajo de EMA rápida (ta.crossunder en Pine) → se coloca orden de breakout del mínimo de ESA vela. Si el precio rompe ese mínimo, se ejecuta la salida. Con Sin Pérdidas activo: solo ejecuta si el mínimo de la vela supera el precio de entrada.'
+  },
+  management: {
+    title: 'MANAGEMENT — Gestión de posición',
+    text: 'Sin Pérdidas: cuando el mínimo de la vela actual supera el precio de entrada, el motor activa la condición de salida sin pérdidas (equivalente a breakeven stop). Re-Entry: tras una salida, si EMA rápida > EMA lenta, busca re-entrar en el breakout del HIGH de la primera vela que cierre sobre EMA rápida.'
+  },
+  sizing: {
+    title: 'SIZING — Tamaño de posición',
+    text: 'Capital fijo: cada trade usa siempre el mismo importe en euros (ej. €10.000). El P&L simple acumula linealmente. El P&L compuesto reinvierte las ganancias: cada trade usa el capital resultante del anterior. El tamaño de posición NO afecta al número de señales ni al timing de entradas/salidas.'
+  },
 }
-function Tip({id,style}){
-  const [show,setShow]=useState(false)
-  const [text,setText]=useState(null)
-  const [loading,setLoading]=useState(false)
-  const topic=TIP_LABELS[id]||id
-  const handleEnter=async()=>{
-    setShow(true)
-    if(text!==null) return  // ya cargado
-    setLoading(true)
-    try{
-      const storedKey=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.integrations?.groqKey||''}catch(_){return ''}})()
-      const r=await fetch('/api/groq-help',{method:'POST',headers:{'Content-Type':'application/json','x-groq-key':storedKey},body:JSON.stringify({topic})})
-      const d=await r.json()
-      setText(d.text||'Sin información disponible.')
-    }catch(_){setText('No se pudo cargar la ayuda.')}
-    setLoading(false)
-  }
-  return(
-    <span style={{position:'relative',display:'inline-flex',alignItems:'center',...style}}
-      onMouseEnter={handleEnter} onMouseLeave={()=>setShow(false)}>
-      <span style={{cursor:'help',color:'#4a7fa0',fontSize:10,lineHeight:1,userSelect:'none'}}>ⓘ</span>
-      {show&&<div style={{position:'absolute',left:'50%',bottom:'calc(100% + 6px)',transform:'translateX(-50%)',background:'#0d1a27',border:'1px solid #2a4a66',borderRadius:5,padding:'7px 10px',zIndex:200,width:220,fontFamily:MONO,fontSize:10,color:'#cce0f5',lineHeight:1.6,boxShadow:'0 4px 20px rgba(0,0,0,0.7)',pointerEvents:'none',whiteSpace:'normal'}}>
-        {loading?<span style={{color:'#4a7fa0'}}>Cargando...</span>:text||'...'}
-        <div style={{position:'absolute',left:'50%',top:'100%',transform:'translateX(-50%)',borderWidth:'5px 5px 0',borderStyle:'solid',borderColor:'#2a4a66 transparent transparent'}}/>
-      </div>}
+
+function Tip({id, style}) {
+  const [show, setShow] = useState(false)
+  const tip = TIP_DATA[id]
+  if (!tip) return null
+  return (
+    <span style={{position:'relative', display:'inline-flex', alignItems:'center', ...style}}
+      onMouseEnter={()=>setShow(true)} onMouseLeave={()=>setShow(false)}>
+      <span style={{cursor:'help', color:'#4a7fa0', fontSize:10, lineHeight:1, userSelect:'none'}}>ⓘ</span>
+      {show && (
+        <div style={{
+          position:'absolute', left:'50%', bottom:'calc(100% + 8px)',
+          transform:'translateX(-50%)', background:'#0a1520',
+          border:'1px solid #2a4a66', borderRadius:6, padding:'9px 11px',
+          zIndex:300, width:240, fontFamily:MONO, fontSize:10,
+          color:'#cce0f5', lineHeight:1.65, boxShadow:'0 6px 24px rgba(0,0,0,0.8)',
+          pointerEvents:'none', whiteSpace:'normal'
+        }}>
+          <div style={{color:'#00d4ff', fontWeight:700, marginBottom:5, fontSize:10}}>{tip.title}</div>
+          <div style={{color:'#b0ccdf'}}>{tip.text}</div>
+          <div style={{position:'absolute',left:'50%',top:'100%',transform:'translateX(-50%)',
+            borderWidth:'5px 5px 0',borderStyle:'solid',borderColor:'#2a4a66 transparent transparent'}}/>
+        </div>
+      )}
     </span>
   )
 }
@@ -1165,186 +1239,407 @@ function McOccupancyChart({occupancyCurve, compoundCurve, capitalIni, occMode='c
 
 // ── Strategy Builder — catálogo de tipos ────────────────────
 const DEFAULT_DEFINITION = {
-  entry: { type:'breakout_high_above_ma', ma_type:'EMA', ma_fast:10, ma_slow:11 },
-  exit:  { type:'breakout_low_below_ma',  ma_type:'EMA', ma_period:10 },
-  stop:  { type:'below_ma_at_signal',     ma_type:'EMA', ma_period:10 },
+  filter:   { conditions:[], logic:'AND' },
+  setup:    { type:'ema_cross_up', ma_type:'EMA', ma_fast:10, ma_slow:11 },
+  trigger:  { type:'breakout_high', rolling:true, max_candles:null },
+  abort:    { conditions:[{type:'ema_cross_down'},{type:'close_below_ma',ma_type:'EMA',ma_period:10}] },
+  stop:     { type:'min_ma_low_signal', ma_type:'EMA', ma_period:10 },
+  exit:     { type:'breakout_low_after_close_below_ma', ma_type:'EMA', ma_period:10 },
   management: { sin_perdidas:true, reentry:true },
-  filters: {
-    market: [],
-    signal: [{ type:'breakout_rolling', max_candles:null }],
-  },
+  sizing:   { type:'fixed_capital', amount:10000, years:5 },
 }
 
-const ENTRY_TYPES = [
-  { value:'breakout_high_above_ma', label:'Breakout máximo tras cruce EMA' },
-  { value:'next_open_after_cross',  label:'Apertura siguiente tras cruce EMA' },
-  { value:'next_open_above_ma',     label:'Apertura siguiente tras cierre sobre MA' },
-  { value:'pullback_pct_from_high', label:'Caída % desde máximo reciente' },
-  { value:'rsi_level',              label:'RSI cruza nivel (sobrevendido)' },
-]
-const EXIT_TYPES = [
-  { value:'breakout_low_below_ma',          label:'Breakout mínimo tras cierre bajo MA' },
-  { value:'next_open_below_ma',             label:'Apertura siguiente tras cierre bajo MA' },
-  { value:'next_open_after_bearish_cross',  label:'Apertura siguiente tras cruce bajista EMA' },
-  { value:'rsi_level',                      label:'RSI cruza nivel (sobrecomprado)' },
-]
-const STOP_TYPES = [
-  { value:'below_ma_at_signal',  label:'Bajo MA en vela de señal' },
-  { value:'low_of_signal_candle',label:'Mínimo vela de señal' },
-  { value:'low_of_entry_candle', label:'Mínimo vela de entrada' },
-  { value:'atr_based',           label:'ATR × multiplicador' },
-  { value:'none',                label:'Sin stop' },
-]
-
-// ── StrategyBuilder component ────────────────────────────────
+// ── StrategyBuilder — constructor jerárquico de 8 pasos ───────
+// Cada paso tiene número, título, descripción y controles específicos.
 function StrategyBuilder({ definition, setDefinition }) {
   const def = definition || DEFAULT_DEFINITION
+  const [openStep, setOpenStep] = useState(null)  // null = todos colapsados, o índice del abierto
+
   const upd = (path, val) => {
     const d = JSON.parse(JSON.stringify(def))
     const keys = path.split('.'); let o = d
-    for (let i=0; i<keys.length-1; i++) o = o[keys[i]]
+    for (let i=0; i<keys.length-1; i++) {
+      if (o[keys[i]] === undefined) o[keys[i]] = {}
+      o = o[keys[i]]
+    }
     o[keys[keys.length-1]] = val
     setDefinition(d)
   }
-  const sec = (title, children) => (
-    <div className="sidebar-section" key={title}>
-      <div className="sidebar-title">{title}</div>
+
+  const sel = (path, val, opts, w) => (
+    <select value={val||''} onChange={e=>upd(path,e.target.value)}
+      style={{background:'var(--bg)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,
+        fontSize:11,padding:'4px 6px',borderRadius:3,width:w||'100%',boxSizing:'border-box'}}>
+      {opts.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
+    </select>
+  )
+  const num = (path, val, min=1, max=500, step=1) => (
+    <input type="number" value={val??''} min={min} max={max} step={step}
+      onChange={e=>upd(path,Number(e.target.value))}
+      style={{background:'var(--bg)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,
+        fontSize:11,padding:'4px 6px',borderRadius:3,width:'100%',boxSizing:'border-box'}}/>
+  )
+  const chk = (path, val, label) => (
+    <label style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer',fontSize:11,color:'var(--text2)'}}>
+      <input type="checkbox" checked={!!val} onChange={e=>upd(path,e.target.checked)}
+        style={{accentColor:'var(--accent)',width:12,height:12}}/>
+      {label}
+    </label>
+  )
+  const row2 = (...children) => (
+    <div style={{display:'grid',gridTemplateColumns:`repeat(${children.length},1fr)`,gap:6}}>{children}</div>
+  )
+  const fld = (label, children) => (
+    <div style={{marginBottom:6}}>
+      <div style={{fontSize:9,color:'var(--text3)',letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:3}}>{label}</div>
       {children}
     </div>
   )
-  const row2 = (a, b) => <div className="row2">{a}{b}</div>
-  const lbl = (name, child) => <label key={name}>{name}{child}</label>
-  const num = (path, val, min=1, max=500, step=1) => (
-    <input type="number" value={val} min={min} max={max} step={step}
-      onChange={e=>upd(path, Number(e.target.value))}/>
-  )
-  const sel = (path, val, opts) => (
-    <select value={val} onChange={e=>upd(path, e.target.value)}>
-      {opts.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
-    </select>
-  )
-  const maTypeOpts = [{value:'EMA',label:'EMA'},{value:'SMA',label:'SMA'}]
-  const e=def.entry, x=def.exit, s=def.stop, m=def.management
-  const mktFilt = def.filters?.market?.[0] || null
-  const sigRolling = def.filters?.signal?.some(f=>f.type==='breakout_rolling')
-  const maxCandles = def.filters?.signal?.find(f=>f.type==='breakout_rolling')?.max_candles
 
-  const setMktFilt = (filt) => {
+  const MA_TYPES = [{v:'EMA',l:'EMA'},{v:'SMA',l:'SMA'}]
+
+  // ── Filtros de mercado: lista editable ──
+  const filt = def.filter || { conditions:[], logic:'AND' }
+  const addFilter = () => {
     const d = JSON.parse(JSON.stringify(def))
-    d.filters = d.filters || { market:[], signal:[] }
-    if (filt===null) d.filters.market=[]
-    else d.filters.market=[filt]
+    d.filter = d.filter || {conditions:[],logic:'AND'}
+    d.filter.conditions.push({type:'external_ma',symbol:'SP500',condition:'precio_ema',ma_type:'EMA',ma_period:10})
     setDefinition(d)
   }
-  const setSigRolling = (on, maxC) => {
+  const removeFilter = (idx) => {
     const d = JSON.parse(JSON.stringify(def))
-    d.filters = d.filters || { market:[], signal:[] }
-    const prev = d.filters.signal?.filter(f=>f.type!=='breakout_rolling') || []
-    d.filters.signal = on ? [...prev, {type:'breakout_rolling', max_candles:maxC}] : prev
+    d.filter.conditions.splice(idx,1)
     setDefinition(d)
   }
+  const updFilter = (idx, key, val) => {
+    const d = JSON.parse(JSON.stringify(def))
+    d.filter.conditions[idx][key] = val
+    setDefinition(d)
+  }
+
+  // ── Condiciones de abort: lista ──
+  const abort = def.abort || { conditions:[] }
+  const toggleAbort = (type) => {
+    const d = JSON.parse(JSON.stringify(def))
+    d.abort = d.abort || {conditions:[]}
+    const idx = d.abort.conditions.findIndex(c=>c.type===type)
+    if (idx>=0) d.abort.conditions.splice(idx,1)
+    else d.abort.conditions.push(type==='close_below_ma'
+      ? {type,ma_type:'EMA',ma_period:def.setup?.ma_fast||10}
+      : {type})
+    setDefinition(d)
+  }
+  const abortHas = (type) => abort.conditions?.some(c=>c.type===type)
+  const abortCBMA = abort.conditions?.find(c=>c.type==='close_below_ma')
+
+  const setup = def.setup || {}
+  const trigger = def.trigger || {}
+  const stop = def.stop || {}
+  const exit = def.exit || {}
+  const mgmt = def.management || {}
+  const sizing = def.sizing || {}
+
+  // ── Pasos definición ──
+  const STEPS = [
+    {
+      num:1, key:'filter', color:'#9b72ff', label:'FILTER',
+      desc:'¿Está el mercado en condición de operar?',
+      summary: filt.conditions?.length
+        ? filt.conditions.map(c=>`SP500 ${c.condition==='precio_ema'?'precio>EMA':'EMAr>EMAl'}`).join(' + ')
+        : 'Sin filtro',
+      body: (
+        <div>
+          {filt.conditions?.length > 1 && fld('Lógica entre condiciones',
+            row2(sel('filter.logic', filt.logic||'AND', [{v:'AND',l:'Todas deben cumplirse (AND)'},{v:'OR',l:'Al menos una (OR)'}]))
+          )}
+          {(filt.conditions||[]).map((c,i)=>(
+            <div key={i} style={{background:'rgba(155,114,255,0.06)',border:'1px solid rgba(155,114,255,0.25)',borderRadius:5,padding:'8px 10px',marginBottom:8}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
+                <span style={{fontSize:10,color:'#9b72ff',fontWeight:700}}>Condición {i+1}</span>
+                <button onClick={()=>removeFilter(i)} style={{background:'none',border:'none',color:'#ff4d6d',cursor:'pointer',fontSize:12,padding:0}}>✕</button>
+              </div>
+              {fld('Símbolo', <select value={c.symbol||'SP500'} onChange={e=>updFilter(i,'symbol',e.target.value)}
+                style={{background:'var(--bg)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'4px 6px',borderRadius:3,width:'100%'}}>
+                <option value="SP500">SP500</option>
+                <option value="OWN">Mismo activo</option>
+              </select>)}
+              {fld('Condición', <select value={c.condition||'precio_ema'} onChange={e=>updFilter(i,'condition',e.target.value)}
+                style={{background:'var(--bg)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'4px 6px',borderRadius:3,width:'100%'}}>
+                <option value="precio_ema">Precio sobre EMA rápida</option>
+                <option value="ema_ema">EMA rápida sobre EMA lenta</option>
+              </select>)}
+              {row2(
+                fld('Tipo MA', <select value={c.ma_type||'EMA'} onChange={e=>updFilter(i,'ma_type',e.target.value)}
+                  style={{background:'var(--bg)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'4px 6px',borderRadius:3,width:'100%'}}>
+                  <option value="EMA">EMA</option><option value="SMA">SMA</option>
+                </select>),
+                fld('Período', <input type="number" value={c.ma_period||10} min={1} max={500}
+                  onChange={e=>updFilter(i,'ma_period',Number(e.target.value))}
+                  style={{background:'var(--bg)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'4px 6px',borderRadius:3,width:'100%'}}/>)
+              )}
+            </div>
+          ))}
+          <button onClick={addFilter} style={{width:'100%',background:'rgba(155,114,255,0.08)',border:'1px dashed rgba(155,114,255,0.4)',color:'#9b72ff',fontFamily:MONO,fontSize:10,padding:'6px',borderRadius:4,cursor:'pointer'}}>
+            + Añadir condición
+          </button>
+        </div>
+      )
+    },
+    {
+      num:2, key:'setup', color:'#ffd166', label:'SETUP',
+      desc:'¿Se ha dado la señal de alerta?',
+      summary: setup.type==='ema_cross_up'
+        ? `Cruce alcista ${setup.ma_type||'EMA'}(${setup.ma_fast||10}) > ${setup.ma_type||'EMA'}(${setup.ma_slow||11})`
+        : setup.type||'—',
+      body: (
+        <div>
+          {fld('Tipo de señal', sel('setup.type', setup.type||'ema_cross_up', [
+            {v:'ema_cross_up',l:'Cruce alcista de medias (EMA rápida > lenta)'},
+            {v:'close_above_ma',l:'Cierre sobre MA'},
+            {v:'rsi_cross_level',l:'RSI cruza nivel (sobrevendido)'},
+          ]))}
+          {setup.type==='ema_cross_up' && row2(
+            fld('MA Rápida', row2(sel('setup.ma_type',setup.ma_type||'EMA',MA_TYPES,'70px'), num('setup.ma_fast',setup.ma_fast||10))),
+            fld('MA Lenta',  row2(sel('setup.ma_type_slow',setup.ma_type_slow||setup.ma_type||'EMA',MA_TYPES,'70px'), num('setup.ma_slow',setup.ma_slow||11)))
+          )}
+          {setup.type==='close_above_ma' && row2(
+            fld('Tipo MA', sel('setup.ma_type',setup.ma_type||'EMA',MA_TYPES)),
+            fld('Período', num('setup.ma_period',setup.ma_period||10))
+          )}
+          {setup.type==='rsi_cross_level' && row2(
+            fld('Período RSI', num('setup.rsi_period',setup.rsi_period||14)),
+            fld('Nivel (subir sobre)', num('setup.rsi_level',setup.rsi_level||30,1,99))
+          )}
+        </div>
+      )
+    },
+    {
+      num:3, key:'trigger', color:'#00d4ff', label:'TRIGGER',
+      desc:'¿Cómo ejecuto la entrada?',
+      summary: trigger.type==='breakout_high'
+        ? `Breakout HIGH${trigger.rolling?' · rolling (actualiza nivel)':' · fijo'}`
+        : trigger.type||'—',
+      body: (
+        <div>
+          {fld('Tipo de entrada', sel('trigger.type', trigger.type||'breakout_high', [
+            {v:'breakout_high',l:'Breakout del máximo de la vela de setup'},
+            {v:'next_open',l:'Apertura de la siguiente vela'},
+          ]))}
+          {trigger.type==='breakout_high' && <>
+            {chk('trigger.rolling', trigger.rolling!==false, 'Rolling: si no hay breakout, actualizar nivel al nuevo mínimo de máximos')}
+            {trigger.rolling!==false && fld('Máx. velas en espera (vacío=ilimitado)',
+              <input type="number" value={trigger.max_candles||''} min={1} max={100} placeholder="Ilimitado"
+                onChange={e=>upd('trigger.max_candles',e.target.value?Number(e.target.value):null)}
+                style={{background:'var(--bg)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'4px 6px',borderRadius:3,width:'100%'}}/>
+            )}
+          </>}
+        </div>
+      )
+    },
+    {
+      num:4, key:'abort', color:'#ff9a3c', label:'ABORT',
+      desc:'¿Qué cancela la entrada pendiente?',
+      summary: abort.conditions?.length
+        ? abort.conditions.map(c=>c.type==='ema_cross_down'?'Cruce bajista':c.type==='close_below_ma'?`Cierre<${c.ma_type||'EMA'}(${c.ma_period||10})`:'?').join(' | ')
+        : 'Sin abort',
+      body: (
+        <div style={{display:'flex',flexDirection:'column',gap:8}}>
+          {chk('_abort_cross_down', abortHas('ema_cross_down'), 'Cruce bajista de EMAs (setup→abort)')}
+          {abortHas('ema_cross_down') && <div style={{fontSize:10,color:'var(--text3)',marginLeft:18,marginTop:-4}}>
+            Usa las mismas EMAs definidas en el Setup
+          </div>}
+          {chk('_abort_close_below', abortHas('close_below_ma'), 'Cierre bajo MA rápida')}
+          {abortHas('close_below_ma') && row2(
+            fld('Tipo MA', <select value={abortCBMA?.ma_type||'EMA'}
+              onChange={e=>{const d=JSON.parse(JSON.stringify(def));const c=d.abort.conditions.find(c=>c.type==='close_below_ma');if(c)c.ma_type=e.target.value;setDefinition(d)}}
+              style={{background:'var(--bg)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'4px 6px',borderRadius:3,width:'100%'}}>
+              <option value="EMA">EMA</option><option value="SMA">SMA</option>
+            </select>),
+            fld('Período', <input type="number" value={abortCBMA?.ma_period||10} min={1}
+              onChange={e=>{const d=JSON.parse(JSON.stringify(def));const c=d.abort.conditions.find(c=>c.type==='close_below_ma');if(c)c.ma_period=Number(e.target.value);setDefinition(d)}}
+              style={{background:'var(--bg)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'4px 6px',borderRadius:3,width:'100%'}}/>)
+          )}
+          {/* Handlers especiales para los checkboxes de abort */}
+          <div style={{display:'none'}}
+            ref={el=>{
+              if(!el) return
+              // patch checkbox handlers after render
+            }}
+          />
+        </div>
+      )
+    },
+    {
+      num:5, key:'stop', color:'#ff4d6d', label:'STOP LOSS',
+      desc:'¿Dónde está mi límite de pérdida?',
+      summary: stop.type==='min_ma_low_signal'
+        ? `min(${stop.ma_type||'EMA'}(${stop.ma_period||10}), LOW setup)`
+        : stop.type==='atr_based'
+        ? `Entrada − ATR(${stop.atr_period||14}) × ${stop.atr_mult||1.0}`
+        : stop.type==='none' ? 'Sin stop' : stop.type||'—',
+      body: (
+        <div>
+          {fld('Tipo de stop', sel('stop.type', stop.type||'min_ma_low_signal', [
+            {v:'min_ma_low_signal', l:'min(MA, LOW de la vela de setup)'},
+            {v:'low_of_signal_candle', l:'Mínimo de la vela de setup'},
+            {v:'low_of_entry_candle', l:'Mínimo de la vela de entrada'},
+            {v:'atr_based', l:'Entrada − ATR × multiplicador'},
+            {v:'none', l:'Sin stop loss'},
+          ]))}
+          {['min_ma_low_signal','low_of_signal_candle'].includes(stop.type||'min_ma_low_signal') && stop.type!=='low_of_signal_candle' && row2(
+            fld('Tipo MA', sel('stop.ma_type',stop.ma_type||'EMA',MA_TYPES)),
+            fld('Período', num('stop.ma_period',stop.ma_period||10))
+          )}
+          {stop.type==='atr_based' && row2(
+            fld('Período ATR', num('stop.atr_period',stop.atr_period||14)),
+            fld('Multiplicador', num('stop.atr_mult',stop.atr_mult||1.0,0.1,10,0.1))
+          )}
+        </div>
+      )
+    },
+    {
+      num:6, key:'exit', color:'#00e5a0', label:'EXIT',
+      desc:'¿Cómo salgo en profit?',
+      summary: exit.type==='breakout_low_after_close_below_ma'
+        ? `1ª vela cierre<${exit.ma_type||'EMA'}(${exit.ma_period||10}) → breakout LOW`
+        : exit.type||'—',
+      body: (
+        <div>
+          {fld('Tipo de salida', sel('exit.type', exit.type||'breakout_low_after_close_below_ma', [
+            {v:'breakout_low_after_close_below_ma', l:'Breakout LOW tras 1ª vela de cierre bajo MA'},
+            {v:'next_open_after_close_below_ma', l:'Apertura siguiente tras cierre bajo MA'},
+            {v:'ema_cross_down', l:'Cruce bajista de EMAs (apertura siguiente)'},
+            {v:'rsi_overbought', l:'RSI cruza nivel sobrecomprado'},
+          ]))}
+          {['breakout_low_after_close_below_ma','next_open_after_close_below_ma'].includes(exit.type||'breakout_low_after_close_below_ma') && row2(
+            fld('Tipo MA', sel('exit.ma_type',exit.ma_type||'EMA',MA_TYPES)),
+            fld('Período', num('exit.ma_period',exit.ma_period||10))
+          )}
+          {exit.type==='rsi_overbought' && row2(
+            fld('Período RSI', num('exit.rsi_period',exit.rsi_period||14)),
+            fld('Nivel (bajar de)', num('exit.rsi_level',exit.rsi_level||70,1,99))
+          )}
+        </div>
+      )
+    },
+    {
+      num:7, key:'management', color:'#4a9fd4', label:'MANAGEMENT',
+      desc:'Sin pérdidas · Re-entry',
+      summary: [mgmt.sin_perdidas&&'Sin Pérdidas', mgmt.reentry&&'Re-Entry'].filter(Boolean).join(' + ') || 'Ninguno',
+      body: (
+        <div style={{display:'flex',flexDirection:'column',gap:10}}>
+          <div>
+            {chk('management.sin_perdidas', mgmt.sin_perdidas, 'Sin Pérdidas')}
+            <div style={{fontSize:10,color:'var(--text3)',marginLeft:18,lineHeight:1.5,marginTop:2}}>
+              Mueve el stop al precio de entrada cuando el trade está en beneficio (low &gt; entrada).
+            </div>
+          </div>
+          <div>
+            {chk('management.reentry', mgmt.reentry, 'Re-Entry')}
+            <div style={{fontSize:10,color:'var(--text3)',marginLeft:18,lineHeight:1.5,marginTop:2}}>
+              Tras una salida, si las EMAs siguen alcistas, busca nueva entrada en el breakout del HIGH
+              de la 1ª vela que cierre sobre la EMA rápida.
+            </div>
+          </div>
+        </div>
+      )
+    },
+    {
+      num:8, key:'sizing', color:'#7a9bc0', label:'SIZING',
+      desc:'¿Cuánto capital por operación?',
+      summary: sizing.type==='fixed_capital'
+        ? `Capital fijo €${(sizing.amount||10000).toLocaleString('es-ES')} · ${sizing.years||5}a BT`
+        : sizing.type==='pct_equity'
+        ? `${sizing.pct||100}% del equity`
+        : '—',
+      body: (
+        <div>
+          {fld('Tipo de sizing', sel('sizing.type', sizing.type||'fixed_capital', [
+            {v:'fixed_capital', l:'Capital fijo (€)'},
+            {v:'pct_equity',    l:'Porcentaje del equity (%)'},
+          ]))}
+          {sizing.type!=='pct_equity' && row2(
+            fld('Capital (€)', num('sizing.amount',sizing.amount||10000,100,9999999,100)),
+            fld('Años backtest', num('sizing.years',sizing.years||5,1,30))
+          )}
+          {sizing.type==='pct_equity' && row2(
+            fld('Porcentaje (%)', num('sizing.pct',sizing.pct||100,1,100)),
+            fld('Capital base (€)', num('sizing.amount',sizing.amount||10000,100,9999999,100))
+          )}
+        </div>
+      )
+    },
+  ]
 
   return (
-    <div style={{display:'flex',flexDirection:'column',gap:14}}>
-      {/* ENTRADA */}
-      {sec('Entrada',<>
-        {lbl('Tipo', sel('entry.type', e.type, ENTRY_TYPES))}
-        {['breakout_high_above_ma','next_open_after_cross'].includes(e.type)&&row2(
-          lbl('Tipo MA', sel('entry.ma_type', e.ma_type||'EMA', maTypeOpts)),
-          <>{lbl('Rápida', num('entry.ma_fast', e.ma_fast||10))}{lbl('Lenta', num('entry.ma_slow', e.ma_slow||11))}</>
-        )}
-        {e.type==='next_open_above_ma'&&row2(
-          lbl('Tipo MA', sel('entry.ma_type', e.ma_type||'EMA', maTypeOpts)),
-          lbl('Período', num('entry.ma_period', e.ma_period||10))
-        )}
-        {e.type==='pullback_pct_from_high'&&row2(
-          lbl('Caída (%)', num('entry.pct', e.pct||5, 0.1, 50, 0.1)),
-          lbl('Lookback (velas)', num('entry.lookback', e.lookback||20, 5, 200))
-        )}
-        {e.type==='rsi_level'&&row2(
-          lbl('Período RSI', num('entry.rsi_period', e.rsi_period||14)),
-          lbl('Nivel (< X)', num('entry.rsi_level', e.rsi_level||30, 1, 99))
-        )}
-      </>)}
-
-      {/* SALIDA */}
-      {sec('Salida',<>
-        {lbl('Tipo', sel('exit.type', x.type, EXIT_TYPES))}
-        {['breakout_low_below_ma','next_open_below_ma'].includes(x.type)&&row2(
-          lbl('Tipo MA', sel('exit.ma_type', x.ma_type||'EMA', maTypeOpts)),
-          lbl('Período', num('exit.ma_period', x.ma_period||10))
-        )}
-        {x.type==='next_open_after_bearish_cross'&&row2(
-          lbl('Tipo MA', sel('exit.ma_type', x.ma_type||'EMA', maTypeOpts)),
-          <>{lbl('Rápida', num('exit.ma_fast', x.ma_fast||10))}{lbl('Lenta', num('exit.ma_slow', x.ma_slow||11))}</>
-        )}
-        {x.type==='rsi_level'&&row2(
-          lbl('Período RSI', num('exit.rsi_period', x.rsi_period||14)),
-          lbl('Nivel (> X)', num('exit.rsi_level', x.rsi_level||70, 1, 99))
-        )}
-      </>)}
-
-      {/* STOP */}
-      {sec('Stop',<>
-        {lbl('Tipo', sel('stop.type', s.type, STOP_TYPES))}
-        {s.type==='below_ma_at_signal'&&row2(
-          lbl('Tipo MA', sel('stop.ma_type', s.ma_type||'EMA', maTypeOpts)),
-          lbl('Período', num('stop.ma_period', s.ma_period||10))
-        )}
-        {s.type==='atr_based'&&row2(
-          lbl('ATR período', num('stop.atr_period', s.atr_period||14)),
-          lbl('Multiplicador', num('stop.atr_mult', s.atr_mult||1.0, 0.1, 10, 0.1))
-        )}
-      </>)}
-
-      {/* GESTIÓN */}
-      {sec('Gestión',<>
-        <label className="checkbox-row">
-          <input type="checkbox" checked={!!m?.sin_perdidas} onChange={e=>upd('management.sin_perdidas',e.target.checked)}/>
-          Sin Pérdidas
-        </label>
-        <label className="checkbox-row">
-          <input type="checkbox" checked={!!m?.reentry} onChange={e=>upd('management.reentry',e.target.checked)}/>
-          Re-Entry
-        </label>
-      </>)}
-
-      {/* FILTROS */}
-      {sec('Filtros de Mercado',<>
-        <label>Tipo
-          <select value={mktFilt?.condition||'none'}
-            onChange={ev=>{
-              if(ev.target.value==='none'){setMktFilt(null)}
-              else setMktFilt({type:'external_ma',condition:ev.target.value,ma_type:'EMA',ma_fast:mktFilt?.ma_fast||10,ma_slow:mktFilt?.ma_slow||11})
+    <div style={{display:'flex',flexDirection:'column',gap:2}}>
+      {STEPS.map((step,idx)=>{
+        const isOpen = openStep===idx
+        const stepColor = step.color
+        return (
+          <div key={step.key} style={{border:`1px solid ${isOpen?stepColor:'rgba(26,45,69,0.8)'}`,borderRadius:6,overflow:'hidden',transition:'border-color .15s'}}>
+            {/* Header del paso */}
+            <button onClick={()=>setOpenStep(isOpen?null:idx)} style={{
+              width:'100%',display:'flex',alignItems:'center',gap:8,padding:'7px 10px',
+              background:isOpen?`${stepColor}12`:'transparent',border:'none',cursor:'pointer',textAlign:'left'
             }}>
-            <option value="none">Sin filtro</option>
-            <option value="precio_ema">SP500 precio sobre EMA rápida</option>
-            <option value="ema_ema">SP500 EMA rápida sobre EMA lenta</option>
-          </select>
-        </label>
-        {mktFilt&&mktFilt.condition!=='none'&&<div className="row2">
-          <label>EMA R<input type="number" value={mktFilt.ma_fast||10} min={1}
-            onChange={ev=>setMktFilt({...mktFilt,ma_fast:Number(ev.target.value)})}/></label>
-          <label>EMA L<input type="number" value={mktFilt.ma_slow||11} min={1}
-            onChange={ev=>setMktFilt({...mktFilt,ma_slow:Number(ev.target.value)})}/></label>
-        </div>}
-      </>)}
+              <span style={{
+                minWidth:20,height:20,borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',
+                background:isOpen?stepColor:'rgba(26,45,69,0.9)',
+                color:isOpen?'#080c14':stepColor,fontFamily:MONO,fontSize:9,fontWeight:700,flexShrink:0
+              }}>{step.num}</span>
+              <span style={{fontFamily:MONO,fontSize:10,fontWeight:700,color:stepColor,letterSpacing:'0.08em',flexShrink:0}}>{step.label}</span>
+              <Tip id={step.key==='stop'?'stopLoss':step.key} style={{flexShrink:0}}/>
+              <span style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{step.summary}</span>
+              <span style={{color:'var(--text3)',fontSize:10,flexShrink:0}}>{isOpen?'▲':'▼'}</span>
+            </button>
 
-      {sec('Filtros de Señal',<>
-        <label className="checkbox-row">
-          <input type="checkbox" checked={!!sigRolling}
-            onChange={e=>setSigRolling(e.target.checked, maxCandles)}/>
-          Breakout rolling (máximo se actualiza)
-        </label>
-        {sigRolling&&<label>Máx. velas en espera
-          <input type="number" value={maxCandles||''} min={1} max={50} placeholder="ilimitado"
-            onChange={e=>setSigRolling(true, e.target.value?Number(e.target.value):null)}/>
-        </label>}
-      </>)}
+            {/* Cuerpo del paso */}
+            {isOpen && (
+              <div style={{padding:'10px 12px 12px',borderTop:`1px solid ${stepColor}30`}}>
+                <div style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',marginBottom:10,fontStyle:'italic'}}>
+                  {step.desc}
+                </div>
+                {step.key==='abort'
+                  ? (() => {
+                      // Abort needs special handler - can't use upd for toggle array
+                      return (
+                        <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                          <label style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer',fontSize:11,color:'var(--text2)'}}>
+                            <input type="checkbox" checked={abortHas('ema_cross_down')} onChange={()=>toggleAbort('ema_cross_down')}
+                              style={{accentColor:'#ff9a3c',width:12,height:12}}/>
+                            Cruce bajista de EMAs
+                          </label>
+                          <label style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer',fontSize:11,color:'var(--text2)'}}>
+                            <input type="checkbox" checked={abortHas('close_below_ma')} onChange={()=>toggleAbort('close_below_ma')}
+                              style={{accentColor:'#ff9a3c',width:12,height:12}}/>
+                            Cierre bajo MA
+                          </label>
+                          {abortHas('close_below_ma') && (
+                            <div style={{marginLeft:18,display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}}>
+                              {fld('Tipo MA',<select value={abortCBMA?.ma_type||'EMA'}
+                                onChange={e=>{const d=JSON.parse(JSON.stringify(def));const c=d.abort.conditions.find(c=>c.type==='close_below_ma');if(c)c.ma_type=e.target.value;setDefinition(d)}}
+                                style={{background:'var(--bg)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'4px 6px',borderRadius:3,width:'100%'}}>
+                                <option value="EMA">EMA</option><option value="SMA">SMA</option>
+                              </select>)}
+                              {fld('Período',<input type="number" value={abortCBMA?.ma_period||10} min={1}
+                                onChange={e=>{const d=JSON.parse(JSON.stringify(def));const c=d.abort.conditions.find(c=>c.type==='close_below_ma');if(c)c.ma_period=Number(e.target.value);setDefinition(d)}}
+                                style={{background:'var(--bg)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'4px 6px',borderRadius:3,width:'100%'}}/>)}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })()
+                  : step.body
+                }
+              </div>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }
-
 
 // ── Main ─────────────────────────────────────────────────────
 export default function Home() {
@@ -1935,7 +2230,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator 2.7</title>
+        <title>Trading Simulator 2.8</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
