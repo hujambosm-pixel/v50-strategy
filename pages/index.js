@@ -30,6 +30,36 @@ function calcMetrics(trades, capitalIni, capitalReinv, gananciaSimple, ganBH, st
 }
 
 const MONO='"JetBrains Mono","Fira Code","IBM Plex Mono",monospace'
+
+// ── Tip — icono ⓘ con tooltip explicativo ────────────────────
+const TIPS={
+  emaR:'EMA Rápida: media exponencial de corto plazo. El cruce alcista (rápida > lenta) genera el setup de entrada.',
+  emaL:'EMA Lenta: media exponencial de largo plazo. Define la tendencia principal.',
+  capital:'Capital inicial en euros para calcular P&L simple y compuesto.',
+  years:'Número de años hacia atrás para el backtest, desde la fecha más reciente disponible.',
+  tipoStop:'Stop Técnico: coloca el stop en min(EMA rápida, mínimo del setup). ATR: stop dinámico basado en volatilidad.',
+  atr:'Periodo del ATR (Average True Range) para calcular el stop dinámico.',
+  atrMult:'Multiplicador del ATR. Stop = Precio entrada − (ATR × multiplicador).',
+  sinPerdidas:'Modo Sin Pérdidas: activa el stop en el precio de entrada cuando el trade está en beneficio, protegiendo contra pérdidas.',
+  reentry:'Re-Entry: permite volver a entrar tras una salida si las EMAs siguen alcistas, mediante un nuevo breakout sobre la EMA rápida.',
+  filtroSP500:'Filtra entradas según el estado del SP500. Bloquea nuevas posiciones cuando el mercado es bajista.',
+  sp500Emas:'EMAs del SP500 usadas para el filtro. "Precio sobre EMA rápida": bloquea si SP500 < EMA. "EMA rápida > lenta": bloquea si tendencia bajista.',
+}
+function Tip({id,style}){
+  const [show,setShow]=useState(false)
+  const t=TIPS[id]||''
+  if(!t) return null
+  return(
+    <span style={{position:'relative',display:'inline-flex',alignItems:'center',...style}}
+      onMouseEnter={()=>setShow(true)} onMouseLeave={()=>setShow(false)}>
+      <span style={{cursor:'help',color:'#4a7fa0',fontSize:10,lineHeight:1,userSelect:'none'}}>ⓘ</span>
+      {show&&<div style={{position:'absolute',left:'50%',bottom:'calc(100% + 6px)',transform:'translateX(-50%)',background:'#0d1a27',border:'1px solid #2a4a66',borderRadius:5,padding:'7px 10px',zIndex:200,width:200,fontFamily:MONO,fontSize:10,color:'#cce0f5',lineHeight:1.5,boxShadow:'0 4px 20px rgba(0,0,0,0.7)',pointerEvents:'none',whiteSpace:'normal'}}>
+        {t}
+        <div style={{position:'absolute',left:'50%',top:'100%',transform:'translateX(-50%)',borderWidth:'5px 5px 0',borderStyle:'solid',borderColor:'#2a4a66 transparent transparent'}}/>
+      </div>}
+    </span>
+  )
+}
 function fmt(v,dec=2,suf=''){if(v==null||isNaN(v))return'—';return v.toLocaleString('es-ES',{minimumFractionDigits:dec,maximumFractionDigits:dec})+suf}
 function fmtDate(s){if(!s)return'—';return new Date(s).toLocaleDateString('es-ES',{day:'2-digit',month:'2-digit',year:'numeric'})}
 function f2(v){if(v==null||isNaN(v))return'—';return v.toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2})}
@@ -174,6 +204,8 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
         rightPriceScale:{borderColor:'#1a2d45'},
         timeScale:{borderColor:'#1a2d45',timeVisible:true},
       })
+      // Margen derecho — equivalent to TV right offset
+      chart.timeScale().applyOptions({ rightOffset: 10 })
       chartRef.current=chart
 
       const candles=chart.addCandlestickSeries({
@@ -190,11 +222,20 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
       const elS=chart.addLineSeries({color:'#ff4d6d',lineWidth:1,lastValueVisible:false,priceLineVisible:false})
       elS.setData(data.filter(d=>d.emaL!=null).map(d=>({time:d.date,value:d.emaL})))
 
-      // Líneas de trades — sin title
+      // Líneas de trades — diagonal P&L + horizontales entrada/stop estilo TV
       trades.forEach(t=>{
         if(!t.entryDate||!t.exitDate) return
+        // Diagonal P&L
         const ls=chart.addLineSeries({color:t.pnlPct>=0?'#00e5a0':'#ff4d6d',lineWidth:2,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
         ls.setData([{time:t.entryDate,value:t.entryPx},{time:t.exitDate,value:t.exitPx}])
+        // Línea horizontal blanca intermitente — nivel de entrada
+        const entryLine=chart.addLineSeries({color:'rgba(255,255,255,0.65)',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
+        entryLine.setData([{time:t.entryDate,value:t.entryPx},{time:t.exitDate,value:t.entryPx}])
+        // Línea horizontal roja — stop loss
+        if(t.stopPx!=null){
+          const stopLine=chart.addLineSeries({color:'rgba(255,77,109,0.8)',lineWidth:2,lineStyle:LineStyle.Solid,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
+          stopLine.setData([{time:t.entryDate,value:t.stopPx},{time:t.exitDate,value:t.stopPx}])
+        }
       })
 
       // ── Flechas de cruce EMA ──
@@ -511,7 +552,7 @@ function EquityChart({
   maxDDStrategyDate,maxDDBHDate,maxDDSP500Date,maxDDCompoundDate,
   capitalIni,showStrategy,showBH,showSP500,showCompound,syncRef,chartHeight=260
 }) {
-  const ref=useRef(null),chartRef=useRef(null)
+  const ref=useRef(null),chartRef=useRef(null),equityTooltipRef=useRef(null)
   useEffect(()=>{
     if(!ref.current) return
     import('lightweight-charts').then(({createChart,CrosshairMode,LineStyle})=>{
@@ -525,18 +566,30 @@ function EquityChart({
         timeScale:{borderColor:'#1a2d45',timeVisible:false},
       })
       chartRef.current=chart
-      if(showStrategy&&strategyCurve?.length)
+      // Track series data by date for crosshair tooltip
+      const equityDataByDate={}
+      const trackSeries=(curve,key)=>{ curve?.forEach(p=>{ if(!equityDataByDate[p.date]) equityDataByDate[p.date]={}; equityDataByDate[p.date][key]=p.value }) }
+
+      if(showStrategy&&strategyCurve?.length){
         chart.addLineSeries({color:'#00d4ff',lineWidth:2,lastValueVisible:false,priceLineVisible:false})
           .setData(strategyCurve.map(p=>({time:p.date,value:p.value})))
-      if(showCompound&&compoundCurve?.length)
+        trackSeries(strategyCurve,'st')
+      }
+      if(showCompound&&compoundCurve?.length){
         chart.addLineSeries({color:'#00e5a0',lineWidth:2,lastValueVisible:false,priceLineVisible:false})
           .setData(compoundCurve.map(p=>({time:p.date,value:p.value})))
-      if(showBH&&bhCurve?.length)
+        trackSeries(compoundCurve,'co')
+      }
+      if(showBH&&bhCurve?.length){
         chart.addLineSeries({color:'#ffd166',lineWidth:2,lineStyle:LineStyle.Dashed,lastValueVisible:false,priceLineVisible:false})
           .setData(bhCurve.map(p=>({time:p.date,value:p.value})))
-      if(showSP500&&sp500BHCurve?.length)
+        trackSeries(bhCurve,'bh')
+      }
+      if(showSP500&&sp500BHCurve?.length){
         chart.addLineSeries({color:'#9b72ff',lineWidth:2,lineStyle:LineStyle.Dotted,lastValueVisible:false,priceLineVisible:false})
           .setData(sp500BHCurve.map(p=>({time:p.date,value:p.value})))
+        trackSeries(sp500BHCurve,'sp')
+      }
       const base=strategyCurve||compoundCurve||bhCurve||sp500BHCurve
       if(base?.length)
         chart.addLineSeries({color:'#3d5a7a',lineWidth:1,lineStyle:LineStyle.Dotted,lastValueVisible:false,priceLineVisible:false})
@@ -549,7 +602,7 @@ function EquityChart({
         if(!trough||peak.date===trough.date) return
         const s=chart.addLineSeries({color,lineWidth:2,lastValueVisible:false,priceLineVisible:false})
         s.setData([{time:peak.date,value:peak.value},{time:trough.date,value:trough.value}])
-        s.setMarkers([{time:trough.date,position:'belowBar',color,shape:'circle',size:0,text:`↓${label} -${dd.toFixed(1)}%`}])
+        s.setMarkers([{time:trough.date,position:'belowBar',color,shape:'circle',size:0,text:''}])
       }
       if(showStrategy) addDD(strategyCurve,maxDDStrategyDate,maxDDStrategy,'#ff4d6d','DD Est.')
       if(showCompound) addDD(compoundCurve,maxDDCompoundDate,maxDDCompound,'#00a870','DD Comp.')
@@ -568,6 +621,26 @@ function EquityChart({
         syncRef.current.listeners.push({id:syncId,handler})
         chart.__syncCleanup=()=>{try{unsub()}catch(_){};if(syncRef.current) syncRef.current.listeners=syncRef.current.listeners.filter(e=>e.id!==syncId)}
       }
+      // Crosshair tooltip — valores de cada curva al pasar el cursor
+      chart.subscribeCrosshairMove(param=>{
+        const tt=equityTooltipRef.current; if(!tt) return
+        if(!param.time||!param.point){tt.style.display='none';return}
+        const d=equityDataByDate[param.time]
+        if(!d){tt.style.display='none';return}
+        const rows=[]
+        const MONO2='"JetBrains Mono",monospace'
+        if(d.st!=null) rows.push(`<div style="display:flex;justify-content:space-between;gap:20px"><span style="color:#00d4ff">Simple</span><b style="color:#00d4ff">€${d.st.toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2})}</b></div>`)
+        if(d.co!=null) rows.push(`<div style="display:flex;justify-content:space-between;gap:20px"><span style="color:#00e5a0">Compuesta</span><b style="color:#00e5a0">€${d.co.toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2})}</b></div>`)
+        if(d.bh!=null) rows.push(`<div style="display:flex;justify-content:space-between;gap:20px"><span style="color:#ffd166">B&H Activo</span><b style="color:#ffd166">€${d.bh.toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2})}</b></div>`)
+        if(d.sp!=null) rows.push(`<div style="display:flex;justify-content:space-between;gap:20px"><span style="color:#9b72ff">B&H SP500</span><b style="color:#9b72ff">€${d.sp.toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2})}</b></div>`)
+        if(!rows.length){tt.style.display='none';return}
+        const cw=ref.current?.clientWidth||600
+        tt.style.display='block'
+        tt.style.left=((param.point.x+200>cw)?param.point.x-210:param.point.x+14)+'px'
+        tt.style.top=Math.max(4,param.point.y-40)+'px'
+        tt.innerHTML=`<div style="font-size:10px;color:#7a9bc0;margin-bottom:4px;font-family:${MONO2}">${param.time}</div>`+rows.join('')
+      })
+
       chart.timeScale().fitContent()
       const ro=new ResizeObserver(()=>{if(ref.current)chart.applyOptions({width:ref.current.clientWidth})})
       ro.observe(ref.current)
@@ -579,7 +652,12 @@ function EquityChart({
   useEffect(()=>{
     if(chartRef.current) try{chartRef.current.applyOptions({height:chartHeight})}catch(_){}
   },[chartHeight])
-  return <div ref={ref} style={{minHeight:260}}/>
+  return (
+    <div style={{position:'relative'}}>
+      <div ref={ref} style={{minHeight:260}}/>
+      <div ref={equityTooltipRef} style={{position:'absolute',display:'none',pointerEvents:'none',background:'rgba(8,12,20,0.96)',border:'1px solid #1a2d45',borderRadius:6,padding:'8px 12px',fontFamily:'"JetBrains Mono",monospace',fontSize:12,color:'#e2eaf5',zIndex:15,minWidth:180,boxShadow:'0 4px 20px rgba(0,0,0,0.5)'}}/>
+    </div>
+  )
 }
 
 // ── MultiCartChart ───────────────────────────────────────────
@@ -1720,25 +1798,25 @@ export default function Home() {
                 <div className="sidebar-section">
                   <div className="sidebar-title">Estrategia</div>
                   <div className="row2">
-                    <label>EMA Rápida<input type="number" value={emaR} min={1} max={500} onChange={e=>setEmaR(e.target.value)}/></label>
-                    <label>EMA Lenta<input  type="number" value={emaL} min={1} max={500} onChange={e=>setEmaL(e.target.value)}/></label>
+                    <label>EMA Rápida <Tip id="emaR"/><input type="number" value={emaR} min={1} max={500} onChange={e=>setEmaR(e.target.value)}/></label>
+                    <label>EMA Lenta <Tip id="emaL"/><input  type="number" value={emaL} min={1} max={500} onChange={e=>setEmaL(e.target.value)}/></label>
                   </div>
                   <div className="row2">
-                    <label>Capital (€)<input type="number" value={capitalIni} min={100} onChange={e=>setCapitalIni(e.target.value)}/></label>
-                    <label>Años BT<input    type="number" value={years} min={1} max={20} onChange={e=>setYears(e.target.value)}/></label>
+                    <label>Capital (€) <Tip id="capital"/><input type="number" value={capitalIni} min={100} onChange={e=>setCapitalIni(e.target.value)}/></label>
+                    <label>Años BT <Tip id="years"/><input    type="number" value={years} min={1} max={20} onChange={e=>setYears(e.target.value)}/></label>
                   </div>
                 </div>
                 <div className="sidebar-section">
                   <div className="sidebar-title">Stop Loss</div>
-                  <label>Tipo<select value={tipoStop} onChange={e=>setTipoStop(e.target.value)}><option value="tecnico">Stop Técnico (EMA)</option><option value="atr">Stop ATR</option><option value="none">Ninguno</option></select></label>
-                  {tipoStop==='atr'&&<div className="row2"><label>ATR<input type="number" value={atrP} min={1} onChange={e=>setAtrP(e.target.value)}/></label><label>Mult.<input type="number" value={atrM} min={0.1} step={0.1} onChange={e=>setAtrM(e.target.value)}/></label></div>}
-                  <label className="checkbox-row"><input type="checkbox" checked={sinPerdidas} onChange={e=>setSinPerdidas(e.target.checked)}/>Sin Pérdidas</label>
-                  <label className="checkbox-row"><input type="checkbox" checked={reentry} onChange={e=>setReentry(e.target.checked)}/>Re-Entry</label>
+                  <label>Tipo <Tip id="tipoStop"/><select value={tipoStop} onChange={e=>setTipoStop(e.target.value)}><option value="tecnico">Stop Técnico (EMA)</option><option value="atr">Stop ATR</option><option value="none">Ninguno</option></select></label>
+                  {tipoStop==='atr'&&<div className="row2"><label>ATR <Tip id="atr"/><input type="number" value={atrP} min={1} onChange={e=>setAtrP(e.target.value)}/></label><label>Mult. <Tip id="atrMult"/><input type="number" value={atrM} min={0.1} step={0.1} onChange={e=>setAtrM(e.target.value)}/></label></div>}
+                  <label className="checkbox-row"><input type="checkbox" checked={sinPerdidas} onChange={e=>setSinPerdidas(e.target.checked)}/>Sin Pérdidas <Tip id="sinPerdidas"/></label>
+                  <label className="checkbox-row"><input type="checkbox" checked={reentry} onChange={e=>setReentry(e.target.checked)}/>Re-Entry <Tip id="reentry"/></label>
                 </div>
                 <div className="sidebar-section">
                   <div className="sidebar-title">Filtro SP500</div>
-                  <label>Filtro<select value={tipoFiltro} onChange={e=>setTipoFiltro(e.target.value)}><option value="none">Sin filtro</option><option value="precio_ema">Precio sobre EMA rápida</option><option value="ema_ema">EMA rápida sobre EMA lenta</option></select></label>
-                  {tipoFiltro!=='none'&&<div className="row2"><label>EMA R<input type="number" value={sp500EmaR} min={1} onChange={e=>setSp500EmaR(e.target.value)}/></label><label>EMA L<input type="number" value={sp500EmaL} min={1} onChange={e=>setSp500EmaL(e.target.value)}/></label></div>}
+                  <label>Filtro <Tip id="filtroSP500"/><select value={tipoFiltro} onChange={e=>setTipoFiltro(e.target.value)}><option value="none">Sin filtro</option><option value="precio_ema">Precio sobre EMA rápida</option><option value="ema_ema">EMA rápida sobre EMA lenta</option></select></label>
+                  {tipoFiltro!=='none'&&<div className="row2"><label>EMA R <Tip id="sp500Emas"/><input type="number" value={sp500EmaR} min={1} onChange={e=>setSp500EmaR(e.target.value)}/></label><label>EMA L<input type="number" value={sp500EmaL} min={1} onChange={e=>setSp500EmaL(e.target.value)}/></label></div>}
                 </div>
                 {loading&&<div style={{fontFamily:MONO,fontSize:12,color:'var(--accent)',textAlign:'center',fontWeight:600}}>⟳ Actualizando...</div>}
                 {error&&<div style={{fontFamily:MONO,fontSize:11,color:'#ff4d6d',padding:'6px 0'}}>⚠ {error}</div>}
