@@ -8,16 +8,15 @@ function calcMetrics(trades, capitalIni, capitalReinv, gananciaSimple, ganBH, st
   const avgWin=wins.length?wins.reduce((s,t)=>s+t.pnlPct,0)/wins.length:0
   const avgLoss=losses.length?losses.reduce((s,t)=>s+Math.abs(t.pnlPct),0)/losses.length:0
   const totalDias=trades.reduce((s,t)=>s+t.dias,0)
-  // Periodo CAGR: usar directamente los años configurados (el backend calcula
-  // startDate como exactamente yearsConfig años antes del último dato).
-  const safYears = Math.max(Number(yearsConfig) || 5, 0.01)
-  const anios = safYears
-  // Para "Tiempo invertido" sí usamos fechas reales del calendario
-  let totalDiasNat = safYears * 365.25
+  // Periodo real: siempre desde fechas reales del calendario (startDate→endDate)
+  // Esto da los años correctos para CAGR y Tiempo Invertido
+  let totalDiasNat = Number(yearsConfig||5) * 365.25
   if (startDate && endDate) {
     const ms = new Date(endDate).getTime() - new Date(startDate).getTime()
     if (!isNaN(ms) && ms > 0) totalDiasNat = ms / 86400000
   }
+  const anios = Math.max(totalDiasNat / 365.25, 0.01)
+  const safYears = anios
   const aniosInv=totalDias/365.25, tiempoInvPct=(totalDias/totalDiasNat)*100
   const cagrS=Math.pow(Math.max(capitalIni+gananciaSimple,0.01)/capitalIni,1/safYears)-1
   const cagrC=capitalReinv>0?Math.pow(capitalReinv/capitalIni,1/safYears)-1:0
@@ -36,81 +35,81 @@ const MONO='"JetBrains Mono","Fira Code","IBM Plex Mono",monospace'
 const TIP_DATA = {
   // ── Config rápida ──────────────────────────────────────────
   emaR: {
-    title: 'EMA Rápida',
-    text: 'Media exponencial de corto plazo. Un cruce alcista (EMA rápida > EMA lenta) genera el SETUP de entrada. En la V50 por defecto es EMA(10). Cuanto menor el periodo, más sensible y más señales falsas.'
+    title: 'EMA Rápida — Periodo',
+    text: 'Número de velas para calcular la media exponencial rápida. Cuanto menor el periodo, más sensible al precio y más señales genera. El cruce alcista de esta línea sobre la EMA lenta activa el SETUP de entrada en estrategias de cruce.'
   },
   emaL: {
-    title: 'EMA Lenta',
-    text: 'Media exponencial de largo plazo. Define la tendencia principal. En la V50 por defecto es EMA(11). El setup se dispara cuando EMA rápida cruza al alza esta línea. Debe ser siempre mayor que la EMA rápida.'
+    title: 'EMA Lenta — Periodo',
+    text: 'Número de velas para calcular la media exponencial lenta. Define la tendencia de fondo. El SETUP se activa cuando la EMA rápida cruza al alza sobre esta. Siempre debe tener un periodo mayor que la EMA rápida.'
   },
   capital: {
     title: 'Capital inicial (€)',
-    text: 'Capital de partida en euros. Se usa como base para calcular P&L simple (siempre sobre este valor fijo) y P&L compuesto (se reinvierte tras cada trade). No afecta al número de señales, solo a los importes en euros.'
+    text: 'Capital de partida en euros. Se usa como base para calcular el P&L Simple (siempre sobre este valor fijo) y el P&L Compuesto (se reinvierte tras cada trade). No afecta al número de señales ni al timing, solo a los importes monetarios.'
   },
   years: {
     title: 'Años de backtest',
-    text: 'Número de años hacia atrás desde la última fecha disponible en Stooq. El motor filtra los datos y solo ejecuta trades dentro de esta ventana. Más años = más trades = estadística más robusta, pero puede incluir regímenes de mercado distintos.'
+    text: 'Ventana temporal hacia atrás desde la última fecha disponible. El motor solo ejecuta trades dentro de este periodo. A mayor número de años, mayor muestra estadística; a menor número, más representativo del comportamiento reciente del activo.'
   },
   tipoStop: {
     title: 'Tipo de Stop Loss',
-    text: 'Técnico (EMA): stop fijo en min(EMA rápida, mínimo de la vela de setup) — nunca se mueve una vez colocado. ATR: stop dinámico = precio entrada − ATR(n) × multiplicador. Ninguno: sin stop, solo sale por señal de EMA.'
+    text: 'Técnico: stop fijo calculado en la vela de setup (por ejemplo, mínimo de esa vela o nivel de media). ATR: stop dinámico basado en la volatilidad reciente — distancia = ATR × multiplicador. Ninguno: la posición solo se cierra por la señal de salida, sin límite de pérdida fijo.'
   },
   atr: {
     title: 'Periodo ATR',
-    text: 'Número de velas para calcular el Average True Range (ATR). El ATR mide la volatilidad media real de cada vela. A mayor periodo, el ATR es más suave y el stop queda más lejos. En la V50 el stop ATR se calcula en el momento de la entrada, no antes.'
+    text: 'Número de velas para calcular el Average True Range. El ATR mide la volatilidad promedio real (rango máximo-mínimo incluyendo gaps). A mayor periodo, el ATR es más suave y el stop queda más alejado del precio de entrada.'
   },
   atrMult: {
     title: 'Multiplicador ATR',
-    text: 'Factor que amplía o reduce la distancia del stop ATR. Stop = Precio entrada − ATR(n) × multiplicador. Con 1.0 el stop queda a exactamente 1 ATR de distancia. Valores más altos dan más margen pero aumentan la pérdida máxima por trade.'
+    text: 'Factor de escala sobre el ATR para calcular la distancia del stop. Stop = precio de entrada − ATR(n) × multiplicador. Un valor alto da más margen al trade pero implica una pérdida máxima mayor por operación.'
   },
   sinPerdidas: {
-    title: 'Modo Sin Pérdidas',
-    text: 'Cuando el mínimo de la vela actual supera el precio de entrada, el stop de salida se activa solo si el precio cae por debajo del precio de entrada. Protege los trades ganadores de convertirse en perdedores. En Pine Script: low > precio_entrada_ejecutado → salida_sin_perdidas_activa = true.'
+    title: 'Sin Pérdidas (Breakeven)',
+    text: 'Cuando el mínimo de la vela actual supera el precio de entrada, la condición de salida solo se activa si el precio vuelve a caer por debajo del precio de entrada. Convierte un trade ganador en uno que, en el peor caso, cierra en tablas.'
   },
   reentry: {
-    title: 'Modo Re-Entry',
-    text: 'Tras una salida, si EMA rápida sigue por encima de EMA lenta, el motor busca una nueva entrada: espera la primera vela cuyo cierre supere la EMA rápida y hace breakout del máximo de esa vela (rolling). Permite capturar continuaciones de tendencia sin necesidad de un cruce alcista nuevo.'
+    title: 'Re-Entry (Reentrada)',
+    text: 'Tras una salida, si la tendencia de medias sigue siendo alcista, el motor busca una nueva entrada: espera la primera vela cuyo cierre supere la media rápida y hace breakout de su máximo. Permite capturar la continuación de la tendencia sin esperar un nuevo cruce de medias.'
   },
   filtroSP500: {
-    title: 'Filtro de mercado SP500',
-    text: '"Precio sobre EMA rápida": bloquea nuevas entradas si el precio del SP500 está por debajo de su EMA rápida. "EMA rápida sobre EMA lenta": bloquea si la EMA rápida del SP500 está por debajo de la lenta. En ambos casos, las entradas pendientes también se cancelan cuando el filtro se activa.'
+    title: 'Filtro de mercado (SP500)',
+    text: 'Bloquea nuevas entradas cuando el mercado de referencia no cumple la condición seleccionada. "Precio sobre EMA": bloquea si el índice está bajo su media rápida. "EMA rápida sobre EMA lenta": bloquea si las medias del índice son bajistas. Las entradas pendientes también se cancelan al activarse el filtro.'
   },
   sp500Emas: {
-    title: 'EMAs del SP500 (filtro)',
-    text: 'Periodos de las medias exponenciales aplicadas al SP500 para el filtro de mercado. Son independientes de las EMAs del activo principal. Por defecto EMA(10) y EMA(11), igual que la estrategia V50 original. Puedes usar periodos más lentos (ej. 50/200) para filtrar solo tendencias de largo plazo.'
+    title: 'Periodos de medias del filtro',
+    text: 'Medias exponenciales aplicadas al índice de referencia (SP500) para evaluar el filtro de mercado. Son independientes de las medias del activo principal. Periodos cortos (ej. 10/11) reaccionan rápido; periodos largos (ej. 50/200) filtran solo tendencias de largo plazo.'
   },
   // ── Constructor de estrategia ──────────────────────────────
   filter: {
     title: 'FILTER — Condición de mercado',
-    text: 'Define si el mercado global está en condición favorable para abrir posiciones. Si la condición NO se cumple, todas las entradas quedan bloqueadas y las pendientes se cancelan. Se evalúa barra a barra. Ejemplo: SP500 precio > EMA(10) → mercado alcista, permitir entradas.'
+    text: 'Define si el mercado está en condición favorable para abrir posiciones. Se evalúa barra a barra. Si la condición no se cumple, todas las entradas quedan bloqueadas y las pendientes se cancelan. Útil para evitar operar en mercados bajistas o de alta volatilidad.'
   },
   setup: {
     title: 'SETUP — Señal de alerta',
-    text: 'El evento técnico que activa el estado de "alerta de entrada". En la V50 es el cruce alcista EMA(10) > EMA(11): ta.crossover(ema_rapida, ema_lenta) en Pine Script. Cuando ocurre, el motor guarda el máximo de esa vela como nivel de breakout y activa la espera del TRIGGER.'
+    text: 'El evento técnico que activa el estado de espera de entrada. Cuando ocurre, el motor registra el precio de referencia (ej. máximo de la vela) como nivel de breakout y comienza a vigilar el TRIGGER. Sin SETUP activo, el TRIGGER no se evalúa.'
   },
   trigger: {
     title: 'TRIGGER — Ejecución de entrada',
-    text: 'Cómo se ejecuta la entrada real. En la V50: breakout del máximo de la vela de setup. Rolling: si en las siguientes velas no hay breakout y el nuevo máximo es menor, el nivel se actualiza al nuevo mínimo de máximos. La entrada se ejecuta cuando el precio intradía supera el nivel de breakout vigente.'
+    text: 'Define cómo se ejecuta la compra real. Breakout: la entrada ocurre cuando el precio supera el máximo de la vela de setup. Rolling: si las siguientes velas no producen breakout, el nivel se actualiza al nuevo mínimo de máximos consecutivos. Apertura: entra directamente en la siguiente apertura.'
   },
   abort: {
     title: 'ABORT — Cancelación de entrada pendiente',
-    text: 'Condiciones que cancelan la entrada mientras está pendiente (antes de ejecutarse). Cruce bajista: EMA rápida cruza por debajo de EMA lenta. Cierre bajo MA: el precio cierra por debajo de la EMA rápida. Cualquiera de los dos reinicia el estado y cancela el nivel de breakout.'
+    text: 'Condiciones que cancelan una entrada mientras está pendiente de ejecutarse. Al cumplirse cualquiera de las condiciones activadas, el motor descarta el setup actual y resetea el nivel de breakout. Evita entrar en una posición cuando el contexto técnico ha cambiado.'
   },
   stopLoss: {
     title: 'STOP LOSS — Límite de pérdida',
-    text: 'Nivel de precio que, si se toca, cierra la posición con pérdida. En la V50: min(EMA rápida, mínimo de la vela de setup) — se fija en el momento del setup y NO se actualiza durante el rolling. Con ATR: precio_entrada − ATR(n) × multiplicador, calculado en la vela de entrada.'
+    text: 'Nivel de precio fijo que, si el precio lo toca intradía, cierra la posición con pérdida controlada. Se fija en el momento del setup o de la entrada y no se recalcula. El stop técnico usa referencia de medias o mínimos de vela; el ATR usa la volatilidad reciente como base.'
   },
   exit: {
-    title: 'EXIT — Salida en profit',
-    text: 'Señal de salida normal (ganando o perdiendo según evolución). En la V50: primera vela cuyo cierre cruza por debajo de EMA rápida (ta.crossunder en Pine) → se coloca orden de breakout del mínimo de ESA vela. Si el precio rompe ese mínimo, se ejecuta la salida. Con Sin Pérdidas activo: solo ejecuta si el mínimo de la vela supera el precio de entrada.'
+    title: 'EXIT — Señal de salida',
+    text: 'Define cuándo y cómo se cierra una posición abierta. Breakout del mínimo: la salida se ejecuta cuando el precio rompe el mínimo de la primera vela que da la señal de salida. Apertura siguiente: sale directamente en la próxima apertura. El modo Sin Pérdidas puede condicionar la activación de esta señal.'
   },
   management: {
-    title: 'MANAGEMENT — Gestión de posición',
-    text: 'Sin Pérdidas: cuando el mínimo de la vela actual supera el precio de entrada, el motor activa la condición de salida sin pérdidas (equivalente a breakeven stop). Re-Entry: tras una salida, si EMA rápida > EMA lenta, busca re-entrar en el breakout del HIGH de la primera vela que cierre sobre EMA rápida.'
+    title: 'MANAGEMENT — Gestión de la posición',
+    text: 'Reglas adicionales activas mientras la posición está abierta. Sin Pérdidas: activa breakeven automático cuando el trade está en beneficio. Re-Entry: tras cerrar, si la tendencia de medias continúa, busca una nueva entrada inmediata sin esperar un cruce nuevo.'
   },
   sizing: {
     title: 'SIZING — Tamaño de posición',
-    text: 'Capital fijo: cada trade usa siempre el mismo importe en euros (ej. €10.000). El P&L simple acumula linealmente. El P&L compuesto reinvierte las ganancias: cada trade usa el capital resultante del anterior. El tamaño de posición NO afecta al número de señales ni al timing de entradas/salidas.'
+    text: 'Capital fijo: cada trade usa siempre el mismo importe en euros. El P&L Simple suma linealmente. El P&L Compuesto reinvierte las ganancias: cada operación usa el capital acumulado del trade anterior. El sizing no afecta a las señales, solo a los resultados monetarios.'
   },
 }
 
@@ -336,6 +335,7 @@ function SettingsModal({ onClose }) {
     { id:'alarmas',       label:'🔔 Alarmas' },
     { id:'grafico',       label:'📈 Gráfico' },
     { id:'ranking',       label:'🏆 Ranking' },
+    { id:'watchlist',     label:'📋 Watchlist' },
   ]
 
   const inp = (val, onChange, opts={}) => (
@@ -525,6 +525,48 @@ function SettingsModal({ onClose }) {
             </div>
           )}
         </div>
+
+          {/* ── WATCHLIST ── */}
+          {tab==='watchlist'&&(
+            <div>
+              {sep('Filtros visibles en la Watchlist')}
+              <div style={{fontSize:10,color:'#5a7a95',lineHeight:1.6,marginBottom:14}}>
+                Elige qué filtros aparecen en la barra de la Watchlist. Los que desactives quedan ocultos
+                pero siguen funcionando si los activas programáticamente.
+              </div>
+              {[
+                ['watchlist.showFilterLista',    'Filtro por Lista',           true,  'Desplegable para filtrar por nombre de lista (General, Acciones, Índices…)'],
+                ['watchlist.showFilterSearch',   'Buscador',                   true,  'Caja de búsqueda de símbolo o nombre de activo'],
+                ['watchlist.showFilterFavorites','Solo Favoritos',             true,  'Toggle ★ para mostrar únicamente favoritos'],
+                ['watchlist.showFilterAlarms',   'Filtro por Alarma activa',   true,  'Desplegable para filtrar activos que tienen una alarma específica activa'],
+              ].map(([key,label,def,hint])=>(
+                <div key={key} style={{marginBottom:12}}>
+                  <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}>
+                    <input type="checkbox"
+                      checked={settings[key.split('.')[0]]?.[key.split('.')[1]]??def}
+                      onChange={e=>upd(key,e.target.checked)}
+                      style={{accentColor:'#00d4ff',width:13,height:13}}/>
+                    <span style={{fontFamily:MONO,fontSize:11,color:'#cce0f5',fontWeight:600}}>{label}</span>
+                  </label>
+                  <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',lineHeight:1.5,marginLeft:21,marginTop:2}}>{hint}</div>
+                </div>
+              ))}
+              {sep('Apariencia')}
+              {[
+                ['watchlist.showRankBadge',  'Mostrar badge de ranking (🥇#2…)', true],
+                ['watchlist.showAlarmDots',  'Mostrar puntos de alarma en cada activo', true],
+                ['watchlist.showListBadge',  'Mostrar etiqueta de lista en cada activo', true],
+              ].map(([key,label,def])=>(
+                <label key={key} style={{display:'flex',alignItems:'center',gap:8,marginBottom:8,cursor:'pointer'}}>
+                  <input type="checkbox"
+                    checked={settings[key.split('.')[0]]?.[key.split('.')[1]]??def}
+                    onChange={e=>upd(key,e.target.checked)}
+                    style={{accentColor:'#00d4ff',width:13,height:13}}/>
+                  <span style={{fontSize:11,color:'#cce0f5'}}>{label}</span>
+                </label>
+              ))}
+            </div>
+          )}
 
           {/* ── RANKING ── */}
           {tab==='ranking'&&(
@@ -953,6 +995,7 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
           const lastBar = data[data.length-1]
           if(lastBar){
             const to = new Date(lastBar.date)
+            to.setDate(to.getDate()+6) // +6 calendar ≈ 4 trading days right margin
             const from = new Date(lastBar.date)
             from.setMonth(from.getMonth()-3)
             chart.timeScale().setVisibleRange({
@@ -990,7 +1033,7 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
           try{
             const pad=Math.max(5,Math.round((new Date(exitDate)-new Date(entryDate))/86400000*0.3))
             const d1=new Date(entryDate); d1.setDate(d1.getDate()-pad)
-            const d2=new Date(exitDate); d2.setDate(d2.getDate()+pad)
+            const d2=new Date(exitDate); d2.setDate(d2.getDate()+pad+6) // right margin
             chart.timeScale().setVisibleRange({from:d1.toISOString().split('T')[0],to:d2.toISOString().split('T')[0]})
           }catch(_){}
         },
@@ -2287,11 +2330,13 @@ export default function Home() {
   },[alarms,watchlist.length]) // eslint-disable-line
 
   // ── Ranking: ejecuta backtest en paralelo sobre toda la watchlist ──
-  const calcRanking = useCallback(async () => {
+  const calcRanking = useCallback(async (rankSymbols=null) => {
     const cfg = { emaR:Number(emaR), emaL:Number(emaL), years:Number(years),
       capitalIni:Number(capitalIni), tipoStop, atrPeriod:Number(atrP), atrMult:Number(atrM),
       sinPerdidas, reentry, tipoFiltro, sp500EmaR:Number(sp500EmaR), sp500EmaL:Number(sp500EmaL) }
-    const syms = watchlist.map(w=>w.symbol)
+    // Use the currently visible/filtered watchlist items
+    // (passed as argument, falls back to full watchlist)
+    const syms = (rankSymbols || watchlist).map(w=>w.symbol)
     setRankingRunning(true); setRankingError(null)
     setRankingProgress({done:0, total:syms.length})
 
@@ -2441,6 +2486,17 @@ export default function Home() {
 
   const metrics=result?calcMetrics(result.trades,Number(capitalIni),result.capitalReinv,result.gananciaSimple,result.ganBH||0,result.startDate,result.meta?.ultimaFecha,Number(years)):null
   const sp5=result?.sp500Status
+  // Watchlist display settings (read from localStorage, live)
+  const wlSettings = (() => {
+    try { return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.watchlist||{} } catch(_){ return {} }
+  })()
+  const wlShowSearch    = wlSettings.showFilterSearch    !== false
+  const wlShowLista     = wlSettings.showFilterLista     !== false
+  const wlShowFavs      = wlSettings.showFilterFavorites !== false
+  const wlShowAlarmFlt  = wlSettings.showFilterAlarms    !== false
+  const wlShowRankBadge = wlSettings.showRankBadge       !== false
+  const wlShowAlarmDots = wlSettings.showAlarmDots       !== false
+  const wlShowListBadge = wlSettings.showListBadge       !== false
   let spStatus='neutral',spTxt='SIN FILTRO'
   if(sp5&&tipoFiltro!=='none'){const blq=tipoFiltro==='precio_ema'?sp5.precio<sp5.emaR:sp5.emaR<sp5.emaL;spStatus=blq?'bad':'ok';spTxt=blq?'⚠ EVITAR ENTRADAS':'✓ APTO PARA OPERAR'}
 
@@ -2814,13 +2870,13 @@ export default function Home() {
                 {/* ══ Fila 1: búsqueda + lista + favoritos + acciones ══ */}
                 <div style={{padding:'5px 8px 3px',borderBottom:'none',flexShrink:0,display:'flex',gap:4,alignItems:'center'}}>
                   {/* Buscador compacto */}
-                  <div style={{position:'relative',flex:'0 0 90px'}}>
+                  {wlShowSearch&&<div style={{position:'relative',flex:'0 0 90px'}}>
                     <input type="text" placeholder="🔍" value={wlSearch} onChange={e=>setWlSearch(e.target.value)}
                       style={{width:'100%',background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'4px 20px 4px 7px',borderRadius:4,boxSizing:'border-box'}}/>
                     {wlSearch&&<span onClick={()=>setWlSearch('')} style={{position:'absolute',right:5,top:'50%',transform:'translateY(-50%)',cursor:'pointer',color:'#a8ccdf',fontSize:11}}>✕</span>}
-                  </div>
+                  </div>}
                   {/* Selector de lista */}
-                  <div style={{position:'relative',flex:1,minWidth:0}}>
+                  {wlShowLista&&<div style={{position:'relative',flex:1,minWidth:0}}>
                     <button onClick={()=>{setListDropOpen(o=>!o);setAlarmDropOpen(false)}} style={{width:'100%',background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'4px 6px',borderRadius:3,cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'center',overflow:'hidden'}}>
                       <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{selectedLists.length===0?'Lista: Todas':selectedLists[0]}</span>
                       <span style={{flexShrink:0,marginLeft:2}}>{listDropOpen?'▲':'▼'}</span>
@@ -2841,17 +2897,17 @@ export default function Home() {
                         </div>
                       )
                     })()}
-                  </div>
+                  </div>}
                   {/* Filtro favoritos */}
-                  <button onClick={()=>setOnlyFavs(f=>!f)} title={onlyFavs?'Mostrando solo favoritos':'Filtrar solo favoritos'}
+                  {wlShowFavs&&<button onClick={()=>setOnlyFavs(f=>!f)} title={onlyFavs?'Mostrando solo favoritos':'Filtrar solo favoritos'}
                     style={{background:onlyFavs?'rgba(255,209,102,0.15)':'transparent',border:`1px solid ${onlyFavs?'#ffd166':'var(--border)'}`,color:onlyFavs?'#ffd166':'var(--text3)',fontFamily:MONO,fontSize:12,padding:'3px 6px',borderRadius:4,cursor:'pointer',flexShrink:0}}>
                     ★
-                  </button>
+                  </button>}
 
                   <button onClick={()=>{setWlSearch('');setSelectedLists([]);setOnlyFavs(false);setSelectedAlarmIds([])}} title="Limpiar todos los filtros" style={{background:'rgba(255,77,109,0.08)',border:'1px solid #ff4d6d',color:'#ff4d6d',fontFamily:MONO,fontSize:11,padding:'3px 7px',borderRadius:3,cursor:'pointer',flexShrink:0}}>✕</button>
                 </div>
                 {/* ══ Fila 2: filtro alarmas (chips inline, ancho completo) ══ */}
-                {alarms.length>0&&(
+                {wlShowAlarmFlt&&alarms.length>0&&(
                   <div style={{padding:'4px 8px 5px',borderBottom:'1px solid var(--border)',flexShrink:0,display:'flex',gap:4,alignItems:'center',flexWrap:'wrap'}}>
                     <span style={{fontFamily:MONO,fontSize:11,color:'#a8ccdf',flexShrink:0,marginRight:2}}>🔔</span>
                     {alarms.map((a,ai)=>{
@@ -2899,15 +2955,16 @@ export default function Home() {
                       const matchAlarm=selectedAlarmIds.length===0||selectedAlarmIds.every(id=>symAlarms[id]?.active===true)
                       return matchList&&matchSearch&&matchFav&&matchAlarm
                     })
-                    const favs=filtered.filter(w=>w.favorite)
-                    const rest=filtered.filter(w=>!w.favorite).sort((a,b)=>{
+                    // Sort: 1st by ranking, 2nd by favorite, 3rd alphabetical
+                    const all=[...filtered].sort((a,b)=>{
                       const ra=rankingData[a.symbol]?.rank, rb=rankingData[b.symbol]?.rank
                       if(ra!=null&&rb!=null) return ra-rb
                       if(ra!=null) return -1
                       if(rb!=null) return 1
+                      if(a.favorite&&!b.favorite) return -1
+                      if(!a.favorite&&b.favorite) return 1
                       return a.name.localeCompare(b.name)
                     })
-                    const all=[...favs,...rest]
                     const totalWl=watchlist.length
                     if(!all.length) return <div style={{padding:'12px',fontFamily:MONO,fontSize:11,color:'#8aadcc'}}>Sin activos para los filtros activos</div>
                     // Count badge + ranking button above list
@@ -2918,7 +2975,7 @@ export default function Home() {
                         <span style={{color:'#8abcd4'}}>activos</span>
                         {rankingRunning&&<span style={{color:'#ffd166',fontSize:10}}>⟳ {rankingProgress.done}/{rankingProgress.total}</span>}
                         {hasRanking&&!rankingRunning&&<span style={{color:'#00e5a0',fontSize:9}}>🏆 Ordenado por ranking</span>}
-                        <button onClick={calcRanking} disabled={rankingRunning} title="Calcular ranking de activos con la estrategia activa"
+                        <button onClick={()=>calcRanking(filtered)} disabled={rankingRunning} title="Calcular ranking de activos con la estrategia activa"
                           style={{marginLeft:'auto',background:rankingRunning?'rgba(13,21,32,0.5)':'rgba(255,209,102,0.1)',border:`1px solid ${rankingRunning?'#1a2d45':'rgba(255,209,102,0.4)'}`,color:rankingRunning?'#3d5a7a':'#ffd166',fontFamily:MONO,fontSize:9,padding:'2px 6px',borderRadius:3,cursor:rankingRunning?'not-allowed':'pointer',letterSpacing:'0.05em'}}>
                           {rankingRunning?'calculando…':'🏆 Ranking'}
                         </button>
@@ -2932,7 +2989,7 @@ export default function Home() {
                         onMouseOver={e=>e.currentTarget.style.background='rgba(255,255,255,0.03)'}
                         onMouseOut={e=>e.currentTarget.style.background=simbolo===w.symbol?'rgba(0,212,255,0.07)':'transparent'}>
                         {/* Ranking badge */}
-                        {(()=>{
+                        {wlShowRankBadge&&(()=>{
                           const rd=rankingData[w.symbol]
                           if(!rd) return <span style={{width:16,flexShrink:0}}/>
                           const r=rd.rank
@@ -2943,7 +3000,7 @@ export default function Home() {
                               {r<=3?['🥇','🥈','🥉'][r-1]:`#${r}`}
                             </span>
                           )
-                        })()}
+                        })()} 
                         {/* Estrella favorito */}
                         <span onClick={async(e)=>{e.stopPropagation();await upsertWatchlistItem({...w,favorite:!w.favorite});reloadWatchlist()}}
                           style={{cursor:'pointer',fontSize:12,color:w.favorite?'#ffd166':'var(--text3)',flexShrink:0}} title="Favorito">
@@ -2955,7 +3012,7 @@ export default function Home() {
                           <div style={{fontFamily:MONO,fontSize:11,color:'#8aadcc',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{w.name}</div>
                         </div>
                         {/* Badges alarmas — círculos de color con velas */}
-                        {(()=>{
+                        {wlShowAlarmDots&&(()=>{
                           const symAlarms=alarmStatus[w.symbol]
                           if(!symAlarms) return null
                           const ALARM_COLORS=['#00e5a0','#ffd166','#00d4ff','#ff7eb3','#9b72ff','#ff4d6d']
@@ -2984,7 +3041,7 @@ export default function Home() {
                           })
                         })()}
                         {/* Lista badge */}
-                        <span style={{fontFamily:MONO,fontSize:8,color:'#7fb8d8',background:'var(--bg2)',padding:'1px 4px',borderRadius:2,flexShrink:0}}>{w.list_name||'General'}</span>
+                        {wlShowListBadge&&<span style={{fontFamily:MONO,fontSize:8,color:'#7fb8d8',background:'var(--bg2)',padding:'1px 4px',borderRadius:2,flexShrink:0}}>{w.list_name||'General'}</span>}
                         {/* Editar */}
                         <span onClick={e=>{e.stopPropagation();openEditItem(w)}} style={{cursor:'pointer',color:'#a8ccdf',fontSize:11,padding:'0 2px',flexShrink:0}} title="Editar">✎</span>
                       </div>
@@ -3224,6 +3281,24 @@ export default function Home() {
                       <div className="chart-price">{fmt(result.meta?.ultimoPrecio,2)}</div>
                       <div className="chart-date">{fmtDate(result.meta?.ultimaFecha)}</div>
                       <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:6}}>
+                        {/* Estrategia activa */}
+                        {stratName&&(
+                          <div style={{
+                            fontFamily:MONO,fontSize:10,color:'#7a9bc0',
+                            background:'rgba(13,21,32,0.85)',border:'1px solid #1a2d45',
+                            borderRadius:4,padding:'2px 8px',display:'flex',alignItems:'center',gap:5,
+                            maxWidth:180,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'
+                          }}>
+                            <span style={{
+                              width:7,height:7,borderRadius:'50%',flexShrink:0,
+                              background:stratColor||'#00d4ff',
+                              boxShadow:`0 0 5px ${stratColor||'#00d4ff'}88`
+                            }}/>
+                            <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:'#a8ccdf'}}>
+                              {stratName}
+                            </span>
+                          </div>
+                        )}
                         {rulerOn&&<span style={{fontFamily:MONO,fontSize:10,color:'#ffd166'}}>📏 Regla ON · Ctrl=imán · dbl-clic=borrar</span>}
                         {/* Botón Fit All */}
                         <button onClick={()=>chartApiRef.current?.fitAll()}
