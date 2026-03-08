@@ -2588,8 +2588,8 @@ export default function Home() {
 
   const metrics=result?calcMetrics(result.trades,Number(capitalIni),result.capitalReinv,result.gananciaSimple,result.ganBH||0,result.startDate,result.meta?.ultimaFecha,Number(years)):null
   // Apply tema settings to CSS vars
-  const [temaKey, setTemaKey] = React.useState(0)
-  React.useEffect(()=>{
+  const [temaKey, setTemaKey] = useState(0)
+  useEffect(()=>{
     try{
       const t = JSON.parse(localStorage.getItem('v50_settings')||'{}')?.tema||{}
       const root = document.documentElement.style
