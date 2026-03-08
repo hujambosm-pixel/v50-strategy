@@ -510,17 +510,26 @@ function SettingsModal({ onClose }) {
                 ))}
               </div>
 
-              {sep('Espacio derecho del gráfico')}
+              {sep('Vista reciente (botón ⊞ Todo)')}
               <div style={{marginBottom:16}}>
                 <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
-                  <span style={{fontFamily:MONO,fontSize:10,color:'#cce0f5',flex:1}}>Velas de separación (borde derecho)</span>
-                  <span style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:'#00d4ff',minWidth:28,textAlign:'right'}}>{settings.chart?.rightMargin??8}</span>
-                  <input type="range" min={0} max={30} value={settings.chart?.rightMargin??8}
+                  <span style={{fontFamily:MONO,fontSize:10,color:'#cce0f5',flex:1}}>Días al futuro al ver vista reciente</span>
+                  <span style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:'#00d4ff',minWidth:28,textAlign:'right'}}>{settings.chart?.rightMargin??5}d</span>
+                  <input type="range" min={0} max={30} value={settings.chart?.rightMargin??5}
                     onChange={e=>upd('chart.rightMargin',Number(e.target.value))}
                     style={{width:100,accentColor:'#00d4ff'}}/>
                 </div>
+                <div style={{marginBottom:10}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8}}>
+                    <span style={{fontFamily:MONO,fontSize:10,color:'#cce0f5',flex:1}}>Meses de historia (vista reciente)</span>
+                    <span style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:'#00d4ff',minWidth:28,textAlign:'right'}}>{settings.chart?.recentMonths??3}m</span>
+                    <input type="range" min={1} max={24} value={settings.chart?.recentMonths??3}
+                      onChange={e=>upd('chart.recentMonths',Number(e.target.value))}
+                      style={{width:100,accentColor:'#00d4ff'}}/>
+                  </div>
+                </div>
                 <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',lineHeight:1.5}}>
-                  Espacio vacío a la derecha de la última vela. Por defecto 8 velas.
+                  El botón ⊞ alterna entre ver todo el periodo y la vista reciente (últimos N meses + M días al futuro).
                 </div>
               </div>
               {sep('Visualización')}
@@ -596,56 +605,90 @@ function SettingsModal({ onClose }) {
           )}
 
           {/* ── TEMA ── */}
-          {tab==='tema'&&(
-            <div>
-              {sep('Tipografía global')}
-              <div style={{marginBottom:12}}>
-                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
-                  <span style={{fontFamily:MONO,fontSize:10,color:'#cce0f5',flex:1}}>Tamaño base de fuente</span>
-                  <span style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:'#00d4ff',minWidth:32,textAlign:'right'}}>{settings.tema?.fontSize??13}px</span>
-                  <input type="range" min={10} max={16} value={settings.tema?.fontSize??13}
-                    onChange={e=>upd('tema.fontSize',Number(e.target.value))}
-                    style={{width:90,accentColor:'#00d4ff'}}/>
+          {tab==='tema'&&(()=>{
+            const SECCIONES=[
+              {id:'global', label:'Toda la app'},
+              {id:'sidebar', label:'Sidebar / Config'},
+              {id:'header', label:'Encabezado'},
+              {id:'chart', label:'Encabezado gráfico'},
+              {id:'trades', label:'Historial trades'},
+              {id:'metrics', label:'Métricas / Resumen'},
+            ]
+            const temaSeccion=settings.tema?.seccion||'global'
+            const skFont=`tema.fonts.${temaSeccion}`
+            const getFontCfg=(s)=>settings.tema?.fonts?.[s]||{}
+            const fc=getFontCfg(temaSeccion)
+            const fontMap={jetbrains:'"JetBrains Mono","Fira Code",monospace',ibmplex:'"IBM Plex Mono",monospace',firacode:'"Fira Code","JetBrains Mono",monospace',system:'system-ui,sans-serif'}
+            const PREVIEW_TEXT='AAPL  +12.34%  €10.234'
+            const previewFont=fontMap[fc.family||'jetbrains']
+            return(
+              <div>
+                {sep('Sección a configurar')}
+                <div style={{display:'flex',flexWrap:'wrap',gap:4,marginBottom:14}}>
+                  {SECCIONES.map(s=>(
+                    <button key={s.id} onClick={()=>upd('tema.seccion',s.id)}
+                      style={{fontFamily:MONO,fontSize:10,padding:'4px 8px',borderRadius:4,cursor:'pointer',
+                        border:`1px solid ${temaSeccion===s.id?'var(--accent)':'#2a3f55'}`,
+                        background:temaSeccion===s.id?'rgba(0,212,255,0.1)':'transparent',
+                        color:temaSeccion===s.id?'var(--accent)':'#7a9bc0'}}>
+                      {s.label}
+                    </button>
+                  ))}
                 </div>
-              </div>
-              <div style={{marginBottom:14}}>
-                <span style={{fontFamily:MONO,fontSize:10,color:'#cce0f5'}}>Familia tipográfica</span>
-                <select value={settings.tema?.fontFamily||'jetbrains'} onChange={e=>upd('tema.fontFamily',e.target.value)}
-                  style={{display:'block',marginTop:6,width:'100%',background:'#080c14',border:'1px solid #1a2d45',
-                    borderRadius:4,color:'#e2eaf5',fontFamily:MONO,fontSize:12,padding:'6px 10px'}}>
-                  <option value="jetbrains">JetBrains Mono (por defecto)</option>
-                  <option value="ibmplex">IBM Plex Mono</option>
-                  <option value="firacode">Fira Code</option>
-                  <option value="system">Fuente del sistema (sans-serif)</option>
-                </select>
-              </div>
-              {sep('Colores de la interfaz')}
-              {[
-                ['tema.colorBg',     'Fondo principal',   '#080c14'],
-                ['tema.colorBg2',    'Fondo secundario',  '#0a101a'],
-                ['tema.colorBg3',    'Fondo terciario',   '#0d1520'],
-                ['tema.colorText',   'Texto principal',   '#eef5ff'],
-                ['tema.colorText2',  'Texto secundario',  '#cce0f8'],
-                ['tema.colorText3',  'Texto apagado',     '#9acce8'],
-                ['tema.colorBorder', 'Bordes',            '#1a2d45'],
-                ['tema.colorAccent', 'Acento (azul)',     '#00d4ff'],
-                ['tema.colorGreen',  'Verde (ganancia)',  '#00e5a0'],
-                ['tema.colorRed',    'Rojo (pérdida)',    '#ff4d6d'],
-              ].map(([key,label,def])=>(
-                <div key={key} style={{display:'flex',alignItems:'center',gap:10,marginBottom:8}}>
-                  <input type="color" value={settings[key.split('.')[0]]?.[key.split('.')[1]]||def}
-                    onChange={e=>upd(key,e.target.value)}
-                    style={{width:28,height:28,borderRadius:4,border:'1px solid #1a2d45',cursor:'pointer',padding:1}}/>
-                  <span style={{fontFamily:MONO,fontSize:11,color:'#cce0f5',flex:1}}>{label}</span>
-                  <span style={{fontFamily:MONO,fontSize:10,color:'#4a6a80'}}>{settings[key.split('.')[0]]?.[key.split('.')[1]]||def}</span>
+
+                {sep(`Tipografía — ${SECCIONES.find(s=>s.id===temaSeccion)?.label||'Global'}`)}
+
+                <div style={{marginBottom:10}}>
+                  <span style={{fontFamily:MONO,fontSize:10,color:'#cce0f5'}}>Familia tipográfica</span>
+                  <select value={fc.family||'jetbrains'} onChange={e=>upd(`${skFont}.family`,e.target.value)}
+                    style={{display:'block',marginTop:5,width:'100%',background:'#080c14',border:'1px solid #1a2d45',
+                      borderRadius:4,color:'#e2eaf5',fontFamily:MONO,fontSize:12,padding:'6px 10px'}}>
+                    <option value="jetbrains">JetBrains Mono</option>
+                    <option value="ibmplex">IBM Plex Mono</option>
+                    <option value="firacode">Fira Code</option>
+                    <option value="system">Sistema (sans-serif)</option>
+                  </select>
                 </div>
-              ))}
-              <button onClick={()=>upd('tema',null)} style={{marginTop:8,width:'100%',fontFamily:MONO,fontSize:10,
-                padding:'5px',borderRadius:4,border:'1px solid #ff4d6d',background:'transparent',color:'#ff4d6d',cursor:'pointer'}}>
-                Restaurar tema por defecto
-              </button>
-            </div>
-          )}
+
+                <div style={{marginBottom:10}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
+                    <span style={{fontFamily:MONO,fontSize:10,color:'#cce0f5',flex:1}}>Tamaño de fuente</span>
+                    <span style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:'#00d4ff',minWidth:32,textAlign:'right'}}>{fc.size??13}px</span>
+                    <input type="range" min={9} max={18} value={fc.size??13}
+                      onChange={e=>upd(`${skFont}.size`,Number(e.target.value))}
+                      style={{width:90,accentColor:'#00d4ff'}}/>
+                  </div>
+                </div>
+
+                <div style={{marginBottom:14}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
+                    <span style={{fontFamily:MONO,fontSize:10,color:'#cce0f5',flex:1}}>Color del texto</span>
+                    <input type="color" value={fc.color||'#eef5ff'}
+                      onChange={e=>upd(`${skFont}.color`,e.target.value)}
+                      style={{width:28,height:28,borderRadius:4,border:'1px solid #1a2d45',cursor:'pointer',padding:1}}/>
+                    <span style={{fontFamily:MONO,fontSize:10,color:'#4a6a80'}}>{fc.color||'#eef5ff'}</span>
+                  </div>
+                </div>
+
+                {/* Preview */}
+                <div style={{background:'#0a101a',border:'1px solid #1a2d45',borderRadius:6,padding:'10px 12px',marginBottom:14}}>
+                  <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',marginBottom:5,letterSpacing:'0.1em'}}>VISTA PREVIA</div>
+                  <span style={{fontFamily:previewFont,fontSize:fc.size??13,color:fc.color||'#eef5ff'}}>
+                    {PREVIEW_TEXT}
+                  </span>
+                </div>
+
+                <button onClick={()=>{
+                  const t={...(settings.tema||{})}
+                  if(t.fonts) delete t.fonts[temaSeccion]
+                  upd('tema',t)
+                }} style={{marginTop:4,width:'100%',fontFamily:MONO,fontSize:10,
+                  padding:'5px',borderRadius:4,border:'1px solid #ff4d6d',background:'transparent',color:'#ff4d6d',cursor:'pointer'}}>
+                  Restaurar sección por defecto
+                </button>
+              </div>
+            )
+          })()}
 
           {/* ── RANKING ── */}
           {tab==='ranking'&&(
@@ -1134,7 +1177,18 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
             chart.timeScale().setVisibleRange({from:d1.toISOString().split('T')[0],to:d2.toISOString().split('T')[0]})
           }catch(_){}
         },
-        fitAll:()=>{ try{ chart.timeScale().fitContent() }catch(_){} }
+        fitAll:()=>{ try{ chart.timeScale().fitContent() }catch(_){} },
+        showRecent:(months,futureDays)=>{
+          try{
+            const lastBar=data[data.length-1]
+            if(!lastBar) return
+            const to=new Date(lastBar.date)
+            to.setDate(to.getDate()+(futureDays||5))
+            const from=new Date(lastBar.date)
+            from.setMonth(from.getMonth()-(months||3))
+            chart.timeScale().setVisibleRange({from:from.toISOString().split('T')[0],to:to.toISOString().split('T')[0]})
+          }catch(_){}
+        }
       })
 
       const ro=new ResizeObserver(()=>{
@@ -2095,6 +2149,7 @@ export default function Home() {
   const [tipoFiltro,setTipoFiltro]=useState('none'),[sp500EmaR,setSp500EmaR]=useState(10),[sp500EmaL,setSp500EmaL]=useState(11)
   const [result,setResult]=useState(null),[loading,setLoading]=useState(false),[error,setError]=useState(null)
   const [labelMode,setLabelMode]=useState(0),[rulerOn,setRulerOn]=useState(false)
+  const [chartViewFull,setChartViewFull]=useState(false)
   const [settingsOpen,setSettingsOpen]=useState(false)
   const [sidePanel,setSidePanel]=useState('config')
   const [metricsLayout,setMetricsLayout]=useState('panel')
@@ -2587,25 +2642,35 @@ export default function Home() {
   },[mcSelected,mcCapital,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL])
 
   const metrics=result?calcMetrics(result.trades,Number(capitalIni),result.capitalReinv,result.gananciaSimple,result.ganBH||0,result.startDate,result.meta?.ultimaFecha,Number(years)):null
-  // Apply tema settings to CSS vars
+  // Apply tema font settings per section via <style> injection
   const [temaKey, setTemaKey] = useState(0)
   useEffect(()=>{
     try{
       const t = JSON.parse(localStorage.getItem('v50_settings')||'{}')?.tema||{}
-      const root = document.documentElement.style
-      if(t.colorBg)    root.setProperty('--bg',    t.colorBg)
-      if(t.colorBg2)   root.setProperty('--bg2',   t.colorBg2)
-      if(t.colorBg3)   root.setProperty('--bg3',   t.colorBg3)
-      if(t.colorText)  root.setProperty('--text',  t.colorText)
-      if(t.colorText2) root.setProperty('--text2', t.colorText2)
-      if(t.colorText3) root.setProperty('--text3', t.colorText3)
-      if(t.colorBorder)root.setProperty('--border',t.colorBorder)
-      if(t.colorAccent)root.setProperty('--accent',t.colorAccent)
-      if(t.colorGreen) root.setProperty('--green', t.colorGreen)
-      if(t.colorRed)   root.setProperty('--red',   t.colorRed)
-      if(t.fontSize)   root.setProperty('--font-size', t.fontSize+'px')
+      const fonts = t.fonts||{}
       const fontMap={jetbrains:'"JetBrains Mono","Fira Code",monospace',ibmplex:'"IBM Plex Mono",monospace',firacode:'"Fira Code","JetBrains Mono",monospace',system:'system-ui,sans-serif'}
-      if(t.fontFamily) root.setProperty('--font-family', fontMap[t.fontFamily]||fontMap.jetbrains)
+      const selectorMap={
+        global:'body,*',
+        sidebar:'.sidebar,.sidebar-section,aside',
+        header:'.header,.header *',
+        chart:'.chart-wrap .chart-header,.chart-wrap .chart-header *',
+        trades:'.trades-section,.trades-section *',
+        metrics:'.metrics-section,.metrics-section *,div[style*="275px"] *',
+      }
+      let css=''
+      for(const [sec,sel] of Object.entries(selectorMap)){
+        const fc=fonts[sec]
+        if(!fc) continue
+        const parts=[]
+        if(fc.family) parts.push(`font-family:${fontMap[fc.family]||fontMap.jetbrains} !important`)
+        if(fc.size)   parts.push(`font-size:${fc.size}px !important`)
+        if(fc.color)  parts.push(`color:${fc.color} !important`)
+        if(parts.length) css+=`${sel}{${parts.join(';')}}
+`
+      }
+      let el=document.getElementById('v50-tema-style')
+      if(!el){el=document.createElement('style');el.id='v50-tema-style';document.head.appendChild(el)}
+      el.textContent=css
     }catch(_){}
   },[temaKey])
 
@@ -2781,7 +2846,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V3.1</title>
+        <title>Trading Simulator V3.2</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2843,7 +2908,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V3.1
+            <span className="dot"/>Trading Simulator V3.2
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -3356,32 +3421,47 @@ export default function Home() {
                 {/* Modo de asignación */}
                 <div style={{padding:'10px 12px',borderBottom:'1px solid var(--border)'}}>
                   <div style={{fontFamily:MONO,fontSize:12,color:'#c8dff5',marginBottom:6,letterSpacing:'0.05em',fontWeight:600}}>MODO DE ASIGNACIÓN</div>
-                  {[
-                    {id:'slots',label:'Slots iguales',
-                      desc:'El capital total se divide en N partes iguales, una por activo seleccionado. Cada slot opera de forma independiente con su fracción fija. Si seleccionas 4 activos con €10.000, cada uno opera con €2.500 en paralelo.',
-                      ready:true},
-                    {id:'rotativo',label:'Capital rotativo',
-                      desc:'Un único pool de capital se asigna a los activos según van generando señales de entrada. Al cerrar una posición, el capital liberado vuelve al pool y está disponible para la siguiente señal. Prioriza por ranking si hay varias señales simultáneas.',
-                      ready:false},
-                    {id:'custom',label:'Pesos personalizados',
-                      desc:'Asigna manualmente un porcentaje del capital a cada activo. La suma total debe ser 100%. Permite sobreponderar activos de mayor convicción.',
-                      ready:false},
-                  ].map(m=>(
-                    <div key={m.id} onClick={()=>m.ready&&setMcMode(m.id)}
-                      style={{display:'flex',alignItems:'flex-start',gap:8,padding:'6px 8px',borderRadius:4,marginBottom:3,
-                        background:mcMode===m.id?'rgba(0,212,255,0.08)':'transparent',
-                        border:`1px solid ${mcMode===m.id?'var(--accent)':'var(--border)'}`,
-                        cursor:m.ready?'pointer':'not-allowed',opacity:m.ready?1:0.45}}>
-                      <div style={{width:14,height:14,borderRadius:'50%',border:`2px solid ${mcMode===m.id?'var(--accent)':'#3d5a7a'}`,
-                        background:mcMode===m.id?'var(--accent)':'transparent',flexShrink:0,marginTop:1}}/>
-                      <div>
-                        <div style={{fontFamily:MONO,fontSize:12,color:mcMode===m.id?'var(--accent)':'#c8dff5',fontWeight:600}}>
-                          {m.label}{!m.ready&&<span style={{fontSize:8,color:'#ffd166',marginLeft:5,verticalAlign:'middle'}}>⏳</span>}
+                  {(()=>{
+                    const [modeTooltip,setModeTooltip]=React.useState(null)
+                    return [
+                      {id:'slots',label:'Slots iguales',ready:true,
+                        desc:'El capital se divide en N partes iguales, una por activo. Cada slot opera de forma independiente con su fracción fija. Ejemplo: 4 activos con €10.000 → cada uno opera con €2.500 en paralelo, sin interferir entre sí.'},
+                      {id:'rotativo',label:'Capital rotativo',ready:false,
+                        desc:'Un único pool de capital se asigna a los activos según van generando señales. Al cerrar una posición, el capital liberado vuelve al pool para la siguiente señal. Si hay señales simultáneas, se prioriza por ranking.'},
+                      {id:'custom',label:'Pesos personalizados',ready:false,
+                        desc:'Define manualmente qué porcentaje del capital va a cada activo. La suma debe ser 100%. Ideal para sobreponderar activos de mayor convicción.'},
+                    ].map(m=>(
+                      <div key={m.id} style={{position:'relative',marginBottom:3}}>
+                        <div onClick={()=>m.ready&&setMcMode(m.id)}
+                          style={{display:'flex',alignItems:'center',gap:8,padding:'6px 8px',borderRadius:4,
+                            background:mcMode===m.id?'rgba(0,212,255,0.08)':'transparent',
+                            border:`1px solid ${mcMode===m.id?'var(--accent)':'var(--border)'}`,
+                            cursor:m.ready?'pointer':'not-allowed',opacity:m.ready?1:0.45}}>
+                          <div style={{width:14,height:14,borderRadius:'50%',border:`2px solid ${mcMode===m.id?'var(--accent)':'#3d5a7a'}`,
+                            background:mcMode===m.id?'var(--accent)':'transparent',flexShrink:0}}/>
+                          <span style={{fontFamily:MONO,fontSize:12,color:mcMode===m.id?'var(--accent)':'#c8dff5',fontWeight:600,flex:1}}>
+                            {m.label}{!m.ready&&<span style={{fontSize:8,color:'#ffd166',marginLeft:5,verticalAlign:'middle'}}>⏳</span>}
+                          </span>
+                          <span
+                            onMouseEnter={()=>setModeTooltip(m.id)}
+                            onMouseLeave={()=>setModeTooltip(null)}
+                            onClick={e=>{e.stopPropagation();setModeTooltip(modeTooltip===m.id?null:m.id)}}
+                            style={{width:16,height:16,borderRadius:'50%',border:'1px solid #3d5a7a',color:'#3d5a7a',fontSize:10,
+                              display:'flex',alignItems:'center',justifyContent:'center',cursor:'help',flexShrink:0,fontWeight:700,lineHeight:1}}>
+                            ?
+                          </span>
                         </div>
-                        <div style={{fontFamily:MONO,fontSize:12,color:'#6a8caa',marginTop:1}}>{m.desc}</div>
+                        {modeTooltip===m.id&&(
+                          <div style={{position:'absolute',right:0,top:'100%',zIndex:9999,background:'#0d1828',
+                            border:'1px solid #2a4a6a',borderRadius:6,padding:'10px 12px',
+                            fontFamily:MONO,fontSize:11,color:'#c8dff5',lineHeight:1.6,
+                            width:240,boxShadow:'0 8px 24px rgba(0,0,0,0.6)',marginTop:4}}>
+                            {m.desc}
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  ))}
+                    ))
+                  })()}
                 </div>
 
                 {/* Selector de activos */}
@@ -3515,10 +3595,26 @@ export default function Home() {
                         )}
                         {rulerOn&&<span style={{fontFamily:MONO,fontSize:10,color:'#ffd166'}}>📏 Regla ON · Ctrl=imán · dbl-clic=borrar</span>}
                         {/* Botón Fit All */}
-                        <button onClick={()=>chartApiRef.current?.fitAll()}
-                          title="Ver período completo de la estrategia"
-                          style={{background:'rgba(0,212,255,0.08)',border:'1px solid #1e3a52',color:'#00d4ff',fontFamily:MONO,fontSize:10,padding:'3px 8px',borderRadius:4,cursor:'pointer',whiteSpace:'nowrap'}}>
-                          ⊞ Todo
+                        <button onClick={()=>{
+                            const s=JSON.parse(localStorage.getItem('v50_settings')||'{}')
+                            if(chartViewFull){
+                              // Switch to recent view
+                              const months=s?.chart?.recentMonths??3
+                              const futureDays=s?.chart?.rightMargin??5
+                              chartApiRef.current?.showRecent(months,futureDays)
+                              setChartViewFull(false)
+                            } else {
+                              // Switch to full view
+                              chartApiRef.current?.fitAll()
+                              setChartViewFull(true)
+                            }
+                          }}
+                          title={chartViewFull?'Ver últimos 3 meses':'Ver período completo'}
+                          style={{background:chartViewFull?'rgba(0,212,255,0.08)':'rgba(0,229,160,0.08)',
+                            border:`1px solid ${chartViewFull?'#1e3a52':'#0a5a42'}`,
+                            color:chartViewFull?'#00d4ff':'#00e5a0',
+                            fontFamily:MONO,fontSize:10,padding:'3px 8px',borderRadius:4,cursor:'pointer',whiteSpace:'nowrap'}}>
+                          {chartViewFull?'⊞ Todo':'⊡ Reciente'}
                         </button>
                         {/* Botón Añadir activo */}
                         <button onClick={newItem}
