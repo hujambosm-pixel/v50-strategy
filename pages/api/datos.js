@@ -174,15 +174,19 @@ function runBacktestV50(data, sp500Data, cfg) {
       }
 
       // 4. NUEVA SEÑAL DE SALIDA — cierre_bajo_ema_rapida (crossunder)
-      //    Pine: if cierre_bajo_ema_rapida and position > 0
-      if (cierreBaj && !salidaPend) {
-        bkSalida   = bar.low
-        stopNivel  = null  // Pine: cancela stop loss al activar salida por EMA
-        salidaPend = true
+      //    Pine siempre actualiza precio_breakout_salida y cancela stops.
+      //    Removemos !salidaPend para actualizar bkSalida en nuevos cruces.
+      if (cierreBaj) {
+        bkSalida  = bar.low
+        stopNivel = null  // cancela stop loss técnico/ATR
         if (sinPerdidas) {
+          // sinPerdidas: solo colocar orden de salida si low > precio de entrada
+          // (si low < entry, la salida queda suspendida hasta recuperar entry)
           sinPerdAct = bar.low > precioEntrada
+          salidaPend = sinPerdAct  // solo pendiente si low sobre entry
         } else {
-          sinPerdAct = false
+          salidaPend = true
+          sinPerdAct = false  // !sinPerdidas: siempre salir, sin condición extra
         }
       }
 
