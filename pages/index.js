@@ -590,7 +590,7 @@ function SettingsModal({ onClose }) {
               {sep('Apariencia')}
               {[
                 ['watchlist.showRankBadge',  'Mostrar badge de ranking (🥇#2…)', true],
-                ['watchlist.showAlarmDots',  'Mostrar puntos de alarma en cada activo', true],
+                ['watchlist.showAlarmDots',  'Mostrar puntos de alarma en cada activo', false],
                 ['watchlist.showListBadge',  'Mostrar etiqueta de lista en cada activo', true],
               ].map(([key,label,def])=>(
                 <label key={key} style={{display:'flex',alignItems:'center',gap:8,marginBottom:8,cursor:'pointer'}}>
@@ -2684,7 +2684,7 @@ export default function Home() {
   const wlShowFavs      = wlSettings.showFilterFavorites !== false
   const wlShowAlarmFlt  = wlSettings.showFilterAlarms    !== false
   const wlShowRankBadge = wlSettings.showRankBadge       !== false
-  const wlShowAlarmDots = wlSettings.showAlarmDots       !== false
+  const wlShowAlarmDots = wlSettings.showAlarmDots       === true
   const wlShowListBadge = wlSettings.showListBadge       !== false
   let spStatus='neutral',spTxt='SIN FILTRO'
   if(sp5&&tipoFiltro!=='none'){const blq=tipoFiltro==='precio_ema'?sp5.precio<sp5.emaR:sp5.emaR<sp5.emaL;spStatus=blq?'bad':'ok';spTxt=blq?'⚠ EVITAR ENTRADAS':'✓ APTO PARA OPERAR'}
@@ -2846,7 +2846,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V3.3</title>
+        <title>Trading Simulator V3.4</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2908,7 +2908,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V3.3
+            <span className="dot"/>Trading Simulator V3.4
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -3101,10 +3101,10 @@ export default function Home() {
                   <button onClick={()=>{setWlSearch('');setSelectedLists([]);setOnlyFavs(false);setSelectedAlarmIds([])}} title="Limpiar todos los filtros" style={{background:'rgba(255,77,109,0.08)',border:'1px solid #ff4d6d',color:'#ff4d6d',fontFamily:MONO,fontSize:11,padding:'3px 7px',borderRadius:3,cursor:'pointer',flexShrink:0}}>✕</button>
                 </div>
                 {/* ══ Fila 2: filtro alarmas (chips inline, ancho completo) ══ */}
-                {wlShowAlarmFlt&&alarms.length>0&&(
+                {wlShowAlarmFlt&&alarms.filter(a=>a.condition!=='price_level').length>0&&(
                   <div style={{padding:'4px 8px 5px',borderBottom:'1px solid var(--border)',flexShrink:0,display:'flex',gap:4,alignItems:'center',flexWrap:'wrap'}}>
                     <span style={{fontFamily:MONO,fontSize:11,color:'#a8ccdf',flexShrink:0,marginRight:2}}>🔔</span>
-                    {alarms.map((a,ai)=>{
+                    {alarms.filter(a=>a.condition!=='price_level').map((a,ai)=>{
                       const sel=selectedAlarmIds.includes(a.id)
                       const activeCount=watchlist.filter(w=>alarmStatus[w.symbol]?.[a.id]?.active===true).length
                       const ALARM_COLORS=['#00e5a0','#ffd166','#00d4ff','#ff7eb3','#9b72ff','#ff4d6d']
@@ -3321,77 +3321,89 @@ export default function Home() {
 
             {sidePanel==='alarms'&&(
               <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
+                {/* Header */}
                 <div style={{padding:'6px 8px',borderBottom:'1px solid var(--border)',display:'flex',gap:4,alignItems:'center',flexShrink:0}}>
-                  <span style={{fontFamily:MONO,fontSize:12,color:'#a8ccdf',flex:1}}>Condiciones / Alarmas</span>
-                  <button onClick={newAlarm} title="Nueva alarma" style={{background:'rgba(0,212,255,0.1)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:13,padding:'3px 8px',borderRadius:3,cursor:'pointer'}}>+</button>
+                  <span style={{fontFamily:MONO,fontSize:12,color:'#a8ccdf',flex:1}}>Alertas &amp; Condiciones</span>
+                  <button onClick={newAlarm} title="Nueva condición" style={{background:'rgba(0,212,255,0.1)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:13,padding:'3px 8px',borderRadius:3,cursor:'pointer'}}>+</button>
                 </div>
                 <div style={{overflowY:'auto',flex:1}}>
                   {alarmLoading&&<div style={{padding:'10px 12px',fontFamily:MONO,fontSize:12,color:'#a8ccdf'}}>⟳ Cargando…</div>}
-                  {!alarmLoading&&!alarms.length&&<div style={{padding:'14px 12px',fontFamily:MONO,fontSize:12,color:'#a8ccdf'}}>Sin alarmas. Pulsa + para crear una.</div>}
-                  {!alarmLoading&&alarms.map((a,ai)=>{
-                    const condLabel={
-                      ema_cross_up:'EMA rápida > EMA lenta ↑',ema_cross_down:'EMA rápida < EMA lenta ↓',
-                      price_above_ema:'Precio cierre > EMA rápida',price_below_ema:'Precio cierre < EMA rápida'
-                    }[a.condition]||a.condition
-                    const ALARM_COLORS=['#00e5a0','#ffd166','#00d4ff','#ff7eb3','#9b72ff','#ff4d6d']
-                    const col=ALARM_COLORS[ai%ALARM_COLORS.length]
-                    const activeCount=watchlist.filter(w=>alarmStatus[w.symbol]?.[a.id]?.active===true).length
-                    const totalEval=watchlist.filter(w=>alarmStatus[w.symbol]?.[a.id]!==undefined).length
+
+                  {/* ── ALERTAS DE PRECIO (primero) ── */}
+                  {!alarmLoading&&(()=>{
+                    const priceAlerts=alarms.filter(a=>a.condition==='price_level')
+                    if(!priceAlerts.length) return null
                     return(
-                      <div key={a.id} style={{padding:'8px 10px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:8}}>
-                        {/* Dot indicador con color de alarma */}
-                        <span style={{width:10,height:10,borderRadius:'50%',flexShrink:0,
-                          background:activeCount>0?col:'#2a3f55',
-                          boxShadow:activeCount>0?`0 0 6px ${col}`:undefined}}/>
-                        <div style={{flex:1,minWidth:0}}>
-                          <div style={{fontFamily:MONO,fontSize:12,color:'#e8f4ff',fontWeight:700}}>{a.name}</div>
-                          <div style={{fontFamily:MONO,fontSize:11,color:'#b0d0e8',marginTop:1}}>{condLabel} · EMA {a.ema_r}/{a.ema_l}</div>
-                          {totalEval>0&&<div style={{fontFamily:MONO,fontSize:11,marginTop:2}}>
-                            <span style={{color:col,fontWeight:600}}>{activeCount} activos</span>
-                            <span style={{color:'#a8ccdf'}}> / {totalEval} evaluados</span>
-                          </div>}
+                      <div>
+                        <div style={{padding:'5px 10px',fontFamily:MONO,fontSize:9,color:'#ffd166',
+                          letterSpacing:'0.08em',textTransform:'uppercase',background:'var(--bg2)',
+                          borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:6}}>
+                          <span>🎯 Alertas de precio</span>
+                          <span style={{color:'#3d5a7a'}}>({priceAlerts.length})</span>
                         </div>
-                        <button onClick={()=>openEditAlarm(a)} style={{background:'transparent',border:'1px solid var(--border)',color:'#a8ccdf',fontFamily:MONO,fontSize:12,padding:'3px 6px',borderRadius:3,cursor:'pointer'}}>✎</button>
-                      </div>
-                    )
-                  })}
-                {/* ── Alarmas de precio (desde doble-clic) ── */}
-                {(()=>{
-                  const priceAlarms=alarms.filter(a=>a.condition==='price_level')
-                  if(!priceAlarms.length) return null
-                  return(
-                    <div style={{borderTop:'2px solid var(--border)',flexShrink:0}}>
-                      <div style={{padding:'5px 10px',fontFamily:MONO,fontSize:9,color:'#6a8caa',
-                        letterSpacing:'0.08em',textTransform:'uppercase',background:'var(--bg2)',
-                        display:'flex',alignItems:'center',gap:6}}>
-                        <span>🎯 Alarmas de precio</span>
-                        <span style={{color:'#3d5a7a'}}>({priceAlarms.length})</span>
-                      </div>
-                      <div style={{overflowY:'auto',maxHeight:180}}>
-                        {priceAlarms.map(a=>{
+                        {priceAlerts.map(a=>{
                           const isAbove=a.condition_detail==='price_above'
                           return(
-                            <div key={a.id} style={{
-                              padding:'5px 10px',borderBottom:'1px solid var(--border)',
-                              display:'flex',alignItems:'center',gap:6}}>
-                              <span style={{fontSize:10,flexShrink:0,color:isAbove?'#00e5a0':'#ff4d6d'}}>{isAbove?'▲':'▼'}</span>
+                            <div key={a.id} style={{padding:'8px 10px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:8}}>
+                              <span style={{fontSize:14,flexShrink:0,color:isAbove?'#00e5a0':'#ff4d6d',lineHeight:1}}>{isAbove?'▲':'▼'}</span>
                               <div style={{flex:1,minWidth:0}}>
-                                <div style={{fontFamily:MONO,fontSize:10,color:'#d0e8fa',fontWeight:600,
+                                <div style={{fontFamily:MONO,fontSize:12,color:'#e8f4ff',fontWeight:700,
                                   overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
                                   {a.symbol} @ <span style={{color:isAbove?'#00e5a0':'#ff4d6d'}}>{a.price_level?.toFixed(2)??'—'}</span>
                                 </div>
-                                <div style={{fontFamily:MONO,fontSize:9,color:'#5a7a95',
+                                <div style={{fontFamily:MONO,fontSize:10,color:'#5a7a95',
                                   overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.name}</div>
                               </div>
                               <button onClick={async()=>{await deleteAlarm(a.id);reloadAlarms()}}
-                                style={{background:'transparent',border:'none',color:'#ff4d6d',fontSize:12,cursor:'pointer',padding:'0 2px',flexShrink:0}}>✕</button>
+                                style={{background:'transparent',border:'none',color:'#ff4d6d',fontSize:14,cursor:'pointer',padding:'0 4px',flexShrink:0}}>✕</button>
                             </div>
                           )
                         })}
                       </div>
-                    </div>
-                  )
-                })()}
+                    )
+                  })()}
+
+                  {/* ── CONDICIONES (segundo) ── */}
+                  {!alarmLoading&&(()=>{
+                    const conditions=alarms.filter(a=>a.condition!=='price_level')
+                    return(
+                      <div>
+                        <div style={{padding:'5px 10px',fontFamily:MONO,fontSize:9,color:'#00d4ff',
+                          letterSpacing:'0.08em',textTransform:'uppercase',background:'var(--bg2)',
+                          borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:6}}>
+                          <span>⚡ Condiciones</span>
+                          <span style={{color:'#3d5a7a'}}>({conditions.length})</span>
+                        </div>
+                        {conditions.length===0&&<div style={{padding:'12px 10px',fontFamily:MONO,fontSize:12,color:'#4a6a80'}}>Sin condiciones. Pulsa + para crear.</div>}
+                        {conditions.map((a,ai)=>{
+                          const condLabel={
+                            ema_cross_up:'EMA rápida > EMA lenta ↑',ema_cross_down:'EMA rápida < EMA lenta ↓',
+                            price_above_ema:'Precio cierre > EMA rápida',price_below_ema:'Precio cierre < EMA rápida'
+                          }[a.condition]||a.condition
+                          const ALARM_COLORS=['#00e5a0','#ffd166','#00d4ff','#ff7eb3','#9b72ff','#ff4d6d']
+                          const col=ALARM_COLORS[ai%ALARM_COLORS.length]
+                          const activeCount=watchlist.filter(w=>alarmStatus[w.symbol]?.[a.id]?.active===true).length
+                          const totalEval=watchlist.filter(w=>alarmStatus[w.symbol]?.[a.id]!==undefined).length
+                          return(
+                            <div key={a.id} style={{padding:'8px 10px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:8}}>
+                              <span style={{width:10,height:10,borderRadius:'50%',flexShrink:0,
+                                background:activeCount>0?col:'#2a3f55',
+                                boxShadow:activeCount>0?`0 0 6px ${col}`:undefined}}/>
+                              <div style={{flex:1,minWidth:0}}>
+                                <div style={{fontFamily:MONO,fontSize:12,color:'#e8f4ff',fontWeight:700}}>{a.name}</div>
+                                <div style={{fontFamily:MONO,fontSize:11,color:'#b0d0e8',marginTop:1}}>{condLabel} · EMA {a.ema_r}/{a.ema_l}</div>
+                                {totalEval>0&&<div style={{fontFamily:MONO,fontSize:11,marginTop:2}}>
+                                  <span style={{color:col,fontWeight:600}}>{activeCount} activos</span>
+                                  <span style={{color:'#a8ccdf'}}> / {totalEval} evaluados</span>
+                                </div>}
+                              </div>
+                              <button onClick={()=>openEditAlarm(a)} style={{background:'transparent',border:'1px solid var(--border)',color:'#a8ccdf',fontFamily:MONO,fontSize:12,padding:'3px 6px',borderRadius:3,cursor:'pointer'}}>✎</button>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )
+                  })()}
                 </div>
               </div>
             )}
