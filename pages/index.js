@@ -336,6 +336,7 @@ function SettingsModal({ onClose }) {
     { id:'grafico',       label:'📈 Gráfico' },
     { id:'ranking',       label:'🏆 Ranking' },
     { id:'watchlist',     label:'📋 Watchlist' },
+    { id:'tema',          label:'🎨 Tema' },
   ]
 
   const inp = (val, onChange, opts={}) => (
@@ -594,6 +595,58 @@ function SettingsModal({ onClose }) {
             </div>
           )}
 
+          {/* ── TEMA ── */}
+          {tab==='tema'&&(
+            <div>
+              {sep('Tipografía global')}
+              <div style={{marginBottom:12}}>
+                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
+                  <span style={{fontFamily:MONO,fontSize:10,color:'#cce0f5',flex:1}}>Tamaño base de fuente</span>
+                  <span style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:'#00d4ff',minWidth:32,textAlign:'right'}}>{settings.tema?.fontSize??13}px</span>
+                  <input type="range" min={10} max={16} value={settings.tema?.fontSize??13}
+                    onChange={e=>upd('tema.fontSize',Number(e.target.value))}
+                    style={{width:90,accentColor:'#00d4ff'}}/>
+                </div>
+              </div>
+              <div style={{marginBottom:14}}>
+                <span style={{fontFamily:MONO,fontSize:10,color:'#cce0f5'}}>Familia tipográfica</span>
+                <select value={settings.tema?.fontFamily||'jetbrains'} onChange={e=>upd('tema.fontFamily',e.target.value)}
+                  style={{display:'block',marginTop:6,width:'100%',background:'#080c14',border:'1px solid #1a2d45',
+                    borderRadius:4,color:'#e2eaf5',fontFamily:MONO,fontSize:12,padding:'6px 10px'}}>
+                  <option value="jetbrains">JetBrains Mono (por defecto)</option>
+                  <option value="ibmplex">IBM Plex Mono</option>
+                  <option value="firacode">Fira Code</option>
+                  <option value="system">Fuente del sistema (sans-serif)</option>
+                </select>
+              </div>
+              {sep('Colores de la interfaz')}
+              {[
+                ['tema.colorBg',     'Fondo principal',   '#080c14'],
+                ['tema.colorBg2',    'Fondo secundario',  '#0a101a'],
+                ['tema.colorBg3',    'Fondo terciario',   '#0d1520'],
+                ['tema.colorText',   'Texto principal',   '#eef5ff'],
+                ['tema.colorText2',  'Texto secundario',  '#cce0f8'],
+                ['tema.colorText3',  'Texto apagado',     '#9acce8'],
+                ['tema.colorBorder', 'Bordes',            '#1a2d45'],
+                ['tema.colorAccent', 'Acento (azul)',     '#00d4ff'],
+                ['tema.colorGreen',  'Verde (ganancia)',  '#00e5a0'],
+                ['tema.colorRed',    'Rojo (pérdida)',    '#ff4d6d'],
+              ].map(([key,label,def])=>(
+                <div key={key} style={{display:'flex',alignItems:'center',gap:10,marginBottom:8}}>
+                  <input type="color" value={settings[key.split('.')[0]]?.[key.split('.')[1]]||def}
+                    onChange={e=>upd(key,e.target.value)}
+                    style={{width:28,height:28,borderRadius:4,border:'1px solid #1a2d45',cursor:'pointer',padding:1}}/>
+                  <span style={{fontFamily:MONO,fontSize:11,color:'#cce0f5',flex:1}}>{label}</span>
+                  <span style={{fontFamily:MONO,fontSize:10,color:'#4a6a80'}}>{settings[key.split('.')[0]]?.[key.split('.')[1]]||def}</span>
+                </div>
+              ))}
+              <button onClick={()=>upd('tema',null)} style={{marginTop:8,width:'100%',fontFamily:MONO,fontSize:10,
+                padding:'5px',borderRadius:4,border:'1px solid #ff4d6d',background:'transparent',color:'#ff4d6d',cursor:'pointer'}}>
+                Restaurar tema por defecto
+              </button>
+            </div>
+          )}
+
           {/* ── RANKING ── */}
           {tab==='ranking'&&(
             <div>
@@ -725,7 +778,13 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
   const containerRef=useRef(null), svgRef=useRef(null), legendRef=useRef(null), tooltipRef=useRef(null)
   const chartRef=useRef(null), candlesRef=useRef(null)
   const rulerStart=useRef(null), rulerActiveR=useRef(rulerActive)
-  useEffect(()=>{rulerActiveR.current=rulerActive},[rulerActive])
+  useEffect(()=>{
+    rulerActiveR.current=rulerActive
+    if(!rulerActive){
+      rulerStart.current=null
+      svgRef.current?.querySelectorAll('.ruler-el').forEach(el=>el.remove())
+    }
+  },[rulerActive])
 
   useEffect(()=>{
     if(typeof window==='undefined'||!containerRef.current) return
@@ -940,7 +999,9 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
       const getPoint=(px,py)=>snapToOHLC(px,py,ctrlState.pressed)
       const cnt=containerRef.current
 
-      // ── Ruler: usar chart.subscribeClick (evita conflicto con canvas) ──
+      // ── Ruler: click sets start/end; dblclick anywhere clears; dblclick outside ruler = price alarm ──
+      const rulerFixed=svgRef.current  // frozen ruler lives in svg; check if line exists
+      const rulerExists=()=>svgRef.current?.querySelector('.ruler-el')!=null
       chart.subscribeClick(param=>{
         if(!rulerActiveR.current) return
         if(param.point==null) return
@@ -950,12 +1011,16 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
         if(!rulerStart.current){
           rulerStart.current={x:px,y:py,price,time}
         } else {
-          // Congelar regla: limpiar ref pero dejar el SVG dibujado
+          // freeze: keep SVG, clear start ref
           rulerStart.current=null
         }
       })
       chart.subscribeDblClick(param=>{
-        if(rulerActiveR.current){ rulerStart.current=null; clearRuler(); return }
+        if(rulerActiveR.current){
+          // dblclick while ruler active → clear ruler
+          rulerStart.current=null; clearRuler(); return
+        }
+        // dblclick while ruler inactive → price alarm
         if(onPriceAlarm&&param.point&&param.point.y!=null){
           const price=candlesRef.current?.coordinateToPrice(param.point.y)
           if(price!=null) onPriceAlarm(Math.round(price*100)/100)
@@ -1035,6 +1100,8 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
           }
         }
       } catch(_){ chart.timeScale().fitContent() }
+      // Re-apply rightOffset after any setVisibleRange (setVisibleRange resets it)
+      chart.timeScale().applyOptions({ rightOffset: rightMargin })
       // Save range whenever user zooms/scrolls
       chart.timeScale().subscribeVisibleTimeRangeChange(range=>{
         if(range && savedRangeRef) savedRangeRef.current = range
@@ -1102,7 +1169,7 @@ function EquityChart({
   strategyCurve,bhCurve,sp500BHCurve,compoundCurve,
   maxDDStrategy,maxDDBH,maxDDSP500,maxDDCompound,
   maxDDStrategyDate,maxDDBHDate,maxDDSP500Date,maxDDCompoundDate,
-  capitalIni,showStrategy,showBH,showSP500,showCompound,syncRef,chartHeight=260
+  capitalIni,showStrategy,showBH,showSP500,showCompound,syncRef,chartHeight=260,rightMargin=8
 }) {
   const ref=useRef(null),chartRef=useRef(null),equityTooltipRef=useRef(null)
   useEffect(()=>{
@@ -1194,6 +1261,7 @@ function EquityChart({
       })
 
       chart.timeScale().fitContent()
+      chart.timeScale().applyOptions({rightOffset:rightMargin})
       const ro=new ResizeObserver(()=>{if(ref.current)chart.applyOptions({width:ref.current.clientWidth})})
       ro.observe(ref.current)
       return()=>ro.disconnect()
@@ -2134,6 +2202,9 @@ export default function Home() {
 
   // ── Backtesting state ──────────────────────────────────────
   const [mcSelected,setMcSelected]=useState([])          // symbols seleccionados
+  const [mcSearch,setMcSearch]=useState('')
+  const [mcOnlyFavs,setMcOnlyFavs]=useState(false)
+  const [mcListFilter,setMcListFilter]=useState('')
   const [mcMode,setMcMode]=useState('slots')             // 'slots' | 'rotativo' | 'custom'
   const [mcCapital,setMcCapital]=useState('compound')    // 'simple' | 'compound'
   const [mcResult,setMcResult]=useState(null)
@@ -2516,6 +2587,28 @@ export default function Home() {
   },[mcSelected,mcCapital,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL])
 
   const metrics=result?calcMetrics(result.trades,Number(capitalIni),result.capitalReinv,result.gananciaSimple,result.ganBH||0,result.startDate,result.meta?.ultimaFecha,Number(years)):null
+  // Apply tema settings to CSS vars
+  const [temaKey, setTemaKey] = React.useState(0)
+  React.useEffect(()=>{
+    try{
+      const t = JSON.parse(localStorage.getItem('v50_settings')||'{}')?.tema||{}
+      const root = document.documentElement.style
+      if(t.colorBg)    root.setProperty('--bg',    t.colorBg)
+      if(t.colorBg2)   root.setProperty('--bg2',   t.colorBg2)
+      if(t.colorBg3)   root.setProperty('--bg3',   t.colorBg3)
+      if(t.colorText)  root.setProperty('--text',  t.colorText)
+      if(t.colorText2) root.setProperty('--text2', t.colorText2)
+      if(t.colorText3) root.setProperty('--text3', t.colorText3)
+      if(t.colorBorder)root.setProperty('--border',t.colorBorder)
+      if(t.colorAccent)root.setProperty('--accent',t.colorAccent)
+      if(t.colorGreen) root.setProperty('--green', t.colorGreen)
+      if(t.colorRed)   root.setProperty('--red',   t.colorRed)
+      if(t.fontSize)   root.setProperty('--font-size', t.fontSize+'px')
+      const fontMap={jetbrains:'"JetBrains Mono","Fira Code",monospace',ibmplex:'"IBM Plex Mono",monospace',firacode:'"Fira Code","JetBrains Mono",monospace',system:'system-ui,sans-serif'}
+      if(t.fontFamily) root.setProperty('--font-family', fontMap[t.fontFamily]||fontMap.jetbrains)
+    }catch(_){}
+  },[temaKey])
+
   const sp5=result?.sp500Status
   // Watchlist display settings (read from localStorage, live)
   const wlSettings = (() => {
@@ -2688,7 +2781,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V3.0</title>
+        <title>Trading Simulator V3.1</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2698,6 +2791,8 @@ export default function Home() {
             --text:#eef5ff; --text2:#cce0f8; --text3:#9acce8;
             --bg:#080c14; --bg2:#0a101a; --bg3:#0d1520;
             --border:#1a2d45; --accent:#00d4ff; --green:#00e5a0; --red:#ff4d6d;
+            --font-size:13px;
+            --font-family:"JetBrains Mono","Fira Code","IBM Plex Mono",monospace;
           }
           body { font-size:14px; color:#e0eeff; }
           /* ── Sidebar ── */
@@ -2728,7 +2823,7 @@ export default function Home() {
           .header-sp500-label { font-size:12px !important; color:#a8d4ec !important; }
           .header-sp500-val   { font-size:13px !important; color:#f0f8ff !important; font-weight:600; }
           .header-sp500-ema   { font-size:12px !important; color:#ffd166 !important; font-weight:600; }
-          .header-sp500-date  { font-size:11px !important; color:#90c4de !important; }
+
           .status-badge { font-size:11px !important; }
         @keyframes alarmPulse {
           0%,100% { opacity:1; box-shadow:var(--bc) 0 0 7px; }
@@ -2748,7 +2843,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V3.0
+            <span className="dot"/>Trading Simulator V3.1
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -2764,8 +2859,7 @@ export default function Home() {
               <span className="header-sp500-label">EMA{sp500EmaR}</span>
               <span className="header-sp500-ema">{fmt(sp5.emaR,2)}</span>
               <span className="header-sp500-label">EMA{sp500EmaL}</span>
-              <span className="header-sp500-ema">{fmt(sp5.emaL,2)}</span>
-              <span className="header-sp500-date">{fmtDate(sp5.date)}</span>
+              <span style={{color:'#ff4d6d',fontWeight:600,fontFamily:MONO,fontSize:12}}>{fmt(sp5.emaL,2)}</span>
               <span className={`status-badge ${spStatus}`} style={{fontSize:10,padding:'1px 6px'}}>{spTxt}</span>
             </div>
           )}
@@ -3263,9 +3357,15 @@ export default function Home() {
                 <div style={{padding:'10px 12px',borderBottom:'1px solid var(--border)'}}>
                   <div style={{fontFamily:MONO,fontSize:12,color:'#c8dff5',marginBottom:6,letterSpacing:'0.05em',fontWeight:600}}>MODO DE ASIGNACIÓN</div>
                   {[
-                    {id:'slots',label:'Slots iguales',desc:'Capital dividido en N partes fijas',ready:true},
-                    {id:'rotativo',label:'Capital rotativo',desc:'Próximamente',ready:false},
-                    {id:'custom',label:'Pesos personalizados',desc:'Próximamente',ready:false},
+                    {id:'slots',label:'Slots iguales',
+                      desc:'El capital total se divide en N partes iguales, una por activo seleccionado. Cada slot opera de forma independiente con su fracción fija. Si seleccionas 4 activos con €10.000, cada uno opera con €2.500 en paralelo.',
+                      ready:true},
+                    {id:'rotativo',label:'Capital rotativo',
+                      desc:'Un único pool de capital se asigna a los activos según van generando señales de entrada. Al cerrar una posición, el capital liberado vuelve al pool y está disponible para la siguiente señal. Prioriza por ranking si hay varias señales simultáneas.',
+                      ready:false},
+                    {id:'custom',label:'Pesos personalizados',
+                      desc:'Asigna manualmente un porcentaje del capital a cada activo. La suma total debe ser 100%. Permite sobreponderar activos de mayor convicción.',
+                      ready:false},
                   ].map(m=>(
                     <div key={m.id} onClick={()=>m.ready&&setMcMode(m.id)}
                       style={{display:'flex',alignItems:'flex-start',gap:8,padding:'6px 8px',borderRadius:4,marginBottom:3,
@@ -3285,9 +3385,28 @@ export default function Home() {
                 </div>
 
                 {/* Selector de activos */}
-                <div style={{padding:'10px 12px',borderBottom:'1px solid var(--border)',flex:1,overflowY:'auto',minHeight:0}}>
-                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
-                    <div style={{fontFamily:MONO,fontSize:11,color:'#cde5ff',letterSpacing:'0.05em',fontWeight:700}}>ACTIVOS ({mcSelected.length} sel.)</div>
+                <div style={{display:'flex',flexDirection:'column',flex:1,minHeight:0}}>
+                  {/* Filtros */}
+                  <div style={{padding:'5px 8px',borderBottom:'1px solid var(--border)',flexShrink:0,display:'flex',gap:4,alignItems:'center'}}>
+                    <input type="text" placeholder="🔍 Buscar..." value={mcSearch||''} onChange={e=>setMcSearch(e.target.value)}
+                      style={{flex:1,background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'3px 7px',borderRadius:4,minWidth:0}}/>
+                    <button onClick={()=>setMcOnlyFavs(f=>!f)}
+                      style={{background:mcOnlyFavs?'rgba(255,209,102,0.15)':'transparent',border:`1px solid ${mcOnlyFavs?'#ffd166':'var(--border)'}`,color:mcOnlyFavs?'#ffd166':'var(--text3)',fontFamily:MONO,fontSize:12,padding:'3px 6px',borderRadius:4,cursor:'pointer',flexShrink:0}}>
+                      ★
+                    </button>
+                    {(()=>{
+                      const allLists=[...new Set(watchlist.map(w=>w.list_name||'General').filter(Boolean))]
+                      return(
+                        <select value={mcListFilter||''} onChange={e=>setMcListFilter(e.target.value)}
+                          style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:10,padding:'3px 5px',borderRadius:4,maxWidth:80}}>
+                          <option value="">Todas</option>
+                          {allLists.map(l=><option key={l} value={l}>{l}</option>)}
+                        </select>
+                      )
+                    })()}
+                  </div>
+                  <div style={{padding:'4px 8px',borderBottom:'1px solid var(--border)',flexShrink:0,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                    <div style={{fontFamily:MONO,fontSize:10,color:'#cde5ff',fontWeight:700}}>{mcSelected.length} seleccionados</div>
                     <div style={{display:'flex',gap:4}}>
                       <button onClick={()=>setMcSelected(watchlist.map(w=>w.symbol))}
                         style={{fontFamily:MONO,fontSize:8,padding:'2px 5px',borderRadius:3,border:'1px solid var(--border)',background:'transparent',color:'#a8ccdf',cursor:'pointer'}}>
@@ -3299,7 +3418,13 @@ export default function Home() {
                       </button>
                     </div>
                   </div>
-                  {[...watchlist].sort((a,b)=>{
+                  <div style={{overflowY:'auto',flex:1}}>
+                  {[...watchlist].filter(w=>{
+                    const matchSearch=!mcSearch||(w.symbol||'').toLowerCase().includes(mcSearch.toLowerCase())||(w.name||'').toLowerCase().includes(mcSearch.toLowerCase())
+                    const matchFav=!mcOnlyFavs||w.favorite
+                    const matchList=!mcListFilter||(w.list_name||'General')===mcListFilter
+                    return matchSearch&&matchFav&&matchList
+                  }).sort((a,b)=>{
                     const ra=rankingData[a.symbol]?.rank, rb=rankingData[b.symbol]?.rank
                     if(ra!=null&&rb!=null) return ra-rb
                     if(ra!=null) return -1
@@ -3333,6 +3458,7 @@ export default function Home() {
                       </div>
                     )
                   })}
+                  </div>
                 </div>
               </div>
             )}
@@ -3455,6 +3581,7 @@ export default function Home() {
                       ))}
                     </div>
                     <EquityChart
+                      rightMargin={(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.chart?.rightMargin??8}catch(_){return 8}})()}
                       strategyCurve={result.strategyCurve}
                       bhCurve={result.bhCurve}
                       sp500BHCurve={result.sp500BHCurve||[]}
@@ -4230,7 +4357,7 @@ export default function Home() {
         </div>
       )}
     {/* ── Modal de configuración global ── */}
-    {settingsOpen&&<SettingsModal onClose={()=>setSettingsOpen(false)}/>}
+    {settingsOpen&&<SettingsModal onClose={()=>{setSettingsOpen(false);setTemaKey(k=>k+1)}}/>}
 
     {/* ── Panel Asistente IA de estrategias ── */}
     {aiPanelOpen&&<StrategyAIPanel
@@ -4250,8 +4377,10 @@ export default function Home() {
             price={priceAlarmDlg.price} symbol={priceAlarmDlg.symbol}
             alarms={alarms}
             onSave={async(item)=>{
-              await saveAlarm(item)
-              const fresh=await loadAlarms(); setAlarms(fresh)
+              try{
+                await upsertAlarm(item)
+                reloadAlarms()
+              }catch(e){alert('Error al guardar alarma: '+e.message)}
               setPriceAlarmDlg(null)
             }}
             onCancel={()=>setPriceAlarmDlg(null)}
