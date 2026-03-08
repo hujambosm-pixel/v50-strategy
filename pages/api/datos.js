@@ -98,7 +98,7 @@ function runBacktestV50(data, sp500Data, cfg) {
     const pnl = (px - precioEntrada) / precioEntrada
     gananciaSimple += pnl * capitalIni
     capitalReinv   += pnl * capitalReinv
-    trades.push(makeTrade(data[entryIdx].date, data[i].date, precioEntrada, px, pnl, capitalReinv, capitalIni, tipo))
+    trades.push(makeTrade(data[entryIdx].date, data[i].date, precioEntrada, px, pnl, capitalReinv, capitalIni, tipo, stopNivel))
     chartData[i].signal = 'exit'
     inPos=false; precioEntrada=null; entryIdx=null
     salidaPend=false; sinPerdAct=false; stopNivel=null; bkSalida=0
@@ -205,27 +205,31 @@ function runBacktestV50(data, sp500Data, cfg) {
 
     // ── Ejecutar entrada pendiente ──────────────────────────
     if (entradaPend) {
-      // Rolling breakout — Pine: if high < precio_breakout_entrada → bajar nivel
-      // IMPORTANTE: el stop NO se recalcula (fijado en vela de setup)
-      if (bar.high < bkEntrada) bkEntrada = bar.high
+      // ── Rolling breakout (fiel a TV) ──────────────────────
+      // TV coloca un stop-order en el nivel. Si el high de esta vela
+      // supera el nivel ANTERIOR → entrada. Si no → baja el nivel al
+      // high de esta vela para la siguiente vela.
+      // CRÍTICO: comprobar breakout con el nivel PREVIO antes de actualizarlo.
+      const prevBk = bkEntrada
 
-      chartData[i].breakoutLine = bkEntrada
-
-      if (bar.high >= bkEntrada) {
-        // Entrada ejecutada
-        precioEntrada = bkEntrada
+      if (bar.high >= prevBk) {
+        // ✅ Breakout conseguido — entrada al nivel previo
+        precioEntrada = prevBk
         entryIdx      = i
         inPos=true; entradaPend=false; reentryPend=false; salidaPend=false; sinPerdAct=false; reentryMode=false
         chartData[i].signal = 'entry'
-        // ATR stop: se calcula con el precio de entrada real
         if (tipoStop === 'atr' && atrArr?.[i]) {
           stopNivel = precioEntrada - atrArr[i] * atrMult
         }
-        // Stop técnico: ya estaba fijado desde la vela de setup — no tocar
         if (tipoStop === 'none') stopNivel = null
         if (stopNivel != null) chartData[i].stopLine = stopNivel
         continue
       }
+
+      // ❌ No breakout — rolling: bajar nivel al high de esta vela
+      // Stop NO se recalcula (fijado en vela de setup)
+      if (bar.high < prevBk) bkEntrada = bar.high
+      chartData[i].breakoutLine = bkEntrada
 
       // Abort — Pine: if cierre_bajo_ema_rapida and entrada_pendiente and not reentry_mode_activo
       if (cierreBaj && !reentryPend) {
@@ -262,14 +266,14 @@ function runBacktestV50(data, sp500Data, cfg) {
   return { chartData, trades, capitalReinv, gananciaSimple, startDate }
 }
 
-function makeTrade(entryDate,exitDate,entryPx,exitPx,pnl,capitalReinv,capitalIni,tipo){
+function makeTrade(entryDate,exitDate,entryPx,exitPx,pnl,capitalReinv,capitalIni,tipo,stopPx=null){
   return {
     entryDate, exitDate, entryPx, exitPx,
     pnlPct: pnl*100,
     pnlSimple: pnl*capitalIni,
     capitalTras: capitalReinv,
     dias: Math.round((new Date(exitDate)-new Date(entryDate))/86400000),
-    tipo
+    tipo, stopPx
   }
 }
 
