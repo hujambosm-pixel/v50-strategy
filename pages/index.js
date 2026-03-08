@@ -116,25 +116,50 @@ const TIP_DATA = {
 
 function Tip({id, style}) {
   const [show, setShow] = useState(false)
+  const anchorRef = useRef(null)
+  const [pos, setPos] = useState({top:true, left:'50%', transform:'translateX(-50%)'})
   const tip = TIP_DATA[id]
   if (!tip) return null
+
+  const calcPos = () => {
+    if (!anchorRef.current) return
+    const rect = anchorRef.current.getBoundingClientRect()
+    const TW = 250, margin = 8
+    // Horizontal: prefer centered, clamp to viewport
+    let left = '50%', transform = 'translateX(-50%)'
+    const centerX = rect.left + rect.width/2
+    if (centerX - TW/2 < margin) {
+      left = `${margin - rect.left}px`; transform = 'none'
+    } else if (centerX + TW/2 > window.innerWidth - margin) {
+      left = 'auto'; transform = 'none'
+    }
+    // Vertical: above if there's room, else below
+    const top = rect.top > 160
+    setPos({ top, left, transform })
+  }
+
   return (
-    <span style={{position:'relative', display:'inline-flex', alignItems:'center', ...style}}
-      onMouseEnter={()=>setShow(true)} onMouseLeave={()=>setShow(false)}>
+    <span ref={anchorRef} style={{position:'relative', display:'inline-flex', alignItems:'center', ...style}}
+      onMouseEnter={()=>{calcPos();setShow(true)}} onMouseLeave={()=>setShow(false)}>
       <span style={{cursor:'help', color:'#4a7fa0', fontSize:10, lineHeight:1, userSelect:'none'}}>ⓘ</span>
       {show && (
         <div style={{
-          position:'absolute', left:'50%', bottom:'calc(100% + 8px)',
-          transform:'translateX(-50%)', background:'#0a1520',
-          border:'1px solid #2a4a66', borderRadius:6, padding:'9px 11px',
-          zIndex:300, width:240, fontFamily:MONO, fontSize:10,
-          color:'#cce0f5', lineHeight:1.65, boxShadow:'0 6px 24px rgba(0,0,0,0.8)',
+          position:'fixed',
+          top: pos.top
+            ? (anchorRef.current ? anchorRef.current.getBoundingClientRect().top - 8 : 0)
+            : (anchorRef.current ? anchorRef.current.getBoundingClientRect().bottom + 8 : 0),
+          left: anchorRef.current ? Math.max(8, Math.min(
+            anchorRef.current.getBoundingClientRect().left + anchorRef.current.getBoundingClientRect().width/2 - 125,
+            window.innerWidth - 258
+          )) : 0,
+          transform: pos.top ? 'translateY(-100%)' : 'none',
+          background:'#0a1520', border:'1px solid #2a4a66', borderRadius:6,
+          padding:'9px 11px', zIndex:9999, width:250, fontFamily:MONO, fontSize:10,
+          color:'#cce0f5', lineHeight:1.65, boxShadow:'0 6px 24px rgba(0,0,0,0.9)',
           pointerEvents:'none', whiteSpace:'normal'
         }}>
           <div style={{color:'#00d4ff', fontWeight:700, marginBottom:5, fontSize:10}}>{tip.title}</div>
           <div style={{color:'#b0ccdf'}}>{tip.text}</div>
-          <div style={{position:'absolute',left:'50%',top:'100%',transform:'translateX(-50%)',
-            borderWidth:'5px 5px 0',borderStyle:'solid',borderColor:'#2a4a66 transparent transparent'}}/>
         </div>
       )}
     </span>
@@ -310,6 +335,7 @@ function SettingsModal({ onClose }) {
     { id:'integraciones', label:'🔌 Integraciones' },
     { id:'alarmas',       label:'🔔 Alarmas' },
     { id:'grafico',       label:'📈 Gráfico' },
+    { id:'ranking',       label:'🏆 Ranking' },
   ]
 
   const inp = (val, onChange, opts={}) => (
@@ -500,6 +526,69 @@ function SettingsModal({ onClose }) {
           )}
         </div>
 
+          {/* ── RANKING ── */}
+          {tab==='ranking'&&(
+            <div>
+              {sep('Pesos de la fórmula de scoring (total = 100%)')}
+              <div style={{fontSize:10,color:'#5a7a95',lineHeight:1.6,marginBottom:14}}>
+                El score 0–100 de cada activo se calcula combinando estas 5 métricas.
+                Ajusta los pesos según lo que más valoras en una estrategia.
+                La penalización del Max DD reduce el score (resta).
+              </div>
+              {[
+                ['ranking.w_winrate',    'Win Rate',                    settings.ranking?.w_winrate    ?? 25, 'Porcentaje de trades ganadores. Mide la consistencia de la estrategia.'],
+                ['ranking.w_factorben',  'Factor de Beneficio',         settings.ranking?.w_factorben  ?? 25, 'Ratio ganancia bruta / pérdida bruta. >1 = estrategia rentable.'],
+                ['ranking.w_cagr',       'CAGR',                        settings.ranking?.w_cagr       ?? 25, 'Tasa de crecimiento anual compuesto. Mide la rentabilidad real anualizada.'],
+                ['ranking.w_robustez',   'CAGR sin top 3 trades',       settings.ranking?.w_robustez   ?? 20, 'CAGR excluyendo las 3 mejores operaciones. Mide la robustez real de la estrategia.'],
+                ['ranking.w_dd',         'Max Drawdown (penalización)', settings.ranking?.w_dd         ?? 5,  'Penaliza el riesgo. Reduce el score según el máximo drawdown histórico.'],
+              ].map(([key, label, val, hint])=>(
+                <div key={key} style={{marginBottom:12}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
+                    <span style={{fontFamily:MONO,fontSize:10,color:'#cce0f5',flex:1}}>{label}</span>
+                    <span style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:'#00d4ff',minWidth:32,textAlign:'right'}}>{val}%</span>
+                    <input type="range" min={0} max={50} value={val}
+                      onChange={e=>upd(key,Number(e.target.value))}
+                      style={{width:100,accentColor:'#00d4ff'}}/>
+                  </div>
+                  <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',lineHeight:1.5,marginLeft:0}}>{hint}</div>
+                </div>
+              ))}
+              {(()=>{
+                const total=(settings.ranking?.w_winrate??25)+(settings.ranking?.w_factorben??25)+(settings.ranking?.w_cagr??25)+(settings.ranking?.w_robustez??20)+(settings.ranking?.w_dd??5)
+                const ok=total===100
+                return(
+                  <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',borderRadius:5,
+                    background:ok?'rgba(0,229,160,0.08)':'rgba(255,209,102,0.08)',
+                    border:`1px solid ${ok?'rgba(0,229,160,0.3)':'rgba(255,209,102,0.4)'}`,marginTop:4}}>
+                    <span style={{fontFamily:MONO,fontSize:11,fontWeight:700,color:ok?'#00e5a0':'#ffd166'}}>
+                      {ok?'✓ Total: 100%':`⚠ Total: ${total}% (debe ser 100%)`}
+                    </span>
+                    {!ok&&<button onClick={()=>{
+                      // auto-normalize
+                      const base={w_winrate:25,w_factorben:25,w_cagr:25,w_robustez:20,w_dd:5}
+                      upd('ranking',{...settings.ranking,...base})
+                    }} style={{marginLeft:'auto',fontFamily:MONO,fontSize:9,padding:'3px 8px',borderRadius:3,
+                      border:'1px solid #ffd166',background:'transparent',color:'#ffd166',cursor:'pointer'}}>
+                      Restaurar por defecto
+                    </button>}
+                  </div>
+                )
+              })()}
+              {sep('Otras opciones de ranking')}
+              {[
+                ['ranking.minTrades', 'Mínimo de trades para incluir en ranking', settings.ranking?.minTrades ?? 3],
+              ].map(([key,label,val])=>(
+                <div key={key} style={{display:'flex',alignItems:'center',gap:10,marginBottom:8}}>
+                  <span style={{fontFamily:MONO,fontSize:10,color:'#cce0f5',flex:1}}>{label}</span>
+                  <input type="number" value={val} min={1} max={50}
+                    onChange={e=>upd(key,Number(e.target.value))}
+                    style={{width:60,background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,
+                      color:'#e2eaf5',fontFamily:MONO,fontSize:12,padding:'4px 8px',textAlign:'center'}}/>
+                </div>
+              ))}
+            </div>
+          )}
+
         {/* Footer */}
         <div style={{display:'flex',justifyContent:'flex-end',gap:8,padding:'12px 20px',
           borderTop:'1px solid #0d1520',flexShrink:0}}>
@@ -580,9 +669,10 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
         grid:{vertLines:{color:'#0d1520'},horzLines:{color:'#0d1520'}},
         crosshair:{mode:CrosshairMode.Normal},
         rightPriceScale:{borderColor:'#1a2d45'},
-        timeScale:{borderColor:'#1a2d45',timeVisible:true, rightOffset:12},
+        timeScale:{borderColor:'#1a2d45',timeVisible:true},
       })
       chartRef.current=chart
+      chart.timeScale().applyOptions({ rightOffset: 4 })
 
       const candles=chart.addCandlestickSeries({
         upColor:'#00e5a0',downColor:'#ff4d6d',
@@ -1249,6 +1339,216 @@ const DEFAULT_DEFINITION = {
   sizing:   { type:'fixed_capital', amount:10000, years:5 },
 }
 
+// ── StrategyAIPanel — asistente IA para configurar estrategias ─
+function StrategyAIPanel({ definition, onApply, onClose }) {
+  const [messages, setMessages] = useState([
+    { role:'assistant', content:'Hola. Descríbeme la estrategia que quieres implementar en lenguaje natural. Por ejemplo: "Quiero comprar cuando el precio cruza al alza una media móvil de 20 periodos y vender cuando cierra por debajo de ella, con un stop en el mínimo de la vela de entrada." \n\nTe ayudaré a configurar cada uno de los 8 pasos del constructor.' }
+  ])
+  const [input, setInput] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [pendingConfig, setPendingConfig] = useState(null)
+  const [pendingMissing, setPendingMissing] = useState(null)
+  const [pendingName, setPendingName] = useState('')
+  const messagesEndRef = useRef(null)
+  const inputRef = useRef(null)
+
+  useEffect(()=>{ messagesEndRef.current?.scrollIntoView({behavior:'smooth'}) }, [messages])
+
+  const getGroqKey = () => {
+    try { return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.integrations?.groqKey||'' } catch(_){ return '' }
+  }
+
+  const send = async () => {
+    const text = input.trim()
+    if (!text || loading) return
+    setInput('')
+    const newMessages = [...messages, { role:'user', content:text }]
+    setMessages(newMessages)
+    setLoading(true)
+    setPendingConfig(null)
+    setPendingMissing(null)
+    try {
+      const key = getGroqKey()
+      const r = await fetch('/api/strategy-ai', {
+        method:'POST',
+        headers:{'Content-Type':'application/json','x-groq-key':key},
+        body: JSON.stringify({ messages: newMessages.filter(m=>m.role!=='system') })
+      })
+      const d = await r.json()
+      if (!r.ok) throw new Error(d.error||'Error')
+      const aiText = d.text
+
+      // Parse strategy_config block
+      const cfgMatch = aiText.match(/```strategy_config\n([\s\S]*?)```/)
+      if (cfgMatch) {
+        try {
+          const cfg = JSON.parse(cfgMatch[1].trim())
+          setPendingConfig(cfg)
+          setPendingName(cfg.name||'Estrategia IA')
+        } catch(_) {}
+      }
+
+      // Parse missing_feature block
+      const missMatch = aiText.match(/```missing_feature\n([\s\S]*?)```/)
+      if (missMatch) {
+        try { setPendingMissing(JSON.parse(missMatch[1].trim())) } catch(_) {}
+      }
+
+      // Clean display text (remove code blocks for cleaner display)
+      const displayText = aiText
+        .replace(/```strategy_config[\s\S]*?```/g, '')
+        .replace(/```missing_feature[\s\S]*?```/g, '')
+        .trim()
+
+      setMessages(prev=>[...prev, { role:'assistant', content:displayText, hasCfg:!!cfgMatch, hasMissing:!!missMatch }])
+    } catch(e) {
+      setMessages(prev=>[...prev, { role:'assistant', content:`Error: ${e.message}`, isError:true }])
+    }
+    setLoading(false)
+    setTimeout(()=>inputRef.current?.focus(),100)
+  }
+
+  const applyConfig = () => {
+    if (!pendingConfig) return
+    const { name, ...defn } = pendingConfig
+    onApply(defn, name)
+    setMessages(prev=>[...prev, {
+      role:'assistant',
+      content:`✓ Configuración aplicada al constructor de estrategias. Puedes revisar y ajustar cada paso manualmente. ${name ? `Nombre: "${name}"` : ''}`
+    }])
+    setPendingConfig(null)
+  }
+
+  const copyMissingCode = () => {
+    if (!pendingMissing) return
+    const code = JSON.stringify(pendingMissing, null, 2)
+    navigator.clipboard?.writeText(code)
+    setMessages(prev=>[...prev,{role:'assistant',content:'📋 Código copiado al portapapeles. Pásalo al desarrollador para implementar la funcionalidad.'}])
+  }
+
+  const MSG_BG = { user:'rgba(0,212,255,0.08)', assistant:'rgba(13,21,32,0.6)' }
+  const MSG_BORDER = { user:'rgba(0,212,255,0.25)', assistant:'rgba(26,45,69,0.6)' }
+
+  return (
+    <div style={{
+      position:'fixed', inset:0, zIndex:800,
+      display:'flex', alignItems:'stretch', justifyContent:'flex-end',
+      pointerEvents:'none'
+    }}>
+      {/* Backdrop */}
+      <div style={{position:'absolute',inset:0,background:'rgba(0,0,0,0.4)',pointerEvents:'all'}}
+        onClick={onClose}/>
+
+      {/* Panel */}
+      <div style={{
+        position:'relative', width:420, maxWidth:'90vw',
+        display:'flex', flexDirection:'column',
+        background:'#0a101a', borderLeft:'1px solid #1a2d45',
+        boxShadow:'-8px 0 40px rgba(0,0,0,0.6)',
+        pointerEvents:'all', zIndex:1
+      }}>
+        {/* Header */}
+        <div style={{
+          padding:'12px 16px', borderBottom:'1px solid #1a2d45',
+          display:'flex', alignItems:'center', gap:10, flexShrink:0
+        }}>
+          <div style={{
+            width:28,height:28,borderRadius:'50%',
+            background:'linear-gradient(135deg,#9b72ff,#00d4ff)',
+            display:'flex',alignItems:'center',justifyContent:'center',
+            fontSize:14,flexShrink:0
+          }}>✦</div>
+          <div style={{flex:1}}>
+            <div style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:'#e2eaf5'}}>Asistente de Estrategias</div>
+            <div style={{fontFamily:MONO,fontSize:9,color:'#4a7fa0'}}>Powered by Groq · llama-3.3-70b</div>
+          </div>
+          <button onClick={onClose} style={{background:'none',border:'none',color:'#5a7a95',fontSize:16,cursor:'pointer',padding:'2px 6px'}}>✕</button>
+        </div>
+
+        {/* Messages */}
+        <div style={{flex:1,overflowY:'auto',padding:'12px 14px',display:'flex',flexDirection:'column',gap:10}}>
+          {messages.map((m,i)=>(
+            <div key={i} style={{
+              background:MSG_BG[m.role]||MSG_BG.assistant,
+              border:`1px solid ${MSG_BORDER[m.role]||MSG_BORDER.assistant}`,
+              borderRadius:m.role==='user'?'8px 8px 2px 8px':'8px 8px 8px 2px',
+              padding:'8px 12px', alignSelf:m.role==='user'?'flex-end':'flex-start',
+              maxWidth:'90%'
+            }}>
+              <div style={{fontFamily:MONO,fontSize:11,color:m.isError?'#ff4d6d':'#cce0f5',lineHeight:1.65,whiteSpace:'pre-wrap'}}>
+                {m.content}
+              </div>
+              {m.hasCfg&&pendingConfig&&(
+                <div style={{marginTop:8,display:'flex',gap:6,alignItems:'center'}}>
+                  <div style={{fontFamily:MONO,fontSize:9,color:'#00e5a0',flex:1}}>
+                    ✓ Configuración lista: "{pendingName}"
+                  </div>
+                  <button onClick={applyConfig} style={{
+                    background:'rgba(0,229,160,0.15)',border:'1px solid #00e5a0',
+                    color:'#00e5a0',fontFamily:MONO,fontSize:10,fontWeight:700,
+                    padding:'4px 10px',borderRadius:4,cursor:'pointer',whiteSpace:'nowrap'
+                  }}>⚡ Aplicar al Builder</button>
+                </div>
+              )}
+              {m.hasMissing&&pendingMissing&&(
+                <div style={{marginTop:8}}>
+                  <div style={{fontFamily:MONO,fontSize:9,color:'#ffd166',marginBottom:4}}>
+                    ⚠ Funcionalidad no disponible: {pendingMissing.description}
+                  </div>
+                  <button onClick={copyMissingCode} style={{
+                    background:'rgba(255,209,102,0.1)',border:'1px solid #ffd166',
+                    color:'#ffd166',fontFamily:MONO,fontSize:10,
+                    padding:'4px 10px',borderRadius:4,cursor:'pointer'
+                  }}>📋 Copiar código para el desarrollador</button>
+                </div>
+              )}
+            </div>
+          ))}
+          {loading&&(
+            <div style={{alignSelf:'flex-start',background:'rgba(13,21,32,0.6)',border:'1px solid #1a2d45',
+              borderRadius:'8px 8px 8px 2px',padding:'8px 14px',fontFamily:MONO,fontSize:11,color:'#4a7fa0'}}>
+              <span style={{animation:'pulse 1.2s infinite'}}>⟳ Pensando...</span>
+            </div>
+          )}
+          <div ref={messagesEndRef}/>
+        </div>
+
+        {/* Input */}
+        <div style={{padding:'10px 14px',borderTop:'1px solid #1a2d45',flexShrink:0}}>
+          <div style={{display:'flex',gap:8,alignItems:'flex-end'}}>
+            <textarea
+              ref={inputRef}
+              value={input}
+              onChange={e=>setInput(e.target.value)}
+              onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}}}
+              placeholder="Describe tu estrategia... (Enter=enviar, Shift+Enter=nueva línea)"
+              rows={2}
+              style={{
+                flex:1,background:'#080c14',border:'1px solid #1a2d45',borderRadius:5,
+                color:'#e2eaf5',fontFamily:MONO,fontSize:11,padding:'8px 10px',
+                resize:'none',lineHeight:1.5,
+                outline:'none',transition:'border-color .15s',
+              }}
+              onFocus={e=>e.target.style.borderColor='#2a4a66'}
+              onBlur={e=>e.target.style.borderColor='#1a2d45'}
+            />
+            <button onClick={send} disabled={loading||!input.trim()} style={{
+              background:loading||!input.trim()?'rgba(26,45,69,0.5)':'linear-gradient(135deg,#9b72ff,#00d4ff)',
+              border:'none',borderRadius:5,color:loading||!input.trim()?'#3d5a7a':'#080c14',
+              fontFamily:MONO,fontSize:16,fontWeight:700,
+              padding:'8px 14px',cursor:loading||!input.trim()?'not-allowed':'pointer',
+              transition:'all .15s',flexShrink:0,alignSelf:'stretch'
+            }}>➤</button>
+          </div>
+          <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',marginTop:5}}>
+            {getGroqKey()?'✓ API Key configurada':'⚠ Sin API Key — configúrala en ⚙ Configuración → Integraciones'}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── StrategyBuilder — constructor jerárquico de 8 pasos ───────
 // Cada paso tiene número, título, descripción y controles específicos.
 function StrategyBuilder({ definition, setDefinition }) {
@@ -1681,6 +1981,7 @@ export default function Home() {
   const [stratSaving, setStratSaving] = useState(false)
   const [stratMsg, setStratMsg]       = useState(null)
   const [stratTab, setStratTab]       = useState('build')
+  const [aiPanelOpen, setAiPanelOpen] = useState(false)
   // Alarmas
   const [alarms,setAlarms]=useState([])
   const [alarmLoading,setAlarmLoading]=useState(true)
@@ -1693,6 +1994,11 @@ export default function Home() {
   const [onlyFavs,setOnlyFavs]=useState(false)  // filtro solo favoritos
   const [alarmDropOpen,setAlarmDropOpen]=useState(false)  // desplegable alarmas
   const [priceAlarmDlg,setPriceAlarmDlg]=useState(null) // {price, symbol} o null
+  // ── Ranking ─────────────────────────────────────────────────
+  const [rankingData,setRankingData]=useState({})      // { symbol: { score, rank, metrics } }
+  const [rankingRunning,setRankingRunning]=useState(false)
+  const [rankingProgress,setRankingProgress]=useState({done:0,total:0})
+  const [rankingError,setRankingError]=useState(null)
   // Búsqueda async de nombre
   const symSearchRef=useRef(null)
   const [mcTradeFilter,setMcTradeFilter]=useState('')
@@ -1980,6 +2286,71 @@ export default function Home() {
     if(watchlist.length>0&&alarms.length>0) refreshAlarmStatus(watchlist,alarms)
   },[alarms,watchlist.length]) // eslint-disable-line
 
+  // ── Ranking: ejecuta backtest en paralelo sobre toda la watchlist ──
+  const calcRanking = useCallback(async () => {
+    const cfg = { emaR:Number(emaR), emaL:Number(emaL), years:Number(years),
+      capitalIni:Number(capitalIni), tipoStop, atrPeriod:Number(atrP), atrMult:Number(atrM),
+      sinPerdidas, reentry, tipoFiltro, sp500EmaR:Number(sp500EmaR), sp500EmaL:Number(sp500EmaL) }
+    const syms = watchlist.map(w=>w.symbol)
+    setRankingRunning(true); setRankingError(null)
+    setRankingProgress({done:0, total:syms.length})
+
+    const sett = (()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')}catch(_){return {}}})()
+    const W = {
+      winrate:   (sett.ranking?.w_winrate   ?? 25) / 100,
+      factorben: (sett.ranking?.w_factorben ?? 25) / 100,
+      cagr:      (sett.ranking?.w_cagr      ?? 25) / 100,
+      robustez:  (sett.ranking?.w_robustez  ?? 20) / 100,
+      dd:        (sett.ranking?.w_dd        ?? 5)  / 100,
+    }
+    const minTrades = sett.ranking?.minTrades ?? 3
+    const BATCH = 4
+    const results = {}
+    for (let i=0; i<syms.length; i+=BATCH) {
+      const batch = syms.slice(i, i+BATCH)
+      await Promise.allSettled(batch.map(async sym => {
+        try {
+          const res = await fetch('/api/datos', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ simbolo:sym, cfg })
+          })
+          const json = await res.json()
+          if (!res.ok || !json.trades?.length) return
+          const trades = json.trades
+          if (trades.length < minTrades) return
+          const wins=trades.filter(t=>t.pnlPct>=0), losses=trades.filter(t=>t.pnlPct<0)
+          const winRate=(wins.length/trades.length)*100
+          const gBrut=wins.reduce((s,t)=>s+t.pnlSimple,0), lBrut=losses.reduce((s,t)=>s+Math.abs(t.pnlSimple),0)
+          const factorBen=lBrut>0?Math.min(gBrut/lBrut,9.99):9.99
+          const totalDiasNat=json.startDate?(new Date(json.meta?.ultimaFecha)-new Date(json.startDate))/86400000:365*Number(years)
+          const anios=Math.max(totalDiasNat/365.25,0.01)
+          const capFinal=Number(capitalIni)+json.gananciaSimple
+          const cagr=capFinal>0?(Math.pow(capFinal/Number(capitalIni),1/anios)-1)*100:-99
+          const sorted3=[...trades].sort((a,b)=>b.pnlSimple-a.pnlSimple).slice(3)
+          const ganRobust=sorted3.reduce((s,t)=>s+t.pnlSimple,0)
+          const capRob=Number(capitalIni)+ganRobust
+          const cagrRobust=capRob>0?(Math.pow(capRob/Number(capitalIni),1/anios)-1)*100:-99
+          const maxDD=json.maxDDStrategy||0
+          const norm=(v,min,max)=>Math.max(0,Math.min(100,(v-min)/(max-min)*100))
+          const score=Math.max(0,Math.min(100,
+            norm(winRate,20,80)*W.winrate +
+            norm(factorBen,0.5,5)*W.factorben +
+            norm(cagr,-20,60)*W.cagr +
+            norm(cagrRobust,-20,50)*W.robustez -
+            norm(maxDD,0,60)*W.dd
+          ))
+          results[sym]={score,metrics:{winRate,factorBen,cagr,cagrRobust,maxDD,trades:trades.length}}
+        } catch(_){}
+      }))
+      setRankingProgress({done:Math.min(i+BATCH,syms.length),total:syms.length})
+    }
+    const sortedEntries=Object.entries(results).sort((a,b)=>b[1].score-a[1].score)
+    sortedEntries.forEach(([sym],i)=>{results[sym].rank=i+1})
+    setRankingData(results)
+    setRankingRunning(false)
+    setRankingProgress({done:0,total:0})
+  }, [watchlist,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL])
+
   const run=useCallback(async(sym,payload)=>{
     setLoading(true);setError(null)
     try{
@@ -2230,7 +2601,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator 2.8</title>
+        <title>Trading Simulator V2.9</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2286,7 +2657,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator 2.5
+            <span className="dot"/>Trading Simulator V2.9
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -2529,18 +2900,30 @@ export default function Home() {
                       return matchList&&matchSearch&&matchFav&&matchAlarm
                     })
                     const favs=filtered.filter(w=>w.favorite)
-                    const rest=filtered.filter(w=>!w.favorite).sort((a,b)=>a.name.localeCompare(b.name))
+                    const rest=filtered.filter(w=>!w.favorite).sort((a,b)=>{
+                      const ra=rankingData[a.symbol]?.rank, rb=rankingData[b.symbol]?.rank
+                      if(ra!=null&&rb!=null) return ra-rb
+                      if(ra!=null) return -1
+                      if(rb!=null) return 1
+                      return a.name.localeCompare(b.name)
+                    })
                     const all=[...favs,...rest]
                     const totalWl=watchlist.length
                     if(!all.length) return <div style={{padding:'12px',fontFamily:MONO,fontSize:11,color:'#8aadcc'}}>Sin activos para los filtros activos</div>
-                    // Count badge above list
+                    // Count badge + ranking button above list
+                    const hasRanking=Object.keys(rankingData).length>0
                     const countBadge=(
-                      <div style={{padding:'3px 10px 3px',fontFamily:MONO,fontSize:12,color:'#a8ccdf',background:'var(--bg2)',borderBottom:'1px solid var(--border)',display:'flex',gap:6,alignItems:'center'}}>
+                      <div style={{padding:'3px 8px',fontFamily:MONO,fontSize:11,color:'#a8ccdf',background:'var(--bg2)',borderBottom:'1px solid var(--border)',display:'flex',gap:5,alignItems:'center',flexWrap:'wrap'}}>
                         <span style={{color:'#a8c8e8',fontWeight:600}}>{all.length}</span>
-                        <span style={{color:'#8abcd4'}}>de</span>
-                        <span style={{color:'#a8c8e8',fontWeight:600}}>{totalWl}</span>
                         <span style={{color:'#8abcd4'}}>activos</span>
-                        {filtered.length<totalWl&&<span style={{marginLeft:'auto',color:'#ffd166',fontSize:11}}>{totalWl-filtered.length} filtrado{totalWl-filtered.length!==1?'s':''}</span>}
+                        {rankingRunning&&<span style={{color:'#ffd166',fontSize:10}}>⟳ {rankingProgress.done}/{rankingProgress.total}</span>}
+                        {hasRanking&&!rankingRunning&&<span style={{color:'#00e5a0',fontSize:9}}>🏆 Ordenado por ranking</span>}
+                        <button onClick={calcRanking} disabled={rankingRunning} title="Calcular ranking de activos con la estrategia activa"
+                          style={{marginLeft:'auto',background:rankingRunning?'rgba(13,21,32,0.5)':'rgba(255,209,102,0.1)',border:`1px solid ${rankingRunning?'#1a2d45':'rgba(255,209,102,0.4)'}`,color:rankingRunning?'#3d5a7a':'#ffd166',fontFamily:MONO,fontSize:9,padding:'2px 6px',borderRadius:3,cursor:rankingRunning?'not-allowed':'pointer',letterSpacing:'0.05em'}}>
+                          {rankingRunning?'calculando…':'🏆 Ranking'}
+                        </button>
+                        {hasRanking&&<button onClick={()=>setRankingData({})} title="Limpiar ranking"
+                          style={{background:'transparent',border:'1px solid #1a2d45',color:'#5a7a95',fontFamily:MONO,fontSize:9,padding:'2px 5px',borderRadius:3,cursor:'pointer'}}>✕</button>}
                       </div>
                     )
                     return (<>{countBadge}{all.map(w=>(
@@ -2548,6 +2931,19 @@ export default function Home() {
                         style={{padding:'6px 10px',display:'flex',alignItems:'center',gap:6,borderBottom:'1px solid var(--border)',background:simbolo===w.symbol?'rgba(0,212,255,0.07)':'transparent'}}
                         onMouseOver={e=>e.currentTarget.style.background='rgba(255,255,255,0.03)'}
                         onMouseOut={e=>e.currentTarget.style.background=simbolo===w.symbol?'rgba(0,212,255,0.07)':'transparent'}>
+                        {/* Ranking badge */}
+                        {(()=>{
+                          const rd=rankingData[w.symbol]
+                          if(!rd) return <span style={{width:16,flexShrink:0}}/>
+                          const r=rd.rank
+                          const col=r===1?'#ffd700':r===2?'#c0c0c0':r===3?'#cd7f32':r<=10?'#00d4ff':'#3d5a7a'
+                          return(
+                            <span title={`Rank #${r} · Score: ${rd.score.toFixed(0)} · WR:${rd.metrics.winRate.toFixed(0)}% · FB:${rd.metrics.factorBen.toFixed(1)} · CAGR:${rd.metrics.cagr.toFixed(1)}%`}
+                              style={{fontFamily:MONO,fontSize:9,fontWeight:700,color:col,flexShrink:0,minWidth:20,textAlign:'center',lineHeight:1}}>
+                              {r<=3?['🥇','🥈','🥉'][r-1]:`#${r}`}
+                            </span>
+                          )
+                        })()}
                         {/* Estrella favorito */}
                         <span onClick={async(e)=>{e.stopPropagation();await upsertWatchlistItem({...w,favorite:!w.favorite});reloadWatchlist()}}
                           style={{cursor:'pointer',fontSize:12,color:w.favorite?'#ffd166':'var(--text3)',flexShrink:0}} title="Favorito">
@@ -3608,6 +4004,23 @@ export default function Home() {
 
             {/* Constructor modular */}
             <div style={{borderTop:'1px solid var(--border)',paddingTop:10}}>
+              {/* Botón Asistente IA */}
+              <button onClick={()=>setAiPanelOpen(true)} style={{
+                display:'flex',alignItems:'center',gap:8,width:'100%',
+                background:'linear-gradient(135deg,rgba(155,114,255,0.12),rgba(0,212,255,0.08))',
+                border:'1px solid rgba(155,114,255,0.4)',borderRadius:6,
+                color:'#cce0f5',fontFamily:MONO,fontSize:11,padding:'8px 12px',
+                cursor:'pointer',marginBottom:10,textAlign:'left',transition:'all .15s'
+              }}
+              onMouseOver={e=>{e.currentTarget.style.background='linear-gradient(135deg,rgba(155,114,255,0.2),rgba(0,212,255,0.14))';e.currentTarget.style.borderColor='rgba(155,114,255,0.7)'}}
+              onMouseOut={e=>{e.currentTarget.style.background='linear-gradient(135deg,rgba(155,114,255,0.12),rgba(0,212,255,0.08))';e.currentTarget.style.borderColor='rgba(155,114,255,0.4)'}}>
+                <span style={{fontSize:16,lineHeight:1}}>✦</span>
+                <div>
+                  <div style={{fontWeight:700,letterSpacing:'0.04em',fontSize:11}}>Asistente IA</div>
+                  <div style={{fontSize:9,color:'#7a9bc0',marginTop:1}}>Describe tu estrategia en lenguaje natural</div>
+                </div>
+                <span style={{marginLeft:'auto',fontSize:10,color:'#9b72ff'}}>→</span>
+              </button>
               <StrategyBuilder definition={definition} setDefinition={setDefinition}/>
             </div>
 
@@ -3654,6 +4067,13 @@ export default function Home() {
       )}
     {/* ── Modal de configuración global ── */}
     {settingsOpen&&<SettingsModal onClose={()=>setSettingsOpen(false)}/>}
+
+    {/* ── Panel Asistente IA de estrategias ── */}
+    {aiPanelOpen&&<StrategyAIPanel
+      definition={definition}
+      onApply={(defn, name)=>{setDefinition(defn);if(name)setStratName(name);setAiPanelOpen(false)}}
+      onClose={()=>setAiPanelOpen(false)}
+    />}
 
     {/* ── Modal de alarma de precio (doble-clic en gráfico) ── */}
     {priceAlarmDlg&&(
