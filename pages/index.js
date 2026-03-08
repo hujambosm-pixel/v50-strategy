@@ -223,7 +223,7 @@ async function fetchAlarms() {
 async function upsertAlarm(item) {
   const method=item.id?'PATCH':'POST'
   const url=item.id?`${SUPA_URL}/rest/v1/alarms?id=eq.${item.id}`:`${SUPA_URL}/rest/v1/alarms`
-  const ALLOWED=['name','condition','ema_r','ema_l','active']
+  const ALLOWED=['name','symbol','condition','condition_detail','price_level','ema_r','ema_l','active']
   const body={}; ALLOWED.forEach(k=>{if(item[k]!==undefined)body[k]=item[k]})
   const res=await fetch(url,{method,headers:{...SUPA_H,'Prefer':'return=representation'},body:JSON.stringify(body)})
   if(!res.ok){const t=await res.text();throw new Error('Error guardando alarma: '+t)}
@@ -458,6 +458,19 @@ function SettingsModal({ onClose }) {
                 </>
               )}
 
+              {sep('Parpadeo de alarmas')}
+              <div style={{marginBottom:12}}>
+                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
+                  <span style={{fontFamily:MONO,fontSize:10,color:'#cce0f5',flex:1}}>Parpadear cuando la alarma lleva ≤ N velas activa</span>
+                  <span style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:'#ffd166',minWidth:24,textAlign:'right'}}>{settings.alarmas?.blinkCandles??3}</span>
+                  <input type="range" min={1} max={20} value={settings.alarmas?.blinkCandles??3}
+                    onChange={e=>upd('alarmas.blinkCandles',Number(e.target.value))}
+                    style={{width:100,accentColor:'#ffd166'}}/>
+                </div>
+                <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',lineHeight:1.5}}>
+                  El círculo de alarma parpadeará si la condición se activó hace N velas o menos (día actual = 1).
+                </div>
+              </div>
               {sep('Opciones')}
               {[
                 ['alarms.onEntry',    'Notificar en señal de entrada'],
@@ -496,6 +509,19 @@ function SettingsModal({ onClose }) {
                 ))}
               </div>
 
+              {sep('Espacio derecho del gráfico')}
+              <div style={{marginBottom:16}}>
+                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
+                  <span style={{fontFamily:MONO,fontSize:10,color:'#cce0f5',flex:1}}>Velas de separación (borde derecho)</span>
+                  <span style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:'#00d4ff',minWidth:28,textAlign:'right'}}>{settings.chart?.rightMargin??8}</span>
+                  <input type="range" min={0} max={30} value={settings.chart?.rightMargin??8}
+                    onChange={e=>upd('chart.rightMargin',Number(e.target.value))}
+                    style={{width:100,accentColor:'#00d4ff'}}/>
+                </div>
+                <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',lineHeight:1.5}}>
+                  Espacio vacío a la derecha de la última vela. Por defecto 8 velas.
+                </div>
+              </div>
               {sep('Visualización')}
               {[
                 ['chart.showGrid',       'Mostrar grid',             true],
@@ -695,7 +721,7 @@ function PriceAlarmQuickForm({ price, symbol, alarms, onSave, onCancel }) {
 }
 
 // ── CandleChart ───────────────────────────────────────────────
-function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, syncRef, savedRangeRef, chartHeight=480 }) {
+function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, syncRef, savedRangeRef, chartHeight=480, rightMargin=8 }) {
   const containerRef=useRef(null), svgRef=useRef(null), legendRef=useRef(null), tooltipRef=useRef(null)
   const chartRef=useRef(null), candlesRef=useRef(null)
   const rulerStart=useRef(null), rulerActiveR=useRef(rulerActive)
@@ -714,7 +740,7 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
         timeScale:{borderColor:'#1a2d45',timeVisible:true},
       })
       chartRef.current=chart
-      chart.timeScale().applyOptions({ rightOffset: 4 })
+      chart.timeScale().applyOptions({ rightOffset: rightMargin })
 
       const candles=chart.addCandlestickSeries({
         upColor:'#00e5a0',downColor:'#ff4d6d',
@@ -913,6 +939,29 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
 
       const getPoint=(px,py)=>snapToOHLC(px,py,ctrlState.pressed)
       const cnt=containerRef.current
+
+      // ── Ruler: usar chart.subscribeClick (evita conflicto con canvas) ──
+      chart.subscribeClick(param=>{
+        if(!rulerActiveR.current) return
+        if(param.point==null) return
+        const px=param.point.x, py=param.point.y
+        const price=candlesRef.current?.coordinateToPrice(py)
+        const time=param.time
+        if(!rulerStart.current){
+          rulerStart.current={x:px,y:py,price,time}
+        } else {
+          // Congelar regla: limpiar ref pero dejar el SVG dibujado
+          rulerStart.current=null
+        }
+      })
+      chart.subscribeDblClick(param=>{
+        if(rulerActiveR.current){ rulerStart.current=null; clearRuler(); return }
+        if(onPriceAlarm&&param.point&&param.point.y!=null){
+          const price=candlesRef.current?.coordinateToPrice(param.point.y)
+          if(price!=null) onPriceAlarm(Math.round(price*100)/100)
+        }
+      })
+
       const onMove=e=>{
         const rect=containerRef.current.getBoundingClientRect()
         const px=e.clientX-rect.left,py=e.clientY-rect.top
@@ -924,26 +973,7 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
         } else { snapDot.setAttribute('display','none') }
         if(rulerActiveR.current&&rulerStart.current) drawRuler(rulerStart.current,getPoint(px,py))
       }
-      const onClick=e=>{
-        if(!rulerActiveR.current)return
-        const rect=containerRef.current.getBoundingClientRect()
-        const pt=getPoint(e.clientX-rect.left,e.clientY-rect.top)
-        if(!rulerStart.current)rulerStart.current=pt;else rulerStart.current=null
-      }
-      const onDbl=e=>{
-        // Si regla activa: limpiar regla
-        if(rulerActiveR.current){ rulerStart.current=null; clearRuler(); return }
-        // Si regla inactiva: crear alarma de precio en el punto del doble-clic
-        if(onPriceAlarm){
-          const rect=containerRef.current.getBoundingClientRect()
-          const px=e.clientX-rect.left, py=e.clientY-rect.top
-          const price=candlesRef.current?.coordinateToPrice(py)
-          if(price!=null) onPriceAlarm(Math.round(price*100)/100)
-        }
-      }
       cnt.addEventListener('mousemove',onMove)
-      cnt.addEventListener('click',onClick)
-      cnt.addEventListener('dblclick',onDbl)
 
       // ── Leyenda OHLC + EMAs ──
       chart.subscribeCrosshairMove(param=>{
@@ -995,7 +1025,7 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
           const lastBar = data[data.length-1]
           if(lastBar){
             const to = new Date(lastBar.date)
-            to.setDate(to.getDate()+6) // +6 calendar ≈ 4 trading days right margin
+            to.setDate(to.getDate()+Math.max(6,rightMargin*1.5|0)) // extra calendar days for right margin
             const from = new Date(lastBar.date)
             from.setMonth(from.getMonth()-3)
             chart.timeScale().setVisibleRange({
@@ -1047,7 +1077,7 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
       ro.observe(containerRef.current)
       setTimeout(drawTradeLabels,200)
 
-      return()=>{cnt.removeEventListener('mousemove',onMove);cnt.removeEventListener('click',onClick);cnt.removeEventListener('dblclick',onDbl);window.removeEventListener('keydown',onKeyDown);window.removeEventListener('keyup',onKeyUp);ro.disconnect()}
+      return()=>{cnt.removeEventListener('mousemove',onMove);window.removeEventListener('keydown',onKeyDown);window.removeEventListener('keyup',onKeyUp);ro.disconnect()}
     })
     return()=>{if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null}}
   },[data,emaRPeriod,emaLPeriod,trades,maxDD,labelMode])
@@ -2102,7 +2132,7 @@ export default function Home() {
     return()=>{window.removeEventListener('mousemove',onMove);window.removeEventListener('mouseup',onUp)}
   },[])
 
-  // ── Multicartera state ──────────────────────────────────────
+  // ── Backtesting state ──────────────────────────────────────
   const [mcSelected,setMcSelected]=useState([])          // symbols seleccionados
   const [mcMode,setMcMode]=useState('slots')             // 'slots' | 'rotativo' | 'custom'
   const [mcCapital,setMcCapital]=useState('compound')    // 'simple' | 'compound'
@@ -2262,6 +2292,7 @@ export default function Home() {
     setSinPerdidas(s.sin_perdidas??true);setReentry(s.reentry??true)
     setTipoFiltro(s.tipo_filtro||'none');setSp500EmaR(s.sp500_ema_r||10);setSp500EmaL(s.sp500_ema_l||11)
     setStrForm(f=>({...f,_loadedName:s.name}))
+    setStratName(s.name||'')
     setSidePanel('config')
   }
   const newStrategy=()=>openEditStr({id:null})
@@ -2463,8 +2494,8 @@ export default function Home() {
   },[simbolo,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,
      sp500EmaR,sp500EmaL,definition,sidePanel,run])
 
-  // ── Multicartera runner ─────────────────────────────────────
-  const runMulticartera=useCallback(async()=>{
+  // ── Backtesting runner ─────────────────────────────────────
+  const runBacktesting=useCallback(async()=>{
     if(mcSelected.length<2){setMcError('Selecciona al menos 2 activos');return}
     setMcLoading(true);setMcError(null);setMcResult(null)
     try{
@@ -2657,7 +2688,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V2.9</title>
+        <title>Trading Simulator V3.0</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2699,6 +2730,10 @@ export default function Home() {
           .header-sp500-ema   { font-size:12px !important; color:#ffd166 !important; font-weight:600; }
           .header-sp500-date  { font-size:11px !important; color:#90c4de !important; }
           .status-badge { font-size:11px !important; }
+        @keyframes alarmPulse {
+          0%,100% { opacity:1; box-shadow:var(--bc) 0 0 7px; }
+          50% { opacity:0.25; box-shadow:none; }
+        }
           /* ── Alarm badge numbers ── */
           .alarm-badge { font-size:11px !important; color:#f5fbff !important; font-weight:700; }
           /* ── Equity section ── */
@@ -2713,7 +2748,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V2.9
+            <span className="dot"/>Trading Simulator V3.0
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -2789,7 +2824,7 @@ export default function Home() {
               onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.25)'}
               onMouseOut={e=>e.currentTarget.style.background='transparent'}/>
             <div style={{display:'flex',borderBottom:'1px solid var(--border)'}}>
-              {[{id:'config',label:'⚙',title:'Configuración'},{id:'watchlist',label:'☰',title:'Watchlist'},{id:'alarms',label:'🔔',title:'Alarmas'},{id:'multi',label:'📊',title:'Multicartera'}].map(tab=>(
+              {[{id:'config',label:'⚙',title:'Configuración'},{id:'watchlist',label:'☰',title:'Watchlist'},{id:'alarms',label:'🔔',title:'Alarmas'},{id:'multi',label:'📊',title:'Backtesting'}].map(tab=>(
                 <button key={tab.id} onClick={()=>setSidePanel(tab.id)} title={tab.title} style={{
                   flex:1,padding:'8px 4px',
                   background:sidePanel===tab.id?'var(--bg3)':'transparent',
@@ -3023,9 +3058,12 @@ export default function Home() {
                             const bars=st?.bars
                             const col=ALARM_COLORS[ai%ALARM_COLORS.length]
                             const label=bars!=null?String(bars):'?'
+                            const blinkN=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.alarmas?.blinkCandles??3}catch(_){return 3}})()
+                            const shouldBlink=active&&bars!=null&&bars<=blinkN
                             return(
                               <span key={a.id} title={`${a.name}${active?' · activa'+( bars!=null?' · '+bars+' velas':''): ' · inactiva'}`}
                                 style={{
+                                  '--bc':col,
                                   display:'inline-flex',alignItems:'center',justifyContent:'center',
                                   width:18,height:18,borderRadius:'50%',flexShrink:0,
                                   background:active?col:'rgba(61,90,122,0.2)',
@@ -3034,6 +3072,7 @@ export default function Home() {
                                   fontFamily:MONO,fontSize:8,fontWeight:800,lineHeight:1,
                                   boxShadow:active?`0 0 6px ${col}55`:undefined,
                                   cursor:'default',
+                                  animation:shouldBlink?`alarmPulse 1s ease-in-out infinite`:undefined,
                                 }}>
                                 {active?label:''}
                               </span>
@@ -3159,25 +3198,63 @@ export default function Home() {
                   })}
                 </div>
               </div>
+
+                {/* ── Alarmas de precio (desde doble-clic) ── */}
+                {(()=>{
+                  const priceAlarms=alarms.filter(a=>a.condition==='price_level')
+                  if(!priceAlarms.length) return null
+                  return(
+                    <div style={{borderTop:'2px solid var(--border)',flexShrink:0}}>
+                      <div style={{padding:'5px 10px',fontFamily:MONO,fontSize:9,color:'#6a8caa',
+                        letterSpacing:'0.08em',textTransform:'uppercase',background:'var(--bg2)',
+                        display:'flex',alignItems:'center',gap:6}}>
+                        <span>🎯 Alarmas de precio</span>
+                        <span style={{color:'#3d5a7a'}}>({priceAlarms.length})</span>
+                      </div>
+                      <div style={{overflowY:'auto',maxHeight:180}}>
+                        {priceAlarms.map(a=>{
+                          const isAbove=a.condition_detail==='price_above'
+                          return(
+                            <div key={a.id} style={{
+                              padding:'5px 10px',borderBottom:'1px solid var(--border)',
+                              display:'flex',alignItems:'center',gap:6}}>
+                              <span style={{fontSize:10,flexShrink:0,color:isAbove?'#00e5a0':'#ff4d6d'}}>{isAbove?'▲':'▼'}</span>
+                              <div style={{flex:1,minWidth:0}}>
+                                <div style={{fontFamily:MONO,fontSize:10,color:'#d0e8fa',fontWeight:600,
+                                  overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                                  {a.symbol} @ <span style={{color:isAbove?'#00e5a0':'#ff4d6d'}}>{a.price_level?.toFixed(2)??'—'}</span>
+                                </div>
+                                <div style={{fontFamily:MONO,fontSize:9,color:'#5a7a95',
+                                  overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.name}</div>
+                              </div>
+                              <button onClick={async()=>{await deleteAlarm(a.id);reloadAlarms()}}
+                                style={{background:'transparent',border:'none',color:'#ff4d6d',fontSize:12,cursor:'pointer',padding:'0 2px',flexShrink:0}}>✕</button>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                })()}
             )}
 
 
-            {/* ══ PANEL MULTICARTERA ══ */}
+            {/* ══ PANEL BACKTESTING ══ */}
             {sidePanel==='multi'&&(
               <div style={{display:'flex',flexDirection:'column',flex:1,overflowY:'auto'}}>
                 {/* Botón ejecutar — fijado arriba */}
                 <div style={{padding:'8px 10px',borderBottom:'1px solid var(--border)',background:'var(--bg2)',flexShrink:0}}>
                   {mcSelected.length>=2?(
-                    <button onClick={runMulticartera} disabled={mcLoading}
+                    <button onClick={runBacktesting} disabled={mcLoading}
                       style={{width:'100%',fontFamily:MONO,fontSize:11,padding:'7px 10px',borderRadius:4,cursor:mcLoading?'wait':'pointer',
                         background:mcLoading?'rgba(0,212,255,0.05)':'rgba(0,212,255,0.15)',
                         border:'1px solid var(--accent)',color:'var(--accent)',fontWeight:700,letterSpacing:'0.05em'}}>
-                      {mcLoading?'⟳ Calculando...':'▶ EJECUTAR MULTICARTERA'}
+                      {mcLoading?'⟳ Calculando...':'▶ EJECUTAR BACKTESTING'}
                     </button>
                   ):(
                     <button disabled style={{width:'100%',fontFamily:MONO,fontSize:12,padding:'7px 10px',borderRadius:4,cursor:'not-allowed',
                       background:'transparent',border:'1px solid #2a3f55',color:'#7aabc8',letterSpacing:'0.05em'}}>
-                      ▶ EJECUTAR — selecciona 2+
+                      ▶ EJECUTAR — selecciona 2+ activos
                     </button>
                   )}
                   {mcError&&<div style={{fontFamily:MONO,fontSize:12,color:'#ff4d6d',marginTop:5}}>⚠ {mcError}</div>}
@@ -3223,8 +3300,15 @@ export default function Home() {
                       </button>
                     </div>
                   </div>
-                  {watchlist.map(w=>{
+                  {[...watchlist].sort((a,b)=>{
+                    const ra=rankingData[a.symbol]?.rank, rb=rankingData[b.symbol]?.rank
+                    if(ra!=null&&rb!=null) return ra-rb
+                    if(ra!=null) return -1
+                    if(rb!=null) return 1
+                    return a.name.localeCompare(b.name)
+                  }).map(w=>{
                     const sel=mcSelected.includes(w.symbol)
+                    const rd=rankingData[w.symbol]
                     return(
                       <div key={w.symbol} onClick={()=>setMcSelected(prev=>sel?prev.filter(s=>s!==w.symbol):[...prev,w.symbol])}
                         style={{display:'flex',alignItems:'center',gap:7,padding:'5px 6px',borderRadius:3,marginBottom:2,cursor:'pointer',
@@ -3241,6 +3325,11 @@ export default function Home() {
                           <div style={{fontFamily:MONO,fontSize:12,color:sel?'var(--accent)':'#d0e8fa',fontWeight:600}}>{w.symbol}</div>
                           <div style={{fontFamily:MONO,fontSize:11,color:'#b0d0e8',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{w.name}</div>
                         </div>
+                        {rd&&<span style={{fontFamily:MONO,fontSize:9,fontWeight:700,
+                          color:rd.rank===1?'#ffd700':rd.rank===2?'#c0c0c0':rd.rank===3?'#cd7f32':rd.rank<=10?'#00d4ff':'#4a7a95',
+                          minWidth:22,textAlign:'right',flexShrink:0}}>
+                          {rd.rank<=3?['🥇','🥈','🥉'][rd.rank-1]:`#${rd.rank}`}
+                        </span>}
                         {w.favorite&&<span style={{color:'#ffd166',fontSize:12}}>★</span>}
                       </div>
                     )
@@ -3323,6 +3412,7 @@ export default function Home() {
                       savedRangeRef={savedRangeRef}
                       syncRef={chartSyncRef}
                       chartHeight={candleH}
+                      rightMargin={(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.chart?.rightMargin??8}catch(_){return 8}})()}
                     />
                     {/* Drag handle — resize candle chart */}
                     <div onMouseDown={e=>{candleResizing.current=true;candleStartY.current=e.clientY;candleStartH.current=candleH;document.body.style.cursor='row-resize';document.body.style.userSelect='none'}}
