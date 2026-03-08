@@ -2846,7 +2846,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V3.2</title>
+        <title>Trading Simulator V3.3</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2908,7 +2908,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V3.2
+            <span className="dot"/>Trading Simulator V3.3
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -3422,7 +3422,7 @@ export default function Home() {
                 <div style={{padding:'10px 12px',borderBottom:'1px solid var(--border)'}}>
                   <div style={{fontFamily:MONO,fontSize:12,color:'#c8dff5',marginBottom:6,letterSpacing:'0.05em',fontWeight:600}}>MODO DE ASIGNACIÓN</div>
                   {(()=>{
-                    const [modeTooltip,setModeTooltip]=React.useState(null)
+                    // eslint-disable-next-line
                     return [
                       {id:'slots',label:'Slots iguales',ready:true,
                         desc:'El capital se divide en N partes iguales, una por activo. Cada slot opera de forma independiente con su fracción fija. Ejemplo: 4 activos con €10.000 → cada uno opera con €2.500 en paralelo, sin interferir entre sí.'},
@@ -3431,7 +3431,7 @@ export default function Home() {
                       {id:'custom',label:'Pesos personalizados',ready:false,
                         desc:'Define manualmente qué porcentaje del capital va a cada activo. La suma debe ser 100%. Ideal para sobreponderar activos de mayor convicción.'},
                     ].map(m=>(
-                      <div key={m.id} style={{position:'relative',marginBottom:3}}>
+                      <div key={m.id} style={{marginBottom:3}}>
                         <div onClick={()=>m.ready&&setMcMode(m.id)}
                           style={{display:'flex',alignItems:'center',gap:8,padding:'6px 8px',borderRadius:4,
                             background:mcMode===m.id?'rgba(0,212,255,0.08)':'transparent',
@@ -3443,22 +3443,12 @@ export default function Home() {
                             {m.label}{!m.ready&&<span style={{fontSize:8,color:'#ffd166',marginLeft:5,verticalAlign:'middle'}}>⏳</span>}
                           </span>
                           <span
-                            onMouseEnter={()=>setModeTooltip(m.id)}
-                            onMouseLeave={()=>setModeTooltip(null)}
-                            onClick={e=>{e.stopPropagation();setModeTooltip(modeTooltip===m.id?null:m.id)}}
+                            title={m.desc}
                             style={{width:16,height:16,borderRadius:'50%',border:'1px solid #3d5a7a',color:'#3d5a7a',fontSize:10,
                               display:'flex',alignItems:'center',justifyContent:'center',cursor:'help',flexShrink:0,fontWeight:700,lineHeight:1}}>
                             ?
                           </span>
                         </div>
-                        {modeTooltip===m.id&&(
-                          <div style={{position:'absolute',right:0,top:'100%',zIndex:9999,background:'#0d1828',
-                            border:'1px solid #2a4a6a',borderRadius:6,padding:'10px 12px',
-                            fontFamily:MONO,fontSize:11,color:'#c8dff5',lineHeight:1.6,
-                            width:240,boxShadow:'0 8px 24px rgba(0,0,0,0.6)',marginTop:4}}>
-                            {m.desc}
-                          </div>
-                        )}
                       </div>
                     ))
                   })()}
@@ -3629,7 +3619,7 @@ export default function Home() {
                       trades={result.trades||[]} maxDD={metrics?.ddSimple||0}
                       labelMode={labelMode} rulerActive={rulerOn}
                       onChartReady={api=>{chartApiRef.current=api}}
-                      onPriceAlarm={price=>setPriceAlarmDlg({price,symbol:simbolo})}
+                      onPriceAlarm={sidePanel!=='watchlist'?price=>setPriceAlarmDlg({price,symbol:simbolo}):null}
                       savedRangeRef={savedRangeRef}
                       syncRef={chartSyncRef}
                       chartHeight={candleH}
