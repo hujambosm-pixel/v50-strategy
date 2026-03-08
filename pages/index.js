@@ -31,30 +31,36 @@ function calcMetrics(trades, capitalIni, capitalReinv, gananciaSimple, ganBH, st
 
 const MONO='"JetBrains Mono","Fira Code","IBM Plex Mono",monospace'
 
-// ── Tip — icono ⓘ con tooltip explicativo ────────────────────
-const TIPS={
-  emaR:'EMA Rápida: media exponencial de corto plazo. El cruce alcista (rápida > lenta) genera el setup de entrada.',
-  emaL:'EMA Lenta: media exponencial de largo plazo. Define la tendencia principal.',
-  capital:'Capital inicial en euros para calcular P&L simple y compuesto.',
-  years:'Número de años hacia atrás para el backtest, desde la fecha más reciente disponible.',
-  tipoStop:'Stop Técnico: coloca el stop en min(EMA rápida, mínimo del setup). ATR: stop dinámico basado en volatilidad.',
-  atr:'Periodo del ATR (Average True Range) para calcular el stop dinámico.',
-  atrMult:'Multiplicador del ATR. Stop = Precio entrada − (ATR × multiplicador).',
-  sinPerdidas:'Modo Sin Pérdidas: activa el stop en el precio de entrada cuando el trade está en beneficio, protegiendo contra pérdidas.',
-  reentry:'Re-Entry: permite volver a entrar tras una salida si las EMAs siguen alcistas, mediante un nuevo breakout sobre la EMA rápida.',
-  filtroSP500:'Filtra entradas según el estado del SP500. Bloquea nuevas posiciones cuando el mercado es bajista.',
-  sp500Emas:'EMAs del SP500 usadas para el filtro. "Precio sobre EMA rápida": bloquea si SP500 < EMA. "EMA rápida > lenta": bloquea si tendencia bajista.',
+// ── Tip — icono ⓘ con tooltip explicativo (Groq AI) ─────────
+const TIP_LABELS={
+  emaR:'EMA Rápida (periodo)',emaL:'EMA Lenta (periodo)',capital:'Capital inicial (€)',
+  years:'Años de backtest',tipoStop:'Tipo de Stop Loss',atr:'Periodo ATR',
+  atrMult:'Multiplicador ATR',sinPerdidas:'Modo Sin Pérdidas',reentry:'Modo Re-Entry',
+  filtroSP500:'Filtro de mercado SP500',sp500Emas:'EMAs del SP500'
 }
 function Tip({id,style}){
   const [show,setShow]=useState(false)
-  const t=TIPS[id]||''
-  if(!t) return null
+  const [text,setText]=useState(null)
+  const [loading,setLoading]=useState(false)
+  const topic=TIP_LABELS[id]||id
+  const handleEnter=async()=>{
+    setShow(true)
+    if(text!==null) return  // ya cargado
+    setLoading(true)
+    try{
+      const storedKey=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.integrations?.groqKey||''}catch(_){return ''}})()
+      const r=await fetch('/api/groq-help',{method:'POST',headers:{'Content-Type':'application/json','x-groq-key':storedKey},body:JSON.stringify({topic})})
+      const d=await r.json()
+      setText(d.text||'Sin información disponible.')
+    }catch(_){setText('No se pudo cargar la ayuda.')}
+    setLoading(false)
+  }
   return(
     <span style={{position:'relative',display:'inline-flex',alignItems:'center',...style}}
-      onMouseEnter={()=>setShow(true)} onMouseLeave={()=>setShow(false)}>
+      onMouseEnter={handleEnter} onMouseLeave={()=>setShow(false)}>
       <span style={{cursor:'help',color:'#4a7fa0',fontSize:10,lineHeight:1,userSelect:'none'}}>ⓘ</span>
-      {show&&<div style={{position:'absolute',left:'50%',bottom:'calc(100% + 6px)',transform:'translateX(-50%)',background:'#0d1a27',border:'1px solid #2a4a66',borderRadius:5,padding:'7px 10px',zIndex:200,width:200,fontFamily:MONO,fontSize:10,color:'#cce0f5',lineHeight:1.5,boxShadow:'0 4px 20px rgba(0,0,0,0.7)',pointerEvents:'none',whiteSpace:'normal'}}>
-        {t}
+      {show&&<div style={{position:'absolute',left:'50%',bottom:'calc(100% + 6px)',transform:'translateX(-50%)',background:'#0d1a27',border:'1px solid #2a4a66',borderRadius:5,padding:'7px 10px',zIndex:200,width:220,fontFamily:MONO,fontSize:10,color:'#cce0f5',lineHeight:1.6,boxShadow:'0 4px 20px rgba(0,0,0,0.7)',pointerEvents:'none',whiteSpace:'normal'}}>
+        {loading?<span style={{color:'#4a7fa0'}}>Cargando...</span>:text||'...'}
         <div style={{position:'absolute',left:'50%',top:'100%',transform:'translateX(-50%)',borderWidth:'5px 5px 0',borderStyle:'solid',borderColor:'#2a4a66 transparent transparent'}}/>
       </div>}
     </span>
@@ -185,8 +191,306 @@ function lookupName(sym) {
   return up.replace(/[\^=\.\-]/g,' ').replace(/USD$/,'').trim()
 }
 
+// ── SettingsModal — configuración global de la app ───────────
+const SETTINGS_KEY = 'v50_settings'
+function loadSettings() {
+  try { return JSON.parse(localStorage.getItem(SETTINGS_KEY)||'{}') } catch(_){ return {} }
+}
+function saveSettings(s) {
+  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)) } catch(_) {}
+}
+
+function SettingsModal({ onClose }) {
+  const [tab, setTab] = useState('integraciones')
+  const [settings, setSettings] = useState(loadSettings)
+  const [groqStatus, setGroqStatus] = useState(null) // null | 'testing' | 'ok' | 'err'
+  const [dirty, setDirty] = useState(false)
+
+  const upd = (path, val) => {
+    setSettings(s => {
+      const n = {...s}
+      const parts = path.split('.')
+      let cur = n
+      for (let i=0; i<parts.length-1; i++) { cur[parts[i]] = cur[parts[i]]||{}; cur = cur[parts[i]] }
+      cur[parts[parts.length-1]] = val
+      return n
+    })
+    setDirty(true)
+  }
+
+  const handleSave = () => { saveSettings(settings); setDirty(false); onClose() }
+
+  const testGroq = async () => {
+    setGroqStatus('testing')
+    try {
+      const r = await fetch('/api/groq-help', {
+        method:'POST',
+        headers:{'Content-Type':'application/json','x-groq-key': settings.integrations?.groqKey||''},
+        body: JSON.stringify({topic:'EMA Rápida'})
+      })
+      setGroqStatus(r.ok ? 'ok' : 'err')
+    } catch(_) { setGroqStatus('err') }
+  }
+
+  const TABS = [
+    { id:'integraciones', label:'🔌 Integraciones' },
+    { id:'alarmas',       label:'🔔 Alarmas' },
+    { id:'grafico',       label:'📈 Gráfico' },
+  ]
+
+  const inp = (val, onChange, opts={}) => (
+    <input
+      type={opts.type||'text'} value={val||''} onChange={e=>onChange(e.target.value)}
+      placeholder={opts.placeholder||''}
+      style={{
+        background:'#080c14', border:'1px solid #1a2d45', borderRadius:4,
+        color:'#e2eaf5', fontFamily:MONO, fontSize:12, padding:'6px 10px',
+        width:'100%', boxSizing:'border-box',
+        ...(opts.mono ? {letterSpacing:'0.04em'} : {})
+      }}
+    />
+  )
+
+  const row = (label, tip, children) => (
+    <div style={{marginBottom:14}}>
+      <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:5}}>
+        <span style={{fontFamily:MONO,fontSize:10,color:'#7a9bc0',letterSpacing:'0.06em',textTransform:'uppercase'}}>{label}</span>
+        {tip&&<span style={{fontFamily:MONO,fontSize:10,color:'#3d5a7a'}}>{tip}</span>}
+      </div>
+      {children}
+    </div>
+  )
+
+  const sep = (title) => (
+    <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',letterSpacing:'0.12em',textTransform:'uppercase',
+      borderBottom:'1px solid #1a2d45',paddingBottom:5,marginBottom:12,marginTop:4}}>{title}</div>
+  )
+
+  return (
+    <div style={{position:'fixed',inset:0,zIndex:900,display:'flex',alignItems:'center',justifyContent:'center',
+      background:'rgba(0,0,0,0.65)'}} onClick={onClose}>
+      <div onClick={e=>e.stopPropagation()} style={{
+        background:'#0a101a', border:'1px solid #1a2d45', borderRadius:10,
+        width:520, maxHeight:'88vh', display:'flex', flexDirection:'column',
+        boxShadow:'0 16px 60px rgba(0,0,0,0.7)', fontFamily:MONO
+      }}>
+
+        {/* Header */}
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',
+          padding:'14px 20px 0', borderBottom:'1px solid #0d1520', paddingBottom:0}}>
+          <div style={{fontSize:13,fontWeight:700,color:'#e2eaf5',letterSpacing:'0.04em'}}>⚙ Configuración</div>
+          <button onClick={onClose} style={{background:'none',border:'none',color:'#5a7a95',fontSize:16,cursor:'pointer',padding:'0 4px',lineHeight:1}}>✕</button>
+        </div>
+
+        {/* Tabs */}
+        <div style={{display:'flex',borderBottom:'1px solid #0d1520',padding:'0 20px',marginTop:0,flexShrink:0}}>
+          {TABS.map(t=>(
+            <button key={t.id} onClick={()=>setTab(t.id)} style={{
+              background:'none', border:'none', borderBottom: tab===t.id ? '2px solid #00d4ff' : '2px solid transparent',
+              color: tab===t.id ? '#00d4ff' : '#5a7a95', fontFamily:MONO, fontSize:10, padding:'10px 14px 8px',
+              cursor:'pointer', letterSpacing:'0.06em', textTransform:'uppercase', transition:'color .15s'
+            }}>{t.label}</button>
+          ))}
+        </div>
+
+        {/* Body */}
+        <div style={{overflowY:'auto',flex:1,padding:'18px 20px'}}>
+
+          {/* ── INTEGRACIONES ── */}
+          {tab==='integraciones'&&(
+            <div>
+              {sep('Groq AI — Tooltips de ayuda')}
+              {row('Groq API Key','(se guarda solo en tu navegador)',
+                <div style={{display:'flex',gap:8}}>
+                  <input
+                    type="password" value={settings.integrations?.groqKey||''} placeholder="gsk_..."
+                    onChange={e=>upd('integrations.groqKey',e.target.value)}
+                    style={{flex:1,background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,
+                      color:'#e2eaf5',fontFamily:MONO,fontSize:12,padding:'6px 10px',letterSpacing:'0.06em'}}
+                  />
+                  <button onClick={testGroq} disabled={groqStatus==='testing'} style={{
+                    padding:'6px 12px', borderRadius:4, border:'1px solid #1a2d45',
+                    background: groqStatus==='ok'?'rgba(0,229,160,0.12)':groqStatus==='err'?'rgba(255,77,109,0.12)':'rgba(13,21,32,0.9)',
+                    color: groqStatus==='ok'?'#00e5a0':groqStatus==='err'?'#ff4d6d':'#7a9bc0',
+                    fontFamily:MONO, fontSize:11, cursor:'pointer', whiteSpace:'nowrap', flexShrink:0
+                  }}>
+                    {groqStatus==='testing'?'⟳ ...' : groqStatus==='ok'?'✓ OK' : groqStatus==='err'?'✗ Error' : 'Probar'}
+                  </button>
+                </div>
+              )}
+              <div style={{fontSize:10,color:'#3d5a7a',lineHeight:1.6,marginTop:-6}}>
+                La clave se almacena únicamente en localStorage de tu navegador. Obtén una clave gratuita en <a href="https://console.groq.com" target="_blank" rel="noreferrer" style={{color:'#4a9fd4'}}>console.groq.com</a>
+              </div>
+            </div>
+          )}
+
+          {/* ── ALARMAS ── */}
+          {tab==='alarmas'&&(
+            <div>
+              {sep('Canal de notificaciones')}
+              {row('Método de envío','',
+                <select value={settings.alarms?.method||'none'} onChange={e=>upd('alarms.method',e.target.value)}
+                  style={{background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,
+                    color:'#e2eaf5',fontFamily:MONO,fontSize:12,padding:'6px 10px',width:'100%'}}>
+                  <option value="none">Sin notificaciones</option>
+                  <option value="email">Email</option>
+                  <option value="webhook">Webhook (Slack, Discord, etc.)</option>
+                  <option value="telegram">Telegram</option>
+                </select>
+              )}
+
+              {settings.alarms?.method==='email'&&(
+                <>{sep('Email')}{row('Dirección de correo','',inp(settings.alarms?.email, v=>upd('alarms.email',v), {placeholder:'tu@email.com',type:'email'}))}</>
+              )}
+
+              {settings.alarms?.method==='webhook'&&(
+                <>{sep('Webhook')}{row('URL del webhook','',inp(settings.alarms?.webhookUrl, v=>upd('alarms.webhookUrl',v), {placeholder:'https://hooks.slack.com/...'}))}</>
+              )}
+
+              {settings.alarms?.method==='telegram'&&(
+                <>
+                  {sep('Telegram')}
+                  {row('Bot Token','',inp(settings.alarms?.telegramToken, v=>upd('alarms.telegramToken',v), {placeholder:'123456:ABC-...', mono:true}))}
+                  {row('Chat ID','',inp(settings.alarms?.telegramChatId, v=>upd('alarms.telegramChatId',v), {placeholder:'-100123456789', mono:true}))}
+                  <div style={{fontSize:10,color:'#3d5a7a',lineHeight:1.6,marginTop:-6}}>
+                    Crea un bot con @BotFather y añade el bot a tu canal/grupo para obtener el Chat ID.
+                  </div>
+                </>
+              )}
+
+              {sep('Opciones')}
+              {[
+                ['alarms.onEntry',    'Notificar en señal de entrada'],
+                ['alarms.onExit',     'Notificar en señal de salida'],
+                ['alarms.onStop',     'Notificar al activar stop loss'],
+                ['alarms.onPriceLvl', 'Notificar alarmas de precio en gráfico'],
+              ].map(([key,label])=>(
+                <label key={key} style={{display:'flex',alignItems:'center',gap:8,marginBottom:8,cursor:'pointer'}}>
+                  <input type="checkbox" checked={!!settings[key.split('.')[0]]?.[key.split('.')[1]]}
+                    onChange={e=>upd(key,e.target.checked)}
+                    style={{accentColor:'#00d4ff',width:13,height:13}}/>
+                  <span style={{fontSize:11,color:'#cce0f5'}}>{label}</span>
+                </label>
+              ))}
+            </div>
+          )}
+
+          {/* ── GRÁFICO ── */}
+          {tab==='grafico'&&(
+            <div>
+              {sep('Colores de velas')}
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:16}}>
+                {[
+                  ['chart.upColor',   'Vela alcista',  '#00e5a0'],
+                  ['chart.downColor', 'Vela bajista',  '#ff4d6d'],
+                  ['chart.emaRColor', 'EMA Rápida',    '#ffd166'],
+                  ['chart.emaLColor', 'EMA Lenta',     '#ff4d6d'],
+                ].map(([key,label,def])=>(
+                  <div key={key} style={{display:'flex',alignItems:'center',gap:8}}>
+                    <input type="color" value={settings[key.split('.')[0]]?.[key.split('.')[1]]||def}
+                      onChange={e=>upd(key,e.target.value)}
+                      style={{width:28,height:28,borderRadius:4,border:'1px solid #1a2d45',
+                        cursor:'pointer',background:'none',padding:1}}/>
+                    <span style={{fontSize:11,color:'#cce0f5'}}>{label}</span>
+                  </div>
+                ))}
+              </div>
+
+              {sep('Visualización')}
+              {[
+                ['chart.showGrid',       'Mostrar grid',             true],
+                ['chart.showRightOffset','Espacio derecho extra',     true],
+                ['chart.autoFitOnLoad',  'Auto-ajustar al cargar',    true],
+              ].map(([key,label,def])=>(
+                <label key={key} style={{display:'flex',alignItems:'center',gap:8,marginBottom:8,cursor:'pointer'}}>
+                  <input type="checkbox"
+                    checked={settings[key.split('.')[0]]?.[key.split('.')[1]]??def}
+                    onChange={e=>upd(key,e.target.checked)}
+                    style={{accentColor:'#00d4ff',width:13,height:13}}/>
+                  <span style={{fontSize:11,color:'#cce0f5'}}>{label}</span>
+                </label>
+              ))}
+
+              {sep('Rendimiento')}
+              {row('Calidad de curvas equity','(más puntos = más lento)',
+                <select value={settings.chart?.equityQuality||'normal'}
+                  onChange={e=>upd('chart.equityQuality',e.target.value)}
+                  style={{background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,
+                    color:'#e2eaf5',fontFamily:MONO,fontSize:12,padding:'6px 10px',width:'100%'}}>
+                  <option value="fast">Rápido (100 pts)</option>
+                  <option value="normal">Normal (300 pts)</option>
+                  <option value="hq">Alta calidad (600 pts)</option>
+                </select>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div style={{display:'flex',justifyContent:'flex-end',gap:8,padding:'12px 20px',
+          borderTop:'1px solid #0d1520',flexShrink:0}}>
+          <button onClick={onClose} style={{padding:'7px 16px',borderRadius:4,border:'1px solid #1a2d45',
+            background:'transparent',color:'#7a9bc0',fontFamily:MONO,fontSize:11,cursor:'pointer'}}>
+            Cancelar
+          </button>
+          <button onClick={handleSave} style={{padding:'7px 16px',borderRadius:4,border:'none',
+            background: dirty ? '#00d4ff' : '#1a2d45',
+            color: dirty ? '#080c14' : '#5a7a95',
+            fontFamily:MONO,fontSize:11,fontWeight:700,cursor:'pointer',transition:'all .15s'}}>
+            {dirty ? '✓ Guardar' : 'Guardado'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── PriceAlarmQuickForm — diálogo rápido desde doble-clic ────
+function PriceAlarmQuickForm({ price, symbol, alarms, onSave, onCancel }) {
+  const [px, setPx] = useState(price.toFixed(2))
+  const [cond, setCond] = useState('price_above')
+  const [name, setName] = useState(`${symbol} @ ${price.toFixed(2)}`)
+  const [saving, setSaving] = useState(false)
+  const condLabels = { price_above:'Precio sube hasta', price_below:'Precio baja hasta' }
+  const doSave = async () => {
+    setSaving(true)
+    await onSave({ symbol, name, condition:'price_level', price_level:Number(px), condition_detail:cond, active:true })
+    setSaving(false)
+  }
+  return (
+    <div style={{fontFamily:MONO,fontSize:12,display:'flex',flexDirection:'column',gap:10}}>
+      <label style={{display:'flex',flexDirection:'column',gap:4}}>
+        <span style={{color:'#7a9bc0',fontSize:10}}>Condición</span>
+        <select value={cond} onChange={e=>setCond(e.target.value)}
+          style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'5px 8px',borderRadius:4}}>
+          <option value="price_above">Precio sube hasta...</option>
+          <option value="price_below">Precio baja hasta...</option>
+        </select>
+      </label>
+      <label style={{display:'flex',flexDirection:'column',gap:4}}>
+        <span style={{color:'#7a9bc0',fontSize:10}}>Precio</span>
+        <input type="number" value={px} step="0.01" onChange={e=>setPx(e.target.value)}
+          style={{background:'var(--bg3)',border:'1px solid var(--accent)',color:'var(--text)',fontFamily:MONO,fontSize:13,padding:'6px 10px',borderRadius:4,fontWeight:700}}/>
+      </label>
+      <label style={{display:'flex',flexDirection:'column',gap:4}}>
+        <span style={{color:'#7a9bc0',fontSize:10}}>Nombre</span>
+        <input type="text" value={name} onChange={e=>setName(e.target.value)}
+          style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'5px 8px',borderRadius:4}}/>
+      </label>
+      <div style={{display:'flex',gap:8,marginTop:4}}>
+        <button onClick={doSave} disabled={saving} style={{flex:1,background:'var(--accent)',border:'none',color:'#080c14',fontFamily:MONO,fontSize:12,fontWeight:700,padding:'8px',borderRadius:4,cursor:'pointer'}}>
+          {saving?'Guardando…':'✓ Crear Alarma'}
+        </button>
+        <button onClick={onCancel} style={{padding:'8px 12px',background:'transparent',border:'1px solid var(--border)',color:'var(--text3)',fontFamily:MONO,fontSize:11,borderRadius:4,cursor:'pointer'}}>
+          Cancelar
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ── CandleChart ───────────────────────────────────────────────
-function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, syncRef, savedRangeRef, chartHeight=480 }) {
+function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, syncRef, savedRangeRef, chartHeight=480 }) {
   const containerRef=useRef(null), svgRef=useRef(null), legendRef=useRef(null), tooltipRef=useRef(null)
   const chartRef=useRef(null), candlesRef=useRef(null)
   const rulerStart=useRef(null), rulerActiveR=useRef(rulerActive)
@@ -202,10 +506,8 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
         grid:{vertLines:{color:'#0d1520'},horzLines:{color:'#0d1520'}},
         crosshair:{mode:CrosshairMode.Normal},
         rightPriceScale:{borderColor:'#1a2d45'},
-        timeScale:{borderColor:'#1a2d45',timeVisible:true},
+        timeScale:{borderColor:'#1a2d45',timeVisible:true, rightOffset:12},
       })
-      // Margen derecho — equivalent to TV right offset
-      chart.timeScale().applyOptions({ rightOffset: 10 })
       chartRef.current=chart
 
       const candles=chart.addCandlestickSeries({
@@ -392,11 +694,14 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
         addC(mk('line',{x1:x2,y1,x2,y2,stroke:'rgba(255,209,102,0.22)','stroke-width':'1','stroke-dasharray':'4,3'}))
         addC(mk('line',{x1,y1,x2,y2,stroke:'#ffd166','stroke-width':'1.8'}))
         ;[[x1,y1],[x2,y2]].forEach(([cx,cy])=>addC(mk('circle',{cx,cy,r:'3',fill:'#ffd166',stroke:'#080c14','stroke-width':'1'})))
-        const mx=(x1+x2)/2,my=(y1+y2)/2
+        const mx=(x1+x2)/2, lineAngle=Math.atan2(y2-y1,x2-x1)
+        // Label: 26px perpendicular above the midpoint of the line
+        const perp = lineAngle - Math.PI/2
+        const lx = mx + Math.cos(perp)*26, ly = (y1+y2)/2 + Math.sin(perp)*26
         const label=`${days}d  ${diff>=0?'+':''}${pct.toFixed(2)}%`
         const bw=label.length*7+14
-        addC(mk('rect',{x:mx-bw/2,y:my-13,width:bw,height:16,fill:'rgba(8,12,20,0.93)',rx:'3',stroke:'#ffd166','stroke-width':'0.7'}))
-        const txt=addC(mk('text',{x:mx,y:my+1,fill:'#ffd166','font-size':'10','font-family':MONO,'text-anchor':'middle','dominant-baseline':'middle'}))
+        addC(mk('rect',{x:lx-bw/2,y:ly-10,width:bw,height:16,fill:'rgba(8,12,20,0.96)',rx:'3',stroke:'#ffd166','stroke-width':'0.8'}))
+        const txt=addC(mk('text',{x:lx,y:ly+1,fill:'#ffd166','font-size':'10','font-family':MONO,'text-anchor':'middle','dominant-baseline':'middle'}))
         txt.textContent=label
       }
 
@@ -419,7 +724,17 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
         const pt=getPoint(e.clientX-rect.left,e.clientY-rect.top)
         if(!rulerStart.current)rulerStart.current=pt;else rulerStart.current=null
       }
-      const onDbl=()=>{rulerStart.current=null;clearRuler()}
+      const onDbl=e=>{
+        // Si regla activa: limpiar regla
+        if(rulerActiveR.current){ rulerStart.current=null; clearRuler(); return }
+        // Si regla inactiva: crear alarma de precio en el punto del doble-clic
+        if(onPriceAlarm){
+          const rect=containerRef.current.getBoundingClientRect()
+          const px=e.clientX-rect.left, py=e.clientY-rect.top
+          const price=candlesRef.current?.coordinateToPrice(py)
+          if(price!=null) onPriceAlarm(Math.round(price*100)/100)
+        }
+      }
       cnt.addEventListener('mousemove',onMove)
       cnt.addEventListener('click',onClick)
       cnt.addEventListener('dblclick',onDbl)
@@ -571,22 +886,22 @@ function EquityChart({
       const trackSeries=(curve,key)=>{ curve?.forEach(p=>{ if(!equityDataByDate[p.date]) equityDataByDate[p.date]={}; equityDataByDate[p.date][key]=p.value }) }
 
       if(showStrategy&&strategyCurve?.length){
-        chart.addLineSeries({color:'#00d4ff',lineWidth:2,lastValueVisible:false,priceLineVisible:false})
+        chart.addLineSeries({color:'#00d4ff',lineWidth:2,lastValueVisible:true,priceLineVisible:false})
           .setData(strategyCurve.map(p=>({time:p.date,value:p.value})))
         trackSeries(strategyCurve,'st')
       }
       if(showCompound&&compoundCurve?.length){
-        chart.addLineSeries({color:'#00e5a0',lineWidth:2,lastValueVisible:false,priceLineVisible:false})
+        chart.addLineSeries({color:'#00e5a0',lineWidth:2,lastValueVisible:true,priceLineVisible:false})
           .setData(compoundCurve.map(p=>({time:p.date,value:p.value})))
         trackSeries(compoundCurve,'co')
       }
       if(showBH&&bhCurve?.length){
-        chart.addLineSeries({color:'#ffd166',lineWidth:2,lineStyle:LineStyle.Dashed,lastValueVisible:false,priceLineVisible:false})
+        chart.addLineSeries({color:'#ffd166',lineWidth:2,lineStyle:LineStyle.Dashed,lastValueVisible:true,priceLineVisible:false})
           .setData(bhCurve.map(p=>({time:p.date,value:p.value})))
         trackSeries(bhCurve,'bh')
       }
       if(showSP500&&sp500BHCurve?.length){
-        chart.addLineSeries({color:'#9b72ff',lineWidth:2,lineStyle:LineStyle.Dotted,lastValueVisible:false,priceLineVisible:false})
+        chart.addLineSeries({color:'#9b72ff',lineWidth:2,lineStyle:LineStyle.Dotted,lastValueVisible:true,priceLineVisible:false})
           .setData(sp500BHCurve.map(p=>({time:p.date,value:p.value})))
         trackSeries(sp500BHCurve,'sp')
       }
@@ -594,7 +909,7 @@ function EquityChart({
       if(base?.length)
         chart.addLineSeries({color:'#3d5a7a',lineWidth:1,lineStyle:LineStyle.Dotted,lastValueVisible:false,priceLineVisible:false})
           .setData([{time:base[0].date,value:capitalIni},{time:base[base.length-1].date,value:capitalIni}])
-      const addDD=(curve,date,dd,color,label)=>{
+      const addDD=(curve,date,dd,color)=>{
         if(!date||!dd||!curve?.length) return
         let peak={date:curve[0].date,value:curve[0].value}
         for(const p of curve){if(p.date>date)break;if(p.value>peak.value)peak=p}
@@ -602,12 +917,12 @@ function EquityChart({
         if(!trough||peak.date===trough.date) return
         const s=chart.addLineSeries({color,lineWidth:2,lastValueVisible:false,priceLineVisible:false})
         s.setData([{time:peak.date,value:peak.value},{time:trough.date,value:trough.value}])
-        s.setMarkers([{time:trough.date,position:'belowBar',color,shape:'circle',size:0,text:''}])
+        s.setMarkers([{time:trough.date,position:'belowBar',color,shape:'circle',size:0,text:`↓ -${dd.toFixed(1)}%`}])
       }
-      if(showStrategy) addDD(strategyCurve,maxDDStrategyDate,maxDDStrategy,'#ff4d6d','DD Est.')
-      if(showCompound) addDD(compoundCurve,maxDDCompoundDate,maxDDCompound,'#00a870','DD Comp.')
-      if(showBH)       addDD(bhCurve,maxDDBHDate,maxDDBH,'#ff9a3c','DD B&H')
-      if(showSP500)    addDD(sp500BHCurve,maxDDSP500Date,maxDDSP500,'#7b5fe0','DD SP500')
+      if(showStrategy) addDD(strategyCurve,maxDDStrategyDate,maxDDStrategy,'#ff4d6d')
+      if(showCompound) addDD(compoundCurve,maxDDCompoundDate,maxDDCompound,'#00a870')
+      if(showBH)       addDD(bhCurve,maxDDBHDate,maxDDBH,'#ff9a3c')
+      if(showSP500)    addDD(sp500BHCurve,maxDDSP500Date,maxDDSP500,'#7b5fe0')
       // ── Cross-chart time sync ──
       if(syncRef?.current){
         const syncId=Symbol()
@@ -683,10 +998,10 @@ function MultiCartChart({simpleCurve,compoundCurve,bhCurve,sp500BHCurve,capitalI
       const base=simpleCurve||compoundCurve||bhCurve||sp500BHCurve
       if(base?.length) chart.addLineSeries({color:'#2a3f55',lineWidth:1,lineStyle:LineStyle.Dotted,lastValueVisible:false,priceLineVisible:false})
         .setData([{time:base[0].date,value:capitalIni},{time:base[base.length-1].date,value:capitalIni}])
-      if(showSimple&&simpleCurve?.length) chart.addLineSeries({color:'#00d4ff',lineWidth:2,title:'Simple'}).setData(simpleCurve.map(p=>({time:p.date,value:p.value})))
-      if(showCompound&&compoundCurve?.length) chart.addLineSeries({color:'#00e5a0',lineWidth:2,title:'Compuesto'}).setData(compoundCurve.map(p=>({time:p.date,value:p.value})))
-      if(showBH&&bhCurve?.length) chart.addLineSeries({color:'#ffd166',lineWidth:2,lineStyle:LineStyle.Dashed,title:'B&H Divers.'}).setData(bhCurve.map(p=>({time:p.date,value:p.value})))
-      if(showSP500&&sp500BHCurve?.length) chart.addLineSeries({color:'#9b72ff',lineWidth:2,lineStyle:LineStyle.Dotted,title:'B&H SP500'}).setData(sp500BHCurve.map(p=>({time:p.date,value:p.value})))
+      if(showSimple&&simpleCurve?.length) chart.addLineSeries({color:'#00d4ff',lineWidth:2,lastValueVisible:true,priceLineVisible:false}).setData(simpleCurve.map(p=>({time:p.date,value:p.value})))
+      if(showCompound&&compoundCurve?.length) chart.addLineSeries({color:'#00e5a0',lineWidth:2,lastValueVisible:true,priceLineVisible:false}).setData(compoundCurve.map(p=>({time:p.date,value:p.value})))
+      if(showBH&&bhCurve?.length) chart.addLineSeries({color:'#ffd166',lineWidth:2,lineStyle:LineStyle.Dashed,lastValueVisible:true,priceLineVisible:false}).setData(bhCurve.map(p=>({time:p.date,value:p.value})))
+      if(showSP500&&sp500BHCurve?.length) chart.addLineSeries({color:'#9b72ff',lineWidth:2,lineStyle:LineStyle.Dotted,lastValueVisible:true,priceLineVisible:false}).setData(sp500BHCurve.map(p=>({time:p.date,value:p.value})))
       const addDD=(curve,date,dd,color)=>{
         if(!date||!dd||!curve?.length) return
         let peak={date:curve[0].date,value:curve[0].value}
@@ -1044,6 +1359,7 @@ export default function Home() {
   const [tipoFiltro,setTipoFiltro]=useState('none'),[sp500EmaR,setSp500EmaR]=useState(10),[sp500EmaL,setSp500EmaL]=useState(11)
   const [result,setResult]=useState(null),[loading,setLoading]=useState(false),[error,setError]=useState(null)
   const [labelMode,setLabelMode]=useState(0),[rulerOn,setRulerOn]=useState(false)
+  const [settingsOpen,setSettingsOpen]=useState(false)
   const [sidePanel,setSidePanel]=useState('config')
   const [metricsLayout,setMetricsLayout]=useState('panel')
   const [metricsView,setMetricsView]=useState('multi')   // 'multi'=3col | 'single'=one strat per block
@@ -1081,6 +1397,7 @@ export default function Home() {
   const [selectedAlarmIds,setSelectedAlarmIds]=useState([])  // IDs de alarmas activas en filtro
   const [onlyFavs,setOnlyFavs]=useState(false)  // filtro solo favoritos
   const [alarmDropOpen,setAlarmDropOpen]=useState(false)  // desplegable alarmas
+  const [priceAlarmDlg,setPriceAlarmDlg]=useState(null) // {price, symbol} o null
   // Búsqueda async de nombre
   const symSearchRef=useRef(null)
   const [mcTradeFilter,setMcTradeFilter]=useState('')
@@ -1618,7 +1935,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator 2.5</title>
+        <title>Trading Simulator 2.7</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -1733,6 +2050,9 @@ export default function Home() {
             {result&&metrics&&sidePanel!=='multi'&&<button onClick={()=>setMetricsLayout(l=>l==='grid'?'panel':'grid')} style={{background:'rgba(13,21,32,0.9)',border:'1px solid #1a2d45',color:'#7a9bc0',fontFamily:MONO,fontSize:11,padding:'3px 9px',borderRadius:4,cursor:'pointer'}}>
               {metricsLayout==='grid'?'⊞ Panel':'⊟ Grid'}
             </button>}
+            <button onClick={()=>setSettingsOpen(true)} title="Configuración" style={{background:'rgba(13,21,32,0.9)',border:'1px solid #1a2d45',color:'#7a9bc0',fontFamily:MONO,fontSize:14,padding:'2px 8px',borderRadius:4,cursor:'pointer',lineHeight:1}} onMouseOver={e=>e.currentTarget.style.borderColor='#4a7fa0'} onMouseOut={e=>e.currentTarget.style.borderColor='#1a2d45'}>
+              ⚙
+            </button>
             <div style={{fontFamily:MONO,fontSize:11,color:'#5a7a95'}}>Stooq · diario</div>
           </div>
         </header>
@@ -2233,6 +2553,7 @@ export default function Home() {
                       trades={result.trades||[]} maxDD={metrics?.ddSimple||0}
                       labelMode={labelMode} rulerActive={rulerOn}
                       onChartReady={api=>{chartApiRef.current=api}}
+                      onPriceAlarm={price=>setPriceAlarmDlg({price,symbol:simbolo})}
                       savedRangeRef={savedRangeRef}
                       syncRef={chartSyncRef}
                       chartHeight={candleH}
@@ -3036,6 +3357,29 @@ export default function Home() {
           </div>
         </div>
       )}
+    {/* ── Modal de configuración global ── */}
+    {settingsOpen&&<SettingsModal onClose={()=>setSettingsOpen(false)}/>}
+
+    {/* ── Modal de alarma de precio (doble-clic en gráfico) ── */}
+    {priceAlarmDlg&&(
+      <div style={{position:'fixed',inset:0,zIndex:999,display:'flex',alignItems:'center',justifyContent:'center',background:'rgba(0,0,0,0.6)'}}
+        onClick={()=>setPriceAlarmDlg(null)}>
+        <div onClick={e=>e.stopPropagation()} style={{background:'#0d1520',border:'1px solid var(--border)',borderRadius:8,padding:'20px 24px',fontFamily:MONO,color:'var(--text)',minWidth:280,boxShadow:'0 8px 40px rgba(0,0,0,0.6)'}}>
+          <div style={{fontSize:13,fontWeight:700,marginBottom:14,color:'var(--accent)'}}>Nueva Alarma de Precio</div>
+          <div style={{fontSize:11,color:'var(--text3)',marginBottom:6}}>{priceAlarmDlg.symbol}</div>
+          <PriceAlarmQuickForm
+            price={priceAlarmDlg.price} symbol={priceAlarmDlg.symbol}
+            alarms={alarms}
+            onSave={async(item)=>{
+              await saveAlarm(item)
+              const fresh=await loadAlarms(); setAlarms(fresh)
+              setPriceAlarmDlg(null)
+            }}
+            onCancel={()=>setPriceAlarmDlg(null)}
+          />
+        </div>
+      </div>
+    )}
     </>
   )
 }
