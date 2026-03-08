@@ -3196,9 +3196,6 @@ export default function Home() {
                       </div>
                     )
                   })}
-                </div>
-              </div>
-
                 {/* ── Alarmas de precio (desde doble-clic) ── */}
                 {(()=>{
                   const priceAlarms=alarms.filter(a=>a.condition==='price_level')
@@ -3236,6 +3233,8 @@ export default function Home() {
                     </div>
                   )
                 })()}
+                </div>
+              </div>
             )}
 
 
