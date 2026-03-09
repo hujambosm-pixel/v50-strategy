@@ -2259,7 +2259,20 @@ export default function Home() {
   const [selectedAlarmIds,setSelectedAlarmIds]=useState([])  // IDs de alarmas activas en filtro
   const [onlyFavs,setOnlyFavs]=useState(false)  // filtro solo favoritos
   const [alarmDropOpen,setAlarmDropOpen]=useState(false)  // desplegable alarmas
-  const [alarmPopup,setAlarmPopup]=useState(null)  // [{symbol,name,condition}] or null
+  const [alarmPopup,setAlarmPopup]=useState(null)  // kept for compat, not shown
+  const [ackedAlarms,setAckedAlarms]=useState(()=>{  // set of "symbol::alarmId" keys user acknowledged
+    try{return new Set(JSON.parse(localStorage.getItem('v50_acked_alarms')||'[]'))}catch(_){return new Set()}
+  })
+  const ackAlarm=(sym,aid)=>setAckedAlarms(prev=>{
+    const n=new Set(prev); n.add(`${sym}::${aid}`)
+    try{localStorage.setItem('v50_acked_alarms',JSON.stringify([...n]))}catch(_){}
+    return n
+  })
+  const unackAlarm=(sym,aid)=>setAckedAlarms(prev=>{
+    const n=new Set(prev); n.delete(`${sym}::${aid}`)
+    try{localStorage.setItem('v50_acked_alarms',JSON.stringify([...n]))}catch(_){}
+    return n
+  })
   const [priceAlarmDlg,setPriceAlarmDlg]=useState(null) // {price, symbol} o null
   // ── Ranking ─────────────────────────────────────────────────
   const [rankingData,setRankingData]=useState({})      // { symbol: { score, rank, metrics } }
@@ -2986,7 +2999,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.5</title>
+        <title>Trading Simulator V4.6</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3049,7 +3062,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.5
+            <span className="dot"/>Trading Simulator V4.6
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -3171,10 +3184,6 @@ export default function Home() {
                         </select>
                       </label>
                   }
-                </div>
-                <div className="sidebar-section">
-                  <div className="sidebar-title">Activo</div>
-                  <label>Símbolo<input type="text" value={simbolo} onChange={e=>setSimbolo(e.target.value.toUpperCase())} placeholder="^GSPC"/></label>
                 </div>
                 <div className="sidebar-section">
                   <div className="sidebar-title">Estrategia</div>
@@ -3475,84 +3484,152 @@ export default function Home() {
               <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
                 {/* Header */}
                 <div style={{padding:'6px 8px',borderBottom:'1px solid var(--border)',display:'flex',gap:4,alignItems:'center',flexShrink:0}}>
-                  <span style={{fontFamily:MONO,fontSize:12,color:'#a8ccdf',flex:1}}>Alertas &amp; Condiciones</span>
-                  <button onClick={newAlarm} title="Nueva condición" style={{background:'rgba(0,212,255,0.1)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:13,padding:'3px 8px',borderRadius:3,cursor:'pointer'}}>+</button>
+                  <span style={{fontFamily:MONO,fontSize:12,color:'#a8ccdf',flex:1}}>Alarmas</span>
+                  <button onClick={()=>refreshAlarmStatus()} title="Actualizar estado" style={{background:'transparent',border:'none',color:'#5a7a95',fontFamily:MONO,fontSize:13,padding:'2px 5px',cursor:'pointer'}} disabled={alarmStatusLoading}>{alarmStatusLoading?'⟳':'↻'}</button>
+                  <button onClick={newAlarm} title="Nueva alarma" style={{background:'rgba(0,212,255,0.1)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:13,padding:'3px 8px',borderRadius:3,cursor:'pointer'}}>+</button>
                 </div>
                 <div style={{overflowY:'auto',flex:1}}>
                   {alarmLoading&&<div style={{padding:'10px 12px',fontFamily:MONO,fontSize:12,color:'#a8ccdf'}}>⟳ Cargando…</div>}
-
-                  {/* ── ALERTAS DE PRECIO (primero) ── */}
                   {!alarmLoading&&(()=>{
+                    // Classify each alarm across all watchlist symbols
+                    const COLORS=['#00e5a0','#ffd166','#00d4ff','#ff7eb3','#9b72ff','#ff4d6d']
+                    const blinkN=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.alarmas?.blinkCandles??3}catch(_){return 3}})()
+
+                    // Price alerts
                     const priceAlerts=alarms.filter(a=>a.condition==='price_level')
-                    if(!priceAlerts.length) return null
-                    return(
-                      <div>
-                        <div style={{padding:'5px 10px',fontFamily:MONO,fontSize:9,color:'#ffd166',
-                          letterSpacing:'0.08em',textTransform:'uppercase',background:'var(--bg2)',
-                          borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:6}}>
-                          <span>🎯 Alertas de precio</span>
-                          <span style={{color:'#3d5a7a'}}>({priceAlerts.length})</span>
+                    // Condition alarms
+                    const condAlarms=alarms.filter(a=>a.condition!=='price_level')
+
+                    // For each condition alarm × symbol: active | pending | acked
+                    const rows=[]
+                    condAlarms.forEach((a,ai)=>{
+                      const col=COLORS[ai%COLORS.length]
+                      const condLabel={ema_cross_up:'↑ Cruce alcista EMA',ema_cross_down:'↓ Cruce bajista EMA',price_above_ema:'Precio > EMA',price_below_ema:'Precio < EMA'}[a.condition]||a.condition
+                      watchlist.forEach(w=>{
+                        const st=alarmStatus[w.symbol]?.[a.id]
+                        if(!st) return
+                        const ackKey=`${w.symbol}::${a.id}`
+                        const isAcked=ackedAlarms.has(ackKey)
+                        const isActive=st.active===true
+                        const bars=st.bars_since_trigger
+                        const shouldBlink=isActive&&bars!=null&&bars<=blinkN
+                        rows.push({a,w,col,condLabel,isActive,isAcked,shouldBlink,ackKey,bars})
+                      })
+                    })
+
+                    const active=rows.filter(r=>r.isActive&&!r.isAcked)
+                    const pending=rows.filter(r=>!r.isActive&&!r.isAcked)
+                    const acked=rows.filter(r=>r.isAcked)
+
+                    const renderRow=(r,i)=>(
+                      <div key={r.ackKey+i} style={{padding:'7px 10px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:8,
+                        opacity:r.isAcked?0.45:1}}>
+                        <span style={{width:9,height:9,borderRadius:'50%',flexShrink:0,
+                          background:r.isAcked?'#2a3f55':r.isActive?r.col:'#2a3f55',
+                          animation:r.shouldBlink?'alarmPulse 1s ease-in-out infinite':undefined,
+                          boxShadow:r.isActive&&!r.isAcked?`0 0 6px ${r.col}`:undefined}}/>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{display:'flex',alignItems:'baseline',gap:5}}>
+                            <span style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:r.isAcked?'#4a6a80':r.isActive?r.col:'#7a9bc0'}}>{r.w.symbol}</span>
+                            <span style={{fontFamily:MONO,fontSize:10,color:'#5a7a95'}}>{r.a.name}</span>
+                          </div>
+                          <div style={{fontFamily:MONO,fontSize:10,color:'#4a6a80',marginTop:1}}>{r.condLabel} · EMA {r.a.ema_r}/{r.a.ema_l}</div>
                         </div>
-                        {priceAlerts.map(a=>{
-                          const isAbove=a.condition_detail==='price_above'
-                          return(
-                            <div key={a.id} style={{padding:'8px 10px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:8}}>
-                              <span style={{fontSize:14,flexShrink:0,color:isAbove?'#00e5a0':'#ff4d6d',lineHeight:1}}>{isAbove?'▲':'▼'}</span>
-                              <div style={{flex:1,minWidth:0}}>
-                                <div style={{fontFamily:MONO,fontSize:12,color:'#e8f4ff',fontWeight:700,
-                                  overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-                                  {a.symbol} @ <span style={{color:isAbove?'#00e5a0':'#ff4d6d'}}>{a.price_level?.toFixed(2)??'—'}</span>
-                                </div>
-                                <div style={{fontFamily:MONO,fontSize:10,color:'#5a7a95',
-                                  overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.name}</div>
-                              </div>
-                              <button onClick={async()=>{await deleteAlarm(a.id);reloadAlarms()}}
-                                style={{background:'transparent',border:'none',color:'#ff4d6d',fontSize:14,cursor:'pointer',padding:'0 4px',flexShrink:0}}>✕</button>
-                            </div>
-                          )
-                        })}
+                        {r.isActive&&!r.isAcked&&(
+                          <button onClick={()=>ackAlarm(r.w.symbol,r.a.id)} title="Reconocer (Acknowledge)"
+                            style={{background:'rgba(0,229,160,0.08)',border:'1px solid #00e5a0',color:'#00e5a0',fontFamily:MONO,fontSize:9,padding:'2px 5px',borderRadius:3,cursor:'pointer',flexShrink:0}}>
+                            ACK
+                          </button>
+                        )}
+                        {r.isAcked&&(
+                          <button onClick={()=>unackAlarm(r.w.symbol,r.a.id)} title="Quitar reconocimiento"
+                            style={{background:'transparent',border:'1px solid #2a3f55',color:'#4a6a80',fontFamily:MONO,fontSize:9,padding:'2px 5px',borderRadius:3,cursor:'pointer',flexShrink:0}}>
+                            ✓
+                          </button>
+                        )}
                       </div>
                     )
-                  })()}
 
-                  {/* ── CONDICIONES (segundo) ── */}
-                  {!alarmLoading&&(()=>{
-                    const conditions=alarms.filter(a=>a.condition!=='price_level')
                     return(
                       <div>
-                        <div style={{padding:'5px 10px',fontFamily:MONO,fontSize:9,color:'#00d4ff',
-                          letterSpacing:'0.08em',textTransform:'uppercase',background:'var(--bg2)',
-                          borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:6}}>
-                          <span>⚡ Condiciones</span>
-                          <span style={{color:'#3d5a7a'}}>({conditions.length})</span>
-                        </div>
-                        {conditions.length===0&&<div style={{padding:'12px 10px',fontFamily:MONO,fontSize:12,color:'#4a6a80'}}>Sin condiciones. Pulsa + para crear.</div>}
-                        {conditions.map((a,ai)=>{
-                          const condLabel={
-                            ema_cross_up:'EMA rápida > EMA lenta ↑',ema_cross_down:'EMA rápida < EMA lenta ↓',
-                            price_above_ema:'Precio cierre > EMA rápida',price_below_ema:'Precio cierre < EMA rápida'
-                          }[a.condition]||a.condition
-                          const ALARM_COLORS=['#00e5a0','#ffd166','#00d4ff','#ff7eb3','#9b72ff','#ff4d6d']
-                          const col=ALARM_COLORS[ai%ALARM_COLORS.length]
-                          const activeCount=watchlist.filter(w=>alarmStatus[w.symbol]?.[a.id]?.active===true).length
-                          const totalEval=watchlist.filter(w=>alarmStatus[w.symbol]?.[a.id]!==undefined).length
-                          return(
-                            <div key={a.id} style={{padding:'8px 10px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:8}}>
-                              <span style={{width:10,height:10,borderRadius:'50%',flexShrink:0,
-                                background:activeCount>0?col:'#2a3f55',
-                                boxShadow:activeCount>0?`0 0 6px ${col}`:undefined}}/>
-                              <div style={{flex:1,minWidth:0}}>
-                                <div style={{fontFamily:MONO,fontSize:12,color:'#e8f4ff',fontWeight:700}}>{a.name}</div>
-                                <div style={{fontFamily:MONO,fontSize:11,color:'#b0d0e8',marginTop:1}}>{condLabel} · EMA {a.ema_r}/{a.ema_l}</div>
-                                {totalEval>0&&<div style={{fontFamily:MONO,fontSize:11,marginTop:2}}>
-                                  <span style={{color:col,fontWeight:600}}>{activeCount} activos</span>
-                                  <span style={{color:'#a8ccdf'}}> / {totalEval} evaluados</span>
-                                </div>}
-                              </div>
-                              <button onClick={()=>openEditAlarm(a)} style={{background:'transparent',border:'1px solid var(--border)',color:'#a8ccdf',fontFamily:MONO,fontSize:12,padding:'3px 6px',borderRadius:3,cursor:'pointer'}}>✎</button>
+                        {/* Alertas de precio */}
+                        {priceAlerts.length>0&&(
+                          <div>
+                            <div style={{padding:'4px 10px',fontFamily:MONO,fontSize:9,color:'#ffd166',letterSpacing:'0.08em',textTransform:'uppercase',background:'var(--bg2)',borderBottom:'1px solid var(--border)',display:'flex',gap:6}}>
+                              <span>🎯 Alertas de precio</span><span style={{color:'#3d5a7a'}}>({priceAlerts.length})</span>
                             </div>
-                          )
-                        })}
+                            {priceAlerts.map(a=>{
+                              const isAbove=a.condition_detail==='price_above'
+                              return(
+                                <div key={a.id} style={{padding:'7px 10px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:8}}>
+                                  <span style={{fontSize:13,color:isAbove?'#00e5a0':'#ff4d6d',flexShrink:0,lineHeight:1}}>{isAbove?'▲':'▼'}</span>
+                                  <div style={{flex:1,minWidth:0}}>
+                                    <div style={{fontFamily:MONO,fontSize:12,color:'#e8f4ff',fontWeight:700}}>{a.symbol} @ <span style={{color:isAbove?'#00e5a0':'#ff4d6d'}}>{a.price_level?.toFixed(2)??'—'}</span></div>
+                                    <div style={{fontFamily:MONO,fontSize:10,color:'#5a7a95'}}>{a.name}</div>
+                                  </div>
+                                  <button onClick={async()=>{await deleteAlarm(a.id);reloadAlarms()}} style={{background:'transparent',border:'none',color:'#ff4d6d',fontSize:14,cursor:'pointer',padding:'0 4px',flexShrink:0}}>✕</button>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
+
+                        {/* Activas */}
+                        {active.length>0&&(
+                          <div>
+                            <div style={{padding:'4px 10px',fontFamily:MONO,fontSize:9,color:'#ff4d6d',letterSpacing:'0.08em',textTransform:'uppercase',background:'var(--bg2)',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:6}}>
+                              <span style={{animation:'alarmPulse 1s ease-in-out infinite',display:'inline-block',width:7,height:7,borderRadius:'50%',background:'#ff4d6d'}}/>
+                              <span>Activas</span><span style={{color:'#3d5a7a'}}>({active.length})</span>
+                              <button onClick={()=>active.forEach(r=>ackAlarm(r.w.symbol,r.a.id))} title="Reconocer todas" style={{marginLeft:'auto',fontFamily:MONO,fontSize:9,padding:'1px 5px',border:'1px solid #3a1a20',background:'rgba(255,77,109,0.08)',color:'#ff4d6d',borderRadius:3,cursor:'pointer'}}>ACK todas</button>
+                            </div>
+                            {active.map(renderRow)}
+                          </div>
+                        )}
+
+                        {/* Pendientes */}
+                        {pending.length>0&&(
+                          <div>
+                            <div style={{padding:'4px 10px',fontFamily:MONO,fontSize:9,color:'#7a9bc0',letterSpacing:'0.08em',textTransform:'uppercase',background:'var(--bg2)',borderBottom:'1px solid var(--border)',display:'flex',gap:6}}>
+                              <span>⏳ Pendientes</span><span style={{color:'#3d5a7a'}}>({pending.length})</span>
+                            </div>
+                            {pending.map(renderRow)}
+                          </div>
+                        )}
+
+                        {/* Reconocidas */}
+                        {acked.length>0&&(
+                          <div>
+                            <div style={{padding:'4px 10px',fontFamily:MONO,fontSize:9,color:'#3d5a7a',letterSpacing:'0.08em',textTransform:'uppercase',background:'var(--bg2)',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:6}}>
+                              <span>✓ Reconocidas</span><span style={{color:'#2a3f55'}}>({acked.length})</span>
+                              <button onClick={()=>acked.forEach(r=>unackAlarm(r.w.symbol,r.a.id))} title="Limpiar reconocidas" style={{marginLeft:'auto',fontFamily:MONO,fontSize:9,padding:'1px 5px',border:'1px solid #1a2d45',background:'transparent',color:'#3d5a7a',borderRadius:3,cursor:'pointer'}}>Limpiar</button>
+                            </div>
+                            {acked.map(renderRow)}
+                          </div>
+                        )}
+
+                        {/* Gestión de condiciones */}
+                        <div>
+                          <div style={{padding:'4px 10px',fontFamily:MONO,fontSize:9,color:'#00d4ff',letterSpacing:'0.08em',textTransform:'uppercase',background:'var(--bg2)',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:6}}>
+                            <span>⚡ Condiciones</span><span style={{color:'#3d5a7a'}}>({condAlarms.length})</span>
+                          </div>
+                          {condAlarms.length===0&&<div style={{padding:'10px 10px',fontFamily:MONO,fontSize:11,color:'#4a6a80'}}>Sin condiciones. Pulsa + para crear.</div>}
+                          {condAlarms.map((a,ai)=>{
+                            const col=COLORS[ai%COLORS.length]
+                            const condLabel={ema_cross_up:'↑ Cruce alcista EMA',ema_cross_down:'↓ Cruce bajista EMA',price_above_ema:'Precio > EMA',price_below_ema:'Precio < EMA'}[a.condition]||a.condition
+                            const activeCount=watchlist.filter(w=>alarmStatus[w.symbol]?.[a.id]?.active===true).length
+                            return(
+                              <div key={a.id} style={{padding:'7px 10px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:8}}>
+                                <span style={{width:9,height:9,borderRadius:'50%',flexShrink:0,background:activeCount>0?col:'#2a3f55',boxShadow:activeCount>0?`0 0 5px ${col}`:undefined}}/>
+                                <div style={{flex:1,minWidth:0}}>
+                                  <div style={{fontFamily:MONO,fontSize:12,color:'#e8f4ff',fontWeight:700}}>{a.name}</div>
+                                  <div style={{fontFamily:MONO,fontSize:10,color:'#7a9bc0',marginTop:1}}>{condLabel} · EMA {a.ema_r}/{a.ema_l}</div>
+                                  {activeCount>0&&<div style={{fontFamily:MONO,fontSize:10,color:col,marginTop:1}}>{activeCount} activos en watchlist</div>}
+                                </div>
+                                <button onClick={()=>openEditAlarm(a)} style={{background:'transparent',border:'1px solid var(--border)',color:'#a8ccdf',fontFamily:MONO,fontSize:11,padding:'2px 6px',borderRadius:3,cursor:'pointer'}}>✎</button>
+                              </div>
+                            )
+                          })}
+                        </div>
                       </div>
                     )
                   })()}
@@ -4591,7 +4668,7 @@ export default function Home() {
                       <span style={{width:8,height:8,borderRadius:'50%',background:s.color||'#00d4ff',flexShrink:0,display:'inline-block'}}/>
                       <div style={{flex:1,minWidth:0}}>
                         <span style={{color:'var(--text)',fontSize:11,fontWeight:600}}>{s.name}</span>
-                        <span style={{color:'var(--text3)',fontSize:10,marginLeft:8}}>{s.symbol} · {s.years}a · {(s.definition?.entry?.type||'legacy').replace(/_/g,' ')}</span>
+                        <span style={{color:'var(--text3)',fontSize:10,marginLeft:8}}>{s.years}a · {(s.definition?.entry?.type||'legacy').replace(/_/g,' ')}</span>
                       </div>
                       <button onClick={()=>openEditStr(s)} style={{background:'transparent',border:'1px solid var(--border)',color:'var(--text3)',fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer'}}>✎</button>
                       <button onClick={()=>duplicateStr(s)} title="Duplicar" style={{background:'transparent',border:'1px solid var(--border)',color:'var(--text3)',fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer'}}>⎘</button>
@@ -4648,43 +4725,7 @@ export default function Home() {
         </div>
       </div>
     )}
-      {/* ── Alarm Popup ── */}
-      {alarmPopup&&(
-        <div style={{position:'fixed',top:0,right:0,bottom:0,left:0,zIndex:999,display:'flex',alignItems:'flex-start',justifyContent:'flex-end',pointerEvents:'none'}}>
-          <div style={{margin:'60px 16px 0 0',background:'#0d1824',border:'1px solid #ff4d6d',borderRadius:8,
-            padding:'14px 16px',minWidth:260,maxWidth:340,boxShadow:'0 8px 32px rgba(255,77,109,0.25)',
-            pointerEvents:'all',fontFamily:MONO}}>
-            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
-              <span style={{fontSize:13,fontWeight:700,color:'#ff4d6d'}}>🔔 Alarmas activas</span>
-              <button onClick={()=>setAlarmPopup(null)} style={{background:'none',border:'none',color:'#5a7a95',fontSize:15,cursor:'pointer',lineHeight:1}}>✕</button>
-            </div>
-            {alarmPopup.map((a,i)=>(
-              <div key={i} onClick={()=>{setSimbolo(a.symbol);setSidePanel('alarms');setAlarmPopup(null)}}
-                style={{display:'flex',alignItems:'center',gap:8,padding:'6px 0',
-                  borderBottom:i<alarmPopup.length-1?'1px solid #1a2d45':'none',cursor:'pointer'}}
-                onMouseOver={e=>e.currentTarget.style.opacity='0.75'} onMouseOut={e=>e.currentTarget.style.opacity='1'}>
-                <span style={{width:8,height:8,borderRadius:'50%',background:'#ff4d6d',flexShrink:0}}/>
-                <div>
-                  <span style={{fontWeight:700,color:'#e2eaf5',fontSize:12}}>{a.symbol}</span>
-                  <span style={{color:'#7a9bc0',fontSize:11,marginLeft:6}}>{a.name}</span>
-                </div>
-              </div>
-            ))}
-            <div style={{marginTop:10,display:'flex',gap:8}}>
-              <button onClick={()=>{setSidePanel('alarms');setAlarmPopup(null)}}
-                style={{flex:1,fontFamily:MONO,fontSize:10,padding:'5px',borderRadius:3,cursor:'pointer',
-                  border:'1px solid #ff4d6d',background:'rgba(255,77,109,0.1)',color:'#ff4d6d'}}>
-                Ver alarmas
-              </button>
-              <button onClick={()=>setAlarmPopup(null)}
-                style={{fontFamily:MONO,fontSize:10,padding:'5px 10px',borderRadius:3,cursor:'pointer',
-                  border:'1px solid #2a3f55',background:'transparent',color:'#7a9bc0'}}>
-                Ignorar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Alarm popup removed — use alarms panel instead */}
     </>
   )
 }
