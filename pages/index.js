@@ -632,35 +632,39 @@ function SettingsModal({ onClose }) {
                   </div>
                 )
                 return(
-                  <div style={{display:'flex',flexDirection:'column',gap:6}}>
-                    {allDotIds.map((id,i)=>{
-                      const name=storedAlarmNames[id]||id
-                      const sel=dotIds.includes(id)
-                      const ALARM_COLORS=['#00e5a0','#ffd166','#00d4ff','#ff7eb3','#9b72ff','#ff4d6d']
-                      const col=ALARM_COLORS[i%ALARM_COLORS.length]
-                      return(
-                        <label key={id} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}>
-                          <input type="checkbox" checked={sel}
-                            onChange={e=>{
-                              const next=e.target.checked?[...dotIds,id]:dotIds.filter(x=>x!==id)
+                  <div>
+                    <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:8}}>
+                      {allDotIds.map((id,i)=>{
+                        const name=storedAlarmNames[id]||id
+                        const sel=dotIds.includes(id)
+                        const ALARM_COLORS=['#00e5a0','#ffd166','#00d4ff','#ff7eb3','#9b72ff','#ff4d6d']
+                        const col=ALARM_COLORS[i%ALARM_COLORS.length]
+                        return(
+                          <label key={id} onClick={()=>{
+                              const next=sel?dotIds.filter(x=>x!==id):[...dotIds,id]
                               upd('watchlist.alarmDotIds',next)
                             }}
-                            style={{accentColor:col,width:13,height:13}}/>
-                          <span style={{width:10,height:10,borderRadius:'50%',background:col,flexShrink:0,display:'inline-block'}}/>
-                          <span style={{fontFamily:MONO,fontSize:11,color:'#cce0f5'}}>{name}</span>
-                        </label>
-                      )
-                    })}
-                    <button onClick={()=>upd('watchlist.alarmDotIds',allDotIds)}
-                      style={{marginTop:4,fontFamily:MONO,fontSize:10,padding:'4px 8px',borderRadius:3,
-                        border:'1px solid #2a3f55',background:'transparent',color:'#7a9bc0',cursor:'pointer',textAlign:'left'}}>
-                      Seleccionar todas
-                    </button>
-                    <button onClick={()=>upd('watchlist.alarmDotIds',[])}
-                      style={{fontFamily:MONO,fontSize:10,padding:'4px 8px',borderRadius:3,
-                        border:'1px solid #2a3f55',background:'transparent',color:'#ff4d6d',cursor:'pointer',textAlign:'left'}}>
-                      Deseleccionar todas
-                    </button>
+                            style={{display:'flex',alignItems:'center',gap:5,cursor:'pointer',
+                              padding:'4px 9px',borderRadius:12,border:`1px solid ${sel?col:'#1e3a52'}`,
+                              background:sel?`${col}18`:'rgba(255,255,255,0.02)',userSelect:'none'}}>
+                            <span style={{width:8,height:8,borderRadius:'50%',background:sel?col:'#2a3f55',flexShrink:0,display:'inline-block'}}/>
+                            <span style={{fontFamily:MONO,fontSize:10,color:sel?col:'#7a9bc0'}}>{name}</span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                    <div style={{display:'flex',gap:6}}>
+                      <button onClick={()=>upd('watchlist.alarmDotIds',allDotIds)}
+                        style={{flex:1,fontFamily:MONO,fontSize:10,padding:'4px 8px',borderRadius:3,
+                          border:'1px solid #2a4060',background:'rgba(0,212,255,0.06)',color:'#00d4ff',cursor:'pointer'}}>
+                        ✓ Todas
+                      </button>
+                      <button onClick={()=>upd('watchlist.alarmDotIds',[])}
+                        style={{flex:1,fontFamily:MONO,fontSize:10,padding:'4px 8px',borderRadius:3,
+                          border:'1px solid #3a1a20',background:'rgba(255,77,109,0.06)',color:'#ff4d6d',cursor:'pointer'}}>
+                        ✕ Ninguna
+                      </button>
+                    </div>
                   </div>
                 )
               })()}
@@ -1187,10 +1191,13 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
         }
       })
 
+      // helper — re-apply right gap after any setVisibleRange (it resets the offset)
+      const RO=5
+      const applyRO=()=>{ try{ chart.timeScale().applyOptions({rightOffset:RO}) }catch(_){} }
       // Restore saved range OR default to last 3 months
       try {
         if(savedRangeRef?.current){
-          chart.timeScale().setVisibleRange(savedRangeRef.current)
+          chart.timeScale().setVisibleRange(savedRangeRef.current); applyRO()
         } else {
           const lastBar = data[data.length-1]
           if(lastBar){
@@ -1200,10 +1207,10 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
             chart.timeScale().setVisibleRange({
               from: from.toISOString().split('T')[0],
               to:   to.toISOString().split('T')[0]
-            })
+            }); applyRO()
           }
         }
-      } catch(_){ chart.timeScale().fitContent() }
+      } catch(_){ chart.timeScale().fitContent(); applyRO() }
       // Save range whenever user zooms/scrolls
       chart.timeScale().subscribeVisibleTimeRangeChange(range=>{
         if(range && savedRangeRef) savedRangeRef.current = range
@@ -1232,11 +1239,11 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
           try{
             const pad=Math.max(5,Math.round((new Date(exitDate)-new Date(entryDate))/86400000*0.3))
             const d1=new Date(entryDate); d1.setDate(d1.getDate()-pad)
-            const d2=new Date(exitDate); d2.setDate(d2.getDate()+pad+6) // right margin
-            chart.timeScale().setVisibleRange({from:d1.toISOString().split('T')[0],to:d2.toISOString().split('T')[0]})
+            const d2=new Date(exitDate); d2.setDate(d2.getDate()+pad+6)
+            chart.timeScale().setVisibleRange({from:d1.toISOString().split('T')[0],to:d2.toISOString().split('T')[0]}); applyRO()
           }catch(_){}
         },
-        fitAll:()=>{ try{ chart.timeScale().fitContent() }catch(_){} },
+        fitAll:()=>{ try{ chart.timeScale().fitContent(); applyRO() }catch(_){} },
         showRecent:(months)=>{
           try{
             const lastBar=data[data.length-1]
@@ -1244,7 +1251,7 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
             const to=new Date(lastBar.date)
             const from=new Date(lastBar.date)
             from.setMonth(from.getMonth()-(months||3))
-            chart.timeScale().setVisibleRange({from:from.toISOString().split('T')[0],to:to.toISOString().split('T')[0]})
+            chart.timeScale().setVisibleRange({from:from.toISOString().split('T')[0],to:to.toISOString().split('T')[0]}); applyRO()
           }catch(_){}
         }
       })
@@ -2949,7 +2956,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V3.8</title>
+        <title>Trading Simulator V3.9</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3011,7 +3018,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V3.8
+            <span className="dot"/>Trading Simulator V3.9
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
