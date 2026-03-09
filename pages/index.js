@@ -590,7 +590,6 @@ function SettingsModal({ onClose }) {
               {sep('Apariencia')}
               {[
                 ['watchlist.showRankBadge',  'Mostrar badge de ranking (🥇#2…)', true],
-                ['watchlist.showAlarmDots',  'Mostrar puntos de alarma en cada activo', false],
                 ['watchlist.showListBadge',  'Mostrar etiqueta de lista en cada activo', true],
               ].map(([key,label,def])=>(
                 <label key={key} style={{display:'flex',alignItems:'center',gap:8,marginBottom:8,cursor:'pointer'}}>
@@ -601,6 +600,59 @@ function SettingsModal({ onClose }) {
                   <span style={{fontSize:11,color:'#cce0f5'}}>{label}</span>
                 </label>
               ))}
+
+              {sep('Condiciones visibles como puntos')}
+              <div style={{fontSize:10,color:'#5a7a95',lineHeight:1.6,marginBottom:10}}>
+                Selecciona qué condiciones se muestran como círculos de color en cada activo de la Watchlist.
+                Solo se muestran condiciones (no alertas de precio).
+              </div>
+              {(()=>{
+                // Load alarms from localStorage cache to show in settings without network call
+                // We use a local state trick: read from the passed-in alarmsProp
+                const dotIds = settings?.watchlist?.alarmDotIds || []
+                // We need access to alarms here - pass them via a special key in settings or use a ref
+                // Since SettingsModal doesn't have access to alarms state, we store alarm names in settings
+                const storedAlarmNames = settings?.watchlist?.alarmDotNames || {}
+                const allDotIds = Object.keys(storedAlarmNames)
+                if(allDotIds.length===0) return(
+                  <div style={{fontFamily:MONO,fontSize:11,color:'#4a6a80',padding:'6px 0'}}>
+                    Abre la app y vuelve aquí para ver las condiciones disponibles.
+                    <br/>Se guardan automáticamente al cargar alarmas.
+                  </div>
+                )
+                return(
+                  <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                    {allDotIds.map((id,i)=>{
+                      const name=storedAlarmNames[id]||id
+                      const sel=dotIds.includes(id)
+                      const ALARM_COLORS=['#00e5a0','#ffd166','#00d4ff','#ff7eb3','#9b72ff','#ff4d6d']
+                      const col=ALARM_COLORS[i%ALARM_COLORS.length]
+                      return(
+                        <label key={id} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}>
+                          <input type="checkbox" checked={sel}
+                            onChange={e=>{
+                              const next=e.target.checked?[...dotIds,id]:dotIds.filter(x=>x!==id)
+                              upd('watchlist.alarmDotIds',next)
+                            }}
+                            style={{accentColor:col,width:13,height:13}}/>
+                          <span style={{width:10,height:10,borderRadius:'50%',background:col,flexShrink:0,display:'inline-block'}}/>
+                          <span style={{fontFamily:MONO,fontSize:11,color:'#cce0f5'}}>{name}</span>
+                        </label>
+                      )
+                    })}
+                    <button onClick={()=>upd('watchlist.alarmDotIds',allDotIds)}
+                      style={{marginTop:4,fontFamily:MONO,fontSize:10,padding:'4px 8px',borderRadius:3,
+                        border:'1px solid #2a3f55',background:'transparent',color:'#7a9bc0',cursor:'pointer',textAlign:'left'}}>
+                      Seleccionar todas
+                    </button>
+                    <button onClick={()=>upd('watchlist.alarmDotIds',[])}
+                      style={{fontFamily:MONO,fontSize:10,padding:'4px 8px',borderRadius:3,
+                        border:'1px solid #2a3f55',background:'transparent',color:'#ff4d6d',cursor:'pointer',textAlign:'left'}}>
+                      Deseleccionar todas
+                    </button>
+                  </div>
+                )
+              })()}
             </div>
           )}
 
@@ -2321,7 +2373,28 @@ export default function Home() {
   const reloadAlarms=()=>{
     setAlarmLoading(true)
     fetchAlarms()
-      .then(data=>setAlarms(data))
+      .then(data=>{
+        setAlarms(data)
+        // Save condition name map to settings so Settings modal can show them
+        const conditions=data.filter(a=>a.condition!=='price_level')
+        if(conditions.length>0){
+          try{
+            const s=JSON.parse(localStorage.getItem('v50_settings')||'{}')
+            if(!s.watchlist) s.watchlist={}
+            const nameMap={}
+            conditions.forEach(a=>{nameMap[a.id]=a.name})
+            s.watchlist.alarmDotNames=nameMap
+            // Init alarmDotIds with all condition IDs if not yet set
+            if(!s.watchlist.alarmDotIds){
+              s.watchlist.alarmDotIds=conditions.map(a=>a.id)
+            } else {
+              // Remove stale IDs
+              s.watchlist.alarmDotIds=s.watchlist.alarmDotIds.filter(id=>nameMap[id])
+            }
+            localStorage.setItem('v50_settings',JSON.stringify(s))
+          }catch(_){}
+        }
+      })
       .catch(()=>{})
       .finally(()=>setAlarmLoading(false))
   }
@@ -2684,7 +2757,7 @@ export default function Home() {
   const wlShowFavs      = wlSettings.showFilterFavorites !== false
   const wlShowAlarmFlt  = wlSettings.showFilterAlarms    !== false
   const wlShowRankBadge = wlSettings.showRankBadge       !== false
-  const wlShowAlarmDots = wlSettings.showAlarmDots       === true
+  // alarm dots now always visible when alarmDotIds has items (managed per-condition)
   const wlShowListBadge = wlSettings.showListBadge       !== false
   let spStatus='neutral',spTxt='SIN FILTRO'
   if(sp5&&tipoFiltro!=='none'){const blq=tipoFiltro==='precio_ema'?sp5.precio<sp5.emaR:sp5.emaR<sp5.emaL;spStatus=blq?'bad':'ok';spTxt=blq?'⚠ EVITAR ENTRADAS':'✓ APTO PARA OPERAR'}
@@ -2846,7 +2919,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V3.4</title>
+        <title>Trading Simulator V3.5</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2908,7 +2981,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V3.4
+            <span className="dot"/>Trading Simulator V3.5
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -3206,11 +3279,14 @@ export default function Home() {
                           <div style={{fontFamily:MONO,fontSize:11,color:'#8aadcc',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{w.name}</div>
                         </div>
                         {/* Badges alarmas — círculos de color con velas */}
-                        {wlShowAlarmDots&&(()=>{
+                        {(()=>{
+                          const dotIds=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.watchlist?.alarmDotIds??null}catch(_){return null}})()
+                          if(dotIds!==null&&dotIds.length===0) return null
                           const symAlarms=alarmStatus[w.symbol]
                           if(!symAlarms) return null
                           const ALARM_COLORS=['#00e5a0','#ffd166','#00d4ff','#ff7eb3','#9b72ff','#ff4d6d']
-                          return alarms.map((a,ai)=>{
+                          const visibleAlarms=alarms.filter(a=>a.condition!=='price_level'&&(dotIds===null||dotIds.includes(a.id)))
+                          return visibleAlarms.map((a,ai)=>{
                             const st=symAlarms[a.id]
                             if(!st) return null
                             const active=st?.active===true
