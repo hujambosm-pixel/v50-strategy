@@ -1235,6 +1235,7 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
 
       // Exponer navigateTo + fitAll
       if(onChartReady) onChartReady({
+        scrollBy:(bars)=>{ try{ chart.timeScale().scrollToPosition(chart.timeScale().scrollPosition()-bars, false) }catch(_){} },
         navigateTo:(entryDate,exitDate)=>{
           try{
             const pad=Math.max(5,Math.round((new Date(exitDate)-new Date(entryDate))/86400000*0.3))
@@ -2955,7 +2956,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.0</title>
+        <title>Trading Simulator V4.1</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3017,7 +3018,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.0
+            <span className="dot"/>Trading Simulator V4.1
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -3733,6 +3734,17 @@ export default function Home() {
                             fontFamily:MONO,fontSize:10,padding:'3px 8px',borderRadius:4,cursor:'pointer',whiteSpace:'nowrap'}}>
                           {chartViewFull?'⊞ Todo':'⊡ Reciente'}
                         </button>
+                        {/* Botones scroll ◀ ▶ */}
+                        <div style={{display:'flex',gap:2}}>
+                          {[['◀',10],['▶',-10]].map(([lbl,bars])=>(
+                            <button key={lbl} onClick={()=>chartApiRef.current?.scrollBy(bars)}
+                              title={bars>0?'Desplazar izquierda':'Desplazar derecha'}
+                              style={{background:'rgba(13,21,32,0.85)',border:'1px solid #1a2d45',color:'#5a8aaa',
+                                fontFamily:MONO,fontSize:11,padding:'2px 7px',borderRadius:4,cursor:'pointer',lineHeight:1}}>
+                              {lbl}
+                            </button>
+                          ))}
+                        </div>
                         {/* Botón Añadir activo */}
                         <button onClick={newItem}
                           title="Añadir activo a la watchlist"
