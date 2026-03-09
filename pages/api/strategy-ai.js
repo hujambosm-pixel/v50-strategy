@@ -72,6 +72,23 @@ Opciones:
   - pct: número (solo para pct_equity, 1-100)
 Ejemplo V50: capital fijo €10.000, 5 años
 
+=== ESTRATEGIAS ESPECIALES (no configurables con pasos normales) ===
+
+BUY & HOLD: el usuario quiere comprar en el primer día del periodo y mantener hasta hoy.
+Esto NO se puede modelar con los 8 pasos del constructor (que requieren cruces/señales).
+Cuando el usuario pida buy&hold o "comprar el primer día y vender hoy":
+- Explícale que el motor ya calcula Buy&Hold automáticamente como curva de comparación en el gráfico de equity (línea amarilla B&H Activo y violeta B&H SP500).
+- Dile que puede verla directamente sin crear ninguna estrategia.
+- Si insiste en una estrategia propia de B&H, explícale que actualmente no está implementada como tipo de estrategia configurable, e indica este bloque missing_feature.
+\`\`\`missing_feature
+{
+  "description": "Estrategia Buy & Hold: entrar en el primer día del periodo y salir en el último día disponible",
+  "suggested_key": "strategy_type",
+  "suggested_values": ["buy_and_hold", "ema_cross"],
+  "implementation_notes": "Añadir type='buy_and_hold' en DEFAULT_DEFINITION. El motor datos.js ya calcula B&H en calcEquityCurves — bastaría exponerlo como trade único con entryDate=startDate, exitDate=lastBar.date"
+}
+\`\`\`
+
 === INSTRUCCIONES DE RESPUESTA ===
 1. Escucha lo que quiere el usuario.
 2. Haz preguntas de aclaración si la descripción es ambigua.
