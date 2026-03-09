@@ -1068,59 +1068,71 @@ function SettingsModal({ onClose, strategies=[] }) {
                 </label>
               ))}
 
-              {sep('Condiciones visibles como puntos')}
-              <div style={{fontSize:10,color:'#5a7a95',lineHeight:1.6,marginBottom:10}}>
-                Selecciona qué condiciones se muestran como círculos de color en cada activo de la Watchlist.
-                Solo se muestran condiciones (no alertas de precio).
+              {sep('Condición de filtrado para la Watchlist')}
+              <div style={{fontSize:10,color:'#5a7a95',lineHeight:1.6,marginBottom:12}}>
+                Selecciona una condición de la librería para usarla como filtro en la Watchlist.
+                Los activos que cumplan la condición quedarán resaltados o filtrados.
               </div>
               {(()=>{
-                // Load alarms from localStorage cache to show in settings without network call
-                // We use a local state trick: read from the passed-in alarmsProp
-                const dotIds = settings?.watchlist?.alarmDotIds || []
-                // We need access to alarms here - pass them via a special key in settings or use a ref
-                // Since SettingsModal doesn't have access to alarms state, we store alarm names in settings
-                const storedAlarmNames = settings?.watchlist?.alarmDotNames || {}
-                const allDotIds = Object.keys(storedAlarmNames)
-                if(allDotIds.length===0) return(
-                  <div style={{fontFamily:MONO,fontSize:11,color:'#4a6a80',padding:'6px 0'}}>
-                    Abre la app y vuelve aquí para ver las condiciones disponibles.
-                    <br/>Se guardan automáticamente al cargar alarmas.
+                const libConds = lsGetConds()  // read from localStorage — same source as Settings Condiciones tab
+                const selectedId = settings?.watchlist?.filterConditionId || null
+                if(libConds.length===0) return(
+                  <div style={{fontFamily:MONO,fontSize:11,color:'#4a6a80',padding:'10px 12px',
+                    background:'rgba(0,0,0,0.2)',borderRadius:4,border:'1px dashed #1e3a52',lineHeight:1.6}}>
+                    No hay condiciones en la librería.<br/>
+                    Créalas en la pestaña <b style={{color:'#00d4ff'}}>⚡ Condiciones</b>.
                   </div>
                 )
+                const COND_COLORS=['#00e5a0','#ffd166','#00d4ff','#ff7eb3','#9b72ff','#ff4d6d']
+                const CTYPE_LABELS={
+                  ema_cross_up:'↑ Cruce alcista EMA',ema_cross_down:'↓ Cruce bajista EMA',
+                  price_above_ema:'Precio > EMA',price_below_ema:'Precio < EMA',
+                  price_above_ma:'Precio > Media',price_below_ma:'Precio < Media',
+                  rsi_above:'RSI sobre nivel',rsi_below:'RSI bajo nivel',
+                  rsi_cross_up:'RSI cruza ↑',rsi_cross_down:'RSI cruza ↓',
+                  macd_cross_up:'MACD cruza señal ↑',macd_cross_down:'MACD cruza señal ↓',
+                }
                 return(
-                  <div>
-                    <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:8}}>
-                      {allDotIds.map((id,i)=>{
-                        const name=storedAlarmNames[id]||id
-                        const sel=dotIds.includes(id)
-                        const ALARM_COLORS=['#00e5a0','#ffd166','#00d4ff','#ff7eb3','#9b72ff','#ff4d6d']
-                        const col=ALARM_COLORS[i%ALARM_COLORS.length]
-                        return(
-                          <label key={id} onClick={()=>{
-                              const next=sel?dotIds.filter(x=>x!==id):[...dotIds,id]
-                              upd('watchlist.alarmDotIds',next)
-                            }}
-                            style={{display:'flex',alignItems:'center',gap:5,cursor:'pointer',
-                              padding:'4px 9px',borderRadius:12,border:`1px solid ${sel?col:'#1e3a52'}`,
-                              background:sel?`${col}18`:'rgba(255,255,255,0.02)',userSelect:'none'}}>
-                            <span style={{width:8,height:8,borderRadius:'50%',background:sel?col:'#2a3f55',flexShrink:0,display:'inline-block'}}/>
-                            <span style={{fontFamily:MONO,fontSize:10,color:sel?col:'#7a9bc0'}}>{name}</span>
-                          </label>
-                        )
-                      })}
-                    </div>
-                    <div style={{display:'flex',gap:6}}>
-                      <button onClick={()=>upd('watchlist.alarmDotIds',allDotIds)}
-                        style={{flex:1,fontFamily:MONO,fontSize:10,padding:'4px 8px',borderRadius:3,
-                          border:'1px solid #2a4060',background:'rgba(0,212,255,0.06)',color:'#00d4ff',cursor:'pointer'}}>
-                        ✓ Todas
-                      </button>
-                      <button onClick={()=>upd('watchlist.alarmDotIds',[])}
-                        style={{flex:1,fontFamily:MONO,fontSize:10,padding:'4px 8px',borderRadius:3,
-                          border:'1px solid #3a1a20',background:'rgba(255,77,109,0.06)',color:'#ff4d6d',cursor:'pointer'}}>
-                        ✕ Ninguna
-                      </button>
-                    </div>
+                  <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                    {/* None option */}
+                    <label onClick={()=>upd('watchlist.filterConditionId', null)}
+                      style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',borderRadius:5,cursor:'pointer',
+                        border:`1px solid ${!selectedId?'#3d5a7a':'#1e3a52'}`,
+                        background:!selectedId?'rgba(61,90,122,0.15)':'rgba(255,255,255,0.01)',userSelect:'none'}}>
+                      <span style={{width:9,height:9,borderRadius:'50%',background:!selectedId?'#3d5a7a':'#2a3f55',flexShrink:0}}/>
+                      <span style={{fontFamily:MONO,fontSize:11,color:!selectedId?'#7a9bc0':'#4a6a80'}}>Sin filtro de condición</span>
+                    </label>
+                    {libConds.map((c,i)=>{
+                      const sel = selectedId===c.id
+                      const col = COND_COLORS[i%COND_COLORS.length]
+                      return(
+                        <label key={c.id} onClick={()=>upd('watchlist.filterConditionId', sel?null:c.id)}
+                          style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',borderRadius:5,cursor:'pointer',
+                            border:`1px solid ${sel?col:'#1e3a52'}`,
+                            background:sel?`${col}14`:'rgba(255,255,255,0.01)',userSelect:'none'}}>
+                          <span style={{width:9,height:9,borderRadius:'50%',flexShrink:0,
+                            background:sel?col:'#2a3f55',
+                            boxShadow:sel?`0 0 5px ${col}`:undefined}}/>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontFamily:MONO,fontSize:11,color:sel?col:'#7a9bc0',fontWeight:sel?600:400}}>{c.name}</div>
+                            <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',marginTop:1}}>
+                              {CTYPE_LABELS[c.type]||c.type}
+                              {c.params?.ma_fast&&` · EMA ${c.params.ma_fast}/${c.params.ma_slow}`}
+                              {c.params?.ma_period&&` · MA(${c.params.ma_period})`}
+                              {c.params?.period&&` · RSI(${c.params.period}) niv.${c.params.level}`}
+                            </div>
+                          </div>
+                          {sel&&<span style={{fontFamily:MONO,fontSize:9,color:col}}>✓ activa</span>}
+                        </label>
+                      )
+                    })}
+                    {selectedId&&(
+                      <div style={{marginTop:4,padding:'7px 10px',background:'rgba(0,212,255,0.05)',
+                        border:'1px solid rgba(0,212,255,0.15)',borderRadius:4,fontFamily:MONO,fontSize:10,color:'#5a7a95'}}>
+                        💡 Los activos que cumplan esta condición aparecerán resaltados en la Watchlist.
+                        El botón de filtro <b style={{color:'#00d4ff'}}>⚡ Filtro condición</b> activará/desactivará el filtrado.
+                      </div>
+                    )}
                   </div>
                 )
               })()}
@@ -2701,6 +2713,7 @@ export default function Home() {
   const [wlSearch,setWlSearch]=useState('')
   const [selectedAlarmIds,setSelectedAlarmIds]=useState([])  // IDs de alarmas activas en filtro
   const [onlyFavs,setOnlyFavs]=useState(false)  // filtro solo favoritos
+  const [condFilterActive,setCondFilterActive]=useState(false) // filtro por condición activa
   const [alarmDropOpen,setAlarmDropOpen]=useState(false)  // desplegable alarmas
   const [alarmPopup,setAlarmPopup]=useState(null)  // kept for compat, not shown
   const [ackedAlarms,setAckedAlarms]=useState(new Set())  // populated from localStorage in useEffect
@@ -3006,20 +3019,33 @@ export default function Home() {
   const openEditAlarm=(a)=>{
     setEditingAlarm(a)
     setAlarmForm({
-      name:a.name||'',
+      symbol: a.symbol||simbolo,           // always bound to active symbol
       condition:a.condition||'ema_cross_up',
       ema_r:a.ema_r||10,ema_l:a.ema_l||11,
+      price_level:a.price_level||null,
+      condition_detail:a.condition_detail||'price_above',
+      condition_id:a.condition_id||null,
+      params:a.params||{},
     })
   }
   const closeEditAlarm=()=>{setEditingAlarm(null);setAlarmForm({})}
   const saveAlarm=async()=>{
     setAlarmSaving(true)
     try{
-      // Condition alarms (not price_level) apply to all watchlist — use symbol='*' as sentinel
+      const sym = alarmForm.symbol||simbolo
+      if(!sym) throw new Error('No hay símbolo activo')
+      // Auto-generate name: "AAPL · Cruce alcista EMA" or "AAPL @ 150.00"
+      const CTYPE_NAMES={ema_cross_up:'Cruce alcista EMA',ema_cross_down:'Cruce bajista EMA',
+        price_above_ema:'Precio > EMA',price_below_ema:'Precio < EMA',
+        price_above_ma:'Precio > MA',price_below_ma:'Precio < MA',
+        rsi_above:'RSI sobre nivel',rsi_below:'RSI bajo nivel',
+        rsi_cross_up:'RSI cruza ↑',rsi_cross_down:'RSI cruza ↓',
+        macd_cross_up:'MACD ↑',macd_cross_down:'MACD ↓'}
       const isPriceAlarm = alarmForm.condition==='price_level'
-      const sym = isPriceAlarm ? (alarmForm.symbol||simbolo||'') : '*'
-      if(isPriceAlarm && !sym) throw new Error('Selecciona un símbolo para la alerta de precio')
-      await upsertAlarm({...alarmForm, symbol:sym, id:editingAlarm?.id||undefined, active:true})
+      const autoName = isPriceAlarm
+        ? `${sym} @ ${Number(alarmForm.price_level).toFixed(2)}`
+        : `${sym} · ${CTYPE_NAMES[alarmForm.condition]||alarmForm.condition}`
+      await upsertAlarm({...alarmForm, symbol:sym, name:autoName, id:editingAlarm?.id||undefined, active:true})
       reloadAlarms(); closeEditAlarm()
     }catch(e){alert('Error: '+e.message)}
     finally{setAlarmSaving(false)}
@@ -3505,7 +3531,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.19</title>
+        <title>Trading Simulator V4.20</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3568,7 +3594,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.19
+            <span className="dot"/>Trading Simulator V4.20
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -3761,7 +3787,25 @@ export default function Home() {
                     ★
                   </button>}
 
-                  {(wlShowSearch||wlShowLista||wlShowFavs)&&<button onClick={()=>{setWlSearch('');setSelectedLists([]);setOnlyFavs(false);setSelectedAlarmIds([])}} title="Limpiar todos los filtros" style={{background:'rgba(255,77,109,0.08)',border:'1px solid #ff4d6d',color:'#ff4d6d',fontFamily:MONO,fontSize:11,padding:'3px 7px',borderRadius:3,cursor:'pointer',flexShrink:0}}>✕</button>}
+                  {/* Botón filtro por condición — solo si hay una seleccionada en Settings */}
+                  {(()=>{
+                    const fCondId=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.watchlist?.filterConditionId||null}catch(_){return null}})()
+                    if(!fCondId) return null
+                    const fCondName=(()=>{const c=lsGetConds().find(x=>x.id===fCondId);return c?.name||'⚡'})()
+                    return(
+                      <button onClick={()=>setCondFilterActive(f=>!f)}
+                        title={condFilterActive?'Mostrar todos':'Filtrar por condición activa'}
+                        style={{background:condFilterActive?'rgba(0,229,160,0.12)':'transparent',
+                          border:`1px solid ${condFilterActive?'#00e5a0':'var(--border)'}`,
+                          color:condFilterActive?'#00e5a0':'var(--text3)',
+                          fontFamily:MONO,fontSize:10,padding:'3px 7px',borderRadius:4,cursor:'pointer',
+                          flexShrink:0,maxWidth:90,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                        ⚡ {fCondName}
+                      </button>
+                    )
+                  })()}
+
+                  {(wlShowSearch||wlShowLista||wlShowFavs||condFilterActive)&&<button onClick={()=>{setWlSearch('');setSelectedLists([]);setOnlyFavs(false);setSelectedAlarmIds([]);setCondFilterActive(false)}} title="Limpiar todos los filtros" style={{background:'rgba(255,77,109,0.08)',border:'1px solid #ff4d6d',color:'#ff4d6d',fontFamily:MONO,fontSize:11,padding:'3px 7px',borderRadius:3,cursor:'pointer',flexShrink:0}}>✕</button>}
                 </div>
                 {/* ══ Fila 2: filtro alarmas (chips inline, ancho completo) ══ */}
                 {wlShowAlarmFlt&&(()=>{
@@ -3808,13 +3852,16 @@ export default function Home() {
                   {wlLoading&&<div style={{padding:'10px 12px',fontFamily:MONO,fontSize:12,color:'#a8ccdf'}}>⟳ Cargando…</div>}
                   {!wlLoading&&(()=>{
                     const searchLower=wlSearch.toLowerCase()
+                    const fCondId=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.watchlist?.filterConditionId||null}catch(_){return null}})()
                     const filtered=watchlist.filter(w=>{
                       const matchList=selectedLists.length===0||selectedLists.includes(w.list_name||'General')
                       const matchSearch=!wlSearch||(w.symbol||'').toLowerCase().includes(searchLower)||(w.name||'').toLowerCase().includes(searchLower)
                       const matchFav=!onlyFavs||w.favorite
                       const symAlarms=alarmStatus[w.symbol]||{}
                       const matchAlarm=selectedAlarmIds.length===0||selectedAlarmIds.every(id=>symAlarms[id]?.active===true)
-                      return matchList&&matchSearch&&matchFav&&matchAlarm
+                      // Condition filter: when active, only show symbols where condition is triggered
+                      const matchCond=!condFilterActive||!fCondId||(alarmStatus[w.symbol]?.[fCondId]?.active===true)
+                      return matchList&&matchSearch&&matchFav&&matchAlarm&&matchCond
                     })
                     // Sort: 1st by ranking, 2nd by favorite, 3rd alphabetical
                     const all=[...filtered].sort((a,b)=>{
@@ -3846,7 +3893,9 @@ export default function Home() {
                     )
                     return (<>{countBadge}{all.map(w=>(
                       <div key={w.id||w.symbol}
-                        style={{padding:'6px 10px',display:'flex',alignItems:'center',gap:6,borderBottom:'1px solid var(--border)',background:simbolo===w.symbol?'rgba(0,212,255,0.07)':'transparent'}}
+                        style={{padding:'6px 10px',display:'flex',alignItems:'center',gap:6,borderBottom:'1px solid var(--border)',
+                          background:simbolo===w.symbol?'rgba(0,212,255,0.07)':'transparent',
+                          borderLeft:`2px solid ${fCondId&&alarmStatus[w.symbol]?.[fCondId]?.active===true?'#00e5a0':'transparent'}`}}
                         onMouseOver={e=>e.currentTarget.style.background='rgba(255,255,255,0.03)'}
                         onMouseOut={e=>e.currentTarget.style.background=simbolo===w.symbol?'rgba(0,212,255,0.07)':'transparent'}>
                         {/* Ranking badge */}
@@ -5122,13 +5171,12 @@ export default function Home() {
                 <button onClick={closeEditAlarm} style={{background:'transparent',border:'none',color:'var(--text3)',fontSize:18,cursor:'pointer'}}>✕</button>
               </div>
 
-              {/* Nombre */}
-              <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>
-                Nombre
-                <input type="text" value={alarmForm.name||''} placeholder="Ej: Cruce alcista S&P 500"
-                  onChange={e=>setAlarmForm(p=>({...p,name:e.target.value}))}
-                  style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:13,padding:'7px 10px',borderRadius:4}}/>
-              </label>
+              {/* Símbolo activo — solo lectura, muestra qué símbolo tendrá la alerta */}
+              <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',background:'rgba(0,212,255,0.06)',border:'1px solid rgba(0,212,255,0.2)',borderRadius:5}}>
+                <span style={{fontFamily:MONO,fontSize:11,color:'#5a7a95'}}>Símbolo:</span>
+                <span style={{fontFamily:MONO,fontSize:15,color:'var(--accent)',fontWeight:700}}>{alarmForm.symbol||simbolo}</span>
+                <span style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',marginLeft:'auto'}}>activo en el gráfico</span>
+              </div>
 
               {/* Tipo de alerta */}
               <div style={{display:'flex',gap:6}}>
@@ -5169,38 +5217,25 @@ export default function Home() {
                 </label>
               )}
 
-              {/* Si es condición técnica: se evaluará en TODOS los símbolos */}
-              {alarmForm.condition!=='price_level'&&(
-                <div style={{padding:'7px 10px',background:'rgba(0,212,255,0.05)',border:'1px solid rgba(0,212,255,0.15)',borderRadius:4,fontFamily:MONO,fontSize:10,color:'#5a7a95',lineHeight:1.5}}>
-                  📡 Esta alerta se evaluará automáticamente en <b style={{color:'#00d4ff'}}>todos los símbolos</b> de tu watchlist.
-                </div>
-              )}
 
-              {/* Si es alerta de precio: pedir símbolo + nivel */}
+
+              {/* Alerta de precio: solo dirección + nivel (símbolo ya está arriba) */}
               {alarmForm.condition==='price_level'&&(
-                <div style={{display:'flex',flexDirection:'column',gap:10}}>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
                   <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>
-                    <span style={{fontSize:10}}>Símbolo</span>
-                    <input type="text" value={alarmForm.symbol||simbolo||''} placeholder="Ej: AAPL"
-                      onChange={e=>setAlarmForm(p=>({...p,symbol:e.target.value.toUpperCase()}))}
-                      style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:13,padding:'7px 10px',borderRadius:4}}/>
+                    <span style={{fontSize:10}}>Dirección</span>
+                    <select value={alarmForm.condition_detail||'price_above'} onChange={e=>setAlarmForm(p=>({...p,condition_detail:e.target.value}))}
+                      style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'7px 8px',borderRadius:4}}>
+                      <option value="price_above">▲ Sube hasta</option>
+                      <option value="price_below">▼ Baja hasta</option>
+                    </select>
                   </label>
-                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-                    <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>
-                      <span style={{fontSize:10}}>Dirección</span>
-                      <select value={alarmForm.condition_detail||'price_above'} onChange={e=>setAlarmForm(p=>({...p,condition_detail:e.target.value}))}
-                        style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'7px 8px',borderRadius:4}}>
-                        <option value="price_above">▲ Sube hasta</option>
-                        <option value="price_below">▼ Baja hasta</option>
-                      </select>
-                    </label>
-                    <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>
-                      <span style={{fontSize:10}}>Precio</span>
-                      <input type="number" value={alarmForm.price_level||''} step="0.01" placeholder="0.00"
-                        onChange={e=>setAlarmForm(p=>({...p,price_level:Number(e.target.value)}))}
-                        style={{background:'var(--bg3)',border:'1px solid rgba(255,209,102,0.4)',color:'#ffd166',fontFamily:MONO,fontSize:14,padding:'7px 10px',borderRadius:4,fontWeight:700}}/>
-                    </label>
-                  </div>
+                  <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>
+                    <span style={{fontSize:10}}>Precio objetivo</span>
+                    <input type="number" value={alarmForm.price_level||''} step="0.01" placeholder="0.00"
+                      onChange={e=>setAlarmForm(p=>({...p,price_level:Number(e.target.value)}))}
+                      style={{background:'var(--bg3)',border:'1px solid rgba(255,209,102,0.4)',color:'#ffd166',fontFamily:MONO,fontSize:14,padding:'7px 10px',borderRadius:4,fontWeight:700}}/>
+                  </label>
                 </div>
               )}
 
