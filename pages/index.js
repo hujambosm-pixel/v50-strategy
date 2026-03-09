@@ -3530,7 +3530,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.22</title>
+        <title>Trading Simulator V4.23</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3593,7 +3593,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.22
+            <span className="dot"/>Trading Simulator V4.23
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -3786,25 +3786,7 @@ export default function Home() {
                     ★
                   </button>}
 
-                  {/* Botón filtro por condición — solo si hay una seleccionada en Settings */}
-                  {(()=>{
-                    const fCondId=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.watchlist?.filterConditionId||null}catch(_){return null}})()
-                    if(!fCondId) return null
-                    const fCondName=(()=>{const c=lsGetConds().find(x=>x.id===fCondId);return c?.name||'⚡'})()
-                    return(
-                      <button onClick={()=>setCondFilterActive(f=>!f)}
-                        title={condFilterActive?'Mostrar todos':'Filtrar por condición activa'}
-                        style={{background:condFilterActive?'rgba(0,229,160,0.12)':'transparent',
-                          border:`1px solid ${condFilterActive?'#00e5a0':'var(--border)'}`,
-                          color:condFilterActive?'#00e5a0':'var(--text3)',
-                          fontFamily:MONO,fontSize:10,padding:'3px 7px',borderRadius:4,cursor:'pointer',
-                          flexShrink:0,maxWidth:90,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-                        ⚡ {fCondName}
-                      </button>
-                    )
-                  })()}
-
-                  {(wlShowSearch||wlShowLista||wlShowFavs||condFilterActive)&&<button onClick={()=>{setWlSearch('');setSelectedLists([]);setOnlyFavs(false);setSelectedAlarmIds([]);setCondFilterActive(false)}} title="Limpiar todos los filtros" style={{background:'rgba(255,77,109,0.08)',border:'1px solid #ff4d6d',color:'#ff4d6d',fontFamily:MONO,fontSize:11,padding:'3px 7px',borderRadius:3,cursor:'pointer',flexShrink:0}}>✕</button>}
+                  {(wlShowSearch||wlShowLista||wlShowFavs)&&<button onClick={()=>{setWlSearch('');setSelectedLists([]);setOnlyFavs(false);setSelectedAlarmIds([])}} title="Limpiar todos los filtros" style={{background:'rgba(255,77,109,0.08)',border:'1px solid #ff4d6d',color:'#ff4d6d',fontFamily:MONO,fontSize:11,padding:'3px 7px',borderRadius:3,cursor:'pointer',flexShrink:0}}>✕</button>}
                 </div>
 
 
@@ -3821,8 +3803,8 @@ export default function Home() {
                       const symAlarms=alarmStatus[w.symbol]||{}
                       const matchAlarm=selectedAlarmIds.length===0||selectedAlarmIds.every(id=>symAlarms[id]?.active===true)
                       // Condition filter: when active, only show symbols where condition is triggered
-                      const matchCond=!condFilterActive||!fCondId||(alarmStatus[w.symbol]?.[fCondId]?.active===true)
-                      return matchList&&matchSearch&&matchFav&&matchAlarm&&matchCond
+                      // condFilterActive removed
+                      return matchList&&matchSearch&&matchFav&&matchAlarm
                     })
                     // Sort: 1st by ranking, 2nd by favorite, 3rd alphabetical
                     const all=[...filtered].sort((a,b)=>{
