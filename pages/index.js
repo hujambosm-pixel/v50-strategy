@@ -289,13 +289,34 @@ function lookupName(sym) {
   return up.replace(/[\^=\.\-]/g,' ').replace(/USD$/,'').trim()
 }
 
-// ── SettingsModal — configuración global de la app ───────────
+// ── Settings — localStorage + Supabase sync ──────────────────
 const SETTINGS_KEY = 'v50_settings'
 function loadSettings() {
   try { return JSON.parse(localStorage.getItem(SETTINGS_KEY)||'{}') } catch(_){ return {} }
 }
 function saveSettings(s) {
   try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)) } catch(_) {}
+}
+async function saveSettingsRemote(s) {
+  // Save to localStorage first (instant)
+  saveSettings(s)
+  // Then sync to Supabase (upsert row id=1)
+  try {
+    await fetch(`${SUPA_URL}/rest/v1/user_settings?id=eq.1`, {
+      method:'PATCH',
+      headers:{...SUPA_H,'Prefer':'return=minimal'},
+      body:JSON.stringify({settings:s, updated_at:new Date().toISOString()})
+    })
+  } catch(_) {}
+}
+async function loadSettingsRemote() {
+  try {
+    const res = await fetch(`${SUPA_URL}/rest/v1/user_settings?id=eq.1&select=settings`, {headers:SUPA_H})
+    if(!res.ok) return null
+    const data = await res.json()
+    if(data?.[0]?.settings && Object.keys(data[0].settings).length > 0) return data[0].settings
+    return null
+  } catch(_){ return null }
 }
 
 function SettingsModal({ onClose }) {
@@ -316,7 +337,7 @@ function SettingsModal({ onClose }) {
     setDirty(true)
   }
 
-  const handleSave = () => { saveSettings(settings); setDirty(false); onClose() }
+  const handleSave = () => { saveSettingsRemote(settings); setDirty(false); onClose() }
 
   const testGroq = async () => {
     setGroqStatus('testing')
@@ -510,32 +531,22 @@ function SettingsModal({ onClose }) {
                 ))}
               </div>
 
-              {sep('Vista reciente (botón ⊞ Todo)')}
+              {sep('Vista reciente (botón ⊡ / ⊞)')}
               <div style={{marginBottom:16}}>
                 <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
-                  <span style={{fontFamily:MONO,fontSize:10,color:'#cce0f5',flex:1}}>Días al futuro al ver vista reciente</span>
-                  <span style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:'#00d4ff',minWidth:28,textAlign:'right'}}>{settings.chart?.rightMargin??5}d</span>
-                  <input type="range" min={0} max={30} value={settings.chart?.rightMargin??5}
-                    onChange={e=>upd('chart.rightMargin',Number(e.target.value))}
+                  <span style={{fontFamily:MONO,fontSize:10,color:'#cce0f5',flex:1}}>Meses de historia (vista reciente)</span>
+                  <span style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:'#00d4ff',minWidth:28,textAlign:'right'}}>{settings.chart?.recentMonths??3}m</span>
+                  <input type="range" min={1} max={24} value={settings.chart?.recentMonths??3}
+                    onChange={e=>upd('chart.recentMonths',Number(e.target.value))}
                     style={{width:100,accentColor:'#00d4ff'}}/>
                 </div>
-                <div style={{marginBottom:10}}>
-                  <div style={{display:'flex',alignItems:'center',gap:8}}>
-                    <span style={{fontFamily:MONO,fontSize:10,color:'#cce0f5',flex:1}}>Meses de historia (vista reciente)</span>
-                    <span style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:'#00d4ff',minWidth:28,textAlign:'right'}}>{settings.chart?.recentMonths??3}m</span>
-                    <input type="range" min={1} max={24} value={settings.chart?.recentMonths??3}
-                      onChange={e=>upd('chart.recentMonths',Number(e.target.value))}
-                      style={{width:100,accentColor:'#00d4ff'}}/>
-                  </div>
-                </div>
                 <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',lineHeight:1.5}}>
-                  El botón ⊞ alterna entre ver todo el periodo y la vista reciente (últimos N meses + M días al futuro).
+                  El botón ⊡ muestra los últimos N meses. ⊞ muestra todo el periodo del backtest.
                 </div>
               </div>
               {sep('Visualización')}
               {[
                 ['chart.showGrid',       'Mostrar grid',             true],
-                ['chart.showRightOffset','Espacio derecho extra',     true],
                 ['chart.autoFitOnLoad',  'Auto-ajustar al cargar',    true],
               ].map(([key,label,def])=>(
                 <label key={key} style={{display:'flex',alignItems:'center',gap:8,marginBottom:8,cursor:'pointer'}}>
@@ -869,7 +880,7 @@ function PriceAlarmQuickForm({ price, symbol, alarms, onSave, onCancel }) {
 }
 
 // ── CandleChart ───────────────────────────────────────────────
-function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, syncRef, savedRangeRef, chartHeight=480, rightMargin=8 }) {
+function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, syncRef, savedRangeRef, chartHeight=480 }) {
   const containerRef=useRef(null), svgRef=useRef(null), legendRef=useRef(null), tooltipRef=useRef(null)
   const chartRef=useRef(null), candlesRef=useRef(null)
   const rulerStart=useRef(null), rulerActiveR=useRef(rulerActive)
@@ -894,7 +905,6 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
         timeScale:{borderColor:'#1a2d45',timeVisible:true},
       })
       chartRef.current=chart
-      chart.timeScale().applyOptions({ rightOffset: rightMargin })
 
       const candles=chart.addCandlestickSeries({
         upColor:'#00e5a0',downColor:'#ff4d6d',
@@ -1185,7 +1195,6 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
           const lastBar = data[data.length-1]
           if(lastBar){
             const to = new Date(lastBar.date)
-            to.setDate(to.getDate()+Math.max(6,rightMargin*1.5|0)) // extra calendar days for right margin
             const from = new Date(lastBar.date)
             from.setMonth(from.getMonth()-3)
             chart.timeScale().setVisibleRange({
@@ -1195,8 +1204,6 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
           }
         }
       } catch(_){ chart.timeScale().fitContent() }
-      // Re-apply rightOffset after any setVisibleRange (setVisibleRange resets it)
-      chart.timeScale().applyOptions({ rightOffset: rightMargin })
       // Save range whenever user zooms/scrolls
       chart.timeScale().subscribeVisibleTimeRangeChange(range=>{
         if(range && savedRangeRef) savedRangeRef.current = range
@@ -1230,12 +1237,11 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
           }catch(_){}
         },
         fitAll:()=>{ try{ chart.timeScale().fitContent() }catch(_){} },
-        showRecent:(months,futureDays)=>{
+        showRecent:(months)=>{
           try{
             const lastBar=data[data.length-1]
             if(!lastBar) return
             const to=new Date(lastBar.date)
-            to.setDate(to.getDate()+(futureDays||5))
             const from=new Date(lastBar.date)
             from.setMonth(from.getMonth()-(months||3))
             chart.timeScale().setVisibleRange({from:from.toISOString().split('T')[0],to:to.toISOString().split('T')[0]})
@@ -1275,7 +1281,7 @@ function EquityChart({
   strategyCurve,bhCurve,sp500BHCurve,compoundCurve,
   maxDDStrategy,maxDDBH,maxDDSP500,maxDDCompound,
   maxDDStrategyDate,maxDDBHDate,maxDDSP500Date,maxDDCompoundDate,
-  capitalIni,showStrategy,showBH,showSP500,showCompound,syncRef,chartHeight=260,rightMargin=8
+  capitalIni,showStrategy,showBH,showSP500,showCompound,syncRef,chartHeight=260
 }) {
   const ref=useRef(null),chartRef=useRef(null),equityTooltipRef=useRef(null)
   useEffect(()=>{
@@ -1367,7 +1373,6 @@ function EquityChart({
       })
 
       chart.timeScale().fitContent()
-      chart.timeScale().applyOptions({rightOffset:rightMargin})
       const ro=new ResizeObserver(()=>{if(ref.current)chart.applyOptions({width:ref.current.clientWidth})})
       ro.observe(ref.current)
       return()=>ro.disconnect()
@@ -2715,6 +2720,16 @@ export default function Home() {
   },[mcSelected,mcCapital,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL])
 
   const metrics=result?calcMetrics(result.trades,Number(capitalIni),result.capitalReinv,result.gananciaSimple,result.ganBH||0,result.startDate,result.meta?.ultimaFecha,Number(years)):null
+  // Load settings from Supabase on mount (overrides localStorage if newer)
+  useEffect(()=>{
+    loadSettingsRemote().then(remote=>{
+      if(remote){
+        saveSettings(remote) // update local cache
+        setTemaKey(k=>k+1)  // re-apply tema
+      }
+    })
+  },[])
+
   // Apply tema font settings per section via <style> injection
   const [temaKey, setTemaKey] = useState(0)
   useEffect(()=>{
@@ -2723,12 +2738,27 @@ export default function Home() {
       const fonts = t.fonts||{}
       const fontMap={jetbrains:'"JetBrains Mono","Fira Code",monospace',ibmplex:'"IBM Plex Mono",monospace',firacode:'"Fira Code","JetBrains Mono",monospace',system:'system-ui,sans-serif'}
       const selectorMap={
-        global:'body,*',
+        global:'body *',
         sidebar:'.sidebar,.sidebar-section,aside',
         header:'.header,.header *',
         chart:'.chart-wrap .chart-header,.chart-wrap .chart-header *',
         trades:'.trades-section,.trades-section *',
         metrics:'.metrics-section,.metrics-section *,div[style*="275px"] *',
+      }
+      // Always apply global to modal overlays too (fixed/absolute containers)
+      const globalFc=fonts['global']
+      if(globalFc){
+        const parts2=[]
+        if(globalFc.family) parts2.push(`font-family:${fontMap[globalFc.family]||fontMap.jetbrains} !important`)
+        if(globalFc.size)   parts2.push(`font-size:${globalFc.size}px !important`)
+        if(globalFc.color)  parts2.push(`color:${globalFc.color} !important`)
+        if(parts2.length){
+          // Target modal overlays specifically
+          css+=`div[style*="position:fixed"] *,div[style*="position: fixed"] *{${parts2.join(';')}}
+`
+          css+=`div[style*="zIndex:200"] *,div[style*="z-index:200"] *{${parts2.join(';')}}
+`
+        }
       }
       let css=''
       for(const [sec,sel] of Object.entries(selectorMap)){
@@ -2919,7 +2949,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V3.5</title>
+        <title>Trading Simulator V3.7</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2981,7 +3011,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V3.5
+            <span className="dot"/>Trading Simulator V3.7
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -3171,7 +3201,7 @@ export default function Home() {
                     ★
                   </button>}
 
-                  <button onClick={()=>{setWlSearch('');setSelectedLists([]);setOnlyFavs(false);setSelectedAlarmIds([])}} title="Limpiar todos los filtros" style={{background:'rgba(255,77,109,0.08)',border:'1px solid #ff4d6d',color:'#ff4d6d',fontFamily:MONO,fontSize:11,padding:'3px 7px',borderRadius:3,cursor:'pointer',flexShrink:0}}>✕</button>
+                  {(wlShowSearch||wlShowLista||wlShowFavs)&&<button onClick={()=>{setWlSearch('');setSelectedLists([]);setOnlyFavs(false);setSelectedAlarmIds([])}} title="Limpiar todos los filtros" style={{background:'rgba(255,77,109,0.08)',border:'1px solid #ff4d6d',color:'#ff4d6d',fontFamily:MONO,fontSize:11,padding:'3px 7px',borderRadius:3,cursor:'pointer',flexShrink:0}}>✕</button>}
                 </div>
                 {/* ══ Fila 2: filtro alarmas (chips inline, ancho completo) ══ */}
                 {wlShowAlarmFlt&&alarms.filter(a=>a.condition!=='price_level').length>0&&(
@@ -3678,8 +3708,7 @@ export default function Home() {
                             if(chartViewFull){
                               // Switch to recent view
                               const months=s?.chart?.recentMonths??3
-                              const futureDays=s?.chart?.rightMargin??5
-                              chartApiRef.current?.showRecent(months,futureDays)
+                              chartApiRef.current?.showRecent(months,0)
                               setChartViewFull(false)
                             } else {
                               // Switch to full view
@@ -3711,7 +3740,6 @@ export default function Home() {
                       savedRangeRef={savedRangeRef}
                       syncRef={chartSyncRef}
                       chartHeight={candleH}
-                      rightMargin={(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.chart?.rightMargin??8}catch(_){return 8}})()}
                     />
                     {/* Drag handle — resize candle chart */}
                     <div onMouseDown={e=>{candleResizing.current=true;candleStartY.current=e.clientY;candleStartH.current=candleH;document.body.style.cursor='row-resize';document.body.style.userSelect='none'}}
@@ -3755,7 +3783,6 @@ export default function Home() {
                       ))}
                     </div>
                     <EquityChart
-                      rightMargin={(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.chart?.rightMargin??8}catch(_){return 8}})()}
                       strategyCurve={result.strategyCurve}
                       bhCurve={result.bhCurve}
                       sp500BHCurve={result.sp500BHCurve||[]}
