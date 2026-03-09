@@ -3421,7 +3421,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.11</title>
+        <title>Trading Simulator V4.12</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3484,7 +3484,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.11
+            <span className="dot"/>Trading Simulator V4.12
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
