@@ -901,7 +901,7 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
     import('lightweight-charts').then(({createChart,CrosshairMode,LineStyle})=>{
       if(chartRef.current){chartRef.current.remove();chartRef.current=null}
       const chart=createChart(containerRef.current,{
-        width:containerRef.current.clientWidth,height:chartHeight,
+        width:containerRef.current.clientWidth-48,height:chartHeight,
         layout:{background:{color:'#080c14'},textColor:'#7a9bc0'},
         grid:{vertLines:{color:'#0d1520'},horzLines:{color:'#0d1520'}},
         crosshair:{mode:CrosshairMode.Normal},
@@ -1257,7 +1257,7 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
       })
 
       const ro=new ResizeObserver(()=>{
-        if(containerRef.current)chart.applyOptions({width:containerRef.current.clientWidth})
+        if(containerRef.current)chart.applyOptions({width:containerRef.current.clientWidth-48})
         setTimeout(drawTradeLabels,50)
       })
       ro.observe(containerRef.current)
@@ -2956,7 +2956,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.1</title>
+        <title>Trading Simulator V4.2</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3018,7 +3018,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.1
+            <span className="dot"/>Trading Simulator V4.2
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
