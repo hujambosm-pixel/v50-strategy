@@ -1068,71 +1068,58 @@ function SettingsModal({ onClose, strategies=[] }) {
                 </label>
               ))}
 
-              {sep('Condición de filtrado para la Watchlist')}
-              <div style={{fontSize:10,color:'#5a7a95',lineHeight:1.6,marginBottom:12}}>
-                Selecciona una condición de la librería para usarla como filtro en la Watchlist.
-                Los activos que cumplan la condición quedarán resaltados o filtrados.
+              {sep('Condiciones visibles como puntos en la Watchlist')}
+              <div style={{fontSize:10,color:'#5a7a95',lineHeight:1.6,marginBottom:10}}>
+                Selecciona qué condiciones se muestran como círculos de color en cada activo.
+                Se evalúan en tiempo real — el número dentro indica las velas desde que se activó.
               </div>
               {(()=>{
-                const libConds = lsGetConds()  // read from localStorage — same source as Settings Condiciones tab
-                const selectedId = settings?.watchlist?.filterConditionId || null
+                const libConds = lsGetConds()
+                const condDotIds = settings?.watchlist?.condDotIds || []
+                const COND_COLORS=['#00e5a0','#ffd166','#00d4ff','#ff7eb3','#9b72ff','#ff4d6d']
                 if(libConds.length===0) return(
-                  <div style={{fontFamily:MONO,fontSize:11,color:'#4a6a80',padding:'10px 12px',
-                    background:'rgba(0,0,0,0.2)',borderRadius:4,border:'1px dashed #1e3a52',lineHeight:1.6}}>
+                  <div style={{fontFamily:MONO,fontSize:11,color:'#4a6a80',padding:'8px 10px',
+                    background:'rgba(0,0,0,0.15)',borderRadius:4,border:'1px dashed #1e3a52',lineHeight:1.6}}>
                     No hay condiciones en la librería.<br/>
-                    Créalas en la pestaña <b style={{color:'#00d4ff'}}>⚡ Condiciones</b>.
+                    Créalas en <b style={{color:'#00d4ff'}}>⚡ Condiciones</b>.
                   </div>
                 )
-                const COND_COLORS=['#00e5a0','#ffd166','#00d4ff','#ff7eb3','#9b72ff','#ff4d6d']
-                const CTYPE_LABELS={
-                  ema_cross_up:'↑ Cruce alcista EMA',ema_cross_down:'↓ Cruce bajista EMA',
-                  price_above_ema:'Precio > EMA',price_below_ema:'Precio < EMA',
-                  price_above_ma:'Precio > Media',price_below_ma:'Precio < Media',
-                  rsi_above:'RSI sobre nivel',rsi_below:'RSI bajo nivel',
-                  rsi_cross_up:'RSI cruza ↑',rsi_cross_down:'RSI cruza ↓',
-                  macd_cross_up:'MACD cruza señal ↑',macd_cross_down:'MACD cruza señal ↓',
-                }
                 return(
-                  <div style={{display:'flex',flexDirection:'column',gap:6}}>
-                    {/* None option */}
-                    <label onClick={()=>upd('watchlist.filterConditionId', null)}
-                      style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',borderRadius:5,cursor:'pointer',
-                        border:`1px solid ${!selectedId?'#3d5a7a':'#1e3a52'}`,
-                        background:!selectedId?'rgba(61,90,122,0.15)':'rgba(255,255,255,0.01)',userSelect:'none'}}>
-                      <span style={{width:9,height:9,borderRadius:'50%',background:!selectedId?'#3d5a7a':'#2a3f55',flexShrink:0}}/>
-                      <span style={{fontFamily:MONO,fontSize:11,color:!selectedId?'#7a9bc0':'#4a6a80'}}>Sin filtro de condición</span>
-                    </label>
-                    {libConds.map((c,i)=>{
-                      const sel = selectedId===c.id
-                      const col = COND_COLORS[i%COND_COLORS.length]
-                      return(
-                        <label key={c.id} onClick={()=>upd('watchlist.filterConditionId', sel?null:c.id)}
-                          style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',borderRadius:5,cursor:'pointer',
-                            border:`1px solid ${sel?col:'#1e3a52'}`,
-                            background:sel?`${col}14`:'rgba(255,255,255,0.01)',userSelect:'none'}}>
-                          <span style={{width:9,height:9,borderRadius:'50%',flexShrink:0,
-                            background:sel?col:'#2a3f55',
-                            boxShadow:sel?`0 0 5px ${col}`:undefined}}/>
-                          <div style={{flex:1,minWidth:0}}>
-                            <div style={{fontFamily:MONO,fontSize:11,color:sel?col:'#7a9bc0',fontWeight:sel?600:400}}>{c.name}</div>
-                            <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',marginTop:1}}>
-                              {CTYPE_LABELS[c.type]||c.type}
-                              {c.params?.ma_fast&&` · EMA ${c.params.ma_fast}/${c.params.ma_slow}`}
-                              {c.params?.ma_period&&` · MA(${c.params.ma_period})`}
-                              {c.params?.period&&` · RSI(${c.params.period}) niv.${c.params.level}`}
-                            </div>
+                  <div>
+                    <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:8}}>
+                      {libConds.map((c,i)=>{
+                        const sel=condDotIds.includes(c.id)
+                        const col=COND_COLORS[i%COND_COLORS.length]
+                        return(
+                          <div key={c.id} onClick={()=>{
+                              const next=sel?condDotIds.filter(x=>x!==c.id):[...condDotIds,c.id]
+                              upd('watchlist.condDotIds',next)
+                            }}
+                            style={{display:'flex',alignItems:'center',gap:5,cursor:'pointer',
+                              padding:'4px 9px',borderRadius:12,
+                              border:`1px solid ${sel?col:'#1e3a52'}`,
+                              background:sel?`${col}18`:'rgba(255,255,255,0.02)',
+                              userSelect:'none'}}>
+                            <span style={{width:8,height:8,borderRadius:'50%',flexShrink:0,display:'inline-block',
+                              background:sel?col:'#2a3f55',
+                              boxShadow:sel?`0 0 4px ${col}`:undefined}}/>
+                            <span style={{fontFamily:MONO,fontSize:10,color:sel?col:'#7a9bc0'}}>{c.name}</span>
                           </div>
-                          {sel&&<span style={{fontFamily:MONO,fontSize:9,color:col}}>✓ activa</span>}
-                        </label>
-                      )
-                    })}
-                    {selectedId&&(
-                      <div style={{marginTop:4,padding:'7px 10px',background:'rgba(0,212,255,0.05)',
-                        border:'1px solid rgba(0,212,255,0.15)',borderRadius:4,fontFamily:MONO,fontSize:10,color:'#5a7a95'}}>
-                        💡 Los activos que cumplan esta condición aparecerán resaltados en la Watchlist.
-                        El botón de filtro <b style={{color:'#00d4ff'}}>⚡ Filtro condición</b> activará/desactivará el filtrado.
-                      </div>
-                    )}
+                        )
+                      })}
+                    </div>
+                    <div style={{display:'flex',gap:6}}>
+                      <button onClick={()=>upd('watchlist.condDotIds',libConds.map(c=>c.id))}
+                        style={{flex:1,fontFamily:MONO,fontSize:10,padding:'4px 8px',borderRadius:3,
+                          border:'1px solid #2a4060',background:'rgba(0,212,255,0.06)',color:'#00d4ff',cursor:'pointer'}}>
+                        ✓ Todas
+                      </button>
+                      <button onClick={()=>upd('watchlist.condDotIds',[])}
+                        style={{flex:1,fontFamily:MONO,fontSize:10,padding:'4px 8px',borderRadius:3,
+                          border:'1px solid #3a1a20',background:'rgba(255,77,109,0.06)',color:'#ff4d6d',cursor:'pointer'}}>
+                        ✕ Ninguna
+                      </button>
+                    </div>
                   </div>
                 )
               })()}
@@ -2893,13 +2880,8 @@ export default function Home() {
             const nameMap={}
             conditions.forEach(a=>{nameMap[a.id]=a.name})
             s.watchlist.alarmDotNames=nameMap
-            // Init alarmDotIds with all condition IDs if not yet set
-            if(!s.watchlist.alarmDotIds){
-              s.watchlist.alarmDotIds=conditions.map(a=>a.id)
-            } else {
-              // Remove stale IDs
-              s.watchlist.alarmDotIds=s.watchlist.alarmDotIds.filter(id=>nameMap[id])
-            }
+            // Legacy: migrate alarmDotIds → condDotIds (no-op if already done)
+            // condDotIds is managed by Settings Watchlist tab
             localStorage.setItem('v50_settings',JSON.stringify(s))
           }catch(_){}
         }
@@ -3082,10 +3064,25 @@ export default function Home() {
     if(!symbols.length||!alarmList.length) return
     setAlarmStatusLoading(true)
     try{
+      // Merge real alarms + library conditions selected for watchlist dots
+      const condDotIds=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.watchlist?.condDotIds||[]}catch(_){return []}})()
+      const libConds = lsGetConds().filter(c=>condDotIds.includes(c.id))
+      const pseudoAlarms = libConds.map(c=>({
+        id: c.id,
+        condition: c.type,
+        ema_r: c.params?.ma_fast || c.params?.ma_period || 10,
+        ema_l: c.params?.ma_slow || 11,
+        params: c.params,
+      }))
+      // Avoid duplicates: real alarms take priority
+      const realAlarmIds = new Set(alarmList.map(a=>a.id))
+      const extraConds = pseudoAlarms.filter(p=>!realAlarmIds.has(p.id))
+      const allEvalAlarms = [...alarmList.map(a=>({id:a.id,condition:a.condition,ema_r:a.ema_r,ema_l:a.ema_l,params:a.params})), ...extraConds]
+
       const res=await fetch('/api/status',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({symbols,alarms:alarmList.map(a=>({id:a.id,condition:a.condition,ema_r:a.ema_r,ema_l:a.ema_l}))})
+        body:JSON.stringify({symbols,alarms:allEvalAlarms})
       })
       const data=await res.json()
       const prev=alarmStatus||{}
@@ -3531,7 +3528,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.20</title>
+        <title>Trading Simulator V4.21</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3594,7 +3591,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.20
+            <span className="dot"/>Trading Simulator V4.21
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -3895,7 +3892,8 @@ export default function Home() {
                       <div key={w.id||w.symbol}
                         style={{padding:'6px 10px',display:'flex',alignItems:'center',gap:6,borderBottom:'1px solid var(--border)',
                           background:simbolo===w.symbol?'rgba(0,212,255,0.07)':'transparent',
-                          borderLeft:`2px solid ${fCondId&&alarmStatus[w.symbol]?.[fCondId]?.active===true?'#00e5a0':'transparent'}`}}
+                          borderLeft:`2px solid ${fCondId&&alarmStatus[w.symbol]?.[fCondId]?.active===true?'#00e5a0':'transparent'}`,
+                          transition:'border-color 0.2s'}}
                         onMouseOver={e=>e.currentTarget.style.background='rgba(255,255,255,0.03)'}
                         onMouseOut={e=>e.currentTarget.style.background=simbolo===w.symbol?'rgba(0,212,255,0.07)':'transparent'}>
                         {/* Ranking badge */}
@@ -3921,27 +3919,26 @@ export default function Home() {
                           <div style={{fontFamily:MONO,fontSize:11,color:simbolo===w.symbol?'var(--accent)':'#d0e8fa',fontWeight:600}}>{w.symbol}</div>
                           <div style={{fontFamily:MONO,fontSize:11,color:'#8aadcc',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{w.name}</div>
                         </div>
-                        {/* Badges alarmas — círculos de color con velas */}
+                        {/* Badges condiciones librería — círculos de color con velas */}
                         {(()=>{
-                          const dotIds=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.watchlist?.alarmDotIds??null}catch(_){return null}})()
-                          if(dotIds!==null&&dotIds.length===0) return null
+                          const condDotIds=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.watchlist?.condDotIds||[]}catch(_){return []}})()
+                          if(!condDotIds.length) return null
                           const symAlarms=alarmStatus[w.symbol]
                           if(!symAlarms) return null
-                          const ALARM_COLORS=['#00e5a0','#ffd166','#00d4ff','#ff7eb3','#9b72ff','#ff4d6d']
-                          const visibleAlarms=alarms.filter(a=>a.condition!=='price_level'&&(dotIds===null||dotIds.includes(a.id)))
-                          return visibleAlarms.map((a,ai)=>{
-                            const st=symAlarms[a.id]
+                          const COND_COLORS=['#00e5a0','#ffd166','#00d4ff','#ff7eb3','#9b72ff','#ff4d6d']
+                          const blinkN=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.alarmas?.blinkCandles??3}catch(_){return 3}})()
+                          const visibleConds=lsGetConds().filter(c=>condDotIds.includes(c.id))
+                          return visibleConds.map((c,ci)=>{
+                            const st=symAlarms[c.id]
                             if(!st) return null
                             const active=st?.active===true
                             const bars=st?.bars
-                            const col=ALARM_COLORS[ai%ALARM_COLORS.length]
+                            const col=COND_COLORS[ci%COND_COLORS.length]
                             const label=bars!=null?String(bars):'?'
-                            const blinkN=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.alarmas?.blinkCandles??3}catch(_){return 3}})()
                             const shouldBlink=active&&bars!=null&&bars<=blinkN
                             return(
-                              <span key={a.id} title={`${a.name}${active?' · activa'+( bars!=null?' · '+bars+' velas':''): ' · inactiva'}`}
+                              <span key={c.id} title={`${c.name}${active?' · activa'+(bars!=null?' · '+bars+' velas':''):' · inactiva'}`}
                                 style={{
-                                  '--bc':col,
                                   display:'inline-flex',alignItems:'center',justifyContent:'center',
                                   width:18,height:18,borderRadius:'50%',flexShrink:0,
                                   background:active?col:'rgba(61,90,122,0.2)',
