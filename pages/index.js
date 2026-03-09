@@ -906,7 +906,7 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
         grid:{vertLines:{color:'#0d1520'},horzLines:{color:'#0d1520'}},
         crosshair:{mode:CrosshairMode.Normal},
         rightPriceScale:{borderColor:'#1a2d45'},
-        timeScale:{borderColor:'#1a2d45',timeVisible:true,rightOffset:5},
+        timeScale:{borderColor:'#1a2d45',timeVisible:true},
       })
       chartRef.current=chart
 
@@ -1191,26 +1191,26 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
         }
       })
 
-      // helper — re-apply right gap after any setVisibleRange (it resets the offset)
-      const RO=5
-      const applyRO=()=>{ try{ chart.timeScale().applyOptions({rightOffset:RO}) }catch(_){} }
+      // addDays: extend 'to' past last bar → permanent right gap, immune to resets
+      const GAP_DAYS = 12  // calendar days of right margin
+      const addDays=(dateStr,n)=>{ const d=new Date(dateStr); d.setDate(d.getDate()+n); return d.toISOString().split('T')[0] }
       // Restore saved range OR default to last 3 months
       try {
         if(savedRangeRef?.current){
-          chart.timeScale().setVisibleRange(savedRangeRef.current); applyRO()
+          const r=savedRangeRef.current
+          chart.timeScale().setVisibleRange({from:r.from, to:addDays(r.to,0)})
         } else {
           const lastBar = data[data.length-1]
           if(lastBar){
-            const to = new Date(lastBar.date)
             const from = new Date(lastBar.date)
             from.setMonth(from.getMonth()-3)
             chart.timeScale().setVisibleRange({
               from: from.toISOString().split('T')[0],
-              to:   to.toISOString().split('T')[0]
-            }); applyRO()
+              to:   addDays(lastBar.date, GAP_DAYS)
+            })
           }
         }
-      } catch(_){ chart.timeScale().fitContent(); applyRO() }
+      } catch(_){ chart.timeScale().fitContent() }
       // Save range whenever user zooms/scrolls
       chart.timeScale().subscribeVisibleTimeRangeChange(range=>{
         if(range && savedRangeRef) savedRangeRef.current = range
@@ -1240,18 +1240,17 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
             const pad=Math.max(5,Math.round((new Date(exitDate)-new Date(entryDate))/86400000*0.3))
             const d1=new Date(entryDate); d1.setDate(d1.getDate()-pad)
             const d2=new Date(exitDate); d2.setDate(d2.getDate()+pad+6)
-            chart.timeScale().setVisibleRange({from:d1.toISOString().split('T')[0],to:d2.toISOString().split('T')[0]}); applyRO()
+            chart.timeScale().setVisibleRange({from:d1.toISOString().split('T')[0],to:d2.toISOString().split('T')[0]})
           }catch(_){}
         },
-        fitAll:()=>{ try{ chart.timeScale().fitContent(); applyRO() }catch(_){} },
+        fitAll:()=>{ try{ const lb=data[data.length-1]; if(lb){ const fr=data[0]; chart.timeScale().setVisibleRange({from:fr.date,to:addDays(lb.date,GAP_DAYS)}) } else chart.timeScale().fitContent() }catch(_){} },
         showRecent:(months)=>{
           try{
             const lastBar=data[data.length-1]
             if(!lastBar) return
-            const to=new Date(lastBar.date)
             const from=new Date(lastBar.date)
             from.setMonth(from.getMonth()-(months||3))
-            chart.timeScale().setVisibleRange({from:from.toISOString().split('T')[0],to:to.toISOString().split('T')[0]}); applyRO()
+            chart.timeScale().setVisibleRange({from:from.toISOString().split('T')[0],to:addDays(lastBar.date,GAP_DAYS)})
           }catch(_){}
         }
       })
@@ -2956,7 +2955,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V3.9</title>
+        <title>Trading Simulator V4.0</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3018,7 +3017,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V3.9
+            <span className="dot"/>Trading Simulator V4.0
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
