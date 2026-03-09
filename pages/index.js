@@ -753,10 +753,7 @@ function SettingsModal({ onClose, strategies=[] }) {
                       </div>
                       <textarea
                         value={groqInput} onChange={e=>setGroqInput(e.target.value)}
-                        placeholder={'Describe la condición en lenguaje natural:
-"Cuando el RSI de 14 periodos cruza hacia arriba el nivel 30"
-"Cruce alcista de EMA 50 sobre EMA 200"
-"MACD cruza por encima de su señal"'}
+                        placeholder="Describe la condición. Ej: RSI(14) cruza hacia arriba nivel 30 / Cruce alcista EMA 50 sobre EMA 200 / MACD cruza señal"
                         rows={3}
                         style={{width:'100%',background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,color:'#e2eaf5',fontFamily:MONO,fontSize:11,padding:'8px 10px',resize:'vertical',boxSizing:'border-box'}}
                       />
@@ -3424,7 +3421,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.10</title>
+        <title>Trading Simulator V4.11</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3487,7 +3484,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.10
+            <span className="dot"/>Trading Simulator V4.11
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
