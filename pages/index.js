@@ -2301,15 +2301,11 @@ export default function Home() {
   const [sinPerdidas,setSinPerdidas]=useState(true),[reentry,setReentry]=useState(true)
   const [tipoFiltro,setTipoFiltro]=useState('none'),[sp500EmaR,setSp500EmaR]=useState(10),[sp500EmaL,setSp500EmaL]=useState(11)
   const [result,setResult]=useState(null),[loading,setLoading]=useState(false),[error,setError]=useState(null)
-  const [labelMode,setLabelMode]=useState(()=>{
-    try{const s=JSON.parse(localStorage.getItem('v50_settings')||'{}');return s.ui?.defaultLabelMode??0}catch(_){return 0}
-  }),[rulerOn,setRulerOn]=useState(false)
+  const [labelMode,setLabelMode]=useState(0),[rulerOn,setRulerOn]=useState(false)
   const [chartViewFull,setChartViewFull]=useState(false)
   const [settingsOpen,setSettingsOpen]=useState(false)
   const [sidePanel,setSidePanel]=useState('config')
-  const [metricsLayout,setMetricsLayout]=useState(()=>{
-    try{const s=JSON.parse(localStorage.getItem('v50_settings')||'{}');return s.ui?.defaultMetricsLayout??'multi'}catch(_){return 'multi'}
-  })
+  const [metricsLayout,setMetricsLayout]=useState('multi')
   const [metricsView,setMetricsView]=useState('multi')   // 'multi'=3col | 'single'=one strat per block
   const [showStrategy,setShowStrategy]=useState(true),[showBH,setShowBH]=useState(true)
   const [showSP500,setShowSP500]=useState(true),[showCompound,setShowCompound]=useState(true)
@@ -2347,9 +2343,7 @@ export default function Home() {
   const [onlyFavs,setOnlyFavs]=useState(false)  // filtro solo favoritos
   const [alarmDropOpen,setAlarmDropOpen]=useState(false)  // desplegable alarmas
   const [alarmPopup,setAlarmPopup]=useState(null)  // kept for compat, not shown
-  const [ackedAlarms,setAckedAlarms]=useState(()=>{  // set of "symbol::alarmId" keys user acknowledged
-    try{return new Set(JSON.parse(localStorage.getItem('v50_acked_alarms')||'[]'))}catch(_){return new Set()}
-  })
+  const [ackedAlarms,setAckedAlarms]=useState(new Set())  // populated from localStorage in useEffect
   const ackAlarm=(sym,aid)=>setAckedAlarms(prev=>{
     const n=new Set(prev); n.add(`${sym}::${aid}`)
     try{localStorage.setItem('v50_acked_alarms',JSON.stringify([...n]))}catch(_){}
@@ -2895,11 +2889,28 @@ export default function Home() {
 
   const metrics=result?calcMetrics(result.trades,Number(capitalIni),result.capitalReinv,result.gananciaSimple,result.ganBH||0,result.startDate,result.meta?.ultimaFecha,Number(years)):null
   // Load settings from Supabase on mount (overrides localStorage if newer)
+  // Also apply ui defaults from localStorage (safe: runs client-side only)
   useEffect(()=>{
+    // Restore ui defaults from localStorage (client-only, avoids SSR mismatch)
+    try{
+      const s=JSON.parse(localStorage.getItem('v50_settings')||'{}')
+      if(s.ui?.defaultLabelMode!=null) setLabelMode(s.ui.defaultLabelMode)
+      if(s.ui?.defaultMetricsLayout)   setMetricsLayout(s.ui.defaultMetricsLayout)
+    }catch(_){}
+    // Restore acknowledged alarms
+    try{
+      const acked=JSON.parse(localStorage.getItem('v50_acked_alarms')||'[]')
+      if(acked.length) setAckedAlarms(new Set(acked))
+    }catch(_){}
     loadSettingsRemote().then(remote=>{
       if(remote){
         saveSettings(remote) // update local cache
         setTemaKey(k=>k+1)  // re-apply tema
+        // Re-apply ui defaults from remote settings
+        try{
+          if(remote.ui?.defaultLabelMode!=null) setLabelMode(remote.ui.defaultLabelMode)
+          if(remote.ui?.defaultMetricsLayout)   setMetricsLayout(remote.ui.defaultMetricsLayout)
+        }catch(_){}
       }
     })
   },[])
@@ -3123,7 +3134,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.08</title>
+        <title>Trading Simulator V4.09</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3186,7 +3197,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.08
+            <span className="dot"/>Trading Simulator V4.09
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -3471,7 +3482,7 @@ export default function Home() {
                           const r=rd.rank
                           const col=r===1?'#ffd700':r===2?'#c0c0c0':r===3?'#cd7f32':r<=10?'#00d4ff':'#3d5a7a'
                           return(
-                            <span title={`Rank #${r} · Score: ${rd.score.toFixed(0)} · WR:${rd.metrics.winRate.toFixed(0)}% · FB:${rd.metrics.factorBen.toFixed(1)} · CAGR:${rd.metrics.cagr.toFixed(1)}%`}
+                            <span title={`Rank #${r} · Score: ${rd.score?.toFixed(0)??'—'} · WR:${rd.metrics?.winRate?.toFixed(0)??'—'}% · FB:${rd.metrics?.factorBen?.toFixed(1)??'—'} · CAGR:${rd.metrics?.cagr?.toFixed(1)??'—'}%`}
                               style={{fontFamily:MONO,fontSize:9,fontWeight:700,color:col,flexShrink:0,minWidth:20,textAlign:'center',lineHeight:1}}>
                               {r<=3?['🥇','🥈','🥉'][r-1]:`#${r}`}
                             </span>
