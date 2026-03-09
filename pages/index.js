@@ -901,7 +901,7 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
     import('lightweight-charts').then(({createChart,CrosshairMode,LineStyle})=>{
       if(chartRef.current){chartRef.current.remove();chartRef.current=null}
       const chart=createChart(containerRef.current,{
-        width:containerRef.current.clientWidth-48,height:chartHeight,
+        width:containerRef.current.clientWidth,height:chartHeight,
         layout:{background:{color:'#080c14'},textColor:'#7a9bc0'},
         grid:{vertLines:{color:'#0d1520'},horzLines:{color:'#0d1520'}},
         crosshair:{mode:CrosshairMode.Normal},
@@ -1198,7 +1198,10 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
       try {
         if(savedRangeRef?.current){
           const r=savedRangeRef.current
-          chart.timeScale().setVisibleRange({from:r.from, to:addDays(r.to,0)})
+          const lastBar=data[data.length-1]
+          const minTo=lastBar?addDays(lastBar.date,GAP_DAYS):r.to
+          const finalTo=r.to>=minTo?r.to:minTo
+          chart.timeScale().setVisibleRange({from:r.from, to:finalTo})
         } else {
           const lastBar = data[data.length-1]
           if(lastBar){
@@ -1211,9 +1214,21 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
           }
         }
       } catch(_){ chart.timeScale().fitContent() }
-      // Save range whenever user zooms/scrolls
+      // Save range whenever user zooms/scrolls — always bake in GAP_DAYS on 'to'
       chart.timeScale().subscribeVisibleTimeRangeChange(range=>{
-        if(range && savedRangeRef) savedRangeRef.current = range
+        if(range && savedRangeRef){
+          const lastBar=data[data.length-1]
+          const toStr = typeof range.to==='object'
+            ? `${range.to.year}-${String(range.to.month).padStart(2,'0')}-${String(range.to.day).padStart(2,'0')}`
+            : String(range.to)
+          const fromStr = typeof range.from==='object'
+            ? `${range.from.year}-${String(range.from.month).padStart(2,'0')}-${String(range.from.day).padStart(2,'0')}`
+            : String(range.from)
+          // Always ensure 'to' is at least lastBar.date + GAP_DAYS
+          const minTo = lastBar ? addDays(lastBar.date, GAP_DAYS) : toStr
+          const finalTo = toStr >= minTo ? toStr : minTo
+          savedRangeRef.current = {from: fromStr, to: finalTo}
+        }
       })
 
       // ── Cross-chart time sync ──
@@ -1257,7 +1272,7 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
       })
 
       const ro=new ResizeObserver(()=>{
-        if(containerRef.current)chart.applyOptions({width:containerRef.current.clientWidth-48})
+        if(containerRef.current)chart.applyOptions({width:containerRef.current.clientWidth})
         setTimeout(drawTradeLabels,50)
       })
       ro.observe(containerRef.current)
@@ -2956,7 +2971,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.2</title>
+        <title>Trading Simulator V4.3</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3018,7 +3033,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.2
+            <span className="dot"/>Trading Simulator V4.3
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
