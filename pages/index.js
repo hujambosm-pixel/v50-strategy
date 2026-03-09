@@ -442,8 +442,9 @@ function SettingsModal({ onClose, strategies=[] }) {
   const [groqErr, setGroqErr]         = useState(null)
   const [condSaving, setCondSaving]   = useState(false)
   const [condDeleting, setCondDeleting] = useState(null)   // id being deleted
+  const [condSaveErr, setCondSaveErr]   = useState(null)   // error for manual save
   // Manual form
-  const [manualForm, setManualForm] = useState({ name:'', description:'', type:'ema_cross_up', params:{} })
+  const [manualForm, setManualForm] = useState({ name:'', description:'', type:'ema_cross_up', params:{ma_fast:10,ma_slow:11} })
 
   // Load conditions when tab is opened
   const openConditions = () => {
@@ -466,14 +467,19 @@ function SettingsModal({ onClose, strategies=[] }) {
   }
 
   const handleSaveCond = async (cond) => {
-    setCondSaving(true)
+    setCondSaving(true); setCondSaveErr(null); setGroqErr(null)
+    const isGroq = !!groqPreview
     try {
-      await saveCondition({...cond, source: groqPreview ? 'groq' : 'manual'})
+      await saveCondition({...cond, source: isGroq ? 'groq' : 'manual'})
       const updated = await fetchConditions()
       setLocalConds(updated||[])
-      setGroqPreview(null); setGroqInput(''); setManualForm({name:'',description:'',type:'ema_cross_up',params:{}})
+      if (isGroq) { setGroqPreview(null); setGroqInput('') }
+      else { setManualForm({name:'',description:'',type:'ema_cross_up',params:{ma_fast:10,ma_slow:11}}) }
       setCondTab('list')
-    } catch(e) { setGroqErr(e.message) }
+    } catch(e) {
+      if (isGroq) setGroqErr(e.message)
+      else setCondSaveErr(e.message)
+    }
     finally { setCondSaving(false) }
   }
 
@@ -515,7 +521,7 @@ function SettingsModal({ onClose, strategies=[] }) {
 
   const TABS = [
     { id:'integraciones', label:'🔌 Integraciones' },
-    { id:'alarmas',       label:'🔔 Alarmas' },
+    { id:'alarmas',       label:'🔔 Alertas' },
     { id:'condiciones',   label:'⚡ Condiciones' },
     { id:'grafico',       label:'📈 Gráfico' },
     { id:'ranking',       label:'🏆 Ranking' },
@@ -710,7 +716,7 @@ function SettingsModal({ onClose, strategies=[] }) {
                   {[['ma_fast','EMA Rápida',10],['ma_slow','EMA Lenta',11]].map(([k,l,d])=>(
                     <label key={k} style={{display:'flex',flexDirection:'column',gap:3,color:'#a8ccdf',fontSize:10}}>{l}
                       <input type="number" value={manualForm.params?.[k]||d} min={1}
-                        onChange={e=>setManualForm(p=>({...p,params:{...p.params,[k]:Number(e.target.value)}}))}
+                        onChange={e=>setManualForm(p=>({...p,params:{...p.params,[k]:Number(e.target.value)||d}}))}
                         style={{background:'#080c14',border:'1px solid #1a2d45',borderRadius:3,color:'#ffd166',fontFamily:MONO,fontSize:13,padding:'5px 8px',fontWeight:700,textAlign:'center'}}/>
                     </label>
                   ))}
@@ -728,7 +734,7 @@ function SettingsModal({ onClose, strategies=[] }) {
                   {[['period','Período',14],['level','Nivel',30]].map(([k,l,d])=>(
                     <label key={k} style={{display:'flex',flexDirection:'column',gap:3,color:'#a8ccdf',fontSize:10}}>{l}
                       <input type="number" value={manualForm.params?.[k]||d} min={1}
-                        onChange={e=>setManualForm(p=>({...p,params:{...p.params,[k]:Number(e.target.value)}}))}
+                        onChange={e=>setManualForm(p=>({...p,params:{...p.params,[k]:Number(e.target.value)||d}}))}
                         style={{background:'#080c14',border:'1px solid #1a2d45',borderRadius:3,color:'#ffd166',fontFamily:MONO,fontSize:13,padding:'5px 8px',fontWeight:700,textAlign:'center'}}/>
                     </label>
                   ))}
@@ -856,7 +862,20 @@ function SettingsModal({ onClose, strategies=[] }) {
                       </label>
                       <label style={{display:'flex',flexDirection:'column',gap:3,color:'#a8ccdf',fontSize:10}}>
                         <span style={{display:'flex',alignItems:'center',gap:5}}>Tipo de condición <span style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a'}}>— define qué señal evalúa la condición</span></span>
-                        <select value={manualForm.type} onChange={e=>setManualForm(p=>({...p,type:e.target.value,params:{}}))}
+                        <select value={manualForm.type} onChange={e=>{
+                          const t=e.target.value
+                          // Pre-fill default params so save works without touching inputs
+                          const defParams = t.startsWith('ema_cross')||t==='price_above_ema'||t==='price_below_ema'
+                            ? {ma_fast:10,ma_slow:11}
+                            : t==='price_above_ma'||t==='price_below_ma'
+                            ? {ma_period:50}
+                            : t.startsWith('rsi_')
+                            ? {period:14,level:30}
+                            : t.startsWith('macd_')
+                            ? {fast:12,slow:26,signal:9}
+                            : {}
+                          setManualForm(p=>({...p,type:t,params:defParams}))
+                        }}
                           style={{background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,color:'#e2eaf5',fontFamily:MONO,fontSize:13,padding:'9px 11px'}}>
                           <optgroup label="EMA">
                             <option value="ema_cross_up">Cruce alcista de medias ↑</option>
@@ -890,6 +909,7 @@ function SettingsModal({ onClose, strategies=[] }) {
                         style={{background:'rgba(0,212,255,0.15)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:13,padding:'11px',borderRadius:5,cursor:manualForm.name.trim()?'pointer':'not-allowed',fontWeight:700,opacity:(condSaving||!manualForm.name.trim())?0.5:1}}>
                         {condSaving?'Guardando…':'Guardar condición'}
                       </button>
+                      {condSaveErr&&<div style={{fontFamily:MONO,fontSize:11,color:'#ff4d6d',marginTop:8,padding:'8px 10px',background:'rgba(255,77,109,0.08)',borderRadius:4}}>⚠ {condSaveErr}</div>}
                     </div>
                   </div>
                 )}
@@ -2663,7 +2683,7 @@ export default function Home() {
   const [stratMsg, setStratMsg]       = useState(null)
   const [stratTab, setStratTab]       = useState('build')
   const [aiPanelOpen, setAiPanelOpen] = useState(false)
-  // Alarmas
+  // Alertas
   const [alarms,setAlarms]=useState([])
   const [alarmLoading,setAlarmLoading]=useState(true)
   const [conditions,setConditions]=useState([])
@@ -2976,7 +2996,7 @@ export default function Home() {
   const newStrategy=()=>openEditStr({id:null})
   const duplicateStr=(s)=>openEditStr({...s,id:null,name:s.name+' (copia)'})
 
-  // ── Alarmas ──
+  // ── Alertas ──
   const openEditAlarm=(a)=>{
     setEditingAlarm(a)
     setAlarmForm({
@@ -3475,7 +3495,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.16</title>
+        <title>Trading Simulator V4.17</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3538,7 +3558,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.16
+            <span className="dot"/>Trading Simulator V4.17
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -3616,7 +3636,7 @@ export default function Home() {
               onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.25)'}
               onMouseOut={e=>e.currentTarget.style.background='transparent'}/>
             <div style={{display:'flex',borderBottom:'1px solid var(--border)'}}>
-              {[{id:'config',label:'⚙',title:'Configuración'},{id:'watchlist',label:'☰',title:'Watchlist'},{id:'alarms',label:'🔔',title:'Alarmas',badge:alarmActiveCount},{id:'multi',label:'📊',title:'Backtesting'}].map(tab=>(
+              {[{id:'config',label:'⚙',title:'Configuración'},{id:'watchlist',label:'☰',title:'Watchlist'},{id:'alarms',label:'🔔',title:'Alertas',badge:alarmActiveCount},{id:'multi',label:'📊',title:'Backtesting'}].map(tab=>(
                 <button key={tab.id} onClick={()=>setSidePanel(tab.id)} title={tab.title} style={{
                   flex:1,padding:'8px 4px',
                   background:sidePanel===tab.id?'var(--bg3)':'transparent',
@@ -3963,152 +3983,180 @@ export default function Home() {
               <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
                 {/* Header */}
                 <div style={{padding:'6px 8px',borderBottom:'1px solid var(--border)',display:'flex',gap:4,alignItems:'center',flexShrink:0}}>
-                  <span style={{fontFamily:MONO,fontSize:12,color:'#a8ccdf',flex:1}}>Alarmas</span>
+                  <span style={{fontFamily:MONO,fontSize:12,color:'#a8ccdf',flex:1}}>Alertas</span>
                   <button onClick={()=>refreshAlarmStatus()} title="Actualizar estado" style={{background:'transparent',border:'none',color:'#5a7a95',fontFamily:MONO,fontSize:13,padding:'2px 5px',cursor:'pointer'}} disabled={alarmStatusLoading}>{alarmStatusLoading?'⟳':'↻'}</button>
                   <button onClick={newAlarm} title="Nueva alarma" style={{background:'rgba(0,212,255,0.1)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:13,padding:'3px 8px',borderRadius:3,cursor:'pointer'}}>+</button>
                 </div>
                 <div style={{overflowY:'auto',flex:1}}>
                   {alarmLoading&&<div style={{padding:'10px 12px',fontFamily:MONO,fontSize:12,color:'#a8ccdf'}}>⟳ Cargando…</div>}
                   {!alarmLoading&&(()=>{
-                    // Classify each alarm across all watchlist symbols
                     const COLORS=['#00e5a0','#ffd166','#00d4ff','#ff7eb3','#9b72ff','#ff4d6d']
                     const blinkN=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.alarmas?.blinkCandles??3}catch(_){return 3}})()
+                    const COND_LABELS={
+                      ema_cross_up:'↑ Cruce alcista EMA',ema_cross_down:'↓ Cruce bajista EMA',
+                      price_above_ema:'Precio > EMA',price_below_ema:'Precio < EMA',
+                      price_above_ma:'Precio > Media',price_below_ma:'Precio < Media',
+                      rsi_above:'RSI sobre nivel',rsi_below:'RSI bajo nivel',
+                      rsi_cross_up:'RSI cruza ↑',rsi_cross_down:'RSI cruza ↓',
+                      macd_cross_up:'MACD cruza señal ↑',macd_cross_down:'MACD cruza señal ↓',
+                    }
 
-                    // Price alerts
+                    // Separate price alerts vs condition alerts
                     const priceAlerts=alarms.filter(a=>a.condition==='price_level')
-                    // Condition alarms
                     const condAlarms=alarms.filter(a=>a.condition!=='price_level')
 
-                    // For each condition alarm × symbol: active | pending | acked
-                    const rows=[]
+                    // Build triggered rows: ONLY those where condition is currently ACTIVE
+                    // (not pending — no mostramos ruido de condiciones no disparadas)
+                    const triggeredRows=[]
+                    const ackedRows=[]
                     condAlarms.forEach((a,ai)=>{
                       const col=COLORS[ai%COLORS.length]
-                      const condLabel={ema_cross_up:'↑ Cruce alcista EMA',ema_cross_down:'↓ Cruce bajista EMA',price_above_ema:'Precio > EMA',price_below_ema:'Precio < EMA'}[a.condition]||a.condition
                       watchlist.forEach(w=>{
                         const st=alarmStatus[w.symbol]?.[a.id]
-                        if(!st) return
+                        if(!st||st.active!==true) return   // skip not-active
                         const ackKey=`${w.symbol}::${a.id}`
                         const isAcked=ackedAlarms.has(ackKey)
-                        const isActive=st.active===true
-                        const bars=st.bars_since_trigger
-                        const shouldBlink=isActive&&bars!=null&&bars<=blinkN
-                        rows.push({a,w,col,condLabel,isActive,isAcked,shouldBlink,ackKey,bars})
+                        const bars=st.bars
+                        const shouldBlink=bars!=null&&bars<=blinkN
+                        const row={a,w,col,isAcked,shouldBlink,ackKey,bars}
+                        if(isAcked) ackedRows.push(row)
+                        else triggeredRows.push(row)
                       })
                     })
 
-                    const active=rows.filter(r=>r.isActive&&!r.isAcked)
-                    const pending=rows.filter(r=>!r.isActive&&!r.isAcked)
-                    const acked=rows.filter(r=>r.isAcked)
-
-                    const renderRow=(r,i)=>(
-                      <div key={r.ackKey+i} style={{padding:'7px 10px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:8,
-                        opacity:r.isAcked?0.45:1}}>
-                        <span style={{width:9,height:9,borderRadius:'50%',flexShrink:0,
-                          background:r.isAcked?'#2a3f55':r.isActive?r.col:'#2a3f55',
-                          animation:r.shouldBlink?'alarmPulse 1s ease-in-out infinite':undefined,
-                          boxShadow:r.isActive&&!r.isAcked?`0 0 6px ${r.col}`:undefined}}/>
-                        <div style={{flex:1,minWidth:0}}>
-                          <div style={{display:'flex',alignItems:'baseline',gap:5}}>
-                            <span style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:r.isAcked?'#4a6a80':r.isActive?r.col:'#7a9bc0'}}>{r.w.symbol}</span>
-                            <span style={{fontFamily:MONO,fontSize:10,color:'#5a7a95'}}>{r.a.name}</span>
-                          </div>
-                          <div style={{fontFamily:MONO,fontSize:10,color:'#4a6a80',marginTop:1}}>{r.condLabel} · EMA {r.a.ema_r}/{r.a.ema_l}</div>
-                        </div>
-                        {r.isActive&&!r.isAcked&&(
-                          <button onClick={()=>ackAlarm(r.w.symbol,r.a.id)} title="Reconocer (Acknowledge)"
-                            style={{background:'rgba(0,229,160,0.08)',border:'1px solid #00e5a0',color:'#00e5a0',fontFamily:MONO,fontSize:9,padding:'2px 5px',borderRadius:3,cursor:'pointer',flexShrink:0}}>
-                            ACK
-                          </button>
-                        )}
-                        {r.isAcked&&(
-                          <button onClick={()=>unackAlarm(r.w.symbol,r.a.id)} title="Quitar reconocimiento"
-                            style={{background:'transparent',border:'1px solid #2a3f55',color:'#4a6a80',fontFamily:MONO,fontSize:9,padding:'2px 5px',borderRadius:3,cursor:'pointer',flexShrink:0}}>
-                            ✓
-                          </button>
-                        )}
+                    const SectionHeader=({color,label,count,right})=>(
+                      <div style={{padding:'5px 10px',fontFamily:MONO,fontSize:9,color,letterSpacing:'0.08em',textTransform:'uppercase',
+                        background:'rgba(0,0,0,0.25)',borderBottom:'1px solid var(--border)',borderTop:'1px solid var(--border)',
+                        display:'flex',alignItems:'center',gap:6}}>
+                        <span>{label}</span>
+                        <span style={{color:'#3d5a7a'}}>({count})</span>
+                        {right&&<div style={{marginLeft:'auto'}}>{right}</div>}
                       </div>
                     )
 
+                    const renderTriggered=(r,i)=>(
+                      <div key={r.ackKey+i} style={{padding:'8px 10px',borderBottom:'1px solid rgba(20,40,65,0.7)',display:'flex',alignItems:'center',gap:8}}>
+                        <span style={{width:9,height:9,borderRadius:'50%',flexShrink:0,background:r.col,
+                          animation:r.shouldBlink?'alarmPulse 1s ease-in-out infinite':undefined,
+                          boxShadow:`0 0 7px ${r.col}`}}/>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{display:'flex',alignItems:'baseline',gap:5}}>
+                            <span style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:r.col}}>{r.w.symbol}</span>
+                            <span style={{fontFamily:MONO,fontSize:10,color:'#5a7a95',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.a.name}</span>
+                          </div>
+                          <div style={{fontFamily:MONO,fontSize:10,color:'#4a6a80',marginTop:1}}>
+                            {COND_LABELS[r.a.condition]||r.a.condition}
+                            {r.bars!=null&&<span style={{color:'#3d5a7a'}}> · {r.bars}v</span>}
+                          </div>
+                        </div>
+                        <button onClick={()=>ackAlarm(r.w.symbol,r.a.id)} title="Reconocer"
+                          style={{background:'rgba(0,229,160,0.08)',border:'1px solid #00e5a045',color:'#00e5a0',fontFamily:MONO,fontSize:9,padding:'3px 6px',borderRadius:3,cursor:'pointer',flexShrink:0}}>
+                          ACK
+                        </button>
+                      </div>
+                    )
+
+                    const noActivity = priceAlerts.length===0 && triggeredRows.length===0 && ackedRows.length===0
+
                     return(
                       <div>
-                        {/* Alertas de precio */}
+                        {/* ── Alertas de precio ── */}
                         {priceAlerts.length>0&&(
                           <div>
-                            <div style={{padding:'4px 10px',fontFamily:MONO,fontSize:9,color:'#ffd166',letterSpacing:'0.08em',textTransform:'uppercase',background:'var(--bg2)',borderBottom:'1px solid var(--border)',display:'flex',gap:6}}>
-                              <span>🎯 Alertas de precio</span><span style={{color:'#3d5a7a'}}>({priceAlerts.length})</span>
-                            </div>
+                            <SectionHeader color="#ffd166" label="🎯 Alertas de precio" count={priceAlerts.length}/>
                             {priceAlerts.map(a=>{
                               const isAbove=a.condition_detail==='price_above'
                               return(
-                                <div key={a.id} style={{padding:'7px 10px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:8}}>
-                                  <span style={{fontSize:13,color:isAbove?'#00e5a0':'#ff4d6d',flexShrink:0,lineHeight:1}}>{isAbove?'▲':'▼'}</span>
+                                <div key={a.id} style={{padding:'8px 10px',borderBottom:'1px solid rgba(20,40,65,0.7)',display:'flex',alignItems:'center',gap:8}}>
+                                  <span style={{fontSize:14,color:isAbove?'#00e5a0':'#ff4d6d',flexShrink:0,lineHeight:1}}>{isAbove?'▲':'▼'}</span>
                                   <div style={{flex:1,minWidth:0}}>
-                                    <div style={{fontFamily:MONO,fontSize:12,color:'#e8f4ff',fontWeight:700}}>{a.symbol} @ <span style={{color:isAbove?'#00e5a0':'#ff4d6d'}}>{a.price_level?.toFixed(2)??'—'}</span></div>
+                                    <div style={{fontFamily:MONO,fontSize:12,color:'#e8f4ff',fontWeight:700}}>
+                                      {a.symbol} <span style={{color:'#5a7a95',fontWeight:400}}>@</span> <span style={{color:isAbove?'#00e5a0':'#ff4d6d'}}>{a.price_level?.toFixed(2)??'—'}</span>
+                                    </div>
                                     <div style={{fontFamily:MONO,fontSize:10,color:'#5a7a95'}}>{a.name}</div>
                                   </div>
-                                  <button onClick={async()=>{await deleteAlarm(a.id);reloadAlarms()}} style={{background:'transparent',border:'none',color:'#ff4d6d',fontSize:14,cursor:'pointer',padding:'0 4px',flexShrink:0}}>✕</button>
+                                  <button onClick={async()=>{await deleteAlarm(a.id);reloadAlarms()}}
+                                    style={{background:'transparent',border:'none',color:'#4a2a2a',fontSize:14,cursor:'pointer',padding:'0 4px',flexShrink:0}}
+                                    onMouseOver={e=>e.currentTarget.style.color='#ff4d6d'} onMouseOut={e=>e.currentTarget.style.color='#4a2a2a'}>✕</button>
                                 </div>
                               )
                             })}
                           </div>
                         )}
 
-                        {/* Activas */}
-                        {active.length>0&&(
+                        {/* ── Alertas activas (disparadas) ── */}
+                        {triggeredRows.length>0&&(
                           <div>
-                            <div style={{padding:'4px 10px',fontFamily:MONO,fontSize:9,color:'#ff4d6d',letterSpacing:'0.08em',textTransform:'uppercase',background:'var(--bg2)',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:6}}>
-                              <span style={{animation:'alarmPulse 1s ease-in-out infinite',display:'inline-block',width:7,height:7,borderRadius:'50%',background:'#ff4d6d'}}/>
-                              <span>Activas</span><span style={{color:'#3d5a7a'}}>({active.length})</span>
-                              <button onClick={()=>active.forEach(r=>ackAlarm(r.w.symbol,r.a.id))} title="Reconocer todas" style={{marginLeft:'auto',fontFamily:MONO,fontSize:9,padding:'1px 5px',border:'1px solid #3a1a20',background:'rgba(255,77,109,0.08)',color:'#ff4d6d',borderRadius:3,cursor:'pointer'}}>ACK todas</button>
-                            </div>
-                            {active.map(renderRow)}
+                            <SectionHeader color="#ff6b6b" label="⚡ Disparadas" count={triggeredRows.length}
+                              right={<button onClick={()=>triggeredRows.forEach(r=>ackAlarm(r.w.symbol,r.a.id))}
+                                style={{fontFamily:MONO,fontSize:9,padding:'1px 6px',border:'1px solid #3a1a20',background:'rgba(255,77,109,0.08)',color:'#ff6b6b',borderRadius:3,cursor:'pointer'}}>
+                                ACK todas</button>}/>
+                            {triggeredRows.map(renderTriggered)}
                           </div>
                         )}
 
-                        {/* Pendientes */}
-                        {pending.length>0&&(
+                        {/* ── Reconocidas (colapsadas si no hay nada más) ── */}
+                        {ackedRows.length>0&&(
                           <div>
-                            <div style={{padding:'4px 10px',fontFamily:MONO,fontSize:9,color:'#7a9bc0',letterSpacing:'0.08em',textTransform:'uppercase',background:'var(--bg2)',borderBottom:'1px solid var(--border)',display:'flex',gap:6}}>
-                              <span>⏳ Pendientes</span><span style={{color:'#3d5a7a'}}>({pending.length})</span>
-                            </div>
-                            {pending.map(renderRow)}
-                          </div>
-                        )}
-
-                        {/* Reconocidas */}
-                        {acked.length>0&&(
-                          <div>
-                            <div style={{padding:'4px 10px',fontFamily:MONO,fontSize:9,color:'#3d5a7a',letterSpacing:'0.08em',textTransform:'uppercase',background:'var(--bg2)',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:6}}>
-                              <span>✓ Reconocidas</span><span style={{color:'#2a3f55'}}>({acked.length})</span>
-                              <button onClick={()=>acked.forEach(r=>unackAlarm(r.w.symbol,r.a.id))} title="Limpiar reconocidas" style={{marginLeft:'auto',fontFamily:MONO,fontSize:9,padding:'1px 5px',border:'1px solid #1a2d45',background:'transparent',color:'#3d5a7a',borderRadius:3,cursor:'pointer'}}>Limpiar</button>
-                            </div>
-                            {acked.map(renderRow)}
-                          </div>
-                        )}
-
-                        {/* Gestión de condiciones */}
-                        <div>
-                          <div style={{padding:'4px 10px',fontFamily:MONO,fontSize:9,color:'#00d4ff',letterSpacing:'0.08em',textTransform:'uppercase',background:'var(--bg2)',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:6}}>
-                            <span>⚡ Condiciones</span><span style={{color:'#3d5a7a'}}>({condAlarms.length})</span>
-                          </div>
-                          {condAlarms.length===0&&<div style={{padding:'10px 10px',fontFamily:MONO,fontSize:11,color:'#4a6a80'}}>Sin condiciones. Pulsa + para crear.</div>}
-                          {condAlarms.map((a,ai)=>{
-                            const col=COLORS[ai%COLORS.length]
-                            const condLabel={ema_cross_up:'↑ Cruce alcista EMA',ema_cross_down:'↓ Cruce bajista EMA',price_above_ema:'Precio > EMA',price_below_ema:'Precio < EMA'}[a.condition]||a.condition
-                            const activeCount=watchlist.filter(w=>alarmStatus[w.symbol]?.[a.id]?.active===true).length
-                            return(
-                              <div key={a.id} style={{padding:'7px 10px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:8}}>
-                                <span style={{width:9,height:9,borderRadius:'50%',flexShrink:0,background:activeCount>0?col:'#2a3f55',boxShadow:activeCount>0?`0 0 5px ${col}`:undefined}}/>
+                            <SectionHeader color="#3d5a7a" label="✓ Reconocidas" count={ackedRows.length}
+                              right={<button onClick={()=>ackedRows.forEach(r=>unackAlarm(r.w.symbol,r.a.id))}
+                                style={{fontFamily:MONO,fontSize:9,padding:'1px 6px',border:'1px solid #1a2d45',background:'transparent',color:'#3d5a7a',borderRadius:3,cursor:'pointer'}}>
+                                Limpiar</button>}/>
+                            {ackedRows.map((r,i)=>(
+                              <div key={r.ackKey+i} style={{padding:'7px 10px',borderBottom:'1px solid rgba(20,40,65,0.5)',display:'flex',alignItems:'center',gap:8,opacity:0.4}}>
+                                <span style={{width:8,height:8,borderRadius:'50%',flexShrink:0,background:'#2a3f55'}}/>
                                 <div style={{flex:1,minWidth:0}}>
-                                  <div style={{fontFamily:MONO,fontSize:12,color:'#e8f4ff',fontWeight:700}}>{a.name}</div>
-                                  <div style={{fontFamily:MONO,fontSize:10,color:'#7a9bc0',marginTop:1}}>{condLabel} · EMA {a.ema_r}/{a.ema_l}</div>
-                                  {activeCount>0&&<div style={{fontFamily:MONO,fontSize:10,color:col,marginTop:1}}>{activeCount} activos en watchlist</div>}
+                                  <span style={{fontFamily:MONO,fontSize:11,color:'#4a6a80'}}>{r.w.symbol} · {r.a.name}</span>
                                 </div>
-                                <button onClick={()=>openEditAlarm(a)} style={{background:'transparent',border:'1px solid var(--border)',color:'#a8ccdf',fontFamily:MONO,fontSize:11,padding:'2px 6px',borderRadius:3,cursor:'pointer'}}>✎</button>
+                                <button onClick={()=>unackAlarm(r.w.symbol,r.a.id)}
+                                  style={{background:'transparent',border:'1px solid #2a3f55',color:'#3d5a7a',fontFamily:MONO,fontSize:9,padding:'2px 5px',borderRadius:3,cursor:'pointer'}}>
+                                  ✓
+                                </button>
                               </div>
-                            )
-                          })}
-                        </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* ── Estado vacío ── */}
+                        {noActivity&&(
+                          <div style={{padding:'24px 12px',textAlign:'center'}}>
+                            <div style={{fontSize:28,marginBottom:8}}>🔕</div>
+                            <div style={{fontFamily:MONO,fontSize:11,color:'#4a6a80',lineHeight:1.7}}>
+                              Sin alertas activas.<br/>
+                              Pulsa <b style={{color:'#00d4ff'}}>+</b> para crear una nueva.
+                            </div>
+                          </div>
+                        )}
+
+                        {/* ── Gestión: lista de condiciones/alertas configuradas ── */}
+                        {condAlarms.length>0&&(
+                          <div style={{marginTop:4}}>
+                            <SectionHeader color="#5a7a95" label="⚙ Configuradas" count={condAlarms.length}/>
+                            {condAlarms.map((a,ai)=>{
+                              const col=COLORS[ai%COLORS.length]
+                              const activeCount=watchlist.filter(w=>alarmStatus[w.symbol]?.[a.id]?.active===true).length
+                              return(
+                                <div key={a.id} style={{padding:'7px 10px',borderBottom:'1px solid rgba(20,40,65,0.5)',display:'flex',alignItems:'center',gap:8}}>
+                                  <span style={{width:8,height:8,borderRadius:'50%',flexShrink:0,
+                                    background:activeCount>0?col:'#2a3f55',
+                                    boxShadow:activeCount>0?`0 0 5px ${col}`:undefined}}/>
+                                  <div style={{flex:1,minWidth:0}}>
+                                    <div style={{fontFamily:MONO,fontSize:11,color:'#cce0f5',fontWeight:600}}>{a.name}</div>
+                                    <div style={{fontFamily:MONO,fontSize:10,color:'#4a6a80'}}>
+                                      {COND_LABELS[a.condition]||a.condition}
+                                      {activeCount>0&&<span style={{color:col}}> · {activeCount} activos</span>}
+                                    </div>
+                                  </div>
+                                  <button onClick={()=>openEditAlarm(a)}
+                                    style={{background:'transparent',border:'1px solid #1a2d45',color:'#7a9bc0',fontFamily:MONO,fontSize:10,padding:'2px 6px',borderRadius:3,cursor:'pointer'}}>✎</button>
+                                  <button onClick={async()=>{await removeAlarm(a.id)}}
+                                    style={{background:'transparent',border:'none',color:'#3a1a20',fontSize:13,cursor:'pointer',padding:'0 2px'}}
+                                    onMouseOver={e=>e.currentTarget.style.color='#ff4d6d'} onMouseOut={e=>e.currentTarget.style.color='#3a1a20'}>✕</button>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
                       </div>
                     )
                   })()}
