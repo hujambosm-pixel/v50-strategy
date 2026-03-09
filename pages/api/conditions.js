@@ -72,7 +72,10 @@ export default async function handler(req, res) {
   // ── GET — listar condiciones ──
   if (req.method === 'GET') {
     const r = await fetch(`${SUPA_URL}/rest/v1/conditions?active=eq.true&order=created_at.asc`, { headers: H })
-    if (!r.ok) return res.status(500).json({ error: 'Error cargando condiciones' })
+    if (!r.ok) {
+      // If table doesn't exist yet, return empty array gracefully
+      return res.status(200).json([])
+    }
     return res.status(200).json(await r.json())
   }
 
@@ -95,6 +98,15 @@ export default async function handler(req, res) {
     headers: { ...H, 'Prefer':'return=representation' },
     body: JSON.stringify({ name, description: description||'', type, params, source: source||'manual', active: true })
   })
-  if (!r.ok) return res.status(500).json({ error: 'Error guardando condición' })
-  return res.status(201).json((await r.json())[0])
+  if (!r.ok) {
+    let detail = ''
+    try { const e = await r.json(); detail = e?.message || e?.hint || JSON.stringify(e) } catch(_) {}
+    // Common case: table doesn't exist yet
+    if (detail.includes('relation') && detail.includes('does not exist')) {
+      return res.status(500).json({ error: 'La tabla "conditions" no existe. Ejecuta supabase_conditions_migration.sql en el SQL Editor de Supabase.' })
+    }
+    return res.status(500).json({ error: `Error guardando condición: ${detail || r.status}` })
+  }
+  const rows = await r.json()
+  return res.status(201).json(Array.isArray(rows) ? rows[0] : rows)
 }
