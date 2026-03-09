@@ -2788,6 +2788,7 @@ export default function Home() {
   const [mcOnlyFavs,setMcOnlyFavs]=useState(false)
   const [mcListFilter,setMcListFilter]=useState('')
   const [mcMode,setMcMode]=useState('slots')             // 'slots' | 'rotativo' | 'custom'
+  const [mcWeights,setMcWeights]=useState({})             // {symbol: pct} para modo custom
   const [mcCapital,setMcCapital]=useState('compound')    // 'simple' | 'compound'
   const [mcResult,setMcResult]=useState(null)
   const [mcLoading,setMcLoading]=useState(false)
@@ -3264,13 +3265,33 @@ export default function Home() {
   // ── Backtesting runner ─────────────────────────────────────
   const runBacktesting=useCallback(async()=>{
     if(mcSelected.length<2){setMcError('Selecciona al menos 2 activos');return}
+    // Validar pesos si modo custom
+    if(mcMode==='custom'){
+      const total=mcSelected.reduce((s,sym)=>s+(Number(mcWeights[sym])||0),0)
+      if(Math.abs(total-100)>0.5){setMcError(`Los pesos suman ${total.toFixed(1)}% — deben sumar 100%`);return}
+    }
     setMcLoading(true);setMcError(null);setMcResult(null)
     try{
+      // rankMap para prioridad en modo rotativo: {symbol: rank}
+      const rankMap={}
+      mcSelected.forEach((sym,i)=>{
+        const rd=rankingData[sym]
+        rankMap[sym]=rd?.rank??i+1
+      })
+      // Normalizar pesos antes de enviar
+      const weightsNorm={}
+      if(mcMode==='custom'){
+        const total=mcSelected.reduce((s,sym)=>s+(Number(mcWeights[sym])||0),0)
+        mcSelected.forEach(sym=>{ weightsNorm[sym]=total>0?(Number(mcWeights[sym])||0)/total*100:100/mcSelected.length })
+      }
       const res=await fetch('/api/multibacktest',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body:JSON.stringify({
           symbols:mcSelected,
+          modoAsig:mcMode,
+          weights:weightsNorm,
+          rankMap,
           cfg:{emaR:Number(emaR),emaL:Number(emaL),years:Number(years),capitalIni:Number(capitalIni),
             tipoStop,atrPeriod:Number(atrP),atrMult:Number(atrM),sinPerdidas,reentry,
             tipoFiltro,sp500EmaR:Number(sp500EmaR),sp500EmaL:Number(sp500EmaL),tipoCapital:mcCapital}
@@ -3280,7 +3301,25 @@ export default function Home() {
       if(!res.ok) throw new Error(json.error||'Error')
       setMcResult(json)
     }catch(e){setMcError(e.message)}finally{setMcLoading(false)}
-  },[mcSelected,mcCapital,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL])
+  },[mcSelected,mcMode,mcWeights,mcCapital,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL,rankingData])
+
+  // Auto-inicializar pesos iguales cuando cambian activos seleccionados (modo custom)
+  useEffect(()=>{
+    if(mcMode!=='custom'||mcSelected.length===0) return
+    setMcWeights(prev=>{
+      const next={...prev}
+      // Añadir nuevos activos con peso igual
+      const existingTotal=mcSelected.reduce((s,sym)=>s+(Number(prev[sym])||0),0)
+      const newSyms=mcSelected.filter(sym=>!prev[sym]&&prev[sym]!==0)
+      if(newSyms.length>0){
+        const eq=parseFloat((100/mcSelected.length).toFixed(1))
+        mcSelected.forEach(sym=>{ next[sym]=eq })
+      }
+      // Limpiar activos eliminados
+      Object.keys(next).forEach(sym=>{ if(!mcSelected.includes(sym)) delete next[sym] })
+      return next
+    })
+  },[mcSelected,mcMode])
 
   const metrics=result?calcMetrics(result.trades,Number(capitalIni),result.capitalReinv,result.gananciaSimple,result.ganBH||0,result.startDate,result.meta?.ultimaFecha,Number(years)):null
   // Load settings from Supabase on mount (overrides localStorage if newer)
@@ -3530,7 +3569,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.23</title>
+        <title>Trading Simulator V4.24</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3593,7 +3632,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.23
+            <span className="dot"/>Trading Simulator V4.24
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4226,9 +4265,9 @@ export default function Home() {
                     return [
                       {id:'slots',label:'Slots iguales',ready:true,
                         desc:'El capital se divide en N partes iguales, una por activo. Cada slot opera de forma independiente con su fracción fija. Ejemplo: 4 activos con €10.000 → cada uno opera con €2.500 en paralelo, sin interferir entre sí.'},
-                      {id:'rotativo',label:'Capital rotativo',ready:false,
+                      {id:'rotativo',label:'Capital rotativo',ready:true,
                         desc:'Un único pool de capital se asigna a los activos según van generando señales. Al cerrar una posición, el capital liberado vuelve al pool para la siguiente señal. Si hay señales simultáneas, se prioriza por ranking.'},
-                      {id:'custom',label:'Pesos personalizados',ready:false,
+                      {id:'custom',label:'Pesos personalizados',ready:true,
                         desc:'Define manualmente qué porcentaje del capital va a cada activo. La suma debe ser 100%. Ideal para sobreponderar activos de mayor convicción.'},
                     ].map(m=>(
                       <div key={m.id} style={{marginBottom:3}}>
@@ -4253,6 +4292,71 @@ export default function Home() {
                     ))
                   })()}
                 </div>
+
+                {/* Pesos personalizados — solo visible cuando modo=custom y hay activos seleccionados */}
+                {mcMode==='custom'&&mcSelected.length>0&&(()=>{
+                  const total=mcSelected.reduce((s,sym)=>s+(Number(mcWeights[sym])||0),0)
+                  const ok=Math.abs(total-100)<0.5
+                  const distribute=()=>{
+                    const eq=(100/mcSelected.length)
+                    const w={}; mcSelected.forEach(s=>{w[s]=parseFloat(eq.toFixed(1))})
+                    setMcWeights(w)
+                  }
+                  const normalize=()=>{
+                    if(total===0){distribute();return}
+                    const w={}; mcSelected.forEach(s=>{w[s]=parseFloat(((Number(mcWeights[s])||0)/total*100).toFixed(1))})
+                    setMcWeights(w)
+                  }
+                  return(
+                    <div style={{padding:'10px 12px',borderBottom:'1px solid var(--border)',flexShrink:0}}>
+                      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:7}}>
+                        <div style={{fontFamily:MONO,fontSize:11,color:'#c8dff5',fontWeight:600,letterSpacing:'0.05em'}}>PESOS</div>
+                        <div style={{display:'flex',gap:4}}>
+                          <button onClick={distribute}
+                            style={{fontFamily:MONO,fontSize:9,padding:'2px 6px',borderRadius:3,cursor:'pointer',
+                              border:'1px solid #2a4060',background:'transparent',color:'#7aabc8'}}>
+                            Repartir igual
+                          </button>
+                          <button onClick={normalize}
+                            style={{fontFamily:MONO,fontSize:9,padding:'2px 6px',borderRadius:3,cursor:'pointer',
+                              border:'1px solid #2a4060',background:'transparent',color:'#7aabc8'}}>
+                            Normalizar
+                          </button>
+                        </div>
+                      </div>
+                      <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                        {mcSelected.map(sym=>{
+                          const v=mcWeights[sym]??''
+                          return(
+                            <div key={sym} style={{display:'flex',alignItems:'center',gap:6}}>
+                              <span style={{fontFamily:MONO,fontSize:11,color:'#a8ccdf',flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sym}</span>
+                              <div style={{display:'flex',alignItems:'center',gap:3}}>
+                                <input type="number" min="0" max="100" step="0.1" value={v}
+                                  onChange={e=>setMcWeights(prev=>({...prev,[sym]:e.target.value}))}
+                                  style={{width:52,background:'var(--bg3)',border:'1px solid var(--border)',
+                                    color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'2px 5px',
+                                    borderRadius:3,textAlign:'right'}}/>
+                                <span style={{fontFamily:MONO,fontSize:11,color:'#5a7a9a'}}>%</span>
+                              </div>
+                              {/* mini barra visual */}
+                              <div style={{width:40,height:6,borderRadius:3,background:'rgba(61,90,122,0.3)',overflow:'hidden',flexShrink:0}}>
+                                <div style={{height:'100%',borderRadius:3,width:`${Math.min(100,Number(v)||0)}%`,
+                                  background:ok?'#00d4ff':'#ffd166',transition:'width 0.2s'}}/>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                      {/* Indicador de suma */}
+                      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:7,paddingTop:5,borderTop:'1px solid var(--border)'}}>
+                        <span style={{fontFamily:MONO,fontSize:10,color:'#7aabc8'}}>Suma total</span>
+                        <span style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:ok?'#00e5a0':Math.abs(total-100)<5?'#ffd166':'#ff4d6d'}}>
+                          {total.toFixed(1)}% {ok?'✓':'⚠'}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                })()}
 
                 {/* Selector de activos */}
                 <div style={{display:'flex',flexDirection:'column',flex:1,minHeight:0}}>
@@ -4681,7 +4785,7 @@ export default function Home() {
                 {/* Header resumen */}
                 <div style={{padding:'7px 16px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
                   <span style={{fontFamily:MONO,fontSize:13,color:'var(--accent)',fontWeight:700}}>📊 Multicartera</span>
-                  <span style={{fontFamily:MONO,fontSize:11,color:'#8ab8d4'}}>{mcResult.n} activos · {fmt(mcResult.slotCapital,0,'€')}/slot</span>
+                  <span style={{fontFamily:MONO,fontSize:11,color:'#8ab8d4'}}>{mcResult.n} activos · <span style={{color:mcResult.modoAsig==='rotativo'?'#ffd166':mcResult.modoAsig==='custom'?'#9b72ff':'#00d4ff'}}>{mcResult.modoAsig==='rotativo'?'Capital rotativo':mcResult.modoAsig==='custom'?'Pesos personalizados':'Slots iguales'}</span></span>
                   <span style={{fontFamily:MONO,fontSize:11,color:'#8ab8d4'}}>Desde {fmtDate(mcResult.startDate)}</span>
                   <div style={{marginLeft:'auto',display:'flex',gap:6,alignItems:'center'}}>
                     <button onClick={()=>mcChartApiRef.current?.fitAll()}
