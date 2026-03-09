@@ -704,9 +704,20 @@ function SettingsModal({ onClose, strategies=[] }) {
             return(
               <div>
                 {sep('Librería de condiciones globales')}
+                {/* Setup notice */}
+                <div style={{background:'rgba(255,209,102,0.06)',border:'1px solid rgba(255,209,102,0.25)',borderRadius:5,padding:'10px 12px',marginBottom:12}}>
+                  <div style={{fontFamily:MONO,fontSize:10,color:'#ffd166',fontWeight:700,marginBottom:4}}>⚠ REQUISITO PREVIO</div>
+                  <div style={{fontFamily:MONO,fontSize:10,color:'#a89060',lineHeight:1.6}}>
+                    Para usar esta función, ejecuta primero el archivo <b style={{color:'#ffd166'}}>supabase_conditions_migration.sql</b> en
+                    el SQL Editor de tu proyecto Supabase.
+                    Sin esto, el botón "Guardar condición" dará error.<br/>
+                    La llamada a Groq IA funciona sin Supabase.
+                  </div>
+                </div>
                 <div style={{fontSize:10,color:'#5a7a95',lineHeight:1.6,marginBottom:14}}>
-                  Las condiciones globales son reutilizables en alarmas y watchlist.
-                  Créalas desde lenguaje natural con Groq IA o manualmente.
+                  Las <b style={{color:'#7a9bc0'}}>condiciones</b> son filtros booleanos reutilizables
+                  (¿se cumple esta condición en este activo ahora mismo?).
+                  Se reutilizan en alarmas de watchlist. Créalas con IA o manualmente.
                 </div>
                 {/* Sub-tabs */}
                 <div style={{display:'flex',gap:0,marginBottom:14,borderBottom:'1px solid var(--border)'}}>
@@ -757,7 +768,11 @@ function SettingsModal({ onClose, strategies=[] }) {
                         rows={3}
                         style={{width:'100%',background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,color:'#e2eaf5',fontFamily:MONO,fontSize:11,padding:'8px 10px',resize:'vertical',boxSizing:'border-box'}}
                       />
-                      {groqErr&&<div style={{fontFamily:MONO,fontSize:10,color:'#ff4d6d',marginTop:4}}>⚠ {groqErr}</div>}
+                      <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',lineHeight:1.5,marginTop:4}}>
+                        💡 Tipos soportados: <span style={{color:'#5a7a95'}}>cruce de EMAs, precio vs media, RSI (nivel y cruce), MACD.</span>
+                        Si especificas parámetros (ej. "EMA 50/200") se usan; si no, Groq aplica los más comunes.
+                      </div>
+                      {groqErr&&<div style={{fontFamily:MONO,fontSize:10,color:'#ff4d6d',marginTop:6,padding:'6px 8px',background:'rgba(255,77,109,0.08)',borderRadius:4,lineHeight:1.5}}>⚠ {groqErr}</div>}
                       <button onClick={handleGroqParse} disabled={groqParsing||!groqInput.trim()||!settings.integrations?.groqKey}
                         style={{marginTop:8,width:'100%',background:'rgba(155,114,255,0.15)',border:'1px solid rgba(155,114,255,0.4)',color:'#9b72ff',fontFamily:MONO,fontSize:11,padding:'7px',borderRadius:4,cursor:'pointer',fontWeight:600,opacity:groqParsing?0.6:1}}>
                         {groqParsing?'⟳ Analizando…':'✨ Analizar con IA'}
@@ -797,7 +812,8 @@ function SettingsModal({ onClose, strategies=[] }) {
                           onChange={e=>setManualForm(p=>({...p,name:e.target.value}))}
                           style={{background:'#080c14',border:'1px solid #1a2d45',borderRadius:3,color:'#e2eaf5',fontFamily:MONO,fontSize:12,padding:'6px 8px'}}/>
                       </label>
-                      <label style={{display:'flex',flexDirection:'column',gap:3,color:'#a8ccdf',fontSize:10}}>Tipo de condición
+                      <label style={{display:'flex',flexDirection:'column',gap:3,color:'#a8ccdf',fontSize:10}}>
+                        <span style={{display:'flex',alignItems:'center',gap:5}}>Tipo de condición <span style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a'}}>— define qué señal evalúa la condición</span></span>
                         <select value={manualForm.type} onChange={e=>setManualForm(p=>({...p,type:e.target.value,params:{}}))}
                           style={{background:'#080c14',border:'1px solid #1a2d45',borderRadius:3,color:'#e2eaf5',fontFamily:MONO,fontSize:11,padding:'6px 8px'}}>
                           <optgroup label="EMA">
@@ -889,12 +905,11 @@ function SettingsModal({ onClose, strategies=[] }) {
               {sep('Vista por defecto — Tabla resumen')}
               <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12}}>
                 <span style={{fontFamily:MONO,fontSize:10,color:'#cce0f5',flex:1}}>Layout inicial tabla resumen</span>
-                <select value={settings.ui?.defaultMetricsLayout??'multi'} onChange={e=>upd('ui.defaultMetricsLayout',e.target.value)}
+                <select value={settings.ui?.defaultMetricsLayout??'panel'} onChange={e=>upd('ui.defaultMetricsLayout',e.target.value)}
                   style={{background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,
                     color:'#e2eaf5',fontFamily:MONO,fontSize:11,padding:'4px 8px'}}>
-                  <option value="multi">Multi-columna</option>
-                  <option value="panel">Panel lateral</option>
-                  <option value="grid">Grid compacto</option>
+                  <option value="panel">Panel lateral derecho</option>
+                  <option value="grid">Grid en contenido</option>
                 </select>
               </div>
               <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:16}}>
@@ -2584,8 +2599,8 @@ export default function Home() {
   const [chartViewFull,setChartViewFull]=useState(false)
   const [settingsOpen,setSettingsOpen]=useState(false)
   const [sidePanel,setSidePanel]=useState('config')
-  const [metricsLayout,setMetricsLayout]=useState('multi')
-  const [metricsView,setMetricsView]=useState('multi')   // 'multi'=3col | 'single'=one strat per block
+  const [metricsLayout,setMetricsLayout]=useState('panel')
+  const [metricsView,setMetricsView]=useState('panel')   // 'multi'=3col | 'single'=one strat per block
   const [showStrategy,setShowStrategy]=useState(true),[showBH,setShowBH]=useState(true)
   const [showSP500,setShowSP500]=useState(true),[showCompound,setShowCompound]=useState(true)
   const [watchlist,setWatchlist]=useState(WATCHLIST_FALLBACK)
@@ -2853,7 +2868,7 @@ export default function Home() {
     setEditingStr(s)
     setStrForm({
       name:s.name||'',
-      years:s.years||5,capital_ini:s.capital_ini||10000,
+      years:s.years||5,capital_ini:s.capital_ini||(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.defaultCapital||1000}catch(_){return 1000}})(),
       color:s.color||'#00d4ff',observations:s.observations||''
     })
     // Cargar definition: si tiene la nueva, usarla; si es estrategia legacy, convertirla
@@ -2890,7 +2905,7 @@ export default function Home() {
         ema_r:entry.ma_fast||entry.ma_period||10,
         ema_l:entry.ma_slow||11,
         years:Number(strForm.years||5),
-        capital_ini:Number(strForm.capital_ini||10000),
+        capital_ini:Number(strForm.capital_ini||(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.defaultCapital||1000}catch(_){return 1000}})()),
       }
       await upsertStrategy(payload)
       reloadStrategies(); closeEditStr()
@@ -3182,7 +3197,8 @@ export default function Home() {
     try{
       const s=JSON.parse(localStorage.getItem('v50_settings')||'{}')
       if(s.ui?.defaultLabelMode!=null) setLabelMode(s.ui.defaultLabelMode)
-      if(s.ui?.defaultMetricsLayout)   setMetricsLayout(s.ui.defaultMetricsLayout)
+      if(s.ui?.defaultMetricsLayout){ const ml=s.ui.defaultMetricsLayout; setMetricsLayout(ml==='multi'||ml==='grid'?'grid':ml==='panel'?'panel':'panel') }
+      if(s.defaultCapital!=null)       setCapitalIni(s.defaultCapital)
     }catch(_){}
     // Restore acknowledged alarms
     try{
@@ -3196,7 +3212,7 @@ export default function Home() {
         // Re-apply ui defaults from remote settings
         try{
           if(remote.ui?.defaultLabelMode!=null) setLabelMode(remote.ui.defaultLabelMode)
-          if(remote.ui?.defaultMetricsLayout)   setMetricsLayout(remote.ui.defaultMetricsLayout)
+          if(remote.ui?.defaultMetricsLayout){ const ml=remote.ui.defaultMetricsLayout; setMetricsLayout(ml==='multi'||ml==='grid'?'grid':ml==='panel'?'panel':'panel') }
         }catch(_){}
       }
     })
@@ -3421,7 +3437,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.12</title>
+        <title>Trading Simulator V4.13</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3484,7 +3500,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.12
+            <span className="dot"/>Trading Simulator V4.13
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -3539,7 +3555,7 @@ export default function Home() {
               <svg width="12" height="12" viewBox="0 0 24 24" fill="#00d4ff"><path d="M3 3h7v2H5v14h14v-5h2v7H3V3zm11 0h7v7h-2V6.41l-9.29 9.3-1.42-1.42L17.59 5H14V3z"/></svg>
               TradingView
             </button>}
-            {result&&metrics&&sidePanel!=='multi'&&<button onClick={()=>setMetricsLayout(l=>l==='grid'?'panel':'grid')} style={{background:'rgba(13,21,32,0.9)',border:'1px solid #1a2d45',color:'#7a9bc0',fontFamily:MONO,fontSize:11,padding:'3px 9px',borderRadius:4,cursor:'pointer'}}>
+            {result&&metrics&&sidePanel!=='multi'&&<button onClick={()=>setMetricsLayout(l=>l==='grid'?'panel':l==='panel'?'grid':'panel')} style={{background:'rgba(13,21,32,0.9)',border:'1px solid #1a2d45',color:'#7a9bc0',fontFamily:MONO,fontSize:11,padding:'3px 9px',borderRadius:4,cursor:'pointer'}}>
               {metricsLayout==='grid'?'⊞ Panel':'⊟ Grid'}
             </button>}
             <button onClick={()=>setSettingsOpen(true)} title="Configuración" style={{background:'rgba(13,21,32,0.9)',border:'1px solid #1a2d45',color:'#7a9bc0',fontFamily:MONO,fontSize:14,padding:'2px 8px',borderRadius:4,cursor:'pointer',lineHeight:1}} onMouseOver={e=>e.currentTarget.style.borderColor='#4a7fa0'} onMouseOut={e=>e.currentTarget.style.borderColor='#1a2d45'}>
