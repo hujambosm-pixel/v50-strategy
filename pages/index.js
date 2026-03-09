@@ -494,6 +494,13 @@ function SettingsModal({ onClose }) {
                 </div>
               </div>
               {sep('Opciones')}
+              <label style={{display:'flex',alignItems:'center',gap:8,marginBottom:8,cursor:'pointer'}}>
+                <input type="checkbox"
+                  checked={settings.alarmas?.popupOnTrigger!==false}
+                  onChange={e=>upd('alarmas.popupOnTrigger',e.target.checked)}
+                  style={{accentColor:'#ff4d6d',width:13,height:13}}/>
+                <span style={{fontSize:11,color:'#cce0f5'}}>Mostrar popup cuando se activa una alarma</span>
+              </label>
               {[
                 ['alarms.onEntry',    'Notificar en señal de entrada'],
                 ['alarms.onExit',     'Notificar en señal de salida'],
@@ -531,6 +538,15 @@ function SettingsModal({ onClose }) {
                 ))}
               </div>
 
+              {sep('Capital por defecto')}
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:16}}>
+                <span style={{fontFamily:MONO,fontSize:10,color:'#cce0f5',flex:1}}>Capital inicial por defecto para nuevas estrategias</span>
+                <span style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:'#00d4ff',minWidth:54,textAlign:'right'}}>€{(settings.defaultCapital??1000).toLocaleString('es-ES')}</span>
+                <input type="number" min={100} step={100} value={settings.defaultCapital??1000}
+                  onChange={e=>upd('defaultCapital',Number(e.target.value))}
+                  style={{width:90,background:'#080c14',border:'1px solid #1a2d45',color:'#e2eaf5',
+                    fontFamily:MONO,fontSize:11,padding:'4px 6px',borderRadius:4}}/>
+              </div>
               {sep('Vista reciente (botón ⊡ / ⊞)')}
               <div style={{marginBottom:16}}>
                 <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
@@ -1610,7 +1626,7 @@ const DEFAULT_DEFINITION = {
   stop:     { type:'min_ma_low_signal', ma_type:'EMA', ma_period:10 },
   exit:     { type:'breakout_low_after_close_below_ma', ma_type:'EMA', ma_period:10 },
   management: { sin_perdidas:true, reentry:true },
-  sizing:   { type:'fixed_capital', amount:10000, years:5 },
+  sizing:   { type:'fixed_capital', amount:(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.defaultCapital??1000}catch(_){return 1000}})(), years:5 },
 }
 
 // ── StrategyAIPanel — asistente IA para configurar estrategias ─
@@ -1646,7 +1662,7 @@ function StrategyAIPanel({ definition, onApply, onClose }) {
       const r = await fetch('/api/strategy-ai', {
         method:'POST',
         headers:{'Content-Type':'application/json','x-groq-key':key},
-        body: JSON.stringify({ messages: newMessages.filter(m=>m.role!=='system') })
+        body: JSON.stringify({ messages: newMessages.filter(m=>m.role!=='system').map(({role,content})=>({role,content})) })
       })
       const d = await r.json()
       if (!r.ok) throw new Error(d.error||'Error')
@@ -2118,31 +2134,6 @@ function StrategyBuilder({ definition, setDefinition }) {
         </div>
       )
     },
-    {
-      num:8, key:'sizing', color:'#7a9bc0', label:'SIZING',
-      desc:'¿Cuánto capital por operación?',
-      summary: sizing.type==='fixed_capital'
-        ? `Capital fijo €${(sizing.amount||10000).toLocaleString('es-ES')} · ${sizing.years||5}a BT`
-        : sizing.type==='pct_equity'
-        ? `${sizing.pct||100}% del equity`
-        : '—',
-      body: (
-        <div>
-          {fld('Tipo de sizing', sel('sizing.type', sizing.type||'fixed_capital', [
-            {v:'fixed_capital', l:'Capital fijo (€)'},
-            {v:'pct_equity',    l:'Porcentaje del equity (%)'},
-          ]))}
-          {sizing.type!=='pct_equity' && row2(
-            fld('Capital (€)', num('sizing.amount',sizing.amount||10000,100,9999999,100)),
-            fld('Años backtest', num('sizing.years',sizing.years||5,1,30))
-          )}
-          {sizing.type==='pct_equity' && row2(
-            fld('Porcentaje (%)', num('sizing.pct',sizing.pct||100,1,100)),
-            fld('Capital base (€)', num('sizing.amount',sizing.amount||10000,100,9999999,100))
-          )}
-        </div>
-      )
-    },
   ]
 
   return (
@@ -2268,6 +2259,7 @@ export default function Home() {
   const [selectedAlarmIds,setSelectedAlarmIds]=useState([])  // IDs de alarmas activas en filtro
   const [onlyFavs,setOnlyFavs]=useState(false)  // filtro solo favoritos
   const [alarmDropOpen,setAlarmDropOpen]=useState(false)  // desplegable alarmas
+  const [alarmPopup,setAlarmPopup]=useState(null)  // [{symbol,name,condition}] or null
   const [priceAlarmDlg,setPriceAlarmDlg]=useState(null) // {price, symbol} o null
   // ── Ranking ─────────────────────────────────────────────────
   const [rankingData,setRankingData]=useState({})      // { symbol: { score, rank, metrics } }
@@ -2563,6 +2555,10 @@ export default function Home() {
   }
 
   // Para cada símbolo de la watchlist, evalúa todas las alarmas globales
+  // Count of triggered alarms across all watchlist symbols (for tab badge)
+  const alarmActiveCount = Object.values(alarmStatus).reduce((tot,sym)=>
+    tot+Object.values(sym).filter(v=>v?.active===true).length, 0)
+
   const refreshAlarmStatus=useCallback(async(wl,al)=>{
     const wlList=wl||watchlist
     const alarmList=al||alarms
@@ -2576,7 +2572,26 @@ export default function Home() {
         body:JSON.stringify({symbols,alarms:alarmList.map(a=>({id:a.id,condition:a.condition,ema_r:a.ema_r,ema_l:a.ema_l}))})
       })
       const data=await res.json()
-      setAlarmStatus(data||{})
+      const prev=alarmStatus
+    const newStatus=data||{}
+    setAlarmStatus(newStatus)
+    // Check if setting enabled: show popup on new active alarms
+    try{
+      const sett=JSON.parse(localStorage.getItem('v50_settings')||'{}')
+      if(sett?.alarmas?.popupOnTrigger!==false){
+        // Find newly triggered alarms (active in new but not in prev)
+        const triggered=[]
+        for(const sym of Object.keys(newStatus)){
+          for(const aid of Object.keys(newStatus[sym]||{})){
+            if(newStatus[sym][aid]?.active===true && !prev[sym]?.[aid]?.active){
+              const al=alarms.find(a=>a.id===aid)
+              if(al) triggered.push({symbol:sym, name:al.name, condition:al.condition})
+            }
+          }
+        }
+        if(triggered.length>0) setAlarmPopup(triggered)
+      }
+    }catch(_){}
     }catch(e){console.error('refreshAlarmStatus error',e)}
     finally{setAlarmStatusLoading(false)}
   },[watchlist,alarms])
@@ -2670,7 +2685,7 @@ export default function Home() {
   const saveStrategy=useCallback(async(overwriteId=null)=>{
     setStratSaving(true); setStratMsg(null)
     try{
-      const body={ name:stratName, description:stratDesc, symbol:simbolo,
+      const body={ name:stratName, description:stratDesc,
         years:Number(years), capital_ini:Number(capitalIni),
         definition:{ ...definition }, color:stratColor }
       const method = overwriteId ? 'PUT' : 'POST'
@@ -2694,7 +2709,7 @@ export default function Home() {
     setStratDesc(strat.description||'')
     setStratColor(strat.color||'#00d4ff')
     setCurrentStratId(strat.id)
-    if(strat.symbol) setSimbolo(strat.symbol)
+    // symbol intentionally not stored in strategy (apply to any asset separately)
     setStratTab('build')
     setStratMsg({type:'ok',text:`Cargada: ${strat.name}`})
   },[])
@@ -2971,7 +2986,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.3</title>
+        <title>Trading Simulator V4.4</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3015,6 +3030,7 @@ export default function Home() {
           .header-sp500-ema   { font-size:12px !important; color:#ffd166 !important; font-weight:600; }
 
           .status-badge { font-size:11px !important; }
+        @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.75;transform:scale(1.2)} }
         @keyframes alarmPulse {
           0%,100% { opacity:1; box-shadow:var(--bc) 0 0 7px; }
           50% { opacity:0.25; box-shadow:none; }
@@ -3033,7 +3049,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.3
+            <span className="dot"/>Trading Simulator V4.4
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -3108,16 +3124,20 @@ export default function Home() {
               onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.25)'}
               onMouseOut={e=>e.currentTarget.style.background='transparent'}/>
             <div style={{display:'flex',borderBottom:'1px solid var(--border)'}}>
-              {[{id:'config',label:'⚙',title:'Configuración'},{id:'watchlist',label:'☰',title:'Watchlist'},{id:'alarms',label:'🔔',title:'Alarmas'},{id:'multi',label:'📊',title:'Backtesting'}].map(tab=>(
+              {[{id:'config',label:'⚙',title:'Configuración'},{id:'watchlist',label:'☰',title:'Watchlist'},{id:'alarms',label:'🔔',title:'Alarmas',badge:alarmActiveCount},{id:'multi',label:'📊',title:'Backtesting'}].map(tab=>(
                 <button key={tab.id} onClick={()=>setSidePanel(tab.id)} title={tab.title} style={{
                   flex:1,padding:'8px 4px',
                   background:sidePanel===tab.id?'var(--bg3)':'transparent',
                   border:'none',
                   borderBottom:sidePanel===tab.id?'2px solid var(--accent)':'2px solid transparent',
                   color:sidePanel===tab.id?'var(--accent)':'var(--text3)',
-                  fontFamily:MONO,fontSize:14,cursor:'pointer'
+                  fontFamily:MONO,fontSize:14,cursor:'pointer',position:'relative'
                 }}>
                   {tab.label}
+                  {tab.badge>0&&<span style={{position:'absolute',top:4,right:2,minWidth:14,height:14,borderRadius:7,
+                    background:'#ff4d6d',color:'#fff',fontSize:8,fontWeight:700,
+                    display:'flex',alignItems:'center',justifyContent:'center',padding:'0 3px',
+                    animation:'pulse 1.4s ease-in-out infinite'}}>{tab.badge}</span>}
                 </button>
               ))}
             </div>
@@ -4501,13 +4521,10 @@ export default function Home() {
               <button onClick={closeEditStr} style={{background:'transparent',border:'none',color:'var(--text3)',fontSize:18,cursor:'pointer'}}>✕</button>
             </div>
 
-            {/* Fila 1: Nombre + Símbolo + Color */}
-            <div style={{display:'grid',gridTemplateColumns:'2fr 1fr auto',gap:10,alignItems:'end'}}>
+            {/* Fila 1: Nombre + Color */}
+            <div style={{display:'grid',gridTemplateColumns:'1fr auto',gap:10,alignItems:'end'}}>
               <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>Nombre
                 <input type="text" value={strForm.name||''} onChange={e=>setStrForm(p=>({...p,name:e.target.value}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'7px 10px',borderRadius:4}}/>
-              </label>
-              <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>Símbolo
-                <input type="text" value={strForm.symbol||''} onChange={e=>setStrForm(p=>({...p,symbol:e.target.value.toUpperCase()}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'7px 10px',borderRadius:4}}/>
               </label>
               <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)',alignItems:'center'}}>Color
                 <input type="color" value={strForm.color||'#00d4ff'} onChange={e=>setStrForm(p=>({...p,color:e.target.value}))} style={{width:38,height:36,padding:2,borderRadius:4,border:'1px solid var(--border)',background:'var(--bg3)',cursor:'pointer'}}/>
@@ -4517,16 +4534,21 @@ export default function Home() {
             {/* Separador */}
             <div style={{borderTop:'1px solid var(--border)',marginTop:2}}/>
 
-            {/* Parámetros globales: Años + Capital */}
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+            {/* Parámetros globales: Capital + Asignación + Años */}
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10}}>
+              <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)',fontFamily:MONO,fontSize:11}}>Capital (€)
+                <input type="number" value={strForm.capital_ini||(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.defaultCapital??1000}catch(_){return 1000}})()} min={100}
+                  onChange={e=>setStrForm(p=>({...p,capital_ini:Number(e.target.value)}))}
+                  style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'7px 10px',borderRadius:4}}/>
+              </label>
+              <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)',fontFamily:MONO,fontSize:11}}>Asignación (%)
+                <input type="number" value={strForm.allocation_pct||100} min={1} max={100}
+                  onChange={e=>setStrForm(p=>({...p,allocation_pct:Number(e.target.value)}))}
+                  style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'7px 10px',borderRadius:4}}/>
+              </label>
               <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)',fontFamily:MONO,fontSize:11}}>Años BT
                 <input type="number" value={strForm.years||5} min={1} max={20}
                   onChange={e=>setStrForm(p=>({...p,years:Number(e.target.value)}))}
-                  style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'7px 10px',borderRadius:4}}/>
-              </label>
-              <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)',fontFamily:MONO,fontSize:11}}>Capital (€)
-                <input type="number" value={strForm.capital_ini||10000} min={100}
-                  onChange={e=>setStrForm(p=>({...p,capital_ini:Number(e.target.value)}))}
                   style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'7px 10px',borderRadius:4}}/>
               </label>
             </div>
@@ -4626,6 +4648,43 @@ export default function Home() {
         </div>
       </div>
     )}
+      {/* ── Alarm Popup ── */}
+      {alarmPopup&&(
+        <div style={{position:'fixed',top:0,right:0,bottom:0,left:0,zIndex:999,display:'flex',alignItems:'flex-start',justifyContent:'flex-end',pointerEvents:'none'}}>
+          <div style={{margin:'60px 16px 0 0',background:'#0d1824',border:'1px solid #ff4d6d',borderRadius:8,
+            padding:'14px 16px',minWidth:260,maxWidth:340,boxShadow:'0 8px 32px rgba(255,77,109,0.25)',
+            pointerEvents:'all',fontFamily:MONO}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
+              <span style={{fontSize:13,fontWeight:700,color:'#ff4d6d'}}>🔔 Alarmas activas</span>
+              <button onClick={()=>setAlarmPopup(null)} style={{background:'none',border:'none',color:'#5a7a95',fontSize:15,cursor:'pointer',lineHeight:1}}>✕</button>
+            </div>
+            {alarmPopup.map((a,i)=>(
+              <div key={i} onClick={()=>{setSimbolo(a.symbol);setSidePanel('alarms');setAlarmPopup(null)}}
+                style={{display:'flex',alignItems:'center',gap:8,padding:'6px 0',
+                  borderBottom:i<alarmPopup.length-1?'1px solid #1a2d45':'none',cursor:'pointer'}}
+                onMouseOver={e=>e.currentTarget.style.opacity='0.75'} onMouseOut={e=>e.currentTarget.style.opacity='1'}>
+                <span style={{width:8,height:8,borderRadius:'50%',background:'#ff4d6d',flexShrink:0}}/>
+                <div>
+                  <span style={{fontWeight:700,color:'#e2eaf5',fontSize:12}}>{a.symbol}</span>
+                  <span style={{color:'#7a9bc0',fontSize:11,marginLeft:6}}>{a.name}</span>
+                </div>
+              </div>
+            ))}
+            <div style={{marginTop:10,display:'flex',gap:8}}>
+              <button onClick={()=>{setSidePanel('alarms');setAlarmPopup(null)}}
+                style={{flex:1,fontFamily:MONO,fontSize:10,padding:'5px',borderRadius:3,cursor:'pointer',
+                  border:'1px solid #ff4d6d',background:'rgba(255,77,109,0.1)',color:'#ff4d6d'}}>
+                Ver alarmas
+              </button>
+              <button onClick={()=>setAlarmPopup(null)}
+                style={{fontFamily:MONO,fontSize:10,padding:'5px 10px',borderRadius:3,cursor:'pointer',
+                  border:'1px solid #2a3f55',background:'transparent',color:'#7a9bc0'}}>
+                Ignorar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }
