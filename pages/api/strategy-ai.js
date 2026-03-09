@@ -118,9 +118,17 @@ FORMATO DE MISSING FEATURE (cuando el usuario pide algo no implementado):
   "description": "Descripción del parámetro que falta",
   "suggested_key": "nombre_del_campo",
   "suggested_values": ["opcion1", "opcion2"],
-  "implementation_notes": "Dónde y cómo añadirlo en el builder"
+  "implementation_notes": "Dónde y cómo añadirlo en el builder",
+  "claude_prompt": "Prompt listo para pegar en Claude.ai con TODO el contexto necesario para implementar el cambio"
 }
 \`\`\`
+
+REGLAS PARA EL CAMPO claude_prompt (MUY IMPORTANTE):
+- Cuando hay un MISSING FEATURE, el campo "claude_prompt" debe contener un prompt COMPLETO y AUTÓNOMO que el usuario pueda copiar y pegar directamente en Claude.ai.
+- El prompt debe incluir: (1) qué archivo modificar (index.js, datos.js, strategy-ai.js), (2) qué variable o estructura añadir/cambiar, (3) el código exacto de la nueva funcionalidad con todos los tipos y valores posibles, (4) cómo integrarlo con el resto del sistema.
+- Escríbelo en español, en primera persona como si el usuario lo estuviera pidiendo.
+- Ejemplo de claude_prompt para Buy&Hold: "Necesito añadir un tipo de estrategia 'buy_and_hold' al constructor de estrategias (index.js). En DEFAULT_DEFINITION añade: buyAndHold: false. En el motor datos.js, dentro de runBacktest(), si cfg.buyAndHold===true, ignorar toda la lógica de cruces EMA y generar un único trade: entryDate=startDate, exitDate=lastBar.date, entryPx=filteredData[0].close, exitPx=filteredData[filteredData.length-1].close. En el constructor (StrategyBuilder), añadir como primer paso colapsable 'TIPO' con un toggle: EMA Cross (comportamiento actual) | Buy & Hold. El paso FILTER, SETUP, TRIGGER, ABORT y EXIT se ocultarán si buyAndHold=true."
+
 
 IMPORTANTE:
 - Responde SIEMPRE en español.
