@@ -281,6 +281,12 @@ async function fetchConditions() {
 }
 
 async function saveCondition(cond) {
+  // 1. ALWAYS save to localStorage first (never fails)
+  const localId = 'local_' + Date.now()
+  const localEntry = { ...cond, id: localId, created_at: new Date().toISOString(), active: true }
+  lsSaveConds([...lsGetConds(), localEntry])
+
+  // 2. Try to sync to Supabase in background — replace local entry with real one if OK
   const groqKey=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.integrations?.groqKey||''}catch(_){return ''}})()
   try {
     const res = await fetch('/api/conditions', {
@@ -290,19 +296,15 @@ async function saveCondition(cond) {
     })
     if (res.ok) {
       const saved = await res.json()
-      // Sync local cache
-      const local = lsGetConds().filter(c => c.id?.startsWith('local_'))
-      // Refresh will be done by caller via fetchConditions
-      return saved
+      if (saved?.id) {
+        // Replace temp local entry with the Supabase one
+        lsSaveConds(lsGetConds().filter(c => c.id !== localId))
+        return saved
+      }
     }
-    // Supabase failed → fall through to localStorage
-    console.warn('Supabase save failed, saving locally')
   } catch(_) {}
-  // localStorage fallback — generate a local id
-  const saved = { ...cond, id: 'local_' + Date.now(), created_at: new Date().toISOString(), active: true }
-  const existing = lsGetConds()
-  lsSaveConds([...existing, saved])
-  return saved
+  // Supabase failed or no id returned — keep the local entry
+  return localEntry
 }
 
 async function deleteCondition(id) {
@@ -3495,7 +3497,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.17</title>
+        <title>Trading Simulator V4.18</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3558,7 +3560,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.17
+            <span className="dot"/>Trading Simulator V4.18
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4095,25 +4097,50 @@ export default function Home() {
                           </div>
                         )}
 
-                        {/* ── Reconocidas (colapsadas si no hay nada más) ── */}
+                        {/* ── Reconocidas — click Limpiar para ELIMINAR ── */}
                         {ackedRows.length>0&&(
                           <div>
                             <SectionHeader color="#3d5a7a" label="✓ Reconocidas" count={ackedRows.length}
-                              right={<button onClick={()=>ackedRows.forEach(r=>unackAlarm(r.w.symbol,r.a.id))}
-                                style={{fontFamily:MONO,fontSize:9,padding:'1px 6px',border:'1px solid #1a2d45',background:'transparent',color:'#3d5a7a',borderRadius:3,cursor:'pointer'}}>
-                                Limpiar</button>}/>
-                            {ackedRows.map((r,i)=>(
-                              <div key={r.ackKey+i} style={{padding:'7px 10px',borderBottom:'1px solid rgba(20,40,65,0.5)',display:'flex',alignItems:'center',gap:8,opacity:0.4}}>
+                              right={
+                                <button onClick={async()=>{
+                                  // Get unique alarm ids from acked rows and delete them
+                                  const uniqueIds=[...new Set(ackedRows.map(r=>r.a.id))]
+                                  for(const id of uniqueIds){ await deleteAlarm(id) }
+                                  reloadAlarms()
+                                  // Clear acked state for these
+                                  setAckedAlarms(prev=>{
+                                    const next=new Set(prev)
+                                    ackedRows.forEach(r=>next.delete(r.ackKey))
+                                    return next
+                                  })
+                                }}
+                                style={{fontFamily:MONO,fontSize:9,padding:'1px 6px',border:'1px solid #3a1a20',background:'rgba(255,77,109,0.06)',color:'#ff6060',borderRadius:3,cursor:'pointer'}}>
+                                🗑 Eliminar</button>
+                              }/>
+                            {/* Group by alarm to avoid N×symbols rows */}
+                            {[...new Map(ackedRows.map(r=>[r.a.id,r])).values()].map((r,i)=>{
+                              const syms=ackedRows.filter(x=>x.a.id===r.a.id).map(x=>x.w.symbol)
+                              return(
+                              <div key={r.a.id+i} style={{padding:'7px 10px',borderBottom:'1px solid rgba(20,40,65,0.5)',display:'flex',alignItems:'center',gap:8,opacity:0.35}}>
                                 <span style={{width:8,height:8,borderRadius:'50%',flexShrink:0,background:'#2a3f55'}}/>
                                 <div style={{flex:1,minWidth:0}}>
-                                  <span style={{fontFamily:MONO,fontSize:11,color:'#4a6a80'}}>{r.w.symbol} · {r.a.name}</span>
+                                  <span style={{fontFamily:MONO,fontSize:11,color:'#4a6a80',fontWeight:600}}>{r.a.name}</span>
+                                  {syms.length>1
+                                    ? <span style={{fontFamily:MONO,fontSize:10,color:'#3d5a7a',marginLeft:5}}>{syms.length} símbolos</span>
+                                    : <span style={{fontFamily:MONO,fontSize:10,color:'#3d5a7a',marginLeft:5}}>{syms[0]}</span>
+                                  }
                                 </div>
-                                <button onClick={()=>unackAlarm(r.w.symbol,r.a.id)}
-                                  style={{background:'transparent',border:'1px solid #2a3f55',color:'#3d5a7a',fontFamily:MONO,fontSize:9,padding:'2px 5px',borderRadius:3,cursor:'pointer'}}>
-                                  ✓
-                                </button>
+                                <button onClick={async()=>{
+                                    await deleteAlarm(r.a.id); reloadAlarms()
+                                    const keysToRemove=ackedRows.filter(x=>x.a.id===r.a.id).map(x=>x.ackKey)
+                                    setAckedAlarms(prev=>{const next=new Set(prev);keysToRemove.forEach(k=>next.delete(k));return next})
+                                  }}
+                                  title="Eliminar esta alerta"
+                                  style={{background:'transparent',border:'none',color:'#3a1a20',fontSize:13,cursor:'pointer',padding:'0 3px'}}
+                                  onMouseOver={e=>e.currentTarget.style.color='#ff4d6d'}
+                                  onMouseOut={e=>e.currentTarget.style.color='#3a1a20'}>✕</button>
                               </div>
-                            ))}
+                            )})}
                           </div>
                         )}
 
