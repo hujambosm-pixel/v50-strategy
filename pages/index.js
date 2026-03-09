@@ -405,7 +405,11 @@ function SettingsModal({ onClose, strategies=[] }) {
 
   // Load conditions when tab is opened
   const openConditions = () => {
-    fetchConditions().then(d=>setLocalConds(d||[])).catch(()=>{})
+    fetchConditions().then(d=>{
+      setLocalConds(d||[])
+      // Auto-switch to create tab if library is empty
+      if(!d||d.length===0) setCondTab('create')
+    }).catch(()=>{ setCondTab('create') })
   }
 
   const handleGroqParse = async () => {
@@ -483,7 +487,7 @@ function SettingsModal({ onClose, strategies=[] }) {
       placeholder={opts.placeholder||''}
       style={{
         background:'#080c14', border:'1px solid #1a2d45', borderRadius:4,
-        color:'#e2eaf5', fontFamily:MONO, fontSize:12, padding:'6px 10px',
+        color:'#e2eaf5', fontFamily:MONO, fontSize:13, padding:'8px 12px',
         width:'100%', boxSizing:'border-box',
         ...(opts.mono ? {letterSpacing:'0.04em'} : {})
       }}
@@ -493,7 +497,7 @@ function SettingsModal({ onClose, strategies=[] }) {
   const row = (label, tip, children) => (
     <div style={{marginBottom:14}}>
       <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:5}}>
-        <span style={{fontFamily:MONO,fontSize:10,color:'#7a9bc0',letterSpacing:'0.06em',textTransform:'uppercase'}}>{label}</span>
+        <span style={{fontFamily:MONO,fontSize:11,color:'#7a9bc0',letterSpacing:'0.06em',textTransform:'uppercase'}}>{label}</span>
         {tip&&<span style={{fontFamily:MONO,fontSize:10,color:'#3d5a7a'}}>{tip}</span>}
       </div>
       {children}
@@ -501,8 +505,8 @@ function SettingsModal({ onClose, strategies=[] }) {
   )
 
   const sep = (title) => (
-    <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',letterSpacing:'0.12em',textTransform:'uppercase',
-      borderBottom:'1px solid #1a2d45',paddingBottom:5,marginBottom:12,marginTop:4}}>{title}</div>
+    <div style={{fontFamily:MONO,fontSize:10,color:'#4a6a85',letterSpacing:'0.10em',textTransform:'uppercase',
+      borderBottom:'1px solid #1a2d45',paddingBottom:6,marginBottom:14,marginTop:6}}>{title}</div>
   )
 
   return (
@@ -510,14 +514,14 @@ function SettingsModal({ onClose, strategies=[] }) {
       background:'rgba(0,0,0,0.65)'}} onClick={onClose}>
       <div onClick={e=>e.stopPropagation()} style={{
         background:'#0a101a', border:'1px solid #1a2d45', borderRadius:10,
-        width:560, maxHeight:'94vh', display:'flex', flexDirection:'column',
+        width:'min(860px,96vw)', maxHeight:'92vh', display:'flex', flexDirection:'column',
         boxShadow:'0 16px 60px rgba(0,0,0,0.7)', fontFamily:MONO
       }}>
 
         {/* Header */}
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',
           padding:'14px 20px 0', borderBottom:'1px solid #0d1520', paddingBottom:0}}>
-          <div style={{fontSize:13,fontWeight:700,color:'#e2eaf5',letterSpacing:'0.04em'}}>⚙ Configuración</div>
+          <div style={{fontSize:16,fontWeight:700,color:'#e2eaf5',letterSpacing:'0.04em'}}>⚙ Configuración</div>
           <button onClick={onClose} style={{background:'none',border:'none',color:'#5a7a95',fontSize:16,cursor:'pointer',padding:'0 4px',lineHeight:1}}>✕</button>
         </div>
 
@@ -526,14 +530,14 @@ function SettingsModal({ onClose, strategies=[] }) {
           {TABS.map(t=>(
             <button key={t.id} onClick={()=>setTab(t.id)} style={{
               background:'none', border:'none', borderBottom: tab===t.id ? '2px solid #00d4ff' : '2px solid transparent',
-              color: tab===t.id ? '#00d4ff' : '#5a7a95', fontFamily:MONO, fontSize:10, padding:'10px 14px 8px',
+              color: tab===t.id ? '#00d4ff' : '#5a7a95', fontFamily:MONO, fontSize:11, padding:'12px 18px 10px',
               cursor:'pointer', letterSpacing:'0.06em', textTransform:'uppercase', transition:'color .15s'
             }}>{t.label}</button>
           ))}
         </div>
 
         {/* Body */}
-        <div style={{overflowY:'auto',flex:1,minHeight:0,padding:'18px 20px'}}>
+        <div style={{overflowY:'auto',flex:1,minHeight:0,padding:'22px 28px'}}>
 
           {/* ── INTEGRACIONES ── */}
           {tab==='integraciones'&&(
@@ -703,28 +707,17 @@ function SettingsModal({ onClose, strategies=[] }) {
             }
             return(
               <div>
-                {sep('Librería de condiciones globales')}
-                {/* Setup notice */}
-                <div style={{background:'rgba(255,209,102,0.06)',border:'1px solid rgba(255,209,102,0.25)',borderRadius:5,padding:'10px 12px',marginBottom:12}}>
-                  <div style={{fontFamily:MONO,fontSize:10,color:'#ffd166',fontWeight:700,marginBottom:4}}>⚠ REQUISITO PREVIO</div>
-                  <div style={{fontFamily:MONO,fontSize:10,color:'#a89060',lineHeight:1.6}}>
-                    Para usar esta función, ejecuta primero el archivo <b style={{color:'#ffd166'}}>supabase_conditions_migration.sql</b> en
-                    el SQL Editor de tu proyecto Supabase.
-                    Sin esto, el botón "Guardar condición" dará error.<br/>
-                    La llamada a Groq IA funciona sin Supabase.
-                  </div>
-                </div>
-                <div style={{fontSize:10,color:'#5a7a95',lineHeight:1.6,marginBottom:14}}>
-                  Las <b style={{color:'#7a9bc0'}}>condiciones</b> son filtros booleanos reutilizables
-                  (¿se cumple esta condición en este activo ahora mismo?).
-                  Se reutilizan en alarmas de watchlist. Créalas con IA o manualmente.
+                {sep('Librería de condiciones')}
+                <div style={{fontSize:12,color:'#7a9bc0',lineHeight:1.7,marginBottom:16}}>
+                  Las condiciones son filtros reutilizables que puedes vincular a alarmas y watchlist.
+                  Créalas con Groq IA (lenguaje natural) o manualmente.
                 </div>
                 {/* Sub-tabs */}
-                <div style={{display:'flex',gap:0,marginBottom:14,borderBottom:'1px solid var(--border)'}}>
-                  {[['list','📋 Librería'],['create','✨ Nueva condición']].map(([id,l])=>(
-                    <button key={id} onClick={()=>setCondTab(id)} style={{padding:'6px 14px',background:'none',border:'none',
+                <div style={{display:'flex',gap:0,marginBottom:18,borderBottom:'1px solid var(--border)'}}>
+                  {[['list',`📋 Librería${localConds.length>0?' ('+localConds.length+')':''}`],['create','✨ Nueva condición']].map(([id,l])=>(
+                    <button key={id} onClick={()=>setCondTab(id)} style={{padding:'10px 20px 9px',background:'none',border:'none',
                       borderBottom:condTab===id?'2px solid #00d4ff':'2px solid transparent',
-                      color:condTab===id?'#00d4ff':'#5a7a95',fontFamily:MONO,fontSize:10,cursor:'pointer',letterSpacing:'0.05em'}}>
+                      color:condTab===id?'#00d4ff':'#7a9bc0',fontFamily:MONO,fontSize:12,cursor:'pointer',letterSpacing:'0.05em',fontWeight:condTab===id?700:400}}>
                       {l}
                     </button>
                   ))}
@@ -738,7 +731,7 @@ function SettingsModal({ onClose, strategies=[] }) {
                       <div key={c.id} style={{background:'#0a1018',border:'1px solid #1a2d45',borderRadius:5,padding:'10px 12px',display:'flex',alignItems:'flex-start',gap:10}}>
                         <div style={{flex:1,minWidth:0}}>
                           <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:3}}>
-                            <span style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:'#e8f4ff'}}>{c.name}</span>
+                            <span style={{fontFamily:MONO,fontSize:13,fontWeight:700,color:'#e8f4ff'}}>{c.name}</span>
                             {c.source==='groq'&&<span style={{fontFamily:MONO,fontSize:8,color:'#9b72ff',background:'rgba(155,114,255,0.1)',padding:'1px 5px',borderRadius:8,border:'1px solid rgba(155,114,255,0.3)'}}>IA</span>}
                           </div>
                           <div style={{fontFamily:MONO,fontSize:10,color:'#7a9bc0',marginBottom:2}}>{CTYPE_LABELS[c.type]||c.type} · {paramSummary(c)}</div>
@@ -757,40 +750,47 @@ function SettingsModal({ onClose, strategies=[] }) {
                 {condTab==='create'&&(
                   <div style={{display:'flex',flexDirection:'column',gap:14}}>
                     {/* Groq AI */}
-                    <div style={{background:'rgba(155,114,255,0.05)',border:'1px solid rgba(155,114,255,0.2)',borderRadius:6,padding:14}}>
-                      <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:8}}>
-                        <span style={{fontFamily:MONO,fontSize:10,color:'#9b72ff',fontWeight:700,letterSpacing:'0.08em'}}>✨ CREAR CON IA (GROQ)</span>
-                        {!settings.integrations?.groqKey&&<span style={{fontFamily:MONO,fontSize:9,color:'#ff4d6d'}}>— necesita Groq API Key en Integraciones</span>}
+                    <div style={{background:'rgba(155,114,255,0.07)',border:'1px solid rgba(155,114,255,0.25)',borderRadius:8,padding:18}}>
+                      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
+                        <span style={{fontFamily:MONO,fontSize:13,color:'#b89fff',fontWeight:700}}>✨ Crear con Groq IA</span>
+                        {!settings.integrations?.groqKey&&(
+                          <span style={{fontFamily:MONO,fontSize:10,color:'#ff8a50',background:'rgba(255,138,80,0.1)',border:'1px solid rgba(255,138,80,0.3)',borderRadius:3,padding:'3px 8px'}}>
+                            ⚠ Configura la Groq API Key en Integraciones
+                          </span>
+                        )}
                       </div>
                       <textarea
                         value={groqInput} onChange={e=>setGroqInput(e.target.value)}
-                        placeholder="Describe la condición. Ej: RSI(14) cruza hacia arriba nivel 30 / Cruce alcista EMA 50 sobre EMA 200 / MACD cruza señal"
-                        rows={3}
-                        style={{width:'100%',background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,color:'#e2eaf5',fontFamily:MONO,fontSize:11,padding:'8px 10px',resize:'vertical',boxSizing:'border-box'}}
+                        placeholder="Describe la condición en lenguaje natural. Ej: RSI de 14 períodos cruza hacia arriba el nivel 30"
+                        rows={4}
+                        style={{width:'100%',background:'#060c14',border:'1px solid rgba(155,114,255,0.3)',borderRadius:5,color:'#e2eaf5',fontFamily:MONO,fontSize:13,padding:'12px 14px',resize:'vertical',boxSizing:'border-box',lineHeight:1.5}}
                       />
-                      <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',lineHeight:1.5,marginTop:4}}>
-                        💡 Tipos soportados: <span style={{color:'#5a7a95'}}>cruce de EMAs, precio vs media, RSI (nivel y cruce), MACD.</span>
-                        Si especificas parámetros (ej. "EMA 50/200") se usan; si no, Groq aplica los más comunes.
+                      <div style={{fontFamily:MONO,fontSize:10,color:'#5a6a80',lineHeight:1.5,marginTop:6}}>
+                        Tipos soportados: cruce de EMAs · precio vs media · RSI (nivel y cruce) · MACD
                       </div>
-                      {groqErr&&<div style={{fontFamily:MONO,fontSize:10,color:'#ff4d6d',marginTop:6,padding:'6px 8px',background:'rgba(255,77,109,0.08)',borderRadius:4,lineHeight:1.5}}>⚠ {groqErr}</div>}
+                      {groqErr&&<div style={{fontFamily:MONO,fontSize:11,color:'#ff4d6d',marginTop:8,padding:'8px 10px',background:'rgba(255,77,109,0.08)',borderRadius:4}}>⚠ {groqErr}</div>}
                       <button onClick={handleGroqParse} disabled={groqParsing||!groqInput.trim()||!settings.integrations?.groqKey}
-                        style={{marginTop:8,width:'100%',background:'rgba(155,114,255,0.15)',border:'1px solid rgba(155,114,255,0.4)',color:'#9b72ff',fontFamily:MONO,fontSize:11,padding:'7px',borderRadius:4,cursor:'pointer',fontWeight:600,opacity:groqParsing?0.6:1}}>
+                        style={{marginTop:10,width:'100%',background:settings.integrations?.groqKey?'rgba(155,114,255,0.2)':'rgba(40,40,40,0.3)',
+                          border:`1px solid ${settings.integrations?.groqKey?'rgba(155,114,255,0.5)':'#2a3a4a'}`,
+                          color:settings.integrations?.groqKey?'#b89fff':'#4a6a80',fontFamily:MONO,fontSize:13,padding:'11px',borderRadius:5,
+                          cursor:settings.integrations?.groqKey&&groqInput.trim()?'pointer':'not-allowed',fontWeight:700,
+                          opacity:(groqParsing||!groqInput.trim()||!settings.integrations?.groqKey)?0.55:1}}>
                         {groqParsing?'⟳ Analizando…':'✨ Analizar con IA'}
                       </button>
                       {/* Preview */}
                       {groqPreview&&(
-                        <div style={{marginTop:10,background:'rgba(0,229,160,0.06)',border:'1px solid rgba(0,229,160,0.25)',borderRadius:5,padding:12}}>
-                          <div style={{fontFamily:MONO,fontSize:9,color:'#00e5a0',letterSpacing:'0.08em',marginBottom:8}}>RESULTADO — REVISAR ANTES DE GUARDAR</div>
-                          <div style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:'#e8f4ff',marginBottom:4}}>{groqPreview.name}</div>
-                          <div style={{fontFamily:MONO,fontSize:10,color:'#7a9bc0',marginBottom:4}}>{CTYPE_LABELS[groqPreview.type]||groqPreview.type} · {JSON.stringify(groqPreview.params)}</div>
-                          {groqPreview.description&&<div style={{fontFamily:MONO,fontSize:10,color:'#5a7a95',marginBottom:10,lineHeight:1.4}}>{groqPreview.description}</div>}
+                        <div style={{marginTop:12,background:'rgba(0,229,160,0.07)',border:'1px solid rgba(0,229,160,0.3)',borderRadius:6,padding:16}}>
+                          <div style={{fontFamily:MONO,fontSize:10,color:'#00e5a0',letterSpacing:'0.08em',marginBottom:10,fontWeight:700}}>✓ RESULTADO — REVISA Y GUARDA</div>
+                          <div style={{fontFamily:MONO,fontSize:14,fontWeight:700,color:'#e8f4ff',marginBottom:5}}>{groqPreview.name}</div>
+                          <div style={{fontFamily:MONO,fontSize:11,color:'#7a9bc0',marginBottom:4}}>{CTYPE_LABELS[groqPreview.type]||groqPreview.type} · <span style={{color:'#ffd166'}}>{JSON.stringify(groqPreview.params)}</span></div>
+                          {groqPreview.description&&<div style={{fontFamily:MONO,fontSize:11,color:'#6a8a9a',marginBottom:12,lineHeight:1.5}}>{groqPreview.description}</div>}
                           <div style={{display:'flex',gap:8}}>
                             <button onClick={()=>handleSaveCond(groqPreview)} disabled={condSaving}
-                              style={{flex:1,background:'rgba(0,229,160,0.15)',border:'1px solid #00e5a0',color:'#00e5a0',fontFamily:MONO,fontSize:11,padding:'7px',borderRadius:4,cursor:'pointer',fontWeight:600}}>
+                              style={{flex:1,background:'rgba(0,229,160,0.18)',border:'1px solid #00e5a0',color:'#00e5a0',fontFamily:MONO,fontSize:13,padding:'10px',borderRadius:5,cursor:'pointer',fontWeight:700}}>
                               {condSaving?'Guardando…':'✓ Guardar condición'}
                             </button>
                             <button onClick={()=>setGroqPreview(null)}
-                              style={{background:'transparent',border:'1px solid #2a3f55',color:'#5a7a95',fontFamily:MONO,fontSize:11,padding:'7px 10px',borderRadius:4,cursor:'pointer'}}>
+                              style={{background:'transparent',border:'1px solid #2a3f55',color:'#5a7a95',fontFamily:MONO,fontSize:12,padding:'10px 14px',borderRadius:5,cursor:'pointer'}}>
                               Descartar
                             </button>
                           </div>
@@ -799,9 +799,9 @@ function SettingsModal({ onClose, strategies=[] }) {
                     </div>
 
                     {/* Separador */}
-                    <div style={{display:'flex',alignItems:'center',gap:10}}>
+                    <div style={{display:'flex',alignItems:'center',gap:10,marginTop:4}}>
                       <div style={{flex:1,height:1,background:'#1a2d45'}}/>
-                      <span style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a'}}>O MANUALMENTE</span>
+                      <span style={{fontFamily:MONO,fontSize:10,color:'#4a6a80',letterSpacing:'0.08em'}}>O MANUALMENTE</span>
                       <div style={{flex:1,height:1,background:'#1a2d45'}}/>
                     </div>
 
@@ -810,12 +810,12 @@ function SettingsModal({ onClose, strategies=[] }) {
                       <label style={{display:'flex',flexDirection:'column',gap:3,color:'#a8ccdf',fontSize:10}}>Nombre
                         <input type="text" value={manualForm.name} placeholder="Ej: Cruce alcista EMA 50/200"
                           onChange={e=>setManualForm(p=>({...p,name:e.target.value}))}
-                          style={{background:'#080c14',border:'1px solid #1a2d45',borderRadius:3,color:'#e2eaf5',fontFamily:MONO,fontSize:12,padding:'6px 8px'}}/>
+                          style={{background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,color:'#e2eaf5',fontFamily:MONO,fontSize:13,padding:'9px 11px'}}/>
                       </label>
                       <label style={{display:'flex',flexDirection:'column',gap:3,color:'#a8ccdf',fontSize:10}}>
                         <span style={{display:'flex',alignItems:'center',gap:5}}>Tipo de condición <span style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a'}}>— define qué señal evalúa la condición</span></span>
                         <select value={manualForm.type} onChange={e=>setManualForm(p=>({...p,type:e.target.value,params:{}}))}
-                          style={{background:'#080c14',border:'1px solid #1a2d45',borderRadius:3,color:'#e2eaf5',fontFamily:MONO,fontSize:11,padding:'6px 8px'}}>
+                          style={{background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,color:'#e2eaf5',fontFamily:MONO,fontSize:13,padding:'9px 11px'}}>
                           <optgroup label="EMA">
                             <option value="ema_cross_up">Cruce alcista de medias ↑</option>
                             <option value="ema_cross_down">Cruce bajista de medias ↓</option>
@@ -842,10 +842,10 @@ function SettingsModal({ onClose, strategies=[] }) {
                       <label style={{display:'flex',flexDirection:'column',gap:3,color:'#a8ccdf',fontSize:10}}>Descripción (opcional)
                         <input type="text" value={manualForm.description} placeholder="Explicación breve"
                           onChange={e=>setManualForm(p=>({...p,description:e.target.value}))}
-                          style={{background:'#080c14',border:'1px solid #1a2d45',borderRadius:3,color:'#e2eaf5',fontFamily:MONO,fontSize:11,padding:'6px 8px'}}/>
+                          style={{background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,color:'#e2eaf5',fontFamily:MONO,fontSize:13,padding:'9px 11px'}}/>
                       </label>
                       <button onClick={()=>{if(!manualForm.name.trim())return;handleSaveCond(manualForm)}} disabled={condSaving||!manualForm.name.trim()}
-                        style={{background:'rgba(0,212,255,0.12)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:11,padding:'8px',borderRadius:4,cursor:'pointer',fontWeight:600,opacity:condSaving?0.6:1}}>
+                        style={{background:'rgba(0,212,255,0.15)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:13,padding:'11px',borderRadius:5,cursor:manualForm.name.trim()?'pointer':'not-allowed',fontWeight:700,opacity:(condSaving||!manualForm.name.trim())?0.5:1}}>
                         {condSaving?'Guardando…':'Guardar condición'}
                       </button>
                     </div>
