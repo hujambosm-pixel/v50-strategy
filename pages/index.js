@@ -2556,8 +2556,8 @@ export default function Home() {
 
   // Para cada símbolo de la watchlist, evalúa todas las alarmas globales
   // Count of triggered alarms across all watchlist symbols (for tab badge)
-  const alarmActiveCount = Object.values(alarmStatus).reduce((tot,sym)=>
-    tot+Object.values(sym).filter(v=>v?.active===true).length, 0)
+  const alarmActiveCount = Object.values(alarmStatus||{}).reduce((tot,sym)=>
+    tot+Object.values(sym||{}).filter(v=>v?.active===true).length, 0)
 
   const refreshAlarmStatus=useCallback(async(wl,al)=>{
     const wlList=wl||watchlist
@@ -2572,7 +2572,7 @@ export default function Home() {
         body:JSON.stringify({symbols,alarms:alarmList.map(a=>({id:a.id,condition:a.condition,ema_r:a.ema_r,ema_l:a.ema_l}))})
       })
       const data=await res.json()
-      const prev=alarmStatus
+      const prev=alarmStatus||{}
     const newStatus=data||{}
     setAlarmStatus(newStatus)
     // Check if setting enabled: show popup on new active alarms
@@ -2581,9 +2581,9 @@ export default function Home() {
       if(sett?.alarmas?.popupOnTrigger!==false){
         // Find newly triggered alarms (active in new but not in prev)
         const triggered=[]
-        for(const sym of Object.keys(newStatus)){
+        for(const sym of Object.keys(newStatus||{})){
           for(const aid of Object.keys(newStatus[sym]||{})){
-            if(newStatus[sym][aid]?.active===true && !prev[sym]?.[aid]?.active){
+            if(newStatus[sym]?.[aid]?.active===true && !prev[sym]?.[aid]?.active){
               const al=alarms.find(a=>a.id===aid)
               if(al) triggered.push({symbol:sym, name:al.name, condition:al.condition})
             }
@@ -2986,7 +2986,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.4</title>
+        <title>Trading Simulator V4.5</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3049,7 +3049,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.4
+            <span className="dot"/>Trading Simulator V4.5
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
