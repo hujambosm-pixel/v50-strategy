@@ -393,7 +393,7 @@ function SettingsModal({ onClose }) {
       background:'rgba(0,0,0,0.65)'}} onClick={onClose}>
       <div onClick={e=>e.stopPropagation()} style={{
         background:'#0a101a', border:'1px solid #1a2d45', borderRadius:10,
-        width:520, maxHeight:'88vh', display:'flex', flexDirection:'column',
+        width:560, maxHeight:'94vh', display:'flex', flexDirection:'column',
         boxShadow:'0 16px 60px rgba(0,0,0,0.7)', fontFamily:MONO
       }}>
 
@@ -416,7 +416,7 @@ function SettingsModal({ onClose }) {
         </div>
 
         {/* Body */}
-        <div style={{overflowY:'auto',flex:1,padding:'18px 20px'}}>
+        <div style={{overflowY:'auto',flex:1,minHeight:0,padding:'18px 20px'}}>
 
           {/* ── INTEGRACIONES ── */}
           {tab==='integraciones'&&(
@@ -902,7 +902,7 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
         grid:{vertLines:{color:'#0d1520'},horzLines:{color:'#0d1520'}},
         crosshair:{mode:CrosshairMode.Normal},
         rightPriceScale:{borderColor:'#1a2d45'},
-        timeScale:{borderColor:'#1a2d45',timeVisible:true},
+        timeScale:{borderColor:'#1a2d45',timeVisible:true,rightOffset:5},
       })
       chartRef.current=chart
 
@@ -2949,7 +2949,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V3.7</title>
+        <title>Trading Simulator V3.8</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3011,7 +3011,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V3.7
+            <span className="dot"/>Trading Simulator V3.8
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -3204,10 +3204,14 @@ export default function Home() {
                   {(wlShowSearch||wlShowLista||wlShowFavs)&&<button onClick={()=>{setWlSearch('');setSelectedLists([]);setOnlyFavs(false);setSelectedAlarmIds([])}} title="Limpiar todos los filtros" style={{background:'rgba(255,77,109,0.08)',border:'1px solid #ff4d6d',color:'#ff4d6d',fontFamily:MONO,fontSize:11,padding:'3px 7px',borderRadius:3,cursor:'pointer',flexShrink:0}}>✕</button>}
                 </div>
                 {/* ══ Fila 2: filtro alarmas (chips inline, ancho completo) ══ */}
-                {wlShowAlarmFlt&&alarms.filter(a=>a.condition!=='price_level').length>0&&(
+                {wlShowAlarmFlt&&(()=>{
+                  const dotIds=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.watchlist?.alarmDotIds??null}catch(_){return null}})()
+                  const visibleChips=alarms.filter(a=>a.condition!=='price_level'&&(dotIds===null||dotIds.includes(a.id)))
+                  return visibleChips.length>0
+                })()&&(
                   <div style={{padding:'4px 8px 5px',borderBottom:'1px solid var(--border)',flexShrink:0,display:'flex',gap:4,alignItems:'center',flexWrap:'wrap'}}>
                     <span style={{fontFamily:MONO,fontSize:11,color:'#a8ccdf',flexShrink:0,marginRight:2}}>🔔</span>
-                    {alarms.filter(a=>a.condition!=='price_level').map((a,ai)=>{
+                    {(()=>{const dotIds=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.watchlist?.alarmDotIds??null}catch(_){return null}})();return alarms.filter(a=>a.condition!=='price_level'&&(dotIds===null||dotIds.includes(a.id)))})().map((a,ai)=>{
                       const sel=selectedAlarmIds.includes(a.id)
                       const activeCount=watchlist.filter(w=>alarmStatus[w.symbol]?.[a.id]?.active===true).length
                       const ALARM_COLORS=['#00e5a0','#ffd166','#00d4ff','#ff7eb3','#9b72ff','#ff4d6d']
