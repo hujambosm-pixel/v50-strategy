@@ -160,9 +160,10 @@ function runBacktestV50(data, sp500Data, cfg) {
         continue
       }
 
-      // 2. STOP HIT
+      // 2. STOP HIT — if gap-down opens below stop, use open (realistic fill)
       if (stopNivel != null && bar.low <= stopNivel) {
-        doExit(i, stopNivel, 'Stop')
+        const fillPx = bar.open <= stopNivel ? bar.open : stopNivel
+        doExit(i, fillPx, 'Stop')
         if (reentry && emaAlcista) reentryMode = true
         continue
       }
@@ -176,13 +177,15 @@ function runBacktestV50(data, sp500Data, cfg) {
           if (lowSobreEntry && !sinPerdAct)    sinPerdAct = true
           if (!lowSobreEntry && sinPerdAct)    sinPerdAct = false
           if (sinPerdAct && bar.low <= bkSalida) {
-            doExit(i, bkSalida, 'Exit')
+            const fillPx = bar.open <= bkSalida ? bar.open : bkSalida
+            doExit(i, fillPx, 'Exit')
             if (reentry && emaAlcista) reentryMode = true
             continue
           }
         } else {
           if (bar.low <= bkSalida) {
-            doExit(i, bkSalida, 'Exit')
+            const fillPx = bar.open <= bkSalida ? bar.open : bkSalida
+            doExit(i, fillPx, 'Exit')
             if (reentry && emaAlcista) reentryMode = true
             continue
           }
