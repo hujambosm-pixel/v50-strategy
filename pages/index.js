@@ -264,20 +264,22 @@ function lsGetConds() { try { return JSON.parse(localStorage.getItem(COND_LS_KEY
 function lsSaveConds(arr) { try { localStorage.setItem(COND_LS_KEY, JSON.stringify(arr)) } catch(_) {} }
 
 async function fetchConditions() {
-  // Try Supabase first; fall back to localStorage
+  const localAll = lsGetConds()
+  const localOnly = localAll.filter(c => c.id?.startsWith('local_'))
   try {
     const res = await fetch('/api/conditions')
     if (res.ok) {
       const data = await res.json()
       if (Array.isArray(data) && !data.error) {
-        // Merge with any local-only entries (id starting with 'local_')
-        const local = lsGetConds().filter(c => c.id?.startsWith('local_'))
-        lsSaveConds([...data, ...local])
-        return [...data, ...local]
+        // Always merge Supabase + local-only entries
+        const merged = [...data, ...localOnly]
+        lsSaveConds(merged)
+        return merged
       }
     }
   } catch(_) {}
-  return lsGetConds()
+  // Supabase unavailable — return full local cache
+  return localAll
 }
 
 async function saveCondition(cond) {
@@ -472,15 +474,17 @@ function SettingsModal({ onClose, strategies=[] }) {
     setCondSaving(true); setCondSaveErr(null); setGroqErr(null)
     const isGroq = !!groqPreview
     try {
+      if (!cond.name?.trim()) throw new Error('El nombre es obligatorio')
       await saveCondition({...cond, source: isGroq ? 'groq' : 'manual'})
+      // Refresh from merged source (localStorage + Supabase)
       const updated = await fetchConditions()
-      setLocalConds(updated||[])
+      setLocalConds(updated||lsGetConds())
       if (isGroq) { setGroqPreview(null); setGroqInput('') }
       else { setManualForm({name:'',description:'',type:'ema_cross_up',params:{ma_fast:10,ma_slow:11}}) }
       setCondTab('list')
     } catch(e) {
-      if (isGroq) setGroqErr(e.message)
-      else setCondSaveErr(e.message)
+      if (isGroq) setGroqErr(e.message||'Error con Groq IA')
+      else setCondSaveErr(e.message||'Error guardando condición')
     }
     finally { setCondSaving(false) }
   }
@@ -3011,7 +3015,11 @@ export default function Home() {
   const saveAlarm=async()=>{
     setAlarmSaving(true)
     try{
-      await upsertAlarm({...alarmForm,id:editingAlarm?.id||undefined,active:true})
+      // Condition alarms (not price_level) apply to all watchlist — use symbol='*' as sentinel
+      const isPriceAlarm = alarmForm.condition==='price_level'
+      const sym = isPriceAlarm ? (alarmForm.symbol||simbolo||'') : '*'
+      if(isPriceAlarm && !sym) throw new Error('Selecciona un símbolo para la alerta de precio')
+      await upsertAlarm({...alarmForm, symbol:sym, id:editingAlarm?.id||undefined, active:true})
       reloadAlarms(); closeEditAlarm()
     }catch(e){alert('Error: '+e.message)}
     finally{setAlarmSaving(false)}
@@ -3497,7 +3505,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.18</title>
+        <title>Trading Simulator V4.19</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3560,7 +3568,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.18
+            <span className="dot"/>Trading Simulator V4.19
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5122,56 +5130,103 @@ export default function Home() {
                   style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:13,padding:'7px 10px',borderRadius:4}}/>
               </label>
 
-              {/* Usar condición global */}
-              <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>
-                <div style={{display:'flex',alignItems:'center',gap:6}}>
-                  <span>Condición global</span>
-                  <span style={{fontSize:9,color:'#5a7a95'}}>(opcional — de la librería de condiciones)</span>
-                </div>
-                <select value={alarmForm.condition_id||''} onChange={e=>{
-                    const cid=e.target.value||null
-                    const cond=conditions.find(c=>c.id===cid)
-                    setAlarmForm(p=>({...p,
-                      condition_id:cid,
-                      condition: cond?.type || p.condition || 'ema_cross_up',
-                      ema_r: cond?.params?.ma_fast || cond?.params?.ma_period || p.ema_r || 10,
-                      ema_l: cond?.params?.ma_slow || p.ema_l || 11,
-                      params: cond?.params || p.params || {},
-                      name: p.name || cond?.name || '',
-                    }))
-                  }}
-                  style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'7px 10px',borderRadius:4}}>
-                  <option value="">— Condición personalizada —</option>
-                  {conditions.map(c=>(
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
-                {linkedCond&&<div style={{fontSize:10,color:'#5a7a95',marginTop:2,lineHeight:1.4}}>{linkedCond.description}</div>}
-              </label>
+              {/* Tipo de alerta */}
+              <div style={{display:'flex',gap:6}}>
+                {[['condition','📡 Condición técnica'],['price_level','🎯 Precio']].map(([v,l])=>(
+                  <button key={v} onClick={()=>setAlarmForm(p=>({...p,condition:v==='price_level'?'price_level':(p.condition==='price_level'?'ema_cross_up':p.condition)}))}
+                    style={{flex:1,padding:'7px 6px',fontFamily:MONO,fontSize:10,borderRadius:4,cursor:'pointer',fontWeight:600,
+                      background:(v==='price_level'?alarmForm.condition==='price_level':alarmForm.condition!=='price_level')?'rgba(0,212,255,0.12)':'transparent',
+                      border:`1px solid ${(v==='price_level'?alarmForm.condition==='price_level':alarmForm.condition!=='price_level')?'var(--accent)':'var(--border)'}`,
+                      color:(v==='price_level'?alarmForm.condition==='price_level':alarmForm.condition!=='price_level')?'var(--accent)':'var(--text3)'}}>
+                    {l}
+                  </button>
+                ))}
+              </div>
 
-              {/* Tipo de condición (cuando no hay global vinculada) */}
-              {!linkedCond&&(
+              {/* Si es condición técnica: enlazar con librería (opcional) */}
+              {alarmForm.condition!=='price_level'&&conditions.length>0&&(
                 <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>
-                  Tipo de condición
+                  <span style={{fontSize:10}}>De la librería <span style={{color:'#4a6a80'}}>(opcional)</span></span>
+                  <select value={alarmForm.condition_id||''} onChange={e=>{
+                      const cid=e.target.value||null
+                      const cond=conditions.find(c=>c.id===cid)
+                      setAlarmForm(p=>({...p,
+                        condition_id:cid,
+                        condition: cond?.type || p.condition || 'ema_cross_up',
+                        ema_r: cond?.params?.ma_fast || cond?.params?.ma_period || p.ema_r || 10,
+                        ema_l: cond?.params?.ma_slow || p.ema_l || 11,
+                        params: cond?.params || p.params || {},
+                        name: p.name || cond?.name || '',
+                      }))
+                    }}
+                    style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'7px 10px',borderRadius:4}}>
+                    <option value="">— Definir manualmente —</option>
+                    {conditions.map(c=>(
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                  {linkedCond&&<div style={{fontSize:10,color:'#00d4ff',marginTop:2}}>✓ {linkedCond.description||linkedCond.name}</div>}
+                </label>
+              )}
+
+              {/* Si es condición técnica: se evaluará en TODOS los símbolos */}
+              {alarmForm.condition!=='price_level'&&(
+                <div style={{padding:'7px 10px',background:'rgba(0,212,255,0.05)',border:'1px solid rgba(0,212,255,0.15)',borderRadius:4,fontFamily:MONO,fontSize:10,color:'#5a7a95',lineHeight:1.5}}>
+                  📡 Esta alerta se evaluará automáticamente en <b style={{color:'#00d4ff'}}>todos los símbolos</b> de tu watchlist.
+                </div>
+              )}
+
+              {/* Si es alerta de precio: pedir símbolo + nivel */}
+              {alarmForm.condition==='price_level'&&(
+                <div style={{display:'flex',flexDirection:'column',gap:10}}>
+                  <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>
+                    <span style={{fontSize:10}}>Símbolo</span>
+                    <input type="text" value={alarmForm.symbol||simbolo||''} placeholder="Ej: AAPL"
+                      onChange={e=>setAlarmForm(p=>({...p,symbol:e.target.value.toUpperCase()}))}
+                      style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:13,padding:'7px 10px',borderRadius:4}}/>
+                  </label>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                    <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>
+                      <span style={{fontSize:10}}>Dirección</span>
+                      <select value={alarmForm.condition_detail||'price_above'} onChange={e=>setAlarmForm(p=>({...p,condition_detail:e.target.value}))}
+                        style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'7px 8px',borderRadius:4}}>
+                        <option value="price_above">▲ Sube hasta</option>
+                        <option value="price_below">▼ Baja hasta</option>
+                      </select>
+                    </label>
+                    <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>
+                      <span style={{fontSize:10}}>Precio</span>
+                      <input type="number" value={alarmForm.price_level||''} step="0.01" placeholder="0.00"
+                        onChange={e=>setAlarmForm(p=>({...p,price_level:Number(e.target.value)}))}
+                        style={{background:'var(--bg3)',border:'1px solid rgba(255,209,102,0.4)',color:'#ffd166',fontFamily:MONO,fontSize:14,padding:'7px 10px',borderRadius:4,fontWeight:700}}/>
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              {/* Tipo de condición técnica (cuando no es precio y no hay condición de librería vinculada) */}
+              {alarmForm.condition!=='price_level'&&!linkedCond&&(
+                <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>
+                  <span style={{fontSize:10}}>Tipo de condición</span>
                   <select value={alarmForm.condition||'ema_cross_up'} onChange={e=>setAlarmForm(p=>({...p,condition:e.target.value,params:{}}))}
                     style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'7px 10px',borderRadius:4}}>
                     <optgroup label="EMA">
-                      <option value="ema_cross_up">EMA rápida &gt; EMA lenta — cruce alcista ↑</option>
-                      <option value="ema_cross_down">EMA rápida &lt; EMA lenta — cruce bajista ↓</option>
-                      <option value="price_above_ema">Precio cierre &gt; EMA rápida</option>
-                      <option value="price_below_ema">Precio cierre &lt; EMA rápida</option>
+                      <option value="ema_cross_up">↑ Cruce alcista EMA</option>
+                      <option value="ema_cross_down">↓ Cruce bajista EMA</option>
+                      <option value="price_above_ema">Precio &gt; EMA</option>
+                      <option value="price_below_ema">Precio &lt; EMA</option>
                     </optgroup>
                     <optgroup label="RSI">
-                      <option value="rsi_cross_up">RSI cruza hacia arriba nivel</option>
-                      <option value="rsi_cross_down">RSI cruza hacia abajo nivel</option>
-                      <option value="rsi_above">RSI por encima de nivel</option>
-                      <option value="rsi_below">RSI por debajo de nivel</option>
+                      <option value="rsi_cross_up">RSI cruza ↑ nivel</option>
+                      <option value="rsi_cross_down">RSI cruza ↓ nivel</option>
+                      <option value="rsi_above">RSI sobre nivel</option>
+                      <option value="rsi_below">RSI bajo nivel</option>
                     </optgroup>
                     <optgroup label="MACD">
-                      <option value="macd_cross_up">MACD cruza señal hacia arriba</option>
-                      <option value="macd_cross_down">MACD cruza señal hacia abajo</option>
+                      <option value="macd_cross_up">MACD cruza señal ↑</option>
+                      <option value="macd_cross_down">MACD cruza señal ↓</option>
                     </optgroup>
-                    <optgroup label="Precio vs Media">
+                    <optgroup label="Media móvil">
                       <option value="price_above_ma">Precio &gt; Media móvil</option>
                       <option value="price_below_ma">Precio &lt; Media móvil</option>
                     </optgroup>
