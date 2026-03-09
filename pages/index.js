@@ -362,7 +362,7 @@ async function loadSettingsRemote() {
   } catch(_){ return null }
 }
 
-function SettingsModal({ onClose }) {
+function SettingsModal({ onClose, strategies=[] }) {
   const [tab, setTab] = useState('integraciones')
   const [settings, setSettings] = useState(loadSettings)
   const [groqStatus, setGroqStatus] = useState(null) // null | 'testing' | 'ok' | 'err'
@@ -1370,7 +1370,8 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
       })
 
       const ro=new ResizeObserver(()=>{
-        if(containerRef.current)chart.applyOptions({width:containerRef.current.clientWidth})
+        if(!containerRef.current||!chartRef.current) return
+        try{chart.applyOptions({width:containerRef.current.clientWidth})}catch(_){}
         setTimeout(drawTradeLabels,50)
       })
       ro.observe(containerRef.current)
@@ -1493,7 +1494,7 @@ function EquityChart({
       })
 
       chart.timeScale().fitContent()
-      const ro=new ResizeObserver(()=>{if(ref.current)chart.applyOptions({width:ref.current.clientWidth})})
+      const ro=new ResizeObserver(()=>{if(ref.current&&chartRef.current){try{chart.applyOptions({width:ref.current.clientWidth})}catch(_){}}})
       ro.observe(ref.current)
       return()=>ro.disconnect()
     })
@@ -1567,7 +1568,7 @@ function MultiCartChart({simpleCurve,compoundCurve,bhCurve,sp500BHCurve,capitalI
       }
       chart.timeScale().fitContent()
       if(onReady) onReady({fitAll:()=>{try{chart.timeScale().fitContent()}catch(_){}}})
-      const ro=new ResizeObserver(()=>{if(ref.current)chart.applyOptions({width:ref.current.clientWidth})})
+      const ro=new ResizeObserver(()=>{if(ref.current&&chartRef.current){try{chart.applyOptions({width:ref.current.clientWidth})}catch(_){}}})
       ro.observe(ref.current)
       return()=>ro.disconnect()
     })
@@ -3108,7 +3109,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.7</title>
+        <title>Trading Simulator V4.07</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3171,7 +3172,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.7
+            <span className="dot"/>Trading Simulator V4.07
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4803,7 +4804,7 @@ export default function Home() {
         </div>
       )}
     {/* ── Modal de configuración global ── */}
-    {settingsOpen&&<SettingsModal onClose={()=>{setSettingsOpen(false);setTemaKey(k=>k+1)}}/>}
+    {settingsOpen&&<SettingsModal onClose={()=>{setSettingsOpen(false);setTemaKey(k=>k+1)}} strategies={strategies}/>}
 
     {/* ── Panel Asistente IA de estrategias ── */}
     {aiPanelOpen&&<StrategyAIPanel
