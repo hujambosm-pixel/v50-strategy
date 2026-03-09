@@ -2363,6 +2363,8 @@ export default function Home() {
   const [priceAlarmDlg,setPriceAlarmDlg]=useState(null) // {price, symbol} o null
   // ── Ranking ─────────────────────────────────────────────────
   const [rankingData,setRankingData]=useState({})      // { symbol: { score, rank, metrics } }
+  const [rankingStratId,setRankingStratId]=useState(null)    // strategy id the ranking was calculated with
+  const [rankingStratName,setRankingStratName]=useState('')  // display name
   const [rankingRunning,setRankingRunning]=useState(false)
   const [rankingProgress,setRankingProgress]=useState({done:0,total:0})
   const [rankingError,setRankingError]=useState(null)
@@ -2497,10 +2499,8 @@ export default function Home() {
             if(defId){
               const match=data.find(s=>s.id===defId)
               if(match) loadStrategyLegacy(match)
+              // loadStrategyLegacy already calls loadRankingRemote internally
             }
-            // Also restore saved ranking if any
-            const defStratId=defId||null
-            loadRankingRemote(defStratId).then(rd=>{if(rd)setRankingData(rd)}).catch(()=>{})
           }catch(_){}
         }
       })
@@ -2629,7 +2629,15 @@ export default function Home() {
     setTipoFiltro(s.tipo_filtro||'none');setSp500EmaR(s.sp500_ema_r||10);setSp500EmaL(s.sp500_ema_l||11)
     setStrForm(f=>({...f,_loadedName:s.name}))
     setStratName(s.name||'')
+    setCurrentStratId(s.id||null)
     setSidePanel('config')
+    // Load saved ranking for this strategy (clear if none)
+    setRankingData({});setRankingStratId(null);setRankingStratName('')
+    if(s.id){
+      loadRankingRemote(s.id).then(rd=>{
+        if(rd){setRankingData(rd);setRankingStratId(s.id);setRankingStratName(s.name||'')}
+      }).catch(()=>{})
+    }
   }
   const newStrategy=()=>openEditStr({id:null})
   const duplicateStr=(s)=>openEditStr({...s,id:null,name:s.name+' (copia)'})
@@ -2784,12 +2792,11 @@ export default function Home() {
     setRankingData(results)
     setRankingRunning(false)
     setRankingProgress({done:0,total:0})
-    // Save ranking to Supabase (fire-and-forget)
-    try{
-      const sett=JSON.parse(localStorage.getItem('v50_settings')||'{}')
-      saveRankingRemote(results, sett.defaultStrategyId||null).catch(()=>{})
-    }catch(_){}
-  }, [watchlist,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL])
+    // Save ranking linked to the currently loaded strategy
+    setRankingStratId(currentStratId)
+    setRankingStratName(stratName||'')
+    saveRankingRemote(results, currentStratId||null).catch(()=>{})
+  }, [watchlist,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL,currentStratId,stratName])
 
   const run=useCallback(async(sym,payload)=>{
     setLoading(true);setError(null)
@@ -2835,6 +2842,13 @@ export default function Home() {
     // symbol intentionally not stored in strategy (apply to any asset separately)
     setStratTab('build')
     setStratMsg({type:'ok',text:`Cargada: ${strat.name}`})
+    // Load saved ranking for this strategy (clear if none)
+    setRankingData({});setRankingStratId(null);setRankingStratName('')
+    if(strat.id){
+      loadRankingRemote(strat.id).then(rd=>{
+        if(rd){setRankingData(rd);setRankingStratId(strat.id);setRankingStratName(strat.name||'')}
+      }).catch(()=>{})
+    }
   },[])
 
   // ── Eliminar estrategia ──
@@ -3109,7 +3123,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.07</title>
+        <title>Trading Simulator V4.08</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3172,7 +3186,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.07
+            <span className="dot"/>Trading Simulator V4.08
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -3436,7 +3450,7 @@ export default function Home() {
                         <span style={{color:'#a8c8e8',fontWeight:600}}>{all.length}</span>
                         <span style={{color:'#8abcd4'}}>activos</span>
                         {rankingRunning&&<span style={{color:'#ffd166',fontSize:10}}>⟳ {rankingProgress.done}/{rankingProgress.total}</span>}
-                        {hasRanking&&!rankingRunning&&<span style={{color:'#00e5a0',fontSize:9}}>🏆 Ordenado por ranking</span>}
+                        {hasRanking&&!rankingRunning&&<span style={{color:'#00e5a0',fontSize:9}} title={rankingStratName?`Calculado con: ${rankingStratName}`:''}>🏆 {rankingStratName||'Ranking'}</span>}
                         <button onClick={()=>calcRanking(filtered)} disabled={rankingRunning} title="Calcular ranking de activos con la estrategia activa"
                           style={{marginLeft:'auto',background:rankingRunning?'rgba(13,21,32,0.5)':'rgba(255,209,102,0.1)',border:`1px solid ${rankingRunning?'#1a2d45':'rgba(255,209,102,0.4)'}`,color:rankingRunning?'#3d5a7a':'#ffd166',fontFamily:MONO,fontSize:9,padding:'2px 6px',borderRadius:3,cursor:rankingRunning?'not-allowed':'pointer',letterSpacing:'0.05em'}}>
                           {rankingRunning?'calculando…':'🏆 Ranking'}
