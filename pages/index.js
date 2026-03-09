@@ -3475,7 +3475,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.15</title>
+        <title>Trading Simulator V4.16</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3538,7 +3538,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.15
+            <span className="dot"/>Trading Simulator V4.16
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4570,12 +4570,12 @@ export default function Home() {
                     </div>
                     <StratSelector strats={metricsStrats} setStrats={setMetricsStrats}/>
                     {(()=>{
-                      // 'panel' → single column, 'multi' → multi-column
-                      const effectiveView = metricsLayout==='multi' ? 'multi' : 'single'
                       const rows = buildUnifiedRows(metrics, result?.maxDDBH||0)
-                      return effectiveView==='single'
-                        ? <MetricsTable/>
-                        : <MetricsWrapper rows={rows} strats={metricsStrats}/>
+                      // 'panel' → tabla horizontal (estrategias como columnas)
+                      // 'multi' → bloques apilados verticalmente (una estrategia encima de otra)
+                      return metricsLayout==='multi'
+                        ? <SingleColumnTable rows={rows} strats={metricsStrats}/>
+                        : <UnifiedMetricsTable rows={rows} strats={metricsStrats}/>
                     })()}
                   </div>
                 )}
