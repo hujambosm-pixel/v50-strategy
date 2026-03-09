@@ -3064,9 +3064,11 @@ export default function Home() {
     if(!symbols.length||!alarmList.length) return
     setAlarmStatusLoading(true)
     try{
-      // Merge real alarms + library conditions selected for watchlist dots
-      const condDotIds=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.watchlist?.condDotIds||[]}catch(_){return []}})()
-      const libConds = lsGetConds().filter(c=>condDotIds.includes(c.id))
+      // Merge real alarms + library conditions for watchlist dots
+      // If condDotIds empty/unset → evaluate ALL library conditions
+      const condDotIds=(()=>{try{const s=JSON.parse(localStorage.getItem('v50_settings')||'{}');const ids=s?.watchlist?.condDotIds;return Array.isArray(ids)&&ids.length>0?ids:null}catch(_){return null}})()
+      const allLibConds=lsGetConds()
+      const libConds = condDotIds ? allLibConds.filter(c=>condDotIds.includes(c.id)) : allLibConds
       const pseudoAlarms = libConds.map(c=>({
         id: c.id,
         condition: c.type,
@@ -3528,7 +3530,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.21</title>
+        <title>Trading Simulator V4.22</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3591,7 +3593,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.21
+            <span className="dot"/>Trading Simulator V4.22
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -3804,45 +3806,7 @@ export default function Home() {
 
                   {(wlShowSearch||wlShowLista||wlShowFavs||condFilterActive)&&<button onClick={()=>{setWlSearch('');setSelectedLists([]);setOnlyFavs(false);setSelectedAlarmIds([]);setCondFilterActive(false)}} title="Limpiar todos los filtros" style={{background:'rgba(255,77,109,0.08)',border:'1px solid #ff4d6d',color:'#ff4d6d',fontFamily:MONO,fontSize:11,padding:'3px 7px',borderRadius:3,cursor:'pointer',flexShrink:0}}>✕</button>}
                 </div>
-                {/* ══ Fila 2: filtro alarmas (chips inline, ancho completo) ══ */}
-                {wlShowAlarmFlt&&(()=>{
-                  const dotIds=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.watchlist?.alarmDotIds??null}catch(_){return null}})()
-                  const visibleChips=alarms.filter(a=>a.condition!=='price_level'&&(dotIds===null||dotIds.includes(a.id)))
-                  return visibleChips.length>0
-                })()&&(
-                  <div style={{padding:'4px 8px 5px',borderBottom:'1px solid var(--border)',flexShrink:0,display:'flex',gap:4,alignItems:'center',flexWrap:'wrap'}}>
-                    <span style={{fontFamily:MONO,fontSize:11,color:'#a8ccdf',flexShrink:0,marginRight:2}}>🔔</span>
-                    {(()=>{const dotIds=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.watchlist?.alarmDotIds??null}catch(_){return null}})();return alarms.filter(a=>a.condition!=='price_level'&&(dotIds===null||dotIds.includes(a.id)))})().map((a,ai)=>{
-                      const sel=selectedAlarmIds.includes(a.id)
-                      const activeCount=watchlist.filter(w=>alarmStatus[w.symbol]?.[a.id]?.active===true).length
-                      const ALARM_COLORS=['#00e5a0','#ffd166','#00d4ff','#ff7eb3','#9b72ff','#ff4d6d']
-                      const col=ALARM_COLORS[ai%ALARM_COLORS.length]
-                      return(
-                        <button key={a.id}
-                          onClick={()=>{
-                            const nowSel=!sel
-                            setSelectedAlarmIds(prev=>nowSel?[...prev,a.id]:prev.filter(x=>x!==a.id))
-                            if(nowSel&&Object.keys(alarmStatus).length===0) refreshAlarmStatus()
-                          }}
-                          style={{
-                            fontFamily:MONO,fontSize:11,padding:'3px 7px',borderRadius:12,cursor:'pointer',
-                            border:`1px solid ${sel?col:'#1e3a52'}`,
-                            background:sel?`${col}18`:'rgba(255,255,255,0.03)',
-                            color:sel?col:'#8aadcc',
-                            display:'flex',alignItems:'center',gap:4,whiteSpace:'nowrap'
-                          }}>
-                          <span style={{width:8,height:8,borderRadius:'50%',background:activeCount>0?col:'#2a3f55',flexShrink:0,display:'inline-block'}}/>
-                          {a.name}
-                          {activeCount>0&&<span style={{color:col,fontWeight:700,fontSize:11}}>{activeCount}</span>}
-                        </button>
-                      )
-                    })}
-                    {selectedAlarmIds.length>0&&(
-                      <span onClick={()=>setSelectedAlarmIds([])} style={{fontFamily:MONO,fontSize:11,color:'#ff4d6d',cursor:'pointer',marginLeft:2,flexShrink:0}}>✕</span>
-                    )}
-                    {alarmStatusLoading&&<span style={{fontFamily:MONO,fontSize:11,color:'#ffd166'}}>⟳</span>}
-                  </div>
-                )}
+
 
                 {/* ── Lista de activos ── */}
                 <div style={{overflowY:'auto',flex:1}}>
@@ -3921,29 +3885,34 @@ export default function Home() {
                         </div>
                         {/* Badges condiciones librería — círculos de color con velas */}
                         {(()=>{
-                          const condDotIds=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.watchlist?.condDotIds||[]}catch(_){return []}})()
-                          if(!condDotIds.length) return null
-                          const symAlarms=alarmStatus[w.symbol]
-                          if(!symAlarms) return null
+                          const allLibConds = lsGetConds()
+                          if(!allLibConds.length) return null
+                          // condDotIds seleccionados en Settings; si vacío → mostrar todos
+                          const condDotIds=(()=>{try{const s=JSON.parse(localStorage.getItem('v50_settings')||'{}');const ids=s?.watchlist?.condDotIds;return Array.isArray(ids)&&ids.length>0?ids:null}catch(_){return null}})()
+                          const visibleConds = condDotIds ? allLibConds.filter(c=>condDotIds.includes(c.id)) : allLibConds
+                          if(!visibleConds.length) return null
+                          const symSt=alarmStatus[w.symbol]
                           const COND_COLORS=['#00e5a0','#ffd166','#00d4ff','#ff7eb3','#9b72ff','#ff4d6d']
                           const blinkN=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.alarmas?.blinkCandles??3}catch(_){return 3}})()
-                          const visibleConds=lsGetConds().filter(c=>condDotIds.includes(c.id))
+                          const CTYPE_LABELS={ema_cross_up:'Cruce alcista EMA',ema_cross_down:'Cruce bajista EMA',price_above_ema:'Precio > EMA',price_below_ema:'Precio < EMA',price_above_ma:'Precio > Media',price_below_ma:'Precio < Media',rsi_above:'RSI sobre nivel',rsi_below:'RSI bajo nivel',rsi_cross_up:'RSI cruza ↑',rsi_cross_down:'RSI cruza ↓',macd_cross_up:'MACD ↑',macd_cross_down:'MACD ↓'}
                           return visibleConds.map((c,ci)=>{
-                            const st=symAlarms[c.id]
-                            if(!st) return null
+                            const st=symSt?.[c.id]
+                            // Show dot even without status data (grey = not evaluated yet)
                             const active=st?.active===true
                             const bars=st?.bars
                             const col=COND_COLORS[ci%COND_COLORS.length]
-                            const label=bars!=null?String(bars):'?'
+                            const label=bars!=null?String(bars):'·'
                             const shouldBlink=active&&bars!=null&&bars<=blinkN
+                            const paramStr=c.params?.ma_fast?`EMA ${c.params.ma_fast}/${c.params.ma_slow}`:c.params?.ma_period?`MA(${c.params.ma_period})`:c.params?.period?`RSI(${c.params.period}) niv.${c.params.level}`:''
+                            const tooltip=`${c.name}${paramStr?' · '+paramStr:''}${active?' ✓ activa'+(bars!=null?' · '+bars+'v':''):' — inactiva'}`
                             return(
-                              <span key={c.id} title={`${c.name}${active?' · activa'+(bars!=null?' · '+bars+' velas':''):' · inactiva'}`}
+                              <span key={c.id} title={tooltip}
                                 style={{
                                   display:'inline-flex',alignItems:'center',justifyContent:'center',
                                   width:18,height:18,borderRadius:'50%',flexShrink:0,
-                                  background:active?col:'rgba(61,90,122,0.2)',
+                                  background:active?col:'rgba(42,63,85,0.5)',
                                   border:`1.5px solid ${active?col:'#2a3f55'}`,
-                                  color:active?'#000':'#3d5a7a',
+                                  color:active?'#080c14':'#3d5a7a',
                                   fontFamily:MONO,fontSize:8,fontWeight:800,lineHeight:1,
                                   boxShadow:active?`0 0 6px ${col}55`:undefined,
                                   cursor:'default',
