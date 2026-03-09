@@ -257,6 +257,30 @@ async function deleteStrategy(id) {
   if(!res.ok) throw new Error('Error eliminando estrategia')
 }
 
+// ── Conditions API ─────────────────────────────────────────────
+async function fetchConditions() {
+  const res=await fetch('/api/conditions')
+  if(!res.ok) return []
+  return await res.json()
+}
+async function saveCondition(cond) {
+  const groqKey=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.integrations?.groqKey||''}catch(_){return ''}})()
+  const res=await fetch('/api/conditions',{method:'POST',headers:{'Content-Type':'application/json','x-groq-key':groqKey},body:JSON.stringify(cond)})
+  if(!res.ok) throw new Error('Error guardando condición')
+  return await res.json()
+}
+async function deleteCondition(id) {
+  const res=await fetch(`/api/conditions?id=${id}`,{method:'DELETE'})
+  if(!res.ok) throw new Error('Error eliminando condición')
+}
+async function groqParseCondition(text) {
+  const groqKey=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.integrations?.groqKey||''}catch(_){return ''}})()
+  const res=await fetch('/api/conditions?action=groq',{method:'POST',headers:{'Content-Type':'application/json','x-groq-key':groqKey},body:JSON.stringify({text})})
+  const json=await res.json()
+  if(!res.ok||json.error) throw new Error(json.error||'Error Groq')
+  return json
+}
+
 // ── Alarms API ───────────────────────────────────────────────
 async function fetchAlarms() {
   const res=await fetch(`${SUPA_URL}/rest/v1/alarms?active=eq.true&order=symbol.asc`,{headers:SUPA_H})
@@ -367,6 +391,55 @@ function SettingsModal({ onClose, strategies=[] }) {
   const [settings, setSettings] = useState(loadSettings)
   const [groqStatus, setGroqStatus] = useState(null) // null | 'testing' | 'ok' | 'err'
   const [dirty, setDirty] = useState(false)
+  // Conditions tab state
+  const [localConds, setLocalConds]   = useState([])
+  const [condTab, setCondTab]         = useState('list')   // 'list' | 'create'
+  const [groqInput, setGroqInput]     = useState('')
+  const [groqParsing, setGroqParsing] = useState(false)
+  const [groqPreview, setGroqPreview] = useState(null)     // parsed condition preview
+  const [groqErr, setGroqErr]         = useState(null)
+  const [condSaving, setCondSaving]   = useState(false)
+  const [condDeleting, setCondDeleting] = useState(null)   // id being deleted
+  // Manual form
+  const [manualForm, setManualForm] = useState({ name:'', description:'', type:'ema_cross_up', params:{} })
+
+  // Load conditions when tab is opened
+  const openConditions = () => {
+    fetchConditions().then(d=>setLocalConds(d||[])).catch(()=>{})
+  }
+
+  const handleGroqParse = async () => {
+    if (!groqInput.trim()) return
+    setGroqParsing(true); setGroqErr(null); setGroqPreview(null)
+    try {
+      const result = await groqParseCondition(groqInput)
+      if (result.error) { setGroqErr(result.error); return }
+      setGroqPreview(result)
+    } catch(e) { setGroqErr(e.message) }
+    finally { setGroqParsing(false) }
+  }
+
+  const handleSaveCond = async (cond) => {
+    setCondSaving(true)
+    try {
+      await saveCondition({...cond, source: groqPreview ? 'groq' : 'manual'})
+      const updated = await fetchConditions()
+      setLocalConds(updated||[])
+      setGroqPreview(null); setGroqInput(''); setManualForm({name:'',description:'',type:'ema_cross_up',params:{}})
+      setCondTab('list')
+    } catch(e) { setGroqErr(e.message) }
+    finally { setCondSaving(false) }
+  }
+
+  const handleDeleteCond = async (id) => {
+    if (!confirm('¿Eliminar esta condición?')) return
+    setCondDeleting(id)
+    try {
+      await deleteCondition(id)
+      setLocalConds(p=>p.filter(c=>c.id!==id))
+    } catch(e) { alert(e.message) }
+    finally { setCondDeleting(null) }
+  }
 
   const upd = (path, val) => {
     setSettings(s => {
@@ -397,6 +470,7 @@ function SettingsModal({ onClose, strategies=[] }) {
   const TABS = [
     { id:'integraciones', label:'🔌 Integraciones' },
     { id:'alarmas',       label:'🔔 Alarmas' },
+    { id:'condiciones',   label:'⚡ Condiciones' },
     { id:'grafico',       label:'📈 Gráfico' },
     { id:'ranking',       label:'🏆 Ranking' },
     { id:'watchlist',     label:'📋 Watchlist' },
@@ -559,6 +633,214 @@ function SettingsModal({ onClose, strategies=[] }) {
               ))}
             </div>
           )}
+
+          {/* ── CONDICIONES GLOBALES ── */}
+          {tab==='condiciones'&&(()=>{
+            if(localConds.length===0 && condTab==='list') openConditions()
+            const CTYPE_LABELS={
+              ema_cross_up:'EMA rápida > EMA lenta ↑',ema_cross_down:'EMA rápida < EMA lenta ↓',
+              price_above_ma:'Precio > Media',price_below_ma:'Precio < Media',
+              price_above_ema:'Precio > EMA',price_below_ema:'Precio < EMA',
+              rsi_above:'RSI sobre nivel',rsi_below:'RSI bajo nivel',
+              rsi_cross_up:'RSI cruza ↑',rsi_cross_down:'RSI cruza ↓',
+              macd_cross_up:'MACD cruza señal ↑',macd_cross_down:'MACD cruza señal ↓',
+            }
+            const paramSummary=(c)=>{
+              const p=c.params||{}
+              if(c.type.startsWith('ema_cross')||c.type.startsWith('price_above_ema')||c.type.startsWith('price_below_ema'))
+                return `EMA ${p.ma_fast||'?'}/${p.ma_slow||'?'}`
+              if(c.type.startsWith('price_above_ma')||c.type.startsWith('price_below_ma'))
+                return `MA(${p.ma_period||'?'})`
+              if(c.type.startsWith('rsi_'))
+                return `RSI(${p.period||14}) nivel ${p.level||50}`
+              if(c.type.startsWith('macd_'))
+                return `MACD(${p.fast||12},${p.slow||26},${p.signal||9})`
+              return ''
+            }
+            const manualParams=()=>{
+              const t=manualForm.type
+              if(t.startsWith('ema_cross')||t.startsWith('price_above_ema')||t.startsWith('price_below_ema')) return(
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                  {[['ma_fast','EMA Rápida',10],['ma_slow','EMA Lenta',11]].map(([k,l,d])=>(
+                    <label key={k} style={{display:'flex',flexDirection:'column',gap:3,color:'#a8ccdf',fontSize:10}}>{l}
+                      <input type="number" value={manualForm.params?.[k]||d} min={1}
+                        onChange={e=>setManualForm(p=>({...p,params:{...p.params,[k]:Number(e.target.value)}}))}
+                        style={{background:'#080c14',border:'1px solid #1a2d45',borderRadius:3,color:'#ffd166',fontFamily:MONO,fontSize:13,padding:'5px 8px',fontWeight:700,textAlign:'center'}}/>
+                    </label>
+                  ))}
+                </div>
+              )
+              if(t.startsWith('price_above_ma')||t.startsWith('price_below_ma')) return(
+                <label style={{display:'flex',flexDirection:'column',gap:3,color:'#a8ccdf',fontSize:10}}>Período MA
+                  <input type="number" value={manualForm.params?.ma_period||50} min={1}
+                    onChange={e=>setManualForm(p=>({...p,params:{...p.params,ma_period:Number(e.target.value)}}))}
+                    style={{background:'#080c14',border:'1px solid #1a2d45',borderRadius:3,color:'#ffd166',fontFamily:MONO,fontSize:13,padding:'5px 8px',fontWeight:700}}/>
+                </label>
+              )
+              if(t.startsWith('rsi_')) return(
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                  {[['period','Período',14],['level','Nivel',30]].map(([k,l,d])=>(
+                    <label key={k} style={{display:'flex',flexDirection:'column',gap:3,color:'#a8ccdf',fontSize:10}}>{l}
+                      <input type="number" value={manualForm.params?.[k]||d} min={1}
+                        onChange={e=>setManualForm(p=>({...p,params:{...p.params,[k]:Number(e.target.value)}}))}
+                        style={{background:'#080c14',border:'1px solid #1a2d45',borderRadius:3,color:'#ffd166',fontFamily:MONO,fontSize:13,padding:'5px 8px',fontWeight:700,textAlign:'center'}}/>
+                    </label>
+                  ))}
+                </div>
+              )
+              if(t.startsWith('macd_')) return(
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
+                  {[['fast','Rápida',12],['slow','Lenta',26],['signal','Señal',9]].map(([k,l,d])=>(
+                    <label key={k} style={{display:'flex',flexDirection:'column',gap:3,color:'#a8ccdf',fontSize:10}}>{l}
+                      <input type="number" value={manualForm.params?.[k]||d} min={1}
+                        onChange={e=>setManualForm(p=>({...p,params:{...p.params,[k]:Number(e.target.value)}}))}
+                        style={{background:'#080c14',border:'1px solid #1a2d45',borderRadius:3,color:'#ffd166',fontFamily:MONO,fontSize:13,padding:'5px 6px',fontWeight:700,textAlign:'center'}}/>
+                    </label>
+                  ))}
+                </div>
+              )
+              return null
+            }
+            return(
+              <div>
+                {sep('Librería de condiciones globales')}
+                <div style={{fontSize:10,color:'#5a7a95',lineHeight:1.6,marginBottom:14}}>
+                  Las condiciones globales son reutilizables en alarmas y watchlist.
+                  Créalas desde lenguaje natural con Groq IA o manualmente.
+                </div>
+                {/* Sub-tabs */}
+                <div style={{display:'flex',gap:0,marginBottom:14,borderBottom:'1px solid var(--border)'}}>
+                  {[['list','📋 Librería'],['create','✨ Nueva condición']].map(([id,l])=>(
+                    <button key={id} onClick={()=>setCondTab(id)} style={{padding:'6px 14px',background:'none',border:'none',
+                      borderBottom:condTab===id?'2px solid #00d4ff':'2px solid transparent',
+                      color:condTab===id?'#00d4ff':'#5a7a95',fontFamily:MONO,fontSize:10,cursor:'pointer',letterSpacing:'0.05em'}}>
+                      {l}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Lista */}
+                {condTab==='list'&&(
+                  <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                    {localConds.length===0&&<div style={{fontFamily:MONO,fontSize:11,color:'#4a6a80',padding:'8px 0'}}>No hay condiciones. Crea una en "Nueva condición".</div>}
+                    {localConds.map(c=>(
+                      <div key={c.id} style={{background:'#0a1018',border:'1px solid #1a2d45',borderRadius:5,padding:'10px 12px',display:'flex',alignItems:'flex-start',gap:10}}>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:3}}>
+                            <span style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:'#e8f4ff'}}>{c.name}</span>
+                            {c.source==='groq'&&<span style={{fontFamily:MONO,fontSize:8,color:'#9b72ff',background:'rgba(155,114,255,0.1)',padding:'1px 5px',borderRadius:8,border:'1px solid rgba(155,114,255,0.3)'}}>IA</span>}
+                          </div>
+                          <div style={{fontFamily:MONO,fontSize:10,color:'#7a9bc0',marginBottom:2}}>{CTYPE_LABELS[c.type]||c.type} · {paramSummary(c)}</div>
+                          {c.description&&<div style={{fontFamily:MONO,fontSize:10,color:'#4a6a80',lineHeight:1.4}}>{c.description}</div>}
+                        </div>
+                        <button onClick={()=>handleDeleteCond(c.id)} disabled={condDeleting===c.id}
+                          style={{background:'transparent',border:'none',color:'#ff4d6d',fontSize:13,cursor:'pointer',padding:'0 2px',flexShrink:0,opacity:condDeleting===c.id?0.4:1}}>
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Crear — Groq IA + Manual */}
+                {condTab==='create'&&(
+                  <div style={{display:'flex',flexDirection:'column',gap:14}}>
+                    {/* Groq AI */}
+                    <div style={{background:'rgba(155,114,255,0.05)',border:'1px solid rgba(155,114,255,0.2)',borderRadius:6,padding:14}}>
+                      <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:8}}>
+                        <span style={{fontFamily:MONO,fontSize:10,color:'#9b72ff',fontWeight:700,letterSpacing:'0.08em'}}>✨ CREAR CON IA (GROQ)</span>
+                        {!settings.integrations?.groqKey&&<span style={{fontFamily:MONO,fontSize:9,color:'#ff4d6d'}}>— necesita Groq API Key en Integraciones</span>}
+                      </div>
+                      <textarea
+                        value={groqInput} onChange={e=>setGroqInput(e.target.value)}
+                        placeholder={'Describe la condición en lenguaje natural:
+"Cuando el RSI de 14 periodos cruza hacia arriba el nivel 30"
+"Cruce alcista de EMA 50 sobre EMA 200"
+"MACD cruza por encima de su señal"'}
+                        rows={3}
+                        style={{width:'100%',background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,color:'#e2eaf5',fontFamily:MONO,fontSize:11,padding:'8px 10px',resize:'vertical',boxSizing:'border-box'}}
+                      />
+                      {groqErr&&<div style={{fontFamily:MONO,fontSize:10,color:'#ff4d6d',marginTop:4}}>⚠ {groqErr}</div>}
+                      <button onClick={handleGroqParse} disabled={groqParsing||!groqInput.trim()||!settings.integrations?.groqKey}
+                        style={{marginTop:8,width:'100%',background:'rgba(155,114,255,0.15)',border:'1px solid rgba(155,114,255,0.4)',color:'#9b72ff',fontFamily:MONO,fontSize:11,padding:'7px',borderRadius:4,cursor:'pointer',fontWeight:600,opacity:groqParsing?0.6:1}}>
+                        {groqParsing?'⟳ Analizando…':'✨ Analizar con IA'}
+                      </button>
+                      {/* Preview */}
+                      {groqPreview&&(
+                        <div style={{marginTop:10,background:'rgba(0,229,160,0.06)',border:'1px solid rgba(0,229,160,0.25)',borderRadius:5,padding:12}}>
+                          <div style={{fontFamily:MONO,fontSize:9,color:'#00e5a0',letterSpacing:'0.08em',marginBottom:8}}>RESULTADO — REVISAR ANTES DE GUARDAR</div>
+                          <div style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:'#e8f4ff',marginBottom:4}}>{groqPreview.name}</div>
+                          <div style={{fontFamily:MONO,fontSize:10,color:'#7a9bc0',marginBottom:4}}>{CTYPE_LABELS[groqPreview.type]||groqPreview.type} · {JSON.stringify(groqPreview.params)}</div>
+                          {groqPreview.description&&<div style={{fontFamily:MONO,fontSize:10,color:'#5a7a95',marginBottom:10,lineHeight:1.4}}>{groqPreview.description}</div>}
+                          <div style={{display:'flex',gap:8}}>
+                            <button onClick={()=>handleSaveCond(groqPreview)} disabled={condSaving}
+                              style={{flex:1,background:'rgba(0,229,160,0.15)',border:'1px solid #00e5a0',color:'#00e5a0',fontFamily:MONO,fontSize:11,padding:'7px',borderRadius:4,cursor:'pointer',fontWeight:600}}>
+                              {condSaving?'Guardando…':'✓ Guardar condición'}
+                            </button>
+                            <button onClick={()=>setGroqPreview(null)}
+                              style={{background:'transparent',border:'1px solid #2a3f55',color:'#5a7a95',fontFamily:MONO,fontSize:11,padding:'7px 10px',borderRadius:4,cursor:'pointer'}}>
+                              Descartar
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Separador */}
+                    <div style={{display:'flex',alignItems:'center',gap:10}}>
+                      <div style={{flex:1,height:1,background:'#1a2d45'}}/>
+                      <span style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a'}}>O MANUALMENTE</span>
+                      <div style={{flex:1,height:1,background:'#1a2d45'}}/>
+                    </div>
+
+                    {/* Manual */}
+                    <div style={{display:'flex',flexDirection:'column',gap:10}}>
+                      <label style={{display:'flex',flexDirection:'column',gap:3,color:'#a8ccdf',fontSize:10}}>Nombre
+                        <input type="text" value={manualForm.name} placeholder="Ej: Cruce alcista EMA 50/200"
+                          onChange={e=>setManualForm(p=>({...p,name:e.target.value}))}
+                          style={{background:'#080c14',border:'1px solid #1a2d45',borderRadius:3,color:'#e2eaf5',fontFamily:MONO,fontSize:12,padding:'6px 8px'}}/>
+                      </label>
+                      <label style={{display:'flex',flexDirection:'column',gap:3,color:'#a8ccdf',fontSize:10}}>Tipo de condición
+                        <select value={manualForm.type} onChange={e=>setManualForm(p=>({...p,type:e.target.value,params:{}}))}
+                          style={{background:'#080c14',border:'1px solid #1a2d45',borderRadius:3,color:'#e2eaf5',fontFamily:MONO,fontSize:11,padding:'6px 8px'}}>
+                          <optgroup label="EMA">
+                            <option value="ema_cross_up">Cruce alcista de medias ↑</option>
+                            <option value="ema_cross_down">Cruce bajista de medias ↓</option>
+                            <option value="price_above_ema">Precio sobre EMA</option>
+                            <option value="price_below_ema">Precio bajo EMA</option>
+                          </optgroup>
+                          <optgroup label="RSI">
+                            <option value="rsi_cross_up">RSI cruza nivel hacia arriba</option>
+                            <option value="rsi_cross_down">RSI cruza nivel hacia abajo</option>
+                            <option value="rsi_above">RSI sobre nivel</option>
+                            <option value="rsi_below">RSI bajo nivel</option>
+                          </optgroup>
+                          <optgroup label="MACD">
+                            <option value="macd_cross_up">MACD cruza señal ↑</option>
+                            <option value="macd_cross_down">MACD cruza señal ↓</option>
+                          </optgroup>
+                          <optgroup label="Media Móvil">
+                            <option value="price_above_ma">Precio sobre media</option>
+                            <option value="price_below_ma">Precio bajo media</option>
+                          </optgroup>
+                        </select>
+                      </label>
+                      {manualParams()}
+                      <label style={{display:'flex',flexDirection:'column',gap:3,color:'#a8ccdf',fontSize:10}}>Descripción (opcional)
+                        <input type="text" value={manualForm.description} placeholder="Explicación breve"
+                          onChange={e=>setManualForm(p=>({...p,description:e.target.value}))}
+                          style={{background:'#080c14',border:'1px solid #1a2d45',borderRadius:3,color:'#e2eaf5',fontFamily:MONO,fontSize:11,padding:'6px 8px'}}/>
+                      </label>
+                      <button onClick={()=>{if(!manualForm.name.trim())return;handleSaveCond(manualForm)}} disabled={condSaving||!manualForm.name.trim()}
+                        style={{background:'rgba(0,212,255,0.12)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:11,padding:'8px',borderRadius:4,cursor:'pointer',fontWeight:600,opacity:condSaving?0.6:1}}>
+                        {condSaving?'Guardando…':'Guardar condición'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })()}
 
           {/* ── GRÁFICO ── */}
           {tab==='grafico'&&(
@@ -2334,6 +2616,8 @@ export default function Home() {
   // Alarmas
   const [alarms,setAlarms]=useState([])
   const [alarmLoading,setAlarmLoading]=useState(true)
+  const [conditions,setConditions]=useState([])
+  const [condLoading,setCondLoading]=useState(false)
   const [editingAlarm,setEditingAlarm]=useState(null)
   const [alarmForm,setAlarmForm]=useState({})
   const [alarmSaving,setAlarmSaving]=useState(false)
@@ -2501,6 +2785,11 @@ export default function Home() {
       .catch(()=>{})
       .finally(()=>setStrLoading(false))
   }
+  const reloadConditions=()=>{
+    setCondLoading(true)
+    fetchConditions().then(d=>setConditions(d||[])).catch(()=>{}).finally(()=>setCondLoading(false))
+  }
+
   const reloadAlarms=()=>{
     setAlarmLoading(true)
     fetchAlarms()
@@ -2535,6 +2824,7 @@ export default function Home() {
     reloadWatchlist()
     reloadStrategies(true)  // true = apply default strategy from settings
     reloadAlarms()
+    reloadConditions()
   },[])
 
   // Abrir editor watchlist
@@ -3134,7 +3424,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.09</title>
+        <title>Trading Simulator V4.10</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3197,7 +3487,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.09
+            <span className="dot"/>Trading Simulator V4.10
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4665,63 +4955,161 @@ export default function Home() {
       })()}
 
       {/* ══ MODAL ALARMA — fixed sobre gráfico ══ */}
-      {editingAlarm!==null&&(
-        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.72)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center'}} onClick={e=>{if(e.target===e.currentTarget)closeEditAlarm()}}>
-          <div style={{background:'#0d1824',border:'1px solid #1e3a52',borderRadius:8,padding:28,width:380,display:'flex',flexDirection:'column',gap:16,fontFamily:MONO,fontSize:12,boxShadow:'0 8px 48px rgba(0,0,0,0.8)'}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-              <span style={{fontWeight:700,color:'var(--text)',fontSize:15}}>{editingAlarm.id?'Editar condición':'Nueva condición'}</span>
-              <button onClick={closeEditAlarm} style={{background:'transparent',border:'none',color:'var(--text3)',fontSize:18,cursor:'pointer'}}>✕</button>
-            </div>
+      {editingAlarm!==null&&(()=>{
+        // When a global condition is linked, auto-fill params display
+        const linkedCond = conditions.find(c=>c.id===alarmForm.condition_id)
+        const COND_LABELS = {
+          ema_cross_up:'EMA rápida > EMA lenta ↑', ema_cross_down:'EMA rápida < EMA lenta ↓',
+          price_above_ma:'Precio > Media móvil', price_below_ma:'Precio < Media móvil',
+          price_above_ema:'Precio > EMA rápida', price_below_ema:'Precio < EMA rápida',
+          rsi_above:'RSI por encima de nivel', rsi_below:'RSI por debajo de nivel',
+          rsi_cross_up:'RSI cruza hacia arriba', rsi_cross_down:'RSI cruza hacia abajo',
+          macd_cross_up:'MACD cruza señal ↑', macd_cross_down:'MACD cruza señal ↓',
+        }
+        // Render param inputs based on condition type
+        const condType = linkedCond?.type || alarmForm.condition || 'ema_cross_up'
+        const isEMAType = condType.startsWith('ema_cross') || condType.startsWith('price_above_ema') || condType.startsWith('price_below_ema')
+        const isMAType  = condType.startsWith('price_above_ma') || condType.startsWith('price_below_ma')
+        const isRSI     = condType.startsWith('rsi_')
+        const isMACD    = condType.startsWith('macd_')
 
-            <label style={{display:'flex',flexDirection:'column',gap:5,color:'var(--text3)'}}>
-              Nombre de la condición
-              <input type="text" value={alarmForm.name||''} placeholder="Ej: V50 EMA 10/11"
-                onChange={e=>setAlarmForm(p=>({...p,name:e.target.value}))}
-                style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:13,padding:'8px 12px',borderRadius:4}}/>
-            </label>
+        return(
+          <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.72)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center'}} onClick={e=>{if(e.target===e.currentTarget)closeEditAlarm()}}>
+            <div style={{background:'#0d1824',border:'1px solid #1e3a52',borderRadius:8,padding:24,width:400,maxHeight:'88vh',overflowY:'auto',display:'flex',flexDirection:'column',gap:14,fontFamily:MONO,fontSize:12,boxShadow:'0 8px 48px rgba(0,0,0,0.8)'}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                <span style={{fontWeight:700,color:'var(--text)',fontSize:15}}>{editingAlarm.id?'Editar alarma':'Nueva alarma'}</span>
+                <button onClick={closeEditAlarm} style={{background:'transparent',border:'none',color:'var(--text3)',fontSize:18,cursor:'pointer'}}>✕</button>
+              </div>
 
-            <label style={{display:'flex',flexDirection:'column',gap:5,color:'var(--text3)'}}>
-              Condición
-              <select value={alarmForm.condition||'ema_cross_up'} onChange={e=>setAlarmForm(p=>({...p,condition:e.target.value}))}
-                style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'8px 12px',borderRadius:4}}>
-                <option value="ema_cross_up">EMA rápida &gt; EMA lenta — alcista ↑</option>
-                <option value="ema_cross_down">EMA rápida &lt; EMA lenta — bajista ↓</option>
-                <option value="price_above_ema">Precio cierre &gt; EMA rápida</option>
-                <option value="price_below_ema">Precio cierre &lt; EMA rápida</option>
-              </select>
-            </label>
-
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
-              <label style={{display:'flex',flexDirection:'column',gap:5,color:'var(--text3)'}}>
-                EMA Rápida
-                <input type="number" value={alarmForm.ema_r||10} min={1}
-                  onChange={e=>setAlarmForm(p=>({...p,ema_r:Number(e.target.value)}))}
-                  style={{background:'var(--bg3)',border:'1px solid rgba(255,209,102,0.4)',color:'#ffd166',fontFamily:MONO,fontSize:16,padding:'8px 12px',borderRadius:4,fontWeight:700,textAlign:'center'}}/>
+              {/* Nombre */}
+              <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>
+                Nombre
+                <input type="text" value={alarmForm.name||''} placeholder="Ej: Cruce alcista S&P 500"
+                  onChange={e=>setAlarmForm(p=>({...p,name:e.target.value}))}
+                  style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:13,padding:'7px 10px',borderRadius:4}}/>
               </label>
-              <label style={{display:'flex',flexDirection:'column',gap:5,color:'var(--text3)'}}>
-                EMA Lenta
-                <input type="number" value={alarmForm.ema_l||11} min={1}
-                  onChange={e=>setAlarmForm(p=>({...p,ema_l:Number(e.target.value)}))}
-                  style={{background:'var(--bg3)',border:'1px solid rgba(255,77,109,0.4)',color:'#ff4d6d',fontFamily:MONO,fontSize:16,padding:'8px 12px',borderRadius:4,fontWeight:700,textAlign:'center'}}/>
-              </label>
-            </div>
 
-            <div style={{display:'flex',gap:8,paddingTop:4,borderTop:'1px solid var(--border)'}}>
-              <button onClick={saveAlarm} disabled={alarmSaving}
-                style={{flex:1,background:'rgba(0,212,255,0.15)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:13,padding:'10px',borderRadius:5,cursor:'pointer',fontWeight:600}}>
-                {alarmSaving?'Guardando…':'Guardar'}
-              </button>
-              {editingAlarm.id&&(
-                <button onClick={()=>removeAlarm(editingAlarm.id)}
-                  style={{background:'rgba(255,77,109,0.12)',border:'1px solid #ff4d6d',color:'#ff4d6d',fontFamily:MONO,fontSize:11,padding:'10px 14px',borderRadius:5,cursor:'pointer',display:'flex',alignItems:'center',gap:5}}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3,6 5,6 21,6"/><path d="M19,6l-1,14a2,2,0,0,1-2,2H8a2,2,0,0,1-2-2L5,6"/><path d="M10,11v6"/><path d="M14,11v6"/><path d="M9,6V4a1,1,0,0,1,1-1h4a1,1,0,0,1,1,1v2"/></svg>
-                  Eliminar
-                </button>
+              {/* Usar condición global */}
+              <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>
+                <div style={{display:'flex',alignItems:'center',gap:6}}>
+                  <span>Condición global</span>
+                  <span style={{fontSize:9,color:'#5a7a95'}}>(opcional — de la librería de condiciones)</span>
+                </div>
+                <select value={alarmForm.condition_id||''} onChange={e=>{
+                    const cid=e.target.value||null
+                    const cond=conditions.find(c=>c.id===cid)
+                    setAlarmForm(p=>({...p,
+                      condition_id:cid,
+                      condition: cond?.type || p.condition || 'ema_cross_up',
+                      ema_r: cond?.params?.ma_fast || cond?.params?.ma_period || p.ema_r || 10,
+                      ema_l: cond?.params?.ma_slow || p.ema_l || 11,
+                      params: cond?.params || p.params || {},
+                      name: p.name || cond?.name || '',
+                    }))
+                  }}
+                  style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'7px 10px',borderRadius:4}}>
+                  <option value="">— Condición personalizada —</option>
+                  {conditions.map(c=>(
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+                {linkedCond&&<div style={{fontSize:10,color:'#5a7a95',marginTop:2,lineHeight:1.4}}>{linkedCond.description}</div>}
+              </label>
+
+              {/* Tipo de condición (cuando no hay global vinculada) */}
+              {!linkedCond&&(
+                <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>
+                  Tipo de condición
+                  <select value={alarmForm.condition||'ema_cross_up'} onChange={e=>setAlarmForm(p=>({...p,condition:e.target.value,params:{}}))}
+                    style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'7px 10px',borderRadius:4}}>
+                    <optgroup label="EMA">
+                      <option value="ema_cross_up">EMA rápida &gt; EMA lenta — cruce alcista ↑</option>
+                      <option value="ema_cross_down">EMA rápida &lt; EMA lenta — cruce bajista ↓</option>
+                      <option value="price_above_ema">Precio cierre &gt; EMA rápida</option>
+                      <option value="price_below_ema">Precio cierre &lt; EMA rápida</option>
+                    </optgroup>
+                    <optgroup label="RSI">
+                      <option value="rsi_cross_up">RSI cruza hacia arriba nivel</option>
+                      <option value="rsi_cross_down">RSI cruza hacia abajo nivel</option>
+                      <option value="rsi_above">RSI por encima de nivel</option>
+                      <option value="rsi_below">RSI por debajo de nivel</option>
+                    </optgroup>
+                    <optgroup label="MACD">
+                      <option value="macd_cross_up">MACD cruza señal hacia arriba</option>
+                      <option value="macd_cross_down">MACD cruza señal hacia abajo</option>
+                    </optgroup>
+                    <optgroup label="Precio vs Media">
+                      <option value="price_above_ma">Precio &gt; Media móvil</option>
+                      <option value="price_below_ma">Precio &lt; Media móvil</option>
+                    </optgroup>
+                  </select>
+                </label>
               )}
+
+              {/* Parámetros según tipo */}
+              {(isEMAType)&&(
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+                  <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>EMA Rápida
+                    <input type="number" value={alarmForm.ema_r||10} min={1} disabled={!!linkedCond}
+                      onChange={e=>setAlarmForm(p=>({...p,ema_r:Number(e.target.value)}))}
+                      style={{background:'var(--bg3)',border:'1px solid rgba(255,209,102,0.4)',color:'#ffd166',fontFamily:MONO,fontSize:15,padding:'7px 10px',borderRadius:4,fontWeight:700,textAlign:'center',opacity:linkedCond?0.5:1}}/>
+                  </label>
+                  <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>EMA Lenta
+                    <input type="number" value={alarmForm.ema_l||11} min={1} disabled={!!linkedCond}
+                      onChange={e=>setAlarmForm(p=>({...p,ema_l:Number(e.target.value)}))}
+                      style={{background:'var(--bg3)',border:'1px solid rgba(255,77,109,0.4)',color:'#ff4d6d',fontFamily:MONO,fontSize:15,padding:'7px 10px',borderRadius:4,fontWeight:700,textAlign:'center',opacity:linkedCond?0.5:1}}/>
+                  </label>
+                </div>
+              )}
+              {isMAType&&(
+                <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>Período de la media
+                  <input type="number" value={alarmForm.params?.ma_period||alarmForm.ema_r||50} min={1} disabled={!!linkedCond}
+                    onChange={e=>setAlarmForm(p=>({...p,params:{...p.params,ma_period:Number(e.target.value)}}))}
+                    style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'#ffd166',fontFamily:MONO,fontSize:15,padding:'7px 10px',borderRadius:4,fontWeight:700,opacity:linkedCond?0.5:1}}/>
+                </label>
+              )}
+              {isRSI&&(
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+                  <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>Período RSI
+                    <input type="number" value={alarmForm.params?.period||14} min={2} max={50} disabled={!!linkedCond}
+                      onChange={e=>setAlarmForm(p=>({...p,params:{...p.params,period:Number(e.target.value)}}))}
+                      style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'#ffd166',fontFamily:MONO,fontSize:15,padding:'7px 10px',borderRadius:4,fontWeight:700,opacity:linkedCond?0.5:1}}/>
+                  </label>
+                  <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>Nivel
+                    <input type="number" value={alarmForm.params?.level||30} min={1} max={99} disabled={!!linkedCond}
+                      onChange={e=>setAlarmForm(p=>({...p,params:{...p.params,level:Number(e.target.value)}}))}
+                      style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'#00d4ff',fontFamily:MONO,fontSize:15,padding:'7px 10px',borderRadius:4,fontWeight:700,opacity:linkedCond?0.5:1}}/>
+                  </label>
+                </div>
+              )}
+              {isMACD&&(
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
+                  {[['fast','Rápida',12],['slow','Lenta',26],['signal','Señal',9]].map(([k,l,d])=>(
+                    <label key={k} style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>{l}
+                      <input type="number" value={alarmForm.params?.[k]||d} min={1} disabled={!!linkedCond}
+                        onChange={e=>setAlarmForm(p=>({...p,params:{...p.params,[k]:Number(e.target.value)}}))}
+                        style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'#ffd166',fontFamily:MONO,fontSize:14,padding:'7px 6px',borderRadius:4,fontWeight:700,opacity:linkedCond?0.5:1,textAlign:'center'}}/>
+                    </label>
+                  ))}
+                </div>
+              )}
+
+              <div style={{display:'flex',gap:8,paddingTop:4,borderTop:'1px solid var(--border)'}}>
+                <button onClick={saveAlarm} disabled={alarmSaving}
+                  style={{flex:1,background:'rgba(0,212,255,0.15)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:13,padding:'10px',borderRadius:5,cursor:'pointer',fontWeight:600}}>
+                  {alarmSaving?'Guardando…':'Guardar alarma'}
+                </button>
+                {editingAlarm.id&&(
+                  <button onClick={()=>removeAlarm(editingAlarm.id)}
+                    style={{background:'rgba(255,77,109,0.12)',border:'1px solid #ff4d6d',color:'#ff4d6d',fontFamily:MONO,fontSize:11,padding:'10px 14px',borderRadius:5,cursor:'pointer'}}>
+                    🗑
+                  </button>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* ══ MODAL ESTRATEGIA — fixed sobre gráfico ══ */}
       {editingStr!==null&&(
