@@ -195,6 +195,49 @@ async function deleteWatchlistItem(id) {
   if(!res.ok) throw new Error('Error eliminando')
 }
 
+// ── Ranking results API ───────────────────────────────────────
+async function saveRankingRemote(rankingData, stratId) {
+  // Upsert one row per symbol in backtest_results, keyed by symbol+strategy_id
+  const rows = Object.entries(rankingData).map(([symbol, rd]) => ({
+    symbol,
+    strategy_id: stratId || null,
+    win_rate:    rd.metrics?.winRate    ?? null,
+    cagr_simple: rd.metrics?.cagr       ?? null,
+    max_drawdown:rd.metrics?.maxDD      ?? null,
+    total_trades:rd.metrics?.trades     ?? null,
+    score:       rd.score               ?? null,
+    rank_position: rd.rank              ?? null,
+    updated_at:  new Date().toISOString(),
+  }))
+  // Upsert in batches of 20
+  for (let i=0; i<rows.length; i+=20) {
+    const batch = rows.slice(i, i+20)
+    await fetch(`${SUPA_URL}/rest/v1/ranking_results`, {
+      method: 'POST',
+      headers: { ...SUPA_H, 'Prefer': 'resolution=merge-duplicates,return=minimal',
+        'Content-Type': 'application/json' },
+      body: JSON.stringify(batch)
+    })
+  }
+}
+async function loadRankingRemote(stratId) {
+  const url = stratId
+    ? `${SUPA_URL}/rest/v1/ranking_results?strategy_id=eq.${stratId}&order=rank_position.asc`
+    : `${SUPA_URL}/rest/v1/ranking_results?order=rank_position.asc`
+  const res = await fetch(url, { headers: SUPA_H })
+  if (!res.ok) return null
+  const rows = await res.json()
+  if (!rows?.length) return null
+  const out = {}
+  rows.forEach(r => {
+    out[r.symbol] = {
+      score: r.score, rank: r.rank_position,
+      metrics: { winRate: r.win_rate, cagr: r.cagr_simple, maxDD: r.max_drawdown, trades: r.total_trades }
+    }
+  })
+  return out
+}
+
 // ── Strategies API ────────────────────────────────────────────
 async function fetchStrategies() {
   const res=await fetch(`${SUPA_URL}/rest/v1/strategies?active=eq.true&order=name.asc`,{headers:SUPA_H})
@@ -547,6 +590,45 @@ function SettingsModal({ onClose }) {
                   style={{width:90,background:'#080c14',border:'1px solid #1a2d45',color:'#e2eaf5',
                     fontFamily:MONO,fontSize:11,padding:'4px 6px',borderRadius:4}}/>
               </div>
+              {sep('Estrategia por defecto')}
+              <div style={{marginBottom:16}}>                <div style={{fontSize:10,color:'#5a7a95',marginBottom:8,lineHeight:1.6}}>
+                  La estrategia seleccionada se cargará automáticamente al abrir la app.
+                </div>
+                <div style={{display:'flex',alignItems:'center',gap:8}}>
+                  <select value={settings.defaultStrategyId||''} onChange={e=>upd('defaultStrategyId',e.target.value||null)}
+                    style={{flex:1,background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,
+                      color:'#e2eaf5',fontFamily:MONO,fontSize:11,padding:'6px 8px'}}>
+                    <option value="">Sin estrategia por defecto</option>
+                    {strategies.map(s=>(
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
+                  {settings.defaultStrategyId&&<span style={{fontFamily:MONO,fontSize:9,color:'#00e5a0'}}>✓</span>}
+                </div>
+              </div>
+
+              {sep('Vista por defecto — Tabla resumen')}
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12}}>
+                <span style={{fontFamily:MONO,fontSize:10,color:'#cce0f5',flex:1}}>Layout inicial tabla resumen</span>
+                <select value={settings.ui?.defaultMetricsLayout??'multi'} onChange={e=>upd('ui.defaultMetricsLayout',e.target.value)}
+                  style={{background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,
+                    color:'#e2eaf5',fontFamily:MONO,fontSize:11,padding:'4px 8px'}}>
+                  <option value="multi">Multi-columna</option>
+                  <option value="panel">Panel lateral</option>
+                  <option value="grid">Grid compacto</option>
+                </select>
+              </div>
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:16}}>
+                <span style={{fontFamily:MONO,fontSize:10,color:'#cce0f5',flex:1}}>Etiquetas trades por defecto</span>
+                <select value={String(settings.ui?.defaultLabelMode??0)} onChange={e=>upd('ui.defaultLabelMode',Number(e.target.value))}
+                  style={{background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,
+                    color:'#e2eaf5',fontFamily:MONO,fontSize:11,padding:'4px 8px'}}>
+                  <option value="0">Sin etiquetas</option>
+                  <option value="1">Solo porcentaje</option>
+                  <option value="2">% + € + días</option>
+                </select>
+              </div>
+
               {sep('Vista reciente (botón ⊡ / ⊞)')}
               <div style={{marginBottom:16}}>
                 <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
@@ -2218,11 +2300,15 @@ export default function Home() {
   const [sinPerdidas,setSinPerdidas]=useState(true),[reentry,setReentry]=useState(true)
   const [tipoFiltro,setTipoFiltro]=useState('none'),[sp500EmaR,setSp500EmaR]=useState(10),[sp500EmaL,setSp500EmaL]=useState(11)
   const [result,setResult]=useState(null),[loading,setLoading]=useState(false),[error,setError]=useState(null)
-  const [labelMode,setLabelMode]=useState(0),[rulerOn,setRulerOn]=useState(false)
+  const [labelMode,setLabelMode]=useState(()=>{
+    try{const s=JSON.parse(localStorage.getItem('v50_settings')||'{}');return s.ui?.defaultLabelMode??0}catch(_){return 0}
+  }),[rulerOn,setRulerOn]=useState(false)
   const [chartViewFull,setChartViewFull]=useState(false)
   const [settingsOpen,setSettingsOpen]=useState(false)
   const [sidePanel,setSidePanel]=useState('config')
-  const [metricsLayout,setMetricsLayout]=useState('panel')
+  const [metricsLayout,setMetricsLayout]=useState(()=>{
+    try{const s=JSON.parse(localStorage.getItem('v50_settings')||'{}');return s.ui?.defaultMetricsLayout??'multi'}catch(_){return 'multi'}
+  })
   const [metricsView,setMetricsView]=useState('multi')   // 'multi'=3col | 'single'=one strat per block
   const [showStrategy,setShowStrategy]=useState(true),[showBH,setShowBH]=useState(true)
   const [showSP500,setShowSP500]=useState(true),[showCompound,setShowCompound]=useState(true)
@@ -2395,10 +2481,28 @@ export default function Home() {
       .catch(()=>{})
       .finally(()=>setWlLoading(false))
   }
-  const reloadStrategies=()=>{
+  const stratLoadedRef=useRef(false)
+  const reloadStrategies=(applyDefault=false)=>{
     setStrLoading(true)
     fetchStrategies()
-      .then(data=>setStrategies(data))
+      .then(data=>{
+        setStrategies(data)
+        // On first load only: apply default strategy from settings (if any)
+        if(applyDefault&&!stratLoadedRef.current&&data.length>0){
+          stratLoadedRef.current=true
+          try{
+            const sett=JSON.parse(localStorage.getItem('v50_settings')||'{}')
+            const defId=sett.defaultStrategyId
+            if(defId){
+              const match=data.find(s=>s.id===defId)
+              if(match) loadStrategyLegacy(match)
+            }
+            // Also restore saved ranking if any
+            const defStratId=defId||null
+            loadRankingRemote(defStratId).then(rd=>{if(rd)setRankingData(rd)}).catch(()=>{})
+          }catch(_){}
+        }
+      })
       .catch(()=>{})
       .finally(()=>setStrLoading(false))
   }
@@ -2434,7 +2538,7 @@ export default function Home() {
   // Cargar datos al montar
   useEffect(()=>{
     reloadWatchlist()
-    reloadStrategies()
+    reloadStrategies(true)  // true = apply default strategy from settings
     reloadAlarms()
   },[])
 
@@ -2466,7 +2570,7 @@ export default function Home() {
   const openEditStr=(s)=>{
     setEditingStr(s)
     setStrForm({
-      name:s.name||'',symbol:s.symbol||'^GSPC',
+      name:s.name||'',
       years:s.years||5,capital_ini:s.capital_ini||10000,
       color:s.color||'#00d4ff',observations:s.observations||''
     })
@@ -2516,7 +2620,7 @@ export default function Home() {
     await deleteStrategy(id); reloadStrategies()
   }
   const loadStrategyLegacy=(s)=>{
-    setSimbolo(s.symbol||simbolo)
+    // symbol intentionally NOT loaded — strategy is asset-independent
     setEmaR(s.ema_r||10);setEmaL(s.ema_l||11);setYears(s.years||5)
     setCapitalIni(s.capital_ini||10000);setTipoStop(s.tipo_stop||'tecnico')
     setAtrP(s.atr_period||14);setAtrM(s.atr_mult||1.0)
@@ -2679,6 +2783,11 @@ export default function Home() {
     setRankingData(results)
     setRankingRunning(false)
     setRankingProgress({done:0,total:0})
+    // Save ranking to Supabase (fire-and-forget)
+    try{
+      const sett=JSON.parse(localStorage.getItem('v50_settings')||'{}')
+      saveRankingRemote(results, sett.defaultStrategyId||null).catch(()=>{})
+    }catch(_){}
   }, [watchlist,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL])
 
   const run=useCallback(async(sym,payload)=>{
@@ -2999,7 +3108,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.6</title>
+        <title>Trading Simulator V4.7</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3062,7 +3171,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.6
+            <span className="dot"/>Trading Simulator V4.7
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
