@@ -258,20 +258,62 @@ async function deleteStrategy(id) {
 }
 
 // ── Conditions API ─────────────────────────────────────────────
+// ── Conditions — localStorage-first, Supabase optional ────────
+const COND_LS_KEY = 'v50_conditions'
+function lsGetConds() { try { return JSON.parse(localStorage.getItem(COND_LS_KEY)||'[]') } catch(_) { return [] } }
+function lsSaveConds(arr) { try { localStorage.setItem(COND_LS_KEY, JSON.stringify(arr)) } catch(_) {} }
+
 async function fetchConditions() {
-  const res=await fetch('/api/conditions')
-  if(!res.ok) return []
-  return await res.json()
+  // Try Supabase first; fall back to localStorage
+  try {
+    const res = await fetch('/api/conditions')
+    if (res.ok) {
+      const data = await res.json()
+      if (Array.isArray(data) && !data.error) {
+        // Merge with any local-only entries (id starting with 'local_')
+        const local = lsGetConds().filter(c => c.id?.startsWith('local_'))
+        lsSaveConds([...data, ...local])
+        return [...data, ...local]
+      }
+    }
+  } catch(_) {}
+  return lsGetConds()
 }
+
 async function saveCondition(cond) {
   const groqKey=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.integrations?.groqKey||''}catch(_){return ''}})()
-  const res=await fetch('/api/conditions',{method:'POST',headers:{'Content-Type':'application/json','x-groq-key':groqKey},body:JSON.stringify(cond)})
-  if(!res.ok) throw new Error('Error guardando condición')
-  return await res.json()
+  try {
+    const res = await fetch('/api/conditions', {
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-groq-key':groqKey},
+      body:JSON.stringify(cond)
+    })
+    if (res.ok) {
+      const saved = await res.json()
+      // Sync local cache
+      const local = lsGetConds().filter(c => c.id?.startsWith('local_'))
+      // Refresh will be done by caller via fetchConditions
+      return saved
+    }
+    // Supabase failed → fall through to localStorage
+    console.warn('Supabase save failed, saving locally')
+  } catch(_) {}
+  // localStorage fallback — generate a local id
+  const saved = { ...cond, id: 'local_' + Date.now(), created_at: new Date().toISOString(), active: true }
+  const existing = lsGetConds()
+  lsSaveConds([...existing, saved])
+  return saved
 }
+
 async function deleteCondition(id) {
-  const res=await fetch(`/api/conditions?id=${id}`,{method:'DELETE'})
-  if(!res.ok) throw new Error('Error eliminando condición')
+  if (!id?.startsWith('local_')) {
+    try {
+      const res = await fetch(`/api/conditions?id=${id}`, {method:'DELETE'})
+      if (!res.ok) console.warn('Supabase delete failed')
+    } catch(_) {}
+  }
+  // Always remove from localStorage cache
+  lsSaveConds(lsGetConds().filter(c => c.id !== id))
 }
 async function groqParseCondition(text) {
   const groqKey=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.integrations?.groqKey||''}catch(_){return ''}})()
@@ -905,11 +947,12 @@ function SettingsModal({ onClose, strategies=[] }) {
               {sep('Vista por defecto — Tabla resumen')}
               <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12}}>
                 <span style={{fontFamily:MONO,fontSize:10,color:'#cce0f5',flex:1}}>Layout inicial tabla resumen</span>
-                <select value={settings.ui?.defaultMetricsLayout??'panel'} onChange={e=>upd('ui.defaultMetricsLayout',e.target.value)}
+                <select value={settings.ui?.defaultMetricsLayout??'multi'} onChange={e=>upd('ui.defaultMetricsLayout',e.target.value)}
                   style={{background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,
                     color:'#e2eaf5',fontFamily:MONO,fontSize:11,padding:'4px 8px'}}>
-                  <option value="panel">Panel lateral derecho</option>
-                  <option value="grid">Grid en contenido</option>
+                  <option value="grid">Grid</option>
+                  <option value="panel">Panel simple</option>
+                  <option value="multi">Panel vista multi-columna</option>
                 </select>
               </div>
               <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:16}}>
@@ -937,18 +980,13 @@ function SettingsModal({ onClose, strategies=[] }) {
                 </div>
               </div>
               {sep('Visualización')}
-              {[
-                ['chart.showGrid',       'Mostrar grid',             true],
-                ['chart.autoFitOnLoad',  'Auto-ajustar al cargar',    true],
-              ].map(([key,label,def])=>(
-                <label key={key} style={{display:'flex',alignItems:'center',gap:8,marginBottom:8,cursor:'pointer'}}>
-                  <input type="checkbox"
-                    checked={settings[key.split('.')[0]]?.[key.split('.')[1]]??def}
-                    onChange={e=>upd(key,e.target.checked)}
-                    style={{accentColor:'#00d4ff',width:13,height:13}}/>
-                  <span style={{fontSize:11,color:'#cce0f5'}}>{label}</span>
-                </label>
-              ))}
+              <label style={{display:'flex',alignItems:'center',gap:8,marginBottom:8,cursor:'pointer'}}>
+                <input type="checkbox"
+                  checked={settings.chart?.autoFitOnLoad??true}
+                  onChange={e=>upd('chart.autoFitOnLoad',e.target.checked)}
+                  style={{accentColor:'#00d4ff',width:13,height:13}}/>
+                <span style={{fontSize:11,color:'#cce0f5'}}>Auto-ajustar al cargar</span>
+              </label>
 
               {sep('Rendimiento')}
               {row('Calidad de curvas equity','(más puntos = más lento)',
@@ -3197,7 +3235,7 @@ export default function Home() {
     try{
       const s=JSON.parse(localStorage.getItem('v50_settings')||'{}')
       if(s.ui?.defaultLabelMode!=null) setLabelMode(s.ui.defaultLabelMode)
-      if(s.ui?.defaultMetricsLayout){ const ml=s.ui.defaultMetricsLayout; setMetricsLayout(ml==='multi'||ml==='grid'?'grid':ml==='panel'?'panel':'panel') }
+      if(s.ui?.defaultMetricsLayout){ setMetricsLayout(s.ui.defaultMetricsLayout) }
       if(s.defaultCapital!=null)       setCapitalIni(s.defaultCapital)
     }catch(_){}
     // Restore acknowledged alarms
@@ -3212,7 +3250,7 @@ export default function Home() {
         // Re-apply ui defaults from remote settings
         try{
           if(remote.ui?.defaultLabelMode!=null) setLabelMode(remote.ui.defaultLabelMode)
-          if(remote.ui?.defaultMetricsLayout){ const ml=remote.ui.defaultMetricsLayout; setMetricsLayout(ml==='multi'||ml==='grid'?'grid':ml==='panel'?'panel':'panel') }
+          if(remote.ui?.defaultMetricsLayout){ setMetricsLayout(remote.ui.defaultMetricsLayout) }
         }catch(_){}
       }
     })
@@ -3437,7 +3475,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.13</title>
+        <title>Trading Simulator V4.15</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3500,7 +3538,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.13
+            <span className="dot"/>Trading Simulator V4.15
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -3555,8 +3593,11 @@ export default function Home() {
               <svg width="12" height="12" viewBox="0 0 24 24" fill="#00d4ff"><path d="M3 3h7v2H5v14h14v-5h2v7H3V3zm11 0h7v7h-2V6.41l-9.29 9.3-1.42-1.42L17.59 5H14V3z"/></svg>
               TradingView
             </button>}
-            {result&&metrics&&sidePanel!=='multi'&&<button onClick={()=>setMetricsLayout(l=>l==='grid'?'panel':l==='panel'?'grid':'panel')} style={{background:'rgba(13,21,32,0.9)',border:'1px solid #1a2d45',color:'#7a9bc0',fontFamily:MONO,fontSize:11,padding:'3px 9px',borderRadius:4,cursor:'pointer'}}>
-              {metricsLayout==='grid'?'⊞ Panel':'⊟ Grid'}
+            {result&&metrics&&sidePanel!=='multi'&&<button
+              onClick={()=>setMetricsLayout(l=>l==='grid'?'panel':l==='panel'?'multi':'grid')}
+              title={metricsLayout==='grid'?'Cambiar a Panel simple':metricsLayout==='panel'?'Cambiar a Panel multi-columna':'Cambiar a Grid'}
+              style={{background:'rgba(13,21,32,0.9)',border:'1px solid #1a2d45',color:'#7a9bc0',fontFamily:MONO,fontSize:11,padding:'3px 9px',borderRadius:4,cursor:'pointer'}}>
+              {metricsLayout==='grid'?'☰ Panel':metricsLayout==='panel'?'⊞ Multi':'⊟ Grid'}
             </button>}
             <button onClick={()=>setSettingsOpen(true)} title="Configuración" style={{background:'rgba(13,21,32,0.9)',border:'1px solid #1a2d45',color:'#7a9bc0',fontFamily:MONO,fontSize:14,padding:'2px 8px',borderRadius:4,cursor:'pointer',lineHeight:1}} onMouseOver={e=>e.currentTarget.style.borderColor='#4a7fa0'} onMouseOut={e=>e.currentTarget.style.borderColor='#1a2d45'}>
               ⚙
@@ -4513,7 +4554,7 @@ export default function Home() {
                 </div>
 
                 {/* Panel derecho de métricas */}
-                {sidePanel!=='multi'&&metricsLayout==='panel'&&metrics&&(
+                {sidePanel!=='multi'&&(metricsLayout==='panel'||metricsLayout==='multi')&&metrics&&(
                   <div style={{width:rightPanelW,flexShrink:0,borderLeft:'1px solid var(--border)',background:'var(--bg2)',overflowY:'auto',position:'relative'}}>
                     {/* Resize handle — left edge */}
                     <div onMouseDown={e=>{rightResizing.current=true;rightStartX.current=e.clientX;rightStartW.current=rightPanelW;document.body.style.cursor='col-resize';document.body.style.userSelect='none'}}
@@ -4523,15 +4564,19 @@ export default function Home() {
                       onMouseOut={e=>e.currentTarget.style.background='transparent'}/>
                     <div style={{padding:'6px 12px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:6}}>
                       <span style={{fontFamily:MONO,fontSize:10,color:'#b8d8f0',letterSpacing:'0.08em',fontWeight:600,flex:1}}>RESUMEN · {simbolo}</span>
-                      <button onClick={()=>setMetricsView(v=>v==='multi'?'single':'multi')}
-                        title={metricsView==='multi'?'Vista columna única':'Vista multi-columna'}
-                        style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',
-                          border:'1px solid #2a4060',background:'rgba(0,0,0,0.3)',color:'#7aabc8'}}>
-                        {metricsView==='multi'?'⊟ 1col':'⊞ 3col'}
-                      </button>
+                      {metricsLayout==='multi'
+                        ? <span style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',padding:'2px 7px'}}>multi-col</span>
+                        : <span style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',padding:'2px 7px'}}>1 col</span>}
                     </div>
                     <StratSelector strats={metricsStrats} setStrats={setMetricsStrats}/>
-                    <MetricsTable/>
+                    {(()=>{
+                      // 'panel' → single column, 'multi' → multi-column
+                      const effectiveView = metricsLayout==='multi' ? 'multi' : 'single'
+                      const rows = buildUnifiedRows(metrics, result?.maxDDBH||0)
+                      return effectiveView==='single'
+                        ? <MetricsTable/>
+                        : <MetricsWrapper rows={rows} strats={metricsStrats}/>
+                    })()}
                   </div>
                 )}
               </div>
