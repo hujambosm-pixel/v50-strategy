@@ -5,6 +5,7 @@ const SUPABASE_URL = process.env.SUPABASE_URL
 const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY
 
 async function sb(path, opts = {}) {
+  if (!SUPABASE_URL) throw new Error('SUPABASE_URL no configurada. Ve a Vercel → Settings → Environment Variables')
   const res = await fetch(`${SUPABASE_URL}/rest/v1${path}`, {
     headers: {
       apikey: SUPABASE_KEY,
