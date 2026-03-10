@@ -2875,7 +2875,8 @@ function ContextThemeMenu({ x, y, section, onClose, onSave }) {
       s.tema = s.tema||{}; s.tema.fonts = nf
       localStorage.setItem('v50_settings', JSON.stringify(s))
     }catch(_){}
-    onSave(nf)
+    // onSave solo notifica pero NO cierra
+    onSave && onSave(nf)
   }
   const reset = () => {
     const nf = {...fonts}; delete nf[section]
@@ -2885,7 +2886,7 @@ function ContextThemeMenu({ x, y, section, onClose, onSave }) {
       s.tema=s.tema||{}; s.tema.fonts=nf
       localStorage.setItem('v50_settings', JSON.stringify(s))
     }catch(_){}
-    onSave(nf)
+    onSave && onSave(nf)
   }
   const secInfo = TEMA_SECTIONS[section]||{}
   // Position: keep inside viewport
@@ -2896,9 +2897,9 @@ function ContextThemeMenu({ x, y, section, onClose, onSave }) {
   const top=Math.min(y, vh-menuH-12)
   return (
     <>
-      {/* Overlay para cerrar */}
+      {/* Overlay para cerrar — solo si click FUERA del panel */}
       <div onClick={onClose} style={{position:'fixed',inset:0,zIndex:9998}}/>
-      <div style={{position:'fixed',left,top,zIndex:9999,width:menuW,
+      <div onClick={e=>e.stopPropagation()} style={{position:'fixed',left,top,zIndex:9999,width:menuW,
         background:'#0d1825',border:'1px solid #1e3a55',borderRadius:8,
         boxShadow:'0 8px 32px rgba(0,0,0,0.7)',fontFamily:MONO,fontSize:11,
         padding:'12px 14px',display:'flex',flexDirection:'column',gap:10}}>
@@ -2973,8 +2974,15 @@ function ContextThemeMenu({ x, y, section, onClose, onSave }) {
               style={{background:'transparent',border:'none',color:'#5a7a95',cursor:'pointer',fontSize:12}}>×</button>}
           </div>
         </label>
-        <div style={{fontSize:9,color:'#3d5a7a',borderTop:'1px solid #1a2d45',paddingTop:6}}>
-          Clic derecho en cualquier sección para personalizar · Los cambios se aplican al instante
+        <div style={{display:'flex',gap:6,borderTop:'1px solid #1a2d45',paddingTop:8,marginTop:2}}>
+          <button onClick={onClose}
+            style={{flex:1,background:'rgba(0,212,255,0.1)',border:'1px solid #00d4ff',color:'#00d4ff',
+              fontFamily:MONO,fontSize:10,padding:'6px',borderRadius:4,cursor:'pointer',fontWeight:600}}>
+            ✓ Guardar y cerrar
+          </button>
+        </div>
+        <div style={{fontSize:9,color:'#3d5a7a',textAlign:'center'}}>
+          Los cambios se aplican al instante · Clic fuera para cerrar
         </div>
       </div>
     </>
@@ -3662,8 +3670,11 @@ export default function Home() {
   const tlGetLS = () => { try{ return (JSON.parse(localStorage.getItem(TL_LS_KEY)||'[]')).map(tlNorm) }catch{ return [] } }
   const tlSetLS = (arr) => localStorage.setItem(TL_LS_KEY, JSON.stringify(arr))
   const tlUseLocal = () => {
-    // Usa localStorage si el usuario no tiene Supabase configurado en los settings
+    // Si hay constantes Supabase hardcoded en la app, usarlas directamente
+    // Solo fallback a localStorage si no hay URL/KEY disponibles
     try {
+      if(typeof SUPA_URL === 'string' && SUPA_URL.startsWith('https') &&
+         typeof SUPA_KEY === 'string' && SUPA_KEY.length > 10) return false
       const s = JSON.parse(localStorage.getItem('v50_settings')||'{}')
       return !s?.integraciones?.supabaseUrl
     } catch { return true }
@@ -4179,7 +4190,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.32</title>
+        <title>Trading Simulator V4.33</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4242,7 +4253,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.32
+            <span className="dot"/>Trading Simulator V4.33
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5802,14 +5813,14 @@ export default function Home() {
               <div className="tl-content" style={{display:'flex',flex:1,height:'100%',overflow:'hidden',background:'var(--bg)',fontSize:13}} onContextMenu={e=>openCtx(e,'tradelog')}>
 
                 {/* COLUMNA IZQUIERDA — filtros + stats */}
-                <div style={{width:190,flexShrink:0,background:'var(--bg2)',borderRight:'1px solid var(--border)',display:'flex',flexDirection:'column',overflowY:'auto'}}>
+                <div style={{width:210,flexShrink:0,background:'var(--bg2)',borderRight:'1px solid var(--border)',display:'flex',flexDirection:'column',overflow:'hidden'}}>
                   {/* Subtabs */}
                   <div style={{display:'flex',borderBottom:'1px solid var(--border)',flexShrink:0}}>
-                    {[{id:'ops',label:'Ops'},{id:'open',label:'Abiertas'},{id:'import',label:'Importar'},{id:'stats',label:'Stats'}].map(t=>(
+                    {[{id:'ops',label:'Operaciones'},{id:'open',label:'Abiertas'},{id:'import',label:'Importar'},{id:'stats',label:'Stats'}].map(t=>(
                       <button key={t.id} onClick={()=>setTlTab(t.id)}
-                        style={{flex:1,padding:'7px 2px',fontFamily:MONO,fontSize:9,cursor:'pointer',background:'transparent',
+                        style={{flex:1,padding:'9px 4px',fontFamily:MONO,fontSize:9,cursor:'pointer',background:tlTab===t.id?'rgba(155,114,255,0.08)':'transparent',
                           border:'none',borderBottom:tlTab===t.id?'2px solid #9b72ff':'2px solid transparent',
-                          color:tlTab===t.id?'#9b72ff':'#4a7a95',letterSpacing:'0.04em'}}>
+                          color:tlTab===t.id?'#c8a0ff':'#4a7a95',letterSpacing:'0.04em',fontWeight:tlTab===t.id?700:400}}>
                         {t.label}
                       </button>
                     ))}
@@ -5913,12 +5924,10 @@ export default function Home() {
 
                     {/* Modo indicator bar */}
                     {tlUseLocal()&&(
-                      <div style={{padding:'4px 12px',background:'rgba(255,209,102,0.06)',borderBottom:'1px solid rgba(255,209,102,0.15)',
-                        fontFamily:MONO,fontSize:10,color:'#ffd166',display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
-                        💾 Modo local — datos guardados en este navegador.{' '}
-                        <span style={{color:'#a8ccdf'}}>Configura Supabase en{' '}</span>
-                        <span style={{color:'#ffd166',cursor:'default'}}>Settings → Integraciones</span>
-                        <span style={{color:'#a8ccdf'}}>{' '}para persistencia real. Los trades locales se pueden exportar después.</span>
+                      <div style={{padding:'3px 10px',background:'rgba(255,209,102,0.04)',borderBottom:'1px solid rgba(255,209,102,0.1)',
+                        fontFamily:MONO,fontSize:9,color:'#7a6a30',display:'flex',alignItems:'center',gap:4,flexShrink:0}}>
+                        💾 <span style={{color:'#ffd166',opacity:0.7}}>Modo local</span>
+                        <span style={{opacity:0.5}}>— Configura Supabase en Settings → Integraciones para persistencia real</span>
                       </div>
                     )}
                     {/* KPI bar */}
@@ -6018,7 +6027,7 @@ export default function Home() {
                                   {isOpen&&' ●'}
                                 </td>
                                 <td style={{padding:'6px 8px',color:t.entry_currency==='EUR'?'#00e5a0':'#ffd166'}}>{t.entry_currency}</td>
-                                <td style={{padding:'6px 8px',color:'#4a7a95',fontSize:10}}>{t.fx_entry!=null?parseFloat(t.fx_entry).toFixed(3):'—'}</td>
+                                <td style={{padding:'6px 8px',color:'#4a7a95',fontSize:10}}>{t.fx_entry&&!isNaN(parseFloat(t.fx_entry))?parseFloat(t.fx_entry).toFixed(3):'—'}</td>
                                 <td style={{padding:'6px 8px',color:'#ff4d6d',fontSize:10}}>
                                   {(()=>{const c=(parseFloat(t.commission_buy||0)+parseFloat(t.commission_sell||0));return c>0?`-€${c.toFixed(2)}`:'—'})()}
                                 </td>
@@ -6118,7 +6127,7 @@ export default function Home() {
                                 <td style={{padding:'5px 8px'}}>{t.shares||'?'}</td>
                                 <td style={{padding:'5px 8px'}}>{t.entry_price||'?'}</td>
                                 <td style={{padding:'5px 8px',color:'#ffd166'}}>{t.entry_currency||'USD'}</td>
-                                <td style={{padding:'5px 8px',color:'#4a7a95',fontSize:10}}>{t.fx_entry!=null?parseFloat(t.fx_entry).toFixed(3):'—'}</td>
+                                <td style={{padding:'5px 8px',color:'#4a7a95',fontSize:10}}>{t.fx_entry&&!isNaN(parseFloat(t.fx_entry))?parseFloat(t.fx_entry).toFixed(3):'—'}</td>
                                 <td style={{padding:'5px 8px'}}>{t.broker||'—'}</td>
                                 <td style={{padding:'5px 8px',color:'#00d4ff'}}>{t.capital_eur?`€${Math.round(t.capital_eur)}`:'—'}</td>
                               </tr>
@@ -6758,20 +6767,55 @@ export default function Home() {
             </div>
             {/* Fila 1: símbolo + nombre + tipo */}
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10}}>
-              {/* Símbolo — con auto-nombre al salir */}
-              <label style={{display:'flex',flexDirection:'column',gap:4}}>
+              {/* Símbolo — con buscador autocomplete */}
+              <label style={{display:'flex',flexDirection:'column',gap:4,position:'relative'}}>
                 <span style={{fontSize:10,color:'#5a8aaa'}}>Símbolo *</span>
-                <input type="text" placeholder="AAPL" value={tlForm.symbol}
-                  onChange={e=>setTlForm(f=>({...f,symbol:e.target.value.toUpperCase()}))}
-                  onBlur={async e=>{
-                    const sym=e.target.value.trim().toUpperCase()
-                    if(!sym||tlForm.name) return
-                    // Auto nombre desde watchlist o lookupName
-                    const wl=typeof WATCHLIST_DEFAULT!=='undefined'?WATCHLIST_DEFAULT:[]
-                    const found=wl.find(w=>w.sym===sym)
-                    if(found) setTlForm(f=>({...f,name:found.name}))
+                <input type="text" placeholder="AAPL, MSFT, BTC..." value={tlForm.symbol}
+                  autoComplete="off"
+                  onChange={e=>{
+                    const v=e.target.value.toUpperCase()
+                    setTlForm(f=>({...f,symbol:v,_symSearch:v}))
                   }}
+                  onBlur={()=>setTimeout(()=>setTlForm(f=>({...f,_symSearch:''})),180)}
                   style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'5px 7px',borderRadius:4}}/>
+                {/* Dropdown sugerencias */}
+                {tlForm._symSearch&&tlForm._symSearch.length>=1&&(()=>{
+                  const q=tlForm._symSearch
+                  const wlHits=watchlist.filter(w=>w.symbol.includes(q)||(w.name||'').toUpperCase().includes(q)).slice(0,4)
+                  const wlSyms=new Set(wlHits.map(w=>w.symbol))
+                  const dictHits=Object.entries(SYM_NAMES).filter(([s,n])=>!wlSyms.has(s)&&(s.includes(q)||n.toUpperCase().includes(q))).slice(0,5)
+                  const all=[...wlHits.map(w=>({symbol:w.symbol,name:w.name})),...dictHits.map(([s,n])=>({symbol:s,name:n}))]
+                  if(!all.length) return null
+                  const assetTypeFor=(sym)=>{
+                    if(sym.includes('-USD')||sym.includes('BTC')||sym.includes('ETH')) return 'crypto'
+                    if(sym.startsWith('^')) return 'etf'
+                    if(sym.includes('=F')) return 'future'
+                    return 'stock'
+                  }
+                  return(
+                    <div style={{position:'absolute',top:'100%',left:0,right:0,zIndex:200,
+                      background:'#0d1824',border:'1px solid #1e3a52',borderRadius:4,
+                      boxShadow:'0 8px 24px rgba(0,0,0,0.7)',maxHeight:200,overflowY:'auto',marginTop:2}}>
+                      {all.map(hit=>(
+                        <div key={hit.symbol} onMouseDown={e=>{
+                          e.preventDefault()
+                          const sym=hit.symbol, name=hit.name||''
+                          const currency=sym.includes('-USD')||sym.startsWith('^')||sym.includes('=F')?'USD':'USD'
+                          const atype=assetTypeFor(sym)
+                          setTlForm(f=>({...f,symbol:sym,name,asset_type:atype,entry_currency:currency,_symSearch:''}))
+                        }}
+                        style={{padding:'6px 10px',cursor:'pointer',display:'flex',justifyContent:'space-between',
+                          alignItems:'center',borderBottom:'1px solid rgba(255,255,255,0.04)',
+                          fontFamily:MONO,fontSize:11}}
+                        onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.08)'}
+                        onMouseOut={e=>e.currentTarget.style.background='transparent'}>
+                          <span style={{color:'#00d4ff',fontWeight:600}}>{hit.symbol}</span>
+                          <span style={{color:'#7a9bc0',fontSize:10}}>{hit.name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })()}
               </label>
               {/* Nombre */}
               <label style={{display:'flex',flexDirection:'column',gap:4}}>
@@ -6841,7 +6885,21 @@ export default function Home() {
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10}}>
               <label style={{display:'flex',flexDirection:'column',gap:4}}>
                 <span style={{fontSize:10,color:'#5a8aaa'}}>Divisa</span>
-                <select value={tlForm.entry_currency} onChange={e=>setTlForm(f=>({...f,entry_currency:e.target.value}))}
+                <select value={tlForm.entry_currency} onChange={async e=>{
+                    const cur=e.target.value
+                    setTlForm(f=>({...f,entry_currency:cur}))
+                    // Auto-fetch FX si no es EUR y no está en modo manual
+                    if(cur!=='EUR'&&!tlForm.fx_entry_manual) {
+                      try{
+                        const date=toIsoDate(tlForm.entry_date)||new Date().toISOString().slice(0,10)
+                        const r=await fetch(`/api/tradelog?action=fx&currency=${cur}&date=${date}`)
+                        const j=await r.json()
+                        if(j.fx) setTlForm(f=>({...f,entry_currency:cur,fx_entry:j.fx.toFixed(4)}))
+                      }catch(_){}
+                    } else if(cur==='EUR'){
+                      setTlForm(f=>({...f,entry_currency:cur,fx_entry:'1',fx_entry_manual:false}))
+                    }
+                  }}
                   style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'5px 7px',borderRadius:4}}>
                   <option>USD</option><option>EUR</option><option>GBP</option><option>CHF</option><option>JPY</option>
                 </select>
@@ -6885,10 +6943,27 @@ export default function Home() {
               </button>
               <button onClick={async()=>{
                 try{
-                  const formToSave = {...tlForm, entry_date: toIsoDate(tlForm.entry_date)||tlForm.entry_date, status:'open', import_source:tlForm.import_source||'manual'}
-                  const saved = await tlSaveTrade(formToSave)
+                  let formData = {...tlForm, entry_date: toIsoDate(tlForm.entry_date)||tlForm.entry_date, status:'open', import_source:tlForm.import_source||'manual'}
+                  // Auto-fetch FX if not set and currency is not EUR
+                  if(formData.entry_currency && formData.entry_currency!=='EUR' && !formData.fx_entry) {
+                    try{
+                      const r=await fetch(`/api/tradelog?action=fx&currency=${formData.entry_currency}&date=${formData.entry_date||new Date().toISOString().slice(0,10)}`)
+                      const j=await r.json()
+                      if(j.fx) formData={...formData,fx_entry:j.fx.toFixed(4)}
+                    }catch(_){}
+                  } else if(formData.entry_currency==='EUR') {
+                    formData={...formData,fx_entry:'1'}
+                  }
+                  const saved = await tlSaveTrade(formData)
                   setTlFormOpen(false)
-                  setTimeout(()=>tlSaveScreenshot({...tlForm,...(saved||{})}).catch(()=>{}),300)
+                  // Captura: salir de tradelog para que el gráfico esté visible
+                  ;(async()=>{
+                    const tradeData={...formData,...(saved||{})}
+                    setSidePanel('config')       // mostrar gráfico
+                    await new Promise(r=>setTimeout(r,600))
+                    await tlSaveScreenshot(tradeData).catch(()=>{})
+                    setSidePanel('tradelog')     // volver
+                  })()
                 }catch(e){alert('Error al guardar: '+e.message)}
               }} style={{fontFamily:MONO,fontSize:11,padding:'7px 14px',borderRadius:4,cursor:'pointer',
                 background:'rgba(155,114,255,0.15)',border:'1px solid #9b72ff',color:'#9b72ff',fontWeight:700}}>
