@@ -1129,12 +1129,15 @@ function SettingsModal({ onClose, strategies=[] }) {
           {/* ── TEMA ── */}
           {tab==='tema'&&(()=>{
             const SECCIONES=[
-              {id:'global', label:'Toda la app'},
-              {id:'sidebar', label:'Sidebar / Config'},
-              {id:'header', label:'Encabezado'},
-              {id:'chart', label:'Encabezado gráfico'},
-              {id:'trades', label:'Historial trades'},
-              {id:'metrics', label:'Métricas / Resumen'},
+              {id:'global',   label:'Toda la app'},
+              {id:'sidebar',  label:'Sidebar / Config'},
+              {id:'header',   label:'Encabezado'},
+              {id:'tabs',     label:'Pestañas sidebar'},
+              {id:'chart',    label:'Encabezado gráfico'},
+              {id:'trades',   label:'Historial trades'},
+              {id:'metrics',  label:'Métricas / Resumen'},
+              {id:'modals',   label:'Modales TradeLog'},
+              {id:'tradelog', label:'TradeLog'},
             ]
             const temaSeccion=settings.tema?.seccion||'global'
             const skFont=`tema.fonts.${temaSeccion}`
@@ -3302,7 +3305,10 @@ export default function Home() {
       const json = await res.json()
       if(!res.ok) throw new Error(json.error||'Error')
       setTlTrades(json.trades||[])
-    } catch(e){ setTlError(e.message) }
+    } catch(e){
+      if(e.message?.includes('SUPABASE_URL')) setTlError('Configura SUPABASE_URL y SUPABASE_ANON_KEY en Vercel → Settings → Environment Variables')
+      else setTlError(e.message)
+    }
     finally { setTlLoading(false) }
   },[tlFilterBroker,tlFilterYear,tlFilterStatus])
 
@@ -3476,11 +3482,15 @@ export default function Home() {
         global:'body *',
         sidebar:'.sidebar,.sidebar-section,aside',
         header:'.header,.header *',
+        tabs:'aside button[style*="border-bottom"],aside .sidebar-tabs button',
         chart:'.chart-wrap .chart-header,.chart-wrap .chart-header *',
         trades:'.trades-section,.trades-section *',
         metrics:'.metrics-section,.metrics-section *,div[style*="275px"] *',
+        modals:'.tl-modal,.tl-modal *',
+        tradelog:'.tl-content,.tl-content *',
       }
-      // Always apply global to modal overlays too (fixed/absolute containers)
+      let css=''
+      // Global — aplica también a modales y overlays fijos
       const globalFc=fonts['global']
       if(globalFc){
         const parts2=[]
@@ -3488,15 +3498,16 @@ export default function Home() {
         if(globalFc.size)   parts2.push(`font-size:${globalFc.size}px !important`)
         if(globalFc.color)  parts2.push(`color:${globalFc.color} !important`)
         if(parts2.length){
-          // Target modal overlays specifically
-          css+=`div[style*="position:fixed"] *,div[style*="position: fixed"] *{${parts2.join(';')}}
+          css+=`body *{${parts2.join(';')}}
 `
-          css+=`div[style*="zIndex:200"] *,div[style*="z-index:200"] *{${parts2.join(';')}}
+          css+=`div[style*="position:fixed"] *{${parts2.join(';')}}
+`
+          css+=`div[style*="zIndex:200"] *,div[style*="zIndex:300"] *{${parts2.join(';')}}
 `
         }
       }
-      let css=''
       for(const [sec,sel] of Object.entries(selectorMap)){
+        if(sec==='global') continue
         const fc=fonts[sec]
         if(!fc) continue
         const parts=[]
@@ -3684,7 +3695,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.25</title>
+        <title>Trading Simulator V4.27</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3747,7 +3758,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.25
+            <span className="dot"/>Trading Simulator V4.27
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -3824,7 +3835,7 @@ export default function Home() {
                 background:'transparent',transition:'background 0.15s'}}
               onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.25)'}
               onMouseOut={e=>e.currentTarget.style.background='transparent'}/>
-            <div style={{display:'flex',borderBottom:'1px solid var(--border)'}}>
+            <div className="sidebar-tabs" style={{display:'flex',borderBottom:'1px solid var(--border)'}}>
               {[{id:'config',label:'⚙',title:'Configuración'},{id:'watchlist',label:'☰',title:'Watchlist'},{id:'alarms',label:'🔔',title:'Alertas',badge:alarmActiveCount},{id:'multi',label:'📊',title:'Backtesting'},{id:'tradelog',label:'📒',title:'TradeLog',accent:'#9b72ff'}].map(tab=>(
                 <button key={tab.id} onClick={()=>setSidePanel(tab.id)} title={tab.title} style={{
                   flex:1,padding:'8px 4px',
@@ -5367,7 +5378,7 @@ export default function Home() {
 
         return(
           <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.72)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center'}} onClick={e=>{if(e.target===e.currentTarget)closeEditAlarm()}}>
-            <div style={{background:'#0d1824',border:'1px solid #1e3a52',borderRadius:8,padding:24,width:400,maxHeight:'88vh',overflowY:'auto',display:'flex',flexDirection:'column',gap:14,fontFamily:MONO,fontSize:12,boxShadow:'0 8px 48px rgba(0,0,0,0.8)'}}>
+            <div style={{background:'#0d1824',border:'1px solid #1e3a52',borderRadius:8,padding:24,width:400,maxHeight:'88vh',overflowY:'auto',display:'flex',flexDirection:'column',gap:14,fontFamily:MONO,fontSize:13,boxShadow:'0 8px 48px rgba(0,0,0,0.8)'}}>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                 <span style={{fontWeight:700,color:'var(--text)',fontSize:15}}>{editingAlarm.id?'Editar alarma':'Nueva alarma'}</span>
                 <button onClick={closeEditAlarm} style={{background:'transparent',border:'none',color:'var(--text3)',fontSize:18,cursor:'pointer'}}>✕</button>
@@ -5538,7 +5549,7 @@ export default function Home() {
 
       {/* ══ TRADELOG MAIN PANEL ══ */}
       {sidePanel==='tradelog'&&(
-        <div style={{display:'flex',flex:1,height:'100%',overflow:'hidden',background:'var(--bg)'}}>
+        <div className="tl-content" style={{display:'flex',flex:1,height:'100%',overflow:'hidden',background:'var(--bg)',fontSize:13}}>
 
           {/* COLUMNA IZQUIERDA — filtros + stats */}
           <div style={{width:190,flexShrink:0,background:'var(--bg2)',borderRight:'1px solid var(--border)',display:'flex',flexDirection:'column',overflowY:'auto'}}>
@@ -6076,7 +6087,7 @@ export default function Home() {
       {/* ══ MODAL ESTRATEGIA — fixed sobre gráfico ══ */}
       {editingStr!==null&&(
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.72)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center'}} onClick={e=>{if(e.target===e.currentTarget)closeEditStr()}}>
-          <div style={{background:'#0d1824',border:'1px solid #1e3a52',borderRadius:8,padding:28,width:680,maxHeight:'90vh',overflowY:'auto',display:'flex',flexDirection:'column',gap:14,fontFamily:MONO,fontSize:12,boxShadow:'0 8px 48px rgba(0,0,0,0.8)'}}>
+          <div style={{background:'#0d1824',border:'1px solid #1e3a52',borderRadius:8,padding:28,width:680,maxHeight:'90vh',overflowY:'auto',display:'flex',flexDirection:'column',gap:14,fontFamily:MONO,fontSize:13,boxShadow:'0 8px 48px rgba(0,0,0,0.8)'}}>
             {/* Header */}
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
               <span style={{fontWeight:700,color:'var(--text)',fontSize:15}}>{editingStr.id?'Editar estrategia':'Nueva estrategia'}</span>
@@ -6216,8 +6227,8 @@ export default function Home() {
       {tlFormOpen&&(
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.75)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center'}}
           onClick={e=>{if(e.target===e.currentTarget)setTlFormOpen(false)}}>
-          <div style={{background:'#0d1824',border:'1px solid #1e3a52',borderRadius:8,padding:24,width:560,maxHeight:'90vh',overflowY:'auto',
-            display:'flex',flexDirection:'column',gap:14,fontFamily:MONO,fontSize:12,boxShadow:'0 8px 48px rgba(0,0,0,0.8)'}}>
+          <div className="tl-modal" style={{background:'#0d1824',border:'1px solid #1e3a52',borderRadius:8,padding:24,width:560,maxHeight:'90vh',overflowY:'auto',
+            display:'flex',flexDirection:'column',gap:14,fontFamily:MONO,fontSize:13,boxShadow:'0 8px 48px rgba(0,0,0,0.8)'}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
               <span style={{fontWeight:700,color:'#c8dff5',fontSize:14}}>{tlForm.id?'Editar operación':'Nueva operación'}</span>
               <span onClick={()=>setTlFormOpen(false)} style={{cursor:'pointer',color:'#4a7a95',fontSize:20,lineHeight:1}}>×</span>
@@ -6324,8 +6335,8 @@ export default function Home() {
       {tlCloseOpen&&tlSelected&&(
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.75)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center'}}
           onClick={e=>{if(e.target===e.currentTarget)setTlCloseOpen(false)}}>
-          <div style={{background:'#0d1824',border:'1px solid #1e3a52',borderRadius:8,padding:24,width:400,
-            display:'flex',flexDirection:'column',gap:14,fontFamily:MONO,fontSize:12,boxShadow:'0 8px 48px rgba(0,0,0,0.8)'}}>
+          <div className="tl-modal" style={{background:'#0d1824',border:'1px solid #1e3a52',borderRadius:8,padding:24,width:400,
+            display:'flex',flexDirection:'column',gap:14,fontFamily:MONO,fontSize:13,boxShadow:'0 8px 48px rgba(0,0,0,0.8)'}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
               <span style={{fontWeight:700,color:'#c8dff5',fontSize:14}}>Cerrar operación · {tlSelected.symbol}</span>
               <span onClick={()=>setTlCloseOpen(false)} style={{cursor:'pointer',color:'#4a7a95',fontSize:20,lineHeight:1}}>×</span>
