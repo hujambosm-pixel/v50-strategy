@@ -1,0 +1,441 @@
+// pages/api/tradelog.js
+// TradeLog API — CRUD operaciones + FX histórico + parsers importación
+
+const SUPABASE_URL = process.env.SUPABASE_URL
+const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY
+
+async function sb(path, opts = {}) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1${path}`, {
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+      'Content-Type': 'application/json',
+      Prefer: opts.prefer || 'return=representation',
+    },
+    ...opts,
+  })
+  if (!res.ok) {
+    const err = await res.text()
+    throw new Error(`Supabase ${res.status}: ${err}`)
+  }
+  const text = await res.text()
+  return text ? JSON.parse(text) : null
+}
+
+// ── FX: obtener tipo de cambio histórico ─────────────────────
+// Usa frankfurter.app (ECB data, gratuito, sin API key)
+async function getFxRate(date, fromCur, toCur = 'EUR') {
+  if (fromCur === toCur) return 1.0
+
+  // 1. Buscar en cache Supabase
+  try {
+    const cached = await sb(
+      `/fx_rates?date=eq.${date}&from_cur=eq.${fromCur}&to_cur=eq.${toCur}&select=rate`
+    )
+    if (cached?.length) return parseFloat(cached[0].rate)
+  } catch (_) {}
+
+  // 2. Llamar a frankfurter.app
+  // API devuelve cuántos EUR vale 1 USD → rate = EUR/USD
+  // Para obtener USD→EUR: rate = 1 / (EUR/USD)
+  try {
+    const url = `https://api.frankfurter.app/${date}?from=${fromCur}&to=${toCur}`
+    const res = await fetch(url)
+    if (res.ok) {
+      const data = await res.json()
+      const rate = data?.rates?.[toCur]
+      if (rate) {
+        // Guardar en cache
+        try {
+          await sb('/fx_rates', {
+            method: 'POST',
+            prefer: 'return=minimal',
+            body: JSON.stringify({ date, from_cur: fromCur, to_cur: toCur, rate, source: 'frankfurter' }),
+          })
+        } catch (_) {}
+        return parseFloat(rate)
+      }
+    }
+  } catch (_) {}
+
+  return null // sin dato
+}
+
+// Precio actual de un símbolo vía Stooq (para flotante)
+const MAP_STOOQ = {
+  '^GSPC':'spy.us','^NDX':'ndx.us','^IBEX':'ibex.es','^GDAXI':'dax.de',
+  '^FTSE':'ftse.uk','^N225':'n225.jp','BTC-USD':'btc-usd.v','ETH-USD':'eth-usd.v',
+  'GC=F':'gc.f','CL=F':'cl.f',
+}
+async function getCurrentPrice(symbol) {
+  try {
+    const sym = MAP_STOOQ[symbol] || (symbol.toLowerCase() + '.us')
+    const res = await fetch(`https://stooq.com/q/d/l/?s=${sym}&i=d`)
+    const text = await res.text()
+    if (!text || text.includes('No data')) return null
+    const lines = text.trim().split('\n').slice(1).filter(l => l.trim())
+    if (!lines.length) return null
+    const last = lines[lines.length - 1].split(',')
+    return { price: parseFloat(last[4]), date: last[0] }
+  } catch { return null }
+}
+
+// ── Parser IBKR CSV ──────────────────────────────────────────
+function parseIBKRcsv(csvText) {
+  const lines = csvText.split('\n').map(l => l.trim()).filter(Boolean)
+  const trades = []
+
+  // IBKR Flex Report o Activity Statement
+  // Buscamos secciones "Trades" con cabecera: Symbol, Date/Time, Quantity, T. Price, Comm/Fee
+  let inTrades = false
+  let headers = []
+
+  for (const line of lines) {
+    const cols = line.split(',').map(c => c.replace(/"/g, '').trim())
+
+    if (cols[0] === 'Trades' && cols[1] === 'Header') {
+      headers = cols
+      inTrades = true
+      continue
+    }
+    if (cols[0] === 'Trades' && cols[1] === 'Data' && inTrades) {
+      const get = (key) => {
+        const idx = headers.indexOf(key)
+        return idx >= 0 ? cols[idx] : null
+      }
+      const symbol   = get('Symbol')
+      const datetime = get('Date/Time') || get('TradeDate')
+      const qty      = parseFloat(get('Quantity') || '0')
+      const price    = parseFloat(get('T. Price') || get('TradePrice') || '0')
+      const comm     = Math.abs(parseFloat(get('Comm/Fee') || get('Commission') || '0'))
+      const currency = get('Currency') || 'USD'
+      const assetCat = get('Asset Category') || 'Stocks'
+
+      if (!symbol || !qty || !price) continue
+
+      const date = datetime ? datetime.split(' ')[0].split(',')[0] : null
+
+      trades.push({
+        symbol,
+        entry_date: date,
+        shares: Math.abs(qty),
+        entry_price: price,
+        entry_currency: currency,
+        commission_buy: qty > 0 ? comm : 0,
+        commission_sell: qty < 0 ? comm : 0,
+        fill_type: qty > 0 ? 'buy' : 'sell',
+        asset_type: assetCat.toLowerCase().includes('crypto') ? 'crypto'
+          : assetCat.toLowerCase().includes('etf') ? 'etf' : 'stock',
+        broker: 'ibkr',
+        import_source: 'ibkr_csv',
+      })
+      continue
+    }
+    if (inTrades && cols[0] !== 'Trades') inTrades = false
+  }
+  return trades
+}
+
+// ── Parser Degiro CSV ────────────────────────────────────────
+function parseDegiroCSV(csvText) {
+  const lines = csvText.split('\n').map(l => l.trim()).filter(Boolean)
+  if (!lines.length) return []
+  const headers = lines[0].split(',').map(c => c.replace(/"/g, '').trim())
+  const trades = []
+
+  for (const line of lines.slice(1)) {
+    const cols = line.split(',').map(c => c.replace(/"/g, '').trim())
+    const get = (key) => {
+      const idx = headers.findIndex(h => h.toLowerCase().includes(key.toLowerCase()))
+      return idx >= 0 ? cols[idx] : null
+    }
+    const date     = get('fecha') || get('date')
+    const symbol   = get('producto') || get('symbol') || get('isin')
+    const qty      = parseFloat((get('número') || get('quantity') || '0').replace(',', '.'))
+    const price    = parseFloat((get('precio') || get('price') || '0').replace(',', '.'))
+    const currency = get('divisa') || get('currency') || 'EUR'
+    const comm     = Math.abs(parseFloat((get('costes') || get('commission') || '0').replace(',', '.')))
+
+    if (!symbol || !qty || !price) continue
+
+    trades.push({
+      symbol: symbol.toUpperCase(),
+      entry_date: date,
+      shares: Math.abs(qty),
+      entry_price: price,
+      entry_currency: currency,
+      commission_buy: qty > 0 ? comm : 0,
+      commission_sell: qty < 0 ? comm : 0,
+      fill_type: qty > 0 ? 'buy' : 'sell',
+      broker: 'degiro',
+      import_source: 'degiro_csv',
+    })
+  }
+  return trades
+}
+
+// ── Parser texto libre (Claude API) ─────────────────────────
+async function parseWithAI(text, apiKey) {
+  const ANTHROPIC_KEY = apiKey || process.env.ANTHROPIC_API_KEY
+  if (!ANTHROPIC_KEY) throw new Error('API key de Anthropic no configurada')
+
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': ANTHROPIC_KEY,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 2000,
+      messages: [{
+        role: 'user',
+        content: `Extrae las operaciones de trading del siguiente texto y devuelve SOLO un JSON array.
+Cada operación debe tener estos campos (todos opcionales excepto symbol):
+- symbol (string, ticker)
+- fill_type ("buy" o "sell")
+- entry_date (YYYY-MM-DD)
+- shares (número)
+- entry_price (número)
+- entry_currency ("USD", "EUR", "GBP"...)
+- commission_buy (número, solo si es compra)
+- commission_sell (número, solo si es venta)
+- broker (si se menciona: "ibkr","degiro","binance","myinvestor")
+
+Si no hay operaciones claras, devuelve [].
+Responde SOLO con el JSON, sin texto adicional.
+
+TEXTO:
+${text.slice(0, 4000)}`
+      }]
+    })
+  })
+  if (!res.ok) throw new Error(`Claude API: ${res.status}`)
+  const data = await res.json()
+  const raw = data.content?.[0]?.text || '[]'
+  try {
+    return JSON.parse(raw.replace(/```json|```/g, '').trim())
+  } catch {
+    return []
+  }
+}
+
+// ── Calcular P&L de un trade ─────────────────────────────────
+function calcPnL(trade) {
+  const fxEntry = trade.fx_entry || 1
+  const fxExit  = trade.fx_exit  || fxEntry
+  const capital = trade.shares * trade.entry_price / fxEntry
+  const commBuyEur  = (trade.commission_buy  || 0) / fxEntry
+  const commSellEur = (trade.commission_sell || 0) / fxExit
+
+  let pnlEur = null, pnlPct = null, pnlCur = null
+  if (trade.status === 'closed' && trade.exit_price) {
+    pnlCur = (trade.exit_price - trade.entry_price) * trade.shares
+    pnlEur = pnlCur / fxExit - commBuyEur - commSellEur
+    pnlPct = capital > 0 ? (pnlEur / capital) * 100 : null
+  }
+  return { capital_eur: capital, pnl_currency: pnlCur, pnl_eur: pnlEur, pnl_pct: pnlPct }
+}
+
+// ── Handler principal ────────────────────────────────────────
+export default async function handler(req, res) {
+  const { action } = req.query
+
+  // ── GET /api/tradelog?action=list ──
+  if (req.method === 'GET' && action === 'list') {
+    try {
+      const { broker, status, year, symbol } = req.query
+      let path = '/trades_log?order=entry_date.desc&limit=500'
+      if (broker)  path += `&broker=eq.${broker}`
+      if (status)  path += `&status=eq.${status}`
+      if (symbol)  path += `&symbol=eq.${symbol.toUpperCase()}`
+      if (year)    path += `&entry_date=gte.${year}-01-01&entry_date=lte.${year}-12-31`
+
+      const trades = await sb(path)
+
+      // Para operaciones abiertas: añadir precio actual
+      const openTrades = trades.filter(t => t.status === 'open')
+      if (openTrades.length) {
+        const priceCache = {}
+        await Promise.all(openTrades.map(async t => {
+          if (!priceCache[t.symbol]) {
+            const r = await getCurrentPrice(t.symbol).catch(() => null)
+            priceCache[t.symbol] = r
+          }
+          const cur = priceCache[t.symbol]
+          if (cur) {
+            t._current_price = cur.price
+            t._current_date  = cur.date
+            const fxEntry = t.fx_entry || 1
+            const fxNow = t.fx_entry || 1 // usamos fx_entry como aproximación flotante
+            const capitalEur = t.shares * t.entry_price / fxEntry
+            const pnlCur = (cur.price - t.entry_price) * t.shares
+            t._pnl_float_eur = pnlCur / fxNow - (t.commission_buy || 0) / fxEntry
+            t._pnl_float_pct = capitalEur > 0 ? (t._pnl_float_eur / capitalEur) * 100 : 0
+          }
+        }))
+      }
+
+      return res.status(200).json({ trades: trades || [] })
+    } catch (e) {
+      return res.status(500).json({ error: e.message })
+    }
+  }
+
+  // ── GET /api/tradelog?action=fills&id=xxx ──
+  if (req.method === 'GET' && action === 'fills') {
+    try {
+      const fills = await sb(`/trade_fills?trade_id=eq.${req.query.id}&order=date.asc`)
+      return res.status(200).json({ fills: fills || [] })
+    } catch (e) {
+      return res.status(500).json({ error: e.message })
+    }
+  }
+
+  // ── GET /api/tradelog?action=fx&date=2025-01-15&from=USD ──
+  if (req.method === 'GET' && action === 'fx') {
+    try {
+      const rate = await getFxRate(req.query.date, req.query.from, req.query.to || 'EUR')
+      return res.status(200).json({ rate, date: req.query.date, from: req.query.from })
+    } catch (e) {
+      return res.status(500).json({ error: e.message })
+    }
+  }
+
+  if (req.method !== 'POST') return res.status(405).end()
+  const body = req.body
+
+  // ── POST save (crear o actualizar) ──
+  if (action === 'save') {
+    try {
+      let trade = { ...body }
+
+      // Auto-fetch FX si no viene manual
+      if (trade.entry_date && trade.entry_currency && trade.entry_currency !== 'EUR') {
+        if (!trade.fx_entry || !trade.fx_entry_manual) {
+          const rate = await getFxRate(trade.entry_date, trade.entry_currency)
+          if (rate) trade.fx_entry = rate
+        }
+      } else {
+        trade.fx_entry = 1.0
+      }
+      if (trade.status === 'closed' && trade.exit_date && trade.exit_currency && trade.exit_currency !== 'EUR') {
+        if (!trade.fx_exit || !trade.fx_exit_manual) {
+          const rate = await getFxRate(trade.exit_date, trade.exit_currency)
+          if (rate) trade.fx_exit = rate
+        }
+      }
+
+      // Recalcular P&L
+      const pnl = calcPnL(trade)
+      trade = { ...trade, ...pnl }
+
+      let saved
+      if (trade.id) {
+        saved = await sb(`/trades_log?id=eq.${trade.id}`, { method: 'PATCH', body: JSON.stringify(trade) })
+      } else {
+        saved = await sb('/trades_log', { method: 'POST', body: JSON.stringify(trade) })
+      }
+
+      return res.status(200).json({ trade: Array.isArray(saved) ? saved[0] : saved })
+    } catch (e) {
+      return res.status(500).json({ error: e.message })
+    }
+  }
+
+  // ── POST delete ──
+  if (action === 'delete') {
+    try {
+      await sb(`/trades_log?id=eq.${body.id}`, { method: 'DELETE', prefer: 'return=minimal' })
+      return res.status(200).json({ ok: true })
+    } catch (e) {
+      return res.status(500).json({ error: e.message })
+    }
+  }
+
+  // ── POST close (cerrar operación abierta) ──
+  if (action === 'close') {
+    try {
+      const { id, exit_date, exit_price, exit_currency, commission_sell, fx_exit_manual, fx_exit } = body
+
+      let fxExit = fx_exit
+      if (!fx_exit_manual) {
+        const cur = exit_currency || 'USD'
+        if (cur !== 'EUR') fxExit = await getFxRate(exit_date, cur) || fxExit
+        else fxExit = 1.0
+      }
+
+      // Obtener trade actual para recalcular
+      const existing = await sb(`/trades_log?id=eq.${id}&select=*`)
+      if (!existing?.length) return res.status(404).json({ error: 'Trade no encontrado' })
+      const trade = {
+        ...existing[0],
+        exit_date, exit_price: parseFloat(exit_price),
+        exit_currency: exit_currency || existing[0].entry_currency,
+        commission_sell: parseFloat(commission_sell || 0),
+        fx_exit: fxExit,
+        fx_exit_manual: !!fx_exit_manual,
+        status: 'closed',
+      }
+      const pnl = calcPnL(trade)
+      const updated = await sb(`/trades_log?id=eq.${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ ...trade, ...pnl }),
+      })
+      return res.status(200).json({ trade: Array.isArray(updated) ? updated[0] : updated })
+    } catch (e) {
+      return res.status(500).json({ error: e.message })
+    }
+  }
+
+  // ── POST fill (añadir entrada parcial) ──
+  if (action === 'fill') {
+    try {
+      const { trade_id, ...fill } = body
+      // FX automático del fill
+      if (fill.currency && fill.currency !== 'EUR' && fill.date) {
+        fill.fx_rate = await getFxRate(fill.date, fill.currency) || null
+      }
+      await sb('/trade_fills', { method: 'POST', body: JSON.stringify({ ...fill, trade_id }) })
+      // Marcar trade como multi-fill
+      await sb(`/trades_log?id=eq.${trade_id}`, {
+        method: 'PATCH', prefer: 'return=minimal',
+        body: JSON.stringify({ has_fills: true }),
+      })
+      return res.status(200).json({ ok: true })
+    } catch (e) {
+      return res.status(500).json({ error: e.message })
+    }
+  }
+
+  // ── POST parse (importar CSV o texto) ──
+  if (action === 'parse') {
+    try {
+      const { text, format, apiKey } = body
+      let parsed = []
+
+      if (format === 'ibkr_csv')   parsed = parseIBKRcsv(text)
+      else if (format === 'degiro_csv') parsed = parseDegiroCSV(text)
+      else if (format === 'ai')    parsed = await parseWithAI(text, apiKey)
+      else return res.status(400).json({ error: 'Formato no soportado: ibkr_csv | degiro_csv | ai' })
+
+      // Enriquecer con FX automático
+      for (const t of parsed) {
+        if (t.entry_date && t.entry_currency && t.entry_currency !== 'EUR') {
+          t.fx_entry = await getFxRate(t.entry_date, t.entry_currency) || null
+        } else {
+          t.fx_entry = 1.0
+        }
+        const pnl = calcPnL({ ...t, status: 'open' })
+        t.capital_eur = pnl.capital_eur
+      }
+
+      return res.status(200).json({ parsed, count: parsed.length })
+    } catch (e) {
+      return res.status(500).json({ error: e.message })
+    }
+  }
+
+  return res.status(400).json({ error: 'Acción no reconocida' })
+}
