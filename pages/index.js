@@ -5803,9 +5803,7 @@ export default function Home() {
                 {tlImportFormat==='ai'&&'Pega cualquier texto: historial de broker, tabla HTML, o describe la operación. Claude lo interpretará.'}
               </div>
               <textarea value={tlImportText} onChange={e=>setTlImportText(e.target.value)}
-                placeholder={tlImportFormat==='ai'?'Pega aquí el historial, tabla o describe la operación...
-
-Ej: "Compré 50 NVDA el 12/02/2025 a $485.20, comisión $1.50"':'Pega el contenido del CSV aquí...'}
+                placeholder={tlImportFormat==='ai'?'Pega aquí el historial, tabla o describe la operación... Ej: Compré 50 NVDA el 12/02/2025 a $485.20, comisión $1.50':'Pega el contenido del CSV aquí...'}
                 style={{flex:'none',height:200,background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',
                   fontFamily:MONO,fontSize:11,padding:'10px',borderRadius:4,resize:'vertical',minHeight:120}}/>
               <div style={{display:'flex',gap:8,alignItems:'center'}}>
