@@ -3374,16 +3374,24 @@ export default function Home() {
   const tlSaveTrade = async(trade)=>{
     if(tlUseLocal()) {
       const all = tlGetLS()
-      const pnl = tlCalcPnL(trade)
-      if(trade.id) {
-        const idx = all.findIndex(t=>t.id===trade.id)
-        const updated = {...trade,...pnl,updated_at:new Date().toISOString()}
+      // Normalizar campos numéricos (los inputs devuelven strings)
+      const n = (v) => v===''||v==null ? null : parseFloat(v)||0
+      const norm = {...trade,
+        entry_price: n(trade.entry_price), exit_price: n(trade.exit_price),
+        shares: n(trade.shares), commission_buy: n(trade.commission_buy)||0,
+        commission_sell: n(trade.commission_sell)||0,
+        fx_entry: n(trade.fx_entry)||null, fx_exit: n(trade.fx_exit)||null,
+      }
+      const pnl = tlCalcPnL(norm)
+      if(norm.id) {
+        const idx = all.findIndex(t=>t.id===norm.id)
+        const updated = {...norm,...pnl,updated_at:new Date().toISOString()}
         if(idx>=0) all[idx]=updated; else all.push(updated)
         tlSetLS(all)
         await loadTrades()
         return updated
       } else {
-        const newT = {...trade,...pnl,id:'ls_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),
+        const newT = {...norm,...pnl,id:'ls_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),
           created_at:new Date().toISOString(),updated_at:new Date().toISOString()}
         tlSetLS([...all,newT])
         await loadTrades()
@@ -3787,7 +3795,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.28</title>
+        <title>Trading Simulator V4.29</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3850,7 +3858,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.28
+            <span className="dot"/>Trading Simulator V4.29
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4693,22 +4701,24 @@ export default function Home() {
                     background:'rgba(155,114,255,0.15)',border:'1px solid #9b72ff',color:'#9b72ff',fontWeight:700}}>
                   + Nueva operación
                 </button>
-                {/* Modo de almacenamiento */}
+                {/* Indicador de datos guardados + borrar todo */}
                 {(()=>{
-                  const isLocal=tlUseLocal()
                   const lsCount=tlGetLS().length
+                  if(!tlUseLocal()) return null
                   return(
-                    <div style={{marginTop:6,padding:'6px 8px',borderRadius:4,border:`1px solid ${isLocal?'#ffd166':'#00e5a0'}20`,background:isLocal?'rgba(255,209,102,0.05)':'rgba(0,229,160,0.05)'}}>
-                      <div style={{fontFamily:MONO,fontSize:9,color:isLocal?'#ffd166':'#00e5a0',fontWeight:700,marginBottom:isLocal?3:0}}>
-                        {isLocal?'📦 Modo local (sin Supabase)':'☁ Conectado a Supabase'}
+                    <div style={{marginTop:6,padding:'6px 8px',borderRadius:4,border:'1px solid #2a3f55',background:'rgba(0,0,0,0.2)'}}>
+                      <div style={{fontFamily:MONO,fontSize:9,color:'#5a8aaa',lineHeight:1.5}}>
+                        {lsCount===0
+                          ? 'Sin operaciones. Añade las que quieras — puedes borrarlas todas cuando quieras.'
+                          : <>
+                              <span style={{color:'#ffd166',fontWeight:700}}>{lsCount} operaciones guardadas</span>
+                              <span onClick={()=>{if(confirm(`¿Borrar las ${lsCount} operaciones?`)){localStorage.removeItem('v50_tradelog');loadTrades()}}}
+                                style={{display:'block',marginTop:3,color:'#ff4d6d',cursor:'pointer',textDecoration:'underline'}}>
+                                🗑 Borrar todas
+                              </span>
+                            </>
+                        }
                       </div>
-                      {isLocal&&<div style={{fontFamily:MONO,fontSize:9,color:'#5a8aaa',lineHeight:1.4}}>
-                        Los datos se guardan en este navegador. Puedes probar y borrar todo después.
-                        {lsCount>0&&<span onClick={()=>{if(confirm(`¿Borrar los ${lsCount} trades de prueba?`)){localStorage.removeItem('v50_tradelog');loadTrades()}}}
-                          style={{display:'block',marginTop:4,color:'#ff4d6d',cursor:'pointer',textDecoration:'underline'}}>
-                          🗑 Borrar {lsCount} trades de prueba
-                        </span>}
-                      </div>}
                     </div>
                   )
                 })()}
@@ -5881,7 +5891,7 @@ export default function Home() {
                           <td style={{padding:'6px 8px',color:'#a8ccdf',whiteSpace:'nowrap'}}>{t.entry_date||'—'}</td>
                           <td style={{padding:'6px 8px',color:'#a8ccdf',whiteSpace:'nowrap'}}>{isOpen?<span style={{color:'#3d5a7a'}}>—</span>:t.exit_date||'—'}</td>
                           <td style={{padding:'6px 8px'}}>{t.shares}</td>
-                          <td style={{padding:'6px 8px',whiteSpace:'nowrap'}}>{t.entry_currency==='EUR'?'€':'$'}{t.entry_price?.toFixed(2)}</td>
+                          <td style={{padding:'6px 8px',whiteSpace:'nowrap'}}>{t.entry_currency==='EUR'?'€':'$'}{t.entry_price!=null?parseFloat(t.entry_price).toFixed(2):'—'}</td>
                           <td style={{padding:'6px 8px',whiteSpace:'nowrap',color:isOpen?'#00e5a0':'inherit'}}>
                             {exitPx!=null?`${t.entry_currency==='EUR'?'€':'$'}${exitPx.toFixed(2)}`:' —'}
                             {isOpen&&' ●'}
@@ -6132,12 +6142,12 @@ export default function Home() {
               <div style={{padding:'8px 12px',borderBottom:'1px solid var(--border)'}}>
                 {[
                   ['Entrada',tlSelected.entry_date||'—'],
-                  ['Precio entrada',`${tlSelected.entry_currency==='EUR'?'€':'$'}${tlSelected.entry_price?.toFixed(2)||'—'}`],
+                  ['Precio entrada',`${tlSelected.entry_currency==='EUR'?'€':'$'}${tlSelected.entry_price!=null?parseFloat(tlSelected.entry_price).toFixed(2):'—'}`],
                   ...(tlSelected.status==='open'&&tlSelected._current_price!=null?[['Precio actual',`${tlSelected.entry_currency==='EUR'?'€':'$'}${tlSelected._current_price.toFixed(2)} ↑`]]:
-                    tlSelected.exit_price!=null?[['Precio salida',`${tlSelected.exit_currency==='EUR'?'€':'$'}${tlSelected.exit_price.toFixed(2)}`],['Fecha salida',tlSelected.exit_date||'—']]:[]),
+                    tlSelected.exit_price!=null?[['Precio salida',`${tlSelected.exit_currency==='EUR'?'€':'$'}${parseFloat(tlSelected.exit_price).toFixed(2)}`],['Fecha salida',tlSelected.exit_date||'—']]:[]),
                   ['Acciones',tlSelected.shares],
-                  ['Capital inv.',`€${tlSelected.capital_eur?.toFixed(0)||'—'}`],
-                  ['Comisión total',`-€${((tlSelected.commission_buy||0)+(tlSelected.commission_sell||0)).toFixed(2)}`],
+                  ['Capital inv.',`€${tlSelected.capital_eur!=null?parseFloat(tlSelected.capital_eur).toFixed(0):'—'}`],
+                  ['Comisión total',`-€${(parseFloat(tlSelected.commission_buy||0)+parseFloat(tlSelected.commission_sell||0)).toFixed(2)}`],
                 ].map(([l,v])=>(
                   <div key={l} style={{display:'flex',justifyContent:'space-between',padding:'3px 0'}}>
                     <span style={{fontFamily:MONO,fontSize:10,color:'#4a7a95'}}>{l}</span>
@@ -6151,8 +6161,8 @@ export default function Home() {
                 <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:4}}>Divisa / FX</div>
                 {[
                   ['Divisa',tlSelected.entry_currency,tlSelected.entry_currency==='EUR'?'#00e5a0':'#ffd166'],
-                  ['FX entrada',tlSelected.fx_entry?.toFixed(4)||(tlSelected.entry_currency==='EUR'?'1.0000':'—'),'#7a9bc0'],
-                  ...(tlSelected.fx_exit?[['FX salida',tlSelected.fx_exit.toFixed(4),'#7a9bc0']]:
+                  ['FX entrada',tlSelected.fx_entry!=null?parseFloat(tlSelected.fx_entry).toFixed(4):null||(tlSelected.entry_currency==='EUR'?'1.0000':'—'),'#7a9bc0'],
+                  ...(tlSelected.fx_exit?[['FX salida',parseFloat(tlSelected.fx_exit).toFixed(4),'#7a9bc0']]:
                     tlSelected.status==='open'&&tlSelected.entry_currency!=='EUR'?[['FX actual','aprox. entrada','#4a7a95']]:[] ),
                 ].map(([l,v,c])=>(
                   <div key={l} style={{display:'flex',justifyContent:'space-between',padding:'2px 0'}}>
@@ -6499,7 +6509,7 @@ export default function Home() {
             {tlCloseForm.exit_price&&(()=>{
               const fx=parseFloat(tlCloseForm.fx_exit)||tlSelected.fx_entry||1
               const cap=tlSelected.capital_eur||0
-              const pnlCur=(parseFloat(tlCloseForm.exit_price)-tlSelected.entry_price)*tlSelected.shares
+              const pnlCur=(parseFloat(tlCloseForm.exit_price)-parseFloat(tlSelected.entry_price))*parseFloat(tlSelected.shares)
               const pnlEur=pnlCur/fx-(tlSelected.commission_buy||0)/(tlSelected.fx_entry||1)-(parseFloat(tlCloseForm.commission_sell)||0)/fx
               const pct=cap>0?pnlEur/cap*100:0
               return(
