@@ -3294,9 +3294,49 @@ export default function Home() {
      sp500EmaR,sp500EmaL,definition,sidePanel,run])
 
   // ── TradeLog helpers ────────────────────────────────────────
+  // ── TradeLog: storage mode (local vs supabase) ──────────────
+  const TL_LS_KEY = 'v50_tradelog'
+  const tlGetLS = () => { try{ return JSON.parse(localStorage.getItem(TL_LS_KEY)||'[]') }catch{ return [] } }
+  const tlSetLS = (arr) => localStorage.setItem(TL_LS_KEY, JSON.stringify(arr))
+  const tlUseLocal = () => {
+    // Usa localStorage si el usuario no tiene Supabase configurado en los settings
+    try {
+      const s = JSON.parse(localStorage.getItem('v50_settings')||'{}')
+      return !s?.integraciones?.supabaseUrl
+    } catch { return true }
+  }
+
+  // Recalcula P&L localmente (refleja la lógica del backend)
+  const tlCalcPnL = (t) => {
+    const fxEntry = parseFloat(t.fx_entry)||1
+    const fxExit  = parseFloat(t.fx_exit)||fxEntry
+    const capital = (parseFloat(t.shares)||0) * (parseFloat(t.entry_price)||0) / fxEntry
+    const commBuyEur  = (parseFloat(t.commission_buy)||0) / fxEntry
+    const commSellEur = (parseFloat(t.commission_sell)||0) / fxExit
+    let pnlEur=null, pnlPct=null, pnlCur=null
+    if(t.status==='closed' && t.exit_price) {
+      pnlCur = (parseFloat(t.exit_price) - parseFloat(t.entry_price)) * parseFloat(t.shares)
+      pnlEur = pnlCur/fxExit - commBuyEur - commSellEur
+      pnlPct = capital>0 ? (pnlEur/capital)*100 : null
+    }
+    return { capital_eur:capital, pnl_currency:pnlCur, pnl_eur:pnlEur, pnl_pct:pnlPct }
+  }
+
   const loadTrades = useCallback(async () => {
     setTlLoading(true); setTlError(null)
     try {
+      // ── modo localStorage (sin Supabase configurado) ──
+      const local = tlUseLocal()
+      if(local) {
+        let trades = tlGetLS()
+        if(tlFilterBroker) trades = trades.filter(t=>t.broker===tlFilterBroker)
+        if(tlFilterYear)   trades = trades.filter(t=>t.entry_date?.startsWith(tlFilterYear))
+        if(tlFilterStatus) trades = trades.filter(t=>t.status===tlFilterStatus)
+        trades = trades.sort((a,b)=>b.entry_date?.localeCompare(a.entry_date||'')||0)
+        setTlTrades(trades)
+        return
+      }
+      // ── modo Supabase ──
       let url = '/api/tradelog?action=list'
       if(tlFilterBroker) url += `&broker=${tlFilterBroker}`
       if(tlFilterYear)   url += `&year=${tlFilterYear}`
@@ -3306,8 +3346,16 @@ export default function Home() {
       if(!res.ok) throw new Error(json.error||'Error')
       setTlTrades(json.trades||[])
     } catch(e){
-      if(e.message?.includes('SUPABASE_URL')) setTlError('Configura SUPABASE_URL y SUPABASE_ANON_KEY en Vercel → Settings → Environment Variables')
-      else setTlError(e.message)
+      // Si el error es de Supabase no configurado → caer a localStorage silenciosamente
+      if(e.message?.includes('SUPABASE_URL') || e.message?.includes('no configurada')) {
+        let trades = tlGetLS()
+        if(tlFilterBroker) trades = trades.filter(t=>t.broker===tlFilterBroker)
+        if(tlFilterYear)   trades = trades.filter(t=>t.entry_date?.startsWith(tlFilterYear))
+        if(tlFilterStatus) trades = trades.filter(t=>t.status===tlFilterStatus)
+        setTlTrades(trades.sort((a,b)=>(b.entry_date||'').localeCompare(a.entry_date||'')))
+      } else {
+        setTlError(e.message)
+      }
     }
     finally { setTlLoading(false) }
   },[tlFilterBroker,tlFilterYear,tlFilterStatus])
@@ -3316,6 +3364,7 @@ export default function Home() {
 
   const loadFills = useCallback(async(id)=>{
     try{
+      if(tlUseLocal()){ setTlFills([]); return }
       const res=await fetch(`/api/tradelog?action=fills&id=${id}`)
       const json=await res.json()
       setTlFills(json.fills||[])
@@ -3323,6 +3372,24 @@ export default function Home() {
   },[])
 
   const tlSaveTrade = async(trade)=>{
+    if(tlUseLocal()) {
+      const all = tlGetLS()
+      const pnl = tlCalcPnL(trade)
+      if(trade.id) {
+        const idx = all.findIndex(t=>t.id===trade.id)
+        const updated = {...trade,...pnl,updated_at:new Date().toISOString()}
+        if(idx>=0) all[idx]=updated; else all.push(updated)
+        tlSetLS(all)
+        await loadTrades()
+        return updated
+      } else {
+        const newT = {...trade,...pnl,id:'ls_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),
+          created_at:new Date().toISOString(),updated_at:new Date().toISOString()}
+        tlSetLS([...all,newT])
+        await loadTrades()
+        return newT
+      }
+    }
     const res=await fetch('/api/tradelog?action=save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(trade)})
     const json=await res.json()
     if(!res.ok) throw new Error(json.error||'Error')
@@ -3332,6 +3399,12 @@ export default function Home() {
 
   const tlDeleteTrade = async(id)=>{
     if(!confirm('¿Eliminar esta operación?')) return
+    if(tlUseLocal()) {
+      tlSetLS(tlGetLS().filter(t=>t.id!==id))
+      setTlSelected(null); setTlFills([])
+      await loadTrades()
+      return
+    }
     await fetch('/api/tradelog?action=delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})})
     setTlSelected(null); setTlFills([])
     await loadTrades()
@@ -3339,6 +3412,25 @@ export default function Home() {
 
   const tlCloseTrade = async()=>{
     if(!tlSelected) return
+    if(tlUseLocal()) {
+      const all = tlGetLS()
+      const idx = all.findIndex(t=>t.id===tlSelected.id)
+      if(idx<0) return
+      const updated = {...all[idx],...tlCloseForm,
+        exit_price:parseFloat(tlCloseForm.exit_price),
+        commission_sell:parseFloat(tlCloseForm.commission_sell||0),
+        status:'closed'}
+      updated.fx_exit = tlCloseForm.fx_exit_manual && tlCloseForm.fx_exit
+        ? parseFloat(tlCloseForm.fx_exit) : updated.fx_entry||1
+      const pnl = tlCalcPnL(updated)
+      Object.assign(updated, pnl)
+      all[idx] = updated
+      tlSetLS(all)
+      setTlCloseOpen(false)
+      await loadTrades()
+      setTlSelected(updated)
+      return
+    }
     const res=await fetch('/api/tradelog?action=close',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({id:tlSelected.id,...tlCloseForm})})
     const json=await res.json()
@@ -3482,7 +3574,7 @@ export default function Home() {
         global:'body *',
         sidebar:'.sidebar,.sidebar-section,aside',
         header:'.header,.header *',
-        tabs:'aside button[style*="border-bottom"],aside .sidebar-tabs button',
+        tabs:'.sidebar-tabs button',
         chart:'.chart-wrap .chart-header,.chart-wrap .chart-header *',
         trades:'.trades-section,.trades-section *',
         metrics:'.metrics-section,.metrics-section *,div[style*="275px"] *',
@@ -3695,7 +3787,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.27</title>
+        <title>Trading Simulator V4.28</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3758,7 +3850,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.27
+            <span className="dot"/>Trading Simulator V4.28
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4566,7 +4658,15 @@ export default function Home() {
             {/* ══ PANEL TRADELOG ══ */}
             {sidePanel==='tradelog'&&(
               <div style={{display:'flex',flexDirection:'column',flex:1,overflowY:'auto',padding:'10px 12px',gap:10}}>
-                <div style={{fontFamily:MONO,fontSize:9,color:'#9b72ff',letterSpacing:'0.1em',textTransform:'uppercase',fontWeight:700}}>📒 TradeLog</div>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                  <div style={{fontFamily:MONO,fontSize:9,color:'#9b72ff',letterSpacing:'0.1em',textTransform:'uppercase',fontWeight:700}}>📒 TradeLog</div>
+                  <div style={{fontFamily:MONO,fontSize:9,padding:'2px 6px',borderRadius:3,
+                    background:tlUseLocal()?'rgba(255,209,102,0.1)':'rgba(0,212,255,0.1)',
+                    border:tlUseLocal()?'1px solid rgba(255,209,102,0.3)':'1px solid rgba(0,212,255,0.3)',
+                    color:tlUseLocal()?'#ffd166':'#00d4ff'}} title={tlUseLocal()?'Datos guardados en este navegador. Configura Supabase en Settings → Integraciones para persistencia real.':'Conectado a Supabase'}>
+                    {tlUseLocal()?'💾 Local':'☁ Supabase'}
+                  </div>
+                </div>
                 <div style={{fontFamily:MONO,fontSize:11,color:'#7a9bc0',lineHeight:1.6}}>
                   El panel completo se muestra en el área central.
                   <br/>Selecciona un tab arriba para navegar.
@@ -4593,6 +4693,25 @@ export default function Home() {
                     background:'rgba(155,114,255,0.15)',border:'1px solid #9b72ff',color:'#9b72ff',fontWeight:700}}>
                   + Nueva operación
                 </button>
+                {/* Modo de almacenamiento */}
+                {(()=>{
+                  const isLocal=tlUseLocal()
+                  const lsCount=tlGetLS().length
+                  return(
+                    <div style={{marginTop:6,padding:'6px 8px',borderRadius:4,border:`1px solid ${isLocal?'#ffd166':'#00e5a0'}20`,background:isLocal?'rgba(255,209,102,0.05)':'rgba(0,229,160,0.05)'}}>
+                      <div style={{fontFamily:MONO,fontSize:9,color:isLocal?'#ffd166':'#00e5a0',fontWeight:700,marginBottom:isLocal?3:0}}>
+                        {isLocal?'📦 Modo local (sin Supabase)':'☁ Conectado a Supabase'}
+                      </div>
+                      {isLocal&&<div style={{fontFamily:MONO,fontSize:9,color:'#5a8aaa',lineHeight:1.4}}>
+                        Los datos se guardan en este navegador. Puedes probar y borrar todo después.
+                        {lsCount>0&&<span onClick={()=>{if(confirm(`¿Borrar los ${lsCount} trades de prueba?`)){localStorage.removeItem('v50_tradelog');loadTrades()}}}
+                          style={{display:'block',marginTop:4,color:'#ff4d6d',cursor:'pointer',textDecoration:'underline'}}>
+                          🗑 Borrar {lsCount} trades de prueba
+                        </span>}
+                      </div>}
+                    </div>
+                  )
+                })()}
                 {tlError&&<div style={{fontFamily:MONO,fontSize:11,color:'#ff4d6d'}}>⚠ {tlError}</div>}
                 {tlLoading&&<div style={{fontFamily:MONO,fontSize:11,color:'#9b72ff'}}>⟳ Cargando…</div>}
               </div>
@@ -5661,6 +5780,16 @@ export default function Home() {
           {(tlTab==='ops'||tlTab==='open')&&(
             <div style={{flex:1,display:'flex',flexDirection:'column',minWidth:0,overflow:'hidden'}}>
 
+              {/* Modo indicator bar */}
+              {tlUseLocal()&&(
+                <div style={{padding:'4px 12px',background:'rgba(255,209,102,0.06)',borderBottom:'1px solid rgba(255,209,102,0.15)',
+                  fontFamily:MONO,fontSize:10,color:'#ffd166',display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
+                  💾 Modo local — datos guardados en este navegador.{' '}
+                  <span style={{color:'#a8ccdf'}}>Configura Supabase en{' '}</span>
+                  <span style={{color:'#ffd166',cursor:'default'}}>Settings → Integraciones</span>
+                  <span style={{color:'#a8ccdf'}}>{' '}para persistencia real. Los trades locales se pueden exportar después.</span>
+                </div>
+              )}
               {/* KPI bar */}
               {(()=>{
                 const vis=tlTrades.filter(t=>{
