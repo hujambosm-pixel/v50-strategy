@@ -1,11 +1,12 @@
 // pages/api/tradelog.js
 // TradeLog API — CRUD operaciones + FX histórico + parsers importación
 
-const SUPABASE_URL = process.env.SUPABASE_URL
-const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY
+// Hardcoded Supabase credentials (same as frontend)
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://uqjngxxbdlquiuhywiuc.supabase.co'
+const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY || 'sb_publishable_st9QJ3zcQbY5ec-JhxwqXQ_joy3udz3'
 
 async function sb(path, opts = {}) {
-  if (!SUPABASE_URL) throw new Error('SUPABASE_URL no configurada. Ve a Vercel → Settings → Environment Variables')
+  // SUPABASE_URL always available (hardcoded fallback)
   const res = await fetch(`${SUPABASE_URL}/rest/v1${path}`, {
     headers: {
       apikey: SUPABASE_KEY,
@@ -297,8 +298,23 @@ export default async function handler(req, res) {
   // ── GET /api/tradelog?action=fx&date=2025-01-15&from=USD ──
   if (req.method === 'GET' && action === 'fx') {
     try {
-      const rate = await getFxRate(req.query.date, req.query.from, req.query.to || 'EUR')
-      return res.status(200).json({ rate, date: req.query.date, from: req.query.from })
+      // Accept both ?from=USD and ?currency=USD
+      const fromCur = req.query.from || req.query.currency || 'USD'
+      const toCur   = req.query.to || 'EUR'
+      // For today, frankfurter might not have data yet — try yesterday
+      let dateStr = req.query.date || new Date().toISOString().slice(0,10)
+      if (fromCur === toCur) return res.status(200).json({ fx: 1, rate: 1, date: dateStr, from: fromCur })
+      let rate = await getFxRate(dateStr, fromCur, toCur)
+      // If no rate for today (weekend/holiday), try last 3 days
+      if (!rate) {
+        for (let i=1; i<=3; i++) {
+          const d = new Date(dateStr); d.setDate(d.getDate()-i)
+          const ds = d.toISOString().slice(0,10)
+          rate = await getFxRate(ds, fromCur, toCur)
+          if (rate) { dateStr = ds; break }
+        }
+      }
+      return res.status(200).json({ fx: rate, rate, date: dateStr, from: fromCur })
     } catch (e) {
       return res.status(500).json({ error: e.message })
     }
