@@ -1908,47 +1908,50 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
           }catch(_){}
         },
         setRange:(from,to)=>{ try{ chart.timeScale().setVisibleRange({from,to}) }catch(_){} },
-        showEntryLine:(entryDate, entryPrice)=>{
+        showEntryLine:(entryDate, entryPrice, opts={})=>{
+          // opts.permanent=true → no auto-remove; opts.label → texto eje precio
           if(!entryDate||!entryPrice) return
           try{
             const ep = parseFloat(entryPrice)
-            // 1. Línea horizontal amarilla sólida en el precio de entrada
+            const label = opts.label || '● ENTRADA'
+            const color = opts.color || '#ffd166'
+            // Línea horizontal fina en el precio de entrada
             const priceLine = candlesRef.current.createPriceLine({
               price: ep,
-              color: '#ffd166',
-              lineWidth: 2,
-              lineStyle: 0,
+              color,
+              lineWidth: 1,
+              lineStyle: 0,   // sólida
               axisLabelVisible: true,
-              title: `⬤ ENTRADA`,
+              title: label,
             })
-            // 2. Línea vertical (serie de dos puntos) en la fecha de entrada — muy visible
-            const vertSeries = chart.addLineSeries({
-              color: '#ffd166',
-              lineWidth: 3,
-              lineStyle: 0,
-              lastValueVisible: false,
-              priceLineVisible: false,
-              crosshairMarkerVisible: false,
-            })
-            // Estimar rango de precio visible para la línea vertical
-            const closes = data.map(d=>d.close).filter(Boolean)
-            const minP = Math.min(...closes) * 0.98
-            const maxP = Math.max(...closes) * 1.02
-            vertSeries.setData([{time:entryDate, value:minP},{time:entryDate, value:maxP}])
-            // 3. Flecha grande abajo de la vela
-            const existingMarkers = (candlesRef.current.markers ? candlesRef.current.markers() : []) || []
-            const newMarkers = [
-              ...existingMarkers.filter(m=>m.text!=='ENTRADA'),
-              {time:entryDate, position:'belowBar', color:'#ffd166', shape:'arrowUp', size:4, text:'ENTRADA'}
-            ]
-            candlesRef.current.setMarkers(newMarkers)
-            // Auto-limpiar después de 6s
-            setTimeout(()=>{
-              try{ candlesRef.current.removePriceLine(priceLine) }catch(_){}
-              try{ chart.removeSeries(vertSeries) }catch(_){}
-              try{ candlesRef.current.setMarkers(existingMarkers) }catch(_){}
-            }, 6000)
-          }catch(_){}
+            if(opts.permanent) return priceLine  // caller keeps reference for cleanup
+            // No-permanent: auto-limpiar después de 6s
+            setTimeout(()=>{ try{ candlesRef.current.removePriceLine(priceLine) }catch(_){} }, 6000)
+          }catch(e){}
+        },
+        // Dibuja líneas permanentes de entradas abiertas del símbolo actual
+        openEntryLinesRef: { current: [] },
+        setOpenTradeLines:(openTrades)=>{
+          if(!candlesRef.current) return
+          // Limpiar líneas anteriores
+          const prevLines = chartRef.current?._openEntryLines || []
+          prevLines.forEach(pl=>{ try{ candlesRef.current.removePriceLine(pl) }catch(_){} })
+          const newLines = openTrades.map(t=>{
+            try{
+              const ep = parseFloat(t.entry_price)
+              if(!ep) return null
+              const sym = t.symbol?.toUpperCase()
+              return candlesRef.current.createPriceLine({
+                price: ep,
+                color: '#ffd166',
+                lineWidth: 1,
+                lineStyle: 0,
+                axisLabelVisible: true,
+                title: `${sym} ${ep.toFixed(2)} ●`,
+              })
+            }catch(_){ return null }
+          }).filter(Boolean)
+          if(chartRef.current) chartRef.current._openEntryLines = newLines
         }
       })
 
@@ -3801,22 +3804,28 @@ export default function Home() {
   const tlSaveScreenshot = async(trade) => {
     try {
       const s = JSON.parse(localStorage.getItem('v50_settings')||'{}')
-      // Navegar al rango configurado (recentMonths) con entry en el 70% derecho
       const months = s?.chart?.recentMonths ?? 3
+      // 1. Asegurarse de que el gráfico principal tiene el símbolo correcto
+      const tradeSym = (trade.symbol||'').toUpperCase()
+      if(tradeSym && tradeSym !== simbolo.toUpperCase()) {
+        setSimbolo(tradeSym)
+        // Esperar debounce (800ms) + API call + render ≈ 3s total
+        await new Promise(r=>setTimeout(r,3200))
+      }
+      // 2. Navegar al rango de la operación (meses antes + 3 semanas después de la entrada)
       if(chartApiRef.current && trade.entry_date) {
         try {
           const entryD = new Date(trade.entry_date)
-          const fromD = new Date(entryD); fromD.setMonth(fromD.getMonth() - months)
-          const toD   = new Date(entryD); toD.setDate(toD.getDate() + 21)
-          chartApiRef.current?.setRange?.(
+          const fromD  = new Date(entryD); fromD.setMonth(fromD.getMonth() - months)
+          const toD    = new Date(entryD); toD.setDate(toD.getDate() + 21)
+          chartApiRef.current.setRange(
             fromD.toISOString().slice(0,10),
             toD.toISOString().slice(0,10)
           )
-          chartApiRef.current?.showEntryLine?.(trade.entry_date, trade.entry_price)
         } catch(_){}
       }
-      // Esperar render completo (gráfico + líneas)
-      await new Promise(r=>setTimeout(r,1000))
+      // 3. Esperar que el rango renderice
+      await new Promise(r=>setTimeout(r,600))
       const dataUrl = chartApiRef.current?.captureJpg?.()
       if(!dataUrl) return
       const sym = (trade.symbol||'TICKER').replace(/[^a-zA-Z0-9^]/g,'_')
@@ -4126,6 +4135,16 @@ export default function Home() {
     })
   },[mcSelected,mcMode])
 
+  // Dibuja líneas de entrada permanentes para operaciones abiertas del símbolo activo
+  useEffect(()=>{
+    if(!chartApiRef.current?.setOpenTradeLines) return
+    const openForSym = tlTrades.filter(t=>
+      t.status==='open' &&
+      (t.symbol||'').toUpperCase()===(simbolo||'').toUpperCase()
+    )
+    chartApiRef.current.setOpenTradeLines(openForSym)
+  },[simbolo, tlTrades, result])
+
   const metrics=result?calcMetrics(result.trades,Number(capitalIni),result.capitalReinv,result.gananciaSimple,result.ganBH||0,result.startDate,result.meta?.ultimaFecha,Number(years)):null
   // Load settings from Supabase on mount (overrides localStorage if newer)
   // Also apply ui defaults from localStorage (safe: runs client-side only)
@@ -4341,7 +4360,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.39</title>
+        <title>Trading Simulator V4.40</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4404,7 +4423,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.39
+            <span className="dot"/>Trading Simulator V4.40
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6077,7 +6096,7 @@ export default function Home() {
                       <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:11}}>
                         <thead>
                           <tr style={{background:'var(--bg2)',position:'sticky',top:0,zIndex:5}}>
-                            {['#','Símbolo','Broker','Entrada','Salida','Acciones','Px entrada','Px salida/actual','Divisa','FX','Comisión','P&L €','P&L %','Días','Estado'].map(h=>(
+                            {['#','Símbolo','Broker','Entrada','Salida','Acciones','Px entrada','Capital inv.','Px salida/actual','Divisa','FX','Comisión','P&L €','P&L %','Días','Estado'].map(h=>(
                               <th key={h} style={{padding:'6px 8px',textAlign:'left',fontFamily:MONO,fontSize:9,color:'#3d5a7a',
                                 letterSpacing:'0.08em',textTransform:'uppercase',borderBottom:'1px solid var(--border)',whiteSpace:'nowrap'}}>{h}</th>
                             ))}
@@ -6103,7 +6122,7 @@ export default function Home() {
                                   background:isSel?'rgba(155,114,255,0.06)':isOpen?'rgba(0,229,160,0.02)':'transparent'}}
                                 onMouseOver={e=>e.currentTarget.style.background=isSel?'rgba(155,114,255,0.1)':'rgba(255,255,255,0.03)'}
                                 onMouseOut={e=>e.currentTarget.style.background=isSel?'rgba(155,114,255,0.06)':isOpen?'rgba(0,229,160,0.02)':'transparent'}>
-                                <td style={{padding:'6px 8px',color:'#3d5a7a',fontSize:10}}>{arr.length-i}</td>
+                                <td style={{padding:'6px 8px',color:'#3d5a7a',fontSize:10}}>{i+1}</td>
                                 <td style={{padding:'6px 8px'}}>
                                   <span style={{fontWeight:700,color:isOpen?'#9b72ff':'#c8dff5'}}>{t.symbol}</span>
                                   {t.has_fills&&<span style={{fontSize:9,color:'#5a8aaa',marginLeft:4}}>×fills</span>}
@@ -6118,6 +6137,16 @@ export default function Home() {
                                 <td style={{padding:'6px 8px',color:'#a8ccdf',whiteSpace:'nowrap'}}>{isOpen?<span style={{color:'#3d5a7a'}}>—</span>:fmtDate(t.exit_date)||'—'}</td>
                                 <td style={{padding:'6px 8px'}}>{t.shares}</td>
                                 <td style={{padding:'6px 8px',whiteSpace:'nowrap'}}>{t.entry_currency==='EUR'?'€':'$'}{t.entry_price!=null?parseFloat(t.entry_price).toFixed(2):'—'}</td>
+                                <td style={{padding:'6px 8px',whiteSpace:'nowrap',color:'#9b72ff',fontWeight:600}}>
+                                  {(()=>{
+                                    const shares=parseFloat(t.shares||0)
+                                    const px=parseFloat(t.entry_price||0)
+                                    const fx=parseFloat(t.fx_entry||1)
+                                    if(!shares||!px) return '—'
+                                    const cap=shares*px/fx
+                                    return `€${Math.round(cap).toLocaleString('es-ES')}`
+                                  })()}
+                                </td>
                                 <td style={{padding:'6px 8px',whiteSpace:'nowrap',color:isOpen?'#00e5a0':'inherit'}}>
                                   {exitPx!=null?`${t.entry_currency==='EUR'?'€':'$'}${parseFloat(exitPx).toFixed(2)}`:' —'}
                                   {isOpen&&' ●'}
@@ -7066,20 +7095,17 @@ export default function Home() {
                   }
                   const saved = await tlSaveTrade(formData)
                   setTlFormOpen(false)
-                  // Captura del gráfico para la operación guardada
+                  // Captura automática del gráfico
                   ;(async()=>{
                     const tradeData={...formData,...(saved||{})}
                     const s2=JSON.parse(localStorage.getItem('v50_settings')||'{}')
                     if(s2?.tradelog?.autoScreenshot===false) return
-                    // Si el símbolo del trade no es el activo actual, cambiar primero
-                    if(tradeData.symbol && tradeData.symbol.toUpperCase()!==simbolo.toUpperCase()) {
-                      setSimbolo(tradeData.symbol.toUpperCase())
-                      await new Promise(r=>setTimeout(r,300))
-                    }
-                    setSidePanel('config')       // mostrar gráfico
-                    await new Promise(r=>setTimeout(r,1200))  // esperar render completo
+                    // Ir al simulador para que el gráfico esté visible
+                    setSidePanel('config')
+                    await new Promise(r=>setTimeout(r,400))
+                    // tlSaveScreenshot carga el símbolo correcto y espera
                     await tlSaveScreenshot(tradeData).catch(()=>{})
-                    setSidePanel('tradelog')     // volver al tradelog
+                    setSidePanel('tradelog')
                   })()
                 }catch(e){alert('Error al guardar: '+e.message)}
               }} style={{fontFamily:MONO,fontSize:11,padding:'7px 14px',borderRadius:4,cursor:'pointer',
