@@ -1,8 +1,8 @@
 // pages/api/strategies.js — CRUD de estrategias en Supabase
 // Métodos: GET (list) | POST (create) | PUT (update) | DELETE (soft delete)
 
-const SUPA_URL = process.env.SUPABASE_URL
-const SUPA_KEY = process.env.SUPABASE_ANON_KEY
+const SUPA_URL = process.env.SUPABASE_URL || 'https://uqjngxxbdlquiuhywiuc.supabase.co'
+const SUPA_KEY = process.env.SUPABASE_ANON_KEY || 'sb_publishable_st9QJ3zcQbY5ec-JhxwqXQ_joy3udz3'
 
 async function supa(path, options = {}) {
   const res = await fetch(`${SUPA_URL}/rest/v1${path}`, {
