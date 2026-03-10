@@ -533,6 +533,7 @@ function SettingsModal({ onClose, strategies=[] }) {
     { id:'ranking',       label:'🏆 Ranking' },
     { id:'watchlist',     label:'📋 Watchlist' },
     { id:'tema',          label:'🎨 Tema' },
+    { id:'tradelog_cfg',  label:'📒 TradeLog' },
   ]
 
   const inp = (val, onChange, opts={}) => (
@@ -1706,8 +1707,15 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
         }
       }
 
-      // Exponer navigateTo + fitAll
+      // Exponer navigateTo + fitAll + captureChart
       if(onChartReady) onChartReady({
+        captureJpg:()=>{
+          try {
+            const canvas = containerRef.current?.querySelector('canvas')
+            if(!canvas) return null
+            return canvas.toDataURL('image/jpeg', 0.92)
+          } catch(_){ return null }
+        },
         scrollBy:(bars)=>{ try{ chart.timeScale().scrollToPosition(chart.timeScale().scrollPosition()-bars, false) }catch(_){} },
         navigateTo:(entryDate,exitDate)=>{
           try{
@@ -2276,6 +2284,125 @@ function StrategyAIPanel({ definition, onApply, onClose }) {
           <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',marginTop:5}}>
             {getGroqKey()?'✓ API Key configurada':'⚠ Sin API Key — configúrala en ⚙ Configuración → Integraciones'}
           </div>
+
+          {/* ── TRADELOG CONFIG ── */}
+          {tab==='tradelog_cfg'&&(
+            <div>
+              {sep('Carpeta base en tu PC')}
+              <div style={{fontSize:10,color:'#5a7a95',lineHeight:1.6,marginBottom:10}}>
+                La app usará esta carpeta para guardar capturas de gráficos y copias de seguridad.
+                Haz clic en "Seleccionar" y elige la carpeta <b style={{color:'#ffd166'}}>"Trading app"</b> en tu PC.
+                Funciona en Chrome y Edge. Solo tienes que hacerlo una vez.
+              </div>
+              {(()=>{
+                const folderName = settings.tradelog?.folderName || null
+                const selectFolder = async () => {
+                  try {
+                    const handle = await window.showDirectoryPicker({mode:'readwrite',startIn:'documents'})
+                    // Guardar en IndexedDB para persistir entre sesiones
+                    const req = indexedDB.open('v50_fs',1)
+                    req.onupgradeneeded = e => e.target.result.createObjectStore('handles')
+                    req.onsuccess = e => {
+                      const db = e.target.result
+                      const tx = db.transaction('handles','readwrite')
+                      tx.objectStore('handles').put(handle,'tradingApp')
+                    }
+                    upd('tradelog.folderName', handle.name)
+                    upd('tradelog.subCharts',  settings.tradelog?.subCharts  || 'Trades charts')
+                    upd('tradelog.subBackup',  settings.tradelog?.subBackup  || 'Backup operativa')
+                  } catch(e) { if(e.name!=='AbortError') alert('Error al seleccionar carpeta: '+e.message) }
+                }
+                return (
+                  <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:14}}>
+                    <div style={{flex:1,background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,
+                      padding:'7px 10px',fontFamily:MONO,fontSize:11,
+                      color:folderName?'#00e5a0':'#3d5a7a'}}>
+                      {folderName ? `📁 ${folderName}` : 'Sin carpeta seleccionada'}
+                    </div>
+                    <button onClick={selectFolder}
+                      style={{padding:'7px 12px',borderRadius:4,border:'1px solid #1a2d45',
+                        background:'rgba(0,212,255,0.08)',color:'#00d4ff',fontFamily:MONO,
+                        fontSize:11,cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>
+                      📁 Seleccionar
+                    </button>
+                  </div>
+                )
+              })()}
+
+              {sep('Subcarpetas')}
+              <div style={{display:'flex',flexDirection:'column',gap:8,marginBottom:14}}>
+                {[
+                  ['tradelog.subCharts','Capturas de gráficos','Trades charts'],
+                  ['tradelog.subBackup','Copias de seguridad','Backup operativa'],
+                ].map(([key,label,def])=>(
+                  <div key={key} style={{display:'flex',alignItems:'center',gap:8}}>
+                    <span style={{fontFamily:MONO,fontSize:10,color:'#7a9bc0',width:160,flexShrink:0}}>{label}</span>
+                    <input type="text" value={settings.tradelog?.[key.split('.')[1]]||def}
+                      onChange={e=>upd(key,e.target.value)}
+                      style={{flex:1,background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,
+                        color:'#e2eaf5',fontFamily:MONO,fontSize:11,padding:'5px 8px'}}/>
+                  </div>
+                ))}
+              </div>
+              <div style={{fontSize:10,color:'#3d5a7a',lineHeight:1.6,marginBottom:16}}>
+                Estructura: <span style={{color:'#7a9bc0'}}>Trading app / Trades charts / NVDA_2025-03-10_V50.jpg</span><br/>
+                Estructura: <span style={{color:'#7a9bc0'}}>Trading app / Backup operativa / backup_2025-03-10.json</span>
+              </div>
+
+              {sep('Captura automática al registrar operación')}
+              <label style={{display:'flex',alignItems:'center',gap:8,marginBottom:10,cursor:'pointer'}}>
+                <input type="checkbox"
+                  checked={settings.tradelog?.autoScreenshot!==false}
+                  onChange={e=>upd('tradelog.autoScreenshot',e.target.checked)}
+                  style={{accentColor:'#9b72ff',width:14,height:14}}/>
+                <span style={{fontFamily:MONO,fontSize:11,color:'#cce0f5'}}>
+                  Guardar captura del gráfico al añadir cada operación
+                </span>
+              </label>
+              <div style={{fontSize:10,color:'#3d5a7a',lineHeight:1.6,marginBottom:16}}>
+                Requiere tener una carpeta base seleccionada. La imagen muestra las velas del período del trade
+                con las EMAs y el punto de entrada marcado.
+              </div>
+
+              {sep('Copia de seguridad de operaciones')}
+              <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+                <button onClick={()=>{
+                  try {
+                    const trades = JSON.parse(localStorage.getItem('v50_tradelog')||'[]')
+                    const d = new Date().toISOString().slice(0,10)
+                    const blob = new Blob([JSON.stringify({version:'v50',date:d,trades},null,2)],{type:'application/json'})
+                    const a = document.createElement('a'); a.href=URL.createObjectURL(blob)
+                    a.download=`backup_${d}.json`; a.click(); URL.revokeObjectURL(a.href)
+                  } catch(e){ alert('Error: '+e.message) }
+                }} style={{padding:'7px 12px',borderRadius:4,border:'1px solid #9b72ff',
+                  background:'rgba(155,114,255,0.1)',color:'#9b72ff',fontFamily:MONO,fontSize:11,cursor:'pointer'}}>
+                  ⬇ Descargar backup (JSON)
+                </button>
+                <button onClick={()=>{
+                  const input = document.createElement('input'); input.type='file'; input.accept='.json'
+                  input.onchange = async e => {
+                    try {
+                      const text = await e.target.files[0].text()
+                      const data = JSON.parse(text)
+                      const trades = data.trades||data
+                      if(!Array.isArray(trades)) throw new Error('Formato incorrecto')
+                      if(!confirm(`¿Restaurar ${trades.length} operaciones? Se reemplazarán las actuales.`)) return
+                      localStorage.setItem('v50_tradelog', JSON.stringify(trades))
+                      alert(`✓ ${trades.length} operaciones restauradas`)
+                    } catch(e){ alert('Error al restaurar: '+e.message) }
+                  }
+                  input.click()
+                }} style={{padding:'7px 12px',borderRadius:4,border:'1px solid #1a2d45',
+                  background:'transparent',color:'#7a9bc0',fontFamily:MONO,fontSize:11,cursor:'pointer'}}>
+                  ⬆ Restaurar desde backup
+                </button>
+              </div>
+              <div style={{fontSize:10,color:'#3d5a7a',lineHeight:1.6,marginTop:8}}>
+                El backup descargado es un fichero JSON con todas tus operaciones.
+                Guárdalo en <span style={{color:'#ffd166'}}>Trading app / Backup operativa</span>.
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -3296,7 +3423,14 @@ export default function Home() {
   // ── TradeLog helpers ────────────────────────────────────────
   // ── TradeLog: storage mode (local vs supabase) ──────────────
   const TL_LS_KEY = 'v50_tradelog'
-  const tlGetLS = () => { try{ return JSON.parse(localStorage.getItem(TL_LS_KEY)||'[]') }catch{ return [] } }
+  const tlNumericFields = ['entry_price','exit_price','shares','commission_buy','commission_sell','fx_entry','fx_exit','capital_eur','pnl_eur','pnl_pct','pnl_currency']
+  const tlNorm = (t) => {
+    if(!t) return t
+    const out = {...t}
+    tlNumericFields.forEach(k=>{ if(out[k]!=null && out[k]!=='') out[k]=parseFloat(out[k])||0 })
+    return out
+  }
+  const tlGetLS = () => { try{ return (JSON.parse(localStorage.getItem(TL_LS_KEY)||'[]')).map(tlNorm) }catch{ return [] } }
   const tlSetLS = (arr) => localStorage.setItem(TL_LS_KEY, JSON.stringify(arr))
   const tlUseLocal = () => {
     // Usa localStorage si el usuario no tiene Supabase configurado en los settings
@@ -3304,6 +3438,58 @@ export default function Home() {
       const s = JSON.parse(localStorage.getItem('v50_settings')||'{}')
       return !s?.integraciones?.supabaseUrl
     } catch { return true }
+  }
+
+  // ── Guardar screenshot del gráfico ─────────────────────────
+  const tlSaveScreenshot = async(trade) => {
+    try {
+      const s = JSON.parse(localStorage.getItem('v50_settings')||'{}')
+      if(s?.tradelog?.autoScreenshot===false) return
+      // Navegar al rango del trade en el gráfico principal
+      if(chartApiRef.current?.navigateTo && trade.entry_date) {
+        const exitD = trade.exit_date || trade.entry_date
+        chartApiRef.current.navigateTo(trade.entry_date, exitD)
+      }
+      // Esperar a que el gráfico renderice
+      await new Promise(r=>setTimeout(r,400))
+      const dataUrl = chartApiRef.current?.captureJpg?.()
+      if(!dataUrl) return
+      const sym = (trade.symbol||'TICKER').replace(/[^a-zA-Z0-9^]/g,'_')
+      const date = (trade.entry_date||new Date().toISOString().slice(0,10))
+      const strat = (trade.strategy||'V50').replace(/[^a-zA-Z0-9]/g,'_')
+      const filename = `${sym}_${date}_${strat}.jpg`
+      // Intentar guardar en carpeta seleccionada (File System Access API)
+      const subFolder = s?.tradelog?.subCharts || 'Trades charts'
+      let saved = false
+      try {
+        const req = indexedDB.open('v50_fs',1)
+        await new Promise((res,rej)=>{
+          req.onsuccess = async e => {
+            try {
+              const db = e.target.result
+              const tx = db.transaction('handles','readonly')
+              const rootHandle = await new Promise((r2,e2)=>{ const req2=tx.objectStore('handles').get('tradingApp'); req2.onsuccess=()=>r2(req2.result); req2.onerror=e2 })
+              if(rootHandle) {
+                const subH = await rootHandle.getDirectoryHandle(subFolder, {create:true})
+                const fileH = await subH.getFileHandle(filename, {create:true})
+                const w = await fileH.createWritable()
+                const resp = await fetch(dataUrl)
+                await w.write(await resp.blob())
+                await w.close()
+                saved = true
+              }
+            } catch(_){}
+            res()
+          }
+          req.onerror = ()=>res()
+        })
+      } catch(_){}
+      // Fallback: descarga directa
+      if(!saved) {
+        const a = document.createElement('a')
+        a.href = dataUrl; a.download = filename; a.click()
+      }
+    } catch(_) {}
   }
 
   // Recalcula P&L localmente (refleja la lógica del backend)
@@ -3795,7 +3981,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.29</title>
+        <title>Trading Simulator V4.30</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3858,7 +4044,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.29
+            <span className="dot"/>Trading Simulator V4.30
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5820,8 +6006,8 @@ export default function Home() {
                       {l:'P&L realizado',v:pnlReal!==0?fmtMoney(pnlReal):'€0',c:pnlReal>=0?'#00e5a0':'#ff4d6d'},
                       {l:'P&L flotante',v:flotante!==0?fmtMoney(flotante):'€0',c:flotante>=0?'#ffd166':'#ff4d6d'},
                       {l:'P&L total',v:fmtMoney(pnlReal+flotante),c:(pnlReal+flotante)>=0?'#00e5a0':'#ff4d6d'},
-                      {l:'Mejor op.',v:best?`${best.symbol} ${best.pnl_pct!=null?`+${best.pnl_pct.toFixed(1)}%`:''}`:' —',c:'#00e5a0'},
-                      {l:'Peor op.',v:worst?`${worst.symbol} ${worst.pnl_pct!=null?`${worst.pnl_pct.toFixed(1)}%`:''}`:' —',c:'#ff4d6d'},
+                      {l:'Mejor op.',v:best?`${best.symbol} ${best.pnl_pct!=null?`+${parseFloat(best.pnl_pct).toFixed(1)}%`:''}`:' —',c:'#00e5a0'},
+                      {l:'Peor op.',v:worst?`${worst.symbol} ${worst.pnl_pct!=null?`${parseFloat(worst.pnl_pct).toFixed(1)}%`:''}`:' —',c:'#ff4d6d'},
                     ].map(({l,v,c})=>(
                       <div key={l} style={{flex:1,padding:'7px 12px',borderRight:'1px solid var(--border)',display:'flex',flexDirection:'column',gap:2}}>
                         <span style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',letterSpacing:'0.08em',textTransform:'uppercase'}}>{l}</span>
@@ -5893,19 +6079,19 @@ export default function Home() {
                           <td style={{padding:'6px 8px'}}>{t.shares}</td>
                           <td style={{padding:'6px 8px',whiteSpace:'nowrap'}}>{t.entry_currency==='EUR'?'€':'$'}{t.entry_price!=null?parseFloat(t.entry_price).toFixed(2):'—'}</td>
                           <td style={{padding:'6px 8px',whiteSpace:'nowrap',color:isOpen?'#00e5a0':'inherit'}}>
-                            {exitPx!=null?`${t.entry_currency==='EUR'?'€':'$'}${exitPx.toFixed(2)}`:' —'}
+                            {exitPx!=null?`${t.entry_currency==='EUR'?'€':'$'}${parseFloat(exitPx).toFixed(2)}`:' —'}
                             {isOpen&&' ●'}
                           </td>
                           <td style={{padding:'6px 8px',color:t.entry_currency==='EUR'?'#00e5a0':'#ffd166'}}>{t.entry_currency}</td>
-                          <td style={{padding:'6px 8px',color:'#4a7a95',fontSize:10}}>{t.fx_entry?.toFixed(3)||'—'}</td>
+                          <td style={{padding:'6px 8px',color:'#4a7a95',fontSize:10}}>{t.fx_entry!=null?parseFloat(t.fx_entry).toFixed(3):'—'}</td>
                           <td style={{padding:'6px 8px',color:'#ff4d6d',fontSize:10}}>
-                            {(()=>{const c=((t.commission_buy||0)+(t.commission_sell||0));return c>0?`-€${c.toFixed(2)}`:'—'})()}
+                            {(()=>{const c=(parseFloat(t.commission_buy||0)+parseFloat(t.commission_sell||0));return c>0?`-€${c.toFixed(2)}`:'—'})()}
                           </td>
                           <td style={{padding:'6px 8px',fontWeight:700,color:pnl==null?'#3d5a7a':pnl>=0?'#00e5a0':'#ff4d6d',whiteSpace:'nowrap'}}>
                             {pnl!=null?fmtMoney(pnl):'—'}
                           </td>
                           <td style={{padding:'6px 8px',fontWeight:700,color:pnlPct==null?'#3d5a7a':pnlPct>=0?'#00e5a0':'#ff4d6d',whiteSpace:'nowrap'}}>
-                            {pnlPct!=null?`${pnlPct>=0?'+':''}${pnlPct.toFixed(2)}%`:'—'}
+                            {pnlPct!=null?`${pnlPct>=0?'+':''}${parseFloat(pnlPct).toFixed(2)}%`:'—'}
                           </td>
                           <td style={{padding:'6px 8px',color:isOpen?'#00e5a0':'#7a9bc0'}}>{dias!=null?dias:'—'}</td>
                           <td style={{padding:'6px 8px'}}>
@@ -5997,7 +6183,7 @@ export default function Home() {
                           <td style={{padding:'5px 8px'}}>{t.shares||'?'}</td>
                           <td style={{padding:'5px 8px'}}>{t.entry_price||'?'}</td>
                           <td style={{padding:'5px 8px',color:'#ffd166'}}>{t.entry_currency||'USD'}</td>
-                          <td style={{padding:'5px 8px',color:'#4a7a95',fontSize:10}}>{t.fx_entry?.toFixed(3)||'—'}</td>
+                          <td style={{padding:'5px 8px',color:'#4a7a95',fontSize:10}}>{t.fx_entry!=null?parseFloat(t.fx_entry).toFixed(3):'—'}</td>
                           <td style={{padding:'5px 8px'}}>{t.broker||'—'}</td>
                           <td style={{padding:'5px 8px',color:'#00d4ff'}}>{t.capital_eur?`€${Math.round(t.capital_eur)}`:'—'}</td>
                         </tr>
@@ -6458,8 +6644,9 @@ export default function Home() {
               </button>
               <button onClick={async()=>{
                 try{
-                  await tlSaveTrade({...tlForm,status:'open',import_source:tlForm.import_source||'manual'})
+                  const saved = await tlSaveTrade({...tlForm,status:'open',import_source:tlForm.import_source||'manual'})
                   setTlFormOpen(false)
+                  setTimeout(()=>tlSaveScreenshot({...tlForm,...(saved||{})}).catch(()=>{}),300)
                 }catch(e){alert('Error al guardar: '+e.message)}
               }} style={{fontFamily:MONO,fontSize:11,padding:'7px 14px',borderRadius:4,cursor:'pointer',
                 background:'rgba(155,114,255,0.15)',border:'1px solid #9b72ff',color:'#9b72ff',fontWeight:700}}>
