@@ -3871,7 +3871,15 @@ export default function Home() {
         return newT
       }
     }
-    const res=await fetch('/api/tradelog?action=save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(trade)})
+    // Sanitize numeric fields for Supabase (empty string → null)
+    const n = (v) => v===''||v==null ? null : (isNaN(parseFloat(v)) ? null : parseFloat(v))
+    const clean = {...trade,
+      entry_price: n(trade.entry_price), exit_price: n(trade.exit_price),
+      shares: n(trade.shares),
+      commission_buy: n(trade.commission_buy)??0, commission_sell: n(trade.commission_sell)??0,
+      fx_entry: n(trade.fx_entry)||null, fx_exit: n(trade.fx_exit)||null,
+    }
+    const res=await fetch('/api/tradelog?action=save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(clean)})
     const json=await res.json()
     if(!res.ok) throw new Error(json.error||'Error')
     await loadTrades()
@@ -6842,7 +6850,15 @@ export default function Home() {
                           const sym=hit.symbol, name=hit.name||''
                           const currency=sym.includes('-USD')||sym.startsWith('^')||sym.includes('=F')?'USD':'USD'
                           const atype=assetTypeFor(sym)
-                          setTlForm(f=>({...f,symbol:sym,name,asset_type:atype,entry_currency:currency,_symSearch:''}))
+                          setTlForm(f=>({...f,symbol:sym,name,asset_type:atype,entry_currency:currency,_symSearch:'',entry_price:'',_fxLoading:false}))
+                          // Fetch live price for the selected symbol
+                          fetch('/api/datos',{method:'POST',headers:{'Content-Type':'application/json'},
+                            body:JSON.stringify({simbolo:sym,cfg:{emaR:10,emaL:11,years:1,capitalIni:1000,tipoStop:'none',atrPeriod:14,atrMult:1,sinPerdidas:false,reentry:false,tipoFiltro:'none',sp500EmaR:10,sp500EmaL:11}})})
+                            .then(r=>r.json())
+                            .then(j=>{ if(j.meta?.ultimoPrecio) setTlForm(f=>({...f,entry_price:String(j.meta.ultimoPrecio.toFixed(2))})) })
+                            .catch(()=>{})
+                          // Also fetch FX for the currency
+                          if(currency!=='EUR') tlFetchFx(currency, tlForm.entry_date)
                         }}
                         style={{padding:'6px 10px',cursor:'pointer',display:'flex',justifyContent:'space-between',
                           alignItems:'center',borderBottom:'1px solid rgba(255,255,255,0.04)',
@@ -6979,6 +6995,9 @@ export default function Home() {
                   let formData = {...tlForm, entry_date: toIsoDate(tlForm.entry_date)||tlForm.entry_date, status:'open', import_source:tlForm.import_source||'manual'}
                   // Strip UI-only fields before sending to Supabase
                   const {_fxLoading, _symSearch, _current_price, _current_date, _pnl_float_eur, _pnl_float_pct, ...cleanForm} = formData
+                  // Convert empty strings to null for numeric Supabase columns
+                  const numericCols = ['entry_price','shares','commission_buy','commission_sell','fx_entry','fx_exit','capital_eur','pnl_eur','pnl_pct','pnl_currency']
+                  numericCols.forEach(k=>{ if(cleanForm[k]===''||cleanForm[k]===undefined) cleanForm[k]=null })
                   formData = cleanForm
                   // Auto-fetch FX if not set and currency is not EUR
                   if(formData.entry_currency && formData.entry_currency!=='EUR' && !formData.fx_entry) {
