@@ -6977,6 +6977,9 @@ export default function Home() {
               <button onClick={async()=>{
                 try{
                   let formData = {...tlForm, entry_date: toIsoDate(tlForm.entry_date)||tlForm.entry_date, status:'open', import_source:tlForm.import_source||'manual'}
+                  // Strip UI-only fields before sending to Supabase
+                  const {_fxLoading, _symSearch, _current_price, _current_date, _pnl_float_eur, _pnl_float_pct, ...cleanForm} = formData
+                  formData = cleanForm
                   // Auto-fetch FX if not set and currency is not EUR
                   if(formData.entry_currency && formData.entry_currency!=='EUR' && !formData.fx_entry) {
                     try{
