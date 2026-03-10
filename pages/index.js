@@ -3165,25 +3165,6 @@ export default function Home() {
   const [tlSearch,setTlSearch]=useState('')
   const [tlFills,setTlFills]=useState([])
   const [tlFormOpen,setTlFormOpen]=useState(false)
-
-  // Auto-fetch FX when modal opens or currency/date changes
-  useEffect(()=>{
-    if(!tlFormOpen) return
-    const cur = tlForm?.entry_currency
-    const date = toIsoDate(tlForm?.entry_date) || new Date().toISOString().slice(0,10)
-    // Only fetch when date is complete (dd/mm/yyyy = 10 chars or ISO format)
-    if(!cur || cur==='EUR' || tlForm?.fx_entry_manual) return
-    const rawDate = tlForm?.entry_date||''
-    if(rawDate.length < 8) return  // incomplete date
-    let cancelled=false
-    setTlForm(f=>({...f,_fxLoading:true}))
-    fetch(`/api/tradelog?action=fx&currency=${cur}&date=${date}`)
-      .then(r=>r.json())
-      .then(j=>{ if(!cancelled && j.fx) setTlForm(f=>({...f,fx_entry:parseFloat(j.fx).toFixed(4),_fxLoading:false})) })
-      .catch(()=>{ if(!cancelled) setTlForm(f=>({...f,_fxLoading:false})) })
-    return ()=>{ cancelled=true }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[tlFormOpen, tlForm?.entry_currency, tlForm?.entry_date])
   const [tlCloseOpen,setTlCloseOpen]=useState(false)
   const [tlImportText,setTlImportText]=useState('')
   const [tlImportFormat,setTlImportFormat]=useState('ai')
@@ -3198,6 +3179,18 @@ export default function Home() {
   const [tlCloseForm,setTlCloseForm]=useState({
     exit_date:'',exit_price:'',exit_currency:'USD',commission_sell:0,fx_exit:'',fx_exit_manual:false
   })
+
+  // FX helper: call directly from onChange (avoids useEffect TDZ issues in production)
+  const tlFetchFx = useCallback((cur, rawDate) => {
+    if(!cur || cur==='EUR') return
+    const date = toIsoDate(rawDate) || new Date().toISOString().slice(0,10)
+    if(!date || date.length < 8) return
+    setTlForm(f=>({...f,_fxLoading:true,fx_entry_manual:false}))
+    fetch(`/api/tradelog?action=fx&currency=${cur}&date=${date}`)
+      .then(r=>r.json())
+      .then(j=>{ if(j.fx) setTlForm(f=>({...f,fx_entry:parseFloat(j.fx).toFixed(4),_fxLoading:false})) })
+      .catch(()=>setTlForm(f=>({...f,_fxLoading:false})))
+  },[])
 
   // Abrir búsqueda de símbolo al escribir cualquier letra/número fuera de inputs
   useEffect(()=>{
@@ -3786,7 +3779,34 @@ export default function Home() {
         if(tlFilterYear)   trades = trades.filter(t=>t.entry_date?.startsWith(tlFilterYear))
         if(tlFilterStatus) trades = trades.filter(t=>t.status===tlFilterStatus)
         trades = trades.sort((a,b)=>b.entry_date?.localeCompare(a.entry_date||'')||0)
-        setTlTrades(trades)
+        // Enrich open trades with live prices client-side
+        const openTrades = trades.filter(t=>t.status==='open')
+        if(openTrades.length) {
+          const priceCache = {}
+          await Promise.all(openTrades.map(async t=>{
+            const sym = (t.symbol||'').trim().toUpperCase()
+            if(!sym) return
+            try{
+              if(!priceCache[sym]){
+                const r=await fetch('/api/datos',{method:'POST',headers:{'Content-Type':'application/json'},
+                  body:JSON.stringify({simbolo:sym,cfg:{emaR:10,emaL:11,years:1,capitalIni:1000,tipoStop:'none',atrPeriod:14,atrMult:1,sinPerdidas:false,reentry:false,tipoFiltro:'none',sp500EmaR:10,sp500EmaL:11}})})
+                const j=await r.json()
+                if(j.meta?.ultimoPrecio) priceCache[sym]={price:j.meta.ultimoPrecio,date:j.meta.ultimaFecha}
+              }
+              const cur = priceCache[sym]
+              if(cur){
+                t._current_price = cur.price
+                t._current_date  = cur.date
+                const fxEntry = parseFloat(t.fx_entry)||1
+                const capitalEur = (parseFloat(t.shares)||0)*(parseFloat(t.entry_price)||0)/fxEntry
+                const pnlCur = (cur.price - parseFloat(t.entry_price||0))*(parseFloat(t.shares)||0)
+                t._pnl_float_eur = pnlCur/fxEntry - (parseFloat(t.commission_buy)||0)/fxEntry
+                t._pnl_float_pct = capitalEur>0?(t._pnl_float_eur/capitalEur)*100:0
+              }
+            }catch(_){}
+          }))
+        }
+        setTlTrades([...trades])
         return
       }
       // ── modo Supabase ──
@@ -3800,7 +3820,7 @@ export default function Home() {
       setTlTrades(json.trades||[])
     } catch(e){
       // Si el error es de Supabase no configurado → caer a localStorage silenciosamente
-      if(e.message?.includes('SUPABASE_URL') || e.message?.includes('no configurada')) {
+      if(e.message?.includes('SUPABASE_URL') || e.message?.includes('no configurada') || e.message?.includes('does not exist') || e.message?.includes('relation')) {
         let trades = tlGetLS()
         if(tlFilterBroker) trades = trades.filter(t=>t.broker===tlFilterBroker)
         if(tlFilterYear)   trades = trades.filter(t=>t.entry_date?.startsWith(tlFilterYear))
@@ -4210,7 +4230,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.34</title>
+        <title>Trading Simulator V4.35</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4273,7 +4293,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.34
+            <span className="dot"/>Trading Simulator V4.35
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5111,7 +5131,7 @@ export default function Home() {
                     </button>
                   ))}
                 </div>
-                <button onClick={()=>{setTlForm(tlDefaultForm());setTlFormOpen(true)}}
+                <button onClick={()=>{const _df=tlDefaultForm();setTlForm(_df);setTlFormOpen(true);if(_df.entry_currency&&_df.entry_currency!=='EUR')tlFetchFx(_df.entry_currency,_df.entry_date)}}
                   style={{marginTop:6,fontFamily:MONO,fontSize:11,padding:'8px 10px',borderRadius:4,cursor:'pointer',
                     background:'rgba(155,114,255,0.15)',border:'1px solid #9b72ff',color:'#9b72ff',fontWeight:700}}>
                   + Nueva operación
@@ -5930,7 +5950,7 @@ export default function Home() {
 
                   {/* Botón nueva op */}
                   <div style={{padding:'10px',marginTop:'auto',borderTop:'1px solid var(--border)',flexShrink:0}}>
-                    <button onClick={()=>{setTlForm(tlDefaultForm());setTlFormOpen(true)}}
+                    <button onClick={()=>{const _df=tlDefaultForm();setTlForm(_df);setTlFormOpen(true);if(_df.entry_currency&&_df.entry_currency!=='EUR')tlFetchFx(_df.entry_currency,_df.entry_date)}}
                       style={{width:'100%',fontFamily:MONO,fontSize:11,padding:'7px',borderRadius:4,cursor:'pointer',
                         background:'rgba(155,114,255,0.15)',border:'1px solid #9b72ff',color:'#9b72ff',fontWeight:700}}>
                       + Nueva operación
@@ -6038,8 +6058,8 @@ export default function Home() {
                                     {TL_LABEL[t.broker]||t.broker?.toUpperCase()}
                                   </span>
                                 </td>
-                                <td style={{padding:'6px 8px',color:'#a8ccdf',whiteSpace:'nowrap'}}>{t.entry_date||'—'}</td>
-                                <td style={{padding:'6px 8px',color:'#a8ccdf',whiteSpace:'nowrap'}}>{isOpen?<span style={{color:'#3d5a7a'}}>—</span>:t.exit_date||'—'}</td>
+                                <td style={{padding:'6px 8px',color:'#a8ccdf',whiteSpace:'nowrap'}}>{fmtDate(t.entry_date)||'—'}</td>
+                                <td style={{padding:'6px 8px',color:'#a8ccdf',whiteSpace:'nowrap'}}>{isOpen?<span style={{color:'#3d5a7a'}}>—</span>:fmtDate(t.exit_date)||'—'}</td>
                                 <td style={{padding:'6px 8px'}}>{t.shares}</td>
                                 <td style={{padding:'6px 8px',whiteSpace:'nowrap'}}>{t.entry_currency==='EUR'?'€':'$'}{t.entry_price!=null?parseFloat(t.entry_price).toFixed(2):'—'}</td>
                                 <td style={{padding:'6px 8px',whiteSpace:'nowrap',color:isOpen?'#00e5a0':'inherit'}}>
@@ -6074,7 +6094,7 @@ export default function Home() {
                       {!tlLoading&&tlTrades.length===0&&(
                         <div style={{padding:'40px',textAlign:'center',fontFamily:MONO,fontSize:12,color:'#3d5a7a'}}>
                           Sin operaciones registradas.{' '}
-                          <span style={{color:'#9b72ff',cursor:'pointer'}} onClick={()=>{setTlForm(tlDefaultForm());setTlFormOpen(true)}}>
+                          <span style={{color:'#9b72ff',cursor:'pointer'}} onClick={()=>{const _df=tlDefaultForm();setTlForm(_df);setTlFormOpen(true);if(_df.entry_currency&&_df.entry_currency!=='EUR')tlFetchFx(_df.entry_currency,_df.entry_date)}}>
                             Añadir primera operación →
                           </span>
                         </div>
@@ -6143,7 +6163,7 @@ export default function Home() {
                             {tlParsed.map((t,i)=>(
                               <tr key={i} style={{borderBottom:'1px solid var(--border)'}}>
                                 <td style={{padding:'5px 8px',fontWeight:700,color:'#c8dff5'}}>{t.symbol||'?'}</td>
-                                <td style={{padding:'5px 8px',color:'#a8ccdf'}}>{t.entry_date||'?'}</td>
+                                <td style={{padding:'5px 8px',color:'#a8ccdf'}}>{fmtDate(t.entry_date)||'?'}</td>
                                 <td style={{padding:'5px 8px'}}>{t.shares||'?'}</td>
                                 <td style={{padding:'5px 8px'}}>{t.entry_price||'?'}</td>
                                 <td style={{padding:'5px 8px',color:'#ffd166'}}>{t.entry_currency||'USD'}</td>
@@ -6291,10 +6311,10 @@ export default function Home() {
                     {/* Detalles */}
                     <div style={{padding:'8px 12px',borderBottom:'1px solid var(--border)'}}>
                       {[
-                        ['Entrada',tlSelected.entry_date||'—'],
+                        ['Entrada',fmtDate(tlSelected.entry_date)||'—'],
                         ['Precio entrada',`${tlSelected.entry_currency==='EUR'?'€':'$'}${tlSelected.entry_price!=null?parseFloat(tlSelected.entry_price).toFixed(2):'—'}`],
                         ...(tlSelected.status==='open'&&tlSelected._current_price!=null?[['Precio actual',`${tlSelected.entry_currency==='EUR'?'€':'$'}${tlSelected._current_price.toFixed(2)} ↑`]]:
-                          tlSelected.exit_price!=null?[['Precio salida',`${tlSelected.exit_currency==='EUR'?'€':'$'}${parseFloat(tlSelected.exit_price).toFixed(2)}`],['Fecha salida',tlSelected.exit_date||'—']]:[]),
+                          tlSelected.exit_price!=null?[['Precio salida',`${tlSelected.exit_currency==='EUR'?'€':'$'}${parseFloat(tlSelected.exit_price).toFixed(2)}`],['Fecha salida',fmtDate(tlSelected.exit_date)||'—']]:[]),
                         ['Acciones',tlSelected.shares],
                         ['Capital inv.',`€${tlSelected.capital_eur!=null?parseFloat(tlSelected.capital_eur).toFixed(0):'—'}`],
                         ['Comisión total',`-€${(parseFloat(tlSelected.commission_buy||0)+parseFloat(tlSelected.commission_sell||0)).toFixed(2)}`],
@@ -6878,11 +6898,13 @@ export default function Home() {
                   value={tlForm.entry_date}
                   onChange={e=>{
                     let v=e.target.value.replace(/[^0-9/]/g,'')
-                    // Auto-insertar /
                     if(v.length===2&&!v.includes('/')) v=v+'/'
                     if(v.length===5&&v.split('/').length===2) v=v+'/'
                     if(v.length>10) v=v.slice(0,10)
                     setTlForm(f=>({...f,entry_date:v}))
+                    // Auto-fetch FX cuando la fecha está completa
+                    if(v.length===10&&tlForm.entry_currency&&tlForm.entry_currency!=='EUR'&&!tlForm.fx_entry_manual)
+                      tlFetchFx(tlForm.entry_currency, v)
                   }}
                   style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'5px 7px',borderRadius:4}}/>
               </label>
@@ -6905,20 +6927,11 @@ export default function Home() {
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10}}>
               <label style={{display:'flex',flexDirection:'column',gap:4}}>
                 <span style={{fontSize:10,color:'#5a8aaa'}}>Divisa</span>
-                <select value={tlForm.entry_currency} onChange={async e=>{
+                <select value={tlForm.entry_currency} onChange={e=>{
                     const cur=e.target.value
-                    setTlForm(f=>({...f,entry_currency:cur}))
-                    // Auto-fetch FX si no es EUR y no está en modo manual
-                    if(cur!=='EUR'&&!tlForm.fx_entry_manual) {
-                      try{
-                        const date=toIsoDate(tlForm.entry_date)||new Date().toISOString().slice(0,10)
-                        const r=await fetch(`/api/tradelog?action=fx&currency=${cur}&date=${date}`)
-                        const j=await r.json()
-                        if(j.fx) setTlForm(f=>({...f,entry_currency:cur,fx_entry:j.fx.toFixed(4)}))
-                      }catch(_){}
-                    } else if(cur==='EUR'){
-                      setTlForm(f=>({...f,entry_currency:cur,fx_entry:'1',fx_entry_manual:false}))
-                    }
+                    if(cur==='EUR'){setTlForm(f=>({...f,entry_currency:cur,fx_entry:'1',fx_entry_manual:false}));return}
+                    setTlForm(f=>({...f,entry_currency:cur,fx_entry:'',fx_entry_manual:false}))
+                    tlFetchFx(cur, tlForm.entry_date)
                   }}
                   style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'5px 7px',borderRadius:4}}>
                   <option>USD</option><option>EUR</option><option>GBP</option><option>CHF</option><option>JPY</option>
