@@ -1219,20 +1219,13 @@ function SettingsModal({ onClose, strategies=[] }) {
               {(()=>{
                 const folderName = settings.tradelog?.folderName || null
                 const selectFolder = async () => {
-                  try {
-                    const handle = await window.showDirectoryPicker({mode:'readwrite',startIn:'documents'})
-                    // Guardar en IndexedDB para persistir entre sesiones
-                    const req = indexedDB.open('v50_fs',1)
-                    req.onupgradeneeded = e => e.target.result.createObjectStore('handles')
-                    req.onsuccess = e => {
-                      const db = e.target.result
-                      const tx = db.transaction('handles','readwrite')
-                      tx.objectStore('handles').put(handle,'tradingApp')
-                    }
-                    upd('tradelog.folderName', handle.name)
-                    upd('tradelog.subCharts',  settings.tradelog?.subCharts  || 'Trades charts')
-                    upd('tradelog.subBackup',  settings.tradelog?.subBackup  || 'Backup operativa')
-                  } catch(e) { if(e.name!=='AbortError') alert('Error al seleccionar carpeta: '+e.message) }
+                  const ok = await tlPickFolder()
+                  if(ok) {
+                    const h = await tlGetFsHandle()
+                    upd('tradelog.folderName', h?.name||'Carpeta seleccionada')
+                    if(!settings.tradelog?.subCharts) upd('tradelog.subCharts','Trades charts')
+                    if(!settings.tradelog?.subBackup) upd('tradelog.subBackup','Backup operativa')
+                  }
                 }
                 return (
                   <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:14}}>
@@ -1788,10 +1781,31 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
       if(onChartReady) onChartReady({
         captureJpg:()=>{
           try {
-            const canvas = containerRef.current?.querySelector('canvas')
-            if(!canvas) return null
-            return canvas.toDataURL('image/jpeg', 0.92)
-          } catch(_){ return null }
+            // chart.takeScreenshot() captures the FULL chart including price/time axes
+            const imgData = chart.takeScreenshot()
+            if(!imgData) return null
+            // imgData is an ImageData — draw onto offscreen canvas to get dataURL
+            const offscreen = document.createElement('canvas')
+            offscreen.width  = imgData.width
+            offscreen.height = imgData.height
+            const ctx2d = offscreen.getContext('2d')
+            ctx2d.putImageData(imgData, 0, 0)
+            return offscreen.toDataURL('image/jpeg', 0.93)
+          } catch(_){
+            // Fallback: composite all canvases in the container
+            try {
+              const canvases = Array.from(containerRef.current?.querySelectorAll('canvas')||[])
+              if(!canvases.length) return null
+              const w = canvases[0].width, h = canvases[0].height
+              const offscreen = document.createElement('canvas')
+              offscreen.width = w; offscreen.height = h
+              const ctx2d = offscreen.getContext('2d')
+              ctx2d.fillStyle = '#080c14'
+              ctx2d.fillRect(0,0,w,h)
+              canvases.forEach(c=>{ try{ ctx2d.drawImage(c,0,0) }catch(_){} })
+              return offscreen.toDataURL('image/jpeg', 0.93)
+            } catch(_){ return null }
+          }
         },
         scrollBy:(bars)=>{ try{ chart.timeScale().scrollToPosition(chart.timeScale().scrollPosition()-bars, false) }catch(_){} },
         navigateTo:(entryDate,exitDate)=>{
@@ -1817,22 +1831,42 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
           if(!entryDate||!entryPrice) return
           try{
             const ep = parseFloat(entryPrice)
+            // 1. Línea horizontal amarilla sólida en el precio de entrada
             const priceLine = candlesRef.current.createPriceLine({
               price: ep,
               color: '#ffd166',
               lineWidth: 2,
-              lineStyle: 0,  // solid
+              lineStyle: 0,
               axisLabelVisible: true,
-              title: `↑ ENTRADA $${ep.toFixed(2)}`,
+              title: `⬤ ENTRADA`,
             })
-            // También flecha en la vela de entrada
-            const existingMarkers = candlesRef.current.markers?.() || []
-            candlesRef.current.setMarkers([
-              ...existingMarkers,
-              {time:entryDate, position:'belowBar', color:'#ffd166', shape:'arrowUp', size:3, text:'ENTRADA'}
-            ])
-            // Auto-eliminar priceLine después de 5s
-            setTimeout(()=>{ try{ candlesRef.current.removePriceLine(priceLine) }catch(_){} }, 5000)
+            // 2. Línea vertical (serie de dos puntos) en la fecha de entrada — muy visible
+            const vertSeries = chart.addLineSeries({
+              color: '#ffd166',
+              lineWidth: 3,
+              lineStyle: 0,
+              lastValueVisible: false,
+              priceLineVisible: false,
+              crosshairMarkerVisible: false,
+            })
+            // Estimar rango de precio visible para la línea vertical
+            const closes = data.map(d=>d.close).filter(Boolean)
+            const minP = Math.min(...closes) * 0.98
+            const maxP = Math.max(...closes) * 1.02
+            vertSeries.setData([{time:entryDate, value:minP},{time:entryDate, value:maxP}])
+            // 3. Flecha grande abajo de la vela
+            const existingMarkers = (candlesRef.current.markers ? candlesRef.current.markers() : []) || []
+            const newMarkers = [
+              ...existingMarkers.filter(m=>m.text!=='ENTRADA'),
+              {time:entryDate, position:'belowBar', color:'#ffd166', shape:'arrowUp', size:4, text:'ENTRADA'}
+            ]
+            candlesRef.current.setMarkers(newMarkers)
+            // Auto-limpiar después de 6s
+            setTimeout(()=>{
+              try{ candlesRef.current.removePriceLine(priceLine) }catch(_){}
+              try{ chart.removeSeries(vertSeries) }catch(_){}
+              try{ candlesRef.current.setMarkers(existingMarkers) }catch(_){}
+            }, 6000)
           }catch(_){}
         }
       })
@@ -3629,58 +3663,96 @@ export default function Home() {
   }
 
   // ── Guardar screenshot del gráfico ─────────────────────────
+  // ── File System Access API helpers ──
+  const tlGetFsHandle = () => new Promise(res=>{
+    try{
+      const req = indexedDB.open('v50_fs',2)
+      req.onupgradeneeded = e => {
+        const db = e.target.result
+        if(!db.objectStoreNames.contains('handles')) db.createObjectStore('handles')
+      }
+      req.onsuccess = e => {
+        try{
+          const tx = e.target.result.transaction('handles','readonly')
+          const r2 = tx.objectStore('handles').get('tradingApp')
+          r2.onsuccess = ()=>res(r2.result||null)
+          r2.onerror = ()=>res(null)
+        }catch(_){ res(null) }
+      }
+      req.onerror = ()=>res(null)
+    }catch(_){ res(null) }
+  })
+  const tlSetFsHandle = (handle) => new Promise(res=>{
+    try{
+      const req = indexedDB.open('v50_fs',2)
+      req.onupgradeneeded = e => {
+        const db = e.target.result
+        if(!db.objectStoreNames.contains('handles')) db.createObjectStore('handles')
+      }
+      req.onsuccess = e => {
+        try{
+          const tx = e.target.result.transaction('handles','readwrite')
+          const r2 = tx.objectStore('handles').put(handle,'tradingApp')
+          r2.onsuccess = ()=>res(true)
+          r2.onerror = ()=>res(false)
+        }catch(_){ res(false) }
+      }
+      req.onerror = ()=>res(false)
+    }catch(_){ res(false) }
+  })
+  const tlPickFolder = async() => {
+    try{
+      if(!window.showDirectoryPicker) { alert('Tu navegador no soporta la API de acceso a archivos. Usa Chrome o Edge.'); return false }
+      const handle = await window.showDirectoryPicker({mode:'readwrite',startIn:'documents'})
+      await tlSetFsHandle(handle)
+      return true
+    }catch(e){
+      if(e.name!=='AbortError') alert('Error al seleccionar carpeta: '+e.message)
+      return false
+    }
+  }
+
   const tlSaveScreenshot = async(trade) => {
     try {
       const s = JSON.parse(localStorage.getItem('v50_settings')||'{}')
       if(s?.tradelog?.autoScreenshot===false) return
-      // Navegar al rango configurado (recentMonths), centrado en la fecha de entrada
+      // Navegar al rango configurado (recentMonths) con entry en el 70% derecho
       const months = s?.chart?.recentMonths ?? 3
       if(chartApiRef.current && trade.entry_date) {
         try {
           const entryD = new Date(trade.entry_date)
-          const fromD = new Date(entryD); fromD.setMonth(fromD.getMonth() - Math.floor(months * 0.3))
-          const toD   = new Date(entryD); toD.setMonth(toD.getMonth() + Math.ceil(months * 0.7))
+          // Mostrar 'months' meses antes + 2 semanas después para dar contexto
+          const fromD = new Date(entryD); fromD.setMonth(fromD.getMonth() - months)
+          const toD   = new Date(entryD); toD.setDate(toD.getDate() + 21)
           chartApiRef.current?.setRange?.(
             fromD.toISOString().slice(0,10),
             toD.toISOString().slice(0,10)
           )
-          // Dibujar línea de entrada amarilla temporal
+          // Dibujar línea de entrada amarilla
           chartApiRef.current?.showEntryLine?.(trade.entry_date, trade.entry_price)
         } catch(_){}
       }
-      // Esperar a que el gráfico renderice con la línea
-      await new Promise(r=>setTimeout(r,600))
+      // Esperar a que el gráfico renderice completamente
+      await new Promise(r=>setTimeout(r,800))
       const dataUrl = chartApiRef.current?.captureJpg?.()
       if(!dataUrl) return
       const sym = (trade.symbol||'TICKER').replace(/[^a-zA-Z0-9^]/g,'_')
       const date = (trade.entry_date||new Date().toISOString().slice(0,10))
       const strat = (trade.strategy||'V50').replace(/[^a-zA-Z0-9]/g,'_')
       const filename = `${sym}_${date}_${strat}.jpg`
-      // Intentar guardar en carpeta seleccionada (File System Access API)
+      // Intentar guardar en carpeta configurada (File System Access API)
       const subFolder = s?.tradelog?.subCharts || 'Trades charts'
       let saved = false
       try {
-        const rootHandle = await new Promise((res)=>{
-          const req = indexedDB.open('v50_fs',1)
-          req.onupgradeneeded = e => { try{ e.target.result.createObjectStore('handles') }catch(_){} }
-          req.onsuccess = e => {
-            try{
-              const tx = e.target.result.transaction('handles','readonly')
-              const r2 = tx.objectStore('handles').get('tradingApp')
-              r2.onsuccess = ()=>res(r2.result)
-              r2.onerror   = ()=>res(null)
-            }catch(_){ res(null) }
-          }
-          req.onerror = ()=>res(null)
-        })
+        const rootHandle = await tlGetFsHandle()
         if(rootHandle) {
-          // Verificar permiso de escritura
-          const perm = await rootHandle.queryPermission({mode:'readwrite'})
-          if(perm==='granted' || (await rootHandle.requestPermission({mode:'readwrite'}))==='granted') {
+          // Verificar/solicitar permiso
+          let perm = await rootHandle.queryPermission({mode:'readwrite'}).catch(()=>'prompt')
+          if(perm !== 'granted') perm = await rootHandle.requestPermission({mode:'readwrite'}).catch(()=>'denied')
+          if(perm === 'granted') {
             const subH = await rootHandle.getDirectoryHandle(subFolder, {create:true})
             const fileH = await subH.getFileHandle(filename, {create:true})
             const w = await fileH.createWritable()
-            // Convertir dataUrl a blob directamente sin fetch
             const b64 = dataUrl.split(',')[1]
             const bytes = Uint8Array.from(atob(b64), c=>c.charCodeAt(0))
             await w.write(new Blob([bytes],{type:'image/jpeg'}))
@@ -3689,7 +3761,7 @@ export default function Home() {
           }
         }
       } catch(_){}
-      // Fallback: descarga directa
+      // Fallback: descarga directa al navegador
       if(!saved) {
         const a = document.createElement('a')
         a.href = dataUrl; a.download = filename; a.click()
@@ -3816,13 +3888,16 @@ export default function Home() {
         return newT
       }
     }
-    // Sanitize numeric fields for Supabase (empty string → null)
-    const n = (v) => v===''||v==null ? null : (isNaN(parseFloat(v)) ? null : parseFloat(v))
+    // Sanitize numeric fields for Supabase
+    const n  = (v) => v===''||v==null||isNaN(parseFloat(v)) ? null : parseFloat(v)
+    const n0 = (v) => parseFloat(v)||0  // NOT NULL columns default to 0
     const clean = {...trade,
-      entry_price: n(trade.entry_price), exit_price: n(trade.exit_price),
-      shares: n(trade.shares),
-      commission_buy: n(trade.commission_buy)??0, commission_sell: n(trade.commission_sell)??0,
-      fx_entry: n(trade.fx_entry)||null, fx_exit: n(trade.fx_exit)||null,
+      entry_price:    n0(trade.entry_price),
+      exit_price:     n(trade.exit_price),
+      shares:         n0(trade.shares),
+      commission_buy: n0(trade.commission_buy),
+      commission_sell:n0(trade.commission_sell),
+      fx_entry: n(trade.fx_entry), fx_exit: n(trade.fx_exit),
     }
     const res=await fetch('/api/tradelog?action=save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(clean)})
     const json=await res.json()
@@ -4183,7 +4258,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.36</title>
+        <title>Trading Simulator V4.37</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4246,7 +4321,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.36
+            <span className="dot"/>Trading Simulator V4.37
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6918,12 +6993,19 @@ export default function Home() {
               </button>
               <button onClick={async()=>{
                 try{
+                  // Validar campos obligatorios
+                  if(!tlForm.symbol?.trim()) { alert('El símbolo es obligatorio'); return }
+                  if(!tlForm.entry_date?.trim()) { alert('La fecha de entrada es obligatoria'); return }
+                  if(!tlForm.entry_price||isNaN(parseFloat(tlForm.entry_price))) { alert('El precio de entrada es obligatorio'); return }
+                  if(!tlForm.shares||isNaN(parseFloat(tlForm.shares))||parseFloat(tlForm.shares)<=0) { alert('El nº de acciones es obligatorio y debe ser mayor que 0'); return }
                   let formData = {...tlForm, entry_date: toIsoDate(tlForm.entry_date)||tlForm.entry_date, status:'open', import_source:tlForm.import_source||'manual'}
                   // Strip UI-only fields before sending to Supabase
                   const {_fxLoading, _symSearch, _current_price, _current_date, _pnl_float_eur, _pnl_float_pct, ...cleanForm} = formData
-                  // Convert empty strings to null for numeric Supabase columns
-                  const numericCols = ['entry_price','shares','commission_buy','commission_sell','fx_entry','fx_exit','capital_eur','pnl_eur','pnl_pct','pnl_currency']
-                  numericCols.forEach(k=>{ if(cleanForm[k]===''||cleanForm[k]===undefined) cleanForm[k]=null })
+                  // Convert empty strings to proper values for Supabase numeric columns (NOT NULL = 0, nullable = null)
+                  const notNullNums = ['entry_price','shares','commission_buy','commission_sell']
+                  const nullableNums = ['fx_entry','fx_exit','capital_eur','pnl_eur','pnl_pct','pnl_currency']
+                  notNullNums.forEach(k=>{ cleanForm[k] = parseFloat(cleanForm[k])||0 })
+                  nullableNums.forEach(k=>{ if(cleanForm[k]===''||cleanForm[k]==null||isNaN(parseFloat(cleanForm[k]))) cleanForm[k]=null; else cleanForm[k]=parseFloat(cleanForm[k]) })
                   formData = cleanForm
                   // Auto-fetch FX if not set and currency is not EUR
                   if(formData.entry_currency && formData.entry_currency!=='EUR' && !formData.fx_entry) {
