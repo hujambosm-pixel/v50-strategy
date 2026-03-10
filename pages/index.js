@@ -1279,6 +1279,155 @@ function SettingsModal({ onClose, strategies=[] }) {
             </div>
           )}
 
+          {/* ── TRADELOG CONFIG ── */}
+          {tab==='tradelog_cfg'&&(
+            <div>
+              {sep('Carpeta base en tu PC')}
+              <div style={{fontSize:10,color:'#5a7a95',lineHeight:1.6,marginBottom:10}}>
+                La app usará esta carpeta para guardar capturas de gráficos y copias de seguridad.
+                Haz clic en "Seleccionar" y elige la carpeta <b style={{color:'#ffd166'}}>"Trading app"</b> en tu PC.
+                Funciona en Chrome y Edge. Solo tienes que hacerlo una vez.
+              </div>
+              {(()=>{
+                const folderName = settings.tradelog?.folderName || null
+                const selectFolder = async () => {
+                  try {
+                    const handle = await window.showDirectoryPicker({mode:'readwrite',startIn:'documents'})
+                    // Guardar en IndexedDB para persistir entre sesiones
+                    const req = indexedDB.open('v50_fs',1)
+                    req.onupgradeneeded = e => e.target.result.createObjectStore('handles')
+                    req.onsuccess = e => {
+                      const db = e.target.result
+                      const tx = db.transaction('handles','readwrite')
+                      tx.objectStore('handles').put(handle,'tradingApp')
+                    }
+                    upd('tradelog.folderName', handle.name)
+                    upd('tradelog.subCharts',  settings.tradelog?.subCharts  || 'Trades charts')
+                    upd('tradelog.subBackup',  settings.tradelog?.subBackup  || 'Backup operativa')
+                  } catch(e) { if(e.name!=='AbortError') alert('Error al seleccionar carpeta: '+e.message) }
+                }
+                return (
+                  <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:14}}>
+                    <div style={{flex:1,background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,
+                      padding:'7px 10px',fontFamily:MONO,fontSize:11,
+                      color:folderName?'#00e5a0':'#3d5a7a'}}>
+                      {folderName ? `📁 ${folderName}` : 'Sin carpeta seleccionada'}
+                    </div>
+                    <button onClick={selectFolder}
+                      style={{padding:'7px 12px',borderRadius:4,border:'1px solid #1a2d45',
+                        background:'rgba(0,212,255,0.08)',color:'#00d4ff',fontFamily:MONO,
+                        fontSize:11,cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>
+                      📁 Seleccionar
+                    </button>
+                  </div>
+                )
+              })()}
+
+              {sep('Subcarpetas')}
+              <div style={{display:'flex',flexDirection:'column',gap:8,marginBottom:14}}>
+                {[
+                  ['tradelog.subCharts','Capturas de gráficos','Trades charts'],
+                  ['tradelog.subBackup','Copias de seguridad','Backup operativa'],
+                ].map(([key,label,def])=>(
+                  <div key={key} style={{display:'flex',alignItems:'center',gap:8}}>
+                    <span style={{fontFamily:MONO,fontSize:10,color:'#7a9bc0',width:160,flexShrink:0}}>{label}</span>
+                    <input type="text" value={settings.tradelog?.[key.split('.')[1]]||def}
+                      onChange={e=>upd(key,e.target.value)}
+                      style={{flex:1,background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,
+                        color:'#e2eaf5',fontFamily:MONO,fontSize:11,padding:'5px 8px'}}/>
+                  </div>
+                ))}
+              </div>
+              <div style={{fontSize:10,color:'#3d5a7a',lineHeight:1.6,marginBottom:16}}>
+                Estructura: <span style={{color:'#7a9bc0'}}>Trading app / Trades charts / NVDA_2025-03-10_V50.jpg</span><br/>
+                Estructura: <span style={{color:'#7a9bc0'}}>Trading app / Backup operativa / backup_2025-03-10.json</span>
+              </div>
+
+              {sep('Valores por defecto al registrar operación')}
+              <div style={{display:'flex',flexDirection:'column',gap:8,marginBottom:14}}>
+                {[
+                  ['tradelog.defaultBroker','Broker por defecto','ibkr'],
+                  ['tradelog.defaultCurrency','Divisa por defecto','USD'],
+                  ['tradelog.defaultCommission','Comisión por defecto (€)','0'],
+                ].map(([key,label,def])=>(
+                  <div key={key} style={{display:'flex',alignItems:'center',gap:8}}>
+                    <span style={{fontFamily:MONO,fontSize:10,color:'#7a9bc0',width:200,flexShrink:0}}>{label}</span>
+                    {key==='tradelog.defaultBroker'
+                      ? <select value={settings.tradelog?.defaultBroker||'ibkr'} onChange={e=>upd(key,e.target.value)}
+                          style={{flex:1,background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,color:'#e2eaf5',fontFamily:MONO,fontSize:11,padding:'5px 8px'}}>
+                          <option value="ibkr">IBKR</option><option value="degiro">Degiro</option>
+                          <option value="myinvestor">MyInvestor</option><option value="binance">Binance</option>
+                          <option value="manual">Manual</option>
+                        </select>
+                      : key==='tradelog.defaultCurrency'
+                      ? <select value={settings.tradelog?.defaultCurrency||'USD'} onChange={e=>upd(key,e.target.value)}
+                          style={{flex:1,background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,color:'#e2eaf5',fontFamily:MONO,fontSize:11,padding:'5px 8px'}}>
+                          <option value="USD">USD</option><option value="EUR">EUR</option>
+                          <option value="GBP">GBP</option><option value="CHF">CHF</option>
+                        </select>
+                      : <input type="number" min="0" step="0.01"
+                          value={settings.tradelog?.defaultCommission??0}
+                          onChange={e=>upd(key,parseFloat(e.target.value)||0)}
+                          style={{flex:1,background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,color:'#e2eaf5',fontFamily:MONO,fontSize:11,padding:'5px 8px'}}/>
+                    }
+                  </div>
+                ))}
+              </div>
+
+              {sep('Captura automática al registrar operación')}
+              <label style={{display:'flex',alignItems:'center',gap:8,marginBottom:10,cursor:'pointer'}}>
+                <input type="checkbox"
+                  checked={settings.tradelog?.autoScreenshot!==false}
+                  onChange={e=>upd('tradelog.autoScreenshot',e.target.checked)}
+                  style={{accentColor:'#9b72ff',width:14,height:14}}/>
+                <span style={{fontFamily:MONO,fontSize:11,color:'#cce0f5'}}>
+                  Guardar captura del gráfico al añadir cada operación
+                </span>
+              </label>
+              <div style={{fontSize:10,color:'#3d5a7a',lineHeight:1.6,marginBottom:16}}>
+                Requiere tener una carpeta base seleccionada. La imagen muestra las velas del período del trade
+                con las EMAs y el punto de entrada marcado.
+              </div>
+
+              {sep('Copia de seguridad de operaciones')}
+              <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+                <button onClick={()=>{
+                  try {
+                    const trades = JSON.parse(localStorage.getItem('v50_tradelog')||'[]')
+                    const d = new Date().toISOString().slice(0,10)
+                    const blob = new Blob([JSON.stringify({version:'v50',date:d,trades},null,2)],{type:'application/json'})
+                    const a = document.createElement('a'); a.href=URL.createObjectURL(blob)
+                    a.download=`backup_${d}.json`; a.click(); URL.revokeObjectURL(a.href)
+                  } catch(e){ alert('Error: '+e.message) }
+                }} style={{padding:'7px 12px',borderRadius:4,border:'1px solid #9b72ff',
+                  background:'rgba(155,114,255,0.1)',color:'#9b72ff',fontFamily:MONO,fontSize:11,cursor:'pointer'}}>
+                  ⬇ Descargar backup (JSON)
+                </button>
+                <button onClick={()=>{
+                  const input = document.createElement('input'); input.type='file'; input.accept='.json'
+                  input.onchange = async e => {
+                    try {
+                      const text = await e.target.files[0].text()
+                      const data = JSON.parse(text)
+                      const trades = data.trades||data
+                      if(!Array.isArray(trades)) throw new Error('Formato incorrecto')
+                      if(!confirm(`¿Restaurar ${trades.length} operaciones? Se reemplazarán las actuales.`)) return
+                      localStorage.setItem('v50_tradelog', JSON.stringify(trades))
+                      alert(`✓ ${trades.length} operaciones restauradas`)
+                    } catch(e){ alert('Error al restaurar: '+e.message) }
+                  }
+                  input.click()
+                }} style={{padding:'7px 12px',borderRadius:4,border:'1px solid #1a2d45',
+                  background:'transparent',color:'#7a9bc0',fontFamily:MONO,fontSize:11,cursor:'pointer'}}>
+                  ⬆ Restaurar desde backup
+                </button>
+              </div>
+              <div style={{fontSize:10,color:'#3d5a7a',lineHeight:1.6,marginTop:8}}>
+                El backup descargado es un fichero JSON con todas tus operaciones.
+                Guárdalo en <span style={{color:'#ffd166'}}>Trading app / Backup operativa</span>.
+              </div>
+            </div>
+          )}
         {/* Footer */}
         <div style={{display:'flex',justifyContent:'flex-end',gap:8,padding:'12px 20px',
           borderTop:'1px solid #0d1520',flexShrink:0}}>
@@ -2285,124 +2434,6 @@ function StrategyAIPanel({ definition, onApply, onClose }) {
             {getGroqKey()?'✓ API Key configurada':'⚠ Sin API Key — configúrala en ⚙ Configuración → Integraciones'}
           </div>
 
-          {/* ── TRADELOG CONFIG ── */}
-          {tab==='tradelog_cfg'&&(
-            <div>
-              {sep('Carpeta base en tu PC')}
-              <div style={{fontSize:10,color:'#5a7a95',lineHeight:1.6,marginBottom:10}}>
-                La app usará esta carpeta para guardar capturas de gráficos y copias de seguridad.
-                Haz clic en "Seleccionar" y elige la carpeta <b style={{color:'#ffd166'}}>"Trading app"</b> en tu PC.
-                Funciona en Chrome y Edge. Solo tienes que hacerlo una vez.
-              </div>
-              {(()=>{
-                const folderName = settings.tradelog?.folderName || null
-                const selectFolder = async () => {
-                  try {
-                    const handle = await window.showDirectoryPicker({mode:'readwrite',startIn:'documents'})
-                    // Guardar en IndexedDB para persistir entre sesiones
-                    const req = indexedDB.open('v50_fs',1)
-                    req.onupgradeneeded = e => e.target.result.createObjectStore('handles')
-                    req.onsuccess = e => {
-                      const db = e.target.result
-                      const tx = db.transaction('handles','readwrite')
-                      tx.objectStore('handles').put(handle,'tradingApp')
-                    }
-                    upd('tradelog.folderName', handle.name)
-                    upd('tradelog.subCharts',  settings.tradelog?.subCharts  || 'Trades charts')
-                    upd('tradelog.subBackup',  settings.tradelog?.subBackup  || 'Backup operativa')
-                  } catch(e) { if(e.name!=='AbortError') alert('Error al seleccionar carpeta: '+e.message) }
-                }
-                return (
-                  <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:14}}>
-                    <div style={{flex:1,background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,
-                      padding:'7px 10px',fontFamily:MONO,fontSize:11,
-                      color:folderName?'#00e5a0':'#3d5a7a'}}>
-                      {folderName ? `📁 ${folderName}` : 'Sin carpeta seleccionada'}
-                    </div>
-                    <button onClick={selectFolder}
-                      style={{padding:'7px 12px',borderRadius:4,border:'1px solid #1a2d45',
-                        background:'rgba(0,212,255,0.08)',color:'#00d4ff',fontFamily:MONO,
-                        fontSize:11,cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>
-                      📁 Seleccionar
-                    </button>
-                  </div>
-                )
-              })()}
-
-              {sep('Subcarpetas')}
-              <div style={{display:'flex',flexDirection:'column',gap:8,marginBottom:14}}>
-                {[
-                  ['tradelog.subCharts','Capturas de gráficos','Trades charts'],
-                  ['tradelog.subBackup','Copias de seguridad','Backup operativa'],
-                ].map(([key,label,def])=>(
-                  <div key={key} style={{display:'flex',alignItems:'center',gap:8}}>
-                    <span style={{fontFamily:MONO,fontSize:10,color:'#7a9bc0',width:160,flexShrink:0}}>{label}</span>
-                    <input type="text" value={settings.tradelog?.[key.split('.')[1]]||def}
-                      onChange={e=>upd(key,e.target.value)}
-                      style={{flex:1,background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,
-                        color:'#e2eaf5',fontFamily:MONO,fontSize:11,padding:'5px 8px'}}/>
-                  </div>
-                ))}
-              </div>
-              <div style={{fontSize:10,color:'#3d5a7a',lineHeight:1.6,marginBottom:16}}>
-                Estructura: <span style={{color:'#7a9bc0'}}>Trading app / Trades charts / NVDA_2025-03-10_V50.jpg</span><br/>
-                Estructura: <span style={{color:'#7a9bc0'}}>Trading app / Backup operativa / backup_2025-03-10.json</span>
-              </div>
-
-              {sep('Captura automática al registrar operación')}
-              <label style={{display:'flex',alignItems:'center',gap:8,marginBottom:10,cursor:'pointer'}}>
-                <input type="checkbox"
-                  checked={settings.tradelog?.autoScreenshot!==false}
-                  onChange={e=>upd('tradelog.autoScreenshot',e.target.checked)}
-                  style={{accentColor:'#9b72ff',width:14,height:14}}/>
-                <span style={{fontFamily:MONO,fontSize:11,color:'#cce0f5'}}>
-                  Guardar captura del gráfico al añadir cada operación
-                </span>
-              </label>
-              <div style={{fontSize:10,color:'#3d5a7a',lineHeight:1.6,marginBottom:16}}>
-                Requiere tener una carpeta base seleccionada. La imagen muestra las velas del período del trade
-                con las EMAs y el punto de entrada marcado.
-              </div>
-
-              {sep('Copia de seguridad de operaciones')}
-              <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-                <button onClick={()=>{
-                  try {
-                    const trades = JSON.parse(localStorage.getItem('v50_tradelog')||'[]')
-                    const d = new Date().toISOString().slice(0,10)
-                    const blob = new Blob([JSON.stringify({version:'v50',date:d,trades},null,2)],{type:'application/json'})
-                    const a = document.createElement('a'); a.href=URL.createObjectURL(blob)
-                    a.download=`backup_${d}.json`; a.click(); URL.revokeObjectURL(a.href)
-                  } catch(e){ alert('Error: '+e.message) }
-                }} style={{padding:'7px 12px',borderRadius:4,border:'1px solid #9b72ff',
-                  background:'rgba(155,114,255,0.1)',color:'#9b72ff',fontFamily:MONO,fontSize:11,cursor:'pointer'}}>
-                  ⬇ Descargar backup (JSON)
-                </button>
-                <button onClick={()=>{
-                  const input = document.createElement('input'); input.type='file'; input.accept='.json'
-                  input.onchange = async e => {
-                    try {
-                      const text = await e.target.files[0].text()
-                      const data = JSON.parse(text)
-                      const trades = data.trades||data
-                      if(!Array.isArray(trades)) throw new Error('Formato incorrecto')
-                      if(!confirm(`¿Restaurar ${trades.length} operaciones? Se reemplazarán las actuales.`)) return
-                      localStorage.setItem('v50_tradelog', JSON.stringify(trades))
-                      alert(`✓ ${trades.length} operaciones restauradas`)
-                    } catch(e){ alert('Error al restaurar: '+e.message) }
-                  }
-                  input.click()
-                }} style={{padding:'7px 12px',borderRadius:4,border:'1px solid #1a2d45',
-                  background:'transparent',color:'#7a9bc0',fontFamily:MONO,fontSize:11,cursor:'pointer'}}>
-                  ⬆ Restaurar desde backup
-                </button>
-              </div>
-              <div style={{fontSize:10,color:'#3d5a7a',lineHeight:1.6,marginTop:8}}>
-                El backup descargado es un fichero JSON con todas tus operaciones.
-                Guárdalo en <span style={{color:'#ffd166'}}>Trading app / Backup operativa</span>.
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </div>
@@ -3423,6 +3454,28 @@ export default function Home() {
   // ── TradeLog helpers ────────────────────────────────────────
   // ── TradeLog: storage mode (local vs supabase) ──────────────
   const TL_LS_KEY = 'v50_tradelog'
+  // Genera formulario con defaults desde settings + estrategia activa
+  const tlDefaultForm = (overrides={}) => {
+    const s = JSON.parse(localStorage.getItem('v50_settings')||'{}')
+    const today = new Date().toISOString().split('T')[0]
+    // Estrategia activa: la que está cargada en el backtest principal
+    const activeStrat = strategies.find(st=>st.id===s.defaultStrategyId)
+      || (strategies.length>0 ? strategies[0] : null)
+    const stratName = activeStrat ? `V50 EMA ${activeStrat.ema_r}/${activeStrat.ema_l}` : 'V50'
+    return {
+      symbol: '', name: '', asset_type: 'stock',
+      broker: s.tradelog?.defaultBroker || 'ibkr',
+      entry_date: today,
+      entry_price: '', shares: '',
+      entry_currency: s.tradelog?.defaultCurrency || 'USD',
+      commission_buy: s.tradelog?.defaultCommission ?? 0,
+      fx_entry: '', fx_entry_manual: false,
+      strategy: stratName,
+      notes: '', import_source: 'manual',
+      ...overrides
+    }
+  }
+
   const tlNumericFields = ['entry_price','exit_price','shares','commission_buy','commission_sell','fx_entry','fx_exit','capital_eur','pnl_eur','pnl_pct','pnl_currency']
   const tlNorm = (t) => {
     if(!t) return t
@@ -3981,7 +4034,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.30</title>
+        <title>Trading Simulator V4.31</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4044,7 +4097,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.30
+            <span className="dot"/>Trading Simulator V4.31
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4882,7 +4935,7 @@ export default function Home() {
                     </button>
                   ))}
                 </div>
-                <button onClick={()=>{setTlForm({symbol:'',name:'',asset_type:'stock',broker:'ibkr',entry_date:'',entry_price:'',shares:'',entry_currency:'USD',commission_buy:0,fx_entry:'',fx_entry_manual:false,notes:'',strategy:'',import_source:'manual'});setTlFormOpen(true)}}
+                <button onClick={()=>{setTlForm(tlDefaultForm());setTlFormOpen(true)}}
                   style={{marginTop:6,fontFamily:MONO,fontSize:11,padding:'8px 10px',borderRadius:4,cursor:'pointer',
                     background:'rgba(155,114,255,0.15)',border:'1px solid #9b72ff',color:'#9b72ff',fontWeight:700}}>
                   + Nueva operación
@@ -5964,7 +6017,7 @@ export default function Home() {
 
             {/* Botón nueva op */}
             <div style={{padding:'10px',marginTop:'auto',borderTop:'1px solid var(--border)',flexShrink:0}}>
-              <button onClick={()=>{setTlForm({symbol:'',name:'',asset_type:'stock',broker:'ibkr',entry_date:'',entry_price:'',shares:'',entry_currency:'USD',commission_buy:0,fx_entry:'',fx_entry_manual:false,notes:'',strategy:'',import_source:'manual'});setTlFormOpen(true)}}
+              <button onClick={()=>{setTlForm(tlDefaultForm());setTlFormOpen(true)}}
                 style={{width:'100%',fontFamily:MONO,fontSize:11,padding:'7px',borderRadius:4,cursor:'pointer',
                   background:'rgba(155,114,255,0.15)',border:'1px solid #9b72ff',color:'#9b72ff',fontWeight:700}}>
                 + Nueva operación
@@ -6110,7 +6163,7 @@ export default function Home() {
                 {!tlLoading&&tlTrades.length===0&&(
                   <div style={{padding:'40px',textAlign:'center',fontFamily:MONO,fontSize:12,color:'#3d5a7a'}}>
                     Sin operaciones registradas.{' '}
-                    <span style={{color:'#9b72ff',cursor:'pointer'}} onClick={()=>{setTlFormOpen(true)}}>
+                    <span style={{color:'#9b72ff',cursor:'pointer'}} onClick={()=>{setTlForm(tlDefaultForm());setTlFormOpen(true)}}>
                       Añadir primera operación →
                     </span>
                   </div>
@@ -6560,20 +6613,37 @@ export default function Home() {
             </div>
             {/* Fila 1: símbolo + nombre + tipo */}
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10}}>
-              {[['Símbolo *','symbol','text','AAPL'],['Nombre','name','text','Apple Inc.'],['Tipo','asset_type','select','']].map(([l,k,type,ph])=>(
-                <label key={k} style={{display:'flex',flexDirection:'column',gap:4}}>
-                  <span style={{fontSize:10,color:'#5a8aaa'}}>{l}</span>
-                  {type==='select'
-                    ?<select value={tlForm[k]} onChange={e=>setTlForm(f=>({...f,[k]:e.target.value}))}
-                        style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'5px 7px',borderRadius:4}}>
-                        <option value="stock">Acción</option><option value="etf">ETF</option>
-                        <option value="crypto">Crypto</option><option value="future">Futuro</option>
-                      </select>
-                    :<input type={type} placeholder={ph} value={tlForm[k]} onChange={e=>setTlForm(f=>({...f,[k]:e.target.value}))}
-                        style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'5px 7px',borderRadius:4}}/>
-                  }
-                </label>
-              ))}
+              {/* Símbolo — con auto-nombre al salir */}
+              <label style={{display:'flex',flexDirection:'column',gap:4}}>
+                <span style={{fontSize:10,color:'#5a8aaa'}}>Símbolo *</span>
+                <input type="text" placeholder="AAPL" value={tlForm.symbol}
+                  onChange={e=>setTlForm(f=>({...f,symbol:e.target.value.toUpperCase()}))}
+                  onBlur={async e=>{
+                    const sym=e.target.value.trim().toUpperCase()
+                    if(!sym||tlForm.name) return
+                    // Auto nombre desde watchlist o lookupName
+                    const wl=typeof WATCHLIST_DEFAULT!=='undefined'?WATCHLIST_DEFAULT:[]
+                    const found=wl.find(w=>w.sym===sym)
+                    if(found) setTlForm(f=>({...f,name:found.name}))
+                  }}
+                  style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'5px 7px',borderRadius:4}}/>
+              </label>
+              {/* Nombre */}
+              <label style={{display:'flex',flexDirection:'column',gap:4}}>
+                <span style={{fontSize:10,color:'#5a8aaa'}}>Nombre</span>
+                <input type="text" placeholder="Apple Inc." value={tlForm.name||''}
+                  onChange={e=>setTlForm(f=>({...f,name:e.target.value}))}
+                  style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'5px 7px',borderRadius:4}}/>
+              </label>
+              {/* Tipo */}
+              <label style={{display:'flex',flexDirection:'column',gap:4}}>
+                <span style={{fontSize:10,color:'#5a8aaa'}}>Tipo</span>
+                <select value={tlForm.asset_type} onChange={e=>setTlForm(f=>({...f,asset_type:e.target.value}))}
+                  style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'5px 7px',borderRadius:4}}>
+                  <option value="stock">Acción</option><option value="etf">ETF</option>
+                  <option value="crypto">Crypto</option><option value="future">Futuro</option>
+                </select>
+              </label>
             </div>
             {/* Fila 2: broker */}
             <label style={{display:'flex',flexDirection:'column',gap:4}}>
@@ -6627,8 +6697,12 @@ export default function Home() {
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
               <label style={{display:'flex',flexDirection:'column',gap:4}}>
                 <span style={{fontSize:10,color:'#5a8aaa'}}>Estrategia</span>
-                <input type="text" placeholder="V50 EMA 10/11" value={tlForm.strategy||''} onChange={e=>setTlForm(f=>({...f,strategy:e.target.value}))}
-                  style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'5px 7px',borderRadius:4}}/>
+                <select value={tlForm.strategy||''} onChange={e=>setTlForm(f=>({...f,strategy:e.target.value}))}
+                  style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'5px 7px',borderRadius:4}}>
+                  {strategies.map(st=>{const n=st.name||`V50 EMA ${st.ema_r}/${st.ema_l}`;return <option key={st.id} value={n}>{n}</option>})}
+                  {strategies.length===0&&<option value="V50">V50</option>}
+                  <option value="">— Sin estrategia —</option>
+                </select>
               </label>
               <label style={{display:'flex',flexDirection:'column',gap:4}}>
                 <span style={{fontSize:10,color:'#5a8aaa'}}>Notas</span>
