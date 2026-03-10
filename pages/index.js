@@ -1213,16 +1213,15 @@ function SettingsModal({ onClose, strategies=[] }) {
               {sep('Carpeta base en tu PC')}
               <div style={{fontSize:10,color:'#5a7a95',lineHeight:1.6,marginBottom:10}}>
                 La app usará esta carpeta para guardar capturas de gráficos y copias de seguridad.
-                Haz clic en "Seleccionar" y elige la carpeta <b style={{color:'#ffd166'}}>"Trading app"</b> en tu PC.
-                Funciona en Chrome y Edge. Solo tienes que hacerlo una vez.
+                Haz clic en "Seleccionar" y elige la carpeta donde quieres guardar las capturas y backups. Se crearán subcarpetas automáticamente.
+                Solo funciona en Chrome y Edge. Solo tienes que hacerlo una vez.
               </div>
               {(()=>{
                 const folderName = settings.tradelog?.folderName || null
                 const selectFolder = async () => {
-                  const ok = await tlPickFolder()
-                  if(ok) {
-                    const h = await tlGetFsHandle()
-                    upd('tradelog.folderName', h?.name||'Carpeta seleccionada')
+                  const name = await tlPickFolder()
+                  if(name) {
+                    upd('tradelog.folderName', name)
                     if(!settings.tradelog?.subCharts) upd('tradelog.subCharts','Trades charts')
                     if(!settings.tradelog?.subBackup) upd('tradelog.subBackup','Backup operativa')
                   }
@@ -1260,8 +1259,8 @@ function SettingsModal({ onClose, strategies=[] }) {
                 ))}
               </div>
               <div style={{fontSize:10,color:'#3d5a7a',lineHeight:1.6,marginBottom:16}}>
-                Estructura: <span style={{color:'#7a9bc0'}}>Trading app / Trades charts / NVDA_2025-03-10_V50.jpg</span><br/>
-                Estructura: <span style={{color:'#7a9bc0'}}>Trading app / Backup operativa / backup_2025-03-10.json</span>
+                Estructura: <span style={{color:'#7a9bc0'}}>[Carpeta elegida] / Trades charts / NVDA_2025-03-10_V50.jpg</span><br/>
+                Estructura: <span style={{color:'#7a9bc0'}}>[Carpeta elegida] / Backup operativa / backup_2025-03-10.json</span>
               </div>
 
               {sep('Valores por defecto al registrar operación')}
@@ -1345,7 +1344,7 @@ function SettingsModal({ onClose, strategies=[] }) {
               </div>
               <div style={{fontSize:10,color:'#3d5a7a',lineHeight:1.6,marginTop:8}}>
                 El backup descargado es un fichero JSON con todas tus operaciones.
-                Guárdalo en <span style={{color:'#ffd166'}}>Trading app / Backup operativa</span>.
+                Guárdalo en <span style={{color:'#ffd166'}}>[Carpeta elegida] / Backup operativa</span>.
               </div>
             </div>
           )}
@@ -1779,31 +1778,87 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
 
       // Exponer navigateTo + fitAll + captureChart
       if(onChartReady) onChartReady({
-        captureJpg:()=>{
+        captureJpg:(wrapEl)=>{
           try {
-            // chart.takeScreenshot() captures the FULL chart including price/time axes
-            const imgData = chart.takeScreenshot()
-            if(!imgData) return null
-            // imgData is an ImageData — draw onto offscreen canvas to get dataURL
-            const offscreen = document.createElement('canvas')
-            offscreen.width  = imgData.width
-            offscreen.height = imgData.height
-            const ctx2d = offscreen.getContext('2d')
-            ctx2d.putImageData(imgData, 0, 0)
-            return offscreen.toDataURL('image/jpeg', 0.93)
-          } catch(_){
-            // Fallback: composite all canvases in the container
+            // chart.takeScreenshot() returns HTMLCanvasElement with full chart (axes + candles)
+            const chartCanvas = chart.takeScreenshot()
+            if(!chartCanvas) return null
+
+            const cw = chartCanvas.width, ch = chartCanvas.height
+
+            // Build final canvas: background + chart + legend overlay
+            const out = document.createElement('canvas')
+            // Add header height (≈36px) on top
+            const HEADER_H = 36
+            out.width  = cw
+            out.height = ch + HEADER_H
+            const ctx = out.getContext('2d')
+
+            // Background
+            ctx.fillStyle = '#080c14'
+            ctx.fillRect(0, 0, out.width, out.height)
+
+            // Header bar with symbol + price info
+            ctx.fillStyle = '#0d1520'
+            ctx.fillRect(0, 0, out.width, HEADER_H)
+            ctx.fillStyle = '#1a2d45'
+            ctx.fillRect(0, HEADER_H - 1, out.width, 1)
+
+            // Header text: SYMBOL  |  date  O H L C
+            const lastBar = data[data.length - 1]
+            if(lastBar) {
+              ctx.font = 'bold 12px "JetBrains Mono", monospace'
+              ctx.fillStyle = '#00d4ff'
+              ctx.fillText(lastBar.date || '', 10, 22)
+              const symEnd = ctx.measureText(lastBar.date || '').width + 10
+              ctx.font = '11px "JetBrains Mono", monospace'
+              const chg = lastBar.close - lastBar.open
+              const pct = (chg / lastBar.open * 100).toFixed(2)
+              const ohlc = [
+                ['O', lastBar.open?.toFixed(2), '#e2eaf5'],
+                ['H', lastBar.high?.toFixed(2), '#00e5a0'],
+                ['L', lastBar.low?.toFixed(2),  '#ff4d6d'],
+                ['C', lastBar.close?.toFixed(2),'#e2eaf5'],
+                [chg>=0?`+${pct}%`:`${pct}%`, '', chg>=0?'#00e5a0':'#ff4d6d'],
+              ]
+              let x = symEnd + 16
+              ohlc.forEach(([label, val, col])=>{
+                if(val) {
+                  ctx.fillStyle = '#5a7a95'
+                  ctx.fillText(label+' ', x, 22)
+                  x += ctx.measureText(label+' ').width
+                  ctx.fillStyle = col
+                  ctx.fillText(val+'  ', x, 22)
+                  x += ctx.measureText(val+'  ').width
+                } else {
+                  ctx.fillStyle = col
+                  ctx.fillText(label+'  ', x, 22)
+                  x += ctx.measureText(label+'  ').width
+                }
+              })
+            }
+
+            // Draw chart below header
+            ctx.drawImage(chartCanvas, 0, HEADER_H)
+
+            return out.toDataURL('image/jpeg', 0.93)
+          } catch(e) {
+            // Fallback: composite ALL canvases in the container
             try {
               const canvases = Array.from(containerRef.current?.querySelectorAll('canvas')||[])
               if(!canvases.length) return null
-              const w = canvases[0].width, h = canvases[0].height
-              const offscreen = document.createElement('canvas')
-              offscreen.width = w; offscreen.height = h
-              const ctx2d = offscreen.getContext('2d')
-              ctx2d.fillStyle = '#080c14'
-              ctx2d.fillRect(0,0,w,h)
-              canvases.forEach(c=>{ try{ ctx2d.drawImage(c,0,0) }catch(_){} })
-              return offscreen.toDataURL('image/jpeg', 0.93)
+              // Find the largest canvas (main chart canvas)
+              const main = canvases.reduce((a,b)=>b.width*b.height>a.width*a.height?b:a)
+              const w = main.width, h = main.height
+              const out = document.createElement('canvas')
+              out.width = w; out.height = h
+              const ctx = out.getContext('2d')
+              ctx.fillStyle = '#080c14'
+              ctx.fillRect(0,0,w,h)
+              // Draw all same-size canvases (layers)
+              canvases.filter(c=>c.width===w&&c.height===h)
+                .forEach(c=>{ try{ ctx.drawImage(c,0,0) }catch(_){} })
+              return out.toDataURL('image/jpeg', 0.93)
             } catch(_){ return null }
           }
         },
@@ -3702,12 +3757,17 @@ export default function Home() {
   })
   const tlPickFolder = async() => {
     try{
-      if(!window.showDirectoryPicker) { alert('Tu navegador no soporta la API de acceso a archivos. Usa Chrome o Edge.'); return false }
+      if(!window.showDirectoryPicker) {
+        alert('Tu navegador no soporta la API de acceso a archivos. Usa Chrome o Edge (no funciona en Firefox ni Safari).')
+        return false
+      }
+      // User picks the root folder; subfolders "Trades charts" and "Backup operativa" 
+      // are created automatically inside it
       const handle = await window.showDirectoryPicker({mode:'readwrite',startIn:'documents'})
-      await tlSetFsHandle(handle)
-      return true
+      const ok = await tlSetFsHandle(handle)
+      return ok ? handle.name : false
     }catch(e){
-      if(e.name!=='AbortError') alert('Error al seleccionar carpeta: '+e.message)
+      if(e.name!=='AbortError') alert('Error: '+e.message)
       return false
     }
   }
@@ -3721,19 +3781,17 @@ export default function Home() {
       if(chartApiRef.current && trade.entry_date) {
         try {
           const entryD = new Date(trade.entry_date)
-          // Mostrar 'months' meses antes + 2 semanas después para dar contexto
           const fromD = new Date(entryD); fromD.setMonth(fromD.getMonth() - months)
           const toD   = new Date(entryD); toD.setDate(toD.getDate() + 21)
           chartApiRef.current?.setRange?.(
             fromD.toISOString().slice(0,10),
             toD.toISOString().slice(0,10)
           )
-          // Dibujar línea de entrada amarilla
           chartApiRef.current?.showEntryLine?.(trade.entry_date, trade.entry_price)
         } catch(_){}
       }
-      // Esperar a que el gráfico renderice completamente
-      await new Promise(r=>setTimeout(r,800))
+      // Esperar render completo (gráfico + líneas)
+      await new Promise(r=>setTimeout(r,1000))
       const dataUrl = chartApiRef.current?.captureJpg?.()
       if(!dataUrl) return
       const sym = (trade.symbol||'TICKER').replace(/[^a-zA-Z0-9^]/g,'_')
@@ -4258,7 +4316,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.37</title>
+        <title>Trading Simulator V4.38</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4321,7 +4379,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.37
+            <span className="dot"/>Trading Simulator V4.38
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
