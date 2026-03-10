@@ -164,6 +164,22 @@ function Tip({id, style}) {
     </span>
   )
 }
+
+// ── Date helpers for TradeLog (dd/mm/yyyy ↔ yyyy-mm-dd) ──
+function toDisplayDate(iso){ // '2024-03-15' → '15/03/2024'
+  if(!iso) return ''
+  const [y,m,d]=iso.split('-')
+  return `${d}/${m}/${y}`
+}
+function toIsoDate(disp){ // '15/03/2024' → '2024-03-15'
+  if(!disp) return ''
+  if(disp.includes('-')) return disp // already ISO
+  const parts=disp.split('/')
+  if(parts.length===3) return `${parts[2]}-${parts[1]}-${parts[0]}`
+  return ''
+}
+function todayDisplay(){ return toDisplayDate(new Date().toISOString().slice(0,10)) }
+
 function fmt(v,dec=2,suf=''){if(v==null||isNaN(v))return'—';return v.toLocaleString('es-ES',{minimumFractionDigits:dec,maximumFractionDigits:dec})+suf}
 function fmtDate(s){if(!s)return'—';return new Date(s).toLocaleDateString('es-ES',{day:'2-digit',month:'2-digit',year:'numeric'})}
 function f2(v){if(v==null||isNaN(v))return'—';return v.toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2})}
@@ -2807,6 +2823,164 @@ function StrategyBuilder({ definition, setDefinition }) {
   )
 }
 
+
+// ── ContextThemeMenu — click derecho en cualquier sección ────
+const TEMA_SECTIONS = {
+  global:   { label:'🌐 Global (todo)', selector:'body *' },
+  header:   { label:'📌 Header',        selector:'.header,.header *' },
+  sidebar:  { label:'📋 Sidebar',       selector:'.sidebar,aside,.sidebar *' },
+  chart:    { label:'📈 Gráfico',        selector:'.chart-wrap,.chart-wrap .chart-header *' },
+  equity:   { label:'💹 Equity / barras',selector:'.equity-section,.equity-section *' },
+  trades:   { label:'📑 Tabla trades',   selector:'.trades-section,.trades-section *' },
+  metrics:  { label:'📊 Métricas',       selector:'.metrics-section *,div[style*="275px"] *' },
+  tradelog: { label:'📒 TradeLog',       selector:'.tl-content,.tl-content *' },
+  modals:   { label:'🪟 Modales',        selector:'.tl-modal,.tl-modal *' },
+}
+const FONT_OPTIONS = [
+  {id:'jetbrains', label:'JetBrains Mono'},
+  {id:'ibmplex',   label:'IBM Plex Mono'},
+  {id:'firacode',  label:'Fira Code'},
+  {id:'system',    label:'System UI'},
+]
+function applyTema(temaFonts){
+  try{
+    const fontMap={jetbrains:'"JetBrains Mono","Fira Code",monospace',ibmplex:'"IBM Plex Mono",monospace',firacode:'"Fira Code","JetBrains Mono",monospace',system:'system-ui,sans-serif'}
+    let css=''
+    for(const [sec,cfg] of Object.entries(TEMA_SECTIONS)){
+      const fc=temaFonts[sec]; if(!fc) continue
+      const parts=[]
+      if(fc.family) parts.push(`font-family:${fontMap[fc.family]||fontMap.jetbrains} !important`)
+      if(fc.size)   parts.push(`font-size:${fc.size}px !important`)
+      if(fc.color)  parts.push(`color:${fc.color} !important`)
+      if(fc.bg)     parts.push(`background:${fc.bg} !important`)
+      if(parts.length) css+=`${cfg.selector}{${parts.join(';')}}\n`
+    }
+    let el=document.getElementById('v50-tema-style')
+    if(!el){el=document.createElement('style');el.id='v50-tema-style';document.head.appendChild(el)}
+    el.textContent=css
+  }catch(_){}
+}
+function ContextThemeMenu({ x, y, section, onClose, onSave }) {
+  const [fonts, setFonts] = useState(()=>{
+    try{ return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.tema?.fonts||{} }catch(_){ return {} }
+  })
+  const fc = fonts[section]||{}
+  const upd = (k,v) => {
+    const nf = {...fonts, [section]:{...fc, [k]:v||undefined}}
+    setFonts(nf)
+    applyTema(nf)
+    // Persist immediately
+    try{
+      const s = JSON.parse(localStorage.getItem('v50_settings')||'{}')
+      s.tema = s.tema||{}; s.tema.fonts = nf
+      localStorage.setItem('v50_settings', JSON.stringify(s))
+    }catch(_){}
+    onSave(nf)
+  }
+  const reset = () => {
+    const nf = {...fonts}; delete nf[section]
+    setFonts(nf); applyTema(nf)
+    try{
+      const s = JSON.parse(localStorage.getItem('v50_settings')||'{}')
+      s.tema=s.tema||{}; s.tema.fonts=nf
+      localStorage.setItem('v50_settings', JSON.stringify(s))
+    }catch(_){}
+    onSave(nf)
+  }
+  const secInfo = TEMA_SECTIONS[section]||{}
+  // Position: keep inside viewport
+  const menuW=260, menuH=310
+  const vw=typeof window!=='undefined'?window.innerWidth:1200
+  const vh=typeof window!=='undefined'?window.innerHeight:800
+  const left=Math.min(x, vw-menuW-12)
+  const top=Math.min(y, vh-menuH-12)
+  return (
+    <>
+      {/* Overlay para cerrar */}
+      <div onClick={onClose} style={{position:'fixed',inset:0,zIndex:9998}}/>
+      <div style={{position:'fixed',left,top,zIndex:9999,width:menuW,
+        background:'#0d1825',border:'1px solid #1e3a55',borderRadius:8,
+        boxShadow:'0 8px 32px rgba(0,0,0,0.7)',fontFamily:MONO,fontSize:11,
+        padding:'12px 14px',display:'flex',flexDirection:'column',gap:10}}>
+        {/* Header */}
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',
+          borderBottom:'1px solid #1a3040',paddingBottom:8,marginBottom:2}}>
+          <span style={{color:'#00d4ff',fontWeight:700,fontSize:12}}>{secInfo.label}</span>
+          <div style={{display:'flex',gap:6,alignItems:'center'}}>
+            <button onClick={reset} title="Restablecer sección"
+              style={{background:'transparent',border:'1px solid #2d4a60',color:'#ff6b6b',
+                fontSize:9,padding:'2px 6px',borderRadius:3,cursor:'pointer',fontFamily:MONO}}>
+              ↺ Reset
+            </button>
+            <button onClick={onClose} style={{background:'transparent',border:'none',
+              color:'#5a7a95',fontSize:16,cursor:'pointer',lineHeight:1,padding:'0 2px'}}>×</button>
+          </div>
+        </div>
+        {/* Sección selector */}
+        <label style={{display:'flex',flexDirection:'column',gap:3}}>
+          <span style={{color:'#5a8aaa',fontSize:9,letterSpacing:'0.08em'}}>SECCIÓN</span>
+          <select value={section} onChange={e=>{ onClose(); setTimeout(()=>onClose(),0) }}
+            disabled style={{background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,
+              color:'#7a9bc0',fontFamily:MONO,fontSize:10,padding:'4px 6px'}}>
+            {Object.entries(TEMA_SECTIONS).map(([k,v])=>
+              <option key={k} value={k}>{v.label}</option>)}
+          </select>
+        </label>
+        {/* Fuente */}
+        <label style={{display:'flex',flexDirection:'column',gap:3}}>
+          <span style={{color:'#5a8aaa',fontSize:9,letterSpacing:'0.08em'}}>FUENTE</span>
+          <select value={fc.family||''} onChange={e=>upd('family',e.target.value)}
+            style={{background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,
+              color:'#e2eaf5',fontFamily:MONO,fontSize:10,padding:'4px 6px'}}>
+            <option value="">— Heredar —</option>
+            {FONT_OPTIONS.map(f=><option key={f.id} value={f.id}>{f.label}</option>)}
+          </select>
+        </label>
+        {/* Tamaño + color texto */}
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+          <label style={{display:'flex',flexDirection:'column',gap:3}}>
+            <span style={{color:'#5a8aaa',fontSize:9,letterSpacing:'0.08em'}}>TAMAÑO</span>
+            <input type="number" min="8" max="24" placeholder="px"
+              value={fc.size||''} onChange={e=>upd('size',e.target.value?Number(e.target.value):undefined)}
+              style={{background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,
+                color:'#e2eaf5',fontFamily:MONO,fontSize:10,padding:'4px 6px'}}/>
+          </label>
+          <label style={{display:'flex',flexDirection:'column',gap:3}}>
+            <span style={{color:'#5a8aaa',fontSize:9,letterSpacing:'0.08em'}}>COLOR TEXTO</span>
+            <div style={{display:'flex',gap:4,alignItems:'center'}}>
+              <input type="color" value={fc.color||'#e2eaf5'}
+                onChange={e=>upd('color',e.target.value)}
+                style={{width:28,height:28,border:'none',background:'none',cursor:'pointer',padding:0}}/>
+              <input type="text" value={fc.color||''} placeholder="#e2eaf5"
+                onChange={e=>upd('color',e.target.value)}
+                style={{flex:1,background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,
+                  color:'#e2eaf5',fontFamily:MONO,fontSize:10,padding:'4px 6px'}}/>
+            </div>
+          </label>
+        </div>
+        {/* Fondo */}
+        <label style={{display:'flex',flexDirection:'column',gap:3}}>
+          <span style={{color:'#5a8aaa',fontSize:9,letterSpacing:'0.08em'}}>COLOR FONDO</span>
+          <div style={{display:'flex',gap:4,alignItems:'center'}}>
+            <input type="color" value={fc.bg||'#080c14'}
+              onChange={e=>upd('bg',e.target.value)}
+              style={{width:28,height:28,border:'none',background:'none',cursor:'pointer',padding:0}}/>
+            <input type="text" value={fc.bg||''} placeholder="transparent"
+              onChange={e=>upd('bg',e.target.value)}
+              style={{flex:1,background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,
+                color:'#e2eaf5',fontFamily:MONO,fontSize:10,padding:'4px 6px'}}/>
+            {fc.bg&&<button onClick={()=>upd('bg',undefined)}
+              style={{background:'transparent',border:'none',color:'#5a7a95',cursor:'pointer',fontSize:12}}>×</button>}
+          </div>
+        </label>
+        <div style={{fontSize:9,color:'#3d5a7a',borderTop:'1px solid #1a2d45',paddingTop:6}}>
+          Clic derecho en cualquier sección para personalizar · Los cambios se aplican al instante
+        </div>
+      </div>
+    </>
+  )
+}
+
 // ── Main ─────────────────────────────────────────────────────
 export default function Home() {
   const [simbolo,setSimbolo]=useState('^GSPC')
@@ -3457,16 +3631,18 @@ export default function Home() {
   // Genera formulario con defaults desde settings + estrategia activa
   const tlDefaultForm = (overrides={}) => {
     const s = JSON.parse(localStorage.getItem('v50_settings')||'{}')
-    const today = new Date().toISOString().split('T')[0]
+    const today = todayDisplay()
     // Estrategia activa: la que está cargada en el backtest principal
     const activeStrat = strategies.find(st=>st.id===s.defaultStrategyId)
       || (strategies.length>0 ? strategies[0] : null)
     const stratName = activeStrat ? `V50 EMA ${activeStrat.ema_r}/${activeStrat.ema_l}` : 'V50'
+    // Precio actual del activo activo en el chart principal
+    const currentPrice = result?.meta?.ultimoPrecio ? String(result.meta.ultimoPrecio.toFixed(2)) : ''
     return {
       symbol: '', name: '', asset_type: 'stock',
       broker: s.tradelog?.defaultBroker || 'ibkr',
       entry_date: today,
-      entry_price: '', shares: '',
+      entry_price: currentPrice, shares: '',
       entry_currency: s.tradelog?.defaultCurrency || 'USD',
       commission_buy: s.tradelog?.defaultCommission ?? 0,
       fx_entry: '', fx_entry_manual: false,
@@ -3515,27 +3691,34 @@ export default function Home() {
       const subFolder = s?.tradelog?.subCharts || 'Trades charts'
       let saved = false
       try {
-        const req = indexedDB.open('v50_fs',1)
-        await new Promise((res,rej)=>{
-          req.onsuccess = async e => {
-            try {
-              const db = e.target.result
-              const tx = db.transaction('handles','readonly')
-              const rootHandle = await new Promise((r2,e2)=>{ const req2=tx.objectStore('handles').get('tradingApp'); req2.onsuccess=()=>r2(req2.result); req2.onerror=e2 })
-              if(rootHandle) {
-                const subH = await rootHandle.getDirectoryHandle(subFolder, {create:true})
-                const fileH = await subH.getFileHandle(filename, {create:true})
-                const w = await fileH.createWritable()
-                const resp = await fetch(dataUrl)
-                await w.write(await resp.blob())
-                await w.close()
-                saved = true
-              }
-            } catch(_){}
-            res()
+        const rootHandle = await new Promise((res)=>{
+          const req = indexedDB.open('v50_fs',1)
+          req.onupgradeneeded = e => { try{ e.target.result.createObjectStore('handles') }catch(_){} }
+          req.onsuccess = e => {
+            try{
+              const tx = e.target.result.transaction('handles','readonly')
+              const r2 = tx.objectStore('handles').get('tradingApp')
+              r2.onsuccess = ()=>res(r2.result)
+              r2.onerror   = ()=>res(null)
+            }catch(_){ res(null) }
           }
-          req.onerror = ()=>res()
+          req.onerror = ()=>res(null)
         })
+        if(rootHandle) {
+          // Verificar permiso de escritura
+          const perm = await rootHandle.queryPermission({mode:'readwrite'})
+          if(perm==='granted' || (await rootHandle.requestPermission({mode:'readwrite'}))==='granted') {
+            const subH = await rootHandle.getDirectoryHandle(subFolder, {create:true})
+            const fileH = await subH.getFileHandle(filename, {create:true})
+            const w = await fileH.createWritable()
+            // Convertir dataUrl a blob directamente sin fetch
+            const b64 = dataUrl.split(',')[1]
+            const bytes = Uint8Array.from(atob(b64), c=>c.charCodeAt(0))
+            await w.write(new Blob([bytes],{type:'image/jpeg'}))
+            await w.close()
+            saved = true
+          }
+        }
       } catch(_){}
       // Fallback: descarga directa
       if(!saved) {
@@ -3812,53 +3995,15 @@ export default function Home() {
 
   // Apply tema font settings per section via <style> injection
   const [temaKey, setTemaKey] = useState(0)
+  const [ctxMenu, setCtxMenu] = useState(null) // {x,y,section}
+  const openCtx = (e, section) => {
+    e.preventDefault(); e.stopPropagation()
+    setCtxMenu({x: e.clientX, y: e.clientY, section})
+  }
   useEffect(()=>{
     try{
       const t = JSON.parse(localStorage.getItem('v50_settings')||'{}')?.tema||{}
-      const fonts = t.fonts||{}
-      const fontMap={jetbrains:'"JetBrains Mono","Fira Code",monospace',ibmplex:'"IBM Plex Mono",monospace',firacode:'"Fira Code","JetBrains Mono",monospace',system:'system-ui,sans-serif'}
-      const selectorMap={
-        global:'body *',
-        sidebar:'.sidebar,.sidebar-section,aside',
-        header:'.header,.header *',
-        tabs:'.sidebar-tabs button',
-        chart:'.chart-wrap .chart-header,.chart-wrap .chart-header *',
-        trades:'.trades-section,.trades-section *',
-        metrics:'.metrics-section,.metrics-section *,div[style*="275px"] *',
-        modals:'.tl-modal,.tl-modal *',
-        tradelog:'.tl-content,.tl-content *',
-      }
-      let css=''
-      // Global — aplica también a modales y overlays fijos
-      const globalFc=fonts['global']
-      if(globalFc){
-        const parts2=[]
-        if(globalFc.family) parts2.push(`font-family:${fontMap[globalFc.family]||fontMap.jetbrains} !important`)
-        if(globalFc.size)   parts2.push(`font-size:${globalFc.size}px !important`)
-        if(globalFc.color)  parts2.push(`color:${globalFc.color} !important`)
-        if(parts2.length){
-          css+=`body *{${parts2.join(';')}}
-`
-          css+=`div[style*="position:fixed"] *{${parts2.join(';')}}
-`
-          css+=`div[style*="zIndex:200"] *,div[style*="zIndex:300"] *{${parts2.join(';')}}
-`
-        }
-      }
-      for(const [sec,sel] of Object.entries(selectorMap)){
-        if(sec==='global') continue
-        const fc=fonts[sec]
-        if(!fc) continue
-        const parts=[]
-        if(fc.family) parts.push(`font-family:${fontMap[fc.family]||fontMap.jetbrains} !important`)
-        if(fc.size)   parts.push(`font-size:${fc.size}px !important`)
-        if(fc.color)  parts.push(`color:${fc.color} !important`)
-        if(parts.length) css+=`${sel}{${parts.join(';')}}
-`
-      }
-      let el=document.getElementById('v50-tema-style')
-      if(!el){el=document.createElement('style');el.id='v50-tema-style';document.head.appendChild(el)}
-      el.textContent=css
+      applyTema(t.fonts||{})
     }catch(_){}
   },[temaKey])
 
@@ -4034,7 +4179,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.31</title>
+        <title>Trading Simulator V4.32</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4094,10 +4239,10 @@ export default function Home() {
       </Head>
       <div className="app">
         {/* ── HEADER ── */}
-        <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}}>
+        <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.31
+            <span className="dot"/>Trading Simulator V4.32
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4167,7 +4312,7 @@ export default function Home() {
 
         <div className="main">
           {/* ── SIDEBAR ── */}
-          <aside className="sidebar" style={{padding:0,gap:0,position:'relative',width:sidebarW,flexShrink:0,flexGrow:0}}>
+          <aside className="sidebar" style={{padding:0,gap:0,position:'relative',width:sidebarW,flexShrink:0,flexGrow:0}} onContextMenu={e=>openCtx(e,'sidebar')}>
             {/* Resize handle — right edge */}
             <div onMouseDown={e=>{sidebarResizing.current=true;sidebarStartX.current=e.clientX;sidebarStartW.current=sidebarW;document.body.style.cursor='col-resize';document.body.style.userSelect='none'}}
               style={{position:'absolute',top:0,right:0,width:4,height:'100%',cursor:'col-resize',zIndex:20,
@@ -4970,15 +5115,15 @@ export default function Home() {
           {/* ── CONTENT ── */}
           <div className="content">
             {/* Single-asset view — oculto cuando multicartera activa */}
-            {sidePanel!=='multi'&&!result&&!error&&<div className="loading"><div className="spinner"/><div className="loading-text">CARGANDO DATOS...</div></div>}
-            {sidePanel!=='multi'&&error&&<div className="error-msg">⚠ {error}</div>}
+            {sidePanel!=='multi'&&sidePanel!=='tradelog'&&!result&&!error&&<div className="loading"><div className="spinner"/><div className="loading-text">CARGANDO DATOS...</div></div>}
+            {sidePanel!=='multi'&&sidePanel!=='tradelog'&&error&&<div className="error-msg">⚠ {error}</div>}
 
-            {sidePanel!=='multi'&&result&&(
+            {sidePanel!=='multi'&&sidePanel!=='tradelog'&&result&&(
               <div style={{display:'flex',flex:1,minHeight:0,overflow:'hidden',height:'100%'}}>
                 {/* Columna principal */}
                 <div ref={contentRef} style={{flex:1,overflowY:'auto'}}>
                   {/* Gráfico de velas */}
-                  <div className="chart-wrap" ref={chartWrapRef}>
+                  <div className="chart-wrap" ref={chartWrapRef} onContextMenu={e=>openCtx(e,'chart')}>
                     <div className="chart-header" style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',fontSize:14}}>
                       {/* Estrella favorito del activo activo */}
                       {(()=>{
@@ -5093,7 +5238,7 @@ export default function Home() {
                   )}
 
                   {/* Equity con toggles */}
-                  <div className="equity-section">
+                  <div className="equity-section" onContextMenu={e=>openCtx(e,'equity')}>
                     <div className="section-title" style={{display:'flex',alignItems:'center',flexWrap:'wrap',gap:6,fontSize:14}}>
                       <span>Equity</span>
                       {[
@@ -5184,7 +5329,7 @@ export default function Home() {
 
                   {/* Historial — clic fila navega al trade */}
                   {result.trades?.length>0&&(
-                    <div className="trades-section">
+                    <div className="trades-section" onContextMenu={e=>openCtx(e,'trades')}>
                       <div className="section-title" style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',fontSize:14}}>
                         <span>Historial — {result.trades.length} operaciones <span style={{fontWeight:400,fontSize:11,color:'#9acce0'}}>· clic fila = ir al trade</span></span>
                         <div style={{display:'flex',gap:4,marginLeft:'auto'}}>
@@ -5268,7 +5413,7 @@ export default function Home() {
 
                 {/* Panel derecho de métricas */}
                 {sidePanel!=='multi'&&(metricsLayout==='panel'||metricsLayout==='multi')&&metrics&&(
-                  <div style={{width:rightPanelW,flexShrink:0,borderLeft:'1px solid var(--border)',background:'var(--bg2)',overflowY:'auto',position:'relative'}}>
+                  <div style={{width:rightPanelW,flexShrink:0,borderLeft:'1px solid var(--border)',background:'var(--bg2)',overflowY:'auto',position:'relative'}} onContextMenu={e=>openCtx(e,'metrics')}>
                     {/* Resize handle — left edge */}
                     <div onMouseDown={e=>{rightResizing.current=true;rightStartX.current=e.clientX;rightStartW.current=rightPanelW;document.body.style.cursor='col-resize';document.body.style.userSelect='none'}}
                       style={{position:'absolute',top:0,left:0,width:4,height:'100%',cursor:'col-resize',zIndex:20,
@@ -5917,7 +6062,7 @@ export default function Home() {
 
       {/* ══ TRADELOG MAIN PANEL ══ */}
       {sidePanel==='tradelog'&&(
-        <div className="tl-content" style={{display:'flex',flex:1,height:'100%',overflow:'hidden',background:'var(--bg)',fontSize:13}}>
+        <div className="tl-content" style={{display:'flex',flex:1,height:'100%',overflow:'hidden',background:'var(--bg)',fontSize:13}} onContextMenu={e=>openCtx(e,'tradelog')}>
 
           {/* COLUMNA IZQUIERDA — filtros + stats */}
           <div style={{width:190,flexShrink:0,background:'var(--bg2)',borderRight:'1px solid var(--border)',display:'flex',flexDirection:'column',overflowY:'auto'}}>
@@ -6605,7 +6750,7 @@ export default function Home() {
       {tlFormOpen&&(
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.75)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center'}}
           onClick={e=>{if(e.target===e.currentTarget)setTlFormOpen(false)}}>
-          <div className="tl-modal" style={{background:'#0d1824',border:'1px solid #1e3a52',borderRadius:8,padding:24,width:560,maxHeight:'90vh',overflowY:'auto',
+          <div className="tl-modal" onContextMenu={e=>openCtx(e,'modals')} style={{background:'#0d1824',border:'1px solid #1e3a52',borderRadius:8,padding:24,width:560,maxHeight:'90vh',overflowY:'auto',
             display:'flex',flexDirection:'column',gap:14,fontFamily:MONO,fontSize:13,boxShadow:'0 8px 48px rgba(0,0,0,0.8)'}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
               <span style={{fontWeight:700,color:'#c8dff5',fontSize:14}}>{tlForm.id?'Editar operación':'Nueva operación'}</span>
@@ -6662,13 +6807,35 @@ export default function Home() {
             </label>
             {/* Fila 3: fecha, precio, acciones */}
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10}}>
-              {[['Fecha entrada *','entry_date','date',''],['Precio entrada *','entry_price','number','0.00'],['Nº acciones *','shares','number','0']].map(([l,k,type,ph])=>(
-                <label key={k} style={{display:'flex',flexDirection:'column',gap:4}}>
-                  <span style={{fontSize:10,color:'#5a8aaa'}}>{l}</span>
-                  <input type={type} placeholder={ph} value={tlForm[k]} onChange={e=>setTlForm(f=>({...f,[k]:e.target.value}))}
-                    style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'5px 7px',borderRadius:4}}/>
-                </label>
-              ))}
+              {/* Fecha — dd/mm/yyyy custom */}
+              <label style={{display:'flex',flexDirection:'column',gap:4}}>
+                <span style={{fontSize:10,color:'#5a8aaa'}}>Fecha entrada *</span>
+                <input type="text" placeholder="dd/mm/yyyy"
+                  value={tlForm.entry_date}
+                  onChange={e=>{
+                    let v=e.target.value.replace(/[^0-9/]/g,'')
+                    // Auto-insertar /
+                    if(v.length===2&&!v.includes('/')) v=v+'/'
+                    if(v.length===5&&v.split('/').length===2) v=v+'/'
+                    if(v.length>10) v=v.slice(0,10)
+                    setTlForm(f=>({...f,entry_date:v}))
+                  }}
+                  style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'5px 7px',borderRadius:4}}/>
+              </label>
+              {/* Precio entrada */}
+              <label style={{display:'flex',flexDirection:'column',gap:4}}>
+                <span style={{fontSize:10,color:'#5a8aaa'}}>Precio entrada *</span>
+                <input type="number" placeholder="0.00" value={tlForm.entry_price}
+                  onChange={e=>setTlForm(f=>({...f,entry_price:e.target.value}))}
+                  style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'5px 7px',borderRadius:4}}/>
+              </label>
+              {/* Nº acciones */}
+              <label style={{display:'flex',flexDirection:'column',gap:4}}>
+                <span style={{fontSize:10,color:'#5a8aaa'}}>Nº acciones *</span>
+                <input type="number" placeholder="0" value={tlForm.shares}
+                  onChange={e=>setTlForm(f=>({...f,shares:e.target.value}))}
+                  style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'5px 7px',borderRadius:4}}/>
+              </label>
             </div>
             {/* Fila 4: divisa, comisión, FX */}
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10}}>
@@ -6718,7 +6885,8 @@ export default function Home() {
               </button>
               <button onClick={async()=>{
                 try{
-                  const saved = await tlSaveTrade({...tlForm,status:'open',import_source:tlForm.import_source||'manual'})
+                  const formToSave = {...tlForm, entry_date: toIsoDate(tlForm.entry_date)||tlForm.entry_date, status:'open', import_source:tlForm.import_source||'manual'}
+                  const saved = await tlSaveTrade(formToSave)
                   setTlFormOpen(false)
                   setTimeout(()=>tlSaveScreenshot({...tlForm,...(saved||{})}).catch(()=>{}),300)
                 }catch(e){alert('Error al guardar: '+e.message)}
@@ -6735,7 +6903,7 @@ export default function Home() {
       {tlCloseOpen&&tlSelected&&(
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.75)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center'}}
           onClick={e=>{if(e.target===e.currentTarget)setTlCloseOpen(false)}}>
-          <div className="tl-modal" style={{background:'#0d1824',border:'1px solid #1e3a52',borderRadius:8,padding:24,width:400,
+          <div className="tl-modal" onContextMenu={e=>openCtx(e,'modals')} style={{background:'#0d1824',border:'1px solid #1e3a52',borderRadius:8,padding:24,width:400,
             display:'flex',flexDirection:'column',gap:14,fontFamily:MONO,fontSize:13,boxShadow:'0 8px 48px rgba(0,0,0,0.8)'}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
               <span style={{fontWeight:700,color:'#c8dff5',fontSize:14}}>Cerrar operación · {tlSelected.symbol}</span>
@@ -6798,6 +6966,17 @@ export default function Home() {
           </div>
         </div>
       )}
+    <>
+      {/* ── Context Theme Menu ── */}
+      {ctxMenu&&<ContextThemeMenu
+        x={ctxMenu.x} y={ctxMenu.y} section={ctxMenu.section}
+        onClose={()=>setCtxMenu(null)}
+        onSave={(nf)=>{
+          setCtxMenu(null)
+          setTemaKey(k=>k+1)
+        }}
+      />}
+    </>
     </>
   )
 }
