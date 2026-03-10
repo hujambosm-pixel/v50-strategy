@@ -3165,6 +3165,25 @@ export default function Home() {
   const [tlSearch,setTlSearch]=useState('')
   const [tlFills,setTlFills]=useState([])
   const [tlFormOpen,setTlFormOpen]=useState(false)
+
+  // Auto-fetch FX when modal opens or currency/date changes
+  useEffect(()=>{
+    if(!tlFormOpen) return
+    const cur = tlForm?.entry_currency
+    const date = toIsoDate(tlForm?.entry_date) || new Date().toISOString().slice(0,10)
+    // Only fetch when date is complete (dd/mm/yyyy = 10 chars or ISO format)
+    if(!cur || cur==='EUR' || tlForm?.fx_entry_manual) return
+    const rawDate = tlForm?.entry_date||''
+    if(rawDate.length < 8) return  // incomplete date
+    let cancelled=false
+    setTlForm(f=>({...f,_fxLoading:true}))
+    fetch(`/api/tradelog?action=fx&currency=${cur}&date=${date}`)
+      .then(r=>r.json())
+      .then(j=>{ if(!cancelled && j.fx) setTlForm(f=>({...f,fx_entry:parseFloat(j.fx).toFixed(4),_fxLoading:false})) })
+      .catch(()=>{ if(!cancelled) setTlForm(f=>({...f,_fxLoading:false})) })
+    return ()=>{ cancelled=true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[tlFormOpen, tlForm?.entry_currency, tlForm?.entry_date])
   const [tlCloseOpen,setTlCloseOpen]=useState(false)
   const [tlImportText,setTlImportText]=useState('')
   const [tlImportFormat,setTlImportFormat]=useState('ai')
@@ -3640,10 +3659,11 @@ export default function Home() {
   const tlDefaultForm = (overrides={}) => {
     const s = JSON.parse(localStorage.getItem('v50_settings')||'{}')
     const today = todayDisplay()
-    // Estrategia activa: la que está cargada en el backtest principal
-    const activeStrat = strategies.find(st=>st.id===s.defaultStrategyId)
+    // Estrategia activa: la cargada en el backtest (currentStratId) o la primera disponible
+    const activeStrat = strategies.find(st=>st.id===currentStratId)
+      || strategies.find(st=>st.id===s.defaultStrategyId)
       || (strategies.length>0 ? strategies[0] : null)
-    const stratName = activeStrat ? `V50 EMA ${activeStrat.ema_r}/${activeStrat.ema_l}` : 'V50'
+    const stratName = activeStrat ? (activeStrat.name||`V50 EMA ${activeStrat.ema_r}/${activeStrat.ema_l}`) : 'V50'
     // Precio actual del activo activo en el chart principal
     const currentPrice = result?.meta?.ultimoPrecio ? String(result.meta.ultimoPrecio.toFixed(2)) : ''
     return {
@@ -4190,7 +4210,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.33</title>
+        <title>Trading Simulator V4.34</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4253,7 +4273,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.33
+            <span className="dot"/>Trading Simulator V4.34
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6912,8 +6932,8 @@ export default function Home() {
               <label style={{display:'flex',flexDirection:'column',gap:4}}>
                 <span style={{fontSize:10,color:'#5a8aaa'}}>FX manual <span style={{color:'#3d5a7a'}}>(opt.)</span></span>
                 <div style={{display:'flex',gap:4,alignItems:'center'}}>
-                  <input type="number" step="0.0001" placeholder="auto" value={tlForm.fx_entry} onChange={e=>setTlForm(f=>({...f,fx_entry:e.target.value,fx_entry_manual:true}))}
-                    style={{flex:1,background:'var(--bg3)',border:`1px solid ${tlForm.fx_entry_manual?'#ffd166':'var(--border)'}`,color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'5px 7px',borderRadius:4}}/>
+                  <input type="number" step="0.0001" placeholder={tlForm._fxLoading?'Cargando…':'auto'} value={tlForm.fx_entry} onChange={e=>setTlForm(f=>({...f,fx_entry:e.target.value,fx_entry_manual:true}))}
+                    style={{flex:1,background:'var(--bg3)',border:`1px solid ${tlForm.fx_entry_manual?'#ffd166':tlForm.fx_entry?'#00e5a0':'var(--border)'}`,color:tlForm._fxLoading?'#5a7a95':'var(--text)',fontFamily:MONO,fontSize:11,padding:'5px 7px',borderRadius:4}}/>
                   {tlForm.fx_entry_manual&&<span onClick={()=>setTlForm(f=>({...f,fx_entry:'',fx_entry_manual:false}))} title="Usar automático" style={{cursor:'pointer',color:'#ffd166',fontSize:14}}>↺</span>}
                 </div>
               </label>
