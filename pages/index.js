@@ -548,8 +548,7 @@ function SettingsModal({ onClose, strategies=[] }) {
     { id:'grafico',       label:'📈 Gráfico' },
     { id:'ranking',       label:'🏆 Ranking' },
     { id:'watchlist',     label:'📋 Watchlist' },
-    { id:'tema',          label:'🎨 Tema' },
-    { id:'tradelog_cfg',  label:'📒 TradeLog' },
+      { id:'tradelog_cfg',  label:'📒 TradeLog' },
   ]
 
   const inp = (val, onChange, opts={}) => (
@@ -1144,93 +1143,6 @@ function SettingsModal({ onClose, strategies=[] }) {
           )}
 
           {/* ── TEMA ── */}
-          {tab==='tema'&&(()=>{
-            const SECCIONES=[
-              {id:'global',   label:'Toda la app'},
-              {id:'sidebar',  label:'Sidebar / Config'},
-              {id:'header',   label:'Encabezado'},
-              {id:'tabs',     label:'Pestañas sidebar'},
-              {id:'chart',    label:'Encabezado gráfico'},
-              {id:'trades',   label:'Historial trades'},
-              {id:'metrics',  label:'Métricas / Resumen'},
-              {id:'modals',   label:'Modales TradeLog'},
-              {id:'tradelog', label:'TradeLog'},
-            ]
-            const temaSeccion=settings.tema?.seccion||'global'
-            const skFont=`tema.fonts.${temaSeccion}`
-            const getFontCfg=(s)=>settings.tema?.fonts?.[s]||{}
-            const fc=getFontCfg(temaSeccion)
-            const fontMap={jetbrains:'"JetBrains Mono","Fira Code",monospace',ibmplex:'"IBM Plex Mono",monospace',firacode:'"Fira Code","JetBrains Mono",monospace',system:'system-ui,sans-serif'}
-            const PREVIEW_TEXT='AAPL  +12.34%  €10.234'
-            const previewFont=fontMap[fc.family||'jetbrains']
-            return(
-              <div>
-                {sep('Sección a configurar')}
-                <div style={{display:'flex',flexWrap:'wrap',gap:4,marginBottom:14}}>
-                  {SECCIONES.map(s=>(
-                    <button key={s.id} onClick={()=>upd('tema.seccion',s.id)}
-                      style={{fontFamily:MONO,fontSize:10,padding:'4px 8px',borderRadius:4,cursor:'pointer',
-                        border:`1px solid ${temaSeccion===s.id?'var(--accent)':'#2a3f55'}`,
-                        background:temaSeccion===s.id?'rgba(0,212,255,0.1)':'transparent',
-                        color:temaSeccion===s.id?'var(--accent)':'#7a9bc0'}}>
-                      {s.label}
-                    </button>
-                  ))}
-                </div>
-
-                {sep(`Tipografía — ${SECCIONES.find(s=>s.id===temaSeccion)?.label||'Global'}`)}
-
-                <div style={{marginBottom:10}}>
-                  <span style={{fontFamily:MONO,fontSize:10,color:'#cce0f5'}}>Familia tipográfica</span>
-                  <select value={fc.family||'jetbrains'} onChange={e=>upd(`${skFont}.family`,e.target.value)}
-                    style={{display:'block',marginTop:5,width:'100%',background:'#080c14',border:'1px solid #1a2d45',
-                      borderRadius:4,color:'#e2eaf5',fontFamily:MONO,fontSize:12,padding:'6px 10px'}}>
-                    <option value="jetbrains">JetBrains Mono</option>
-                    <option value="ibmplex">IBM Plex Mono</option>
-                    <option value="firacode">Fira Code</option>
-                    <option value="system">Sistema (sans-serif)</option>
-                  </select>
-                </div>
-
-                <div style={{marginBottom:10}}>
-                  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
-                    <span style={{fontFamily:MONO,fontSize:10,color:'#cce0f5',flex:1}}>Tamaño de fuente</span>
-                    <span style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:'#00d4ff',minWidth:32,textAlign:'right'}}>{fc.size??13}px</span>
-                    <input type="range" min={9} max={18} value={fc.size??13}
-                      onChange={e=>upd(`${skFont}.size`,Number(e.target.value))}
-                      style={{width:90,accentColor:'#00d4ff'}}/>
-                  </div>
-                </div>
-
-                <div style={{marginBottom:14}}>
-                  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
-                    <span style={{fontFamily:MONO,fontSize:10,color:'#cce0f5',flex:1}}>Color del texto</span>
-                    <input type="color" value={fc.color||'#eef5ff'}
-                      onChange={e=>upd(`${skFont}.color`,e.target.value)}
-                      style={{width:28,height:28,borderRadius:4,border:'1px solid #1a2d45',cursor:'pointer',padding:1}}/>
-                    <span style={{fontFamily:MONO,fontSize:10,color:'#4a6a80'}}>{fc.color||'#eef5ff'}</span>
-                  </div>
-                </div>
-
-                {/* Preview */}
-                <div style={{background:'#0a101a',border:'1px solid #1a2d45',borderRadius:6,padding:'10px 12px',marginBottom:14}}>
-                  <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',marginBottom:5,letterSpacing:'0.1em'}}>VISTA PREVIA</div>
-                  <span style={{fontFamily:previewFont,fontSize:fc.size??13,color:fc.color||'#eef5ff'}}>
-                    {PREVIEW_TEXT}
-                  </span>
-                </div>
-
-                <button onClick={()=>{
-                  const t={...(settings.tema||{})}
-                  if(t.fonts) delete t.fonts[temaSeccion]
-                  upd('tema',t)
-                }} style={{marginTop:4,width:'100%',fontFamily:MONO,fontSize:10,
-                  padding:'5px',borderRadius:4,border:'1px solid #ff4d6d',background:'transparent',color:'#ff4d6d',cursor:'pointer'}}>
-                  Restaurar sección por defecto
-                </button>
-              </div>
-            )
-          })()}
 
           {/* ── RANKING ── */}
           {tab==='ranking'&&(
@@ -1898,6 +1810,29 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
             const from=new Date(lastBar.date)
             from.setMonth(from.getMonth()-(months||3))
             chart.timeScale().setVisibleRange({from:from.toISOString().split('T')[0],to:addDays(lastBar.date,GAP_DAYS)})
+          }catch(_){}
+        },
+        setRange:(from,to)=>{ try{ chart.timeScale().setVisibleRange({from,to}) }catch(_){} },
+        showEntryLine:(entryDate, entryPrice)=>{
+          if(!entryDate||!entryPrice) return
+          try{
+            const ep = parseFloat(entryPrice)
+            const priceLine = candlesRef.current.createPriceLine({
+              price: ep,
+              color: '#ffd166',
+              lineWidth: 2,
+              lineStyle: 0,  // solid
+              axisLabelVisible: true,
+              title: `↑ ENTRADA $${ep.toFixed(2)}`,
+            })
+            // También flecha en la vela de entrada
+            const existingMarkers = candlesRef.current.markers?.() || []
+            candlesRef.current.setMarkers([
+              ...existingMarkers,
+              {time:entryDate, position:'belowBar', color:'#ffd166', shape:'arrowUp', size:3, text:'ENTRADA'}
+            ])
+            // Auto-eliminar priceLine después de 5s
+            setTimeout(()=>{ try{ candlesRef.current.removePriceLine(priceLine) }catch(_){} }, 5000)
           }catch(_){}
         }
       })
@@ -3698,13 +3633,23 @@ export default function Home() {
     try {
       const s = JSON.parse(localStorage.getItem('v50_settings')||'{}')
       if(s?.tradelog?.autoScreenshot===false) return
-      // Navegar al rango del trade en el gráfico principal
-      if(chartApiRef.current?.navigateTo && trade.entry_date) {
-        const exitD = trade.exit_date || trade.entry_date
-        chartApiRef.current.navigateTo(trade.entry_date, exitD)
+      // Navegar al rango configurado (recentMonths), centrado en la fecha de entrada
+      const months = s?.chart?.recentMonths ?? 3
+      if(chartApiRef.current && trade.entry_date) {
+        try {
+          const entryD = new Date(trade.entry_date)
+          const fromD = new Date(entryD); fromD.setMonth(fromD.getMonth() - Math.floor(months * 0.3))
+          const toD   = new Date(entryD); toD.setMonth(toD.getMonth() + Math.ceil(months * 0.7))
+          chartApiRef.current?.setRange?.(
+            fromD.toISOString().slice(0,10),
+            toD.toISOString().slice(0,10)
+          )
+          // Dibujar línea de entrada amarilla temporal
+          chartApiRef.current?.showEntryLine?.(trade.entry_date, trade.entry_price)
+        } catch(_){}
       }
-      // Esperar a que el gráfico renderice
-      await new Promise(r=>setTimeout(r,400))
+      // Esperar a que el gráfico renderice con la línea
+      await new Promise(r=>setTimeout(r,600))
       const dataUrl = chartApiRef.current?.captureJpg?.()
       if(!dataUrl) return
       const sym = (trade.symbol||'TICKER').replace(/[^a-zA-Z0-9^]/g,'_')
@@ -4238,7 +4183,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.35</title>
+        <title>Trading Simulator V4.36</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4301,7 +4246,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.35
+            <span className="dot"/>Trading Simulator V4.36
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5108,65 +5053,46 @@ export default function Home() {
 
             {/* ══ PANEL TRADELOG ══ */}
             {sidePanel==='tradelog'&&(
-              <div style={{display:'flex',flexDirection:'column',flex:1,overflowY:'auto',padding:'10px 12px',gap:10}}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                  <div style={{fontFamily:MONO,fontSize:9,color:'#9b72ff',letterSpacing:'0.1em',textTransform:'uppercase',fontWeight:700}}>📒 TradeLog</div>
-                  <div style={{fontFamily:MONO,fontSize:9,padding:'2px 6px',borderRadius:3,
-                    background:tlUseLocal()?'rgba(255,209,102,0.1)':'rgba(0,212,255,0.1)',
-                    border:tlUseLocal()?'1px solid rgba(255,209,102,0.3)':'1px solid rgba(0,212,255,0.3)',
-                    color:tlUseLocal()?'#ffd166':'#00d4ff'}} title={tlUseLocal()?'Datos guardados en este navegador. Configura Supabase en Settings → Integraciones para persistencia real.':'Conectado a Supabase'}>
+              <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
+                {/* Header badge */}
+                <div style={{padding:'10px 12px',borderBottom:'1px solid var(--border)',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0}}>
+                  <span style={{fontFamily:MONO,fontSize:9,color:'#9b72ff',letterSpacing:'0.1em',textTransform:'uppercase',fontWeight:700}}>📒 TradeLog</span>
+                  <span style={{fontFamily:MONO,fontSize:9,padding:'2px 6px',borderRadius:3,
+                    background:tlUseLocal()?'rgba(255,209,102,0.1)':'rgba(0,212,255,0.08)',
+                    border:tlUseLocal()?'1px solid rgba(255,209,102,0.3)':'1px solid rgba(0,212,255,0.2)',
+                    color:tlUseLocal()?'#ffd166':'#00d4ff'}}>
                     {tlUseLocal()?'💾 Local':'☁ Supabase'}
-                  </div>
+                  </span>
                 </div>
-                <div style={{fontFamily:MONO,fontSize:11,color:'#7a9bc0',lineHeight:1.6}}>
-                  El panel completo se muestra en el área central.
-                  <br/>Selecciona un tab arriba para navegar.
-                </div>
-                <div style={{display:'flex',flexDirection:'column',gap:6,marginTop:4}}>
+                {/* Nav links */}
+                <div style={{display:'flex',flexDirection:'column',gap:2,padding:'8px 8px',flexShrink:0}}>
                   {[
-                    {id:'ops',label:'📋 Operaciones',count:tlTrades.length},
-                    {id:'open',label:'🟢 Abiertas',count:tlTrades.filter(t=>t.status==='open').length},
-                    {id:'import',label:'📥 Importar'},
-                    {id:'stats',label:'📈 Estadísticas'},
+                    {id:'ops',  icon:'📋', label:'Operaciones', count:tlTrades.length},
+                    {id:'open', icon:'🟢', label:'Abiertas',    count:tlTrades.filter(t=>t.status==='open').length},
+                    {id:'import',icon:'📥',label:'Importar'},
+                    {id:'stats',icon:'📈', label:'Estadísticas'},
                   ].map(t=>(
                     <button key={t.id} onClick={()=>setTlTab(t.id)}
-                      style={{fontFamily:MONO,fontSize:11,padding:'6px 10px',borderRadius:4,cursor:'pointer',textAlign:'left',
+                      style={{fontFamily:MONO,fontSize:11,padding:'6px 8px',borderRadius:4,cursor:'pointer',textAlign:'left',
                         background:tlTab===t.id?'rgba(155,114,255,0.12)':'transparent',
-                        border:`1px solid ${tlTab===t.id?'#9b72ff':'#1a2d45'}`,
-                        color:tlTab===t.id?'#9b72ff':'#7a9bc0',display:'flex',justifyContent:'space-between'}}>
-                      <span>{t.label}</span>
-                      {t.count!=null&&<span style={{color:tlTab===t.id?'#9b72ff':'#3d5a7a',fontWeight:700}}>{t.count}</span>}
+                        border:`1px solid ${tlTab===t.id?'#9b72ff':'transparent'}`,
+                        color:tlTab===t.id?'#c8a0ff':'#5a7a95',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                      <span>{t.icon} {t.label}</span>
+                      {t.count!=null&&<span style={{fontSize:10,fontWeight:700,color:tlTab===t.id?'#9b72ff':'#3d5a7a',background:'rgba(0,0,0,0.3)',padding:'1px 5px',borderRadius:8}}>{t.count}</span>}
                     </button>
                   ))}
                 </div>
-                <button onClick={()=>{const _df=tlDefaultForm();setTlForm(_df);setTlFormOpen(true);if(_df.entry_currency&&_df.entry_currency!=='EUR')tlFetchFx(_df.entry_currency,_df.entry_date)}}
-                  style={{marginTop:6,fontFamily:MONO,fontSize:11,padding:'8px 10px',borderRadius:4,cursor:'pointer',
-                    background:'rgba(155,114,255,0.15)',border:'1px solid #9b72ff',color:'#9b72ff',fontWeight:700}}>
-                  + Nueva operación
-                </button>
-                {/* Indicador de datos guardados + borrar todo */}
-                {(()=>{
-                  const lsCount=tlGetLS().length
-                  if(!tlUseLocal()) return null
-                  return(
-                    <div style={{marginTop:6,padding:'6px 8px',borderRadius:4,border:'1px solid #2a3f55',background:'rgba(0,0,0,0.2)'}}>
-                      <div style={{fontFamily:MONO,fontSize:9,color:'#5a8aaa',lineHeight:1.5}}>
-                        {lsCount===0
-                          ? 'Sin operaciones. Añade las que quieras — puedes borrarlas todas cuando quieras.'
-                          : <>
-                              <span style={{color:'#ffd166',fontWeight:700}}>{lsCount} operaciones guardadas</span>
-                              <span onClick={()=>{if(confirm(`¿Borrar las ${lsCount} operaciones?`)){localStorage.removeItem('v50_tradelog');loadTrades()}}}
-                                style={{display:'block',marginTop:3,color:'#ff4d6d',cursor:'pointer',textDecoration:'underline'}}>
-                                🗑 Borrar todas
-                              </span>
-                            </>
-                        }
-                      </div>
-                    </div>
-                  )
-                })()}
-                {tlError&&<div style={{fontFamily:MONO,fontSize:11,color:'#ff4d6d'}}>⚠ {tlError}</div>}
-                {tlLoading&&<div style={{fontFamily:MONO,fontSize:11,color:'#9b72ff'}}>⟳ Cargando…</div>}
+                {/* Spacer */}
+                <div style={{flex:1}}/>
+                {/* Nueva operación */}
+                <div style={{padding:'10px 8px',borderTop:'1px solid var(--border)',flexShrink:0}}>
+                  <button onClick={()=>{const _df=tlDefaultForm();setTlForm(_df);setTlFormOpen(true);if(_df.entry_currency&&_df.entry_currency!=='EUR')tlFetchFx(_df.entry_currency,_df.entry_date)}}
+                    style={{width:'100%',fontFamily:MONO,fontSize:11,padding:'7px',borderRadius:4,cursor:'pointer',
+                      background:'rgba(155,114,255,0.15)',border:'1px solid #9b72ff',color:'#9b72ff',fontWeight:700,letterSpacing:'0.04em'}}>
+                    + Nueva operación
+                  </button>
+                </div>
+                {tlError&&<div style={{padding:'4px 8px',fontFamily:MONO,fontSize:10,color:'#ff4d6d'}}>⚠ {tlError}</div>}
               </div>
             )}
           </aside>
