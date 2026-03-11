@@ -2935,7 +2935,9 @@ const TEMA_SECTIONS = {
   equity:   { label:'💹 Equity / barras',selector:'.equity-section,.equity-section *' },
   trades:   { label:'📑 Tabla trades',   selector:'.trades-section,.trades-section *' },
   metrics:  { label:'📊 Métricas',       selector:'.metrics-section *,div[style*="275px"] *' },
-  tradelog: { label:'📒 TradeLog',       selector:'.tl-content,.tl-content *' },
+  tradelog: { label:'📒 TradeLog (global)',selector:'.tl-content,.tl-content *' },
+  tl_table: { label:'📋 TradeLog tabla', selector:'.tl-ops-table,.tl-ops-table *' },
+  tl_resumen:{ label:'📊 TradeLog resumen',selector:'.tl-resumen,.tl-resumen *' },
   modals:   { label:'🪟 Modales',        selector:'.tl-modal,.tl-modal *' },
 }
 const FONT_OPTIONS = [
@@ -2967,27 +2969,39 @@ function ContextThemeMenu({ x, y, section, onClose, onSave }) {
     try{ return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.tema?.fonts||{} }catch(_){ return {} }
   })
   const fc = fonts[section]||{}
-  const upd = (k,v) => {
-    const nf = {...fonts, [section]:{...fc, [k]:v||undefined}}
-    setFonts(nf)
-    applyTema(nf)
-    // Persist immediately
+  const saveTemaLS = (nf) => {
     try{
       const s = JSON.parse(localStorage.getItem('v50_settings')||'{}')
       s.tema = s.tema||{}; s.tema.fonts = nf
       localStorage.setItem('v50_settings', JSON.stringify(s))
     }catch(_){}
-    // onSave solo notifica pero NO cierra
+  }
+  const saveTemaSupabase = async (nf) => {
+    try{
+      const supaUrl=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.supabase?.url}catch(_){return null}})()
+      const supaKey=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.supabase?.anonKey}catch(_){return null}})()
+      if(!supaUrl||!supaKey) return
+      await fetch(supaUrl+'/rest/v1/user_settings',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','apikey':supaKey,'Authorization':'Bearer '+supaKey,
+          'Prefer':'resolution=merge-duplicates'},
+        body:JSON.stringify({key:'v50_tema_fonts',value:JSON.stringify(nf)})
+      })
+    }catch(_){}
+  }
+  const upd = (k,v) => {
+    const nf = {...fonts, [section]:{...fc, [k]:v||undefined}}
+    setFonts(nf)
+    applyTema(nf)
+    saveTemaLS(nf)
+    saveTemaSupabase(nf)
     onSave && onSave(nf)
   }
   const reset = () => {
     const nf = {...fonts}; delete nf[section]
     setFonts(nf); applyTema(nf)
-    try{
-      const s = JSON.parse(localStorage.getItem('v50_settings')||'{}')
-      s.tema=s.tema||{}; s.tema.fonts=nf
-      localStorage.setItem('v50_settings', JSON.stringify(s))
-    }catch(_){}
+    saveTemaLS(nf)
+    saveTemaSupabase(nf)
     onSave && onSave(nf)
   }
   const secInfo = TEMA_SECTIONS[section]||{}
@@ -4361,9 +4375,27 @@ export default function Home() {
     setCtxMenu({x: e.clientX, y: e.clientY, section})
   }
   useEffect(()=>{
+    const applyFromLS=()=>{
+      try{ const t=JSON.parse(localStorage.getItem('v50_settings')||'{}')?.tema||{}; applyTema(t.fonts||{}) }catch(_){}
+    }
+    applyFromLS()
+    // Also try Supabase for persisted tema
     try{
-      const t = JSON.parse(localStorage.getItem('v50_settings')||'{}')?.tema||{}
-      applyTema(t.fonts||{})
+      const supaUrl=JSON.parse(localStorage.getItem('v50_settings')||'{}')?.supabase?.url
+      const supaKey=JSON.parse(localStorage.getItem('v50_settings')||'{}')?.supabase?.anonKey
+      if(supaUrl&&supaKey){
+        fetch(supaUrl+'/rest/v1/user_settings?key=eq.v50_tema_fonts&select=value',{
+          headers:{'apikey':supaKey,'Authorization':'Bearer '+supaKey}
+        }).then(r=>r.json()).then(rows=>{
+          if(rows?.[0]?.value){
+            const nf=JSON.parse(rows[0].value)
+            applyTema(nf)
+            const s=JSON.parse(localStorage.getItem('v50_settings')||'{}')
+            s.tema=s.tema||{}; s.tema.fonts=nf
+            localStorage.setItem('v50_settings',JSON.stringify(s))
+          }
+        }).catch(()=>{})
+      }
     }catch(_){}
   },[temaKey])
 
@@ -4539,7 +4571,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.53</title>
+        <title>Trading Simulator V4.54</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4602,7 +4634,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.53
+            <span className="dot"/>Trading Simulator V4.54
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6331,7 +6363,7 @@ export default function Home() {
 
                     {/* Tabla */}
                     <div style={{flex:1,overflowY:'auto'}}>
-                      <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:11}}>
+                      <table className="tl-ops-table" style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:11}}>
                         <thead>
                           <tr style={{background:'var(--bg2)',position:'sticky',top:0,zIndex:5}}>
                             {['#','Símbolo','Estrategia','Broker','Entrada','Salida','Acciones','Px entrada','Capital inv.','Px salida/actual','Divisa','FX','Comisión','P&L €','P&L %','Días','Estado'].map(h=>(
@@ -6366,7 +6398,7 @@ export default function Home() {
                                   name:t.name||'',
                                   asset_type:t.asset_type||'stock',
                                   broker:t.broker||df.broker,
-                                  entry_date:t.entry_date||'',
+                                  entry_date:toDisplayDate(t.entry_date)||'',
                                   entry_price:t.entry_price||'',
                                   shares:t.shares||'',
                                   entry_currency:t.entry_currency||'USD',
@@ -6668,6 +6700,7 @@ export default function Home() {
                         if(tlFilterStatus&&t.status!==tlFilterStatus) return false
                         if(tlFilterBroker&&t.broker!==tlFilterBroker) return false
                         if(tlFilterYear&&!t.entry_date?.startsWith(tlFilterYear)) return false
+                        if(tlFilterStrat&&(t.strategy||'')!==tlFilterStrat) return false
                         return true
                       })
                       const closed = filtered.filter(t=>t.status==='closed'&&t.pnl_eur!=null&&t.entry_date)
@@ -6773,7 +6806,13 @@ export default function Home() {
                 <div style={{width:270,flexShrink:0,borderLeft:'1px solid var(--border)',background:'var(--bg2)',display:'flex',flexDirection:'column',overflow:'hidden'}}>
                   {/* ── MÉTRICAS SIEMPRE VISIBLES — incluye flotantes ── */}
                   {(()=>{
-                    const all=tlTrades
+                    const all=tlTrades.filter(t=>{
+                      if(tlFilterStatus&&t.status!==tlFilterStatus) return false
+                      if(tlFilterBroker&&t.broker!==tlFilterBroker) return false
+                      if(tlFilterYear&&!t.entry_date?.startsWith(tlFilterYear)) return false
+                      if(tlFilterStrat&&(t.strategy||'')!==tlFilterStrat) return false
+                      return true
+                    })
                     const closed=all.filter(t=>t.status==='closed')
                     const open=all.filter(t=>t.status==='open')
                     const today=new Date().toISOString().split('T')[0]
@@ -6904,7 +6943,7 @@ export default function Home() {
                        tip:'Operación con peor P&L €. Incluye abiertas por su flotante actual. Si está abierta, el resultado puede cambiar.'},
                     ]
                     return(
-                      <div style={{flex:tlSelected?'0 0 auto':1,overflowY:'auto',borderBottom:tlSelected?'1px solid var(--border)':'none'}}>
+                      <div className="tl-resumen" style={{flex:tlSelected?'0 0 auto':1,overflowY:'auto',borderBottom:tlSelected?'1px solid var(--border)':'none'}}>
                         <div style={{padding:'6px 10px',borderBottom:'1px solid var(--border)',fontFamily:MONO,fontSize:8,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',display:'flex',justifyContent:'space-between'}}>
                           <span>Resumen · {open.length}ab/{closed.length}cerr</span>
                           <span style={{color:'#1a3a5a'}}>{all.length} ops</span>
@@ -7517,7 +7556,7 @@ export default function Home() {
             <div style={{borderTop:'1px solid var(--border)',paddingTop:10}}>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
                 <span style={{fontFamily:MONO,fontSize:10,color:'#5a8aaa'}}>Fills parciales</span>
-                <button onClick={()=>setTlFillsList(f=>[...f,{date:tlForm.entry_date||'',price:'',shares:''}])}
+                <button onClick={()=>setTlFillsList(f=>[...f,{date:tlForm.entry_date||todayDisplay()||'',price:'',shares:''}])}
                   style={{fontFamily:MONO,fontSize:10,padding:'3px 8px',borderRadius:3,cursor:'pointer',
                     border:'1px solid #2a4060',background:'rgba(0,212,255,0.06)',color:'#00d4ff'}}>
                   + Añadir fill
@@ -7632,7 +7671,23 @@ export default function Home() {
               </div>
             )}
             {/* Botones */}
-            <div style={{display:'flex',justifyContent:'flex-end',gap:8,paddingTop:4,borderTop:'1px solid var(--border)'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',paddingTop:4,borderTop:'1px solid var(--border)'}}>
+              {/* Eliminar (solo si editando) */}
+              {tlForm.id?(
+                <button onClick={async()=>{
+                  if(!window.confirm('¿Eliminar esta operación? Esta acción no se puede deshacer.')) return
+                  try{
+                    await tlDeleteTrade(tlForm.id)
+                    setTlFormOpen(false)
+                    setSidePanel('tradelog')
+                  }catch(e){alert('Error al eliminar: '+e.message)}
+                }}
+                  style={{fontFamily:MONO,fontSize:11,padding:'7px 12px',borderRadius:4,cursor:'pointer',
+                    background:'rgba(255,77,109,0.08)',border:'1px solid rgba(255,77,109,0.3)',color:'#ff4d6d'}}>
+                  🗑 Eliminar
+                </button>
+              ):<div/>}
+              <div style={{display:'flex',gap:8}}>
               <button onClick={()=>setTlFormOpen(false)}
                 style={{fontFamily:MONO,fontSize:11,padding:'7px 14px',borderRadius:4,cursor:'pointer',background:'transparent',border:'1px solid #2a4060',color:'#7a9bc0'}}>
                 Cancelar
@@ -7665,23 +7720,25 @@ export default function Home() {
                   }
                   const saved = await tlSaveTrade(formData)
                   setTlFormOpen(false)
-                  // Captura automática del gráfico
+                  // Captura automática del gráfico (en background, siempre vuelve a tradelog)
                   ;(async()=>{
                     const tradeData={...formData,...(saved||{})}
                     const s2=JSON.parse(localStorage.getItem('v50_settings')||'{}')
-                    if(s2?.tradelog?.autoScreenshot===false) return
-                    // Ir al simulador para que el gráfico esté visible
-                    setSidePanel('config')
-                    await new Promise(r=>setTimeout(r,400))
-                    // tlSaveScreenshot carga el símbolo correcto y espera
-                    await tlSaveScreenshot(tradeData).catch(()=>{})
-                    setSidePanel('tradelog')
+                    if(s2?.tradelog?.autoScreenshot===false){ setSidePanel('tradelog'); return }
+                    try{
+                      setSidePanel('config')
+                      await new Promise(r=>setTimeout(r,400))
+                      await tlSaveScreenshot(tradeData).catch(()=>{})
+                    }finally{
+                      setSidePanel('tradelog')
+                    }
                   })()
                 }catch(e){alert('Error al guardar: '+e.message)}
               }} style={{fontFamily:MONO,fontSize:11,padding:'7px 14px',borderRadius:4,cursor:'pointer',
                 background:'rgba(155,114,255,0.15)',border:'1px solid #9b72ff',color:'#9b72ff',fontWeight:700}}>
                 Guardar
               </button>
+              </div>
             </div>
           </div>
         </div>
