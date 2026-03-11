@@ -4465,7 +4465,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.48</title>
+        <title>Trading Simulator V4.49</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4528,7 +4528,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.48
+            <span className="dot"/>Trading Simulator V4.49
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5440,18 +5440,7 @@ export default function Home() {
                       </a>
                   }
                 </div>
-                {/* Subtabs */}
-                <div style={{display:'flex',borderBottom:'1px solid var(--border)',flexShrink:0}}>
-                  {[{id:'ops',label:'Ops'},{id:'import',label:'Import'},{id:'export',label:'Export'},{id:'dashboard',label:'Dashboard'}].map(t=>(
-                    <button key={t.id} onClick={()=>setTlTab(t.id)}
-                      style={{flex:1,padding:'8px 2px',fontFamily:MONO,fontSize:9,cursor:'pointer',
-                        background:tlTab===t.id?'rgba(155,114,255,0.08)':'transparent',
-                        border:'none',borderBottom:tlTab===t.id?'2px solid #9b72ff':'2px solid transparent',
-                        color:tlTab===t.id?'#c8a0ff':'#4a7a95',letterSpacing:'0.03em',fontWeight:tlTab===t.id?700:400}}>
-                      {t.label}
-                    </button>
-                  ))}
-                </div>
+
                 {/* Filtros */}
                 {(()=>{
                   const allYears=[...new Set(tlTrades.map(t=>t.entry_date?.slice(0,4)).filter(Boolean))].sort((a,b)=>b-a)
@@ -6206,55 +6195,36 @@ export default function Home() {
                         <span style={{opacity:0.5}}>— Configura Supabase en Settings → Integraciones para persistencia real</span>
                       </div>
                     )}
-                    {/* KPI bar */}
-                    {(()=>{
-                      const vis=tlTrades.filter(t=>{
-                        if(tlTab==='open') return t.status==='open'
-                        return true
-                      })
-                      const closed=vis.filter(t=>t.status==='closed')
-                      const open=vis.filter(t=>t.status==='open')
-                      const pnlReal=closed.reduce((s,t)=>s+(t.pnl_eur||0),0)
-                      const flotante=open.reduce((s,t)=>s+(t._pnl_float_eur||0),0)
-                      const capital=vis.reduce((s,t)=>s+(t.capital_eur||0),0)
-                      const best=closed.length?closed.reduce((b,t)=>(t.pnl_eur||0)>(b.pnl_eur||0)?t:b,closed[0]):null
-                      const worst=closed.length?closed.reduce((b,t)=>(t.pnl_eur||0)<(b.pnl_eur||0)?t:b,closed[0]):null
-                      return(
-                        <div style={{display:'flex',borderBottom:'1px solid var(--border)',flexShrink:0,background:'#0a0f1a'}}>
-                          {[
-                            {l:'Capital empleado',v:capital>0?`€${Math.round(capital).toLocaleString('es-ES')}`:'—',c:'#00d4ff'},
-                            {l:'P&L realizado',v:pnlReal!==0?fmtMoney(pnlReal):'€0',c:pnlReal>=0?'#00e5a0':'#ff4d6d'},
-                            {l:'P&L flotante',v:flotante!==0?fmtMoney(flotante):'€0',c:flotante>=0?'#ffd166':'#ff4d6d'},
-                            {l:'P&L total',v:fmtMoney(pnlReal+flotante),c:(pnlReal+flotante)>=0?'#00e5a0':'#ff4d6d'},
-                            {l:'Mejor op.',v:best?`${best.symbol} ${best.pnl_pct!=null?`+${parseFloat(best.pnl_pct).toFixed(1)}%`:''}`:' —',c:'#00e5a0'},
-                            {l:'Peor op.',v:worst?`${worst.symbol} ${worst.pnl_pct!=null?`${parseFloat(worst.pnl_pct).toFixed(1)}%`:''}`:' —',c:'#ff4d6d'},
-                          ].map(({l,v,c})=>(
-                            <div key={l} style={{flex:1,padding:'7px 12px',borderRight:'1px solid var(--border)',display:'flex',flexDirection:'column',gap:2}}>
-                              <span style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',letterSpacing:'0.08em',textTransform:'uppercase'}}>{l}</span>
-                              <span style={{fontFamily:MONO,fontSize:13,fontWeight:700,color:c}}>{v}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )
-                    })()}
-
-                    {/* Búsqueda inline + Nueva operación */}
-                    <div style={{padding:'5px 8px',borderBottom:'1px solid var(--border)',flexShrink:0,display:'flex',gap:6,alignItems:'center'}}>
-                      <input type="text" placeholder="🔍 Buscar símbolo..." value={tlSearch} onChange={e=>setTlSearch(e.target.value)}
-                        style={{flex:1,background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'4px 8px',borderRadius:4}}/>
-                      <span style={{fontFamily:MONO,fontSize:10,color:'#3d5a7a',flexShrink:0}}>
-                        {tlTrades.filter(t=>{
-                          if(tlTab==='open'&&t.status!=='open') return false
-                          if(tlSearch&&!(t.symbol||'').toLowerCase().includes(tlSearch.toLowerCase())) return false
-                          return true
-                        }).length} ops
-                      </span>
-                      {tlLoading&&<span style={{fontFamily:MONO,fontSize:11,color:'#9b72ff',flexShrink:0}}>⟳</span>}
-                      <button onClick={()=>{const _df=tlDefaultForm();setTlForm(_df);setTlFormOpen(true);if(_df.entry_currency&&_df.entry_currency!=='EUR')tlFetchFx(_df.entry_currency,_df.entry_date)}}
-                        style={{flexShrink:0,fontFamily:MONO,fontSize:11,padding:'4px 11px',borderRadius:4,cursor:'pointer',
-                          background:'rgba(155,114,255,0.15)',border:'1px solid #9b72ff',color:'#9b72ff',fontWeight:700,whiteSpace:'nowrap'}}>
-                        + Nueva op.
-                      </button>
+                    {/* ── Tabs + búsqueda en una sola fila ── */}
+                    <div style={{display:'flex',borderBottom:'1px solid var(--border)',flexShrink:0,alignItems:'stretch',background:'var(--bg2)'}}>
+                      {[{id:'ops',label:'Ops'},{id:'import',label:'Import'},{id:'export',label:'Export'},{id:'dashboard',label:'Dashboard'}].map(t=>(
+                        <button key={t.id} onClick={()=>setTlTab(t.id)}
+                          style={{padding:'8px 14px',fontFamily:MONO,fontSize:10,cursor:'pointer',
+                            background:tlTab===t.id?'rgba(155,114,255,0.1)':'transparent',
+                            border:'none',borderBottom:tlTab===t.id?'2px solid #9b72ff':'2px solid transparent',
+                            color:tlTab===t.id?'#c8a0ff':'#4a7a95',letterSpacing:'0.04em',fontWeight:tlTab===t.id?700:400,
+                            whiteSpace:'nowrap',flexShrink:0}}>
+                          {t.label}
+                        </button>
+                      ))}
+                      <div style={{flex:1}}/>
+                      <div style={{display:'flex',gap:6,alignItems:'center',padding:'4px 8px'}}>
+                        <input type="text" placeholder="🔍 Buscar símbolo..." value={tlSearch} onChange={e=>setTlSearch(e.target.value)}
+                          style={{width:160,background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:10,padding:'3px 7px',borderRadius:4}}/>
+                        <span style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',flexShrink:0}}>
+                          {tlTrades.filter(t=>{
+                            if(tlTab==='open'&&t.status!=='open') return false
+                            if(tlSearch&&!(t.symbol||'').toLowerCase().includes(tlSearch.toLowerCase())) return false
+                            return true
+                          }).length} ops
+                        </span>
+                        {tlLoading&&<span style={{fontFamily:MONO,fontSize:10,color:'#9b72ff',flexShrink:0}}>⟳</span>}
+                        <button onClick={()=>{const _df=tlDefaultForm();setTlForm(_df);setTlFormOpen(true);if(_df.entry_currency&&_df.entry_currency!=='EUR')tlFetchFx(_df.entry_currency,_df.entry_date)}}
+                          style={{flexShrink:0,fontFamily:MONO,fontSize:10,padding:'3px 10px',borderRadius:4,cursor:'pointer',
+                            background:'rgba(155,114,255,0.15)',border:'1px solid #9b72ff',color:'#9b72ff',fontWeight:700,whiteSpace:'nowrap'}}>
+                          + Nueva op.
+                        </button>
+                      </div>
                     </div>
 
                     {/* Tabla */}
@@ -6705,8 +6675,14 @@ export default function Home() {
                     const cagrReal=aniosPeriodo&&pnlReal!==0?
                       (Math.pow(Math.max((capitalRef+pnlReal)/capitalRef,0.001),1/aniosPeriodo)-1)*100:null
                     const fmtEur=v=>v>=0?'+€'+Math.round(v):'-€'+Math.round(Math.abs(v))
+                    // Capital empleado = open trades capital
+                    const capitalEmp=open.reduce((s,t)=>{
+                      const fxE=t.fx_entry>0?(t.fx_entry<1?1/t.fx_entry:t.fx_entry):1
+                      return s+(parseFloat(t.shares||0)*parseFloat(t.entry_price||0))/fxE
+                    },0)
                     const rows=[
                       {l:'Total Operaciones',                 v:all.length,                                             c:'#ffd166'},
+                      {l:'Capital Empleado',                  v:capitalEmp>0?'€'+Math.round(capitalEmp).toLocaleString('es-ES'):'—', c:'#00d4ff'},
                       {l:'Tiempo Invertido ('+aniosInv.toFixed(2)+'a)', v:tiempoInvPct!=null?tiempoInvPct+'%':'—',     c:'#ffd166'},
                       {l:'Ganadoras',                         v:wins.length,                                            c:'#00e5a0'},
                       {l:'Perdedoras',                        v:losses.length,                                          c:'#ff4d6d'},
