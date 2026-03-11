@@ -4465,7 +4465,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.49</title>
+        <title>Trading Simulator V4.50</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4528,7 +4528,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.49
+            <span className="dot"/>Trading Simulator V4.50
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6183,49 +6183,52 @@ export default function Home() {
             {sidePanel==='tradelog'&&(
               <div className="tl-content" style={{display:'flex',flex:1,height:'100%',overflow:'hidden',background:'var(--bg)',fontSize:13}} onContextMenu={e=>openCtx(e,'tradelog')}>
 
-                {/* COLUMNA CENTRAL — tabla */}
-                {(tlTab==='ops'||tlTab==='open')&&(
-                  <div style={{flex:1,display:'flex',flexDirection:'column',minWidth:0,overflow:'hidden'}}>
-
-                    {/* Modo indicator bar */}
-                    {tlUseLocal()&&(
-                      <div style={{padding:'3px 10px',background:'rgba(255,209,102,0.04)',borderBottom:'1px solid rgba(255,209,102,0.1)',
-                        fontFamily:MONO,fontSize:9,color:'#7a6a30',display:'flex',alignItems:'center',gap:4,flexShrink:0}}>
-                        💾 <span style={{color:'#ffd166',opacity:0.7}}>Modo local</span>
-                        <span style={{opacity:0.5}}>— Configura Supabase en Settings → Integraciones para persistencia real</span>
-                      </div>
-                    )}
-                    {/* ── Tabs + búsqueda en una sola fila ── */}
-                    <div style={{display:'flex',borderBottom:'1px solid var(--border)',flexShrink:0,alignItems:'stretch',background:'var(--bg2)'}}>
-                      {[{id:'ops',label:'Ops'},{id:'import',label:'Import'},{id:'export',label:'Export'},{id:'dashboard',label:'Dashboard'}].map(t=>(
-                        <button key={t.id} onClick={()=>setTlTab(t.id)}
-                          style={{padding:'8px 14px',fontFamily:MONO,fontSize:10,cursor:'pointer',
-                            background:tlTab===t.id?'rgba(155,114,255,0.1)':'transparent',
-                            border:'none',borderBottom:tlTab===t.id?'2px solid #9b72ff':'2px solid transparent',
-                            color:tlTab===t.id?'#c8a0ff':'#4a7a95',letterSpacing:'0.04em',fontWeight:tlTab===t.id?700:400,
-                            whiteSpace:'nowrap',flexShrink:0}}>
-                          {t.label}
-                        </button>
-                      ))}
-                      <div style={{flex:1}}/>
-                      <div style={{display:'flex',gap:6,alignItems:'center',padding:'4px 8px'}}>
-                        <input type="text" placeholder="🔍 Buscar símbolo..." value={tlSearch} onChange={e=>setTlSearch(e.target.value)}
-                          style={{width:160,background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:10,padding:'3px 7px',borderRadius:4}}/>
-                        <span style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',flexShrink:0}}>
-                          {tlTrades.filter(t=>{
-                            if(tlTab==='open'&&t.status!=='open') return false
-                            if(tlSearch&&!(t.symbol||'').toLowerCase().includes(tlSearch.toLowerCase())) return false
-                            return true
-                          }).length} ops
-                        </span>
-                        {tlLoading&&<span style={{fontFamily:MONO,fontSize:10,color:'#9b72ff',flexShrink:0}}>⟳</span>}
-                        <button onClick={()=>{const _df=tlDefaultForm();setTlForm(_df);setTlFormOpen(true);if(_df.entry_currency&&_df.entry_currency!=='EUR')tlFetchFx(_df.entry_currency,_df.entry_date)}}
-                          style={{flexShrink:0,fontFamily:MONO,fontSize:10,padding:'3px 10px',borderRadius:4,cursor:'pointer',
-                            background:'rgba(155,114,255,0.15)',border:'1px solid #9b72ff',color:'#9b72ff',fontWeight:700,whiteSpace:'nowrap'}}>
-                          + Nueva op.
-                        </button>
-                      </div>
+                {/* COLUMNA CENTRAL — siempre visible con tab bar fija arriba */}
+                <div style={{flex:1,display:'flex',flexDirection:'column',minWidth:0,overflow:'hidden'}}>
+                  {/* ── Modo indicator bar ── */}
+                  {tlUseLocal()&&(
+                    <div style={{padding:'3px 10px',background:'rgba(255,209,102,0.04)',borderBottom:'1px solid rgba(255,209,102,0.1)',
+                      fontFamily:MONO,fontSize:9,color:'#7a6a30',display:'flex',alignItems:'center',gap:4,flexShrink:0}}>
+                      💾 <span style={{color:'#ffd166',opacity:0.7}}>Modo local</span>
+                      <span style={{opacity:0.5}}>— Configura Supabase en Settings → Integraciones</span>
                     </div>
+                  )}
+                  {/* ── TABS siempre visibles + búsqueda/nueva op ── */}
+                  <div style={{display:'flex',borderBottom:'2px solid var(--border)',flexShrink:0,alignItems:'stretch',background:'#0a0f1a'}}>
+                    {[{id:'ops',label:'Ops'},{id:'import',label:'📥 Import'},{id:'export',label:'📤 Export'},{id:'dashboard',label:'📊 Dashboard'}].map(t=>(
+                      <button key={t.id} onClick={()=>setTlTab(t.id)}
+                        style={{padding:'9px 16px',fontFamily:MONO,fontSize:11,cursor:'pointer',
+                          background:tlTab===t.id?'rgba(155,114,255,0.12)':'transparent',
+                          border:'none',
+                          borderBottom:tlTab===t.id?'2px solid #9b72ff':'2px solid transparent',
+                          marginBottom:'-2px',
+                          color:tlTab===t.id?'#d0aaff':'#4a7a95',letterSpacing:'0.04em',fontWeight:tlTab===t.id?700:400,
+                          whiteSpace:'nowrap',flexShrink:0}}>
+                        {t.label}
+                      </button>
+                    ))}
+                    <div style={{flex:1}}/>
+                    <div style={{display:'flex',gap:6,alignItems:'center',padding:'5px 10px'}}>
+                      <input type="text" placeholder="🔍 Buscar símbolo..." value={tlSearch} onChange={e=>setTlSearch(e.target.value)}
+                        style={{width:170,background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:10,padding:'4px 8px',borderRadius:4}}/>
+                      <span style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',flexShrink:0}}>
+                        {tlTrades.filter(t=>{
+                          if(tlTab==='open'&&t.status!=='open') return false
+                          if(tlSearch&&!(t.symbol||'').toLowerCase().includes(tlSearch.toLowerCase())) return false
+                          return true
+                        }).length} ops
+                      </span>
+                      {tlLoading&&<span style={{fontFamily:MONO,fontSize:10,color:'#9b72ff',flexShrink:0}}>⟳</span>}
+                      <button onClick={()=>{const _df=tlDefaultForm();setTlForm(_df);setTlFormOpen(true);if(_df.entry_currency&&_df.entry_currency!=='EUR')tlFetchFx(_df.entry_currency,_df.entry_date)}}
+                        style={{flexShrink:0,fontFamily:MONO,fontSize:10,padding:'4px 12px',borderRadius:4,cursor:'pointer',
+                          background:'rgba(155,114,255,0.15)',border:'1px solid #9b72ff',color:'#9b72ff',fontWeight:700,whiteSpace:'nowrap'}}>
+                        + Nueva op.
+                      </button>
+                    </div>
+                  </div>
+                  {/* ── Contenido por tab ── */}
+                  {(tlTab==='ops'||tlTab==='open')&&(
+                  <div style={{flex:1,display:'flex',flexDirection:'column',minWidth:0,overflow:'hidden'}}>
 
                     {/* Tabla */}
                     <div style={{flex:1,overflowY:'auto'}}>
@@ -6352,6 +6355,7 @@ export default function Home() {
                   </div>
                 )}
 
+                  </div>){/* end ops/open inner div */}
                 {/* IMPORTAR */}
                 {tlTab==='import'&&(
                   <div style={{flex:1,display:'flex',flexDirection:'column',padding:'16px',gap:12,overflowY:'auto'}}>
@@ -6635,51 +6639,58 @@ export default function Home() {
                 )}
 
 
-                                {/* COLUMNA DERECHA — métricas siempre + detalle trade */}
+                                </div>{/* end columna central outer */}
+                {/* COLUMNA DERECHA — métricas siempre + detalle trade */}
                 <div style={{width:270,flexShrink:0,borderLeft:'1px solid var(--border)',background:'var(--bg2)',display:'flex',flexDirection:'column',overflow:'hidden'}}>
-                  {/* ── MÉTRICAS SIEMPRE VISIBLES ── */}
+                  {/* ── MÉTRICAS SIEMPRE VISIBLES — incluye flotantes ── */}
                   {(()=>{
                     const all=tlTrades
                     const closed=all.filter(t=>t.status==='closed')
                     const open=all.filter(t=>t.status==='open')
-                    const wins=closed.filter(t=>(t.pnl_eur||0)>=0)
-                    const losses=closed.filter(t=>(t.pnl_eur||0)<0)
+                    const today=new Date().toISOString().split('T')[0]
+                    // P&L
                     const pnlReal=closed.reduce((s,t)=>s+(t.pnl_eur||0),0)
                     const pnlFloat=open.reduce((s,t)=>s+(t._pnl_float_eur||0),0)
+                    const pnlTotal=pnlReal+pnlFloat
                     const commTotal=all.reduce((s,t)=>s+(parseFloat(t.commission_buy||0)+parseFloat(t.commission_sell||0)),0)
-                    const wr=closed.length?wins.length/closed.length*100:0
-                    // Media % (de pnl_pct field, como en imagen)
-                    const avgWinPct=wins.length?wins.reduce((s,t)=>s+parseFloat(t.pnl_pct||0),0)/wins.length:0
-                    const avgLossPct=losses.length?losses.reduce((s,t)=>s+Math.abs(parseFloat(t.pnl_pct||0)),0)/losses.length:0
-                    const avgWin=wins.length?wins.reduce((s,t)=>s+(t.pnl_eur||0),0)/wins.length:0
-                    const avgLoss=losses.length?losses.reduce((s,t)=>s+Math.abs(t.pnl_eur||0),0)/losses.length:0
-                    const factorBen=avgLoss>0?(avgWin/avgLoss):null
-                    const bestT=closed.length?closed.reduce((b,t)=>(t.pnl_eur||0)>(b.pnl_eur||0)?t:b,closed[0]):null
-                    const worstT=closed.length?closed.reduce((b,t)=>(t.pnl_eur||0)<(b.pnl_eur||0)?t:b,closed[0]):null
-                    // Días
-                    const diasArr=closed.map(t=>t.entry_date&&t.exit_date?Math.round((new Date(t.exit_date)-new Date(t.entry_date))/86400000):null).filter(d=>d!=null)
+                    // Combinamos cerradas + abiertas con su P&L flotante para Win Rate, medias, días
+                    const allWithPnl=[
+                      ...closed.map(t=>({...t,_eff_pnl:t.pnl_eur||0,_eff_pct:parseFloat(t.pnl_pct||0),_eff_dias:t.entry_date&&t.exit_date?Math.round((new Date(t.exit_date)-new Date(t.entry_date))/86400000):0})),
+                      ...open.map(t=>({...t,_eff_pnl:t._pnl_float_eur||0,_eff_pct:t._pnl_float_pct||0,_eff_dias:t.entry_date?Math.round((new Date(today)-new Date(t.entry_date))/86400000):0}))
+                    ]
+                    const wins=allWithPnl.filter(t=>t._eff_pnl>=0)
+                    const losses=allWithPnl.filter(t=>t._eff_pnl<0)
+                    const wr=allWithPnl.length?wins.length/allWithPnl.length*100:0
+                    const avgWinPct=wins.length?wins.reduce((s,t)=>s+t._eff_pct,0)/wins.length:0
+                    const avgLossPct=losses.length?losses.reduce((s,t)=>s+Math.abs(t._eff_pct),0)/losses.length:0
+                    const avgWinEur=wins.length?wins.reduce((s,t)=>s+t._eff_pnl,0)/wins.length:0
+                    const avgLossEur=losses.length?losses.reduce((s,t)=>s+Math.abs(t._eff_pnl),0)/losses.length:0
+                    const factorBen=avgLossEur>0?(avgWinEur/avgLossEur):null
+                    const bestT=allWithPnl.length?allWithPnl.reduce((b,t)=>t._eff_pnl>b._eff_pnl?t:b,allWithPnl[0]):null
+                    const worstT=allWithPnl.length?allWithPnl.reduce((b,t)=>t._eff_pnl<b._eff_pnl?t:b,allWithPnl[0]):null
+                    // Días: cerradas + abiertas en curso
+                    const diasArr=allWithPnl.map(t=>t._eff_dias).filter(d=>d!=null&&d>=0)
                     const diasProm=diasArr.length?diasArr.reduce((s,d)=>s+d,0)/diasArr.length:null
                     const totalDias=diasArr.reduce((s,d)=>s+d,0)
-                    // DD sobre P&L neto (incluyendo comisiones implícitas en pnl_eur)
+                    // DD sobre P&L total (cerradas + flotante actual)
                     let peak=0,maxDD=0
                     closed.slice().sort((a,b)=>(a.exit_date||'').localeCompare(b.exit_date||'')).reduce((cum,t)=>{
                       const eq=cum+(t.pnl_eur||0); if(eq>peak)peak=eq; const dd=peak-eq; if(dd>maxDD)maxDD=dd; return eq
                     },0)
-                    // CAGR — desde primera entrada hasta HOY
-                    const firstDate=closed.length?closed.reduce((a,t)=>t.entry_date<a?t.entry_date:a,closed[0].entry_date):null
-                    const today=new Date().toISOString().split('T')[0]
+                    // CAGR — desde primera entrada (cualquier op.) hasta HOY, sobre P&L total
+                    const firstDate=allWithPnl.length?allWithPnl.reduce((a,t)=>t.entry_date<a?t.entry_date:a,allWithPnl[0].entry_date):null
                     const aniosPeriodo=firstDate?Math.max((new Date(today)-new Date(firstDate))/86400000/365.25,0.01):null
                     const aniosInv=totalDias/365.25
                     const tiempoInvPct=aniosPeriodo?Math.round(totalDias/(aniosPeriodo*365.25)*100):null
-                    const capitalRef=10000  // base de referencia (sólo relativo)
-                    const cagrReal=aniosPeriodo&&pnlReal!==0?
-                      (Math.pow(Math.max((capitalRef+pnlReal)/capitalRef,0.001),1/aniosPeriodo)-1)*100:null
-                    const fmtEur=v=>v>=0?'+€'+Math.round(v):'-€'+Math.round(Math.abs(v))
-                    // Capital empleado = open trades capital
+                    // CAGR usa capital empleado actual como base
                     const capitalEmp=open.reduce((s,t)=>{
                       const fxE=t.fx_entry>0?(t.fx_entry<1?1/t.fx_entry:t.fx_entry):1
                       return s+(parseFloat(t.shares||0)*parseFloat(t.entry_price||0))/fxE
                     },0)
+                    const capitalBase=capitalEmp>0?capitalEmp:10000
+                    const cagrReal=aniosPeriodo&&pnlTotal!==0?
+                      (Math.pow(Math.max((capitalBase+pnlTotal)/capitalBase,0.001),1/aniosPeriodo)-1)*100:null
+                    const fmtEur=v=>v>=0?'+€'+Math.round(v):'-€'+Math.round(Math.abs(v))
                     const rows=[
                       {l:'Total Operaciones',                 v:all.length,                                             c:'#ffd166'},
                       {l:'Capital Empleado',                  v:capitalEmp>0?'€'+Math.round(capitalEmp).toLocaleString('es-ES'):'—', c:'#00d4ff'},
