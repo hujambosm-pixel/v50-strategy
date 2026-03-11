@@ -29,30 +29,33 @@ async function sb(path, opts = {}) {
 async function getFxRate(date, fromCur, toCur = 'EUR') {
   if (fromCur === toCur) return 1.0
 
-  // 1. Buscar en cache Supabase
+  // Guardamos siempre como EURUSD (>1): cuántos USD vale 1 EUR
+  // Así la fórmula de conversión es: importe_EUR = importe_USD / rate
+  // Ej: EUR→USD = 1.1641 → $559.5 / 1.1641 = €480.5
+  const baseCur = toCur   // EUR (la divisa base, >1)
+  const quoteCur = fromCur  // USD (la que compramos)
+
+  // 1. Buscar en cache Supabase (guardado como EUR→USD)
   try {
     const cached = await sb(
-      `/fx_rates?date=eq.${date}&from_cur=eq.${fromCur}&to_cur=eq.${toCur}&select=rate`
+      `/fx_rates?date=eq.${date}&from_cur=eq.${baseCur}&to_cur=eq.${quoteCur}&select=rate`
     )
     if (cached?.length) return parseFloat(cached[0].rate)
   } catch (_) {}
 
-  // 2. Llamar a frankfurter.app
-  // API devuelve cuántos EUR vale 1 USD → rate = EUR/USD
-  // Para obtener USD→EUR: rate = 1 / (EUR/USD)
+  // 2. Llamar a frankfurter.app: from=EUR&to=USD → devuelve 1.1641
   try {
-    const url = `https://api.frankfurter.app/${date}?from=${fromCur}&to=${toCur}`
+    const url = `https://api.frankfurter.app/${date}?from=${baseCur}&to=${quoteCur}`
     const res = await fetch(url)
     if (res.ok) {
       const data = await res.json()
-      const rate = data?.rates?.[toCur]
+      const rate = data?.rates?.[quoteCur]
       if (rate) {
-        // Guardar en cache
         try {
           await sb('/fx_rates', {
             method: 'POST',
             prefer: 'return=minimal',
-            body: JSON.stringify({ date, from_cur: fromCur, to_cur: toCur, rate, source: 'frankfurter' }),
+            body: JSON.stringify({ date, from_cur: baseCur, to_cur: quoteCur, rate, source: 'frankfurter' }),
           })
         } catch (_) {}
         return parseFloat(rate)
@@ -60,7 +63,7 @@ async function getFxRate(date, fromCur, toCur = 'EUR') {
     }
   } catch (_) {}
 
-  return null // sin dato
+  return null
 }
 
 // Precio actual de un símbolo vía Stooq (para flotante)
@@ -248,7 +251,7 @@ export default async function handler(req, res) {
   if (req.method === 'GET' && action === 'list') {
     try {
       const { broker, status, year, symbol } = req.query
-      let path = '/trades_log?order=entry_date.desc&limit=500'
+      let path = '/trades_log?order=entry_date.desc,created_at.desc&limit=500'
       if (broker)  path += `&broker=eq.${broker}`
       if (status)  path += `&status=eq.${status}`
       if (symbol)  path += `&symbol=eq.${symbol.toUpperCase()}`
