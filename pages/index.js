@@ -3887,7 +3887,7 @@ export default function Home() {
         if(tlFilterBroker) trades = trades.filter(t=>t.broker===tlFilterBroker)
         if(tlFilterYear)   trades = trades.filter(t=>t.entry_date?.startsWith(tlFilterYear))
         if(tlFilterStatus) trades = trades.filter(t=>t.status===tlFilterStatus)
-        trades = trades.sort((a,b)=>b.entry_date?.localeCompare(a.entry_date||'')||0)
+        trades = trades.sort((a,b)=>b.entry_date?.localeCompare(a.entry_date||'')||b.created_at?.localeCompare(a.created_at||'')||0)
         // Enrich open trades with live prices client-side
         const openTrades = trades.filter(t=>t.status==='open')
         if(openTrades.length) {
@@ -3906,7 +3906,10 @@ export default function Home() {
               if(cur){
                 t._current_price = cur.price
                 t._current_date  = cur.date
-                const fxEntry = parseFloat(t.fx_entry)||1
+                // fx_entry es EURUSD (>1): cuántos USD vale 1 EUR
+                // Si viene <1 (registros antiguos con USDEUR), invertir
+                let fxEntry = parseFloat(t.fx_entry)||1
+                if(fxEntry < 1) fxEntry = 1/fxEntry  // compatibilidad hacia atrás
                 const capitalEur = (parseFloat(t.shares)||0)*(parseFloat(t.entry_price)||0)/fxEntry
                 const pnlCur = (cur.price - parseFloat(t.entry_price||0))*(parseFloat(t.shares)||0)
                 t._pnl_float_eur = pnlCur/fxEntry - (parseFloat(t.commission_buy)||0)/fxEntry
@@ -3934,7 +3937,7 @@ export default function Home() {
         if(tlFilterBroker) trades = trades.filter(t=>t.broker===tlFilterBroker)
         if(tlFilterYear)   trades = trades.filter(t=>t.entry_date?.startsWith(tlFilterYear))
         if(tlFilterStatus) trades = trades.filter(t=>t.status===tlFilterStatus)
-        setTlTrades(trades.sort((a,b)=>(b.entry_date||'').localeCompare(a.entry_date||'')))
+        setTlTrades(trades.sort((a,b)=>(b.entry_date||'').localeCompare(a.entry_date||'')||(b.created_at||b.id||'').localeCompare(a.created_at||a.id||'')))
       } else {
         setTlError(e.message)
       }
@@ -4360,7 +4363,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.40</title>
+        <title>Trading Simulator V4.42</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4423,7 +4426,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.40
+            <span className="dot"/>Trading Simulator V4.42
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6137,14 +6140,16 @@ export default function Home() {
                                 <td style={{padding:'6px 8px',color:'#a8ccdf',whiteSpace:'nowrap'}}>{isOpen?<span style={{color:'#3d5a7a'}}>—</span>:fmtDate(t.exit_date)||'—'}</td>
                                 <td style={{padding:'6px 8px'}}>{t.shares}</td>
                                 <td style={{padding:'6px 8px',whiteSpace:'nowrap'}}>{t.entry_currency==='EUR'?'€':'$'}{t.entry_price!=null?parseFloat(t.entry_price).toFixed(2):'—'}</td>
-                                <td style={{padding:'6px 8px',whiteSpace:'nowrap',color:'#9b72ff',fontWeight:600}}>
+                                <td style={{padding:'6px 8px',whiteSpace:'nowrap',color:'#9b72ff',fontWeight:600}}
+                                  title={`Acciones × Px entrada ÷ FX (sin comisión)`}>
                                   {(()=>{
                                     const shares=parseFloat(t.shares||0)
                                     const px=parseFloat(t.entry_price||0)
-                                    const fx=parseFloat(t.fx_entry||1)
+                                    let fx=parseFloat(t.fx_entry||1)
+                                    if(fx<1) fx=1/fx  // compatibilidad registros antiguos (USDEUR→EURUSD)
                                     if(!shares||!px) return '—'
-                                    const cap=shares*px/fx
-                                    return `€${Math.round(cap).toLocaleString('es-ES')}`
+                                    const cap=(shares*px)/fx
+                                    return cap>=10000?`€${(cap/1000).toFixed(1)}k`:`€${Math.round(cap).toLocaleString('es-ES')}`
                                   })()}
                                 </td>
                                 <td style={{padding:'6px 8px',whiteSpace:'nowrap',color:isOpen?'#00e5a0':'inherit'}}>
@@ -6152,7 +6157,7 @@ export default function Home() {
                                   {isOpen&&' ●'}
                                 </td>
                                 <td style={{padding:'6px 8px',color:t.entry_currency==='EUR'?'#00e5a0':'#ffd166'}}>{t.entry_currency}</td>
-                                <td style={{padding:'6px 8px',color:'#4a7a95',fontSize:10}}>{t.fx_entry&&!isNaN(parseFloat(t.fx_entry))?parseFloat(t.fx_entry).toFixed(3):'—'}</td>
+                                <td style={{padding:'6px 8px',color:'#4a7a95',fontSize:10}}>{(()=>{let fx=parseFloat(t.fx_entry);if(!fx||isNaN(fx))return'—';if(fx<1)fx=1/fx;return fx.toFixed(4)})()}</td>
                                 <td style={{padding:'6px 8px',color:'#ff4d6d',fontSize:10}}>
                                   {(()=>{const c=(parseFloat(t.commission_buy||0)+parseFloat(t.commission_sell||0));return c>0?`-€${c.toFixed(2)}`:'—'})()}
                                 </td>
@@ -6252,7 +6257,7 @@ export default function Home() {
                                 <td style={{padding:'5px 8px'}}>{t.shares||'?'}</td>
                                 <td style={{padding:'5px 8px'}}>{t.entry_price||'?'}</td>
                                 <td style={{padding:'5px 8px',color:'#ffd166'}}>{t.entry_currency||'USD'}</td>
-                                <td style={{padding:'5px 8px',color:'#4a7a95',fontSize:10}}>{t.fx_entry&&!isNaN(parseFloat(t.fx_entry))?parseFloat(t.fx_entry).toFixed(3):'—'}</td>
+                                <td style={{padding:'5px 8px',color:'#4a7a95',fontSize:10}}>{(()=>{let fx=parseFloat(t.fx_entry);if(!fx||isNaN(fx))return'—';if(fx<1)fx=1/fx;return fx.toFixed(4)})()}</td>
                                 <td style={{padding:'5px 8px'}}>{t.broker||'—'}</td>
                                 <td style={{padding:'5px 8px',color:'#00d4ff'}}>{t.capital_eur?`€${Math.round(t.capital_eur)}`:'—'}</td>
                               </tr>
