@@ -4284,14 +4284,27 @@ export default function Home() {
   const tlImportConfirm = async(rows)=>{
     setTlImportLoading(true)
     try{
+      const s=JSON.parse(localStorage.getItem('v50_settings')||'{}')
+      const defBroker=s?.tradelog?.defaultBroker||'ibkr'
+      let errors=[]
       for(const row of rows){
-        await fetch('/api/tradelog?action=save',{method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({...row,status:'open'})})
+        const trade={...row, status:'open', broker:row.broker||defBroker}
+        if(tlUseLocal()){
+          const all=tlGetLS()
+          all.push({...trade, id:'local_'+Date.now()+'_'+Math.random().toString(36).slice(2)})
+          tlSetLS(all)
+        } else {
+          const res=await fetch('/api/tradelog?action=save',{method:'POST',
+            headers:{'Content-Type':'application/json'},body:JSON.stringify(trade)})
+          const json=await res.json()
+          if(!res.ok) errors.push(json.error||'Error guardando '+trade.symbol)
+        }
       }
+      if(errors.length) alert('Errores al guardar:\n'+errors.join('\n'))
       setTlParsed([]); setTlImportText('')
       await loadTrades()
       setTlTab('ops')
-    }catch(e){alert('Error al guardar: '+e.message)}
+    }catch(e){alert('Error al importar: '+e.message)}
     finally{setTlImportLoading(false)}
   }
 
@@ -4597,7 +4610,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.59</title>
+        <title>Trading Simulator V4.60</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4660,7 +4673,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.59
+            <span className="dot"/>Trading Simulator V4.60
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6612,13 +6625,20 @@ export default function Home() {
                         </div>
                         <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:11}}>
                           <thead><tr style={{background:'var(--bg2)'}}>
-                            {['Símbolo','Fecha','Acciones','Precio','Divisa','FX','Broker','Capital €'].map(h=>(
+                            {['Tipo','Símbolo','Fecha','Acciones','Precio','Divisa','FX','Broker','Capital €'].map(h=>(
                               <th key={h} style={{padding:'5px 8px',textAlign:'left',fontSize:9,color:'#3d5a7a',letterSpacing:'0.08em',textTransform:'uppercase',borderBottom:'1px solid var(--border)'}}>{h}</th>
                             ))}
                           </tr></thead>
                           <tbody>
                             {tlParsed.map((t,i)=>(
                               <tr key={i} style={{borderBottom:'1px solid var(--border)'}}>
+                                <td style={{padding:'5px 8px'}}>
+                                  <span style={{fontFamily:MONO,fontSize:10,padding:'2px 6px',borderRadius:3,
+                                    background:t.fill_type==='buy'?'rgba(0,229,160,0.15)':'rgba(255,77,109,0.15)',
+                                    color:t.fill_type==='buy'?'#00e5a0':'#ff4d6d',fontWeight:700}}>
+                                    {t.fill_type==='buy'?'▲ BUY':'▼ SELL'}
+                                  </span>
+                                </td>
                                 <td style={{padding:'5px 8px',fontWeight:700,color:'#c8dff5'}}>{t.symbol||'?'}</td>
                                 <td style={{padding:'5px 8px',color:'#a8ccdf'}}>{fmtDate(t.entry_date)||'?'}</td>
                                 <td style={{padding:'5px 8px'}}>{t.shares||'?'}</td>
