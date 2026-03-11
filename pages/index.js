@@ -1490,6 +1490,7 @@ function PriceAlarmQuickForm({ price, symbol, alarms, onSave, onCancel }) {
 function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, syncRef, savedRangeRef, chartHeight=480 }) {
   const containerRef=useRef(null), svgRef=useRef(null), legendRef=useRef(null), tooltipRef=useRef(null)
   const chartRef=useRef(null), candlesRef=useRef(null)
+  const chartAliveRef=useRef(true)
   const rulerStart=useRef(null), rulerActiveR=useRef(rulerActive)
   useEffect(()=>{
     rulerActiveR.current=rulerActive
@@ -1676,8 +1677,8 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
       }
 
       // Redibujar etiquetas al hacer zoom/scroll — guardamos unsub para cleanup
-      let chartAlive=true
-      const unsubLabels=chart.timeScale().subscribeVisibleTimeRangeChange(()=>{ if(chartAlive) setTimeout(()=>{ if(chartAlive) drawTradeLabels() },30) })
+      chartAliveRef.current=true
+      const unsubLabels=chart.timeScale().subscribeVisibleTimeRangeChange(()=>{ if(chartAliveRef.current) setTimeout(()=>{ if(chartAliveRef.current) drawTradeLabels() },30) })
 
       // ── Regla SVG ──
       const svg=svgRef.current, NS='http://www.w3.org/2000/svg'
@@ -1854,7 +1855,7 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
 
       // Exponer navigateTo + fitAll + captureChart
       if(onChartReady) onChartReady({
-        captureJpg:(wrapEl)=>{
+        captureJpg:(wrapEl, captureSymbol, entryPrice)=>{
           try {
             // chart.takeScreenshot() returns HTMLCanvasElement with full chart (axes + candles)
             const chartCanvas = chart.takeScreenshot()
@@ -1883,10 +1884,15 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
             // Header text: SYMBOL  |  date  O H L C
             const lastBar = data[data.length - 1]
             if(lastBar) {
-              ctx.font = 'bold 12px "JetBrains Mono", monospace'
+              ctx.font = 'bold 13px "JetBrains Mono", monospace'
               ctx.fillStyle = '#00d4ff'
-              ctx.fillText(lastBar.date || '', 10, 22)
-              const symEnd = ctx.measureText(lastBar.date || '').width + 10
+              const displaySym = captureSymbol || emaRPeriod+'·'+emaLPeriod
+              ctx.fillText(displaySym, 10, 22)
+              const symEnd = ctx.measureText(displaySym).width + 16
+              ctx.font = '10px "JetBrains Mono", monospace'
+              ctx.fillStyle = '#3d5a7a'
+              ctx.fillText(lastBar.date || '', symEnd, 22)
+              const dateEnd = symEnd + ctx.measureText(lastBar.date || '').width + 14
               ctx.font = '11px "JetBrains Mono", monospace'
               const chg = lastBar.close - lastBar.open
               const pct = (chg / lastBar.open * 100).toFixed(2)
@@ -1897,7 +1903,7 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
                 ['C', lastBar.close?.toFixed(2),'#e2eaf5'],
                 [chg>=0?`+${pct}%`:`${pct}%`, '', chg>=0?'#00e5a0':'#ff4d6d'],
               ]
-              let x = symEnd + 16
+              let x = dateEnd + 8
               ohlc.forEach(([label, val, col])=>{
                 if(val) {
                   ctx.fillStyle = '#5a7a95'
@@ -1916,6 +1922,36 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
 
             // Draw chart below header
             ctx.drawImage(chartCanvas, 0, HEADER_H)
+
+            // Línea amarilla de precio de entrada
+            if(entryPrice && candlesRef.current) {
+              try {
+                const py = candlesRef.current.priceToCoordinate(entryPrice)
+                if(py != null) {
+                  const lineY = HEADER_H + py
+                  ctx.strokeStyle = '#ffd166'
+                  ctx.lineWidth = 1.5
+                  ctx.setLineDash([6, 4])
+                  ctx.beginPath()
+                  ctx.moveTo(0, lineY)
+                  ctx.lineTo(cw, lineY)
+                  ctx.stroke()
+                  ctx.setLineDash([])
+                  // Etiqueta precio
+                  ctx.font = 'bold 10px "JetBrains Mono", monospace'
+                  const priceLabel = entryPrice.toFixed(2)
+                  const lw = ctx.measureText(priceLabel).width + 8
+                  ctx.fillStyle = 'rgba(255,209,102,0.18)'
+                  ctx.fillRect(4, lineY - 9, lw, 13)
+                  ctx.strokeStyle = '#ffd166'
+                  ctx.lineWidth = 0.7
+                  ctx.setLineDash([])
+                  ctx.strokeRect(4, lineY - 9, lw, 13)
+                  ctx.fillStyle = '#ffd166'
+                  ctx.fillText(priceLabel, 8, lineY + 2)
+                }
+              } catch(_){}
+            }
 
             return out.toDataURL('image/jpeg', 0.93)
           } catch(e) {
@@ -2013,9 +2049,9 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
       ro.observe(containerRef.current)
       setTimeout(drawTradeLabels,200)
 
-      return()=>{chartAlive=false;try{unsubLabels()}catch(_){};cnt.removeEventListener('mousemove',onMove);window.removeEventListener('keydown',onKeyDown);window.removeEventListener('keyup',onKeyUp);ro.disconnect()}
+      return()=>{chartAliveRef.current=false;try{unsubLabels()}catch(_){};cnt.removeEventListener('mousemove',onMove);window.removeEventListener('keydown',onKeyDown);window.removeEventListener('keyup',onKeyUp);ro.disconnect()}
     })
-    return()=>{if(chartRef.current){chartAlive=false;try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null}}
+    return()=>{chartAliveRef.current=false;if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null}}
   },[data,emaRPeriod,emaLPeriod,trades,maxDD,labelMode])
 
   // Apply height changes without recreating chart
@@ -2979,10 +3015,10 @@ function ContextThemeMenu({ x, y, section, onClose, onSave }) {
   }
   const saveTemaSupabase = async (nf) => {
     try{
-      await fetch(SUPA_URL+'/rest/v1/user_settings',{
+      await fetch(SUPA_URL+'/rest/v1/user_settings?on_conflict=key',{
         method:'POST',
-        headers:{...SUPA_H,'Prefer':'resolution=merge-duplicates'},
-        body:JSON.stringify({key:'v50_tema_fonts',value:JSON.stringify(nf)})
+        headers:{...SUPA_H,'Prefer':'return=minimal,resolution=merge-duplicates'},
+        body:JSON.stringify({key:'v50_tema_fonts',value:JSON.stringify(nf),updated_at:new Date().toISOString()})
       })
     }catch(_){}
   }
@@ -4013,7 +4049,7 @@ export default function Home() {
       }
       // 3. Esperar que el rango renderice
       await new Promise(r=>setTimeout(r,600))
-      const dataUrl = chartApiRef.current?.captureJpg?.()
+      const dataUrl = chartApiRef.current?.captureJpg?.(null, trade.symbol, parseFloat(trade.entry_price)||null)
       if(!dataUrl) return
       const sym = (trade.symbol||'TICKER').replace(/[^a-zA-Z0-9^]/g,'_')
       const date = (trade.entry_date||new Date().toISOString().slice(0,10))
@@ -7708,13 +7744,14 @@ export default function Home() {
                   } else if(formData.entry_currency==='EUR') {
                     formData={...formData,fx_entry:'1'}
                   }
+                  const isNew = !tlForm.id
                   const saved = await tlSaveTrade(formData)
                   setTlFormOpen(false)
-                  // Captura automática del gráfico (en background, siempre vuelve a tradelog)
+                  // Captura automática SOLO en operaciones nuevas
                   ;(async()=>{
                     const tradeData={...formData,...(saved||{})}
                     const s2=JSON.parse(localStorage.getItem('v50_settings')||'{}')
-                    if(s2?.tradelog?.autoScreenshot!==true){ setSidePanel('tradelog'); return }
+                    if(!isNew||s2?.tradelog?.autoScreenshot!==true){ setSidePanel('tradelog'); return }
                     try{
                       setSidePanel('config')
                       await new Promise(r=>setTimeout(r,400))
