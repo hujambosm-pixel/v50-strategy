@@ -235,7 +235,7 @@ function parseIBKRtext(text) {
 
 // ── Parser IBKR detalle de orden (formato móvil/web) ────────
 // Ej: "Sold 1 @ 732.095 on DARK" + "Filled" + "09/03/2026, 14:30" + "Fees: 0.35"
-function parseIBKRorderDetail(text) {
+function parseIBKRorderDetail(text, useDDMM=true) {
   const trades = []
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean)
   const actionRe = /^(Bought|Sold|Comprado|Vendido)\s+(\d+(?:[.,]\d+)?)\s+@\s+([\d.,]+)/i
@@ -257,11 +257,14 @@ function parseIBKRorderDetail(text) {
           if (dm) {
             const p1 = parseInt(dm[1]), p2 = parseInt(dm[2]), year = dm[3]
             // Si p1 > 12 => formato DD/MM/YYYY
-            // IBKR España/Europa usa DD/MM/YYYY — asumir siempre este formato
-            if (p1 > 12) // p1 claramente es día
-              date = year + '-' + String(p2).padStart(2,'0') + '-' + String(p1).padStart(2,'0')
-            else // ambiguo o p1<=12: asumir DD/MM (formato europeo IBKR)
-              date = year + '-' + String(p2).padStart(2,'0') + '-' + String(p1).padStart(2,'0')
+            // p1>12 => claramente es día (DD/MM); p2>12 => claramente es mes (MM/DD)
+            // Si ambiguo, usar la preferencia del usuario
+            let day, month
+            if (p1 > 12)       { day=p1; month=p2 }   // unambiguously DD/MM
+            else if (p2 > 12)  { day=p2; month=p1 }   // unambiguously MM/DD
+            else if (useDDMM)  { day=p1; month=p2 }   // user preference: DD/MM (Europa)
+            else               { day=p2; month=p1 }   // user preference: MM/DD (USA)
+            date = year + '-' + String(month).padStart(2,'0') + '-' + String(day).padStart(2,'0')
           }
         }
         const fm = /Fees?:\s*([\d.,]+)/i.exec(lines[j])
@@ -295,7 +298,7 @@ function parseIBKRorderDetail(text) {
 }
 
 // ── Auto-detect formato texto ────────────────────────────────
-function autoParseText(text) {
+function autoParseText(text, useDDMM=true) {
   // 1. IBKR Activity Statement (tabla tabulada)
   if (/U\d{7,}\s+[A-Z]+\s+\d{4}-\d{2}-\d{2}/m.test(text) ||
       /Id\. de cuenta|Account ID/i.test(text)) {
@@ -304,7 +307,7 @@ function autoParseText(text) {
   }
   // 2. IBKR detalle de orden móvil ("Sold 1 @ 732.095 on DARK")
   if (/^(Bought|Sold|Comprado|Vendido)\s+\d/im.test(text)) {
-    const result = parseIBKRorderDetail(text)
+    const result = parseIBKRorderDetail(text, useDDMM)
     if (result.length > 0) return { trades: result, source: 'ibkr_order' }
   }
   return null
@@ -566,14 +569,15 @@ export default async function handler(req, res) {
   // ── POST parse (importar CSV o texto) ──
   if (action === 'parse') {
     try {
-      const { text, format, apiKey } = body
+      const { text, format, apiKey, ibkrDateFormat } = body
+      const useDDMM = ibkrDateFormat !== 'MM/DD'  // default DD/MM (Europa)
       let parsed = []
 
       if (format === 'ibkr_csv')      parsed = parseIBKRcsv(text)
       else if (format === 'degiro_csv') parsed = parseDegiroCSV(text)
       else if (format === 'ai') {
         // Intentar parseo local primero (sin AI)
-        const local = autoParseText(text)
+        const local = autoParseText(text, useDDMM)
         if (local && local.trades.length > 0) {
           parsed = local.trades
         } else {
