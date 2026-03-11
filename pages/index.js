@@ -4288,7 +4288,9 @@ export default function Home() {
       const defBroker=s?.tradelog?.defaultBroker||'ibkr'
       let errors=[]
       for(const row of rows){
-        const trade={...row, status:'open', broker:row.broker||defBroker}
+        // Campos válidos para trades_log — descartar campos UI-only del parser
+        const {_fxLoading,_symSearch,_current_price,_current_date,_pnl_float_eur,_pnl_float_pct,...cleanRow}=row
+        const trade={...cleanRow, status:'open', broker:cleanRow.broker||defBroker}
         if(tlUseLocal()){
           const all=tlGetLS()
           all.push({...trade, id:'local_'+Date.now()+'_'+Math.random().toString(36).slice(2)})
@@ -4610,7 +4612,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.60</title>
+        <title>Trading Simulator V4.61</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4673,7 +4675,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.60
+            <span className="dot"/>Trading Simulator V4.61
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6597,6 +6599,13 @@ export default function Home() {
                       style={{flex:'none',height:200,background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',
                         fontFamily:MONO,fontSize:11,padding:'10px',borderRadius:4,resize:'vertical',minHeight:120}}/>
                     <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                      {tlImportText.trim()&&(
+                        <button onClick={()=>{setTlImportText('');setTlParsed([])}}
+                          style={{fontFamily:MONO,fontSize:11,padding:'6px 12px',borderRadius:4,cursor:'pointer',
+                            background:'transparent',border:'1px solid #2a4060',color:'#7a9bc0'}}>
+                          ✕ Limpiar
+                        </button>
+                      )}
                       <button onClick={tlImportParse} disabled={tlImportLoading||!tlImportText.trim()}
                         style={{fontFamily:MONO,fontSize:11,padding:'7px 14px',borderRadius:4,cursor:tlImportLoading?'wait':'pointer',
                           background:'rgba(155,114,255,0.15)',border:'1px solid #9b72ff',color:'#9b72ff',fontWeight:700,
