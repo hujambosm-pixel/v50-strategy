@@ -1675,8 +1675,9 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
         })
       }
 
-      // Redibujar etiquetas al hacer zoom/scroll
-      chart.timeScale().subscribeVisibleTimeRangeChange(()=>setTimeout(drawTradeLabels,30))
+      // Redibujar etiquetas al hacer zoom/scroll — guardamos unsub para cleanup
+      let chartAlive=true
+      const unsubLabels=chart.timeScale().subscribeVisibleTimeRangeChange(()=>{ if(chartAlive) setTimeout(()=>{ if(chartAlive) drawTradeLabels() },30) })
 
       // ── Regla SVG ──
       const svg=svgRef.current, NS='http://www.w3.org/2000/svg'
@@ -2012,9 +2013,9 @@ function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, r
       ro.observe(containerRef.current)
       setTimeout(drawTradeLabels,200)
 
-      return()=>{cnt.removeEventListener('mousemove',onMove);window.removeEventListener('keydown',onKeyDown);window.removeEventListener('keyup',onKeyUp);ro.disconnect()}
+      return()=>{chartAlive=false;try{unsubLabels()}catch(_){};cnt.removeEventListener('mousemove',onMove);window.removeEventListener('keydown',onKeyDown);window.removeEventListener('keyup',onKeyUp);ro.disconnect()}
     })
-    return()=>{if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null}}
+    return()=>{if(chartRef.current){chartAlive=false;try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null}}
   },[data,emaRPeriod,emaLPeriod,trades,maxDD,labelMode])
 
   // Apply height changes without recreating chart
@@ -2978,13 +2979,9 @@ function ContextThemeMenu({ x, y, section, onClose, onSave }) {
   }
   const saveTemaSupabase = async (nf) => {
     try{
-      const supaUrl=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.supabase?.url}catch(_){return null}})()
-      const supaKey=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.supabase?.anonKey}catch(_){return null}})()
-      if(!supaUrl||!supaKey) return
-      await fetch(supaUrl+'/rest/v1/user_settings',{
+      await fetch(SUPA_URL+'/rest/v1/user_settings',{
         method:'POST',
-        headers:{'Content-Type':'application/json','apikey':supaKey,'Authorization':'Bearer '+supaKey,
-          'Prefer':'resolution=merge-duplicates'},
+        headers:{...SUPA_H,'Prefer':'resolution=merge-duplicates'},
         body:JSON.stringify({key:'v50_tema_fonts',value:JSON.stringify(nf)})
       })
     }catch(_){}
@@ -4379,24 +4376,18 @@ export default function Home() {
       try{ const t=JSON.parse(localStorage.getItem('v50_settings')||'{}')?.tema||{}; applyTema(t.fonts||{}) }catch(_){}
     }
     applyFromLS()
-    // Also try Supabase for persisted tema
-    try{
-      const supaUrl=JSON.parse(localStorage.getItem('v50_settings')||'{}')?.supabase?.url
-      const supaKey=JSON.parse(localStorage.getItem('v50_settings')||'{}')?.supabase?.anonKey
-      if(supaUrl&&supaKey){
-        fetch(supaUrl+'/rest/v1/user_settings?key=eq.v50_tema_fonts&select=value',{
-          headers:{'apikey':supaKey,'Authorization':'Bearer '+supaKey}
-        }).then(r=>r.json()).then(rows=>{
-          if(rows?.[0]?.value){
-            const nf=JSON.parse(rows[0].value)
-            applyTema(nf)
-            const s=JSON.parse(localStorage.getItem('v50_settings')||'{}')
-            s.tema=s.tema||{}; s.tema.fonts=nf
-            localStorage.setItem('v50_settings',JSON.stringify(s))
-          }
-        }).catch(()=>{})
+    // Also try Supabase for persisted tema (using hardcoded SUPA_URL/SUPA_H)
+    fetch(SUPA_URL+'/rest/v1/user_settings?key=eq.v50_tema_fonts&select=value',{
+      headers:SUPA_H
+    }).then(r=>r.json()).then(rows=>{
+      if(rows?.[0]?.value){
+        const nf=JSON.parse(rows[0].value)
+        applyTema(nf)
+        const s=JSON.parse(localStorage.getItem('v50_settings')||'{}')
+        s.tema=s.tema||{}; s.tema.fonts=nf
+        localStorage.setItem('v50_settings',JSON.stringify(s))
       }
-    }catch(_){}
+    }).catch(()=>{})
   },[temaKey])
 
   const sp5=result?.sp500Status
