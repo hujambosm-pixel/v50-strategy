@@ -247,7 +247,7 @@ function parseIBKRorderDetail(text) {
     if (m) {
       const qty   = parseFloat(m[2].replace(',','.'))
       const price = parseFloat(m[3].replace(',','.'))
-      const isBuy = /Bought|Comprado/i.test(m[1])
+      const isBuy = /Bought|Bot|Comprado/i.test(m[1])
       let date = null, fees = 0, symbol = null
 
       // Buscar en líneas siguientes: fecha y fees
