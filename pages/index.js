@@ -4189,7 +4189,6 @@ export default function Home() {
   }
 
   const tlDeleteTrade = async(id)=>{
-    if(!confirm('¿Eliminar esta operación?')) return
     if(tlUseLocal()) {
       tlSetLS(tlGetLS().filter(t=>t.id!==id))
       setTlSelected(null); setTlFills([])
@@ -6354,7 +6353,7 @@ export default function Home() {
 
                     {/* Tabla */}
                     <div style={{flex:1,overflowY:'auto'}}>
-                      <table className="tl-ops-table" style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:11}}>
+                      <table className="tl-ops-table" onContextMenu={e=>{e.stopPropagation();openCtx(e,'tl_table')}} style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:11}}>
                         <thead>
                           <tr style={{background:'var(--bg2)',position:'sticky',top:0,zIndex:5}}>
                             {['#','Símbolo','Estrategia','Broker','Entrada','Salida','Acciones','Px entrada','Capital inv.','Px salida/actual','Divisa','FX','Comisión','P&L €','P&L %','Días','Estado'].map(h=>(
@@ -6934,7 +6933,7 @@ export default function Home() {
                        tip:'Operación con peor P&L €. Incluye abiertas por su flotante actual. Si está abierta, el resultado puede cambiar.'},
                     ]
                     return(
-                      <div className="tl-resumen" style={{flex:tlSelected?'0 0 auto':1,overflowY:'auto',borderBottom:tlSelected?'1px solid var(--border)':'none'}}>
+                      <div className="tl-resumen" onContextMenu={e=>{e.stopPropagation();openCtx(e,'tl_resumen')}} style={{flex:tlSelected?'0 0 auto':1,overflowY:'auto',borderBottom:tlSelected?'1px solid var(--border)':'none'}}>
                         <div style={{padding:'6px 10px',borderBottom:'1px solid var(--border)',fontFamily:MONO,fontSize:8,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',display:'flex',justifyContent:'space-between'}}>
                           <span>Resumen · {open.length}ab/{closed.length}cerr</span>
                           <span style={{color:'#1a3a5a'}}>{all.length} ops</span>
@@ -7715,7 +7714,7 @@ export default function Home() {
                   ;(async()=>{
                     const tradeData={...formData,...(saved||{})}
                     const s2=JSON.parse(localStorage.getItem('v50_settings')||'{}')
-                    if(s2?.tradelog?.autoScreenshot===false){ setSidePanel('tradelog'); return }
+                    if(s2?.tradelog?.autoScreenshot!==true){ setSidePanel('tradelog'); return }
                     try{
                       setSidePanel('config')
                       await new Promise(r=>setTimeout(r,400))
@@ -7808,7 +7807,6 @@ export default function Home() {
         x={ctxMenu.x} y={ctxMenu.y} section={ctxMenu.section}
         onClose={()=>setCtxMenu(null)}
         onSave={(nf)=>{
-          setCtxMenu(null)
           setTemaKey(k=>k+1)
         }}
       />}
