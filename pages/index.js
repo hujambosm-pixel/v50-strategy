@@ -1320,6 +1320,15 @@ function SettingsModal({ onClose, strategies=[] }) {
                 ))}
               </div>
 
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:14}}>
+                <span style={{fontFamily:MONO,fontSize:10,color:'#7a9bc0',width:200,flexShrink:0}}>Formato fecha IBKR import</span>
+                <select value={settings.tradelog?.ibkrDateFormat||'DD/MM'} onChange={e=>upd('tradelog.ibkrDateFormat',e.target.value)}
+                  style={{flex:1,background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,color:'#e2eaf5',fontFamily:MONO,fontSize:11,padding:'5px 8px'}}>
+                  <option value="DD/MM">DD/MM/YYYY — Europa (IBKR España/UK)</option>
+                  <option value="MM/DD">MM/DD/YYYY — USA</option>
+                </select>
+              </div>
+
               {sep('Condiciones visibles como puntos en el TradeLog')}
               <div style={{fontSize:10,color:'#5a7a95',lineHeight:1.6,marginBottom:10}}>                Selecciona qué condiciones de la librería aparecen como círculos de color en la columna Símbolo del registro de operaciones.
               </div>
@@ -4273,7 +4282,9 @@ export default function Home() {
       const s=JSON.parse(localStorage.getItem('v50_settings')||'{}')
       const apiKey=s?.integrations?.groqKey||''
       const res=await fetch('/api/tradelog?action=parse',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({text:tlImportText,format:tlImportFormat,apiKey})})
+        body:JSON.stringify({text:tlImportText,format:tlImportFormat,apiKey,
+          ibkrDateFormat:s?.tradelog?.ibkrDateFormat||'DD/MM'})})
+
       const json=await res.json()
       if(!res.ok) throw new Error(json.error||'Error')
       setTlParsed(json.parsed||[])
@@ -4612,7 +4623,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.61</title>
+        <title>Trading Simulator V4.62</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4675,7 +4686,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.61
+            <span className="dot"/>Trading Simulator V4.62
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6599,13 +6610,11 @@ export default function Home() {
                       style={{flex:'none',height:200,background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',
                         fontFamily:MONO,fontSize:11,padding:'10px',borderRadius:4,resize:'vertical',minHeight:120}}/>
                     <div style={{display:'flex',gap:8,alignItems:'center'}}>
-                      {tlImportText.trim()&&(
-                        <button onClick={()=>{setTlImportText('');setTlParsed([])}}
-                          style={{fontFamily:MONO,fontSize:11,padding:'6px 12px',borderRadius:4,cursor:'pointer',
-                            background:'transparent',border:'1px solid #2a4060',color:'#7a9bc0'}}>
-                          ✕ Limpiar
-                        </button>
-                      )}
+                      <button onClick={()=>{setTlImportText('');setTlParsed([])}}
+                        style={{fontFamily:MONO,fontSize:11,padding:'6px 12px',borderRadius:4,cursor:'pointer',
+                          background:'transparent',border:'1px solid #2a4060',color:'#7a9bc0'}}>
+                        ✕ Limpiar
+                      </button>
                       <button onClick={tlImportParse} disabled={tlImportLoading||!tlImportText.trim()}
                         style={{fontFamily:MONO,fontSize:11,padding:'7px 14px',borderRadius:4,cursor:tlImportLoading?'wait':'pointer',
                           background:'rgba(155,114,255,0.15)',border:'1px solid #9b72ff',color:'#9b72ff',fontWeight:700,
