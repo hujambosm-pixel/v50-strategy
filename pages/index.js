@@ -1320,6 +1320,55 @@ function SettingsModal({ onClose, strategies=[] }) {
                 ))}
               </div>
 
+              {sep('Condiciones visibles como puntos en el TradeLog')}
+              <div style={{fontSize:10,color:'#5a7a95',lineHeight:1.6,marginBottom:10}}>                Selecciona qué condiciones de la librería aparecen como círculos de color en la columna Símbolo del registro de operaciones.
+              </div>
+              {(()=>{
+                const libConds=lsGetConds()
+                const tlCondIds=settings?.tradelog?.condDotIds||[]
+                const COND_COLORS=['#00e5a0','#ffd166','#00d4ff','#ff7eb3','#9b72ff','#ff4d6d']
+                if(libConds.length===0) return(
+                  <div style={{fontFamily:MONO,fontSize:11,color:'#4a6a80',padding:'8px 10px',
+                    background:'rgba(0,0,0,0.15)',borderRadius:4,border:'1px dashed #1e3a52',lineHeight:1.6,marginBottom:14}}>
+                    No hay condiciones en la librería.<br/>
+                    Créalas en <b style={{color:'#00d4ff'}}>⚡ Condiciones</b>.
+                  </div>
+                )
+                return(
+                  <div style={{marginBottom:14}}>
+                    <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:8}}>
+                      {libConds.map((c,i)=>{
+                        const sel=tlCondIds.includes(c.id)
+                        const col=COND_COLORS[i%COND_COLORS.length]
+                        return(
+                          <div key={c.id} onClick={()=>{const next=sel?tlCondIds.filter(x=>x!==c.id):[...tlCondIds,c.id];upd('tradelog.condDotIds',next)}}
+                            style={{display:'flex',alignItems:'center',gap:5,cursor:'pointer',
+                              padding:'4px 9px',borderRadius:12,
+                              border:'1px solid '+(sel?col:'#1e3a52'),
+                              background:sel?col+'18':'rgba(255,255,255,0.02)',userSelect:'none'}}>
+                            <span style={{width:8,height:8,borderRadius:'50%',flexShrink:0,display:'inline-block',
+                              background:sel?col:'#2a3f55',boxShadow:sel?'0 0 4px '+col:undefined}}/>
+                            <span style={{fontFamily:MONO,fontSize:10,color:sel?col:'#7a9bc0'}}>{c.name}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                    <div style={{display:'flex',gap:6}}>
+                      <button onClick={()=>upd('tradelog.condDotIds',libConds.map(c=>c.id))}
+                        style={{flex:1,fontFamily:MONO,fontSize:10,padding:'4px 8px',borderRadius:3,
+                          border:'1px solid #2a4060',background:'rgba(0,212,255,0.06)',color:'#00d4ff',cursor:'pointer'}}>
+                        ✓ Todas
+                      </button>
+                      <button onClick={()=>upd('tradelog.condDotIds',[])}
+                        style={{flex:1,fontFamily:MONO,fontSize:10,padding:'4px 8px',borderRadius:3,
+                          border:'1px solid #3a1a20',background:'rgba(255,77,109,0.06)',color:'#ff4d6d',cursor:'pointer'}}>
+                        ✕ Ninguna
+                      </button>
+                    </div>
+                  </div>
+                )
+              })()}
+
               {sep('Captura automática al registrar operación')}
               <label style={{display:'flex',alignItems:'center',gap:8,marginBottom:10,cursor:'pointer'}}>
                 <input type="checkbox"
@@ -3342,6 +3391,8 @@ export default function Home() {
   const [tlSearch,setTlSearch]=useState('')
   const [tlFills,setTlFills]=useState([])
   const [tlFormOpen,setTlFormOpen]=useState(false)
+  const [tlFilterStrat,setTlFilterStrat]=useState('')
+  const [tlFillsList,setTlFillsList]=useState([])  // fills para modal nueva/editar op
   const [tlSideEdit,setTlSideEdit]=useState(false)   // edit panel in left sidebar
   const [tlCloseOpen,setTlCloseOpen]=useState(false)
   const [tlImportText,setTlImportText]=useState('')
@@ -5505,6 +5556,31 @@ export default function Home() {
                           ))}
                         </div>
                       </div>
+                      {(()=>{
+                        const strats=[...new Set(tlTrades.map(t=>t.strategy||'').filter(Boolean))].sort()
+                        if(!strats.length) return null
+                        return(
+                          <div style={{padding:'7px 8px',borderBottom:'1px solid var(--border)'}}>
+                            <div style={{fontFamily:MONO,fontSize:8,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:4}}>Estrategia</div>
+                            <div style={{display:'flex',gap:3,flexWrap:'wrap'}}>
+                              <button onClick={()=>setTlFilterStrat('')}
+                                style={{fontFamily:MONO,fontSize:9,padding:'2px 6px',borderRadius:3,cursor:'pointer',
+                                  border:'1px solid '+(tlFilterStrat===''?'#9b72ff':'#1a2d45'),
+                                  background:tlFilterStrat===''?'rgba(155,114,255,0.1)':'transparent',
+                                  color:tlFilterStrat===''?'#9b72ff':'#4a7a95'}}>Todas</button>
+                              {strats.map(v=>(
+                                <button key={v} onClick={()=>setTlFilterStrat(tlFilterStrat===v?'':v)}
+                                  style={{fontFamily:MONO,fontSize:9,padding:'2px 6px',borderRadius:3,cursor:'pointer',
+                                    border:'1px solid '+(tlFilterStrat===v?'#00d4ff':'#1a2d45'),
+                                    background:tlFilterStrat===v?'rgba(0,212,255,0.1)':'transparent',
+                                    color:tlFilterStrat===v?'#00d4ff':'#4a7a95',
+                                    maxWidth:90,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}
+                                  title={v}>{v}</button>
+                              ))}
+                            </div>
+                          </div>
+                        )
+                      })()}
 
                     </div>
                   )
@@ -6258,7 +6334,7 @@ export default function Home() {
                       <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:11}}>
                         <thead>
                           <tr style={{background:'var(--bg2)',position:'sticky',top:0,zIndex:5}}>
-                            {['#','Símbolo','Broker','Entrada','Salida','Acciones','Px entrada','Capital inv.','Px salida/actual','Divisa','FX','Comisión','P&L €','P&L %','Días','Estado'].map(h=>(
+                            {['#','Símbolo','Estrategia','Broker','Entrada','Salida','Acciones','Px entrada','Capital inv.','Px salida/actual','Divisa','FX','Comisión','P&L €','P&L %','Días','Estado'].map(h=>(
                               <th key={h} style={{padding:'6px 8px',textAlign:'left',fontFamily:MONO,fontSize:9,color:'#3d5a7a',
                                 letterSpacing:'0.08em',textTransform:'uppercase',borderBottom:'1px solid var(--border)',whiteSpace:'nowrap'}}>{h}</th>
                             ))}
@@ -6268,6 +6344,7 @@ export default function Home() {
                           {tlTrades.filter(t=>{
                             if(tlTab==='open'&&t.status!=='open') return false
                             if(tlSearch&&!(t.symbol||'').toLowerCase().includes(tlSearch.toLowerCase())) return false
+                            if(tlFilterStrat&&(t.strategy||'')!==tlFilterStrat) return false
                             return true
                           }).map((t,i,arr)=>{
                             const isOpen=t.status==='open'
@@ -6282,7 +6359,6 @@ export default function Home() {
                               <tr key={t.id} onClick={()=>{
                                 setTlSelected(t)
                                 if(t.has_fills)loadFills(t.id);else setTlFills([])
-                                // Populate form for editing
                                 const df=tlDefaultForm()
                                 setTlForm({...df,
                                   id:t.id,
@@ -6304,20 +6380,68 @@ export default function Home() {
                                 if(t.status==='open'){
                                   setTlCloseForm({exit_date:'',exit_price:'',exit_currency:t.entry_currency||'USD',commission_sell:0,fx_exit:'',fx_exit_manual:false})
                                 }
-                                setTlSideEdit(true)
+                                setTlFillsList([])
+                                setTlFormOpen(true)
                               }}
                                 style={{borderBottom:'1px solid var(--border)',cursor:'pointer',
                                   background:isSel?'rgba(155,114,255,0.06)':isOpen?'rgba(0,229,160,0.02)':'transparent'}}
                                 onMouseOver={e=>e.currentTarget.style.background=isSel?'rgba(155,114,255,0.1)':'rgba(255,255,255,0.03)'}
                                 onMouseOut={e=>e.currentTarget.style.background=isSel?'rgba(155,114,255,0.06)':isOpen?'rgba(0,229,160,0.02)':'transparent'}>
                                 <td style={{padding:'6px 8px',color:'#3d5a7a',fontSize:10}}>{i+1}</td>
-                                <td style={{padding:'6px 8px'}}>
-                                  <span style={{fontWeight:700,color:isOpen?'#9b72ff':'#c8dff5'}}>{t.symbol}</span>
-                                  {t.has_fills&&<span style={{fontSize:9,color:'#5a8aaa',marginLeft:4}}>×fills</span>}
+                                <td style={{padding:'6px 4px 6px 8px',maxWidth:120}} onClick={e=>e.stopPropagation()}>
+                                  <div style={{display:'flex',alignItems:'center',gap:4}}>
+                                    <span
+                                      onClick={e=>{e.stopPropagation();window.open('https://www.tradingview.com/chart/?symbol='+tvSym(t.symbol),'_blank')}}
+                                      title={'Abrir '+t.symbol+' en TradingView'}
+                                      style={{fontWeight:700,color:isOpen?'#9b72ff':'#00d4ff',cursor:'pointer',
+                                        textDecoration:'underline',textDecorationColor:'rgba(0,212,255,0.3)',
+                                        textUnderlineOffset:2}}>
+                                      {t.symbol}
+                                    </span>
+                                    {t.has_fills&&<span style={{fontSize:8,color:'#5a8aaa',flexShrink:0}}>fills</span>}
+                                    {/* Condition dots for tradelog */}
+                                    {(()=>{
+                                      const sett=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')}catch(_){return {}}})()
+                                      const tlCondIds=sett?.tradelog?.condDotIds
+                                      const allLibConds=lsGetConds()
+                                      const visConds=Array.isArray(tlCondIds)&&tlCondIds.length>0?allLibConds.filter(c=>tlCondIds.includes(c.id)):[]
+                                      if(!visConds.length) return null
+                                      const COND_COLORS=['#00e5a0','#ffd166','#00d4ff','#ff7eb3','#9b72ff','#ff4d6d']
+                                      const blinkN=sett?.alarmas?.blinkCandles??3
+                                      return visConds.map((c,ci)=>{
+                                        const st=alarmStatus[t.symbol]?.[c.id]
+                                        const active=st?.active===true
+                                        const bars=st?.bars
+                                        const col2=COND_COLORS[ci%COND_COLORS.length]
+                                        const shouldBlink=active&&bars!=null&&bars<=blinkN
+                                        return(
+                                          <span key={c.id} title={c.name+(active?' ✓ '+(bars!=null?bars+'v':''):' —')}
+                                            style={{display:'inline-flex',alignItems:'center',justifyContent:'center',
+                                              width:14,height:14,borderRadius:'50%',flexShrink:0,
+                                              background:active?col2:'rgba(42,63,85,0.5)',
+                                              border:'1px solid '+(active?col2:'#2a3f55'),
+                                              color:active?'#080c14':'#3d5a7a',
+                                              fontFamily:MONO,fontSize:7,fontWeight:800,lineHeight:1,
+                                              boxShadow:active?'0 0 5px '+col2+'55':undefined,
+                                              cursor:'default',
+                                              animation:shouldBlink?'alarmPulse 1s ease-in-out infinite':undefined}}>
+                                            {active&&bars!=null?String(bars):''}
+                                          </span>
+                                        )
+                                      })
+                                    })()}
+                                  </div>
+                                </td>
+                                <td style={{padding:'6px 4px',maxWidth:90,overflow:'hidden'}}>
+                                  <span style={{fontFamily:MONO,fontSize:9,color:'#5a8aaa',
+                                    overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',display:'block'}}
+                                    title={t.strategy||'—'}>
+                                    {t.strategy||<span style={{color:'#2a4060'}}>—</span>}
+                                  </span>
                                 </td>
                                 <td style={{padding:'6px 8px'}}>
                                   <span style={{fontSize:9,padding:'1px 5px',borderRadius:3,fontWeight:700,
-                                    background:`${col}18`,border:`1px solid ${col}44`,color:col}}>
+                                    background:col+'18',border:'1px solid '+col+'44',color:col}}>
                                     {TL_LABEL[t.broker]||t.broker?.toUpperCase()}
                                   </span>
                                 </td>
@@ -7389,6 +7513,124 @@ export default function Home() {
                   style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'5px 7px',borderRadius:4}}/>
               </label>
             </div>
+            {/* ── FILLS PARCIALES ── */}
+            <div style={{borderTop:'1px solid var(--border)',paddingTop:10}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
+                <span style={{fontFamily:MONO,fontSize:10,color:'#5a8aaa'}}>Fills parciales</span>
+                <button onClick={()=>setTlFillsList(f=>[...f,{date:tlForm.entry_date||'',price:'',shares:''}])}
+                  style={{fontFamily:MONO,fontSize:10,padding:'3px 8px',borderRadius:3,cursor:'pointer',
+                    border:'1px solid #2a4060',background:'rgba(0,212,255,0.06)',color:'#00d4ff'}}>
+                  + Añadir fill
+                </button>
+              </div>
+              {tlFillsList.length>0&&(
+                <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                  {tlFillsList.map((f,fi)=>(
+                    <div key={fi} style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr auto',gap:6,alignItems:'center'}}>
+                      <input type="text" placeholder="dd/mm/yyyy" value={f.date}
+                        onChange={e=>{const nf=[...tlFillsList];nf[fi]={...nf[fi],date:e.target.value};setTlFillsList(nf);
+                          if(e.target.value.length===10){
+                            const tot=nf.filter(x=>x.shares&&x.price).reduce((s,x)=>({sh:s.sh+parseFloat(x.shares||0),val:s.val+parseFloat(x.shares||0)*parseFloat(x.price||0)}),{sh:0,val:0})
+                            if(tot.sh>0){setTlForm(p=>({...p,shares:tot.sh.toString(),entry_price:(tot.val/tot.sh).toFixed(4)}))}
+                          }}}
+                        style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:10,padding:'4px 6px',borderRadius:3}}/>
+                      <input type="number" placeholder="Precio" value={f.price}
+                        onChange={e=>{const nf=[...tlFillsList];nf[fi]={...nf[fi],price:e.target.value};setTlFillsList(nf);
+                          const tot=nf.filter(x=>x.shares&&x.price).reduce((s,x)=>({sh:s.sh+parseFloat(x.shares||0),val:s.val+parseFloat(x.shares||0)*parseFloat(x.price||0)}),{sh:0,val:0})
+                          if(tot.sh>0){setTlForm(p=>({...p,shares:tot.sh.toString(),entry_price:(tot.val/tot.sh).toFixed(4)}))}}}
+                        style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:10,padding:'4px 6px',borderRadius:3}}/>
+                      <input type="number" placeholder="Acciones" value={f.shares}
+                        onChange={e=>{const nf=[...tlFillsList];nf[fi]={...nf[fi],shares:e.target.value};setTlFillsList(nf);
+                          const tot=nf.filter(x=>x.shares&&x.price).reduce((s,x)=>({sh:s.sh+parseFloat(x.shares||0),val:s.val+parseFloat(x.shares||0)*parseFloat(x.price||0)}),{sh:0,val:0})
+                          if(tot.sh>0){setTlForm(p=>({...p,shares:tot.sh.toString(),entry_price:(tot.val/tot.sh).toFixed(4)}))}}}
+                        style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:10,padding:'4px 6px',borderRadius:3}}/>
+                      <span onClick={()=>{const nf=tlFillsList.filter((_,i)=>i!==fi);setTlFillsList(nf);
+                          const tot=nf.filter(x=>x.shares&&x.price).reduce((s,x)=>({sh:s.sh+parseFloat(x.shares||0),val:s.val+parseFloat(x.shares||0)*parseFloat(x.price||0)}),{sh:0,val:0})
+                          if(tot.sh>0){setTlForm(p=>({...p,shares:tot.sh.toString(),entry_price:(tot.val/tot.sh).toFixed(4)}))}}}
+                        style={{cursor:'pointer',color:'#ff4d6d',fontSize:14,lineHeight:1,padding:'0 2px'}}>×</span>
+                    </div>
+                  ))}
+                  <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',paddingTop:2}}>
+                    Precio medio → <span style={{color:'#ffd166'}}>{tlForm.entry_price||'—'}</span>
+                    &nbsp;· Acciones totales → <span style={{color:'#ffd166'}}>{tlForm.shares||'—'}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+            {/* ── CERRAR OPERACIÓN (inline, solo si abierta y editando) ── */}
+            {tlForm.id&&tlSelected?.status==='open'&&(
+              <div style={{borderTop:'1px solid var(--border)',paddingTop:10}}>
+                <div style={{fontFamily:MONO,fontSize:10,color:'#ffd166',marginBottom:8,fontWeight:700}}>
+                  ↘ Cerrar posición
+                </div>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10}}>
+                  <label style={{display:'flex',flexDirection:'column',gap:4}}>
+                    <span style={{fontSize:10,color:'#5a8aaa'}}>Fecha salida</span>
+                    <input type="text" placeholder="dd/mm/yyyy" value={tlCloseForm.exit_date}
+                      onChange={e=>setTlCloseForm(f=>({...f,exit_date:e.target.value}))}
+                      style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'5px 7px',borderRadius:4}}/>
+                  </label>
+                  <label style={{display:'flex',flexDirection:'column',gap:4}}>
+                    <span style={{fontSize:10,color:'#5a8aaa'}}>Precio salida</span>
+                    <input type="number" step="0.01" placeholder={tlSelected?._current_price?String(parseFloat(tlSelected._current_price).toFixed(2)):'0.00'}
+                      value={tlCloseForm.exit_price}
+                      onChange={e=>setTlCloseForm(f=>({...f,exit_price:e.target.value}))}
+                      style={{background:'var(--bg3)',border:'1px solid #ffd16644',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'5px 7px',borderRadius:4}}/>
+                  </label>
+                  <label style={{display:'flex',flexDirection:'column',gap:4}}>
+                    <span style={{fontSize:10,color:'#5a8aaa'}}>Comisión venta (€)</span>
+                    <input type="number" min="0" step="0.01" value={tlCloseForm.commission_sell||0}
+                      onChange={e=>setTlCloseForm(f=>({...f,commission_sell:e.target.value}))}
+                      style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'5px 7px',borderRadius:4}}/>
+                  </label>
+                </div>
+                {tlCloseForm.exit_price&&tlCloseForm.exit_date&&(
+                  <div style={{marginTop:6,fontFamily:MONO,fontSize:9,color:'#5a8aaa',display:'flex',gap:12}}>
+                    {(()=>{
+                      const pnlCur=(parseFloat(tlCloseForm.exit_price)-parseFloat(tlSelected.entry_price||0))*parseFloat(tlSelected.shares||0)
+                      const fx=parseFloat(tlSelected.fx_entry||1)>1?parseFloat(tlSelected.fx_entry||1):(parseFloat(tlSelected.fx_entry||1)>0?1/parseFloat(tlSelected.fx_entry||1):1)
+                      const pnlEur=pnlCur/fx-(parseFloat(tlCloseForm.commission_sell||0))
+                      const pnlPct=(parseFloat(tlCloseForm.exit_price)/parseFloat(tlSelected.entry_price||1)-1)*100
+                      const col=pnlEur>=0?'#00e5a0':'#ff4d6d'
+                      return(<>
+                        <span>P&L: <b style={{color:col}}>{pnlEur>=0?'+':''}{pnlEur.toFixed(2)}€</b></span>
+                        <span>%: <b style={{color:col}}>{pnlPct>=0?'+':''}{pnlPct.toFixed(2)}%</b></span>
+                      </>)
+                    })()}
+                  </div>
+                )}
+                <button onClick={async()=>{
+                  if(!tlCloseForm.exit_price||!tlCloseForm.exit_date){alert('Introduce fecha y precio de salida');return}
+                  try{
+                    const exitDate=toIsoDate(tlCloseForm.exit_date)||tlCloseForm.exit_date
+                    const exitPx=parseFloat(tlCloseForm.exit_price)
+                    const entryPx=parseFloat(tlSelected.entry_price||0)
+                    const shares=parseFloat(tlSelected.shares||0)
+                    let fx=parseFloat(tlSelected.fx_entry||1); if(fx<1&&fx>0) fx=1/fx
+                    const pnlCur=(exitPx-entryPx)*shares
+                    const commSell=parseFloat(tlCloseForm.commission_sell||0)
+                    const pnlEur=pnlCur/fx-commSell
+                    const pnlPct=(exitPx/entryPx-1)*100
+                    let fxExit=null
+                    if(tlSelected.entry_currency&&tlSelected.entry_currency!=='EUR'){
+                      try{const r=await fetch('/api/tradelog?action=fx&currency='+tlSelected.entry_currency+'&date='+exitDate);const j=await r.json();if(j.fx)fxExit=j.fx}catch(_){}
+                    }
+                    await tlUpdateTrade(tlSelected.id,{
+                      status:'closed',exit_date:exitDate,exit_price:exitPx,
+                      commission_sell:commSell,fx_exit:fxExit,
+                      pnl_eur:parseFloat(pnlEur.toFixed(4)),
+                      pnl_pct:parseFloat(pnlPct.toFixed(4)),
+                      pnl_currency:parseFloat(pnlCur.toFixed(4))
+                    })
+                    setTlFormOpen(false)
+                  }catch(e){alert('Error al cerrar: '+e.message)}
+                }}
+                  style={{marginTop:8,fontFamily:MONO,fontSize:11,padding:'6px 14px',borderRadius:4,cursor:'pointer',
+                    background:'rgba(255,209,102,0.12)',border:'1px solid #ffd166',color:'#ffd166',fontWeight:700}}>
+                  ✓ Confirmar cierre
+                </button>
+              </div>
+            )}
             {/* Botones */}
             <div style={{display:'flex',justifyContent:'flex-end',gap:8,paddingTop:4,borderTop:'1px solid var(--border)'}}>
               <button onClick={()=>setTlFormOpen(false)}
