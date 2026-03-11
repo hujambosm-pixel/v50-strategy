@@ -3044,6 +3044,7 @@ function ContextThemeMenu({ x, y, section, onClose, onSave }) {
 
 // ── Main ─────────────────────────────────────────────────────
 // ── TlEquityChart — equity curve from real tradelog ─────────────────────────
+// ── Equity P&L curve (simple green/red line) ──
 function TlEquityChart({ curve }) {
   const ref = useRef(null), chartRef = useRef(null)
   useEffect(()=>{
@@ -3051,19 +3052,17 @@ function TlEquityChart({ curve }) {
     import('lightweight-charts').then(({createChart,CrosshairMode,LineStyle})=>{
       if(chartRef.current){chartRef.current.remove();chartRef.current=null}
       const chart = createChart(ref.current,{
-        width:ref.current.clientWidth, height:220,
+        width:ref.current.clientWidth, height:200,
         layout:{background:{color:'#080c14'},textColor:'#7a9bc0'},
         grid:{vertLines:{color:'#0d1520'},horzLines:{color:'#0d1520'}},
         crosshair:{mode:CrosshairMode.Normal},
         rightPriceScale:{borderColor:'#1a2d45'},
-        timeScale:{borderColor:'#1a2d45',timeVisible:false},
-        localization:{priceFormatter:v=>`€${Math.round(v)}`},
+        timeScale:{borderColor:'#1a2d45',timeVisible:true},
+        localization:{priceFormatter:v=>'€'+Math.round(v)},
       })
       chartRef.current = chart
-      // Zero line
       chart.addLineSeries({color:'#2a3f55',lineWidth:1,lineStyle:LineStyle.Dotted,lastValueVisible:false,priceLineVisible:false})
         .setData([{time:curve[0].date,value:0},{time:curve[curve.length-1].date,value:0}])
-      // Equity line (color by final P&L)
       const finalVal = curve[curve.length-1].value
       const lineColor = finalVal >= 0 ? '#00e5a0' : '#ff4d6d'
       chart.addLineSeries({color:lineColor,lineWidth:2,lastValueVisible:true,priceLineVisible:false})
@@ -3075,7 +3074,73 @@ function TlEquityChart({ curve }) {
     })
     return ()=>{ if(chartRef.current){chartRef.current.remove();chartRef.current=null} }
   },[curve])
-  return <div ref={ref} style={{minHeight:220,borderTop:'1px solid var(--border)'}}/>
+  return <div ref={ref} style={{minHeight:200,borderTop:'1px solid var(--border)'}}/>
+}
+
+// ── Capital Invertido vs Profit acumulado (area + line) ──
+function TlInvestChart({ investData }) {
+  // investData: [{date, capital, profit}]  sorted by date
+  const ref = useRef(null), chartRef = useRef(null)
+  useEffect(()=>{
+    if(!ref.current||!investData?.length) return
+    import('lightweight-charts').then(({createChart,CrosshairMode,LineStyle})=>{
+      if(chartRef.current){chartRef.current.remove();chartRef.current=null}
+      const chart = createChart(ref.current,{
+        width:ref.current.clientWidth, height:200,
+        layout:{background:{color:'#0b0f1a'},textColor:'#7a9bc0'},
+        grid:{vertLines:{color:'#0d1520'},horzLines:{color:'#0d1520'}},
+        crosshair:{mode:CrosshairMode.Normal},
+        rightPriceScale:{borderColor:'#1a2d45',scaleMargins:{top:0.08,bottom:0.06}},
+        timeScale:{borderColor:'#1a2d45',timeVisible:true},
+        localization:{priceFormatter:v=>'€'+Math.round(v)},
+      })
+      chartRef.current = chart
+      // Area — Capital Invertido (azul con relleno)
+      const areaSeries = chart.addAreaSeries({
+        lineColor:'#2a7fff',
+        topColor:'rgba(42,127,255,0.55)',
+        bottomColor:'rgba(42,127,255,0.04)',
+        lineWidth:2,
+        title:'Capital inv.',
+        lastValueVisible:true,
+        priceLineVisible:false,
+      })
+      areaSeries.setData(investData.map(p=>({time:p.date,value:p.capital})))
+      // Line — Profit acumulado (verde lima)
+      const profitSeries = chart.addLineSeries({
+        color:'#aaff44',
+        lineWidth:2,
+        title:'Profit',
+        lastValueVisible:true,
+        priceLineVisible:false,
+      })
+      profitSeries.setData(investData.map(p=>({time:p.date,value:p.profit})))
+      // Zero dotted
+      if(investData.length>1){
+        chart.addLineSeries({color:'#2a3f55',lineWidth:1,lineStyle:LineStyle.Dotted,lastValueVisible:false,priceLineVisible:false})
+          .setData([{time:investData[0].date,value:0},{time:investData[investData.length-1].date,value:0}])
+      }
+      chart.timeScale().fitContent()
+      const ro = new ResizeObserver(()=>{ if(ref.current) chart.applyOptions({width:ref.current.clientWidth}) })
+      ro.observe(ref.current)
+      return ()=>ro.disconnect()
+    })
+    return ()=>{ if(chartRef.current){chartRef.current.remove();chartRef.current=null} }
+  },[investData])
+  return (
+    <div style={{borderTop:'1px solid var(--border)'}}>
+      <div style={{padding:'6px 14px 0',display:'flex',alignItems:'center',gap:14}}>
+        <span style={{fontFamily:'"JetBrains Mono",monospace',fontSize:9,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase'}}>Capital Invertido vs Profit</span>
+        <span style={{display:'flex',alignItems:'center',gap:4,fontFamily:'"JetBrains Mono",monospace',fontSize:9,color:'#2a7fff'}}>
+          <span style={{display:'inline-block',width:10,height:2,background:'#2a7fff',borderRadius:1}}/> Capital inv.
+        </span>
+        <span style={{display:'flex',alignItems:'center',gap:4,fontFamily:'"JetBrains Mono",monospace',fontSize:9,color:'#aaff44'}}>
+          <span style={{display:'inline-block',width:10,height:2,background:'#aaff44',borderRadius:1}}/> Profit acum.
+        </span>
+      </div>
+      <div ref={ref} style={{minHeight:200}}/>
+    </div>
+  )
 }
 
 
@@ -4399,7 +4464,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.44</title>
+        <title>Trading Simulator V4.45</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4462,7 +4527,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.44
+            <span className="dot"/>Trading Simulator V4.45
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5338,38 +5403,7 @@ export default function Home() {
                           ))}
                         </div>
                       </div>
-                      {/* Resumen */}
-                      {(()=>{
-                        const vis=tlTrades.filter(t=>{
-                          if(tlFilterStatus&&t.status!==tlFilterStatus) return false
-                          if(tlFilterBroker&&t.broker!==tlFilterBroker) return false
-                          return true
-                        })
-                        const closed=vis.filter(t=>t.status==='closed')
-                        const open=vis.filter(t=>t.status==='open')
-                        const wins=closed.filter(t=>(t.pnl_eur||0)>=0)
-                        const pnlTotal=closed.reduce((s,t)=>s+(t.pnl_eur||0),0)
-                        const flotante=open.reduce((s,t)=>s+(t._pnl_float_eur||0),0)
-                        const commTotal=vis.reduce((s,t)=>s+(t.commission_buy||0)/(t.fx_entry||1)+(t.commission_sell||0)/(t.fx_exit||t.fx_entry||1),0)
-                        const wr=closed.length?wins.length/closed.length*100:0
-                        return(
-                          <div style={{padding:'7px 8px'}}>
-                            <div style={{fontFamily:MONO,fontSize:8,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:5}}>Resumen</div>
-                            {[
-                              ['Cerradas',closed.length,'#7a9bc0'],
-                              ['Abiertas',open.length,'#00e5a0'],
-                              ['P&L realizado',pnlTotal>=0?'+€'+Math.round(pnlTotal):'-€'+Math.round(Math.abs(pnlTotal)),pnlTotal>=0?'#00e5a0':'#ff4d6d'],
-                              ['Flotante',flotante>=0?'+€'+Math.round(flotante):'-€'+Math.round(Math.abs(flotante)),'#ffd166'],
-                              ['Comisiones','-€'+commTotal.toFixed(0),'#ff4d6d'],
-                            ].map(([l,v,c])=>(
-                              <div key={l} style={{display:'flex',justifyContent:'space-between',padding:'2px 0'}}>
-                                <span style={{fontFamily:MONO,fontSize:10,color:'#4a7a95'}}>{l}</span>
-                                <span style={{fontFamily:MONO,fontSize:10,fontWeight:700,color:c}}>{v}</span>
-                              </div>
-                            ))}
-                          </div>
-                        )
-                      })()}
+
                     </div>
                   )
                 })()}
@@ -6391,43 +6425,90 @@ export default function Home() {
                 {tlTab==='dashboard'&&(
                   <div style={{flex:1,display:'flex',flexDirection:'column',gap:0,overflowY:'auto'}}>
                     {(()=>{
-                      const closed = tlTrades.filter(t=>t.status==='closed'&&t.pnl_eur!=null&&t.entry_date)
-                        .sort((a,b)=>a.entry_date.localeCompare(b.entry_date))
-                      if(!closed.length) return (
+                      // Apply same filters as ops table
+                      const filtered = tlTrades.filter(t=>{
+                        if(tlFilterStatus&&t.status!==tlFilterStatus) return false
+                        if(tlFilterBroker&&t.broker!==tlFilterBroker) return false
+                        if(tlFilterYear&&!t.entry_date?.startsWith(tlFilterYear)) return false
+                        return true
+                      })
+                      const closed = filtered.filter(t=>t.status==='closed'&&t.pnl_eur!=null&&t.entry_date)
+                        .sort((a,b)=>(a.exit_date||a.entry_date).localeCompare(b.exit_date||b.entry_date))
+                      const openTrades = filtered.filter(t=>t.status==='open'&&t.entry_date)
+                      if(!closed.length&&!openTrades.length) return (
                         <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:MONO,fontSize:12,color:'#3d5a7a'}}>
-                          Sin operaciones cerradas para mostrar el dashboard.
+                          Sin operaciones para mostrar el dashboard.
                         </div>
                       )
-                      // Build equity curve
-                      let capital = 0
+                      // Build equity curve — closed P&L cumulative + open floating
+                      let cumPnl = 0
                       const equityCurve = closed.map(t=>{
-                        capital += parseFloat(t.pnl_eur||0)
-                        return {date:t.exit_date||t.entry_date, value:capital, trade:t}
+                        cumPnl += parseFloat(t.pnl_eur||0)
+                        return {date:t.exit_date||t.entry_date, value:cumPnl, trade:t}
                       })
+                      // Append today's point with floating P&L
+                      const floatPnl = openTrades.reduce((s,t)=>s+(t._pnl_float_eur||0),0)
+                      const today = new Date().toISOString().split('T')[0]
+                      if(floatPnl!==0 && equityCurve.length>0){
+                        equityCurve.push({date:today,value:cumPnl+floatPnl,isFloat:true})
+                      }
+                      // Build invest chart data: for each closed trade on its entry date,
+                      // capital = shares * entry_price / fx_entry, accumulated profit
+                      // We build a timeline of events: entry (capital up), exit (capital down + profit)
+                      const events = []
+                      closed.forEach(t=>{
+                        const fxE = t.fx_entry>0?(t.fx_entry<1?1/t.fx_entry:t.fx_entry):1
+                        const capitalEur = (parseFloat(t.shares||0)*parseFloat(t.entry_price||0))/fxE
+                        events.push({date:t.entry_date, capDelta:+capitalEur, pnlDelta:0})
+                        events.push({date:t.exit_date||today, capDelta:-capitalEur, pnlDelta:parseFloat(t.pnl_eur||0)})
+                      })
+                      // Sort and accumulate
+                      events.sort((a,b)=>a.date.localeCompare(b.date))
+                      let runCap=0, runPnl=0
+                      const investMap = {}
+                      events.forEach(ev=>{
+                        runCap += ev.capDelta; runPnl += ev.pnlDelta
+                        investMap[ev.date]={capital:Math.max(0,runCap), profit:runPnl}
+                      })
+                      // Also include open trades capital
+                      openTrades.forEach(t=>{
+                        const fxE = t.fx_entry>0?(t.fx_entry<1?1/t.fx_entry:t.fx_entry):1
+                        const capitalEur = (parseFloat(t.shares||0)*parseFloat(t.entry_price||0))/fxE
+                        const d = t.entry_date
+                        if(!investMap[d]) investMap[d]={capital:0,profit:runPnl}
+                        investMap[d].capital += capitalEur
+                      })
+                      const investData = Object.keys(investMap).sort().map(d=>({date:d,...investMap[d]}))
                       const wins = closed.filter(t=>(t.pnl_eur||0)>=0)
                       const losses = closed.filter(t=>(t.pnl_eur||0)<0)
-                      const totalPnl = closed.reduce((s,t)=>s+(t.pnl_eur||0),0)
+                      const totalPnl = closed.reduce((s,t)=>s+(t.pnl_eur||0),0)+floatPnl
                       const avgWin = wins.length?wins.reduce((s,t)=>s+(t.pnl_eur||0),0)/wins.length:0
                       const avgLoss = losses.length?losses.reduce((s,t)=>s+Math.abs(t.pnl_eur||0),0)/losses.length:0
                       const factorBen = avgLoss>0?avgWin/avgLoss:0
-                      const bestTrade = closed.reduce((b,t)=>(t.pnl_eur||0)>(b.pnl_eur||0)?t:b, closed[0])
-                      const worstTrade = closed.reduce((b,t)=>(t.pnl_eur||0)<(b.pnl_eur||0)?t:b, closed[0])
-                      // Max DD
+                      const bestTrade = closed.length?closed.reduce((b,t)=>(t.pnl_eur||0)>(b.pnl_eur||0)?t:b, closed[0]):null
                       let peak=0, maxDD=0
                       equityCurve.forEach(p=>{if(p.value>peak)peak=p.value;const dd=peak-p.value;if(dd>maxDD)maxDD=dd})
                       return (
                         <div style={{display:'flex',flexDirection:'column',gap:0}}>
+                          {/* Filtros activos badge */}
+                          {(tlFilterStatus||tlFilterBroker||tlFilterYear)&&(
+                            <div style={{padding:'4px 10px',background:'rgba(155,114,255,0.06)',borderBottom:'1px solid var(--border)',display:'flex',gap:6,flexWrap:'wrap'}}>
+                              {tlFilterStatus&&<span style={{fontFamily:MONO,fontSize:9,color:'#9b72ff',border:'1px solid rgba(155,114,255,0.3)',borderRadius:3,padding:'1px 5px'}}>Estado: {tlFilterStatus}</span>}
+                              {tlFilterBroker&&<span style={{fontFamily:MONO,fontSize:9,color:'#9b72ff',border:'1px solid rgba(155,114,255,0.3)',borderRadius:3,padding:'1px 5px'}}>Broker: {tlFilterBroker}</span>}
+                              {tlFilterYear&&<span style={{fontFamily:MONO,fontSize:9,color:'#9b72ff',border:'1px solid rgba(155,114,255,0.3)',borderRadius:3,padding:'1px 5px'}}>Año: {tlFilterYear}</span>}
+                            </div>
+                          )}
                           {/* KPIs */}
                           <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:1,background:'var(--border)',borderBottom:'1px solid var(--border)'}}>
                             {[
-                              {l:'P&L Total',v:`${totalPnl>=0?'+':''}€${Math.round(totalPnl)}`,c:totalPnl>=0?'#00e5a0':'#ff4d6d'},
-                              {l:'Win Rate',v:`${closed.length?Math.round(wins.length/closed.length*100):0}%`,c:wins.length/closed.length>=0.5?'#00e5a0':'#ff4d6d'},
-                              {l:'Factor Ben.',v:factorBen.toFixed(2),c:factorBen>=1?'#00e5a0':'#ff4d6d'},
-                              {l:'Max DD',v:`-€${Math.round(maxDD)}`,c:'#ff4d6d'},
-                              {l:'Operaciones',v:closed.length,c:'#ffd166'},
+                              {l:'P&L Total',v:(totalPnl>=0?'+':'')+('€'+Math.round(Math.abs(totalPnl))*(totalPnl<0?-1:1)).toString().replace('-€','-€'),c:totalPnl>=0?'#00e5a0':'#ff4d6d'},
+                              {l:'Win Rate',v:closed.length?Math.round(wins.length/closed.length*100)+'%':'—',c:closed.length&&wins.length/closed.length>=0.5?'#00e5a0':'#ff4d6d'},
+                              {l:'Factor Ben.',v:factorBen>0?factorBen.toFixed(2):'—',c:factorBen>=1?'#00e5a0':'#ff4d6d'},
+                              {l:'Max DD',v:maxDD>0?'-€'+Math.round(maxDD):'—',c:maxDD>0?'#ff4d6d':'#7a9bc0'},
+                              {l:'Cerradas',v:closed.length,c:'#ffd166'},
                               {l:'Ganadoras',v:wins.length,c:'#00e5a0'},
                               {l:'Perdedoras',v:losses.length,c:'#ff4d6d'},
-                              {l:'Mejor op.',v:`${bestTrade.symbol} ${bestTrade.pnl_pct!=null?`+${parseFloat(bestTrade.pnl_pct).toFixed(1)}%`:''}`,c:'#00e5a0'},
+                              {l:'Flotante',v:floatPnl>=0?'+€'+Math.round(floatPnl):'-€'+Math.round(Math.abs(floatPnl)),c:floatPnl>=0?'#00e5a0':'#ffd166'},
                             ].map(({l,v,c})=>(
                               <div key={l} style={{padding:'10px 12px',background:'var(--bg2)',display:'flex',flexDirection:'column',gap:3}}>
                                 <span style={{fontFamily:MONO,fontSize:8,color:'#3d5a7a',textTransform:'uppercase',letterSpacing:'0.08em'}}>{l}</span>
@@ -6435,21 +6516,25 @@ export default function Home() {
                               </div>
                             ))}
                           </div>
-                          {/* Equity curve */}
-                          <TlEquityChart curve={equityCurve}/>
+                          {/* Equity curve — P&L acumulado */}
+                          {equityCurve.length>1&&<TlEquityChart curve={equityCurve}/>}
+                          {/* Capital Invertido vs Profit */}
+                          {investData.length>1&&<TlInvestChart investData={investData}/>}
                           {/* Barras P&L por trade */}
-                          <div style={{padding:'12px 16px 8px',borderTop:'1px solid var(--border)'}}>
-                            <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:8}}>P&L por operación</div>
-                            <div style={{display:'flex',alignItems:'flex-end',gap:2,height:60}}>
-                              {closed.map((t,i)=>{
-                                const mx=Math.max(...closed.map(x=>Math.abs(x.pnl_eur||0)),1)
-                                const h=Math.max(3,Math.abs(t.pnl_eur||0)/mx*56)
-                                const isW=(t.pnl_eur||0)>=0
-                                return <div key={i} title={`${t.symbol} ${isW?'+':''}€${Math.round(t.pnl_eur||0)}`}
-                                  style={{flex:1,height:h,background:isW?'#00e5a0':'#ff4d6d',borderRadius:'2px 2px 0 0',minWidth:2,opacity:0.85,cursor:'default'}}/>
-                              })}
+                          {closed.length>0&&(
+                            <div style={{padding:'12px 16px 8px',borderTop:'1px solid var(--border)'}}>
+                              <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:8}}>P&L por operación</div>
+                              <div style={{display:'flex',alignItems:'flex-end',gap:2,height:60}}>
+                                {closed.map((t,i)=>{
+                                  const mx=Math.max(...closed.map(x=>Math.abs(x.pnl_eur||0)),1)
+                                  const h=Math.max(3,Math.abs(t.pnl_eur||0)/mx*56)
+                                  const isW=(t.pnl_eur||0)>=0
+                                  return <div key={i} title={t.symbol+' '+(isW?'+':'')+('€'+Math.round(t.pnl_eur||0))}
+                                    style={{flex:1,height:h,background:isW?'#00e5a0':'#ff4d6d',borderRadius:'2px 2px 0 0',minWidth:2,opacity:0.85,cursor:'default'}}/>
+                                })}
+                              </div>
                             </div>
-                          </div>
+                          )}
                         </div>
                       )
                     })()}
