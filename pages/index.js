@@ -6327,9 +6327,7 @@ export default function Home() {
                             t.entry_currency||'', fx.toFixed(4), comm,
                             t.pnl_eur!=null?parseFloat(t.pnl_eur).toFixed(2):'',
                             t.pnl_pct!=null?parseFloat(t.pnl_pct).toFixed(2)+'%':'',
-                            dias, t.strategy||'', (t.notes||'').replace(/[
-
-,]/g,' ')
+                            dias, t.strategy||'', (t.notes||'').replace(/[\n\r,]/g,' ')
                           ]
                         })
                         const csv = [headers,...rows].map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('
