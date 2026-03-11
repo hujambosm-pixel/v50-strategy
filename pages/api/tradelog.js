@@ -181,33 +181,46 @@ function parseDegiroCSV(csvText) {
 
 
 // ── Parser IBKR texto pegado (Activity Statement) ───────────
-// Detecta líneas con patrón: AccountID  SYMBOL  DATE,TIME  DATE  -  BUY/SELL  qty  price  ...
+// Soporta: tabuladores, espacios múltiples, formato en inglés y español
+// U17100954  ACLS  2026-02-17, 14:35:09  2026-02-18  -  BUY  12  95.6197  -1,147.44  -0.35
 function parseIBKRtext(text) {
   const trades = []
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean)
-  // Patrón de fila de operación IBKR en español e inglés:
-  // U17100954  ACLS  2026-02-17, 14:35:09  2026-02-18  -  BUY  12  95.6197  -1,147.44  -0.35  0.00  STP  O
-  // Los campos separados por tabuladores o espacios múltiples
-  const rowRe = /^(U\d+)\s+([A-Z0-9.\-]+)\s+(\d{4}-\d{2}-\d{2})[,\s]+[\d:]+\s+[\d-]+\s+[-–]\s+(BUY|SELL|COMPRA|VENTA)\s+([\d.]+)\s+([\d.,]+)\s+([-\d.,]+)\s+([-\d.,]+)/i
   let currency = 'USD'
+
   for (const line of lines) {
-    // Detectar divisa de la sección (USD / EUR / etc.)
+    // Detectar divisa de sección
     if (/^(USD|EUR|GBP|CHF|CAD|AUD|JPY)$/.test(line.trim())) {
-      currency = line.trim()
-      continue
+      currency = line.trim(); continue
     }
-    const m = rowRe.exec(line)
-    if (!m) continue
-    const [, , symbol, date, type, qtyRaw, priceRaw, , commRaw] = m
-    const qty = parseFloat(qtyRaw.replace(',',''))
-    const price = parseFloat(priceRaw.replace(',',''))
-    const comm = Math.abs(parseFloat((commRaw||'0').replace(',','')))
-    if (!symbol || !qty || !price) continue
-    const isBuy = /BUY|COMPRA/i.test(type)
+    // Dividir por tabuladores o espacios múltiples (≥2)
+    const cols = line.split(/\t|  +/).map(c => c.trim()).filter(Boolean)
+    // Necesitamos al menos 8 columnas y que la primera sea cuenta IBKR (U + dígitos)
+    if (cols.length < 8 || !/^U\d+$/.test(cols[0])) continue
+
+    // cols: [cuenta, symbol, fecha+hora, fechaLiq, -, tipo, cantidad, precio, importe, comision, ...]
+    const symbol   = cols[1]
+    const dateStr  = cols[2]  // "2026-02-17, 14:35:09" o "2026-02-17"
+    const typeCol  = cols[5]  // BUY / SELL / COMPRA / VENTA
+    const qtyRaw   = cols[6]
+    const priceRaw = cols[7]
+    const commRaw  = cols[9] || cols[8] || '0'
+
+    if (!symbol || !dateStr || !typeCol) continue
+    if (!/BUY|SELL|COMPRA|VENTA/i.test(typeCol)) continue
+
+    const date  = dateStr.split(/[,\s]/)[0]  // tomar solo YYYY-MM-DD
+    const qty   = parseFloat(qtyRaw.replace(/[,\s]/g,''))
+    const price = parseFloat(priceRaw.replace(/[,\s]/g,''))
+    const comm  = Math.abs(parseFloat(commRaw.replace(/[,\s]/g,'')) || 0)
+
+    if (!date || isNaN(qty) || isNaN(price) || !qty || !price) continue
+
+    const isBuy = /BUY|COMPRA/i.test(typeCol)
     trades.push({
       symbol,
       entry_date: date,
-      shares: qty,
+      shares: Math.abs(qty),
       entry_price: price,
       entry_currency: currency,
       commission_buy:  isBuy ? comm : 0,
@@ -231,46 +244,49 @@ function autoParseText(text) {
   return null
 }
 
-// ── Parser texto libre (Claude API) ─────────────────────────
+// ── Parser texto libre (Groq API) ───────────────────────────
 async function parseWithAI(text, apiKey) {
-  const ANTHROPIC_KEY = apiKey || process.env.ANTHROPIC_API_KEY
-  if (!ANTHROPIC_KEY) throw new Error('API key de Anthropic no configurada')
+  const GROQ_KEY = apiKey || process.env.GROQ_API_KEY
+  if (!GROQ_KEY) throw new Error('API key de Groq no configurada. Ve a ⚙ Config → Integraciones y añade tu clave Groq.')
 
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
+  const PROMPT = `Extrae las operaciones de trading del siguiente texto y devuelve SOLO un JSON array.
+Cada operación debe tener estos campos (todos opcionales excepto symbol):
+- symbol (string, ticker, en mayúsculas)
+- fill_type ("buy" o "sell")
+- entry_date (YYYY-MM-DD)
+- shares (número positivo)
+- entry_price (número)
+- entry_currency ("USD", "EUR", "GBP"...)
+- commission_buy (número, solo si fill_type=buy)
+- commission_sell (número, solo si fill_type=sell)
+- broker (si se menciona: "ibkr","degiro","binance","myinvestor")
+
+Ignora líneas de totales, subtotales, cabeceras y resúmenes.
+Si no hay operaciones claras, devuelve [].
+Responde SOLO con el JSON array, sin texto adicional, sin markdown.
+
+TEXTO:
+${text.slice(0, 6000)}`
+
+  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-api-key': ANTHROPIC_KEY,
-      'anthropic-version': '2023-06-01',
+      'Authorization': `Bearer ${GROQ_KEY}`,
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
+      model: 'llama-3.1-8b-instant',
       max_tokens: 2000,
-      messages: [{
-        role: 'user',
-        content: `Extrae las operaciones de trading del siguiente texto y devuelve SOLO un JSON array.
-Cada operación debe tener estos campos (todos opcionales excepto symbol):
-- symbol (string, ticker)
-- fill_type ("buy" o "sell")
-- entry_date (YYYY-MM-DD)
-- shares (número)
-- entry_price (número)
-- entry_currency ("USD", "EUR", "GBP"...)
-- commission_buy (número, solo si es compra)
-- commission_sell (número, solo si es venta)
-- broker (si se menciona: "ibkr","degiro","binance","myinvestor")
-
-Si no hay operaciones claras, devuelve [].
-Responde SOLO con el JSON, sin texto adicional.
-
-TEXTO:
-${text.slice(0, 4000)}`
-      }]
+      temperature: 0,
+      messages: [{ role: 'user', content: PROMPT }]
     })
   })
-  if (!res.ok) throw new Error(`Claude API: ${res.status}`)
+  if (!res.ok) {
+    const err = await res.text()
+    throw new Error(`Groq API ${res.status}: ${err}`)
+  }
   const data = await res.json()
-  const raw = data.content?.[0]?.text || '[]'
+  const raw = data.choices?.[0]?.message?.content || '[]'
   try {
     return JSON.parse(raw.replace(/```json|```/g, '').trim())
   } catch {
