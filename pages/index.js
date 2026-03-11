@@ -3246,7 +3246,7 @@ export default function Home() {
   const [tlLoading,setTlLoading]=useState(false)
   const [tlError,setTlError]=useState(null)
   const [tlSelected,setTlSelected]=useState(null)      // trade seleccionado en detalle
-  const [tlTab,setTlTab]=useState('ops')               // 'ops'|'open'|'import'|'export'|'dashboard'
+  const [tlTab,setTlTab]=useState('ops')               // 'ops'|'import'|'export'|'dashboard'
   const [tlFilterBroker,setTlFilterBroker]=useState('')
   const [tlFilterYear,setTlFilterYear]=useState('')
   const [tlFilterType,setTlFilterType]=useState('')
@@ -4399,7 +4399,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.43</title>
+        <title>Trading Simulator V4.44</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4462,7 +4462,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.43
+            <span className="dot"/>Trading Simulator V4.44
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5273,16 +5273,21 @@ export default function Home() {
                 {/* Header + badge */}
                 <div style={{padding:'8px 10px',borderBottom:'1px solid var(--border)',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0}}>
                   <span style={{fontFamily:MONO,fontSize:9,color:'#9b72ff',letterSpacing:'0.1em',textTransform:'uppercase',fontWeight:700}}>📒 TradeLog</span>
-                  <span style={{fontFamily:MONO,fontSize:9,padding:'2px 5px',borderRadius:3,
-                    background:tlUseLocal()?'rgba(255,209,102,0.1)':'rgba(0,212,255,0.08)',
-                    border:tlUseLocal()?'1px solid rgba(255,209,102,0.3)':'1px solid rgba(0,212,255,0.2)',
-                    color:tlUseLocal()?'#ffd166':'#00d4ff'}}>
-                    {tlUseLocal()?'💾 Local':'☁ Supabase'}
-                  </span>
+                  {tlUseLocal()
+                    ? <span style={{fontFamily:MONO,fontSize:9,padding:'2px 5px',borderRadius:3,
+                        background:'rgba(255,209,102,0.1)',border:'1px solid rgba(255,209,102,0.3)',color:'#ffd166'}}>
+                        💾 Local
+                      </span>
+                    : <a href="https://supabase.com/dashboard/project/uqjngxxbdlquiuhywiuc" target="_blank" rel="noreferrer"
+                        style={{fontFamily:MONO,fontSize:9,padding:'2px 5px',borderRadius:3,cursor:'pointer',textDecoration:'none',
+                          background:'rgba(0,212,255,0.08)',border:'1px solid rgba(0,212,255,0.2)',color:'#00d4ff'}}>
+                        ☁ Supabase ↗
+                      </a>
+                  }
                 </div>
                 {/* Subtabs */}
                 <div style={{display:'flex',borderBottom:'1px solid var(--border)',flexShrink:0}}>
-                  {[{id:'ops',label:'Ops'},{id:'open',label:'Abiertas'},{id:'import',label:'Import'},{id:'export',label:'Export'},{id:'dashboard',label:'Dashboard'}].map(t=>(
+                  {[{id:'ops',label:'Ops'},{id:'import',label:'Import'},{id:'export',label:'Export'},{id:'dashboard',label:'Dashboard'}].map(t=>(
                     <button key={t.id} onClick={()=>setTlTab(t.id)}
                       style={{flex:1,padding:'8px 2px',fontFamily:MONO,fontSize:9,cursor:'pointer',
                         background:tlTab===t.id?'rgba(155,114,255,0.08)':'transparent',
@@ -5301,9 +5306,9 @@ export default function Home() {
                         <div style={{fontFamily:MONO,fontSize:8,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:4}}>Estado</div>
                         <div style={{display:'flex',gap:3,flexWrap:'wrap'}}>
                           {[['','Todas'],['open','Abiertas'],['closed','Cerradas']].map(([v,l])=>(
-                            <button key={v} onClick={()=>{setTlFilterStatus(v);setTimeout(loadTrades,50)}}
+                            <button key={v} onClick={()=>setTlFilterStatus(tlFilterStatus===v?'':v)}
                               style={{fontFamily:MONO,fontSize:10,padding:'2px 6px',borderRadius:3,cursor:'pointer',
-                                border:`1px solid ${tlFilterStatus===v?'#9b72ff':'#1a2d45'}`,
+                                border:'1px solid '+(tlFilterStatus===v?'#9b72ff':'#1a2d45'),
                                 background:tlFilterStatus===v?'rgba(155,114,255,0.1)':'transparent',
                                 color:tlFilterStatus===v?'#9b72ff':'#4a7a95'}}>{l}</button>
                           ))}
@@ -5313,10 +5318,10 @@ export default function Home() {
                         <div style={{fontFamily:MONO,fontSize:8,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:4}}>Broker</div>
                         <div style={{display:'flex',gap:3,flexWrap:'wrap'}}>
                           {[['','Todos'],...TL_BROKERS.map(b=>[b,TL_LABEL[b]])].map(([v,l])=>(
-                            <button key={v} onClick={()=>{setTlFilterBroker(v);setTimeout(loadTrades,50)}}
+                            <button key={v} onClick={()=>setTlFilterBroker(tlFilterBroker===v?'':v)}
                               style={{fontFamily:MONO,fontSize:10,padding:'2px 6px',borderRadius:3,cursor:'pointer',
-                                border:`1px solid ${tlFilterBroker===v?(TL_COLORS[v]||'#9b72ff'):'#1a2d45'}`,
-                                background:tlFilterBroker===v?`${TL_COLORS[v]||'#9b72ff'}18`:'transparent',
+                                border:'1px solid '+(tlFilterBroker===v?(TL_COLORS[v]||'#9b72ff'):'#1a2d45'),
+                                background:tlFilterBroker===v?(TL_COLORS[v]||'#9b72ff')+'18':'transparent',
                                 color:tlFilterBroker===v?(TL_COLORS[v]||'#9b72ff'):'#4a7a95'}}>{l}</button>
                           ))}
                         </div>
@@ -5325,9 +5330,9 @@ export default function Home() {
                         <div style={{fontFamily:MONO,fontSize:8,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:4}}>Período</div>
                         <div style={{display:'flex',gap:3,flexWrap:'wrap'}}>
                           {[['','Todo'],...allYears.map(y=>[y,y])].map(([v,l])=>(
-                            <button key={v} onClick={()=>{setTlFilterYear(v);setTimeout(loadTrades,50)}}
+                            <button key={v} onClick={()=>setTlFilterYear(tlFilterYear===v?'':v)}
                               style={{fontFamily:MONO,fontSize:10,padding:'2px 6px',borderRadius:3,cursor:'pointer',
-                                border:`1px solid ${tlFilterYear===v?'#9b72ff':'#1a2d45'}`,
+                                border:'1px solid '+(tlFilterYear===v?'#9b72ff':'#1a2d45'),
                                 background:tlFilterYear===v?'rgba(155,114,255,0.1)':'transparent',
                                 color:tlFilterYear===v?'#9b72ff':'#4a7a95'}}>{l}</button>
                           ))}
@@ -5351,13 +5356,11 @@ export default function Home() {
                           <div style={{padding:'7px 8px'}}>
                             <div style={{fontFamily:MONO,fontSize:8,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:5}}>Resumen</div>
                             {[
-                              ['Total ops',vis.length,'#ffd166'],
                               ['Cerradas',closed.length,'#7a9bc0'],
                               ['Abiertas',open.length,'#00e5a0'],
-                              ['Win rate',closed.length?`${wr.toFixed(0)}%`:'—',wr>=50?'#00e5a0':'#ff4d6d'],
-                              ['P&L realizado',pnlTotal>=0?`+€${Math.round(pnlTotal)}`:`-€${Math.round(Math.abs(pnlTotal))}`,pnlTotal>=0?'#00e5a0':'#ff4d6d'],
-                              ['Flotante',flotante>=0?`+€${Math.round(flotante)}`:`-€${Math.round(Math.abs(flotante))}`,'#ffd166'],
-                              ['Comisiones',`-€${commTotal.toFixed(0)}`,'#ff4d6d'],
+                              ['P&L realizado',pnlTotal>=0?'+€'+Math.round(pnlTotal):'-€'+Math.round(Math.abs(pnlTotal)),pnlTotal>=0?'#00e5a0':'#ff4d6d'],
+                              ['Flotante',flotante>=0?'+€'+Math.round(flotante):'-€'+Math.round(Math.abs(flotante)),'#ffd166'],
+                              ['Comisiones','-€'+commTotal.toFixed(0),'#ff4d6d'],
                             ].map(([l,v,c])=>(
                               <div key={l} style={{display:'flex',justifyContent:'space-between',padding:'2px 0'}}>
                                 <span style={{fontFamily:MONO,fontSize:10,color:'#4a7a95'}}>{l}</span>
@@ -6454,130 +6457,79 @@ export default function Home() {
                 )}
 
 
-                {/* COLUMNA DERECHA — detalle del trade seleccionado */}
-                {tlSelected&&(
-                  <div style={{width:270,flexShrink:0,background:'var(--bg2)',borderLeft:'1px solid var(--border)',display:'flex',flexDirection:'column',overflowY:'auto'}}>
-                    {/* Header */}
-                    <div style={{padding:'10px 12px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'flex-start',justifyContent:'space-between',flexShrink:0}}>
-                      <div>
-                        <div style={{fontFamily:MONO,fontSize:16,fontWeight:700,color:tlSelected.status==='open'?'#9b72ff':'#c8dff5'}}>
-                          {tlSelected.symbol}
-                          <span style={{fontSize:9,marginLeft:6,padding:'1px 5px',borderRadius:3,verticalAlign:'middle',
-                            background:tlSelected.status==='open'?'rgba(0,229,160,0.08)':'rgba(90,90,90,0.08)',
-                            border:tlSelected.status==='open'?'1px solid rgba(0,229,160,0.2)':'1px solid #1a2d45',
-                            color:tlSelected.status==='open'?'#00e5a0':'#5a8aaa'}}>
-                            {tlSelected.status==='open'?'Abierta':'Cerrada'}
-                          </span>
-                        </div>
-                        <div style={{fontFamily:MONO,fontSize:10,color:'#5a8aaa',marginTop:2}}>
-                          {tlSelected.name||tlSelected.symbol} · <span style={{color:TL_COLORS[tlSelected.broker]||'#7a9bc0',fontWeight:700}}>{TL_LABEL[tlSelected.broker]||tlSelected.broker}</span>
-                        </div>
-                      </div>
-                      <div style={{display:'flex',gap:6}}>
-                        <span onClick={()=>{setTlForm({...tlSelected});setTlFormOpen(true)}} title="Editar"
-                          style={{cursor:'pointer',color:'#3d5a7a',fontSize:16}} onMouseOver={e=>e.currentTarget.style.color='#7a9bc0'} onMouseOut={e=>e.currentTarget.style.color='#3d5a7a'}>✎</span>
-                        <span onClick={()=>tlDeleteTrade(tlSelected.id)} title="Eliminar"
-                          style={{cursor:'pointer',color:'#3d5a7a',fontSize:16}} onMouseOver={e=>e.currentTarget.style.color='#ff4d6d'} onMouseOut={e=>e.currentTarget.style.color='#3d5a7a'}>🗑</span>
-                      </div>
-                    </div>
-
-                    {/* P&L grande */}
-                    {(()=>{
-                      const isOpen=tlSelected.status==='open'
-                      const pnl=isOpen?tlSelected._pnl_float_eur:tlSelected.pnl_eur
-                      const pct=isOpen?tlSelected._pnl_float_pct:tlSelected.pnl_pct
-                      if(pnl==null) return null
-                      return(
-                        <div style={{padding:'10px 12px',borderBottom:'1px solid var(--border)',flexShrink:0}}>
-                          <div style={{fontFamily:MONO,fontSize:20,fontWeight:700,color:pnl>=0?'#00e5a0':'#ff4d6d'}}>
-                            {fmtMoney(pnl)}
-                          </div>
-                          <div style={{fontFamily:MONO,fontSize:11,color:'#5a8aaa',marginTop:2}}>
-                            {isOpen?'flotante ·':'realizado ·'} {pct!=null?`${pct>=0?'+':''}${pct.toFixed(2)}%`:''}
-                          </div>
-                        </div>
-                      )
-                    })()}
-
-                    {/* Detalles */}
-                    <div style={{padding:'8px 12px',borderBottom:'1px solid var(--border)'}}>
-                      {[
-                        ['Entrada',fmtDate(tlSelected.entry_date)||'—'],
-                        ['Precio entrada',`${tlSelected.entry_currency==='EUR'?'€':'$'}${tlSelected.entry_price!=null?parseFloat(tlSelected.entry_price).toFixed(2):'—'}`],
-                        ...(tlSelected.status==='open'&&tlSelected._current_price!=null?[['Precio actual',`${tlSelected.entry_currency==='EUR'?'€':'$'}${tlSelected._current_price.toFixed(2)} ↑`]]:
-                          tlSelected.exit_price!=null?[['Precio salida',`${tlSelected.exit_currency==='EUR'?'€':'$'}${parseFloat(tlSelected.exit_price).toFixed(2)}`],['Fecha salida',fmtDate(tlSelected.exit_date)||'—']]:[]),
-                        ['Acciones',tlSelected.shares],
-                        ['Capital inv.',`€${tlSelected.capital_eur!=null?parseFloat(tlSelected.capital_eur).toFixed(0):'—'}`],
-                        ['Comisión total',`-€${(parseFloat(tlSelected.commission_buy||0)+parseFloat(tlSelected.commission_sell||0)).toFixed(2)}`],
-                      ].map(([l,v])=>(
-                        <div key={l} style={{display:'flex',justifyContent:'space-between',padding:'3px 0'}}>
-                          <span style={{fontFamily:MONO,fontSize:10,color:'#4a7a95'}}>{l}</span>
-                          <span style={{fontFamily:MONO,fontSize:11,fontWeight:600,color:'#c8dff5'}}>{v}</span>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* FX */}
-                    <div style={{padding:'8px 12px',borderBottom:'1px solid var(--border)'}}>
-                      <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:4}}>Divisa / FX</div>
-                      {[
-                        ['Divisa',tlSelected.entry_currency,tlSelected.entry_currency==='EUR'?'#00e5a0':'#ffd166'],
-                        ['FX entrada',tlSelected.fx_entry!=null?parseFloat(tlSelected.fx_entry).toFixed(4):null||(tlSelected.entry_currency==='EUR'?'1.0000':'—'),'#7a9bc0'],
-                        ...(tlSelected.fx_exit?[['FX salida',parseFloat(tlSelected.fx_exit).toFixed(4),'#7a9bc0']]:
-                          tlSelected.status==='open'&&tlSelected.entry_currency!=='EUR'?[['FX actual','aprox. entrada','#4a7a95']]:[] ),
-                      ].map(([l,v,c])=>(
-                        <div key={l} style={{display:'flex',justifyContent:'space-between',padding:'2px 0'}}>
-                          <span style={{fontFamily:MONO,fontSize:10,color:'#4a7a95'}}>{l}</span>
-                          <span style={{fontFamily:MONO,fontSize:11,color:c}}>{v}</span>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Fills parciales */}
-                    {tlFills.length>0&&(
-                      <div style={{borderBottom:'1px solid var(--border)'}}>
-                        <div style={{padding:'6px 12px',fontFamily:MONO,fontSize:9,color:'#3d5a7a',letterSpacing:'0.08em',textTransform:'uppercase'}}>
-                          Entradas parciales <span style={{color:'#9b72ff'}}>×{tlFills.length}</span>
+                                {/* COLUMNA DERECHA — métricas siempre + detalle trade */}
+                <div style={{width:270,flexShrink:0,borderLeft:'1px solid var(--border)',background:'var(--bg2)',display:'flex',flexDirection:'column',overflow:'hidden'}}>
+                  {/* ── MÉTRICAS SIEMPRE VISIBLES ── */}
+                  {(()=>{
+                    const all=tlTrades
+                    const closed=all.filter(t=>t.status==='closed')
+                    const open=all.filter(t=>t.status==='open')
+                    const wins=closed.filter(t=>(t.pnl_eur||0)>=0)
+                    const losses=closed.filter(t=>(t.pnl_eur||0)<0)
+                    const pnlReal=closed.reduce((s,t)=>s+(t.pnl_eur||0),0)
+                    const pnlFloat=open.reduce((s,t)=>s+(t._pnl_float_eur||0),0)
+                    const commTotal=all.reduce((s,t)=>s+(parseFloat(t.commission_buy||0)+parseFloat(t.commission_sell||0)),0)
+                    const wr=closed.length?wins.length/closed.length*100:0
+                    const avgWin=wins.length?wins.reduce((s,t)=>s+(t.pnl_eur||0),0)/wins.length:0
+                    const avgLoss=losses.length?losses.reduce((s,t)=>s+Math.abs(t.pnl_eur||0),0)/losses.length:0
+                    const factorBen=avgLoss>0?(avgWin/avgLoss):null
+                    const bestT=closed.length?closed.reduce((b,t)=>(t.pnl_eur||0)>(b.pnl_eur||0)?t:b,closed[0]):null
+                    const worstT=closed.length?closed.reduce((b,t)=>(t.pnl_eur||0)<(b.pnl_eur||0)?t:b,closed[0]):null
+                    const diasArr=closed.map(t=>t.entry_date&&t.exit_date?Math.round((new Date(t.exit_date)-new Date(t.entry_date))/86400000):null).filter(d=>d!=null)
+                    const diasProm=diasArr.length?diasArr.reduce((s,d)=>s+d,0)/diasArr.length:null
+                    let peak=0,maxDD=0
+                    closed.sort((a,b)=>a.entry_date?.localeCompare(b.entry_date||'')||0).forEach(t=>{
+                      const eq=closed.slice(0,closed.indexOf(t)+1).reduce((s,x)=>s+(x.pnl_eur||0),0)
+                      if(eq>peak)peak=eq; const dd=peak-eq; if(dd>maxDD)maxDD=dd
+                    })
+                    const fmtEur=v=>v>=0?'+€'+Math.round(v):'-€'+Math.round(Math.abs(v))
+                    const totalDias=closed.reduce((s,t)=>s+(t.entry_date&&t.exit_date?Math.round((new Date(t.exit_date)-new Date(t.entry_date))/86400000):0),0)
+                    const rows=[
+                      {l:'Operaciones',    v:all.length,                                    c:'#ffd166'},
+                      {l:'Cerradas / Abiertas', v:closed.length+' / '+open.length,          c:'#7a9bc0'},
+                      {l:'Ganadoras',      v:wins.length,                                   c:'#00e5a0'},
+                      {l:'Perdedoras',     v:losses.length,                                 c:'#ff4d6d'},
+                      {l:'Factor Ben.',    v:factorBen!=null?factorBen.toFixed(2):'—',      c:factorBen!=null&&factorBen>=1?'#00e5a0':'#ff4d6d'},
+                      {l:'Ganancia media', v:wins.length?'+€'+avgWin.toFixed(0):'—',        c:'#00e5a0'},
+                      {l:'Pérdida media',  v:losses.length?'-€'+avgLoss.toFixed(0):'—',     c:'#ff4d6d'},
+                      {l:'Días promedio',  v:diasProm!=null?diasProm.toFixed(0)+' días':'—',c:'#00d4ff'},
+                      {l:'Total días inv.',v:totalDias+' días',                              c:'#00d4ff'},
+                      {l:'P&L realizado',  v:fmtEur(pnlReal),                               c:pnlReal>=0?'#00e5a0':'#ff4d6d'},
+                      {l:'P&L flotante',   v:fmtEur(pnlFloat),                              c:pnlFloat>=0?'#00e5a0':'#ff4d6d'},
+                      {l:'P&L total',      v:fmtEur(pnlReal+pnlFloat),                      c:(pnlReal+pnlFloat)>=0?'#00e5a0':'#ff4d6d'},
+                      {l:'Comisiones',     v:'-€'+commTotal.toFixed(0),                      c:'#ff4d6d'},
+                      {l:'Max Drawdown',   v:maxDD>0?'-€'+Math.round(maxDD):'—',             c:'#ff4d6d'},
+                      {l:'Mejor op.',      v:bestT?bestT.symbol+' +€'+Math.round(bestT.pnl_eur||0):'—', c:'#00e5a0'},
+                      {l:'Peor op.',       v:worstT?worstT.symbol+' -€'+Math.round(Math.abs(worstT.pnl_eur||0)):'—', c:'#ff4d6d'},
+                    ]
+                    return(
+                      <div style={{flex:tlSelected?'0 0 auto':1,overflowY:'auto',borderBottom:tlSelected?'1px solid var(--border)':'none'}}>
+                        <div style={{padding:'6px 10px',borderBottom:'1px solid var(--border)',fontFamily:MONO,fontSize:8,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',display:'flex',justifyContent:'space-between'}}>
+                          <span>Resumen</span>
+                          <span style={{color:'#1a3a5a'}}>{all.length} ops</span>
                         </div>
                         <table style={{width:'100%',borderCollapse:'collapse'}}>
-                          <thead><tr>
-                            {['Fecha','Acciones','Precio'].map(h=>(
-                              <th key={h} style={{padding:'4px 12px',fontFamily:MONO,fontSize:9,color:'#3d5a7a',textAlign:'left',letterSpacing:'0.05em',borderBottom:'1px solid var(--border)'}}>{h}</th>
-                            ))}
-                          </tr></thead>
                           <tbody>
-                            {tlFills.map((f,i)=>(
-                              <tr key={i} style={{borderBottom:'1px solid var(--border)'}}>
-                                <td style={{padding:'4px 12px',fontFamily:MONO,fontSize:10,color:'#a8ccdf'}}>{f.date}</td>
-                                <td style={{padding:'4px 12px',fontFamily:MONO,fontSize:10}}>{f.shares}</td>
-                                <td style={{padding:'4px 12px',fontFamily:MONO,fontSize:10}}>${f.price?.toFixed(2)}</td>
+                            {rows.map(({l,v,c})=>(
+                              <tr key={l} style={{borderBottom:'1px solid rgba(26,45,69,0.5)'}}>
+                                <td style={{padding:'4px 10px',fontFamily:MONO,fontSize:10,color:'#4a7a95'}}>{l}</td>
+                                <td style={{padding:'4px 10px',textAlign:'right',fontFamily:MONO,fontSize:10,fontWeight:700,color:c}}>{v}</td>
                               </tr>
                             ))}
                           </tbody>
                         </table>
                       </div>
-                    )}
+                    )
+                  })()}
+                  {/* ── DETALLE TRADE SELECCIONADO ── */}
+                  {tlSelected&&(
 
-                    {/* Notas */}
-                    {tlSelected.notes&&(
-                      <div style={{padding:'8px 12px',borderBottom:'1px solid var(--border)'}}>
-                        <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:4}}>Notas</div>
-                        <div style={{fontFamily:MONO,fontSize:10,color:'#7a9bc0',fontStyle:'italic',lineHeight:1.5}}>{tlSelected.notes}</div>
-                      </div>
-                    )}
+                    <div style={{flex:1,overflowY:'auto'}}>
 
-                    {/* Acciones */}
-                    {tlSelected.status==='open'&&(
-                      <div style={{padding:'10px 12px',flexShrink:0}}>
-                        <button onClick={()=>{
-                          setTlCloseForm({exit_date:new Date().toISOString().split('T')[0],exit_price:'',exit_currency:tlSelected.entry_currency||'USD',commission_sell:0,fx_exit:'',fx_exit_manual:false})
-                          setTlCloseOpen(true)
-                        }}
-                          style={{width:'100%',fontFamily:MONO,fontSize:11,padding:'7px',borderRadius:4,cursor:'pointer',
-                            background:'rgba(0,229,160,0.12)',border:'1px solid #00e5a0',color:'#00e5a0',fontWeight:700}}>
-                          ⊠ Cerrar operación
-                        </button>
-                      </div>
+                    </div>
+                  )}
+                </div>
+            </div>
                     )}
                   </div>
                 )}
