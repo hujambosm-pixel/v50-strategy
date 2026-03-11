@@ -179,6 +179,58 @@ function parseDegiroCSV(csvText) {
   return trades
 }
 
+
+// ── Parser IBKR texto pegado (Activity Statement) ───────────
+// Detecta líneas con patrón: AccountID  SYMBOL  DATE,TIME  DATE  -  BUY/SELL  qty  price  ...
+function parseIBKRtext(text) {
+  const trades = []
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean)
+  // Patrón de fila de operación IBKR en español e inglés:
+  // U17100954  ACLS  2026-02-17, 14:35:09  2026-02-18  -  BUY  12  95.6197  -1,147.44  -0.35  0.00  STP  O
+  // Los campos separados por tabuladores o espacios múltiples
+  const rowRe = /^(U\d+)\s+([A-Z0-9.\-]+)\s+(\d{4}-\d{2}-\d{2})[,\s]+[\d:]+\s+[\d-]+\s+[-–]\s+(BUY|SELL|COMPRA|VENTA)\s+([\d.]+)\s+([\d.,]+)\s+([-\d.,]+)\s+([-\d.,]+)/i
+  let currency = 'USD'
+  for (const line of lines) {
+    // Detectar divisa de la sección (USD / EUR / etc.)
+    if (/^(USD|EUR|GBP|CHF|CAD|AUD|JPY)$/.test(line.trim())) {
+      currency = line.trim()
+      continue
+    }
+    const m = rowRe.exec(line)
+    if (!m) continue
+    const [, , symbol, date, type, qtyRaw, priceRaw, , commRaw] = m
+    const qty = parseFloat(qtyRaw.replace(',',''))
+    const price = parseFloat(priceRaw.replace(',',''))
+    const comm = Math.abs(parseFloat((commRaw||'0').replace(',','')))
+    if (!symbol || !qty || !price) continue
+    const isBuy = /BUY|COMPRA/i.test(type)
+    trades.push({
+      symbol,
+      entry_date: date,
+      shares: qty,
+      entry_price: price,
+      entry_currency: currency,
+      commission_buy:  isBuy ? comm : 0,
+      commission_sell: isBuy ? 0 : comm,
+      fill_type: isBuy ? 'buy' : 'sell',
+      broker: 'ibkr',
+      import_source: 'ibkr_text',
+    })
+  }
+  return trades
+}
+
+// ── Auto-detect formato texto (IBKR vs genérico) ────────────
+function autoParseText(text) {
+  // Detectar si es IBKR activity statement pegado
+  if (/U\d{7,}\s+[A-Z]+\s+\d{4}-\d{2}-\d{2}/m.test(text) ||
+      /Id\. de cuenta|Account ID/i.test(text)) {
+    const result = parseIBKRtext(text)
+    if (result.length > 0) return { trades: result, source: 'ibkr_text' }
+  }
+  return null
+}
+
 // ── Parser texto libre (Claude API) ─────────────────────────
 async function parseWithAI(text, apiKey) {
   const ANTHROPIC_KEY = apiKey || process.env.ANTHROPIC_API_KEY
@@ -435,9 +487,18 @@ export default async function handler(req, res) {
       const { text, format, apiKey } = body
       let parsed = []
 
-      if (format === 'ibkr_csv')   parsed = parseIBKRcsv(text)
+      if (format === 'ibkr_csv')      parsed = parseIBKRcsv(text)
       else if (format === 'degiro_csv') parsed = parseDegiroCSV(text)
-      else if (format === 'ai')    parsed = await parseWithAI(text, apiKey)
+      else if (format === 'ai') {
+        // Intentar parseo local primero (sin AI)
+        const local = autoParseText(text)
+        if (local && local.trades.length > 0) {
+          parsed = local.trades
+        } else {
+          // Fallback: Claude API (requiere apiKey)
+          parsed = await parseWithAI(text, apiKey)
+        }
+      }
       else return res.status(400).json({ error: 'Formato no soportado: ibkr_csv | degiro_csv | ai' })
 
       // Enriquecer con FX automático
