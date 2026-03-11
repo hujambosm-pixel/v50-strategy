@@ -4597,7 +4597,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.57</title>
+        <title>Trading Simulator V4.58</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4660,7 +4660,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.57
+            <span className="dot"/>Trading Simulator V4.58
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6577,7 +6577,7 @@ export default function Home() {
                     <div style={{fontFamily:MONO,fontSize:11,color:'#5a8aaa'}}>
                       {tlImportFormat==='ibkr_csv'&&'Exporta desde IBKR: Informes → Extracto de cuenta → CSV. Pega el contenido aquí.'}
                       {tlImportFormat==='degiro_csv'&&'Exporta desde Degiro: Actividad → Exportar → CSV. Pega el contenido aquí.'}
-                      {tlImportFormat==='ai'&&'Pega cualquier texto: historial de broker, tabla HTML, o describe la operación. Claude lo interpretará.'}
+                      {tlImportFormat==='ai'&&'Pega cualquier texto: historial de broker, tabla HTML o detalle de orden. Se interpretará automáticamente.'}
                     </div>
                     <textarea value={tlImportText} onChange={e=>setTlImportText(e.target.value)}
                       placeholder={tlImportFormat==='ai'?'Pega aquí el historial, tabla o describe la operación... Ej: Compré 50 NVDA el 12/02/2025 a $485.20, comisión $1.50':'Pega el contenido del CSV aquí...'}
