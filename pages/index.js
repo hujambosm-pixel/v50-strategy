@@ -4465,7 +4465,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.47</title>
+        <title>Trading Simulator V4.48</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4528,7 +4528,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.47
+            <span className="dot"/>Trading Simulator V4.48
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4742,7 +4742,7 @@ export default function Home() {
                       return matchList&&matchSearch&&matchFav&&matchAlarm
                     })
                     // Sort: 1st by ranking, 2nd by favorite, 3rd alphabetical
-                    const all=[...filtered].sort((a,b)=>{
+                    const all=filtered.slice().sort((a,b)=>{
                       const ra=rankingData[a.symbol]?.rank, rb=rankingData[b.symbol]?.rank
                       if(ra!=null&&rb!=null) return ra-rb
                       if(ra!=null) return -1
@@ -6692,7 +6692,7 @@ export default function Home() {
                     const totalDias=diasArr.reduce((s,d)=>s+d,0)
                     // DD sobre P&L neto (incluyendo comisiones implícitas en pnl_eur)
                     let peak=0,maxDD=0
-                    [...closed].sort((a,b)=>(a.exit_date||'').localeCompare(b.exit_date||'')).reduce((cum,t)=>{
+                    closed.slice().sort((a,b)=>(a.exit_date||'').localeCompare(b.exit_date||'')).reduce((cum,t)=>{
                       const eq=cum+(t.pnl_eur||0); if(eq>peak)peak=eq; const dd=peak-eq; if(dd>maxDD)maxDD=dd; return eq
                     },0)
                     // CAGR — desde primera entrada hasta HOY
