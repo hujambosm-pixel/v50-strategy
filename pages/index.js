@@ -3965,7 +3965,7 @@ export default function Home() {
       if(typeof SUPA_URL === 'string' && SUPA_URL.startsWith('https') &&
          typeof SUPA_KEY === 'string' && SUPA_KEY.length > 10) return false
       const s = JSON.parse(localStorage.getItem('v50_settings')||'{}')
-      return !s?.integraciones?.supabaseUrl
+      return !s?.integrations?.supabaseUrl
     } catch { return true }
   }
 
@@ -4271,7 +4271,7 @@ export default function Home() {
     setTlImportLoading(true); setTlParsed([])
     try{
       const s=JSON.parse(localStorage.getItem('v50_settings')||'{}')
-      const apiKey=s?.integraciones?.groqKey||''
+      const apiKey=s?.integrations?.groqKey||''
       const res=await fetch('/api/tradelog?action=parse',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({text:tlImportText,format:tlImportFormat,apiKey})})
       const json=await res.json()
@@ -4597,7 +4597,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.58</title>
+        <title>Trading Simulator V4.59</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4660,7 +4660,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.58
+            <span className="dot"/>Trading Simulator V4.59
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
