@@ -3454,6 +3454,74 @@ export default function Home() {
   const [tlImportText,setTlImportText]=useState('')
   const [tlImportFormat,setTlImportFormat]=useState('ai')
   const [tlParsed,setTlParsed]=useState([])
+  const [tlGroupFills,setTlGroupFills]=useState(true)  // agrupar fills por operación
+
+  // ── Agrupa fills del parser en operaciones completas ──────
+  // BUY(s) + SELL(s) del mismo símbolo → 1 trade con precio promedio
+  const groupParsedFills = (rows) => {
+    if(!rows||rows.length===0) return rows
+    // Separar por símbolo
+    const bySymbol = {}
+    rows.forEach(r=>{
+      const k = r.symbol
+      if(!bySymbol[k]) bySymbol[k]={buys:[],sells:[]}
+      if(r.fill_type==='buy') bySymbol[k].buys.push(r)
+      else bySymbol[k].sells.push(r)
+    })
+    const result = []
+    Object.entries(bySymbol).forEach(([sym,{buys,sells}])=>{
+      if(buys.length===0&&sells.length>0){
+        // Solo ventas (sin compras en este lote) → importar como cierre independiente
+        sells.forEach(s=>result.push(s))
+        return
+      }
+      if(sells.length===0){
+        // Solo compras → posición abierta
+        if(buys.length===1){ result.push(buys[0]); return }
+        // Múltiples compras → promediar (precio medio ponderado)
+        const totalShares = buys.reduce((s,b)=>s+b.shares,0)
+        const avgPrice    = buys.reduce((s,b)=>s+b.entry_price*b.shares,0)/totalShares
+        const totalComm   = buys.reduce((s,b)=>s+(b.commission_buy||0),0)
+        const earliest    = buys.reduce((a,b)=>a.entry_date<=b.entry_date?a:b)
+        result.push({...earliest, shares:totalShares, entry_price:parseFloat(avgPrice.toFixed(4)),
+          commission_buy:totalComm, fill_type:'buy', status:'open', _fills:buys})
+        return
+      }
+      // Hay compras Y ventas → construir trade cerrado
+      const totalBuy  = buys.reduce((s,b)=>s+b.shares,0)
+      const totalSell = sells.reduce((s,b)=>s+b.shares,0)
+      const avgBuy    = buys.reduce((s,b)=>s+b.entry_price*b.shares,0)/totalBuy
+      const avgSell   = sells.reduce((s,b)=>s+b.entry_price*b.shares,0)/totalSell
+      const commBuy   = buys.reduce((s,b)=>s+(b.commission_buy||0),0)
+      const commSell  = sells.reduce((s,b)=>s+(b.commission_sell||0),0)
+      const entryRow  = buys.reduce((a,b)=>a.entry_date<=b.entry_date?a:b)
+      const exitRow   = sells.reduce((a,b)=>a.entry_date>=b.entry_date?a:b)
+      const sharesToClose = Math.min(totalBuy, totalSell)
+      const isFullyClosed = Math.abs(totalBuy-totalSell)<0.001
+      result.push({
+        ...entryRow,
+        shares: sharesToClose,
+        entry_price: parseFloat(avgBuy.toFixed(4)),
+        commission_buy: commBuy,
+        exit_date: exitRow.entry_date,
+        exit_price: parseFloat(avgSell.toFixed(4)),
+        exit_currency: exitRow.entry_currency||entryRow.entry_currency,
+        commission_sell: commSell,
+        fill_type: 'buy',
+        status: isFullyClosed ? 'closed' : 'open',
+        _fills: [...buys, ...sells],
+        _grouped: true,
+        _buyCount: buys.length,
+        _sellCount: sells.length,
+      })
+      // Si hay más compras que ventas, dejar resto como abierto
+      if(totalBuy > totalSell+0.001){
+        result.push({...entryRow, shares:totalBuy-totalSell, entry_price:parseFloat(avgBuy.toFixed(4)),
+          commission_buy:0, fill_type:'buy', status:'open'})
+      }
+    })
+    return result
+  }
   const [tlImportLoading,setTlImportLoading]=useState(false)
   const [tlForm,setTlForm]=useState({
     symbol:'',name:'',asset_type:'stock',broker:'ibkr',
@@ -4287,7 +4355,8 @@ export default function Home() {
 
       const json=await res.json()
       if(!res.ok) throw new Error(json.error||'Error')
-      setTlParsed(json.parsed||[])
+      const raw = json.parsed||[]
+      setTlParsed(tlGroupFills ? groupParsedFills(raw) : raw)
     }catch(e){alert('Error al parsear: '+e.message)}
     finally{setTlImportLoading(false)}
   }
@@ -4623,7 +4692,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.62</title>
+        <title>Trading Simulator V4.63</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4686,7 +4755,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.62
+            <span className="dot"/>Trading Simulator V4.63
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6629,7 +6698,17 @@ export default function Home() {
                       <div style={{border:'1px solid var(--border)',borderRadius:6,overflow:'hidden'}}>
                         <div style={{padding:'8px 12px',background:'var(--bg2)',borderBottom:'1px solid var(--border)',
                           display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                          <span style={{fontFamily:MONO,fontSize:11,color:'#c8dff5',fontWeight:700}}>Preview — revisa antes de importar</span>
+                          <div style={{display:'flex',alignItems:'center',gap:6}}>
+                            <span style={{fontFamily:MONO,fontSize:11,color:'#c8dff5',fontWeight:700}}>Preview</span>
+                            <button onClick={()=>setTlGroupFills(g=>!g)}
+                              title="Agrupar compras y ventas del mismo símbolo en una operación"
+                              style={{fontFamily:MONO,fontSize:9,padding:'2px 7px',borderRadius:3,cursor:'pointer',
+                                border:'1px solid '+(tlGroupFills?'#ffd166':'#2a4060'),
+                                background:tlGroupFills?'rgba(255,209,102,0.1)':'transparent',
+                                color:tlGroupFills?'#ffd166':'#5a7a95'}}>
+                              {tlGroupFills?'⛓ Agrupado':'⛓ Agrupar fills'}
+                            </button>
+                          </div>
                           <div style={{display:'flex',gap:6}}>
                             <button onClick={()=>setTlParsed([])}
                               style={{fontFamily:MONO,fontSize:10,padding:'3px 8px',borderRadius:3,cursor:'pointer',
@@ -6643,7 +6722,7 @@ export default function Home() {
                         </div>
                         <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:11}}>
                           <thead><tr style={{background:'var(--bg2)'}}>
-                            {['Tipo','Símbolo','Fecha','Acciones','Precio','Divisa','FX','Broker','Capital €'].map(h=>(
+                            {['Tipo','Símbolo','Fecha','Acciones','Precio','Divisa','FX','Broker','Estado','Capital €'].map(h=>(
                               <th key={h} style={{padding:'5px 8px',textAlign:'left',fontSize:9,color:'#3d5a7a',letterSpacing:'0.08em',textTransform:'uppercase',borderBottom:'1px solid var(--border)'}}>{h}</th>
                             ))}
                           </tr></thead>
@@ -6657,13 +6736,28 @@ export default function Home() {
                                     {t.fill_type==='buy'?'▲ BUY':'▼ SELL'}
                                   </span>
                                 </td>
-                                <td style={{padding:'5px 8px',fontWeight:700,color:'#c8dff5'}}>{t.symbol||'?'}</td>
+                                <td style={{padding:'5px 8px',fontWeight:700,color:'#c8dff5'}}>
+                                  {t.symbol||'?'}
+                                  {t._grouped&&<span style={{fontSize:9,color:'#ffd166',marginLeft:5}}>
+                                    {t._buyCount}C+{t._sellCount}V→1op
+                                  </span>}
+                                </td>
                                 <td style={{padding:'5px 8px',color:'#a8ccdf'}}>{fmtDate(t.entry_date)||'?'}</td>
                                 <td style={{padding:'5px 8px'}}>{t.shares||'?'}</td>
-                                <td style={{padding:'5px 8px'}}>{t.entry_price||'?'}</td>
+                                <td style={{padding:'5px 8px'}}>
+                                  {t.entry_price||'?'}
+                                  {t.exit_price&&<span style={{fontSize:9,color:'#ff4d6d',marginLeft:4}}>→{t.exit_price}</span>}
+                                </td>
                                 <td style={{padding:'5px 8px',color:'#ffd166'}}>{t.entry_currency||'USD'}</td>
                                 <td style={{padding:'5px 8px',color:'#4a7a95',fontSize:10}}>{(()=>{let fx=parseFloat(t.fx_entry);if(!fx||isNaN(fx))return'—';if(fx<1)fx=1/fx;return fx.toFixed(4)})()}</td>
                                 <td style={{padding:'5px 8px'}}>{t.broker||'—'}</td>
+                                <td style={{padding:'5px 8px'}}>
+                                  <span style={{fontSize:9,padding:'1px 5px',borderRadius:3,
+                                    background:t.status==='closed'?'rgba(0,229,160,0.1)':'rgba(255,209,102,0.1)',
+                                    color:t.status==='closed'?'#00e5a0':'#ffd166'}}>
+                                    {t.status==='closed'?'✓ Cerrada':'○ Abierta'}
+                                  </span>
+                                </td>
                                 <td style={{padding:'5px 8px',color:'#00d4ff'}}>{t.capital_eur?`€${Math.round(t.capital_eur)}`:'—'}</td>
                               </tr>
                             ))}
