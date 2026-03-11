@@ -233,13 +233,79 @@ function parseIBKRtext(text) {
   return trades
 }
 
-// ── Auto-detect formato texto (IBKR vs genérico) ────────────
+// ── Parser IBKR detalle de orden (formato móvil/web) ────────
+// Ej: "Sold 1 @ 732.095 on DARK" + "Filled" + "09/03/2026, 14:30" + "Fees: 0.35"
+function parseIBKRorderDetail(text) {
+  const trades = []
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean)
+  const actionRe = /^(Bought|Sold|Comprado|Vendido)\s+(\d+(?:[.,]\d+)?)\s+@\s+([\d.,]+)/i
+  const dateRe = /^(\d{1,2})[/\-](\d{1,2})[/\-](\d{4})/
+
+  let i = 0
+  while (i < lines.length) {
+    const m = actionRe.exec(lines[i])
+    if (m) {
+      const qty   = parseFloat(m[2].replace(',','.'))
+      const price = parseFloat(m[3].replace(',','.'))
+      const isBuy = /Bought|Comprado/i.test(m[1])
+      let date = null, fees = 0, symbol = null
+
+      // Buscar en líneas siguientes: fecha y fees
+      for (let j = i + 1; j < Math.min(i + 15, lines.length); j++) {
+        if (!date) {
+          const dm = dateRe.exec(lines[j])
+          if (dm) {
+            const p1 = parseInt(dm[1]), p2 = parseInt(dm[2]), year = dm[3]
+            // Si p1 > 12 => formato DD/MM/YYYY
+            // IBKR España/Europa usa DD/MM/YYYY — asumir siempre este formato
+            if (p1 > 12) // p1 claramente es día
+              date = year + '-' + String(p2).padStart(2,'0') + '-' + String(p1).padStart(2,'0')
+            else // ambiguo o p1<=12: asumir DD/MM (formato europeo IBKR)
+              date = year + '-' + String(p2).padStart(2,'0') + '-' + String(p1).padStart(2,'0')
+          }
+        }
+        const fm = /Fees?:\s*([\d.,]+)/i.exec(lines[j])
+        if (fm) fees = parseFloat(fm[1].replace(',','.'))
+        // Nueva acción => parar
+        if (j > i && actionRe.test(lines[j])) break
+      }
+      // Buscar símbolo en líneas anteriores (ticker solo, ej "UI", "ACLS")
+      for (let j = Math.max(0, i - 8); j < i; j++) {
+        if (/^[A-Z]{1,6}$/.test(lines[j])) { symbol = lines[j] }
+      }
+
+      if (symbol && price && qty && date) {
+        trades.push({
+          symbol,
+          entry_date: date,
+          shares: qty,
+          entry_price: price,
+          entry_currency: 'USD',
+          commission_buy:  isBuy ? fees : 0,
+          commission_sell: isBuy ? 0 : fees,
+          fill_type: isBuy ? 'buy' : 'sell',
+          broker: 'ibkr',
+          import_source: 'ibkr_order',
+        })
+      }
+    }
+    i++
+  }
+  return trades
+}
+
+// ── Auto-detect formato texto ────────────────────────────────
 function autoParseText(text) {
-  // Detectar si es IBKR activity statement pegado
+  // 1. IBKR Activity Statement (tabla tabulada)
   if (/U\d{7,}\s+[A-Z]+\s+\d{4}-\d{2}-\d{2}/m.test(text) ||
       /Id\. de cuenta|Account ID/i.test(text)) {
     const result = parseIBKRtext(text)
     if (result.length > 0) return { trades: result, source: 'ibkr_text' }
+  }
+  // 2. IBKR detalle de orden móvil ("Sold 1 @ 732.095 on DARK")
+  if (/^(Bought|Sold|Comprado|Vendido)\s+\d/im.test(text)) {
+    const result = parseIBKRorderDetail(text)
+    if (result.length > 0) return { trades: result, source: 'ibkr_order' }
   }
   return null
 }
