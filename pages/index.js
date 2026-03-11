@@ -3042,6 +3042,29 @@ function ContextThemeMenu({ x, y, section, onClose, onSave }) {
   )
 }
 
+// ── MetricRow — fila resumen con tooltip hover ──────────────
+function MetricRow({label,value,color,tip}){
+  const [hov,setHov]=useState(false)
+  return(
+    <tr style={{borderBottom:'1px solid rgba(26,45,69,0.5)',position:'relative',background:hov?'rgba(0,212,255,0.03)':'transparent'}}
+      onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}>
+      <td style={{padding:'4px 6px 4px 10px',fontFamily:MONO,fontSize:10,color:'#4a7a95',whiteSpace:'nowrap'}}>
+        {label}
+        {tip&&<span style={{marginLeft:3,color:hov?'#3a6a8a':'#2a4060',cursor:'help',fontSize:9}}>ⓘ</span>}
+      </td>
+      <td style={{padding:'4px 10px 4px 4px',textAlign:'right',fontFamily:MONO,fontSize:10,fontWeight:700,color:color,whiteSpace:'nowrap'}}>{value}</td>
+      {hov&&tip&&(
+        <div style={{position:'fixed',right:10,zIndex:999,pointerEvents:'none',width:240}}>
+          <div style={{background:'#0a1520',border:'1px solid #1a4060',borderRadius:5,padding:'8px 10px',fontFamily:MONO,fontSize:9,color:'#8abccc',lineHeight:1.6,boxShadow:'0 6px 24px rgba(0,0,0,0.7)'}}>
+            <div style={{color:'#4a8aaa',fontWeight:700,marginBottom:3,fontSize:10}}>{label}</div>
+            {tip}
+          </div>
+        </div>
+      )}
+    </tr>
+  )
+}
+
 // ── Main ─────────────────────────────────────────────────────
 // ── TlEquityChart — equity curve from real tradelog ─────────────────────────
 // ── Equity P&L curve (simple green/red line) ──
@@ -4465,7 +4488,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.52</title>
+        <title>Trading Simulator V4.53</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4528,7 +4551,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.52
+            <span className="dot"/>Trading Simulator V4.53
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6591,24 +6614,7 @@ export default function Home() {
                               {tlFilterYear&&<span style={{fontFamily:MONO,fontSize:9,color:'#9b72ff',border:'1px solid rgba(155,114,255,0.3)',borderRadius:3,padding:'1px 5px'}}>Año: {tlFilterYear}</span>}
                             </div>
                           )}
-                          {/* KPIs */}
-                          <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:1,background:'var(--border)',borderBottom:'1px solid var(--border)'}}>
-                            {[
-                              {l:'P&L Total',v:(totalPnl>=0?'+':'')+('€'+Math.round(Math.abs(totalPnl))*(totalPnl<0?-1:1)).toString().replace('-€','-€'),c:totalPnl>=0?'#00e5a0':'#ff4d6d'},
-                              {l:'Win Rate',v:closed.length?Math.round(wins.length/closed.length*100)+'%':'—',c:closed.length&&wins.length/closed.length>=0.5?'#00e5a0':'#ff4d6d'},
-                              {l:'Factor Ben.',v:factorBen>0?factorBen.toFixed(2):'—',c:factorBen>=1?'#00e5a0':'#ff4d6d'},
-                              {l:'Max DD',v:maxDD>0?'-€'+Math.round(maxDD):'—',c:maxDD>0?'#ff4d6d':'#7a9bc0'},
-                              {l:'Cerradas',v:closed.length,c:'#ffd166'},
-                              {l:'Ganadoras',v:wins.length,c:'#00e5a0'},
-                              {l:'Perdedoras',v:losses.length,c:'#ff4d6d'},
-                              {l:'Flotante',v:floatPnl>=0?'+€'+Math.round(floatPnl):'-€'+Math.round(Math.abs(floatPnl)),c:floatPnl>=0?'#00e5a0':'#ffd166'},
-                            ].map(({l,v,c})=>(
-                              <div key={l} style={{padding:'10px 12px',background:'var(--bg2)',display:'flex',flexDirection:'column',gap:3}}>
-                                <span style={{fontFamily:MONO,fontSize:8,color:'#3d5a7a',textTransform:'uppercase',letterSpacing:'0.08em'}}>{l}</span>
-                                <span style={{fontFamily:MONO,fontSize:13,fontWeight:700,color:c}}>{v}</span>
-                              </div>
-                            ))}
-                          </div>
+
                           {/* Equity curve — P&L acumulado */}
                           {equityCurve.length>1&&<TlEquityChart curve={equityCurve}/>}
                           {/* Capital Invertido vs Profit */}
@@ -6690,41 +6696,99 @@ export default function Home() {
                     const cagrReal=aniosPeriodo&&pnlTotal!==0?
                       (Math.pow(Math.max((capitalBase+pnlTotal)/capitalBase,0.001),1/aniosPeriodo)-1)*100:null
                     const fmtEur=v=>v>=0?'+€'+Math.round(v):'-€'+Math.round(Math.abs(v))
+                    // Max DD como % sobre capital base
+                    const maxDDPct=maxDD>0&&capitalBase>0?(maxDD/capitalBase*100):0
+                    // Mejor/Peor usa _eff_pnl (incluye flotante de abiertas)
+                    const bestV=bestT?bestT._eff_pnl:null
+                    const worstV=worstT?worstT._eff_pnl:null
                     const rows=[
-                      {l:'Total Operaciones',                 v:all.length,                                             c:'#ffd166'},
-                      {l:'Capital Empleado',                  v:capitalEmp>0?'€'+Math.round(capitalEmp).toLocaleString('es-ES'):'—', c:'#00d4ff'},
-                      {l:'Tiempo Invertido ('+aniosInv.toFixed(2)+'a)', v:tiempoInvPct!=null?tiempoInvPct+'%':'—',     c:'#ffd166'},
-                      {l:'Ganadoras',                         v:wins.length,                                            c:'#00e5a0'},
-                      {l:'Perdedoras',                        v:losses.length,                                          c:'#ff4d6d'},
-                      {l:'Win Rate',                          v:closed.length?wr.toFixed(1)+'%':'—',                    c:wr>=50?'#00e5a0':'#ff4d6d'},
-                      {l:'Ganancia Media (%)',                 v:avgWinPct>0?'+'+avgWinPct.toFixed(2)+'%':'—',           c:'#00e5a0'},
-                      {l:'Pérdida Media (%)',                  v:avgLossPct>0?avgLossPct.toFixed(2)+'%':'—',             c:'#ff4d6d'},
-                      {l:'Días Promedio',                     v:diasProm!=null?diasProm.toFixed(2):'—',                  c:'#00d4ff'},
-                      {l:'Total Días Invertido',              v:totalDias,                                               c:'#00d4ff'},
-                      {l:'P&L realizado',                     v:fmtEur(pnlReal),                                         c:pnlReal>=0?'#00e5a0':'#ff4d6d'},
-                      {l:'P&L flotante',                      v:fmtEur(pnlFloat),                                        c:pnlFloat>=0?'#00e5a0':'#ffd166'},
-                      {l:'P&L total',                         v:fmtEur(pnlReal+pnlFloat),                                c:(pnlReal+pnlFloat)>=0?'#00e5a0':'#ff4d6d'},
-                      {l:'Comisiones',                        v:commTotal>0?'-€'+commTotal.toFixed(2):'—',                c:'#ff4d6d'},
-                      {l:'Factor Beneficio',                  v:factorBen!=null?factorBen.toFixed(2):'—',                c:factorBen!=null&&factorBen>=1?'#00e5a0':'#ff4d6d'},
-                      {l:'CAGR ('+( aniosPeriodo?aniosPeriodo.toFixed(2):'—')+'a)',
-                                                              v:cagrReal!=null?(cagrReal>=0?'+':'')+cagrReal.toFixed(2)+'%':'—',c:cagrReal!=null&&cagrReal>=0?'#00e5a0':'#ff4d6d'},
-                      {l:'Max Drawdown',                      v:maxDD>0?'-€'+Math.round(maxDD):'—',                       c:'#ff4d6d'},
-                      {l:'Mejor op.',                         v:bestT?bestT.symbol+' +€'+Math.round(bestT.pnl_eur||0):'—',c:'#00e5a0'},
-                      {l:'Peor op.',                          v:worstT?worstT.symbol+' -€'+Math.round(Math.abs(worstT.pnl_eur||0)):'—',c:'#ff4d6d'},
+                      {l:'Total Operaciones',
+                       v:(open.length+' ab. / '+closed.length+' cerr.'),
+                       c:'#ffd166',
+                       tip:'Total posiciones registradas. Abiertas = en cartera ahora. Cerradas = ya liquidadas.'},
+                      {l:'Capital Empleado',
+                       v:capitalEmp>0?'€'+Math.round(capitalEmp).toLocaleString('es-ES'):'—',
+                       c:'#00d4ff',
+                       tip:'Suma del capital actual en posiciones abiertas (acciones × precio entrada ÷ FX). No incluye P&L flotante.'},
+                      {l:'Tiempo Invertido ('+aniosInv.toFixed(2)+'a)',
+                       v:tiempoInvPct!=null?tiempoInvPct+'%':'—',
+                       c:'#ffd166',
+                       tip:'Días totales con capital invertido ÷ días totales del periodo. Incluye días en curso de posiciones abiertas.'},
+                      {l:'Ganadoras',
+                       v:wins.length,
+                       c:'#00e5a0',
+                       tip:'Ops con P&L ≥ 0. Cerradas: P&L realizado. Abiertas: P&L flotante actual.'},
+                      {l:'Perdedoras',
+                       v:losses.length,
+                       c:'#ff4d6d',
+                       tip:'Ops con P&L < 0. Cerradas: P&L realizado. Abiertas: P&L flotante actual.'},
+                      {l:'Win Rate',
+                       v:allWithPnl.length?wr.toFixed(1)+'%':'—',
+                       c:wr>=50?'#00e5a0':'#ff4d6d',
+                       tip:'Ganadoras ÷ total ops × 100. Incluye cerradas (P&L real) y abiertas (flotante). Mejora al cerrar las abiertas en positivo.'},
+                      {l:'Ganancia Media (%)',
+                       v:avgWinPct>0?'+'+avgWinPct.toFixed(2)+'%':'—',
+                       c:'#00e5a0',
+                       tip:'Media del % de ganancia de todas las ops ganadoras. Cerradas: pnl_pct. Abiertas: % flotante actual sobre precio entrada.'},
+                      {l:'Pérdida Media (%)',
+                       v:avgLossPct>0?avgLossPct.toFixed(2)+'%':'—',
+                       c:'#ff4d6d',
+                       tip:'Media del % de pérdida (en valor absoluto) de todas las ops perdedoras. Incluye abiertas en negativo.'},
+                      {l:'Días Promedio',
+                       v:diasProm!=null?Math.round(diasProm)+' d':'—',
+                       c:'#00d4ff',
+                       tip:'Media de días por operación. Cerradas: días entre entrada y salida. Abiertas: días hasta hoy.'},
+                      {l:'Total Días Invertido',
+                       v:totalDias+' d',
+                       c:'#00d4ff',
+                       tip:'Suma de todos los días individuales invertidos. Si tienes 2 ops simultáneas de 5 días cada una, cuenta 10 días.'},
+                      {l:'P&L realizado',
+                       v:fmtEur(pnlReal),
+                       c:pnlReal>=0?'#00e5a0':'#ff4d6d',
+                       tip:'Suma del P&L neto de todas las operaciones cerradas (ya descontadas comisiones si están en pnl_eur).'},
+                      {l:'P&L flotante',
+                       v:fmtEur(pnlFloat),
+                       c:pnlFloat>=0?'#00e5a0':'#ffd166',
+                       tip:'P&L no realizado de las posiciones abiertas. Calculado como (precio actual − precio entrada) × acciones ÷ FX.'},
+                      {l:'P&L total',
+                       v:fmtEur(pnlTotal),
+                       c:pnlTotal>=0?'#00e5a0':'#ff4d6d',
+                       tip:'P&L realizado + P&L flotante. Representa el resultado global de toda la cartera en este momento.'},
+                      {l:'Comisiones',
+                       v:commTotal>0?'-€'+commTotal.toFixed(2):'—',
+                       c:'#ff4d6d',
+                       tip:'Suma de commission_buy + commission_sell de todas las operaciones. No están descontadas del P&L mostrado si usas pnl_eur bruto.'},
+                      {l:'Factor Beneficio',
+                       v:factorBen!=null?factorBen.toFixed(2):'—',
+                       c:factorBen!=null&&factorBen>=1?'#00e5a0':'#ff4d6d',
+                       tip:'Ganancia media € ganador ÷ pérdida media € perdedor. >1 = expectativa positiva. Incluye abiertas por su flotante actual.'},
+                      {l:'CAGR ('+(aniosPeriodo?aniosPeriodo.toFixed(2):'—')+'a)',
+                       v:cagrReal!=null?(cagrReal>=0?'+':'')+cagrReal.toFixed(2)+'%':'—',
+                       c:cagrReal!=null&&cagrReal>=0?'#00e5a0':'#ff4d6d',
+                       tip:'Tasa anual compuesta: ((Capital+P&LTotal)/Capital)^(1/años)−1. Periodo: primera entrada hasta hoy. Base: capital empleado actual (o 10.000€ si no hay abiertas).'},
+                      {l:'Max Drawdown',
+                       v:maxDD>0?('-€'+Math.round(maxDD)+' ('+maxDDPct.toFixed(1)+'%)'):'—',
+                       c:'#ff4d6d',
+                       tip:'Mayor caída desde un pico de P&L hasta el valle siguiente, calculado sobre las ops cerradas ordenadas por fecha de salida. El flotante no se incluye (es dinámico).'},
+                      {l:'Mejor op.',
+                       v:bestT?(bestT.symbol+' '+(bestV>=0?'+':'')+fmtEur(bestV)):'—',
+                       c:'#00e5a0',
+                       tip:'Operación con mayor P&L €. Incluye abiertas por su flotante actual. Si está abierta, el resultado puede cambiar.'},
+                      {l:'Peor op.',
+                       v:worstT?(worstT.symbol+' '+fmtEur(worstV)):'—',
+                       c:'#ff4d6d',
+                       tip:'Operación con peor P&L €. Incluye abiertas por su flotante actual. Si está abierta, el resultado puede cambiar.'},
                     ]
                     return(
                       <div style={{flex:tlSelected?'0 0 auto':1,overflowY:'auto',borderBottom:tlSelected?'1px solid var(--border)':'none'}}>
                         <div style={{padding:'6px 10px',borderBottom:'1px solid var(--border)',fontFamily:MONO,fontSize:8,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',display:'flex',justifyContent:'space-between'}}>
-                          <span>Resumen</span>
+                          <span>Resumen · {open.length}ab/{closed.length}cerr</span>
                           <span style={{color:'#1a3a5a'}}>{all.length} ops</span>
                         </div>
                         <table style={{width:'100%',borderCollapse:'collapse'}}>
                           <tbody>
-                            {rows.map(({l,v,c})=>(
-                              <tr key={l} style={{borderBottom:'1px solid rgba(26,45,69,0.5)'}}>
-                                <td style={{padding:'4px 10px',fontFamily:MONO,fontSize:10,color:'#4a7a95'}}>{l}</td>
-                                <td style={{padding:'4px 10px',textAlign:'right',fontFamily:MONO,fontSize:10,fontWeight:700,color:c}}>{v}</td>
-                              </tr>
+                            {rows.map(({l,v,c,tip})=>(
+                              <MetricRow key={l} label={l} value={v} color={c} tip={tip}/>
                             ))}
                           </tbody>
                         </table>
