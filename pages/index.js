@@ -6312,37 +6312,46 @@ export default function Home() {
                     </div>
                     {(()=>{
                       const exportCSV = () => {
-                        const headers = ['#','Símbolo','Nombre','Broker','Estado','Entrada','Salida','Acciones','Px Entrada','Capital inv. (€)','Px Salida','Divisa','FX entrada','Comisión (€)','P&L (€)','P&L (%)','Días','Estrategia','Notas']
-                        const rows = tlTrades.map((t,i)=>{
-                          let fx=parseFloat(t.fx_entry||1); if(fx<1)fx=1/fx
-                          const cap = (parseFloat(t.shares||0)*parseFloat(t.entry_price||0)/fx).toFixed(0)
-                          const dias = t.entry_date&&t.exit_date?Math.round((new Date(t.exit_date)-new Date(t.entry_date))/86400000):''
-                          const comm = (parseFloat(t.commission_buy||0)+parseFloat(t.commission_sell||0)).toFixed(2)
+                        const SEP = ','
+                        const NL  = '\r\n'
+                        const esc = function(v) {
+                          var s = v == null ? '' : String(v)
+                          return '"' + s.replace(/"/g, '""') + '"'
+                        }
+                        var headers = ['#','Simbolo','Nombre','Broker','Estado','Entrada','Salida','Acciones','Px Entrada','Capital inv EUR','Px Salida','Divisa','FX entrada','Comision EUR','PnL EUR','PnL pct','Dias','Estrategia','Notas']
+                        var rows = tlTrades.map(function(t,i) {
+                          var fx = parseFloat(t.fx_entry||1); if(fx<1) fx=1/fx
+                          var cap = (parseFloat(t.shares||0)*parseFloat(t.entry_price||0)/fx).toFixed(0)
+                          var dias = t.entry_date&&t.exit_date ? Math.round((new Date(t.exit_date)-new Date(t.entry_date))/86400000) : ''
+                          var comm = (parseFloat(t.commission_buy||0)+parseFloat(t.commission_sell||0)).toFixed(2)
+                          var notes = (t.notes||'').split('\n').join(' ').split('\r').join('')
                           return [
                             i+1, t.symbol||'', t.name||'', t.broker||'', t.status||'',
                             t.entry_date||'', t.exit_date||'', t.shares||'',
-                            t.entry_price!=null?parseFloat(t.entry_price).toFixed(2):'',
+                            t.entry_price!=null ? parseFloat(t.entry_price).toFixed(2) : '',
                             cap,
-                            t.exit_price!=null?parseFloat(t.exit_price).toFixed(2):'',
+                            t.exit_price!=null ? parseFloat(t.exit_price).toFixed(2) : '',
                             t.entry_currency||'', fx.toFixed(4), comm,
-                            t.pnl_eur!=null?parseFloat(t.pnl_eur).toFixed(2):'',
-                            t.pnl_pct!=null?parseFloat(t.pnl_pct).toFixed(2)+'%':'',
-                            dias, t.strategy||'', (t.notes||'').replace(/[\n\r,]/g,' ')
+                            t.pnl_eur!=null ? parseFloat(t.pnl_eur).toFixed(2) : '',
+                            t.pnl_pct!=null ? parseFloat(t.pnl_pct).toFixed(2)+'%' : '',
+                            dias, t.strategy||'', notes
                           ]
                         })
-                        const csv = [headers,...rows].map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('
-')
-                        const blob = new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'})
-                        const url = URL.createObjectURL(blob)
-                        const a = document.createElement('a')
-                        a.href=url; a.download=`tradelog_${new Date().toISOString().slice(0,10)}.csv`
-                        a.click(); URL.revokeObjectURL(url)
+                        var allRows = [headers].concat(rows)
+                        var csv = allRows.map(function(r){ return r.map(esc).join(SEP) }).join(NL)
+                        var blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8'})
+                        var url = URL.createObjectURL(blob)
+                        var a = document.createElement('a')
+                        a.href = url
+                        a.download = 'tradelog_'+new Date().toISOString().slice(0,10)+'.csv'
+                        a.click()
+                        URL.revokeObjectURL(url)
                       }
-                      const exportJSON = () => {
+                                            const exportJSON = () => {
                         const blob = new Blob([JSON.stringify(tlTrades,null,2)],{type:'application/json'})
                         const url = URL.createObjectURL(blob)
                         const a = document.createElement('a')
-                        a.href=url; a.download=`tradelog_${new Date().toISOString().slice(0,10)}.json`
+                        a.href=url; a.download='tradelog_'+new Date().toISOString().slice(0,10)+'.json'
                         a.click(); URL.revokeObjectURL(url)
                       }
                       return (
