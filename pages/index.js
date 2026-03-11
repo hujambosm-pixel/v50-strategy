@@ -4465,7 +4465,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.50</title>
+        <title>Trading Simulator V4.51</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4528,7 +4528,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.50
+            <span className="dot"/>Trading Simulator V4.51
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6355,7 +6355,7 @@ export default function Home() {
                   </div>
                 )}
 
-                  </div>){/* end ops/open inner div */}
+                  </div>)
                 {/* IMPORTAR */}
                 {tlTab==='import'&&(
                   <div style={{flex:1,display:'flex',flexDirection:'column',padding:'16px',gap:12,overflowY:'auto'}}>
@@ -6639,7 +6639,7 @@ export default function Home() {
                 )}
 
 
-                                </div>{/* end columna central outer */}
+                                </div>
                 {/* COLUMNA DERECHA — métricas siempre + detalle trade */}
                 <div style={{width:270,flexShrink:0,borderLeft:'1px solid var(--border)',background:'var(--bg2)',display:'flex',flexDirection:'column',overflow:'hidden'}}>
                   {/* ── MÉTRICAS SIEMPRE VISIBLES — incluye flotantes ── */}
