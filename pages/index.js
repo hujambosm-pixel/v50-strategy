@@ -3043,6 +3043,42 @@ function ContextThemeMenu({ x, y, section, onClose, onSave }) {
 }
 
 // ── Main ─────────────────────────────────────────────────────
+// ── TlEquityChart — equity curve from real tradelog ─────────────────────────
+function TlEquityChart({ curve }) {
+  const ref = useRef(null), chartRef = useRef(null)
+  useEffect(()=>{
+    if(!ref.current||!curve?.length) return
+    import('lightweight-charts').then(({createChart,CrosshairMode,LineStyle})=>{
+      if(chartRef.current){chartRef.current.remove();chartRef.current=null}
+      const chart = createChart(ref.current,{
+        width:ref.current.clientWidth, height:220,
+        layout:{background:{color:'#080c14'},textColor:'#7a9bc0'},
+        grid:{vertLines:{color:'#0d1520'},horzLines:{color:'#0d1520'}},
+        crosshair:{mode:CrosshairMode.Normal},
+        rightPriceScale:{borderColor:'#1a2d45'},
+        timeScale:{borderColor:'#1a2d45',timeVisible:false},
+        localization:{priceFormatter:v=>`€${Math.round(v)}`},
+      })
+      chartRef.current = chart
+      // Zero line
+      chart.addLineSeries({color:'#2a3f55',lineWidth:1,lineStyle:LineStyle.Dotted,lastValueVisible:false,priceLineVisible:false})
+        .setData([{time:curve[0].date,value:0},{time:curve[curve.length-1].date,value:0}])
+      // Equity line (color by final P&L)
+      const finalVal = curve[curve.length-1].value
+      const lineColor = finalVal >= 0 ? '#00e5a0' : '#ff4d6d'
+      chart.addLineSeries({color:lineColor,lineWidth:2,lastValueVisible:true,priceLineVisible:false})
+        .setData(curve.map(p=>({time:p.date,value:p.value})))
+      chart.timeScale().fitContent()
+      const ro = new ResizeObserver(()=>{ if(ref.current) chart.applyOptions({width:ref.current.clientWidth}) })
+      ro.observe(ref.current)
+      return ()=>ro.disconnect()
+    })
+    return ()=>{ if(chartRef.current){chartRef.current.remove();chartRef.current=null} }
+  },[curve])
+  return <div ref={ref} style={{minHeight:220,borderTop:'1px solid var(--border)'}}/>
+}
+
+
 export default function Home() {
   const [simbolo,setSimbolo]=useState('^GSPC')
   const [symSearchOpen,setSymSearchOpen]=useState(false)
@@ -3210,7 +3246,7 @@ export default function Home() {
   const [tlLoading,setTlLoading]=useState(false)
   const [tlError,setTlError]=useState(null)
   const [tlSelected,setTlSelected]=useState(null)      // trade seleccionado en detalle
-  const [tlTab,setTlTab]=useState('ops')               // 'ops'|'open'|'import'|'stats'
+  const [tlTab,setTlTab]=useState('ops')               // 'ops'|'open'|'import'|'export'|'dashboard'
   const [tlFilterBroker,setTlFilterBroker]=useState('')
   const [tlFilterYear,setTlFilterYear]=useState('')
   const [tlFilterType,setTlFilterType]=useState('')
@@ -4363,7 +4399,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.42</title>
+        <title>Trading Simulator V4.43</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4426,7 +4462,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.42
+            <span className="dot"/>Trading Simulator V4.43
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5246,7 +5282,7 @@ export default function Home() {
                 </div>
                 {/* Subtabs */}
                 <div style={{display:'flex',borderBottom:'1px solid var(--border)',flexShrink:0}}>
-                  {[{id:'ops',label:'Ops'},{id:'open',label:'Abiertas'},{id:'import',label:'Import'},{id:'stats',label:'Stats'}].map(t=>(
+                  {[{id:'ops',label:'Ops'},{id:'open',label:'Abiertas'},{id:'import',label:'Import'},{id:'export',label:'Export'},{id:'dashboard',label:'Dashboard'}].map(t=>(
                     <button key={t.id} onClick={()=>setTlTab(t.id)}
                       style={{flex:1,padding:'8px 2px',fontFamily:MONO,fontSize:9,cursor:'pointer',
                         background:tlTab===t.id?'rgba(155,114,255,0.08)':'transparent',
@@ -5334,14 +5370,7 @@ export default function Home() {
                     </div>
                   )
                 })()}
-                {/* Nueva operación */}
-                <div style={{padding:'8px',borderTop:'1px solid var(--border)',flexShrink:0}}>
-                  <button onClick={()=>{const _df=tlDefaultForm();setTlForm(_df);setTlFormOpen(true);if(_df.entry_currency&&_df.entry_currency!=='EUR')tlFetchFx(_df.entry_currency,_df.entry_date)}}
-                    style={{width:'100%',fontFamily:MONO,fontSize:11,padding:'7px',borderRadius:4,cursor:'pointer',
-                      background:'rgba(155,114,255,0.15)',border:'1px solid #9b72ff',color:'#9b72ff',fontWeight:700}}>
-                    + Nueva operación
-                  </button>
-                </div>
+
                 {tlError&&<div style={{padding:'4px 8px',fontFamily:MONO,fontSize:10,color:'#ff4d6d'}}>⚠ {tlError}</div>}
               </div>
             )}
@@ -6080,10 +6109,10 @@ export default function Home() {
                       )
                     })()}
 
-                    {/* Búsqueda inline */}
+                    {/* Búsqueda inline + Nueva operación */}
                     <div style={{padding:'5px 8px',borderBottom:'1px solid var(--border)',flexShrink:0,display:'flex',gap:6,alignItems:'center'}}>
                       <input type="text" placeholder="🔍 Buscar símbolo..." value={tlSearch} onChange={e=>setTlSearch(e.target.value)}
-                        style={{flex:1,background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'3px 8px',borderRadius:4}}/>
+                        style={{flex:1,background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'4px 8px',borderRadius:4}}/>
                       <span style={{fontFamily:MONO,fontSize:10,color:'#3d5a7a',flexShrink:0}}>
                         {tlTrades.filter(t=>{
                           if(tlTab==='open'&&t.status!=='open') return false
@@ -6092,6 +6121,11 @@ export default function Home() {
                         }).length} ops
                       </span>
                       {tlLoading&&<span style={{fontFamily:MONO,fontSize:11,color:'#9b72ff',flexShrink:0}}>⟳</span>}
+                      <button onClick={()=>{const _df=tlDefaultForm();setTlForm(_df);setTlFormOpen(true);if(_df.entry_currency&&_df.entry_currency!=='EUR')tlFetchFx(_df.entry_currency,_df.entry_date)}}
+                        style={{flexShrink:0,fontFamily:MONO,fontSize:11,padding:'4px 11px',borderRadius:4,cursor:'pointer',
+                          background:'rgba(155,114,255,0.15)',border:'1px solid #9b72ff',color:'#9b72ff',fontWeight:700,whiteSpace:'nowrap'}}>
+                        + Nueva op.
+                      </button>
                     </div>
 
                     {/* Tabla */}
@@ -6269,89 +6303,149 @@ export default function Home() {
                   </div>
                 )}
 
-                {/* ESTADÍSTICAS (básico) */}
-                {tlTab==='stats'&&(
-                  <div style={{flex:1,display:'flex',flexDirection:'column',padding:'16px',gap:16,overflowY:'auto'}}>
-                    <div style={{fontFamily:MONO,fontSize:13,color:'#c8dff5',fontWeight:700}}>📈 Estadísticas</div>
+                {/* EXPORT */}
+                {tlTab==='export'&&(
+                  <div style={{flex:1,display:'flex',flexDirection:'column',padding:'20px',gap:16,overflowY:'auto'}}>
+                    <div style={{fontFamily:MONO,fontSize:13,color:'#c8dff5',fontWeight:700}}>📤 Exportar operaciones</div>
+                    <div style={{fontFamily:MONO,fontSize:11,color:'#5a8aaa'}}>
+                      Descarga el historial completo en formato Excel/CSV.
+                    </div>
                     {(()=>{
-                      const closed=tlTrades.filter(t=>t.status==='closed')
-                      if(!closed.length) return <div style={{fontFamily:MONO,fontSize:12,color:'#3d5a7a'}}>Sin operaciones cerradas.</div>
-                      const wins=closed.filter(t=>(t.pnl_eur||0)>=0)
-                      const losses=closed.filter(t=>(t.pnl_eur||0)<0)
-                      const pnlTotal=closed.reduce((s,t)=>s+(t.pnl_eur||0),0)
-                      const avgWin=wins.length?wins.reduce((s,t)=>s+(t.pnl_pct||0),0)/wins.length:0
-                      const avgLoss=losses.length?losses.reduce((s,t)=>s+(t.pnl_pct||0),0)/losses.length:0
-                      const avgDias=closed.reduce((s,t)=>s+(t.entry_date&&t.exit_date?Math.round((new Date(t.exit_date)-new Date(t.entry_date))/86400000):0),0)/closed.length
-                      const byBroker=TL_BROKERS.map(b=>({
-                        broker:b, count:closed.filter(t=>t.broker===b).length,
-                        pnl:closed.filter(t=>t.broker===b).reduce((s,t)=>s+(t.pnl_eur||0),0)
-                      })).filter(x=>x.count>0)
-                      // P&L por mes
-                      const byMonth={}
-                      closed.forEach(t=>{
-                        const m=t.exit_date?.slice(0,7)
-                        if(m){ if(!byMonth[m]) byMonth[m]=0; byMonth[m]+=(t.pnl_eur||0) }
-                      })
-                      const months=Object.entries(byMonth).sort(([a],[b])=>a.localeCompare(b))
-                      const maxAbs=Math.max(...months.map(([,v])=>Math.abs(v)),1)
-                      return(
-                        <div style={{display:'flex',gap:16,flexWrap:'wrap'}}>
-                          {/* KPIs */}
-                          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,minWidth:320}}>
-                            {[
-                              ['Total cerradas',closed.length,'#ffd166'],
-                              ['Win Rate',`${(wins.length/closed.length*100).toFixed(1)}%`,wins.length/closed.length>=0.5?'#00e5a0':'#ff4d6d'],
-                              ['P&L total',`€${pnlTotal>=0?'+':''}${Math.round(pnlTotal)}`,pnlTotal>=0?'#00e5a0':'#ff4d6d'],
-                              ['Ganancia media',`+${avgWin.toFixed(2)}%`,'#00e5a0'],
-                              ['Pérdida media',`${avgLoss.toFixed(2)}%`,'#ff4d6d'],
-                              ['Días promedio',`${avgDias.toFixed(0)}d`,'#00d4ff'],
-                            ].map(([l,v,c])=>(
-                              <div key={l} style={{background:'var(--bg2)',border:'1px solid var(--border)',borderRadius:4,padding:'10px 12px'}}>
-                                <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',letterSpacing:'0.08em',textTransform:'uppercase'}}>{l}</div>
-                                <div style={{fontFamily:MONO,fontSize:16,fontWeight:700,color:c,marginTop:3}}>{v}</div>
-                              </div>
-                            ))}
+                      const exportCSV = () => {
+                        const headers = ['#','Símbolo','Nombre','Broker','Estado','Entrada','Salida','Acciones','Px Entrada','Capital inv. (€)','Px Salida','Divisa','FX entrada','Comisión (€)','P&L (€)','P&L (%)','Días','Estrategia','Notas']
+                        const rows = tlTrades.map((t,i)=>{
+                          let fx=parseFloat(t.fx_entry||1); if(fx<1)fx=1/fx
+                          const cap = (parseFloat(t.shares||0)*parseFloat(t.entry_price||0)/fx).toFixed(0)
+                          const dias = t.entry_date&&t.exit_date?Math.round((new Date(t.exit_date)-new Date(t.entry_date))/86400000):''
+                          const comm = (parseFloat(t.commission_buy||0)+parseFloat(t.commission_sell||0)).toFixed(2)
+                          return [
+                            i+1, t.symbol||'', t.name||'', t.broker||'', t.status||'',
+                            t.entry_date||'', t.exit_date||'', t.shares||'',
+                            t.entry_price!=null?parseFloat(t.entry_price).toFixed(2):'',
+                            cap,
+                            t.exit_price!=null?parseFloat(t.exit_price).toFixed(2):'',
+                            t.entry_currency||'', fx.toFixed(4), comm,
+                            t.pnl_eur!=null?parseFloat(t.pnl_eur).toFixed(2):'',
+                            t.pnl_pct!=null?parseFloat(t.pnl_pct).toFixed(2)+'%':'',
+                            dias, t.strategy||'', (t.notes||'').replace(/[
+
+,]/g,' ')
+                          ]
+                        })
+                        const csv = [headers,...rows].map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('
+')
+                        const blob = new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'})
+                        const url = URL.createObjectURL(blob)
+                        const a = document.createElement('a')
+                        a.href=url; a.download=`tradelog_${new Date().toISOString().slice(0,10)}.csv`
+                        a.click(); URL.revokeObjectURL(url)
+                      }
+                      const exportJSON = () => {
+                        const blob = new Blob([JSON.stringify(tlTrades,null,2)],{type:'application/json'})
+                        const url = URL.createObjectURL(blob)
+                        const a = document.createElement('a')
+                        a.href=url; a.download=`tradelog_${new Date().toISOString().slice(0,10)}.json`
+                        a.click(); URL.revokeObjectURL(url)
+                      }
+                      return (
+                        <div style={{display:'flex',flexDirection:'column',gap:12,maxWidth:360}}>
+                          <div style={{padding:'14px',background:'var(--bg2)',borderRadius:6,border:'1px solid var(--border)'}}>
+                            <div style={{fontFamily:MONO,fontSize:11,color:'#c8dff5',fontWeight:700,marginBottom:4}}>📊 CSV / Excel</div>
+                            <div style={{fontFamily:MONO,fontSize:10,color:'#5a8aaa',marginBottom:10}}>
+                              Compatible con Excel, Google Sheets y Numbers. Incluye todas las columnas del historial.
+                            </div>
+                            <button onClick={exportCSV}
+                              style={{fontFamily:MONO,fontSize:11,padding:'7px 16px',borderRadius:4,cursor:'pointer',
+                                background:'rgba(0,229,160,0.12)',border:'1px solid #00e5a0',color:'#00e5a0',fontWeight:700}}>
+                              ⬇ Descargar CSV ({tlTrades.length} ops)
+                            </button>
                           </div>
-                          {/* P&L por mes */}
-                          {months.length>1&&(
-                            <div style={{flex:1,minWidth:300}}>
-                              <div style={{fontFamily:MONO,fontSize:10,color:'#3d5a7a',letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:8}}>P&L por mes</div>
-                              <div style={{display:'flex',flexDirection:'column',gap:4}}>
-                                {months.map(([m,v])=>(
-                                  <div key={m} style={{display:'flex',alignItems:'center',gap:8}}>
-                                    <span style={{fontFamily:MONO,fontSize:10,color:'#7a9bc0',width:55,flexShrink:0}}>{m}</span>
-                                    <div style={{flex:1,height:16,background:'var(--bg3)',borderRadius:3,overflow:'hidden'}}>
-                                      <div style={{height:'100%',width:`${Math.abs(v)/maxAbs*100}%`,
-                                        background:v>=0?'#00e5a0':'#ff4d6d',borderRadius:3,minWidth:2}}/>
-                                    </div>
-                                    <span style={{fontFamily:MONO,fontSize:10,fontWeight:700,color:v>=0?'#00e5a0':'#ff4d6d',width:70,textAlign:'right',flexShrink:0}}>
-                                      {v>=0?'+':''}€{Math.round(Math.abs(v))}
-                                    </span>
-                                  </div>
-                                ))}
-                              </div>
+                          <div style={{padding:'14px',background:'var(--bg2)',borderRadius:6,border:'1px solid var(--border)'}}>
+                            <div style={{fontFamily:MONO,fontSize:11,color:'#c8dff5',fontWeight:700,marginBottom:4}}>🗂 JSON (backup)</div>
+                            <div style={{fontFamily:MONO,fontSize:10,color:'#5a8aaa',marginBottom:10}}>
+                              Exporta todos los campos incluyendo notas, fills e IDs. Útil como copia de seguridad manual.
                             </div>
-                          )}
-                          {/* Por broker */}
-                          {byBroker.length>1&&(
-                            <div style={{minWidth:200}}>
-                              <div style={{fontFamily:MONO,fontSize:10,color:'#3d5a7a',letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:8}}>Por broker</div>
-                              {byBroker.map(({broker,count,pnl})=>(
-                                <div key={broker} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'5px 0',borderBottom:'1px solid var(--border)'}}>
-                                  <span style={{fontFamily:MONO,fontSize:10,color:TL_COLORS[broker]||'#7a9bc0',fontWeight:700}}>{TL_LABEL[broker]}</span>
-                                  <span style={{fontFamily:MONO,fontSize:10,color:'#5a8aaa'}}>{count} ops</span>
-                                  <span style={{fontFamily:MONO,fontSize:11,fontWeight:700,color:pnl>=0?'#00e5a0':'#ff4d6d'}}>
-                                    {pnl>=0?'+':''}€{Math.round(Math.abs(pnl))}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
+                            <button onClick={exportJSON}
+                              style={{fontFamily:MONO,fontSize:11,padding:'7px 16px',borderRadius:4,cursor:'pointer',
+                                background:'rgba(0,212,255,0.08)',border:'1px solid #00d4ff',color:'#00d4ff',fontWeight:700}}>
+                              ⬇ Descargar JSON ({tlTrades.length} ops)
+                            </button>
+                          </div>
                         </div>
                       )
                     })()}
                   </div>
                 )}
+
+                {/* DASHBOARD */}
+                {tlTab==='dashboard'&&(
+                  <div style={{flex:1,display:'flex',flexDirection:'column',gap:0,overflowY:'auto'}}>
+                    {(()=>{
+                      const closed = tlTrades.filter(t=>t.status==='closed'&&t.pnl_eur!=null&&t.entry_date)
+                        .sort((a,b)=>a.entry_date.localeCompare(b.entry_date))
+                      if(!closed.length) return (
+                        <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:MONO,fontSize:12,color:'#3d5a7a'}}>
+                          Sin operaciones cerradas para mostrar el dashboard.
+                        </div>
+                      )
+                      // Build equity curve
+                      let capital = 0
+                      const equityCurve = closed.map(t=>{
+                        capital += parseFloat(t.pnl_eur||0)
+                        return {date:t.exit_date||t.entry_date, value:capital, trade:t}
+                      })
+                      const wins = closed.filter(t=>(t.pnl_eur||0)>=0)
+                      const losses = closed.filter(t=>(t.pnl_eur||0)<0)
+                      const totalPnl = closed.reduce((s,t)=>s+(t.pnl_eur||0),0)
+                      const avgWin = wins.length?wins.reduce((s,t)=>s+(t.pnl_eur||0),0)/wins.length:0
+                      const avgLoss = losses.length?losses.reduce((s,t)=>s+Math.abs(t.pnl_eur||0),0)/losses.length:0
+                      const factorBen = avgLoss>0?avgWin/avgLoss:0
+                      const bestTrade = closed.reduce((b,t)=>(t.pnl_eur||0)>(b.pnl_eur||0)?t:b, closed[0])
+                      const worstTrade = closed.reduce((b,t)=>(t.pnl_eur||0)<(b.pnl_eur||0)?t:b, closed[0])
+                      // Max DD
+                      let peak=0, maxDD=0
+                      equityCurve.forEach(p=>{if(p.value>peak)peak=p.value;const dd=peak-p.value;if(dd>maxDD)maxDD=dd})
+                      return (
+                        <div style={{display:'flex',flexDirection:'column',gap:0}}>
+                          {/* KPIs */}
+                          <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:1,background:'var(--border)',borderBottom:'1px solid var(--border)'}}>
+                            {[
+                              {l:'P&L Total',v:`${totalPnl>=0?'+':''}€${Math.round(totalPnl)}`,c:totalPnl>=0?'#00e5a0':'#ff4d6d'},
+                              {l:'Win Rate',v:`${closed.length?Math.round(wins.length/closed.length*100):0}%`,c:wins.length/closed.length>=0.5?'#00e5a0':'#ff4d6d'},
+                              {l:'Factor Ben.',v:factorBen.toFixed(2),c:factorBen>=1?'#00e5a0':'#ff4d6d'},
+                              {l:'Max DD',v:`-€${Math.round(maxDD)}`,c:'#ff4d6d'},
+                              {l:'Operaciones',v:closed.length,c:'#ffd166'},
+                              {l:'Ganadoras',v:wins.length,c:'#00e5a0'},
+                              {l:'Perdedoras',v:losses.length,c:'#ff4d6d'},
+                              {l:'Mejor op.',v:`${bestTrade.symbol} ${bestTrade.pnl_pct!=null?`+${parseFloat(bestTrade.pnl_pct).toFixed(1)}%`:''}`,c:'#00e5a0'},
+                            ].map(({l,v,c})=>(
+                              <div key={l} style={{padding:'10px 12px',background:'var(--bg2)',display:'flex',flexDirection:'column',gap:3}}>
+                                <span style={{fontFamily:MONO,fontSize:8,color:'#3d5a7a',textTransform:'uppercase',letterSpacing:'0.08em'}}>{l}</span>
+                                <span style={{fontFamily:MONO,fontSize:13,fontWeight:700,color:c}}>{v}</span>
+                              </div>
+                            ))}
+                          </div>
+                          {/* Equity curve */}
+                          <TlEquityChart curve={equityCurve}/>
+                          {/* Barras P&L por trade */}
+                          <div style={{padding:'12px 16px 8px',borderTop:'1px solid var(--border)'}}>
+                            <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:8}}>P&L por operación</div>
+                            <div style={{display:'flex',alignItems:'flex-end',gap:2,height:60}}>
+                              {closed.map((t,i)=>{
+                                const mx=Math.max(...closed.map(x=>Math.abs(x.pnl_eur||0)),1)
+                                const h=Math.max(3,Math.abs(t.pnl_eur||0)/mx*56)
+                                const isW=(t.pnl_eur||0)>=0
+                                return <div key={i} title={`${t.symbol} ${isW?'+':''}€${Math.round(t.pnl_eur||0)}`}
+                                  style={{flex:1,height:h,background:isW?'#00e5a0':'#ff4d6d',borderRadius:'2px 2px 0 0',minWidth:2,opacity:0.85,cursor:'default'}}/>
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })()}
+                  </div>
+                )}
+
 
                 {/* COLUMNA DERECHA — detalle del trade seleccionado */}
                 {tlSelected&&(
