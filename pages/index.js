@@ -3383,117 +3383,186 @@ export default function Home() {
       )
       if (isDup) enriched._isDuplicate = true
 
-      // Closure detection: any SELL fill (isolated or _orphanSell) → find open position
+      // Closure detection: any SELL fill (isolated or _orphanSell) → find open positions
       const isSellFill = r.fill_type === 'sell' || r._orphanSell
       if (isSellFill && !r._grouped) {
-        // Find the most recent open position for this symbol
-        const openPos = [...tlTrades]
+        const openPositions = [...tlTrades]
           .filter(t =>
             t.symbol === r.symbol &&
             (!t.status || t.status === 'open') &&
             !t.exit_date
           )
-          .sort((a,b) => (b.entry_date||'') > (a.entry_date||'') ? 1 : -1)[0]
+          .sort((a,b) => (a.entry_date||'') <= (b.entry_date||'') ? -1 : 1)  // oldest first
 
-        if (openPos) {
-          const openShares  = parseFloat(openPos.shares||0)
-          const sellShares  = parseFloat(r.shares||0)
-          const isPartial   = sellShares < openShares - 0.001
-          const isFull      = Math.abs(sellShares - openShares) < 0.001
-          const isExcess    = sellShares > openShares + 0.001  // venta > posición (no debería)
-
+        if (openPositions.length === 1) {
+          // Single open position → auto-assign
+          const openPos    = openPositions[0]
+          const openShares = parseFloat(openPos.shares||0)
+          const sellShares = parseFloat(r.shares||0)
           enriched._closesTradeId  = openPos.id
           enriched._closesSymbol   = openPos.symbol
           enriched._openEntryDate  = openPos.entry_date
           enriched._openShares     = openShares
           enriched._sellShares     = sellShares
-          enriched._isPartialClose = isPartial
-          enriched._isFullClose    = isFull
-          enriched._isExcessSell   = isExcess
-          // Remaining shares if partial
-          if (isPartial) enriched._remainingShares = openShares - sellShares
+          enriched._isPartialClose = sellShares < openShares - 0.001
+          enriched._isFullClose    = Math.abs(sellShares - openShares) < 0.001
+          enriched._isExcessSell   = sellShares > openShares + 0.001
+          if (enriched._isPartialClose) enriched._remainingShares = openShares - sellShares
+        } else if (openPositions.length > 1) {
+          // Multiple open positions → flag for user selection
+          enriched._multipleOpen   = true
+          enriched._openOptions    = openPositions.map(t=>({
+            id: t.id,
+            entry_date: t.entry_date,
+            shares: parseFloat(t.shares||0),
+            entry_price: t.entry_price,
+          }))
+          // Pre-select oldest (FIFO) but user can change
+          const presel = openPositions[0]
+          const openShares = parseFloat(presel.shares||0)
+          const sellShares = parseFloat(r.shares||0)
+          enriched._closesTradeId  = presel.id
+          enriched._closesSymbol   = presel.symbol
+          enriched._openEntryDate  = presel.entry_date
+          enriched._openShares     = openShares
+          enriched._sellShares     = sellShares
+          enriched._isPartialClose = sellShares < openShares - 0.001
+          enriched._isFullClose    = Math.abs(sellShares - openShares) < 0.001
+          enriched._isExcessSell   = sellShares > openShares + 0.001
+          if (enriched._isPartialClose) enriched._remainingShares = openShares - sellShares
         }
       }
       return enriched
     })
   }
 
-  // ── Agrupa fills del parser en operaciones completas ──────
-  // BUY(s) + SELL(s) del mismo símbolo → 1 trade con precio promedio
+  // ── Agrupa fills del parser en operaciones (FIFO cronológico) ──
+  // Procesa todos los fills de cada símbolo en orden de fecha.
+  // Las SELLs cierran las BUYs más antiguas disponibles (FIFO).
+  // Las SELLs sin BUY previa = cierre huérfano (buscará en tlTrades).
   const groupParsedFills = (rows) => {
     if(!rows||rows.length===0) return rows
-    // Separar por símbolo
+    // Agrupar por símbolo
     const bySymbol = {}
     rows.forEach(r=>{
       const k = r.symbol
-      if(!bySymbol[k]) bySymbol[k]={buys:[],sells:[]}
-      if(r.fill_type==='buy') bySymbol[k].buys.push(r)
-      else bySymbol[k].sells.push(r)
+      if(!bySymbol[k]) bySymbol[k]=[]
+      bySymbol[k].push(r)
     })
     const result = []
-    Object.entries(bySymbol).forEach(([sym,{buys,sells}])=>{
-      if(buys.length===0&&sells.length>0){
-        // Solo ventas sin compras en este lote → marcar como cierre huérfano
-        // Se buscará posición abierta en tlTrades al enriquecer
-        const totalSell = sells.reduce((s,b)=>s+b.shares,0)
-        const avgSell   = sells.reduce((s,b)=>s+b.entry_price*b.shares,0)/totalSell
-        const commSell  = sells.reduce((s,b)=>s+(b.commission_sell||0),0)
-        const latestSell= sells.reduce((a,b)=>a.entry_date>=b.entry_date?a:b)
-        if(sells.length===1){
-          result.push({...sells[0], _orphanSell:true}); return
+    Object.entries(bySymbol).forEach(([sym, fills])=>{
+      // Ordenar todos los fills cronológicamente
+      const sorted = [...fills].sort((a,b)=>(a.entry_date||'') <= (b.entry_date||'') ? -1 : 1)
+      // Cola FIFO de compras pendientes de cerrar
+      // Cada elemento: { row, sharesLeft, buyFills:[] }
+      const buyQueue = []
+
+      sorted.forEach(fill=>{
+        if(fill.fill_type==='buy'){
+          buyQueue.push({ row:fill, sharesLeft:fill.shares, sellFills:[] })
+        } else {
+          // SELL: consumir BUYs de la cola en orden FIFO
+          let sharesToAssign = fill.shares
+          while(sharesToAssign > 0.001 && buyQueue.length > 0){
+            const head = buyQueue[0]
+            const take = Math.min(head.sharesLeft, sharesToAssign)
+            head.sellFills.push({...fill, shares:take})
+            head.sharesLeft -= take
+            sharesToAssign  -= take
+            if(head.sharesLeft < 0.001) buyQueue.shift()  // BUY fully consumed
+          }
+          // Shares restantes de la sell sin BUY previa = huérfana
+          if(sharesToAssign > 0.001){
+            result.push({
+              ...fill, shares:sharesToAssign, _orphanSell:true,
+              fill_type:'sell', status:'open'
+            })
+          }
         }
-        // Múltiples sells del mismo símbolo → promediar
-        result.push({
-          ...latestSell, shares:totalSell, entry_price:parseFloat(avgSell.toFixed(4)),
-          commission_sell:commSell, fill_type:'sell', _orphanSell:true,
-          _sellCount:sells.length, _grouped:sells.length>1
-        })
-        return
-      }
-      if(sells.length===0){
-        // Solo compras → posición abierta
-        if(buys.length===1){ result.push(buys[0]); return }
-        // Múltiples compras → promediar (precio medio ponderado)
-        const totalShares = buys.reduce((s,b)=>s+b.shares,0)
-        const avgPrice    = buys.reduce((s,b)=>s+b.entry_price*b.shares,0)/totalShares
-        const totalComm   = buys.reduce((s,b)=>s+(b.commission_buy||0),0)
-        const earliest    = buys.reduce((a,b)=>a.entry_date<=b.entry_date?a:b)
-        result.push({...earliest, shares:totalShares, entry_price:parseFloat(avgPrice.toFixed(4)),
-          commission_buy:totalComm, fill_type:'buy', status:'open', _fills:buys})
-        return
-      }
-      // Hay compras Y ventas → construir trade cerrado
-      const totalBuy  = buys.reduce((s,b)=>s+b.shares,0)
-      const totalSell = sells.reduce((s,b)=>s+b.shares,0)
-      const avgBuy    = buys.reduce((s,b)=>s+b.entry_price*b.shares,0)/totalBuy
-      const avgSell   = sells.reduce((s,b)=>s+b.entry_price*b.shares,0)/totalSell
-      const commBuy   = buys.reduce((s,b)=>s+(b.commission_buy||0),0)
-      const commSell  = sells.reduce((s,b)=>s+(b.commission_sell||0),0)
-      const entryRow  = buys.reduce((a,b)=>a.entry_date<=b.entry_date?a:b)
-      const exitRow   = sells.reduce((a,b)=>a.entry_date>=b.entry_date?a:b)
-      const sharesToClose = Math.min(totalBuy, totalSell)
-      const isFullyClosed = Math.abs(totalBuy-totalSell)<0.001
-      result.push({
-        ...entryRow,
-        shares: sharesToClose,
-        entry_price: parseFloat(avgBuy.toFixed(4)),
-        commission_buy: commBuy,
-        exit_date: exitRow.entry_date,
-        exit_price: parseFloat(avgSell.toFixed(4)),
-        exit_currency: exitRow.entry_currency||entryRow.entry_currency,
-        commission_sell: commSell,
-        fill_type: 'buy',
-        status: isFullyClosed ? 'closed' : 'open',
-        _fills: [...buys, ...sells],
-        _grouped: true,
-        _buyCount: buys.length,
-        _sellCount: sells.length,
       })
-      // Si hay más compras que ventas, dejar resto como abierto
-      if(totalBuy > totalSell+0.001){
-        result.push({...entryRow, shares:totalBuy-totalSell, entry_price:parseFloat(avgBuy.toFixed(4)),
-          commission_buy:0, fill_type:'buy', status:'open'})
-      }
+
+      // Ahora convertir buyQueue entries a trades
+      // Primero, detectar grupos contiguos de BUYs sin sells entre ellas
+      // que se podrían agrupar (mismo día o sin venta intermedia)
+      // Para simplicidad: cada BUY original = 1 fila resultado
+      // Si tiene sellFills → trade cerrado (o parcial si sharesLeft > 0)
+      // Si no tiene sellFills → abierto
+      // BUYs consumidas parcialmente ya salieron de la cola
+
+      // Reconstruir: iterar fills originales de buy en orden
+      // (buyQueue ya tiene solo las NO totalmente consumidas)
+      // Necesitamos rastrear qué fills tienen sellFills
+
+      // Re-process: build output for each buy fill
+      const allBuyFills = sorted.filter(f=>f.fill_type==='buy')
+      // Map from fill object to accumulated sell fills (collected during FIFO above)
+      // We need to redo this tracking properly
+      // Simplest: re-run FIFO and build a map
+
+      const buyMap = []  // {buyFill, sellFills, sharesUsed}
+      allBuyFills.forEach(b=>buyMap.push({buyFill:b, sellFills:[], sharesUsed:0}))
+
+      // Re-run FIFO with tracking
+      let bIdx = 0
+      const sellFillsSorted = sorted.filter(f=>f.fill_type==='sell')
+      sellFillsSorted.forEach(sell=>{
+        let remaining = sell.shares
+        let si = bIdx
+        while(remaining>0.001 && si<buyMap.length){
+          const bm = buyMap[si]
+          const available = bm.buyFill.shares - bm.sharesUsed
+          if(available < 0.001){ si++; continue }
+          const take = Math.min(available, remaining)
+          bm.sellFills.push({...sell, shares:take})
+          bm.sharesUsed += take
+          remaining -= take
+          if(bm.buyFill.shares - bm.sharesUsed < 0.001) si++
+        }
+        bIdx = si
+      })
+
+      // Build result rows from buyMap
+      buyMap.forEach(({buyFill, sellFills, sharesUsed})=>{
+        if(sellFills.length===0){
+          // Fully open buy
+          result.push({...buyFill, status:'open'})
+        } else {
+          // Has matching sells
+          const totalSell = sellFills.reduce((s,f)=>s+f.shares,0)
+          const avgSell   = sellFills.reduce((s,f)=>s+f.entry_price*f.shares,0)/totalSell
+          const commSell  = sellFills.reduce((s,f)=>s+(f.commission_sell||0),0)
+          const lastSell  = sellFills.reduce((a,b)=>a.entry_date>=b.entry_date?a:b)
+          const isFull    = Math.abs(totalSell-buyFill.shares)<0.001
+          const buyCount  = 1  // one buy fill
+          const sellCount = sellFills.length
+          result.push({
+            ...buyFill,
+            shares: Math.min(totalSell, buyFill.shares),
+            exit_date:       lastSell.entry_date,
+            exit_price:      parseFloat(avgSell.toFixed(4)),
+            exit_currency:   lastSell.entry_currency||buyFill.entry_currency,
+            commission_sell: commSell,
+            fill_type: 'buy',
+            status: isFull ? 'closed' : 'open',
+            _grouped: sellFills.length>1,
+            _buyCount: buyCount,
+            _sellCount: sellCount,
+            _fills: [buyFill, ...sellFills],
+          })
+          // If buy partially consumed → add remainder as open
+          if(!isFull){
+            const remainder = buyFill.shares - totalSell
+            result.push({
+              ...buyFill, shares:remainder, status:'open',
+              fill_type:'buy', _remainder:true
+            })
+          }
+        }
+      })
+
+      // Orphan sells (no buy available) already pushed above during first FIFO pass
+      // But we re-did FIFO in buyMap, so push orphans again from buyMap perspective
+      // Actually orphan sells were pushed in the first FIFO loop, still valid
     })
     return result
   }
@@ -4364,10 +4433,11 @@ export default function Home() {
         const {_fxLoading,_symSearch,_current_price,_current_date,_pnl_float_eur,_pnl_float_pct,...cleanRow}=row
         // Skip duplicates if user didn't remove them
         if(cleanRow._isDuplicate) continue
-        // Strip ALL internal UI fields (prefixed with _) before sending to Supabase
+        // Strip ALL internal UI fields before sending to Supabase
         const {_isDuplicate,_closesTradeId,_closesSymbol,_openEntryDate,_openShares,
-               _grouped,_buyCount,_sellCount,_fills,_orphanSell,
+               _grouped,_buyCount,_sellCount,_fills,_orphanSell,_remainder,
                _isPartialClose,_isFullClose,_isExcessSell,_remainingShares,_sellShares,
+               _multipleOpen,_openOptions,
                ...saveRow}=cleanRow
 
         if(cleanRow._closesTradeId) {
@@ -4767,7 +4837,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.66</title>
+        <title>Trading Simulator V4.68</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4830,7 +4900,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.66
+            <span className="dot"/>Trading Simulator V4.68
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6522,6 +6592,26 @@ export default function Home() {
                   )}
                   {/* ── TABS siempre visibles + búsqueda/nueva op ── */}
                   <div style={{display:'flex',borderBottom:'2px solid var(--border)',flexShrink:0,alignItems:'stretch',background:'#0a0f1a'}}>
+                    {/* Search — izquierda, antes de los tabs */}
+                    <div style={{display:'flex',gap:4,alignItems:'center',padding:'4px 8px',borderRight:'1px solid var(--border)',flexShrink:0}}>
+                      <input type="text" placeholder="🔍 símbolo" value={tlSearch} onChange={e=>setTlSearch(e.target.value)}
+                        style={{width:110,background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:10,padding:'3px 7px',borderRadius:4}}/>
+                      {tlSearch&&(
+                        <button onClick={()=>setTlSearch('')} title="Limpiar filtro"
+                          style={{background:'transparent',border:'none',color:'#ff4d6d',cursor:'pointer',
+                            fontSize:12,padding:'0 3px',lineHeight:1,flexShrink:0}}
+                          onMouseOver={e=>e.currentTarget.style.color='#ff8080'}
+                          onMouseOut={e=>e.currentTarget.style.color='#ff4d6d'}>✕</button>
+                      )}
+                      <span style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',flexShrink:0}}>
+                        {tlTrades.filter(t=>{
+                          if(tlTab==='open'&&t.status!=='open') return false
+                          if(tlSearch&&!(t.symbol||'').toLowerCase().includes(tlSearch.toLowerCase())) return false
+                          return true
+                        }).length}
+                      </span>
+                      {tlLoading&&<span style={{fontFamily:MONO,fontSize:9,color:'#9b72ff',flexShrink:0}}>⟳</span>}
+                    </div>
                     {[{id:'ops',label:'Ops'},{id:'import',label:'📥 Import'},{id:'export',label:'📤 Export'},{id:'dashboard',label:'📊 Dashboard'}].map(t=>(
                       <button key={t.id} onClick={()=>setTlTab(t.id)}
                         style={{padding:'9px 16px',fontFamily:MONO,fontSize:11,cursor:'pointer',
@@ -6536,16 +6626,6 @@ export default function Home() {
                     ))}
                     <div style={{flex:1}}/>
                     <div style={{display:'flex',gap:6,alignItems:'center',padding:'5px 10px'}}>
-                      <input type="text" placeholder="🔍 Buscar símbolo..." value={tlSearch} onChange={e=>setTlSearch(e.target.value)}
-                        style={{width:170,background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:10,padding:'4px 8px',borderRadius:4}}/>
-                      <span style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',flexShrink:0}}>
-                        {tlTrades.filter(t=>{
-                          if(tlTab==='open'&&t.status!=='open') return false
-                          if(tlSearch&&!(t.symbol||'').toLowerCase().includes(tlSearch.toLowerCase())) return false
-                          return true
-                        }).length} ops
-                      </span>
-                      {tlLoading&&<span style={{fontFamily:MONO,fontSize:10,color:'#9b72ff',flexShrink:0}}>⟳</span>}
                       {tlMultiMode?(
                         <>
                           <span style={{fontFamily:MONO,fontSize:10,color:'#ffd166',flexShrink:0}}>
@@ -6856,9 +6936,18 @@ export default function Home() {
                               style={{fontFamily:MONO,fontSize:10,padding:'3px 8px',borderRadius:3,cursor:'pointer',
                                 border:'1px solid #2a4060',background:'transparent',color:'#7a9bc0'}}>Cancelar</button>
                             <button onClick={()=>tlImportConfirm(tlParsed)}
-                              style={{fontFamily:MONO,fontSize:10,padding:'3px 8px',borderRadius:3,cursor:'pointer',
-                                border:'1px solid #00e5a0',background:'rgba(0,229,160,0.1)',color:'#00e5a0',fontWeight:700}}>
-                              {(()=>{const valid=tlParsed.filter(r=>!r._isDuplicate).length;return `✓ Importar ${valid} op${valid!==1?'s':''}`})()}
+                              disabled={tlParsed.some(r=>r._multipleOpen&&!r._closesTradeId)}
+                              style={{fontFamily:MONO,fontSize:10,padding:'3px 8px',borderRadius:3,
+                                cursor:tlParsed.some(r=>r._multipleOpen&&!r._closesTradeId)?'not-allowed':'pointer',
+                                border:'1px solid '+(tlParsed.some(r=>r._multipleOpen&&!r._closesTradeId)?'#ffd166':'#00e5a0'),
+                                background:tlParsed.some(r=>r._multipleOpen&&!r._closesTradeId)?'rgba(255,209,102,0.1)':'rgba(0,229,160,0.1)',
+                                color:tlParsed.some(r=>r._multipleOpen&&!r._closesTradeId)?'#ffd166':'#00e5a0',
+                                fontWeight:700}}>
+                              {(()=>{
+                const needsChoice=tlParsed.some(r=>r._multipleOpen&&!r._closesTradeId)
+                const valid=tlParsed.filter(r=>!r._isDuplicate).length
+                return needsChoice?'⚠ Elige posición a cerrar':`✓ Importar ${valid} op${valid!==1?'s':''}`
+              })()}
                             </button>
                           </div>
                         </div>
@@ -6893,9 +6982,9 @@ export default function Home() {
                                 <td style={{padding:'3px 5px',whiteSpace:'nowrap'}}>
                                   {isClose?(
                                     <span style={{fontFamily:MONO,fontSize:9,padding:'2px 5px',borderRadius:3,
-                                      background: t._isPartialClose?'rgba(255,209,102,0.2)':'rgba(155,114,255,0.2)',
-                                      color: t._isPartialClose?'#ffd166':'#9b72ff',fontWeight:700}}>
-                                      {t._isPartialClose?'↩ PARCIAL':'↩ CIERRE'}
+                                      background: t._multipleOpen?'rgba(255,209,102,0.25)':t._isPartialClose?'rgba(255,209,102,0.2)':'rgba(155,114,255,0.2)',
+                                      color: t._multipleOpen?'#ffd166':t._isPartialClose?'#ffd166':'#9b72ff',fontWeight:700}}>
+                                      {t._multipleOpen?'⚠ MÚLTIPLES':t._isPartialClose?'↩ PARCIAL':'↩ CIERRE'}
                                     </span>
                                   ):isGrouped?(
                                     <span style={{fontFamily:MONO,fontSize:9,padding:'2px 5px',borderRadius:3,
@@ -6929,11 +7018,48 @@ export default function Home() {
                                     onFocus={e=>e.target.style.borderBottomColor='var(--accent)'}
                                     onBlur={e=>e.target.style.borderBottomColor='transparent'}/>
                                   {t.exit_price&&<span style={{fontSize:9,color:'#9b72ff',marginLeft:3}}>→{t.exit_price}</span>}
-                                  {isClose&&<div style={{fontSize:8,color:t._isPartialClose?'#ffd166':'#9b72ff'}}>
+                                  {isClose&&!t._multipleOpen&&<div style={{fontSize:8,color:t._isPartialClose?'#ffd166':'#9b72ff'}}>
                                     {t._isPartialClose
                                       ? `cierra ${t._sellShares} de ${t._openShares} acc · resto ${t._remainingShares}`
                                       : `cierra ${t._closesSymbol} (${t._openShares} acc)`}
                                   </div>}
+                                  {t._multipleOpen&&(
+                                    <div style={{marginTop:3}}>
+                                      <div style={{fontSize:8,color:'#ffd166',marginBottom:2}}>
+                                        ⚠ {t._openOptions?.length} posiciones abiertas — elige cuál cerrar:
+                                      </div>
+                                      <select
+                                        value={t._closesTradeId||''}
+                                        onChange={e=>{
+                                          const chosen = t._openOptions?.find(o=>o.id===e.target.value)
+                                          if(!chosen) return
+                                          const openShares=parseFloat(chosen.shares||0)
+                                          const sellShares=parseFloat(t.shares||0)
+                                          setTlParsed(prev=>{
+                                            const next=[...prev]
+                                            next[i]={...next[i],
+                                              _closesTradeId:chosen.id,
+                                              _openEntryDate:chosen.entry_date,
+                                              _openShares:openShares,
+                                              _sellShares:sellShares,
+                                              _isPartialClose:sellShares<openShares-0.001,
+                                              _isFullClose:Math.abs(sellShares-openShares)<0.001,
+                                              _remainingShares:Math.max(0,openShares-sellShares)
+                                            }
+                                            return next
+                                          })
+                                        }}
+                                        style={{fontFamily:MONO,fontSize:9,background:'#0d1824',
+                                          border:'1px solid #ffd166',color:'#ffd166',
+                                          borderRadius:3,padding:'2px 4px',cursor:'pointer',width:'100%'}}>
+                                        {t._openOptions?.map(o=>(
+                                          <option key={o.id} value={o.id}>
+                                            {o.entry_date} · {o.shares} acc · ${o.entry_price}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </div>
+                                  )}
                                 </td>
                                 {cell('entry_currency',t.entry_currency,'#ffd166')}
                                 <td style={{padding:'3px 5px',color:'#4a7a95',fontSize:10}}>{(()=>{let fx=parseFloat(t.fx_entry);if(!fx||isNaN(fx))return'—';if(fx<1)fx=1/fx;return fx.toFixed(4)})()}</td>
