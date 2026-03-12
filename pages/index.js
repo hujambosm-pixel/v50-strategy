@@ -4437,9 +4437,11 @@ export default function Home() {
         const {_fxLoading,_symSearch,_current_price,_current_date,_pnl_float_eur,_pnl_float_pct,...cleanRow}=row
         // Skip duplicates if user didn't remove them
         if(cleanRow._isDuplicate) continue
-        // Strip all internal UI fields
+        // Strip ALL internal UI fields (prefixed with _) before sending to Supabase
         const {_isDuplicate,_closesTradeId,_closesSymbol,_openEntryDate,_openShares,
-               _grouped,_buyCount,_sellCount,_fills,...saveRow}=cleanRow
+               _grouped,_buyCount,_sellCount,_fills,_orphanSell,
+               _isPartialClose,_isFullClose,_isExcessSell,_remainingShares,_sellShares,
+               ...saveRow}=cleanRow
 
         if(cleanRow._closesTradeId) {
           const sellShares  = parseFloat(saveRow.shares||0)
