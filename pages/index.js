@@ -1210,84 +1210,7 @@ function SettingsModal({ onClose, strategies=[] }) {
           {/* ── TRADELOG CONFIG ── */}
           {tab==='tradelog_cfg'&&(
             <div>
-              {sep('Carpeta base en tu PC')}
-              <div style={{fontSize:10,color:'#5a7a95',lineHeight:1.6,marginBottom:10}}>
-                La app usará esta carpeta para guardar capturas de gráficos y copias de seguridad.
-                Haz clic en "Seleccionar" y elige la carpeta donde quieres guardar las capturas y backups. Se crearán subcarpetas automáticamente.
-                Solo funciona en Chrome y Edge. Solo tienes que hacerlo una vez.
-              </div>
-              {(()=>{
-                const folderName = settings.tradelog?.folderName || null
-                const selectFolder = async () => {
-                  try {
-                    if(!window.showDirectoryPicker) {
-                      alert('Solo Chrome y Edge soportan esta función (no Firefox ni Safari).')
-                      return
-                    }
-                    const handle = await window.showDirectoryPicker({mode:'readwrite',startIn:'documents'})
-                    // Store in IndexedDB
-                    await new Promise(res=>{
-                      const req = indexedDB.open('v50_fs',2)
-                      req.onupgradeneeded = e=>{
-                        const db=e.target.result
-                        if(!db.objectStoreNames.contains('handles')) db.createObjectStore('handles')
-                      }
-                      req.onsuccess = e=>{
-                        try{
-                          const tx=e.target.result.transaction('handles','readwrite')
-                          const r2=tx.objectStore('handles').put(handle,'tradingApp')
-                          r2.onsuccess=()=>res(true); r2.onerror=()=>res(false)
-                        }catch(_){ res(false) }
-                      }
-                      req.onerror=()=>res(false)
-                    })
-                    upd('tradelog.folderName', handle.name)
-                    if(!settings.tradelog?.subCharts) upd('tradelog.subCharts','Trades charts')
-                    if(!settings.tradelog?.subBackup) upd('tradelog.subBackup','Backup operativa')
-                  } catch(e) {
-                    if(e.name!=='AbortError') alert('Error al seleccionar carpeta: '+e.message)
-                  }
-                }
-                return (
-                  <div style={{display:'flex',gap:6,alignItems:'center',marginBottom:14}}>
-                    <div style={{flex:1,background:'#080c14',border:`1px solid ${folderName?'#1a4a2a':'#1a2d45'}`,borderRadius:4,
-                      padding:'7px 10px',fontFamily:MONO,fontSize:11,
-                      color:folderName?'#00e5a0':'#3d5a7a',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-                      {folderName ? `📁 ${folderName}` : 'Sin carpeta seleccionada'}
-                    </div>
-                    {folderName&&<button onClick={()=>upd('tradelog.folderName',null)}
-                      style={{padding:'7px 8px',borderRadius:4,border:'1px solid #2a1a1a',
-                        background:'rgba(255,77,109,0.08)',color:'#ff4d6d',fontFamily:MONO,
-                        fontSize:11,cursor:'pointer',flexShrink:0}} title="Limpiar carpeta">✕</button>}
-                    <button onClick={selectFolder}
-                      style={{padding:'7px 12px',borderRadius:4,border:'1px solid #1a3a5a',
-                        background:'rgba(0,212,255,0.1)',color:'#00d4ff',fontFamily:MONO,
-                        fontSize:11,cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>
-                      📁 Seleccionar…
-                    </button>
-                  </div>
-                )
-              })()}
 
-              {sep('Subcarpetas')}
-              <div style={{display:'flex',flexDirection:'column',gap:8,marginBottom:14}}>
-                {[
-                  ['tradelog.subCharts','Capturas de gráficos','Trades charts'],
-                  ['tradelog.subBackup','Copias de seguridad','Backup operativa'],
-                ].map(([key,label,def])=>(
-                  <div key={key} style={{display:'flex',alignItems:'center',gap:8}}>
-                    <span style={{fontFamily:MONO,fontSize:10,color:'#7a9bc0',width:160,flexShrink:0}}>{label}</span>
-                    <input type="text" value={settings.tradelog?.[key.split('.')[1]]||def}
-                      onChange={e=>upd(key,e.target.value)}
-                      style={{flex:1,background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,
-                        color:'#e2eaf5',fontFamily:MONO,fontSize:11,padding:'5px 8px'}}/>
-                  </div>
-                ))}
-              </div>
-              <div style={{fontSize:10,color:'#3d5a7a',lineHeight:1.6,marginBottom:16}}>
-                Estructura: <span style={{color:'#7a9bc0'}}>[Carpeta elegida] / Trades charts / NVDA_2025-03-10_V50.jpg</span><br/>
-                Estructura: <span style={{color:'#7a9bc0'}}>[Carpeta elegida] / Backup operativa / backup_2025-03-10.json</span>
-              </div>
 
               {sep('Valores por defecto al registrar operación')}
               <div style={{display:'flex',flexDirection:'column',gap:8,marginBottom:14}}>
@@ -1378,20 +1301,7 @@ function SettingsModal({ onClose, strategies=[] }) {
                 )
               })()}
 
-              {sep('Captura automática al registrar operación')}
-              <label style={{display:'flex',alignItems:'center',gap:8,marginBottom:10,cursor:'pointer'}}>
-                <input type="checkbox"
-                  checked={settings.tradelog?.autoScreenshot!==false}
-                  onChange={e=>upd('tradelog.autoScreenshot',e.target.checked)}
-                  style={{accentColor:'#9b72ff',width:14,height:14}}/>
-                <span style={{fontFamily:MONO,fontSize:11,color:'#cce0f5'}}>
-                  Guardar captura del gráfico al añadir cada operación
-                </span>
-              </label>
-              <div style={{fontSize:10,color:'#3d5a7a',lineHeight:1.6,marginBottom:16}}>
-                Requiere tener una carpeta base seleccionada. La imagen muestra las velas del período del trade
-                con las EMAs y el punto de entrada marcado.
-              </div>
+
 
               {sep('Copia de seguridad de operaciones')}
               <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
@@ -3439,6 +3349,8 @@ export default function Home() {
   const [tlLoading,setTlLoading]=useState(false)
   const [tlError,setTlError]=useState(null)
   const [tlSelected,setTlSelected]=useState(null)      // trade seleccionado en detalle
+  const [tlMultiSel,setTlMultiSel]=useState(new Set()) // ids seleccionados para borrado
+  const [tlMultiMode,setTlMultiMode]=useState(false)   // modo multiselección activo
   const [tlTab,setTlTab]=useState('ops')               // 'ops'|'import'|'export'|'dashboard'
   const [tlFilterBroker,setTlFilterBroker]=useState('')
   const [tlFilterYear,setTlFilterYear]=useState('')
@@ -4195,31 +4107,30 @@ export default function Home() {
       const date = (trade.entry_date||new Date().toISOString().slice(0,10))
       const strat = (trade.strategy||'V50').replace(/[^a-zA-Z0-9]/g,'_')
       const filename = `${sym}_${date}_${strat}.jpg`
-      // Intentar guardar en carpeta configurada (File System Access API)
-      const subFolder = s?.tradelog?.subCharts || 'Trades charts'
-      let saved = false
+      // Siempre preguntar dónde guardar (showSaveFilePicker si disponible, sino descarga directa)
       try {
-        const rootHandle = await tlGetFsHandle()
-        if(rootHandle) {
-          // Verificar/solicitar permiso
-          let perm = await rootHandle.queryPermission({mode:'readwrite'}).catch(()=>'prompt')
-          if(perm !== 'granted') perm = await rootHandle.requestPermission({mode:'readwrite'}).catch(()=>'denied')
-          if(perm === 'granted') {
-            const subH = await rootHandle.getDirectoryHandle(subFolder, {create:true})
-            const fileH = await subH.getFileHandle(filename, {create:true})
-            const w = await fileH.createWritable()
-            const b64 = dataUrl.split(',')[1]
-            const bytes = Uint8Array.from(atob(b64), c=>c.charCodeAt(0))
-            await w.write(new Blob([bytes],{type:'image/jpeg'}))
-            await w.close()
-            saved = true
-          }
+        if(window.showSaveFilePicker) {
+          const fileHandle = await window.showSaveFilePicker({
+            suggestedName: filename,
+            types: [{ description:'Imagen JPEG', accept:{'image/jpeg':['.jpg','.jpeg']} }],
+            startIn: 'documents'
+          })
+          const w = await fileHandle.createWritable()
+          const b64 = dataUrl.split(',')[1]
+          const bytes = Uint8Array.from(atob(b64), c=>c.charCodeAt(0))
+          await w.write(new Blob([bytes],{type:'image/jpeg'}))
+          await w.close()
+        } else {
+          // Fallback navegadores sin API (Firefox, Safari): descarga directa
+          const a = document.createElement('a')
+          a.href = dataUrl; a.download = filename; a.click()
         }
-      } catch(_){}
-      // Fallback: descarga directa al navegador
-      if(!saved) {
-        const a = document.createElement('a')
-        a.href = dataUrl; a.download = filename; a.click()
+      } catch(e) {
+        if(e.name!=='AbortError') {
+          // Si el usuario cancela → fallback silencioso
+          const a = document.createElement('a')
+          a.href = dataUrl; a.download = filename; a.click()
+        }
       }
     } catch(_) {}
   }
@@ -4373,6 +4284,22 @@ export default function Home() {
     }
     await fetch('/api/tradelog?action=delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})})
     setTlSelected(null); setTlFills([])
+    await loadTrades()
+  }
+
+  const tlDeleteMulti = async(ids)=>{
+    if(!ids||ids.size===0) return
+    if(!window.confirm(`¿Eliminar ${ids.size} operaci${ids.size===1?'ón':'ones'}? Esta acción no se puede deshacer.`)) return
+    if(tlUseLocal()){
+      tlSetLS(tlGetLS().filter(t=>!ids.has(t.id)))
+      setTlSelected(null); setTlMultiSel(new Set()); setTlMultiMode(false)
+      await loadTrades(); return
+    }
+    // Delete each via API
+    await Promise.all([...ids].map(id=>
+      fetch('/api/tradelog?action=delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})})
+    ))
+    setTlSelected(null); setTlMultiSel(new Set()); setTlMultiMode(false)
     await loadTrades()
   }
 
@@ -4840,7 +4767,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.65</title>
+        <title>Trading Simulator V4.66</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4903,7 +4830,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.65
+            <span className="dot"/>Trading Simulator V4.66
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6619,11 +6546,40 @@ export default function Home() {
                         }).length} ops
                       </span>
                       {tlLoading&&<span style={{fontFamily:MONO,fontSize:10,color:'#9b72ff',flexShrink:0}}>⟳</span>}
-                      <button onClick={()=>{const _df=tlDefaultForm();setTlForm(_df);setTlFormOpen(true);if(_df.entry_currency&&_df.entry_currency!=='EUR')tlFetchFx(_df.entry_currency,_df.entry_date)}}
-                        style={{flexShrink:0,fontFamily:MONO,fontSize:10,padding:'4px 12px',borderRadius:4,cursor:'pointer',
-                          background:'rgba(155,114,255,0.15)',border:'1px solid #9b72ff',color:'#9b72ff',fontWeight:700,whiteSpace:'nowrap'}}>
-                        + Nueva op.
-                      </button>
+                      {tlMultiMode?(
+                        <>
+                          <span style={{fontFamily:MONO,fontSize:10,color:'#ffd166',flexShrink:0}}>
+                            {tlMultiSel.size} seleccionadas
+                          </span>
+                          <button onClick={()=>tlDeleteMulti(tlMultiSel)}
+                            disabled={tlMultiSel.size===0}
+                            style={{flexShrink:0,fontFamily:MONO,fontSize:10,padding:'4px 12px',borderRadius:4,cursor:'pointer',
+                              background:tlMultiSel.size>0?'rgba(255,77,109,0.2)':'rgba(60,30,30,0.3)',
+                              border:'1px solid '+(tlMultiSel.size>0?'#ff4d6d':'#3a1a1a'),
+                              color:tlMultiSel.size>0?'#ff4d6d':'#5a2a2a',fontWeight:700,whiteSpace:'nowrap'}}>
+                            🗑 Eliminar
+                          </button>
+                          <button onClick={()=>{setTlMultiMode(false);setTlMultiSel(new Set())}}
+                            style={{flexShrink:0,fontFamily:MONO,fontSize:10,padding:'4px 10px',borderRadius:4,cursor:'pointer',
+                              background:'transparent',border:'1px solid #2a4060',color:'#7a9bc0',whiteSpace:'nowrap'}}>
+                            Cancelar
+                          </button>
+                        </>
+                      ):(
+                        <>
+                          <button onClick={()=>setTlMultiMode(true)}
+                            title="Selección múltiple para borrar"
+                            style={{flexShrink:0,fontFamily:MONO,fontSize:10,padding:'4px 8px',borderRadius:4,cursor:'pointer',
+                              background:'transparent',border:'1px solid #2a3040',color:'#4a6a80',whiteSpace:'nowrap'}}>
+                            🗑
+                          </button>
+                          <button onClick={()=>{const _df=tlDefaultForm();setTlForm(_df);setTlFormOpen(true);if(_df.entry_currency&&_df.entry_currency!=='EUR')tlFetchFx(_df.entry_currency,_df.entry_date)}}
+                            style={{flexShrink:0,fontFamily:MONO,fontSize:10,padding:'4px 12px',borderRadius:4,cursor:'pointer',
+                              background:'rgba(155,114,255,0.15)',border:'1px solid #9b72ff',color:'#9b72ff',fontWeight:700,whiteSpace:'nowrap'}}>
+                            + Nueva op.
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                   {/* ── Contenido por tab ── */}
@@ -6635,6 +6591,28 @@ export default function Home() {
                       <table className="tl-ops-table" onContextMenu={e=>{e.stopPropagation();openCtx(e,'tl_table')}} style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:11}}>
                         <thead>
                           <tr style={{background:'var(--bg2)',position:'sticky',top:0,zIndex:5}}>
+                            {tlMultiMode&&(
+                              <th style={{padding:'6px 8px',borderBottom:'1px solid var(--border)',width:32}}>
+                                <input type="checkbox"
+                                  style={{cursor:'pointer',accentColor:'#ff4d6d'}}
+                                  checked={tlTrades.filter(t=>{
+                                    if(tlTab==='open'&&t.status!=='open') return false
+                                    if(tlSearch&&!(t.symbol||'').toLowerCase().includes(tlSearch.toLowerCase())) return false
+                                    return true
+                                  }).every(t=>tlMultiSel.has(t.id))}
+                                  onChange={e=>{
+                                    const visible=tlTrades.filter(t=>{
+                                      if(tlTab==='open'&&t.status!=='open') return false
+                                      if(tlSearch&&!(t.symbol||'').toLowerCase().includes(tlSearch.toLowerCase())) return false
+                                      return true
+                                    })
+                                    if(e.target.checked) setTlMultiSel(new Set(visible.map(t=>t.id)))
+                                    else setTlMultiSel(new Set())
+                                  }}
+                                  title="Seleccionar todas"
+                                />
+                              </th>
+                            )}
                             {['#','Símbolo','Estrategia','Broker','Entrada','Salida','Acciones','Px entrada','Capital inv.','Px salida/actual','Divisa','FX','Comisión','P&L €','P&L %','Días','Estado'].map(h=>(
                               <th key={h} style={{padding:'6px 8px',textAlign:'left',fontFamily:MONO,fontSize:9,color:'#3d5a7a',
                                 letterSpacing:'0.08em',textTransform:'uppercase',borderBottom:'1px solid var(--border)',whiteSpace:'nowrap'}}>{h}</th>
@@ -6656,8 +6634,13 @@ export default function Home() {
                               Math.round((new Date(isOpen?t._current_date||new Date():t.exit_date)-new Date(t.entry_date))/86400000):null
                             const col=TL_COLORS[t.broker]||'#7a9bc0'
                             const isSel=tlSelected?.id===t.id
+                            const isMultiChecked = tlMultiSel.has(t.id)
                             return(
                               <tr key={t.id} onClick={()=>{
+                                if(tlMultiMode){
+                                  setTlMultiSel(prev=>{const n=new Set(prev);n.has(t.id)?n.delete(t.id):n.add(t.id);return n})
+                                  return
+                                }
                                 setTlSelected(t)
                                 if(t.has_fills)loadFills(t.id);else setTlFills([])
                                 const df=tlDefaultForm()
@@ -6685,9 +6668,16 @@ export default function Home() {
                                 setTlFormOpen(true)
                               }}
                                 style={{borderBottom:'1px solid var(--border)',cursor:'pointer',
-                                  background:isSel?'rgba(155,114,255,0.06)':isOpen?'rgba(0,229,160,0.02)':'transparent'}}
-                                onMouseOver={e=>e.currentTarget.style.background=isSel?'rgba(155,114,255,0.1)':'rgba(255,255,255,0.03)'}
-                                onMouseOut={e=>e.currentTarget.style.background=isSel?'rgba(155,114,255,0.06)':isOpen?'rgba(0,229,160,0.02)':'transparent'}>
+                                  background:isMultiChecked?'rgba(255,77,109,0.07)':isSel?'rgba(155,114,255,0.06)':isOpen?'rgba(0,229,160,0.02)':'transparent'}}
+                                onMouseOver={e=>e.currentTarget.style.background=isMultiChecked?'rgba(255,77,109,0.12)':isSel?'rgba(155,114,255,0.1)':'rgba(255,255,255,0.03)'}
+                                onMouseOut={e=>e.currentTarget.style.background=isMultiChecked?'rgba(255,77,109,0.07)':isSel?'rgba(155,114,255,0.06)':isOpen?'rgba(0,229,160,0.02)':'transparent'}>
+                                {tlMultiMode&&(
+                                  <td style={{padding:'6px 8px'}} onClick={e=>e.stopPropagation()}>
+                                    <input type="checkbox" checked={isMultiChecked}
+                                      style={{cursor:'pointer',accentColor:'#ff4d6d'}}
+                                      onChange={()=>setTlMultiSel(prev=>{const n=new Set(prev);n.has(t.id)?n.delete(t.id):n.add(t.id);return n})}/>
+                                  </td>
+                                )}
                                 <td style={{padding:'6px 8px',color:'#3d5a7a',fontSize:10}}>{i+1}</td>
                                 <td style={{padding:'6px 4px 6px 8px',maxWidth:120}} onClick={e=>e.stopPropagation()}>
                                   <div style={{display:'flex',alignItems:'center',gap:4}}>
@@ -8088,7 +8078,7 @@ export default function Home() {
                   ;(async()=>{
                     const tradeData={...formData,...(saved||{})}
                     const s2=JSON.parse(localStorage.getItem('v50_settings')||'{}')
-                    if(!isNew||s2?.tradelog?.autoScreenshot!==true){ setSidePanel('tradelog'); return }
+                    if(!isNew){ setSidePanel('tradelog'); return }  // only screenshot on new trades
                     try{
                       setSidePanel('config')
                       await new Promise(r=>setTimeout(r,400))
