@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import Head from 'next/head'
 
 function calcMetrics(trades, capitalIni, capitalReinv, gananciaSimple, ganBH, startDate, endDate, yearsConfig) {
@@ -3362,7 +3362,7 @@ export default function Home() {
   // ── tlFiltered: single source of truth for all filtered views ──
   // Respects: status, broker, year, month, strategy, search
   // All tabs (Ops table, Dashboard, Métricas panel) MUST use this, not tlTrades directly
-  const tlFiltered = React.useMemo(()=>{
+  const tlFiltered = useMemo(()=>{
     return tlTrades.filter(t=>{
       if(tlFilterStatus && t.status!==tlFilterStatus) return false
       if(tlFilterBroker && t.broker!==tlFilterBroker) return false
