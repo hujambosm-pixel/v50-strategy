@@ -3457,11 +3457,12 @@ export default function Home() {
   const [tlParsed,setTlParsed]=useState([])          // displayed (grouped or not)
   const [tlGroupFills,setTlGroupFills]=useState(true)
 
-  // ── Enriquece filas: detecta duplicados y cierres vs trades existentes ──
+  // ── Enriquece filas: detecta duplicados y cierres (totales/parciales) ──
   const enrichParsedRows = (rows) => {
     return rows.map(r => {
       let enriched = {...r}
-      // Duplicate detection: same symbol + date + price + shares
+
+      // Duplicate detection: same symbol + date + price + shares already in DB
       const isDup = tlTrades.some(t =>
         t.symbol === r.symbol &&
         t.entry_date === r.entry_date &&
@@ -3470,19 +3471,35 @@ export default function Home() {
       )
       if (isDup) enriched._isDuplicate = true
 
-      // Closure detection: SELL fill → find open position same symbol
-      if (r.fill_type === 'sell' && !r._grouped) {
-        const openPos = tlTrades.find(t =>
-          t.symbol === r.symbol &&
-          t.fill_type !== 'sell' &&
-          (!t.status || t.status === 'open') &&
-          !t.exit_date
-        )
+      // Closure detection: any SELL fill (isolated or _orphanSell) → find open position
+      const isSellFill = r.fill_type === 'sell' || r._orphanSell
+      if (isSellFill && !r._grouped) {
+        // Find the most recent open position for this symbol
+        const openPos = [...tlTrades]
+          .filter(t =>
+            t.symbol === r.symbol &&
+            (!t.status || t.status === 'open') &&
+            !t.exit_date
+          )
+          .sort((a,b) => (b.entry_date||'') > (a.entry_date||'') ? 1 : -1)[0]
+
         if (openPos) {
-          enriched._closesTradeId = openPos.id
-          enriched._closesSymbol  = openPos.symbol
-          enriched._openEntryDate = openPos.entry_date
-          enriched._openShares    = openPos.shares
+          const openShares  = parseFloat(openPos.shares||0)
+          const sellShares  = parseFloat(r.shares||0)
+          const isPartial   = sellShares < openShares - 0.001
+          const isFull      = Math.abs(sellShares - openShares) < 0.001
+          const isExcess    = sellShares > openShares + 0.001  // venta > posición (no debería)
+
+          enriched._closesTradeId  = openPos.id
+          enriched._closesSymbol   = openPos.symbol
+          enriched._openEntryDate  = openPos.entry_date
+          enriched._openShares     = openShares
+          enriched._sellShares     = sellShares
+          enriched._isPartialClose = isPartial
+          enriched._isFullClose    = isFull
+          enriched._isExcessSell   = isExcess
+          // Remaining shares if partial
+          if (isPartial) enriched._remainingShares = openShares - sellShares
         }
       }
       return enriched
@@ -3504,8 +3521,21 @@ export default function Home() {
     const result = []
     Object.entries(bySymbol).forEach(([sym,{buys,sells}])=>{
       if(buys.length===0&&sells.length>0){
-        // Solo ventas (sin compras en este lote) → importar como cierre independiente
-        sells.forEach(s=>result.push(s))
+        // Solo ventas sin compras en este lote → marcar como cierre huérfano
+        // Se buscará posición abierta en tlTrades al enriquecer
+        const totalSell = sells.reduce((s,b)=>s+b.shares,0)
+        const avgSell   = sells.reduce((s,b)=>s+b.entry_price*b.shares,0)/totalSell
+        const commSell  = sells.reduce((s,b)=>s+(b.commission_sell||0),0)
+        const latestSell= sells.reduce((a,b)=>a.entry_date>=b.entry_date?a:b)
+        if(sells.length===1){
+          result.push({...sells[0], _orphanSell:true}); return
+        }
+        // Múltiples sells del mismo símbolo → promediar
+        result.push({
+          ...latestSell, shares:totalSell, entry_price:parseFloat(avgSell.toFixed(4)),
+          commission_sell:commSell, fill_type:'sell', _orphanSell:true,
+          _sellCount:sells.length, _grouped:sells.length>1
+        })
         return
       }
       if(sells.length===0){
@@ -4412,30 +4442,80 @@ export default function Home() {
                _grouped,_buyCount,_sellCount,_fills,...saveRow}=cleanRow
 
         if(cleanRow._closesTradeId) {
-          // Close an existing open position
+          const sellShares  = parseFloat(saveRow.shares||0)
+          const openShares  = parseFloat(cleanRow._openShares||0)
+          const isPartial   = cleanRow._isPartialClose
+          const remaining   = cleanRow._remainingShares||0
+
+          // Patch the existing open trade with exit info
           const patch={
-            exit_date: saveRow.entry_date,
-            exit_price: saveRow.entry_price,
-            exit_currency: saveRow.entry_currency||saveRow.entry_currency,
-            commission_sell: saveRow.commission_sell||0,
-            status:'closed'
+            exit_date:      saveRow.entry_date,
+            exit_price:     saveRow.entry_price,
+            exit_currency:  saveRow.entry_currency||'USD',
+            commission_sell:saveRow.commission_sell||0,
+            shares:         sellShares,    // close only the sold qty
+            status:         isPartial ? 'partial' : 'closed'
           }
+
           if(tlUseLocal()){
             const all=tlGetLS()
             const idx=all.findIndex(t=>t.id===cleanRow._closesTradeId)
-            if(idx>=0) all[idx]={...all[idx],...patch}
-            else all.push({...saveRow, status:'open', broker:saveRow.broker||defBroker,
-                           id:'local_'+Date.now()+'_'+Math.random().toString(36).slice(2)})
+            if(idx>=0){
+              all[idx]={...all[idx],...patch}
+              // If partial close → also create a new open trade for the remainder
+              if(isPartial && remaining>0){
+                all.push({...all[idx], id:'local_'+Date.now()+'r_'+Math.random().toString(36).slice(2),
+                  shares:remaining, exit_date:null, exit_price:null, commission_sell:0, status:'open'})
+              }
+            }
             tlSetLS(all)
           } else {
+            // Update existing trade (close/partial)
             const res=await fetch('/api/tradelog?action=save',{method:'POST',
               headers:{'Content-Type':'application/json'},
               body:JSON.stringify({id:cleanRow._closesTradeId,...patch})})
             const json=await res.json()
             if(!res.ok) errors.push(json.error||'Error cerrando '+saveRow.symbol)
+            // If partial → create remainder as new open trade
+            if(isPartial && remaining>0 && res.ok){
+              const origTrade=tlTrades.find(t=>t.id===cleanRow._closesTradeId)||{}
+              const remTrade={
+                symbol: origTrade.symbol,
+                entry_date: origTrade.entry_date,
+                entry_price: origTrade.entry_price,
+                entry_currency: origTrade.entry_currency,
+                shares: remaining,
+                broker: origTrade.broker||defBroker,
+                strategy: origTrade.strategy||'',
+                notes: (origTrade.notes?origTrade.notes+' | ':'')+'[Resto cierre parcial]',
+                commission_buy: 0,
+                fx_entry: origTrade.fx_entry,
+                status: 'open',
+                import_source: 'partial_remainder'
+              }
+              const r2=await fetch('/api/tradelog?action=save',{method:'POST',
+                headers:{'Content-Type':'application/json'},body:JSON.stringify(remTrade)})
+              const j2=await r2.json()
+              if(!r2.ok) errors.push(j2.error||'Error creando resto parcial '+saveRow.symbol)
+            }
           }
         } else {
-          const trade={...saveRow, status: saveRow.status||'open', broker:saveRow.broker||defBroker}
+          // If it's a SELL fill (no matching open found), skip — it's an orphan
+          // The user already decided by not deleting it from preview → save as-is
+          // but correct the field names so it doesn't look like a buy entry
+          let trade
+          if(saveRow.fill_type==='sell' && !saveRow.exit_date) {
+            // Orphan sell: save as closed trade with entry=unknown, exit=the sell data
+            // We DON'T have entry info so save minimal record for reference
+            trade = {
+              ...saveRow,
+              status: 'open',
+              broker: saveRow.broker||defBroker,
+              notes: (saveRow.notes?saveRow.notes+' | ':'')+'[Venta importada sin compra asociada]'
+            }
+          } else {
+            trade = {...saveRow, status: saveRow.status||'open', broker:saveRow.broker||defBroker}
+          }
           if(tlUseLocal()){
             const all=tlGetLS()
             all.push({...trade, id:'local_'+Date.now()+'_'+Math.random().toString(36).slice(2)})
@@ -4758,7 +4838,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.64</title>
+        <title>Trading Simulator V4.65</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4821,7 +4901,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.64
+            <span className="dot"/>Trading Simulator V4.65
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6727,7 +6807,7 @@ export default function Home() {
                     <div style={{fontFamily:MONO,fontSize:13,color:'#c8dff5',fontWeight:700}}>📥 Importar operaciones</div>
                     {/* Selector de formato */}
                     <div style={{display:'flex',gap:6}}>
-                      {[['ibkr_csv','CSV IBKR'],['degiro_csv','CSV Degiro'],['ai','Texto / Pegar / OCR']].map(([v,l])=>(
+                      {[['ibkr_csv','CSV IBKR'],['degiro_csv','CSV Degiro'],['ai','Texto / Pegar']].map(([v,l])=>(
                         <button key={v} onClick={()=>setTlImportFormat(v)}
                           style={{fontFamily:MONO,fontSize:11,padding:'5px 10px',borderRadius:4,cursor:'pointer',
                             border:`1px solid ${tlImportFormat===v?'#9b72ff':'#1a2d45'}`,
@@ -6821,8 +6901,9 @@ export default function Home() {
                                 <td style={{padding:'3px 5px',whiteSpace:'nowrap'}}>
                                   {isClose?(
                                     <span style={{fontFamily:MONO,fontSize:9,padding:'2px 5px',borderRadius:3,
-                                      background:'rgba(155,114,255,0.2)',color:'#9b72ff',fontWeight:700}}>
-                                      ↩ CIERRE
+                                      background: t._isPartialClose?'rgba(255,209,102,0.2)':'rgba(155,114,255,0.2)',
+                                      color: t._isPartialClose?'#ffd166':'#9b72ff',fontWeight:700}}>
+                                      {t._isPartialClose?'↩ PARCIAL':'↩ CIERRE'}
                                     </span>
                                   ):isGrouped?(
                                     <span style={{fontFamily:MONO,fontSize:9,padding:'2px 5px',borderRadius:3,
@@ -6856,16 +6937,20 @@ export default function Home() {
                                     onFocus={e=>e.target.style.borderBottomColor='var(--accent)'}
                                     onBlur={e=>e.target.style.borderBottomColor='transparent'}/>
                                   {t.exit_price&&<span style={{fontSize:9,color:'#9b72ff',marginLeft:3}}>→{t.exit_price}</span>}
-                                  {isClose&&<div style={{fontSize:8,color:'#9b72ff'}}>cierra {t._closesSymbol}</div>}
+                                  {isClose&&<div style={{fontSize:8,color:t._isPartialClose?'#ffd166':'#9b72ff'}}>
+                                    {t._isPartialClose
+                                      ? `cierra ${t._sellShares} de ${t._openShares} acc · resto ${t._remainingShares}`
+                                      : `cierra ${t._closesSymbol} (${t._openShares} acc)`}
+                                  </div>}
                                 </td>
                                 {cell('entry_currency',t.entry_currency,'#ffd166')}
                                 <td style={{padding:'3px 5px',color:'#4a7a95',fontSize:10}}>{(()=>{let fx=parseFloat(t.fx_entry);if(!fx||isNaN(fx))return'—';if(fx<1)fx=1/fx;return fx.toFixed(4)})()}</td>
                                 {cell('broker',t.broker)}
                                 <td style={{padding:'3px 5px'}}>
                                   <span style={{fontSize:9,padding:'1px 5px',borderRadius:3,
-                                    background:t.status==='closed'||isClose?'rgba(0,229,160,0.1)':'rgba(255,209,102,0.1)',
-                                    color:t.status==='closed'||isClose?'#00e5a0':'#ffd166'}}>
-                                    {t.status==='closed'||isClose?'✓ Cerrada':'○ Abierta'}
+                                    background: t._isFullClose||t.status==='closed'?'rgba(0,229,160,0.1)':t._isPartialClose?'rgba(255,209,102,0.15)':'rgba(255,209,102,0.1)',
+                                    color: t._isFullClose||t.status==='closed'?'#00e5a0':t._isPartialClose?'#ffd166':'#ffd166'}}>
+                                    {t._isFullClose||t.status==='closed'?'✓ Cerrada':t._isPartialClose?'◑ Parcial':'○ Abierta'}
                                   </span>
                                 </td>
                                 <td style={{padding:'3px 5px',color:'#00d4ff'}}>{t.capital_eur?`€${Math.round(t.capital_eur)}`:'—'}</td>
