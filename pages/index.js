@@ -3354,10 +3354,31 @@ export default function Home() {
   const [tlTab,setTlTab]=useState('ops')               // 'ops'|'import'|'export'|'dashboard'
   const [tlFilterBroker,setTlFilterBroker]=useState('')
   const [tlFilterYear,setTlFilterYear]=useState('')
+  const [tlFilterMonth,setTlFilterMonth]=useState('')  // '01'..'12'
   const [tlFilterType,setTlFilterType]=useState('')
   const [tlFilterStatus,setTlFilterStatus]=useState('') // ''|'open'|'closed'
   const [tlSearch,setTlSearch]=useState('')
   const tlSearchRef=useRef(null)
+  // ── tlFiltered: single source of truth for all filtered views ──
+  // Respects: status, broker, year, month, strategy, search
+  // All tabs (Ops table, Dashboard, Métricas panel) MUST use this, not tlTrades directly
+  const tlFiltered = React.useMemo(()=>{
+    return tlTrades.filter(t=>{
+      if(tlFilterStatus && t.status!==tlFilterStatus) return false
+      if(tlFilterBroker && t.broker!==tlFilterBroker) return false
+      if(tlFilterStrat && (t.strategy||'')!==tlFilterStrat) return false
+      if(tlSearch && !(t.symbol||'').toLowerCase().includes(tlSearch.toLowerCase())) return false
+      if(tlFilterYear||tlFilterMonth){
+        // For closed trades use exit_date (month the result materialized)
+        // For open trades use entry_date
+        const d = (t.status==='closed' ? t.exit_date : null) || t.entry_date
+        if(!d) return false
+        if(tlFilterYear && !d.startsWith(tlFilterYear)) return false
+        if(tlFilterMonth && d.slice(5,7)!==tlFilterMonth) return false
+      }
+      return true
+    })
+  },[tlTrades,tlFilterStatus,tlFilterBroker,tlFilterStrat,tlSearch,tlFilterYear,tlFilterMonth])
   const [tlFills,setTlFills]=useState([])
   const [tlFormOpen,setTlFormOpen]=useState(false)
   const [tlFilterStrat,setTlFilterStrat]=useState('')
@@ -4230,7 +4251,14 @@ export default function Home() {
       if(local) {
         let trades = tlGetLS()
         if(tlFilterBroker) trades = trades.filter(t=>t.broker===tlFilterBroker)
-        if(tlFilterYear)   trades = trades.filter(t=>t.entry_date?.startsWith(tlFilterYear))
+        if(tlFilterYear)   trades = trades.filter(t=>{
+          const d=(t.status==='closed'?t.exit_date:null)||t.entry_date
+          return d&&d.startsWith(tlFilterYear)
+        })
+        if(tlFilterMonth)  trades = trades.filter(t=>{
+          const d=(t.status==='closed'?t.exit_date:null)||t.entry_date
+          return d&&d.slice(5,7)===tlFilterMonth
+        })
         if(tlFilterStatus) trades = trades.filter(t=>t.status===tlFilterStatus)
         trades = trades.sort((a,b)=>b.entry_date?.localeCompare(a.entry_date||'')||b.created_at?.localeCompare(a.created_at||'')||0)
         // Enrich open trades with live prices client-side
@@ -4270,6 +4298,7 @@ export default function Home() {
       let url = '/api/tradelog?action=list'
       if(tlFilterBroker) url += `&broker=${tlFilterBroker}`
       if(tlFilterYear)   url += `&year=${tlFilterYear}`
+      if(tlFilterMonth)  url += `&month=${tlFilterMonth}`
       if(tlFilterStatus) url += `&status=${tlFilterStatus}`
       const res = await fetch(url)
       const json = await res.json()
@@ -4280,7 +4309,14 @@ export default function Home() {
       if(e.message?.includes('SUPABASE_URL') || e.message?.includes('no configurada') || e.message?.includes('does not exist') || e.message?.includes('relation')) {
         let trades = tlGetLS()
         if(tlFilterBroker) trades = trades.filter(t=>t.broker===tlFilterBroker)
-        if(tlFilterYear)   trades = trades.filter(t=>t.entry_date?.startsWith(tlFilterYear))
+        if(tlFilterYear)   trades = trades.filter(t=>{
+          const d=(t.status==='closed'?t.exit_date:null)||t.entry_date
+          return d&&d.startsWith(tlFilterYear)
+        })
+        if(tlFilterMonth)  trades = trades.filter(t=>{
+          const d=(t.status==='closed'?t.exit_date:null)||t.entry_date
+          return d&&d.slice(5,7)===tlFilterMonth
+        })
         if(tlFilterStatus) trades = trades.filter(t=>t.status===tlFilterStatus)
         setTlTrades(trades.sort((a,b)=>(b.entry_date||'').localeCompare(a.entry_date||'')||(b.created_at||b.id||'').localeCompare(a.created_at||a.id||'')))
       } else {
@@ -4288,7 +4324,7 @@ export default function Home() {
       }
     }
     finally { setTlLoading(false) }
-  },[tlFilterBroker,tlFilterYear,tlFilterStatus])
+  },[tlFilterBroker,tlFilterYear,tlFilterMonth,tlFilterStatus])
 
   useEffect(()=>{ if(sidePanel==='tradelog') loadTrades() },[sidePanel,loadTrades])
 
@@ -4839,7 +4875,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.69</title>
+        <title>Trading Simulator V4.71</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4902,7 +4938,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.69
+            <span className="dot"/>Trading Simulator V4.71
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5200,11 +5236,11 @@ export default function Home() {
                               <span key={c.id} title={tooltip}
                                 style={{
                                   display:'inline-flex',alignItems:'center',justifyContent:'center',
-                                  width:18,height:18,borderRadius:'50%',flexShrink:0,
+                                  width:15,height:15,borderRadius:'50%',flexShrink:0,
                                   background:active?col:'rgba(42,63,85,0.5)',
                                   border:`1.5px solid ${active?col:'#2a3f55'}`,
                                   color:active?'#080c14':'#3d5a7a',
-                                  fontFamily:MONO,fontSize:7,fontWeight:800,lineHeight:1,letterSpacing:'-0.5px',
+                                  fontFamily:MONO,fontSize:6,fontWeight:800,lineHeight:1,letterSpacing:'-0.5px',
                                   boxShadow:active?`0 0 6px ${col}55`:undefined,
                                   cursor:'default',
                                   animation:shouldBlink?`alarmPulse 1s ease-in-out infinite`:undefined,
@@ -5846,15 +5882,41 @@ export default function Home() {
                       </div>
                       <div style={{padding:'7px 8px',borderBottom:'1px solid var(--border)'}}>
                         <div style={{fontFamily:MONO,fontSize:8,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:4}}>Período</div>
-                        <div style={{display:'flex',gap:3,flexWrap:'wrap'}}>
+                        <div style={{display:'flex',gap:3,flexWrap:'wrap',marginBottom:tlFilterYear?4:0}}>
                           {[['','Todo'],...allYears.map(y=>[y,y])].map(([v,l])=>(
-                            <button key={v} onClick={()=>setTlFilterYear(tlFilterYear===v?'':v)}
+                            <button key={v} onClick={()=>{const next=tlFilterYear===v?'':v;setTlFilterYear(next);if(!next)setTlFilterMonth('')}}
                               style={{fontFamily:MONO,fontSize:10,padding:'2px 6px',borderRadius:3,cursor:'pointer',
                                 border:'1px solid '+(tlFilterYear===v?'#9b72ff':'#1a2d45'),
                                 background:tlFilterYear===v?'rgba(155,114,255,0.1)':'transparent',
                                 color:tlFilterYear===v?'#9b72ff':'#4a7a95'}}>{l}</button>
                           ))}
                         </div>
+                        {tlFilterYear&&(()=>{
+                          const monthsInYear=[...new Set(tlTrades
+                            .filter(t=>{const d=t.exit_date||t.entry_date;return d&&d.startsWith(tlFilterYear)})
+                            .map(t=>{const d=t.exit_date||t.entry_date;return d?d.slice(5,7):null}).filter(Boolean)
+                          )].sort()
+                          if(!monthsInYear.length) return null
+                          const MESES=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
+                          return(
+                            <div style={{display:'flex',gap:3,flexWrap:'wrap',paddingTop:4,borderTop:'1px solid rgba(155,114,255,0.12)'}}>
+                              <button onClick={()=>setTlFilterMonth('')}
+                                style={{fontFamily:MONO,fontSize:9,padding:'2px 5px',borderRadius:3,cursor:'pointer',
+                                  border:'1px solid '+(tlFilterMonth===''?'#9b72ff':'#1a2d45'),
+                                  background:tlFilterMonth===''?'rgba(155,114,255,0.1)':'transparent',
+                                  color:tlFilterMonth===''?'#9b72ff':'#4a7a95'}}>Todos</button>
+                              {monthsInYear.map(m=>(
+                                <button key={m} onClick={()=>setTlFilterMonth(tlFilterMonth===m?'':m)}
+                                  style={{fontFamily:MONO,fontSize:9,padding:'2px 5px',borderRadius:3,cursor:'pointer',
+                                    border:'1px solid '+(tlFilterMonth===m?'#00d4ff':'#1a2d45'),
+                                    background:tlFilterMonth===m?'rgba(0,212,255,0.1)':'transparent',
+                                    color:tlFilterMonth===m?'#00d4ff':'#4a7a95'}}>
+                                  {MESES[parseInt(m)-1]}
+                                </button>
+                              ))}
+                            </div>
+                          )
+                        })()}
                       </div>
                       {(()=>{
                         const strats=[...new Set(tlTrades.map(t=>t.strategy||'').filter(Boolean))].sort()
@@ -6606,11 +6668,7 @@ export default function Home() {
                           onMouseOut={e=>e.currentTarget.style.color='#ff4d6d'}>✕</button>
                       )}
                       <span style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',flexShrink:0}}>
-                        {tlTrades.filter(t=>{
-                          if(tlTab==='open'&&t.status!=='open') return false
-                          if(tlSearch&&!(t.symbol||'').toLowerCase().includes(tlSearch.toLowerCase())) return false
-                          return true
-                        }).length}
+                        {tlFiltered.length}
                       </span>
                       {tlLoading&&<span style={{fontFamily:MONO,fontSize:9,color:'#9b72ff',flexShrink:0}}>⟳</span>}
                     </div>
@@ -6677,17 +6735,9 @@ export default function Home() {
                               <th style={{padding:'6px 8px',borderBottom:'1px solid var(--border)',width:32}}>
                                 <input type="checkbox"
                                   style={{cursor:'pointer',accentColor:'#ff4d6d'}}
-                                  checked={tlTrades.filter(t=>{
-                                    if(tlTab==='open'&&t.status!=='open') return false
-                                    if(tlSearch&&!(t.symbol||'').toLowerCase().includes(tlSearch.toLowerCase())) return false
-                                    return true
-                                  }).every(t=>tlMultiSel.has(t.id))}
+                                  checked={tlFiltered.length>0&&tlFiltered.every(t=>tlMultiSel.has(t.id))}
                                   onChange={e=>{
-                                    const visible=tlTrades.filter(t=>{
-                                      if(tlTab==='open'&&t.status!=='open') return false
-                                      if(tlSearch&&!(t.symbol||'').toLowerCase().includes(tlSearch.toLowerCase())) return false
-                                      return true
-                                    })
+                                    const visible=tlFiltered
                                     if(e.target.checked) setTlMultiSel(new Set(visible.map(t=>t.id)))
                                     else setTlMultiSel(new Set())
                                   }}
@@ -6702,12 +6752,7 @@ export default function Home() {
                           </tr>
                         </thead>
                         <tbody>
-                          {tlTrades.filter(t=>{
-                            if(tlTab==='open'&&t.status!=='open') return false
-                            if(tlSearch&&!(t.symbol||'').toLowerCase().includes(tlSearch.toLowerCase())) return false
-                            if(tlFilterStrat&&(t.strategy||'')!==tlFilterStrat) return false
-                            return true
-                          }).map((t,i,arr)=>{
+                          {tlFiltered.map((t,i,arr)=>{
                             const isOpen=t.status==='open'
                             const pnl=isOpen?t._pnl_float_eur:t.pnl_eur
                             const pnlPct=isOpen?t._pnl_float_pct:t.pnl_pct
@@ -6744,7 +6789,7 @@ export default function Home() {
                                   import_source:t.import_source||'manual'
                                 })
                                 if(t.status==='open'){
-                                  setTlCloseForm({exit_date:new Date().toISOString().slice(0,10),exit_price:'',exit_currency:t.entry_currency||'USD',commission_sell:0,fx_exit:'',fx_exit_manual:false})
+                                  setTlCloseForm({exit_date:todayDisplay(),exit_price:'',exit_currency:t.entry_currency||'USD',commission_sell:0,fx_exit:'',fx_exit_manual:false})
                                 }
                                 setTlFillsList([])
                                 setTlExitFillsList([])
@@ -6791,11 +6836,11 @@ export default function Home() {
                                         return(
                                           <span key={c.id} title={c.name+(active?' ✓ '+(bars!=null?bars+'v':''):' —')}
                                             style={{display:'inline-flex',alignItems:'center',justifyContent:'center',
-                                              width:14,height:14,borderRadius:'50%',flexShrink:0,
+                                              width:13,height:13,borderRadius:'50%',flexShrink:0,
                                               background:active?col2:'rgba(42,63,85,0.5)',
                                               border:'1px solid '+(active?col2:'#2a3f55'),
                                               color:active?'#080c14':'#3d5a7a',
-                                              fontFamily:MONO,fontSize:6,fontWeight:800,lineHeight:1,letterSpacing:'-0.5px',
+                                              fontFamily:MONO,fontSize:5,fontWeight:800,lineHeight:1,letterSpacing:'-0.5px',
                                               boxShadow:active?'0 0 5px '+col2+'55':undefined,
                                               cursor:'default',
                                               animation:shouldBlink?'alarmPulse 1s ease-in-out infinite':undefined}}>
@@ -7177,14 +7222,7 @@ export default function Home() {
                 {tlTab==='dashboard'&&(
                   <div style={{flex:1,display:'flex',flexDirection:'column',gap:0,overflowY:'auto'}}>
                     {(()=>{
-                      // Apply same filters as ops table
-                      const filtered = tlTrades.filter(t=>{
-                        if(tlFilterStatus&&t.status!==tlFilterStatus) return false
-                        if(tlFilterBroker&&t.broker!==tlFilterBroker) return false
-                        if(tlFilterYear&&!t.entry_date?.startsWith(tlFilterYear)) return false
-                        if(tlFilterStrat&&(t.strategy||'')!==tlFilterStrat) return false
-                        return true
-                      })
+                      const filtered = tlFiltered
                       const closed = filtered.filter(t=>t.status==='closed'&&t.pnl_eur!=null&&t.entry_date)
                         .sort((a,b)=>(a.exit_date||a.entry_date).localeCompare(b.exit_date||b.entry_date))
                       const openTrades = filtered.filter(t=>t.status==='open'&&t.entry_date)
@@ -7246,11 +7284,19 @@ export default function Home() {
                       return (
                         <div style={{display:'flex',flexDirection:'column',gap:0}}>
                           {/* Filtros activos badge */}
-                          {(tlFilterStatus||tlFilterBroker||tlFilterYear)&&(
-                            <div style={{padding:'4px 10px',background:'rgba(155,114,255,0.06)',borderBottom:'1px solid var(--border)',display:'flex',gap:6,flexWrap:'wrap'}}>
+                          {(tlFilterStatus||tlFilterBroker||tlFilterYear||tlFilterMonth||tlFilterStrat||tlSearch)&&(
+                            <div style={{padding:'4px 10px',background:'rgba(155,114,255,0.06)',borderBottom:'1px solid var(--border)',display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
+                              <span style={{fontFamily:MONO,fontSize:8,color:'#4a5a70',flexShrink:0}}>Filtros:</span>
                               {tlFilterStatus&&<span style={{fontFamily:MONO,fontSize:9,color:'#9b72ff',border:'1px solid rgba(155,114,255,0.3)',borderRadius:3,padding:'1px 5px'}}>Estado: {tlFilterStatus}</span>}
                               {tlFilterBroker&&<span style={{fontFamily:MONO,fontSize:9,color:'#9b72ff',border:'1px solid rgba(155,114,255,0.3)',borderRadius:3,padding:'1px 5px'}}>Broker: {tlFilterBroker}</span>}
-                              {tlFilterYear&&<span style={{fontFamily:MONO,fontSize:9,color:'#9b72ff',border:'1px solid rgba(155,114,255,0.3)',borderRadius:3,padding:'1px 5px'}}>Año: {tlFilterYear}</span>}
+                              {tlFilterYear&&<span style={{fontFamily:MONO,fontSize:9,color:'#9b72ff',border:'1px solid rgba(155,114,255,0.3)',borderRadius:3,padding:'1px 5px'}}>Año: {tlFilterYear}{tlFilterMonth?' · '+['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][parseInt(tlFilterMonth)-1]:''}</span>}
+                              {tlFilterStrat&&<span style={{fontFamily:MONO,fontSize:9,color:'#00d4ff',border:'1px solid rgba(0,212,255,0.3)',borderRadius:3,padding:'1px 5px',maxWidth:100,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={tlFilterStrat}>{tlFilterStrat}</span>}
+                              {tlSearch&&<span style={{fontFamily:MONO,fontSize:9,color:'#ffd166',border:'1px solid rgba(255,209,102,0.3)',borderRadius:3,padding:'1px 5px'}}>"{tlSearch}"</span>}
+                              <button onClick={()=>{setTlFilterStatus('');setTlFilterBroker('');setTlFilterYear('');setTlFilterMonth('');setTlFilterStrat('');setTlSearch('')}}
+                                style={{fontFamily:MONO,fontSize:8,padding:'1px 5px',borderRadius:3,cursor:'pointer',
+                                  background:'rgba(255,77,109,0.08)',border:'1px solid rgba(255,77,109,0.3)',color:'#ff4d6d',marginLeft:'auto',flexShrink:0}}>
+                                ✕ Limpiar todo
+                              </button>
                             </div>
                           )}
 
@@ -7288,13 +7334,7 @@ export default function Home() {
                 <div style={{width:270,flexShrink:0,borderLeft:'1px solid var(--border)',background:'var(--bg2)',display:'flex',flexDirection:'column',overflow:'hidden'}}>
                   {/* ── MÉTRICAS SIEMPRE VISIBLES — incluye flotantes ── */}
                   {(()=>{
-                    const all=tlTrades.filter(t=>{
-                      if(tlFilterStatus&&t.status!==tlFilterStatus) return false
-                      if(tlFilterBroker&&t.broker!==tlFilterBroker) return false
-                      if(tlFilterYear&&!t.entry_date?.startsWith(tlFilterYear)) return false
-                      if(tlFilterStrat&&(t.strategy||'')!==tlFilterStrat) return false
-                      return true
-                    })
+                    const all=tlFiltered
                     const closed=all.filter(t=>t.status==='closed')
                     const open=all.filter(t=>t.status==='open')
                     const today=new Date().toISOString().split('T')[0]
