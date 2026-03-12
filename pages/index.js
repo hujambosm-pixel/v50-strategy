@@ -4467,7 +4467,21 @@ export default function Home() {
       setTlParsedRaw(raw)
       const grouped = groupParsedFills(raw)
       setTlParsed(enrichParsedRows(grouped))
-    }catch(e){alert('Error al parsear: '+e.message)}
+    }catch(e){
+      const msg = e.message||''
+      // Detect Groq rate limit and extract wait time
+      const waitMatch = msg.match(/try again in ([\d.]+)s/i)
+      if(waitMatch){
+        const secs = Math.ceil(parseFloat(waitMatch[1]))
+        alert(`⏱ Límite de Groq alcanzado (demasiados tokens por minuto).
+
+Espera ${secs} segundos y vuelve a intentarlo.
+
+Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.groq.com`)
+      } else {
+        alert('Error al parsear: '+msg)
+      }
+    }
     finally{setTlImportLoading(false)}
   }
 
