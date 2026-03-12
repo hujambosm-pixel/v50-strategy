@@ -3359,6 +3359,9 @@ export default function Home() {
   const [tlFilterStatus,setTlFilterStatus]=useState('') // ''|'open'|'closed'
   const [tlSearch,setTlSearch]=useState('')
   const tlSearchRef=useRef(null)
+  const [tlFills,setTlFills]=useState([])
+  const [tlFormOpen,setTlFormOpen]=useState(false)
+  const [tlFilterStrat,setTlFilterStrat]=useState('')
   // ── tlFiltered: single source of truth for all filtered views ──
   // Respects: status, broker, year, month, strategy, search
   // All tabs (Ops table, Dashboard, Métricas panel) MUST use this, not tlTrades directly
@@ -3369,8 +3372,6 @@ export default function Home() {
       if(tlFilterStrat && (t.strategy||'')!==tlFilterStrat) return false
       if(tlSearch && !(t.symbol||'').toLowerCase().includes(tlSearch.toLowerCase())) return false
       if(tlFilterYear||tlFilterMonth){
-        // For closed trades use exit_date (month the result materialized)
-        // For open trades use entry_date
         const d = (t.status==='closed' ? t.exit_date : null) || t.entry_date
         if(!d) return false
         if(tlFilterYear && !d.startsWith(tlFilterYear)) return false
@@ -3379,9 +3380,6 @@ export default function Home() {
       return true
     })
   },[tlTrades,tlFilterStatus,tlFilterBroker,tlFilterStrat,tlSearch,tlFilterYear,tlFilterMonth])
-  const [tlFills,setTlFills]=useState([])
-  const [tlFormOpen,setTlFormOpen]=useState(false)
-  const [tlFilterStrat,setTlFilterStrat]=useState('')
   const [tlFillsList,setTlFillsList]=useState([])  // fills entrada para modal
   const [tlExitFillsList,setTlExitFillsList]=useState([])  // fills salida para modal
   const [tlSideEdit,setTlSideEdit]=useState(false)   // edit panel in left sidebar
