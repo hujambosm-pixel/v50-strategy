@@ -8318,7 +8318,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   const pnlPct=(parseFloat(tlCloseForm.exit_price)/parseFloat(tlSelected.entry_price||1)-1)*100
                   const col=pnlEur>=0?'#00e5a0':'#ff4d6d'
                   return(<div style={{fontFamily:MONO,fontSize:10,color:'var(--text3)',marginBottom:6,display:'flex',gap:16}}>
-                    <span>P&L: <b style={{color:col}}>{pnlEur>=0?'+':''}{pnlEur.toFixed(2)}€</b></span>
+                    <span>P&amp;L: <b style={{color:col}}>{pnlEur>=0?'+':''}{pnlEur.toFixed(2)}€</b></span>
                     <span>%: <b style={{color:col}}>{pnlPct>=0?'+':''}{pnlPct.toFixed(2)}%</b></span>
                   </div>)
                 })()}
