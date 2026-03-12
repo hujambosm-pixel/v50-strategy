@@ -4901,7 +4901,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.72</title>
+        <title>Trading Simulator V4.73</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4964,7 +4964,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.72
+            <span className="dot"/>Trading Simulator V4.73
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -8199,53 +8199,51 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
             {/* ── FILLS PARCIALES ── */}
             <div style={{borderTop:'1px solid var(--border)',paddingTop:10}}>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
-                <span style={{fontFamily:MONO,fontSize:10,color:'#5a8aaa'}}>Fills parciales</span>
-                <button onClick={()=>setTlFillsList(f=>[...f,{date:tlForm.entry_date||todayDisplay()||'',price:'',shares:''}])}
+                <span style={{fontFamily:MONO,fontSize:10,color:'#5a8aaa',fontWeight:600}}>Fills de entrada</span>
+                <button onClick={()=>setTlFillsList(f=>[...f,{date:todayDisplay(),price:'',shares:''}])}
                   style={{fontFamily:MONO,fontSize:10,padding:'3px 8px',borderRadius:3,cursor:'pointer',
                     border:'1px solid #2a4060',background:'rgba(0,212,255,0.06)',color:'#00d4ff'}}>
-                  + Añadir fill
+                  + Añadir fill entrada
                 </button>
               </div>
               {tlFillsList.length>0&&(
                 <div style={{display:'flex',flexDirection:'column',gap:4}}>
-                  {tlFillsList.map((f,fi)=>(
+                  {tlFillsList.map((f,fi)=>{
+                    const updF=(patch)=>{const nf=[...tlFillsList];nf[fi]={...nf[fi],...patch};setTlFillsList(nf)}
+                    return(
                     <div key={fi} style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr auto',gap:6,alignItems:'center'}}>
                       <input type="text" placeholder="dd/mm/yyyy" value={f.date}
-                        onChange={e=>{const nf=[...tlFillsList];nf[fi]={...nf[fi],date:e.target.value};setTlFillsList(nf);
-                          if(e.target.value.length===10){
-                            const tot=nf.filter(x=>x.shares&&x.price).reduce((s,x)=>({sh:s.sh+parseFloat(x.shares||0),val:s.val+parseFloat(x.shares||0)*parseFloat(x.price||0)}),{sh:0,val:0})
-                            if(tot.sh>0){setTlForm(p=>({...p,shares:tot.sh.toString(),entry_price:(tot.val/tot.sh).toFixed(4)}))}
-                          }}}
+                        onChange={e=>updF({date:e.target.value})}
                         style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:10,padding:'4px 6px',borderRadius:3}}/>
                       <input type="number" placeholder="Precio" value={f.price}
-                        onChange={e=>{const nf=[...tlFillsList];nf[fi]={...nf[fi],price:e.target.value};setTlFillsList(nf);
-                          const tot=nf.filter(x=>x.shares&&x.price).reduce((s,x)=>({sh:s.sh+parseFloat(x.shares||0),val:s.val+parseFloat(x.shares||0)*parseFloat(x.price||0)}),{sh:0,val:0})
-                          if(tot.sh>0){setTlForm(p=>({...p,shares:tot.sh.toString(),entry_price:(tot.val/tot.sh).toFixed(4)}))}}}
+                        onChange={e=>updF({price:e.target.value})}
                         style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:10,padding:'4px 6px',borderRadius:3}}/>
                       <input type="number" placeholder="Acciones" value={f.shares}
-                        onChange={e=>{const nf=[...tlFillsList];nf[fi]={...nf[fi],shares:e.target.value};setTlFillsList(nf);
-                          const tot=nf.filter(x=>x.shares&&x.price).reduce((s,x)=>({sh:s.sh+parseFloat(x.shares||0),val:s.val+parseFloat(x.shares||0)*parseFloat(x.price||0)}),{sh:0,val:0})
-                          if(tot.sh>0){setTlForm(p=>({...p,shares:tot.sh.toString(),entry_price:(tot.val/tot.sh).toFixed(4)}))}}}
+                        onChange={e=>updF({shares:e.target.value})}
                         style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:10,padding:'4px 6px',borderRadius:3}}/>
-                      <span onClick={()=>{const nf=tlFillsList.filter((_,i)=>i!==fi);setTlFillsList(nf);
-                          const tot=nf.filter(x=>x.shares&&x.price).reduce((s,x)=>({sh:s.sh+parseFloat(x.shares||0),val:s.val+parseFloat(x.shares||0)*parseFloat(x.price||0)}),{sh:0,val:0})
-                          if(tot.sh>0){setTlForm(p=>({...p,shares:tot.sh.toString(),entry_price:(tot.val/tot.sh).toFixed(4)}))}}}
+                      <span onClick={()=>setTlFillsList(tlFillsList.filter((_,i)=>i!==fi))}
                         style={{cursor:'pointer',color:'#ff4d6d',fontSize:14,lineHeight:1,padding:'0 2px'}}>×</span>
                     </div>
-                  ))}
-                  <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',paddingTop:2}}>
-                    Precio medio → <span style={{color:'#ffd166'}}>{tlForm.entry_price||'—'}</span>
-                    &nbsp;· Acciones totales → <span style={{color:'#ffd166'}}>{tlForm.shares||'—'}</span>
-                  </div>
+                    )
+                  })}
+                  {(()=>{
+                    const tot=tlFillsList.filter(x=>x.shares&&x.price).reduce((s,x)=>({sh:s.sh+parseFloat(x.shares||0),val:s.val+parseFloat(x.shares||0)*parseFloat(x.price||0)}),{sh:0,val:0})
+                    if(!tot.sh) return null
+                    return(
+                      <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',paddingTop:2}}>
+                        Precio medio entrada → <span style={{color:'#ffd166'}}>{(tot.val/tot.sh).toFixed(4)}</span>
+                        &nbsp;· Acciones totales → <span style={{color:'#ffd166'}}>{tot.sh}</span>
+                      </div>
+                    )
+                  })()}
                 </div>
               )}
             </div>
-            {/* ── FILLS DE SALIDA PARCIALES (solo si hay exit_price en el form o op abierta) ── */}
             {tlForm.id&&(
               <div style={{borderTop:'1px solid var(--border)',paddingTop:10}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
-                  <span style={{fontFamily:MONO,fontSize:10,color:'#ff9a6c'}}>Fills de salida parciales</span>
-                  <button onClick={()=>setTlExitFillsList(f=>[...f,{date:new Date().toISOString().slice(0,10),price:'',shares:''}])}
+                  <span style={{fontFamily:MONO,fontSize:10,color:'#ff9a6c',fontWeight:600}}>Fills de salida</span>
+                  <button onClick={()=>setTlExitFillsList(f=>[...f,{date:todayDisplay(),price:'',shares:''}])}
                     style={{fontFamily:MONO,fontSize:10,padding:'3px 8px',borderRadius:3,cursor:'pointer',
                       border:'1px solid #2a4060',background:'rgba(255,77,109,0.06)',color:'#ff9a6c'}}>
                     + Añadir fill salida
@@ -8253,262 +8251,35 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 </div>
                 {tlExitFillsList.length>0&&(
                   <div style={{display:'flex',flexDirection:'column',gap:4}}>
-                    {tlExitFillsList.map((f,fi)=>(
+                    {tlExitFillsList.map((f,fi)=>{
+                      const updEF=(patch)=>{const nf=[...tlExitFillsList];nf[fi]={...nf[fi],...patch};setTlExitFillsList(nf)}
+                      return(
                       <div key={fi} style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr auto',gap:6,alignItems:'center'}}>
-                        <input type="date" value={f.date}
-                          onChange={e=>{const nf=[...tlExitFillsList];nf[fi]={...nf[fi],date:e.target.value};setTlExitFillsList(nf);
-                            const tot=nf.filter(x=>x.shares&&x.price).reduce((s,x)=>({sh:s.sh+parseFloat(x.shares||0),val:s.val+parseFloat(x.shares||0)*parseFloat(x.price||0)}),{sh:0,val:0})
-                            if(tot.sh>0){setTlForm(p=>({...p,exit_date:nf[nf.length-1].date,exit_price:(tot.val/tot.sh).toFixed(4)}))}}}
+                        <input type="text" placeholder="dd/mm/yyyy" value={f.date}
+                          onChange={e=>updEF({date:e.target.value})}
                           style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:10,padding:'4px 6px',borderRadius:3}}/>
                         <input type="number" placeholder="Precio salida" value={f.price}
-                          onChange={e=>{const nf=[...tlExitFillsList];nf[fi]={...nf[fi],price:e.target.value};setTlExitFillsList(nf);
-                            const tot=nf.filter(x=>x.shares&&x.price).reduce((s,x)=>({sh:s.sh+parseFloat(x.shares||0),val:s.val+parseFloat(x.shares||0)*parseFloat(x.price||0)}),{sh:0,val:0})
-                            if(tot.sh>0){setTlForm(p=>({...p,exit_price:(tot.val/tot.sh).toFixed(4)}))}}}
+                          onChange={e=>updEF({price:e.target.value})}
                           style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:10,padding:'4px 6px',borderRadius:3}}/>
                         <input type="number" placeholder="Acciones" value={f.shares}
-                          onChange={e=>{const nf=[...tlExitFillsList];nf[fi]={...nf[fi],shares:e.target.value};setTlExitFillsList(nf);
-                            const tot=nf.filter(x=>x.shares&&x.price).reduce((s,x)=>({sh:s.sh+parseFloat(x.shares||0),val:s.val+parseFloat(x.shares||0)*parseFloat(x.price||0)}),{sh:0,val:0})
-                            if(tot.sh>0){setTlForm(p=>({...p,exit_price:(tot.val/tot.sh).toFixed(4)}))}}}
+                          onChange={e=>updEF({shares:e.target.value})}
                           style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:10,padding:'4px 6px',borderRadius:3}}/>
-                        <span onClick={()=>{const nf=tlExitFillsList.filter((_,i)=>i!==fi);setTlExitFillsList(nf);
-                            const tot=nf.filter(x=>x.shares&&x.price).reduce((s,x)=>({sh:s.sh+parseFloat(x.shares||0),val:s.val+parseFloat(x.shares||0)*parseFloat(x.price||0)}),{sh:0,val:0})
-                            if(tot.sh>0){setTlForm(p=>({...p,exit_price:(tot.val/tot.sh).toFixed(4)}))}}}
+                        <span onClick={()=>setTlExitFillsList(tlExitFillsList.filter((_,i)=>i!==fi))}
                           style={{cursor:'pointer',color:'#ff4d6d',fontSize:14,lineHeight:1,padding:'0 2px'}}>×</span>
                       </div>
-                    ))}
-                    <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',paddingTop:2}}>
-                      Precio medio salida → <span style={{color:'#ff9a6c'}}>{tlForm.exit_price||'—'}</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-            {/* ── CERRAR OPERACIÓN (inline, solo si abierta y editando) ── */}
-            {tlForm.id&&tlSelected?.status==='open'&&(
-              <div style={{borderTop:'1px solid var(--border)',paddingTop:10}}>
-                <div style={{fontFamily:MONO,fontSize:10,color:'#ffd166',marginBottom:8,fontWeight:700}}>
-                  ↘ Cerrar posición
-                </div>
-                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10}}>
-                  <label style={{display:'flex',flexDirection:'column',gap:4}}>
-                    <span style={{fontSize:10,color:'#5a8aaa'}}>Fecha salida</span>
-                    <input type="text" placeholder="dd/mm/yyyy" value={tlCloseForm.exit_date}
-                      onChange={e=>setTlCloseForm(f=>({...f,exit_date:e.target.value}))}
-                      style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'5px 7px',borderRadius:4}}/>
-                  </label>
-                  <label style={{display:'flex',flexDirection:'column',gap:4}}>
-                    <span style={{fontSize:10,color:'#5a8aaa'}}>Precio salida</span>
-                    <input type="number" step="0.01" placeholder={tlSelected?._current_price?String(parseFloat(tlSelected._current_price).toFixed(2)):'0.00'}
-                      value={tlCloseForm.exit_price}
-                      onChange={e=>setTlCloseForm(f=>({...f,exit_price:e.target.value}))}
-                      style={{background:'var(--bg3)',border:'1px solid #ffd16644',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'5px 7px',borderRadius:4}}/>
-                  </label>
-                  <label style={{display:'flex',flexDirection:'column',gap:4}}>
-                    <span style={{fontSize:10,color:'#5a8aaa'}}>Comisión venta (€)</span>
-                    <input type="number" min="0" step="0.01" value={tlCloseForm.commission_sell||0}
-                      onChange={e=>setTlCloseForm(f=>({...f,commission_sell:e.target.value}))}
-                      style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'5px 7px',borderRadius:4}}/>
-                  </label>
-                </div>
-                {tlCloseForm.exit_price&&tlCloseForm.exit_date&&(
-                  <div style={{marginTop:6,fontFamily:MONO,fontSize:9,color:'#5a8aaa',display:'flex',gap:12}}>
+                      )
+                    })}
                     {(()=>{
-                      const pnlCur=(parseFloat(tlCloseForm.exit_price)-parseFloat(tlSelected.entry_price||0))*parseFloat(tlSelected.shares||0)
-                      const fx=parseFloat(tlSelected.fx_entry||1)>1?parseFloat(tlSelected.fx_entry||1):(parseFloat(tlSelected.fx_entry||1)>0?1/parseFloat(tlSelected.fx_entry||1):1)
-                      const pnlEur=pnlCur/fx-(parseFloat(tlCloseForm.commission_sell||0))
-                      const pnlPct=(parseFloat(tlCloseForm.exit_price)/parseFloat(tlSelected.entry_price||1)-1)*100
-                      const col=pnlEur>=0?'#00e5a0':'#ff4d6d'
-                      return(<>
-                        <span>P&L: <b style={{color:col}}>{pnlEur>=0?'+':''}{pnlEur.toFixed(2)}€</b></span>
-                        <span>%: <b style={{color:col}}>{pnlPct>=0?'+':''}{pnlPct.toFixed(2)}%</b></span>
-                      </>)
+                      const tot=tlExitFillsList.filter(x=>x.shares&&x.price).reduce((s,x)=>({sh:s.sh+parseFloat(x.shares||0),val:s.val+parseFloat(x.shares||0)*parseFloat(x.price||0)}),{sh:0,val:0})
+                      if(!tot.sh) return null
+                      return(
+                        <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',paddingTop:2}}>
+                          Precio medio salida → <span style={{color:'#ff9a6c'}}>{(tot.val/tot.sh).toFixed(4)}</span>
+                          &nbsp;· Acciones totales → <span style={{color:'#ff9a6c'}}>{tot.sh}</span>
+                        </div>
+                      )
                     })()}
                   </div>
                 )}
-                <button onClick={async()=>{
-                  if(!tlCloseForm.exit_price||!tlCloseForm.exit_date){alert('Introduce fecha y precio de salida');return}
-                  try{
-                    const exitDate=toIsoDate(tlCloseForm.exit_date)||tlCloseForm.exit_date
-                    const exitPx=parseFloat(tlCloseForm.exit_price)
-                    const entryPx=parseFloat(tlSelected.entry_price||0)
-                    const shares=parseFloat(tlSelected.shares||0)
-                    let fx=parseFloat(tlSelected.fx_entry||1); if(fx<1&&fx>0) fx=1/fx
-                    const pnlCur=(exitPx-entryPx)*shares
-                    const commSell=parseFloat(tlCloseForm.commission_sell||0)
-                    const pnlEur=pnlCur/fx-commSell
-                    const pnlPct=(exitPx/entryPx-1)*100
-                    let fxExit=null
-                    if(tlSelected.entry_currency&&tlSelected.entry_currency!=='EUR'){
-                      try{const r=await fetch('/api/tradelog?action=fx&currency='+tlSelected.entry_currency+'&date='+exitDate);const j=await r.json();if(j.fx)fxExit=j.fx}catch(_){}
-                    }
-                    await tlSaveTrade({...tlSelected,
-                      status:'closed',exit_date:exitDate,exit_price:exitPx,
-                      commission_sell:commSell,fx_exit:fxExit,
-                      pnl_eur:parseFloat(pnlEur.toFixed(4)),
-                      pnl_pct:parseFloat(pnlPct.toFixed(4)),
-                      pnl_currency:parseFloat(pnlCur.toFixed(4))
-                    })
-                    setTlFormOpen(false)
-                  }catch(e){alert('Error al cerrar: '+e.message)}
-                }}
-                  style={{marginTop:8,fontFamily:MONO,fontSize:11,padding:'6px 14px',borderRadius:4,cursor:'pointer',
-                    background:'rgba(255,209,102,0.12)',border:'1px solid #ffd166',color:'#ffd166',fontWeight:700}}>
-                  ✓ Confirmar cierre
-                </button>
               </div>
             )}
-            {/* Botones */}
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',paddingTop:4,borderTop:'1px solid var(--border)'}}>
-              {/* Eliminar (solo si editando) */}
-              {tlForm.id?(
-                <button onClick={async()=>{
-                  if(!window.confirm('¿Eliminar esta operación? Esta acción no se puede deshacer.')) return
-                  try{
-                    await tlDeleteTrade(tlForm.id)
-                    setTlFormOpen(false)
-                    setSidePanel('tradelog')
-                  }catch(e){alert('Error al eliminar: '+e.message)}
-                }}
-                  style={{fontFamily:MONO,fontSize:11,padding:'7px 12px',borderRadius:4,cursor:'pointer',
-                    background:'rgba(255,77,109,0.08)',border:'1px solid rgba(255,77,109,0.3)',color:'#ff4d6d'}}>
-                  🗑 Eliminar
-                </button>
-              ):<div/>}
-              <div style={{display:'flex',gap:8}}>
-              <button onClick={()=>setTlFormOpen(false)}
-                style={{fontFamily:MONO,fontSize:11,padding:'7px 14px',borderRadius:4,cursor:'pointer',background:'transparent',border:'1px solid #2a4060',color:'#7a9bc0'}}>
-                Cancelar
-              </button>
-              <button onClick={async()=>{
-                try{
-                  // Validar campos obligatorios
-                  if(!tlForm.symbol?.trim()) { alert('El símbolo es obligatorio'); return }
-                  if(!tlForm.entry_date?.trim()) { alert('La fecha de entrada es obligatoria'); return }
-                  if(!tlForm.entry_price||isNaN(parseFloat(tlForm.entry_price))) { alert('El precio de entrada es obligatorio'); return }
-                  if(!tlForm.shares||isNaN(parseFloat(tlForm.shares))||parseFloat(tlForm.shares)<=0) { alert('El nº de acciones es obligatorio y debe ser mayor que 0'); return }
-                  let formData = {...tlForm, entry_date: toIsoDate(tlForm.entry_date)||tlForm.entry_date, status:'open', import_source:tlForm.import_source||'manual'}
-                  // Strip UI-only fields before sending to Supabase
-                  const {_fxLoading, _symSearch, _current_price, _current_date, _pnl_float_eur, _pnl_float_pct, ...cleanForm} = formData
-                  // Convert empty strings to proper values for Supabase numeric columns (NOT NULL = 0, nullable = null)
-                  const notNullNums = ['entry_price','shares','commission_buy','commission_sell']
-                  const nullableNums = ['fx_entry','fx_exit','capital_eur','pnl_eur','pnl_pct','pnl_currency']
-                  notNullNums.forEach(k=>{ cleanForm[k] = parseFloat(cleanForm[k])||0 })
-                  nullableNums.forEach(k=>{ if(cleanForm[k]===''||cleanForm[k]==null||isNaN(parseFloat(cleanForm[k]))) cleanForm[k]=null; else cleanForm[k]=parseFloat(cleanForm[k]) })
-                  formData = cleanForm
-                  // Auto-fetch FX if not set and currency is not EUR
-                  if(formData.entry_currency && formData.entry_currency!=='EUR' && !formData.fx_entry) {
-                    try{
-                      const r=await fetch(`/api/tradelog?action=fx&currency=${formData.entry_currency}&date=${formData.entry_date||new Date().toISOString().slice(0,10)}`)
-                      const j=await r.json()
-                      if(j.fx) formData={...formData,fx_entry:j.fx.toFixed(4)}
-                    }catch(_){}
-                  } else if(formData.entry_currency==='EUR') {
-                    formData={...formData,fx_entry:'1'}
-                  }
-                  const isNew = !tlForm.id
-                  const saved = await tlSaveTrade(formData)
-                  setTlFormOpen(false)
-                  // Captura automática SOLO en operaciones nuevas
-                  ;(async()=>{
-                    const tradeData={...formData,...(saved||{})}
-                    const s2=JSON.parse(localStorage.getItem('v50_settings')||'{}')
-                    if(!isNew){ setSidePanel('tradelog'); return }  // only screenshot on new trades
-                    try{
-                      setSidePanel('config')
-                      await new Promise(r=>setTimeout(r,400))
-                      await tlSaveScreenshot(tradeData).catch(()=>{})
-                    }finally{
-                      setSidePanel('tradelog')
-                    }
-                  })()
-                }catch(e){alert('Error al guardar: '+e.message)}
-              }} style={{fontFamily:MONO,fontSize:11,padding:'7px 14px',borderRadius:4,cursor:'pointer',
-                background:'rgba(155,114,255,0.15)',border:'1px solid #9b72ff',color:'#9b72ff',fontWeight:700}}>
-                Guardar
-              </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ══ MODAL CERRAR OPERACIÓN ══ */}
-      {tlCloseOpen&&tlSelected&&(
-        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.75)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center'}}
-          onClick={e=>{if(e.target===e.currentTarget)setTlCloseOpen(false)}}>
-          <div className="tl-modal" onContextMenu={e=>openCtx(e,'modals')} style={{background:'#0d1824',border:'1px solid #1e3a52',borderRadius:8,padding:24,width:400,
-            display:'flex',flexDirection:'column',gap:14,fontFamily:MONO,fontSize:13,boxShadow:'0 8px 48px rgba(0,0,0,0.8)'}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-              <span style={{fontWeight:700,color:'#c8dff5',fontSize:14}}>Cerrar operación · {tlSelected.symbol}</span>
-              <span onClick={()=>setTlCloseOpen(false)} style={{cursor:'pointer',color:'#4a7a95',fontSize:20,lineHeight:1}}>×</span>
-            </div>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-              <label style={{display:'flex',flexDirection:'column',gap:4}}>
-                <span style={{fontSize:10,color:'#5a8aaa'}}>Fecha salida</span>
-                <input type="date" value={tlCloseForm.exit_date} onChange={e=>setTlCloseForm(f=>({...f,exit_date:e.target.value}))}
-                  style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'5px 7px',borderRadius:4}}/>
-              </label>
-              <label style={{display:'flex',flexDirection:'column',gap:4}}>
-                <span style={{fontSize:10,color:'#5a8aaa'}}>Precio salida</span>
-                <input type="number" step="0.01" placeholder="0.00" value={tlCloseForm.exit_price} onChange={e=>setTlCloseForm(f=>({...f,exit_price:e.target.value}))}
-                  style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'5px 7px',borderRadius:4}}/>
-              </label>
-              <label style={{display:'flex',flexDirection:'column',gap:4}}>
-                <span style={{fontSize:10,color:'#5a8aaa'}}>Comisión venta (€)</span>
-                <input type="number" min="0" step="0.01" value={tlCloseForm.commission_sell} onChange={e=>setTlCloseForm(f=>({...f,commission_sell:e.target.value}))}
-                  style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'5px 7px',borderRadius:4}}/>
-              </label>
-              <label style={{display:'flex',flexDirection:'column',gap:4}}>
-                <span style={{fontSize:10,color:'#5a8aaa'}}>FX salida <span style={{color:'#3d5a7a'}}>(opt.)</span></span>
-                <div style={{display:'flex',gap:4,alignItems:'center'}}>
-                  <input type="number" step="0.0001" placeholder="auto" value={tlCloseForm.fx_exit} onChange={e=>setTlCloseForm(f=>({...f,fx_exit:e.target.value,fx_exit_manual:true}))}
-                    style={{flex:1,background:'var(--bg3)',border:`1px solid ${tlCloseForm.fx_exit_manual?'#ffd166':'var(--border)'}`,color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'5px 7px',borderRadius:4}}/>
-                  {tlCloseForm.fx_exit_manual&&<span onClick={()=>setTlCloseForm(f=>({...f,fx_exit:'',fx_exit_manual:false}))} title="Usar automático" style={{cursor:'pointer',color:'#ffd166',fontSize:14}}>↺</span>}
-                </div>
-              </label>
-            </div>
-            {/* Preview P&L */}
-            {tlCloseForm.exit_price&&(()=>{
-              const fx=parseFloat(tlCloseForm.fx_exit)||tlSelected.fx_entry||1
-              const cap=tlSelected.capital_eur||0
-              const pnlCur=(parseFloat(tlCloseForm.exit_price)-parseFloat(tlSelected.entry_price))*parseFloat(tlSelected.shares)
-              const pnlEur=pnlCur/fx-(tlSelected.commission_buy||0)/(tlSelected.fx_entry||1)-(parseFloat(tlCloseForm.commission_sell)||0)/fx
-              const pct=cap>0?pnlEur/cap*100:0
-              return(
-                <div style={{padding:'8px 12px',background:'var(--bg3)',borderRadius:4,border:'1px solid var(--border)'}}>
-                  <div style={{fontSize:10,color:'#5a8aaa',marginBottom:4}}>Preview P&L</div>
-                  <div style={{fontFamily:MONO,fontSize:16,fontWeight:700,color:pnlEur>=0?'#00e5a0':'#ff4d6d'}}>
-                    {fmtMoney(pnlEur)} · {pnlEur>=0?'+':''}{pct.toFixed(2)}%
-                  </div>
-                </div>
-              )
-            })()}
-            <div style={{display:'flex',justifyContent:'flex-end',gap:8,paddingTop:4,borderTop:'1px solid var(--border)'}}>
-              <button onClick={()=>setTlCloseOpen(false)}
-                style={{fontFamily:MONO,fontSize:11,padding:'7px 14px',borderRadius:4,cursor:'pointer',background:'transparent',border:'1px solid #2a4060',color:'#7a9bc0'}}>
-                Cancelar
-              </button>
-              <button onClick={async()=>{
-                try{ await tlCloseTrade() }
-                catch(e){alert('Error: '+e.message)}
-              }} style={{fontFamily:MONO,fontSize:11,padding:'7px 14px',borderRadius:4,cursor:'pointer',
-                background:'rgba(0,229,160,0.12)',border:'1px solid #00e5a0',color:'#00e5a0',fontWeight:700}}>
-                ✓ Confirmar cierre
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    <>
-      {/* ── Context Theme Menu ── */}
-      {ctxMenu&&<ContextThemeMenu
-        x={ctxMenu.x} y={ctxMenu.y} section={ctxMenu.section}
-        onClose={()=>setCtxMenu(null)}
-        onSave={(nf)=>{
-          setTemaKey(k=>k+1)
-        }}
-      />}
-    </>
-    </>
-  )
-}
