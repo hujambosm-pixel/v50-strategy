@@ -3357,10 +3357,12 @@ export default function Home() {
   const [tlFilterType,setTlFilterType]=useState('')
   const [tlFilterStatus,setTlFilterStatus]=useState('') // ''|'open'|'closed'
   const [tlSearch,setTlSearch]=useState('')
+  const tlSearchRef=useRef(null)
   const [tlFills,setTlFills]=useState([])
   const [tlFormOpen,setTlFormOpen]=useState(false)
   const [tlFilterStrat,setTlFilterStrat]=useState('')
-  const [tlFillsList,setTlFillsList]=useState([])  // fills para modal nueva/editar op
+  const [tlFillsList,setTlFillsList]=useState([])  // fills entrada para modal
+  const [tlExitFillsList,setTlExitFillsList]=useState([])  // fills salida para modal
   const [tlSideEdit,setTlSideEdit]=useState(false)   // edit panel in left sidebar
   const [tlCloseOpen,setTlCloseOpen]=useState(false)
   const [tlImportText,setTlImportText]=useState('')
@@ -4837,7 +4839,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.68</title>
+        <title>Trading Simulator V4.69</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4900,7 +4902,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.68
+            <span className="dot"/>Trading Simulator V4.69
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5202,7 +5204,7 @@ export default function Home() {
                                   background:active?col:'rgba(42,63,85,0.5)',
                                   border:`1.5px solid ${active?col:'#2a3f55'}`,
                                   color:active?'#080c14':'#3d5a7a',
-                                  fontFamily:MONO,fontSize:8,fontWeight:800,lineHeight:1,
+                                  fontFamily:MONO,fontSize:7,fontWeight:800,lineHeight:1,letterSpacing:'-0.5px',
                                   boxShadow:active?`0 0 6px ${col}55`:undefined,
                                   cursor:'default',
                                   animation:shouldBlink?`alarmPulse 1s ease-in-out infinite`:undefined,
@@ -6594,10 +6596,10 @@ export default function Home() {
                   <div style={{display:'flex',borderBottom:'2px solid var(--border)',flexShrink:0,alignItems:'stretch',background:'#0a0f1a'}}>
                     {/* Search — izquierda, antes de los tabs */}
                     <div style={{display:'flex',gap:4,alignItems:'center',padding:'4px 8px',borderRight:'1px solid var(--border)',flexShrink:0}}>
-                      <input type="text" placeholder="🔍 símbolo" value={tlSearch} onChange={e=>setTlSearch(e.target.value)}
+                      <input ref={tlSearchRef} type="text" placeholder="🔍 símbolo" value={tlSearch} onChange={e=>setTlSearch(e.target.value)}
                         style={{width:110,background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:10,padding:'3px 7px',borderRadius:4}}/>
                       {tlSearch&&(
-                        <button onClick={()=>setTlSearch('')} title="Limpiar filtro"
+                        <button onClick={()=>{setTlSearch('');setTimeout(()=>tlSearchRef.current?.focus(),0)}} title="Limpiar filtro"
                           style={{background:'transparent',border:'none',color:'#ff4d6d',cursor:'pointer',
                             fontSize:12,padding:'0 3px',lineHeight:1,flexShrink:0}}
                           onMouseOver={e=>e.currentTarget.style.color='#ff8080'}
@@ -6742,9 +6744,10 @@ export default function Home() {
                                   import_source:t.import_source||'manual'
                                 })
                                 if(t.status==='open'){
-                                  setTlCloseForm({exit_date:'',exit_price:'',exit_currency:t.entry_currency||'USD',commission_sell:0,fx_exit:'',fx_exit_manual:false})
+                                  setTlCloseForm({exit_date:new Date().toISOString().slice(0,10),exit_price:'',exit_currency:t.entry_currency||'USD',commission_sell:0,fx_exit:'',fx_exit_manual:false})
                                 }
                                 setTlFillsList([])
+                                setTlExitFillsList([])
                                 setTlFormOpen(true)
                               }}
                                 style={{borderBottom:'1px solid var(--border)',cursor:'pointer',
@@ -6792,7 +6795,7 @@ export default function Home() {
                                               background:active?col2:'rgba(42,63,85,0.5)',
                                               border:'1px solid '+(active?col2:'#2a3f55'),
                                               color:active?'#080c14':'#3d5a7a',
-                                              fontFamily:MONO,fontSize:7,fontWeight:800,lineHeight:1,
+                                              fontFamily:MONO,fontSize:6,fontWeight:800,lineHeight:1,letterSpacing:'-0.5px',
                                               boxShadow:active?'0 0 5px '+col2+'55':undefined,
                                               cursor:'default',
                                               animation:shouldBlink?'alarmPulse 1s ease-in-out infinite':undefined}}>
@@ -8075,6 +8078,49 @@ export default function Home() {
                 </div>
               )}
             </div>
+            {/* ── FILLS DE SALIDA PARCIALES (solo si hay exit_price en el form o op abierta) ── */}
+            {tlForm.id&&(
+              <div style={{borderTop:'1px solid var(--border)',paddingTop:10}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
+                  <span style={{fontFamily:MONO,fontSize:10,color:'#ff9a6c'}}>Fills de salida parciales</span>
+                  <button onClick={()=>setTlExitFillsList(f=>[...f,{date:new Date().toISOString().slice(0,10),price:'',shares:''}])}
+                    style={{fontFamily:MONO,fontSize:10,padding:'3px 8px',borderRadius:3,cursor:'pointer',
+                      border:'1px solid #2a4060',background:'rgba(255,77,109,0.06)',color:'#ff9a6c'}}>
+                    + Añadir fill salida
+                  </button>
+                </div>
+                {tlExitFillsList.length>0&&(
+                  <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                    {tlExitFillsList.map((f,fi)=>(
+                      <div key={fi} style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr auto',gap:6,alignItems:'center'}}>
+                        <input type="date" value={f.date}
+                          onChange={e=>{const nf=[...tlExitFillsList];nf[fi]={...nf[fi],date:e.target.value};setTlExitFillsList(nf);
+                            const tot=nf.filter(x=>x.shares&&x.price).reduce((s,x)=>({sh:s.sh+parseFloat(x.shares||0),val:s.val+parseFloat(x.shares||0)*parseFloat(x.price||0)}),{sh:0,val:0})
+                            if(tot.sh>0){setTlForm(p=>({...p,exit_date:nf[nf.length-1].date,exit_price:(tot.val/tot.sh).toFixed(4)}))}}}
+                          style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:10,padding:'4px 6px',borderRadius:3}}/>
+                        <input type="number" placeholder="Precio salida" value={f.price}
+                          onChange={e=>{const nf=[...tlExitFillsList];nf[fi]={...nf[fi],price:e.target.value};setTlExitFillsList(nf);
+                            const tot=nf.filter(x=>x.shares&&x.price).reduce((s,x)=>({sh:s.sh+parseFloat(x.shares||0),val:s.val+parseFloat(x.shares||0)*parseFloat(x.price||0)}),{sh:0,val:0})
+                            if(tot.sh>0){setTlForm(p=>({...p,exit_price:(tot.val/tot.sh).toFixed(4)}))}}}
+                          style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:10,padding:'4px 6px',borderRadius:3}}/>
+                        <input type="number" placeholder="Acciones" value={f.shares}
+                          onChange={e=>{const nf=[...tlExitFillsList];nf[fi]={...nf[fi],shares:e.target.value};setTlExitFillsList(nf);
+                            const tot=nf.filter(x=>x.shares&&x.price).reduce((s,x)=>({sh:s.sh+parseFloat(x.shares||0),val:s.val+parseFloat(x.shares||0)*parseFloat(x.price||0)}),{sh:0,val:0})
+                            if(tot.sh>0){setTlForm(p=>({...p,exit_price:(tot.val/tot.sh).toFixed(4)}))}}}
+                          style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:10,padding:'4px 6px',borderRadius:3}}/>
+                        <span onClick={()=>{const nf=tlExitFillsList.filter((_,i)=>i!==fi);setTlExitFillsList(nf);
+                            const tot=nf.filter(x=>x.shares&&x.price).reduce((s,x)=>({sh:s.sh+parseFloat(x.shares||0),val:s.val+parseFloat(x.shares||0)*parseFloat(x.price||0)}),{sh:0,val:0})
+                            if(tot.sh>0){setTlForm(p=>({...p,exit_price:(tot.val/tot.sh).toFixed(4)}))}}}
+                          style={{cursor:'pointer',color:'#ff4d6d',fontSize:14,lineHeight:1,padding:'0 2px'}}>×</span>
+                      </div>
+                    ))}
+                    <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',paddingTop:2}}>
+                      Precio medio salida → <span style={{color:'#ff9a6c'}}>{tlForm.exit_price||'—'}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
             {/* ── CERRAR OPERACIÓN (inline, solo si abierta y editando) ── */}
             {tlForm.id&&tlSelected?.status==='open'&&(
               <div style={{borderTop:'1px solid var(--border)',paddingTop:10}}>
@@ -8133,7 +8179,7 @@ export default function Home() {
                     if(tlSelected.entry_currency&&tlSelected.entry_currency!=='EUR'){
                       try{const r=await fetch('/api/tradelog?action=fx&currency='+tlSelected.entry_currency+'&date='+exitDate);const j=await r.json();if(j.fx)fxExit=j.fx}catch(_){}
                     }
-                    await tlUpdateTrade(tlSelected.id,{
+                    await tlSaveTrade({...tlSelected,
                       status:'closed',exit_date:exitDate,exit_price:exitPx,
                       commission_sell:commSell,fx_exit:fxExit,
                       pnl_eur:parseFloat(pnlEur.toFixed(4)),
