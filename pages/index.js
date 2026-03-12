@@ -3453,8 +3453,41 @@ export default function Home() {
   const [tlCloseOpen,setTlCloseOpen]=useState(false)
   const [tlImportText,setTlImportText]=useState('')
   const [tlImportFormat,setTlImportFormat]=useState('ai')
-  const [tlParsed,setTlParsed]=useState([])
-  const [tlGroupFills,setTlGroupFills]=useState(true)  // agrupar fills por operación
+  const [tlParsedRaw,setTlParsedRaw]=useState([])  // raw fills from parser
+  const [tlParsed,setTlParsed]=useState([])          // displayed (grouped or not)
+  const [tlGroupFills,setTlGroupFills]=useState(true)
+
+  // ── Enriquece filas: detecta duplicados y cierres vs trades existentes ──
+  const enrichParsedRows = (rows) => {
+    return rows.map(r => {
+      let enriched = {...r}
+      // Duplicate detection: same symbol + date + price + shares
+      const isDup = tlTrades.some(t =>
+        t.symbol === r.symbol &&
+        t.entry_date === r.entry_date &&
+        Math.abs(parseFloat(t.entry_price||0) - parseFloat(r.entry_price||0)) < 0.01 &&
+        Math.abs(parseFloat(t.shares||0) - parseFloat(r.shares||0)) < 0.01
+      )
+      if (isDup) enriched._isDuplicate = true
+
+      // Closure detection: SELL fill → find open position same symbol
+      if (r.fill_type === 'sell' && !r._grouped) {
+        const openPos = tlTrades.find(t =>
+          t.symbol === r.symbol &&
+          t.fill_type !== 'sell' &&
+          (!t.status || t.status === 'open') &&
+          !t.exit_date
+        )
+        if (openPos) {
+          enriched._closesTradeId = openPos.id
+          enriched._closesSymbol  = openPos.symbol
+          enriched._openEntryDate = openPos.entry_date
+          enriched._openShares    = openPos.shares
+        }
+      }
+      return enriched
+    })
+  }
 
   // ── Agrupa fills del parser en operaciones completas ──────
   // BUY(s) + SELL(s) del mismo símbolo → 1 trade con precio promedio
@@ -4356,7 +4389,9 @@ export default function Home() {
       const json=await res.json()
       if(!res.ok) throw new Error(json.error||'Error')
       const raw = json.parsed||[]
-      setTlParsed(tlGroupFills ? groupParsedFills(raw) : raw)
+      setTlParsedRaw(raw)
+      const grouped = groupParsedFills(raw)
+      setTlParsed(enrichParsedRows(grouped))
     }catch(e){alert('Error al parsear: '+e.message)}
     finally{setTlImportLoading(false)}
   }
@@ -4370,20 +4405,51 @@ export default function Home() {
       for(const row of rows){
         // Campos válidos para trades_log — descartar campos UI-only del parser
         const {_fxLoading,_symSearch,_current_price,_current_date,_pnl_float_eur,_pnl_float_pct,...cleanRow}=row
-        const trade={...cleanRow, status:'open', broker:cleanRow.broker||defBroker}
-        if(tlUseLocal()){
-          const all=tlGetLS()
-          all.push({...trade, id:'local_'+Date.now()+'_'+Math.random().toString(36).slice(2)})
-          tlSetLS(all)
+        // Skip duplicates if user didn't remove them
+        if(cleanRow._isDuplicate) continue
+        // Strip all internal UI fields
+        const {_isDuplicate,_closesTradeId,_closesSymbol,_openEntryDate,_openShares,
+               _grouped,_buyCount,_sellCount,_fills,...saveRow}=cleanRow
+
+        if(cleanRow._closesTradeId) {
+          // Close an existing open position
+          const patch={
+            exit_date: saveRow.entry_date,
+            exit_price: saveRow.entry_price,
+            exit_currency: saveRow.entry_currency||saveRow.entry_currency,
+            commission_sell: saveRow.commission_sell||0,
+            status:'closed'
+          }
+          if(tlUseLocal()){
+            const all=tlGetLS()
+            const idx=all.findIndex(t=>t.id===cleanRow._closesTradeId)
+            if(idx>=0) all[idx]={...all[idx],...patch}
+            else all.push({...saveRow, status:'open', broker:saveRow.broker||defBroker,
+                           id:'local_'+Date.now()+'_'+Math.random().toString(36).slice(2)})
+            tlSetLS(all)
+          } else {
+            const res=await fetch('/api/tradelog?action=save',{method:'POST',
+              headers:{'Content-Type':'application/json'},
+              body:JSON.stringify({id:cleanRow._closesTradeId,...patch})})
+            const json=await res.json()
+            if(!res.ok) errors.push(json.error||'Error cerrando '+saveRow.symbol)
+          }
         } else {
-          const res=await fetch('/api/tradelog?action=save',{method:'POST',
-            headers:{'Content-Type':'application/json'},body:JSON.stringify(trade)})
-          const json=await res.json()
-          if(!res.ok) errors.push(json.error||'Error guardando '+trade.symbol)
+          const trade={...saveRow, status: saveRow.status||'open', broker:saveRow.broker||defBroker}
+          if(tlUseLocal()){
+            const all=tlGetLS()
+            all.push({...trade, id:'local_'+Date.now()+'_'+Math.random().toString(36).slice(2)})
+            tlSetLS(all)
+          } else {
+            const res=await fetch('/api/tradelog?action=save',{method:'POST',
+              headers:{'Content-Type':'application/json'},body:JSON.stringify(trade)})
+            const json=await res.json()
+            if(!res.ok) errors.push(json.error||'Error guardando '+trade.symbol)
+          }
         }
       }
       if(errors.length) alert('Errores al guardar:\n'+errors.join('\n'))
-      setTlParsed([]); setTlImportText('')
+      setTlParsed([]); setTlParsedRaw([]); setTlImportText('')
       await loadTrades()
       setTlTab('ops')
     }catch(e){alert('Error al importar: '+e.message)}
@@ -4692,7 +4758,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.63</title>
+        <title>Trading Simulator V4.64</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4755,7 +4821,7 @@ export default function Home() {
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.63
+            <span className="dot"/>Trading Simulator V4.64
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6679,7 +6745,7 @@ export default function Home() {
                       style={{flex:'none',height:200,background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',
                         fontFamily:MONO,fontSize:11,padding:'10px',borderRadius:4,resize:'vertical',minHeight:120}}/>
                     <div style={{display:'flex',gap:8,alignItems:'center'}}>
-                      <button onClick={()=>{setTlImportText('');setTlParsed([])}}
+                      <button onClick={()=>{setTlImportText('');setTlParsed([]);setTlParsedRaw([])}}
                         style={{fontFamily:MONO,fontSize:11,padding:'6px 12px',borderRadius:4,cursor:'pointer',
                           background:'transparent',border:'1px solid #2a4060',color:'#7a9bc0'}}>
                         ✕ Limpiar
@@ -6700,7 +6766,11 @@ export default function Home() {
                           display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                           <div style={{display:'flex',alignItems:'center',gap:6}}>
                             <span style={{fontFamily:MONO,fontSize:11,color:'#c8dff5',fontWeight:700}}>Preview</span>
-                            <button onClick={()=>setTlGroupFills(g=>!g)}
+                            <button onClick={()=>{
+                              const next=!tlGroupFills
+                              setTlGroupFills(next)
+                              setTlParsed(enrichParsedRows(next ? groupParsedFills(tlParsedRaw) : tlParsedRaw))
+                            }}
                               title="Agrupar compras y ventas del mismo símbolo en una operación"
                               style={{fontFamily:MONO,fontSize:9,padding:'2px 7px',borderRadius:3,cursor:'pointer',
                                 border:'1px solid '+(tlGroupFills?'#ffd166':'#2a4060'),
@@ -6710,57 +6780,105 @@ export default function Home() {
                             </button>
                           </div>
                           <div style={{display:'flex',gap:6}}>
-                            <button onClick={()=>setTlParsed([])}
+                            <button onClick={()=>{setTlParsed([]);setTlParsedRaw([])}}
                               style={{fontFamily:MONO,fontSize:10,padding:'3px 8px',borderRadius:3,cursor:'pointer',
                                 border:'1px solid #2a4060',background:'transparent',color:'#7a9bc0'}}>Cancelar</button>
                             <button onClick={()=>tlImportConfirm(tlParsed)}
                               style={{fontFamily:MONO,fontSize:10,padding:'3px 8px',borderRadius:3,cursor:'pointer',
                                 border:'1px solid #00e5a0',background:'rgba(0,229,160,0.1)',color:'#00e5a0',fontWeight:700}}>
-                              ✓ Importar {tlParsed.length} ops
+                              {(()=>{const valid=tlParsed.filter(r=>!r._isDuplicate).length;return `✓ Importar ${valid} op${valid!==1?'s':''}`})()}
                             </button>
                           </div>
                         </div>
                         <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:11}}>
                           <thead><tr style={{background:'var(--bg2)'}}>
-                            {['Tipo','Símbolo','Fecha','Acciones','Precio','Divisa','FX','Broker','Estado','Capital €'].map(h=>(
+                            {['Tipo','Símbolo','Fecha','Acc.','Precio','Div.','FX','Broker','Estado','Cap. €',''].map(h=>(
                               <th key={h} style={{padding:'5px 8px',textAlign:'left',fontSize:9,color:'#3d5a7a',letterSpacing:'0.08em',textTransform:'uppercase',borderBottom:'1px solid var(--border)'}}>{h}</th>
                             ))}
                           </tr></thead>
                           <tbody>
-                            {tlParsed.map((t,i)=>(
-                              <tr key={i} style={{borderBottom:'1px solid var(--border)'}}>
-                                <td style={{padding:'5px 8px'}}>
-                                  <span style={{fontFamily:MONO,fontSize:10,padding:'2px 6px',borderRadius:3,
-                                    background:t.fill_type==='buy'?'rgba(0,229,160,0.15)':'rgba(255,77,109,0.15)',
-                                    color:t.fill_type==='buy'?'#00e5a0':'#ff4d6d',fontWeight:700}}>
-                                    {t.fill_type==='buy'?'▲ BUY':'▼ SELL'}
-                                  </span>
+                            {tlParsed.map((t,i)=>{
+                              const isDup=t._isDuplicate
+                              const isClose=!!t._closesTradeId
+                              const isGrouped=t._grouped
+                              const ed=(field,val)=>setTlParsed(prev=>{
+                                const next=[...prev]; next[i]={...next[i],[field]:val}; return next
+                              })
+                              const cell=(field,val,cls)=>(
+                                <td style={{padding:'3px 5px'}}>
+                                  <input value={val||''} onChange={e=>ed(field,e.target.value)}
+                                    style={{background:'transparent',border:'none',borderBottom:'1px solid transparent',
+                                      color:cls||'var(--text)',fontFamily:MONO,fontSize:11,width:'100%',
+                                      padding:'1px 3px',outline:'none'}}
+                                    onFocus={e=>e.target.style.borderBottomColor='var(--accent)'}
+                                    onBlur={e=>e.target.style.borderBottomColor='transparent'}/>
                                 </td>
-                                <td style={{padding:'5px 8px',fontWeight:700,color:'#c8dff5'}}>
-                                  {t.symbol||'?'}
-                                  {t._grouped&&<span style={{fontSize:9,color:'#ffd166',marginLeft:5}}>
-                                    {t._buyCount}C+{t._sellCount}V→1op
-                                  </span>}
+                              )
+                              return (
+                              <tr key={i} style={{borderBottom:'1px solid var(--border)',
+                                background:isDup?'rgba(255,77,109,0.06)':'transparent',
+                                opacity:isDup?0.7:1}}>
+                                <td style={{padding:'3px 5px',whiteSpace:'nowrap'}}>
+                                  {isClose?(
+                                    <span style={{fontFamily:MONO,fontSize:9,padding:'2px 5px',borderRadius:3,
+                                      background:'rgba(155,114,255,0.2)',color:'#9b72ff',fontWeight:700}}>
+                                      ↩ CIERRE
+                                    </span>
+                                  ):isGrouped?(
+                                    <span style={{fontFamily:MONO,fontSize:9,padding:'2px 5px',borderRadius:3,
+                                      background:'rgba(0,212,255,0.15)',color:'#00d4ff',fontWeight:700}}>
+                                      ↕ {t._buyCount}C+{t._sellCount}V
+                                    </span>
+                                  ):(
+                                    <span style={{fontFamily:MONO,fontSize:9,padding:'2px 5px',borderRadius:3,
+                                      background:t.fill_type==='buy'?'rgba(0,229,160,0.15)':'rgba(255,77,109,0.15)',
+                                      color:t.fill_type==='buy'?'#00e5a0':'#ff4d6d',fontWeight:700}}>
+                                      {t.fill_type==='buy'?'▲ BUY':'▼ SELL'}
+                                    </span>
+                                  )}
+                                  {isDup&&<span style={{fontSize:8,color:'#ff4d6d',marginLeft:4,display:'block'}}>⚠ dup</span>}
                                 </td>
-                                <td style={{padding:'5px 8px',color:'#a8ccdf'}}>{fmtDate(t.entry_date)||'?'}</td>
-                                <td style={{padding:'5px 8px'}}>{t.shares||'?'}</td>
-                                <td style={{padding:'5px 8px'}}>
-                                  {t.entry_price||'?'}
-                                  {t.exit_price&&<span style={{fontSize:9,color:'#ff4d6d',marginLeft:4}}>→{t.exit_price}</span>}
+                                {cell('symbol',t.symbol,'#c8dff5')}
+                                <td style={{padding:'3px 5px'}}>
+                                  <input value={t.entry_date||''} onChange={e=>ed('entry_date',e.target.value)}
+                                    style={{background:'transparent',border:'none',borderBottom:'1px solid transparent',
+                                      color:'#a8ccdf',fontFamily:MONO,fontSize:11,width:88,
+                                      padding:'1px 3px',outline:'none'}}
+                                    onFocus={e=>e.target.style.borderBottomColor='var(--accent)'}
+                                    onBlur={e=>e.target.style.borderBottomColor='transparent'}/>
                                 </td>
-                                <td style={{padding:'5px 8px',color:'#ffd166'}}>{t.entry_currency||'USD'}</td>
-                                <td style={{padding:'5px 8px',color:'#4a7a95',fontSize:10}}>{(()=>{let fx=parseFloat(t.fx_entry);if(!fx||isNaN(fx))return'—';if(fx<1)fx=1/fx;return fx.toFixed(4)})()}</td>
-                                <td style={{padding:'5px 8px'}}>{t.broker||'—'}</td>
-                                <td style={{padding:'5px 8px'}}>
+                                {cell('shares',t.shares)}
+                                <td style={{padding:'3px 5px',whiteSpace:'nowrap'}}>
+                                  <input value={t.entry_price||''} onChange={e=>ed('entry_price',e.target.value)}
+                                    style={{background:'transparent',border:'none',borderBottom:'1px solid transparent',
+                                      color:'var(--text)',fontFamily:MONO,fontSize:11,width:70,
+                                      padding:'1px 3px',outline:'none'}}
+                                    onFocus={e=>e.target.style.borderBottomColor='var(--accent)'}
+                                    onBlur={e=>e.target.style.borderBottomColor='transparent'}/>
+                                  {t.exit_price&&<span style={{fontSize:9,color:'#9b72ff',marginLeft:3}}>→{t.exit_price}</span>}
+                                  {isClose&&<div style={{fontSize:8,color:'#9b72ff'}}>cierra {t._closesSymbol}</div>}
+                                </td>
+                                {cell('entry_currency',t.entry_currency,'#ffd166')}
+                                <td style={{padding:'3px 5px',color:'#4a7a95',fontSize:10}}>{(()=>{let fx=parseFloat(t.fx_entry);if(!fx||isNaN(fx))return'—';if(fx<1)fx=1/fx;return fx.toFixed(4)})()}</td>
+                                {cell('broker',t.broker)}
+                                <td style={{padding:'3px 5px'}}>
                                   <span style={{fontSize:9,padding:'1px 5px',borderRadius:3,
-                                    background:t.status==='closed'?'rgba(0,229,160,0.1)':'rgba(255,209,102,0.1)',
-                                    color:t.status==='closed'?'#00e5a0':'#ffd166'}}>
-                                    {t.status==='closed'?'✓ Cerrada':'○ Abierta'}
+                                    background:t.status==='closed'||isClose?'rgba(0,229,160,0.1)':'rgba(255,209,102,0.1)',
+                                    color:t.status==='closed'||isClose?'#00e5a0':'#ffd166'}}>
+                                    {t.status==='closed'||isClose?'✓ Cerrada':'○ Abierta'}
                                   </span>
                                 </td>
-                                <td style={{padding:'5px 8px',color:'#00d4ff'}}>{t.capital_eur?`€${Math.round(t.capital_eur)}`:'—'}</td>
+                                <td style={{padding:'3px 5px',color:'#00d4ff'}}>{t.capital_eur?`€${Math.round(t.capital_eur)}`:'—'}</td>
+                                <td style={{padding:'3px 5px'}}>
+                                  <button onClick={()=>setTlParsed(prev=>prev.filter((_,j)=>j!==i))}
+                                    title="Eliminar esta fila"
+                                    style={{background:'transparent',border:'none',color:'#3d5a7a',cursor:'pointer',
+                                      fontSize:12,padding:'0 4px',lineHeight:1}}
+                                    onMouseOver={e=>e.currentTarget.style.color='#ff4d6d'}
+                                    onMouseOut={e=>e.currentTarget.style.color='#3d5a7a'}>✕</button>
+                                </td>
                               </tr>
-                            ))}
+                            )})}
                           </tbody>
                         </table>
                       </div>
