@@ -8283,3 +8283,139 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 )}
               </div>
             )}
+            {/* ── CERRAR OPERACIÓN (inline, solo si abierta y editando) ── */}
+            {tlForm.id&&tlSelected?.status==='open'&&(
+              <div style={{borderTop:'1px solid var(--border)',paddingTop:10}}>
+                <div style={{fontFamily:MONO,fontSize:10,color:'#ffd166',marginBottom:8,fontWeight:700}}>
+                  ↘ Cerrar posición
+                </div>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:8}}>
+                  <label style={{display:'flex',flexDirection:'column',gap:4}}>
+                    <span style={{fontSize:10,color:'#5a8aaa'}}>Fecha salida</span>
+                    <input type="text" placeholder="dd/mm/yyyy" value={tlCloseForm.exit_date||''}
+                      onChange={e=>setTlCloseForm(f=>({...f,exit_date:e.target.value}))}
+                      style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'5px 7px',borderRadius:4}}/>
+                  </label>
+                  <label style={{display:'flex',flexDirection:'column',gap:4}}>
+                    <span style={{fontSize:10,color:'#5a8aaa'}}>Precio salida</span>
+                    <input type="number" step="0.01" placeholder={tlSelected?._current_price?String(parseFloat(tlSelected._current_price).toFixed(2)):'0.00'}
+                      value={tlCloseForm.exit_price||''}
+                      onChange={e=>setTlCloseForm(f=>({...f,exit_price:e.target.value}))}
+                      style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'5px 7px',borderRadius:4}}/>
+                  </label>
+                  <label style={{display:'flex',flexDirection:'column',gap:4}}>
+                    <span style={{fontSize:10,color:'#5a8aaa'}}>Comisión venta (€)</span>
+                    <input type="number" step="0.01" value={tlCloseForm.commission_sell||0}
+                      onChange={e=>setTlCloseForm(f=>({...f,commission_sell:e.target.value}))}
+                      style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'5px 7px',borderRadius:4}}/>
+                  </label>
+                </div>
+                {tlCloseForm.exit_price&&tlSelected&&(()=>{
+                  const pnlCur=(parseFloat(tlCloseForm.exit_price)-parseFloat(tlSelected.entry_price||0))*parseFloat(tlSelected.shares||0)
+                  const fx=parseFloat(tlSelected.fx_entry||1)>1?parseFloat(tlSelected.fx_entry||1):(parseFloat(tlSelected.fx_entry||1)>0?1/parseFloat(tlSelected.fx_entry||1):1)
+                  const commSell=parseFloat(tlCloseForm.commission_sell||0)
+                  const pnlEur=pnlCur/fx-commSell
+                  const pnlPct=(parseFloat(tlCloseForm.exit_price)/parseFloat(tlSelected.entry_price||1)-1)*100
+                  const col=pnlEur>=0?'#00e5a0':'#ff4d6d'
+                  return(<div style={{fontFamily:MONO,fontSize:10,color:'var(--text3)',marginBottom:6,display:'flex',gap:16}}>
+                    <span>P&L: <b style={{color:col}}>{pnlEur>=0?'+':''}{pnlEur.toFixed(2)}€</b></span>
+                    <span>%: <b style={{color:col}}>{pnlPct>=0?'+':''}{pnlPct.toFixed(2)}%</b></span>
+                  </div>)
+                })()}
+                <button onClick={async()=>{
+                  if(!tlCloseForm.exit_price||!tlCloseForm.exit_date){alert('Introduce fecha y precio de salida');return}
+                  try{
+                    const exitDate=toIsoDate(tlCloseForm.exit_date)||tlCloseForm.exit_date
+                    const exitPx=parseFloat(tlCloseForm.exit_price)
+                    const entryPx=parseFloat(tlSelected.entry_price||0)
+                    const shares=parseFloat(tlSelected.shares||0)
+                    let fx=parseFloat(tlSelected.fx_entry||1); if(fx<1&&fx>0) fx=1/fx
+                    const pnlCur=(exitPx-entryPx)*shares
+                    const commSell=parseFloat(tlCloseForm.commission_sell||0)
+                    const pnlEur=pnlCur/fx-commSell
+                    const pnlPct=(exitPx/entryPx-1)*100
+                    let fxExit=null
+                    if(tlSelected.entry_currency&&tlSelected.entry_currency!=='EUR'){
+                      try{const r=await fetch('/api/tradelog?action=fx&currency='+tlSelected.entry_currency+'&date='+exitDate);const j=await r.json();if(j.fx)fxExit=j.fx}catch(_){}
+                    }
+                    await tlSaveTrade({...tlSelected,
+                      status:'closed',exit_date:exitDate,exit_price:exitPx,
+                      commission_sell:commSell,fx_exit:fxExit,
+                      pnl_eur:parseFloat(pnlEur.toFixed(4)),
+                      pnl_pct:parseFloat(pnlPct.toFixed(4)),
+                      pnl_currency:parseFloat(pnlCur.toFixed(4))
+                    })
+                    setTlFormOpen(false)
+                  }catch(e){alert('Error al cerrar: '+e.message)}
+                }}
+                  style={{marginTop:8,fontFamily:MONO,fontSize:11,padding:'6px 14px',borderRadius:4,cursor:'pointer',
+                    background:'rgba(255,209,102,0.12)',border:'1px solid #ffd166',color:'#ffd166',fontWeight:700}}>
+                  ✓ Confirmar cierre
+                </button>
+              </div>
+            )}
+            {/* Botones */}
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',paddingTop:4,borderTop:'1px solid var(--border)'}}>
+              {tlForm.id?(
+                <button onClick={async()=>{
+                  if(!window.confirm('¿Eliminar esta operación? Esta acción no se puede deshacer.')) return
+                  try{
+                    await tlDeleteTrade(tlForm.id)
+                    setTlFormOpen(false)
+                  }catch(e){alert('Error: '+e.message)}
+                }}
+                  style={{fontFamily:MONO,fontSize:11,padding:'6px 12px',borderRadius:4,cursor:'pointer',
+                    background:'rgba(255,77,109,0.1)',border:'1px solid #ff4d6d',color:'#ff4d6d'}}>
+                  🗑 Eliminar
+                </button>
+              ):<div/>}
+              <button onClick={async()=>{
+                try{
+                  let formData = {...tlForm, entry_date: toIsoDate(tlForm.entry_date)||tlForm.entry_date, status:'open', import_source:tlForm.import_source||'manual'}
+                  if(tlForm.exit_date||tlForm.exit_price) formData.status='closed'
+                  const cleanForm={...formData}
+                  delete cleanForm._current_price; delete cleanForm._multipleOpen; delete cleanForm._openOptions; delete cleanForm._closesTradeId
+                  formData = cleanForm
+                  if(formData.entry_currency && formData.entry_currency!=='EUR' && !formData.fx_entry) {
+                    try{
+                      const r=await fetch(`/api/tradelog?action=fx&currency=${formData.entry_currency}&date=${formData.entry_date||new Date().toISOString().slice(0,10)}`)
+                      const j=await r.json()
+                      if(j.fx) formData={...formData,fx_entry:j.fx.toFixed(4)}
+                    }catch(_){}
+                  } else if(formData.entry_currency==='EUR') {
+                    formData={...formData,fx_entry:'1'}
+                  }
+                  const isNew = !tlForm.id
+                  const saved = await tlSaveTrade(formData)
+                  setTlFormOpen(false)
+                  ;(async()=>{
+                    const s2=await loadSettings()
+                    if(!isNew||s2?.tradelog?.autoScreenshot!==true){ setSidePanel('tradelog'); return }
+                    setSidePanel('tradelog')
+                    await new Promise(r=>setTimeout(r,400))
+                    await saveScreenshot(saved)
+                  })()
+                }catch(e){alert('Error al guardar: '+e.message)}
+              }}
+                style={{fontFamily:MONO,fontSize:11,padding:'6px 18px',borderRadius:4,cursor:'pointer',
+                  background:'rgba(0,212,255,0.15)',border:'1px solid var(--accent)',color:'var(--accent)',fontWeight:700}}>
+                {tlForm.id?'Guardar cambios':'Guardar operación'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+    {/* ── Modal de configuración global ── */}
+    {settingsOpen&&<SettingsModal onClose={()=>{setSettingsOpen(false);setTemaKey(k=>k+1)}} strategies={strategies}/>}
+
+    {/* ── Panel Asistente IA de estrategias ── */}
+    {aiPanelOpen&&<StrategyAIPanel
+      definition={definition}
+      onApply={(defn, name)=>{setDefinition(defn);if(name)setStratName(name);setAiPanelOpen(false)}}
+      onClose={()=>setAiPanelOpen(false)}
+    />}
+  </div>
+  </>
+  )
+}
