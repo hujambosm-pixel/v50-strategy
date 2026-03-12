@@ -335,7 +335,7 @@ Si no hay operaciones claras, devuelve [].
 Responde SOLO con el JSON array, sin texto adicional, sin markdown.
 
 TEXTO:
-${text.slice(0, 6000)}`
+${text.slice(0, 3500)}`
 
   const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
@@ -351,8 +351,20 @@ ${text.slice(0, 6000)}`
     })
   })
   if (!res.ok) {
-    const err = await res.text()
-    throw new Error(`Groq API ${res.status}: ${err}`)
+    const errText = await res.text()
+    // Parse retry-after from Groq rate limit response
+    let retryMsg = ''
+    try {
+      const errJson = JSON.parse(errText)
+      const errDetail = errJson?.error?.message || errText
+      // Extract "Please try again in Xs"
+      const m = errDetail.match(/try again in ([\d.]+)s/i)
+      if (m) retryMsg = ` — espera ${Math.ceil(parseFloat(m[1]))}s`
+      throw new Error(`Groq API ${res.status}${retryMsg}: ${errDetail}`)
+    } catch(pe) {
+      if (pe.message.startsWith('Groq API')) throw pe
+      throw new Error(`Groq API ${res.status}: ${errText}`)
+    }
   }
   const data = await res.json()
   const raw = data.choices?.[0]?.message?.content || '[]'
