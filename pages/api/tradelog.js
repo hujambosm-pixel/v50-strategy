@@ -238,7 +238,7 @@ function parseIBKRtext(text) {
 function parseIBKRorderDetail(text, useDDMM=true) {
   const trades = []
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean)
-  const actionRe = /^(Bought|Sold|Comprado|Vendido)\s+(\d+(?:[.,]\d+)?)\s+@\s+([\d.,]+)/i
+  const actionRe = /^(Bought|Bot|Bght|Sold|Sld|Comprado|Vendido)\s+(\d+(?:[.,]\d+)?)\s+@\s+([\d.,]+)/i
   const dateRe = /^(\d{1,2})[/\-](\d{1,2})[/\-](\d{4})/
 
   let i = 0
@@ -247,7 +247,7 @@ function parseIBKRorderDetail(text, useDDMM=true) {
     if (m) {
       const qty   = parseFloat(m[2].replace(',','.'))
       const price = parseFloat(m[3].replace(',','.'))
-      const isBuy = /Bought|Bot|Comprado/i.test(m[1])
+      const isBuy = /Bought|Bot|Bght|Comprado/i.test(m[1])
       let date = null, fees = 0, symbol = null
 
       // Buscar en líneas siguientes: fecha y fees
@@ -306,7 +306,7 @@ function autoParseText(text, useDDMM=true) {
     if (result.length > 0) return { trades: result, source: 'ibkr_text' }
   }
   // 2. IBKR detalle de orden móvil ("Sold 1 @ 732.095 on DARK")
-  if (/^(Bought|Sold|Comprado|Vendido)\s+\d/im.test(text)) {
+  if (/^(Bought|Bot|Bght|Sold|Sld|Comprado|Vendido)\s+\d/im.test(text)) {
     const result = parseIBKRorderDetail(text, useDDMM)
     if (result.length > 0) return { trades: result, source: 'ibkr_order' }
   }
