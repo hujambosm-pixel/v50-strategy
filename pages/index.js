@@ -1,34 +1,9 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import Head from 'next/head'
-
-function calcMetrics(trades, capitalIni, capitalReinv, gananciaSimple, ganBH, startDate, endDate, yearsConfig) {
-  if (!trades||trades.length===0) return null
-  const n=trades.length, wins=trades.filter(t=>t.pnlPct>=0), losses=trades.filter(t=>t.pnlPct<0)
-  const winRate=(wins.length/n)*100
-  const avgWin=wins.length?wins.reduce((s,t)=>s+t.pnlPct,0)/wins.length:0
-  const avgLoss=losses.length?losses.reduce((s,t)=>s+Math.abs(t.pnlPct),0)/losses.length:0
-  const totalDias=trades.reduce((s,t)=>s+t.dias,0)
-  // Periodo real: siempre desde fechas reales del calendario (startDate→endDate)
-  // Esto da los años correctos para CAGR y Tiempo Invertido
-  let totalDiasNat = Number(yearsConfig||5) * 365.25
-  if (startDate && endDate) {
-    const ms = new Date(endDate).getTime() - new Date(startDate).getTime()
-    if (!isNaN(ms) && ms > 0) totalDiasNat = ms / 86400000
-  }
-  const anios = Math.max(totalDiasNat / 365.25, 0.01)
-  const safYears = anios
-  const aniosInv=totalDias/365.25, tiempoInvPct=(totalDias/totalDiasNat)*100
-  const cagrS=Math.pow(Math.max(capitalIni+gananciaSimple,0.01)/capitalIni,1/safYears)-1
-  const cagrC=capitalReinv>0?Math.pow(capitalReinv/capitalIni,1/safYears)-1:0
-  const capBH=capitalIni+ganBH, cagrBH=capBH>0?Math.pow(capBH/capitalIni,1/safYears)-1:0
-  const gBrute=wins.reduce((s,t)=>s+t.pnlSimple,0), lBrute=losses.reduce((s,t)=>s+Math.abs(t.pnlSimple),0)
-  const factorBen=lBrute>0?gBrute/lBrute:999
-  let peakS=capitalIni,maxDDS=0; trades.forEach(t=>{const eq=capitalIni+trades.slice(0,trades.indexOf(t)+1).reduce((s,x)=>s+x.pnlSimple,0);if(eq>peakS)peakS=eq;const dd=(peakS-eq)/peakS*100;if(dd>maxDDS)maxDDS=dd})
-  let peakR=capitalIni,maxDDR=0; trades.forEach(t=>{if(t.capitalTras>peakR)peakR=t.capitalTras;const dd=(peakR-t.capitalTras)/peakR*100;if(dd>maxDDR)maxDDR=dd})
-  return {n,wins:wins.length,losses:losses.length,winRate,avgWin,avgLoss,totalDias,diasProm:totalDias/n,ganSimple:gananciaSimple,ganComp:capitalReinv-capitalIni,ganBH,ganTotalPct:(gananciaSimple/capitalIni)*100,cagrS:cagrS*100,cagrC:cagrC*100,cagrBH:cagrBH*100,factorBen,ddSimple:maxDDS,ddComp:maxDDR,tiempoInvPct,aniosInv,anios:safYears}
-}
-
-const MONO='"JetBrains Mono","Fira Code","IBM Plex Mono",monospace'
+import { calcMetrics, MONO, fmt, fmtDate, f2, tvSym } from '../lib/utils'
+import { WATCHLIST_DEFAULT } from '../lib/constants'
+import CandleChart from '../components/CandleChart'
+import EquityChart from '../components/EquityChart'
 
 // ── Tip — icono ⓘ con tooltip explicativo (Groq AI) ─────────
 // ── Ayuda precisa por parámetro — sin llamada a IA, 100% exacto ─
@@ -180,34 +155,30 @@ function toIsoDate(disp){ // '15/03/2024' → '2024-03-15'
 }
 function todayDisplay(){ return toDisplayDate(new Date().toISOString().slice(0,10)) }
 
-function fmt(v,dec=2,suf=''){if(v==null||isNaN(v))return'—';return v.toLocaleString('es-ES',{minimumFractionDigits:dec,maximumFractionDigits:dec})+suf}
-function fmtDate(s){if(!s)return'—';return new Date(s).toLocaleDateString('es-ES',{day:'2-digit',month:'2-digit',year:'numeric'})}
-function f2(v){if(v==null||isNaN(v))return'—';return v.toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2})}
-function tvSym(sym){if(sym==='^GSPC')return'SP:SPX';if(sym==='^IBEX')return'BME:IBC';if(sym==='^GDAXI')return'XETR:DAX';if(sym==='^NDX')return'NASDAQ:NDX';if(sym.includes('-USD'))return`BINANCE:${sym.replace('-','')}`;return sym}
 
-// ── Supabase config ──────────────────────────────────────────
-const SUPA_URL='https://uqjngxxbdlquiuhywiuc.supabase.co'
-const SUPA_KEY='sb_publishable_st9QJ3zcQbY5ec-JhxwqXQ_joy3udz3'
-const SUPA_H={apikey:SUPA_KEY,Authorization:`Bearer ${SUPA_KEY}`,'Content-Type':'application/json'}
+// ── Supabase config — leído de Settings (localStorage) ───────
+function getSupaUrl() { try { return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.integrations?.supabaseUrl||'' } catch(_){ return '' } }
+function getSupaKey() { try { return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.integrations?.supabaseKey||'' } catch(_){ return '' } }
+function getSupaH() { const k=getSupaKey(); return {apikey:k,Authorization:`Bearer ${k}`,'Content-Type':'application/json'} }
 
 // ── Watchlist API ─────────────────────────────────────────────
 async function fetchWatchlist() {
-  const res=await fetch(`${SUPA_URL}/rest/v1/watchlist?order=favorite.desc,name.asc`,{headers:SUPA_H})
+  const res=await fetch(`${getSupaUrl()}/rest/v1/watchlist?order=favorite.desc,name.asc`,{headers:getSupaH()})
   if(!res.ok) throw new Error('Error cargando watchlist')
   return await res.json() // devuelve filas completas con todos los campos
 }
 async function upsertWatchlistItem(item) {
   const method=item.id?'PATCH':'POST'
-  const url=item.id?`${SUPA_URL}/rest/v1/watchlist?id=eq.${item.id}`:`${SUPA_URL}/rest/v1/watchlist`
+  const url=item.id?`${getSupaUrl()}/rest/v1/watchlist?id=eq.${item.id}`:`${getSupaUrl()}/rest/v1/watchlist`
   // Limpiar campos internos (prefijo _) y campos no existentes en la tabla
   const ALLOWED=['symbol','name','group_name','list_name','position','active','favorite','observations']
   const body={}; ALLOWED.forEach(k=>{if(item[k]!==undefined)body[k]=item[k]})
-  const res=await fetch(url,{method,headers:{...SUPA_H,'Prefer':'return=representation'},body:JSON.stringify(body)})
+  const res=await fetch(url,{method,headers:{...getSupaH(),'Prefer':'return=representation'},body:JSON.stringify(body)})
   if(!res.ok){const t=await res.text();throw new Error('Error guardando: '+t)}
   return (await res.json())[0]
 }
 async function deleteWatchlistItem(id) {
-  const res=await fetch(`${SUPA_URL}/rest/v1/watchlist?id=eq.${id}`,{method:'DELETE',headers:SUPA_H})
+  const res=await fetch(`${getSupaUrl()}/rest/v1/watchlist?id=eq.${id}`,{method:'DELETE',headers:getSupaH()})
   if(!res.ok) throw new Error('Error eliminando')
 }
 
@@ -228,9 +199,9 @@ async function saveRankingRemote(rankingData, stratId) {
   // Upsert in batches of 20
   for (let i=0; i<rows.length; i+=20) {
     const batch = rows.slice(i, i+20)
-    await fetch(`${SUPA_URL}/rest/v1/ranking_results`, {
+    await fetch(`${getSupaUrl()}/rest/v1/ranking_results`, {
       method: 'POST',
-      headers: { ...SUPA_H, 'Prefer': 'resolution=merge-duplicates,return=minimal',
+      headers: { ...getSupaH(), 'Prefer': 'resolution=merge-duplicates,return=minimal',
         'Content-Type': 'application/json' },
       body: JSON.stringify(batch)
     })
@@ -238,9 +209,9 @@ async function saveRankingRemote(rankingData, stratId) {
 }
 async function loadRankingRemote(stratId) {
   const url = stratId
-    ? `${SUPA_URL}/rest/v1/ranking_results?strategy_id=eq.${stratId}&order=rank_position.asc`
-    : `${SUPA_URL}/rest/v1/ranking_results?order=rank_position.asc`
-  const res = await fetch(url, { headers: SUPA_H })
+    ? `${getSupaUrl()}/rest/v1/ranking_results?strategy_id=eq.${stratId}&order=rank_position.asc`
+    : `${getSupaUrl()}/rest/v1/ranking_results?order=rank_position.asc`
+  const res = await fetch(url, { headers: getSupaH() })
   if (!res.ok) return null
   const rows = await res.json()
   if (!rows?.length) return null
@@ -256,20 +227,20 @@ async function loadRankingRemote(stratId) {
 
 // ── Strategies API ────────────────────────────────────────────
 async function fetchStrategies() {
-  const res=await fetch(`${SUPA_URL}/rest/v1/strategies?active=eq.true&order=name.asc`,{headers:SUPA_H})
+  const res=await fetch(`${getSupaUrl()}/rest/v1/strategies?active=eq.true&order=name.asc`,{headers:getSupaH()})
   if(!res.ok) throw new Error('Error cargando estrategias')
   return await res.json()
 }
 async function upsertStrategy(item) {
   const method=item.id?'PATCH':'POST'
-  const url=item.id?`${SUPA_URL}/rest/v1/strategies?id=eq.${item.id}`:`${SUPA_URL}/rest/v1/strategies`
+  const url=item.id?`${getSupaUrl()}/rest/v1/strategies?id=eq.${item.id}`:`${getSupaUrl()}/rest/v1/strategies`
   const body={...item}; delete body.id
-  const res=await fetch(url,{method,headers:{...SUPA_H,'Prefer':'return=representation'},body:JSON.stringify(body)})
+  const res=await fetch(url,{method,headers:{...getSupaH(),'Prefer':'return=representation'},body:JSON.stringify(body)})
   if(!res.ok) throw new Error('Error guardando estrategia')
   return (await res.json())[0]
 }
 async function deleteStrategy(id) {
-  const res=await fetch(`${SUPA_URL}/rest/v1/strategies?id=eq.${id}`,{method:'DELETE',headers:SUPA_H})
+  const res=await fetch(`${getSupaUrl()}/rest/v1/strategies?id=eq.${id}`,{method:'DELETE',headers:getSupaH()})
   if(!res.ok) throw new Error('Error eliminando estrategia')
 }
 
@@ -345,21 +316,21 @@ async function groqParseCondition(text) {
 
 // ── Alarms API ───────────────────────────────────────────────
 async function fetchAlarms() {
-  const res=await fetch(`${SUPA_URL}/rest/v1/alarms?active=eq.true&order=symbol.asc`,{headers:SUPA_H})
+  const res=await fetch(`${getSupaUrl()}/rest/v1/alarms?active=eq.true&order=symbol.asc`,{headers:getSupaH()})
   if(!res.ok) throw new Error('Error cargando alarmas')
   return await res.json()
 }
 async function upsertAlarm(item) {
   const method=item.id?'PATCH':'POST'
-  const url=item.id?`${SUPA_URL}/rest/v1/alarms?id=eq.${item.id}`:`${SUPA_URL}/rest/v1/alarms`
+  const url=item.id?`${getSupaUrl()}/rest/v1/alarms?id=eq.${item.id}`:`${getSupaUrl()}/rest/v1/alarms`
   const ALLOWED=['name','symbol','condition','condition_detail','price_level','ema_r','ema_l','active']
   const body={}; ALLOWED.forEach(k=>{if(item[k]!==undefined)body[k]=item[k]})
-  const res=await fetch(url,{method,headers:{...SUPA_H,'Prefer':'return=representation'},body:JSON.stringify(body)})
+  const res=await fetch(url,{method,headers:{...getSupaH(),'Prefer':'return=representation'},body:JSON.stringify(body)})
   if(!res.ok){const t=await res.text();throw new Error('Error guardando alarma: '+t)}
   return (await res.json())[0]
 }
 async function deleteAlarm(id) {
-  const res=await fetch(`${SUPA_URL}/rest/v1/alarms?id=eq.${id}`,{method:'DELETE',headers:SUPA_H})
+  const res=await fetch(`${getSupaUrl()}/rest/v1/alarms?id=eq.${id}`,{method:'DELETE',headers:getSupaH()})
   if(!res.ok) throw new Error('Error eliminando alarma')
 }
 
@@ -377,16 +348,6 @@ async function searchSymbolName(sym) {
 }
 
 // Fallback local por si Supabase no responde
-const WATCHLIST_FALLBACK=[
-  {id:null,symbol:'^GSPC',name:'S&P 500',group_name:'Índices',list_name:'General',favorite:false,observations:''},
-  {id:null,symbol:'^NDX',name:'Nasdaq 100',group_name:'Índices',list_name:'General',favorite:false,observations:''},
-  {id:null,symbol:'^IBEX',name:'IBEX 35',group_name:'Índices',list_name:'General',favorite:false,observations:''},
-  {id:null,symbol:'^GDAXI',name:'DAX 40',group_name:'Índices',list_name:'General',favorite:false,observations:''},
-  {id:null,symbol:'AAPL',name:'Apple',group_name:'Acciones',list_name:'General',favorite:false,observations:''},
-  {id:null,symbol:'MSFT',name:'Microsoft',group_name:'Acciones',list_name:'General',favorite:false,observations:''},
-  {id:null,symbol:'NVDA',name:'Nvidia',group_name:'Acciones',list_name:'General',favorite:false,observations:''},
-  {id:null,symbol:'BTC-USD',name:'Bitcoin',group_name:'Crypto',list_name:'General',favorite:false,observations:''},
-]
 
 // ── Mapa de nombres conocidos ────────────────────────────────
 const SYM_NAMES={
@@ -431,16 +392,16 @@ async function saveSettingsRemote(s) {
   saveSettings(s)
   // Then sync to Supabase (upsert row id=1)
   try {
-    await fetch(`${SUPA_URL}/rest/v1/user_settings?id=eq.1`, {
+    await fetch(`${getSupaUrl()}/rest/v1/user_settings?id=eq.1`, {
       method:'PATCH',
-      headers:{...SUPA_H,'Prefer':'return=minimal'},
+      headers:{...getSupaH(),'Prefer':'return=minimal'},
       body:JSON.stringify({settings:s, updated_at:new Date().toISOString()})
     })
   } catch(_) {}
 }
 async function loadSettingsRemote() {
   try {
-    const res = await fetch(`${SUPA_URL}/rest/v1/user_settings?id=eq.1&select=settings`, {headers:SUPA_H})
+    const res = await fetch(`${getSupaUrl()}/rest/v1/user_settings?id=eq.1&select=settings`, {headers:getSupaH()})
     if(!res.ok) return null
     const data = await res.json()
     if(data?.[0]?.settings && Object.keys(data[0].settings).length > 0) return data[0].settings
@@ -612,6 +573,27 @@ function SettingsModal({ onClose, strategies=[] }) {
           {/* ── INTEGRACIONES ── */}
           {tab==='integraciones'&&(
             <div>
+              {sep('Supabase — Base de datos en la nube')}
+              {row('URL del proyecto','(ej: https://xxxx.supabase.co)',
+                <input
+                  type="text" value={settings.integrations?.supabaseUrl||''} placeholder="https://xxxx.supabase.co"
+                  onChange={e=>upd('integrations.supabaseUrl',e.target.value)}
+                  style={{width:'100%',background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,
+                    color:'#e2eaf5',fontFamily:MONO,fontSize:12,padding:'6px 10px',letterSpacing:'0.04em'}}
+                />
+              )}
+              {row('Anon Key','(se guarda solo en tu navegador)',
+                <input
+                  type="password" value={settings.integrations?.supabaseKey||''} placeholder="sb_publishable_..."
+                  onChange={e=>upd('integrations.supabaseKey',e.target.value)}
+                  style={{width:'100%',background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,
+                    color:'#e2eaf5',fontFamily:MONO,fontSize:12,padding:'6px 10px',letterSpacing:'0.06em'}}
+                />
+              )}
+              <div style={{fontSize:10,color:'#3d5a7a',lineHeight:1.6,marginTop:-6,marginBottom:16}}>
+                Las credenciales se almacenan únicamente en localStorage de tu navegador. Sin configurar, el tradelog funciona en modo local.
+              </div>
+
               {sep('Groq AI — Tooltips de ayuda')}
               {row('Groq API Key','(se guarda solo en tu navegador)',
                 <div style={{display:'flex',gap:8}}>
@@ -1401,704 +1383,6 @@ function PriceAlarmQuickForm({ price, symbol, alarms, onSave, onCancel }) {
           Cancelar
         </button>
       </div>
-    </div>
-  )
-}
-
-// ── CandleChart ───────────────────────────────────────────────
-function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, syncRef, savedRangeRef, chartHeight=480 }) {
-  const containerRef=useRef(null), svgRef=useRef(null), legendRef=useRef(null), tooltipRef=useRef(null)
-  const chartRef=useRef(null), candlesRef=useRef(null)
-  const chartAliveRef=useRef(true)
-  const rulerStart=useRef(null), rulerActiveR=useRef(rulerActive)
-  useEffect(()=>{
-    rulerActiveR.current=rulerActive
-    if(!rulerActive){
-      rulerStart.current=null
-      svgRef.current?.querySelectorAll('.ruler-el').forEach(el=>el.remove())
-    }
-  },[rulerActive])
-
-  useEffect(()=>{
-    if(typeof window==='undefined'||!containerRef.current) return
-    import('lightweight-charts').then(({createChart,CrosshairMode,LineStyle})=>{
-      if(chartRef.current){chartRef.current.remove();chartRef.current=null}
-      const chart=createChart(containerRef.current,{
-        width:containerRef.current.clientWidth,height:chartHeight,
-        layout:{background:{color:'#080c14'},textColor:'#7a9bc0'},
-        grid:{vertLines:{color:'#0d1520'},horzLines:{color:'#0d1520'}},
-        crosshair:{mode:CrosshairMode.Normal},
-        rightPriceScale:{borderColor:'#1a2d45'},
-        timeScale:{borderColor:'#1a2d45',timeVisible:true},
-      })
-      chartRef.current=chart
-
-      const candles=chart.addCandlestickSeries({
-        upColor:'#00e5a0',downColor:'#ff4d6d',
-        borderUpColor:'#00e5a0',borderDownColor:'#ff4d6d',
-        wickUpColor:'#00e5a0',wickDownColor:'#ff4d6d'
-      })
-      candles.setData(data.map(d=>({time:d.date,open:d.open,high:d.high,low:d.low,close:d.close})))
-      candlesRef.current=candles
-
-      // EMA series — sin title para no generar leyenda inferior
-      const erS=chart.addLineSeries({color:'#ffd166',lineWidth:1,lastValueVisible:false,priceLineVisible:false})
-      erS.setData(data.filter(d=>d.emaR!=null).map(d=>({time:d.date,value:d.emaR})))
-      const elS=chart.addLineSeries({color:'#ff4d6d',lineWidth:1,lastValueVisible:false,priceLineVisible:false})
-      elS.setData(data.filter(d=>d.emaL!=null).map(d=>({time:d.date,value:d.emaL})))
-
-      // Líneas de trades — diagonal P&L + horizontales entrada/stop estilo TV
-      trades.forEach(t=>{
-        if(!t.entryDate||!t.exitDate) return
-        // Diagonal P&L
-        const ls=chart.addLineSeries({color:t.pnlPct>=0?'#00e5a0':'#ff4d6d',lineWidth:2,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
-        ls.setData([{time:t.entryDate,value:t.entryPx},{time:t.exitDate,value:t.exitPx}])
-        // Línea horizontal blanca intermitente — nivel de entrada
-        const entryLine=chart.addLineSeries({color:'rgba(255,255,255,0.65)',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
-        entryLine.setData([{time:t.entryDate,value:t.entryPx},{time:t.exitDate,value:t.entryPx}])
-        // Línea horizontal roja — stop loss
-        if(t.stopPx!=null){
-          const stopLine=chart.addLineSeries({color:'rgba(255,77,109,0.8)',lineWidth:2,lineStyle:LineStyle.Solid,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
-          stopLine.setData([{time:t.entryDate,value:t.stopPx},{time:t.exitDate,value:t.stopPx}])
-        }
-      })
-
-      // ── Flechas de cruce EMA ──
-      // shape:'circle' size:1 → punto invisible, solo muestra el texto diagonal ↗↘
-      const marks=[]
-      for(let i=1;i<data.length;i++){
-        const p=data[i-1],c=data[i]
-        if(!p.emaR||!p.emaL||!c.emaR||!c.emaL) continue
-        if(p.emaR<p.emaL&&c.emaR>=c.emaL)
-          marks.push({time:c.date,position:'belowBar',color:'#00e5a0',shape:'circle',size:1,text:'↗'})
-        else if(p.emaR>p.emaL&&c.emaR<=c.emaL)
-          marks.push({time:c.date,position:'aboveBar',color:'#ff4d6d',shape:'circle',size:1,text:'↘'})
-      }
-      if(marks.length) candles.setMarkers(marks)
-
-      const ohlcMap={},erMap={},elMap={}
-      data.forEach(d=>{ohlcMap[d.date]=d;if(d.emaR!=null)erMap[d.date]=d.emaR;if(d.emaL!=null)elMap[d.date]=d.emaL})
-
-      // ── Imán Ctrl — snap al O/H/L/C más cercano (independiente de la regla) ──
-      const snapToOHLC=(px,py,isCtrl)=>{
-        if(!isCtrl) return {
-          x:px, y:py,
-          price:candlesRef.current?.coordinateToPrice(py),
-          time:chart.timeScale().coordinateToTime(px)
-        }
-        const time=chart.timeScale().coordinateToTime(px)
-        const bar=time&&ohlcMap[time]
-        if(!bar) return {
-          x:px, y:py,
-          price:candlesRef.current?.coordinateToPrice(py),
-          time
-        }
-        const candidates=[bar.open,bar.high,bar.low,bar.close]
-        const snappedPrice=candidates.reduce((best,p)=>{
-          const coord=candlesRef.current?.priceToCoordinate(p)
-          const bestCoord=candlesRef.current?.priceToCoordinate(best)
-          if(coord==null) return best
-          return Math.abs(coord-py)<Math.abs(bestCoord-py)?p:best
-        })
-        const sy=candlesRef.current?.priceToCoordinate(snappedPrice)??py
-        return {x:px, y:sy, price:snappedPrice, time}
-      }
-
-      // Punto visual del imán en SVG
-      const NS2='http://www.w3.org/2000/svg'
-      const snapDot=document.createElementNS(NS2,'circle')
-      Object.entries({r:'4',fill:'none',stroke:'#ffd166','stroke-width':'1.5',display:'none',class:'snap-dot','pointer-events':'none'}).forEach(([k,v])=>snapDot.setAttribute(k,v))
-      svgRef.current?.appendChild(snapDot)
-
-      const ctrlState={pressed:false}
-      const onKeyDown=(e)=>{if(e.key==='Control'){ctrlState.pressed=true}}
-      const onKeyUp=(e)=>{if(e.key==='Control'){ctrlState.pressed=false;snapDot.setAttribute('display','none')}}
-      window.addEventListener('keydown',onKeyDown)
-      window.addEventListener('keyup',onKeyUp)
-      const drawTradeLabels=()=>{
-        const svg=svgRef.current; if(!svg||!candlesRef.current||!chartRef.current) return
-        svg.querySelectorAll('.trade-label').forEach(el=>el.remove())
-        const NS='http://www.w3.org/2000/svg'
-        trades.forEach((t,idx)=>{
-          if(!t.entryDate||!t.exitDate) return
-          try {
-            const ts=chartRef.current.timeScale()
-            const x1=ts.timeToCoordinate(t.entryDate), x2=ts.timeToCoordinate(t.exitDate)
-            if(x1==null||x2==null) return
-            const midX=(x1+x2)/2
-            // Precio medio del trade para la posición Y base
-            const midPrice=(t.entryPx+t.exitPx)/2
-            const pyBase=candlesRef.current.priceToCoordinate(midPrice)
-            if(pyBase==null) return
-            const isWin=t.pnlPct>=0
-            const bc=isWin?'#00e5a0':'#ff4d6d'
-            const g=document.createElementNS(NS,'g'); g.setAttribute('class','trade-label')
-
-            const chartH=containerRef.current?.clientHeight||480
-            const mkConnector=(y1start,y2end)=>{
-              const l=document.createElementNS(NS,'line')
-              Object.entries({x1:midX,y1:y1start,x2:midX,y2:y2end,
-                stroke:bc,'stroke-width':'1','stroke-dasharray':'3,3','opacity':'0.45'
-              }).forEach(([k,v])=>l.setAttribute(k,v))
-              return l
-            }
-
-            if(labelMode===2){
-              // ── Modo completo: % + € (sin fechas) ──
-              const line1=`${t.pnlPct>=0?'+':''}${t.pnlPct.toFixed(2)}%`
-              const line2=`€${t.pnlSimple>=0?'+':''}${Math.round(t.pnlSimple)}  ·  ${t.dias}d`
-              const charW=8, BOX_H=40
-              const w=Math.max(line1.length,line2.length)*charW+24
-              const ZONE_TOP=22, ZONE_H=chartH*0.26
-              const labelY=ZONE_TOP + (idx % 3)*(ZONE_H/3) + BOX_H/2
-              const rect=document.createElementNS(NS,'rect')
-              Object.entries({
-                x:midX-w/2, y:labelY-BOX_H/2, width:w, height:BOX_H,
-                fill:isWin?'rgba(0,229,160,0.18)':'rgba(255,77,109,0.18)',
-                rx:'5', stroke:bc, 'stroke-width':'1.5'
-              }).forEach(([k,v])=>rect.setAttribute(k,v))
-              g.appendChild(rect)
-              g.appendChild(mkConnector(labelY+BOX_H/2+2, Math.max(labelY+BOX_H/2+4,pyBase-4)))
-              const mkT=(txt,y,sz)=>{
-                const el=document.createElementNS(NS,'text')
-                Object.entries({x:midX,y,'font-size':sz,'font-family':MONO,'text-anchor':'middle',fill:bc,'font-weight':'700'}).forEach(([k,v])=>el.setAttribute(k,v))
-                el.textContent=txt; return el
-              }
-              g.appendChild(mkT(line1,labelY-4,'13'))
-              g.appendChild(mkT(line2,labelY+12,'10.5'))
-
-            } else if(labelMode===1){
-              // ── Modo solo %: más grande, franja alta ──
-              const ZONE_TOP=18, ZONE_H=chartH*0.22
-              const labelY=ZONE_TOP + (idx % 4)*(ZONE_H/4) + 12
-              const lbl=`${t.pnlPct>=0?'+':''}${t.pnlPct.toFixed(1)}%`
-              const bw=lbl.length*8+14
-              const bg=document.createElementNS(NS,'rect')
-              Object.entries({
-                x:midX-bw/2, y:labelY-14, width:bw, height:20,
-                fill:isWin?'rgba(0,229,160,0.1)':'rgba(255,77,109,0.1)',
-                rx:'3', stroke:bc, 'stroke-width':'0.7', opacity:'0.9'
-              }).forEach(([k,v])=>bg.setAttribute(k,v))
-              g.appendChild(bg)
-              g.appendChild(mkConnector(labelY+6, pyBase-4))
-              const txt=document.createElementNS(NS,'text')
-              Object.entries({
-                x:midX, y:labelY, 'font-size':'12', 'font-family':MONO,
-                'text-anchor':'middle', fill:bc, 'font-weight':'700'
-              }).forEach(([k,v])=>txt.setAttribute(k,v))
-              txt.textContent=lbl
-              g.appendChild(txt)
-            }
-            // labelMode===0 → no se añade nada al svg
-            svg.appendChild(g)
-          } catch(_){}
-        })
-      }
-
-      // Redibujar etiquetas al hacer zoom/scroll — guardamos unsub para cleanup
-      chartAliveRef.current=true
-      const unsubLabels=chart.timeScale().subscribeVisibleTimeRangeChange(()=>{ if(chartAliveRef.current) setTimeout(()=>{ if(chartAliveRef.current) drawTradeLabels() },30) })
-
-      // ── Regla SVG ──
-      const svg=svgRef.current, NS='http://www.w3.org/2000/svg'
-      const mk=(tag,attrs)=>{const el=document.createElementNS(NS,tag);Object.entries(attrs).forEach(([k,v])=>el.setAttribute(k,v));return el}
-      const clearRuler=()=>{svg?.querySelectorAll('.ruler-el').forEach(el=>el.remove())}
-      const drawRuler=(s,e)=>{
-        clearRuler(); if(!svg) return
-        const {x:x1,y:y1}=s,{x:x2,y:y2,price:pe,time:te}=e
-        const diff=pe-s.price, pct=s.price>0?(diff/s.price)*100:0
-        let days=0
-        if(s.time&&te){
-          const t1=typeof s.time==='string'?new Date(s.time).getTime():s.time*1000
-          const t2=typeof te==='string'?new Date(te).getTime():te*1000
-          days=Math.round(Math.abs(t2-t1)/86400000)
-        }
-        const addC=(el)=>{el.setAttribute('class','ruler-el');svg.appendChild(el);return el}
-        addC(mk('line',{x1,y1,x2,y2:y1,stroke:'rgba(255,209,102,0.22)','stroke-width':'1','stroke-dasharray':'4,3'}))
-        addC(mk('line',{x1:x2,y1,x2,y2,stroke:'rgba(255,209,102,0.22)','stroke-width':'1','stroke-dasharray':'4,3'}))
-        addC(mk('line',{x1,y1,x2,y2,stroke:'#ffd166','stroke-width':'1.8'}))
-        ;[[x1,y1],[x2,y2]].forEach(([cx,cy])=>addC(mk('circle',{cx,cy,r:'3',fill:'#ffd166',stroke:'#080c14','stroke-width':'1'})))
-        const mx=(x1+x2)/2, lineAngle=Math.atan2(y2-y1,x2-x1)
-        // Label: 26px perpendicular above the midpoint of the line
-        const perp = lineAngle - Math.PI/2
-        const lx = mx + Math.cos(perp)*26, ly = (y1+y2)/2 + Math.sin(perp)*26
-        const label=`${days}d  ${diff>=0?'+':''}${pct.toFixed(2)}%`
-        const bw=label.length*7+14
-        addC(mk('rect',{x:lx-bw/2,y:ly-10,width:bw,height:16,fill:'rgba(8,12,20,0.96)',rx:'3',stroke:'#ffd166','stroke-width':'0.8'}))
-        const txt=addC(mk('text',{x:lx,y:ly+1,fill:'#ffd166','font-size':'10','font-family':MONO,'text-anchor':'middle','dominant-baseline':'middle'}))
-        txt.textContent=label
-      }
-
-      const getPoint=(px,py)=>snapToOHLC(px,py,ctrlState.pressed)
-      const cnt=containerRef.current
-
-      // ── Ruler: click sets start/end; dblclick anywhere clears; dblclick outside ruler = price alarm ──
-      const rulerFixed=svgRef.current  // frozen ruler lives in svg; check if line exists
-      const rulerExists=()=>svgRef.current?.querySelector('.ruler-el')!=null
-      chart.subscribeClick(param=>{
-        if(!rulerActiveR.current) return
-        if(param.point==null) return
-        const px=param.point.x, py=param.point.y
-        const price=candlesRef.current?.coordinateToPrice(py)
-        const time=param.time
-        if(!rulerStart.current){
-          rulerStart.current={x:px,y:py,price,time}
-        } else {
-          // freeze: keep SVG, clear start ref
-          rulerStart.current=null
-        }
-      })
-      chart.subscribeDblClick(param=>{
-        if(rulerActiveR.current){
-          // dblclick while ruler active → clear ruler
-          rulerStart.current=null; clearRuler(); return
-        }
-        // dblclick while ruler inactive → price alarm
-        if(onPriceAlarm&&param.point&&param.point.y!=null){
-          const price=candlesRef.current?.coordinateToPrice(param.point.y)
-          if(price!=null) onPriceAlarm(Math.round(price*100)/100)
-        }
-      })
-
-      const onMove=e=>{
-        const rect=containerRef.current.getBoundingClientRect()
-        const px=e.clientX-rect.left,py=e.clientY-rect.top
-        if(ctrlState.pressed){
-          const snapped=snapToOHLC(px,py,true)
-          snapDot.setAttribute('cx',String(snapped.x))
-          snapDot.setAttribute('cy',String(snapped.y))
-          snapDot.setAttribute('display','block')
-        } else { snapDot.setAttribute('display','none') }
-        if(rulerActiveR.current&&rulerStart.current) drawRuler(rulerStart.current,getPoint(px,py))
-      }
-      cnt.addEventListener('mousemove',onMove)
-
-      // ── Leyenda OHLC + EMAs ──
-      chart.subscribeCrosshairMove(param=>{
-        const leg=legendRef.current
-        if(leg){
-          if(param.time){
-            const b=ohlcMap[param.time],er=erMap[param.time],el=elMap[param.time]
-            if(b){
-              const chg=b.close-b.open,pct=(chg/b.open)*100,cc=chg>=0?'#00e5a0':'#ff4d6d'
-              leg.innerHTML=
-                `<span style="color:#7a9bc0;margin-right:8px">${b.date}</span>`+
-                `<span style="margin-right:7px">O <b>${f2(b.open)}</b></span>`+
-                `<span style="margin-right:7px">H <b style="color:#00e5a0">${f2(b.high)}</b></span>`+
-                `<span style="margin-right:7px">L <b style="color:#ff4d6d">${f2(b.low)}</b></span>`+
-                `<span style="margin-right:12px">C <b>${f2(b.close)}</b></span>`+
-                `<span style="color:${cc};margin-right:14px">${chg>=0?'+':''}${f2(chg)} (${pct>=0?'+':''}${pct.toFixed(2)}%)</span>`+
-                (er!=null?`<span style="margin-right:7px">EMA${emaRPeriod} <b style="color:#ffd166">${f2(er)}</b></span>`:'')+
-                (el!=null?`<span>EMA${emaLPeriod} <b style="color:#ff4d6d">${f2(el)}</b></span>`:'')
-            }
-          } else leg.innerHTML=''
-        }
-        // Tooltip de trade (solo cuando etiquetas OFF)
-        const tt=tooltipRef.current
-        if(tt){
-          if(!param.time||!param.point){tt.style.display='none';return}
-          const trade=trades.find(t=>t.entryDate<=param.time&&param.time<=t.exitDate)
-          if(!trade){tt.style.display='none';return}
-          const bc=trade.pnlPct>=0?'#00e5a0':'#ff4d6d'
-          const w=containerRef.current?.clientWidth||600
-          tt.style.display='block'
-          tt.style.left=((param.point.x+210>w)?param.point.x-220:param.point.x+16)+'px'
-          tt.style.top=Math.max(8,param.point.y-70)+'px'
-          tt.style.borderColor=bc
-          tt.innerHTML=
-            `<div style="font-size:10px;color:#7a9bc0;margin-bottom:4px">${fmtDate(trade.entryDate)} → ${fmtDate(trade.exitDate)}</div>`+
-            `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:#7a9bc0">Capital</span><b style="color:#e2eaf5">€${f2(trade.capitalTras)}</b></div>`+
-            `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:#7a9bc0">Profit</span><b style="color:${bc}">${trade.pnlPct>=0?'+':''}${trade.pnlPct.toFixed(2)}%</b></div>`+
-            `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:#7a9bc0">P&L</span><b style="color:${bc}">${trade.pnlSimple>=0?'€+':'€-'}${f2(Math.abs(trade.pnlSimple))}</b></div>`+
-            `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:#7a9bc0">Días</span><span>${trade.dias}</span></div>`+
-            `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:#7a9bc0">Max DD</span><span style="color:#ff4d6d">${maxDD.toFixed(2)}%</span></div>`
-        }
-      })
-
-      // addDays: extend 'to' past last bar → permanent right gap, immune to resets
-      const GAP_DAYS = 12  // calendar days of right margin
-      const addDays=(dateStr,n)=>{ const d=new Date(dateStr); d.setDate(d.getDate()+n); return d.toISOString().split('T')[0] }
-      // Restore saved range OR default to last 3 months
-      try {
-        if(savedRangeRef?.current){
-          const r=savedRangeRef.current
-          const lastBar=data[data.length-1]
-          const minTo=lastBar?addDays(lastBar.date,GAP_DAYS):r.to
-          const finalTo=r.to>=minTo?r.to:minTo
-          chart.timeScale().setVisibleRange({from:r.from, to:finalTo})
-        } else {
-          const lastBar = data[data.length-1]
-          if(lastBar){
-            const from = new Date(lastBar.date)
-            from.setMonth(from.getMonth()-3)
-            chart.timeScale().setVisibleRange({
-              from: from.toISOString().split('T')[0],
-              to:   addDays(lastBar.date, GAP_DAYS)
-            })
-          }
-        }
-      } catch(_){ chart.timeScale().fitContent() }
-      // Save range whenever user zooms/scrolls — always bake in GAP_DAYS on 'to'
-      chart.timeScale().subscribeVisibleTimeRangeChange(range=>{
-        if(range && savedRangeRef){
-          const lastBar=data[data.length-1]
-          const toStr = typeof range.to==='object'
-            ? `${range.to.year}-${String(range.to.month).padStart(2,'0')}-${String(range.to.day).padStart(2,'0')}`
-            : String(range.to)
-          const fromStr = typeof range.from==='object'
-            ? `${range.from.year}-${String(range.from.month).padStart(2,'0')}-${String(range.from.day).padStart(2,'0')}`
-            : String(range.from)
-          // Always ensure 'to' is at least lastBar.date + GAP_DAYS
-          const minTo = lastBar ? addDays(lastBar.date, GAP_DAYS) : toStr
-          const finalTo = toStr >= minTo ? toStr : minTo
-          savedRangeRef.current = {from: fromStr, to: finalTo}
-        }
-      })
-
-      // ── Cross-chart time sync ──
-      if(syncRef?.current){
-        const syncId=Symbol()
-        const unsub=chart.timeScale().subscribeVisibleTimeRangeChange(range=>{
-          if(!range||syncRef.current.syncing) return
-          syncRef.current.syncing=true
-          syncRef.current.listeners.forEach(fn=>{if(fn.id!==syncId)try{fn.handler(range)}catch(_){}})
-          syncRef.current.syncing=false
-        })
-        const handler=(range)=>{try{chart.timeScale().setVisibleRange(range)}catch(_){}}
-        syncRef.current.listeners.push({id:syncId,handler})
-        chart.__syncCleanup=()=>{
-          try{unsub()}catch(_){}
-          if(syncRef.current) syncRef.current.listeners=syncRef.current.listeners.filter(e=>e.id!==syncId)
-        }
-      }
-
-      // Exponer navigateTo + fitAll + captureChart
-      if(onChartReady) onChartReady({
-        captureJpg:(wrapEl, captureSymbol, entryPrice)=>{
-          try {
-            // chart.takeScreenshot() returns HTMLCanvasElement with full chart (axes + candles)
-            const chartCanvas = chart.takeScreenshot()
-            if(!chartCanvas) return null
-
-            const cw = chartCanvas.width, ch = chartCanvas.height
-
-            // Build final canvas: background + chart + legend overlay
-            const out = document.createElement('canvas')
-            // Add header height (≈36px) on top
-            const HEADER_H = 36
-            out.width  = cw
-            out.height = ch + HEADER_H
-            const ctx = out.getContext('2d')
-
-            // Background
-            ctx.fillStyle = '#080c14'
-            ctx.fillRect(0, 0, out.width, out.height)
-
-            // Header bar with symbol + price info
-            ctx.fillStyle = '#0d1520'
-            ctx.fillRect(0, 0, out.width, HEADER_H)
-            ctx.fillStyle = '#1a2d45'
-            ctx.fillRect(0, HEADER_H - 1, out.width, 1)
-
-            // Header text: SYMBOL  |  date  O H L C
-            const lastBar = data[data.length - 1]
-            if(lastBar) {
-              ctx.font = 'bold 13px "JetBrains Mono", monospace'
-              ctx.fillStyle = '#00d4ff'
-              const displaySym = captureSymbol || emaRPeriod+'·'+emaLPeriod
-              ctx.fillText(displaySym, 10, 22)
-              const symEnd = ctx.measureText(displaySym).width + 16
-              ctx.font = '10px "JetBrains Mono", monospace'
-              ctx.fillStyle = '#3d5a7a'
-              ctx.fillText(lastBar.date || '', symEnd, 22)
-              const dateEnd = symEnd + ctx.measureText(lastBar.date || '').width + 14
-              ctx.font = '11px "JetBrains Mono", monospace'
-              const chg = lastBar.close - lastBar.open
-              const pct = (chg / lastBar.open * 100).toFixed(2)
-              const ohlc = [
-                ['O', lastBar.open?.toFixed(2), '#e2eaf5'],
-                ['H', lastBar.high?.toFixed(2), '#00e5a0'],
-                ['L', lastBar.low?.toFixed(2),  '#ff4d6d'],
-                ['C', lastBar.close?.toFixed(2),'#e2eaf5'],
-                [chg>=0?`+${pct}%`:`${pct}%`, '', chg>=0?'#00e5a0':'#ff4d6d'],
-              ]
-              let x = dateEnd + 8
-              ohlc.forEach(([label, val, col])=>{
-                if(val) {
-                  ctx.fillStyle = '#5a7a95'
-                  ctx.fillText(label+' ', x, 22)
-                  x += ctx.measureText(label+' ').width
-                  ctx.fillStyle = col
-                  ctx.fillText(val+'  ', x, 22)
-                  x += ctx.measureText(val+'  ').width
-                } else {
-                  ctx.fillStyle = col
-                  ctx.fillText(label+'  ', x, 22)
-                  x += ctx.measureText(label+'  ').width
-                }
-              })
-            }
-
-            // Draw chart below header
-            ctx.drawImage(chartCanvas, 0, HEADER_H)
-
-            // Línea amarilla de precio de entrada
-            if(entryPrice && candlesRef.current) {
-              try {
-                const py = candlesRef.current.priceToCoordinate(entryPrice)
-                if(py != null) {
-                  const lineY = HEADER_H + py
-                  ctx.strokeStyle = '#ffd166'
-                  ctx.lineWidth = 1.5
-                  ctx.setLineDash([6, 4])
-                  ctx.beginPath()
-                  ctx.moveTo(0, lineY)
-                  ctx.lineTo(cw, lineY)
-                  ctx.stroke()
-                  ctx.setLineDash([])
-                  // Etiqueta precio
-                  ctx.font = 'bold 10px "JetBrains Mono", monospace'
-                  const priceLabel = entryPrice.toFixed(2)
-                  const lw = ctx.measureText(priceLabel).width + 8
-                  ctx.fillStyle = 'rgba(255,209,102,0.18)'
-                  ctx.fillRect(4, lineY - 9, lw, 13)
-                  ctx.strokeStyle = '#ffd166'
-                  ctx.lineWidth = 0.7
-                  ctx.setLineDash([])
-                  ctx.strokeRect(4, lineY - 9, lw, 13)
-                  ctx.fillStyle = '#ffd166'
-                  ctx.fillText(priceLabel, 8, lineY + 2)
-                }
-              } catch(_){}
-            }
-
-            return out.toDataURL('image/jpeg', 0.93)
-          } catch(e) {
-            // Fallback: composite ALL canvases in the container
-            try {
-              const canvases = Array.from(containerRef.current?.querySelectorAll('canvas')||[])
-              if(!canvases.length) return null
-              // Find the largest canvas (main chart canvas)
-              const main = canvases.reduce((a,b)=>b.width*b.height>a.width*a.height?b:a)
-              const w = main.width, h = main.height
-              const out = document.createElement('canvas')
-              out.width = w; out.height = h
-              const ctx = out.getContext('2d')
-              ctx.fillStyle = '#080c14'
-              ctx.fillRect(0,0,w,h)
-              // Draw all same-size canvases (layers)
-              canvases.filter(c=>c.width===w&&c.height===h)
-                .forEach(c=>{ try{ ctx.drawImage(c,0,0) }catch(_){} })
-              return out.toDataURL('image/jpeg', 0.93)
-            } catch(_){ return null }
-          }
-        },
-        scrollBy:(bars)=>{ try{ chart.timeScale().scrollToPosition(chart.timeScale().scrollPosition()-bars, false) }catch(_){} },
-        navigateTo:(entryDate,exitDate)=>{
-          try{
-            const pad=Math.max(5,Math.round((new Date(exitDate)-new Date(entryDate))/86400000*0.3))
-            const d1=new Date(entryDate); d1.setDate(d1.getDate()-pad)
-            const d2=new Date(exitDate); d2.setDate(d2.getDate()+pad+6)
-            chart.timeScale().setVisibleRange({from:d1.toISOString().split('T')[0],to:d2.toISOString().split('T')[0]})
-          }catch(_){}
-        },
-        fitAll:()=>{ try{ const lb=data[data.length-1]; if(lb){ const fr=data[0]; chart.timeScale().setVisibleRange({from:fr.date,to:addDays(lb.date,GAP_DAYS)}) } else chart.timeScale().fitContent() }catch(_){} },
-        showRecent:(months)=>{
-          try{
-            const lastBar=data[data.length-1]
-            if(!lastBar) return
-            const from=new Date(lastBar.date)
-            from.setMonth(from.getMonth()-(months||3))
-            chart.timeScale().setVisibleRange({from:from.toISOString().split('T')[0],to:addDays(lastBar.date,GAP_DAYS)})
-          }catch(_){}
-        },
-        setRange:(from,to)=>{ try{ chart.timeScale().setVisibleRange({from,to}) }catch(_){} },
-        showEntryLine:(entryDate, entryPrice, opts={})=>{
-          // opts.permanent=true → no auto-remove; opts.label → texto eje precio
-          if(!entryDate||!entryPrice) return
-          try{
-            const ep = parseFloat(entryPrice)
-            const label = opts.label || '● ENTRADA'
-            const color = opts.color || '#ffd166'
-            // Línea horizontal fina en el precio de entrada
-            const priceLine = candlesRef.current.createPriceLine({
-              price: ep,
-              color,
-              lineWidth: 1,
-              lineStyle: 0,   // sólida
-              axisLabelVisible: true,
-              title: label,
-            })
-            if(opts.permanent) return priceLine  // caller keeps reference for cleanup
-            // No-permanent: auto-limpiar después de 6s
-            setTimeout(()=>{ try{ candlesRef.current.removePriceLine(priceLine) }catch(_){} }, 6000)
-          }catch(e){}
-        },
-        // Dibuja líneas permanentes de entradas abiertas del símbolo actual
-        openEntryLinesRef: { current: [] },
-        setOpenTradeLines:(openTrades)=>{
-          if(!candlesRef.current) return
-          // Limpiar líneas anteriores
-          const prevLines = chartRef.current?._openEntryLines || []
-          prevLines.forEach(pl=>{ try{ candlesRef.current.removePriceLine(pl) }catch(_){} })
-          const newLines = openTrades.map(t=>{
-            try{
-              const ep = parseFloat(t.entry_price)
-              if(!ep) return null
-              const sym = t.symbol?.toUpperCase()
-              return candlesRef.current.createPriceLine({
-                price: ep,
-                color: '#ffd166',
-                lineWidth: 1,
-                lineStyle: 0,
-                axisLabelVisible: true,
-                title: `${sym} ${ep.toFixed(2)} ●`,
-              })
-            }catch(_){ return null }
-          }).filter(Boolean)
-          if(chartRef.current) chartRef.current._openEntryLines = newLines
-        }
-      })
-
-      const ro=new ResizeObserver(()=>{
-        if(!containerRef.current||!chartRef.current) return
-        try{chart.applyOptions({width:containerRef.current.clientWidth})}catch(_){}
-        setTimeout(drawTradeLabels,50)
-      })
-      ro.observe(containerRef.current)
-      setTimeout(drawTradeLabels,200)
-
-      return()=>{chartAliveRef.current=false;try{unsubLabels()}catch(_){};cnt.removeEventListener('mousemove',onMove);window.removeEventListener('keydown',onKeyDown);window.removeEventListener('keyup',onKeyUp);ro.disconnect()}
-    })
-    return()=>{chartAliveRef.current=false;if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null}}
-  },[data,emaRPeriod,emaLPeriod,trades,maxDD,labelMode])
-
-  // Apply height changes without recreating chart
-  useEffect(()=>{
-    if(chartRef.current) try{chartRef.current.applyOptions({height:chartHeight})}catch(_){}
-  },[chartHeight])
-
-  return (
-    <div style={{position:'relative'}}>
-      <div ref={legendRef} style={{position:'absolute',top:8,left:8,zIndex:10,fontFamily:MONO,fontSize:12,color:'#7a9bc0',background:'rgba(8,12,20,0.82)',padding:'4px 10px',borderRadius:4,pointerEvents:'none',whiteSpace:'nowrap'}}/>
-      <div ref={containerRef} style={{minHeight:480}}/>
-      <svg ref={svgRef} style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',pointerEvents:'none',zIndex:5}}/>
-      <div ref={tooltipRef} style={{position:'absolute',display:'none',pointerEvents:'none',background:'rgba(8,12,20,0.96)',border:'1px solid #00e5a0',borderRadius:6,padding:'8px 12px',fontFamily:MONO,fontSize:12,color:'#e2eaf5',zIndex:15,minWidth:200,boxShadow:'0 4px 20px rgba(0,0,0,0.5)'}}/>
-    </div>
-  )
-}
-
-// ── EquityChart — con curva compuesta ────────────────────────
-function EquityChart({
-  strategyCurve,bhCurve,sp500BHCurve,compoundCurve,
-  maxDDStrategy,maxDDBH,maxDDSP500,maxDDCompound,
-  maxDDStrategyDate,maxDDBHDate,maxDDSP500Date,maxDDCompoundDate,
-  capitalIni,showStrategy,showBH,showSP500,showCompound,syncRef,chartHeight=260
-}) {
-  const ref=useRef(null),chartRef=useRef(null),equityTooltipRef=useRef(null)
-  useEffect(()=>{
-    if(!ref.current) return
-    import('lightweight-charts').then(({createChart,CrosshairMode,LineStyle})=>{
-      if(chartRef.current){chartRef.current.remove();chartRef.current=null}
-      const chart=createChart(ref.current,{
-        width:ref.current.clientWidth,height:chartHeight,
-        layout:{background:{color:'#080c14'},textColor:'#7a9bc0'},
-        grid:{vertLines:{color:'#0d1520'},horzLines:{color:'#0d1520'}},
-        crosshair:{mode:CrosshairMode.Normal},
-        rightPriceScale:{borderColor:'#1a2d45'},
-        timeScale:{borderColor:'#1a2d45',timeVisible:false},
-      })
-      chartRef.current=chart
-      // Track series data by date for crosshair tooltip
-      const equityDataByDate={}
-      const trackSeries=(curve,key)=>{ curve?.forEach(p=>{ if(!equityDataByDate[p.date]) equityDataByDate[p.date]={}; equityDataByDate[p.date][key]=p.value }) }
-
-      if(showStrategy&&strategyCurve?.length){
-        chart.addLineSeries({color:'#00d4ff',lineWidth:2,lastValueVisible:true,priceLineVisible:false})
-          .setData(strategyCurve.map(p=>({time:p.date,value:p.value})))
-        trackSeries(strategyCurve,'st')
-      }
-      if(showCompound&&compoundCurve?.length){
-        chart.addLineSeries({color:'#00e5a0',lineWidth:2,lastValueVisible:true,priceLineVisible:false})
-          .setData(compoundCurve.map(p=>({time:p.date,value:p.value})))
-        trackSeries(compoundCurve,'co')
-      }
-      if(showBH&&bhCurve?.length){
-        chart.addLineSeries({color:'#ffd166',lineWidth:2,lineStyle:LineStyle.Dashed,lastValueVisible:true,priceLineVisible:false})
-          .setData(bhCurve.map(p=>({time:p.date,value:p.value})))
-        trackSeries(bhCurve,'bh')
-      }
-      if(showSP500&&sp500BHCurve?.length){
-        chart.addLineSeries({color:'#9b72ff',lineWidth:2,lineStyle:LineStyle.Dotted,lastValueVisible:true,priceLineVisible:false})
-          .setData(sp500BHCurve.map(p=>({time:p.date,value:p.value})))
-        trackSeries(sp500BHCurve,'sp')
-      }
-      const base=strategyCurve||compoundCurve||bhCurve||sp500BHCurve
-      if(base?.length)
-        chart.addLineSeries({color:'#3d5a7a',lineWidth:1,lineStyle:LineStyle.Dotted,lastValueVisible:false,priceLineVisible:false})
-          .setData([{time:base[0].date,value:capitalIni},{time:base[base.length-1].date,value:capitalIni}])
-      const addDD=(curve,date,dd,color)=>{
-        if(!date||!dd||!curve?.length) return
-        let peak={date:curve[0].date,value:curve[0].value}
-        for(const p of curve){if(p.date>date)break;if(p.value>peak.value)peak=p}
-        const trough=curve.find(p=>p.date===date)
-        if(!trough||peak.date===trough.date) return
-        const s=chart.addLineSeries({color,lineWidth:2,lastValueVisible:false,priceLineVisible:false})
-        s.setData([{time:peak.date,value:peak.value},{time:trough.date,value:trough.value}])
-        s.setMarkers([{time:trough.date,position:'belowBar',color,shape:'circle',size:0,text:`↓ -${dd.toFixed(1)}%`}])
-      }
-      if(showStrategy) addDD(strategyCurve,maxDDStrategyDate,maxDDStrategy,'#ff4d6d')
-      if(showCompound) addDD(compoundCurve,maxDDCompoundDate,maxDDCompound,'#00a870')
-      if(showBH)       addDD(bhCurve,maxDDBHDate,maxDDBH,'#ff9a3c')
-      if(showSP500)    addDD(sp500BHCurve,maxDDSP500Date,maxDDSP500,'#7b5fe0')
-      // ── Cross-chart time sync ──
-      if(syncRef?.current){
-        const syncId=Symbol()
-        const unsub=chart.timeScale().subscribeVisibleTimeRangeChange(range=>{
-          if(!range||syncRef.current.syncing) return
-          syncRef.current.syncing=true
-          syncRef.current.listeners.forEach(fn=>{if(fn.id!==syncId)try{fn.handler(range)}catch(_){}})
-          syncRef.current.syncing=false
-        })
-        const handler=(range)=>{try{chart.timeScale().setVisibleRange(range)}catch(_){}}
-        syncRef.current.listeners.push({id:syncId,handler})
-        chart.__syncCleanup=()=>{try{unsub()}catch(_){};if(syncRef.current) syncRef.current.listeners=syncRef.current.listeners.filter(e=>e.id!==syncId)}
-      }
-      // Crosshair tooltip — valores de cada curva al pasar el cursor
-      chart.subscribeCrosshairMove(param=>{
-        const tt=equityTooltipRef.current; if(!tt) return
-        if(!param.time||!param.point){tt.style.display='none';return}
-        const d=equityDataByDate[param.time]
-        if(!d){tt.style.display='none';return}
-        const rows=[]
-        const MONO2='"JetBrains Mono",monospace'
-        if(d.st!=null) rows.push(`<div style="display:flex;justify-content:space-between;gap:20px"><span style="color:#00d4ff">Simple</span><b style="color:#00d4ff">€${d.st.toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2})}</b></div>`)
-        if(d.co!=null) rows.push(`<div style="display:flex;justify-content:space-between;gap:20px"><span style="color:#00e5a0">Compuesta</span><b style="color:#00e5a0">€${d.co.toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2})}</b></div>`)
-        if(d.bh!=null) rows.push(`<div style="display:flex;justify-content:space-between;gap:20px"><span style="color:#ffd166">B&H Activo</span><b style="color:#ffd166">€${d.bh.toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2})}</b></div>`)
-        if(d.sp!=null) rows.push(`<div style="display:flex;justify-content:space-between;gap:20px"><span style="color:#9b72ff">B&H SP500</span><b style="color:#9b72ff">€${d.sp.toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2})}</b></div>`)
-        if(!rows.length){tt.style.display='none';return}
-        const cw=ref.current?.clientWidth||600
-        tt.style.display='block'
-        tt.style.left=((param.point.x+200>cw)?param.point.x-210:param.point.x+14)+'px'
-        tt.style.top=Math.max(4,param.point.y-40)+'px'
-        tt.innerHTML=`<div style="font-size:10px;color:#7a9bc0;margin-bottom:4px;font-family:${MONO2}">${param.time}</div>`+rows.join('')
-      })
-
-      chart.timeScale().fitContent()
-      const ro=new ResizeObserver(()=>{if(ref.current&&chartRef.current){try{chart.applyOptions({width:ref.current.clientWidth})}catch(_){}}})
-      ro.observe(ref.current)
-      return()=>ro.disconnect()
-    })
-    return()=>{if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null}}
-  },[strategyCurve,bhCurve,sp500BHCurve,compoundCurve,maxDDStrategy,maxDDBH,maxDDSP500,maxDDCompound,maxDDStrategyDate,maxDDBHDate,maxDDSP500Date,maxDDCompoundDate,capitalIni,showStrategy,showBH,showSP500,showCompound])
-
-  useEffect(()=>{
-    if(chartRef.current) try{chartRef.current.applyOptions({height:chartHeight})}catch(_){}
-  },[chartHeight])
-  return (
-    <div style={{position:'relative'}}>
-      <div ref={ref} style={{minHeight:260}}/>
-      <div ref={equityTooltipRef} style={{position:'absolute',display:'none',pointerEvents:'none',background:'rgba(8,12,20,0.96)',border:'1px solid #1a2d45',borderRadius:6,padding:'8px 12px',fontFamily:'"JetBrains Mono",monospace',fontSize:12,color:'#e2eaf5',zIndex:15,minWidth:180,boxShadow:'0 4px 20px rgba(0,0,0,0.5)'}}/>
     </div>
   )
 }
@@ -2934,9 +2218,9 @@ function ContextThemeMenu({ x, y, section, onClose, onSave }) {
   }
   const saveTemaSupabase = async (nf) => {
     try{
-      await fetch(SUPA_URL+'/rest/v1/user_settings?on_conflict=key',{
+      await fetch(getSupaUrl()+'/rest/v1/user_settings?on_conflict=key',{
         method:'POST',
-        headers:{...SUPA_H,'Prefer':'return=minimal,resolution=merge-duplicates'},
+        headers:{...getSupaH(),'Prefer':'return=minimal,resolution=merge-duplicates'},
         body:JSON.stringify({key:'v50_tema_fonts',value:JSON.stringify(nf),updated_at:new Date().toISOString()})
       })
     }catch(_){}
@@ -3201,7 +2485,7 @@ export default function Home() {
   const [metricsView,setMetricsView]=useState('panel')   // 'multi'=3col | 'single'=one strat per block
   const [showStrategy,setShowStrategy]=useState(true),[showBH,setShowBH]=useState(true)
   const [showSP500,setShowSP500]=useState(true),[showCompound,setShowCompound]=useState(true)
-  const [watchlist,setWatchlist]=useState(WATCHLIST_FALLBACK)
+  const [watchlist,setWatchlist]=useState(WATCHLIST_DEFAULT)
   const [wlLoading,setWlLoading]=useState(true)
   const [selectedLists,setSelectedLists]=useState(['General'])
   const [listDropOpen,setListDropOpen]=useState(false)
@@ -4114,14 +3398,8 @@ export default function Home() {
   const tlGetLS = () => { try{ return (JSON.parse(localStorage.getItem(TL_LS_KEY)||'[]')).map(tlNorm) }catch{ return [] } }
   const tlSetLS = (arr) => localStorage.setItem(TL_LS_KEY, JSON.stringify(arr))
   const tlUseLocal = () => {
-    // Si hay constantes Supabase hardcoded en la app, usarlas directamente
-    // Solo fallback a localStorage si no hay URL/KEY disponibles
-    try {
-      if(typeof SUPA_URL === 'string' && SUPA_URL.startsWith('https') &&
-         typeof SUPA_KEY === 'string' && SUPA_KEY.length > 10) return false
-      const s = JSON.parse(localStorage.getItem('v50_settings')||'{}')
-      return !s?.integrations?.supabaseUrl
-    } catch { return true }
+    try { return !(getSupaUrl().startsWith('https') && getSupaKey().length > 10) }
+    catch { return true }
   }
 
   // ── Guardar screenshot del gráfico ─────────────────────────
@@ -4715,9 +3993,9 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
       try{ const t=JSON.parse(localStorage.getItem('v50_settings')||'{}')?.tema||{}; applyTema(t.fonts||{}) }catch(_){}
     }
     applyFromLS()
-    // Also try Supabase for persisted tema (using hardcoded SUPA_URL/SUPA_H)
-    fetch(SUPA_URL+'/rest/v1/user_settings?key=eq.v50_tema_fonts&select=value',{
-      headers:SUPA_H
+    // Also try Supabase for persisted tema (using hardcoded getSupaUrl()/getSupaH())
+    fetch(getSupaUrl()+'/rest/v1/user_settings?key=eq.v50_tema_fonts&select=value',{
+      headers:getSupaH()
     }).then(r=>r.json()).then(rows=>{
       if(rows?.[0]?.value){
         const nf=JSON.parse(rows[0].value)
@@ -5869,7 +5147,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         background:'rgba(255,209,102,0.1)',border:'1px solid rgba(255,209,102,0.3)',color:'#ffd166'}}>
                         💾 Local
                       </span>
-                    : <a href="https://supabase.com/dashboard/project/uqjngxxbdlquiuhywiuc" target="_blank" rel="noreferrer"
+                    : <a href={`https://supabase.com/dashboard/project/${(getSupaUrl().match(/https:\/\/([^.]+)\.supabase\.co/)||[])[1]||''}`} target="_blank" rel="noreferrer"
                         style={{fontFamily:MONO,fontSize:9,padding:'2px 5px',borderRadius:3,cursor:'pointer',textDecoration:'none',
                           background:'rgba(0,212,255,0.08)',border:'1px solid rgba(0,212,255,0.2)',color:'#00d4ff'}}>
                         ☁ Supabase ↗
