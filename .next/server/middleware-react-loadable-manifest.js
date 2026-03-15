@@ -1,0 +1,1 @@
+self.__REACT_LOADABLE_MANIFEST="{\"pages\\\\index.js -> lightweight-charts\":{\"id\":\"pages\\\\index.js -> lightweight-charts\",\"files\":[\"static/chunks/node_modules_lightweight-charts_dist_lightweight-charts_development_mjs.js\"]}}"
