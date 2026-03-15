@@ -8405,17 +8405,6 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
           </div>
         </div>
       )}
-
-    {/* ── Modal de configuración global ── */}
-    {settingsOpen&&<SettingsModal onClose={()=>{setSettingsOpen(false);setTemaKey(k=>k+1)}} strategies={strategies}/>}
-
-    {/* ── Panel Asistente IA de estrategias ── */}
-    {aiPanelOpen&&<StrategyAIPanel
-      definition={definition}
-      onApply={(defn, name)=>{setDefinition(defn);if(name)setStratName(name);setAiPanelOpen(false)}}
-      onClose={()=>setAiPanelOpen(false)}
-    />}
-  </div>
   </>
   )
 }
