@@ -10,6 +10,27 @@ const ROLES = [
   { key: 'management', label: 'MANAGEMENT', color: '#9b72ff', desc: 'Gestión de la posición abierta' },
 ]
 
+const ENTRY_TYPES = [
+  { value: 'ema_cross_up',              label: 'EMA Cruce ↑' },
+  { value: 'breakout_high_above_ma',    label: 'Breakout High sobre MA' },
+  { value: 'breakout_high',             label: 'Breakout High (rolling)' },
+  { value: 'price_above_ma',            label: 'Precio > MA' },
+  { value: 'close_above_ma',            label: 'Cierre > MA' },
+]
+const STOP_TYPES = [
+  { value: 'below_ma_at_signal',        label: 'Stop bajo MA (señal)' },
+  { value: 'min_ma_low_signal',         label: 'Mín / MA baja (señal)' },
+  { value: 'atr_based',                 label: 'ATR-based' },
+  { value: 'none',                      label: 'Sin stop' },
+]
+const EXIT_TYPES = [
+  { value: 'breakout_low_below_ma',             label: 'Breakout Low bajo MA' },
+  { value: 'breakout_low_after_close_below_ma', label: 'Breakout Low tras cierre < MA' },
+  { value: 'ema_cross_down',                    label: 'EMA Cruce ↓' },
+  { value: 'close_below_ma',                    label: 'Cierre < MA' },
+  { value: 'none',                              label: 'Sin salida específica' },
+]
+
 function CondSelect({ role, conditions, value, onChange }) {
   const r = ROLES.find(r => r.key === role)
   return (
@@ -57,7 +78,20 @@ function Cell({ label, color, children, wide, style }) {
 const INPUT = {
   width: '100%', background: 'var(--bg3)', border: '1px solid var(--border)',
   color: 'var(--text1)', fontFamily: MONO, fontSize: 11,
-  padding: '6px 8px', borderRadius: 4, boxSizing: 'border-box',
+  padding: '6px 8px', borderRadius: 4, boxSizing: 'border-box', outline: 'none',
+}
+
+const SELECT = { ...INPUT, cursor: 'pointer' }
+
+const SECTION = {
+  padding: '12px', background: 'var(--bg2)',
+  border: '1px solid var(--border)', borderRadius: 6,
+  marginBottom: 10,
+}
+
+const SECTION_TITLE = {
+  fontFamily: MONO, fontSize: 9, color: 'var(--text3)',
+  letterSpacing: '0.1em', marginBottom: 10, textTransform: 'uppercase',
 }
 
 export default function StrategyEditorPanel({
@@ -66,6 +100,10 @@ export default function StrategyEditorPanel({
   onSave, onCancel, onDelete, saving,
 }) {
   const refs = definition?.condition_refs || {}
+  const entry = definition?.entry || definition?.setup || {}
+  const stop  = definition?.stop || {}
+  const exit  = definition?.exit || {}
+  const mgmt  = definition?.management || {}
 
   function setRef(role, condId) {
     setDefinition(prev => ({
@@ -74,10 +112,42 @@ export default function StrategyEditorPanel({
     }))
   }
 
+  function setEntryField(key, val) {
+    setDefinition(prev => ({
+      ...prev,
+      entry: { ...(prev?.entry || prev?.setup || {}), [key]: val },
+    }))
+  }
+
+  function setStopField(key, val) {
+    setDefinition(prev => ({
+      ...prev,
+      stop: { ...(prev?.stop || {}), [key]: val },
+    }))
+  }
+
+  function setExitField(key, val) {
+    setDefinition(prev => ({
+      ...prev,
+      exit: { ...(prev?.exit || {}), [key]: val },
+    }))
+  }
+
+  function setMgmtField(key, val) {
+    setDefinition(prev => ({
+      ...prev,
+      management: { ...(prev?.management || {}), [key]: val },
+    }))
+  }
+
   function getCondName(condId) {
     if (!condId) return null
     return conditions.find(c => c.id === condId)?.name || condId
   }
+
+  const hasEntryType = entry.type
+  const hasStopType  = stop.type
+  const hasExitType  = exit.type
 
   return (
     <div style={{
@@ -129,12 +199,7 @@ export default function StrategyEditorPanel({
       <div style={{ flex: 1, overflowY: 'auto', padding: '20px 20px 32px' }}>
 
         {/* ── Row 1: Basic fields ── */}
-        <div style={{
-          display: 'flex', gap: 10, flexWrap: 'wrap',
-          padding: '12px', background: 'var(--bg2)',
-          border: '1px solid var(--border)', borderRadius: 6,
-          marginBottom: 10,
-        }}>
+        <div style={{ ...SECTION, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <Cell label="Nombre" wide>
             <input
               type="text"
@@ -178,20 +243,152 @@ export default function StrategyEditorPanel({
           </Cell>
         </div>
 
-        {/* ── Row 2: Role dropdowns ── */}
-        <div style={{
-          padding: '12px', background: 'var(--bg2)',
-          border: '1px solid var(--border)', borderRadius: 6,
-          marginBottom: 10,
-        }}>
-          <div style={{
-            fontFamily: MONO, fontSize: 9, color: 'var(--text3)',
-            letterSpacing: '0.1em', marginBottom: 10, textTransform: 'uppercase',
-          }}>
-            Componentes de la estrategia
+        {/* ── Row 2: Entry / Setup ── */}
+        <div style={{ ...SECTION, borderColor: hasEntryType ? '#00e5a030' : 'var(--border)' }}>
+          <div style={{ ...SECTION_TITLE, color: hasEntryType ? '#00e5a0' : 'var(--text3)' }}>
+            Entrada (Entry / Setup)
+          </div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <Cell label="Tipo" color="#00e5a0" wide>
+              <select value={entry.type || ''} onChange={e => setEntryField('type', e.target.value)} style={SELECT}>
+                <option value="">— Sin tipo —</option>
+                {ENTRY_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+              </select>
+            </Cell>
+            <Cell label="EMA Rápida">
+              <input type="number" min={1}
+                value={entry.ma_fast ?? ''}
+                onChange={e => setEntryField('ma_fast', Number(e.target.value))}
+                style={INPUT} placeholder="10"
+              />
+            </Cell>
+            <Cell label="EMA Lenta">
+              <input type="number" min={2}
+                value={entry.ma_slow ?? ''}
+                onChange={e => setEntryField('ma_slow', Number(e.target.value))}
+                style={INPUT} placeholder="11"
+              />
+            </Cell>
+            <Cell label="Tipo MA">
+              <select value={entry.ma_type || 'EMA'} onChange={e => setEntryField('ma_type', e.target.value)} style={SELECT}>
+                <option value="EMA">EMA</option>
+                <option value="SMA">SMA</option>
+              </select>
+            </Cell>
+          </div>
+        </div>
+
+        {/* ── Row 3: Stop ── */}
+        <div style={{ ...SECTION, borderColor: hasStopType ? '#ff4d6d30' : 'var(--border)' }}>
+          <div style={{ ...SECTION_TITLE, color: hasStopType ? '#ff4d6d' : 'var(--text3)' }}>
+            Stop Loss
+          </div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <Cell label="Tipo" color="#ff4d6d" wide>
+              <select value={stop.type || ''} onChange={e => setStopField('type', e.target.value)} style={SELECT}>
+                <option value="">— Sin stop —</option>
+                {STOP_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+              </select>
+            </Cell>
+            <Cell label="Período MA">
+              <input type="number" min={1}
+                value={stop.ma_period ?? ''}
+                onChange={e => setStopField('ma_period', Number(e.target.value))}
+                style={INPUT} placeholder="10"
+              />
+            </Cell>
+            <Cell label="Tipo MA">
+              <select value={stop.ma_type || 'EMA'} onChange={e => setStopField('ma_type', e.target.value)} style={SELECT}>
+                <option value="EMA">EMA</option>
+                <option value="SMA">SMA</option>
+              </select>
+            </Cell>
+            {stop.type === 'atr_based' && <>
+              <Cell label="ATR Período">
+                <input type="number" min={1}
+                  value={stop.atr_period ?? 14}
+                  onChange={e => setStopField('atr_period', Number(e.target.value))}
+                  style={INPUT}
+                />
+              </Cell>
+              <Cell label="ATR Mult">
+                <input type="number" min={0.1} step={0.1}
+                  value={stop.atr_mult ?? 1.0}
+                  onChange={e => setStopField('atr_mult', Number(e.target.value))}
+                  style={INPUT}
+                />
+              </Cell>
+            </>}
+          </div>
+        </div>
+
+        {/* ── Row 4: Exit ── */}
+        <div style={{ ...SECTION, borderColor: hasExitType ? '#ffd16630' : 'var(--border)' }}>
+          <div style={{ ...SECTION_TITLE, color: hasExitType ? '#ffd166' : 'var(--text3)' }}>
+            Salida (Exit)
+          </div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <Cell label="Tipo" color="#ffd166" wide>
+              <select value={exit.type || ''} onChange={e => setExitField('type', e.target.value)} style={SELECT}>
+                <option value="">— Sin salida —</option>
+                {EXIT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+              </select>
+            </Cell>
+            <Cell label="Período MA">
+              <input type="number" min={1}
+                value={exit.ma_period ?? ''}
+                onChange={e => setExitField('ma_period', Number(e.target.value))}
+                style={INPUT} placeholder="10"
+              />
+            </Cell>
+            <Cell label="Tipo MA">
+              <select value={exit.ma_type || 'EMA'} onChange={e => setExitField('ma_type', e.target.value)} style={SELECT}>
+                <option value="EMA">EMA</option>
+                <option value="SMA">SMA</option>
+              </select>
+            </Cell>
+          </div>
+        </div>
+
+        {/* ── Row 5: Management ── */}
+        <div style={SECTION}>
+          <div style={SECTION_TITLE}>Gestión</div>
+          <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'center' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={!!mgmt.sin_perdidas}
+                onChange={e => setMgmtField('sin_perdidas', e.target.checked)}
+                style={{ width: 14, height: 14, cursor: 'pointer' }}
+              />
+              <span style={{ fontFamily: MONO, fontSize: 11, color: 'var(--text1)' }}>Sin pérdidas</span>
+              <span style={{ fontFamily: MONO, fontSize: 10, color: 'var(--text3)' }}>
+                (mover stop a BE cuando entra en beneficio)
+              </span>
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={!!mgmt.reentry}
+                onChange={e => setMgmtField('reentry', e.target.checked)}
+                style={{ width: 14, height: 14, cursor: 'pointer' }}
+              />
+              <span style={{ fontFamily: MONO, fontSize: 11, color: 'var(--text1)' }}>Reentrada</span>
+              <span style={{ fontFamily: MONO, fontSize: 10, color: 'var(--text3)' }}>
+                (permite múltiples entradas en el mismo activo)
+              </span>
+            </label>
+          </div>
+        </div>
+
+        {/* ── Row 6: Condition refs (library links) ── */}
+        <div style={SECTION}>
+          <div style={SECTION_TITLE}>
+            Vincular condiciones de la librería
+            <span style={{ color: 'var(--text3)', marginLeft: 6, fontSize: 9, fontWeight: 400 }}>— opcional</span>
             {conditions.length === 0 && (
               <span style={{ color: '#ffd166', marginLeft: 8, fontSize: 9 }}>
-                ⚠ Sin condiciones en la librería. Créalas primero en el panel 🔧 Condiciones.
+                ⚠ Sin condiciones en la librería. Créalas en el panel 🔧 Condiciones.
               </span>
             )}
           </div>
@@ -218,19 +415,14 @@ export default function StrategyEditorPanel({
           </div>
         </div>
 
-        {/* ── Row 3: Observaciones ── */}
-        <div style={{
-          padding: '12px', background: 'var(--bg2)',
-          border: '1px solid var(--border)', borderRadius: 6,
-        }}>
+        {/* ── Row 7: Observaciones ── */}
+        <div style={SECTION}>
           <Cell label="Observaciones" wide style={{ flex: 1 }}>
             <textarea
               value={strForm.observations || ''}
               onChange={e => setStrForm(p => ({ ...p, observations: e.target.value }))}
               rows={3}
-              style={{
-                ...INPUT, resize: 'vertical', width: '100%', minHeight: 60,
-              }}
+              style={{ ...INPUT, resize: 'vertical', width: '100%', minHeight: 60 }}
               placeholder="Notas sobre la estrategia…"
             />
           </Cell>
