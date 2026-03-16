@@ -10,17 +10,8 @@ const ROLES = [
   { key: 'management', label: 'MANAGEMENT', color: '#9b72ff', desc: 'Gestión de la posición abierta' },
 ]
 
-const ROLE_LABELS = Object.fromEntries(ROLES.map(r => [r.key, r.label]))
-
-function conditionsForRole(conditions, role) {
-  const tagged = conditions.filter(c => c.role === role)
-  return tagged.length > 0 ? tagged : conditions
-}
-
 function CondSelect({ role, conditions, value, onChange }) {
   const r = ROLES.find(r => r.key === role)
-  const opts = conditionsForRole(conditions, role)
-  const hasTagged = conditions.some(c => c.role === role)
   return (
     <select
       value={value || ''}
@@ -33,10 +24,7 @@ function CondSelect({ role, conditions, value, onChange }) {
       }}
     >
       <option value="">— Sin condición —</option>
-      {!hasTagged && opts.length > 0 && (
-        <option disabled style={{ color: '#5a7a95', fontSize: 10 }}>── todas las condiciones ──</option>
-      )}
-      {opts.map(c => (
+      {conditions.map(c => (
         <option key={c.id} value={c.id}>{c.name}</option>
       ))}
     </select>
@@ -201,12 +189,6 @@ export default function StrategyEditorPanel({
             letterSpacing: '0.1em', marginBottom: 10, textTransform: 'uppercase',
           }}>
             Componentes de la estrategia
-            {!conditions.some(c => c.role) && conditions.length > 0 && (
-              <span style={{ color: '#ffd166', marginLeft: 8, fontSize: 9 }}>
-                ⚠ Las condiciones no tienen rol asignado — se muestran todas en cada desplegable.
-                Asigna roles en el panel de Condiciones.
-              </span>
-            )}
             {conditions.length === 0 && (
               <span style={{ color: '#ffd166', marginLeft: 8, fontSize: 9 }}>
                 ⚠ Sin condiciones en la librería. Créalas primero en el panel 🔧 Condiciones.

@@ -368,9 +368,30 @@ const sleep = ms => new Promise(r => setTimeout(r, ms))
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
-  const { symbols, cfg, modoAsig = 'slots', weights = {}, rankMap = {} } = req.body
+  const { symbols, cfg: cfgInput, definition, modoAsig = 'slots', weights = {}, rankMap = {} } = req.body
   if (!Array.isArray(symbols) || !symbols.length) return res.status(400).json({ error: 'symbols requerido' })
-  if (!cfg) return res.status(400).json({ error: 'cfg requerido' })
+  let cfg = cfgInput
+  if (!cfg && definition) {
+    const entry = definition.entry || {}
+    const stop  = definition.stop  || {}
+    const mgmt  = definition.management || {}
+    const filt  = definition.filters?.market?.[0] || {}
+    cfg = {
+      emaR:        entry.ma_fast   || 10,
+      emaL:        entry.ma_slow   || 11,
+      capitalIni:  definition.capitalIni || 10000,
+      years:       definition.years      || 5,
+      tipoStop:    stop.type === 'atr_based' ? 'atr' : stop.type === 'none' ? 'none' : 'tecnico',
+      atrPeriod:   stop.atr_period || 14,
+      atrMult:     stop.atr_mult   || 1.0,
+      sinPerdidas: mgmt.sin_perdidas !== false,
+      reentry:     mgmt.reentry     !== false,
+      tipoFiltro:  filt.condition   || 'none',
+      sp500EmaR:   filt.ma_fast     || 10,
+      sp500EmaL:   filt.ma_slow     || 11,
+    }
+  }
+  if (!cfg) return res.status(400).json({ error: 'Se requiere cfg o definition' })
 
   try {
     // Descargar datos en batches para no saturar Stooq
