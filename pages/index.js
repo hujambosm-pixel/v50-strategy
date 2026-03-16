@@ -263,9 +263,13 @@ async function fetchStrategies() {
 async function upsertStrategy(item) {
   const method=item.id?'PATCH':'POST'
   const url=item.id?`${SUPA_URL}/rest/v1/strategies?id=eq.${item.id}`:`${SUPA_URL}/rest/v1/strategies`
-  const body={...item}; delete body.id
+  const ALLOWED=['name','years','capital_ini','allocation_pct','color','observations','active','definition',
+    'ema_r','ema_l','tipo_stop','atr_period','atr_mult','sin_perdidas','reentry','tipo_filtro','sp500_ema_r','sp500_ema_l',
+    'condition_filter_id','condition_setup_id','condition_trigger_id','condition_abort_id',
+    'condition_stop_loss_id','condition_exit_id','condition_management_id']
+  const body={}; ALLOWED.forEach(k=>{if(item[k]!==undefined)body[k]=item[k]})
   const res=await fetch(url,{method,headers:{...SUPA_H,'Prefer':'return=representation'},body:JSON.stringify(body)})
-  if(!res.ok) throw new Error('Error guardando estrategia')
+  if(!res.ok){const t=await res.text();throw new Error(`Error guardando estrategia: ${t}`)}
   return (await res.json())[0]
 }
 async function deleteStrategy(id) {
@@ -4901,7 +4905,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.74</title>
+        <title>Trading Simulator V4.88</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4964,7 +4968,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.74
+            <span className="dot"/>Trading Simulator V4.88
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -7967,6 +7971,20 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 <button onClick={()=>openEditStr({id:null})} style={{marginTop:8,width:'100%',background:'transparent',border:'1px dashed var(--border)',color:'var(--text3)',fontFamily:MONO,fontSize:11,padding:'6px',borderRadius:4,cursor:'pointer'}}>+ Nueva estrategia</button>
               </div>
             )}
+
+            {/* Definition JSON preview */}
+            <div style={{borderTop:'1px solid var(--border)',paddingTop:10}}>
+              <div style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:6}}>
+                definition (columna guardada)
+              </div>
+              <textarea
+                readOnly
+                value={JSON.stringify(definition,null,2)}
+                rows={6}
+                style={{width:'100%',background:'var(--bg3)',border:'1px solid var(--border)',color:'#7ab8d8',
+                  fontFamily:MONO,fontSize:10,padding:'8px',borderRadius:4,resize:'vertical',boxSizing:'border-box'}}
+              />
+            </div>
 
             {/* Botones acción */}
             <div style={{display:'flex',gap:8,paddingTop:4,borderTop:'1px solid var(--border)'}}>
