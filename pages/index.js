@@ -111,9 +111,13 @@ async function fetchStrategies() {
 async function upsertStrategy(item) {
   const method=item.id?'PATCH':'POST'
   const url=item.id?`${getSupaUrl()}/rest/v1/strategies?id=eq.${item.id}`:`${getSupaUrl()}/rest/v1/strategies`
-  const body={...item}; delete body.id
+  // Only send known DB columns — strip any UI-only keys (prefixed with _)
+  const ALLOWED=['name','years','capital_ini','allocation_pct','color','observations','active','definition',
+    'condition_filter_id','condition_setup_id','condition_trigger_id','condition_abort_id',
+    'condition_stop_loss_id','condition_exit_id','condition_management_id']
+  const body={}; ALLOWED.forEach(k=>{if(item[k]!==undefined)body[k]=item[k]})
   const res=await fetch(url,{method,headers:{...getSupaH(),'Prefer':'return=representation'},body:JSON.stringify(body)})
-  if(!res.ok) throw new Error('Error guardando estrategia')
+  if(!res.ok){const t=await res.text();throw new Error(`Error guardando estrategia: ${t}`)}
   return (await res.json())[0]
 }
 async function deleteStrategy(id) {
@@ -2022,7 +2026,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.87</title>
+        <title>Trading Simulator V4.88</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2085,7 +2089,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.87
+            <span className="dot"/>Trading Simulator V4.88
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}

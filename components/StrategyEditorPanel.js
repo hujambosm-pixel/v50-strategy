@@ -222,6 +222,7 @@ export default function StrategyEditorPanel({
         <div style={{
           padding: '12px', background: 'var(--bg2)',
           border: '1px solid var(--border)', borderRadius: 6,
+          marginBottom: 10,
         }}>
           <Cell label="Observaciones" wide style={{ flex: 1 }}>
             <textarea
@@ -234,6 +235,27 @@ export default function StrategyEditorPanel({
               placeholder="Notas sobre la estrategia…"
             />
           </Cell>
+        </div>
+
+        {/* ── Row 4: Definition JSON preview ── */}
+        <div style={{
+          padding: '12px', background: 'var(--bg2)',
+          border: '1px solid var(--border)', borderRadius: 6,
+        }}>
+          <div style={{
+            fontFamily: MONO, fontSize: 9, color: 'var(--text3)',
+            letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6,
+          }}>
+            definition — columna guardada en Supabase
+          </div>
+          <textarea
+            readOnly
+            value={definition ? JSON.stringify(definition, null, 2) : '{}'}
+            rows={8}
+            style={{
+              ...INPUT, resize: 'vertical', width: '100%', color: '#7ab8d8', fontSize: 10,
+            }}
+          />
         </div>
 
       </div>
