@@ -1,4 +1,16 @@
 {
+  "components\\CandleChart.js -> lightweight-charts": {
+    "id": "components\\CandleChart.js -> lightweight-charts",
+    "files": [
+      "static/chunks/node_modules_lightweight-charts_dist_lightweight-charts_development_mjs.js"
+    ]
+  },
+  "components\\EquityChart.js -> lightweight-charts": {
+    "id": "components\\EquityChart.js -> lightweight-charts",
+    "files": [
+      "static/chunks/node_modules_lightweight-charts_dist_lightweight-charts_development_mjs.js"
+    ]
+  },
   "pages\\index.js -> lightweight-charts": {
     "id": "pages\\index.js -> lightweight-charts",
     "files": [

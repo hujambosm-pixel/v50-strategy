@@ -409,8 +409,8 @@ async function loadSettingsRemote() {
   } catch(_){ return null }
 }
 
-function SettingsModal({ onClose, strategies=[] }) {
-  const [tab, setTab] = useState('integraciones')
+function SettingsModal({ onClose, strategies=[], initialTab='integraciones' }) {
+  const [tab, setTab] = useState(initialTab)
   const [settings, setSettings] = useState(loadSettings)
   const [groqStatus, setGroqStatus] = useState(null) // null | 'testing' | 'ok' | 'err'
   const [dirty, setDirty] = useState(false)
@@ -2352,14 +2352,16 @@ function MetricRow({label,value,color,tip}){
         {tip&&<span style={{marginLeft:3,color:hov?'#3a6a8a':'#2a4060',cursor:'help',fontSize:9}}>ⓘ</span>}
       </td>
       <td style={{padding:'4px 10px 4px 4px',textAlign:'right',fontFamily:MONO,fontSize:10,fontWeight:700,color:color,whiteSpace:'nowrap'}}>{value}</td>
-      {hov&&tip&&(
-        <div style={{position:'fixed',right:10,zIndex:999,pointerEvents:'none',width:240}}>
-          <div style={{background:'#0a1520',border:'1px solid #1a4060',borderRadius:5,padding:'8px 10px',fontFamily:MONO,fontSize:9,color:'#8abccc',lineHeight:1.6,boxShadow:'0 6px 24px rgba(0,0,0,0.7)'}}>
-            <div style={{color:'#4a8aaa',fontWeight:700,marginBottom:3,fontSize:10}}>{label}</div>
-            {tip}
+      <td style={{padding:0,border:'none',position:'relative'}}>
+        {hov&&tip&&(
+          <div style={{position:'fixed',right:10,zIndex:999,pointerEvents:'none',width:240}}>
+            <div style={{background:'#0a1520',border:'1px solid #1a4060',borderRadius:5,padding:'8px 10px',fontFamily:MONO,fontSize:9,color:'#8abccc',lineHeight:1.6,boxShadow:'0 6px 24px rgba(0,0,0,0.7)'}}>
+              <div style={{color:'#4a8aaa',fontWeight:700,marginBottom:3,fontSize:10}}>{label}</div>
+              {tip}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </td>
     </tr>
   )
 }
@@ -2480,7 +2482,9 @@ export default function Home() {
   const [labelMode,setLabelMode]=useState(0),[rulerOn,setRulerOn]=useState(false)
   const [chartViewFull,setChartViewFull]=useState(false)
   const [settingsOpen,setSettingsOpen]=useState(false)
+  const [settingsInitTab,setSettingsInitTab]=useState('integraciones')
   const [sidePanel,setSidePanel]=useState('config')
+  const [navExpanded,setNavExpanded]=useState(false)
   const [metricsLayout,setMetricsLayout]=useState('panel')
   const [metricsView,setMetricsView]=useState('panel')   // 'multi'=3col | 'single'=one strat per block
   const [showStrategy,setShowStrategy]=useState(true),[showBH,setShowBH]=useState(true)
@@ -4311,6 +4315,44 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         </header>
 
         <div className="main">
+          {/* ── VERTICAL NAV ── */}
+          <nav
+            onMouseEnter={()=>setNavExpanded(true)}
+            onMouseLeave={()=>setNavExpanded(false)}
+            style={{width:navExpanded?158:42,transition:'width 0.18s ease',display:'flex',flexDirection:'column',
+              background:'var(--bg2)',borderRight:'1px solid var(--border)',flexShrink:0,overflow:'hidden',
+              zIndex:15,paddingTop:6,paddingBottom:6}}
+          >
+            {[
+              {id:'config',     icon:'⚙', label:'Estrategia'},
+              {id:'conditions', icon:'🔧',label:'Condiciones'},
+              {id:'watchlist',  icon:'📋',label:'Watchlist'},
+              {id:'alarms',     icon:'🔔',label:'Alertas',   badge:alarmActiveCount},
+              {id:'multi',      icon:'📊',label:'Backtesting'},
+              {id:'tradelog',   icon:'📒',label:'TradeLog',  accent:'#9b72ff'},
+            ].map(item=>(
+              <button key={item.id}
+                onClick={()=>{setSidePanel(item.id);if(item.id==='conditions')reloadConditions()}}
+                title={!navExpanded?item.label:undefined}
+                style={{display:'flex',alignItems:'center',gap:10,padding:'9px 11px',width:'100%',
+                  background:sidePanel===item.id?'var(--bg3)':'transparent',
+                  border:'none',borderLeft:sidePanel===item.id?`2px solid ${item.accent||'var(--accent)'}`:'2px solid transparent',
+                  color:sidePanel===item.id?(item.accent||'var(--accent)'):'var(--text3)',
+                  fontFamily:MONO,fontSize:16,cursor:'pointer',whiteSpace:'nowrap',textAlign:'left',
+                  transition:'background 0.12s,color 0.12s',position:'relative'}}
+              >
+                <span style={{fontSize:16,flexShrink:0,width:20,textAlign:'center'}}>{item.icon}</span>
+                <span style={{fontSize:11,letterSpacing:'0.06em',textTransform:'uppercase',opacity:navExpanded?1:0,transition:'opacity 0.1s'}}>
+                  {item.label}
+                </span>
+                {item.badge>0&&<span style={{position:'absolute',top:4,left:navExpanded?undefined:24,right:navExpanded?10:undefined,
+                  minWidth:14,height:14,borderRadius:7,background:'#ff4d6d',color:'#fff',fontSize:8,fontWeight:700,
+                  display:'flex',alignItems:'center',justifyContent:'center',padding:'0 3px',
+                  animation:'pulse 1.4s ease-in-out infinite'}}>{item.badge}</span>}
+              </button>
+            ))}
+          </nav>
+
           {/* ── SIDEBAR ── */}
           <aside className="sidebar" style={{padding:0,gap:0,position:'relative',width:sidebarW,flexShrink:0,flexGrow:0}} onContextMenu={e=>openCtx(e,'sidebar')}>
             {/* Resize handle — right edge */}
@@ -4319,24 +4361,36 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 background:'transparent',transition:'background 0.15s'}}
               onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.25)'}
               onMouseOut={e=>e.currentTarget.style.background='transparent'}/>
-            <div className="sidebar-tabs" style={{display:'flex',borderBottom:'1px solid var(--border)'}}>
-              {[{id:'config',label:'⚙',title:'Configuración'},{id:'watchlist',label:'☰',title:'Watchlist'},{id:'alarms',label:'🔔',title:'Alertas',badge:alarmActiveCount},{id:'multi',label:'📊',title:'Backtesting'},{id:'tradelog',label:'📒',title:'TradeLog',accent:'#9b72ff'}].map(tab=>(
-                <button key={tab.id} onClick={()=>setSidePanel(tab.id)} title={tab.title} style={{
-                  flex:1,padding:'8px 4px',
-                  background:sidePanel===tab.id?'var(--bg3)':'transparent',
-                  border:'none',
-                  borderBottom:sidePanel===tab.id?`2px solid ${tab.accent||'var(--accent)'}`:'2px solid transparent',
-                  color:sidePanel===tab.id?(tab.accent||'var(--accent)'):'var(--text3)',
-                  fontFamily:MONO,fontSize:14,cursor:'pointer',position:'relative'
-                }}>
-                  {tab.label}
-                  {tab.badge>0&&<span style={{position:'absolute',top:4,right:2,minWidth:14,height:14,borderRadius:7,
-                    background:'#ff4d6d',color:'#fff',fontSize:8,fontWeight:700,
-                    display:'flex',alignItems:'center',justifyContent:'center',padding:'0 3px',
-                    animation:'pulse 1.4s ease-in-out infinite'}}>{tab.badge}</span>}
-                </button>
-              ))}
-            </div>
+
+            {sidePanel==='conditions'&&(
+              <div style={{padding:14,display:'flex',flexDirection:'column',gap:10,overflowY:'auto',flex:1}}>
+                <div className="sidebar-title" style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                  <span>Condiciones</span>
+                  <button onClick={()=>{setSettingsInitTab('condiciones');setSettingsOpen(true)}}
+                    style={{background:'rgba(0,212,255,0.1)',border:'1px solid var(--accent)',color:'var(--accent)',
+                      fontFamily:MONO,fontSize:11,padding:'1px 8px',borderRadius:3,cursor:'pointer'}}>+ Nueva</button>
+                </div>
+                {condLoading
+                  ? <div style={{fontFamily:MONO,fontSize:12,color:'var(--text3)'}}>⟳ Cargando…</div>
+                  : conditions.length===0
+                    ? <div style={{fontFamily:MONO,fontSize:12,color:'var(--text3)',lineHeight:1.8}}>
+                        Sin condiciones guardadas.
+                        <br/>
+                        <button onClick={()=>{setSettingsInitTab('condiciones');setSettingsOpen(true)}}
+                          style={{marginTop:8,background:'rgba(0,212,255,0.08)',border:'1px solid var(--border)',
+                            color:'var(--accent)',fontFamily:MONO,fontSize:11,padding:'4px 10px',
+                            borderRadius:4,cursor:'pointer'}}>Crear condición</button>
+                      </div>
+                    : conditions.map(c=>(
+                        <div key={c.id||c.name} style={{background:'var(--bg3)',border:'1px solid var(--border)',
+                          borderRadius:5,padding:'8px 10px'}}>
+                          <div style={{fontFamily:MONO,fontSize:12,color:'var(--text1)',fontWeight:600}}>{c.name}</div>
+                          {c.description&&<div style={{fontFamily:MONO,fontSize:10,color:'var(--text3)',marginTop:2}}>{c.description}</div>}
+                        </div>
+                      ))
+                }
+              </div>
+            )}
 
             {sidePanel==='config'&&(
               <div style={{padding:14,display:'flex',flexDirection:'column',gap:14,overflowY:'auto',flex:1}}>
@@ -7260,7 +7314,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         </div>
       )}
     {/* ── Modal de configuración global ── */}
-    {settingsOpen&&<SettingsModal onClose={()=>{setSettingsOpen(false);setTemaKey(k=>k+1)}} strategies={strategies}/>}
+    {settingsOpen&&<SettingsModal onClose={()=>{setSettingsOpen(false);setTemaKey(k=>k+1)}} strategies={strategies} initialTab={settingsInitTab}/>}
 
     {/* ── Panel Asistente IA de estrategias ── */}
     {aiPanelOpen&&<StrategyAIPanel
