@@ -1,6 +1,17 @@
 import { useState } from 'react'
 import { MONO } from '../lib/utils'
 
+export const STRATEGY_ROLES = [
+  { key: 'filter',     label: 'FILTER',     color: '#4a9eff' },
+  { key: 'setup',      label: 'SETUP',      color: '#00d4ff' },
+  { key: 'trigger',    label: 'TRIGGER',    color: '#00e5a0' },
+  { key: 'abort',      label: 'ABORT',      color: '#ff7a7a' },
+  { key: 'stop_loss',  label: 'STOP LOSS',  color: '#ff4d6d' },
+  { key: 'exit',       label: 'EXIT',       color: '#ffd166' },
+  { key: 'management', label: 'MANAGEMENT', color: '#9b72ff' },
+]
+const ROLE_MAP = Object.fromEntries(STRATEGY_ROLES.map(r => [r.key, r]))
+
 const TYPE_LABELS = {
   ema_cross_up:    'EMA Cruce ↑',
   ema_cross_down:  'EMA Cruce ↓',
@@ -43,7 +54,7 @@ function fmtDate(iso) {
   try { return new Date(iso).toLocaleDateString('es-ES',{day:'2-digit',month:'2-digit',year:'2-digit'}) } catch(_) { return '—' }
 }
 
-export default function ConditionsManager({ conditions, selectedCondition, onSelect, onNew, onDelete, onReload, loading }) {
+export default function ConditionsManager({ conditions, selectedCondition, onSelect, onNew, onDelete, onReload, onUpdateRole, loading }) {
   const [search, setSearch] = useState('')
   const [filterType, setFilterType] = useState('')
   const [sortCol, setSortCol] = useState('created_at')
@@ -138,7 +149,8 @@ export default function ConditionsManager({ conditions, selectedCondition, onSel
               <tr style={{background:'var(--bg2)',position:'sticky',top:0,zIndex:1}}>
                 {[
                   {key:'name',       label:'Nombre'},
-                  {key:'type',       label:'Tipo'},
+                  {key:'_role',      label:'Rol estrategia', noSort:true},
+                  {key:'type',       label:'Tipo indicador'},
                   {key:'_params',    label:'Parámetros', noSort:true},
                   {key:'description',label:'Descripción'},
                   {key:'source',     label:'Fuente'},
@@ -174,6 +186,26 @@ export default function ConditionsManager({ conditions, selectedCondition, onSel
                     <td style={{padding:'7px 12px',color:'var(--text1)',fontWeight:isSelected?700:500,
                       maxWidth:180,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
                       {c.name||'—'}
+                    </td>
+                    {/* Role dropdown */}
+                    <td style={{padding:'4px 8px',whiteSpace:'nowrap'}} onClick={e=>e.stopPropagation()}>
+                      {(()=>{
+                        const r = c.role ? ROLE_MAP[c.role] : null
+                        return (
+                          <select
+                            value={c.role||''}
+                            onChange={e=>{if(onUpdateRole)onUpdateRole(c.id, e.target.value||null)}}
+                            style={{fontFamily:MONO,fontSize:10,padding:'2px 4px',
+                              background:'var(--bg3)',border:`1px solid ${r?r.color+'44':'var(--border)'}`,
+                              color:r?r.color:'var(--text3)',borderRadius:3,cursor:'pointer',minWidth:110}}
+                          >
+                            <option value="">— sin rol —</option>
+                            {STRATEGY_ROLES.map(sr=>(
+                              <option key={sr.key} value={sr.key}>{sr.label}</option>
+                            ))}
+                          </select>
+                        )
+                      })()}
                     </td>
                     {/* Type badge */}
                     <td style={{padding:'7px 12px',whiteSpace:'nowrap'}}>

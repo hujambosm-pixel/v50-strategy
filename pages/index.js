@@ -4,7 +4,7 @@ import { calcMetrics, MONO, fmt, fmtDate, f2, tvSym } from '../lib/utils'
 import { WATCHLIST_DEFAULT, DEFAULT_DEFINITION } from '../lib/constants'
 import { getSupaUrl, getSupaKey, getSupaH } from '../lib/supabase'
 import { loadSettings, saveSettings, saveSettingsRemote, loadSettingsRemote } from '../lib/settings'
-import { fetchConditions, lsGetConds, lsSaveConds, COND_LS_KEY } from '../lib/conditions'
+import { fetchConditions, lsGetConds, lsSaveConds, COND_LS_KEY, updateCondition } from '../lib/conditions'
 import CandleChart from '../components/CandleChart'
 import EquityChart from '../components/EquityChart'
 import Tip from '../components/Tip'
@@ -18,6 +18,7 @@ import MetricRow from '../components/MetricRow'
 import PriceAlarmQuickForm from '../components/PriceAlarmQuickForm'
 import ConditionsManager from '../components/ConditionsManager'
 import StrategiesManager from '../components/StrategiesManager'
+import StrategyEditorPanel from '../components/StrategyEditorPanel'
 
 
 // ── Date helpers for TradeLog (dd/mm/yyyy ↔ yyyy-mm-dd) ──
@@ -1922,7 +1923,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.82</title>
+        <title>Trading Simulator V4.83</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -1985,7 +1986,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.82
+            <span className="dot"/>Trading Simulator V4.83
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -3145,14 +3146,34 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 }}
                 onReload={reloadConditions}
                 loading={condLoading}
+                onUpdateRole={async(id,role)=>{
+                  await updateCondition(id,{role})
+                  setConditions(prev=>prev.map(c=>c.id===id?{...c,role}:c))
+                }}
               />
             )}
 
-            {/* Single-asset view — oculto cuando multicartera activa */}
-            {sidePanel!=='multi'&&sidePanel!=='tradelog'&&sidePanel!=='conditions'&&!result&&!error&&<div className="loading"><div className="spinner"/><div className="loading-text">CARGANDO DATOS...</div></div>}
-            {sidePanel!=='multi'&&sidePanel!=='tradelog'&&sidePanel!=='conditions'&&error&&<div className="error-msg">⚠ {error}</div>}
+            {/* ══ STRATEGY EDITOR PANEL ══ */}
+            {editingStr!==null&&sidePanel==='config'&&(
+              <StrategyEditorPanel
+                strForm={strForm}
+                setStrForm={setStrForm}
+                definition={definition}
+                setDefinition={setDefinition}
+                conditions={conditions}
+                strategy={editingStr}
+                onSave={saveEditStr}
+                onCancel={closeEditStr}
+                onDelete={()=>deleteStr(editingStr.id)}
+                saving={strSaving}
+              />
+            )}
 
-            {sidePanel!=='multi'&&sidePanel!=='tradelog'&&sidePanel!=='conditions'&&result&&(
+            {/* Single-asset view — oculto cuando multicartera activa o editando estrategia */}
+            {sidePanel!=='multi'&&sidePanel!=='tradelog'&&sidePanel!=='conditions'&&!(editingStr&&sidePanel==='config')&&!result&&!error&&<div className="loading"><div className="spinner"/><div className="loading-text">CARGANDO DATOS...</div></div>}
+            {sidePanel!=='multi'&&sidePanel!=='tradelog'&&sidePanel!=='conditions'&&!(editingStr&&sidePanel==='config')&&error&&<div className="error-msg">⚠ {error}</div>}
+
+            {sidePanel!=='multi'&&sidePanel!=='tradelog'&&sidePanel!=='conditions'&&!(editingStr&&sidePanel==='config')&&result&&(
               <div style={{display:'flex',flex:1,minHeight:0,overflow:'hidden',height:'100%'}}>
                 {/* Columna principal */}
                 <div ref={contentRef} style={{flex:1,overflowY:'auto'}}>
@@ -5041,111 +5062,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         )
       })()}
 
-      {/* ══ MODAL ESTRATEGIA — fixed sobre gráfico ══ */}
-      {editingStr!==null&&(
-        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.72)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center'}} onClick={e=>{if(e.target===e.currentTarget)closeEditStr()}}>
-          <div style={{background:'#0d1824',border:'1px solid #1e3a52',borderRadius:8,padding:28,width:680,maxHeight:'90vh',overflowY:'auto',display:'flex',flexDirection:'column',gap:14,fontFamily:MONO,fontSize:13,boxShadow:'0 8px 48px rgba(0,0,0,0.8)'}}>
-            {/* Header */}
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-              <span style={{fontWeight:700,color:'var(--text)',fontSize:15}}>{editingStr.id?'Editar estrategia':'Nueva estrategia'}</span>
-              <button onClick={closeEditStr} style={{background:'transparent',border:'none',color:'var(--text3)',fontSize:18,cursor:'pointer'}}>✕</button>
-            </div>
-
-            {/* Fila 1: Nombre + Color */}
-            <div style={{display:'grid',gridTemplateColumns:'1fr auto',gap:10,alignItems:'end'}}>
-              <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>Nombre
-                <input type="text" value={strForm.name||''} onChange={e=>setStrForm(p=>({...p,name:e.target.value}))} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'7px 10px',borderRadius:4}}/>
-              </label>
-              <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)',alignItems:'center'}}>Color
-                <input type="color" value={strForm.color||'#00d4ff'} onChange={e=>setStrForm(p=>({...p,color:e.target.value}))} style={{width:38,height:36,padding:2,borderRadius:4,border:'1px solid var(--border)',background:'var(--bg3)',cursor:'pointer'}}/>
-              </label>
-            </div>
-
-            {/* Separador */}
-            <div style={{borderTop:'1px solid var(--border)',marginTop:2}}/>
-
-            {/* Parámetros globales: Capital + Asignación + Años */}
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10}}>
-              <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)',fontFamily:MONO,fontSize:11}}>Capital (€)
-                <input type="number" value={strForm.capital_ini||(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.defaultCapital??1000}catch(_){return 1000}})()} min={100}
-                  onChange={e=>setStrForm(p=>({...p,capital_ini:Number(e.target.value)}))}
-                  style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'7px 10px',borderRadius:4}}/>
-              </label>
-              <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)',fontFamily:MONO,fontSize:11}}>Asignación (%)
-                <input type="number" value={strForm.allocation_pct||100} min={1} max={100}
-                  onChange={e=>setStrForm(p=>({...p,allocation_pct:Number(e.target.value)}))}
-                  style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'7px 10px',borderRadius:4}}/>
-              </label>
-              <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)',fontFamily:MONO,fontSize:11}}>Años BT
-                <input type="number" value={strForm.years||5} min={1} max={20}
-                  onChange={e=>setStrForm(p=>({...p,years:Number(e.target.value)}))}
-                  style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'7px 10px',borderRadius:4}}/>
-              </label>
-            </div>
-
-            {/* Constructor modular */}
-            <div style={{borderTop:'1px solid var(--border)',paddingTop:10}}>
-              {/* Botón Asistente IA */}
-              <button onClick={()=>setAiPanelOpen(true)} style={{
-                display:'flex',alignItems:'center',gap:8,width:'100%',
-                background:'linear-gradient(135deg,rgba(155,114,255,0.12),rgba(0,212,255,0.08))',
-                border:'1px solid rgba(155,114,255,0.4)',borderRadius:6,
-                color:'#cce0f5',fontFamily:MONO,fontSize:11,padding:'8px 12px',
-                cursor:'pointer',marginBottom:10,textAlign:'left',transition:'all .15s'
-              }}
-              onMouseOver={e=>{e.currentTarget.style.background='linear-gradient(135deg,rgba(155,114,255,0.2),rgba(0,212,255,0.14))';e.currentTarget.style.borderColor='rgba(155,114,255,0.7)'}}
-              onMouseOut={e=>{e.currentTarget.style.background='linear-gradient(135deg,rgba(155,114,255,0.12),rgba(0,212,255,0.08))';e.currentTarget.style.borderColor='rgba(155,114,255,0.4)'}}>
-                <span style={{fontSize:16,lineHeight:1}}>✦</span>
-                <div>
-                  <div style={{fontWeight:700,letterSpacing:'0.04em',fontSize:11}}>Asistente IA</div>
-                  <div style={{fontSize:9,color:'#7a9bc0',marginTop:1}}>Describe tu estrategia en lenguaje natural</div>
-                </div>
-                <span style={{marginLeft:'auto',fontSize:10,color:'#9b72ff'}}>→</span>
-              </button>
-              <StrategyBuilder definition={definition} setDefinition={setDefinition}/>
-            </div>
-
-            {/* Observaciones */}
-            <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>
-              Observaciones
-              <textarea value={strForm.observations||''} onChange={e=>setStrForm(p=>({...p,observations:e.target.value}))} rows={3} style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'7px 10px',borderRadius:4,resize:'vertical'}}/>
-            </label>
-
-            {/* Lista de estrategias existentes */}
-            {strategies.length>0&&(
-              <div style={{borderTop:'1px solid var(--border)',paddingTop:12}}>
-                <div style={{fontWeight:600,color:'var(--text3)',fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:8}}>Estrategias guardadas</div>
-                <div style={{display:'flex',flexDirection:'column',gap:4,maxHeight:140,overflowY:'auto'}}>
-                  {strategies.map(s=>(
-                    <div key={s.id} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 8px',borderRadius:4,background:editingStr?.id===s.id?'rgba(0,212,255,0.08)':'transparent',border:editingStr?.id===s.id?'1px solid rgba(0,212,255,0.3)':'1px solid transparent'}}>
-                      <span style={{width:8,height:8,borderRadius:'50%',background:s.color||'#00d4ff',flexShrink:0,display:'inline-block'}}/>
-                      <div style={{flex:1,minWidth:0}}>
-                        <span style={{color:'var(--text)',fontSize:11,fontWeight:600}}>{s.name}</span>
-                        <span style={{color:'var(--text3)',fontSize:10,marginLeft:8}}>{s.years}a · {(s.definition?.entry?.type||'legacy').replace(/_/g,' ')}</span>
-                      </div>
-                      <button onClick={()=>openEditStr(s)} style={{background:'transparent',border:'1px solid var(--border)',color:'var(--text3)',fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer'}}>✎</button>
-                      <button onClick={()=>duplicateStr(s)} title="Duplicar" style={{background:'transparent',border:'1px solid var(--border)',color:'var(--text3)',fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer'}}>⎘</button>
-                      <button onClick={()=>{loadStrategyLegacy(s);closeEditStr()}} style={{background:'rgba(0,212,255,0.1)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer'}}>▶</button>
-                    </div>
-                  ))}
-                </div>
-                <button onClick={()=>openEditStr({id:null})} style={{marginTop:8,width:'100%',background:'transparent',border:'1px dashed var(--border)',color:'var(--text3)',fontFamily:MONO,fontSize:11,padding:'6px',borderRadius:4,cursor:'pointer'}}>+ Nueva estrategia</button>
-              </div>
-            )}
-
-            {/* Botones acción */}
-            <div style={{display:'flex',gap:8,paddingTop:4,borderTop:'1px solid var(--border)'}}>
-              <button onClick={saveEditStr} disabled={strSaving} style={{flex:1,background:'rgba(0,212,255,0.15)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:13,padding:'9px',borderRadius:5,cursor:'pointer',fontWeight:600}}>
-                {strSaving?'Guardando…':'Guardar estrategia'}
-              </button>
-              {editingStr.id&&<button onClick={()=>deleteStr(editingStr.id)} style={{background:'rgba(255,77,109,0.12)',border:'1px solid #ff4d6d',color:'#ff4d6d',fontFamily:MONO,fontSize:12,padding:'9px 16px',borderRadius:5,cursor:'pointer',display:'flex',alignItems:'center',gap:6}}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3,6 5,6 21,6"/><path d="M19,6l-1,14a2,2,0,0,1-2,2H8a2,2,0,0,1-2-2L5,6"/><path d="M10,11v6"/><path d="M14,11v6"/><path d="M9,6V4a1,1,0,0,1,1-1h4a1,1,0,0,1,1,1v2"/></svg>
-                Eliminar
-              </button>}
-            </div>
-          </div>
-        </div>
-      )}
+      {/* StrategyEditorPanel is rendered in the content area (see above) */}
     {/* ── Modal de configuración global ── */}
     {settingsOpen&&<SettingsModal onClose={()=>{setSettingsOpen(false);setTemaKey(k=>k+1)}} strategies={strategies} initialTab={settingsInitTab}/>}
 

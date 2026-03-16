@@ -96,13 +96,30 @@ export default async function handler(req, res) {
 
   if (req.method !== 'POST') return res.status(405).end()
 
+  // ── PATCH — actualizar condición (id en query) ──
+  if (req.method === 'PATCH') {
+    const { id } = req.query
+    if (!id) return res.status(400).json({ error: 'id requerido' })
+    const updates = {}
+    const allowed = ['name','description','type','params','source','role']
+    allowed.forEach(k => { if (req.body[k] !== undefined) updates[k] = req.body[k] })
+    const r = await fetch(`${SUPA_URL}/rest/v1/conditions?id=eq.${id}`, {
+      method: 'PATCH',
+      headers: { ...H, 'Prefer':'return=representation' },
+      body: JSON.stringify(updates),
+    })
+    if (!r.ok) return res.status(500).json({ error: 'Error actualizando' })
+    const rows = await r.json()
+    return res.status(200).json(Array.isArray(rows) ? rows[0] : rows)
+  }
+
   // ── POST — crear condición ──
-  const { name, description, type, params, source } = req.body
+  const { name, description, type, params, source, role } = req.body
   if (!name || !type || !params) return res.status(400).json({ error: 'name, type y params son requeridos' })
   const r = await fetch(`${SUPA_URL}/rest/v1/conditions`, {
     method: 'POST',
     headers: { ...H, 'Prefer':'return=representation' },
-    body: JSON.stringify({ name, description: description||'', type, params, source: source||'manual', active: true })
+    body: JSON.stringify({ name, description: description||'', type, params, source: source||'manual', role: role||null, active: true })
   })
   if (!r.ok) {
     let detail = ''
