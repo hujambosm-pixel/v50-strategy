@@ -802,10 +802,44 @@ export default function Home() {
     setStrSaving(true)
     try{
       const refs = definition?.condition_refs || {}
+
+      // Auto-build definition from linked conditions so the backtest engine
+      // always has the params it needs (entry, stop, exit, management).
+      // Each condition's type + params map to the corresponding def sub-object.
+      const getCond = (id) => conditions.find(c => c.id === id)
+      const condToParams = (c) => c ? { type: c.type, ...(c.params || {}) } : undefined
+
+      const setupCond   = getCond(refs.setup)
+      const triggerCond = getCond(refs.trigger)
+      const stopCond    = getCond(refs.stop_loss)
+      const exitCond    = getCond(refs.exit)
+      const mgmtCond    = getCond(refs.management)
+      const filterCond  = getCond(refs.filter)
+      const abortCond   = getCond(refs.abort)
+
+      // Entry: prefer setup, fall back to trigger
+      const entryParams = condToParams(setupCond) || condToParams(triggerCond)
+      // Management condition params (sin_perdidas, reentry) come from existing def if no cond linked
+      const existingMgmt = definition?.management || {}
+      const mgmtParams = mgmtCond
+        ? { sin_perdidas: !!mgmtCond.params?.sin_perdidas, reentry: !!mgmtCond.params?.reentry }
+        : existingMgmt
+
+      const builtDefinition = {
+        ...definition,  // keep any extra keys (filters, abort, etc.)
+        condition_refs: refs,
+        ...(entryParams ? { entry: entryParams } : {}),
+        ...(stopCond    ? { stop:  condToParams(stopCond) }  : {}),
+        ...(exitCond    ? { exit:  condToParams(exitCond) }  : {}),
+        ...(filterCond  ? { filter: { logic:'AND', conditions:[{ type:filterCond.type, ...(filterCond.params||{}) }] } } : {}),
+        ...(abortCond   ? { abort: { conditions:[{ type:abortCond.type, ...(abortCond.params||{}) }] } } : {}),
+        management: mgmtParams,
+      }
+
       const payload={
         ...strForm,
         id:editingStr?.id||undefined,
-        definition,
+        definition: builtDefinition,
         years:Number(strForm.years||5),
         capital_ini:Number(strForm.capital_ini||(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.defaultCapital||1000}catch(_){return 1000}})()),
         allocation_pct:Number(strForm.allocation_pct||100),
@@ -1988,7 +2022,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.86</title>
+        <title>Trading Simulator V4.87</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2051,7 +2085,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.86
+            <span className="dot"/>Trading Simulator V4.87
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
