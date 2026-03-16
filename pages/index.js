@@ -847,13 +847,14 @@ export default function Home() {
         years:Number(strForm.years||5),
         capital_ini:Number(strForm.capital_ini||(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.defaultCapital||1000}catch(_){return 1000}})()),
         allocation_pct:Number(strForm.allocation_pct||100),
-        condition_filter_id:     refs.filter     || null,
-        condition_setup_id:      refs.setup      || null,
-        condition_trigger_id:    refs.trigger    || null,
-        condition_abort_id:      refs.abort      || null,
-        condition_stop_loss_id:  refs.stop_loss  || null,
-        condition_exit_id:       refs.exit       || null,
-        condition_management_id: refs.management || null,
+        // Only send real UUIDs — local_ IDs are localStorage-only and not valid for FK columns
+        condition_filter_id:     refs.filter     && !refs.filter.startsWith('local_')     ? refs.filter     : null,
+        condition_setup_id:      refs.setup      && !refs.setup.startsWith('local_')      ? refs.setup      : null,
+        condition_trigger_id:    refs.trigger    && !refs.trigger.startsWith('local_')    ? refs.trigger    : null,
+        condition_abort_id:      refs.abort      && !refs.abort.startsWith('local_')      ? refs.abort      : null,
+        condition_stop_loss_id:  refs.stop_loss  && !refs.stop_loss.startsWith('local_')  ? refs.stop_loss  : null,
+        condition_exit_id:       refs.exit       && !refs.exit.startsWith('local_')       ? refs.exit       : null,
+        condition_management_id: refs.management && !refs.management.startsWith('local_') ? refs.management : null,
       }
       await upsertStrategy(payload)
       reloadStrategies(); closeEditStr()
@@ -2026,7 +2027,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.88</title>
+        <title>Trading Simulator V4.89</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2089,7 +2090,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.88
+            <span className="dot"/>Trading Simulator V4.89
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
