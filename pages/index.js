@@ -4,7 +4,7 @@ import { calcMetrics, MONO, fmt, fmtDate, f2, tvSym } from '../lib/utils'
 import { WATCHLIST_DEFAULT, DEFAULT_DEFINITION } from '../lib/constants'
 import { getSupaUrl, getSupaKey, getSupaH } from '../lib/supabase'
 import { loadSettings, saveSettings, saveSettingsRemote, loadSettingsRemote } from '../lib/settings'
-import { fetchConditions, lsGetConds, lsSaveConds, COND_LS_KEY, updateCondition } from '../lib/conditions'
+import { fetchConditions, lsGetConds, lsSaveConds, COND_LS_KEY } from '../lib/conditions'
 import CandleChart from '../components/CandleChart'
 import EquityChart from '../components/EquityChart'
 import Tip from '../components/Tip'
@@ -770,44 +770,48 @@ export default function Home() {
     setEditingStr(s)
     setStrForm({
       name:s.name||'',
-      years:s.years||5,capital_ini:s.capital_ini||(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.defaultCapital||1000}catch(_){return 1000}})(),
-      color:s.color||'#00d4ff',observations:s.observations||''
+      years:s.years||5,
+      capital_ini:s.capital_ini||(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.defaultCapital||1000}catch(_){return 1000}})(),
+      allocation_pct:s.allocation_pct||100,
+      color:s.color||'#00d4ff',
+      observations:s.observations||''
     })
-    // Cargar definition: si tiene la nueva, usarla; si es estrategia legacy, convertirla
+    // Use definition directly; seed condition_refs from FK columns if absent
     const def = s.definition && Object.keys(s.definition).length>0
-      ? s.definition
-      : {
-          entry:{ type:'breakout_high_above_ma',ma_type:'EMA',ma_fast:s.ema_r||10,ma_slow:s.ema_l||11 },
-          exit: { type:'breakout_low_below_ma', ma_type:'EMA',ma_period:s.ema_r||10 },
-          stop: s.tipo_stop==='atr'
-            ? { type:'atr_based',atr_period:s.atr_period||14,atr_mult:s.atr_mult||1.0 }
-            : s.tipo_stop==='none' ? { type:'none' }
-            : { type:'below_ma_at_signal',ma_type:'EMA',ma_period:s.ema_r||10 },
-          management:{ sin_perdidas:s.sin_perdidas!==false, reentry:s.reentry!==false },
-          filters:{
-            market: s.tipo_filtro&&s.tipo_filtro!=='none'
-              ? [{ type:'external_ma',condition:s.tipo_filtro,ma_type:'EMA',ma_fast:s.sp500_ema_r||10,ma_slow:s.sp500_ema_l||11 }]
-              : [],
-            signal:[{type:'breakout_rolling',max_candles:null}]
-          }
-        }
+      ? { ...s.definition }
+      : { ...DEFAULT_DEFINITION }
+    if (!def.condition_refs) {
+      def.condition_refs = {
+        filter:     s.condition_filter_id     || null,
+        setup:      s.condition_setup_id      || null,
+        trigger:    s.condition_trigger_id    || null,
+        abort:      s.condition_abort_id      || null,
+        stop_loss:  s.condition_stop_loss_id  || null,
+        exit:       s.condition_exit_id       || null,
+        management: s.condition_management_id || null,
+      }
+    }
     setDefinition(def)
   }
   const closeEditStr=()=>{setEditingStr(null);setStrForm({})}
   const saveEditStr=async()=>{
     setStrSaving(true)
     try{
-      // Guarda con definition (nuevo formato) + campos legacy para compatibilidad
-      const entry=definition?.entry||{}
+      const refs = definition?.condition_refs || {}
       const payload={
         ...strForm,
         id:editingStr?.id||undefined,
         definition,
-        // Mantener campos legacy sincronizados para el motor cfg
-        ema_r:entry.ma_fast||entry.ma_period||10,
-        ema_l:entry.ma_slow||11,
         years:Number(strForm.years||5),
         capital_ini:Number(strForm.capital_ini||(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.defaultCapital||1000}catch(_){return 1000}})()),
+        allocation_pct:Number(strForm.allocation_pct||100),
+        condition_filter_id:     refs.filter     || null,
+        condition_setup_id:      refs.setup      || null,
+        condition_trigger_id:    refs.trigger    || null,
+        condition_abort_id:      refs.abort      || null,
+        condition_stop_loss_id:  refs.stop_loss  || null,
+        condition_exit_id:       refs.exit       || null,
+        condition_management_id: refs.management || null,
       }
       await upsertStrategy(payload)
       reloadStrategies(); closeEditStr()
@@ -819,17 +823,28 @@ export default function Home() {
     await deleteStrategy(id); reloadStrategies()
   }
   const loadStrategyLegacy=(s)=>{
-    // symbol intentionally NOT loaded — strategy is asset-independent
-    setEmaR(s.ema_r||10);setEmaL(s.ema_l||11);setYears(s.years||5)
-    setCapitalIni(s.capital_ini||10000);setTipoStop(s.tipo_stop||'tecnico')
-    setAtrP(s.atr_period||14);setAtrM(s.atr_mult||1.0)
-    setSinPerdidas(s.sin_perdidas??true);setReentry(s.reentry??true)
-    setTipoFiltro(s.tipo_filtro||'none');setSp500EmaR(s.sp500_ema_r||10);setSp500EmaL(s.sp500_ema_l||11)
+    // Load strategy params from definition into the cfg panel state
+    const def  = s.definition || {}
+    const entry = def.entry || {}
+    const stop  = def.stop  || {}
+    const mgmt  = def.management || {}
+    const filt  = def.filters?.market?.[0] || {}
+    setEmaR(entry.ma_fast || entry.ma_period || 10)
+    setEmaL(entry.ma_slow || 11)
+    setYears(s.years || 5)
+    setCapitalIni(s.capital_ini || 10000)
+    setTipoStop(stop.type === 'atr_based' ? 'atr' : stop.type === 'none' ? 'none' : 'tecnico')
+    setAtrP(stop.atr_period || 14)
+    setAtrM(stop.atr_mult || 1.0)
+    setSinPerdidas(mgmt.sin_perdidas !== false)
+    setReentry(mgmt.reentry !== false)
+    setTipoFiltro(filt.condition || 'none')
+    setSp500EmaR(filt.ma_fast || 10)
+    setSp500EmaL(filt.ma_slow || 11)
     setStrForm(f=>({...f,_loadedName:s.name}))
     setStratName(s.name||'')
     setCurrentStratId(s.id||null)
     setSidePanel('config')
-    // Load saved ranking for this strategy (clear if none)
     setRankingData({});setRankingStratId(null);setRankingStratName('')
     if(s.id){
       loadRankingRemote(s.id).then(rd=>{
@@ -1923,7 +1938,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.83</title>
+        <title>Trading Simulator V4.84</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -1986,7 +2001,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.83
+            <span className="dot"/>Trading Simulator V4.84
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -3146,10 +3161,6 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 }}
                 onReload={reloadConditions}
                 loading={condLoading}
-                onUpdateRole={async(id,role)=>{
-                  await updateCondition(id,{role})
-                  setConditions(prev=>prev.map(c=>c.id===id?{...c,role}:c))
-                }}
               />
             )}
 
