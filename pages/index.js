@@ -16,9 +16,9 @@ import { TlEquityChart, TlInvestChart } from '../components/TlCharts'
 import ContextThemeMenu, { applyTema } from '../components/ContextThemeMenu'
 import MetricRow from '../components/MetricRow'
 import PriceAlarmQuickForm from '../components/PriceAlarmQuickForm'
-import ConditionsManager from '../components/ConditionsManager'
 import StrategiesManager from '../components/StrategiesManager'
 import StrategyEditorPanel from '../components/StrategyEditorPanel'
+import ConditionEditorPanel from '../components/ConditionEditorPanel'
 
 
 // ── Date helpers for TradeLog (dd/mm/yyyy ↔ yyyy-mm-dd) ──
@@ -255,6 +255,10 @@ export default function Home() {
   const [conditions,setConditions]=useState([])
   const [condLoading,setCondLoading]=useState(false)
   const [selectedCondition,setSelectedCondition]=useState(null)
+  const [editingCond,setEditingCond]=useState(null)
+  const [condForm,setCondForm]=useState({})
+  const [condSaving,setCondSaving]=useState(false)
+  const [condSearch,setCondSearch]=useState('')
   const [selectedStrategy,setSelectedStrategy]=useState(null)
   const [editingAlarm,setEditingAlarm]=useState(null)
   const [alarmForm,setAlarmForm]=useState({})
@@ -854,6 +858,52 @@ export default function Home() {
   }
   const newStrategy=()=>openEditStr({id:null})
   const duplicateStr=(s)=>openEditStr({...s,id:null,name:s.name+' (copia)'})
+
+  // ── Condition editor ──
+  const openEditCond=(c)=>{
+    setEditingCond(c)
+    setCondForm({
+      name: c.name||'',
+      description: c.description||'',
+      type: c.type||'',
+      params: c.params||{},
+    })
+    setSidePanel('conditions')
+  }
+  const closeEditCond=()=>{ setEditingCond(null); setCondForm({}) }
+  const saveEditCond=async()=>{
+    if(!condForm.name?.trim()) return
+    setCondSaving(true)
+    try {
+      const payload={ name:condForm.name.trim(), description:condForm.description||'', type:condForm.type, params:condForm.params||{}, active:true }
+      let saved
+      if(editingCond?.id&&!editingCond.id.startsWith('local_')){
+        const {updateCondition}=await import('../lib/conditions')
+        await updateCondition(editingCond.id, payload)
+        saved={...editingCond,...payload}
+        setConditions(prev=>prev.map(c=>c.id===editingCond.id?saved:c))
+      } else if(editingCond?.id?.startsWith('local_')){
+        const {updateCondition}=await import('../lib/conditions')
+        await updateCondition(editingCond.id, payload)
+        saved={...editingCond,...payload}
+        setConditions(prev=>prev.map(c=>c.id===editingCond.id?saved:c))
+      } else {
+        const {saveCondition}=await import('../lib/conditions')
+        saved=await saveCondition(payload)
+        setConditions(prev=>[...prev,saved])
+      }
+      closeEditCond()
+    } catch(e){ console.error(e) }
+    finally{ setCondSaving(false) }
+  }
+  const newCond=()=>openEditCond({id:null})
+  const deleteCond=async(id)=>{
+    if(!confirm('¿Eliminar esta condición?')) return
+    const {deleteCondition}=await import('../lib/conditions')
+    await deleteCondition(id)
+    setConditions(prev=>prev.filter(c=>c.id!==id))
+    if(editingCond?.id===id) closeEditCond()
+  }
 
   // ── Alertas ──
   const openEditAlarm=(a)=>{
@@ -1938,7 +1988,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.84</title>
+        <title>Trading Simulator V4.85</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2001,7 +2051,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.84
+            <span className="dot"/>Trading Simulator V4.85
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -2118,67 +2168,70 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               onMouseOut={e=>e.currentTarget.style.background='transparent'}/>
 
             {sidePanel==='conditions'&&(
-              <div style={{padding:14,display:'flex',flexDirection:'column',gap:10,overflowY:'auto',flex:1}}>
-                <div className="sidebar-title" style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                  <span>Detalle</span>
-                  <button onClick={()=>{setSettingsInitTab('condiciones');setSettingsOpen(true)}}
-                    style={{background:'rgba(0,212,255,0.1)',border:'1px solid var(--accent)',color:'var(--accent)',
-                      fontFamily:MONO,fontSize:11,padding:'1px 8px',borderRadius:3,cursor:'pointer'}}>+ Nueva</button>
+              <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
+                {/* ── Header ── */}
+                <div style={{padding:'8px 10px',borderBottom:'1px solid var(--border)',flexShrink:0}}>
+                  <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:6}}>
+                    <span className="sidebar-title" style={{margin:0,flex:1}}>Condiciones</span>
+                    <button onClick={newCond} title="Nueva condición"
+                      style={{background:'rgba(0,212,255,0.1)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:12,padding:'2px 8px',borderRadius:3,cursor:'pointer',lineHeight:1.4}}>+</button>
+                  </div>
+                  <div style={{position:'relative'}}>
+                    <input
+                      type="text"
+                      placeholder="🔍 Buscar…"
+                      value={condSearch}
+                      onChange={e=>setCondSearch(e.target.value)}
+                      style={{width:'100%',background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'4px 22px 4px 7px',borderRadius:4,boxSizing:'border-box'}}
+                    />
+                    {condSearch&&<span onClick={()=>setCondSearch('')}
+                      style={{position:'absolute',right:6,top:'50%',transform:'translateY(-50%)',cursor:'pointer',color:'#a8ccdf',fontSize:11}}>✕</span>}
+                  </div>
                 </div>
-                {!selectedCondition
-                  ? <div style={{fontFamily:MONO,fontSize:11,color:'var(--text3)',lineHeight:1.9,marginTop:4}}>
-                      ← Selecciona una condición de la lista para ver sus detalles.
+                {/* ── List ── */}
+                <div style={{overflowY:'auto',flex:1}}>
+                  {condLoading&&<div style={{padding:'10px 12px',fontFamily:MONO,fontSize:12,color:'#a8ccdf'}}>⟳ Cargando…</div>}
+                  {!condLoading&&conditions.length===0&&(
+                    <div style={{padding:'14px 12px',fontFamily:MONO,fontSize:11,color:'var(--text3)',lineHeight:1.8}}>
+                      Sin condiciones guardadas.
+                      <br/>
+                      <button onClick={newCond}
+                        style={{marginTop:8,background:'rgba(0,212,255,0.08)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:11,padding:'4px 10px',borderRadius:4,cursor:'pointer'}}>
+                        + Crear condición
+                      </button>
                     </div>
-                  : (()=>{
-                      const c = selectedCondition
-                      const typeLabels={'ema_cross_up':'EMA Cruce ↑','ema_cross_down':'EMA Cruce ↓','price_above_ma':'Precio > MA','price_below_ma':'Precio < MA','close_below_ma':'Cierre < MA','rsi_above':'RSI >','rsi_below':'RSI <','rsi_cross_up':'RSI Cruce ↑','rsi_cross_down':'RSI Cruce ↓','macd_cross_up':'MACD Cruce ↑','macd_cross_down':'MACD Cruce ↓'}
+                  )}
+                  {conditions
+                    .filter(c=>!condSearch||c.name?.toLowerCase().includes(condSearch.toLowerCase())||c.description?.toLowerCase().includes(condSearch.toLowerCase()))
+                    .map(c=>{
+                      const isEditing=editingCond?.id===c.id
                       return (
-                        <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                          <div style={{fontFamily:MONO,fontSize:13,fontWeight:700,color:'var(--text1)',lineHeight:1.3}}>{c.name}</div>
-                          {c.description&&<div style={{fontFamily:MONO,fontSize:11,color:'var(--text3)',lineHeight:1.6}}>{c.description}</div>}
-                          <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:2}}>
-                            <span style={{background:'rgba(0,212,255,0.1)',border:'1px solid rgba(0,212,255,0.3)',color:'#7ab8d8',borderRadius:3,padding:'2px 8px',fontFamily:MONO,fontSize:10}}>
-                              {typeLabels[c.type]||c.type||'—'}
-                            </span>
-                            {c.source==='groq'
-                              ? <span style={{background:'rgba(155,114,255,0.12)',border:'1px solid rgba(155,114,255,0.3)',color:'#9b72ff',borderRadius:3,padding:'2px 8px',fontFamily:MONO,fontSize:10}}>🤖 IA</span>
-                              : c.id?.startsWith('local_')
-                                ? <span style={{background:'rgba(255,209,102,0.1)',border:'1px solid rgba(255,209,102,0.3)',color:'#ffd166',borderRadius:3,padding:'2px 8px',fontFamily:MONO,fontSize:10}}>💾 Local</span>
-                                : <span style={{background:'rgba(122,155,192,0.1)',border:'1px solid rgba(122,155,192,0.3)',color:'var(--text3)',borderRadius:3,padding:'2px 8px',fontFamily:MONO,fontSize:10}}>✏ Manual</span>
-                            }
+                        <div key={c.id||c.name}
+                          style={{
+                            display:'flex',alignItems:'center',gap:6,
+                            padding:'7px 10px',
+                            background:isEditing?'rgba(0,212,255,0.06)':'transparent',
+                            borderLeft:isEditing?'2px solid var(--accent)':'2px solid transparent',
+                            borderBottom:'1px solid rgba(255,255,255,0.04)',
+                            cursor:'default',
+                          }}>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontFamily:MONO,fontSize:11,color:'var(--text1)',fontWeight:isEditing?700:400,
+                              overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                              {c.name||'—'}
+                            </div>
+                            {c.type&&<div style={{fontFamily:MONO,fontSize:10,color:'#4a7a9b',marginTop:1}}>{c.type}</div>}
                           </div>
-                          {c.params&&Object.keys(c.params).length>0&&(
-                            <div style={{background:'var(--bg3)',border:'1px solid var(--border)',borderRadius:5,padding:'8px 10px',marginTop:2}}>
-                              <div style={{fontFamily:MONO,fontSize:10,color:'var(--text3)',marginBottom:4,letterSpacing:'0.06em'}}>PARÁMETROS</div>
-                              {Object.entries(c.params).map(([k,v])=>(
-                                <div key={k} style={{display:'flex',justifyContent:'space-between',fontFamily:MONO,fontSize:11,marginTop:2}}>
-                                  <span style={{color:'var(--text3)'}}>{k}</span>
-                                  <span style={{color:'var(--text1)',fontWeight:600}}>{String(v)}</span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                          {c.created_at&&(
-                            <div style={{fontFamily:MONO,fontSize:10,color:'var(--text3)',marginTop:2}}>
-                              Creada: {new Date(c.created_at).toLocaleDateString('es-ES')}
-                            </div>
-                          )}
-                          <button
-                            onClick={async()=>{
-                              if(!confirm(`¿Eliminar "${c.name}"?`)) return
-                              const {deleteCondition}=await import('../lib/conditions')
-                              await deleteCondition(c.id)
-                              setConditions(prev=>prev.filter(x=>x.id!==c.id))
-                              setSelectedCondition(null)
-                            }}
-                            style={{marginTop:4,background:'rgba(255,77,109,0.1)',border:'1px solid rgba(255,77,109,0.3)',
-                              color:'#ff4d6d',fontFamily:MONO,fontSize:11,padding:'5px 10px',borderRadius:4,cursor:'pointer'}}>
-                            Eliminar condición
-                          </button>
+                          <button onClick={()=>openEditCond(c)} title="Editar condición"
+                            style={{background:'transparent',border:'none',color:'var(--text3)',cursor:'pointer',
+                              fontSize:13,padding:'2px 4px',flexShrink:0,opacity:0.7,transition:'opacity 0.1s'}}
+                            onMouseOver={e=>e.currentTarget.style.opacity='1'}
+                            onMouseOut={e=>e.currentTarget.style.opacity='0.7'}>✎</button>
                         </div>
                       )
-                    })()
-                }
+                    })
+                  }
+                </div>
               </div>
             )}
 
@@ -3146,21 +3199,16 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
           {/* ── CONTENT ── */}
           <div className="content">
 
-            {/* ══ PANEL CONDICIONES ══ */}
-            {sidePanel==='conditions'&&(
-              <ConditionsManager
-                conditions={conditions}
-                selectedCondition={selectedCondition}
-                onSelect={setSelectedCondition}
-                onNew={()=>{setSettingsInitTab('condiciones');setSettingsOpen(true)}}
-                onDelete={async(id)=>{
-                  const {deleteCondition}=await import('../lib/conditions')
-                  await deleteCondition(id)
-                  setConditions(prev=>prev.filter(c=>c.id!==id))
-                  if(selectedCondition?.id===id) setSelectedCondition(null)
-                }}
-                onReload={reloadConditions}
-                loading={condLoading}
+            {/* ══ CONDITION EDITOR PANEL ══ */}
+            {editingCond!==null&&sidePanel==='conditions'&&(
+              <ConditionEditorPanel
+                condForm={condForm}
+                setCondForm={setCondForm}
+                condition={editingCond}
+                onSave={saveEditCond}
+                onCancel={closeEditCond}
+                onDelete={()=>deleteCond(editingCond.id)}
+                saving={condSaving}
               />
             )}
 
@@ -3180,11 +3228,11 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               />
             )}
 
-            {/* Single-asset view — oculto cuando multicartera activa o editando estrategia */}
-            {sidePanel!=='multi'&&sidePanel!=='tradelog'&&sidePanel!=='conditions'&&!(editingStr&&sidePanel==='config')&&!result&&!error&&<div className="loading"><div className="spinner"/><div className="loading-text">CARGANDO DATOS...</div></div>}
-            {sidePanel!=='multi'&&sidePanel!=='tradelog'&&sidePanel!=='conditions'&&!(editingStr&&sidePanel==='config')&&error&&<div className="error-msg">⚠ {error}</div>}
+            {/* Single-asset view — oculto cuando multicartera activa o editando */}
+            {sidePanel!=='multi'&&sidePanel!=='tradelog'&&!(editingCond&&sidePanel==='conditions')&&!(editingStr&&sidePanel==='config')&&!result&&!error&&<div className="loading"><div className="spinner"/><div className="loading-text">CARGANDO DATOS...</div></div>}
+            {sidePanel!=='multi'&&sidePanel!=='tradelog'&&!(editingCond&&sidePanel==='conditions')&&!(editingStr&&sidePanel==='config')&&error&&<div className="error-msg">⚠ {error}</div>}
 
-            {sidePanel!=='multi'&&sidePanel!=='tradelog'&&sidePanel!=='conditions'&&!(editingStr&&sidePanel==='config')&&result&&(
+            {sidePanel!=='multi'&&sidePanel!=='tradelog'&&!(editingCond&&sidePanel==='conditions')&&!(editingStr&&sidePanel==='config')&&result&&(
               <div style={{display:'flex',flex:1,minHeight:0,overflow:'hidden',height:'100%'}}>
                 {/* Columna principal */}
                 <div ref={contentRef} style={{flex:1,overflowY:'auto'}}>

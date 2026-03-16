@@ -101,11 +101,10 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
   const TABS = [
     { id:'integraciones', label:'🔌 Integraciones' },
     { id:'alarmas',       label:'🔔 Alertas' },
-    { id:'condiciones',   label:'⚡ Condiciones' },
     { id:'grafico',       label:'📈 Gráfico' },
     { id:'ranking',       label:'🏆 Ranking' },
     { id:'watchlist',     label:'📋 Watchlist' },
-      { id:'tradelog_cfg',  label:'📒 TradeLog' },
+    { id:'tradelog_cfg',  label:'📒 TradeLog' },
   ]
 
   const inp = (val, onChange, opts={}) => (
@@ -286,8 +285,10 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
             </div>
           )}
 
-          {/* ── CONDICIONES GLOBALES ── */}
-          {tab==='condiciones'&&(()=>{
+          {/* ── CONDICIONES — moved to sidebar + center editor (V4.85) ── */}
+
+          {/* ── GRÁFICO ── */}
+          {tab==='condiciones_NEVER'&&(()=>{
             if(localConds.length===0 && condTab==='list') openConditions()
             const CTYPE_LABELS={
               ema_cross_up:'EMA rápida > EMA lenta ↑',ema_cross_down:'EMA rápida < EMA lenta ↓',
