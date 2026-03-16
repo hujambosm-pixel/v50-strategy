@@ -1922,7 +1922,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.81</title>
+        <title>Trading Simulator V4.82</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -1985,7 +1985,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.81
+            <span className="dot"/>Trading Simulator V4.82
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -2167,60 +2167,100 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
             )}
 
             {sidePanel==='config'&&(
-              <div style={{padding:14,display:'flex',flexDirection:'column',gap:14,overflowY:'auto',flex:1}}>
-                {/* ── Selector de estrategia ── */}
-                <div className="sidebar-section">
-                  <div className="sidebar-title" style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                    <span>Estrategia</span>
-                    <div style={{display:'flex',gap:4}}>
-                      <button onClick={newStrategy} title="Nueva estrategia" style={{background:'rgba(0,212,255,0.1)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:11,padding:'1px 6px',borderRadius:3,cursor:'pointer'}}>+</button>
-                      <button onClick={()=>strategies.length>0&&openEditStr(strategies.find(s=>s.name===strForm._loadedName)||strategies[0])} title="Gestionar estrategias" style={{background:'transparent',border:'1px solid var(--border)',color:'#a8ccdf',fontFamily:MONO,fontSize:11,padding:'1px 6px',borderRadius:3,cursor:'pointer'}}>✎</button>
+              <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
+                {/* ── Header: título + búsqueda + botón nueva ── */}
+                <div style={{padding:'8px 10px',borderBottom:'1px solid var(--border)',flexShrink:0}}>
+                  <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:6}}>
+                    <span className="sidebar-title" style={{margin:0,flex:1}}>Estrategias</span>
+                    <button onClick={newStrategy} title="Nueva estrategia"
+                      style={{background:'rgba(0,212,255,0.1)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:12,padding:'2px 8px',borderRadius:3,cursor:'pointer',lineHeight:1.4}}>+</button>
+                  </div>
+                  <div style={{position:'relative'}}>
+                    <input
+                      type="text"
+                      placeholder="🔍 Buscar…"
+                      value={strForm._search||''}
+                      onChange={e=>setStrForm(p=>({...p,_search:e.target.value}))}
+                      style={{width:'100%',background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'4px 22px 4px 7px',borderRadius:4,boxSizing:'border-box'}}
+                    />
+                    {strForm._search&&<span onClick={()=>setStrForm(p=>({...p,_search:''}))}
+                      style={{position:'absolute',right:6,top:'50%',transform:'translateY(-50%)',cursor:'pointer',color:'#a8ccdf',fontSize:11}}>✕</span>}
+                  </div>
+                </div>
+
+                {/* ── Lista ── */}
+                <div style={{overflowY:'auto',flex:1}}>
+                  {strLoading&&<div style={{padding:'10px 12px',fontFamily:MONO,fontSize:12,color:'#a8ccdf'}}>⟳ Cargando…</div>}
+                  {!strLoading&&strategies.length===0&&(
+                    <div style={{padding:'14px 12px',fontFamily:MONO,fontSize:11,color:'var(--text3)',lineHeight:1.8}}>
+                      Sin estrategias guardadas.
+                      <br/>
+                      <button onClick={newStrategy}
+                        style={{marginTop:8,background:'rgba(0,212,255,0.08)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:11,padding:'4px 10px',borderRadius:4,cursor:'pointer'}}>
+                        + Crear estrategia
+                      </button>
                     </div>
-                  </div>
-                  {strLoading
-                    ? <div style={{fontFamily:MONO,fontSize:12,color:'#a8ccdf'}}>⟳ Cargando…</div>
-                    : <label>
-                        <select
-                          value={strForm._loadedName||''}
-                          onChange={e=>{
-                            const s=strategies.find(x=>x.name===e.target.value)
-                            if(s) loadStrategyLegacy(s)
-                          }}
-                          style={{width:'100%'}}
-                        >
-                          <option value="">— seleccionar —</option>
-                          {strategies.map(s=>(
-                            <option key={s.id} value={s.name}>{s.name}</option>
-                          ))}
-                        </select>
-                      </label>
-                  }
+                  )}
+                  {!strLoading&&(()=>{
+                    const q=(strForm._search||'').toLowerCase()
+                    const list=q?strategies.filter(s=>(s.name||'').toLowerCase().includes(q)||(s.description||'').toLowerCase().includes(q)):strategies
+                    if(!list.length&&q) return <div style={{padding:'10px 12px',fontFamily:MONO,fontSize:11,color:'var(--text3)'}}>Sin resultados.</div>
+                    return list.map(s=>{
+                      const isActive=currentStratId===s.id
+                      const col=s.color||'#00d4ff'
+                      return (
+                        <div key={s.id}
+                          style={{padding:'7px 10px',display:'flex',alignItems:'center',gap:6,
+                            borderBottom:'1px solid var(--border)',
+                            background:isActive?'rgba(0,212,255,0.07)':'transparent',
+                            borderLeft:`2px solid ${isActive?col:'transparent'}`,
+                            transition:'background 0.1s'}}
+                          onMouseOver={e=>{if(!isActive)e.currentTarget.style.background='rgba(255,255,255,0.03)'}}
+                          onMouseOut={e=>{if(!isActive)e.currentTarget.style.background='transparent'}}>
+                          {/* Color dot */}
+                          <span style={{width:8,height:8,borderRadius:'50%',background:col,
+                            flexShrink:0,display:'inline-block',boxShadow:isActive?`0 0 5px ${col}88`:'none'}}/>
+                          {/* Name + meta */}
+                          <div style={{flex:1,minWidth:0,cursor:'default'}}>
+                            <div style={{fontFamily:MONO,fontSize:11,color:isActive?'var(--accent)':'#d0e8fa',
+                              fontWeight:isActive?700:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                              {s.name}
+                            </div>
+                            <div style={{fontFamily:MONO,fontSize:9,color:'#5a7a95',marginTop:1}}>
+                              {s.years||'?'}a · {s.definition?.setup?.ma_fast||s.ema_r||'?'}/{s.definition?.setup?.ma_slow||s.ema_l||'?'}
+                            </div>
+                          </div>
+                          {/* Edit button */}
+                          <button onClick={e=>{e.stopPropagation();openEditStr(s)}}
+                            title="Editar"
+                            style={{background:'transparent',border:'1px solid var(--border)',color:'var(--text3)',
+                              fontFamily:MONO,fontSize:11,padding:'2px 6px',borderRadius:3,cursor:'pointer',
+                              flexShrink:0,transition:'color 0.1s,border-color 0.1s'}}
+                            onMouseOver={e=>{e.currentTarget.style.color='#a8ccdf';e.currentTarget.style.borderColor='#a8ccdf'}}
+                            onMouseOut={e=>{e.currentTarget.style.color='var(--text3)';e.currentTarget.style.borderColor='var(--border)'}}>
+                            ✎
+                          </button>
+                          {/* Play button */}
+                          <button onClick={e=>{e.stopPropagation();loadStrategyLegacy(s)}}
+                            title={`Ejecutar: ${s.name}`}
+                            style={{background:isActive?`${col}22`:'rgba(0,212,255,0.08)',
+                              border:`1px solid ${isActive?col:'var(--accent)'}`,
+                              color:isActive?col:'var(--accent)',
+                              fontFamily:MONO,fontSize:12,padding:'2px 7px',borderRadius:3,cursor:'pointer',
+                              flexShrink:0,transition:'all 0.1s'}}
+                            onMouseOver={e=>{e.currentTarget.style.background=`${col}33`}}
+                            onMouseOut={e=>{e.currentTarget.style.background=isActive?`${col}22`:'rgba(0,212,255,0.08)'}}>
+                            ▶
+                          </button>
+                        </div>
+                      )
+                    })
+                  })()}
                 </div>
-                <div className="sidebar-section">
-                  <div className="sidebar-title">Estrategia</div>
-                  <div className="row2">
-                    <label>EMA Rápida <Tip id="emaR"/><input type="number" value={emaR} min={1} max={500} onChange={e=>setEmaR(e.target.value)}/></label>
-                    <label>EMA Lenta <Tip id="emaL"/><input  type="number" value={emaL} min={1} max={500} onChange={e=>setEmaL(e.target.value)}/></label>
-                  </div>
-                  <div className="row2">
-                    <label>Capital (€) <Tip id="capital"/><input type="number" value={capitalIni} min={100} onChange={e=>setCapitalIni(e.target.value)}/></label>
-                    <label>Años BT <Tip id="years"/><input    type="number" value={years} min={1} max={20} onChange={e=>setYears(e.target.value)}/></label>
-                  </div>
-                </div>
-                <div className="sidebar-section">
-                  <div className="sidebar-title">Stop Loss</div>
-                  <label>Tipo <Tip id="tipoStop"/><select value={tipoStop} onChange={e=>setTipoStop(e.target.value)}><option value="tecnico">Stop Técnico (EMA)</option><option value="atr">Stop ATR</option><option value="none">Ninguno</option></select></label>
-                  {tipoStop==='atr'&&<div className="row2"><label>ATR <Tip id="atr"/><input type="number" value={atrP} min={1} onChange={e=>setAtrP(e.target.value)}/></label><label>Mult. <Tip id="atrMult"/><input type="number" value={atrM} min={0.1} step={0.1} onChange={e=>setAtrM(e.target.value)}/></label></div>}
-                  <label className="checkbox-row"><input type="checkbox" checked={sinPerdidas} onChange={e=>setSinPerdidas(e.target.checked)}/>Sin Pérdidas <Tip id="sinPerdidas"/></label>
-                  <label className="checkbox-row"><input type="checkbox" checked={reentry} onChange={e=>setReentry(e.target.checked)}/>Re-Entry <Tip id="reentry"/></label>
-                </div>
-                <div className="sidebar-section">
-                  <div className="sidebar-title">Filtro SP500</div>
-                  <label>Filtro <Tip id="filtroSP500"/><select value={tipoFiltro} onChange={e=>setTipoFiltro(e.target.value)}><option value="none">Sin filtro</option><option value="precio_ema">Precio sobre EMA rápida</option><option value="ema_ema">EMA rápida sobre EMA lenta</option></select></label>
-                  {tipoFiltro!=='none'&&<div className="row2"><label>EMA R <Tip id="sp500Emas"/><input type="number" value={sp500EmaR} min={1} onChange={e=>setSp500EmaR(e.target.value)}/></label><label>EMA L<input type="number" value={sp500EmaL} min={1} onChange={e=>setSp500EmaL(e.target.value)}/></label></div>}
-                </div>
-                {loading&&<div style={{fontFamily:MONO,fontSize:12,color:'var(--accent)',textAlign:'center',fontWeight:600}}>⟳ Actualizando...</div>}
-                {error&&<div style={{fontFamily:MONO,fontSize:11,color:'#ff4d6d',padding:'6px 0'}}>⚠ {error}</div>}
+
+                {/* ── Footer: estado de carga ── */}
+                {loading&&<div style={{padding:'4px 10px',fontFamily:MONO,fontSize:11,color:'var(--accent)',borderTop:'1px solid var(--border)',flexShrink:0}}>⟳ Actualizando…</div>}
+                {error&&<div style={{padding:'4px 10px',fontFamily:MONO,fontSize:11,color:'#ff4d6d',borderTop:'1px solid var(--border)',flexShrink:0}}>⚠ {error}</div>}
               </div>
             )}
 
@@ -3108,32 +3148,11 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               />
             )}
 
-            {/* ══ PANEL ESTRATEGIAS ══ */}
-            {sidePanel==='config'&&(
-              <StrategiesManager
-                strategies={strategies}
-                selectedStrategy={selectedStrategy}
-                onSelect={s=>{
-                  setSelectedStrategy(s===selectedStrategy?null:s)
-                  if(s) loadStrategyLegacy(s)
-                }}
-                onNew={newStrategy}
-                onDelete={async(id)=>{
-                  if(!confirm('¿Eliminar esta estrategia?')) return
-                  await fetch(`/api/strategies?id=${id}`,{method:'DELETE'})
-                  setStrategies(prev=>prev.filter(s=>s.id!==id))
-                  if(selectedStrategy?.id===id) setSelectedStrategy(null)
-                }}
-                onReload={reloadStrategies}
-                loading={strLoading}
-              />
-            )}
-
             {/* Single-asset view — oculto cuando multicartera activa */}
-            {sidePanel!=='multi'&&sidePanel!=='tradelog'&&sidePanel!=='conditions'&&sidePanel!=='config'&&!result&&!error&&<div className="loading"><div className="spinner"/><div className="loading-text">CARGANDO DATOS...</div></div>}
-            {sidePanel!=='multi'&&sidePanel!=='tradelog'&&sidePanel!=='conditions'&&sidePanel!=='config'&&error&&<div className="error-msg">⚠ {error}</div>}
+            {sidePanel!=='multi'&&sidePanel!=='tradelog'&&sidePanel!=='conditions'&&!result&&!error&&<div className="loading"><div className="spinner"/><div className="loading-text">CARGANDO DATOS...</div></div>}
+            {sidePanel!=='multi'&&sidePanel!=='tradelog'&&sidePanel!=='conditions'&&error&&<div className="error-msg">⚠ {error}</div>}
 
-            {sidePanel!=='multi'&&sidePanel!=='tradelog'&&sidePanel!=='conditions'&&sidePanel!=='config'&&result&&(
+            {sidePanel!=='multi'&&sidePanel!=='tradelog'&&sidePanel!=='conditions'&&result&&(
               <div style={{display:'flex',flex:1,minHeight:0,overflow:'hidden',height:'100%'}}>
                 {/* Columna principal */}
                 <div ref={contentRef} style={{flex:1,overflowY:'auto'}}>
