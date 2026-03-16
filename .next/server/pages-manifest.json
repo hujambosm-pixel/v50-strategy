@@ -2,7 +2,7 @@
   "/_app": "pages/_app.js",
   "/_error": "pages/_error.js",
   "/_document": "pages/_document.js",
-  "/api/conditions": "pages/api/conditions.js",
   "/api/datos": "pages/api/datos.js",
+  "/api/conditions": "pages/api/conditions.js",
   "/": "pages/index.js"
 }
