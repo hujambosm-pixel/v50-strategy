@@ -33,7 +33,7 @@ export function TlEquityChart({ curve }) {
 }
 
 // ── Capital Invertido vs Profit acumulado (area + line) ──
-function TlInvestChart({ investData }) {
+export function TlInvestChart({ investData }) {
   // investData: [{date, capital, profit}]  sorted by date
   const ref = useRef(null), chartRef = useRef(null)
   useEffect(()=>{

@@ -73,7 +73,7 @@ export function MultiCartChart({simpleCurve,compoundCurve,bhCurve,sp500BHCurve,c
 
 // ── OccupancyBarChart — individual asset capital invested chart ────
 // showMode: 'compound'|'simple' — independent filter, own toggle
-function OccupancyBarChart({trades, chartData, capitalIni, syncRef, showMode='compound'}) {
+export function OccupancyBarChart({trades, chartData, capitalIni, syncRef, showMode='compound'}) {
   const ref=useRef(null), chartRef=useRef(null)
   useEffect(()=>{
     if(!ref.current||!trades?.length||!chartData?.length) return
@@ -134,7 +134,7 @@ function OccupancyBarChart({trades, chartData, capitalIni, syncRef, showMode='co
 }
 
 // ── McOccupancyChart — MC capital invertido chart (same style as OccupancyBarChart) ──
-function McOccupancyChart({occupancyCurve, compoundCurve, capitalIni, occMode='compound', syncRef}) {
+export function McOccupancyChart({occupancyCurve, compoundCurve, capitalIni, occMode='compound', syncRef}) {
   const ref=useRef(null), chartRef=useRef(null)
   useEffect(()=>{
     if(!ref.current||!occupancyCurve?.length) return

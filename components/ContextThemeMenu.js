@@ -21,7 +21,7 @@ const FONT_OPTIONS = [
   {id:'firacode',  label:'Fira Code'},
   {id:'system',    label:'System UI'},
 ]
-function applyTema(temaFonts){
+export function applyTema(temaFonts){
   try{
     const fontMap={jetbrains:'"JetBrains Mono","Fira Code",monospace',ibmplex:'"IBM Plex Mono",monospace',firacode:'"Fira Code","JetBrains Mono",monospace',system:'system-ui,sans-serif'}
     let css=''
@@ -39,7 +39,7 @@ function applyTema(temaFonts){
     el.textContent=css
   }catch(_){}
 }
-function ContextThemeMenu({ x, y, section, onClose, onSave }) {
+export default function ContextThemeMenu({ x, y, section, onClose, onSave }) {
   const [fonts, setFonts] = useState(()=>{
     try{ return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.tema?.fonts||{} }catch(_){ return {} }
   })
