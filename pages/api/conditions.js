@@ -6,9 +6,14 @@
 // DELETE → eliminar condición (id en query)
 // POST ?action=groq → pide a Groq que traduzca lenguaje natural → JSON de condición
 
-const SUPA_URL  = process.env.SUPABASE_URL
-const SUPA_KEY  = process.env.SUPABASE_ANON_KEY
-const H = { 'Content-Type':'application/json', apikey: SUPA_KEY, Authorization:`Bearer ${SUPA_KEY}` }
+// Supabase credentials: env vars take priority, client headers as fallback
+// (client passes x-supa-url / x-supa-key from localStorage settings)
+function getSupaCreds(req) {
+  const url = process.env.SUPABASE_URL || req?.headers?.['x-supa-url'] || ''
+  const key = process.env.SUPABASE_ANON_KEY || req?.headers?.['x-supa-key'] || ''
+  const h = { 'Content-Type':'application/json', apikey: key, Authorization:`Bearer ${key}` }
+  return { url, key, h }
+}
 
 const GROQ_SYSTEM = `Eres un asistente especializado en análisis técnico de trading.
 Tu tarea es convertir una descripción en lenguaje natural de una condición de mercado
@@ -67,6 +72,7 @@ export default async function handler(req, res) {
   }
 
   // Supabase requerido para el resto de operaciones
+  const { url: SUPA_URL, key: SUPA_KEY, h: H } = getSupaCreds(req)
   if (!SUPA_URL || !SUPA_KEY) return res.status(500).json({ error: 'Supabase no configurado' })
 
   // ── GET — listar condiciones ──
