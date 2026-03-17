@@ -39,7 +39,60 @@ REGLAS:
 - Si el usuario no especifica parámetros, usa los valores por defecto más comunes.
 - Si la descripción no corresponde a ningún tipo disponible, devuelve { "error": "No puedo modelar esta condición con los tipos disponibles." }`
 
+const GROQ_STRATEGY_SYSTEM = `Eres un experto en análisis técnico de trading. Convierte una descripción en lenguaje natural en una configuración JSON de estrategia con 7 bloques.
+
+TIPOS DE CONDICIÓN (únicos disponibles) y sus params:
+- ema_cross_up / ema_cross_down:   { ma_fast: int, ma_slow: int }
+- price_above_ma / price_below_ma: { ma_period: int, ma_type?: "EMA"|"SMA" }
+- close_above_ma / close_below_ma: { ma_period: int, ma_type?: "EMA"|"SMA" }
+- rsi_above / rsi_below / rsi_cross_up / rsi_cross_down: { period: int, level: int }
+- macd_cross_up / macd_cross_down: { fast: int, slow: int, signal: int }
+
+TIPOS DE STOP:
+- { "type": "tecnico", "ma_period": int }
+- { "type": "atr_based", "atr_period": int, "atr_mult": float }
+- null
+
+REGLAS:
+- Responde ÚNICAMENTE con JSON válido. Sin texto adicional, sin markdown.
+- Estructura exacta: { "filter", "setup", "trigger", "abort", "stop_loss", "exit", "management" }
+- Bloques no aplicables → null. management nunca es null.
+- Cada bloque de condición: { "type": "tipo", ...params }
+- management: { "sin_perdidas": bool, "reentry": bool }
+- Si faltan parámetros usa los valores más comunes.`
+
 export default async function handler(req, res) {
+  // ── POST ?action=groq_strategy ──
+  if (req.method === 'POST' && req.query.action === 'groq_strategy') {
+    const { text } = req.body
+    if (!text?.trim()) return res.status(400).json({ error: 'text requerido' })
+    const apiKey = process.env.GROQ_API_KEY || req.headers['x-groq-key'] || ''
+    if (!apiKey) return res.status(400).json({ error: 'No hay Groq API Key configurada. Añádela en ⚙ Configuración → Integraciones.' })
+    try {
+      const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type':'application/json', 'Authorization':`Bearer ${apiKey}` },
+        body: JSON.stringify({
+          model: 'llama-3.1-8b-instant',
+          max_tokens: 600,
+          temperature: 0.1,
+          messages: [
+            { role: 'system', content: GROQ_STRATEGY_SYSTEM },
+            { role: 'user',   content: text.trim() }
+          ]
+        })
+      })
+      if (!groqRes.ok) return res.status(502).json({ error: `Groq error: ${await groqRes.text()}` })
+      const data   = await groqRes.json()
+      const raw    = data.choices?.[0]?.message?.content || ''
+      const clean  = raw.replace(/```json|```/g, '').trim()
+      const parsed = JSON.parse(clean)
+      return res.status(200).json(parsed)
+    } catch(e) {
+      return res.status(500).json({ error: `Error parseando respuesta de Groq: ${e.message}` })
+    }
+  }
+
   // ── POST ?action=groq — NO necesita Supabase, va primero ──
   if (req.method === 'POST' && req.query.action === 'groq') {
     const { text } = req.body

@@ -799,6 +799,18 @@ export default function Home() {
         management: s.condition_management_id || null,
       }
     }
+    // Backfill inline role params from condition library so the visual builder shows correct values
+    // for strategies created before Phase 1 that used condition_refs
+    const BUILDER_ROLES = ['filter','setup','trigger','abort','exit','stop_loss']
+    BUILDER_ROLES.forEach(role => {
+      if (!def[role] && def.condition_refs?.[role]) {
+        const c = conditions.find(c => c.id === def.condition_refs[role])
+        if (c) def[role] = { type: c.type, ...c.params }
+      }
+    })
+    // Backfill from legacy definition.entry → definition.setup for old strategies
+    if (!def.setup && def.entry?.type) def.setup = def.entry
+    if (!def.stop_loss && def.stop?.type && ['tecnico','atr_based','none'].includes(def.stop.type)) def.stop_loss = def.stop
     setDefinition(def)
   }
   const closeEditStr=()=>{setEditingStr(null);setStrForm({})}
@@ -806,37 +818,32 @@ export default function Home() {
     setStrSaving(true)
     try{
       const refs = definition?.condition_refs || {}
-
-      // Auto-build definition from linked conditions so the backtest engine
-      // always has the params it needs (entry, stop, exit, management).
-      // Each condition's type + params map to the corresponding def sub-object.
       const getCond = (id) => conditions.find(c => c.id === id)
       const condToParams = (c) => c ? { type: c.type, ...(c.params || {}) } : undefined
 
-      const setupCond   = getCond(refs.setup)
-      const triggerCond = getCond(refs.trigger)
-      const stopCond    = getCond(refs.stop_loss)
-      const exitCond    = getCond(refs.exit)
-      const mgmtCond    = getCond(refs.management)
-      const filterCond  = getCond(refs.filter)
-      const abortCond   = getCond(refs.abort)
+      // Prefer inline params from visual builder; fall back to linked condition from library
+      const getParams = (role) => {
+        const inline = definition?.[role]
+        if (inline?.type) return inline
+        const cond = getCond(refs[role])
+        return cond ? condToParams(cond) : null
+      }
 
-      // Entry: prefer setup, fall back to trigger
-      const entryParams = condToParams(setupCond) || condToParams(triggerCond)
-      // Management condition params (sin_perdidas, reentry) come from existing def if no cond linked
-      const existingMgmt = definition?.management || {}
-      const mgmtParams = mgmtCond
-        ? { sin_perdidas: !!mgmtCond.params?.sin_perdidas, reentry: !!mgmtCond.params?.reentry }
-        : existingMgmt
+      const entryParams  = getParams('setup') || getParams('trigger')
+      const stopParams   = getParams('stop_loss')
+      const exitParams   = getParams('exit')
+      const filterParams = getParams('filter')
+      const abortParams  = getParams('abort')
+      const mgmtParams   = definition?.management || {}
 
       const builtDefinition = {
-        ...definition,  // keep any extra keys (filters, abort, etc.)
+        ...definition,
         condition_refs: refs,
-        ...(entryParams ? { entry: entryParams } : {}),
-        ...(stopCond    ? { stop:  condToParams(stopCond) }  : {}),
-        ...(exitCond    ? { exit:  condToParams(exitCond) }  : {}),
-        ...(filterCond  ? { filter: { logic:'AND', conditions:[{ type:filterCond.type, ...(filterCond.params||{}) }] } } : {}),
-        ...(abortCond   ? { abort: { conditions:[{ type:abortCond.type, ...(abortCond.params||{}) }] } } : {}),
+        ...(entryParams  ? { entry:  entryParams  } : {}),
+        ...(stopParams   ? { stop:   stopParams   } : {}),
+        ...(exitParams   ? { exit:   exitParams   } : {}),
+        ...(filterParams ? { filter: { logic:'AND', conditions:[filterParams] } } : {}),
+        ...(abortParams  ? { abort:  { conditions:[abortParams] }              } : {}),
         management: mgmtParams,
       }
 
@@ -2027,7 +2034,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.89</title>
+        <title>Trading Simulator V4.90</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2090,7 +2097,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.89
+            <span className="dot"/>Trading Simulator V4.90
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
