@@ -89,7 +89,12 @@ const SEL = {
 function getAuthH() {
   let s = {}
   try { s = JSON.parse(localStorage.getItem('v50_settings')||'{}') } catch(_) {}
-  return { 'Content-Type':'application/json', 'x-supa-url':s?.supabase?.url||'', 'x-supa-key':s?.supabase?.anon_key||'' }
+  return {
+    'Content-Type':'application/json',
+    'x-supa-url':  s?.supabase?.url      || '',
+    'x-supa-key':  s?.supabase?.anon_key || '',
+    'x-groq-key':  s?.integrations?.groqKey || '',
+  }
 }
 
 // ── Sub-components ────────────────────────────────────────────────────
