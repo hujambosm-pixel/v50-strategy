@@ -2000,7 +2000,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.01</title>
+        <title>Trading Simulator V5.02</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2071,7 +2071,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.01
+            <span className="dot"/>Trading Simulator V5.02
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -2564,70 +2564,34 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       rsi_cross_up:'RSI cruza ↑',rsi_cross_down:'RSI cruza ↓',
                       macd_cross_up:'MACD cruza señal ↑',macd_cross_down:'MACD cruza señal ↓',
                     }
-
-                    // Separate price alerts vs condition alerts
-                    const priceAlerts=alarms.filter(a=>a.condition==='price_level')
-                    const condAlarms=alarms.filter(a=>a.condition!=='price_level')
-
-                    // Build triggered rows: ONLY those where condition is currently ACTIVE
-                    // (not pending — no mostramos ruido de condiciones no disparadas)
-                    const triggeredRows=[]
-                    const ackedRows=[]
-                    condAlarms.forEach((a,ai)=>{
-                      const col=COLORS[ai%COLORS.length]
-                      watchlist.forEach(w=>{
-                        const st=alarmStatus[w.symbol]?.[a.id]
-                        if(!st||st.active!==true) return   // skip not-active
-                        const ackKey=`${w.symbol}::${a.id}`
-                        const isAcked=ackedAlarms.has(ackKey)
-                        const bars=st.bars
-                        const shouldBlink=bars!=null&&bars<=blinkN
-                        const row={a,w,col,isAcked,shouldBlink,ackKey,bars}
-                        if(isAcked) ackedRows.push(row)
-                        else triggeredRows.push(row)
-                      })
-                    })
-
-                    const SectionHeader=({color,label,count,right})=>(
+                    const SectionHeader=({color,label,count})=>(
                       <div style={{padding:'5px 10px',fontFamily:MONO,fontSize:9,color,letterSpacing:'0.08em',textTransform:'uppercase',
                         background:'rgba(0,0,0,0.25)',borderBottom:'1px solid var(--border)',borderTop:'1px solid var(--border)',
                         display:'flex',alignItems:'center',gap:6}}>
                         <span>{label}</span>
                         <span style={{color:'#3d5a7a'}}>({count})</span>
-                        {right&&<div style={{marginLeft:'auto'}}>{right}</div>}
                       </div>
                     )
 
-                    const renderTriggered=(r,i)=>(
-                      <div key={r.ackKey+i} style={{padding:'8px 10px',borderBottom:'1px solid rgba(20,40,65,0.7)',display:'flex',alignItems:'center',gap:8}}>
-                        <span style={{width:9,height:9,borderRadius:'50%',flexShrink:0,background:r.col,
-                          animation:r.shouldBlink?'alarmPulse 1s ease-in-out infinite':undefined,
-                          boxShadow:`0 0 7px ${r.col}`}}/>
-                        <div style={{flex:1,minWidth:0}}>
-                          <div style={{display:'flex',alignItems:'baseline',gap:5}}>
-                            <span style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:r.col}}>{r.w.symbol}</span>
-                            <span style={{fontFamily:MONO,fontSize:10,color:'#5a7a95',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.a.name}</span>
-                          </div>
-                          <div style={{fontFamily:MONO,fontSize:10,color:'#4a6a80',marginTop:1}}>
-                            {COND_LABELS[r.a.condition]||r.a.condition}
-                            {r.bars!=null&&<span style={{color:'#3d5a7a'}}> · {r.bars}v</span>}
-                          </div>
+                    const priceAlerts=alarms.filter(a=>a.condition==='price_level')
+                    const condAlarms=alarms.filter(a=>a.condition!=='price_level')
+
+                    if(alarms.length===0) return(
+                      <div style={{padding:'24px 12px',textAlign:'center'}}>
+                        <div style={{fontSize:28,marginBottom:8}}>🔕</div>
+                        <div style={{fontFamily:MONO,fontSize:11,color:'#4a6a80',lineHeight:1.7}}>
+                          Sin alertas configuradas.<br/>
+                          Pulsa <b style={{color:'#00d4ff'}}>+</b> para crear una nueva.
                         </div>
-                        <button onClick={()=>ackAlarm(r.w.symbol,r.a.id)} title="Reconocer"
-                          style={{background:'rgba(0,229,160,0.08)',border:'1px solid #00e5a045',color:'#00e5a0',fontFamily:MONO,fontSize:9,padding:'3px 6px',borderRadius:3,cursor:'pointer',flexShrink:0}}>
-                          ACK
-                        </button>
                       </div>
                     )
-
-                    const noActivity = priceAlerts.length===0 && triggeredRows.length===0 && ackedRows.length===0
 
                     return(
                       <div>
                         {/* ── Alertas de precio ── */}
                         {priceAlerts.length>0&&(
                           <div>
-                            <SectionHeader color="#ffd166" label="🎯 Alertas de precio" count={priceAlerts.length}/>
+                            <SectionHeader color="#ffd166" label="🎯 Precio" count={priceAlerts.length}/>
                             {priceAlerts.map(a=>{
                               const isAbove=a.condition_detail==='price_above'
                               return(
@@ -2637,9 +2601,10 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                     <div style={{fontFamily:MONO,fontSize:12,color:'#e8f4ff',fontWeight:700}}>
                                       {a.symbol} <span style={{color:'#5a7a95',fontWeight:400}}>@</span> <span style={{color:isAbove?'#00e5a0':'#ff4d6d'}}>{a.price_level?.toFixed(2)??'—'}</span>
                                     </div>
-                                    <div style={{fontFamily:MONO,fontSize:10,color:'#5a7a95'}}>{a.name}</div>
                                   </div>
-                                  <button onClick={async()=>{await deleteAlarm(a.id);reloadAlarms()}}
+                                  <button onClick={()=>openEditAlarm(a)} title="Editar"
+                                    style={{background:'transparent',border:'1px solid #1a2d45',color:'#7a9bc0',fontFamily:MONO,fontSize:10,padding:'2px 6px',borderRadius:3,cursor:'pointer',flexShrink:0}}>✎</button>
+                                  <button onClick={async()=>{await deleteAlarm(a.id);reloadAlarms()}} title="Eliminar"
                                     style={{background:'transparent',border:'none',color:'#4a2a2a',fontSize:14,cursor:'pointer',padding:'0 4px',flexShrink:0}}
                                     onMouseOver={e=>e.currentTarget.style.color='#ff4d6d'} onMouseOut={e=>e.currentTarget.style.color='#4a2a2a'}>✕</button>
                                 </div>
@@ -2648,98 +2613,57 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                           </div>
                         )}
 
-                        {/* ── Alertas activas (disparadas) ── */}
-                        {triggeredRows.length>0&&(
-                          <div>
-                            <SectionHeader color="#ff6b6b" label="⚡ Disparadas" count={triggeredRows.length}
-                              right={<button onClick={()=>triggeredRows.forEach(r=>ackAlarm(r.w.symbol,r.a.id))}
-                                style={{fontFamily:MONO,fontSize:9,padding:'1px 6px',border:'1px solid #3a1a20',background:'rgba(255,77,109,0.08)',color:'#ff6b6b',borderRadius:3,cursor:'pointer'}}>
-                                ACK todas</button>}/>
-                            {triggeredRows.map(renderTriggered)}
-                          </div>
-                        )}
-
-                        {/* ── Reconocidas — click Limpiar para ELIMINAR ── */}
-                        {ackedRows.length>0&&(
-                          <div>
-                            <SectionHeader color="#3d5a7a" label="✓ Reconocidas" count={ackedRows.length}
-                              right={
-                                <button onClick={async()=>{
-                                  // Get unique alarm ids from acked rows and delete them
-                                  const uniqueIds=[...new Set(ackedRows.map(r=>r.a.id))]
-                                  for(const id of uniqueIds){ await deleteAlarm(id) }
-                                  reloadAlarms()
-                                  // Clear acked state for these
-                                  setAckedAlarms(prev=>{
-                                    const next=new Set(prev)
-                                    ackedRows.forEach(r=>next.delete(r.ackKey))
-                                    return next
-                                  })
-                                }}
-                                style={{fontFamily:MONO,fontSize:9,padding:'1px 6px',border:'1px solid #3a1a20',background:'rgba(255,77,109,0.06)',color:'#ff6060',borderRadius:3,cursor:'pointer'}}>
-                                🗑 Eliminar</button>
-                              }/>
-                            {/* Group by alarm to avoid N×symbols rows */}
-                            {[...new Map(ackedRows.map(r=>[r.a.id,r])).values()].map((r,i)=>{
-                              const syms=ackedRows.filter(x=>x.a.id===r.a.id).map(x=>x.w.symbol)
-                              return(
-                              <div key={r.a.id+i} style={{padding:'7px 10px',borderBottom:'1px solid rgba(20,40,65,0.5)',display:'flex',alignItems:'center',gap:8,opacity:0.35}}>
-                                <span style={{width:8,height:8,borderRadius:'50%',flexShrink:0,background:'#2a3f55'}}/>
-                                <div style={{flex:1,minWidth:0}}>
-                                  <span style={{fontFamily:MONO,fontSize:11,color:'#4a6a80',fontWeight:600}}>{r.a.name}</span>
-                                  {syms.length>1
-                                    ? <span style={{fontFamily:MONO,fontSize:10,color:'#3d5a7a',marginLeft:5}}>{syms.length} símbolos</span>
-                                    : <span style={{fontFamily:MONO,fontSize:10,color:'#3d5a7a',marginLeft:5}}>{syms[0]}</span>
-                                  }
-                                </div>
-                                <button onClick={async()=>{
-                                    await deleteAlarm(r.a.id); reloadAlarms()
-                                    const keysToRemove=ackedRows.filter(x=>x.a.id===r.a.id).map(x=>x.ackKey)
-                                    setAckedAlarms(prev=>{const next=new Set(prev);keysToRemove.forEach(k=>next.delete(k));return next})
-                                  }}
-                                  title="Eliminar esta alerta"
-                                  style={{background:'transparent',border:'none',color:'#3a1a20',fontSize:13,cursor:'pointer',padding:'0 3px'}}
-                                  onMouseOver={e=>e.currentTarget.style.color='#ff4d6d'}
-                                  onMouseOut={e=>e.currentTarget.style.color='#3a1a20'}>✕</button>
-                              </div>
-                            )})}
-                          </div>
-                        )}
-
-                        {/* ── Estado vacío ── */}
-                        {noActivity&&(
-                          <div style={{padding:'24px 12px',textAlign:'center'}}>
-                            <div style={{fontSize:28,marginBottom:8}}>🔕</div>
-                            <div style={{fontFamily:MONO,fontSize:11,color:'#4a6a80',lineHeight:1.7}}>
-                              Sin alertas activas.<br/>
-                              Pulsa <b style={{color:'#00d4ff'}}>+</b> para crear una nueva.
-                            </div>
-                          </div>
-                        )}
-
-                        {/* ── Gestión: lista de condiciones/alertas configuradas ── */}
+                        {/* ── Alertas técnicas — una fila por alerta, estado inline ── */}
                         {condAlarms.length>0&&(
-                          <div style={{marginTop:4}}>
-                            <SectionHeader color="#5a7a95" label="⚙ Configuradas" count={condAlarms.length}/>
+                          <div>
+                            <SectionHeader color="#00d4ff" label="⚡ Técnicas" count={condAlarms.length}/>
                             {condAlarms.map((a,ai)=>{
                               const col=COLORS[ai%COLORS.length]
-                              const activeCount=watchlist.filter(w=>alarmStatus[w.symbol]?.[a.id]?.active===true).length
+                              const sym=a.symbol||''
+                              const st=alarmStatus[sym]?.[a.id]
+                              const active=st?.active===true
+                              const bars=st?.bars
+                              const ackKey=`${sym}::${a.id}`
+                              const isAcked=ackedAlarms.has(ackKey)
+                              const shouldBlink=active&&!isAcked&&bars!=null&&bars<=blinkN
+                              // dot color: active+unacked=col blinking, active+acked=col static, inactive=grey
+                              const dotCol=active?col:'#2a3f55'
                               return(
-                                <div key={a.id} style={{padding:'7px 10px',borderBottom:'1px solid rgba(20,40,65,0.5)',display:'flex',alignItems:'center',gap:8}}>
-                                  <span style={{width:8,height:8,borderRadius:'50%',flexShrink:0,
-                                    background:activeCount>0?col:'#2a3f55',
-                                    boxShadow:activeCount>0?`0 0 5px ${col}`:undefined}}/>
+                                <div key={a.id} style={{padding:'8px 10px',borderBottom:'1px solid rgba(20,40,65,0.6)',
+                                  display:'flex',alignItems:'center',gap:8,
+                                  background:active&&!isAcked?'rgba(0,229,160,0.03)':'transparent'}}>
+                                  <span style={{width:9,height:9,borderRadius:'50%',flexShrink:0,
+                                    background:dotCol,
+                                    boxShadow:active?`0 0 6px ${col}`:undefined,
+                                    animation:shouldBlink?'alarmPulse 1s ease-in-out infinite':undefined}}/>
                                   <div style={{flex:1,minWidth:0}}>
-                                    <div style={{fontFamily:MONO,fontSize:11,color:'#cce0f5',fontWeight:600}}>{a.name}</div>
-                                    <div style={{fontFamily:MONO,fontSize:10,color:'#4a6a80'}}>
+                                    <div style={{display:'flex',alignItems:'baseline',gap:5}}>
+                                      <span style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:active?col:'#cce0f5'}}>{sym}</span>
+                                      <span style={{fontFamily:MONO,fontSize:10,color:'#5a7a95',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.name}</span>
+                                    </div>
+                                    <div style={{fontFamily:MONO,fontSize:10,color:'#4a6a80',marginTop:1}}>
                                       {COND_LABELS[a.condition]||a.condition}
-                                      {activeCount>0&&<span style={{color:col}}> · {activeCount} activos</span>}
+                                      {active&&bars!=null&&<span style={{color:isAcked?'#4a6a80':col}}> · {bars}v</span>}
+                                      {!active&&<span style={{color:'#3d5a7a'}}> · inactiva</span>}
+                                      {active&&isAcked&&<span style={{color:'#3d5a7a'}}> · vista</span>}
                                     </div>
                                   </div>
-                                  <button onClick={()=>openEditAlarm(a)}
-                                    style={{background:'transparent',border:'1px solid #1a2d45',color:'#7a9bc0',fontFamily:MONO,fontSize:10,padding:'2px 6px',borderRadius:3,cursor:'pointer'}}>✎</button>
-                                  <button onClick={async()=>{await removeAlarm(a.id)}}
-                                    style={{background:'transparent',border:'none',color:'#3a1a20',fontSize:13,cursor:'pointer',padding:'0 2px'}}
+                                  {active&&!isAcked&&(
+                                    <button onClick={()=>ackAlarm(sym,a.id)} title="Marcar como vista"
+                                      style={{background:'rgba(0,229,160,0.08)',border:'1px solid #00e5a045',color:'#00e5a0',fontFamily:MONO,fontSize:9,padding:'3px 6px',borderRadius:3,cursor:'pointer',flexShrink:0}}>
+                                      ACK
+                                    </button>
+                                  )}
+                                  {(active&&isAcked)&&(
+                                    <button onClick={()=>unackAlarm(sym,a.id)} title="Desmarcar"
+                                      style={{background:'transparent',border:'1px solid #2a3f55',color:'#3d5a7a',fontFamily:MONO,fontSize:9,padding:'3px 6px',borderRadius:3,cursor:'pointer',flexShrink:0}}>
+                                      ✓
+                                    </button>
+                                  )}
+                                  <button onClick={()=>openEditAlarm(a)} title="Editar"
+                                    style={{background:'transparent',border:'1px solid #1a2d45',color:'#7a9bc0',fontFamily:MONO,fontSize:10,padding:'2px 6px',borderRadius:3,cursor:'pointer',flexShrink:0}}>✎</button>
+                                  <button onClick={async()=>{await removeAlarm(a.id)}} title="Eliminar"
+                                    style={{background:'transparent',border:'none',color:'#3a1a20',fontSize:13,cursor:'pointer',padding:'0 2px',flexShrink:0}}
                                     onMouseOver={e=>e.currentTarget.style.color='#ff4d6d'} onMouseOut={e=>e.currentTarget.style.color='#3a1a20'}>✕</button>
                                 </div>
                               )
