@@ -2000,7 +2000,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.04</title>
+        <title>Trading Simulator V5.05</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2071,7 +2071,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.04
+            <span className="dot"/>Trading Simulator V5.05
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -2594,7 +2594,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                             <SectionHeader color="#ffd166" label="🎯 Alertas de precio" count={priceAlerts.length}/>
                             {priceAlerts.map(a=>{
                               const isAbove=a.condition_detail==='price_above'
-                              const openChart=()=>{if(a.symbol){setSimbolo(a.symbol);setSidePanel('watchlist')}}
+                              const openChart=()=>{if(a.symbol)setSimbolo(a.symbol)}
                               return(
                                 <div key={a.id} style={{padding:'8px 10px',borderBottom:'1px solid rgba(20,40,65,0.7)',display:'flex',alignItems:'center',gap:8}}>
                                   <span style={{fontSize:14,color:isAbove?'#00e5a0':'#ff4d6d',flexShrink:0,lineHeight:1}}>{isAbove?'▲':'▼'}</span>
@@ -2628,7 +2628,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                               const isAcked=ackedAlarms.has(ackKey)
                               const shouldBlink=active&&!isAcked&&bars!=null&&bars<=blinkN
                               const dotCol=active?col:'#2a3f55'
-                              const openChart=()=>{if(sym){setSimbolo(sym);setSidePanel('watchlist')}}
+                              const openChart=()=>{if(sym)setSimbolo(sym)}
                               return(
                                 <div key={a.id} style={{padding:'8px 10px',borderBottom:'1px solid rgba(20,40,65,0.6)',
                                   display:'flex',alignItems:'center',gap:8,
@@ -3210,6 +3210,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       syncRef={chartSyncRef}
                       chartHeight={candleH}
                       priceAlarms={alarms.filter(a=>a.condition==='price_level'&&(a.symbol||'').toUpperCase()===(simbolo||'').toUpperCase())}
+                      tlOpenTrades={tlTrades.filter(t=>t.status==='open'&&(t.symbol||'').toUpperCase()===(simbolo||'').toUpperCase())}
                     />
                     {/* Drag handle — resize candle chart */}
                     <div onMouseDown={e=>{candleResizing.current=true;candleStartY.current=e.clientY;candleStartH.current=candleH;document.body.style.cursor='row-resize';document.body.style.userSelect='none'}}

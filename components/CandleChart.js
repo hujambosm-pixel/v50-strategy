@@ -1,7 +1,7 @@
 import { useRef, useEffect } from 'react'
 import { MONO, f2, fmtDate } from '../lib/utils'
 
-export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, syncRef, savedRangeRef, chartHeight=480, priceAlarms=[] }) {
+export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, syncRef, savedRangeRef, chartHeight=480, priceAlarms=[], tlOpenTrades=[] }) {
   const containerRef=useRef(null), svgRef=useRef(null), legendRef=useRef(null), tooltipRef=useRef(null)
   const chartRef=useRef(null), candlesRef=useRef(null)
   const chartAliveRef=useRef(true)
@@ -72,14 +72,17 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       if(marks.length) candles.setMarkers(marks)
 
       // ── Línea amarilla de entrada para posiciones abiertas (Tradelog) ──
-      trades.filter(t=>t.entryDate&&!t.exitDate&&t.entryPx).forEach(t=>{
+      // tlOpenTrades usa campos de Supabase: entry_price, entry_date (distinto al backtest)
+      tlOpenTrades.forEach(t=>{
+        const px=parseFloat(t.entry_price)
+        if(!px||isNaN(px)) return
         candles.createPriceLine({
-          price: Number(t.entryPx),
+          price: px,
           color: '#ffd166',
           lineWidth: 2,
           lineStyle: 0, // Solid
           axisLabelVisible: true,
-          title: `● ${t.entryPx?.toFixed?.(2)??''}`,
+          title: `● ${px.toFixed(2)}`,
         })
       })
 
