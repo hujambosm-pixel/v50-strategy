@@ -1998,7 +1998,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.95</title>
+        <title>Trading Simulator V4.96</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2061,7 +2061,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.95
+            <span className="dot"/>Trading Simulator V4.96
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -2416,8 +2416,9 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                           const CTYPE_LABELS={ema_cross_up:'Cruce alcista EMA',ema_cross_down:'Cruce bajista EMA',price_above_ema:'Precio > EMA',price_below_ema:'Precio < EMA',price_above_ma:'Precio > Media',price_below_ma:'Precio < Media',rsi_above:'RSI sobre nivel',rsi_below:'RSI bajo nivel',rsi_cross_up:'RSI cruza ↑',rsi_cross_down:'RSI cruza ↓',macd_cross_up:'MACD ↑',macd_cross_down:'MACD ↓'}
                           return visibleConds.map((c,ci)=>{
                             const st=symSt?.[c.id]
-                            // Show dot even without status data (grey = not evaluated yet)
                             const active=st?.active===true
+                            // Solo mostrar el círculo si la condición está activa
+                            if(!active) return null
                             const bars=st?.bars
                             const col=COND_COLORS[ci%COND_COLORS.length]
                             const label=bars!=null?String(bars):'·'

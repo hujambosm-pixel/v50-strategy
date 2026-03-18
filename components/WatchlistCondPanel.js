@@ -126,8 +126,8 @@ export default function WatchlistCondPanel({ conditions, condDotIds, onCondDotId
         <span style={{fontFamily:MONO,fontSize:8,color:'var(--text3)'}}>{open?'▲':'▼'}</span>
       </div>
 
-      {/* ── Pills (siempre visibles si hay condiciones) ── */}
-      {conditions.length>0&&!editing&&(
+      {/* ── Pills (visibles solo cuando expandido) ── */}
+      {open&&conditions.length>0&&!editing&&(
         <div style={{display:'flex',flexWrap:'wrap',gap:4,padding:'0 8px 6px',alignItems:'center'}}>
           {conditions.map((c,i)=>{
             const sel = condDotIds.includes(c.id)
