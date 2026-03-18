@@ -80,9 +80,9 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
           price: px,
           color: '#ffd166',
           lineWidth: 2,
-          lineStyle: 0, // Solid
-          axisLabelVisible: true,
-          title: `● ${px.toFixed(2)}`,
+          lineStyle: 0,
+          axisLabelVisible: false,
+          title: '',
         })
       })
 
@@ -95,8 +95,8 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
           color: isAbove ? '#00e5a0' : '#ff4d6d',
           lineWidth: 2,
           lineStyle: 0, // Solid
-          axisLabelVisible: true,
-          title: `${isAbove?'▲':'▼'} ${alarm.symbol||''}`,
+          axisLabelVisible: false,
+          title: '',
         })
       })
 
