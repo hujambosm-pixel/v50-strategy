@@ -1999,7 +1999,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.99</title>
+        <title>Trading Simulator V5.00</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2062,7 +2062,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.99
+            <span className="dot"/>Trading Simulator V5.00
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4062,36 +4062,6 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                       {t.symbol}
                                     </span>
                                     {t.has_fills&&<span style={{fontSize:8,color:'#5a8aaa',flexShrink:0}}>fills</span>}
-                                    {(()=>{
-                                      const sett=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')}catch(_){return {}}})()
-                                      const tlCondIds=sett?.tradelog?.condDotIds
-                                      const allLibConds=lsGetConds()
-                                      const visConds=Array.isArray(tlCondIds)&&tlCondIds.length>0?allLibConds.filter(c=>tlCondIds.includes(c.id)):[]
-                                      if(!visConds.length) return null
-                                      const COND_COLORS=['#00e5a0','#ffd166','#00d4ff','#ff7eb3','#9b72ff','#ff4d6d']
-                                      const blinkN=sett?.alarmas?.blinkCandles??3
-                                      return visConds.map((c,ci)=>{
-                                        const st=alarmStatus[t.symbol]?.[c.id]
-                                        const active=st?.active===true
-                                        const bars=st?.bars
-                                        const col2=COND_COLORS[ci%COND_COLORS.length]
-                                        const shouldBlink=active&&bars!=null&&bars<=blinkN
-                                        return(
-                                          <span key={c.id} title={c.name+(active?' ✓ '+(bars!=null?bars+'v':''):' —')}
-                                            style={{display:'inline-flex',alignItems:'center',justifyContent:'center',
-                                              width:13,height:13,borderRadius:'50%',flexShrink:0,
-                                              background:active?col2:'rgba(42,63,85,0.5)',
-                                              border:'1px solid '+(active?col2:'#2a3f55'),
-                                              color:active?'#080c14':'#3d5a7a',
-                                              fontFamily:MONO,fontSize:5,fontWeight:800,lineHeight:1,letterSpacing:'-0.5px',
-                                              boxShadow:active?'0 0 5px '+col2+'55':undefined,
-                                              cursor:'default',
-                                              animation:shouldBlink?'alarmPulse 1s ease-in-out infinite':undefined}}>
-                                            {active&&bars!=null?String(bars):''}
-                                          </span>
-                                        )
-                                      })
-                                    })()}
                                   </div>
                                 </td>
                                 <td style={{padding:'6px 4px',maxWidth:90,overflow:'hidden'}}>
