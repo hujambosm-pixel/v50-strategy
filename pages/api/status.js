@@ -229,6 +229,8 @@ export default async function handler(req, res) {
           if (!closes) { result[sym] = null; return }
           const symResult = {}
           alarms.forEach(a => {
+            // If alarm is symbol-specific, only evaluate for its own symbol
+            if (a.symbol && a.symbol.toUpperCase() !== sym.toUpperCase()) return
             symResult[a.id] = evalConditionFull(a, closes)
           })
           result[sym] = symResult

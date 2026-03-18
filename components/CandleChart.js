@@ -1,7 +1,7 @@
 import { useRef, useEffect } from 'react'
 import { MONO, f2, fmtDate } from '../lib/utils'
 
-export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, syncRef, savedRangeRef, chartHeight=480 }) {
+export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, syncRef, savedRangeRef, chartHeight=480, priceAlarms=[] }) {
   const containerRef=useRef(null), svgRef=useRef(null), legendRef=useRef(null), tooltipRef=useRef(null)
   const chartRef=useRef(null), candlesRef=useRef(null)
   const chartAliveRef=useRef(true)
@@ -70,6 +70,20 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
           marks.push({time:c.date,position:'aboveBar',color:'#ff4d6d',shape:'circle',size:1,text:'↘'})
       }
       if(marks.length) candles.setMarkers(marks)
+
+      // ── Líneas de alertas de precio ──
+      priceAlarms.forEach(alarm=>{
+        if(!alarm.price_level) return
+        const isAbove = alarm.condition_detail==='price_above'
+        candles.createPriceLine({
+          price: Number(alarm.price_level),
+          color: isAbove ? '#ffd166' : '#ff7eb3',
+          lineWidth: 1,
+          lineStyle: 2, // LineStyle.Dashed
+          axisLabelVisible: true,
+          title: `⚠ ${alarm.symbol||''}`,
+        })
+      })
 
       const ohlcMap={},erMap={},elMap={}
       data.forEach(d=>{ohlcMap[d.date]=d;if(d.emaR!=null)erMap[d.date]=d.emaR;if(d.emaL!=null)elMap[d.date]=d.emaL})

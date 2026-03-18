@@ -973,8 +973,9 @@ export default function Home() {
 
   // Para cada símbolo de la watchlist, evalúa todas las alarmas globales
   // Count of triggered alarms across all watchlist symbols (for tab badge)
-  const alarmActiveCount = Object.values(alarmStatus||{}).reduce((tot,sym)=>
-    tot+Object.values(sym||{}).filter(v=>v?.active===true).length, 0)
+  const alarmActiveCount = (alarms||[]).filter(a=>
+    a.symbol && alarmStatus[a.symbol]?.[a.id]?.active===true
+  ).length
 
   const refreshAlarmStatus=useCallback(async(wl,al)=>{
     const wlList=wl||watchlist
@@ -998,7 +999,7 @@ export default function Home() {
       // Avoid duplicates: real alarms take priority
       const realAlarmIds = new Set(alarmList.map(a=>a.id))
       const extraConds = pseudoAlarms.filter(p=>!realAlarmIds.has(p.id))
-      const allEvalAlarms = [...alarmList.map(a=>({id:a.id,condition:a.condition,ema_r:a.ema_r,ema_l:a.ema_l,params:a.params})), ...extraConds]
+      const allEvalAlarms = [...alarmList.map(a=>({id:a.id,symbol:a.symbol,condition:a.condition,ema_r:a.ema_r,ema_l:a.ema_l,params:a.params})), ...extraConds]
 
       const res=await fetch('/api/status',{
         method:'POST',
@@ -1999,7 +2000,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.00</title>
+        <title>Trading Simulator V5.01</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2048,6 +2049,14 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
           0%,100% { opacity:1; box-shadow:var(--bc) 0 0 7px; }
           50% { opacity:0.25; box-shadow:none; }
         }
+        @keyframes bellSwing {
+          0%,100%{transform:rotate(0deg)}
+          15%{transform:rotate(15deg)}
+          30%{transform:rotate(-12deg)}
+          45%{transform:rotate(8deg)}
+          60%{transform:rotate(-5deg)}
+          75%{transform:rotate(3deg)}
+        }
           /* ── Alarm badge numbers ── */
           .alarm-badge { font-size:11px !important; color:#f5fbff !important; font-weight:700; }
           /* ── Equity section ── */
@@ -2062,7 +2071,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.00
+            <span className="dot"/>Trading Simulator V5.01
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -2142,7 +2151,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
           >
             {[
               {id:'config',     icon:'⚙', label:'Estrategias'},
-              {id:'alarms',     icon:'🔔',label:'Alertas',   badge:alarmActiveCount},
+              {id:'alarms',     icon:'🔔',label:'Alertas',   hasAlerts:alarmActiveCount>0, alertCount:alarmActiveCount},
               {id:'watchlist',  icon:'📋',label:'Watchlist'},
               {id:'multi',      icon:'📊',label:'Backtesting'},
               {id:'tradelog',   icon:'📒',label:'TradeLog',  accent:'#9b72ff'},
@@ -2157,14 +2166,14 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   fontFamily:MONO,fontSize:20,cursor:'pointer',whiteSpace:'nowrap',textAlign:'left',
                   transition:'background 0.12s,color 0.12s',position:'relative'}}
               >
-                <span style={{fontSize:20,flexShrink:0,width:24,textAlign:'center'}}>{item.icon}</span>
+                <span title={item.hasAlerts?`${item.alertCount} alerta${item.alertCount!==1?'s':''} activa${item.alertCount!==1?'s':''}`:undefined}
+                  style={{fontSize:20,flexShrink:0,width:24,textAlign:'center',
+                    display:'inline-block',
+                    animation:item.hasAlerts?'bellSwing 1.2s ease-in-out infinite':undefined,
+                    transformOrigin:'top center'}}>{item.icon}</span>
                 <span style={{fontSize:11,letterSpacing:'0.06em',textTransform:'uppercase',opacity:navExpanded?1:0,transition:'opacity 0.1s'}}>
                   {item.label}
                 </span>
-                {item.badge>0&&<span style={{position:'absolute',top:4,left:navExpanded?undefined:24,right:navExpanded?10:undefined,
-                  minWidth:14,height:14,borderRadius:7,background:'#ff4d6d',color:'#fff',fontSize:8,fontWeight:700,
-                  display:'flex',alignItems:'center',justifyContent:'center',padding:'0 3px',
-                  animation:'pulse 1.4s ease-in-out infinite'}}>{item.badge}</span>}
               </button>
             ))}
           </nav>
@@ -3275,6 +3284,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       savedRangeRef={savedRangeRef}
                       syncRef={chartSyncRef}
                       chartHeight={candleH}
+                      priceAlarms={alarms.filter(a=>a.condition==='price_level'&&(a.symbol||'').toUpperCase()===(simbolo||'').toUpperCase())}
                     />
                     {/* Drag handle — resize candle chart */}
                     <div onMouseDown={e=>{candleResizing.current=true;candleStartY.current=e.clientY;candleStartH.current=candleH;document.body.style.cursor='row-resize';document.body.style.userSelect='none'}}
@@ -4946,81 +4956,110 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 </div>
               )}
 
-              {/* Tipo de condición técnica (cuando no es precio y no hay condición de librería vinculada) */}
+              {/* Constructor visual SI [indicador] [operación] [parámetros] */}
               {alarmForm.condition!=='price_level'&&!linkedCond&&(
-                <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>
-                  <span style={{fontSize:10}}>Tipo de condición</span>
-                  <select value={alarmForm.condition||'ema_cross_up'} onChange={e=>setAlarmForm(p=>({...p,condition:e.target.value,params:{}}))}
-                    style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'7px 10px',borderRadius:4}}>
-                    <optgroup label="EMA">
-                      <option value="ema_cross_up">↑ Cruce alcista EMA</option>
-                      <option value="ema_cross_down">↓ Cruce bajista EMA</option>
-                      <option value="price_above_ema">Precio &gt; EMA</option>
-                      <option value="price_below_ema">Precio &lt; EMA</option>
-                    </optgroup>
-                    <optgroup label="RSI">
-                      <option value="rsi_cross_up">RSI cruza ↑ nivel</option>
-                      <option value="rsi_cross_down">RSI cruza ↓ nivel</option>
-                      <option value="rsi_above">RSI sobre nivel</option>
-                      <option value="rsi_below">RSI bajo nivel</option>
-                    </optgroup>
-                    <optgroup label="MACD">
-                      <option value="macd_cross_up">MACD cruza señal ↑</option>
-                      <option value="macd_cross_down">MACD cruza señal ↓</option>
-                    </optgroup>
-                    <optgroup label="Media móvil">
-                      <option value="price_above_ma">Precio &gt; Media móvil</option>
-                      <option value="price_below_ma">Precio &lt; Media móvil</option>
-                    </optgroup>
-                  </select>
-                </label>
-              )}
-
-              {/* Parámetros según tipo */}
-              {(isEMAType)&&(
-                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-                  <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>EMA Rápida
-                    <input type="number" value={alarmForm.ema_r||10} min={1} disabled={!!linkedCond}
-                      onChange={e=>setAlarmForm(p=>({...p,ema_r:Number(e.target.value)}))}
-                      style={{background:'var(--bg3)',border:'1px solid rgba(255,209,102,0.4)',color:'#ffd166',fontFamily:MONO,fontSize:15,padding:'7px 10px',borderRadius:4,fontWeight:700,textAlign:'center',opacity:linkedCond?0.5:1}}/>
-                  </label>
-                  <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>EMA Lenta
-                    <input type="number" value={alarmForm.ema_l||11} min={1} disabled={!!linkedCond}
-                      onChange={e=>setAlarmForm(p=>({...p,ema_l:Number(e.target.value)}))}
-                      style={{background:'var(--bg3)',border:'1px solid rgba(255,77,109,0.4)',color:'#ff4d6d',fontFamily:MONO,fontSize:15,padding:'7px 10px',borderRadius:4,fontWeight:700,textAlign:'center',opacity:linkedCond?0.5:1}}/>
-                  </label>
+                <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                  <span style={{fontSize:10,color:'var(--text3)'}}>Condición</span>
+                  <div style={{display:'flex',flexWrap:'wrap',gap:6,alignItems:'center',
+                    background:'rgba(0,0,0,0.2)',border:'1px solid var(--border)',borderRadius:6,padding:'10px 12px'}}>
+                    <span style={{fontFamily:MONO,fontSize:11,color:'#5a7a95',fontWeight:700}}>SI</span>
+                    {/* Indicador */}
+                    <select value={(()=>{
+                      const c=alarmForm.condition||'ema_cross_up'
+                      if(c.startsWith('ema_cross')||c.startsWith('price_above_ema')||c.startsWith('price_below_ema')) return 'EMA'
+                      if(c.startsWith('price_above_ma')||c.startsWith('price_below_ma')) return 'MA'
+                      if(c.startsWith('rsi_')) return 'RSI'
+                      if(c.startsWith('macd_')) return 'MACD'
+                      return 'EMA'
+                    })()} onChange={e=>{
+                      const ind=e.target.value
+                      const defaults={EMA:'ema_cross_up',MA:'price_above_ma',RSI:'rsi_cross_up',MACD:'macd_cross_up'}
+                      setAlarmForm(p=>({...p,condition:defaults[ind],params:{}}))
+                    }}
+                      style={{background:'rgba(0,212,255,0.1)',border:'1px solid var(--accent)',color:'var(--accent)',
+                        fontFamily:MONO,fontSize:11,padding:'4px 8px',borderRadius:4,cursor:'pointer',fontWeight:700}}>
+                      <option value="EMA">EMA</option>
+                      <option value="MA">Media móvil</option>
+                      <option value="RSI">RSI</option>
+                      <option value="MACD">MACD</option>
+                    </select>
+                    {/* Operación */}
+                    <select value={alarmForm.condition||'ema_cross_up'} onChange={e=>setAlarmForm(p=>({...p,condition:e.target.value,params:{}}))}
+                      style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',
+                        fontFamily:MONO,fontSize:11,padding:'4px 8px',borderRadius:4,cursor:'pointer'}}>
+                      {(()=>{
+                        const c=alarmForm.condition||'ema_cross_up'
+                        if(c.startsWith('ema_cross')||c.startsWith('price_above_ema')||c.startsWith('price_below_ema')) return(<>
+                          <option value="ema_cross_up">cruza al alza</option>
+                          <option value="ema_cross_down">cruza a la baja</option>
+                          <option value="price_above_ema">precio por encima</option>
+                          <option value="price_below_ema">precio por debajo</option>
+                        </>)
+                        if(c.startsWith('price_above_ma')||c.startsWith('price_below_ma')) return(<>
+                          <option value="price_above_ma">precio por encima</option>
+                          <option value="price_below_ma">precio por debajo</option>
+                        </>)
+                        if(c.startsWith('rsi_')) return(<>
+                          <option value="rsi_cross_up">cruza al alza nivel</option>
+                          <option value="rsi_cross_down">cruza a la baja nivel</option>
+                          <option value="rsi_above">por encima de nivel</option>
+                          <option value="rsi_below">por debajo de nivel</option>
+                        </>)
+                        if(c.startsWith('macd_')) return(<>
+                          <option value="macd_cross_up">cruza señal al alza</option>
+                          <option value="macd_cross_down">cruza señal a la baja</option>
+                        </>)
+                      })()}
+                    </select>
+                  </div>
+                  {/* Parámetros inline */}
+                  {(()=>{
+                    const c=alarmForm.condition||'ema_cross_up'
+                    const isEMA=c.startsWith('ema_cross')||c.startsWith('price_above_ema')||c.startsWith('price_below_ema')
+                    const isMA=c.startsWith('price_above_ma')||c.startsWith('price_below_ma')
+                    const isRSI=c.startsWith('rsi_')
+                    const isMACD=c.startsWith('macd_')
+                    const INP={background:'var(--bg3)',border:'1px solid rgba(255,209,102,0.4)',color:'#ffd166',fontFamily:MONO,fontSize:14,padding:'6px 10px',borderRadius:4,fontWeight:700,textAlign:'center',width:72}
+                    if(isEMA) return(
+                      <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                        <span style={{fontFamily:MONO,fontSize:10,color:'#5a7a95'}}>Rápida</span>
+                        <input type="number" value={alarmForm.ema_r||10} min={1} onChange={e=>setAlarmForm(p=>({...p,ema_r:Number(e.target.value)}))} style={INP}/>
+                        <span style={{fontFamily:MONO,fontSize:10,color:'#5a7a95'}}>Lenta</span>
+                        <input type="number" value={alarmForm.ema_l||11} min={1} onChange={e=>setAlarmForm(p=>({...p,ema_l:Number(e.target.value)}))} style={{...INP,border:'1px solid rgba(255,77,109,0.4)',color:'#ff4d6d'}}/>
+                      </div>
+                    )
+                    if(isMA) return(
+                      <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                        <span style={{fontFamily:MONO,fontSize:10,color:'#5a7a95'}}>Período</span>
+                        <input type="number" value={alarmForm.params?.ma_period||50} min={1} onChange={e=>setAlarmForm(p=>({...p,params:{...p.params,ma_period:Number(e.target.value)}}))} style={INP}/>
+                      </div>
+                    )
+                    if(isRSI) return(
+                      <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                        <span style={{fontFamily:MONO,fontSize:10,color:'#5a7a95'}}>Período</span>
+                        <input type="number" value={alarmForm.params?.period||14} min={2} max={50} onChange={e=>setAlarmForm(p=>({...p,params:{...p.params,period:Number(e.target.value)}}))} style={INP}/>
+                        <span style={{fontFamily:MONO,fontSize:10,color:'#5a7a95'}}>Nivel</span>
+                        <input type="number" value={alarmForm.params?.level||30} min={1} max={99} onChange={e=>setAlarmForm(p=>({...p,params:{...p.params,level:Number(e.target.value)}}))} style={{...INP,border:'1px solid rgba(0,212,255,0.4)',color:'#00d4ff'}}/>
+                      </div>
+                    )
+                    if(isMACD) return(
+                      <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                        {[['fast','Rápida',12],['slow','Lenta',26],['signal','Señal',9]].map(([k,l,d])=>(
+                          <div key={k} style={{display:'flex',gap:4,alignItems:'center'}}>
+                            <span style={{fontFamily:MONO,fontSize:10,color:'#5a7a95'}}>{l}</span>
+                            <input type="number" value={alarmForm.params?.[k]||d} min={1} onChange={e=>setAlarmForm(p=>({...p,params:{...p.params,[k]:Number(e.target.value)}}))} style={{...INP,width:56}}/>
+                          </div>
+                        ))}
+                      </div>
+                    )
+                    return null
+                  })()}
                 </div>
               )}
-              {isMAType&&(
-                <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>Período de la media
-                  <input type="number" value={alarmForm.params?.ma_period||alarmForm.ema_r||50} min={1} disabled={!!linkedCond}
-                    onChange={e=>setAlarmForm(p=>({...p,params:{...p.params,ma_period:Number(e.target.value)}}))}
-                    style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'#ffd166',fontFamily:MONO,fontSize:15,padding:'7px 10px',borderRadius:4,fontWeight:700,opacity:linkedCond?0.5:1}}/>
-                </label>
-              )}
-              {isRSI&&(
-                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-                  <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>Período RSI
-                    <input type="number" value={alarmForm.params?.period||14} min={2} max={50} disabled={!!linkedCond}
-                      onChange={e=>setAlarmForm(p=>({...p,params:{...p.params,period:Number(e.target.value)}}))}
-                      style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'#ffd166',fontFamily:MONO,fontSize:15,padding:'7px 10px',borderRadius:4,fontWeight:700,opacity:linkedCond?0.5:1}}/>
-                  </label>
-                  <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>Nivel
-                    <input type="number" value={alarmForm.params?.level||30} min={1} max={99} disabled={!!linkedCond}
-                      onChange={e=>setAlarmForm(p=>({...p,params:{...p.params,level:Number(e.target.value)}}))}
-                      style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'#00d4ff',fontFamily:MONO,fontSize:15,padding:'7px 10px',borderRadius:4,fontWeight:700,opacity:linkedCond?0.5:1}}/>
-                  </label>
-                </div>
-              )}
-              {isMACD&&(
-                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
-                  {[['fast','Rápida',12],['slow','Lenta',26],['signal','Señal',9]].map(([k,l,d])=>(
-                    <label key={k} style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>{l}
-                      <input type="number" value={alarmForm.params?.[k]||d} min={1} disabled={!!linkedCond}
-                        onChange={e=>setAlarmForm(p=>({...p,params:{...p.params,[k]:Number(e.target.value)}}))}
-                        style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'#ffd166',fontFamily:MONO,fontSize:14,padding:'7px 6px',borderRadius:4,fontWeight:700,opacity:linkedCond?0.5:1,textAlign:'center'}}/>
-                    </label>
-                  ))}
+              {/* Params display when library condition is linked */}
+              {alarmForm.condition!=='price_level'&&linkedCond&&(
+                <div style={{background:'rgba(0,212,255,0.06)',border:'1px solid rgba(0,212,255,0.15)',borderRadius:5,padding:'8px 12px',fontSize:11,color:'#00d4ff'}}>
+                  ✓ Usando parámetros de: <b>{linkedCond.name}</b>
                 </div>
               )}
 
