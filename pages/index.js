@@ -1998,7 +1998,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.97</title>
+        <title>Trading Simulator V4.98</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2061,7 +2061,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.97
+            <span className="dot"/>Trading Simulator V4.98
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -2373,11 +2373,13 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                           style={{background:'transparent',border:'1px solid #1a2d45',color:'#5a7a95',fontFamily:MONO,fontSize:9,padding:'2px 5px',borderRadius:3,cursor:'pointer'}}>✕</button>}
                       </div>
                     )
+                    // Símbolos con posición abierta en Tradelog
+                    const openSymbols=new Set(tlTrades.filter(t=>t.status==='open').map(t=>(t.symbol||'').toUpperCase()))
                     return (<>{countBadge}{all.map(w=>(
                       <div key={w.id||w.symbol}
                         style={{padding:'6px 10px',display:'flex',alignItems:'center',gap:6,borderBottom:'1px solid var(--border)',
                           background:simbolo===w.symbol?'rgba(0,212,255,0.07)':'transparent',
-                          borderLeft:`2px solid ${fCondId&&alarmStatus[w.symbol]?.[fCondId]?.active===true?'#00e5a0':'transparent'}`,
+                          borderLeft:`3px solid ${openSymbols.has((w.symbol||'').toUpperCase())?'#ffd166':fCondId&&alarmStatus[w.symbol]?.[fCondId]?.active===true?'#00e5a0':'transparent'}`,
                           transition:'border-color 0.2s'}}
                         onMouseOver={e=>e.currentTarget.style.background='rgba(255,255,255,0.03)'}
                         onMouseOut={e=>e.currentTarget.style.background=simbolo===w.symbol?'rgba(0,212,255,0.07)':'transparent'}>
