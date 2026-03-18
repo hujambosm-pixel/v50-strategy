@@ -18,6 +18,7 @@ import MetricRow from '../components/MetricRow'
 import PriceAlarmQuickForm from '../components/PriceAlarmQuickForm'
 import StrategiesManager from '../components/StrategiesManager'
 import StrategyEditorPanel from '../components/StrategyEditorPanel'
+import WatchlistCondPanel from '../components/WatchlistCondPanel'
 
 
 // ── Date helpers for TradeLog (dd/mm/yyyy ↔ yyyy-mm-dd) ──
@@ -258,6 +259,8 @@ export default function Home() {
   const [conditions,setConditions]=useState([])
   const [condLoading,setCondLoading]=useState(false)
   const [panelScale,setPanelScale]=useState(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.ui?.panelScale||{}}catch{return{}}})
+  const [wlCondDotIds,setWlCondDotIdsState]=useState(()=>{try{const s=JSON.parse(localStorage.getItem('v50_settings')||'{}');const ids=s?.watchlist?.condDotIds;return Array.isArray(ids)?ids:[]}catch{return[]}})
+  const updateWlCondDotIds=useCallback((ids)=>{setWlCondDotIdsState(ids);try{const s=JSON.parse(localStorage.getItem('v50_settings')||'{}');if(!s.watchlist)s.watchlist={};s.watchlist.condDotIds=ids;localStorage.setItem('v50_settings',JSON.stringify(s))}catch{}},[])
   const [selectedCondition,setSelectedCondition]=useState(null)
   const [selectedStrategy,setSelectedStrategy]=useState(null)
   const [editingAlarm,setEditingAlarm]=useState(null)
@@ -1995,7 +1998,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.94</title>
+        <title>Trading Simulator V4.95</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2058,7 +2061,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.94
+            <span className="dot"/>Trading Simulator V4.95
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -2318,6 +2321,14 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 </div>
 
 
+                {/* ── Círculos de condiciones del watchlist ── */}
+                <WatchlistCondPanel
+                  conditions={conditions}
+                  condDotIds={wlCondDotIds}
+                  onCondDotIdsChange={updateWlCondDotIds}
+                  onReload={reloadConditions}
+                />
+
                 {/* ── Lista de activos ── */}
                 <div style={{overflowY:'auto',flex:1}}>
                   {wlLoading&&<div style={{padding:'10px 12px',fontFamily:MONO,fontSize:12,color:'#a8ccdf'}}>⟳ Cargando…</div>}
@@ -2395,11 +2406,9 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         </div>
                         {/* Badges condiciones librería — círculos de color con velas */}
                         {(()=>{
-                          const allLibConds = lsGetConds()
-                          if(!allLibConds.length) return null
-                          // condDotIds seleccionados en Settings; si vacío → mostrar todos
-                          const condDotIds=(()=>{try{const s=JSON.parse(localStorage.getItem('v50_settings')||'{}');const ids=s?.watchlist?.condDotIds;return Array.isArray(ids)&&ids.length>0?ids:null}catch(_){return null}})()
-                          const visibleConds = condDotIds ? allLibConds.filter(c=>condDotIds.includes(c.id)) : allLibConds
+                          if(!conditions.length) return null
+                          // wlCondDotIds desde estado React (se actualiza al hacer toggle en WatchlistCondPanel)
+                          const visibleConds = wlCondDotIds.length>0 ? conditions.filter(c=>wlCondDotIds.includes(c.id)) : conditions
                           if(!visibleConds.length) return null
                           const symSt=alarmStatus[w.symbol]
                           const COND_COLORS=['#00e5a0','#ffd166','#00d4ff','#ff7eb3','#9b72ff','#ff4d6d']

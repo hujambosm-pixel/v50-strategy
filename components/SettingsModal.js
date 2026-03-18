@@ -663,61 +663,6 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                 </label>
               ))}
 
-              {sep('Condiciones visibles como puntos en la Watchlist')}
-              <div style={{fontSize:10,color:'#5a7a95',lineHeight:1.6,marginBottom:10}}>
-                Selecciona qué condiciones se muestran como círculos de color en cada activo.
-                Se evalúan en tiempo real — el número dentro indica las velas desde que se activó.
-              </div>
-              {(()=>{
-                const libConds = lsGetConds()
-                const condDotIds = settings?.watchlist?.condDotIds || []
-                const COND_COLORS=['#00e5a0','#ffd166','#00d4ff','#ff7eb3','#9b72ff','#ff4d6d']
-                if(libConds.length===0) return(
-                  <div style={{fontFamily:MONO,fontSize:11,color:'#4a6a80',padding:'8px 10px',
-                    background:'rgba(0,0,0,0.15)',borderRadius:4,border:'1px dashed #1e3a52',lineHeight:1.6}}>
-                    No hay condiciones en la librería.<br/>
-                    Créalas en <b style={{color:'#00d4ff'}}>⚡ Condiciones</b>.
-                  </div>
-                )
-                return(
-                  <div>
-                    <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:8}}>
-                      {libConds.map((c,i)=>{
-                        const sel=condDotIds.includes(c.id)
-                        const col=COND_COLORS[i%COND_COLORS.length]
-                        return(
-                          <div key={c.id} onClick={()=>{
-                              const next=sel?condDotIds.filter(x=>x!==c.id):[...condDotIds,c.id]
-                              upd('watchlist.condDotIds',next)
-                            }}
-                            style={{display:'flex',alignItems:'center',gap:5,cursor:'pointer',
-                              padding:'4px 9px',borderRadius:12,
-                              border:`1px solid ${sel?col:'#1e3a52'}`,
-                              background:sel?`${col}18`:'rgba(255,255,255,0.02)',
-                              userSelect:'none'}}>
-                            <span style={{width:8,height:8,borderRadius:'50%',flexShrink:0,display:'inline-block',
-                              background:sel?col:'#2a3f55',
-                              boxShadow:sel?`0 0 4px ${col}`:undefined}}/>
-                            <span style={{fontFamily:MONO,fontSize:10,color:sel?col:'#7a9bc0'}}>{c.name}</span>
-                          </div>
-                        )
-                      })}
-                    </div>
-                    <div style={{display:'flex',gap:6}}>
-                      <button onClick={()=>upd('watchlist.condDotIds',libConds.map(c=>c.id))}
-                        style={{flex:1,fontFamily:MONO,fontSize:10,padding:'4px 8px',borderRadius:3,
-                          border:'1px solid #2a4060',background:'rgba(0,212,255,0.06)',color:'#00d4ff',cursor:'pointer'}}>
-                        ✓ Todas
-                      </button>
-                      <button onClick={()=>upd('watchlist.condDotIds',[])}
-                        style={{flex:1,fontFamily:MONO,fontSize:10,padding:'4px 8px',borderRadius:3,
-                          border:'1px solid #3a1a20',background:'rgba(255,77,109,0.06)',color:'#ff4d6d',cursor:'pointer'}}>
-                        ✕ Ninguna
-                      </button>
-                    </div>
-                  </div>
-                )
-              })()}
             </div>
           )}
 
