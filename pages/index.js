@@ -257,6 +257,7 @@ export default function Home() {
   const [alarmLoading,setAlarmLoading]=useState(true)
   const [conditions,setConditions]=useState([])
   const [condLoading,setCondLoading]=useState(false)
+  const [panelScale,setPanelScale]=useState(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.ui?.panelScale||{}}catch{return{}}})
   const [selectedCondition,setSelectedCondition]=useState(null)
   const [selectedStrategy,setSelectedStrategy]=useState(null)
   const [editingAlarm,setEditingAlarm]=useState(null)
@@ -899,6 +900,17 @@ export default function Home() {
   }
   const newStrategy=()=>openEditStr({id:null})
   const duplicateStr=(s)=>openEditStr({...s,id:null,name:s.name+' (copia)'})
+
+  // ── Panel scale (Ctrl+Scroll por panel) ──
+  const handlePanelScaleWheel=useCallback((panel,e)=>{
+    if(!e.ctrlKey)return
+    e.preventDefault()
+    const curr=panelScale[panel]||1
+    const next=Math.min(2.0,Math.max(0.5,Math.round((curr+(e.deltaY<0?0.05:-0.05))*100)/100))
+    const updated={...panelScale,[panel]:next}
+    setPanelScale(updated)
+    try{const s=JSON.parse(localStorage.getItem('v50_settings')||'{}');if(!s.ui)s.ui={};s.ui.panelScale=updated;localStorage.setItem('v50_settings',JSON.stringify(s))}catch{}
+  },[panelScale])
 
   // ── Alertas ──
   const openEditAlarm=(a)=>{
@@ -1983,7 +1995,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V4.93</title>
+        <title>Trading Simulator V4.94</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2046,7 +2058,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V4.93
+            <span className="dot"/>Trading Simulator V4.94
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -2119,9 +2131,10 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
           <nav
             onMouseEnter={()=>setNavExpanded(true)}
             onMouseLeave={()=>setNavExpanded(false)}
-            style={{width:navExpanded?158:42,transition:'width 0.18s ease',display:'flex',flexDirection:'column',
+            onWheel={e=>{if(e.ctrlKey){e.preventDefault();handlePanelScaleWheel('nav',e)}}}
+            style={{width:navExpanded?Math.round(158*(panelScale.nav||1)):Math.round(42*(panelScale.nav||1)),transition:'width 0.18s ease',display:'flex',flexDirection:'column',
               background:'var(--bg2)',borderRight:'1px solid var(--border)',flexShrink:0,overflow:'hidden',
-              zIndex:15,paddingTop:6,paddingBottom:6}}
+              zIndex:15,paddingTop:6,paddingBottom:6,zoom:panelScale.nav||1}}
           >
             {[
               {id:'config',     icon:'⚙', label:'Estrategias'},
@@ -2131,16 +2144,16 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               {id:'tradelog',   icon:'📒',label:'TradeLog',  accent:'#9b72ff'},
             ].map(item=>(
               <button key={item.id}
-                onClick={()=>{setSidePanel(item.id);if(item.id==='conditions')reloadConditions()}}
+                onClick={()=>setSidePanel(item.id)}
                 title={!navExpanded?item.label:undefined}
                 style={{display:'flex',alignItems:'center',gap:10,padding:'9px 11px',width:'100%',
                   background:sidePanel===item.id?'var(--bg3)':'transparent',
                   border:'none',borderLeft:sidePanel===item.id?`2px solid ${item.accent||'var(--accent)'}`:'2px solid transparent',
                   color:sidePanel===item.id?(item.accent||'var(--accent)'):'var(--text3)',
-                  fontFamily:MONO,fontSize:16,cursor:'pointer',whiteSpace:'nowrap',textAlign:'left',
+                  fontFamily:MONO,fontSize:20,cursor:'pointer',whiteSpace:'nowrap',textAlign:'left',
                   transition:'background 0.12s,color 0.12s',position:'relative'}}
               >
-                <span style={{fontSize:16,flexShrink:0,width:20,textAlign:'center'}}>{item.icon}</span>
+                <span style={{fontSize:20,flexShrink:0,width:24,textAlign:'center'}}>{item.icon}</span>
                 <span style={{fontSize:11,letterSpacing:'0.06em',textTransform:'uppercase',opacity:navExpanded?1:0,transition:'opacity 0.1s'}}>
                   {item.label}
                 </span>
@@ -2153,13 +2166,16 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
           </nav>
 
           {/* ── SIDEBAR ── */}
-          <aside className="sidebar" style={{padding:0,gap:0,position:'relative',width:sidebarW,flexShrink:0,flexGrow:0}} onContextMenu={e=>openCtx(e,'sidebar')}>
+          <aside className="sidebar" style={{padding:0,gap:0,position:'relative',width:sidebarW,flexShrink:0,flexGrow:0}} onContextMenu={e=>openCtx(e,'sidebar')}
+            onWheel={e=>{if(e.ctrlKey){e.preventDefault();handlePanelScaleWheel(sidePanel,e)}}}>
             {/* Resize handle — right edge */}
             <div onMouseDown={e=>{sidebarResizing.current=true;sidebarStartX.current=e.clientX;sidebarStartW.current=sidebarW;document.body.style.cursor='col-resize';document.body.style.userSelect='none'}}
               style={{position:'absolute',top:0,right:0,width:4,height:'100%',cursor:'col-resize',zIndex:20,
                 background:'transparent',transition:'background 0.15s'}}
               onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.25)'}
               onMouseOut={e=>e.currentTarget.style.background='transparent'}/>
+            {/* Zoom wrapper — escala el contenido del panel activo con Ctrl+Scroll */}
+            <div style={{zoom:panelScale[sidePanel]||1,display:'flex',flexDirection:'column',flex:1,overflow:'hidden',height:'100%'}}>
 
             {sidePanel==='config'&&(
               <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
@@ -3120,6 +3136,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               )}
             </div>
             )}
+            </div>{/* /zoom wrapper */}
           </aside>
 
           {/* ── CONTENT ── */}
