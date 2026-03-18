@@ -975,6 +975,7 @@ export default function Home() {
   // Count of triggered alarms across all watchlist symbols (for tab badge)
   const alarmActiveCount = (alarms||[]).filter(a=>
     a.symbol && alarmStatus[a.symbol]?.[a.id]?.active===true
+    && !ackedAlarms.has(`${a.symbol}::${a.id}`)
   ).length
 
   const refreshAlarmStatus=useCallback(async(wl,al)=>{
@@ -1436,6 +1437,7 @@ export default function Home() {
     finally { setTlLoading(false) }
   },[tlFilterBroker,tlFilterYear,tlFilterMonth,tlFilterStatus])
 
+  useEffect(()=>{ loadTrades() },[loadTrades])  // carga siempre al inicio para tener tlTrades disponible (líneas en gráfico, etc.)
   useEffect(()=>{ if(sidePanel==='tradelog') loadTrades() },[sidePanel,loadTrades])
 
   const loadFills = useCallback(async(id)=>{
@@ -2000,7 +2002,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.07</title>
+        <title>Trading Simulator V5.08</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2075,7 +2077,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.07
+            <span className="dot"/>Trading Simulator V5.08
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
