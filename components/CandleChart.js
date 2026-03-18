@@ -77,11 +77,11 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         const isAbove = alarm.condition_detail==='price_above'
         candles.createPriceLine({
           price: Number(alarm.price_level),
-          color: isAbove ? '#ffd166' : '#ff7eb3',
-          lineWidth: 1,
-          lineStyle: 2, // LineStyle.Dashed
+          color: isAbove ? '#00e5a0' : '#ff4d6d',
+          lineWidth: 2,
+          lineStyle: 0, // Solid
           axisLabelVisible: true,
-          title: `⚠ ${alarm.symbol||''}`,
+          title: `${isAbove?'▲':'▼'} ${alarm.symbol||''}`,
         })
       })
 
