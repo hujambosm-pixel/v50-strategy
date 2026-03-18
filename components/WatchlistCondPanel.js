@@ -118,7 +118,7 @@ export default function WatchlistCondPanel({ conditions, condDotIds, onCondDotId
       <div style={{display:'flex',alignItems:'center',gap:6,padding:'5px 8px 4px',cursor:'pointer'}}
         onClick={()=>{setOpen(o=>!o);setEditing(null)}}>
         <span style={{fontFamily:MONO,fontSize:8,color:'var(--text3)',letterSpacing:'0.09em',textTransform:'uppercase',flex:1}}>
-          ● Círculos de condiciones
+          ● Notificaciones
         </span>
         <button onClick={openNew} title="Nueva condición"
           style={{background:'rgba(0,212,255,0.1)',border:'1px solid var(--accent)',color:'var(--accent)',
