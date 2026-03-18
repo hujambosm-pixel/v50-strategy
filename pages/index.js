@@ -2000,7 +2000,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.03</title>
+        <title>Trading Simulator V5.04</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2071,7 +2071,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.03
+            <span className="dot"/>Trading Simulator V5.04
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -2591,13 +2591,14 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         {/* ── Alertas de precio ── */}
                         {priceAlerts.length>0&&(
                           <div>
-                            <SectionHeader color="#ffd166" label="🎯 Precio" count={priceAlerts.length}/>
+                            <SectionHeader color="#ffd166" label="🎯 Alertas de precio" count={priceAlerts.length}/>
                             {priceAlerts.map(a=>{
                               const isAbove=a.condition_detail==='price_above'
+                              const openChart=()=>{if(a.symbol){setSimbolo(a.symbol);setSidePanel('watchlist')}}
                               return(
                                 <div key={a.id} style={{padding:'8px 10px',borderBottom:'1px solid rgba(20,40,65,0.7)',display:'flex',alignItems:'center',gap:8}}>
                                   <span style={{fontSize:14,color:isAbove?'#00e5a0':'#ff4d6d',flexShrink:0,lineHeight:1}}>{isAbove?'▲':'▼'}</span>
-                                  <div style={{flex:1,minWidth:0}}>
+                                  <div style={{flex:1,minWidth:0,cursor:'pointer'}} onClick={openChart} title="Ver gráfico">
                                     <div style={{fontFamily:MONO,fontSize:12,color:'#e8f4ff',fontWeight:700}}>
                                       {a.symbol} <span style={{color:'#5a7a95',fontWeight:400}}>@</span> <span style={{color:isAbove?'#00e5a0':'#ff4d6d'}}>{a.price_level?.toFixed(2)??'—'}</span>
                                     </div>
@@ -2616,7 +2617,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         {/* ── Alertas técnicas — una fila por alerta, estado inline ── */}
                         {condAlarms.length>0&&(
                           <div>
-                            <SectionHeader color="#00d4ff" label="⚡ Técnicas" count={condAlarms.length}/>
+                            <SectionHeader color="#00d4ff" label="⚡ Alertas técnicas" count={condAlarms.length}/>
                             {condAlarms.map((a,ai)=>{
                               const col=COLORS[ai%COLORS.length]
                               const sym=a.symbol||''
@@ -2626,8 +2627,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                               const ackKey=`${sym}::${a.id}`
                               const isAcked=ackedAlarms.has(ackKey)
                               const shouldBlink=active&&!isAcked&&bars!=null&&bars<=blinkN
-                              // dot color: active+unacked=col blinking, active+acked=col static, inactive=grey
                               const dotCol=active?col:'#2a3f55'
+                              const openChart=()=>{if(sym){setSimbolo(sym);setSidePanel('watchlist')}}
                               return(
                                 <div key={a.id} style={{padding:'8px 10px',borderBottom:'1px solid rgba(20,40,65,0.6)',
                                   display:'flex',alignItems:'center',gap:8,
@@ -2636,7 +2637,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                     background:dotCol,
                                     boxShadow:active?`0 0 6px ${col}`:undefined,
                                     animation:shouldBlink?'alarmPulse 1s ease-in-out infinite':undefined}}/>
-                                  <div style={{flex:1,minWidth:0}}>
+                                  <div style={{flex:1,minWidth:0,cursor:'pointer'}} onClick={openChart} title="Ver gráfico">
                                     <div style={{display:'flex',alignItems:'baseline',gap:5}}>
                                       <span style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:active?col:'#cce0f5'}}>{sym}</span>
                                       <span style={{fontFamily:MONO,fontSize:10,color:'#5a7a95',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.name}</span>

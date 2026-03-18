@@ -71,6 +71,18 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       }
       if(marks.length) candles.setMarkers(marks)
 
+      // ── Línea amarilla de entrada para posiciones abiertas (Tradelog) ──
+      trades.filter(t=>t.entryDate&&!t.exitDate&&t.entryPx).forEach(t=>{
+        candles.createPriceLine({
+          price: Number(t.entryPx),
+          color: '#ffd166',
+          lineWidth: 2,
+          lineStyle: 0, // Solid
+          axisLabelVisible: true,
+          title: `● ${t.entryPx?.toFixed?.(2)??''}`,
+        })
+      })
+
       // ── Líneas de alertas de precio ──
       priceAlarms.forEach(alarm=>{
         if(!alarm.price_level) return
