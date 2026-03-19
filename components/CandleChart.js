@@ -307,7 +307,8 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         }
       }
       cnt.addEventListener('mousedown',onMouseDown)
-      cnt.addEventListener('mouseup',onMouseUp)
+      // mouseup en window para capturarlo aunque el ratón salga del chart
+      window.addEventListener('mouseup',onMouseUp)
 
       const onMove=e=>{
         const rect=containerRef.current.getBoundingClientRect()
@@ -636,7 +637,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       ro.observe(containerRef.current)
       setTimeout(drawTradeLabels,200)
 
-      return()=>{chartAliveRef.current=false;try{unsubLabels()}catch(_){};cnt.removeEventListener('mousemove',onMove);cnt.removeEventListener('mousedown',onMouseDown);cnt.removeEventListener('mouseup',onMouseUp);window.removeEventListener('keydown',onKeyDown);window.removeEventListener('keyup',onKeyUp);ro.disconnect()}
+      return()=>{chartAliveRef.current=false;try{unsubLabels()}catch(_){};cnt.removeEventListener('mousemove',onMove);cnt.removeEventListener('mousedown',onMouseDown);window.removeEventListener('mouseup',onMouseUp);window.removeEventListener('keydown',onKeyDown);window.removeEventListener('keyup',onKeyUp);ro.disconnect()}
     })
     return()=>{chartAliveRef.current=false;if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null}}
   },[data,emaRPeriod,emaLPeriod,trades,maxDD,labelMode])
