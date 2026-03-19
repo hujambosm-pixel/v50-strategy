@@ -320,7 +320,8 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
           const newPrice=candlesRef.current.coordinateToPrice(py)
           if(newPrice!=null){
             const rounded=Math.round(newPrice*100)/100
-            dragRef.current.lineObj.priceLine.applyOptions({price:rounded})
+            const{lineSeries,firstDate,lastDate}=dragRef.current.lineObj
+            try{lineSeries.setData([{time:firstDate,value:rounded},{time:lastDate,value:rounded}])}catch(_){}
             dragRef.current.lineObj.price=rounded
           }
           return
@@ -654,43 +655,43 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
     if(chartRef.current) try{chartRef.current.applyOptions({height:chartHeight})}catch(_){}
   },[chartHeight])
 
-  // ── Líneas de alertas de precio — efecto separado para no recrear el chart ──
+  // ── Líneas de alertas de precio — addLineSeries para forzar eje a incluir el nivel ──
   useEffect(()=>{
-    const candles=candlesRef.current
-    if(!candles) return
-    // Limpiar timers de parpadeo anteriores
+    const chart=chartRef.current
+    if(!chart||!data?.length) return
+    // Limpiar timers y series anteriores
     priceAlarmTimersRef.current.forEach(id=>clearInterval(id))
     priceAlarmTimersRef.current=[]
-    // Eliminar líneas anteriores
-    priceAlarmLinesRef.current.forEach(({priceLine})=>{try{candles.removePriceLine(priceLine)}catch(_){}})
+    priceAlarmLinesRef.current.forEach(({lineSeries})=>{try{chart.removeSeries(lineSeries)}catch(_){}})
+    const firstDate=data[0]?.date
+    const lastDate=data[data.length-1]?.date
+    if(!firstDate||!lastDate){priceAlarmLinesRef.current=[];return}
     const lastClose=lastCloseRef.current
-    // Crear nuevas
     priceAlarmLinesRef.current=priceAlarms
       .filter(a=>a.price_level)
       .map(alarm=>{
         const isAbove=alarm.condition_detail==='price_above'
         const actualColor=isAbove?'#00e5a0':'#ff4d6d'
         const level=Number(alarm.price_level)
-        // Comprobar si el nivel ha sido tocado
         const triggered=lastClose!=null&&(isAbove?lastClose>=level:lastClose<=level)
         const ackKey=`${alarm.symbol}::${alarm.id}`
         const isAcked=ackedAlarms instanceof Set&&ackedAlarms.has(ackKey)
         const shouldBlink=triggered&&!isAcked
-        const priceLine=candles.createPriceLine({
-          price:level,
-          color:actualColor,
-          lineWidth:2,lineStyle:0,
-          axisLabelVisible:true,title:'',
+        // addLineSeries: la serie forma parte de los datos → el eje siempre incluye el nivel
+        const lineSeries=chart.addLineSeries({
+          color:actualColor,lineWidth:2,
+          lastValueVisible:true,priceLineVisible:false,crosshairMarkerVisible:false,
         })
+        lineSeries.setData([{time:firstDate,value:level},{time:lastDate,value:level}])
         if(shouldBlink){
           let vis=true
           const tid=setInterval(()=>{
-            try{priceLine.applyOptions({color:vis?actualColor:'rgba(255,255,255,0)'})}catch(_){}
+            try{lineSeries.applyOptions({color:vis?actualColor:'rgba(0,0,0,0)'})}catch(_){}
             vis=!vis
           },500)
           priceAlarmTimersRef.current.push(tid)
         }
-        return{alarmId:alarm.id,priceLine,price:level}
+        return{alarmId:alarm.id,lineSeries,price:level,firstDate,lastDate}
       })
     return()=>{
       priceAlarmTimersRef.current.forEach(id=>clearInterval(id))
