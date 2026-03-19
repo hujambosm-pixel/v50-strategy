@@ -451,7 +451,7 @@ export default function Home() {
           })
           if(head.sharesLeft<0.001) buyQueue.shift()
         }
-        if(consumed<0.001) grouped.push({...sell, _orphanSell:true, status:'open'})
+        if(consumed<0.001) grouped.push({...sell, _orphanSell:true, status:'orphan'})
       })
       buyQueue.filter(b=>b.sharesLeft>0.001).forEach(b=>grouped.push({...b, shares:b.sharesLeft, status:'open'}))
     })
@@ -2061,7 +2061,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.26</title>
+        <title>Trading Simulator V5.27</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2136,7 +2136,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.26
+            <span className="dot"/>Trading Simulator V5.27
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4136,10 +4136,10 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                 <td style={{padding:'6px 8px',color:'#7a9bc0'}}>{dias!=null?dias+'d':'—'}</td>
                                 <td style={{padding:'6px 8px'}}>
                                   <span style={{fontSize:9,padding:'1px 5px',borderRadius:3,fontWeight:700,
-                                    background:isOpen?'rgba(155,114,255,0.12)':'rgba(0,229,160,0.1)',
-                                    border:'1px solid '+(isOpen?'rgba(155,114,255,0.3)':'rgba(0,229,160,0.3)'),
-                                    color:isOpen?'#9b72ff':'#00e5a0'}}>
-                                    {isOpen?'Abierta':'Cerrada'}
+                                    background:t.status==='orphan'?'rgba(255,77,109,0.1)':isOpen?'rgba(155,114,255,0.12)':'rgba(0,229,160,0.1)',
+                                    border:'1px solid '+(t.status==='orphan'?'rgba(255,77,109,0.3)':isOpen?'rgba(155,114,255,0.3)':'rgba(0,229,160,0.3)'),
+                                    color:t.status==='orphan'?'#ff4d6d':isOpen?'#9b72ff':'#00e5a0'}}>
+                                    {t.status==='orphan'?'⊘ Sin origen':isOpen?'Abierta':'Cerrada'}
                                   </span>
                                 </td>
                               </tr>
