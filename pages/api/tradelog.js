@@ -297,15 +297,74 @@ function parseIBKRorderDetail(text, useDDMM=true) {
   return trades
 }
 
+// ── Parser IBKR tabla tabulada en español ────────────────────
+// Formato: Símbolo \t Fecha/Hora \t Cantidad \t Precio trans. \t ... \t Tarifa/com. \t ... \t Código
+// Cantidad positiva = BUY, negativa = SELL. Ignorar filas "Total *" y cabeceras.
+function parseIBKRtabSpanish(text) {
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean)
+  const trades = []
+  let currency = 'USD'
+
+  for (const line of lines) {
+    // Sección de divisa
+    if (/^(USD|EUR|GBP|CHF|CAD|AUD|JPY)$/.test(line)) { currency = line; continue }
+
+    const cols = line.split('\t')
+
+    // Ignorar cabeceras y filas de sección
+    if (!cols[0] || /^(Símbolo|Symbol|Acciones|Stocks|Total)/i.test(cols[0])) continue
+
+    // Necesitamos al menos 7 columnas y fecha válida en col 1
+    if (cols.length < 7) continue
+
+    const symbol   = cols[0].trim()
+    const dateStr  = (cols[1] || '').trim()
+    const qtyRaw   = (cols[2] || '').trim()
+    const priceRaw = (cols[3] || '').trim()
+    const commRaw  = (cols[6] || '0').trim()
+
+    // Fecha: "2026-01-05, 09:30:01" → "2026-01-05"
+    const date = dateStr.split(/[,\s]/)[0]
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue
+
+    const qty   = parseFloat(qtyRaw.replace(/,/g, ''))
+    const price = parseFloat(priceRaw.replace(/,/g, ''))
+    const comm  = Math.abs(parseFloat(commRaw.replace(/,/g, '')) || 0)
+
+    if (!qty || !price || isNaN(qty) || isNaN(price)) continue
+
+    const isBuy = qty > 0
+    trades.push({
+      symbol,
+      entry_date: date,
+      shares: Math.abs(qty),
+      entry_price: price,
+      entry_currency: currency,
+      commission_buy:  isBuy ? comm : 0,
+      commission_sell: isBuy ? 0 : comm,
+      fill_type: isBuy ? 'buy' : 'sell',
+      broker: 'ibkr',
+      import_source: 'ibkr_tab_es',
+    })
+  }
+  return trades
+}
+
 // ── Auto-detect formato texto ────────────────────────────────
 function autoParseText(text, useDDMM=true) {
-  // 1. IBKR Activity Statement (tabla tabulada)
+  // 1. IBKR tabla tabulada español (Símbolo \t Fecha/Hora \t Cantidad \t Precio trans.)
+  if (/Símbolo\tFecha|Fecha\/Hora\tCantidad/m.test(text) ||
+      /\t\d{4}-\d{2}-\d{2},\s*\d{2}:\d{2}/.test(text)) {
+    const result = parseIBKRtabSpanish(text)
+    if (result.length > 0) return { trades: result, source: 'ibkr_tab_es' }
+  }
+  // 2. IBKR Activity Statement (tabla tabulada con ID de cuenta)
   if (/U\d{7,}\s+[A-Z]+\s+\d{4}-\d{2}-\d{2}/m.test(text) ||
       /Id\. de cuenta|Account ID/i.test(text)) {
     const result = parseIBKRtext(text)
     if (result.length > 0) return { trades: result, source: 'ibkr_text' }
   }
-  // 2. IBKR detalle de orden móvil ("Sold 1 @ 732.095 on DARK")
+  // 3. IBKR detalle de orden móvil ("Sold 1 @ 732.095 on DARK")
   if (/^(Bought|Bot|Bght|Sold|Sld|Comprado|Vendido)\s+\d/im.test(text)) {
     const result = parseIBKRorderDetail(text, useDDMM)
     if (result.length > 0) return { trades: result, source: 'ibkr_order' }
