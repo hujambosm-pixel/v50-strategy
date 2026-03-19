@@ -1,13 +1,15 @@
 import { useRef, useEffect } from 'react'
 import { MONO, f2, fmtDate } from '../lib/utils'
 
-export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, chartHeight=480, priceAlarms=[], tlOpenTrades=[] }) {
+export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms }) {
   const containerRef=useRef(null), svgRef=useRef(null), legendRef=useRef(null), tooltipRef=useRef(null)
   const chartRef=useRef(null), candlesRef=useRef(null)
   const chartAliveRef=useRef(true)
   const rulerStart=useRef(null), rulerActiveR=useRef(rulerActive)
-  const priceAlarmLinesRef=useRef([]) // [{alarmId, priceLine, price}]
-  const dragRef=useRef(null)          // {lineObj} while dragging
+  const priceAlarmLinesRef=useRef([])    // [{alarmId, priceLine, price}]
+  const dragRef=useRef(null)             // {lineObj} while dragging
+  const priceAlarmTimersRef=useRef([])   // setInterval IDs for blinking
+  const lastCloseRef=useRef(null)        // último close cargado
   useEffect(()=>{
     rulerActiveR.current=rulerActive
     if(!rulerActive){
@@ -642,6 +644,11 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
     return()=>{chartAliveRef.current=false;if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null}}
   },[data,emaRPeriod,emaLPeriod,trades,maxDD,labelMode])
 
+  // Mantener lastCloseRef actualizado sin recrear el chart
+  useEffect(()=>{
+    if(data?.length) lastCloseRef.current=data[data.length-1]?.close
+  },[data])
+
   // Apply height changes without recreating chart
   useEffect(()=>{
     if(chartRef.current) try{chartRef.current.applyOptions({height:chartHeight})}catch(_){}
@@ -651,22 +658,45 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
   useEffect(()=>{
     const candles=candlesRef.current
     if(!candles) return
+    // Limpiar timers de parpadeo anteriores
+    priceAlarmTimersRef.current.forEach(id=>clearInterval(id))
+    priceAlarmTimersRef.current=[]
     // Eliminar líneas anteriores
     priceAlarmLinesRef.current.forEach(({priceLine})=>{try{candles.removePriceLine(priceLine)}catch(_){}})
+    const lastClose=lastCloseRef.current
     // Crear nuevas
     priceAlarmLinesRef.current=priceAlarms
       .filter(a=>a.price_level)
       .map(alarm=>{
         const isAbove=alarm.condition_detail==='price_above'
+        const actualColor=isAbove?'#00e5a0':'#ff4d6d'
+        const level=Number(alarm.price_level)
+        // Comprobar si el nivel ha sido tocado
+        const triggered=lastClose!=null&&(isAbove?lastClose>=level:lastClose<=level)
+        const ackKey=`${alarm.symbol}::${alarm.id}`
+        const isAcked=ackedAlarms instanceof Set&&ackedAlarms.has(ackKey)
+        const shouldBlink=triggered&&!isAcked
         const priceLine=candles.createPriceLine({
-          price:Number(alarm.price_level),
-          color:isAbove?'#00e5a0':'#ff4d6d',
+          price:level,
+          color:actualColor,
           lineWidth:2,lineStyle:0,
           axisLabelVisible:true,title:'',
         })
-        return{alarmId:alarm.id,priceLine,price:Number(alarm.price_level)}
+        if(shouldBlink){
+          let vis=true
+          const tid=setInterval(()=>{
+            try{priceLine.applyOptions({color:vis?actualColor:'rgba(255,255,255,0)'})}catch(_){}
+            vis=!vis
+          },500)
+          priceAlarmTimersRef.current.push(tid)
+        }
+        return{alarmId:alarm.id,priceLine,price:level}
       })
-  },[priceAlarms])
+    return()=>{
+      priceAlarmTimersRef.current.forEach(id=>clearInterval(id))
+      priceAlarmTimersRef.current=[]
+    }
+  },[priceAlarms,ackedAlarms])
 
   return (
     <div style={{position:'relative'}}>

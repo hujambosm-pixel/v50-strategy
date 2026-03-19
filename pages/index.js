@@ -2008,7 +2008,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.11</title>
+        <title>Trading Simulator V5.12</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2083,7 +2083,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.11
+            <span className="dot"/>Trading Simulator V5.12
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -2607,16 +2607,35 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                             <SectionHeader color="#ffd166" label="🎯 Alertas de precio" count={priceAlerts.length}/>
                             {priceAlerts.map(a=>{
                               const isAbove=a.condition_detail==='price_above'
+                              const col=isAbove?'#00e5a0':'#ff4d6d'
+                              const ackKey=`${a.symbol}::${a.id}`
+                              const isAcked=ackedAlarms.has(ackKey)
+                              // Solo podemos saber si está triggered para el símbolo actual
+                              const lastClose=result?.data?.length?result.data[result.data.length-1]?.close:null
+                              const triggered=lastClose!=null&&(a.symbol||'').toUpperCase()===(simbolo||'').toUpperCase()
+                                &&(isAbove?lastClose>=Number(a.price_level):lastClose<=Number(a.price_level))
+                              const shouldBlink=triggered&&!isAcked
                               const openChart=()=>{if(a.symbol)setSimbolo(a.symbol)}
                               return(
-                                <div key={a.id} style={{padding:'8px 10px',borderBottom:'1px solid rgba(20,40,65,0.7)',display:'flex',alignItems:'center',gap:8}}>
-                                  <span style={{fontSize:14,color:isAbove?'#00e5a0':'#ff4d6d',flexShrink:0,lineHeight:1}}>{isAbove?'▲':'▼'}</span>
+                                <div key={a.id} style={{padding:'8px 10px',borderBottom:'1px solid rgba(20,40,65,0.7)',display:'flex',alignItems:'center',gap:8,
+                                  background:shouldBlink?`${col}10`:'transparent',
+                                  animation:shouldBlink?'rowPulse 1.2s ease-in-out infinite':undefined}}>
+                                  <span style={{fontSize:14,color:col,flexShrink:0,lineHeight:1,
+                                    animation:shouldBlink?'alarmPulse 1s ease-in-out infinite':undefined}}>{isAbove?'▲':'▼'}</span>
                                   <div style={{flex:1,minWidth:0,cursor:'pointer'}} onClick={openChart} title="Ver gráfico">
-                                    <div style={{fontFamily:MONO,fontSize:12,color:'#e8f4ff',fontWeight:700}}>
+                                    <div style={{fontFamily:MONO,fontSize:12,color:'#e8f4ff',fontWeight:700,
+                                      animation:shouldBlink?'alarmPulse 1s ease-in-out infinite':undefined}}>
                                       {a.symbol}{' '}<span style={{color:'#5a7a95',fontWeight:400}}>@</span>{' '}
-                                      <span style={{color:isAbove?'#00e5a0':'#ff4d6d'}}>{a.price_level?.toFixed(2)??'—'}</span>
+                                      <span style={{color:col}}>{Number(a.price_level)?.toFixed(2)??'—'}</span>
                                     </div>
                                   </div>
+                                  {triggered&&(
+                                    <button onClick={()=>isAcked?unackAlarm(a.symbol,a.id):ackAlarm(a.symbol,a.id)}
+                                      title={isAcked?'Marcar como no vista':'Reconocer alerta'}
+                                      style={{background:isAcked?'transparent':`${col}20`,border:`1px solid ${col}`,color:col,fontFamily:MONO,fontSize:10,padding:'2px 6px',borderRadius:3,cursor:'pointer',flexShrink:0}}>
+                                      {isAcked?'↩':'ACK'}
+                                    </button>
+                                  )}
                                   <button onClick={()=>openEditAlarm(a)} title="Editar"
                                     style={{background:'transparent',border:'1px solid #1a2d45',color:'#7a9bc0',fontFamily:MONO,fontSize:10,padding:'2px 6px',borderRadius:3,cursor:'pointer',flexShrink:0}}>✎</button>
                                   <button onClick={async()=>{await deleteAlarm(a.id);reloadAlarms()}} title="Eliminar"
@@ -3224,6 +3243,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       onChartReady={api=>{chartApiRef.current=api}}
                       onPriceAlarm={sidePanel!=='watchlist'?price=>setPriceAlarmDlg({price,symbol:simbolo}):null}
                       onAlarmPriceDrag={onAlarmPriceDrag}
+                      ackedAlarms={ackedAlarms}
                       savedRangeRef={savedRangeRef}
                       syncRef={chartSyncRef}
                       chartHeight={candleH}
