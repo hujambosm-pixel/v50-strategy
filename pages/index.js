@@ -499,19 +499,24 @@ export default function Home() {
     if (!rawRows || rawRows.length === 0) return rawRows
     const bySymbol = {}
     rawRows.forEach((r, i) => {
-      const k = r.symbol
+      const k = (r.symbol || '').trim()
       if (!bySymbol[k]) bySymbol[k] = []
       bySymbol[k].push({ r, i })
     })
     const statusMap = new Array(rawRows.length).fill('open')
     Object.entries(bySymbol).forEach(([, fills]) => {
-      const sorted = [...fills].sort((a, b) => (a.r.entry_date || '') <= (b.r.entry_date || '') ? -1 : 1)
+      // Comparador correcto: 3 valores, estable para fechas iguales (preserva orden original)
+      const sorted = [...fills].sort((a, b) => {
+        const da = a.r.entry_date || '', db = b.r.entry_date || ''
+        return da < db ? -1 : da > db ? 1 : 0
+      })
       const buyQueue = [] // {origIdx, sharesLeft}
       sorted.forEach(({ r, i }) => {
         if (r.fill_type === 'buy') {
-          buyQueue.push({ origIdx: i, sharesLeft: r.shares })
+          buyQueue.push({ origIdx: i, sharesLeft: Number(r.shares) })
         } else {
-          let remaining = r.shares
+          const totalShares = Number(r.shares)
+          let remaining = totalShares
           while (remaining > 0.001 && buyQueue.length > 0) {
             const head = buyQueue[0]
             const take = Math.min(head.sharesLeft, remaining)
@@ -522,8 +527,13 @@ export default function Home() {
               buyQueue.shift()
             }
           }
-          // Mark sell as closed-related if it consumed any buy
-          if (r.shares - remaining > 0.001) statusMap[i] = 'sell_close'
+          if (totalShares - remaining > 0.001) {
+            // Consumió al menos una compra → fill de cierre
+            statusMap[i] = 'sell_close'
+          } else {
+            // Sin BUY disponible → sell huérfano (proviene de operación externa)
+            statusMap[i] = 'orphan'
+          }
         }
       })
     })
@@ -2044,7 +2054,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.18</title>
+        <title>Trading Simulator V5.19</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2119,7 +2129,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.18
+            <span className="dot"/>Trading Simulator V5.19
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4412,9 +4422,9 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                 </td>
                                 <td style={{padding:'3px 5px'}}>
                                   <span style={{fontSize:9,padding:'1px 5px',borderRadius:3,
-                                    background: t._isFullClose||t.status==='closed'?'rgba(0,229,160,0.1)':t.status==='sell_close'?'rgba(155,114,255,0.15)':t._isPartialClose?'rgba(255,209,102,0.15)':'rgba(255,209,102,0.1)',
-                                    color: t._isFullClose||t.status==='closed'?'#00e5a0':t.status==='sell_close'?'#9b72ff':t._isPartialClose?'#ffd166':'#ffd166'}}>
-                                    {t._isFullClose||t.status==='closed'?'✓ Cerrada':t.status==='sell_close'?'↩ Cierre':t._isPartialClose?'◑ Parcial':'○ Abierta'}
+                                    background: t._isFullClose||t.status==='closed'?'rgba(0,229,160,0.1)':t.status==='sell_close'?'rgba(155,114,255,0.15)':t.status==='orphan'?'rgba(255,77,109,0.1)':t._isPartialClose?'rgba(255,209,102,0.15)':'rgba(255,209,102,0.1)',
+                                    color: t._isFullClose||t.status==='closed'?'#00e5a0':t.status==='sell_close'?'#9b72ff':t.status==='orphan'?'#ff4d6d':t._isPartialClose?'#ffd166':'#ffd166'}}>
+                                    {t._isFullClose||t.status==='closed'?'✓ Cerrada':t.status==='sell_close'?'↩ Cierre':t.status==='orphan'?'⊘ Sin origen':t._isPartialClose?'◑ Parcial':'○ Abierta'}
                                   </span>
                                 </td>
                                 <td style={{padding:'3px 5px',color:'#00d4ff'}}>{t.capital_eur?`€${Math.round(t.capital_eur)}`:'—'}</td>
