@@ -1558,11 +1558,23 @@ export default function Home() {
 
   const loadFills = useCallback(async(id)=>{
     try{
-      if(tlUseLocal()){ setTlFills([]); return }
+      if(tlUseLocal()){ setTlFills([]); setTlFillsList([]); return }
       const res=await fetch(`/api/tradelog?action=fills&id=${id}`)
       const json=await res.json()
-      setTlFills(json.fills||[])
-    }catch(_){ setTlFills([]) }
+      const fills=json.fills||[]
+      setTlFills(fills)
+      setTlFillsList(fills.map(f=>({date:toDisplayDate(f.date)||f.date||'',price:String(f.price||''),shares:String(f.shares||''),_dbId:f.id})))
+    }catch(_){ setTlFills([]); setTlFillsList([]) }
+  },[])
+
+  const loadExitFills = useCallback(async(id)=>{
+    try{
+      if(tlUseLocal()){ setTlExitFillsList([]); return }
+      const res=await fetch(`/api/tradelog?action=fills&id=${id}`)
+      const json=await res.json()
+      const fills=json.fills||[]
+      setTlExitFillsList(fills.map(f=>({date:toDisplayDate(f.date)||f.date||'',price:String(f.price||''),shares:String(f.shares||''),_dbId:f.id})))
+    }catch(_){ setTlExitFillsList([]) }
   },[])
 
   const tlSaveTrade = async(trade)=>{
@@ -2047,7 +2059,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.24</title>
+        <title>Trading Simulator V5.25</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2122,7 +2134,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.24
+            <span className="dot"/>Trading Simulator V5.25
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4028,7 +4040,11 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                   return
                                 }
                                 setTlSelected(t)
-                                if(t.has_fills)loadFills(t.id);else setTlFills([])
+                                // For FIFO-grouped trades use original BUY/SELL IDs; for legacy trades use t.id
+                                const entryFillsId = t._originalBuyId || (t.has_fills ? t.id : null)
+                                const exitFillsId  = t._originalSellId || null
+                                if(entryFillsId) loadFills(entryFillsId); else { setTlFills([]); setTlFillsList([]) }
+                                if(exitFillsId)  loadExitFills(exitFillsId); else setTlExitFillsList([])
                                 const df=tlDefaultForm()
                                 setTlForm({...df,
                                   id:t.id,symbol:t.symbol||'',name:t.name||'',
@@ -4040,12 +4056,14 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                   fx_entry:t.fx_entry?String(t.fx_entry):'',
                                   fx_entry_manual:!!t.fx_entry,
                                   notes:t.notes||'',strategy:t.strategy||df.strategy,
-                                  import_source:t.import_source||'manual'
+                                  import_source:t.import_source||'manual',
+                                  _entryFillsId: entryFillsId || t.id,
+                                  _exitFillsId:  exitFillsId  || t.id,
                                 })
                                 if(t.status==='open'){
                                   setTlCloseForm({exit_date:todayDisplay(),exit_price:'',exit_currency:t.entry_currency||'USD',commission_sell:0,fx_exit:'',fx_exit_manual:false})
                                 }
-                                setTlFillsList([]);setTlExitFillsList([]);setTlFormOpen(true)
+                                setTlFormOpen(true)
                               }}
                                 style={{borderBottom:'1px solid var(--border)',cursor:'pointer',
                                   background:baseBg,
@@ -5476,7 +5494,26 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     formData={...formData,fx_entry:'1'}
                   }
                   const isNew = !tlForm.id
-                  const saved = await tlSaveTrade(formData)
+                  // Strip internal fill-ID fields before saving trade record
+                  const {_entryFillsId, _exitFillsId, ...tradeData} = formData
+                  const entryFillsId = _entryFillsId || tlForm.id
+                  const exitFillsId  = _exitFillsId  || tlForm.id
+                  const saved = await tlSaveTrade(tradeData)
+                  // Save new entry fills (no _dbId = not yet in DB)
+                  const newEntryFills = tlFillsList.filter(f=>!f._dbId&&f.price&&f.shares)
+                  const newExitFills  = tlExitFillsList.filter(f=>!f._dbId&&f.price&&f.shares)
+                  await Promise.all([
+                    ...newEntryFills.map(f=>fetch('/api/tradelog?action=fill',{method:'POST',
+                      headers:{'Content-Type':'application/json'},
+                      body:JSON.stringify({trade_id:entryFillsId,date:toIsoDate(f.date)||f.date,
+                        price:parseFloat(f.price),shares:parseFloat(f.shares),type:'entry',
+                        currency:tlForm.entry_currency||'USD'})})),
+                    ...newExitFills.map(f=>fetch('/api/tradelog?action=fill',{method:'POST',
+                      headers:{'Content-Type':'application/json'},
+                      body:JSON.stringify({trade_id:exitFillsId,date:toIsoDate(f.date)||f.date,
+                        price:parseFloat(f.price),shares:parseFloat(f.shares),type:'exit',
+                        currency:tlForm.entry_currency||'USD'})})),
+                  ])
                   setTlFormOpen(false)
                   ;(async()=>{
                     const s2=await loadSettings()
