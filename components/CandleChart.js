@@ -289,7 +289,12 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
             if(dist<DRAG_HIT&&dist<nearestDist){nearest=lineObj;nearestDist=dist}
           })
         }
-        if(nearest){dragRef.current={lineObj:nearest};e.preventDefault();e.stopPropagation()}
+        if(nearest){
+          dragRef.current={lineObj:nearest}
+          // Deshabilitar scroll/zoom del chart mientras dura el drag
+          chart.applyOptions({handleScroll:false,handleScale:false})
+          e.preventDefault();e.stopPropagation()
+        }
       }
       const onMouseUp=()=>{
         if(dragRef.current){
@@ -297,6 +302,8 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
           if(onAlarmPriceDrag) onAlarmPriceDrag(lineObj.alarmId,Math.round(lineObj.price*100)/100)
           dragRef.current=null
           if(containerRef.current) containerRef.current.style.cursor=''
+          // Restaurar scroll/zoom
+          chart.applyOptions({handleScroll:true,handleScale:true})
         }
       }
       cnt.addEventListener('mousedown',onMouseDown)
