@@ -423,9 +423,8 @@ export default function Home() {
   const [tlCloseOpen,setTlCloseOpen]=useState(false)
   const [tlImportText,setTlImportText]=useState('')
   const [tlImportFormat,setTlImportFormat]=useState('ai')
-  const [tlParsedRaw,setTlParsedRaw]=useState([])  // raw fills from parser
-  const [tlParsed,setTlParsed]=useState([])          // displayed (grouped or not)
-  const [tlGroupFills,setTlGroupFills]=useState(true)
+  const [tlParsedRaw,setTlParsedRaw]=useState([])  // raw fills from parser (always saved)
+  const [tlParsed,setTlParsed]=useState([])          // grouped preview (display only)
 
   // ── Enriquece filas: detecta duplicados y cierres (totales/parciales) ──
   const enrichParsedRows = (rows) => {
@@ -1628,9 +1627,16 @@ export default function Home() {
       const json=await res.json()
       if(!res.ok) throw new Error(json.error||'Error')
       const raw = json.parsed||[]
-      setTlParsedRaw(raw)
-      const grouped = groupParsedFills(raw)
-      setTlParsed(enrichParsedRows(grouped))
+      // Mark duplicates on raw fills (for save-time skip + button count)
+      const markedRaw = raw.map(r=>({...r, _isDuplicate: tlTrades.some(t=>
+        t.symbol===r.symbol && t.entry_date===r.entry_date &&
+        (t.fill_type||'buy')===(r.fill_type||'buy') &&
+        Math.abs(parseFloat(t.shares||0)-parseFloat(r.shares||0))<0.01 &&
+        Math.abs(parseFloat(t.entry_price||0)-parseFloat(r.entry_price||0))<0.01
+      )}))
+      setTlParsedRaw(markedRaw)
+      // Preview always shows grouped view (FIFO for display only, not for save)
+      setTlParsed(enrichParsedRows(groupParsedFills(markedRaw)))
     }catch(e){
       const msg = e.message||''
       // Detect Groq rate limit and extract wait time
@@ -1649,110 +1655,32 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
     finally{setTlImportLoading(false)}
   }
 
-  const tlImportConfirm = async(rows)=>{
+  // Saves each raw fill individually to Supabase — FIFO grouping is display-only, never at save time
+  const tlImportConfirm = async()=>{
     setTlImportLoading(true)
     try{
       const s=JSON.parse(localStorage.getItem('v50_settings')||'{}')
       const defBroker=s?.tradelog?.defaultBroker||'ibkr'
       let errors=[]
-      for(const row of rows){
-        // Campos válidos para trades_log — descartar campos UI-only del parser
-        const {_fxLoading,_symSearch,_current_price,_current_date,_pnl_float_eur,_pnl_float_pct,...cleanRow}=row
-        // Skip duplicates if user didn't remove them
-        if(cleanRow._isDuplicate) continue
-        // Strip ALL internal UI fields before sending to Supabase
+      for(const raw of tlParsedRaw){
+        if(raw._isDuplicate) continue
+        // Strip all UI-only fields — only keep DB-valid columns
         const {_isDuplicate,_closesTradeId,_closesSymbol,_openEntryDate,_openShares,
                _grouped,_buyCount,_sellCount,_fills,_orphanSell,_remainder,
                _isPartialClose,_isFullClose,_isExcessSell,_remainingShares,_sellShares,
-               _multipleOpen,_openOptions,
-               ...saveRow}=cleanRow
-
-        if(cleanRow._closesTradeId) {
-          const sellShares  = parseFloat(saveRow.shares||0)
-          const openShares  = parseFloat(cleanRow._openShares||0)
-          const isPartial   = cleanRow._isPartialClose
-          const remaining   = cleanRow._remainingShares||0
-
-          // Patch the existing open trade with exit info
-          const patch={
-            exit_date:      saveRow.entry_date,
-            exit_price:     saveRow.entry_price,
-            exit_currency:  saveRow.entry_currency||'USD',
-            commission_sell:saveRow.commission_sell||0,
-            shares:         sellShares,    // close only the sold qty
-            status:         isPartial ? 'partial' : 'closed'
-          }
-
-          if(tlUseLocal()){
-            const all=tlGetLS()
-            const idx=all.findIndex(t=>t.id===cleanRow._closesTradeId)
-            if(idx>=0){
-              all[idx]={...all[idx],...patch}
-              // If partial close → also create a new open trade for the remainder
-              if(isPartial && remaining>0){
-                all.push({...all[idx], id:'local_'+Date.now()+'r_'+Math.random().toString(36).slice(2),
-                  shares:remaining, exit_date:null, exit_price:null, commission_sell:0, status:'open'})
-              }
-            }
-            tlSetLS(all)
-          } else {
-            // Update existing trade (close/partial)
-            const res=await fetch('/api/tradelog?action=save',{method:'POST',
-              headers:{'Content-Type':'application/json'},
-              body:JSON.stringify({id:cleanRow._closesTradeId,...patch})})
-            const json=await res.json()
-            if(!res.ok) errors.push(json.error||'Error cerrando '+saveRow.symbol)
-            // If partial → create remainder as new open trade
-            if(isPartial && remaining>0 && res.ok){
-              const origTrade=tlTrades.find(t=>t.id===cleanRow._closesTradeId)||{}
-              const remTrade={
-                symbol: origTrade.symbol,
-                entry_date: origTrade.entry_date,
-                entry_price: origTrade.entry_price,
-                entry_currency: origTrade.entry_currency,
-                shares: remaining,
-                broker: origTrade.broker||defBroker,
-                strategy: origTrade.strategy||'',
-                notes: (origTrade.notes?origTrade.notes+' | ':'')+'[Resto cierre parcial]',
-                commission_buy: 0,
-                fx_entry: origTrade.fx_entry,
-                status: 'open',
-                import_source: 'partial_remainder',
-                group_id: origTrade.group_id || null
-              }
-              const r2=await fetch('/api/tradelog?action=save',{method:'POST',
-                headers:{'Content-Type':'application/json'},body:JSON.stringify(remTrade)})
-              const j2=await r2.json()
-              if(!r2.ok) errors.push(j2.error||'Error creando resto parcial '+saveRow.symbol)
-            }
-          }
+               _multipleOpen,_openOptions,_fxLoading,_symSearch,
+               _current_price,_current_date,_pnl_float_eur,_pnl_float_pct,
+               status, ...fillFields}=raw
+        const trade={...fillFields, status:'open', broker:fillFields.broker||defBroker}
+        if(tlUseLocal()){
+          const all=tlGetLS()
+          all.push({...trade, id:'local_'+Date.now()+'_'+Math.random().toString(36).slice(2)})
+          tlSetLS(all)
         } else {
-          // If it's a SELL fill (no matching open found), skip — it's an orphan
-          // The user already decided by not deleting it from preview → save as-is
-          // but correct the field names so it doesn't look like a buy entry
-          let trade
-          if(saveRow.fill_type==='sell' && !saveRow.exit_date) {
-            // Orphan sell: save as closed trade with entry=unknown, exit=the sell data
-            // We DON'T have entry info so save minimal record for reference
-            trade = {
-              ...saveRow,
-              status: 'open',
-              broker: saveRow.broker||defBroker,
-              notes: (saveRow.notes?saveRow.notes+' | ':'')+'[Venta importada sin compra asociada]'
-            }
-          } else {
-            trade = {...saveRow, status: saveRow.status||'open', broker:saveRow.broker||defBroker}
-          }
-          if(tlUseLocal()){
-            const all=tlGetLS()
-            all.push({...trade, id:'local_'+Date.now()+'_'+Math.random().toString(36).slice(2)})
-            tlSetLS(all)
-          } else {
-            const res=await fetch('/api/tradelog?action=save',{method:'POST',
-              headers:{'Content-Type':'application/json'},body:JSON.stringify(trade)})
-            const json=await res.json()
-            if(!res.ok) errors.push(json.error||'Error guardando '+trade.symbol)
-          }
+          const res=await fetch('/api/tradelog?action=save',{method:'POST',
+            headers:{'Content-Type':'application/json'},body:JSON.stringify(trade)})
+          const json=await res.json()
+          if(!res.ok) errors.push(json.error||'Error guardando '+trade.symbol)
         }
       }
       if(errors.length) alert('Errores al guardar:\n'+errors.join('\n'))
@@ -2065,7 +1993,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.22</title>
+        <title>Trading Simulator V5.23</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2140,7 +2068,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.22
+            <span className="dot"/>Trading Simulator V5.23
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4282,38 +4210,21 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                           display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                           <div style={{display:'flex',alignItems:'center',gap:6}}>
                             <span style={{fontFamily:MONO,fontSize:11,color:'#c8dff5',fontWeight:700}}>Preview</span>
-                            <button onClick={()=>{
-                              const next=!tlGroupFills
-                              setTlGroupFills(next)
-                              setTlParsed(enrichParsedRows(next ? groupParsedFills(tlParsedRaw) : annotateFillsWithFifo(tlParsedRaw)))
-                            }}
-                              title="Agrupar compras y ventas del mismo símbolo en una operación"
-                              style={{fontFamily:MONO,fontSize:9,padding:'2px 7px',borderRadius:3,cursor:'pointer',
-                                border:'1px solid '+(tlGroupFills?'#ffd166':'#2a4060'),
-                                background:tlGroupFills?'rgba(255,209,102,0.1)':'transparent',
-                                color:tlGroupFills?'#ffd166':'#5a7a95'}}>
-                              {tlGroupFills?'⛓ Agrupado':'⛓ Agrupar fills'}
-                            </button>
+                            <span style={{fontFamily:MONO,fontSize:9,color:'#5a7a95'}}>⛓ Agrupado · fills individuales al guardar</span>
                           </div>
                           <div style={{display:'flex',gap:6}}>
                             <button onClick={()=>{setTlParsed([]);setTlParsedRaw([])}}
                               style={{fontFamily:MONO,fontSize:10,padding:'3px 8px',borderRadius:3,cursor:'pointer',
                                 border:'1px solid #2a4060',background:'transparent',color:'#7a9bc0'}}>Cancelar</button>
-                            <button onClick={()=>tlImportConfirm(tlParsed)}
-                              disabled={tlParsed.some(r=>r._multipleOpen&&!r._closesTradeId)}
+                            <button onClick={()=>tlImportConfirm()}
                               style={{fontFamily:MONO,fontSize:10,padding:'3px 8px',borderRadius:3,
-                                cursor:tlParsed.some(r=>r._multipleOpen&&!r._closesTradeId)?'not-allowed':'pointer',
-                                border:'1px solid '+(tlParsed.some(r=>r._multipleOpen&&!r._closesTradeId)?'#ffd166':'#00e5a0'),
-                                background:tlParsed.some(r=>r._multipleOpen&&!r._closesTradeId)?'rgba(255,209,102,0.1)':'rgba(0,229,160,0.1)',
-                                color:tlParsed.some(r=>r._multipleOpen&&!r._closesTradeId)?'#ffd166':'#00e5a0',
-                                fontWeight:700}}>
+                                cursor:'pointer',border:'1px solid #00e5a0',
+                                background:'rgba(0,229,160,0.1)',color:'#00e5a0',fontWeight:700}}>
                               {(()=>{
-                const needsChoice=tlParsed.some(r=>r._multipleOpen&&!r._closesTradeId)
-                const valid=tlParsed.filter(r=>!r._isDuplicate).length
-                const dups=tlParsed.filter(r=>r._isDuplicate).length
-                if(needsChoice) return '⚠ Elige posición a cerrar'
-                if(dups>0) return `✓ Importar ${valid} · ⊘ ${dups} duplicada${dups!==1?'s':''} omitida${dups!==1?'s':''}`
-                return `✓ Importar ${valid} op${valid!==1?'s':''}`
+                const valid=tlParsedRaw.filter(r=>!r._isDuplicate).length
+                const dups=tlParsedRaw.filter(r=>r._isDuplicate).length
+                if(dups>0) return `✓ Importar ${valid} fills · ⊘ ${dups} duplicada${dups!==1?'s':''} omitida${dups!==1?'s':''}`
+                return `✓ Importar ${valid} fill${valid!==1?'s':''}`
               })()}
                             </button>
                           </div>
