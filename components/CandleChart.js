@@ -299,13 +299,13 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         }
       }
       const onMouseUp=()=>{
+        // Siempre restaurar scroll (safety net aunque no haya drag activo)
+        try{chart.applyOptions({handleScroll:true,handleScale:true})}catch(_){}
         if(dragRef.current){
           const{lineObj}=dragRef.current
           if(onAlarmPriceDrag) onAlarmPriceDrag(lineObj.alarmId,Math.round(lineObj.price*100)/100)
           dragRef.current=null
           if(containerRef.current) containerRef.current.style.cursor=''
-          // Restaurar scroll/zoom
-          chart.applyOptions({handleScroll:true,handleScale:true})
         }
       }
       cnt.addEventListener('mousedown',onMouseDown)

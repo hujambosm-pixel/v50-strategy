@@ -203,6 +203,22 @@ function evalConditionFull(alarm, closes) {
     return { active: true, bars: n }
   }
 
+  // ── Precio vs nivel fijo (alertas de precio) ──
+  if (condition === 'price_level') {
+    const level = Number(alarm.price_level)
+    if (!level || !closes?.length) return { active: null, bars: null }
+    const lastClose = closes[closes.length - 1]
+    const isAbove = alarm.condition_detail === 'price_above'
+    const active = isAbove ? lastClose >= level : lastClose <= level
+    if (!active) return { active: false, bars: null }
+    let count = 0
+    for (let i = closes.length - 1; i >= 0; i--) {
+      const ok = isAbove ? closes[i] >= level : closes[i] <= level
+      if (ok) count++; else break
+    }
+    return { active: true, bars: count }
+  }
+
   return { active: null, bars: null }
 }
 

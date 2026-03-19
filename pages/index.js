@@ -1006,7 +1006,7 @@ export default function Home() {
       // Avoid duplicates: real alarms take priority
       const realAlarmIds = new Set(alarmList.map(a=>a.id))
       const extraConds = pseudoAlarms.filter(p=>!realAlarmIds.has(p.id))
-      const allEvalAlarms = [...alarmList.map(a=>({id:a.id,symbol:a.symbol,condition:a.condition,ema_r:a.ema_r,ema_l:a.ema_l,params:a.params})), ...extraConds]
+      const allEvalAlarms = [...alarmList.map(a=>({id:a.id,symbol:a.symbol,condition:a.condition,condition_detail:a.condition_detail,price_level:a.price_level,ema_r:a.ema_r,ema_l:a.ema_l,params:a.params})), ...extraConds]
 
       const res=await fetch('/api/status',{
         method:'POST',
@@ -2008,7 +2008,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.13</title>
+        <title>Trading Simulator V5.14</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2083,7 +2083,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.13
+            <span className="dot"/>Trading Simulator V5.14
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -2610,10 +2610,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                               const col=isAbove?'#00e5a0':'#ff4d6d'
                               const ackKey=`${a.symbol}::${a.id}`
                               const isAcked=ackedAlarms.has(ackKey)
-                              // Solo podemos saber si está triggered para el símbolo actual
-                              const lastClose=result?.chartData?.length?result.chartData[result.chartData.length-1]?.close:null
-                              const triggered=lastClose!=null&&(a.symbol||'').toUpperCase()===(simbolo||'').toUpperCase()
-                                &&(isAbove?lastClose>=Number(a.price_level):lastClose<=Number(a.price_level))
+                              // Usar alarmStatus (evaluado por API para todos los símbolos del watchlist)
+                              const triggered=alarmStatus[a.symbol||'']?.[a.id]?.active===true
                               const shouldBlink=triggered&&!isAcked
                               const openChart=()=>{if(a.symbol)setSimbolo(a.symbol)}
                               return(
