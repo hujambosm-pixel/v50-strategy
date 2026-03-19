@@ -494,6 +494,42 @@ export default function Home() {
     })
   }
 
+  // Anota fills crudos con status basado en FIFO matching (para vista sin agrupar)
+  const annotateFillsWithFifo = (rawRows) => {
+    if (!rawRows || rawRows.length === 0) return rawRows
+    const bySymbol = {}
+    rawRows.forEach((r, i) => {
+      const k = r.symbol
+      if (!bySymbol[k]) bySymbol[k] = []
+      bySymbol[k].push({ r, i })
+    })
+    const statusMap = new Array(rawRows.length).fill('open')
+    Object.entries(bySymbol).forEach(([, fills]) => {
+      const sorted = [...fills].sort((a, b) => (a.r.entry_date || '') <= (b.r.entry_date || '') ? -1 : 1)
+      const buyQueue = [] // {origIdx, sharesLeft}
+      sorted.forEach(({ r, i }) => {
+        if (r.fill_type === 'buy') {
+          buyQueue.push({ origIdx: i, sharesLeft: r.shares })
+        } else {
+          let remaining = r.shares
+          while (remaining > 0.001 && buyQueue.length > 0) {
+            const head = buyQueue[0]
+            const take = Math.min(head.sharesLeft, remaining)
+            head.sharesLeft -= take
+            remaining -= take
+            if (head.sharesLeft < 0.001) {
+              statusMap[head.origIdx] = 'closed'
+              buyQueue.shift()
+            }
+          }
+          // Mark sell as closed-related if it consumed any buy
+          if (r.shares - remaining > 0.001) statusMap[i] = 'sell_close'
+        }
+      })
+    })
+    return rawRows.map((r, i) => ({ ...r, status: statusMap[i] }))
+  }
+
   // ── Agrupa fills del parser en operaciones (FIFO cronológico) ──
   // Procesa todos los fills de cada símbolo en orden de fecha.
   // Las SELLs cierran las BUYs más antiguas disponibles (FIFO).
@@ -2008,7 +2044,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.16</title>
+        <title>Trading Simulator V5.17</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2083,7 +2119,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.16
+            <span className="dot"/>Trading Simulator V5.17
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4228,7 +4264,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                             <button onClick={()=>{
                               const next=!tlGroupFills
                               setTlGroupFills(next)
-                              setTlParsed(enrichParsedRows(next ? groupParsedFills(tlParsedRaw) : tlParsedRaw))
+                              setTlParsed(enrichParsedRows(next ? groupParsedFills(tlParsedRaw) : annotateFillsWithFifo(tlParsedRaw)))
                             }}
                               title="Agrupar compras y ventas del mismo símbolo en una operación"
                               style={{fontFamily:MONO,fontSize:9,padding:'2px 7px',borderRadius:3,cursor:'pointer',
@@ -4260,7 +4296,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         </div>
                         <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:11}}>
                           <thead><tr style={{background:'var(--bg2)'}}>
-                            {['Tipo','Símbolo','Fecha','Acc.','Precio','Div.','FX','Broker','Estado','Cap. €',''].map(h=>(
+                            {['Tipo','Símbolo','Fecha','Acc.','Precio','Div.','FX','Broker','Com.','Estado','Cap. €',''].map(h=>(
                               <th key={h} style={{padding:'5px 8px',textAlign:'left',fontSize:9,color:'#3d5a7a',letterSpacing:'0.08em',textTransform:'uppercase',borderBottom:'1px solid var(--border)'}}>{h}</th>
                             ))}
                           </tr></thead>
@@ -4295,8 +4331,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                     </span>
                                   ):isGrouped?(
                                     <span style={{fontFamily:MONO,fontSize:9,padding:'2px 5px',borderRadius:3,
-                                      background:'rgba(0,212,255,0.15)',color:'#00d4ff',fontWeight:700}}>
-                                      ↕ {t._buyCount}C+{t._sellCount}V
+                                      background:'rgba(0,229,160,0.15)',color:'#00e5a0',fontWeight:700}}>
+                                      ▲ BUY
                                     </span>
                                   ):(
                                     <span style={{fontFamily:MONO,fontSize:9,padding:'2px 5px',borderRadius:3,
@@ -4371,11 +4407,14 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                 {cell('entry_currency',t.entry_currency,'#ffd166')}
                                 <td style={{padding:'3px 5px',color:'#4a7a95',fontSize:10}}>{(()=>{let fx=parseFloat(t.fx_entry);if(!fx||isNaN(fx))return'—';if(fx<1)fx=1/fx;return fx.toFixed(4)})()}</td>
                                 {cell('broker',t.broker)}
+                                <td style={{padding:'3px 5px',color:'#7a9bc0',fontSize:10,textAlign:'right'}}>
+                                  {(()=>{const c=(t.commission_buy||0)+(t.commission_sell||0);return c>0?c.toFixed(2):'—'})()}
+                                </td>
                                 <td style={{padding:'3px 5px'}}>
                                   <span style={{fontSize:9,padding:'1px 5px',borderRadius:3,
-                                    background: t._isFullClose||t.status==='closed'?'rgba(0,229,160,0.1)':t._isPartialClose?'rgba(255,209,102,0.15)':'rgba(255,209,102,0.1)',
-                                    color: t._isFullClose||t.status==='closed'?'#00e5a0':t._isPartialClose?'#ffd166':'#ffd166'}}>
-                                    {t._isFullClose||t.status==='closed'?'✓ Cerrada':t._isPartialClose?'◑ Parcial':'○ Abierta'}
+                                    background: t._isFullClose||t.status==='closed'?'rgba(0,229,160,0.1)':t.status==='sell_close'?'rgba(155,114,255,0.15)':t._isPartialClose?'rgba(255,209,102,0.15)':'rgba(255,209,102,0.1)',
+                                    color: t._isFullClose||t.status==='closed'?'#00e5a0':t.status==='sell_close'?'#9b72ff':t._isPartialClose?'#ffd166':'#ffd166'}}>
+                                    {t._isFullClose||t.status==='closed'?'✓ Cerrada':t.status==='sell_close'?'↩ Cierre':t._isPartialClose?'◑ Parcial':'○ Abierta'}
                                   </span>
                                 </td>
                                 <td style={{padding:'3px 5px',color:'#00d4ff'}}>{t.capital_eur?`€${Math.round(t.capital_eur)}`:'—'}</td>
