@@ -399,11 +399,68 @@ export default function Home() {
   const [tlExpandedGroups,setTlExpandedGroups]=useState(new Set())  // group_ids expanded
   const [tlFormOpen,setTlFormOpen]=useState(false)
   const [tlFilterStrat,setTlFilterStrat]=useState('')
+  // ── groupTradesForDisplay: FIFO match individual fills → virtual grouped rows ──
+  // tlTrades stores raw fills (fill_type:'buy'|'sell', status:'open').
+  // This function pairs them chronologically per symbol so the UI shows closed ops with entry+exit.
+  // Old-format merged trades (already have exit_date) pass through unchanged.
+  const groupTradesForDisplay = (trades) => {
+    if (!trades?.length) return []
+    const isIndividualFill = t => (t.fill_type==='buy'||t.fill_type==='sell') && !t.exit_date
+    const newFills   = trades.filter(isIndividualFill)
+    const legacyTrades = trades.filter(t => !isIndividualFill(t) && t.fill_type!=='sell')
+    if (!newFills.length) return legacyTrades
+    const bySymbol = {}
+    newFills.forEach(t=>{ if(!bySymbol[t.symbol]) bySymbol[t.symbol]=[]; bySymbol[t.symbol].push(t) })
+    const grouped = []
+    Object.entries(bySymbol).forEach(([,fills])=>{
+      const sorted = [...fills].sort((a,b)=>{
+        const da=a.entry_date||'', db=b.entry_date||''
+        if(da<db) return -1; if(da>db) return 1
+        if(a.fill_type==='buy'&&b.fill_type!=='buy') return -1
+        if(a.fill_type!=='buy'&&b.fill_type==='buy') return 1
+        return 0
+      })
+      const buyQueue = sorted.filter(t=>t.fill_type==='buy')
+        .map(t=>({...t, sharesLeft: parseFloat(t.shares||0)}))
+      sorted.filter(t=>t.fill_type==='sell').forEach(sell=>{
+        let remaining = parseFloat(sell.shares||0), consumed = 0
+        const sTot = parseFloat(sell.shares||1), sComm = parseFloat(sell.commission_sell||0)
+        while(remaining>0.001 && buyQueue.length>0){
+          const head=buyQueue[0]
+          if(head.sharesLeft<0.001){ buyQueue.shift(); continue }
+          const take=Math.min(head.sharesLeft, remaining)
+          head.sharesLeft-=take; remaining-=take; consumed+=take
+          const bTot=parseFloat(head.shares||1)
+          const bCommProp=parseFloat(head.commission_buy||0)*(take/bTot)
+          const sCommProp=sComm*(take/sTot)
+          const fxE=parseFloat(head.fx_entry||1), fxX=parseFloat(sell.fx_entry||head.fx_entry||1)
+          const pnlCur=(parseFloat(sell.entry_price||0)-parseFloat(head.entry_price||0))*take
+          const capEur=take*parseFloat(head.entry_price||0)/fxE
+          const pnlEur=pnlCur/fxX - bCommProp/fxE - sCommProp/fxX
+          grouped.push({
+            ...head, id:`${head.id}__${sell.id}`,
+            _originalBuyId:head.id, _originalSellId:sell.id, _isFifoGrouped:true,
+            shares:take, commission_buy:bCommProp,
+            exit_date:sell.entry_date, exit_price:parseFloat(sell.entry_price||0),
+            exit_currency:sell.entry_currency||head.entry_currency,
+            commission_sell:sCommProp, fx_exit:fxX, status:'closed',
+            capital_eur:capEur, pnl_currency:pnlCur, pnl_eur:pnlEur,
+            pnl_pct:capEur>0?(pnlEur/capEur)*100:null
+          })
+          if(head.sharesLeft<0.001) buyQueue.shift()
+        }
+        if(consumed<0.001) grouped.push({...sell, _orphanSell:true, status:'open'})
+      })
+      buyQueue.filter(b=>b.sharesLeft>0.001).forEach(b=>grouped.push({...b, shares:b.sharesLeft, status:'open'}))
+    })
+    return [...legacyTrades, ...grouped]
+      .sort((a,b)=>(b.entry_date||'').localeCompare(a.entry_date||'')||(b.created_at||'').localeCompare(a.created_at||''))
+  }
+
   // ── tlFiltered: single source of truth for all filtered views ──
-  // Respects: status, broker, year, month, strategy, search
-  // All tabs (Ops table, Dashboard, Métricas panel) MUST use this, not tlTrades directly
+  // Applies FIFO grouping first, then all filters client-side (status after grouping is computed)
   const tlFiltered = useMemo(()=>{
-    return tlTrades.filter(t=>{
+    return groupTradesForDisplay(tlTrades).filter(t=>{
       if(tlFilterStatus && t.status!==tlFilterStatus) return false
       if(tlFilterBroker && t.broker!==tlFilterBroker) return false
       if(tlFilterStrat && (t.strategy||'')!==tlFilterStrat) return false
@@ -1467,12 +1524,9 @@ export default function Home() {
         setTlTrades([...trades])
         return
       }
-      // ── modo Supabase ──
+      // ── modo Supabase ── load all fills; status/year/month filtered client-side after FIFO grouping
       let url = '/api/tradelog?action=list'
       if(tlFilterBroker) url += `&broker=${tlFilterBroker}`
-      if(tlFilterYear)   url += `&year=${tlFilterYear}`
-      if(tlFilterMonth)  url += `&month=${tlFilterMonth}`
-      if(tlFilterStatus) url += `&status=${tlFilterStatus}`
       const res = await fetch(url)
       const json = await res.json()
       if(!res.ok) throw new Error(json.error||'Error')
@@ -1497,7 +1551,7 @@ export default function Home() {
       }
     }
     finally { setTlLoading(false) }
-  },[tlFilterBroker,tlFilterYear,tlFilterMonth,tlFilterStatus])
+  },[tlFilterBroker])
 
   useEffect(()=>{ loadTrades() },[loadTrades])  // carga siempre al inicio para tener tlTrades disponible (líneas en gráfico, etc.)
   useEffect(()=>{ if(sidePanel==='tradelog') loadTrades() },[sidePanel,loadTrades])
@@ -1760,7 +1814,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   useEffect(()=>{
     if(!chartApiRef.current?.setOpenTradeLines) return
     const openForSym = tlTrades.filter(t=>
-      t.status==='open' &&
+      t.status==='open' && t.fill_type!=='sell' &&
       (t.symbol||'').toUpperCase()===(simbolo||'').toUpperCase()
     )
     chartApiRef.current.setOpenTradeLines(openForSym)
@@ -1993,7 +2047,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.23</title>
+        <title>Trading Simulator V5.24</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2068,7 +2122,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.23
+            <span className="dot"/>Trading Simulator V5.24
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -2388,7 +2442,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       </div>
                     )
                     // Símbolos con posición abierta en Tradelog
-                    const openSymbols=new Set(tlTrades.filter(t=>t.status==='open').map(t=>(t.symbol||'').toUpperCase()))
+                    const openSymbols=new Set(tlTrades.filter(t=>t.status==='open'&&t.fill_type!=='sell').map(t=>(t.symbol||'').toUpperCase()))
                     const allFiltered=onlyOpen?all.filter(w=>openSymbols.has((w.symbol||'').toUpperCase())):all
                     return (<>{countBadge}{allFiltered.map(w=>(
                       <div key={w.id||w.symbol}
@@ -3231,7 +3285,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       syncRef={chartSyncRef}
                       chartHeight={candleH}
                       priceAlarms={alarms.filter(a=>a.condition==='price_level'&&(a.symbol||'').toUpperCase()===(simbolo||'').toUpperCase())}
-                      tlOpenTrades={tlTrades.filter(t=>t.status==='open'&&(t.symbol||'').toUpperCase()===(simbolo||'').toUpperCase())}
+                      tlOpenTrades={tlTrades.filter(t=>t.status==='open'&&t.fill_type!=='sell'&&(t.symbol||'').toUpperCase()===(simbolo||'').toUpperCase())}
                     />
                     {/* Drag handle — resize candle chart */}
                     <div onMouseDown={e=>{candleResizing.current=true;candleStartY.current=e.clientY;candleStartH.current=candleH;document.body.style.cursor='row-resize';document.body.style.userSelect='none'}}
