@@ -2061,7 +2061,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.27</title>
+        <title>Trading Simulator V5.28</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2136,7 +2136,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.27
+            <span className="dot"/>Trading Simulator V5.28
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4024,6 +4024,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                             const renderRow = (t, i, arr, opts={})=>{
                               const {isSub=false, isLast=false} = opts
                               const isOpen=t.status==='open'
+                              const isOrphan=t.status==='orphan'
                               const pnl=isOpen?t._pnl_float_eur:t.pnl_eur
                               const pnlPct=isOpen?t._pnl_float_pct:t.pnl_pct
                               const exitPx=isOpen?t._current_price:t.exit_price
@@ -4108,10 +4109,10 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                     {TL_LABEL[t.broker]||t.broker?.toUpperCase()}
                                   </span>
                                 </td>
-                                <td style={{padding:'6px 8px',color:'#a8ccdf',whiteSpace:'nowrap'}}>{fmtDate(t.entry_date)||'—'}</td>
-                                <td style={{padding:'6px 8px',color:'#a8ccdf',whiteSpace:'nowrap'}}>{isOpen?<span style={{color:'#3d5a7a'}}>—</span>:fmtDate(t.exit_date)||'—'}</td>
+                                <td style={{padding:'6px 8px',color:'#a8ccdf',whiteSpace:'nowrap'}}>{isOrphan?<span style={{color:'#3d5a7a'}}>—</span>:fmtDate(t.entry_date)||'—'}</td>
+                                <td style={{padding:'6px 8px',color:'#a8ccdf',whiteSpace:'nowrap'}}>{isOrphan?fmtDate(t.entry_date)||'—':isOpen?<span style={{color:'#3d5a7a'}}>—</span>:fmtDate(t.exit_date)||'—'}</td>
                                 <td style={{padding:'6px 8px',color:'#e2eaf5'}}>{t.shares}</td>
-                                <td style={{padding:'6px 8px',color:'#e2eaf5'}}>{t.entry_price}</td>
+                                <td style={{padding:'6px 8px',color:'#e2eaf5'}}>{isOrphan?<span style={{color:'#3d5a7a'}}>—</span>:t.entry_price}</td>
                                 <td style={{padding:'6px 8px',color:'#7a9bc0',whiteSpace:'nowrap'}}>
                                   {(()=>{
                                     let cap=parseFloat(t.entry_price||0)*parseFloat(t.shares||0)
@@ -4121,7 +4122,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                   })()}
                                 </td>
                                 <td style={{padding:'6px 8px',color:isOpen?'#9b72ff':'#e2eaf5',whiteSpace:'nowrap'}}>
-                                  {exitPx?parseFloat(exitPx).toFixed(2):<span style={{color:'#3d5a7a'}}>—</span>}
+                                  {isOrphan?parseFloat(t.entry_price||0).toFixed(2):exitPx?parseFloat(exitPx).toFixed(2):<span style={{color:'#3d5a7a'}}>—</span>}
                                   {isOpen&&exitPx&&<span style={{fontSize:8,color:'#5a8aaa',marginLeft:2}}>live</span>}
                                 </td>
                                 <td style={{padding:'6px 8px',color:'#ffd166',fontSize:10}}>{t.entry_currency||'—'}</td>
