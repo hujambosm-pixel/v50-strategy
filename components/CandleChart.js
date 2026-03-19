@@ -696,7 +696,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       priceAlarmTimersRef.current.forEach(id=>clearInterval(id))
       priceAlarmTimersRef.current=[]
     }
-  },[priceAlarms,ackedAlarms])
+  },[priceAlarms,ackedAlarms,data])
 
   return (
     <div style={{position:'relative'}}>
