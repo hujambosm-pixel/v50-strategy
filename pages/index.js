@@ -451,7 +451,7 @@ export default function Home() {
             (!t.status || t.status === 'open') &&
             !t.exit_date
           )
-          .sort((a,b) => (a.entry_date||'') <= (b.entry_date||'') ? -1 : 1)  // oldest first
+          .sort((a,b) => { const da=a.entry_date||'',db=b.entry_date||''; return da<db?-1:da>db?1:0 })  // oldest first
 
         if (openPositions.length === 1) {
           // Single open position → auto-assign
@@ -506,10 +506,13 @@ export default function Home() {
     })
     const statusMap = new Array(rawRows.length).fill('open')
     Object.entries(bySymbol).forEach(([, fills]) => {
-      // Comparador correcto: 3 valores, estable para fechas iguales (preserva orden original)
+      // Comparador correcto: BUY antes que SELL en misma fecha para FIFO correcto
       const sorted = [...fills].sort((a, b) => {
         const da = a.r.entry_date || '', db = b.r.entry_date || ''
-        return da < db ? -1 : da > db ? 1 : 0
+        if (da < db) return -1; if (da > db) return 1
+        if (a.r.fill_type==='buy' && b.r.fill_type!=='buy') return -1
+        if (a.r.fill_type!=='buy' && b.r.fill_type==='buy') return 1
+        return 0
       })
       const buyQueue = [] // {origIdx, sharesLeft}
       sorted.forEach(({ r, i }) => {
@@ -2062,7 +2065,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.21</title>
+        <title>Trading Simulator V5.22</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2137,7 +2140,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.21
+            <span className="dot"/>Trading Simulator V5.22
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
