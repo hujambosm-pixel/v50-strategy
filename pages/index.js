@@ -555,8 +555,15 @@ export default function Home() {
     })
     const result = []
     Object.entries(bySymbol).forEach(([sym, fills])=>{
-      // Ordenar todos los fills cronológicamente
-      const sorted = [...fills].sort((a,b)=>(a.entry_date||'') <= (b.entry_date||'') ? -1 : 1)
+      // Ordenar todos los fills cronológicamente (BUYs antes que SELLs en misma fecha)
+      const sorted = [...fills].sort((a,b)=>{
+        const da=a.entry_date||'', db=b.entry_date||''
+        if(da<db) return -1; if(da>db) return 1
+        // Misma fecha: BUY antes que SELL para FIFO correcto
+        if(a.fill_type==='buy'&&b.fill_type!=='buy') return -1
+        if(a.fill_type!=='buy'&&b.fill_type==='buy') return 1
+        return 0
+      })
       // Cola FIFO de compras pendientes de cerrar
       // Cada elemento: { row, sharesLeft, buyFills:[] }
       const buyQueue = []
@@ -579,7 +586,7 @@ export default function Home() {
           if(sharesToAssign > 0.001){
             result.push({
               ...fill, shares:sharesToAssign, _orphanSell:true,
-              fill_type:'sell', status:'open'
+              fill_type:'sell', status:'orphan'
             })
           }
         }
@@ -2054,7 +2061,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.19</title>
+        <title>Trading Simulator V5.20</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2129,7 +2136,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.19
+            <span className="dot"/>Trading Simulator V5.20
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
