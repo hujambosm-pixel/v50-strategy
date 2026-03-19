@@ -1,11 +1,13 @@
 import { useRef, useEffect } from 'react'
 import { MONO, f2, fmtDate } from '../lib/utils'
 
-export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, syncRef, savedRangeRef, chartHeight=480, priceAlarms=[], tlOpenTrades=[] }) {
+export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, chartHeight=480, priceAlarms=[], tlOpenTrades=[] }) {
   const containerRef=useRef(null), svgRef=useRef(null), legendRef=useRef(null), tooltipRef=useRef(null)
   const chartRef=useRef(null), candlesRef=useRef(null)
   const chartAliveRef=useRef(true)
   const rulerStart=useRef(null), rulerActiveR=useRef(rulerActive)
+  const priceAlarmLinesRef=useRef([]) // [{alarmId, priceLine, price}]
+  const dragRef=useRef(null)          // {lineObj} while dragging
   useEffect(()=>{
     rulerActiveR.current=rulerActive
     if(!rulerActive){
@@ -86,19 +88,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         })
       })
 
-      // ── Líneas de alertas de precio ──
-      priceAlarms.forEach(alarm=>{
-        if(!alarm.price_level) return
-        const isAbove = alarm.condition_detail==='price_above'
-        candles.createPriceLine({
-          price: Number(alarm.price_level),
-          color: isAbove ? '#00e5a0' : '#ff4d6d',
-          lineWidth: 2,
-          lineStyle: 0, // Solid
-          axisLabelVisible: true,
-          title: '',
-        })
-      })
+      // ── Líneas de alertas de precio — gestionadas en efecto separado ──
 
       const ohlcMap={},erMap={},elMap={}
       data.forEach(d=>{ohlcMap[d.date]=d;if(d.emaR!=null)erMap[d.date]=d.emaR;if(d.emaL!=null)elMap[d.date]=d.emaL})
@@ -284,9 +274,56 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         }
       })
 
+      // ── Drag de líneas de precio de alarma ──
+      const DRAG_HIT=8 // px de tolerancia
+      const onMouseDown=e=>{
+        if(rulerActiveR.current) return
+        const rect=containerRef.current.getBoundingClientRect()
+        const py=e.clientY-rect.top
+        let nearest=null,nearestDist=Infinity
+        if(candlesRef.current){
+          priceAlarmLinesRef.current.forEach(lineObj=>{
+            const lineY=candlesRef.current.priceToCoordinate(lineObj.price)
+            if(lineY==null) return
+            const dist=Math.abs(py-lineY)
+            if(dist<DRAG_HIT&&dist<nearestDist){nearest=lineObj;nearestDist=dist}
+          })
+        }
+        if(nearest){dragRef.current={lineObj:nearest};e.preventDefault();e.stopPropagation()}
+      }
+      const onMouseUp=()=>{
+        if(dragRef.current){
+          const{lineObj}=dragRef.current
+          if(onAlarmPriceDrag) onAlarmPriceDrag(lineObj.alarmId,Math.round(lineObj.price*100)/100)
+          dragRef.current=null
+          if(containerRef.current) containerRef.current.style.cursor=''
+        }
+      }
+      cnt.addEventListener('mousedown',onMouseDown)
+      cnt.addEventListener('mouseup',onMouseUp)
+
       const onMove=e=>{
         const rect=containerRef.current.getBoundingClientRect()
         const px=e.clientX-rect.left,py=e.clientY-rect.top
+        // Drag activo: mover línea de precio
+        if(dragRef.current&&candlesRef.current){
+          const newPrice=candlesRef.current.coordinateToPrice(py)
+          if(newPrice!=null){
+            const rounded=Math.round(newPrice*100)/100
+            dragRef.current.lineObj.priceLine.applyOptions({price:rounded})
+            dragRef.current.lineObj.price=rounded
+          }
+          return
+        }
+        // Cursor hint cuando estamos cerca de una línea de alarma
+        if(candlesRef.current&&!rulerActiveR.current){
+          let nearAlarm=false
+          priceAlarmLinesRef.current.forEach(lineObj=>{
+            const lineY=candlesRef.current.priceToCoordinate(lineObj.price)
+            if(lineY!=null&&Math.abs(py-lineY)<DRAG_HIT) nearAlarm=true
+          })
+          containerRef.current.style.cursor=nearAlarm?'ns-resize':''
+        }
         if(ctrlState.pressed){
           const snapped=snapToOHLC(px,py,true)
           snapDot.setAttribute('cx',String(snapped.x))
@@ -592,7 +629,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       ro.observe(containerRef.current)
       setTimeout(drawTradeLabels,200)
 
-      return()=>{chartAliveRef.current=false;try{unsubLabels()}catch(_){};cnt.removeEventListener('mousemove',onMove);window.removeEventListener('keydown',onKeyDown);window.removeEventListener('keyup',onKeyUp);ro.disconnect()}
+      return()=>{chartAliveRef.current=false;try{unsubLabels()}catch(_){};cnt.removeEventListener('mousemove',onMove);cnt.removeEventListener('mousedown',onMouseDown);cnt.removeEventListener('mouseup',onMouseUp);window.removeEventListener('keydown',onKeyDown);window.removeEventListener('keyup',onKeyUp);ro.disconnect()}
     })
     return()=>{chartAliveRef.current=false;if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null}}
   },[data,emaRPeriod,emaLPeriod,trades,maxDD,labelMode])
@@ -601,6 +638,27 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
   useEffect(()=>{
     if(chartRef.current) try{chartRef.current.applyOptions({height:chartHeight})}catch(_){}
   },[chartHeight])
+
+  // ── Líneas de alertas de precio — efecto separado para no recrear el chart ──
+  useEffect(()=>{
+    const candles=candlesRef.current
+    if(!candles) return
+    // Eliminar líneas anteriores
+    priceAlarmLinesRef.current.forEach(({priceLine})=>{try{candles.removePriceLine(priceLine)}catch(_){}})
+    // Crear nuevas
+    priceAlarmLinesRef.current=priceAlarms
+      .filter(a=>a.price_level)
+      .map(alarm=>{
+        const isAbove=alarm.condition_detail==='price_above'
+        const priceLine=candles.createPriceLine({
+          price:Number(alarm.price_level),
+          color:isAbove?'#00e5a0':'#ff4d6d',
+          lineWidth:2,lineStyle:0,
+          axisLabelVisible:true,title:'',
+        })
+        return{alarmId:alarm.id,priceLine,price:Number(alarm.price_level)}
+      })
+  },[priceAlarms])
 
   return (
     <div style={{position:'relative'}}>

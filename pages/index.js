@@ -229,8 +229,8 @@ export default function Home() {
   const [navExpanded,setNavExpanded]=useState(false)
   const [metricsLayout,setMetricsLayout]=useState('panel')
   const [metricsView,setMetricsView]=useState('panel')   // 'multi'=3col | 'single'=one strat per block
-  const [showStrategy,setShowStrategy]=useState(true),[showBH,setShowBH]=useState(true)
-  const [showSP500,setShowSP500]=useState(true),[showCompound,setShowCompound]=useState(true)
+  const [showStrategy,setShowStrategy]=useState(false),[showBH,setShowBH]=useState(true)
+  const [showSP500,setShowSP500]=useState(false),[showCompound,setShowCompound]=useState(true)
   const [watchlist,setWatchlist]=useState(WATCHLIST_DEFAULT)
   const [wlLoading,setWlLoading]=useState(true)
   const [selectedLists,setSelectedLists]=useState(['General'])
@@ -715,6 +715,12 @@ export default function Home() {
   const reloadConditions=()=>{
     setCondLoading(true)
     fetchConditions().then(d=>setConditions(d||[])).catch(()=>{}).finally(()=>setCondLoading(false))
+  }
+
+  const onAlarmPriceDrag=async(alarmId,newPrice)=>{
+    // Optimistic update
+    setAlarms(prev=>prev.map(a=>a.id===alarmId?{...a,price_level:newPrice}:a))
+    try{ await upsertAlarm({id:alarmId,price_level:newPrice}) }catch(e){ reloadAlarms() }
   }
 
   const reloadAlarms=()=>{
@@ -2002,7 +2008,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.08</title>
+        <title>Trading Simulator V5.09</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2077,16 +2083,17 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.08
+            <span className="dot"/>Trading Simulator V5.09
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
           {sp5&&(
-            <div style={{
+            <div onClick={()=>window.open('https://www.tradingview.com/chart/?symbol=SPX','_blank')} title="Ver SP500 en TradingView" style={{
               display:'flex',alignItems:'center',gap:6,
               padding:'0 12px',
               borderLeft:'1px solid var(--border)',borderRight:'1px solid var(--border)',
-              fontFamily:MONO,fontSize:11,flexShrink:0
+              fontFamily:MONO,fontSize:11,flexShrink:0,
+              cursor:'pointer',
             }}>
               <span className="header-sp500-label">SP500</span>
               <span className="header-sp500-val">{fmt(sp5.precio,2)}</span>
@@ -3216,6 +3223,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       labelMode={labelMode} rulerActive={rulerOn}
                       onChartReady={api=>{chartApiRef.current=api}}
                       onPriceAlarm={sidePanel!=='watchlist'?price=>setPriceAlarmDlg({price,symbol:simbolo}):null}
+                      onAlarmPriceDrag={onAlarmPriceDrag}
                       savedRangeRef={savedRangeRef}
                       syncRef={chartSyncRef}
                       chartHeight={candleH}
