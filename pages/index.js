@@ -428,6 +428,8 @@ export default function Home() {
         while(remaining>0.001 && buyQueue.length>0){
           const head=buyQueue[0]
           if(head.sharesLeft<0.001){ buyQueue.shift(); continue }
+          // Un SELL no puede emparejarse con un BUY posterior — cronológicamente imposible
+          if((head.entry_date||'') > (sell.entry_date||'')) break
           const take=Math.min(head.sharesLeft, remaining)
           head.sharesLeft-=take; remaining-=take; consumed+=take
           const bTot=parseFloat(head.shares||1)
@@ -2059,7 +2061,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.25</title>
+        <title>Trading Simulator V5.26</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2134,7 +2136,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.25
+            <span className="dot"/>Trading Simulator V5.26
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
