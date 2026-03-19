@@ -432,12 +432,13 @@ export default function Home() {
     return rows.map(r => {
       let enriched = {...r}
 
-      // Duplicate detection: same symbol + date + price + shares already in DB
+      // Duplicate detection: same symbol + date + fill_type + shares + price already in DB
       const isDup = tlTrades.some(t =>
         t.symbol === r.symbol &&
         t.entry_date === r.entry_date &&
-        Math.abs(parseFloat(t.entry_price||0) - parseFloat(r.entry_price||0)) < 0.01 &&
-        Math.abs(parseFloat(t.shares||0) - parseFloat(r.shares||0)) < 0.01
+        (t.fill_type||'buy') === (r.fill_type||'buy') &&
+        Math.abs(parseFloat(t.shares||0) - parseFloat(r.shares||0)) < 0.01 &&
+        Math.abs(parseFloat(t.entry_price||0) - parseFloat(r.entry_price||0)) < 0.01
       )
       if (isDup) enriched._isDuplicate = true
 
@@ -2061,7 +2062,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.20</title>
+        <title>Trading Simulator V5.21</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2136,7 +2137,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.20
+            <span className="dot"/>Trading Simulator V5.21
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4306,7 +4307,10 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                               {(()=>{
                 const needsChoice=tlParsed.some(r=>r._multipleOpen&&!r._closesTradeId)
                 const valid=tlParsed.filter(r=>!r._isDuplicate).length
-                return needsChoice?'⚠ Elige posición a cerrar':`✓ Importar ${valid} op${valid!==1?'s':''}`
+                const dups=tlParsed.filter(r=>r._isDuplicate).length
+                if(needsChoice) return '⚠ Elige posición a cerrar'
+                if(dups>0) return `✓ Importar ${valid} · ⊘ ${dups} duplicada${dups!==1?'s':''} omitida${dups!==1?'s':''}`
+                return `✓ Importar ${valid} op${valid!==1?'s':''}`
               })()}
                             </button>
                           </div>
@@ -4358,7 +4362,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                       {t.fill_type==='buy'?'▲ BUY':'▼ SELL'}
                                     </span>
                                   )}
-                                  {isDup&&<span style={{fontSize:8,color:'#ff4d6d',marginLeft:4,display:'block'}}>⚠ dup</span>}
+                                  {isDup&&<span style={{fontSize:8,color:'#ff4d6d',marginLeft:4,display:'block'}}>⚠ Duplicada</span>}
                                 </td>
                                 {cell('symbol',t.symbol,'#c8dff5')}
                                 <td style={{padding:'3px 5px'}}>
