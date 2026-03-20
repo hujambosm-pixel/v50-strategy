@@ -1804,10 +1804,10 @@ export default function Home() {
       const raw = json.parsed||[]
       // Mark duplicates on raw fills (for save-time skip + button count)
       const markedRaw = raw.map(r=>({...r, _isDuplicate: tlTrades.some(t=>
-        t.symbol===r.symbol && t.entry_date===r.entry_date &&
+        t.symbol===r.symbol && (t.date||t.entry_date)===(r.date||r.entry_date) &&
         (t.fill_type||'buy')===(r.fill_type||'buy') &&
         Math.abs(parseFloat(t.shares||0)-parseFloat(r.shares||0))<0.01 &&
-        Math.abs(parseFloat(t.entry_price||0)-parseFloat(r.entry_price||0))<0.01
+        Math.abs(parseFloat(t.price||t.entry_price||0)-parseFloat(r.price||r.entry_price||0))<0.01
       )}))
       setTlParsedRaw(markedRaw)
       // Preview always shows grouped view (FIFO for display only, not for save)
@@ -1846,7 +1846,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                _multipleOpen,_openOptions,_fxLoading,_symSearch,
                _current_price,_current_date,_pnl_float_eur,_pnl_float_pct,
                status, ...fillFields}=raw
-        const trade={...fillFields, status:'open', broker:fillFields.broker||defBroker}
+        const trade={...fillFields, broker:fillFields.broker||defBroker}
         if(tlUseLocal()){
           const all=tlGetLS()
           all.push({...trade, id:'local_'+Date.now()+'_'+Math.random().toString(36).slice(2)})
