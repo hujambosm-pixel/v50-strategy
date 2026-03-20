@@ -1801,7 +1801,20 @@ export default function Home() {
 
       const json=await res.json()
       if(!res.ok) throw new Error(json.error||'Error')
-      const raw = json.parsed||[]
+      // Normalizar al schema viejo que usan groupParsedFills / display table
+      // (la API devuelve new schema: date/price/currency/fx/commission)
+      const raw = (json.parsed||[]).map(r=>{
+        const isBuy=(r.fill_type||'buy')!=='sell'
+        return {
+          ...r,
+          entry_date:     r.date     !=null ? r.date     : r.entry_date,
+          entry_price:    r.price    !=null ? r.price    : r.entry_price,
+          entry_currency: r.currency || r.entry_currency || 'USD',
+          fx_entry:       r.fx       !=null ? r.fx       : r.fx_entry,
+          commission_buy:  isBuy  ? (r.commission!=null?r.commission:r.commission_buy ||0) : (r.commission_buy ||0),
+          commission_sell: !isBuy ? (r.commission!=null?r.commission:r.commission_sell||0) : (r.commission_sell||0),
+        }
+      })
       // Mark duplicates on raw fills (for save-time skip + button count)
       const markedRaw = raw.map(r=>({...r, _isDuplicate: tlTrades.some(t=>
         t.symbol===r.symbol && (t.date||t.entry_date)===(r.date||r.entry_date) &&
