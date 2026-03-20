@@ -2182,7 +2182,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.31</title>
+        <title>Trading Simulator V5.32</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2257,7 +2257,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.31
+            <span className="dot"/>Trading Simulator V5.32
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4548,7 +4548,12 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                     {t._isFullClose||t.status==='closed'?'✓ Cerrada':t.status==='sell_close'?'↩ Cierre':t.status==='orphan'?'⊘ Sin origen':t._isPartialClose?'◑ Parcial':'○ Abierta'}
                                   </span>
                                 </td>
-                                <td style={{padding:'3px 5px',color:'#00d4ff'}}>{t.capital_eur?`€${Math.round(t.capital_eur)}`:'—'}</td>
+                                <td style={{padding:'3px 5px',color:'#00d4ff'}}>{(()=>{
+                                  const ep=parseFloat(t.entry_price||0),sh=parseFloat(t.shares||0)
+                                  let fx=parseFloat(t.fx_entry||1);if(fx<1&&fx>0)fx=1/fx
+                                  const capEur=(t.entry_currency&&t.entry_currency!=='EUR')?(ep*sh)/fx:(ep*sh)
+                                  return capEur>0?'€'+Math.round(capEur).toLocaleString('es-ES'):'—'
+                                })()}</td>
                                 <td style={{padding:'3px 5px'}}>
                                   <button onClick={()=>setTlParsed(prev=>prev.filter((_,j)=>j!==i))}
                                     title="Eliminar esta fila"
