@@ -1858,7 +1858,10 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                _isPartialClose,_isFullClose,_isExcessSell,_remainingShares,_sellShares,
                _multipleOpen,_openOptions,_fxLoading,_symSearch,
                _current_price,_current_date,_pnl_float_eur,_pnl_float_pct,
-               status, ...fillFields}=raw
+               status, capital_eur, pnl_eur, pnl_pct, pnl_currency,
+               entry_date, entry_price, entry_currency, fx_entry, commission_buy, commission_sell,
+               exit_date, exit_price, exit_currency, fx_exit,
+               ...fillFields}=raw
         const trade={...fillFields, broker:fillFields.broker||defBroker}
         if(tlUseLocal()){
           const all=tlGetLS()
@@ -2182,7 +2185,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.32</title>
+        <title>Trading Simulator V5.33</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2257,7 +2260,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.32
+            <span className="dot"/>Trading Simulator V5.33
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
