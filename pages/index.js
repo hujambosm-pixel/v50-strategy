@@ -2328,7 +2328,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.54</title>
+        <title>Trading Simulator V5.55</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2403,7 +2403,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.54
+            <span className="dot"/>Trading Simulator V5.55
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4734,7 +4734,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 {tlTab==='dashboard'&&(
                   <div style={{flex:1,display:'flex',flexDirection:'column',gap:0,overflowY:'auto'}}>
                     {(()=>{
-                      // Bug fix V5.54: use tlTradesFiltered (pre-computed with live prices) instead of
+                      // Bug fix V5.55: use tlTradesFiltered (pre-computed with live prices) instead of
                       // re-running computeFifo with empty prices, which caused pnl_eur to never resolve
                       // for open positions and the equity curve to be empty when ≤1 closed trade existed.
                       const closed = tlTradesFiltered.filter(t=>t.status==='closed').slice().sort((a,b)=>(a.exit_date||a.entry_date||'').localeCompare(b.exit_date||b.entry_date||''))
@@ -4753,11 +4753,11 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         cumPnl += parseFloat(t.pnl_eur||0)
                         return {date:t.exit_date||t.entry_date, value:cumPnl, trade:t}
                       })
-                      // Float point = closed cum + live floating (uses real prices via tlFifo/tlLivePrices)
+                      // Float point: always show open trade endpoint so curve renders even while prices load
                       const floatPnl = openTrades.reduce((s,t)=>s+(t._pnl_float_eur||0),0)
-                      if(floatPnl!==0){
+                      if(openTrades.length>0){
                         // Anchor at entry of first open trade if no closed trades exist yet
-                        if(equityCurve.length===0 && openTrades.length>0){
+                        if(equityCurve.length===0){
                           equityCurve.push({date:openTrades[0].entry_date||today, value:0})
                         }
                         equityCurve.push({date:today, value:cumPnl+floatPnl, isFloat:true})
@@ -4771,7 +4771,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         return {date:t.exit_date||t.entry_date, value:parseFloat(cumSinFx.toFixed(4))}
                       })
                       // Build invest chart data: timeline of capital invested vs cumulative profit
-                      // Bug fix V5.54: include open trade entry events in the events array so their
+                      // Bug fix V5.55: include open trade entry events in the events array so their
                       // capital propagates correctly through the timeline up to today (instead of
                       // patching investMap at entry_date which didn't propagate forward).
                       const events = []
@@ -4860,7 +4860,10 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 <div style={{width:270,flexShrink:0,borderLeft:'1px solid var(--border)',background:'var(--bg2)',display:'flex',flexDirection:'column',overflow:'hidden'}}>
                   {/* ── MÉTRICAS SIEMPRE VISIBLES — incluye flotantes ── */}
                   {(()=>{
-                    const {openPositions:open, closedTrades:closed} = computeFifo(tlFiltered, {})
+                    // Use tlTradesFiltered (pre-computed with live prices via tlFifo/tlLivePrices)
+                    // so _pnl_float_eur is correct for open positions instead of always 0
+                    const open = tlTradesFiltered.filter(t=>t.status==='open')
+                    const closed = tlTradesFiltered.filter(t=>t.status==='closed').slice().sort((a,b)=>(a.exit_date||'').localeCompare(b.exit_date||''))
                     const today=new Date().toISOString().split('T')[0]
                     // P&L
                     const pnlReal=closed.reduce((s,t)=>s+(t.pnl_eur||0),0)
