@@ -2330,7 +2330,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.49</title>
+        <title>Trading Simulator V5.50</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2405,7 +2405,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.49
+            <span className="dot"/>Trading Simulator V5.50
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4216,7 +4216,19 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       <table className="tl-ops-table" onContextMenu={e=>{e.stopPropagation();openCtx(e,'tl_table')}} style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:11,textAlign:'center'}}>
                         <thead>
                           <tr style={{background:'var(--bg2)',position:'sticky',top:0,zIndex:5}}>
-                            <th style={{width:28,padding:'6px 4px',borderBottom:'1px solid var(--border)'}}/>
+                            <th style={{width:28,padding:'6px 4px',borderBottom:'1px solid var(--border)',cursor:tlMultiMode?'pointer':'default'}}
+                              onClick={()=>{
+                                if(!tlMultiMode) return
+                                const allIds=tlTradesFiltered.flatMap(t=>[...(t._buyFills||[]),...(t._sellFills||[])].map(f=>f.id).filter(Boolean))
+                                const allSel=allIds.length>0&&allIds.every(id=>tlMultiSel.has(id))
+                                setTlMultiSel(allSel?new Set():new Set(allIds))
+                              }}>
+                              {tlMultiMode&&(()=>{
+                                const allIds=tlTradesFiltered.flatMap(t=>[...(t._buyFills||[]),...(t._sellFills||[])].map(f=>f.id).filter(Boolean))
+                                const allSel=allIds.length>0&&allIds.every(id=>tlMultiSel.has(id))
+                                return <input type="checkbox" readOnly checked={allSel} style={{cursor:'pointer',width:12,height:12,pointerEvents:'none'}}/>
+                              })()}
+                            </th>
                             {['#','Symbol','Strategy','Broker','Entry','Exit','Shares','Px In','Capital','Px Out','Curr.','FX','Fee','P&L€','P&L%','Days','Status'].map(h=>(
                               <th key={h} style={{padding:'6px 8px',textAlign:'center',fontFamily:MONO,fontSize:9,color:'#3d5a7a',
                                 letterSpacing:'0.08em',textTransform:'uppercase',borderBottom:'1px solid var(--border)',whiteSpace:'nowrap'}}>{h}</th>
@@ -4337,6 +4349,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                     <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:10,textAlign:'center'}}>
                                       <thead>
                                         <tr style={{background:'rgba(0,212,255,0.04)'}}>
+                                          <th style={{width:20,padding:'3px 4px'}}/>
                                           {['Tipo','Fecha','Acciones','Precio','Capital €','Comisión','Divisa','FX'].map(h=>(
                                             <th key={h} style={{padding:'3px 8px',color:'#2a4060',fontWeight:600,fontSize:8,
                                               letterSpacing:'0.08em',textTransform:'uppercase',textAlign:'center'}}>{h}</th>
@@ -4354,7 +4367,11 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                           <tr key={fill.id} style={{borderTop:'1px solid rgba(0,212,255,0.05)',cursor:'pointer'}}
                                             onMouseOver={e=>e.currentTarget.style.background='rgba(255,255,255,0.04)'}
                                             onMouseOut={e=>e.currentTarget.style.background=''}
-                                            onClick={e=>{e.stopPropagation();const df=tlDefaultForm();setTlForm({...df,id:fill.id,fill_type:fill.fill_type||'buy',symbol:fill.symbol||trade.symbol||'',broker:fill.broker||df.broker,date:toDisplayDate(fill.date)||'',price:fill.price||'',shares:fill.shares||'',currency:fill.currency||'USD',commission:fill.commission||0,fx:fill.fx?String(fill.fx):'',fx_manual:!!fill.fx,notes:fill.notes||'',strategy:fill.strategy||df.strategy,import_source:fill.import_source||'manual',_isFirstBuy:isFirstBuy});setTlFormOpen(true)}}>
+                                            onClick={e=>{e.stopPropagation();if(tlMultiMode){if(fill.id)setTlMultiSel(prev=>{const n=new Set(prev);n.has(fill.id)?n.delete(fill.id):n.add(fill.id);return n});return}const df=tlDefaultForm();setTlForm({...df,id:fill.id,fill_type:fill.fill_type||'buy',symbol:fill.symbol||trade.symbol||'',broker:fill.broker||df.broker,date:toDisplayDate(fill.date)||'',price:fill.price||'',shares:fill.shares||'',currency:fill.currency||'USD',commission:fill.commission||0,fx:fill.fx?String(fill.fx):'',fx_manual:!!fill.fx,notes:fill.notes||'',strategy:fill.strategy||df.strategy,import_source:fill.import_source||'manual',_isFirstBuy:isFirstBuy});setTlFormOpen(true)}}>
+                                            <td style={{width:20,padding:'4px 4px',textAlign:'center'}}
+                                              onClick={e=>{e.stopPropagation();if(fill.id)setTlMultiSel(prev=>{const n=new Set(prev);n.has(fill.id)?n.delete(fill.id):n.add(fill.id);return n})}}>
+                                              {tlMultiMode&&<input type="checkbox" readOnly checked={!!fill.id&&tlMultiSel.has(fill.id)} style={{cursor:'pointer',width:11,height:11,pointerEvents:'none'}}/>}
+                                            </td>
                                             <td style={{padding:'4px 8px',textAlign:'center'}}>
                                               <span style={{fontSize:9,padding:'1px 5px',borderRadius:3,fontWeight:700,
                                                 background:isBuy?'rgba(0,229,160,0.12)':'rgba(255,77,109,0.12)',
