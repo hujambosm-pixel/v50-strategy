@@ -2328,7 +2328,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.58</title>
+        <title>Trading Simulator V5.59</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2403,7 +2403,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.58
+            <span className="dot"/>Trading Simulator V5.59
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4734,7 +4734,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 {tlTab==='dashboard'&&(
                   <div style={{flex:1,display:'flex',flexDirection:'column',gap:0,overflowY:'auto'}}>
                     {(()=>{
-                      // Bug fix V5.58: use tlTradesFiltered (pre-computed with live prices) instead of
+                      // Bug fix V5.59: use tlTradesFiltered (pre-computed with live prices) instead of
                       // re-running computeFifo with empty prices, which caused pnl_eur to never resolve
                       // for open positions and the equity curve to be empty when ≤1 closed trade existed.
                       const closed = tlTradesFiltered.filter(t=>t.status==='closed').slice().sort((a,b)=>(a.exit_date||a.entry_date||'').localeCompare(b.exit_date||b.entry_date||''))
@@ -4747,37 +4747,45 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       const today = new Date().toISOString().split('T')[0]
                       // Build equity curve — deduplicated by date (lightweight-charts requires strictly ascending times)
                       // Multiple closed trades on same day would cause duplicate timestamps → chart fails silently
-                      let cumPnl = 0, cumSinFx = 0
-                      const equityByDate = {}, sinFxByDate = {}
+                      let cumPnl = 0, cumSinFx = 0, cumSinComm = 0
+                      const equityByDate = {}, sinFxByDate = {}, sinCommByDate = {}
                       closed.forEach(t=>{
                         const date = t.exit_date||t.entry_date||today
+                        const comm = parseFloat(t.commission||0)
                         cumPnl += parseFloat(t.pnl_eur||0)
                         equityByDate[date] = cumPnl
                         const fxE=parseFloat(t.fx_entry||0)||1
                         // Sin FX: no deducir comisión — pnl_eur tampoco la incluye, así la diferencia = FX puro
                         cumSinFx+=(parseFloat(t.exit_price||0)-parseFloat(t.entry_price||0))*parseFloat(t.shares||0)/fxE
                         sinFxByDate[date] = parseFloat(cumSinFx.toFixed(4))
+                        // Sin Comisiones: pnl_eur + commission (lo que ganarías sin costes)
+                        cumSinComm += parseFloat(t.pnl_eur||0) + comm
+                        sinCommByDate[date] = parseFloat(cumSinComm.toFixed(4))
                       })
                       const equityCurve = Object.keys(equityByDate).sort().map(date=>({date,value:equityByDate[date]}))
                       const curveSinFx = Object.keys(sinFxByDate).sort().map(date=>({date,value:sinFxByDate[date]}))
+                      const curveSinComm = Object.keys(sinCommByDate).sort().map(date=>({date,value:sinCommByDate[date]}))
                       // Float point: always show open trade endpoint so curve renders even while prices load
                       // _pnl_float_eur uses entry FX → valid for both real and Sin FX curves
                       const floatPnl = openTrades.reduce((s,t)=>s+(t._pnl_float_eur||0),0)
+                      const openComm = openTrades.reduce((s,t)=>s+parseFloat(t.commission||0),0)
                       if(openTrades.length>0){
                         // Anchor at entry of first open trade if no closed trades exist yet
                         if(equityCurve.length===0){
                           equityCurve.push({date:openTrades[0].entry_date||today, value:0})
                           curveSinFx.push({date:openTrades[0].entry_date||today, value:0})
+                          curveSinComm.push({date:openTrades[0].entry_date||today, value:0})
                         }
-                        // Add today's float point to BOTH curves to avoid Sin FX diverging at the last segment
+                        // Add today's float point to all curves (consistent endpoint)
                         const lastDate = equityCurve.length ? equityCurve[equityCurve.length-1].date : ''
                         if(today > lastDate){
                           equityCurve.push({date:today, value:cumPnl+floatPnl, isFloat:true})
                           curveSinFx.push({date:today, value:parseFloat((cumSinFx+floatPnl).toFixed(4))})
+                          curveSinComm.push({date:today, value:parseFloat((cumSinComm+floatPnl+openComm).toFixed(4))})
                         }
                       }
                       // Build invest chart data: timeline of capital invested vs cumulative profit
-                      // Bug fix V5.58: include open trade entry events in the events array so their
+                      // Bug fix V5.59: include open trade entry events in the events array so their
                       // capital propagates correctly through the timeline up to today (instead of
                       // patching investMap at entry_date which didn't propagate forward).
                       const events = []
@@ -4786,7 +4794,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         const capitalEur = (parseFloat(t.shares||0)*parseFloat(t.entry_price||0))/fxE
                         const commIn = parseFloat(t.commission||0)/2
                         events.push({date:t.entry_date, capDelta:+capitalEur+commIn, pnlDelta:-commIn})
-                        events.push({date:t.exit_date||today, capDelta:-capitalEur, pnlDelta:parseFloat(t.pnl_eur||0)+commIn})
+                        // Exit removes full deployed amount (capitalEur+commIn) so commIn doesn't accumulate
+                        events.push({date:t.exit_date||today, capDelta:-(capitalEur+commIn), pnlDelta:parseFloat(t.pnl_eur||0)+commIn})
                       })
                       // Open trades: capital enters at entry_date and stays deployed (no exit event)
                       openTrades.forEach(t=>{
@@ -4833,7 +4842,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                           )}
 
                           {/* Equity curve — P&L acumulado */}
-                          {equityCurve.length>1&&<TlEquityChart curve={equityCurve} curveSinFx={curveSinFx.length>1?curveSinFx:null}/>}
+                          {equityCurve.length>1&&<TlEquityChart curve={equityCurve} curveSinFx={curveSinFx.length>1?curveSinFx:null} curveSinComm={curveSinComm.length>1?curveSinComm:null}/>}
                           {/* Capital Invertido vs Profit */}
                           {investData.length>1&&<TlInvestChart investData={investData}/>}
                           {/* Barras P&L por trade — cerradas + abiertas */}
@@ -4883,9 +4892,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     ]
                     const wins=allWithPnl.filter(t=>t._eff_pnl>=0)
                     const losses=allWithPnl.filter(t=>t._eff_pnl<0)
-                    // Win Rate: closed trades only (standard metric — open positions not yet resolved)
-                    const winsC=closed.filter(t=>(t.pnl_eur||0)>=0)
-                    const wr=closed.length?winsC.length/closed.length*100:0
+                    // Win Rate: todas las ops (cerradas + abiertas). Abierta cuenta si P&L flotante > 0
+                    const wr=allWithPnl.length?allWithPnl.filter(t=>t._eff_pnl>0).length/allWithPnl.length*100:0
                     const avgWinPct=wins.length?wins.reduce((s,t)=>s+t._eff_pct,0)/wins.length:0
                     const avgLossPct=losses.length?losses.reduce((s,t)=>s+Math.abs(t._eff_pct),0)/losses.length:0
                     const avgWinEur=wins.length?wins.reduce((s,t)=>s+t._eff_pnl,0)/wins.length:0
@@ -4957,7 +4965,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       {l:'Win Rate',
                        v:closed.length?wr.toFixed(1)+'%':'—',
                        c:wr>=50?'#00e5a0':'#ff4d6d',
-                       tip:'Ops cerradas ganadoras ÷ total cerradas × 100. Solo incluye posiciones ya liquidadas (P&L definitivo).'},
+                       tip:'Ops con P&L > 0 ÷ total ops × 100. Incluye cerradas (P&L real) y abiertas (flotante actual). Una abierta cuenta como ganadora si su flotante es positivo.'},
                       {l:'Ganancia Media (%)',
                        v:avgWinPct>0?'+'+avgWinPct.toFixed(2)+'%':'—',
                        c:'#00e5a0',

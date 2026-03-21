@@ -1,7 +1,12 @@
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useState } from 'react'
 
-export function TlEquityChart({ curve, curveSinFx }) {
+const MONO = '"JetBrains Mono",monospace'
+
+export function TlEquityChart({ curve, curveSinFx, curveSinComm }) {
   const ref = useRef(null), chartRef = useRef(null)
+  const [showSinFx, setShowSinFx] = useState(true)
+  const [showSinComm, setShowSinComm] = useState(true)
+
   useEffect(()=>{
     if(!ref.current||!curve?.length) return
     import('lightweight-charts').then(({createChart,CrosshairMode,LineStyle})=>{
@@ -22,9 +27,13 @@ export function TlEquityChart({ curve, curveSinFx }) {
       const lineColor = finalVal >= 0 ? '#00e5a0' : '#ff4d6d'
       chart.addLineSeries({color:lineColor,lineWidth:2,lastValueVisible:true,priceLineVisible:false,title:'P&L real'})
         .setData(curve.map(p=>({time:p.date,value:p.value})))
-      if(curveSinFx?.length>1){
+      if(showSinFx && curveSinFx?.length>1){
         chart.addLineSeries({color:'#7a9bc0',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:true,priceLineVisible:false,title:'Sin FX'})
           .setData(curveSinFx.map(p=>({time:p.date,value:p.value})))
+      }
+      if(showSinComm && curveSinComm?.length>1){
+        chart.addLineSeries({color:'#ffd166',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:true,priceLineVisible:false,title:'Sin Comm'})
+          .setData(curveSinComm.map(p=>({time:p.date,value:p.value})))
       }
       chart.timeScale().fitContent()
       const ro = new ResizeObserver(()=>{ if(ref.current) chart.applyOptions({width:ref.current.clientWidth}) })
@@ -32,20 +41,37 @@ export function TlEquityChart({ curve, curveSinFx }) {
       return ()=>ro.disconnect()
     })
     return ()=>{ if(chartRef.current){chartRef.current.remove();chartRef.current=null} }
-  },[curve,curveSinFx])
+  },[curve, curveSinFx, curveSinComm, showSinFx, showSinComm])
+
+  const btnStyle = (active, color) => ({
+    display:'flex',alignItems:'center',gap:4,
+    fontFamily:MONO,fontSize:9,color:active?color:'#3d5a7a',
+    cursor:'pointer',background:'none',border:'none',padding:'1px 4px',
+    borderRadius:3,opacity:active?1:0.5,
+    transition:'opacity 0.15s',
+  })
+
   return (
     <div style={{borderTop:'1px solid var(--border)'}}>
-      {curveSinFx?.length>1&&(
-        <div style={{padding:'4px 14px 0',display:'flex',gap:14,alignItems:'center'}}>
-          <span style={{fontFamily:'"JetBrains Mono",monospace',fontSize:9,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase'}}>Equity</span>
-          <span style={{display:'flex',alignItems:'center',gap:4,fontFamily:'"JetBrains Mono",monospace',fontSize:9,color:'#00e5a0'}}>
-            <span style={{display:'inline-block',width:10,height:2,background:'#00e5a0',borderRadius:1}}/> P&L real
-          </span>
-          <span style={{display:'flex',alignItems:'center',gap:4,fontFamily:'"JetBrains Mono",monospace',fontSize:9,color:'#7a9bc0'}}>
-            <span style={{display:'inline-block',width:10,height:2,background:'#7a9bc0',borderRadius:1,opacity:0.6}}/> Sin FX
-          </span>
-        </div>
-      )}
+      <div style={{padding:'4px 14px 0',display:'flex',gap:10,alignItems:'center'}}>
+        <span style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',marginRight:4}}>Equity</span>
+        {/* P&L real — always visible, no toggle */}
+        <span style={{display:'flex',alignItems:'center',gap:4,fontFamily:MONO,fontSize:9,color:'#00e5a0'}}>
+          <span style={{display:'inline-block',width:10,height:2,background:'#00e5a0',borderRadius:1}}/> P&L real
+        </span>
+        {/* Sin FX toggle */}
+        {curveSinFx?.length>1&&(
+          <button onClick={()=>setShowSinFx(v=>!v)} style={btnStyle(showSinFx,'#7a9bc0')} title={showSinFx?'Ocultar Sin FX':'Mostrar Sin FX'}>
+            <span style={{display:'inline-block',width:10,height:2,background:'#7a9bc0',borderRadius:1,opacity:showSinFx?0.8:0.3,borderBottom:'1px dashed #7a9bc0'}}/> Sin FX
+          </button>
+        )}
+        {/* Sin Comisiones toggle */}
+        {curveSinComm?.length>1&&(
+          <button onClick={()=>setShowSinComm(v=>!v)} style={btnStyle(showSinComm,'#ffd166')} title={showSinComm?'Ocultar Sin Comisiones':'Mostrar Sin Comisiones'}>
+            <span style={{display:'inline-block',width:10,height:2,background:'#ffd166',borderRadius:1,opacity:showSinComm?0.8:0.3,borderBottom:'1px dashed #ffd166'}}/> Sin Comm.
+          </button>
+        )}
+      </div>
       <div ref={ref} style={{minHeight:200}}/>
     </div>
   )
