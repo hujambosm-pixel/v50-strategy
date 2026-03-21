@@ -2328,7 +2328,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.59</title>
+        <title>Trading Simulator V5.60</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2403,7 +2403,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.59
+            <span className="dot"/>Trading Simulator V5.60
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4160,7 +4160,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       </button>
                     ))}
                     <div style={{flex:1}}/>
-                    <div style={{display:'flex',gap:6,alignItems:'center',padding:'5px 10px'}}>
+                    {tlTab==='ops'&&<div style={{display:'flex',gap:6,alignItems:'center',padding:'5px 10px'}}>
                       {tlMultiMode?(
                         <>
                           <span style={{fontFamily:MONO,fontSize:10,color:'#ffd166',flexShrink:0}}>
@@ -4203,7 +4203,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                           </button>
                         </>
                       )}
-                    </div>
+                    </div>}
                   </div>
                   {/* ── Contenido por tab ── */}
                   {(tlTab==='ops'||tlTab==='open')&&(
@@ -4734,7 +4734,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 {tlTab==='dashboard'&&(
                   <div style={{flex:1,display:'flex',flexDirection:'column',gap:0,overflowY:'auto'}}>
                     {(()=>{
-                      // Bug fix V5.59: use tlTradesFiltered (pre-computed with live prices) instead of
+                      // Bug fix V5.60: use tlTradesFiltered (pre-computed with live prices) instead of
                       // re-running computeFifo with empty prices, which caused pnl_eur to never resolve
                       // for open positions and the equity curve to be empty when ≤1 closed trade existed.
                       const closed = tlTradesFiltered.filter(t=>t.status==='closed').slice().sort((a,b)=>(a.exit_date||a.entry_date||'').localeCompare(b.exit_date||b.entry_date||''))
@@ -4785,7 +4785,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         }
                       }
                       // Build invest chart data: timeline of capital invested vs cumulative profit
-                      // Bug fix V5.59: include open trade entry events in the events array so their
+                      // Bug fix V5.60: include open trade entry events in the events array so their
                       // capital propagates correctly through the timeline up to today (instead of
                       // patching investMap at entry_date which didn't propagate forward).
                       const events = []
@@ -4892,8 +4892,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     ]
                     const wins=allWithPnl.filter(t=>t._eff_pnl>=0)
                     const losses=allWithPnl.filter(t=>t._eff_pnl<0)
-                    // Win Rate: todas las ops (cerradas + abiertas). Abierta cuenta si P&L flotante > 0
-                    const wr=allWithPnl.length?allWithPnl.filter(t=>t._eff_pnl>0).length/allWithPnl.length*100:0
+                    // Win Rate: todas las ops. Ganadora si P&L >= 0 (incluye break-even y VRT si flotante positivo)
+                    const wr=allWithPnl.length?allWithPnl.filter(t=>t._eff_pnl>=0).length/allWithPnl.length*100:0
                     const avgWinPct=wins.length?wins.reduce((s,t)=>s+t._eff_pct,0)/wins.length:0
                     const avgLossPct=losses.length?losses.reduce((s,t)=>s+Math.abs(t._eff_pct),0)/losses.length:0
                     const avgWinEur=wins.length?wins.reduce((s,t)=>s+t._eff_pnl,0)/wins.length:0

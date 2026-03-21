@@ -6,6 +6,8 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm }) {
   const ref = useRef(null), chartRef = useRef(null)
   const [showSinFx, setShowSinFx] = useState(true)
   const [showSinComm, setShowSinComm] = useState(true)
+  // Derive legend color from final curve value — same logic as the drawn line
+  const lineColor = curve?.length ? (curve[curve.length-1].value >= 0 ? '#00e5a0' : '#ff4d6d') : '#00e5a0'
 
   useEffect(()=>{
     if(!ref.current||!curve?.length) return
@@ -55,9 +57,9 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm }) {
     <div style={{borderTop:'1px solid var(--border)'}}>
       <div style={{padding:'4px 14px 0',display:'flex',gap:10,alignItems:'center'}}>
         <span style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',marginRight:4}}>Equity</span>
-        {/* P&L real — always visible, no toggle */}
-        <span style={{display:'flex',alignItems:'center',gap:4,fontFamily:MONO,fontSize:9,color:'#00e5a0'}}>
-          <span style={{display:'inline-block',width:10,height:2,background:'#00e5a0',borderRadius:1}}/> P&L real
+        {/* P&L real — always visible, color matches the drawn line */}
+        <span style={{display:'flex',alignItems:'center',gap:4,fontFamily:MONO,fontSize:9,color:lineColor}}>
+          <span style={{display:'inline-block',width:10,height:2,background:lineColor,borderRadius:1}}/> P&L real
         </span>
         {/* Sin FX toggle */}
         {curveSinFx?.length>1&&(
