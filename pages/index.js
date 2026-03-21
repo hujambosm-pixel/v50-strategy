@@ -2328,7 +2328,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.57</title>
+        <title>Trading Simulator V5.58</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2403,7 +2403,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.57
+            <span className="dot"/>Trading Simulator V5.58
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4734,7 +4734,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 {tlTab==='dashboard'&&(
                   <div style={{flex:1,display:'flex',flexDirection:'column',gap:0,overflowY:'auto'}}>
                     {(()=>{
-                      // Bug fix V5.57: use tlTradesFiltered (pre-computed with live prices) instead of
+                      // Bug fix V5.58: use tlTradesFiltered (pre-computed with live prices) instead of
                       // re-running computeFifo with empty prices, which caused pnl_eur to never resolve
                       // for open positions and the equity curve to be empty when ≤1 closed trade existed.
                       const closed = tlTradesFiltered.filter(t=>t.status==='closed').slice().sort((a,b)=>(a.exit_date||a.entry_date||'').localeCompare(b.exit_date||b.entry_date||''))
@@ -4754,7 +4754,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         cumPnl += parseFloat(t.pnl_eur||0)
                         equityByDate[date] = cumPnl
                         const fxE=parseFloat(t.fx_entry||0)||1
-                        cumSinFx+=(parseFloat(t.exit_price||0)-parseFloat(t.entry_price||0))*parseFloat(t.shares||0)/fxE-parseFloat(t.commission||0)
+                        // Sin FX: no deducir comisión — pnl_eur tampoco la incluye, así la diferencia = FX puro
+                        cumSinFx+=(parseFloat(t.exit_price||0)-parseFloat(t.entry_price||0))*parseFloat(t.shares||0)/fxE
                         sinFxByDate[date] = parseFloat(cumSinFx.toFixed(4))
                       })
                       const equityCurve = Object.keys(equityByDate).sort().map(date=>({date,value:equityByDate[date]}))
@@ -4776,7 +4777,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         }
                       }
                       // Build invest chart data: timeline of capital invested vs cumulative profit
-                      // Bug fix V5.57: include open trade entry events in the events array so their
+                      // Bug fix V5.58: include open trade entry events in the events array so their
                       // capital propagates correctly through the timeline up to today (instead of
                       // patching investMap at entry_date which didn't propagate forward).
                       const events = []
@@ -4883,7 +4884,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     const wins=allWithPnl.filter(t=>t._eff_pnl>=0)
                     const losses=allWithPnl.filter(t=>t._eff_pnl<0)
                     // Win Rate: closed trades only (standard metric — open positions not yet resolved)
-                    const winsC=closed.filter(t=>(t.pnl_eur||0)>0)
+                    const winsC=closed.filter(t=>(t.pnl_eur||0)>=0)
                     const wr=closed.length?winsC.length/closed.length*100:0
                     const avgWinPct=wins.length?wins.reduce((s,t)=>s+t._eff_pct,0)/wins.length:0
                     const avgLossPct=losses.length?losses.reduce((s,t)=>s+Math.abs(t._eff_pct),0)/losses.length:0
@@ -4991,21 +4992,17 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                        tip:'Suma de commission_buy + commission_sell de todas las operaciones. No están descontadas del P&L mostrado si usas pnl_eur bruto.'},
                       {l:'Impacto FX €',
                        v:(()=>{
-                         const total=tlTradesFiltered.filter(t=>t.exit_price!=null).reduce((s,t)=>{
+                         // Fórmula: (exit-entry)×shares×(1/fx_exit - 1/fx_entry) — solo cerradas
+                         // Igual que la diferencia entre P&L real y Sin FX en la equity curve
+                         const total=closed.reduce((s,t)=>{
                            const fxE=parseFloat(t.fx_entry||0)||1
-                           let fxX
-                           if(t.status==='open'&&t.currency&&t.currency!=='EUR'){
-                             const fxLive=tlLiveFx[t.currency]
-                             fxX=fxLive>0?fxLive:fxE
-                           } else {
-                             fxX=parseFloat(t.fx_exit||t.fx_entry||0)||fxE
-                           }
-                           return s+parseFloat(t.exit_price)*parseFloat(t.shares||0)*(1/fxX-1/fxE)
+                           const fxX=parseFloat(t.fx_exit||t.fx_entry||0)||fxE
+                           return s+(parseFloat(t.exit_price||0)-parseFloat(t.entry_price||0))*parseFloat(t.shares||0)*(1/fxX-1/fxE)
                          },0)
                          return total!==0?(total>=0?'+€':'-€')+Math.abs(total).toFixed(2):'€0.00'
                        })(),
                        c:'#ffd166',
-                       tip:'Suma del impacto del tipo de cambio en todas las operaciones (cerradas + abiertas). Abiertas usan FX en tiempo real. Positivo = el EUR se debilitó (tus USD valieron más). Negativo = el EUR se fortaleció.'},
+                       tip:'Impacto del tipo de cambio en el P&L realizado (solo cerradas). Igual que la diferencia entre "P&L real" y "Sin FX" en la equity curve. Positivo = EUR débil favoreció tus USD. Negativo = EUR fuerte penalizó.'},
                       {l:'Factor Beneficio',
                        v:factorBen!=null?factorBen.toFixed(2):'—',
                        c:factorBen!=null&&factorBen>=1?'#00e5a0':'#ff4d6d',
