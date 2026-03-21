@@ -2328,7 +2328,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.53</title>
+        <title>Trading Simulator V5.54</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2403,7 +2403,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.53
+            <span className="dot"/>Trading Simulator V5.54
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4734,8 +4734,11 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 {tlTab==='dashboard'&&(
                   <div style={{flex:1,display:'flex',flexDirection:'column',gap:0,overflowY:'auto'}}>
                     {(()=>{
-                      const {openPositions: openTrades, closedTrades: closed_raw} = computeFifo(tlFiltered, {})
-                      const closed = closed_raw.slice().sort((a,b)=>(a.exit_date||a.entry_date||'').localeCompare(b.exit_date||b.entry_date||''))
+                      // Bug fix V5.54: use tlTradesFiltered (pre-computed with live prices) instead of
+                      // re-running computeFifo with empty prices, which caused pnl_eur to never resolve
+                      // for open positions and the equity curve to be empty when ≤1 closed trade existed.
+                      const closed = tlTradesFiltered.filter(t=>t.status==='closed').slice().sort((a,b)=>(a.exit_date||a.entry_date||'').localeCompare(b.exit_date||b.entry_date||''))
+                      const openTrades = tlTradesFiltered.filter(t=>t.status==='open')
                       if(!closed.length&&!openTrades.length) return (
                         <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:MONO,fontSize:12,color:'#3d5a7a'}}>
                           Sin operaciones para mostrar el dashboard.
@@ -4750,10 +4753,14 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         cumPnl += parseFloat(t.pnl_eur||0)
                         return {date:t.exit_date||t.entry_date, value:cumPnl, trade:t}
                       })
-                      // Float point = closed cum + live floating (net comm buy already deducted)
+                      // Float point = closed cum + live floating (uses real prices via tlFifo/tlLivePrices)
                       const floatPnl = openTrades.reduce((s,t)=>s+(t._pnl_float_eur||0),0)
-                      if(floatPnl!==0 && equityCurve.length>0){
-                        equityCurve.push({date:today,value:cumPnl+floatPnl,isFloat:true})
+                      if(floatPnl!==0){
+                        // Anchor at entry of first open trade if no closed trades exist yet
+                        if(equityCurve.length===0 && openTrades.length>0){
+                          equityCurve.push({date:openTrades[0].entry_date||today, value:0})
+                        }
+                        equityCurve.push({date:today, value:cumPnl+floatPnl, isFloat:true})
                       }
                       // Sin FX curve: P&L sin FX = (exit_price - entry_price) × shares / fx_entry - commission
                       let cumSinFx = 0
@@ -4764,6 +4771,9 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         return {date:t.exit_date||t.entry_date, value:parseFloat(cumSinFx.toFixed(4))}
                       })
                       // Build invest chart data: timeline of capital invested vs cumulative profit
+                      // Bug fix V5.54: include open trade entry events in the events array so their
+                      // capital propagates correctly through the timeline up to today (instead of
+                      // patching investMap at entry_date which didn't propagate forward).
                       const events = []
                       closed.forEach(t=>{
                         const fxE = t.fx_entry>0?(t.fx_entry<1?1/t.fx_entry:t.fx_entry):1
@@ -4772,6 +4782,12 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         events.push({date:t.entry_date, capDelta:+capitalEur+commIn, pnlDelta:-commIn})
                         events.push({date:t.exit_date||today, capDelta:-capitalEur, pnlDelta:parseFloat(t.pnl_eur||0)+commIn})
                       })
+                      // Open trades: capital enters at entry_date and stays deployed (no exit event)
+                      openTrades.forEach(t=>{
+                        const fxE = t.fx_entry>0?(t.fx_entry<1?1/t.fx_entry:t.fx_entry):1
+                        const capitalEur = (parseFloat(t.shares||0)*parseFloat(t.entry_price||0))/fxE
+                        events.push({date:t.entry_date||today, capDelta:+capitalEur, pnlDelta:0})
+                      })
                       events.sort((a,b)=>(a.date||'').localeCompare(b.date||''))
                       let runCap=0, runPnl=0
                       const investMap = {}
@@ -4779,15 +4795,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         runCap += ev.capDelta; runPnl += ev.pnlDelta
                         investMap[ev.date]={capital:Math.max(0,runCap), profit:runPnl}
                       })
-                      // Open trades: capital still deployed
-                      openTrades.forEach(t=>{
-                        const fxE = t.fx_entry>0?(t.fx_entry<1?1/t.fx_entry:t.fx_entry):1
-                        const capitalEur = (parseFloat(t.shares||0)*parseFloat(t.entry_price||0))/fxE
-                        const d = t.entry_date||today
-                        if(!investMap[d]) investMap[d]={capital:0,profit:runPnl}
-                        investMap[d].capital += capitalEur
-                        investMap[d].profit += (t._pnl_float_eur||0)
-                      })
+                      // Ensure today point reflects current float P&L
+                      investMap[today]={capital:Math.max(0,runCap), profit:runPnl+floatPnl}
                       const investData = Object.keys(investMap).sort().map(d=>({date:d,...investMap[d]}))
                       const wins = closed.filter(t=>(t.pnl_eur||0)>=0)
                       const losses = closed.filter(t=>(t.pnl_eur||0)<0)
