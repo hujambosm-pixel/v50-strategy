@@ -2330,7 +2330,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.48</title>
+        <title>Trading Simulator V5.49</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2405,7 +2405,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.48
+            <span className="dot"/>Trading Simulator V5.49
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4245,16 +4245,24 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                             const statusLabel=isOrphan?'Sin origen':isOpen?'Abierta':'Cerrada'
                             const rowBg=isOpen?'rgba(155,114,255,0.015)':'transparent'
                             const fills=[...(trade._buyFills||[]),...(trade._sellFills||[])].sort((a,b)=>(b.date||'').localeCompare(a.date||''))
+                            const trFillIds=fills.map(f=>f.id).filter(Boolean)
+                            const trAllSelected=trFillIds.length>0&&trFillIds.every(id=>tlMultiSel.has(id))
+                            const toggleMultiRow=()=>{
+                              const ids=trFillIds.length?trFillIds:[trade.id].filter(Boolean)
+                              setTlMultiSel(prev=>{const n=new Set(prev);const allSel=ids.every(id=>n.has(id));ids.forEach(id=>allSel?n.delete(id):n.add(id));return n})
+                            }
                             return[
                               <tr key={trade.id}
                                 style={{borderBottom:'1px solid var(--border)',background:rowBg,cursor:'pointer'}}
                                 onMouseOver={e=>e.currentTarget.style.background='rgba(255,255,255,0.03)'}
                                 onMouseOut={e=>e.currentTarget.style.background=rowBg}
-                                onClick={()=>{if(fills.length)setTlExpandedTrades(prev=>{const n=new Set(prev);n.has(trade.id)?n.delete(trade.id):n.add(trade.id);return n})}}>
-                                {/* Expand button */}
+                                onClick={()=>{if(tlMultiMode){toggleMultiRow()}else{if(fills.length)setTlExpandedTrades(prev=>{const n=new Set(prev);n.has(trade.id)?n.delete(trade.id):n.add(trade.id);return n})}}}>
+                                {/* Expand / multiselect button */}
                                 <td style={{padding:'6px 4px',textAlign:'center',width:28,cursor:'pointer'}}
-                                  onClick={e=>{e.stopPropagation();if(fills.length)setTlExpandedTrades(prev=>{const n=new Set(prev);n.has(trade.id)?n.delete(trade.id):n.add(trade.id);return n})}}>
-                                  {fills.length>0&&<span style={{fontSize:9,color:isExp?'#00d4ff':'#3d5a7a'}}>{isExp?'▼':'▶'}</span>}
+                                  onClick={e=>{e.stopPropagation();if(tlMultiMode){toggleMultiRow()}else{if(fills.length)setTlExpandedTrades(prev=>{const n=new Set(prev);n.has(trade.id)?n.delete(trade.id):n.add(trade.id);return n})}}}>
+                                  {tlMultiMode
+                                    ?<input type="checkbox" readOnly checked={trAllSelected} style={{cursor:'pointer',width:12,height:12,pointerEvents:'none'}}/>
+                                    :fills.length>0&&<span style={{fontSize:9,color:isExp?'#00d4ff':'#3d5a7a'}}>{isExp?'▼':'▶'}</span>}
                                 </td>
                                 <td style={{padding:'6px 8px',color:'#3d5a7a',fontSize:10}}>{i+1}</td>
                                 <td style={{padding:'6px 4px 6px 8px',maxWidth:100}} onClick={e=>e.stopPropagation()}>
