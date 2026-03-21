@@ -37,8 +37,10 @@ function computeFifo(fills, prices={}) {
     let cur=null
     const newCur=()=>({
       _buyFills:[], _sellFills:[],
-      _wBuyPxSh:0, _wBuyFxSh:0, _totalBuySh:0,
+      _wBuyPxSh:0, _totalBuySh:0,
+      _wBuyFxCap:0, _totalBuyCap:0,
       _wSellPxSh:0, _totalSellSh:0,
+      _wSellFxCap:0, _totalSellCap:0,
       _pnlEur:0, _totalComm:0,
       _firstBuyDate:null, _lastSellDate:null,
       _broker:null, _strategy:null, _currency:null,
@@ -52,8 +54,9 @@ function computeFifo(fills, prices={}) {
         if(!buyQueue.length) cur=newCur()
         buyQueue.push({fill:f, remaining:shares, orig:shares})
         fillStatus[f.id]='open'
-        cur._buyFills.push({id:f.id, date:f.date, shares, price, commission:comm, fill_type:'buy'})
-        cur._wBuyPxSh+=price*shares; cur._wBuyFxSh+=fx*shares; cur._totalBuySh+=shares
+        cur._buyFills.push({id:f.id, date:f.date, shares, price, commission:comm, fill_type:'buy', fx:f.fx, currency:f.currency, symbol:f.symbol, broker:f.broker, strategy:f.strategy, notes:f.notes, import_source:f.import_source})
+        cur._wBuyPxSh+=price*shares; cur._totalBuySh+=shares
+        cur._wBuyFxCap+=fx*price*shares; cur._totalBuyCap+=price*shares
         cur._totalComm+=comm
         if(!cur._firstBuyDate||f.date<cur._firstBuyDate) cur._firstBuyDate=f.date
         cur._broker=cur._broker||f.broker; cur._strategy=cur._strategy||f.strategy; cur._currency=cur._currency||f.currency
@@ -70,7 +73,7 @@ function computeFifo(fills, prices={}) {
             _buyFills:[], _sellFills:[{id:f.id, date:f.date, shares, price, commission:comm, fill_type:'sell'}]})
           return
         }
-        cur._sellFills.push({id:f.id, date:f.date, shares, price, commission:comm, fill_type:'sell'})
+        cur._sellFills.push({id:f.id, date:f.date, shares, price, commission:comm, fill_type:'sell', fx:f.fx, currency:f.currency, symbol:f.symbol, broker:f.broker, strategy:f.strategy, notes:f.notes, import_source:f.import_source})
         cur._totalComm+=comm
         if(!cur._lastSellDate||f.date>cur._lastSellDate) cur._lastSellDate=f.date
         cur._currency=cur._currency||f.currency
@@ -85,6 +88,7 @@ function computeFifo(fills, prices={}) {
           const buyComm=lot.orig>0?parseFloat(lot.fill.commission||0)/lot.orig*matched:0
           const sellComm=shares>0?comm/shares*matched:0
           cur._wSellPxSh+=price*matched; cur._totalSellSh+=matched; cur._pnlEur+=pnlEur
+          cur._wSellFxCap+=fx*price*matched; cur._totalSellCap+=price*matched
           closedTrades.push({
             symbol, shares:matched,
             pnl_eur:parseFloat(pnlEur.toFixed(4)),
@@ -103,12 +107,13 @@ function computeFifo(fills, prices={}) {
         if(!buyQueue.length){
           // Posición cerrada completamente → emitir trade
           const entryPx=cur._totalBuySh>0?cur._wBuyPxSh/cur._totalBuySh:0
-          const fxE=cur._totalBuySh>0?cur._wBuyFxSh/cur._totalBuySh:1
+          const fxE=cur._totalBuyCap>0?cur._wBuyFxCap/cur._totalBuyCap:1
+          const fxX=cur._totalSellCap>0?cur._wSellFxCap/cur._totalSellCap:fxE
           const exitPx=cur._totalSellSh>0?cur._wSellPxSh/cur._totalSellSh:0
           const pnlPct=entryPx>0?(exitPx/entryPx-1)*100:0
           trades.push({id:'trade_'+symbol+'_'+tradeIdx++, symbol, status:'closed',
             entry_date:cur._firstBuyDate, entry_price:parseFloat(entryPx.toFixed(4)), fx_entry:parseFloat(fxE.toFixed(4)),
-            exit_date:cur._lastSellDate, exit_price:parseFloat(exitPx.toFixed(4)),
+            exit_date:cur._lastSellDate, exit_price:parseFloat(exitPx.toFixed(4)), fx_exit:parseFloat(fxX.toFixed(4)),
             shares:parseFloat(cur._totalSellSh.toFixed(4)),
             commission:parseFloat(cur._totalComm.toFixed(4)),
             currency:cur._currency||'USD', broker:cur._broker, strategy:cur._strategy,
@@ -122,7 +127,8 @@ function computeFifo(fills, prices={}) {
     if(buyQueue.length>0){
       const openShares=buyQueue.reduce((s,l)=>s+l.remaining,0)
       const avgBuyPx=openShares>0?buyQueue.reduce((s,l)=>s+parseFloat(l.fill.price||0)*l.remaining,0)/openShares:0
-      let fxE=parseFloat(buyQueue[0].fill.fx||1); if(fxE>0&&fxE<1) fxE=1/fxE; if(!fxE||isNaN(fxE)) fxE=1
+      const openCap=buyQueue.reduce((s,l)=>s+parseFloat(l.fill.price||0)*l.remaining,0)
+      let fxE=openCap>0?buyQueue.reduce((s,l)=>{let fx=parseFloat(l.fill.fx||1);if(fx>0&&fx<1)fx=1/fx;if(!fx||isNaN(fx))fx=1;return s+fx*parseFloat(l.fill.price||0)*l.remaining},0)/openCap:1
       const livePx=prices[symbol]?.price?parseFloat(prices[symbol].price):null
       const floatEur=livePx!=null?(livePx-avgBuyPx)*openShares/fxE:0
       const floatPct=livePx!=null&&avgBuyPx>0?(livePx/avgBuyPx-1)*100:0
@@ -142,7 +148,7 @@ function computeFifo(fills, prices={}) {
         // Posición abierta: entry_price = avg de los lotes restantes (costo real)
         trades.push({id:'trade_'+symbol+'_'+tradeIdx++, symbol, status:'open',
           entry_date:cur._firstBuyDate, entry_price:parseFloat(avgBuyPx.toFixed(4)), fx_entry:parseFloat(fxE.toFixed(4)),
-          exit_date:null, exit_price:null,
+          exit_date:null, exit_price:livePx!=null?parseFloat(livePx.toFixed(2)):null,
           shares:parseFloat(openShares.toFixed(4)),
           commission:parseFloat(cur._totalComm.toFixed(4)),
           currency:cur._currency||'USD', broker:cur._broker, strategy:cur._strategy,
@@ -595,7 +601,28 @@ export default function Home() {
   }
 
   // ── tlFifo: FIFO grouping sobre todos los fills (sin filtros) ──
-  const tlFifo = useMemo(()=>computeFifo(tlTrades, {}), [tlTrades])
+  const [tlLivePrices,setTlLivePrices]=useState({})
+  const tlFifo = useMemo(()=>computeFifo(tlTrades, tlLivePrices), [tlTrades, tlLivePrices])
+
+  // ── Fetch live prices for open positions ──
+  useEffect(()=>{
+    const {openPositions} = computeFifo(tlTrades, {})
+    const symbols = [...new Set(openPositions.map(p=>p.symbol).filter(Boolean))]
+    if(!symbols.length){ setTlLivePrices({}); return }
+    const cfg={emaR:10,emaL:11,years:1,capitalIni:1000,tipoStop:'none',atrPeriod:14,atrMult:1,sinPerdidas:false,reentry:false,tipoFiltro:'none',sp500EmaR:10,sp500EmaL:11}
+    Promise.all(symbols.map(async sym=>{
+      try{
+        const r=await fetch('/api/datos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({simbolo:sym,cfg})})
+        const j=await r.json()
+        if(j.meta?.ultimoPrecio) return {sym,price:j.meta.ultimoPrecio}
+      }catch(_){}
+      return null
+    })).then(results=>{
+      const prices={}
+      results.filter(Boolean).forEach(({sym,price})=>{ prices[sym]={price} })
+      setTlLivePrices(prices)
+    })
+  },[tlTrades])
 
   // ── tlFiltered: fills filtrados + status vía FIFO ──
   const tlFiltered = useMemo(()=>{
@@ -2281,7 +2308,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.42</title>
+        <title>Trading Simulator V5.45</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2356,7 +2383,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.42
+            <span className="dot"/>Trading Simulator V5.45
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -3297,11 +3324,11 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
 
                 {/* Filtros */}
                 {(()=>{
-                  const allYears=[...new Set(tlTrades.map(t=>(t.date||t.entry_date)?.slice(0,4)).filter(Boolean))].sort((a,b)=>b-a)
+                  const allYears=[...new Set((tlFifo.trades||[]).map(t=>(t.entry_date||t.exit_date)?.slice(0,4)).filter(Boolean))].sort((a,b)=>b-a)
                   const strats=[...new Set(tlTrades.map(t=>t.strategy||'').filter(Boolean))].sort()
-                  const monthsInYear=tlFilterYear?[...new Set(tlTrades
-                    .filter(t=>{const d=t.date;return d&&d.startsWith(tlFilterYear)})
-                    .map(t=>{const d=t.date;return d?d.slice(5,7):null}).filter(Boolean)
+                  const monthsInYear=tlFilterYear?[...new Set((tlFifo.trades||[])
+                    .filter(t=>{const d=t.entry_date||t.exit_date;return d&&d.startsWith(tlFilterYear)})
+                    .map(t=>{const d=t.entry_date||t.exit_date;return d?d.slice(5,7):null}).filter(Boolean)
                   )].sort():[]
                   const MESES=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
                   const selStyle={fontFamily:MONO,fontSize:10,width:'100%',padding:'3px 4px',borderRadius:3,
@@ -4182,7 +4209,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                             const statusColor=isOrphan?'#ff4d6d':isOpen?'#9b72ff':'#00e5a0'
                             const statusLabel=isOrphan?'Sin origen':isOpen?'Abierta':'Cerrada'
                             const rowBg=isOpen?'rgba(155,114,255,0.015)':'transparent'
-                            const fills=[...(trade._buyFills||[]),...(trade._sellFills||[])].sort((a,b)=>(a.date||'').localeCompare(b.date||''))
+                            const fills=[...(trade._buyFills||[]),...(trade._sellFills||[])].sort((a,b)=>(b.date||'').localeCompare(a.date||''))
                             return[
                               <tr key={trade.id}
                                 style={{borderBottom:'1px solid var(--border)',background:rowBg,cursor:'pointer'}}
@@ -4242,13 +4269,12 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                               isExp&&fills.length>0&&(
                                 <tr key={trade.id+'-fills'}>
                                   <td colSpan={18} style={{padding:0,background:'rgba(0,212,255,0.015)',borderBottom:'2px solid rgba(0,212,255,0.1)'}}>
-                                    <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:10}}>
+                                    <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:10,textAlign:'center'}}>
                                       <thead>
                                         <tr style={{background:'rgba(0,212,255,0.04)'}}>
-                                          {['Tipo','Fecha','Acciones','Precio','Capital €','Comisión'].map(h=>(
+                                          {['Tipo','Fecha','Acciones','Precio','Capital €','Comisión','Divisa','FX'].map(h=>(
                                             <th key={h} style={{padding:'3px 8px',color:'#2a4060',fontWeight:600,fontSize:8,
-                                              letterSpacing:'0.08em',textTransform:'uppercase',textAlign:'left',
-                                              paddingLeft:h==='Tipo'?32:8}}>{h}</th>
+                                              letterSpacing:'0.08em',textTransform:'uppercase',textAlign:'center'}}>{h}</th>
                                           ))}
                                         </tr>
                                       </thead>
@@ -4257,12 +4283,14 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                           const isBuy=fill.fill_type==='buy'
                                           let ffx=parseFloat(fill.fx||trade.fx_entry||1);if(ffx<1&&ffx>0)ffx=1/ffx
                                           const capF=(parseFloat(fill.price||0)*parseFloat(fill.shares||0))/((trade.currency&&trade.currency!=='EUR')?ffx:1)
+                                          const firstBuyId=(trade._buyFills||[]).slice().sort((a,b)=>(a.date||'').localeCompare(b.date||''))[0]?.id
+                                          const isFirstBuy=isBuy&&fill.id===firstBuyId
                                           return(
                                           <tr key={fill.id} style={{borderTop:'1px solid rgba(0,212,255,0.05)',cursor:'pointer'}}
                                             onMouseOver={e=>e.currentTarget.style.background='rgba(255,255,255,0.04)'}
                                             onMouseOut={e=>e.currentTarget.style.background=''}
-                                            onClick={e=>{e.stopPropagation();const df=tlDefaultForm();setTlForm({...df,id:fill.id,fill_type:fill.fill_type||'buy',symbol:fill.symbol||trade.symbol||'',broker:fill.broker||df.broker,date:toDisplayDate(fill.date)||'',price:fill.price||'',shares:fill.shares||'',currency:fill.currency||'USD',commission:fill.commission||0,fx:fill.fx?String(fill.fx):'',fx_manual:!!fill.fx,notes:fill.notes||'',strategy:fill.strategy||df.strategy,import_source:fill.import_source||'manual'});setTlFormOpen(true)}}>
-                                            <td style={{padding:'4px 8px 4px 32px'}}>
+                                            onClick={e=>{e.stopPropagation();const df=tlDefaultForm();setTlForm({...df,id:fill.id,fill_type:fill.fill_type||'buy',symbol:fill.symbol||trade.symbol||'',broker:fill.broker||df.broker,date:toDisplayDate(fill.date)||'',price:fill.price||'',shares:fill.shares||'',currency:fill.currency||'USD',commission:fill.commission||0,fx:fill.fx?String(fill.fx):'',fx_manual:!!fill.fx,notes:fill.notes||'',strategy:fill.strategy||df.strategy,import_source:fill.import_source||'manual',_isFirstBuy:isFirstBuy});setTlFormOpen(true)}}>
+                                            <td style={{padding:'4px 8px',textAlign:'center'}}>
                                               <span style={{fontSize:9,padding:'1px 5px',borderRadius:3,fontWeight:700,
                                                 background:isBuy?'rgba(0,229,160,0.12)':'rgba(255,77,109,0.12)',
                                                 color:isBuy?'#00e5a0':'#ff4d6d'}}>
@@ -4274,6 +4302,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                             <td style={{padding:'4px 8px',color:'#e2eaf5'}}>{parseFloat(fill.price||0).toFixed(2)}</td>
                                             <td style={{padding:'4px 8px',color:'#7a9bc0'}}>{capF>0?'€'+Math.round(capF).toLocaleString('es-ES'):'—'}</td>
                                             <td style={{padding:'4px 8px',color:'#4a7a95'}}>{parseFloat(fill.commission||0)>0?'€'+parseFloat(fill.commission).toFixed(2):'—'}</td>
+                                            <td style={{padding:'4px 8px',color:'#ffd166',fontSize:10}}>{fill.currency||trade.currency||'—'}</td>
+                                            <td style={{padding:'4px 8px',color:'#4a7a95',fontSize:10}}>{(()=>{let fx=parseFloat(fill.fx||0);if(!fx||isNaN(fx))return'—';if(fx<1&&fx>0)fx=1/fx;return fx.toFixed(4)})()}</td>
                                           </tr>
                                           )
                                         })}
@@ -4749,7 +4779,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     const worstV=worstT?worstT._eff_pnl:null
                     const rows=[
                       {l:'Total Operaciones',
-                       v:(open.length+' ab. / '+closed.length+' cerr.'),
+                       v:(tlTradesFiltered.filter(t=>t.status==='open').length+' ab. / '+tlTradesFiltered.filter(t=>t.status==='closed').length+' cerr.'),
                        c:'#ffd166',
                        tip:'Total posiciones registradas. Abiertas = en cartera ahora. Cerradas = ya liquidadas.'},
                       {l:'Capital Empleado',
@@ -4828,7 +4858,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     return(
                       <div className="tl-resumen" onContextMenu={e=>{e.stopPropagation();openCtx(e,'tl_resumen')}} style={{flex:tlSelected?'0 0 auto':1,overflowY:'auto',borderBottom:tlSelected?'1px solid var(--border)':'none'}}>
                         <div style={{padding:'6px 10px',borderBottom:'1px solid var(--border)',fontFamily:MONO,fontSize:8,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',display:'flex',justifyContent:'space-between'}}>
-                          <span>Resumen · {open.length}ab/{closed.length}cerr</span>
+                          <span>Resumen · {tlTradesFiltered.filter(t=>t.status==='open').length}ab/{tlTradesFiltered.filter(t=>t.status==='closed').length}cerr</span>
                           <span style={{color:'#1a3a5a'}}>{allWithPnl.length} ops</span>
                         </div>
                         <table style={{width:'100%',borderCollapse:'collapse'}}>
@@ -5326,9 +5356,10 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
             {/* Fila 5: estrategia, notas */}
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
               <label style={{display:'flex',flexDirection:'column',gap:4}}>
-                <span style={{fontSize:10,color:'#5a8aaa'}}>Estrategia</span>
+                <span style={{fontSize:10,color:'#5a8aaa'}}>Estrategia{tlForm.id&&!tlForm._isFirstBuy&&<span style={{color:'#3d5a7a',marginLeft:4,fontSize:9}}>(solo editable en el 1er BUY)</span>}</span>
                 <select value={tlForm.strategy||''} onChange={e=>setTlForm(f=>({...f,strategy:e.target.value}))}
-                  style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'5px 7px',borderRadius:4}}>
+                  disabled={!!(tlForm.id&&!tlForm._isFirstBuy)}
+                  style={{background:'var(--bg3)',border:'1px solid var(--border)',color:tlForm.id&&!tlForm._isFirstBuy?'#3d5a7a':'var(--text)',fontFamily:MONO,fontSize:11,padding:'5px 7px',borderRadius:4,opacity:tlForm.id&&!tlForm._isFirstBuy?0.45:1,cursor:tlForm.id&&!tlForm._isFirstBuy?'not-allowed':'auto'}}>
                   {strategies.map(st=>{const n=st.name||`V50 EMA ${st.ema_r}/${st.ema_l}`;return <option key={st.id} value={n}>{n}</option>})}
                   {strategies.length===0&&<option value="V50">V50</option>}
                   <option value="">— Sin estrategia —</option>
