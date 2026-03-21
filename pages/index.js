@@ -2330,7 +2330,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.47</title>
+        <title>Trading Simulator V5.48</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2405,7 +2405,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.47
+            <span className="dot"/>Trading Simulator V5.48
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4901,15 +4901,21 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                        tip:'Suma de commission_buy + commission_sell de todas las operaciones. No están descontadas del P&L mostrado si usas pnl_eur bruto.'},
                       {l:'Impacto FX €',
                        v:(()=>{
-                         const total=tlTradesFiltered.filter(t=>t.status==='closed'&&t.exit_price!=null).reduce((s,t)=>{
+                         const total=tlTradesFiltered.filter(t=>t.exit_price!=null).reduce((s,t)=>{
                            const fxE=parseFloat(t.fx_entry||0)||1
-                           const fxX=parseFloat(t.fx_exit||t.fx_entry||0)||fxE
+                           let fxX
+                           if(t.status==='open'&&t.currency&&t.currency!=='EUR'){
+                             const fxLive=tlLiveFx[t.currency]
+                             fxX=fxLive>0?fxLive:fxE
+                           } else {
+                             fxX=parseFloat(t.fx_exit||t.fx_entry||0)||fxE
+                           }
                            return s+parseFloat(t.exit_price)*parseFloat(t.shares||0)*(1/fxX-1/fxE)
                          },0)
                          return total!==0?(total>=0?'+€':'-€')+Math.abs(total).toFixed(2):'€0.00'
                        })(),
                        c:'#ffd166',
-                       tip:'Suma del impacto del tipo de cambio en todas las operaciones cerradas. Positivo = el EUR se debilitó (tus USD valieron más). Negativo = el EUR se fortaleció.'},
+                       tip:'Suma del impacto del tipo de cambio en todas las operaciones (cerradas + abiertas). Abiertas usan FX en tiempo real. Positivo = el EUR se debilitó (tus USD valieron más). Negativo = el EUR se fortaleció.'},
                       {l:'Factor Beneficio',
                        v:factorBen!=null?factorBen.toFixed(2):'—',
                        c:factorBen!=null&&factorBen>=1?'#00e5a0':'#ff4d6d',
