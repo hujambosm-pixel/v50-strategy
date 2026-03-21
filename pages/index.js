@@ -2328,7 +2328,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.60</title>
+        <title>Trading Simulator V5.61</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2403,7 +2403,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.60
+            <span className="dot"/>Trading Simulator V5.61
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4887,9 +4887,13 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     const commTotal=[...closed,...open].reduce((s,t)=>s+parseFloat(t.commission||0),0)
                     // Combinamos cerradas + abiertas con su P&L flotante para Win Rate, medias, días
                     const allWithPnl=[
-                      ...closed.map(t=>({...t,_eff_pnl:t.pnl_eur||0,_eff_pct:parseFloat(t.pnl_pct||0),_eff_dias:t.entry_date&&t.exit_date?Math.round((new Date(t.exit_date)-new Date(t.entry_date))/86400000):0})),
-                      ...open.map(t=>({...t,_eff_pnl:t._pnl_float_eur||0,_eff_pct:t._pnl_float_pct||0,_eff_dias:t.entry_date?Math.round((new Date(today)-new Date(t.entry_date))/86400000):0}))
+                      ...closed.map(t=>({...t,_eff_pnl:parseFloat(t.pnl_eur)||0,_eff_pct:parseFloat(t.pnl_pct||0),_eff_dias:t.entry_date&&t.exit_date?Math.round((new Date(t.exit_date)-new Date(t.entry_date))/86400000):0})),
+                      ...open.map(t=>({...t,_eff_pnl:typeof t._pnl_float_eur==='number'?t._pnl_float_eur:0,_eff_pct:t._pnl_float_pct||0,_eff_dias:t.entry_date?Math.round((new Date(today)-new Date(t.entry_date))/86400000):0}))
                     ]
+                    // Debug: log open trade _eff_pnl values to diagnose Win Rate
+                    console.log('[WinRate] open trades:',open.map(t=>({symbol:t.symbol,_pnl_float_eur:t._pnl_float_eur,typeof_float:typeof t._pnl_float_eur,_eff_pnl:typeof t._pnl_float_eur==='number'?t._pnl_float_eur:0})))
+                    console.log('[WinRate] closed sample (first 3):',closed.slice(0,3).map(t=>({symbol:t.symbol,pnl_eur:t.pnl_eur,typeof_pnl:typeof t.pnl_eur,_eff_pnl:parseFloat(t.pnl_eur)||0})))
+                    console.log('[WinRate] winners:',allWithPnl.filter(t=>t._eff_pnl>=0).length,'/',allWithPnl.length,'— losers:',allWithPnl.filter(t=>t._eff_pnl<0).length,'— zero/null:',allWithPnl.filter(t=>t._eff_pnl===0).length)
                     const wins=allWithPnl.filter(t=>t._eff_pnl>=0)
                     const losses=allWithPnl.filter(t=>t._eff_pnl<0)
                     // Win Rate: todas las ops. Ganadora si P&L >= 0 (incluye break-even y VRT si flotante positivo)
