@@ -603,14 +603,16 @@ export default function Home() {
 
   // ── tlFifo: FIFO grouping sobre todos los fills (sin filtros) ──
   const [tlLivePrices,setTlLivePrices]=useState({})
+  const [tlLiveFx,setTlLiveFx]=useState({})
   const tlFifo = useMemo(()=>computeFifo(tlTrades, tlLivePrices), [tlTrades, tlLivePrices])
 
   // ── Fetch live prices for open positions ──
   useEffect(()=>{
     const {openPositions} = computeFifo(tlTrades, {})
     const symbols = [...new Set(openPositions.map(p=>p.symbol).filter(Boolean))]
-    if(!symbols.length){ setTlLivePrices({}); return }
+    if(!symbols.length){ setTlLivePrices({}); setTlLiveFx({}); return }
     const cfg={emaR:10,emaL:11,years:1,capitalIni:1000,tipoStop:'none',atrPeriod:14,atrMult:1,sinPerdidas:false,reentry:false,tipoFiltro:'none',sp500EmaR:10,sp500EmaL:11}
+    // Live prices
     Promise.all(symbols.map(async sym=>{
       try{
         const r=await fetch('/api/datos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({simbolo:sym,cfg})})
@@ -623,6 +625,25 @@ export default function Home() {
       results.filter(Boolean).forEach(({sym,price})=>{ prices[sym]={price} })
       setTlLivePrices(prices)
     })
+    // Live FX for each unique non-EUR currency among open positions
+    const today=new Date().toISOString().slice(0,10)
+    const currencies=[...new Set(openPositions.map(p=>p.currency).filter(c=>c&&c!=='EUR'))]
+    if(currencies.length){
+      Promise.all(currencies.map(async cur=>{
+        try{
+          const r=await fetch(`/api/tradelog?action=fx&currency=${cur}&date=${today}`)
+          const j=await r.json()
+          if(j.fx) return {cur,fx:parseFloat(j.fx)}
+        }catch(_){}
+        return null
+      })).then(results=>{
+        const fxMap={}
+        results.filter(Boolean).forEach(({cur,fx})=>{ fxMap[cur]=fx })
+        setTlLiveFx(fxMap)
+      })
+    } else {
+      setTlLiveFx({})
+    }
   },[tlTrades])
 
   // ── tlFiltered: fills filtrados + status vía FIFO ──
@@ -2309,7 +2330,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.46</title>
+        <title>Trading Simulator V5.47</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2384,7 +2405,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.46
+            <span className="dot"/>Trading Simulator V5.47
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4280,10 +4301,14 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                 </td>
                                 {tlShowFxCols&&(()=>{
                                   const fxE=parseFloat(trade.fx_entry||0)||1
-                                  const fxX=parseFloat(trade.fx_exit||trade.fx_entry||0)||fxE
-                                  const fxImpEur=(!isOpen&&!isOrphan&&trade.exit_price!=null)
-                                    ?parseFloat(trade.exit_price)*parseFloat(trade.shares||0)*(1/fxX-1/fxE)
-                                    :null
+                                  let fxImpEur=null
+                                  if(isOpen&&!isOrphan&&trade.exit_price!=null&&trade.currency&&trade.currency!=='EUR'){
+                                    const fxLive=tlLiveFx[trade.currency]
+                                    if(fxLive>0) fxImpEur=parseFloat(trade.exit_price)*parseFloat(trade.shares||0)*(1/fxLive-1/fxE)
+                                  } else if(!isOpen&&!isOrphan&&trade.exit_price!=null){
+                                    const fxX=parseFloat(trade.fx_exit||trade.fx_entry||0)||fxE
+                                    fxImpEur=parseFloat(trade.exit_price)*parseFloat(trade.shares||0)*(1/fxX-1/fxE)
+                                  }
                                   const capE=parseFloat(trade.entry_price||0)*parseFloat(trade.shares||0)/fxE
                                   const fxImpPct=fxImpEur!=null&&capE>0?fxImpEur/capE*100:null
                                   const fxCellStyle={padding:'6px 8px',whiteSpace:'nowrap',background:'rgba(255,209,102,0.04)'}
@@ -4818,17 +4843,6 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     const bestV=bestT?bestT._eff_pnl:null
                     const worstV=worstT?worstT._eff_pnl:null
                     const rows=[
-                      {l:'Impacto FX €',
-                       v:(()=>{
-                         const total=tlTradesFiltered.filter(t=>t.status==='closed'&&t.exit_price!=null).reduce((s,t)=>{
-                           const fxE=parseFloat(t.fx_entry||0)||1
-                           const fxX=parseFloat(t.fx_exit||t.fx_entry||0)||fxE
-                           return s+parseFloat(t.exit_price)*parseFloat(t.shares||0)*(1/fxX-1/fxE)
-                         },0)
-                         return total!==0?(total>=0?'+€':'-€')+Math.abs(total).toFixed(2):'€0.00'
-                       })(),
-                       c:'#ffd166',
-                       tip:'Suma del impacto del tipo de cambio en todas las operaciones cerradas. Positivo = el EUR se debilitó (tus USD valieron más). Negativo = el EUR se fortaleció.'},
                       {l:'Total Operaciones',
                        v:(tlTradesFiltered.filter(t=>t.status==='open').length+' ab. / '+tlTradesFiltered.filter(t=>t.status==='closed').length+' cerr.'),
                        c:'#ffd166',
@@ -4885,6 +4899,17 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                        v:commTotal>0?'-€'+commTotal.toFixed(2):'—',
                        c:'#ff4d6d',
                        tip:'Suma de commission_buy + commission_sell de todas las operaciones. No están descontadas del P&L mostrado si usas pnl_eur bruto.'},
+                      {l:'Impacto FX €',
+                       v:(()=>{
+                         const total=tlTradesFiltered.filter(t=>t.status==='closed'&&t.exit_price!=null).reduce((s,t)=>{
+                           const fxE=parseFloat(t.fx_entry||0)||1
+                           const fxX=parseFloat(t.fx_exit||t.fx_entry||0)||fxE
+                           return s+parseFloat(t.exit_price)*parseFloat(t.shares||0)*(1/fxX-1/fxE)
+                         },0)
+                         return total!==0?(total>=0?'+€':'-€')+Math.abs(total).toFixed(2):'€0.00'
+                       })(),
+                       c:'#ffd166',
+                       tip:'Suma del impacto del tipo de cambio en todas las operaciones cerradas. Positivo = el EUR se debilitó (tus USD valieron más). Negativo = el EUR se fortaleció.'},
                       {l:'Factor Beneficio',
                        v:factorBen!=null?factorBen.toFixed(2):'—',
                        c:factorBen!=null&&factorBen>=1?'#00e5a0':'#ff4d6d',
