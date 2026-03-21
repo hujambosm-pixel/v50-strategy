@@ -2330,7 +2330,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.51</title>
+        <title>Trading Simulator V5.52</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2405,7 +2405,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.51
+            <span className="dot"/>Trading Simulator V5.52
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4149,7 +4149,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       </span>
                       {tlLoading&&<span style={{fontFamily:MONO,fontSize:9,color:'#9b72ff',flexShrink:0}}>⟳</span>}
                     </div>
-                    {[{id:'ops',label:'Ops'},{id:'import',label:'📥 Import'},{id:'export',label:'📤 Export'},{id:'dashboard',label:'📊 Dashboard'}].map(t=>(
+                    {[{id:'ops',label:'Ops'},{id:'import',label:'📥 Import'},{id:'export',label:'💾 Backup'},{id:'dashboard',label:'📊 Dashboard'}].map(t=>(
                       <button key={t.id} onClick={()=>setTlTab(t.id)}
                         style={{padding:'9px 16px',fontFamily:MONO,fontSize:11,cursor:'pointer',
                           background:tlTab===t.id?'rgba(155,114,255,0.12)':'transparent',
@@ -4620,12 +4620,12 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   </div>
                 )}
 
-                {/* EXPORT */}
+                {/* BACKUP */}
                 {tlTab==='export'&&(
                   <div style={{flex:1,display:'flex',flexDirection:'column',padding:'20px',gap:16,overflowY:'auto'}}>
-                    <div style={{fontFamily:MONO,fontSize:13,color:'#c8dff5',fontWeight:700}}>📤 Exportar operaciones</div>
+                    <div style={{fontFamily:MONO,fontSize:13,color:'#c8dff5',fontWeight:700}}>💾 Backup</div>
                     <div style={{fontFamily:MONO,fontSize:11,color:'#5a8aaa'}}>
-                      Descarga el historial completo en formato Excel/CSV.
+                      Descarga o restaura el historial completo de operaciones.
                     </div>
                     {(()=>{
                       const exportCSV = () => {
@@ -4659,12 +4659,37 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         a.click()
                         URL.revokeObjectURL(url)
                       }
-                                            const exportJSON = () => {
-                        const blob = new Blob([JSON.stringify(tlTrades,null,2)],{type:'application/json'})
+                      const exportJSON = () => {
+                        const d = new Date().toISOString().slice(0,10)
+                        const payload = {version:'v50', date:d, trades:tlTrades}
+                        const blob = new Blob([JSON.stringify(payload,null,2)],{type:'application/json'})
                         const url = URL.createObjectURL(blob)
                         const a = document.createElement('a')
-                        a.href=url; a.download='tradelog_'+new Date().toISOString().slice(0,10)+'.json'
+                        a.href=url; a.download='tradelog_'+d+'.json'
                         a.click(); URL.revokeObjectURL(url)
+                      }
+                      const restoreJSON = () => {
+                        const input = document.createElement('input')
+                        input.type='file'; input.accept='.json'
+                        input.onchange = async e => {
+                          try {
+                            const text = await e.target.files[0].text()
+                            const data = JSON.parse(text)
+                            const trades = Array.isArray(data) ? data : (data.trades||[])
+                            if(!Array.isArray(trades)||trades.length===0) throw new Error('No se encontraron operaciones en el archivo')
+                            if(!confirm(`¿Restaurar ${trades.length} fills desde backup? Se hará upsert en Supabase (no borra existentes).`)) return
+                            let ok=0, fail=0
+                            for(const fill of trades){
+                              try{
+                                const res=await fetch('/api/tradelog?action=save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(fill)})
+                                if(res.ok) ok++; else fail++
+                              }catch{ fail++ }
+                            }
+                            await loadTrades()
+                            alert(`✓ ${ok} fills restaurados${fail>0?' · '+fail+' errores':''}`)
+                          } catch(err){ alert('Error al restaurar: '+err.message) }
+                        }
+                        input.click()
                       }
                       return (
                         <div style={{display:'flex',flexDirection:'column',gap:12,maxWidth:360}}>
@@ -4687,7 +4712,18 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                             <button onClick={exportJSON}
                               style={{fontFamily:MONO,fontSize:11,padding:'7px 16px',borderRadius:4,cursor:'pointer',
                                 background:'rgba(0,212,255,0.08)',border:'1px solid #00d4ff',color:'#00d4ff',fontWeight:700}}>
-                              ⬇ Descargar JSON ({tlTrades.length} ops)
+                              ⬇ Descargar JSON ({tlTrades.length} fills)
+                            </button>
+                          </div>
+                          <div style={{padding:'14px',background:'var(--bg2)',borderRadius:6,border:'1px solid var(--border)'}}>
+                            <div style={{fontFamily:MONO,fontSize:11,color:'#c8dff5',fontWeight:700,marginBottom:4}}>↑ Restaurar</div>
+                            <div style={{fontFamily:MONO,fontSize:10,color:'#5a8aaa',marginBottom:10}}>
+                              Carga un JSON de backup y hace upsert de cada fill en Supabase. No borra operaciones existentes.
+                            </div>
+                            <button onClick={restoreJSON}
+                              style={{fontFamily:MONO,fontSize:11,padding:'7px 16px',borderRadius:4,cursor:'pointer',
+                                background:'rgba(155,114,255,0.08)',border:'1px solid #9b72ff',color:'#9b72ff',fontWeight:700}}>
+                              ↑ Restaurar desde backup
                             </button>
                           </div>
                         </div>
