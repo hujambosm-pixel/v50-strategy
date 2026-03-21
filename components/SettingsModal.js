@@ -775,47 +775,6 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                   <option value="MM/DD">MM/DD/YYYY — USA</option>
                 </select>
               </div>
-
-
-
-
-              {sep('Copia de seguridad de operaciones')}
-              <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-                <button onClick={()=>{
-                  try {
-                    const trades = JSON.parse(localStorage.getItem('v50_tradelog')||'[]')
-                    const d = new Date().toISOString().slice(0,10)
-                    const blob = new Blob([JSON.stringify({version:'v50',date:d,trades},null,2)],{type:'application/json'})
-                    const a = document.createElement('a'); a.href=URL.createObjectURL(blob)
-                    a.download=`backup_${d}.json`; a.click(); URL.revokeObjectURL(a.href)
-                  } catch(e){ alert('Error: '+e.message) }
-                }} style={{padding:'7px 12px',borderRadius:4,border:'1px solid #9b72ff',
-                  background:'rgba(155,114,255,0.1)',color:'#9b72ff',fontFamily:MONO,fontSize:11,cursor:'pointer'}}>
-                  ⬇ Descargar backup (JSON)
-                </button>
-                <button onClick={()=>{
-                  const input = document.createElement('input'); input.type='file'; input.accept='.json'
-                  input.onchange = async e => {
-                    try {
-                      const text = await e.target.files[0].text()
-                      const data = JSON.parse(text)
-                      const trades = data.trades||data
-                      if(!Array.isArray(trades)) throw new Error('Formato incorrecto')
-                      if(!confirm(`¿Restaurar ${trades.length} operaciones? Se reemplazarán las actuales.`)) return
-                      localStorage.setItem('v50_tradelog', JSON.stringify(trades))
-                      alert(`✓ ${trades.length} operaciones restauradas`)
-                    } catch(e){ alert('Error al restaurar: '+e.message) }
-                  }
-                  input.click()
-                }} style={{padding:'7px 12px',borderRadius:4,border:'1px solid #1a2d45',
-                  background:'transparent',color:'#7a9bc0',fontFamily:MONO,fontSize:11,cursor:'pointer'}}>
-                  ⬆ Restaurar desde backup
-                </button>
-              </div>
-              <div style={{fontSize:10,color:'#3d5a7a',lineHeight:1.6,marginTop:8}}>
-                El backup descargado es un fichero JSON con todas tus operaciones.
-                Guárdalo en <span style={{color:'#ffd166'}}>[Carpeta elegida] / Backup operativa</span>.
-              </div>
             </div>
           )}
         {/* Footer */}
