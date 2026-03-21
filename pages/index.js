@@ -1852,17 +1852,21 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
       let errors=[]
       for(const raw of tlParsedRaw){
         if(raw._isDuplicate) continue
-        // Strip all UI-only fields — only keep DB-valid columns
-        const {_isDuplicate,_closesTradeId,_closesSymbol,_openEntryDate,_openShares,
-               _grouped,_buyCount,_sellCount,_fills,_orphanSell,_remainder,
-               _isPartialClose,_isFullClose,_isExcessSell,_remainingShares,_sellShares,
-               _multipleOpen,_openOptions,_fxLoading,_symSearch,
-               _current_price,_current_date,_pnl_float_eur,_pnl_float_pct,
-               status, capital_eur, pnl_eur, pnl_pct, pnl_currency,
-               entry_date, entry_price, entry_currency, fx_entry, commission_buy, commission_sell,
-               exit_date, exit_price, exit_currency, fx_exit,
-               ...fillFields}=raw
-        const trade={...fillFields, broker:fillFields.broker||defBroker}
+        // Whitelist estricta — solo campos válidos en trades_log, sin importar qué traiga raw
+        const trade = {
+          symbol:        raw.symbol,
+          fill_type:     raw.fill_type || 'buy',
+          date:          raw.date      || raw.entry_date,
+          price:         raw.price     != null ? raw.price     : raw.entry_price,
+          shares:        raw.shares,
+          commission:    raw.commission != null ? raw.commission : (raw.commission_buy || raw.commission_sell || 0),
+          currency:      raw.currency  || raw.entry_currency || 'USD',
+          fx:            raw.fx        != null ? raw.fx        : raw.fx_entry,
+          broker:        raw.broker    || defBroker,
+          strategy:      raw.strategy  || '',
+          notes:         raw.notes     || '',
+          import_source: raw.import_source || 'import',
+        }
         if(tlUseLocal()){
           const all=tlGetLS()
           all.push({...trade, id:'local_'+Date.now()+'_'+Math.random().toString(36).slice(2)})
@@ -2185,7 +2189,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.33</title>
+        <title>Trading Simulator V5.34</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2260,7 +2264,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.33
+            <span className="dot"/>Trading Simulator V5.34
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
