@@ -2328,7 +2328,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.56</title>
+        <title>Trading Simulator V5.57</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2403,7 +2403,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.56
+            <span className="dot"/>Trading Simulator V5.57
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4734,7 +4734,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 {tlTab==='dashboard'&&(
                   <div style={{flex:1,display:'flex',flexDirection:'column',gap:0,overflowY:'auto'}}>
                     {(()=>{
-                      // Bug fix V5.56: use tlTradesFiltered (pre-computed with live prices) instead of
+                      // Bug fix V5.57: use tlTradesFiltered (pre-computed with live prices) instead of
                       // re-running computeFifo with empty prices, which caused pnl_eur to never resolve
                       // for open positions and the equity curve to be empty when ≤1 closed trade existed.
                       const closed = tlTradesFiltered.filter(t=>t.status==='closed').slice().sort((a,b)=>(a.exit_date||a.entry_date||'').localeCompare(b.exit_date||b.entry_date||''))
@@ -4760,20 +4760,23 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       const equityCurve = Object.keys(equityByDate).sort().map(date=>({date,value:equityByDate[date]}))
                       const curveSinFx = Object.keys(sinFxByDate).sort().map(date=>({date,value:sinFxByDate[date]}))
                       // Float point: always show open trade endpoint so curve renders even while prices load
+                      // _pnl_float_eur uses entry FX → valid for both real and Sin FX curves
                       const floatPnl = openTrades.reduce((s,t)=>s+(t._pnl_float_eur||0),0)
                       if(openTrades.length>0){
                         // Anchor at entry of first open trade if no closed trades exist yet
                         if(equityCurve.length===0){
                           equityCurve.push({date:openTrades[0].entry_date||today, value:0})
+                          curveSinFx.push({date:openTrades[0].entry_date||today, value:0})
                         }
-                        // Only add today's float point if date is strictly after the last curve date
+                        // Add today's float point to BOTH curves to avoid Sin FX diverging at the last segment
                         const lastDate = equityCurve.length ? equityCurve[equityCurve.length-1].date : ''
                         if(today > lastDate){
                           equityCurve.push({date:today, value:cumPnl+floatPnl, isFloat:true})
+                          curveSinFx.push({date:today, value:parseFloat((cumSinFx+floatPnl).toFixed(4))})
                         }
                       }
                       // Build invest chart data: timeline of capital invested vs cumulative profit
-                      // Bug fix V5.56: include open trade entry events in the events array so their
+                      // Bug fix V5.57: include open trade entry events in the events array so their
                       // capital propagates correctly through the timeline up to today (instead of
                       // patching investMap at entry_date which didn't propagate forward).
                       const events = []
@@ -4908,12 +4911,13 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       const fxE=t.fx_entry>0?(t.fx_entry<1?1/t.fx_entry:t.fx_entry):1
                       return s+(parseFloat(t.shares||0)*parseFloat(t.entry_price||0))/fxE
                     },0)
-                    // CAGR base = máximo capital concurrente histórico (evita -100% cuando hay pocas posiciones abiertas)
-                    // Simula eventos de entrada/salida de capital para todas las ops y busca el pico
+                    // CAGR base = máximo capital concurrente histórico, consistente con el pico del gráfico Capital Invertido
+                    // Incluye comisión/2 en el capital de entrada igual que lo hace el invest chart
                     const capEvents=[];[...closed,...open].forEach(t=>{
                       const fxE2=t.fx_entry>0?(t.fx_entry<1?1/t.fx_entry:t.fx_entry):1
                       const cap=(parseFloat(t.shares||0)*parseFloat(t.entry_price||0))/fxE2
-                      capEvents.push({date:t.entry_date||today,delta:+cap})
+                      const commHalf=parseFloat(t.commission||0)/2
+                      capEvents.push({date:t.entry_date||today,delta:+cap+commHalf})
                       if(t.status==='closed') capEvents.push({date:t.exit_date||today,delta:-cap})
                     })
                     capEvents.sort((a,b)=>(a.date||'').localeCompare(b.date||''))
