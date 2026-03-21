@@ -538,6 +538,7 @@ export default function Home() {
   const [tlFills,setTlFills]=useState([])
   const [tlExpandedGroups,setTlExpandedGroups]=useState(new Set())  // group_ids expanded
   const [tlExpandedTrades,setTlExpandedTrades]=useState(new Set()) // trade ids expanded
+  const [tlShowFxCols,setTlShowFxCols]=useState(false) // toggle FX impact columns
   const [tlFormOpen,setTlFormOpen]=useState(false)
   const [tlFilterStrat,setTlFilterStrat]=useState('')
   // ── groupTradesForDisplay: FIFO match individual fills → virtual grouped rows ──
@@ -2308,7 +2309,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.45</title>
+        <title>Trading Simulator V5.46</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2383,7 +2384,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.45
+            <span className="dot"/>Trading Simulator V5.46
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4168,6 +4169,14 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                               background:'transparent',border:'1px solid #2a3040',color:'#4a6a80',whiteSpace:'nowrap'}}>
                             🗑
                           </button>
+                          <button onClick={()=>setTlShowFxCols(v=>!v)}
+                            title={tlShowFxCols?'Ocultar columnas FX Impact':'Mostrar columnas FX Impact'}
+                            style={{flexShrink:0,fontFamily:MONO,fontSize:10,padding:'4px 8px',borderRadius:4,cursor:'pointer',
+                              background:tlShowFxCols?'rgba(255,209,102,0.15)':'transparent',
+                              border:'1px solid '+(tlShowFxCols?'#ffd166':'#2a3040'),
+                              color:tlShowFxCols?'#ffd166':'#4a6a80',whiteSpace:'nowrap',fontWeight:tlShowFxCols?700:400}}>
+                            FX±
+                          </button>
                           <button onClick={()=>{const _df=tlDefaultForm();setTlForm(_df);setTlFormOpen(true);if(_df.currency&&_df.currency!=='EUR')tlFetchFx(_df.currency,_df.date)}}
                             style={{flexShrink:0,fontFamily:MONO,fontSize:10,padding:'4px 12px',borderRadius:4,cursor:'pointer',
                               background:'rgba(155,114,255,0.15)',border:'1px solid #9b72ff',color:'#9b72ff',fontWeight:700,whiteSpace:'nowrap'}}>
@@ -4190,6 +4199,11 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                             {['#','Symbol','Strategy','Broker','Entry','Exit','Shares','Px In','Capital','Px Out','Curr.','FX','Fee','P&L€','P&L%','Days','Status'].map(h=>(
                               <th key={h} style={{padding:'6px 8px',textAlign:'center',fontFamily:MONO,fontSize:9,color:'#3d5a7a',
                                 letterSpacing:'0.08em',textTransform:'uppercase',borderBottom:'1px solid var(--border)',whiteSpace:'nowrap'}}>{h}</th>
+                            ))}
+                            {tlShowFxCols&&['FX €','FX %'].map(h=>(
+                              <th key={h} style={{padding:'6px 8px',textAlign:'center',fontFamily:MONO,fontSize:9,color:'#b8860b',
+                                letterSpacing:'0.08em',textTransform:'uppercase',borderBottom:'1px solid var(--border)',whiteSpace:'nowrap',
+                                background:'rgba(255,209,102,0.04)'}}>{h}</th>
                             ))}
                           </tr>
                         </thead>
@@ -4264,11 +4278,29 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                     {statusLabel}
                                   </span>
                                 </td>
+                                {tlShowFxCols&&(()=>{
+                                  const fxE=parseFloat(trade.fx_entry||0)||1
+                                  const fxX=parseFloat(trade.fx_exit||trade.fx_entry||0)||fxE
+                                  const fxImpEur=(!isOpen&&!isOrphan&&trade.exit_price!=null)
+                                    ?parseFloat(trade.exit_price)*parseFloat(trade.shares||0)*(1/fxX-1/fxE)
+                                    :null
+                                  const capE=parseFloat(trade.entry_price||0)*parseFloat(trade.shares||0)/fxE
+                                  const fxImpPct=fxImpEur!=null&&capE>0?fxImpEur/capE*100:null
+                                  const fxCellStyle={padding:'6px 8px',whiteSpace:'nowrap',background:'rgba(255,209,102,0.04)'}
+                                  return(<>
+                                    <td style={fxCellStyle}>
+                                      {fxImpEur!=null?<span style={{color:fxImpEur>=0?'#ffd166':'#ff9944',fontWeight:600}}>{fxImpEur>=0?'+':''}{fxImpEur.toFixed(2)}€</span>:<span style={{color:'#3d5a7a'}}>—</span>}
+                                    </td>
+                                    <td style={fxCellStyle}>
+                                      {fxImpPct!=null?<span style={{color:fxImpPct>=0?'#ffd166':'#ff9944',fontWeight:600}}>{fxImpPct>=0?'+':''}{fxImpPct.toFixed(2)}%</span>:<span style={{color:'#3d5a7a'}}>—</span>}
+                                    </td>
+                                  </>)
+                                })()}
                               </tr>,
                               // ── Fills expandidos ──
                               isExp&&fills.length>0&&(
                                 <tr key={trade.id+'-fills'}>
-                                  <td colSpan={18} style={{padding:0,background:'rgba(0,212,255,0.015)',borderBottom:'2px solid rgba(0,212,255,0.1)'}}>
+                                  <td colSpan={tlShowFxCols?20:18} style={{padding:0,background:'rgba(0,212,255,0.015)',borderBottom:'2px solid rgba(0,212,255,0.1)'}}>
                                     <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:10,textAlign:'center'}}>
                                       <thead>
                                         <tr style={{background:'rgba(0,212,255,0.04)'}}>
@@ -4639,6 +4671,14 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       if(floatPnl!==0 && equityCurve.length>0){
                         equityCurve.push({date:today,value:cumPnl+floatPnl,isFloat:true})
                       }
+                      // Sin FX curve: P&L sin FX = (exit_price - entry_price) × shares / fx_entry - commission
+                      let cumSinFx = 0
+                      const curveSinFx = closed.map(t=>{
+                        const fxE=parseFloat(t.fx_entry||0)||1
+                        const pnlSinFx=(parseFloat(t.exit_price||0)-parseFloat(t.entry_price||0))*parseFloat(t.shares||0)/fxE-parseFloat(t.commission||0)
+                        cumSinFx+=pnlSinFx
+                        return {date:t.exit_date||t.entry_date, value:parseFloat(cumSinFx.toFixed(4))}
+                      })
                       // Build invest chart data: timeline of capital invested vs cumulative profit
                       const events = []
                       closed.forEach(t=>{
@@ -4694,7 +4734,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                           )}
 
                           {/* Equity curve — P&L acumulado */}
-                          {equityCurve.length>1&&<TlEquityChart curve={equityCurve}/>}
+                          {equityCurve.length>1&&<TlEquityChart curve={equityCurve} curveSinFx={curveSinFx.length>1?curveSinFx:null}/>}
                           {/* Capital Invertido vs Profit */}
                           {investData.length>1&&<TlInvestChart investData={investData}/>}
                           {/* Barras P&L por trade — cerradas + abiertas */}
@@ -4778,6 +4818,17 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     const bestV=bestT?bestT._eff_pnl:null
                     const worstV=worstT?worstT._eff_pnl:null
                     const rows=[
+                      {l:'Impacto FX €',
+                       v:(()=>{
+                         const total=tlTradesFiltered.filter(t=>t.status==='closed'&&t.exit_price!=null).reduce((s,t)=>{
+                           const fxE=parseFloat(t.fx_entry||0)||1
+                           const fxX=parseFloat(t.fx_exit||t.fx_entry||0)||fxE
+                           return s+parseFloat(t.exit_price)*parseFloat(t.shares||0)*(1/fxX-1/fxE)
+                         },0)
+                         return total!==0?(total>=0?'+€':'-€')+Math.abs(total).toFixed(2):'€0.00'
+                       })(),
+                       c:'#ffd166',
+                       tip:'Suma del impacto del tipo de cambio en todas las operaciones cerradas. Positivo = el EUR se debilitó (tus USD valieron más). Negativo = el EUR se fortaleció.'},
                       {l:'Total Operaciones',
                        v:(tlTradesFiltered.filter(t=>t.status==='open').length+' ab. / '+tlTradesFiltered.filter(t=>t.status==='closed').length+' cerr.'),
                        c:'#ffd166',

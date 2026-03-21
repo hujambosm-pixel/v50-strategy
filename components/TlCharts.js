@@ -1,6 +1,6 @@
 import { useRef, useEffect } from 'react'
 
-export function TlEquityChart({ curve }) {
+export function TlEquityChart({ curve, curveSinFx }) {
   const ref = useRef(null), chartRef = useRef(null)
   useEffect(()=>{
     if(!ref.current||!curve?.length) return
@@ -20,16 +20,35 @@ export function TlEquityChart({ curve }) {
         .setData([{time:curve[0].date,value:0},{time:curve[curve.length-1].date,value:0}])
       const finalVal = curve[curve.length-1].value
       const lineColor = finalVal >= 0 ? '#00e5a0' : '#ff4d6d'
-      chart.addLineSeries({color:lineColor,lineWidth:2,lastValueVisible:true,priceLineVisible:false})
+      chart.addLineSeries({color:lineColor,lineWidth:2,lastValueVisible:true,priceLineVisible:false,title:'P&L real'})
         .setData(curve.map(p=>({time:p.date,value:p.value})))
+      if(curveSinFx?.length>1){
+        chart.addLineSeries({color:'#7a9bc0',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:true,priceLineVisible:false,title:'Sin FX'})
+          .setData(curveSinFx.map(p=>({time:p.date,value:p.value})))
+      }
       chart.timeScale().fitContent()
       const ro = new ResizeObserver(()=>{ if(ref.current) chart.applyOptions({width:ref.current.clientWidth}) })
       ro.observe(ref.current)
       return ()=>ro.disconnect()
     })
     return ()=>{ if(chartRef.current){chartRef.current.remove();chartRef.current=null} }
-  },[curve])
-  return <div ref={ref} style={{minHeight:200,borderTop:'1px solid var(--border)'}}/>
+  },[curve,curveSinFx])
+  return (
+    <div style={{borderTop:'1px solid var(--border)'}}>
+      {curveSinFx?.length>1&&(
+        <div style={{padding:'4px 14px 0',display:'flex',gap:14,alignItems:'center'}}>
+          <span style={{fontFamily:'"JetBrains Mono",monospace',fontSize:9,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase'}}>Equity</span>
+          <span style={{display:'flex',alignItems:'center',gap:4,fontFamily:'"JetBrains Mono",monospace',fontSize:9,color:'#00e5a0'}}>
+            <span style={{display:'inline-block',width:10,height:2,background:'#00e5a0',borderRadius:1}}/> P&L real
+          </span>
+          <span style={{display:'flex',alignItems:'center',gap:4,fontFamily:'"JetBrains Mono",monospace',fontSize:9,color:'#7a9bc0'}}>
+            <span style={{display:'inline-block',width:10,height:2,background:'#7a9bc0',borderRadius:1,opacity:0.6}}/> Sin FX
+          </span>
+        </div>
+      )}
+      <div ref={ref} style={{minHeight:200}}/>
+    </div>
+  )
 }
 
 // ── Capital Invertido vs Profit acumulado (area + line) ──
