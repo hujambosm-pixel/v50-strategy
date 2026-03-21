@@ -29,19 +29,51 @@ function computeFifo(fills, prices={}) {
   ;[...fills]
     .sort((a,b)=>(a.date||'').localeCompare(b.date||'')||(a.created_at||a.id||'').localeCompare(b.created_at||b.id||''))
     .forEach(f=>{ if(!bySymbol[f.symbol]) bySymbol[f.symbol]=[]; bySymbol[f.symbol].push(f) })
-  const openPositions=[], closedTrades=[], fillStatus={}
+  const openPositions=[], closedTrades=[], fillStatus={}, trades=[]
   Object.entries(bySymbol).forEach(([symbol, symFills])=>{
     const buyQueue=[]  // {fill, remaining, orig}
+    let tradeIdx=0
+    // cur: acumulador del ciclo abierto actual (BUYs hasta que posición vuelve a 0)
+    let cur=null
+    const newCur=()=>({
+      _buyFills:[], _sellFills:[],
+      _wBuyPxSh:0, _wBuyFxSh:0, _totalBuySh:0,
+      _wSellPxSh:0, _totalSellSh:0,
+      _pnlEur:0, _totalComm:0,
+      _firstBuyDate:null, _lastSellDate:null,
+      _broker:null, _strategy:null, _currency:null,
+    })
     symFills.forEach(f=>{
       const shares=parseFloat(f.shares||0)
       const price=parseFloat(f.price||0)
       const comm=parseFloat(f.commission||0)
       let fx=parseFloat(f.fx||1); if(fx>0&&fx<1) fx=1/fx; if(!fx||isNaN(fx)) fx=1
       if(f.fill_type==='buy'){
+        if(!buyQueue.length) cur=newCur()
         buyQueue.push({fill:f, remaining:shares, orig:shares})
         fillStatus[f.id]='open'
+        cur._buyFills.push({id:f.id, date:f.date, shares, price, commission:comm, fill_type:'buy'})
+        cur._wBuyPxSh+=price*shares; cur._wBuyFxSh+=fx*shares; cur._totalBuySh+=shares
+        cur._totalComm+=comm
+        if(!cur._firstBuyDate||f.date<cur._firstBuyDate) cur._firstBuyDate=f.date
+        cur._broker=cur._broker||f.broker; cur._strategy=cur._strategy||f.strategy; cur._currency=cur._currency||f.currency
       } else if(f.fill_type==='sell'){
         fillStatus[f.id]='sell'
+        if(!buyQueue.length){
+          // SELL sin BUY correspondiente → orphan
+          trades.push({id:'orphan_'+f.id, symbol, status:'orphan',
+            entry_date:null, entry_price:null, fx_entry:null,
+            exit_date:f.date, exit_price:price,
+            shares, commission:comm, currency:f.currency||'USD',
+            broker:f.broker, strategy:f.strategy,
+            pnl_eur:null, pnl_pct:null, _pnl_float_eur:null, _pnl_float_pct:null,
+            _buyFills:[], _sellFills:[{id:f.id, date:f.date, shares, price, commission:comm, fill_type:'sell'}]})
+          return
+        }
+        cur._sellFills.push({id:f.id, date:f.date, shares, price, commission:comm, fill_type:'sell'})
+        cur._totalComm+=comm
+        if(!cur._lastSellDate||f.date>cur._lastSellDate) cur._lastSellDate=f.date
+        cur._currency=cur._currency||f.currency
         let sellRem=shares
         while(sellRem>0.001&&buyQueue.length>0){
           const lot=buyQueue[0]
@@ -52,6 +84,7 @@ function computeFifo(fills, prices={}) {
           const pnlPct=buyPx>0?(price/buyPx-1)*100:0
           const buyComm=lot.orig>0?parseFloat(lot.fill.commission||0)/lot.orig*matched:0
           const sellComm=shares>0?comm/shares*matched:0
+          cur._wSellPxSh+=price*matched; cur._totalSellSh+=matched; cur._pnlEur+=pnlEur
           closedTrades.push({
             symbol, shares:matched,
             pnl_eur:parseFloat(pnlEur.toFixed(4)),
@@ -66,6 +99,23 @@ function computeFifo(fills, prices={}) {
           lot.remaining-=matched; sellRem-=matched
           if(lot.remaining<=0.001){ fillStatus[lot.fill.id]='closed'; buyQueue.shift() }
           else fillStatus[lot.fill.id]='partial'
+        }
+        if(!buyQueue.length){
+          // Posición cerrada completamente → emitir trade
+          const entryPx=cur._totalBuySh>0?cur._wBuyPxSh/cur._totalBuySh:0
+          const fxE=cur._totalBuySh>0?cur._wBuyFxSh/cur._totalBuySh:1
+          const exitPx=cur._totalSellSh>0?cur._wSellPxSh/cur._totalSellSh:0
+          const pnlPct=entryPx>0?(exitPx/entryPx-1)*100:0
+          trades.push({id:'trade_'+symbol+'_'+tradeIdx++, symbol, status:'closed',
+            entry_date:cur._firstBuyDate, entry_price:parseFloat(entryPx.toFixed(4)), fx_entry:parseFloat(fxE.toFixed(4)),
+            exit_date:cur._lastSellDate, exit_price:parseFloat(exitPx.toFixed(4)),
+            shares:parseFloat(cur._totalSellSh.toFixed(4)),
+            commission:parseFloat(cur._totalComm.toFixed(4)),
+            currency:cur._currency||'USD', broker:cur._broker, strategy:cur._strategy,
+            pnl_eur:parseFloat(cur._pnlEur.toFixed(4)), pnl_pct:parseFloat(pnlPct.toFixed(4)),
+            _pnl_float_eur:null, _pnl_float_pct:null,
+            _buyFills:cur._buyFills, _sellFills:cur._sellFills})
+          cur=null
         }
       }
     })
@@ -88,9 +138,21 @@ function computeFifo(fills, prices={}) {
         status:'open',
       })
       buyQueue.forEach(l=>{ if(fillStatus[l.fill.id]!=='partial') fillStatus[l.fill.id]='open' })
+      if(cur){
+        // Posición abierta: entry_price = avg de los lotes restantes (costo real)
+        trades.push({id:'trade_'+symbol+'_'+tradeIdx++, symbol, status:'open',
+          entry_date:cur._firstBuyDate, entry_price:parseFloat(avgBuyPx.toFixed(4)), fx_entry:parseFloat(fxE.toFixed(4)),
+          exit_date:null, exit_price:null,
+          shares:parseFloat(openShares.toFixed(4)),
+          commission:parseFloat(cur._totalComm.toFixed(4)),
+          currency:cur._currency||'USD', broker:cur._broker, strategy:cur._strategy,
+          pnl_eur:null, pnl_pct:null,
+          _pnl_float_eur:parseFloat(floatEur.toFixed(4)), _pnl_float_pct:parseFloat(floatPct.toFixed(4)),
+          _buyFills:cur._buyFills, _sellFills:cur._sellFills})
+      }
     }
   })
-  return {openPositions, closedTrades, fillStatus}
+  return {openPositions, closedTrades, fillStatus, trades}
 }
 
 // ── Date helpers for TradeLog (dd/mm/yyyy ↔ yyyy-mm-dd) ──
@@ -469,6 +531,7 @@ export default function Home() {
   const tlSearchRef=useRef(null)
   const [tlFills,setTlFills]=useState([])
   const [tlExpandedGroups,setTlExpandedGroups]=useState(new Set())  // group_ids expanded
+  const [tlExpandedTrades,setTlExpandedTrades]=useState(new Set()) // trade ids expanded
   const [tlFormOpen,setTlFormOpen]=useState(false)
   const [tlFilterStrat,setTlFilterStrat]=useState('')
   // ── groupTradesForDisplay: FIFO match individual fills → virtual grouped rows ──
@@ -554,6 +617,35 @@ export default function Home() {
       return true
     })
   },[tlTrades,tlFifo,tlFilterBroker,tlFilterStrat,tlSearch,tlFilterYear,tlFilterMonth,tlFilterStatus])
+
+  // ── tlTradesFiltered: operaciones FIFO filtradas para el historial ──
+  const tlTradesFiltered = useMemo(()=>{
+    return (tlFifo.trades||[])
+      .filter(t=>{
+        if(tlFilterBroker && t.broker!==tlFilterBroker) return false
+        if(tlFilterStrat && (t.strategy||'')!==tlFilterStrat) return false
+        if(tlSearch && !(t.symbol||'').toLowerCase().includes(tlSearch.toLowerCase())) return false
+        if(tlFilterYear||tlFilterMonth){
+          const d=t.entry_date||t.exit_date
+          if(!d) return false
+          if(tlFilterYear && !d.startsWith(tlFilterYear)) return false
+          if(tlFilterMonth && d.slice(5,7)!==tlFilterMonth) return false
+        }
+        if(tlFilterStatus){
+          if(tlFilterStatus==='open' && t.status!=='open') return false
+          if(tlFilterStatus==='closed' && t.status!=='closed') return false
+        }
+        return true
+      })
+      .sort((a,b)=>{
+        if(a.status==='open'&&b.status!=='open') return -1
+        if(a.status!=='open'&&b.status==='open') return 1
+        const da=a.exit_date||a.entry_date||''
+        const db=b.exit_date||b.entry_date||''
+        return db.localeCompare(da)
+      })
+  },[tlFifo,tlFilterBroker,tlFilterStrat,tlSearch,tlFilterYear,tlFilterMonth,tlFilterStatus])
+
   const tlPrices = {}
   const [tlFillsList,setTlFillsList]=useState([])  // fills entrada para modal
   const [tlExitFillsList,setTlExitFillsList]=useState([])  // fills salida para modal
@@ -2189,7 +2281,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.34</title>
+        <title>Trading Simulator V5.42</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2264,7 +2356,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.34
+            <span className="dot"/>Trading Simulator V5.42
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -3205,97 +3297,59 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
 
                 {/* Filtros */}
                 {(()=>{
-                  const allYears=[...new Set(tlTrades.map(t=>t.entry_date?.slice(0,4)).filter(Boolean))].sort((a,b)=>b-a)
+                  const allYears=[...new Set(tlTrades.map(t=>(t.date||t.entry_date)?.slice(0,4)).filter(Boolean))].sort((a,b)=>b-a)
+                  const strats=[...new Set(tlTrades.map(t=>t.strategy||'').filter(Boolean))].sort()
+                  const monthsInYear=tlFilterYear?[...new Set(tlTrades
+                    .filter(t=>{const d=t.date;return d&&d.startsWith(tlFilterYear)})
+                    .map(t=>{const d=t.date;return d?d.slice(5,7):null}).filter(Boolean)
+                  )].sort():[]
+                  const MESES=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
+                  const selStyle={fontFamily:MONO,fontSize:10,width:'100%',padding:'3px 4px',borderRadius:3,
+                    border:'1px solid #1a2d45',background:'#0a1628',color:'#c0d8f0',cursor:'pointer',outline:'none'}
+                  const labelStyle={fontFamily:MONO,fontSize:8,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:3}
+                  const rowStyle={padding:'6px 8px',borderBottom:'1px solid var(--border)',display:'flex',flexDirection:'column',gap:2}
                   return(
                     <div style={{overflowY:'auto',flex:1}}>
-                      <div style={{padding:'7px 8px',borderBottom:'1px solid var(--border)'}}>
-                        <div style={{fontFamily:MONO,fontSize:8,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:4}}>Estado</div>
-                        <div style={{display:'flex',gap:3,flexWrap:'wrap'}}>
-                          {[['','Todas'],['open','Abiertas'],['closed','Cerradas']].map(([v,l])=>(
-                            <button key={v} onClick={()=>setTlFilterStatus(tlFilterStatus===v?'':v)}
-                              style={{fontFamily:MONO,fontSize:10,padding:'2px 6px',borderRadius:3,cursor:'pointer',
-                                border:'1px solid '+(tlFilterStatus===v?'#9b72ff':'#1a2d45'),
-                                background:tlFilterStatus===v?'rgba(155,114,255,0.1)':'transparent',
-                                color:tlFilterStatus===v?'#9b72ff':'#4a7a95'}}>{l}</button>
-                          ))}
-                        </div>
+                      <div style={rowStyle}>
+                        <div style={labelStyle}>Estado</div>
+                        <select value={tlFilterStatus} onChange={e=>setTlFilterStatus(e.target.value)} style={selStyle}>
+                          <option value=''>Todas</option>
+                          <option value='open'>Abiertas</option>
+                          <option value='closed'>Cerradas</option>
+                        </select>
                       </div>
-                      <div style={{padding:'7px 8px',borderBottom:'1px solid var(--border)'}}>
-                        <div style={{fontFamily:MONO,fontSize:8,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:4}}>Broker</div>
-                        <div style={{display:'flex',gap:3,flexWrap:'wrap'}}>
-                          {[['','Todos'],...TL_BROKERS.map(b=>[b,TL_LABEL[b]])].map(([v,l])=>(
-                            <button key={v} onClick={()=>setTlFilterBroker(tlFilterBroker===v?'':v)}
-                              style={{fontFamily:MONO,fontSize:10,padding:'2px 6px',borderRadius:3,cursor:'pointer',
-                                border:'1px solid '+(tlFilterBroker===v?(TL_COLORS[v]||'#9b72ff'):'#1a2d45'),
-                                background:tlFilterBroker===v?(TL_COLORS[v]||'#9b72ff')+'18':'transparent',
-                                color:tlFilterBroker===v?(TL_COLORS[v]||'#9b72ff'):'#4a7a95'}}>{l}</button>
-                          ))}
-                        </div>
+                      <div style={rowStyle}>
+                        <div style={labelStyle}>Broker</div>
+                        <select value={tlFilterBroker} onChange={e=>setTlFilterBroker(e.target.value)} style={selStyle}>
+                          <option value=''>Todos</option>
+                          {TL_BROKERS.map(b=><option key={b} value={b}>{TL_LABEL[b]}</option>)}
+                        </select>
                       </div>
-                      <div style={{padding:'7px 8px',borderBottom:'1px solid var(--border)'}}>
-                        <div style={{fontFamily:MONO,fontSize:8,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:4}}>Período</div>
-                        <div style={{display:'flex',gap:3,flexWrap:'wrap',marginBottom:tlFilterYear?4:0}}>
-                          {[['','Todo'],...allYears.map(y=>[y,y])].map(([v,l])=>(
-                            <button key={v} onClick={()=>{const next=tlFilterYear===v?'':v;setTlFilterYear(next);if(!next)setTlFilterMonth('')}}
-                              style={{fontFamily:MONO,fontSize:10,padding:'2px 6px',borderRadius:3,cursor:'pointer',
-                                border:'1px solid '+(tlFilterYear===v?'#9b72ff':'#1a2d45'),
-                                background:tlFilterYear===v?'rgba(155,114,255,0.1)':'transparent',
-                                color:tlFilterYear===v?'#9b72ff':'#4a7a95'}}>{l}</button>
-                          ))}
-                        </div>
-                        {tlFilterYear&&(()=>{
-                          const monthsInYear=[...new Set(tlTrades
-                            .filter(t=>{const d=t.date;return d&&d.startsWith(tlFilterYear)})
-                            .map(t=>{const d=t.date;return d?d.slice(5,7):null}).filter(Boolean)
-                          )].sort()
-                          if(!monthsInYear.length) return null
-                          const MESES=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
-                          return(
-                            <div style={{display:'flex',gap:3,flexWrap:'wrap',paddingTop:4,borderTop:'1px solid rgba(155,114,255,0.12)'}}>
-                              <button onClick={()=>setTlFilterMonth('')}
-                                style={{fontFamily:MONO,fontSize:9,padding:'2px 5px',borderRadius:3,cursor:'pointer',
-                                  border:'1px solid '+(tlFilterMonth===''?'#9b72ff':'#1a2d45'),
-                                  background:tlFilterMonth===''?'rgba(155,114,255,0.1)':'transparent',
-                                  color:tlFilterMonth===''?'#9b72ff':'#4a7a95'}}>Todos</button>
-                              {monthsInYear.map(m=>(
-                                <button key={m} onClick={()=>setTlFilterMonth(tlFilterMonth===m?'':m)}
-                                  style={{fontFamily:MONO,fontSize:9,padding:'2px 5px',borderRadius:3,cursor:'pointer',
-                                    border:'1px solid '+(tlFilterMonth===m?'#00d4ff':'#1a2d45'),
-                                    background:tlFilterMonth===m?'rgba(0,212,255,0.1)':'transparent',
-                                    color:tlFilterMonth===m?'#00d4ff':'#4a7a95'}}>
-                                  {MESES[parseInt(m)-1]}
-                                </button>
-                              ))}
-                            </div>
-                          )
-                        })()}
+                      <div style={rowStyle}>
+                        <div style={labelStyle}>Año</div>
+                        <select value={tlFilterYear} onChange={e=>{setTlFilterYear(e.target.value);setTlFilterMonth('')}} style={selStyle}>
+                          <option value=''>Todo</option>
+                          {allYears.map(y=><option key={y} value={y}>{y}</option>)}
+                        </select>
                       </div>
-                      {(()=>{
-                        const strats=[...new Set(tlTrades.map(t=>t.strategy||'').filter(Boolean))].sort()
-                        if(!strats.length) return null
-                        return(
-                          <div style={{padding:'7px 8px',borderBottom:'1px solid var(--border)'}}>
-                            <div style={{fontFamily:MONO,fontSize:8,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:4}}>Estrategia</div>
-                            <div style={{display:'flex',gap:3,flexWrap:'wrap'}}>
-                              <button onClick={()=>setTlFilterStrat('')}
-                                style={{fontFamily:MONO,fontSize:9,padding:'2px 6px',borderRadius:3,cursor:'pointer',
-                                  border:'1px solid '+(tlFilterStrat===''?'#9b72ff':'#1a2d45'),
-                                  background:tlFilterStrat===''?'rgba(155,114,255,0.1)':'transparent',
-                                  color:tlFilterStrat===''?'#9b72ff':'#4a7a95'}}>Todas</button>
-                              {strats.map(v=>(
-                                <button key={v} onClick={()=>setTlFilterStrat(tlFilterStrat===v?'':v)}
-                                  style={{fontFamily:MONO,fontSize:9,padding:'2px 6px',borderRadius:3,cursor:'pointer',
-                                    border:'1px solid '+(tlFilterStrat===v?'#00d4ff':'#1a2d45'),
-                                    background:tlFilterStrat===v?'rgba(0,212,255,0.1)':'transparent',
-                                    color:tlFilterStrat===v?'#00d4ff':'#4a7a95',
-                                    maxWidth:90,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}
-                                  title={v}>{v}</button>
-                              ))}
-                            </div>
-                          </div>
-                        )
-                      })()}
-
+                      {tlFilterYear&&monthsInYear.length>0&&(
+                        <div style={rowStyle}>
+                          <div style={labelStyle}>Mes</div>
+                          <select value={tlFilterMonth} onChange={e=>setTlFilterMonth(e.target.value)} style={selStyle}>
+                            <option value=''>Todos</option>
+                            {monthsInYear.map(m=><option key={m} value={m}>{MESES[parseInt(m)-1]}</option>)}
+                          </select>
+                        </div>
+                      )}
+                      {strats.length>0&&(
+                        <div style={rowStyle}>
+                          <div style={labelStyle}>Estrategia</div>
+                          <select value={tlFilterStrat} onChange={e=>setTlFilterStrat(e.target.value)} style={selStyle}>
+                            <option value=''>Todas</option>
+                            {strats.map(v=><option key={v} value={v}>{v}</option>)}
+                          </select>
+                        </div>
+                      )}
                     </div>
                   )
                 })()}
@@ -4042,7 +4096,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                           onMouseOut={e=>e.currentTarget.style.color='#ff4d6d'}>✕</button>
                       )}
                       <span style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',flexShrink:0}}>
-                        {tlFiltered.length}
+                        {tlTradesFiltered.length}
                       </span>
                       {tlLoading&&<span style={{fontFamily:MONO,fontSize:9,color:'#9b72ff',flexShrink:0}}>⟳</span>}
                     </div>
@@ -4102,160 +4156,74 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
 
                     {/* Tabla */}
                     <div style={{flex:1,overflowY:'auto'}}>
-                      <table className="tl-ops-table" onContextMenu={e=>{e.stopPropagation();openCtx(e,'tl_table')}} style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:11}}>
+                      <table className="tl-ops-table" onContextMenu={e=>{e.stopPropagation();openCtx(e,'tl_table')}} style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:11,textAlign:'center'}}>
                         <thead>
                           <tr style={{background:'var(--bg2)',position:'sticky',top:0,zIndex:5}}>
-                            {tlMultiMode&&(
-                              <th style={{padding:'6px 8px',borderBottom:'1px solid var(--border)',width:32}}>
-                                <input type="checkbox"
-                                  style={{cursor:'pointer',accentColor:'#ff4d6d'}}
-                                  checked={tlFiltered.length>0&&tlFiltered.every(t=>tlMultiSel.has(t.id))}
-                                  onChange={e=>{
-                                    const visible=tlFiltered
-                                    if(e.target.checked) setTlMultiSel(new Set(visible.map(t=>t.id)))
-                                    else setTlMultiSel(new Set())
-                                  }}
-                                  title="Seleccionar todas"
-                                />
-                              </th>
-                            )}
-                            {['#','Símbolo','Estrategia','Broker','Entrada','Salida','Acciones','Px entrada','Capital inv.','Px salida/actual','Divisa','FX','Comisión','P&L €','P&L %','Días','Estado'].map(h=>(
-                              <th key={h} style={{padding:'6px 8px',textAlign:'left',fontFamily:MONO,fontSize:9,color:'#3d5a7a',
+                            <th style={{width:28,padding:'6px 4px',borderBottom:'1px solid var(--border)'}}/>
+                            {['#','Symbol','Strategy','Broker','Entry','Exit','Shares','Px In','Capital','Px Out','Curr.','FX','Fee','P&L€','P&L%','Days','Status'].map(h=>(
+                              <th key={h} style={{padding:'6px 8px',textAlign:'center',fontFamily:MONO,fontSize:9,color:'#3d5a7a',
                                 letterSpacing:'0.08em',textTransform:'uppercase',borderBottom:'1px solid var(--border)',whiteSpace:'nowrap'}}>{h}</th>
                             ))}
                           </tr>
                         </thead>
                         <tbody>
-                          {(()=>{
-                            // ── Build group-aware display list ──
-                            // Group rows by group_id; ungrouped rows render normally
-                            const groupMap = {}
-                            tlFiltered.forEach(t=>{
-                              if(t.group_id){
-                                if(!groupMap[t.group_id]) groupMap[t.group_id]=[]
-                                groupMap[t.group_id].push(t)
-                              }
-                            })
-                            // Build ordered display items: {type:'row'|'group', ...}
-                            const seen = new Set()
-                            const items = []
-                            tlFiltered.forEach((t,i)=>{
-                              if(!t.group_id){
-                                items.push({type:'row', t, i})
-                              } else if(!seen.has(t.group_id)){
-                                seen.add(t.group_id)
-                                const members = groupMap[t.group_id]
-                                items.push({type:'group', group_id:t.group_id, members, i})
-                              }
-                            })
-                            // ── Row renderer (shared by single rows and sub-rows) ──
-                            const renderRow = (t, i, arr, opts={})=>{
-                              const {isSub=false, isLast=false} = opts
-                              const isOpen=t.status==='open'
-                              const isOrphan=t.status==='orphan'
-                              const pnl=isOpen?t._pnl_float_eur:t.pnl_eur
-                              const pnlPct=isOpen?t._pnl_float_pct:t.pnl_pct
-                              const exitPx=isOpen?t._current_price:t.exit_price
-                              const dias=t.entry_date&&(isOpen?t._current_date:t.exit_date)?
-                                Math.round((new Date(isOpen?t._current_date||new Date():t.exit_date)-new Date(t.entry_date))/86400000):null
-                              const col=TL_COLORS[t.broker]||'#7a9bc0'
-                              const isSel=tlSelected?.id===t.id
-                              const isMultiChecked = tlMultiSel.has(t.id)
-                              const baseBg = isSub
-                                ? (isMultiChecked?'rgba(255,77,109,0.07)':isSel?'rgba(155,114,255,0.08)':'rgba(0,212,255,0.03)')
-                                : (isMultiChecked?'rgba(255,77,109,0.07)':isSel?'rgba(155,114,255,0.06)':isOpen?'rgba(0,229,160,0.02)':'transparent')
-                              return(
-                              <tr key={t.id} onClick={()=>{
-                                if(tlMultiMode){
-                                  setTlMultiSel(prev=>{const n=new Set(prev);n.has(t.id)?n.delete(t.id):n.add(t.id);return n})
-                                  return
-                                }
-                                setTlSelected(t)
-                                // For FIFO-grouped trades use original BUY/SELL IDs; for legacy trades use t.id
-                                const entryFillsId = t._originalBuyId || (t.has_fills ? t.id : null)
-                                const exitFillsId  = t._originalSellId || null
-                                if(entryFillsId) loadFills(entryFillsId); else { setTlFills([]); setTlFillsList([]) }
-                                if(exitFillsId)  loadExitFills(exitFillsId); else setTlExitFillsList([])
-                                const df=tlDefaultForm()
-                                setTlForm({...df,
-                                  id:t.id,symbol:t.symbol||'',name:t.name||'',
-                                  asset_type:t.asset_type||'stock',broker:t.broker||df.broker,
-                                  entry_date:toDisplayDate(t.entry_date)||'',
-                                  entry_price:t.entry_price||'',shares:t.shares||'',
-                                  entry_currency:t.entry_currency||'USD',
-                                  commission_buy:t.commission_buy||0,
-                                  fx_entry:t.fx_entry?String(t.fx_entry):'',
-                                  fx_entry_manual:!!t.fx_entry,
-                                  notes:t.notes||'',strategy:t.strategy||df.strategy,
-                                  import_source:t.import_source||'manual',
-                                  _entryFillsId: entryFillsId || t.id,
-                                  _exitFillsId:  exitFillsId  || t.id,
-                                })
-                                if(t.status==='open'){
-                                  setTlCloseForm({exit_date:todayDisplay(),exit_price:'',exit_currency:t.entry_currency||'USD',commission_sell:0,fx_exit:'',fx_exit_manual:false})
-                                }
-                                setTlFormOpen(true)
-                              }}
-                                style={{borderBottom:'1px solid var(--border)',cursor:'pointer',
-                                  background:baseBg,
-                                  borderLeft: isSub?'2px solid rgba(0,212,255,0.2)':'none'}}
-                                onMouseOver={e=>e.currentTarget.style.background=isMultiChecked?'rgba(255,77,109,0.12)':isSub?'rgba(0,212,255,0.06)':'rgba(255,255,255,0.03)'}
-                                onMouseOut={e=>e.currentTarget.style.background=baseBg}>
-                                {tlMultiMode&&(
-                                  <td style={{padding:'6px 8px'}} onClick={e=>e.stopPropagation()}>
-                                    <input type="checkbox" checked={isMultiChecked}
-                                      style={{cursor:'pointer',accentColor:'#ff4d6d'}}
-                                      onChange={()=>setTlMultiSel(prev=>{const n=new Set(prev);n.has(t.id)?n.delete(t.id):n.add(t.id);return n})}/>
-                                  </td>
-                                )}
-                                <td style={{padding:'6px 8px',color:'#3d5a7a',fontSize:10}}>
-                                  {isSub?<span style={{marginLeft:8,color:'#2a4060'}}>↳</span>:i+1}
+                          {tlTradesFiltered.flatMap((trade,i)=>{
+                            const isOpen=trade.status==='open'
+                            const isOrphan=trade.status==='orphan'
+                            const isExp=tlExpandedTrades.has(trade.id)
+                            const pnl=isOpen?trade._pnl_float_eur:trade.pnl_eur
+                            const pnlPct=isOpen?trade._pnl_float_pct:trade.pnl_pct
+                            const today2=new Date().toISOString().slice(0,10)
+                            const dias=trade.entry_date?(Math.round((new Date(isOpen?today2:trade.exit_date||today2)-new Date(trade.entry_date))/86400000)):null
+                            const col=TL_COLORS[trade.broker]||'#7a9bc0'
+                            const capEur=(()=>{const ep=parseFloat(trade.entry_price||0),sh=parseFloat(trade.shares||0);let fx=parseFloat(trade.fx_entry||1);if(fx<1&&fx>0)fx=1/fx;const cap=ep*sh;return(trade.currency&&trade.currency!=='EUR')?cap/fx:cap})()
+                            const statusBg=isOrphan?'rgba(255,77,109,0.1)':isOpen?'rgba(155,114,255,0.12)':'rgba(0,229,160,0.1)'
+                            const statusBorder=isOrphan?'rgba(255,77,109,0.3)':isOpen?'rgba(155,114,255,0.3)':'rgba(0,229,160,0.3)'
+                            const statusColor=isOrphan?'#ff4d6d':isOpen?'#9b72ff':'#00e5a0'
+                            const statusLabel=isOrphan?'Sin origen':isOpen?'Abierta':'Cerrada'
+                            const rowBg=isOpen?'rgba(155,114,255,0.015)':'transparent'
+                            const fills=[...(trade._buyFills||[]),...(trade._sellFills||[])].sort((a,b)=>(a.date||'').localeCompare(b.date||''))
+                            return[
+                              <tr key={trade.id}
+                                style={{borderBottom:'1px solid var(--border)',background:rowBg,cursor:'pointer'}}
+                                onMouseOver={e=>e.currentTarget.style.background='rgba(255,255,255,0.03)'}
+                                onMouseOut={e=>e.currentTarget.style.background=rowBg}
+                                onClick={()=>{if(fills.length)setTlExpandedTrades(prev=>{const n=new Set(prev);n.has(trade.id)?n.delete(trade.id):n.add(trade.id);return n})}}>
+                                {/* Expand button */}
+                                <td style={{padding:'6px 4px',textAlign:'center',width:28,cursor:'pointer'}}
+                                  onClick={e=>{e.stopPropagation();if(fills.length)setTlExpandedTrades(prev=>{const n=new Set(prev);n.has(trade.id)?n.delete(trade.id):n.add(trade.id);return n})}}>
+                                  {fills.length>0&&<span style={{fontSize:9,color:isExp?'#00d4ff':'#3d5a7a'}}>{isExp?'▼':'▶'}</span>}
                                 </td>
-                                <td style={{padding:'6px 4px 6px 8px',maxWidth:120}} onClick={e=>e.stopPropagation()}>
-                                  <div style={{display:'flex',alignItems:'center',gap:4}}>
-                                    <span
-                                      onClick={e=>{e.stopPropagation();window.open('https://www.tradingview.com/chart/?symbol='+tvSym(t.symbol),'_blank')}}
-                                      title={'Abrir '+t.symbol+' en TradingView'}
-                                      style={{fontWeight:700,color:isOpen?'#9b72ff':'#00d4ff',cursor:'pointer',
-                                        textDecoration:'underline',textDecorationColor:'rgba(0,212,255,0.3)',
-                                        textUnderlineOffset:2}}>
-                                      {t.symbol}
-                                    </span>
-                                    {t.has_fills&&<span style={{fontSize:8,color:'#5a8aaa',flexShrink:0}}>fills</span>}
-                                  </div>
+                                <td style={{padding:'6px 8px',color:'#3d5a7a',fontSize:10}}>{i+1}</td>
+                                <td style={{padding:'6px 4px 6px 8px',maxWidth:100}} onClick={e=>e.stopPropagation()}>
+                                  <span onClick={e=>{e.stopPropagation();window.open('https://www.tradingview.com/chart/?symbol='+tvSym(trade.symbol),'_blank')}}
+                                    title={'Abrir '+trade.symbol+' en TradingView'}
+                                    style={{fontWeight:700,color:isOpen?'#9b72ff':'#00d4ff',cursor:'pointer',
+                                      textDecoration:'underline',textDecorationColor:'rgba(0,212,255,0.3)',textUnderlineOffset:2}}>
+                                    {trade.symbol}
+                                  </span>
                                 </td>
                                 <td style={{padding:'6px 4px',maxWidth:90,overflow:'hidden'}}>
-                                  <span style={{fontFamily:MONO,fontSize:9,color:'#5a8aaa',
-                                    overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',display:'block'}}
-                                    title={t.strategy||'—'}>
-                                    {t.strategy||<span style={{color:'#2a4060'}}>—</span>}
-                                  </span>
+                                  <span style={{fontFamily:MONO,fontSize:9,color:'#5a8aaa',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',display:'block'}}
+                                    title={trade.strategy||'—'}>{trade.strategy||<span style={{color:'#2a4060'}}>—</span>}</span>
                                 </td>
                                 <td style={{padding:'6px 8px'}}>
                                   <span style={{fontSize:9,padding:'1px 5px',borderRadius:3,fontWeight:700,
                                     background:col+'18',border:'1px solid '+col+'44',color:col}}>
-                                    {TL_LABEL[t.broker]||t.broker?.toUpperCase()}
+                                    {TL_LABEL[trade.broker]||trade.broker?.toUpperCase()||'—'}
                                   </span>
                                 </td>
-                                <td style={{padding:'6px 8px',color:'#a8ccdf',whiteSpace:'nowrap'}}>{isOrphan?<span style={{color:'#3d5a7a'}}>—</span>:fmtDate(t.entry_date)||'—'}</td>
-                                <td style={{padding:'6px 8px',color:'#a8ccdf',whiteSpace:'nowrap'}}>{isOrphan?fmtDate(t.entry_date)||'—':isOpen?<span style={{color:'#3d5a7a'}}>—</span>:fmtDate(t.exit_date)||'—'}</td>
-                                <td style={{padding:'6px 8px',color:'#e2eaf5'}}>{t.shares}</td>
-                                <td style={{padding:'6px 8px',color:'#e2eaf5'}}>{isOrphan?<span style={{color:'#3d5a7a'}}>—</span>:t.entry_price}</td>
-                                <td style={{padding:'6px 8px',color:'#7a9bc0',whiteSpace:'nowrap'}}>
-                                  {(()=>{
-                                    let cap=parseFloat(t.entry_price||0)*parseFloat(t.shares||0)
-                                    let fx=parseFloat(t.fx_entry||1);if(fx<1&&fx>0)fx=1/fx
-                                    const capEur=(t.entry_currency&&t.entry_currency!=='EUR')?cap/fx:cap
-                                    return capEur>0?'€'+Math.round(capEur).toLocaleString('es-ES'):'—'
-                                  })()}
-                                </td>
+                                <td style={{padding:'6px 8px',color:'#a8ccdf',whiteSpace:'nowrap'}}>{fmtDate(trade.entry_date)||'—'}</td>
+                                <td style={{padding:'6px 8px',color:'#a8ccdf',whiteSpace:'nowrap'}}>{isOpen||isOrphan?<span style={{color:'#3d5a7a'}}>—</span>:fmtDate(trade.exit_date)||'—'}</td>
+                                <td style={{padding:'6px 8px',color:'#e2eaf5'}}>{parseFloat(trade.shares||0).toFixed(2)}</td>
+                                <td style={{padding:'6px 8px',color:'#e2eaf5',whiteSpace:'nowrap'}}>{isOrphan?<span style={{color:'#3d5a7a'}}>—</span>:parseFloat(trade.entry_price||0).toFixed(2)}</td>
+                                <td style={{padding:'6px 8px',color:'#7a9bc0',whiteSpace:'nowrap'}}>{capEur>0?'€'+Math.round(capEur).toLocaleString('es-ES'):'—'}</td>
                                 <td style={{padding:'6px 8px',color:isOpen?'#9b72ff':'#e2eaf5',whiteSpace:'nowrap'}}>
-                                  {isOrphan?parseFloat(t.entry_price||0).toFixed(2):exitPx?parseFloat(exitPx).toFixed(2):<span style={{color:'#3d5a7a'}}>—</span>}
-                                  {isOpen&&exitPx&&<span style={{fontSize:8,color:'#5a8aaa',marginLeft:2}}>live</span>}
+                                  {trade.exit_price!=null?<>{parseFloat(trade.exit_price).toFixed(2)}</>:<span style={{color:'#3d5a7a'}}>—</span>}
                                 </td>
-                                <td style={{padding:'6px 8px',color:'#ffd166',fontSize:10}}>{t.entry_currency||'—'}</td>
-                                <td style={{padding:'6px 8px',color:'#4a7a95',fontSize:10}}>{(()=>{let fx=parseFloat(t.fx_entry||0);if(!fx||isNaN(fx))return'—';if(fx<1)fx=1/fx;return fx.toFixed(4)})()}</td>
-                                <td style={{padding:'6px 8px',color:'#4a7a95',fontSize:10}}>{(()=>{const c=parseFloat(t.commission_buy||0)+parseFloat(t.commission_sell||0);return c>0?'€'+c.toFixed(2):'—'})()}</td>
+                                <td style={{padding:'6px 8px',color:'#ffd166',fontSize:10}}>{trade.currency||'—'}</td>
+                                <td style={{padding:'6px 8px',color:'#4a7a95',fontSize:10}}>{(()=>{let fx=parseFloat(trade.fx_entry||0);if(!fx||isNaN(fx))return'—';if(fx<1)fx=1/fx;return fx.toFixed(4)})()}</td>
+                                <td style={{padding:'6px 8px',color:'#4a7a95',fontSize:10}}>{parseFloat(trade.commission||0)>0?'€'+parseFloat(trade.commission).toFixed(2):'—'}</td>
                                 <td style={{padding:'6px 8px',whiteSpace:'nowrap'}}>
                                   {pnl!=null?<span style={{color:pnl>=0?'#00e5a0':'#ff4d6d',fontWeight:600}}>{pnl>=0?'+':''}{parseFloat(pnl).toFixed(2)}€</span>:<span style={{color:'#3d5a7a'}}>—</span>}
                                 </td>
@@ -4265,98 +4233,60 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                 <td style={{padding:'6px 8px',color:'#7a9bc0'}}>{dias!=null?dias+'d':'—'}</td>
                                 <td style={{padding:'6px 8px'}}>
                                   <span style={{fontSize:9,padding:'1px 5px',borderRadius:3,fontWeight:700,
-                                    background:t.status==='orphan'?'rgba(255,77,109,0.1)':isOpen?'rgba(155,114,255,0.12)':'rgba(0,229,160,0.1)',
-                                    border:'1px solid '+(t.status==='orphan'?'rgba(255,77,109,0.3)':isOpen?'rgba(155,114,255,0.3)':'rgba(0,229,160,0.3)'),
-                                    color:t.status==='orphan'?'#ff4d6d':isOpen?'#9b72ff':'#00e5a0'}}>
-                                    {t.status==='orphan'?'⊘ Sin origen':isOpen?'Abierta':'Cerrada'}
+                                    background:statusBg,border:'1px solid '+statusBorder,color:statusColor}}>
+                                    {statusLabel}
                                   </span>
                                 </td>
-                              </tr>
-                              )
-                            }
-                            // ── Render display items ──
-                            return items.flatMap((item, displayIdx)=>{
-                              if(item.type==='row'){
-                                return [renderRow(item.t, displayIdx, items)]
-                              }
-                              // GROUP
-                              const {group_id, members} = item
-                              const isExp = tlExpandedGroups.has(group_id)
-                              const first = members[0]
-                              const totalShares = members.reduce((s,m)=>s+parseFloat(m.shares||0),0)
-                              const allOpen = members.every(m=>m.status==='open')
-                              const allClosed = members.every(m=>m.status==='closed')
-                              const groupPnl = members.reduce((s,m)=>{
-                                const p=m.status==='open'?m._pnl_float_eur:m.pnl_eur
-                                return s+(p!=null?parseFloat(p):0)
-                              },0)
-                              const groupPnlPct = members.reduce((s,m)=>{
-                                const p=m.status==='open'?m._pnl_float_pct:m.pnl_pct
-                                return s+(p!=null?parseFloat(p):0)
-                              },0)/members.length
-                              const col=TL_COLORS[first.broker]||'#7a9bc0'
-                              const rows = [
-                                // Parent summary row
-                                <tr key={'grp-'+group_id}
-                                  style={{borderBottom:'1px solid var(--border)',
-                                    background:'rgba(0,212,255,0.04)',
-                                    borderLeft:'2px solid rgba(0,212,255,0.35)',cursor:'pointer'}}
-                                  onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.08)'}
-                                  onMouseOut={e=>e.currentTarget.style.background='rgba(0,212,255,0.04)'}>
-                                  {tlMultiMode&&<td style={{padding:'6px 8px'}}/>}
-                                  <td style={{padding:'6px 8px'}}>
-                                    <button
-                                      onClick={e=>{e.stopPropagation();setTlExpandedGroups(prev=>{const n=new Set(prev);n.has(group_id)?n.delete(group_id):n.add(group_id);return n})}}
-                                      style={{background:'rgba(0,212,255,0.12)',border:'1px solid rgba(0,212,255,0.35)',
-                                        color:'#00d4ff',borderRadius:3,cursor:'pointer',
-                                        fontFamily:MONO,fontSize:10,padding:'1px 5px',lineHeight:1,fontWeight:700}}>
-                                      {isExp?'▼':'▶'} {members.length}
-                                    </button>
-                                  </td>
-                                  <td style={{padding:'6px 4px 6px 8px'}} onClick={e=>{e.stopPropagation();setTlExpandedGroups(prev=>{const n=new Set(prev);n.has(group_id)?n.delete(group_id):n.add(group_id);return n})}}>
-                                    <span style={{fontWeight:700,color:'#00d4ff'}}>{first.symbol}</span>
-                                    <span style={{fontFamily:MONO,fontSize:8,color:'#4a7a95',marginLeft:4}}>{members.length} ops</span>
-                                  </td>
-                                  <td style={{padding:'6px 4px',color:'#5a8aaa',fontSize:9}}>{first.strategy||'—'}</td>
-                                  <td style={{padding:'6px 8px'}}>
-                                    <span style={{fontSize:9,padding:'1px 5px',borderRadius:3,fontWeight:700,
-                                      background:col+'18',border:'1px solid '+col+'44',color:col}}>
-                                      {TL_LABEL[first.broker]||first.broker?.toUpperCase()}
-                                    </span>
-                                  </td>
-                                  <td style={{padding:'6px 8px',color:'#a8ccdf',fontSize:9}}>{fmtDate(first.entry_date)||'—'}</td>
-                                  <td style={{padding:'6px 8px',color:'#3d5a7a',fontSize:9}}>—</td>
-                                  <td style={{padding:'6px 8px',color:'#e2eaf5'}}>{totalShares.toFixed(0)}</td>
-                                  <td colSpan={3} style={{padding:'6px 8px',color:'#4a7a95',fontSize:9}}>precio medio ponderado</td>
-                                  <td style={{padding:'6px 8px',color:'#ffd166',fontSize:10}}>{first.entry_currency||'—'}</td>
-                                  <td colSpan={2} style={{padding:'6px 8px'}}/>
-                                  <td style={{padding:'6px 8px',whiteSpace:'nowrap'}}>
-                                    {groupPnl!==0?<span style={{color:groupPnl>=0?'#00e5a0':'#ff4d6d',fontWeight:600}}>{groupPnl>=0?'+':''}{groupPnl.toFixed(2)}€</span>:<span style={{color:'#3d5a7a'}}>—</span>}
-                                  </td>
-                                  <td style={{padding:'6px 8px',whiteSpace:'nowrap'}}>
-                                    {groupPnlPct!==0?<span style={{color:groupPnlPct>=0?'#00e5a0':'#ff4d6d',fontWeight:600}}>{groupPnlPct>=0?'+':''}{groupPnlPct.toFixed(2)}%</span>:<span style={{color:'#3d5a7a'}}>—</span>}
-                                  </td>
-                                  <td style={{padding:'6px 8px',color:'#3d5a7a'}}>—</td>
-                                  <td style={{padding:'6px 8px'}}>
-                                    <span style={{fontSize:9,padding:'1px 5px',borderRadius:3,fontWeight:700,
-                                      background:allOpen?'rgba(155,114,255,0.12)':allClosed?'rgba(0,229,160,0.1)':'rgba(255,209,102,0.1)',
-                                      border:'1px solid '+(allOpen?'rgba(155,114,255,0.3)':allClosed?'rgba(0,229,160,0.3)':'rgba(255,209,102,0.3)'),
-                                      color:allOpen?'#9b72ff':allClosed?'#00e5a0':'#ffd166'}}>
-                                      {allOpen?'Abiertas':allClosed?'Cerradas':'Mixto'}
-                                    </span>
+                              </tr>,
+                              // ── Fills expandidos ──
+                              isExp&&fills.length>0&&(
+                                <tr key={trade.id+'-fills'}>
+                                  <td colSpan={18} style={{padding:0,background:'rgba(0,212,255,0.015)',borderBottom:'2px solid rgba(0,212,255,0.1)'}}>
+                                    <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:10}}>
+                                      <thead>
+                                        <tr style={{background:'rgba(0,212,255,0.04)'}}>
+                                          {['Tipo','Fecha','Acciones','Precio','Capital €','Comisión'].map(h=>(
+                                            <th key={h} style={{padding:'3px 8px',color:'#2a4060',fontWeight:600,fontSize:8,
+                                              letterSpacing:'0.08em',textTransform:'uppercase',textAlign:'left',
+                                              paddingLeft:h==='Tipo'?32:8}}>{h}</th>
+                                          ))}
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {fills.map(fill=>{
+                                          const isBuy=fill.fill_type==='buy'
+                                          let ffx=parseFloat(fill.fx||trade.fx_entry||1);if(ffx<1&&ffx>0)ffx=1/ffx
+                                          const capF=(parseFloat(fill.price||0)*parseFloat(fill.shares||0))/((trade.currency&&trade.currency!=='EUR')?ffx:1)
+                                          return(
+                                          <tr key={fill.id} style={{borderTop:'1px solid rgba(0,212,255,0.05)',cursor:'pointer'}}
+                                            onMouseOver={e=>e.currentTarget.style.background='rgba(255,255,255,0.04)'}
+                                            onMouseOut={e=>e.currentTarget.style.background=''}
+                                            onClick={e=>{e.stopPropagation();const df=tlDefaultForm();setTlForm({...df,id:fill.id,fill_type:fill.fill_type||'buy',symbol:fill.symbol||trade.symbol||'',broker:fill.broker||df.broker,date:toDisplayDate(fill.date)||'',price:fill.price||'',shares:fill.shares||'',currency:fill.currency||'USD',commission:fill.commission||0,fx:fill.fx?String(fill.fx):'',fx_manual:!!fill.fx,notes:fill.notes||'',strategy:fill.strategy||df.strategy,import_source:fill.import_source||'manual'});setTlFormOpen(true)}}>
+                                            <td style={{padding:'4px 8px 4px 32px'}}>
+                                              <span style={{fontSize:9,padding:'1px 5px',borderRadius:3,fontWeight:700,
+                                                background:isBuy?'rgba(0,229,160,0.12)':'rgba(255,77,109,0.12)',
+                                                color:isBuy?'#00e5a0':'#ff4d6d'}}>
+                                                {isBuy?'▲ BUY':'▼ SELL'}
+                                              </span>
+                                            </td>
+                                            <td style={{padding:'4px 8px',color:'#a8ccdf'}}>{fmtDate(fill.date)}</td>
+                                            <td style={{padding:'4px 8px',color:'#e2eaf5'}}>{fill.shares}</td>
+                                            <td style={{padding:'4px 8px',color:'#e2eaf5'}}>{parseFloat(fill.price||0).toFixed(2)}</td>
+                                            <td style={{padding:'4px 8px',color:'#7a9bc0'}}>{capF>0?'€'+Math.round(capF).toLocaleString('es-ES'):'—'}</td>
+                                            <td style={{padding:'4px 8px',color:'#4a7a95'}}>{parseFloat(fill.commission||0)>0?'€'+parseFloat(fill.commission).toFixed(2):'—'}</td>
+                                          </tr>
+                                          )
+                                        })}
+                                      </tbody>
+                                    </table>
                                   </td>
                                 </tr>
-                              ]
-                              // Sub-rows when expanded
-                              if(isExp){
-                                members.forEach((m,mi)=>rows.push(renderRow(m, mi, members, {isSub:true, isLast:mi===members.length-1})))
-                              }
-                              return rows
-                            })
-                          })()}
+                              )
+                            ]
+                          })}
                         </tbody>
                       </table>
-                      {!tlLoading&&tlTrades.length===0&&(
+                      {!tlLoading&&tlTradesFiltered.length===0&&(
                         <div style={{padding:'40px',textAlign:'center',fontFamily:MONO,fontSize:12,color:'#3d5a7a'}}>
                           Sin operaciones registradas.{' '}
                           <span style={{color:'#9b72ff',cursor:'pointer'}} onClick={()=>{const _df=tlDefaultForm();setTlForm(_df);setTlFormOpen(true);if(_df.currency&&_df.currency!=='EUR')tlFetchFx(_df.currency,_df.date)}}>
