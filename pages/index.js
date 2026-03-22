@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import Head from 'next/head'
+import { ListFilter, Briefcase, Star, Bell, X as LucideX } from 'lucide-react'
 import { calcMetrics, MONO, fmt, fmtDate, f2, tvSym } from '../lib/utils'
 import { WATCHLIST_DEFAULT, DEFAULT_DEFINITION } from '../lib/constants'
 import { getSupaUrl, getSupaKey, getSupaH } from '../lib/supabase'
@@ -2398,7 +2399,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.97</title>
+        <title>Trading Simulator V5.98</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2475,7 +2476,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.97
+            <span className="dot"/>Trading Simulator V5.98
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -2674,51 +2675,144 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
 
             {sidePanel==='watchlist'&&(
               <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'visible',minHeight:0}}>
-                {/* ══ Fila 1: búsqueda + lista + favoritos + acciones ══ */}
-                <div style={{padding:'5px 8px 3px',borderBottom:'none',flexShrink:0,display:'flex',gap:4,alignItems:'center'}}>
-                  {/* Buscador compacto */}
-                  {wlShowSearch&&<div style={{position:'relative',flex:'0 0 90px'}}>
-                    <input type="text" placeholder="🔍" value={wlSearch} onChange={e=>setWlSearch(e.target.value)}
-                      style={{width:'100%',background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'4px 20px 4px 7px',borderRadius:4,boxSizing:'border-box'}}/>
-                    {wlSearch&&<span onClick={()=>setWlSearch('')} style={{position:'absolute',right:5,top:'50%',transform:'translateY(-50%)',cursor:'pointer',color:'#a8ccdf',fontSize:11}}>✕</span>}
-                  </div>}
-                  {/* Selector de lista */}
-                  {wlShowLista&&<div style={{position:'relative',flex:1,minWidth:0}}>
-                    <button onClick={()=>{setListDropOpen(o=>!o);setAlarmDropOpen(false)}} style={{width:'100%',background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'4px 6px',borderRadius:3,cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'center',overflow:'hidden'}}>
-                      <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{selectedLists.length===0?'Lista: Todas':selectedLists[0]}</span>
-                      <span style={{flexShrink:0,marginLeft:2}}>{listDropOpen?'▲':'▼'}</span>
-                    </button>
-                    {listDropOpen&&(()=>{
-                      const allLists=[...new Set(watchlist.map(w=>w.list_name||'General').filter(Boolean))]
-                      return(
-                        <div style={{position:'absolute',top:'100%',left:0,right:0,background:'var(--bg3)',border:'1px solid var(--border)',borderRadius:3,zIndex:60,boxShadow:'0 4px 16px rgba(0,0,0,0.7)',minWidth:120}}>
-                          <div onClick={()=>{setSelectedLists([]);setWlSearch('');setListDropOpen(false)}} style={{padding:'6px 10px',fontFamily:MONO,fontSize:12,cursor:'pointer',color:selectedLists.length===0?'var(--accent)':'var(--text)',borderBottom:'1px solid var(--border)'}}>
-                            Todas las listas
-                          </div>
-                          {allLists.map(l=>(
-                            <div key={l} onClick={()=>{setSelectedLists([l]);setWlSearch('');setListDropOpen(false)}}
-                              style={{padding:'6px 10px',fontFamily:MONO,fontSize:12,cursor:'pointer',display:'flex',alignItems:'center',gap:6,color:'var(--text)'}}>
-                              <span style={{color:selectedLists.includes(l)?'var(--accent)':'var(--text3)',fontSize:11}}>{selectedLists.includes(l)?'●':'○'}</span>{l}
+                {/* ══ Cabecera Watchlist: búsqueda + iconos de filtro ══ */}
+                {(()=>{
+                  const iBtn=(active,ac,hoverAc)=>({
+                    background:active?`${ac}22`:'transparent',
+                    border:`1px solid ${active?ac:'transparent'}`,
+                    color:active?ac:'#4a6a88',
+                    borderRadius:4,cursor:'pointer',padding:4,
+                    display:'flex',alignItems:'center',justifyContent:'center',
+                    flexShrink:0,lineHeight:1,transition:'background 0.1s,color 0.1s',
+                  })
+                  const anyAlarmFired=alarmActiveCount>0
+                  const anyFilterActive=!!(wlSearch||selectedLists.length||onlyFavs||selectedAlarmIds.length||onlyOpen)
+                  return(
+                    <div style={{padding:'4px 8px 3px',flexShrink:0,display:'flex',gap:3,alignItems:'center'}}>
+                      {/* Search — ocupa el espacio disponible */}
+                      <div style={{position:'relative',flex:1,minWidth:0}}>
+                        <input type="text" placeholder="Buscar…" value={wlSearch} onChange={e=>setWlSearch(e.target.value)}
+                          style={{width:'100%',background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',
+                            fontFamily:MONO,fontSize:11,padding:'3px 20px 3px 7px',borderRadius:4,boxSizing:'border-box'}}/>
+                        {wlSearch&&<span onClick={()=>setWlSearch('')}
+                          style={{position:'absolute',right:5,top:'50%',transform:'translateY(-50%)',
+                            cursor:'pointer',color:'#a8ccdf',fontSize:10,lineHeight:1}}>✕</span>}
+                      </div>
+
+                      {/* ListFilter — selector de lista */}
+                      <div style={{position:'relative'}}>
+                        <button onClick={()=>{setListDropOpen(o=>!o);setAlarmDropOpen(false)}}
+                          title={selectedLists.length?`Lista: ${selectedLists[0]}`:'Todas las listas'}
+                          style={iBtn(selectedLists.length>0,'#00d4ff')}
+                          onMouseOver={e=>{if(!selectedLists.length)e.currentTarget.style.color='#00d4ff'}}
+                          onMouseOut={e=>{if(!selectedLists.length)e.currentTarget.style.color='#4a6a88'}}>
+                          <ListFilter size={16}/>
+                        </button>
+                        {listDropOpen&&(()=>{
+                          const allLists=[...new Set(watchlist.map(w=>w.list_name||'General').filter(Boolean))]
+                          return(
+                            <div style={{position:'absolute',top:'calc(100% + 4px)',right:0,background:'var(--bg3)',
+                              border:'1px solid var(--border)',borderRadius:4,zIndex:60,
+                              boxShadow:'0 4px 16px rgba(0,0,0,0.7)',minWidth:140}}>
+                              <div onClick={()=>{setSelectedLists([]);setListDropOpen(false)}}
+                                style={{padding:'6px 10px',fontFamily:MONO,fontSize:11,cursor:'pointer',
+                                  color:selectedLists.length===0?'var(--accent)':'var(--text)',
+                                  borderBottom:'1px solid var(--border)'}}>
+                                Todas las listas
+                              </div>
+                              {allLists.map(l=>(
+                                <div key={l} onClick={()=>{setSelectedLists([l]);setListDropOpen(false)}}
+                                  style={{padding:'6px 10px',fontFamily:MONO,fontSize:11,cursor:'pointer',
+                                    display:'flex',alignItems:'center',gap:6,color:'var(--text)'}}>
+                                  <span style={{color:selectedLists.includes(l)?'var(--accent)':'var(--text3)',fontSize:10}}>
+                                    {selectedLists.includes(l)?'●':'○'}
+                                  </span>{l}
+                                </div>
+                              ))}
                             </div>
-                          ))}
-                        </div>
-                      )
-                    })()}
-                  </div>}
-                  {/* Filtro favoritos */}
-                  {wlShowFavs&&<button onClick={()=>setOnlyFavs(f=>!f)} title={onlyFavs?'Mostrando solo favoritos':'Filtrar solo favoritos'}
-                    style={{background:onlyFavs?'rgba(255,209,102,0.15)':'transparent',border:`1px solid ${onlyFavs?'#ffd166':'var(--border)'}`,color:onlyFavs?'#ffd166':'var(--text3)',fontFamily:MONO,fontSize:12,padding:'3px 6px',borderRadius:4,cursor:'pointer',flexShrink:0}}>
-                    ★
-                  </button>}
+                          )
+                        })()}
+                      </div>
 
-                  {/* Filtro posiciones abiertas */}
-                  <button onClick={()=>setOnlyOpen(f=>!f)} title={onlyOpen?'Mostrando solo posiciones abiertas':'Filtrar solo posiciones abiertas'}
-                    style={{background:onlyOpen?'rgba(255,209,102,0.15)':'transparent',border:`1px solid ${onlyOpen?'#ffd166':'var(--border)'}`,color:onlyOpen?'#ffd166':'var(--text3)',fontFamily:MONO,fontSize:11,padding:'3px 6px',borderRadius:4,cursor:'pointer',flexShrink:0}}>
-                    ▲
-                  </button>
+                      {/* Briefcase — en cartera */}
+                      <button onClick={()=>setOnlyOpen(f=>!f)}
+                        title={onlyOpen?'En cartera (activo — click para quitar)':'Filtrar solo posiciones abiertas'}
+                        style={iBtn(onlyOpen,'#00d4ff')}
+                        onMouseOver={e=>{if(!onlyOpen)e.currentTarget.style.color='#00d4ff'}}
+                        onMouseOut={e=>{if(!onlyOpen)e.currentTarget.style.color='#4a6a88'}}>
+                        <Briefcase size={16}/>
+                      </button>
 
-                  {(wlShowSearch||wlShowLista||wlShowFavs||onlyOpen)&&<button onClick={()=>{setWlSearch('');setSelectedLists([]);setOnlyFavs(false);setSelectedAlarmIds([]);setOnlyOpen(false)}} title="Limpiar todos los filtros" style={{background:'rgba(255,77,109,0.08)',border:'1px solid #ff4d6d',color:'#ff4d6d',fontFamily:MONO,fontSize:11,padding:'3px 7px',borderRadius:3,cursor:'pointer',flexShrink:0}}>✕</button>}
-                </div>
+                      {/* Star — favoritos */}
+                      <button onClick={()=>setOnlyFavs(f=>!f)}
+                        title={onlyFavs?'Solo favoritos (activo — click para quitar)':'Filtrar solo favoritos'}
+                        style={iBtn(onlyFavs,'#ffd166')}
+                        onMouseOver={e=>{if(!onlyFavs)e.currentTarget.style.color='#ffd166'}}
+                        onMouseOut={e=>{if(!onlyFavs)e.currentTarget.style.color='#4a6a88'}}>
+                        <Star size={16}/>
+                      </button>
+
+                      {/* Bell — alarmas activas */}
+                      <div style={{position:'relative'}}>
+                        <button onClick={()=>{setAlarmDropOpen(o=>!o);setListDropOpen(false)}}
+                          title="Filtrar por alarma activa"
+                          style={{...iBtn(selectedAlarmIds.length>0,'#ff4d6d'),
+                            animation:anyAlarmFired&&!selectedAlarmIds.length?'bellSwing 1.2s ease-in-out infinite':undefined}}
+                          onMouseOver={e=>{if(!selectedAlarmIds.length)e.currentTarget.style.color='#ff4d6d'}}
+                          onMouseOut={e=>{if(!selectedAlarmIds.length)e.currentTarget.style.color='#4a6a88'}}>
+                          <Bell size={16}/>
+                        </button>
+                        {alarmDropOpen&&(()=>{
+                          const firedAlarms=(alarms||[]).filter(a=>a.symbol&&alarmStatus[a.symbol]?.[a.id]?.active===true)
+                          return(
+                            <div style={{position:'absolute',top:'calc(100% + 4px)',right:0,background:'var(--bg3)',
+                              border:'1px solid var(--border)',borderRadius:4,zIndex:60,
+                              boxShadow:'0 4px 16px rgba(0,0,0,0.7)',minWidth:180,maxHeight:220,overflowY:'auto'}}>
+                              {firedAlarms.length===0
+                                ? <div style={{padding:'8px 10px',fontFamily:MONO,fontSize:11,color:'#4a6a88'}}>Sin alarmas disparadas</div>
+                                : <>
+                                    <div onClick={()=>{setSelectedAlarmIds([]);setAlarmDropOpen(false)}}
+                                      style={{padding:'5px 10px',fontFamily:MONO,fontSize:10,cursor:'pointer',
+                                        color:selectedAlarmIds.length===0?'var(--accent)':'var(--text)',
+                                        borderBottom:'1px solid var(--border)'}}>
+                                      Todas
+                                    </div>
+                                    {firedAlarms.map(a=>(
+                                      <div key={a.id} onClick={()=>{
+                                          const next=selectedAlarmIds.includes(a.id)
+                                            ?selectedAlarmIds.filter(x=>x!==a.id)
+                                            :[...selectedAlarmIds,a.id]
+                                          setSelectedAlarmIds(next)
+                                        }}
+                                        style={{padding:'5px 10px',fontFamily:MONO,fontSize:11,cursor:'pointer',
+                                          display:'flex',alignItems:'center',gap:6,color:'var(--text)'}}>
+                                        <span style={{color:selectedAlarmIds.includes(a.id)?'#ff4d6d':'var(--text3)',fontSize:10}}>
+                                          {selectedAlarmIds.includes(a.id)?'●':'○'}
+                                        </span>
+                                        <span style={{fontWeight:600,color:'#e2eaf5'}}>{a.symbol}</span>
+                                        <span style={{color:'#5a8aaa',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.name||a.condition}</span>
+                                      </div>
+                                    ))}
+                                  </>
+                              }
+                            </div>
+                          )
+                        })()}
+                      </div>
+
+                      {/* X — limpiar filtros (naranja, solo visible si hay algún filtro activo) */}
+                      {anyFilterActive&&(
+                        <button onClick={()=>{setWlSearch('');setSelectedLists([]);setOnlyFavs(false);setSelectedAlarmIds([]);setOnlyOpen(false);setAlarmDropOpen(false);setListDropOpen(false)}}
+                          title="Limpiar filtros"
+                          style={iBtn(true,'#ff9a3c')}
+                          onMouseOver={e=>e.currentTarget.style.background='rgba(255,154,60,0.2)'}
+                          onMouseOut={e=>e.currentTarget.style.background='rgba(255,154,60,0.13)'}>
+                          <LucideX size={16}/>
+                        </button>
+                      )}
+                    </div>
+                  )
+                })()}
 
 
                 {/* ── Círculos de condiciones del watchlist ── */}
