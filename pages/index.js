@@ -2392,7 +2392,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.81</title>
+        <title>Trading Simulator V5.82</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2467,7 +2467,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.81
+            <span className="dot"/>Trading Simulator V5.82
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -2529,7 +2529,13 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               style={{background:'rgba(13,21,32,0.9)',border:'1px solid #1a2d45',color:'#7a9bc0',fontFamily:MONO,fontSize:11,padding:'3px 9px',borderRadius:4,cursor:'pointer'}}>
               {metricsLayout==='grid'?'☰ Panel':metricsLayout==='panel'?'⊞ Multi':'⊟ Grid'}
             </button>}
-            <button onClick={()=>setSettingsOpen(true)} title="Configuración" style={{background:'rgba(13,21,32,0.9)',border:'1px solid #1a2d45',color:'#7a9bc0',fontFamily:MONO,fontSize:18,padding:'2px 8px',borderRadius:4,cursor:'pointer',lineHeight:1.1}} onMouseOver={e=>e.currentTarget.style.borderColor='#4a7fa0'} onMouseOut={e=>e.currentTarget.style.borderColor='#1a2d45'}>
+            <button onClick={()=>setSettingsOpen(true)} title="Settings"
+              style={{background:'rgba(0,212,255,0.06)',border:'1px solid rgba(0,212,255,0.25)',color:'#00d4ff',
+                fontFamily:MONO,fontSize:20,padding:'4px 10px',borderRadius:6,cursor:'pointer',
+                lineHeight:1,display:'flex',alignItems:'center',justifyContent:'center',
+                transition:'background 0.15s,border-color 0.15s,color 0.15s'}}
+              onMouseOver={e=>{e.currentTarget.style.background='rgba(0,212,255,0.14)';e.currentTarget.style.borderColor='#00d4ff'}}
+              onMouseOut={e=>{e.currentTarget.style.background='rgba(0,212,255,0.06)';e.currentTarget.style.borderColor='rgba(0,212,255,0.25)'}}>
               ⚙
             </button>
             <div style={{fontFamily:MONO,fontSize:11,color:'#5a7a95'}}>Stooq · diario</div>
