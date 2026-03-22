@@ -2328,7 +2328,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.63</title>
+        <title>Trading Simulator V5.64</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2403,7 +2403,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.63
+            <span className="dot"/>Trading Simulator V5.64
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4875,6 +4875,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 <div style={{width:270,flexShrink:0,borderLeft:'1px solid var(--border)',background:'var(--bg2)',display:'flex',flexDirection:'column',overflow:'hidden'}}>
                   {/* ── MÉTRICAS SIEMPRE VISIBLES — incluye flotantes ── */}
                   {(()=>{
+                    // Diagnostic: confirm re-execution when live prices arrive
+                    console.log('[metrics render] tlLivePrices keys:',Object.keys(tlLivePrices),'values:',JSON.stringify(tlLivePrices))
                     // Recompute float P&L for open positions directly from tlLivePrices (current state)
                     // instead of relying on _pnl_float_eur baked into tlTradesFiltered, which may be
                     // stale if tlFifo useMemo hasn't invalidated yet when live prices arrive.
