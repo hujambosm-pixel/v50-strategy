@@ -13,6 +13,9 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
   const ref = useRef(null), chartRef = useRef(null)
   const [showSinFx, setShowSinFx] = useState(true)
   const [showSinComm, setShowSinComm] = useState(true)
+  const [showAportacion, setShowAportacion] = useState(true)
+  const [showRetirada, setShowRetirada] = useState(true)
+  const [showDividendo, setShowDividendo] = useState(true)
 
   // Active main curve
   const activeCurve = showWithContribs && curveWithContribs?.length > 1 ? curveWithContribs : curve
@@ -44,12 +47,16 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
       mainSeries.setData(activeCurve.map(p=>({time:p.date,value:p.value})))
       // Contribution markers on main series
       if(showWithContribs && contributions?.length){
+        const activeTypes = new Set(['aportacion','retirada','dividendo'].filter(t=>
+          t==='aportacion'?showAportacion:t==='retirada'?showRetirada:showDividendo
+        ))
         const markers = contributions
-          .filter(c=>c.date)
+          .filter(c=>c.date && activeTypes.has(c.type))
           .map(c=>{
             const m = CONTRIB_MARKER[c.type] || CONTRIB_MARKER.aportacion
-            return { time:c.date, position:m.position, color:m.color, shape:m.shape,
-              text: m.prefix+'€'+Math.round(parseFloat(c.amount||0)) }
+            const amt = Math.round(parseFloat(c.amount||0))
+            const txt = amt>=1000 ? m.prefix+(amt/1000).toFixed(1).replace('.0','')+'k' : m.prefix+amt
+            return { time:c.date, position:m.position, color:m.color, shape:m.shape, size:0.7, text:txt }
           })
           .sort((a,b)=>a.time.localeCompare(b.time))
         if(markers.length) mainSeries.setMarkers(markers)
@@ -70,7 +77,7 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
       return ()=>ro.disconnect()
     })
     return ()=>{ if(chartRef.current){chartRef.current.remove();chartRef.current=null} }
-  },[activeCurve, curveSinFx, curveSinComm, showSinFx, showSinComm, showWithContribs, contributions])
+  },[activeCurve, curveSinFx, curveSinComm, showSinFx, showSinComm, showWithContribs, contributions, showAportacion, showRetirada, showDividendo])
 
   const btnStyle = (active, color) => ({
     display:'flex',alignItems:'center',gap:4,
@@ -109,17 +116,24 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
             <span style={{display:'inline-block',width:10,height:2,background:'#ffd166',borderRadius:1,opacity:showSinComm?0.8:0.3,borderBottom:'1px dashed #ffd166'}}/> Sin Comm.
           </button>
         )}
-        {/* Contribution type legend when showWithContribs */}
-        {showWithContribs&&contributions?.length>0&&(
-          <span style={{display:'flex',gap:8,marginLeft:4}}>
-            {['aportacion','retirada','dividendo'].filter(t=>contributions.some(c=>c.type===t)).map(t=>(
-              <span key={t} style={{display:'flex',alignItems:'center',gap:3,fontFamily:MONO,fontSize:8,color:CONTRIB_MARKER[t].color}}>
-                <span style={{fontSize:10}}>{t==='retirada'?'↓':'↑'}</span>
-                {t==='aportacion'?'Aport.':t==='retirada'?'Retir.':'Divid.'}
-              </span>
-            ))}
-          </span>
-        )}
+        {/* Contribution type toggles when showWithContribs */}
+        {showWithContribs&&contributions?.length>0&&(()=>{
+          const cfg=[
+            {type:'aportacion', label:'Aport.', icon:'↑', show:showAportacion, set:setShowAportacion},
+            {type:'retirada',   label:'Retir.', icon:'↓', show:showRetirada,   set:setShowRetirada},
+            {type:'dividendo',  label:'Divid.', icon:'↑', show:showDividendo,  set:setShowDividendo},
+          ].filter(({type})=>contributions.some(c=>c.type===type))
+          return(
+            <span style={{display:'flex',gap:6,marginLeft:4}}>
+              {cfg.map(({type,label,icon,show,set})=>(
+                <button key={type} onClick={()=>set(v=>!v)} style={btnStyle(show, CONTRIB_MARKER[type].color)}
+                  title={show?`Ocultar ${label}`:`Mostrar ${label}`}>
+                  <span style={{fontSize:9,opacity:show?1:0.4}}>{icon}</span> {label}
+                </button>
+              ))}
+            </span>
+          )
+        })()}
       </div>
       <div ref={ref} style={{minHeight:200}}/>
     </div>
