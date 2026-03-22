@@ -2399,7 +2399,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V6.00</title>
+        <title>Trading Simulator V6.01</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2476,7 +2476,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V6.00
+            <span className="dot"/>Trading Simulator V6.01
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -2894,11 +2894,31 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                           style={{cursor:'pointer',fontSize:12,color:w.favorite?'#ffd166':'var(--text3)',flexShrink:0}} title="Favorito">
                           {w.favorite?'★':'☆'}
                         </span>
-                        {/* Nombre — clic carga el activo */}
-                        <div onClick={()=>setSimbolo(w.symbol)} style={{flex:1,cursor:'pointer',minWidth:0}}>
-                          <div style={{fontFamily:MONO,fontSize:11,color:simbolo===w.symbol?'var(--accent)':'#d0e8fa',fontWeight:600}}>{w.symbol}</div>
-                          <div style={{fontFamily:MONO,fontSize:11,color:'#8aadcc',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{w.name}</div>
-                        </div>
+                        {/* Nombre + P&L flotante — clic carga el activo */}
+                        {(()=>{
+                          const wSym=(w.symbol||'').toUpperCase()
+                          const openPos=(tlFifo.openPositions||[]).find(p=>(p.symbol||'').toUpperCase()===wSym)
+                          const hasLive=openPos&&tlLivePrices[openPos.symbol]?.price!=null
+                          const pnlEur=openPos?._pnl_float_eur??0
+                          const pnlPct=openPos?._pnl_float_pct??0
+                          const pnlColor=pnlEur>=0?'#00e5a0':'#ff4d6d'
+                          const eurStr=pnlEur<0?`-€${Math.round(Math.abs(pnlEur))}`:`€${Math.round(pnlEur)}`
+                          const pctStr=`${Math.round(pnlPct)}%`
+                          return(
+                            <div onClick={()=>setSimbolo(w.symbol)} style={{flex:1,cursor:'pointer',minWidth:0}}>
+                              <div style={{fontFamily:MONO,fontSize:11,color:simbolo===w.symbol?'var(--accent)':'#d0e8fa',fontWeight:600}}>{w.symbol}</div>
+                              <div style={{display:'flex',alignItems:'baseline',gap:5,minWidth:0}}>
+                                <div style={{fontFamily:MONO,fontSize:11,color:'#8aadcc',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0,flex:1}}>{w.name}</div>
+                                {openPos&&hasLive&&(
+                                  <span title={`P&L flotante: ${eurStr} (${pctStr})`}
+                                    style={{fontFamily:MONO,fontSize:11,color:pnlColor,flexShrink:0,whiteSpace:'nowrap'}}>
+                                    {eurStr} {pctStr}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        })()}
                         {/* Badges condiciones librería — círculos de color con velas */}
                         {(()=>{
                           if(!conditions.length) return null
