@@ -14,5 +14,10 @@ create table if not exists capital_contributions (
 create index if not exists capital_contributions_date_idx
   on capital_contributions (date);
 
--- RLS opcional (desactivado por defecto como el resto de tablas del proyecto)
+-- Desactivar RLS — el proyecto usa anon key directamente sin auth
+-- Necesario para que el insert/select/delete funcionen con la anon key
+alter table capital_contributions disable row level security;
+
+-- Si en el futuro quieres RLS con acceso total a anon (sin auth):
 -- alter table capital_contributions enable row level security;
+-- create policy "anon full access" on capital_contributions for all to anon using (true) with check (true);

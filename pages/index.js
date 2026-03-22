@@ -2359,7 +2359,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.67</title>
+        <title>Trading Simulator V5.68</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2434,7 +2434,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.67
+            <span className="dot"/>Trading Simulator V5.68
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4920,8 +4920,99 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     })()}
                   </div>
                 )}
-
-
+                {/* CAPITAL */}
+                {tlTab==='capital'&&(
+                  <div style={{flex:1,display:'flex',flexDirection:'column',minWidth:0,overflowY:'auto',padding:'16px 20px'}}>
+                    {(()=>{
+                      const netContrib=contributions.reduce((s,c)=>s+(c.type==='retirada'?-1:1)*parseFloat(c.amount||0),0)
+                      const divAcum=contributions.filter(c=>c.type==='dividendo').reduce((s,c)=>s+parseFloat(c.amount||0),0)
+                      const closedPnl=tlTradesFiltered.filter(t=>!t._open).reduce((s,t)=>s+parseFloat(t.pnl_eur||0),0)
+                      const floatPnl=tlTradesFiltered.filter(t=>t._open).reduce((s,t)=>{
+                        const px=tlLivePrices[t.symbol]?.price!=null?parseFloat(tlLivePrices[t.symbol].price):null
+                        const fxE=t.fx_entry||1
+                        return s+(px!==null?(px-t.entry_price)*t.shares/fxE:(typeof t._pnl_float_eur==='number'?t._pnl_float_eur:0))
+                      },0)
+                      const patrimTotal=netContrib+divAcum+closedPnl+floatPnl
+                      const fmtAmt=(v,signed=true)=>(signed&&v>=0?'+':'')+Math.round(v).toLocaleString('es-ES')+'€'
+                      return(
+                        <>
+                          {/* Stat boxes — full width 3-col grid */}
+                          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,marginBottom:14}}>
+                            {[
+                              {label:'Capital neto aportado',val:fmtAmt(netContrib),col:netContrib>=0?'#2a7fff':'#ff4d6d'},
+                              {label:'Dividendos acumulados',val:'+'+Math.round(divAcum).toLocaleString('es-ES')+'€',col:'#aaff44'},
+                              {label:'Patrimonio total',val:fmtAmt(patrimTotal),col:patrimTotal>=0?'#00e5a0':'#ff4d6d'},
+                            ].map(({label,val,col})=>(
+                              <div key={label} style={{background:'#0d1824',border:'1px solid #1a2d45',borderRadius:8,padding:'12px 16px'}}>
+                                <div style={{fontFamily:MONO,fontSize:8,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:6}}>{label}</div>
+                                <div style={{fontFamily:MONO,fontSize:20,fontWeight:700,color:col}}>{val}</div>
+                              </div>
+                            ))}
+                          </div>
+                          {/* Add form — compact single row */}
+                          <div style={{background:'#0d1824',border:'1px solid #1a2d45',borderRadius:8,padding:'10px 14px',marginBottom:12,display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+                            <input type="date" value={contribDate} onChange={e=>setContribDate(e.target.value)}
+                              style={{fontFamily:MONO,fontSize:11,background:'#080c14',border:'1px solid #1e3a52',borderRadius:4,color:'#c8d8e8',padding:'4px 8px',width:130,flexShrink:0}}/>
+                            <select value={contribType} onChange={e=>setContribType(e.target.value)}
+                              style={{fontFamily:MONO,fontSize:11,background:'#080c14',border:'1px solid #1e3a52',borderRadius:4,color:'#c8d8e8',padding:'4px 8px',width:120,flexShrink:0}}>
+                              <option value="aportacion">Aportación</option>
+                              <option value="retirada">Retirada</option>
+                              <option value="dividendo">Dividendo</option>
+                            </select>
+                            <input type="number" min="0.01" step="0.01" value={contribAmount} onChange={e=>setContribAmount(e.target.value)}
+                              placeholder="€ Importe"
+                              style={{fontFamily:MONO,fontSize:11,background:'#080c14',border:'1px solid #1e3a52',borderRadius:4,color:'#c8d8e8',padding:'4px 8px',width:110,flexShrink:0}}/>
+                            <input type="text" value={contribNotes} onChange={e=>setContribNotes(e.target.value)}
+                              placeholder="Notas (opcional)"
+                              style={{fontFamily:MONO,fontSize:11,background:'#080c14',border:'1px solid #1e3a52',borderRadius:4,color:'#c8d8e8',padding:'4px 8px',flex:1,minWidth:100}}/>
+                            <button onClick={addContribution} disabled={contribSaving||!contribDate||!contribAmount||parseFloat(contribAmount)<=0}
+                              style={{fontFamily:MONO,fontSize:10,background:'#1a4a80',border:'1px solid #2a7fff',borderRadius:4,color:'#c8d8e8',padding:'5px 14px',cursor:'pointer',opacity:contribSaving?0.5:1,whiteSpace:'nowrap',flexShrink:0}}>
+                              {contribSaving?'Guardando...':'+ Añadir'}
+                            </button>
+                          </div>
+                          {/* Contributions table */}
+                          <div style={{background:'#0a0f1a',border:'1px solid #1a2d45',borderRadius:8,overflow:'hidden'}}>
+                            <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:11}}>
+                              <thead>
+                                <tr style={{background:'#0d1824',borderBottom:'1px solid #1a2d45'}}>
+                                  {['Fecha','Tipo','Importe','Notas',''].map(h=>(
+                                    <th key={h} style={{padding:'7px 12px',textAlign:'left',color:'#3d5a7a',fontWeight:400,fontSize:9,letterSpacing:'0.08em',textTransform:'uppercase'}}>{h}</th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {contributions.length===0&&(
+                                  <tr><td colSpan={5} style={{padding:'20px 12px',color:'#3d5a7a',textAlign:'center',fontSize:10}}>Sin registros — añade tu primera aportación</td></tr>
+                                )}
+                                {contributions.map((c,i)=>{
+                                  const TYPE_COLOR={aportacion:'#2a7fff',retirada:'#ff4d6d',dividendo:'#aaff44'}
+                                  const TYPE_LABEL={aportacion:'Aportación',retirada:'Retirada',dividendo:'Dividendo'}
+                                  const col=TYPE_COLOR[c.type]||'#7a9bc0'
+                                  return(
+                                    <tr key={c.id} style={{borderBottom:'1px solid #0d1520',background:i%2===0?'transparent':'rgba(13,24,36,0.4)'}}>
+                                      <td style={{padding:'6px 12px',color:'#c8d8e8'}}>{c.date}</td>
+                                      <td style={{padding:'6px 12px'}}>
+                                        <span style={{background:col+'22',border:'1px solid '+col+'55',borderRadius:3,padding:'1px 6px',color:col,fontSize:9,letterSpacing:'0.06em'}}>{TYPE_LABEL[c.type]||c.type}</span>
+                                      </td>
+                                      <td style={{padding:'6px 12px',color:c.type==='retirada'?'#ff4d6d':'#c8d8e8',textAlign:'right',fontVariantNumeric:'tabular-nums'}}>
+                                        {c.type==='retirada'?'-':c.type==='dividendo'?'D+':'+'}€{parseFloat(c.amount).toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2})}
+                                      </td>
+                                      <td style={{padding:'6px 12px',color:'#5a7a9a',fontSize:10}}>{c.notes||'—'}</td>
+                                      <td style={{padding:'6px 12px',textAlign:'right'}}>
+                                        <button onClick={()=>deleteContribution(c.id)} title="Eliminar"
+                                          style={{fontFamily:MONO,fontSize:9,background:'none',border:'1px solid #3d1a1a',borderRadius:3,color:'#ff4d6d',padding:'2px 6px',cursor:'pointer',opacity:0.7}}>✕</button>
+                                      </td>
+                                    </tr>
+                                  )
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </>
+                      )
+                    })()}
+                  </div>
+                )}
                 </div>
                 {/* COLUMNA DERECHA — métricas siempre + detalle trade */}
                 <div style={{width:270,flexShrink:0,borderLeft:'1px solid var(--border)',background:'var(--bg2)',display:'flex',flexDirection:'column',overflow:'hidden'}}>
@@ -5122,106 +5213,6 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 </div>
               </div>
             )}
-                {/* CAPITAL */}
-                {tlTab==='capital'&&(
-                  <div style={{flex:1,display:'flex',flexDirection:'column',gap:0,overflowY:'auto',padding:'16px 20px'}}>
-                    {/* Totals panel */}
-                    {(()=>{
-                      const netContrib=contributions.reduce((s,c)=>s+(c.type==='retirada'?-1:1)*parseFloat(c.amount||0),0)
-                      const divAcum=contributions.filter(c=>c.type==='dividendo').reduce((s,c)=>s+parseFloat(c.amount||0),0)
-                      const closedPnl=tlTradesFiltered.filter(t=>!t._open).reduce((s,t)=>s+parseFloat(t.pnl_eur||0),0)
-                      const floatPnl=tlTradesFiltered.filter(t=>t._open).reduce((s,t)=>s+parseFloat(t._pnl_float_eur||0),0)
-                      const patrimTotal=netContrib+divAcum+closedPnl+floatPnl
-                      const statBox=(label,value,color)=>(
-                        <div key={label} style={{background:'#0d1824',border:'1px solid #1a2d45',borderRadius:8,padding:'10px 16px',minWidth:160}}>
-                          <div style={{fontFamily:MONO,fontSize:8,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:4}}>{label}</div>
-                          <div style={{fontFamily:MONO,fontSize:18,fontWeight:700,color:color||'#c8d8e8'}}>{value}</div>
-                        </div>
-                      )
-                      return(
-                        <div style={{display:'flex',gap:10,flexWrap:'wrap',marginBottom:16}}>
-                          {statBox('Capital neto aportado',(netContrib>=0?'+':'')+Math.round(netContrib).toLocaleString('es-ES')+'€',netContrib>=0?'#2a7fff':'#ff4d6d')}
-                          {statBox('Dividendos acumulados','+'+Math.round(divAcum).toLocaleString('es-ES')+'€','#aaff44')}
-                          {statBox('Patrimonio total',(patrimTotal>=0?'+':'')+Math.round(patrimTotal).toLocaleString('es-ES')+'€',patrimTotal>=0?'#00e5a0':'#ff4d6d')}
-                        </div>
-                      )
-                    })()}
-                    {/* Add form */}
-                    <div style={{background:'#0d1824',border:'1px solid #1a2d45',borderRadius:8,padding:'12px 16px',marginBottom:14}}>
-                      <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:10}}>Nueva entrada</div>
-                      <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'flex-end'}}>
-                        <div style={{display:'flex',flexDirection:'column',gap:3}}>
-                          <label style={{fontFamily:MONO,fontSize:8,color:'#5a7a9a'}}>Fecha</label>
-                          <input type="date" value={contribDate} onChange={e=>setContribDate(e.target.value)}
-                            style={{fontFamily:MONO,fontSize:11,background:'#080c14',border:'1px solid #1e3a52',borderRadius:4,color:'#c8d8e8',padding:'4px 8px',width:130}}/>
-                        </div>
-                        <div style={{display:'flex',flexDirection:'column',gap:3}}>
-                          <label style={{fontFamily:MONO,fontSize:8,color:'#5a7a9a'}}>Tipo</label>
-                          <select value={contribType} onChange={e=>setContribType(e.target.value)}
-                            style={{fontFamily:MONO,fontSize:11,background:'#080c14',border:'1px solid #1e3a52',borderRadius:4,color:'#c8d8e8',padding:'4px 8px',width:120}}>
-                            <option value="aportacion">Aportación</option>
-                            <option value="retirada">Retirada</option>
-                            <option value="dividendo">Dividendo</option>
-                          </select>
-                        </div>
-                        <div style={{display:'flex',flexDirection:'column',gap:3}}>
-                          <label style={{fontFamily:MONO,fontSize:8,color:'#5a7a9a'}}>Importe (€)</label>
-                          <input type="number" min="0.01" step="0.01" value={contribAmount} onChange={e=>setContribAmount(e.target.value)}
-                            placeholder="0.00"
-                            style={{fontFamily:MONO,fontSize:11,background:'#080c14',border:'1px solid #1e3a52',borderRadius:4,color:'#c8d8e8',padding:'4px 8px',width:100}}/>
-                        </div>
-                        <div style={{display:'flex',flexDirection:'column',gap:3,flex:1,minWidth:120}}>
-                          <label style={{fontFamily:MONO,fontSize:8,color:'#5a7a9a'}}>Notas</label>
-                          <input type="text" value={contribNotes} onChange={e=>setContribNotes(e.target.value)}
-                            placeholder="Opcional"
-                            style={{fontFamily:MONO,fontSize:11,background:'#080c14',border:'1px solid #1e3a52',borderRadius:4,color:'#c8d8e8',padding:'4px 8px'}}/>
-                        </div>
-                        <button onClick={addContribution} disabled={contribSaving||!contribDate||!contribAmount||parseFloat(contribAmount)<=0}
-                          style={{fontFamily:MONO,fontSize:10,background:'#1a4a80',border:'1px solid #2a7fff',borderRadius:4,color:'#c8d8e8',padding:'6px 14px',cursor:'pointer',opacity:contribSaving?0.5:1,whiteSpace:'nowrap'}}>
-                          {contribSaving?'Guardando...':'+ Añadir'}
-                        </button>
-                      </div>
-                    </div>
-                    {/* Contributions table */}
-                    <div style={{background:'#0a0f1a',border:'1px solid #1a2d45',borderRadius:8,overflow:'hidden'}}>
-                      <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:11}}>
-                        <thead>
-                          <tr style={{background:'#0d1824',borderBottom:'1px solid #1a2d45'}}>
-                            {['Fecha','Tipo','Importe','Notas',''].map(h=>(
-                              <th key={h} style={{padding:'7px 12px',textAlign:'left',color:'#3d5a7a',fontWeight:400,fontSize:9,letterSpacing:'0.08em',textTransform:'uppercase'}}>{h}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {contributions.length===0&&(
-                            <tr><td colSpan={5} style={{padding:'20px 12px',color:'#3d5a7a',textAlign:'center',fontSize:10}}>Sin registros</td></tr>
-                          )}
-                          {contributions.map((c,i)=>{
-                            const TYPE_COLOR={aportacion:'#2a7fff',retirada:'#ff4d6d',dividendo:'#aaff44'}
-                            const TYPE_LABEL={aportacion:'Aportación',retirada:'Retirada',dividendo:'Dividendo'}
-                            const col=TYPE_COLOR[c.type]||'#7a9bc0'
-                            return(
-                              <tr key={c.id} style={{borderBottom:'1px solid #0d1520',background:i%2===0?'transparent':'rgba(13,24,36,0.4)'}}>
-                                <td style={{padding:'6px 12px',color:'#c8d8e8'}}>{c.date}</td>
-                                <td style={{padding:'6px 12px'}}>
-                                  <span style={{background:col+'22',border:'1px solid '+col+'55',borderRadius:3,padding:'1px 6px',color:col,fontSize:9,letterSpacing:'0.06em'}}>{TYPE_LABEL[c.type]||c.type}</span>
-                                </td>
-                                <td style={{padding:'6px 12px',color:c.type==='retirada'?'#ff4d6d':'#c8d8e8',textAlign:'right',fontVariantNumeric:'tabular-nums'}}>
-                                  {c.type==='retirada'?'-':c.type==='dividendo'?'D+':'+'}€{parseFloat(c.amount).toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2})}
-                                </td>
-                                <td style={{padding:'6px 12px',color:'#5a7a9a',fontSize:10}}>{c.notes||'—'}</td>
-                                <td style={{padding:'6px 12px',textAlign:'right'}}>
-                                  <button onClick={()=>deleteContribution(c.id)} title="Eliminar"
-                                    style={{fontFamily:MONO,fontSize:9,background:'none',border:'1px solid #3d1a1a',borderRadius:3,color:'#ff4d6d',padding:'2px 6px',cursor:'pointer',opacity:0.7}}>✕</button>
-                                </td>
-                              </tr>
-                            )
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
           </div>
         </div>
       </div>
