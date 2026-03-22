@@ -2389,7 +2389,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.72</title>
+        <title>Trading Simulator V5.74</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2464,7 +2464,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.72
+            <span className="dot"/>Trading Simulator V5.74
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4257,6 +4257,23 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                               color:tlShowFxCols?'#ffd166':'#4a6a80',whiteSpace:'nowrap',fontWeight:tlShowFxCols?700:400}}>
                             FX±
                           </button>
+                          {(()=>{
+                            const expandable=tlTradesFiltered.filter(t=>(t._buyFills||[]).length+(t._sellFills||[]).length>0)
+                            const anyExp=expandable.some(t=>tlExpandedTrades.has(t.id))
+                            return expandable.length>0&&(
+                              <button
+                                onClick={()=>anyExp
+                                  ?setTlExpandedTrades(new Set())
+                                  :setTlExpandedTrades(new Set(expandable.map(t=>t.id)))}
+                                title={anyExp?'Colapsar todos los fills':'Expandir todos los fills'}
+                                style={{flexShrink:0,fontFamily:MONO,fontSize:10,padding:'4px 8px',borderRadius:4,cursor:'pointer',
+                                  background:anyExp?'rgba(0,212,255,0.12)':'transparent',
+                                  border:'1px solid '+(anyExp?'#00d4ff':'#2a3040'),
+                                  color:anyExp?'#00d4ff':'#4a6a80',whiteSpace:'nowrap'}}>
+                                {anyExp?'▼ Colapsar':'▶ Expandir'}
+                              </button>
+                            )
+                          })()}
                           <button onClick={()=>{const _df=tlDefaultForm();setTlForm(_df);setTlFormOpen(true);if(_df.currency&&_df.currency!=='EUR')tlFetchFx(_df.currency,_df.date)}}
                             style={{flexShrink:0,fontFamily:MONO,fontSize:10,padding:'4px 12px',borderRadius:4,cursor:'pointer',
                               background:'rgba(155,114,255,0.15)',border:'1px solid #9b72ff',color:'#9b72ff',fontWeight:700,whiteSpace:'nowrap'}}>
