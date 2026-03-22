@@ -10,7 +10,7 @@ const CONTRIB_MARKER = {
 }
 
 export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContribs, contributions, showWithContribs, onToggleContribs }) {
-  const ref = useRef(null), chartRef = useRef(null)
+  const ref = useRef(null), chartRef = useRef(null), equityTooltipRef = useRef(null)
   const [showSinFx, setShowSinFx] = useState(true)
   const [showSinComm, setShowSinComm] = useState(true)
   const [showAportacion, setShowAportacion] = useState(true)
@@ -39,12 +39,16 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
       // Zero baseline
       chart.addLineSeries({color:'#2a3f55',lineWidth:1,lineStyle:LineStyle.Dotted,lastValueVisible:false,priceLineVisible:false})
         .setData([{time:activeCurve[0].date,value:0},{time:activeCurve[activeCurve.length-1].date,value:0}])
+      // Track series data by date for crosshair tooltip
+      const eqData={}
+      const track=(arr,key)=>arr?.forEach(p=>{if(!eqData[p.date])eqData[p.date]={};eqData[p.date][key]=p.value})
       // Main series
       const finalVal = activeCurve[activeCurve.length-1].value
       const lc = finalVal >= 0 ? '#00e5a0' : '#ff4d6d'
       const label = showWithContribs ? 'Patrimonio' : 'P&L real'
       const mainSeries = chart.addLineSeries({color:lc,lineWidth:2,lastValueVisible:true,priceLineVisible:false,title:label})
       mainSeries.setData(activeCurve.map(p=>({time:p.date,value:p.value})))
+      track(activeCurve,'main')
       // Contribution markers on main series
       if(showWithContribs && contributions?.length){
         const activeTypes = new Set(['aportacion','retirada','dividendo'].filter(t=>
@@ -65,12 +69,31 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
       if(!showWithContribs && showSinFx && curveSinFx?.length>1){
         chart.addLineSeries({color:'#7a9bc0',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:true,priceLineVisible:false,title:'Sin FX'})
           .setData(curveSinFx.map(p=>({time:p.date,value:p.value})))
+        track(curveSinFx,'fx')
       }
       // Sin Comisiones line
       if(!showWithContribs && showSinComm && curveSinComm?.length>1){
         chart.addLineSeries({color:'#ffd166',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:true,priceLineVisible:false,title:'Sin Comm'})
           .setData(curveSinComm.map(p=>({time:p.date,value:p.value})))
+        track(curveSinComm,'comm')
       }
+      // Crosshair tooltip
+      const MONO2='"JetBrains Mono",monospace'
+      chart.subscribeCrosshairMove(param=>{
+        const tt=equityTooltipRef.current; if(!tt) return
+        if(!param.time||!param.point){tt.style.display='none';return}
+        const d=eqData[param.time]; if(!d){tt.style.display='none';return}
+        const rows=[]
+        if(d.main!=null) rows.push(`<div style="display:flex;justify-content:space-between;gap:20px"><span style="color:${lc}">${label}</span><b style="color:${lc}">€${Math.round(d.main).toLocaleString('es-ES')}</b></div>`)
+        if(d.fx!=null)   rows.push(`<div style="display:flex;justify-content:space-between;gap:20px"><span style="color:#7a9bc0">Sin FX</span><b style="color:#7a9bc0">€${Math.round(d.fx).toLocaleString('es-ES')}</b></div>`)
+        if(d.comm!=null) rows.push(`<div style="display:flex;justify-content:space-between;gap:20px"><span style="color:#ffd166">Sin Comm</span><b style="color:#ffd166">€${Math.round(d.comm).toLocaleString('es-ES')}</b></div>`)
+        if(!rows.length){tt.style.display='none';return}
+        const cw=ref.current?.clientWidth||600
+        tt.style.display='block'
+        tt.style.left=((param.point.x+200>cw)?param.point.x-210:param.point.x+14)+'px'
+        tt.style.top=Math.max(4,param.point.y-40)+'px'
+        tt.innerHTML=`<div style="font-size:10px;color:#7a9bc0;margin-bottom:4px;font-family:${MONO2}">${param.time}</div>`+rows.join('')
+      })
       chart.timeScale().fitContent()
       const ro = new ResizeObserver(()=>{ if(ref.current) chart.applyOptions({width:ref.current.clientWidth}) })
       ro.observe(ref.current)
@@ -135,7 +158,10 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
           )
         })()}
       </div>
-      <div ref={ref} style={{minHeight:200}}/>
+      <div style={{position:'relative'}}>
+        <div ref={ref} style={{minHeight:200}}/>
+        <div ref={equityTooltipRef} style={{position:'absolute',display:'none',pointerEvents:'none',background:'rgba(8,12,20,0.96)',border:'1px solid #1a2d45',borderRadius:6,padding:'8px 12px',fontFamily:'"JetBrains Mono",monospace',fontSize:12,color:'#e2eaf5',zIndex:15,minWidth:160,boxShadow:'0 4px 20px rgba(0,0,0,0.5)'}}/>
+      </div>
     </div>
   )
 }
