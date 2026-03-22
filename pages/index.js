@@ -2359,7 +2359,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.68</title>
+        <title>Trading Simulator V5.69</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2434,7 +2434,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.68
+            <span className="dot"/>Trading Simulator V5.69
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4926,8 +4926,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     {(()=>{
                       const netContrib=contributions.reduce((s,c)=>s+(c.type==='retirada'?-1:1)*parseFloat(c.amount||0),0)
                       const divAcum=contributions.filter(c=>c.type==='dividendo').reduce((s,c)=>s+parseFloat(c.amount||0),0)
-                      const closedPnl=tlTradesFiltered.filter(t=>!t._open).reduce((s,t)=>s+parseFloat(t.pnl_eur||0),0)
-                      const floatPnl=tlTradesFiltered.filter(t=>t._open).reduce((s,t)=>{
+                      const closedPnl=tlTradesFiltered.filter(t=>t.status==='closed').reduce((s,t)=>s+parseFloat(t.pnl_eur||0),0)
+                      const floatPnl=tlTradesFiltered.filter(t=>t.status==='open').reduce((s,t)=>{
                         const px=tlLivePrices[t.symbol]?.price!=null?parseFloat(tlLivePrices[t.symbol].price):null
                         const fxE=t.fx_entry||1
                         return s+(px!==null?(px-t.entry_price)*t.shares/fxE:(typeof t._pnl_float_eur==='number'?t._pnl_float_eur:0))
@@ -4990,7 +4990,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                   const col=TYPE_COLOR[c.type]||'#7a9bc0'
                                   return(
                                     <tr key={c.id} style={{borderBottom:'1px solid #0d1520',background:i%2===0?'transparent':'rgba(13,24,36,0.4)'}}>
-                                      <td style={{padding:'6px 12px',color:'#c8d8e8'}}>{c.date}</td>
+                                      <td style={{padding:'6px 12px',color:'#c8d8e8'}}>{c.date?c.date.split('-').reverse().join('/'):''}</td>
                                       <td style={{padding:'6px 12px'}}>
                                         <span style={{background:col+'22',border:'1px solid '+col+'55',borderRadius:3,padding:'1px 6px',color:col,fontSize:9,letterSpacing:'0.06em'}}>{TYPE_LABEL[c.type]||c.type}</span>
                                       </td>
