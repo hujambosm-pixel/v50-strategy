@@ -336,6 +336,14 @@ export default async function handler(req, res) {
     }
   }
 
+  // ── GET contributions ──
+  if (req.method === 'GET' && action === 'contributions') {
+    try {
+      const data = await sb('/capital_contributions?order=date.desc,created_at.desc')
+      return res.status(200).json(data || [])
+    } catch (e) { return res.status(500).json({ error: e.message }) }
+  }
+
   if (req.method !== 'POST') return res.status(405).end()
   const body = req.body
 
@@ -420,6 +428,29 @@ export default async function handler(req, res) {
     } catch (e) {
       return res.status(500).json({ error: e.message })
     }
+  }
+
+  // ── POST add-contribution ──
+  if (action === 'add-contribution') {
+    try {
+      const { date, amount, type, notes } = body
+      if (!date || !amount || !type) return res.status(400).json({ error: 'Faltan campos obligatorios' })
+      const data = await sb('/capital_contributions', {
+        method: 'POST',
+        body: JSON.stringify({ date, amount: parseFloat(amount), type, notes: notes || null }),
+      })
+      return res.status(200).json(data?.[0] || {})
+    } catch (e) { return res.status(500).json({ error: e.message }) }
+  }
+
+  // ── POST delete-contribution ──
+  if (action === 'delete-contribution') {
+    try {
+      const { id } = body
+      if (!id) return res.status(400).json({ error: 'Falta id' })
+      await sb('/capital_contributions?id=eq.' + id, { method: 'DELETE', prefer: 'return=minimal' })
+      return res.status(200).json({ ok: true })
+    } catch (e) { return res.status(500).json({ error: e.message }) }
   }
 
   return res.status(400).json({ error: 'Acción no reconocida' })

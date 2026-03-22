@@ -527,7 +527,15 @@ export default function Home() {
   const [tlSelected,setTlSelected]=useState(null)      // trade seleccionado en detalle
   const [tlMultiSel,setTlMultiSel]=useState(new Set()) // ids seleccionados para borrado
   const [tlMultiMode,setTlMultiMode]=useState(false)   // modo multiselección activo
-  const [tlTab,setTlTab]=useState('ops')               // 'ops'|'import'|'export'|'dashboard'
+  const [tlTab,setTlTab]=useState('ops')               // 'ops'|'import'|'export'|'dashboard'|'capital'
+  // ── Capital contributions ──
+  const [contributions,setContributions]=useState([])
+  const [showWithContribs,setShowWithContribs]=useState(false)
+  const [contribDate,setContribDate]=useState(()=>new Date().toISOString().split('T')[0])
+  const [contribAmount,setContribAmount]=useState('')
+  const [contribType,setContribType]=useState('aportacion')
+  const [contribNotes,setContribNotes]=useState('')
+  const [contribSaving,setContribSaving]=useState(false)
   const [tlFilterBroker,setTlFilterBroker]=useState('')
   const [tlFilterYear,setTlFilterYear]=useState('')
   const [tlFilterMonth,setTlFilterMonth]=useState('')  // '01'..'12'
@@ -645,6 +653,29 @@ export default function Home() {
       setTlLiveFx({})
     }
   },[tlTrades])
+
+  // ── Capital contributions: fetch + CRUD ──
+  useEffect(()=>{
+    fetch('/api/tradelog?action=contributions').then(r=>r.json())
+      .then(d=>{ if(Array.isArray(d)) setContributions(d) }).catch(()=>{})
+  },[])
+  const addContribution=async()=>{
+    if(!contribDate||!contribAmount||isNaN(parseFloat(contribAmount))||parseFloat(contribAmount)<=0) return
+    setContribSaving(true)
+    try{
+      const r=await fetch('/api/tradelog?action=add-contribution',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({date:contribDate,amount:parseFloat(contribAmount),type:contribType,notes:contribNotes||null})})
+      const d=await r.json()
+      if(d.id){
+        setContributions(prev=>[d,...prev].sort((a,b)=>b.date.localeCompare(a.date)||b.created_at.localeCompare(a.created_at||'')))
+        setContribAmount(''); setContribNotes('')
+      }
+    }finally{setContribSaving(false)}
+  }
+  const deleteContribution=async(id)=>{
+    await fetch('/api/tradelog?action=delete-contribution',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})})
+    setContributions(prev=>prev.filter(c=>c.id!==id))
+  }
 
   // ── tlFiltered: fills filtrados + status vía FIFO ──
   const tlFiltered = useMemo(()=>{
@@ -2328,7 +2359,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.66</title>
+        <title>Trading Simulator V5.67</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2403,7 +2434,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.66
+            <span className="dot"/>Trading Simulator V5.67
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4147,7 +4178,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       </span>
                       {tlLoading&&<span style={{fontFamily:MONO,fontSize:9,color:'#9b72ff',flexShrink:0}}>⟳</span>}
                     </div>
-                    {[{id:'ops',label:'Ops'},{id:'import',label:'📥 Import'},{id:'export',label:'💾 Backup'},{id:'dashboard',label:'📊 Dashboard'}].map(t=>(
+                    {[{id:'ops',label:'Ops'},{id:'import',label:'📥 Import'},{id:'export',label:'💾 Backup'},{id:'dashboard',label:'📊 Dashboard'},{id:'capital',label:'💰 Capital'}].map(t=>(
                       <button key={t.id} onClick={()=>setTlTab(t.id)}
                         style={{padding:'9px 16px',fontFamily:MONO,fontSize:11,cursor:'pointer',
                           background:tlTab===t.id?'rgba(155,114,255,0.12)':'transparent',
@@ -4784,6 +4815,27 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                           curveSinComm.push({date:today, value:parseFloat((cumSinComm+floatPnl+openComm).toFixed(4))})
                         }
                       }
+                      // ── Patrimony curve (P&L + net contributions) ──
+                      let curveWithContribs=[]
+                      if(contributions.length){
+                        const cSorted=[...contributions].filter(c=>c.date).sort((a,b)=>a.date.localeCompare(b.date))
+                        const allEvts=[
+                          ...closed.map(t=>({date:t.exit_date||t.entry_date||today,pnl:parseFloat(t.pnl_eur||0),contrib:0})),
+                          ...cSorted.map(c=>({date:c.date,pnl:0,contrib:c.type==='retirada'?-parseFloat(c.amount):parseFloat(c.amount)}))
+                        ].filter(e=>e.date).sort((a,b)=>a.date.localeCompare(b.date))
+                        let runPnlW=0,runContribW=0
+                        const patrimByDate={}
+                        allEvts.forEach(e=>{runPnlW+=e.pnl;runContribW+=e.contrib;patrimByDate[e.date]=runPnlW+runContribW})
+                        curveWithContribs=Object.keys(patrimByDate).sort().map(d=>({date:d,value:patrimByDate[d]}))
+                        if(curveWithContribs.length===0&&openTrades.length){
+                          const anchor=cSorted[0]?.date||openTrades[0]?.entry_date||today
+                          curveWithContribs.push({date:anchor,value:runContribW})
+                        }
+                        if(openTrades.length&&curveWithContribs.length){
+                          const lastW=curveWithContribs[curveWithContribs.length-1].date
+                          if(today>lastW) curveWithContribs.push({date:today,value:runContribW+runPnlW+floatPnl,isFloat:true})
+                        }
+                      }
                       // Build invest chart data: timeline of capital invested vs cumulative profit
                       // Bug fix V5.60: include open trade entry events in the events array so their
                       // capital propagates correctly through the timeline up to today (instead of
@@ -4842,7 +4894,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                           )}
 
                           {/* Equity curve — P&L acumulado */}
-                          {equityCurve.length>1&&<TlEquityChart curve={equityCurve} curveSinFx={curveSinFx.length>1?curveSinFx:null} curveSinComm={curveSinComm.length>1?curveSinComm:null}/>}
+                          {equityCurve.length>1&&<TlEquityChart curve={equityCurve} curveSinFx={curveSinFx.length>1?curveSinFx:null} curveSinComm={curveSinComm.length>1?curveSinComm:null} curveWithContribs={curveWithContribs.length>1?curveWithContribs:null} contributions={contributions} showWithContribs={showWithContribs} onToggleContribs={()=>setShowWithContribs(v=>!v)}/>}
                           {/* Capital Invertido vs Profit */}
                           {investData.length>1&&<TlInvestChart investData={investData}/>}
                           {/* Barras P&L por trade — cerradas + abiertas */}
@@ -4940,7 +4992,11 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     capEvents.sort((a,b)=>(a.date||'').localeCompare(b.date||''))
                     let runCapEv=0,maxCapEv=0
                     capEvents.forEach(ev=>{runCapEv+=ev.delta;if(runCapEv>maxCapEv)maxCapEv=runCapEv})
-                    const capitalBase=Math.max(maxCapEv,capitalEmp>0?capitalEmp:0,1000)
+                    const peakCapBase=Math.max(maxCapEv,capitalEmp>0?capitalEmp:0,1000)
+                    // CAGR: si toggle "Con aportaciones" activo → base=capital neto aportado; sino → pico concurrente
+                    const netContrib=contributions.reduce((s,c)=>s+(c.type==='retirada'?-1:1)*parseFloat(c.amount||0),0)
+                    const capitalBase=showWithContribs&&netContrib>0?netContrib:peakCapBase
+                    const cagrLabel=showWithContribs&&netContrib>0?'global':'op.'
                     const cagrReal=aniosPeriodo&&pnlTotal!==0?
                       (Math.pow(Math.max((capitalBase+pnlTotal)/capitalBase,0.001),1/aniosPeriodo)-1)*100:null
                     const fmtEur=v=>v>=0?'+€'+Math.round(v):'-€'+Math.round(Math.abs(v))
@@ -5023,10 +5079,10 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                        v:factorBen!=null?factorBen.toFixed(2):'—',
                        c:factorBen!=null&&factorBen>=1?'#00e5a0':'#ff4d6d',
                        tip:'Ganancia media € ganador ÷ pérdida media € perdedor. >1 = expectativa positiva. Incluye abiertas por su flotante actual.'},
-                      {l:'CAGR ('+(aniosPeriodo?aniosPeriodo.toFixed(2):'—')+'a)',
+                      {l:'CAGR '+cagrLabel+' ('+(aniosPeriodo?aniosPeriodo.toFixed(2):'—')+'a)',
                        v:cagrReal!=null?(cagrReal>=0?'+':'')+cagrReal.toFixed(2)+'%':'—',
                        c:cagrReal!=null&&cagrReal>=0?'#00e5a0':'#ff4d6d',
-                       tip:'Tasa anual compuesta: ((Capital+P&LTotal)/Capital)^(1/años)−1. Periodo: primera entrada hasta hoy. Base: capital empleado actual (o 10.000€ si no hay abiertas).'},
+                       tip:'Tasa anual compuesta. op. = base pico capital desplegado. global = base capital neto aportado.'},
                       {l:'Max Drawdown',
                        v:maxDD>0?('-€'+Math.round(maxDD)+' ('+maxDDPct.toFixed(1)+'%)'):'—',
                        c:'#ff4d6d',
@@ -5066,6 +5122,106 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 </div>
               </div>
             )}
+                {/* CAPITAL */}
+                {tlTab==='capital'&&(
+                  <div style={{flex:1,display:'flex',flexDirection:'column',gap:0,overflowY:'auto',padding:'16px 20px'}}>
+                    {/* Totals panel */}
+                    {(()=>{
+                      const netContrib=contributions.reduce((s,c)=>s+(c.type==='retirada'?-1:1)*parseFloat(c.amount||0),0)
+                      const divAcum=contributions.filter(c=>c.type==='dividendo').reduce((s,c)=>s+parseFloat(c.amount||0),0)
+                      const closedPnl=tlTradesFiltered.filter(t=>!t._open).reduce((s,t)=>s+parseFloat(t.pnl_eur||0),0)
+                      const floatPnl=tlTradesFiltered.filter(t=>t._open).reduce((s,t)=>s+parseFloat(t._pnl_float_eur||0),0)
+                      const patrimTotal=netContrib+divAcum+closedPnl+floatPnl
+                      const statBox=(label,value,color)=>(
+                        <div key={label} style={{background:'#0d1824',border:'1px solid #1a2d45',borderRadius:8,padding:'10px 16px',minWidth:160}}>
+                          <div style={{fontFamily:MONO,fontSize:8,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:4}}>{label}</div>
+                          <div style={{fontFamily:MONO,fontSize:18,fontWeight:700,color:color||'#c8d8e8'}}>{value}</div>
+                        </div>
+                      )
+                      return(
+                        <div style={{display:'flex',gap:10,flexWrap:'wrap',marginBottom:16}}>
+                          {statBox('Capital neto aportado',(netContrib>=0?'+':'')+Math.round(netContrib).toLocaleString('es-ES')+'€',netContrib>=0?'#2a7fff':'#ff4d6d')}
+                          {statBox('Dividendos acumulados','+'+Math.round(divAcum).toLocaleString('es-ES')+'€','#aaff44')}
+                          {statBox('Patrimonio total',(patrimTotal>=0?'+':'')+Math.round(patrimTotal).toLocaleString('es-ES')+'€',patrimTotal>=0?'#00e5a0':'#ff4d6d')}
+                        </div>
+                      )
+                    })()}
+                    {/* Add form */}
+                    <div style={{background:'#0d1824',border:'1px solid #1a2d45',borderRadius:8,padding:'12px 16px',marginBottom:14}}>
+                      <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:10}}>Nueva entrada</div>
+                      <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'flex-end'}}>
+                        <div style={{display:'flex',flexDirection:'column',gap:3}}>
+                          <label style={{fontFamily:MONO,fontSize:8,color:'#5a7a9a'}}>Fecha</label>
+                          <input type="date" value={contribDate} onChange={e=>setContribDate(e.target.value)}
+                            style={{fontFamily:MONO,fontSize:11,background:'#080c14',border:'1px solid #1e3a52',borderRadius:4,color:'#c8d8e8',padding:'4px 8px',width:130}}/>
+                        </div>
+                        <div style={{display:'flex',flexDirection:'column',gap:3}}>
+                          <label style={{fontFamily:MONO,fontSize:8,color:'#5a7a9a'}}>Tipo</label>
+                          <select value={contribType} onChange={e=>setContribType(e.target.value)}
+                            style={{fontFamily:MONO,fontSize:11,background:'#080c14',border:'1px solid #1e3a52',borderRadius:4,color:'#c8d8e8',padding:'4px 8px',width:120}}>
+                            <option value="aportacion">Aportación</option>
+                            <option value="retirada">Retirada</option>
+                            <option value="dividendo">Dividendo</option>
+                          </select>
+                        </div>
+                        <div style={{display:'flex',flexDirection:'column',gap:3}}>
+                          <label style={{fontFamily:MONO,fontSize:8,color:'#5a7a9a'}}>Importe (€)</label>
+                          <input type="number" min="0.01" step="0.01" value={contribAmount} onChange={e=>setContribAmount(e.target.value)}
+                            placeholder="0.00"
+                            style={{fontFamily:MONO,fontSize:11,background:'#080c14',border:'1px solid #1e3a52',borderRadius:4,color:'#c8d8e8',padding:'4px 8px',width:100}}/>
+                        </div>
+                        <div style={{display:'flex',flexDirection:'column',gap:3,flex:1,minWidth:120}}>
+                          <label style={{fontFamily:MONO,fontSize:8,color:'#5a7a9a'}}>Notas</label>
+                          <input type="text" value={contribNotes} onChange={e=>setContribNotes(e.target.value)}
+                            placeholder="Opcional"
+                            style={{fontFamily:MONO,fontSize:11,background:'#080c14',border:'1px solid #1e3a52',borderRadius:4,color:'#c8d8e8',padding:'4px 8px'}}/>
+                        </div>
+                        <button onClick={addContribution} disabled={contribSaving||!contribDate||!contribAmount||parseFloat(contribAmount)<=0}
+                          style={{fontFamily:MONO,fontSize:10,background:'#1a4a80',border:'1px solid #2a7fff',borderRadius:4,color:'#c8d8e8',padding:'6px 14px',cursor:'pointer',opacity:contribSaving?0.5:1,whiteSpace:'nowrap'}}>
+                          {contribSaving?'Guardando...':'+ Añadir'}
+                        </button>
+                      </div>
+                    </div>
+                    {/* Contributions table */}
+                    <div style={{background:'#0a0f1a',border:'1px solid #1a2d45',borderRadius:8,overflow:'hidden'}}>
+                      <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:11}}>
+                        <thead>
+                          <tr style={{background:'#0d1824',borderBottom:'1px solid #1a2d45'}}>
+                            {['Fecha','Tipo','Importe','Notas',''].map(h=>(
+                              <th key={h} style={{padding:'7px 12px',textAlign:'left',color:'#3d5a7a',fontWeight:400,fontSize:9,letterSpacing:'0.08em',textTransform:'uppercase'}}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {contributions.length===0&&(
+                            <tr><td colSpan={5} style={{padding:'20px 12px',color:'#3d5a7a',textAlign:'center',fontSize:10}}>Sin registros</td></tr>
+                          )}
+                          {contributions.map((c,i)=>{
+                            const TYPE_COLOR={aportacion:'#2a7fff',retirada:'#ff4d6d',dividendo:'#aaff44'}
+                            const TYPE_LABEL={aportacion:'Aportación',retirada:'Retirada',dividendo:'Dividendo'}
+                            const col=TYPE_COLOR[c.type]||'#7a9bc0'
+                            return(
+                              <tr key={c.id} style={{borderBottom:'1px solid #0d1520',background:i%2===0?'transparent':'rgba(13,24,36,0.4)'}}>
+                                <td style={{padding:'6px 12px',color:'#c8d8e8'}}>{c.date}</td>
+                                <td style={{padding:'6px 12px'}}>
+                                  <span style={{background:col+'22',border:'1px solid '+col+'55',borderRadius:3,padding:'1px 6px',color:col,fontSize:9,letterSpacing:'0.06em'}}>{TYPE_LABEL[c.type]||c.type}</span>
+                                </td>
+                                <td style={{padding:'6px 12px',color:c.type==='retirada'?'#ff4d6d':'#c8d8e8',textAlign:'right',fontVariantNumeric:'tabular-nums'}}>
+                                  {c.type==='retirada'?'-':c.type==='dividendo'?'D+':'+'}€{parseFloat(c.amount).toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2})}
+                                </td>
+                                <td style={{padding:'6px 12px',color:'#5a7a9a',fontSize:10}}>{c.notes||'—'}</td>
+                                <td style={{padding:'6px 12px',textAlign:'right'}}>
+                                  <button onClick={()=>deleteContribution(c.id)} title="Eliminar"
+                                    style={{fontFamily:MONO,fontSize:9,background:'none',border:'1px solid #3d1a1a',borderRadius:3,color:'#ff4d6d',padding:'2px 6px',cursor:'pointer',opacity:0.7}}>✕</button>
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
           </div>
         </div>
       </div>
