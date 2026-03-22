@@ -1127,6 +1127,19 @@ export default function Home() {
     return fetchConditions().then(d=>setConditions(d||[])).catch(()=>{}).finally(()=>setCondLoading(false))
   }
 
+  // Sync colors saved inside params.color (Supabase source) into local condColors
+  useEffect(()=>{
+    if(!conditions.length) return
+    setCondColorsState(prev=>{
+      const next={...prev}
+      let changed=false
+      conditions.forEach(c=>{ if(c.params?.color&&!next[c.id]){next[c.id]=c.params.color;changed=true} })
+      if(!changed) return prev
+      try{const s=JSON.parse(localStorage.getItem('v50_settings')||'{}');if(!s.watchlist)s.watchlist={};s.watchlist.condColors=next;localStorage.setItem('v50_settings',JSON.stringify(s))}catch{}
+      return next
+    })
+  },[conditions]) // eslint-disable-line
+
   const onAlarmPriceDrag=async(alarmId,newPrice)=>{
     // Optimistic update
     setAlarms(prev=>prev.map(a=>a.id===alarmId?{...a,price_level:newPrice}:a))
@@ -1452,10 +1465,10 @@ export default function Home() {
     finally{setAlarmStatusLoading(false)}
   },[watchlist,alarms])
 
-  // Recalcular cuando cargan alarmas O watchlist (ambos deben estar listos)
+  // Recalcular cuando cargan alarmas/condiciones O watchlist (basta con que haya algo que evaluar)
   useEffect(()=>{
-    if(watchlist.length>0&&alarms.length>0) refreshAlarmStatus(watchlist,alarms)
-  },[alarms,watchlist.length]) // eslint-disable-line
+    if(watchlist.length>0&&(alarms.length>0||conditions.length>0)) refreshAlarmStatus(watchlist,alarms)
+  },[alarms,conditions.length,watchlist.length]) // eslint-disable-line
 
   // ── Ranking: ejecuta backtest en paralelo sobre toda la watchlist ──
   const calcRanking = useCallback(async (rankSymbols=null) => {
@@ -2409,7 +2422,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V6.02</title>
+        <title>Trading Simulator V6.03</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2486,7 +2499,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V6.02
+            <span className="dot"/>Trading Simulator V6.03
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -2723,7 +2736,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                           return(
                             <div style={{position:'absolute',top:'calc(100% + 4px)',right:0,background:'var(--bg3)',
                               border:'1px solid var(--border)',borderRadius:4,zIndex:60,
-                              boxShadow:'0 4px 16px rgba(0,0,0,0.7)',minWidth:140}}>
+                              boxShadow:'0 4px 16px rgba(0,0,0,0.7)',width:'max-content',minWidth:160,maxWidth:280}}>
                               <div onClick={()=>{setSelectedLists([]);setListDropOpen(false)}}
                                 style={{padding:'6px 10px',fontFamily:MONO,fontSize:11,cursor:'pointer',
                                   color:selectedLists.length===0?'var(--accent)':'var(--text)',
@@ -2733,7 +2746,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                               {allLists.map(l=>(
                                 <div key={l} onClick={()=>{setSelectedLists([l]);setListDropOpen(false)}}
                                   style={{padding:'6px 10px',fontFamily:MONO,fontSize:11,cursor:'pointer',
-                                    display:'flex',alignItems:'center',gap:6,color:'var(--text)'}}>
+                                    display:'flex',alignItems:'center',gap:6,color:'var(--text)',whiteSpace:'nowrap'}}>
                                   <span style={{color:selectedLists.includes(l)?'var(--accent)':'var(--text3)',fontSize:10}}>
                                     {selectedLists.includes(l)?'●':'○'}
                                   </span>{l}
@@ -2830,6 +2843,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   onCondDotIdsChange={updateWlCondDotIds}
                   onReload={reloadConditions}
                   condColors={condColors}
+                  onColorChange={setCondColor}
                 />
 
                 {/* ── Lista de activos ── */}

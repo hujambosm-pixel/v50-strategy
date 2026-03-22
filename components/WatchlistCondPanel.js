@@ -41,7 +41,9 @@ function Num({ label, value, onChange, min=1, max=9999 }) {
   )
 }
 
-export default function WatchlistCondPanel({ conditions, condDotIds, onCondDotIdsChange, onReload, condColors={} }) {
+const PICKER_COLORS = ['#00e5a0','#ffd166','#00d4ff','#ff7eb3','#9b72ff','#ff4d6d','#ff9a3c','#a78bfa','#7ec8e3','#f472b6']
+
+export default function WatchlistCondPanel({ conditions, condDotIds, onCondDotIdsChange, onReload, condColors={}, onColorChange }) {
   const [editing, setEditing] = useState(null)
   const [form, setForm]       = useState({})
   const [saving, setSaving]   = useState(false)
@@ -50,13 +52,14 @@ export default function WatchlistCondPanel({ conditions, condDotIds, onCondDotId
   function openEdit(c, e) {
     e?.stopPropagation()
     const rev = CREV[c.type]||[]
-    setForm({ name:c.name||'', ind:rev[0]||'', op:rev[1]||'', params:{...c.params||{}}, type:c.type||'' })
+    const existingColor = condColors[c.id] || c.params?.color || ''
+    setForm({ name:c.name||'', ind:rev[0]||'', op:rev[1]||'', params:{...c.params||{}}, type:c.type||'', color:existingColor })
     setEditing(c)
     setOpen(true)
   }
   function openNew(e) {
     e?.stopPropagation()
-    setForm({ name:'', ind:'', op:'', params:{}, type:'' })
+    setForm({ name:'', ind:'', op:'', params:{}, type:'', color:'' })
     setEditing({id:null})
     setOpen(true)
   }
@@ -76,16 +79,24 @@ export default function WatchlistCondPanel({ conditions, condDotIds, onCondDotId
     if (!form.name.trim()||!form.type) return
     setSaving(true)
     try {
-      const payload = { name:form.name.trim(), type:form.type, params:form.params||{}, active:true }
+      // Include color inside params so it persists in Supabase
+      const params = {...(form.params||{})}
+      if (form.color) params.color = form.color
+      else delete params.color
+      const payload = { name:form.name.trim(), type:form.type, params, active:true }
+      let savedId = editing?.id
       if (editing?.id) {
         const { updateCondition } = await import('../lib/conditions')
         await updateCondition(editing.id, payload)
       } else {
         const { saveCondition } = await import('../lib/conditions')
         const saved = await saveCondition(payload)
+        savedId = saved.id
         // Auto-activate new condition in the watchlist dots
         onCondDotIdsChange([...condDotIds, saved.id])
       }
+      // Propagate color choice to parent immediately
+      if (onColorChange && savedId) onColorChange(savedId, form.color||null)
       // onReload now returns a Promise — await it so conditions are loaded before closing
       await onReload()
       cancel()
@@ -165,14 +176,27 @@ export default function WatchlistCondPanel({ conditions, condDotIds, onCondDotId
       {editing!==null&&(
         <div style={{padding:'8px 8px 10px',background:'rgba(0,0,0,0.25)',borderTop:'1px solid var(--border)'}}>
           <div style={{fontFamily:MONO,fontSize:8,color:'var(--text3)',marginBottom:6,textTransform:'uppercase',letterSpacing:'0.09em'}}>
-            {editing.id?'Editar condición':'Nueva condición de watchlist'}
+            {editing.id?'Editar notificación':'Nueva notificación'}
           </div>
 
           {/* Nombre */}
           <input type="text" value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))}
-            placeholder="Nombre de la condición…"
+            placeholder="Nombre de la notificación…"
             style={{width:'100%',background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',
               fontFamily:MONO,fontSize:10,padding:'4px 7px',borderRadius:3,boxSizing:'border-box',marginBottom:6}}/>
+
+          {/* Color del círculo */}
+          <div style={{display:'flex',alignItems:'center',gap:5,marginBottom:7,flexWrap:'wrap'}}>
+            <span style={{fontFamily:MONO,fontSize:8,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'0.08em',flexShrink:0}}>Color</span>
+            {PICKER_COLORS.map(c=>(
+              <span key={c} onClick={()=>setForm(f=>({...f,color:f.color===c?'':c}))}
+                title={c} style={{width:12,height:12,borderRadius:'50%',background:c,cursor:'pointer',flexShrink:0,
+                  boxShadow:form.color===c?`0 0 0 2px #0d1824,0 0 0 3.5px ${c}`:'none',transition:'box-shadow 0.1s'}}/>
+            ))}
+            {form.color&&<span onClick={()=>setForm(f=>({...f,color:''}))}
+              style={{fontFamily:MONO,fontSize:9,color:'#5a8aaa',cursor:'pointer',lineHeight:1}}
+              title="Restablecer color por defecto">✕</span>}
+          </div>
 
           {/* Constructor SI [...] */}
           <div style={{display:'flex',alignItems:'center',gap:4,flexWrap:'wrap',marginBottom:8}}>
