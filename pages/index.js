@@ -2306,7 +2306,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
           const next=strats.includes(s)?strats.length>1?strats.filter(x=>x!==s):strats:[...strats,s]
           setStrats(next)
         }}
-          style={{fontFamily:MONO,fontSize:10,padding:'2px 8px',borderRadius:3,cursor:'pointer',
+          style={{fontFamily:MONO,fontSize:9,padding:'1px 5px',borderRadius:3,cursor:'pointer',
             border:`1px solid ${strats.includes(s)?STRAT_META[s].color:'#2a3f55'}`,
             background:strats.includes(s)?STRAT_META[s].bg:'transparent',
             color:strats.includes(s)?STRAT_META[s].color:'#4a6a88',fontWeight:strats.includes(s)?600:400}}>
@@ -2398,7 +2398,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.96</title>
+        <title>Trading Simulator V5.97</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2475,7 +2475,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.96
+            <span className="dot"/>Trading Simulator V5.97
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
