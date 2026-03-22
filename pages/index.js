@@ -1101,7 +1101,7 @@ export default function Home() {
             const defId=sett.defaultStrategyId
             if(defId){
               const match=data.find(s=>s.id===defId)
-              if(match) loadStrategyLegacy(match)
+              if(match) loadStrategyLegacy(match,{navigateToConfig:false})
               // loadStrategyLegacy already calls loadRankingRemote internally
             }
           }catch(_){}
@@ -1280,7 +1280,7 @@ export default function Home() {
     if(!confirm('¿Eliminar esta estrategia?')) return
     await deleteStrategy(id); reloadStrategies()
   }
-  const loadStrategyLegacy=(s)=>{
+  const loadStrategyLegacy=(s,{navigateToConfig=true}={})=>{
     // Load strategy params from definition into the cfg panel state
     const def  = s.definition || {}
     const entry = def.entry || {}
@@ -1302,7 +1302,7 @@ export default function Home() {
     setStrForm(f=>({...f,_loadedName:s.name}))
     setStratName(s.name||'')
     setCurrentStratId(s.id||null)
-    setSidePanel('config')
+    if(navigateToConfig) setSidePanel('config')
     setRankingData({});setRankingStratId(null);setRankingStratName('')
     if(s.id){
       loadRankingRemote(s.id).then(rd=>{
@@ -2397,7 +2397,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.92</title>
+        <title>Trading Simulator V5.93</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2411,6 +2411,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
             --font-family:"JetBrains Mono","Fira Code","IBM Plex Mono",monospace;
           }
           body { font-size:14px; color:#e0eeff; }
+          /* ── Nav icons — force 28px regardless of any inheritance ── */
+          .nav-item-icon { font-size:28px !important; width:30px !important; flex-shrink:0 !important; text-align:center !important; display:inline-block !important; line-height:1 !important; }
           /* ── Sidebar ── */
           .sidebar { font-size:13px; }
           .sidebar .sidebar-title { color:#f5fbff !important; font-weight:700; font-size:12px !important; letter-spacing:0.08em; text-transform:uppercase; padding-bottom:4px; border-bottom:1px solid #1a3050; margin-bottom:6px; }
@@ -2472,7 +2474,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.92
+            <span className="dot"/>Trading Simulator V5.93
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -2529,7 +2531,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
             onWheel={e=>{if(e.ctrlKey){e.preventDefault();handlePanelScaleWheel('nav',e)}}}
             style={{width:navExpanded?Math.round(158*(panelScale.nav||1)):Math.round(48*(panelScale.nav||1)),transition:'width 0.18s ease',display:'flex',flexDirection:'column',
               background:'var(--bg2)',borderRight:'1px solid var(--border)',flexShrink:0,overflow:'hidden',
-              zIndex:15,paddingTop:6,paddingBottom:6,zoom:panelScale.nav||1}}
+              zIndex:15,paddingTop:6,paddingBottom:6}}
           >
             {[
               {id:'config',     icon:'📈', label:'Estrategias'},
@@ -2548,10 +2550,9 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   fontFamily:MONO,fontSize:28,cursor:'pointer',whiteSpace:'nowrap',textAlign:'left',
                   transition:'background 0.12s,color 0.12s',position:'relative'}}
               >
-                <span title={item.hasAlerts?`${item.alertCount} alerta${item.alertCount!==1?'s':''} activa${item.alertCount!==1?'s':''}`:undefined}
-                  style={{fontSize:28,flexShrink:0,width:30,textAlign:'center',
-                    display:'inline-block',
-                    animation:item.hasAlerts?'bellSwing 1.2s ease-in-out infinite':undefined,
+                <span className="nav-item-icon"
+                  title={item.hasAlerts?`${item.alertCount} alerta${item.alertCount!==1?'s':''} activa${item.alertCount!==1?'s':''}`:undefined}
+                  style={{animation:item.hasAlerts?'bellSwing 1.2s ease-in-out infinite':undefined,
                     transformOrigin:'top center'}}>{item.icon}</span>
                 <span style={{fontSize:11,letterSpacing:'0.06em',textTransform:'uppercase',opacity:navExpanded?1:0,transition:'opacity 0.1s'}}>
                   {item.label}
@@ -3576,10 +3577,15 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     </div>
                     <div style={{position:'relative'}}>
                       {/* Transparent overlay sobre el logo TradingView (esquina inf. izq.) */}
-                      <div onClick={()=>window.open(`https://www.tradingview.com/chart/?symbol=${tvSym(simbolo)}`,'_blank')}
+                      <div onClick={()=>{
+                          const sym=tvSym(simbolo)
+                          const url=`https://www.tradingview.com/chart/?symbol=${sym}`
+                          console.log('[TV Logo] simbolo:',simbolo,'→ tvSym:',sym,'→ URL:',url)
+                          window.open(url,'_blank')
+                        }}
                         title={`Abrir ${simbolo} en TradingView`}
                         style={{position:'absolute',bottom:3,left:3,zIndex:9999,width:130,height:22,
-                          cursor:'pointer',background:'transparent'}}/>
+                          cursor:'pointer',background:'rgba(0,0,0,0.01)'}}/>
                       <CandleChart
                         data={result.chartData} emaRPeriod={emaR} emaLPeriod={emaL}
                         trades={result.trades||[]} maxDD={metrics?.ddSimple||0}
