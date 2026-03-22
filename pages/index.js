@@ -1114,7 +1114,7 @@ export default function Home() {
   }
   const reloadConditions=()=>{
     setCondLoading(true)
-    fetchConditions().then(d=>setConditions(d||[])).catch(()=>{}).finally(()=>setCondLoading(false))
+    return fetchConditions().then(d=>setConditions(d||[])).catch(()=>{}).finally(()=>setCondLoading(false))
   }
 
   const onAlarmPriceDrag=async(alarmId,newPrice)=>{
@@ -2399,7 +2399,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.99</title>
+        <title>Trading Simulator V6.00</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2476,7 +2476,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.99
+            <span className="dot"/>Trading Simulator V6.00
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -2909,13 +2909,14 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                           const COND_COLORS=['#00e5a0','#ffd166','#00d4ff','#ff7eb3','#9b72ff','#ff4d6d']
                           const blinkN=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.alarmas?.blinkCandles??3}catch(_){return 3}})()
                           const CTYPE_LABELS={ema_cross_up:'Cruce alcista EMA',ema_cross_down:'Cruce bajista EMA',price_above_ema:'Precio > EMA',price_below_ema:'Precio < EMA',price_above_ma:'Precio > Media',price_below_ma:'Precio < Media',rsi_above:'RSI sobre nivel',rsi_below:'RSI bajo nivel',rsi_cross_up:'RSI cruza ↑',rsi_cross_down:'RSI cruza ↓',macd_cross_up:'MACD ↑',macd_cross_down:'MACD ↓'}
-                          return visibleConds.map((c,ci)=>{
+                          return visibleConds.map((c)=>{
                             const st=symSt?.[c.id]
                             const active=st?.active===true
                             // Solo mostrar el círculo si la condición está activa
                             if(!active) return null
                             const bars=st?.bars
-                            const col=COND_COLORS[ci%COND_COLORS.length]
+                            const globalIdx=conditions.findIndex(x=>x.id===c.id)
+                            const col=COND_COLORS[(globalIdx>=0?globalIdx:0)%COND_COLORS.length]
                             const label=bars!=null?String(bars):'·'
                             const shouldBlink=active&&bars!=null&&bars<=blinkN
                             const paramStr=c.params?.ma_fast?`EMA ${c.params.ma_fast}/${c.params.ma_slow}`:c.params?.ma_period?`MA(${c.params.ma_period})`:c.params?.period?`RSI(${c.params.period}) niv.${c.params.level}`:''

@@ -25,7 +25,7 @@ export const COND_COLORS = ['#00e5a0','#ffd166','#00d4ff','#ff7eb3','#9b72ff','#
 
 const SEL = {
   background:'var(--bg3)',border:'1px solid var(--border)',
-  color:'var(--text1)',fontFamily:MONO,fontSize:10,
+  color:'var(--text)',fontFamily:MONO,fontSize:10,
   padding:'3px 5px',borderRadius:3,cursor:'pointer',outline:'none',
 }
 
@@ -35,7 +35,7 @@ function Num({ label, value, onChange, min=1, max=9999 }) {
       {label&&<span style={{fontFamily:MONO,fontSize:7,color:'var(--text3)',textTransform:'uppercase'}}>{label}</span>}
       <input type="number" value={value??''} min={min} max={max}
         onChange={e=>{const n=parseFloat(e.target.value);if(!isNaN(n))onChange(n)}}
-        style={{width:46,background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text1)',fontFamily:MONO,fontSize:10,padding:'2px 3px',borderRadius:3,textAlign:'center'}}
+        style={{width:46,background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:10,padding:'2px 3px',borderRadius:3,textAlign:'center'}}
       />
     </label>
   )
@@ -86,9 +86,13 @@ export default function WatchlistCondPanel({ conditions, condDotIds, onCondDotId
         // Auto-activate new condition in the watchlist dots
         onCondDotIdsChange([...condDotIds, saved.id])
       }
+      // onReload now returns a Promise — await it so conditions are loaded before closing
       await onReload()
       cancel()
-    } catch(e) { console.error(e) }
+    } catch(e) {
+      console.error('WatchlistCondPanel save error:', e)
+      alert(`Error guardando: ${e?.message||e}`)
+    }
     finally { setSaving(false) }
   }
 
@@ -167,7 +171,7 @@ export default function WatchlistCondPanel({ conditions, condDotIds, onCondDotId
           {/* Nombre */}
           <input type="text" value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))}
             placeholder="Nombre de la condición…"
-            style={{width:'100%',background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text1)',
+            style={{width:'100%',background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',
               fontFamily:MONO,fontSize:10,padding:'4px 7px',borderRadius:3,boxSizing:'border-box',marginBottom:6}}/>
 
           {/* Constructor SI [...] */}
@@ -211,7 +215,8 @@ export default function WatchlistCondPanel({ conditions, condDotIds, onCondDotId
             <button onClick={save} disabled={saving||!form.name.trim()||!form.type}
               style={{flex:1,fontFamily:MONO,fontSize:10,padding:'4px',borderRadius:3,
                 border:'1px solid var(--accent)',background:'rgba(0,212,255,0.1)',color:'var(--accent)',
-                cursor:saving||!form.name.trim()||!form.type?'not-allowed':'pointer'}}>
+                cursor:saving||!form.name.trim()||!form.type?'not-allowed':'pointer',
+                opacity:saving||!form.name.trim()||!form.type?0.4:1,transition:'opacity 0.15s'}}>
               {saving?'⟳…':'💾 Guardar'}
             </button>
             {editing?.id&&(
