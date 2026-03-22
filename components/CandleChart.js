@@ -1,8 +1,9 @@
 import { useRef, useEffect } from 'react'
 import { MONO, f2, fmtDate } from '../lib/utils'
 
-export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms }) {
+export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef }) {
   const containerRef=useRef(null), svgRef=useRef(null), legendRef=useRef(null), tooltipRef=useRef(null)
+  const activeLegendRef = externalLegendRef || legendRef
   const chartRef=useRef(null), candlesRef=useRef(null)
   const chartAliveRef=useRef(true)
   const rulerStart=useRef(null), rulerActiveR=useRef(rulerActive)
@@ -348,19 +349,18 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
 
       // ── Leyenda OHLC + EMAs ──
       chart.subscribeCrosshairMove(param=>{
-        const leg=legendRef.current
+        const leg=activeLegendRef.current
         if(leg){
           if(param.time){
             const b=ohlcMap[param.time],er=erMap[param.time],el=elMap[param.time]
             if(b){
               const chg=b.close-b.open,pct=(chg/b.open)*100,cc=chg>=0?'#00e5a0':'#ff4d6d'
               leg.innerHTML=
-                `<span style="color:#7a9bc0;margin-right:8px">${b.date}</span>`+
                 `<span style="margin-right:7px">O <b>${f2(b.open)}</b></span>`+
                 `<span style="margin-right:7px">H <b style="color:#00e5a0">${f2(b.high)}</b></span>`+
                 `<span style="margin-right:7px">L <b style="color:#ff4d6d">${f2(b.low)}</b></span>`+
-                `<span style="margin-right:12px">C <b>${f2(b.close)}</b></span>`+
-                `<span style="color:${cc};margin-right:14px">${chg>=0?'+':''}${f2(chg)} (${pct>=0?'+':''}${pct.toFixed(2)}%)</span>`+
+                `<span style="margin-right:10px">C <b>${f2(b.close)}</b></span>`+
+                `<span style="color:${cc};margin-right:12px">${chg>=0?'+':''}${f2(chg)} (${pct>=0?'+':''}${pct.toFixed(2)}%)</span>`+
                 (er!=null?`<span style="margin-right:7px">EMA${emaRPeriod} <b style="color:#ffd166">${f2(er)}</b></span>`:'')+
                 (el!=null?`<span>EMA${emaLPeriod} <b style="color:#ff4d6d">${f2(el)}</b></span>`:'')
             }
@@ -702,7 +702,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
 
   return (
     <div style={{position:'relative'}}>
-      <div ref={legendRef} style={{position:'absolute',top:8,left:8,zIndex:10,fontFamily:MONO,fontSize:12,color:'#7a9bc0',background:'rgba(8,12,20,0.82)',padding:'4px 10px',borderRadius:4,pointerEvents:'none',whiteSpace:'nowrap'}}/>
+      <div ref={legendRef} style={{position:'absolute',top:8,left:8,zIndex:10,fontFamily:MONO,fontSize:12,color:'#7a9bc0',background:'rgba(8,12,20,0.82)',padding:'4px 10px',borderRadius:4,pointerEvents:'none',whiteSpace:'nowrap',display:externalLegendRef?'none':'block'}}/>
       <div ref={containerRef} style={{minHeight:480}}/>
       <svg ref={svgRef} style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',pointerEvents:'none',zIndex:5}}/>
       <div ref={tooltipRef} style={{position:'absolute',display:'none',pointerEvents:'none',background:'rgba(8,12,20,0.96)',border:'1px solid #00e5a0',borderRadius:6,padding:'8px 12px',fontFamily:MONO,fontSize:12,color:'#e2eaf5',zIndex:15,minWidth:200,boxShadow:'0 4px 20px rgba(0,0,0,0.5)'}}/>

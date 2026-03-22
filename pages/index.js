@@ -517,6 +517,7 @@ export default function Home() {
   const [indivOccMode,setIndivOccMode]=useState('compound')  // independent filter for indiv occupancy chart
 
   const debounceRef=useRef(null),chartApiRef=useRef(null),contentRef=useRef(null)
+  const chartLegendRef=useRef(null)   // external legend ref for integrated chart info bar
 
   const mcChartApiRef=useRef(null)
 
@@ -2397,7 +2398,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.94</title>
+        <title>Trading Simulator V5.95</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2474,7 +2475,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.94
+            <span className="dot"/>Trading Simulator V5.95
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -3496,86 +3497,107 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 {/* Columna principal */}
                 <div ref={contentRef} style={{flex:1,overflowY:'auto'}}>
                   {/* Gráfico de velas */}
-                  <div className="chart-wrap" ref={chartWrapRef} onContextMenu={e=>openCtx(e,'chart')}>
-                    <div className="chart-header" style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',fontSize:14}}>
-                      {/* Estrella favorito del activo activo */}
-                      {(()=>{
-                        const wItem=watchlist.find(w=>w.symbol===simbolo)
-                        if(!wItem) return null
-                        return(
-                          <span onClick={async()=>{await upsertWatchlistItem({...wItem,favorite:!wItem.favorite});reloadWatchlist()}}
-                            title={wItem.favorite?'Quitar favorito':'Marcar favorito'}
-                            style={{cursor:'pointer',fontSize:16,color:wItem.favorite?'#ffd166':'#3d5a7a',flexShrink:0,lineHeight:1}}>
-                            {wItem.favorite?'★':'☆'}
-                          </span>
-                        )
-                      })()}
-                      <div className="chart-title" style={{cursor:'pointer'}} onClick={()=>window.open(`https://www.tradingview.com/chart/?symbol=${tvSym(simbolo)}`,'_blank')} title={`Abrir ${simbolo} en TradingView ↗`}>{simbolo}</div>
-                      {/* Botón + Watchlist — junto al ticker */}
-                      <button onClick={newItem} title="Añadir a watchlist"
-                        style={{background:'rgba(0,212,255,0.06)',border:'1px solid rgba(0,212,255,0.28)',
-                          color:'#00d4ff',fontFamily:MONO,fontSize:13,padding:'1px 7px',borderRadius:4,
-                          cursor:'pointer',lineHeight:1,flexShrink:0}}>
-                        +
-                      </button>
-                      {/* Nombre del activo */}
-                      <div style={{fontFamily:MONO,fontSize:12,color:'#7a9bc0',fontWeight:400}}>{lookupName(simbolo)}</div>
-                      <div className="chart-price">{fmt(result.meta?.ultimoPrecio,2)}</div>
-                      <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:6}}>
+                  <div className="chart-wrap" ref={chartWrapRef} onContextMenu={e=>openCtx(e,'chart')} style={{padding:0,borderBottom:'1px solid var(--border)'}}>
+                    <div style={{position:'relative'}}>
+                      {/* ── Barra de info integrada — una sola fila sobre el gráfico ── */}
+                      <div style={{position:'absolute',top:0,left:0,right:0,zIndex:11,height:30,
+                        display:'flex',alignItems:'center',gap:5,padding:'0 8px',
+                        background:'rgba(8,12,20,0.92)',backdropFilter:'blur(4px)',
+                        borderBottom:'1px solid rgba(26,45,69,0.6)',
+                        pointerEvents:'none',fontFamily:MONO,fontSize:11,overflow:'hidden'}}>
+                        {/* ★ favorito */}
+                        {(()=>{
+                          const wItem=watchlist.find(w=>w.symbol===simbolo)
+                          if(!wItem) return null
+                          return(
+                            <span onClick={async(e)=>{e.stopPropagation();await upsertWatchlistItem({...wItem,favorite:!wItem.favorite});reloadWatchlist()}}
+                              title={wItem.favorite?'Quitar favorito':'Marcar favorito'}
+                              style={{cursor:'pointer',fontSize:12,color:wItem.favorite?'#ffd166':'#3d5a7a',
+                                flexShrink:0,lineHeight:1,pointerEvents:'all'}}>
+                              {wItem.favorite?'★':'☆'}
+                            </span>
+                          )
+                        })()}
+                        {/* Ticker — clic abre TradingView */}
+                        <span onClick={()=>window.open(`https://www.tradingview.com/chart/?symbol=${tvSym(simbolo)}`,'_blank')}
+                          title={`Abrir ${simbolo} en TradingView ↗`}
+                          style={{cursor:'pointer',fontWeight:700,color:'#e2eaf5',fontSize:13,
+                            flexShrink:0,pointerEvents:'all',userSelect:'none'}}>
+                          {simbolo}
+                        </span>
+                        {/* + añadir a watchlist */}
+                        <button onClick={newItem} title="Añadir a watchlist"
+                          style={{pointerEvents:'all',background:'rgba(0,212,255,0.06)',
+                            border:'1px solid rgba(0,212,255,0.28)',color:'#00d4ff',
+                            fontFamily:MONO,fontSize:11,padding:'0 5px',borderRadius:3,
+                            cursor:'pointer',lineHeight:'18px',flexShrink:0,height:18}}>+</button>
+                        {/* OHLC dinámico — CandleChart escribe aquí via externalLegendRef */}
+                        <span ref={chartLegendRef} style={{flex:1,minWidth:0,overflow:'hidden',
+                          whiteSpace:'nowrap',textOverflow:'ellipsis'}}/>
                         {/* Estrategia activa */}
                         {stratName&&(
-                          <div style={{
-                            fontFamily:MONO,fontSize:10,color:'#7a9bc0',
+                          <span style={{flexShrink:0,fontSize:9,color:'#7a9bc0',
                             background:'rgba(13,21,32,0.85)',border:'1px solid #1a2d45',
-                            borderRadius:4,padding:'2px 8px',display:'flex',alignItems:'center',gap:5,
-                            maxWidth:180,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'
-                          }}>
-                            <span style={{
-                              width:7,height:7,borderRadius:'50%',flexShrink:0,
-                              background:stratColor||'#00d4ff',
-                              boxShadow:`0 0 5px ${stratColor||'#00d4ff'}88`
-                            }}/>
-                            <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:'#a8ccdf'}}>
-                              {stratName}
-                            </span>
-                          </div>
+                            borderRadius:3,padding:'1px 6px',display:'flex',alignItems:'center',gap:3,
+                            maxWidth:130,overflow:'hidden'}}>
+                            <span style={{width:6,height:6,borderRadius:'50%',flexShrink:0,
+                              background:stratColor||'#00d4ff',boxShadow:`0 0 4px ${stratColor||'#00d4ff'}88`}}/>
+                            <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{stratName}</span>
+                          </span>
                         )}
-                        {rulerOn&&<span style={{fontFamily:MONO,fontSize:10,color:'#ffd166'}}>📏 Regla ON · Ctrl=imán · dbl-clic=borrar</span>}
-                        {/* Botón Fit All */}
+                        {rulerOn&&<span style={{fontSize:9,color:'#ffd166',flexShrink:0}}>Ctrl=imán · dbl=borrar</span>}
+                        {/* Fit/Recent */}
                         <button onClick={()=>{
                             const s=JSON.parse(localStorage.getItem('v50_settings')||'{}')
-                            if(chartViewFull){
-                              // Switch to recent view
-                              const months=s?.chart?.recentMonths??3
-                              chartApiRef.current?.showRecent(months,0)
-                              setChartViewFull(false)
-                            } else {
-                              // Switch to full view
-                              chartApiRef.current?.fitAll()
-                              setChartViewFull(true)
-                            }
+                            if(chartViewFull){chartApiRef.current?.showRecent(s?.chart?.recentMonths??3,0);setChartViewFull(false)}
+                            else{chartApiRef.current?.fitAll();setChartViewFull(true)}
                           }}
                           title={chartViewFull?'Ver últimos 3 meses':'Ver período completo'}
-                          style={{background:chartViewFull?'rgba(0,212,255,0.08)':'rgba(0,229,160,0.08)',
-                            border:`1px solid ${chartViewFull?'#1e3a52':'#0a5a42'}`,
+                          style={{pointerEvents:'all',background:'rgba(8,12,20,0.7)',border:'1px solid #1e3a52',
                             color:chartViewFull?'#00d4ff':'#00e5a0',
-                            fontFamily:MONO,fontSize:10,padding:'3px 8px',borderRadius:4,cursor:'pointer',whiteSpace:'nowrap'}}>
-                          {chartViewFull?'⊞ Todo':'⊡ Reciente'}
+                            fontFamily:MONO,fontSize:9,padding:'2px 5px',borderRadius:3,cursor:'pointer',
+                            flexShrink:0,lineHeight:1}}>
+                          {chartViewFull?'⊞':'⊡'}
                         </button>
-                        {/* Botones scroll ◀ ▶ */}
-                        <div style={{display:'flex',gap:2}}>
-                          {[['◀',10],['▶',-10]].map(([lbl,bars])=>(
-                            <button key={lbl} onClick={()=>chartApiRef.current?.scrollBy(bars)}
-                              title={bars>0?'Desplazar izquierda':'Desplazar derecha'}
-                              style={{background:'rgba(13,21,32,0.85)',border:'1px solid #1a2d45',color:'#5a8aaa',
-                                fontFamily:MONO,fontSize:11,padding:'2px 7px',borderRadius:4,cursor:'pointer',lineHeight:1}}>
-                              {lbl}
+                        {/* ◀ ▶ */}
+                        {[['◀',10],['▶',-10]].map(([lbl,bars])=>(
+                          <button key={lbl} onClick={()=>chartApiRef.current?.scrollBy(bars)}
+                            title={bars>0?'Izquierda':'Derecha'}
+                            style={{pointerEvents:'all',background:'rgba(8,12,20,0.7)',border:'1px solid #1a2d45',
+                              color:'#5a8aaa',fontFamily:MONO,fontSize:10,padding:'1px 5px',
+                              borderRadius:3,cursor:'pointer',lineHeight:1,flexShrink:0}}>
+                            {lbl}
+                          </button>
+                        ))}
+                        {/* Regla */}
+                        <button onClick={()=>setRulerOn(r=>!r)}
+                          title={rulerOn?'Desactivar regla':'Activar regla de medición'}
+                          style={{pointerEvents:'all',
+                            background:rulerOn?'rgba(255,209,102,0.18)':'rgba(8,12,20,0.7)',
+                            border:`1px solid ${rulerOn?'#ffd166':'#2a3d55'}`,
+                            color:rulerOn?'#ffd166':'#5a7a95',
+                            fontFamily:MONO,fontSize:10,padding:'2px 5px',borderRadius:3,cursor:'pointer',
+                            display:'flex',alignItems:'center',gap:2,lineHeight:1,flexShrink:0}}>
+                          📏{rulerOn&&<span style={{fontSize:9}}> ON</span>}
+                        </button>
+                        {/* % / All — label mode */}
+                        {(()=>{
+                          const cfgs=[{label:'🏷',active:false},{label:'%',active:true},{label:'All',active:true}]
+                          const c=cfgs[labelMode]
+                          return(
+                            <button onClick={()=>setLabelMode(l=>(l+1)%3)}
+                              title={['Sin etiquetas','Solo %','% + € + días'][labelMode]}
+                              style={{pointerEvents:'all',
+                                background:c.active?'rgba(0,229,160,0.12)':'rgba(8,12,20,0.7)',
+                                border:`1px solid ${c.active?'rgba(0,229,160,0.5)':'#2a3d55'}`,
+                                color:c.active?'#00e5a0':'#5a7a95',
+                                fontFamily:MONO,fontSize:10,padding:'2px 5px',borderRadius:3,cursor:'pointer',
+                                lineHeight:1,flexShrink:0}}>
+                              {c.label}
                             </button>
-                          ))}
-                        </div>
+                          )
+                        })()}
                       </div>
-                    </div>
-                    <div style={{position:'relative'}}>
                       <CandleChart
                         data={result.chartData} emaRPeriod={emaR} emaLPeriod={emaL}
                         trades={result.trades||[]} maxDD={metrics?.ddSimple||0}
@@ -3587,41 +3609,10 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         savedRangeRef={savedRangeRef}
                         syncRef={chartSyncRef}
                         chartHeight={candleH}
+                        externalLegendRef={chartLegendRef}
                         priceAlarms={alarms.filter(a=>a.condition==='price_level'&&(a.symbol||'').toUpperCase()===(simbolo||'').toUpperCase())}
                         tlOpenTrades={tlTrades.filter(t=>t.status==='open'&&t.fill_type!=='sell'&&(t.symbol||'').toUpperCase()===(simbolo||'').toUpperCase())}
                       />
-                      {/* Overlay Regla + % — esquina superior derecha del gráfico */}
-                      <div style={{position:'absolute',top:6,right:8,zIndex:10,display:'flex',gap:4,pointerEvents:'none'}}>
-                        <button onClick={()=>setRulerOn(r=>!r)}
-                          title={rulerOn?'Desactivar regla (Ctrl=imán · dbl-clic=borrar)':'Activar regla de medición'}
-                          style={{pointerEvents:'all',
-                            background:rulerOn?'rgba(255,209,102,0.18)':'rgba(8,12,20,0.72)',
-                            border:`1px solid ${rulerOn?'#ffd166':'#2a3d55'}`,
-                            color:rulerOn?'#ffd166':'#5a7a95',
-                            fontFamily:MONO,fontSize:10,padding:'3px 7px',borderRadius:4,cursor:'pointer',
-                            backdropFilter:'blur(6px)',display:'flex',alignItems:'center',gap:3,lineHeight:1}}>
-                          📏{rulerOn&&<span style={{fontSize:9}}> ON</span>}
-                        </button>
-                        {(()=>{
-                          const cfgs=[
-                            {label:'🏷',title:'Sin etiquetas',active:false},
-                            {label:'%',title:'Solo porcentaje',active:true},
-                            {label:'All',title:'% + € + días',active:true},
-                          ]
-                          const c=cfgs[labelMode]
-                          return(
-                            <button onClick={()=>setLabelMode(l=>(l+1)%3)} title={c.title}
-                              style={{pointerEvents:'all',
-                                background:c.active?'rgba(0,229,160,0.12)':'rgba(8,12,20,0.72)',
-                                border:`1px solid ${c.active?'rgba(0,229,160,0.5)':'#2a3d55'}`,
-                                color:c.active?'#00e5a0':'#5a7a95',
-                                fontFamily:MONO,fontSize:10,padding:'3px 7px',borderRadius:4,cursor:'pointer',
-                                backdropFilter:'blur(6px)',lineHeight:1}}>
-                              {c.label}
-                            </button>
-                          )
-                        })()}
-                      </div>
                     </div>
                     {/* Drag handle — resize candle chart */}
                     <div onMouseDown={e=>{candleResizing.current=true;candleStartY.current=e.clientY;candleStartH.current=candleH;document.body.style.cursor='row-resize';document.body.style.userSelect='none'}}
