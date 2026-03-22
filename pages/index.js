@@ -1127,13 +1127,16 @@ export default function Home() {
     return fetchConditions().then(d=>setConditions(d||[])).catch(()=>{}).finally(()=>setCondLoading(false))
   }
 
-  // Sync colors saved inside params.color (Supabase source) into local condColors
+  // Sync colors from Supabase (c.color column, fallback to legacy params.color) into local condColors
   useEffect(()=>{
     if(!conditions.length) return
     setCondColorsState(prev=>{
       const next={...prev}
       let changed=false
-      conditions.forEach(c=>{ if(c.params?.color&&!next[c.id]){next[c.id]=c.params.color;changed=true} })
+      conditions.forEach(c=>{
+        const col = c.color || c.params?.color  // c.color = dedicated column (new); params.color = legacy
+        if(col&&!next[c.id]){next[c.id]=col;changed=true}
+      })
       if(!changed) return prev
       try{const s=JSON.parse(localStorage.getItem('v50_settings')||'{}');if(!s.watchlist)s.watchlist={};s.watchlist.condColors=next;localStorage.setItem('v50_settings',JSON.stringify(s))}catch{}
       return next
@@ -2422,7 +2425,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V6.04</title>
+        <title>Trading Simulator V6.05</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2499,7 +2502,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V6.04
+            <span className="dot"/>Trading Simulator V6.05
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}

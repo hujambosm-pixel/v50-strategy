@@ -52,7 +52,7 @@ export default function WatchlistCondPanel({ conditions, condDotIds, onCondDotId
   function openEdit(c, e) {
     e?.stopPropagation()
     const rev = CREV[c.type]||[]
-    const existingColor = condColors[c.id] || c.params?.color || ''
+    const existingColor = condColors[c.id] || c.color || c.params?.color || ''
     setForm({ name:c.name||'', ind:rev[0]||'', op:rev[1]||'', params:{...c.params||{}}, type:c.type||'', color:existingColor })
     setEditing(c)
     setOpen(true)
@@ -79,11 +79,10 @@ export default function WatchlistCondPanel({ conditions, condDotIds, onCondDotId
     if (!form.name.trim()||!form.type) return
     setSaving(true)
     try {
-      // Include color inside params so it persists in Supabase
+      // color is a top-level column in Supabase (not inside params)
       const params = {...(form.params||{})}
-      if (form.color) params.color = form.color
-      else delete params.color
-      const payload = { name:form.name.trim(), type:form.type, params, active:true }
+      delete params.color  // clean up legacy storage if present
+      const payload = { name:form.name.trim(), type:form.type, params, color:form.color||null, active:true }
       let savedId = editing?.id
       if (editing?.id) {
         const { updateCondition } = await import('../lib/conditions')
