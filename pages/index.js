@@ -2398,7 +2398,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.95</title>
+        <title>Trading Simulator V5.96</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2412,8 +2412,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
             --font-family:"JetBrains Mono","Fira Code","IBM Plex Mono",monospace;
           }
           body { font-size:14px; color:#e0eeff; }
-          /* ── Nav icons — force 20px regardless of any inheritance ── */
-          .nav-item-icon { font-size:20px !important; width:22px !important; flex-shrink:0 !important; text-align:center !important; display:inline-block !important; line-height:1 !important; }
+          /* ── Nav icons — force 16px regardless of any inheritance ── */
+          .nav-item-icon { font-size:16px !important; width:18px !important; flex-shrink:0 !important; text-align:center !important; display:inline-block !important; line-height:1 !important; }
           /* ── Sidebar ── */
           .sidebar { font-size:13px; }
           .sidebar .sidebar-title { color:#f5fbff !important; font-weight:700; font-size:12px !important; letter-spacing:0.08em; text-transform:uppercase; padding-bottom:4px; border-bottom:1px solid #1a3050; margin-bottom:6px; }
@@ -2475,7 +2475,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.95
+            <span className="dot"/>Trading Simulator V5.96
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -2530,7 +2530,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
             onMouseEnter={()=>setNavExpanded(true)}
             onMouseLeave={()=>setNavExpanded(false)}
             onWheel={e=>{if(e.ctrlKey){e.preventDefault();handlePanelScaleWheel('nav',e)}}}
-            style={{width:navExpanded?Math.round(148*(panelScale.nav||1)):Math.round(40*(panelScale.nav||1)),transition:'width 0.18s ease',display:'flex',flexDirection:'column',
+            style={{width:navExpanded?Math.round(140*(panelScale.nav||1)):Math.round(34*(panelScale.nav||1)),transition:'width 0.18s ease',display:'flex',flexDirection:'column',
               background:'var(--bg2)',borderRight:'1px solid var(--border)',flexShrink:0,overflow:'hidden',
               zIndex:15,paddingTop:6,paddingBottom:6}}
           >
@@ -2548,7 +2548,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   background:sidePanel===item.id?'var(--bg3)':'transparent',
                   border:'none',borderLeft:sidePanel===item.id?`2px solid ${item.accent||'var(--accent)'}`:'2px solid transparent',
                   color:sidePanel===item.id?(item.accent||'var(--accent)'):'var(--text3)',
-                  fontFamily:MONO,fontSize:20,cursor:'pointer',whiteSpace:'nowrap',textAlign:'left',
+                  fontFamily:MONO,fontSize:16,cursor:'pointer',whiteSpace:'nowrap',textAlign:'left',
                   transition:'background 0.12s,color 0.12s',position:'relative'}}
               >
                 <span className="nav-item-icon"
