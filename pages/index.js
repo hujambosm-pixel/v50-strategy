@@ -528,6 +528,7 @@ export default function Home() {
   const [tlMultiSel,setTlMultiSel]=useState(new Set()) // ids seleccionados para borrado
   const [tlMultiMode,setTlMultiMode]=useState(false)   // modo multiselección activo
   const [tlTab,setTlTab]=useState('dashboard')          // 'ops'|'import'|'export'|'dashboard'|'capital'
+  const [tlResumenCollapsed,setTlResumenCollapsed]=useState(false)
   // ── Capital contributions ──
   const [contributions,setContributions]=useState([])
   const [showWithContribs,setShowWithContribs]=useState(false)
@@ -2392,7 +2393,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.86</title>
+        <title>Trading Simulator V5.87</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2467,7 +2468,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.86
+            <span className="dot"/>Trading Simulator V5.87
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5155,7 +5156,26 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 )}
                 </div>
                 {/* COLUMNA DERECHA — métricas siempre + detalle trade */}
-                <div style={{width:270,flexShrink:0,borderLeft:'1px solid var(--border)',background:'var(--bg2)',display:'flex',flexDirection:'column',overflow:'hidden'}}>
+                <div style={{width:tlResumenCollapsed?28:rightPanelW,flexShrink:0,borderLeft:'1px solid var(--border)',background:'var(--bg2)',display:'flex',flexDirection:'column',overflow:'hidden',position:'relative',transition:'width 0.18s ease'}}>
+                  {/* Drag handle — igual que panel de estrategias */}
+                  {!tlResumenCollapsed&&<div
+                    onMouseDown={e=>{rightResizing.current=true;rightStartX.current=e.clientX;rightStartW.current=rightPanelW;document.body.style.cursor='col-resize';document.body.style.userSelect='none'}}
+                    style={{position:'absolute',top:0,left:0,width:4,height:'100%',cursor:'col-resize',zIndex:20,background:'transparent',transition:'background 0.15s'}}
+                    onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.25)'}
+                    onMouseOut={e=>e.currentTarget.style.background='transparent'}/>}
+                  {/* Tira colapsada con botón de reapertura */}
+                  {tlResumenCollapsed&&(
+                    <button onClick={()=>setTlResumenCollapsed(false)} title="Expandir Resumen"
+                      style={{width:'100%',height:'100%',background:'transparent',border:'none',cursor:'pointer',
+                        display:'flex',alignItems:'center',justifyContent:'center',color:'#3d5a7a',
+                        fontSize:14,padding:0,flexDirection:'column',gap:6}}
+                      onMouseOver={e=>{e.currentTarget.style.color='#7a9bc0';e.currentTarget.style.background='rgba(255,255,255,0.02)'}}
+                      onMouseOut={e=>{e.currentTarget.style.color='#3d5a7a';e.currentTarget.style.background='transparent'}}>
+                      <span style={{fontSize:10}}>◀</span>
+                    </button>
+                  )}
+                  {/* Contenido del panel (oculto cuando colapsado) */}
+                  {!tlResumenCollapsed&&<>
                   {/* ── MÉTRICAS SIEMPRE VISIBLES — incluye flotantes ── */}
                   {(()=>{
                     const liveFloatEur=(t)=>{
@@ -5359,14 +5379,26 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       <div className="tl-resumen" onContextMenu={e=>{e.stopPropagation();openCtx(e,'tl_resumen')}} style={{flex:tlSelected?'0 0 auto':1,overflowY:'auto',borderBottom:tlSelected?'1px solid var(--border)':'none'}}>
                         <div style={{padding:'4px 6px 4px 10px',borderBottom:'1px solid var(--border)',fontFamily:MONO,fontSize:8,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
                           <span>Resumen</span>
-                          {result&&metrics&&sidePanel!=='multi'&&sidePanel!=='tradelog'&&(
-                            <button onClick={()=>setMetricsLayout(l=>l==='grid'?'panel':l==='panel'?'multi':'grid')}
-                              title={metricsLayout==='grid'?'Panel simple':metricsLayout==='panel'?'Multi-columna':'Grid'}
-                              style={{background:'transparent',border:'1px solid #1a2d45',color:'#3d5a7a',fontFamily:MONO,fontSize:9,
-                                padding:'2px 6px',borderRadius:3,cursor:'pointer',letterSpacing:'normal',textTransform:'none'}}>
-                              {metricsLayout==='grid'?'☰':metricsLayout==='panel'?'⊞':'⊟'}
-                            </button>
-                          )}
+                          <div style={{display:'flex',gap:4,alignItems:'center'}}>
+                            {result&&metrics&&sidePanel!=='multi'&&sidePanel!=='tradelog'&&(
+                              <button onClick={()=>setMetricsLayout(l=>l==='grid'?'panel':l==='panel'?'multi':'grid')}
+                                title={metricsLayout==='grid'?'Panel simple':metricsLayout==='panel'?'Multi-columna':'Grid'}
+                                style={{background:'transparent',border:'1px solid #1a2d45',color:'#3d5a7a',fontFamily:MONO,fontSize:9,
+                                  padding:'2px 6px',borderRadius:3,cursor:'pointer',letterSpacing:'normal',textTransform:'none'}}>
+                                {metricsLayout==='grid'?'☰':metricsLayout==='panel'?'⊞':'⊟'}
+                              </button>
+                            )}
+                            {sidePanel==='tradelog'&&(
+                              <button onClick={()=>setTlResumenCollapsed(true)} title="Contraer panel"
+                                style={{background:'transparent',border:'1px solid #1a2d45',color:'#3d5a7a',fontFamily:MONO,
+                                  fontSize:9,padding:'2px 6px',borderRadius:3,cursor:'pointer',
+                                  letterSpacing:'normal',textTransform:'none',lineHeight:1}}
+                                onMouseOver={e=>{e.currentTarget.style.borderColor='#4a7fa0';e.currentTarget.style.color='#7a9bc0'}}
+                                onMouseOut={e=>{e.currentTarget.style.borderColor='#1a2d45';e.currentTarget.style.color='#3d5a7a'}}>
+                                ▶
+                              </button>
+                            )}
+                          </div>
                         </div>
                         <table style={{width:'100%',borderCollapse:'collapse'}}>
                           <tbody>
@@ -5380,12 +5412,10 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   })()}
                   {/* ── DETALLE TRADE SELECCIONADO ── */}
                   {tlSelected&&(
-
                     <div style={{flex:1,overflowY:'auto'}}>
-
                     </div>
                   )}
-                </div>
+                </>
               </div>
             )}
           </div>
