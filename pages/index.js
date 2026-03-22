@@ -2392,7 +2392,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.78</title>
+        <title>Trading Simulator V5.79</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2467,7 +2467,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.78
+            <span className="dot"/>Trading Simulator V5.79
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4914,7 +4914,15 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       })
                       // Ensure today point reflects current float P&L
                       investMap[today]={capital:Math.max(0,runCap), profit:runPnl+floatPnl}
-                      const investData = Object.keys(investMap).sort().map(d=>({date:d,...investMap[d]}))
+                      const investDataRaw = Object.keys(investMap).sort().map(d=>({date:d,...investMap[d]}))
+                      // V5.79: clip invest chart data to active year/month filter (same logic as equity chart)
+                      const investData = (tlFilterYear||tlFilterMonth)
+                        ? investDataRaw.filter(p=>{
+                            if(tlFilterYear&&!p.date.startsWith(tlFilterYear)) return false
+                            if(tlFilterMonth&&p.date.slice(5,7)!==tlFilterMonth) return false
+                            return true
+                          })
+                        : investDataRaw
                       const wins = closed.filter(t=>(t.pnl_eur||0)>=0)
                       const losses = closed.filter(t=>(t.pnl_eur||0)<0)
                       const totalPnl = closed.reduce((s,t)=>s+(t.pnl_eur||0),0)+floatPnl
