@@ -2393,7 +2393,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.87.1</title>
+        <title>Trading Simulator V5.88</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2468,7 +2468,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.87.1
+            <span className="dot"/>Trading Simulator V5.88
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -2492,32 +2492,6 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
 
           {/* Botones derecha */}
           <div style={{display:'flex',alignItems:'center',gap:8,marginLeft:'auto',padding:'0 12px'}}>
-            {sidePanel!=='tradelog'&&<button onClick={()=>setRulerOn(r=>!r)} style={{
-              background:rulerOn?'rgba(255,209,102,0.15)':'rgba(13,21,32,0.9)',
-              border:`1px solid ${rulerOn?'#ffd166':'#2d3748'}`,
-              color:rulerOn?'#ffd166':'#7a9bc0',
-              fontFamily:MONO,fontSize:11,padding:'3px 9px',borderRadius:4,cursor:'pointer',
-              display:'flex',alignItems:'center',gap:4
-            }}>
-              📏 {rulerOn?'ON':'Regla'}
-            </button>}
-            {sidePanel!=='tradelog'&&(()=>{
-              const modes=[
-                {label:'🏷 OFF',bg:'rgba(13,21,32,0.9)',border:'#2d3748',color:'#7a9bc0'},
-                {label:'🏷 %',bg:'rgba(0,229,160,0.08)',border:'#00e5a0',color:'#00e5a0'},
-                {label:'🏷 Full',bg:'rgba(0,229,160,0.15)',border:'#00e5a0',color:'#00e5a0'},
-              ]
-              const m=modes[labelMode]
-              return(
-                <button onClick={()=>setLabelMode(l=>(l+1)%3)} title={['Sin etiquetas','Solo porcentaje','Porcentaje + euros + días'][labelMode]} style={{
-                  background:m.bg, border:`1px solid ${m.border}`, color:m.color,
-                  fontFamily:MONO,fontSize:11,padding:'3px 9px',borderRadius:4,cursor:'pointer',
-                  display:'flex',alignItems:'center',gap:4
-                }}>
-                  {m.label}
-                </button>
-              )
-            })()}
             {sidePanel==='tradelog'&&(tlUseLocal()
               ? <span style={{fontFamily:MONO,fontSize:9,padding:'3px 8px',borderRadius:4,
                   background:'rgba(255,209,102,0.1)',border:'1px solid rgba(255,209,102,0.3)',color:'#ffd166'}}>
@@ -3523,6 +3497,13 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         )
                       })()}
                       <div className="chart-title" style={{cursor:'pointer'}} onClick={()=>setSymSearchOpen(true)} title="Buscar símbolo">{simbolo}</div>
+                      {/* Botón + Watchlist — junto al ticker */}
+                      <button onClick={newItem} title="Añadir a watchlist"
+                        style={{background:'rgba(0,212,255,0.06)',border:'1px solid rgba(0,212,255,0.28)',
+                          color:'#00d4ff',fontFamily:MONO,fontSize:13,padding:'1px 7px',borderRadius:4,
+                          cursor:'pointer',lineHeight:1,flexShrink:0}}>
+                        +
+                      </button>
                       {/* Nombre del activo */}
                       <div style={{fontFamily:MONO,fontSize:12,color:'#7a9bc0',fontWeight:400}}>{lookupName(simbolo)}</div>
                       <div className="chart-price">{fmt(result.meta?.ultimoPrecio,2)}</div>
@@ -3579,28 +3560,56 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                             </button>
                           ))}
                         </div>
-                        {/* Botón Añadir activo */}
-                        <button onClick={newItem}
-                          title="Añadir activo a la watchlist"
-                          style={{background:'rgba(0,212,255,0.08)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:13,padding:'2px 8px',borderRadius:4,cursor:'pointer',lineHeight:1}}>
-                          +
-                        </button>
                       </div>
                     </div>
-                    <CandleChart
-                      data={result.chartData} emaRPeriod={emaR} emaLPeriod={emaL}
-                      trades={result.trades||[]} maxDD={metrics?.ddSimple||0}
-                      labelMode={labelMode} rulerActive={rulerOn}
-                      onChartReady={api=>{chartApiRef.current=api}}
-                      onPriceAlarm={sidePanel!=='watchlist'?price=>setPriceAlarmDlg({price,symbol:simbolo}):null}
-                      onAlarmPriceDrag={onAlarmPriceDrag}
-                      ackedAlarms={ackedAlarms}
-                      savedRangeRef={savedRangeRef}
-                      syncRef={chartSyncRef}
-                      chartHeight={candleH}
-                      priceAlarms={alarms.filter(a=>a.condition==='price_level'&&(a.symbol||'').toUpperCase()===(simbolo||'').toUpperCase())}
-                      tlOpenTrades={tlTrades.filter(t=>t.status==='open'&&t.fill_type!=='sell'&&(t.symbol||'').toUpperCase()===(simbolo||'').toUpperCase())}
-                    />
+                    <div style={{position:'relative'}}>
+                      <CandleChart
+                        data={result.chartData} emaRPeriod={emaR} emaLPeriod={emaL}
+                        trades={result.trades||[]} maxDD={metrics?.ddSimple||0}
+                        labelMode={labelMode} rulerActive={rulerOn}
+                        onChartReady={api=>{chartApiRef.current=api}}
+                        onPriceAlarm={sidePanel!=='watchlist'?price=>setPriceAlarmDlg({price,symbol:simbolo}):null}
+                        onAlarmPriceDrag={onAlarmPriceDrag}
+                        ackedAlarms={ackedAlarms}
+                        savedRangeRef={savedRangeRef}
+                        syncRef={chartSyncRef}
+                        chartHeight={candleH}
+                        priceAlarms={alarms.filter(a=>a.condition==='price_level'&&(a.symbol||'').toUpperCase()===(simbolo||'').toUpperCase())}
+                        tlOpenTrades={tlTrades.filter(t=>t.status==='open'&&t.fill_type!=='sell'&&(t.symbol||'').toUpperCase()===(simbolo||'').toUpperCase())}
+                      />
+                      {/* Overlay Regla + % — esquina superior derecha del gráfico */}
+                      <div style={{position:'absolute',top:6,right:8,zIndex:10,display:'flex',gap:4,pointerEvents:'none'}}>
+                        <button onClick={()=>setRulerOn(r=>!r)}
+                          title={rulerOn?'Desactivar regla (Ctrl=imán · dbl-clic=borrar)':'Activar regla de medición'}
+                          style={{pointerEvents:'all',
+                            background:rulerOn?'rgba(255,209,102,0.18)':'rgba(8,12,20,0.72)',
+                            border:`1px solid ${rulerOn?'#ffd166':'#2a3d55'}`,
+                            color:rulerOn?'#ffd166':'#5a7a95',
+                            fontFamily:MONO,fontSize:10,padding:'3px 7px',borderRadius:4,cursor:'pointer',
+                            backdropFilter:'blur(6px)',display:'flex',alignItems:'center',gap:3,lineHeight:1}}>
+                          📏{rulerOn&&<span style={{fontSize:9}}> ON</span>}
+                        </button>
+                        {(()=>{
+                          const cfgs=[
+                            {label:'🏷',title:'Sin etiquetas',active:false},
+                            {label:'%',title:'Solo porcentaje',active:true},
+                            {label:'All',title:'% + € + días',active:true},
+                          ]
+                          const c=cfgs[labelMode]
+                          return(
+                            <button onClick={()=>setLabelMode(l=>(l+1)%3)} title={c.title}
+                              style={{pointerEvents:'all',
+                                background:c.active?'rgba(0,229,160,0.12)':'rgba(8,12,20,0.72)',
+                                border:`1px solid ${c.active?'rgba(0,229,160,0.5)':'#2a3d55'}`,
+                                color:c.active?'#00e5a0':'#5a7a95',
+                                fontFamily:MONO,fontSize:10,padding:'3px 7px',borderRadius:4,cursor:'pointer',
+                                backdropFilter:'blur(6px)',lineHeight:1}}>
+                              {c.label}
+                            </button>
+                          )
+                        })()}
+                      </div>
+                    </div>
                     {/* Drag handle — resize candle chart */}
                     <div onMouseDown={e=>{candleResizing.current=true;candleStartY.current=e.clientY;candleStartH.current=candleH;document.body.style.cursor='row-resize';document.body.style.userSelect='none'}}
                       style={{height:6,cursor:'row-resize',background:'transparent',transition:'background 0.15s',
