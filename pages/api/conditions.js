@@ -147,8 +147,6 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true })
   }
 
-  if (req.method !== 'POST') return res.status(405).end()
-
   // ── PATCH — actualizar condición (id en query) ──
   if (req.method === 'PATCH') {
     const { id } = req.query
@@ -165,6 +163,8 @@ export default async function handler(req, res) {
     const rows = await r.json()
     return res.status(200).json(Array.isArray(rows) ? rows[0] : rows)
   }
+
+  if (req.method !== 'POST') return res.status(405).end()
 
   // ── POST — crear condición ──
   const { name, description, type, params, source, role, color } = req.body

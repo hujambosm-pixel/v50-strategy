@@ -419,11 +419,9 @@ export default function Home() {
   const [alarmSaving,setAlarmSaving]=useState(false)
   // Buscador global watchlist
   const [wlSearch,setWlSearch]=useState('')
-  const [selectedAlarmIds,setSelectedAlarmIds]=useState([])  // IDs de alarmas activas en filtro
   const [onlyFavs,setOnlyFavs]=useState(false)  // filtro solo favoritos
-  const [condFilterActive,setCondFilterActive]=useState(false) // filtro por condición activa
+  const [condFilterActive,setCondFilterActive]=useState(false) // filtro: solo activos con alertas disparadas
   const [onlyOpen,setOnlyOpen]=useState(false) // filtro solo posiciones abiertas
-  const [alarmDropOpen,setAlarmDropOpen]=useState(null)  // null | {x,y} desplegable alarmas
   const [alarmPopup,setAlarmPopup]=useState(null)  // kept for compat, not shown
   const [ackedAlarms,setAckedAlarms]=useState(new Set())  // populated from localStorage in useEffect
   const ackAlarm=(sym,aid)=>setAckedAlarms(prev=>{
@@ -2425,7 +2423,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V6.05</title>
+        <title>Trading Simulator V6.06</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2502,7 +2500,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V6.05
+            <span className="dot"/>Trading Simulator V6.06
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -2712,7 +2710,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     flexShrink:0,lineHeight:1,transition:'background 0.1s,color 0.1s',
                   })
                   const anyAlarmFired=alarmActiveCount>0
-                  const anyFilterActive=!!(wlSearch||selectedLists.length||onlyFavs||selectedAlarmIds.length||onlyOpen)
+                  const anyFilterActive=!!(wlSearch||selectedLists.length||onlyFavs||condFilterActive||onlyOpen)
                   return(
                     <div style={{padding:'4px 8px 3px',flexShrink:0,display:'flex',gap:3,alignItems:'center'}}>
                       {/* Search — ocupa el espacio disponible */}
@@ -2727,7 +2725,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
 
                       {/* ListFilter — selector de lista */}
                       <div style={{position:'relative'}}>
-                        <button onClick={e=>{const r=e.currentTarget.getBoundingClientRect();setListDropOpen(prev=>prev?null:{x:r.right,y:r.bottom+4});setAlarmDropOpen(null)}}
+                        <button onClick={e=>{const r=e.currentTarget.getBoundingClientRect();setListDropOpen(prev=>prev?null:{x:r.left,y:r.bottom+4})}}
                           title={selectedLists.length?`Lista: ${selectedLists[0]}`:'Todas las listas'}
                           style={iBtn(selectedLists.length>0,'#00d4ff')}
                           onMouseOver={e=>{if(!selectedLists.length)e.currentTarget.style.color='#00d4ff'}}
@@ -2737,7 +2735,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         {listDropOpen&&(()=>{
                           const allLists=[...new Set(watchlist.map(w=>w.list_name||'General').filter(Boolean))]
                           return(
-                            <div style={{position:'fixed',top:listDropOpen.y,right:window.innerWidth-listDropOpen.x,background:'var(--bg3)',
+                            <div style={{position:'fixed',top:listDropOpen.y,left:listDropOpen.x,background:'var(--bg3)',
                               border:'1px solid var(--border)',borderRadius:4,zIndex:9990,
                               boxShadow:'0 4px 16px rgba(0,0,0,0.7)',width:'max-content',minWidth:160,maxWidth:280}}>
                               <div onClick={()=>{setSelectedLists([]);setListDropOpen(null)}}
@@ -2778,56 +2776,18 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         <Star size={16}/>
                       </button>
 
-                      {/* Bell — alarmas activas */}
-                      <div style={{position:'relative'}}>
-                        <button onClick={e=>{const r=e.currentTarget.getBoundingClientRect();setAlarmDropOpen(prev=>prev?null:{x:r.right,y:r.bottom+4});setListDropOpen(null)}}
-                          title="Filtrar por alarma activa"
-                          style={{...iBtn(selectedAlarmIds.length>0,'#ff4d6d'),
-                            animation:anyAlarmFired&&!selectedAlarmIds.length?'bellSwing 1.2s ease-in-out infinite':undefined}}
-                          onMouseOver={e=>{if(!selectedAlarmIds.length)e.currentTarget.style.color='#ff4d6d'}}
-                          onMouseOut={e=>{if(!selectedAlarmIds.length)e.currentTarget.style.color='#4a6a88'}}>
-                          <Bell size={16}/>
-                        </button>
-                        {alarmDropOpen&&(()=>{
-                          const firedAlarms=(alarms||[]).filter(a=>a.symbol&&alarmStatus[a.symbol]?.[a.id]?.active===true)
-                          return(
-                            <div style={{position:'fixed',top:alarmDropOpen.y,right:window.innerWidth-alarmDropOpen.x,background:'var(--bg3)',
-                              border:'1px solid var(--border)',borderRadius:4,zIndex:9990,
-                              boxShadow:'0 4px 16px rgba(0,0,0,0.7)',minWidth:180,maxHeight:220,overflowY:'auto'}}>
-                              {firedAlarms.length===0
-                                ? <div style={{padding:'8px 10px',fontFamily:MONO,fontSize:11,color:'#4a6a88'}}>Sin alarmas disparadas</div>
-                                : <>
-                                    <div onClick={()=>{setSelectedAlarmIds([]);setAlarmDropOpen(null)}}
-                                      style={{padding:'5px 10px',fontFamily:MONO,fontSize:10,cursor:'pointer',
-                                        color:selectedAlarmIds.length===0?'var(--accent)':'var(--text)',
-                                        borderBottom:'1px solid var(--border)'}}>
-                                      Todas
-                                    </div>
-                                    {firedAlarms.map(a=>(
-                                      <div key={a.id} onClick={()=>{
-                                          const next=selectedAlarmIds.includes(a.id)
-                                            ?selectedAlarmIds.filter(x=>x!==a.id)
-                                            :[...selectedAlarmIds,a.id]
-                                          setSelectedAlarmIds(next)
-                                        }}
-                                        style={{padding:'5px 10px',fontFamily:MONO,fontSize:11,cursor:'pointer',
-                                          display:'flex',alignItems:'center',gap:6,color:'var(--text)'}}>
-                                        <span style={{color:selectedAlarmIds.includes(a.id)?'#ff4d6d':'var(--text3)',fontSize:10}}>
-                                          {selectedAlarmIds.includes(a.id)?'●':'○'}
-                                        </span>
-                                        <span style={{fontWeight:600,color:'#e2eaf5'}}>{a.symbol}</span>
-                                        <span style={{color:'#5a8aaa',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.name||a.condition}</span>
-                                      </div>
-                                    ))}
-                                  </>
-                              }
-                            </div>
-                          )
-                        })()}
-                      </div>
+                      {/* Bell — filtro: solo activos con al menos un círculo activo */}
+                      <button onClick={()=>{setCondFilterActive(f=>!f);setListDropOpen(null)}}
+                        title={condFilterActive?'Con alertas activas (click para quitar)':'Mostrar solo activos con alertas activas'}
+                        style={{...iBtn(condFilterActive,'#ff4d6d'),
+                          animation:anyAlarmFired&&!condFilterActive?'bellSwing 1.2s ease-in-out infinite':undefined}}
+                        onMouseOver={e=>{if(!condFilterActive)e.currentTarget.style.color='#ff4d6d'}}
+                        onMouseOut={e=>{if(!condFilterActive)e.currentTarget.style.color='#4a6a88'}}>
+                        <Bell size={16}/>
+                      </button>
 
                       {/* X — limpiar filtros (siempre visible; naranja brillante si hay filtros, apagado si no) */}
-                      <button onClick={()=>{setWlSearch('');setSelectedLists([]);setOnlyFavs(false);setSelectedAlarmIds([]);setOnlyOpen(false);setAlarmDropOpen(null);setListDropOpen(null)}}
+                      <button onClick={()=>{setWlSearch('');setSelectedLists([]);setOnlyFavs(false);setCondFilterActive(false);setOnlyOpen(false);setListDropOpen(null)}}
                         title="Limpiar filtros"
                         style={anyFilterActive?iBtn(true,'#ff9a3c'):{...iBtn(false,'#ff9a3c'),opacity:0.3,cursor:'default'}}
                         onMouseOver={e=>{if(anyFilterActive)e.currentTarget.style.background='rgba(255,154,60,0.2)'}}
@@ -2860,10 +2820,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       const matchSearch=!wlSearch||(w.symbol||'').toLowerCase().includes(searchLower)||(w.name||'').toLowerCase().includes(searchLower)
                       const matchFav=!onlyFavs||w.favorite
                       const symAlarms=alarmStatus[w.symbol]||{}
-                      const matchAlarm=selectedAlarmIds.length===0||selectedAlarmIds.every(id=>symAlarms[id]?.active===true)
-                      // Condition filter: when active, only show symbols where condition is triggered
-                      // condFilterActive removed
-                      return matchList&&matchSearch&&matchFav&&matchAlarm
+                      const matchActive=!condFilterActive||Object.values(symAlarms).some(v=>v?.active===true)
+                      return matchList&&matchSearch&&matchFav&&matchActive
                     })
                     // Sort: 1st by ranking, 2nd by favorite, 3rd alphabetical
                     const all=filtered.slice().sort((a,b)=>{
