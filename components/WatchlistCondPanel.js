@@ -41,7 +41,7 @@ function Num({ label, value, onChange, min=1, max=9999 }) {
   )
 }
 
-export default function WatchlistCondPanel({ conditions, condDotIds, onCondDotIdsChange, onReload }) {
+export default function WatchlistCondPanel({ conditions, condDotIds, onCondDotIdsChange, onReload, condColors={} }) {
   const [editing, setEditing] = useState(null)
   const [form, setForm]       = useState({})
   const [saving, setSaving]   = useState(false)
@@ -135,7 +135,7 @@ export default function WatchlistCondPanel({ conditions, condDotIds, onCondDotId
         <div style={{display:'flex',flexWrap:'wrap',gap:4,padding:'0 8px 6px',alignItems:'center'}}>
           {conditions.map((c,i)=>{
             const sel = condDotIds.includes(c.id)
-            const col = COND_COLORS[i%COND_COLORS.length]
+            const col = condColors[c.id] || COND_COLORS[i%COND_COLORS.length]
             return (
               <div key={c.id} style={{display:'flex',alignItems:'center',gap:2}}>
                 <span onClick={()=>toggleDot(c,i)} title={`${sel?'Ocultar':'Mostrar'}: ${c.name}`}

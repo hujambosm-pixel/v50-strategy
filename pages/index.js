@@ -402,6 +402,16 @@ export default function Home() {
   const [panelScale,setPanelScale]=useState(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.ui?.panelScale||{}}catch{return{}}})
   const [wlCondDotIds,setWlCondDotIdsState]=useState(()=>{try{const s=JSON.parse(localStorage.getItem('v50_settings')||'{}');const ids=s?.watchlist?.condDotIds;return Array.isArray(ids)?ids:[]}catch{return[]}})
   const updateWlCondDotIds=useCallback((ids)=>{setWlCondDotIdsState(ids);try{const s=JSON.parse(localStorage.getItem('v50_settings')||'{}');if(!s.watchlist)s.watchlist={};s.watchlist.condDotIds=ids;localStorage.setItem('v50_settings',JSON.stringify(s))}catch{}},[])
+  const [condColors,setCondColorsState]=useState(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.watchlist?.condColors||{}}catch{return{}}})
+  const [condColorPicker,setCondColorPicker]=useState(null) // {condId,x,y} or null
+  const setCondColor=useCallback((condId,color)=>{
+    setCondColorsState(prev=>{
+      const next=color?{...prev,[condId]:color}:Object.fromEntries(Object.entries(prev).filter(([k])=>k!==condId))
+      try{const s=JSON.parse(localStorage.getItem('v50_settings')||'{}');if(!s.watchlist)s.watchlist={};s.watchlist.condColors=next;localStorage.setItem('v50_settings',JSON.stringify(s))}catch{}
+      return next
+    })
+    setCondColorPicker(null)
+  },[])
   const [selectedCondition,setSelectedCondition]=useState(null)
   const [selectedStrategy,setSelectedStrategy]=useState(null)
   const [editingAlarm,setEditingAlarm]=useState(null)
@@ -2399,7 +2409,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V6.01</title>
+        <title>Trading Simulator V6.02</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2476,7 +2486,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V6.01
+            <span className="dot"/>Trading Simulator V6.02
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -2819,6 +2829,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   condDotIds={wlCondDotIds}
                   onCondDotIdsChange={updateWlCondDotIds}
                   onReload={reloadConditions}
+                  condColors={condColors}
                 />
 
                 {/* ── Lista de activos ── */}
@@ -2907,15 +2918,13 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                           return(
                             <div onClick={()=>setSimbolo(w.symbol)} style={{flex:1,cursor:'pointer',minWidth:0}}>
                               <div style={{fontFamily:MONO,fontSize:11,color:simbolo===w.symbol?'var(--accent)':'#d0e8fa',fontWeight:600}}>{w.symbol}</div>
-                              <div style={{display:'flex',alignItems:'baseline',gap:5,minWidth:0}}>
-                                <div style={{fontFamily:MONO,fontSize:11,color:'#8aadcc',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0,flex:1}}>{w.name}</div>
-                                {openPos&&hasLive&&(
-                                  <span title={`P&L flotante: ${eurStr} (${pctStr})`}
-                                    style={{fontFamily:MONO,fontSize:11,color:pnlColor,flexShrink:0,whiteSpace:'nowrap'}}>
-                                    {eurStr} {pctStr}
-                                  </span>
-                                )}
-                              </div>
+                              {openPos&&hasLive
+                                ? <div title={`P&L flotante: ${eurStr} / ${pctStr}`}
+                                    style={{fontFamily:MONO,fontSize:11,color:pnlColor,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>
+                                    {eurStr} / {pctStr}
+                                  </div>
+                                : <div style={{fontFamily:MONO,fontSize:11,color:'#8aadcc',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{w.name}</div>
+                              }
                             </div>
                           )
                         })()}
@@ -2936,13 +2945,14 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                             if(!active) return null
                             const bars=st?.bars
                             const globalIdx=conditions.findIndex(x=>x.id===c.id)
-                            const col=COND_COLORS[(globalIdx>=0?globalIdx:0)%COND_COLORS.length]
+                            const col=condColors[c.id]||COND_COLORS[(globalIdx>=0?globalIdx:0)%COND_COLORS.length]
                             const label=bars!=null?String(bars):'·'
                             const shouldBlink=active&&bars!=null&&bars<=blinkN
                             const paramStr=c.params?.ma_fast?`EMA ${c.params.ma_fast}/${c.params.ma_slow}`:c.params?.ma_period?`MA(${c.params.ma_period})`:c.params?.period?`RSI(${c.params.period}) niv.${c.params.level}`:''
-                            const tooltip=`${c.name}${paramStr?' · '+paramStr:''}${active?' ✓ activa'+(bars!=null?' · '+bars+'v':''):' — inactiva'}`
+                            const tooltip=`${c.name}${paramStr?' · '+paramStr:''}${active?' ✓ activa'+(bars!=null?' · '+bars+'v':''):' — inactiva'} · Clic para cambiar color`
                             return(
                               <span key={c.id} title={tooltip}
+                                onClick={e=>{e.stopPropagation();const r=e.currentTarget.getBoundingClientRect();setCondColorPicker(prev=>prev?.condId===c.id?null:{condId:c.id,x:r.left,y:r.bottom+4})}}
                                 style={{
                                   display:'inline-flex',alignItems:'center',justifyContent:'center',
                                   width:15,height:15,borderRadius:'50%',flexShrink:0,
@@ -2951,7 +2961,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                   color:active?'#080c14':'#3d5a7a',
                                   fontFamily:MONO,fontSize:6,fontWeight:800,lineHeight:1,letterSpacing:'-0.5px',
                                   boxShadow:active?`0 0 6px ${col}55`:undefined,
-                                  cursor:'default',
+                                  cursor:'pointer',
                                   animation:shouldBlink?`alarmPulse 1s ease-in-out infinite`:undefined,
                                 }}>
                                 {active?label:''}
@@ -2968,6 +2978,31 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   </>)
                   })()}
                 </div>
+
+                {/* ── Color picker para círculos de condición ── */}
+                {condColorPicker&&(()=>{
+                  const PICKER=['#00e5a0','#ffd166','#00d4ff','#ff7eb3','#9b72ff','#ff4d6d','#ff9a3c','#a78bfa','#7ec8e3','#f472b6']
+                  const cur=condColors[condColorPicker.condId]
+                  return(<>
+                    <div style={{position:'fixed',inset:0,zIndex:9997}} onClick={()=>setCondColorPicker(null)}/>
+                    <div style={{position:'fixed',top:condColorPicker.y,left:condColorPicker.x,zIndex:9998,
+                      background:'#0d1824',border:'1px solid #1e3a52',borderRadius:6,padding:'6px 8px',
+                      display:'flex',alignItems:'center',gap:5,boxShadow:'0 4px 20px rgba(0,0,0,0.8)'}}>
+                      {PICKER.map(c=>(
+                        <span key={c} onClick={e=>{e.stopPropagation();setCondColor(condColorPicker.condId,c)}}
+                          style={{width:14,height:14,borderRadius:'50%',background:c,cursor:'pointer',flexShrink:0,
+                            boxShadow:cur===c?`0 0 0 2px #fff,0 0 0 3px ${c}`:'none',
+                            transition:'box-shadow 0.1s'}}/>
+                      ))}
+                      {cur&&<span onClick={e=>{e.stopPropagation();setCondColor(condColorPicker.condId,null)}}
+                        title="Restablecer color por defecto"
+                        style={{fontFamily:MONO,fontSize:10,color:'#5a8aaa',cursor:'pointer',padding:'0 2px',
+                          lineHeight:1,flexShrink:0}}
+                        onMouseOver={e=>e.currentTarget.style.color='#ff4d6d'}
+                        onMouseOut={e=>e.currentTarget.style.color='#5a8aaa'}>✕</span>}
+                    </div>
+                  </>)
+                })()}
 
                 {/* ── Modal editor activo — fixed sobre gráfico ── */}
                 {editingItem!==null&&(
