@@ -365,7 +365,7 @@ export default function Home() {
   const [chartViewFull,setChartViewFull]=useState(false)
   const [settingsOpen,setSettingsOpen]=useState(false)
   const [settingsInitTab,setSettingsInitTab]=useState('integraciones')
-  const [sidePanel,setSidePanel]=useState('config')
+  const [sidePanel,setSidePanel]=useState('watchlist')
   const [navExpanded,setNavExpanded]=useState(false)
   const [metricsLayout,setMetricsLayout]=useState('panel')
   const [metricsView,setMetricsView]=useState('panel')   // 'multi'=3col | 'single'=one strat per block
@@ -373,7 +373,7 @@ export default function Home() {
   const [showSP500,setShowSP500]=useState(false),[showCompound,setShowCompound]=useState(true)
   const [watchlist,setWatchlist]=useState(WATCHLIST_DEFAULT)
   const [wlLoading,setWlLoading]=useState(true)
-  const [selectedLists,setSelectedLists]=useState(['General'])
+  const [selectedLists,setSelectedLists]=useState([])
   const [listDropOpen,setListDropOpen]=useState(false)
   const [editingItem,setEditingItem]=useState(null) // item watchlist en edición
   const [editForm,setEditForm]=useState({})
@@ -2393,7 +2393,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.89</title>
+        <title>Trading Simulator V5.90</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2468,7 +2468,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.89
+            <span className="dot"/>Trading Simulator V5.90
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -2529,7 +2529,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
             onMouseEnter={()=>setNavExpanded(true)}
             onMouseLeave={()=>setNavExpanded(false)}
             onWheel={e=>{if(e.ctrlKey){e.preventDefault();handlePanelScaleWheel('nav',e)}}}
-            style={{width:navExpanded?Math.round(158*(panelScale.nav||1)):Math.round(42*(panelScale.nav||1)),transition:'width 0.18s ease',display:'flex',flexDirection:'column',
+            style={{width:navExpanded?Math.round(158*(panelScale.nav||1)):Math.round(48*(panelScale.nav||1)),transition:'width 0.18s ease',display:'flex',flexDirection:'column',
               background:'var(--bg2)',borderRight:'1px solid var(--border)',flexShrink:0,overflow:'hidden',
               zIndex:15,paddingTop:6,paddingBottom:6,zoom:panelScale.nav||1}}
           >
@@ -2543,15 +2543,15 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               <button key={item.id}
                 onClick={()=>setSidePanel(item.id)}
                 title={!navExpanded?item.label:undefined}
-                style={{display:'flex',alignItems:'center',gap:10,padding:'9px 11px',width:'100%',
+                style={{display:'flex',alignItems:'center',gap:10,padding:'9px 8px',width:'100%',
                   background:sidePanel===item.id?'var(--bg3)':'transparent',
                   border:'none',borderLeft:sidePanel===item.id?`2px solid ${item.accent||'var(--accent)'}`:'2px solid transparent',
                   color:sidePanel===item.id?(item.accent||'var(--accent)'):'var(--text3)',
-                  fontFamily:MONO,fontSize:26,cursor:'pointer',whiteSpace:'nowrap',textAlign:'left',
+                  fontFamily:MONO,fontSize:28,cursor:'pointer',whiteSpace:'nowrap',textAlign:'left',
                   transition:'background 0.12s,color 0.12s',position:'relative'}}
               >
                 <span title={item.hasAlerts?`${item.alertCount} alerta${item.alertCount!==1?'s':''} activa${item.alertCount!==1?'s':''}`:undefined}
-                  style={{fontSize:26,flexShrink:0,width:28,textAlign:'center',
+                  style={{fontSize:28,flexShrink:0,width:30,textAlign:'center',
                     display:'inline-block',
                     animation:item.hasAlerts?'bellSwing 1.2s ease-in-out infinite':undefined,
                     transformOrigin:'top center'}}>{item.icon}</span>
