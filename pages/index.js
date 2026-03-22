@@ -531,7 +531,7 @@ export default function Home() {
   // ── Capital contributions ──
   const [contributions,setContributions]=useState([])
   const [showWithContribs,setShowWithContribs]=useState(false)
-  const [contribDate,setContribDate]=useState(()=>new Date().toISOString().split('T')[0])
+  const [contribDate,setContribDate]=useState(()=>{const d=new Date();return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear()})
   const [contribAmount,setContribAmount]=useState('')
   const [contribType,setContribType]=useState('aportacion')
   const [contribNotes,setContribNotes]=useState('')
@@ -661,10 +661,14 @@ export default function Home() {
   },[])
   const addContribution=async()=>{
     if(!contribDate||!contribAmount||isNaN(parseFloat(contribAmount))||parseFloat(contribAmount)<=0) return
+    // Convert DD/MM/YYYY → YYYY-MM-DD for Supabase
+    const parts=contribDate.split('/')
+    const isoDate=parts.length===3?`${parts[2]}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`:contribDate
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) return
     setContribSaving(true)
     try{
       const r=await fetch('/api/tradelog?action=add-contribution',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({date:contribDate,amount:parseFloat(contribAmount),type:contribType,notes:contribNotes||null})})
+        body:JSON.stringify({date:isoDate,amount:parseFloat(contribAmount),type:contribType,notes:contribNotes||null})})
       const d=await r.json()
       if(d.id){
         setContributions(prev=>[d,...prev].sort((a,b)=>b.date.localeCompare(a.date)||b.created_at.localeCompare(a.created_at||'')))
@@ -2359,7 +2363,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.69</title>
+        <title>Trading Simulator V5.70</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2434,7 +2438,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.69
+            <span className="dot"/>Trading Simulator V5.70
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4924,7 +4928,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 {tlTab==='capital'&&(
                   <div style={{flex:1,display:'flex',flexDirection:'column',minWidth:0,overflowY:'auto',padding:'16px 20px'}}>
                     {(()=>{
-                      const netContrib=contributions.reduce((s,c)=>s+(c.type==='retirada'?-1:1)*parseFloat(c.amount||0),0)
+                      const netContrib=contributions.filter(c=>c.type==='aportacion'||c.type==='retirada').reduce((s,c)=>s+(c.type==='retirada'?-1:1)*parseFloat(c.amount||0),0)
                       const divAcum=contributions.filter(c=>c.type==='dividendo').reduce((s,c)=>s+parseFloat(c.amount||0),0)
                       const closedPnl=tlTradesFiltered.filter(t=>t.status==='closed').reduce((s,t)=>s+parseFloat(t.pnl_eur||0),0)
                       const floatPnl=tlTradesFiltered.filter(t=>t.status==='open').reduce((s,t)=>{
@@ -4951,8 +4955,9 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                           </div>
                           {/* Add form — compact single row */}
                           <div style={{background:'#0d1824',border:'1px solid #1a2d45',borderRadius:8,padding:'10px 14px',marginBottom:12,display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
-                            <input type="date" value={contribDate} onChange={e=>setContribDate(e.target.value)}
-                              style={{fontFamily:MONO,fontSize:11,background:'#080c14',border:'1px solid #1e3a52',borderRadius:4,color:'#c8d8e8',padding:'4px 8px',width:130,flexShrink:0}}/>
+                            <input type="text" value={contribDate} onChange={e=>setContribDate(e.target.value)}
+                              placeholder="DD/MM/YYYY" maxLength={10}
+                              style={{fontFamily:MONO,fontSize:11,background:'#080c14',border:'1px solid #1e3a52',borderRadius:4,color:'#c8d8e8',padding:'4px 8px',width:100,flexShrink:0}}/>
                             <select value={contribType} onChange={e=>setContribType(e.target.value)}
                               style={{fontFamily:MONO,fontSize:11,background:'#080c14',border:'1px solid #1e3a52',borderRadius:4,color:'#c8d8e8',padding:'4px 8px',width:120,flexShrink:0}}>
                               <option value="aportacion">Aportación</option>
