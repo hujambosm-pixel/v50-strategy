@@ -375,7 +375,7 @@ export default function Home() {
   const [watchlist,setWatchlist]=useState(WATCHLIST_DEFAULT)
   const [wlLoading,setWlLoading]=useState(true)
   const [selectedLists,setSelectedLists]=useState([])
-  const [listDropOpen,setListDropOpen]=useState(false)
+  const [listDropOpen,setListDropOpen]=useState(null) // null | {x,y}
   const [editingItem,setEditingItem]=useState(null) // item watchlist en edición
   const [editForm,setEditForm]=useState({})
   const [editSaving,setEditSaving]=useState(false)
@@ -423,7 +423,7 @@ export default function Home() {
   const [onlyFavs,setOnlyFavs]=useState(false)  // filtro solo favoritos
   const [condFilterActive,setCondFilterActive]=useState(false) // filtro por condición activa
   const [onlyOpen,setOnlyOpen]=useState(false) // filtro solo posiciones abiertas
-  const [alarmDropOpen,setAlarmDropOpen]=useState(false)  // desplegable alarmas
+  const [alarmDropOpen,setAlarmDropOpen]=useState(null)  // null | {x,y} desplegable alarmas
   const [alarmPopup,setAlarmPopup]=useState(null)  // kept for compat, not shown
   const [ackedAlarms,setAckedAlarms]=useState(new Set())  // populated from localStorage in useEffect
   const ackAlarm=(sym,aid)=>setAckedAlarms(prev=>{
@@ -2422,7 +2422,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V6.03</title>
+        <title>Trading Simulator V6.04</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2499,7 +2499,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V6.03
+            <span className="dot"/>Trading Simulator V6.04
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -2724,7 +2724,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
 
                       {/* ListFilter — selector de lista */}
                       <div style={{position:'relative'}}>
-                        <button onClick={()=>{setListDropOpen(o=>!o);setAlarmDropOpen(false)}}
+                        <button onClick={e=>{const r=e.currentTarget.getBoundingClientRect();setListDropOpen(prev=>prev?null:{x:r.right,y:r.bottom+4});setAlarmDropOpen(null)}}
                           title={selectedLists.length?`Lista: ${selectedLists[0]}`:'Todas las listas'}
                           style={iBtn(selectedLists.length>0,'#00d4ff')}
                           onMouseOver={e=>{if(!selectedLists.length)e.currentTarget.style.color='#00d4ff'}}
@@ -2734,17 +2734,17 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         {listDropOpen&&(()=>{
                           const allLists=[...new Set(watchlist.map(w=>w.list_name||'General').filter(Boolean))]
                           return(
-                            <div style={{position:'absolute',top:'calc(100% + 4px)',right:0,background:'var(--bg3)',
-                              border:'1px solid var(--border)',borderRadius:4,zIndex:60,
+                            <div style={{position:'fixed',top:listDropOpen.y,right:window.innerWidth-listDropOpen.x,background:'var(--bg3)',
+                              border:'1px solid var(--border)',borderRadius:4,zIndex:9990,
                               boxShadow:'0 4px 16px rgba(0,0,0,0.7)',width:'max-content',minWidth:160,maxWidth:280}}>
-                              <div onClick={()=>{setSelectedLists([]);setListDropOpen(false)}}
+                              <div onClick={()=>{setSelectedLists([]);setListDropOpen(null)}}
                                 style={{padding:'6px 10px',fontFamily:MONO,fontSize:11,cursor:'pointer',
                                   color:selectedLists.length===0?'var(--accent)':'var(--text)',
                                   borderBottom:'1px solid var(--border)'}}>
                                 Todas las listas
                               </div>
                               {allLists.map(l=>(
-                                <div key={l} onClick={()=>{setSelectedLists([l]);setListDropOpen(false)}}
+                                <div key={l} onClick={()=>{setSelectedLists([l]);setListDropOpen(null)}}
                                   style={{padding:'6px 10px',fontFamily:MONO,fontSize:11,cursor:'pointer',
                                     display:'flex',alignItems:'center',gap:6,color:'var(--text)',whiteSpace:'nowrap'}}>
                                   <span style={{color:selectedLists.includes(l)?'var(--accent)':'var(--text3)',fontSize:10}}>
@@ -2777,7 +2777,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
 
                       {/* Bell — alarmas activas */}
                       <div style={{position:'relative'}}>
-                        <button onClick={()=>{setAlarmDropOpen(o=>!o);setListDropOpen(false)}}
+                        <button onClick={e=>{const r=e.currentTarget.getBoundingClientRect();setAlarmDropOpen(prev=>prev?null:{x:r.right,y:r.bottom+4});setListDropOpen(null)}}
                           title="Filtrar por alarma activa"
                           style={{...iBtn(selectedAlarmIds.length>0,'#ff4d6d'),
                             animation:anyAlarmFired&&!selectedAlarmIds.length?'bellSwing 1.2s ease-in-out infinite':undefined}}
@@ -2788,13 +2788,13 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         {alarmDropOpen&&(()=>{
                           const firedAlarms=(alarms||[]).filter(a=>a.symbol&&alarmStatus[a.symbol]?.[a.id]?.active===true)
                           return(
-                            <div style={{position:'absolute',top:'calc(100% + 4px)',right:0,background:'var(--bg3)',
-                              border:'1px solid var(--border)',borderRadius:4,zIndex:60,
+                            <div style={{position:'fixed',top:alarmDropOpen.y,right:window.innerWidth-alarmDropOpen.x,background:'var(--bg3)',
+                              border:'1px solid var(--border)',borderRadius:4,zIndex:9990,
                               boxShadow:'0 4px 16px rgba(0,0,0,0.7)',minWidth:180,maxHeight:220,overflowY:'auto'}}>
                               {firedAlarms.length===0
                                 ? <div style={{padding:'8px 10px',fontFamily:MONO,fontSize:11,color:'#4a6a88'}}>Sin alarmas disparadas</div>
                                 : <>
-                                    <div onClick={()=>{setSelectedAlarmIds([]);setAlarmDropOpen(false)}}
+                                    <div onClick={()=>{setSelectedAlarmIds([]);setAlarmDropOpen(null)}}
                                       style={{padding:'5px 10px',fontFamily:MONO,fontSize:10,cursor:'pointer',
                                         color:selectedAlarmIds.length===0?'var(--accent)':'var(--text)',
                                         borderBottom:'1px solid var(--border)'}}>
@@ -2824,7 +2824,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       </div>
 
                       {/* X — limpiar filtros (siempre visible; naranja brillante si hay filtros, apagado si no) */}
-                      <button onClick={()=>{setWlSearch('');setSelectedLists([]);setOnlyFavs(false);setSelectedAlarmIds([]);setOnlyOpen(false);setAlarmDropOpen(false);setListDropOpen(false)}}
+                      <button onClick={()=>{setWlSearch('');setSelectedLists([]);setOnlyFavs(false);setSelectedAlarmIds([]);setOnlyOpen(false);setAlarmDropOpen(null);setListDropOpen(null)}}
                         title="Limpiar filtros"
                         style={anyFilterActive?iBtn(true,'#ff9a3c'):{...iBtn(false,'#ff9a3c'),opacity:0.3,cursor:'default'}}
                         onMouseOver={e=>{if(anyFilterActive)e.currentTarget.style.background='rgba(255,154,60,0.2)'}}

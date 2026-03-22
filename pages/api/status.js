@@ -87,7 +87,7 @@ async function fetchCloses(symbol) {
 // ── Condition evaluator ───────────────────────────────────────
 // alarm: { id, condition, ema_r, ema_l, params }
 // params overrides ema_r/ema_l when condition comes from a global condition
-function evalConditionFull(alarm, closes) {
+function evalConditionFull(alarm, closes, sym) {
   const condition = alarm.condition
   const p = alarm.params || {}
 
@@ -135,6 +135,7 @@ function evalConditionFull(alarm, closes) {
     if (ma == null) return { active: null, bars: null }
     const isAbove = condition === 'price_above_ma' || condition === 'price_above_ema'
     const active = isAbove ? price > ma : price < ma
+    console.log(`[status:${sym||'?'}] ${condition}(period=${maPeriod}) lastClose=${price?.toFixed(3)} EMA${maPeriod}=${ma?.toFixed(3)} active=${active} closes[-3]=${last.slice(-3).map(v=>v?.toFixed(2)).join(',')}`)
     if (!active) return { active: false, bars: null }
     let count = 0
     for (let i = n; i >= 0; i--) {
@@ -247,7 +248,7 @@ export default async function handler(req, res) {
           alarms.forEach(a => {
             // If alarm is symbol-specific, only evaluate for its own symbol
             if (a.symbol && a.symbol.toUpperCase() !== sym.toUpperCase()) return
-            symResult[a.id] = evalConditionFull(a, closes)
+            symResult[a.id] = evalConditionFull(a, closes, sym)
           })
           result[sym] = symResult
         } catch { result[sym] = null }
