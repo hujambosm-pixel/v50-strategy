@@ -11,8 +11,8 @@ const CONTRIB_MARKER = {
 
 export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContribs, contributions, showWithContribs, onToggleContribs, syncRef }) {
   const ref = useRef(null), chartRef = useRef(null), equityTooltipRef = useRef(null)
-  const [showSinFx, setShowSinFx] = useState(true)
-  const [showSinComm, setShowSinComm] = useState(true)
+  const [showSinFx, setShowSinFx] = useState(false)
+  const [showSinComm, setShowSinComm] = useState(false)
   const [showAportacion, setShowAportacion] = useState(true)
   const [showRetirada, setShowRetirada] = useState(true)
   const [showDividendo, setShowDividendo] = useState(true)
@@ -180,9 +180,11 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
 }
 
 // ── Capital Invertido vs Profit acumulado (area + line) ──
-export function TlInvestChart({ investData, syncRef }) {
+export function TlInvestChart({ investData, syncRef, patrimonyCurve }) {
   // investData: [{date, capital, profit}]  sorted by date
-  const ref = useRef(null), chartRef = useRef(null)
+  const ref = useRef(null), chartRef = useRef(null), investTooltipRef = useRef(null)
+  const [showPatrimony, setShowPatrimony] = useState(false)
+
   useEffect(()=>{
     if(!ref.current||!investData?.length) return
     import('lightweight-charts').then(({createChart,CrosshairMode,LineStyle})=>{
@@ -197,8 +199,23 @@ export function TlInvestChart({ investData, syncRef }) {
         localization:{priceFormatter:v=>'€'+Math.round(v)},
       })
       chartRef.current = chart
+      const eqData={}
+      const track=(arr,key)=>arr?.forEach(p=>{if(!eqData[p.date])eqData[p.date]={};eqData[p.date][key]=p.value})
+      // Patrimonio area — renderizada ANTES del capital para quedar detrás
+      if(showPatrimony && patrimonyCurve?.length>1){
+        chart.addAreaSeries({
+          lineColor:'rgba(0,229,160,0.35)',
+          topColor:'rgba(0,229,160,0.15)',
+          bottomColor:'rgba(0,229,160,0.02)',
+          lineWidth:1,
+          title:'Patrimonio',
+          lastValueVisible:true,
+          priceLineVisible:false,
+        }).setData(patrimonyCurve.map(p=>({time:p.date,value:p.value})))
+        track(patrimonyCurve,'pat')
+      }
       // Area — Capital Invertido (azul con relleno)
-      const areaSeries = chart.addAreaSeries({
+      chart.addAreaSeries({
         lineColor:'#2a7fff',
         topColor:'rgba(42,127,255,0.55)',
         bottomColor:'rgba(42,127,255,0.04)',
@@ -206,22 +223,39 @@ export function TlInvestChart({ investData, syncRef }) {
         title:'Capital inv.',
         lastValueVisible:true,
         priceLineVisible:false,
-      })
-      areaSeries.setData(investData.map(p=>({time:p.date,value:p.capital})))
+      }).setData(investData.map(p=>({time:p.date,value:p.capital})))
+      track(investData.map(p=>({date:p.date,value:p.capital})),'cap')
       // Line — Profit acumulado (verde lima)
-      const profitSeries = chart.addLineSeries({
+      chart.addLineSeries({
         color:'#aaff44',
         lineWidth:2,
         title:'Profit',
         lastValueVisible:true,
         priceLineVisible:false,
-      })
-      profitSeries.setData(investData.map(p=>({time:p.date,value:p.profit})))
+      }).setData(investData.map(p=>({time:p.date,value:p.profit})))
+      track(investData.map(p=>({date:p.date,value:p.profit})),'pnl')
       // Zero dotted
       if(investData.length>1){
         chart.addLineSeries({color:'#2a3f55',lineWidth:1,lineStyle:LineStyle.Dotted,lastValueVisible:false,priceLineVisible:false})
           .setData([{time:investData[0].date,value:0},{time:investData[investData.length-1].date,value:0}])
       }
+      // Crosshair tooltip
+      const MONO2='"JetBrains Mono",monospace'
+      chart.subscribeCrosshairMove(param=>{
+        const tt=investTooltipRef.current; if(!tt) return
+        if(!param.time||!param.point){tt.style.display='none';return}
+        const d=eqData[param.time]; if(!d){tt.style.display='none';return}
+        const rows=[]
+        if(d.pat!=null) rows.push(`<div style="display:flex;justify-content:space-between;gap:20px"><span style="color:#00e5a0">Patrimonio</span><b style="color:#00e5a0">€${Math.round(d.pat).toLocaleString('es-ES')}</b></div>`)
+        if(d.cap!=null) rows.push(`<div style="display:flex;justify-content:space-between;gap:20px"><span style="color:#2a7fff">Capital inv.</span><b style="color:#2a7fff">€${Math.round(d.cap).toLocaleString('es-ES')}</b></div>`)
+        if(d.pnl!=null) rows.push(`<div style="display:flex;justify-content:space-between;gap:20px"><span style="color:#aaff44">Profit acum.</span><b style="color:#aaff44">${d.pnl>=0?'':'−'}€${Math.abs(Math.round(d.pnl)).toLocaleString('es-ES')}</b></div>`)
+        if(!rows.length){tt.style.display='none';return}
+        const cw=ref.current?.clientWidth||600
+        tt.style.display='block'
+        tt.style.left=((param.point.x+200>cw)?param.point.x-210:param.point.x+14)+'px'
+        tt.style.top=Math.max(4,param.point.y-40)+'px'
+        tt.innerHTML=rows.join('')
+      })
       // Cross-chart time sync
       if(syncRef?.current){
         const syncId=Symbol()
@@ -241,19 +275,37 @@ export function TlInvestChart({ investData, syncRef }) {
       return ()=>ro.disconnect()
     })
     return ()=>{ if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null} }
-  },[investData])
+  },[investData, showPatrimony, patrimonyCurve])
+
+  const btnStyle = (active, color) => ({
+    display:'flex',alignItems:'center',gap:4,
+    fontFamily:MONO,fontSize:9,color:active?color:'#3d5a7a',
+    cursor:'pointer',background:'none',border:'none',padding:'1px 4px',
+    borderRadius:3,opacity:active?1:0.5,transition:'opacity 0.15s',
+  })
   return (
     <div style={{borderTop:'1px solid var(--border)'}}>
-      <div style={{padding:'6px 14px 0',display:'flex',alignItems:'center',gap:14}}>
-        <span style={{fontFamily:'"JetBrains Mono",monospace',fontSize:9,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase'}}>Capital Invertido vs Profit</span>
-        <span style={{display:'flex',alignItems:'center',gap:4,fontFamily:'"JetBrains Mono",monospace',fontSize:9,color:'#2a7fff'}}>
+      <div style={{padding:'6px 14px 0',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+        <span style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',marginRight:4}}>Capital Invertido vs Profit</span>
+        <span style={{display:'flex',alignItems:'center',gap:4,fontFamily:MONO,fontSize:9,color:'#2a7fff'}}>
           <span style={{display:'inline-block',width:10,height:2,background:'#2a7fff',borderRadius:1}}/> Capital inv.
         </span>
-        <span style={{display:'flex',alignItems:'center',gap:4,fontFamily:'"JetBrains Mono",monospace',fontSize:9,color:'#aaff44'}}>
+        <span style={{display:'flex',alignItems:'center',gap:4,fontFamily:MONO,fontSize:9,color:'#aaff44'}}>
           <span style={{display:'inline-block',width:10,height:2,background:'#aaff44',borderRadius:1}}/> Profit acum.
         </span>
+        {patrimonyCurve?.length>1&&(
+          <button onClick={()=>setShowPatrimony(v=>!v)} style={btnStyle(showPatrimony,'#00e5a0')}
+            title={showPatrimony?'Ocultar Patrimonio':'Mostrar Patrimonio total'}>
+            <span style={{display:'inline-block',width:10,height:6,borderRadius:1,
+              background:showPatrimony?'rgba(0,229,160,0.4)':'transparent',
+              border:'1px solid '+(showPatrimony?'#00e5a0':'#3d5a7a')}}/> Patrimonio
+          </button>
+        )}
       </div>
-      <div ref={ref} style={{minHeight:200}}/>
+      <div style={{position:'relative'}}>
+        <div ref={ref} style={{minHeight:200}}/>
+        <div ref={investTooltipRef} style={{position:'absolute',display:'none',pointerEvents:'none',background:'rgba(8,12,20,0.96)',border:'1px solid #1a2d45',borderRadius:6,padding:'8px 12px',fontFamily:'"JetBrains Mono",monospace',fontSize:12,color:'#e2eaf5',zIndex:15,minWidth:160,boxShadow:'0 4px 20px rgba(0,0,0,0.5)'}}/>
+      </div>
     </div>
   )
 }

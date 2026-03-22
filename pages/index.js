@@ -2390,7 +2390,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.76</title>
+        <title>Trading Simulator V5.77</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2465,7 +2465,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.76
+            <span className="dot"/>Trading Simulator V5.77
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4944,7 +4944,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                           {/* Equity curve — P&L acumulado */}
                           {equityCurve.length>1&&<TlEquityChart curve={equityCurve} curveSinFx={curveSinFx.length>1?curveSinFx:null} curveSinComm={curveSinComm.length>1?curveSinComm:null} curveWithContribs={curveWithContribs.length>1?curveWithContribs:null} contributions={contributions} showWithContribs={showWithContribs} onToggleContribs={()=>setShowWithContribs(v=>!v)} syncRef={tlDashSyncRef}/>}
                           {/* Capital Invertido vs Profit */}
-                          {investData.length>1&&<TlInvestChart investData={investData} syncRef={tlDashSyncRef}/>}
+                          {investData.length>1&&<TlInvestChart investData={investData} syncRef={tlDashSyncRef} patrimonyCurve={curveWithContribs.length>1?curveWithContribs:null}/>}
                           {/* Barras P&L por trade — cerradas + abiertas */}
                           {(closed.length>0||openTrades.length>0)&&(
                             <div style={{padding:'12px 16px 8px',borderTop:'1px solid var(--border)'}}>
