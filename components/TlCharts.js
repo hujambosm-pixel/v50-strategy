@@ -59,8 +59,8 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
           .map(c=>{
             const m = CONTRIB_MARKER[c.type] || CONTRIB_MARKER.aportacion
             const amt = Math.round(parseFloat(c.amount||0))
-            const txt = amt>=1000 ? m.prefix+(amt/1000).toFixed(1).replace('.0','')+'k' : m.prefix+amt
-            return { time:c.date, position:m.position, color:m.color, shape:m.shape, size:0.7, text:txt }
+            const txt = amt>=1000 ? m.prefix+(amt/1000).toFixed(0)+'k' : m.prefix+amt
+            return { time:c.date, position:m.position, color:m.color, shape:m.shape, size:0.3, text:txt }
           })
           .sort((a,b)=>a.time.localeCompare(b.time))
         if(markers.length) mainSeries.setMarkers(markers)
