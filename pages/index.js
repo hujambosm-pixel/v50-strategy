@@ -2423,7 +2423,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V6.09</title>
+        <title>Trading Simulator V6.10</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2500,7 +2500,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V6.09
+            <span className="dot"/>Trading Simulator V6.10
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -2939,7 +2939,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                   animation:shouldBlink?`alarmPulse 1s ease-in-out infinite`:undefined,
                                 }}>
                                 {active&&<span style={{fontFamily:MONO,fontSize:9,fontWeight:800,lineHeight:1,
-                                  letterSpacing:'-0.5px',transform:'scale(0.5)',display:'inline-block',
+                                  letterSpacing:'-0.5px',transform:'scale(0.7)',display:'inline-block',
                                   whiteSpace:'nowrap'}}>
                                   {label}
                                 </span>}
