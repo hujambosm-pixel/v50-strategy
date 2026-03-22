@@ -5150,6 +5150,12 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     const peakCapBase=Math.max(maxCapEv,capitalEmp>0?capitalEmp:0,1000)
                     // CAGR: si toggle "Con aportaciones" activo → base=capital neto aportado; sino → pico concurrente
                     const netContrib=contributions.reduce((s,c)=>s+(c.type==='retirada'?-1:1)*parseFloat(c.amount||0),0)
+                    // Patrimonio actual (solo si hay aportaciones registradas)
+                    const hasContribs=contributions.length>0
+                    const capitalNeto=contributions.reduce((s,c)=>c.type==='aportacion'?s+parseFloat(c.amount||0):c.type==='retirada'?s-parseFloat(c.amount||0):s,0)
+                    const dividendosAcum=contributions.filter(c=>c.type==='dividendo').reduce((s,c)=>s+parseFloat(c.amount||0),0)
+                    const patrimonioActual=hasContribs?capitalNeto+dividendosAcum+pnlTotal:null
+                    const capitalDisp=hasContribs&&patrimonioActual!=null?patrimonioActual-capitalEmp:null
                     const capitalBase=showWithContribs&&netContrib>0?netContrib:peakCapBase
                     const cagrLabel=showWithContribs&&netContrib>0?'global':'op.'
                     const cagrReal=aniosPeriodo&&pnlTotal!==0?
@@ -5165,10 +5171,18 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                        v:(tlTradesFiltered.filter(t=>t.status==='open').length+' ab. / '+tlTradesFiltered.filter(t=>t.status==='closed').length+' cerr.'),
                        c:'#ffd166',
                        tip:'Total posiciones registradas. Abiertas = en cartera ahora. Cerradas = ya liquidadas.'},
+                      {l:'Patrimonio actual',
+                       v:patrimonioActual!=null?(patrimonioActual>=0?'€':'-€')+Math.abs(Math.round(patrimonioActual)).toLocaleString('es-ES'):'—',
+                       c:patrimonioActual==null?'#3d5a7a':patrimonioActual>=0?'#00e5a0':'#ff4d6d',
+                       tip:'Capital neto aportado + dividendos acumulados + P&L total (realizado + flotante). Requiere registros en pestaña Capital.'},
                       {l:'Capital Empleado',
                        v:capitalEmp>0?'€'+Math.round(capitalEmp).toLocaleString('es-ES'):'—',
                        c:'#00d4ff',
                        tip:'Suma del capital actual en posiciones abiertas (acciones × precio entrada ÷ FX). No incluye P&L flotante.'},
+                      {l:'Capital disponible',
+                       v:capitalDisp!=null?(capitalDisp>=0?'€':'-€')+Math.abs(Math.round(capitalDisp)).toLocaleString('es-ES'):'—',
+                       c:capitalDisp==null?'#3d5a7a':capitalDisp>=0?'#00e5a0':'#ff4d6d',
+                       tip:'Patrimonio actual − Capital empleado. Liquidez estimada disponible fuera de posiciones abiertas.'},
                       {l:'Tiempo Invertido ('+aniosInv.toFixed(2)+'a)',
                        v:tiempoInvPct!=null?tiempoInvPct+'%':'—',
                        c:'#ffd166',
