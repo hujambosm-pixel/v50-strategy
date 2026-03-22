@@ -2397,7 +2397,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.93</title>
+        <title>Trading Simulator V5.94</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2411,8 +2411,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
             --font-family:"JetBrains Mono","Fira Code","IBM Plex Mono",monospace;
           }
           body { font-size:14px; color:#e0eeff; }
-          /* ── Nav icons — force 28px regardless of any inheritance ── */
-          .nav-item-icon { font-size:28px !important; width:30px !important; flex-shrink:0 !important; text-align:center !important; display:inline-block !important; line-height:1 !important; }
+          /* ── Nav icons — force 20px regardless of any inheritance ── */
+          .nav-item-icon { font-size:20px !important; width:22px !important; flex-shrink:0 !important; text-align:center !important; display:inline-block !important; line-height:1 !important; }
           /* ── Sidebar ── */
           .sidebar { font-size:13px; }
           .sidebar .sidebar-title { color:#f5fbff !important; font-weight:700; font-size:12px !important; letter-spacing:0.08em; text-transform:uppercase; padding-bottom:4px; border-bottom:1px solid #1a3050; margin-bottom:6px; }
@@ -2474,7 +2474,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.93
+            <span className="dot"/>Trading Simulator V5.94
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -2529,7 +2529,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
             onMouseEnter={()=>setNavExpanded(true)}
             onMouseLeave={()=>setNavExpanded(false)}
             onWheel={e=>{if(e.ctrlKey){e.preventDefault();handlePanelScaleWheel('nav',e)}}}
-            style={{width:navExpanded?Math.round(158*(panelScale.nav||1)):Math.round(48*(panelScale.nav||1)),transition:'width 0.18s ease',display:'flex',flexDirection:'column',
+            style={{width:navExpanded?Math.round(148*(panelScale.nav||1)):Math.round(40*(panelScale.nav||1)),transition:'width 0.18s ease',display:'flex',flexDirection:'column',
               background:'var(--bg2)',borderRight:'1px solid var(--border)',flexShrink:0,overflow:'hidden',
               zIndex:15,paddingTop:6,paddingBottom:6}}
           >
@@ -2547,7 +2547,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   background:sidePanel===item.id?'var(--bg3)':'transparent',
                   border:'none',borderLeft:sidePanel===item.id?`2px solid ${item.accent||'var(--accent)'}`:'2px solid transparent',
                   color:sidePanel===item.id?(item.accent||'var(--accent)'):'var(--text3)',
-                  fontFamily:MONO,fontSize:28,cursor:'pointer',whiteSpace:'nowrap',textAlign:'left',
+                  fontFamily:MONO,fontSize:20,cursor:'pointer',whiteSpace:'nowrap',textAlign:'left',
                   transition:'background 0.12s,color 0.12s',position:'relative'}}
               >
                 <span className="nav-item-icon"
@@ -3510,7 +3510,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                           </span>
                         )
                       })()}
-                      <div className="chart-title" style={{cursor:'pointer'}} onClick={()=>setSymSearchOpen(true)} title="Buscar símbolo">{simbolo}</div>
+                      <div className="chart-title" style={{cursor:'pointer'}} onClick={()=>window.open(`https://www.tradingview.com/chart/?symbol=${tvSym(simbolo)}`,'_blank')} title={`Abrir ${simbolo} en TradingView ↗`}>{simbolo}</div>
                       {/* Botón + Watchlist — junto al ticker */}
                       <button onClick={newItem} title="Añadir a watchlist"
                         style={{background:'rgba(0,212,255,0.06)',border:'1px solid rgba(0,212,255,0.28)',
@@ -3576,16 +3576,6 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       </div>
                     </div>
                     <div style={{position:'relative'}}>
-                      {/* Transparent overlay sobre el logo TradingView (esquina inf. izq.) */}
-                      <div onClick={()=>{
-                          const sym=tvSym(simbolo)
-                          const url=`https://www.tradingview.com/chart/?symbol=${sym}`
-                          console.log('[TV Logo] simbolo:',simbolo,'→ tvSym:',sym,'→ URL:',url)
-                          window.open(url,'_blank')
-                        }}
-                        title={`Abrir ${simbolo} en TradingView`}
-                        style={{position:'absolute',bottom:3,left:3,zIndex:9999,width:130,height:22,
-                          cursor:'pointer',background:'rgba(0,0,0,0.01)'}}/>
                       <CandleChart
                         data={result.chartData} emaRPeriod={emaR} emaLPeriod={emaL}
                         trades={result.trades||[]} maxDD={metrics?.ddSimple||0}
