@@ -536,6 +536,11 @@ export default function Home() {
   const [contribType,setContribType]=useState('aportacion')
   const [contribNotes,setContribNotes]=useState('')
   const [contribSaving,setContribSaving]=useState(false)
+  const [contribEditing,setContribEditing]=useState(null)
+  const [contribEditDate,setContribEditDate]=useState('')
+  const [contribEditType,setContribEditType]=useState('aportacion')
+  const [contribEditAmount,setContribEditAmount]=useState('')
+  const [contribEditNotes,setContribEditNotes]=useState('')
   const [tlFilterBroker,setTlFilterBroker]=useState('')
   const [tlFilterYear,setTlFilterYear]=useState('')
   const [tlFilterMonth,setTlFilterMonth]=useState('')  // '01'..'12'
@@ -679,6 +684,27 @@ export default function Home() {
   const deleteContribution=async(id)=>{
     await fetch('/api/tradelog?action=delete-contribution',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})})
     setContributions(prev=>prev.filter(c=>c.id!==id))
+  }
+  const startEditContrib=(c)=>{
+    setContribEditing(c.id)
+    setContribEditDate(c.date?c.date.split('-').reverse().join('/'):'')
+    setContribEditType(c.type)
+    setContribEditAmount(String(parseFloat(c.amount)))
+    setContribEditNotes(c.notes||'')
+  }
+  const saveEditContrib=async(id)=>{
+    const parts=contribEditDate.split('/')
+    const isoDate=parts.length===3?`${parts[2]}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`:contribEditDate
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(isoDate)||!contribEditAmount||parseFloat(contribEditAmount)<=0) return
+    try{
+      const r=await fetch('/api/tradelog?action=update-contribution',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({id,date:isoDate,amount:parseFloat(contribEditAmount),type:contribEditType,notes:contribEditNotes||null})})
+      const d=await r.json()
+      if(d.id){
+        setContributions(prev=>prev.map(c=>c.id===id?d:c).sort((a,b)=>b.date.localeCompare(a.date)||(b.created_at||'').localeCompare(a.created_at||'')))
+        setContribEditing(null)
+      }
+    }catch(_){}
   }
 
   // ── tlFiltered: fills filtrados + status vía FIFO ──
@@ -2363,7 +2389,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.70</title>
+        <title>Trading Simulator V5.71</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2438,7 +2464,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.70
+            <span className="dot"/>Trading Simulator V5.71
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4993,6 +5019,37 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                   const TYPE_COLOR={aportacion:'#2a7fff',retirada:'#ff4d6d',dividendo:'#aaff44'}
                                   const TYPE_LABEL={aportacion:'Aportación',retirada:'Retirada',dividendo:'Dividendo'}
                                   const col=TYPE_COLOR[c.type]||'#7a9bc0'
+                                  const isEditing=contribEditing===c.id
+                                  const inp={fontFamily:MONO,fontSize:11,background:'#080c14',border:'1px solid #2a4a6a',borderRadius:3,color:'#c8d8e8',padding:'2px 6px'}
+                                  if(isEditing) return(
+                                    <tr key={c.id} style={{borderBottom:'1px solid #0d1520',background:'rgba(42,127,255,0.05)'}}>
+                                      <td style={{padding:'4px 8px'}}>
+                                        <input type="text" value={contribEditDate} onChange={e=>setContribEditDate(e.target.value)}
+                                          placeholder="DD/MM/YYYY" maxLength={10} style={{...inp,width:88}}/>
+                                      </td>
+                                      <td style={{padding:'4px 8px'}}>
+                                        <select value={contribEditType} onChange={e=>setContribEditType(e.target.value)} style={{...inp,width:100}}>
+                                          <option value="aportacion">Aportación</option>
+                                          <option value="retirada">Retirada</option>
+                                          <option value="dividendo">Dividendo</option>
+                                        </select>
+                                      </td>
+                                      <td style={{padding:'4px 8px'}}>
+                                        <input type="number" min="0.01" step="0.01" value={contribEditAmount} onChange={e=>setContribEditAmount(e.target.value)}
+                                          style={{...inp,width:80,textAlign:'right'}}/>
+                                      </td>
+                                      <td style={{padding:'4px 8px'}}>
+                                        <input type="text" value={contribEditNotes} onChange={e=>setContribEditNotes(e.target.value)}
+                                          placeholder="Notas" style={{...inp,width:'100%'}}/>
+                                      </td>
+                                      <td style={{padding:'4px 8px',textAlign:'right',whiteSpace:'nowrap'}}>
+                                        <button onClick={()=>saveEditContrib(c.id)} title="Guardar"
+                                          style={{fontFamily:MONO,fontSize:10,background:'#0d2a1a',border:'1px solid #00e5a0',borderRadius:3,color:'#00e5a0',padding:'2px 7px',cursor:'pointer',marginRight:4}}>✓</button>
+                                        <button onClick={()=>setContribEditing(null)} title="Cancelar"
+                                          style={{fontFamily:MONO,fontSize:10,background:'none',border:'1px solid #3d5a7a',borderRadius:3,color:'#5a7a9a',padding:'2px 7px',cursor:'pointer'}}>✕</button>
+                                      </td>
+                                    </tr>
+                                  )
                                   return(
                                     <tr key={c.id} style={{borderBottom:'1px solid #0d1520',background:i%2===0?'transparent':'rgba(13,24,36,0.4)'}}>
                                       <td style={{padding:'6px 12px',color:'#c8d8e8'}}>{c.date?c.date.split('-').reverse().join('/'):''}</td>
@@ -5003,7 +5060,9 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                         {c.type==='retirada'?'-':c.type==='dividendo'?'D+':'+'}€{parseFloat(c.amount).toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2})}
                                       </td>
                                       <td style={{padding:'6px 12px',color:'#5a7a9a',fontSize:10}}>{c.notes||'—'}</td>
-                                      <td style={{padding:'6px 12px',textAlign:'right'}}>
+                                      <td style={{padding:'6px 12px',textAlign:'right',whiteSpace:'nowrap'}}>
+                                        <button onClick={()=>startEditContrib(c)} title="Editar"
+                                          style={{fontFamily:MONO,fontSize:9,background:'none',border:'1px solid #1a3a5a',borderRadius:3,color:'#5a7a9a',padding:'2px 6px',cursor:'pointer',marginRight:4}}>✏</button>
                                         <button onClick={()=>deleteContribution(c.id)} title="Eliminar"
                                           style={{fontFamily:MONO,fontSize:9,background:'none',border:'1px solid #3d1a1a',borderRadius:3,color:'#ff4d6d',padding:'2px 6px',cursor:'pointer',opacity:0.7}}>✕</button>
                                       </td>

@@ -453,5 +453,18 @@ export default async function handler(req, res) {
     } catch (e) { return res.status(500).json({ error: e.message }) }
   }
 
+  // ── POST update-contribution ──
+  if (action === 'update-contribution') {
+    try {
+      const { id, date, amount, type, notes } = body
+      if (!id || !date || !amount || !type) return res.status(400).json({ error: 'Faltan campos' })
+      const data = await sb('/capital_contributions?id=eq.' + id, {
+        method: 'PATCH',
+        body: JSON.stringify({ date, amount: parseFloat(amount), type, notes: notes || null }),
+      })
+      return res.status(200).json(data?.[0] || {})
+    } catch (e) { return res.status(500).json({ error: e.message }) }
+  }
+
   return res.status(400).json({ error: 'Acción no reconocida' })
 }
