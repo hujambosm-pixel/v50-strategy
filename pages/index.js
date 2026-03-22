@@ -1175,7 +1175,11 @@ export default function Home() {
     if(!confirm('¿Eliminar este activo?')) return
     await deleteWatchlistItem(id); reloadWatchlist()
   }
-  const newItem=()=>openEditItem({id:null,symbol:'',name:'',group_name:'Acciones',list_name:'General',favorite:false,observations:''})
+  const newItem=()=>{
+    const sym=simbolo||''
+    const nm=sym?lookupName(sym)||'':''
+    openEditItem({id:null,symbol:sym,name:nm,group_name:'Acciones',list_name:'General',favorite:false,observations:''})
+  }
 
   // Abrir editor estrategia
   const openEditStr=(s)=>{
@@ -2393,7 +2397,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.90</title>
+        <title>Trading Simulator V5.91</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2468,7 +2472,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.90
+            <span className="dot"/>Trading Simulator V5.91
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -2504,12 +2508,6 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   ☁ Supabase ↗
                 </a>
             }
-            <a href="https://vercel.com/hujambosm-pixel/v50-strategy" target="_blank" rel="noreferrer"
-              style={{fontFamily:MONO,fontSize:11,padding:'3px 9px',borderRadius:4,cursor:'pointer',textDecoration:'none',
-                background:'rgba(0,212,255,0.06)',border:'1px solid rgba(0,212,255,0.25)',color:'#00d4ff',
-                display:'flex',alignItems:'center',gap:5}}>
-              ▲ Vercel ↗
-            </a>
             <button onClick={()=>setSettingsOpen(true)} title="Settings"
               style={{background:'rgba(0,212,255,0.06)',border:'1px solid rgba(0,212,255,0.25)',color:'#00d4ff',
                 fontFamily:MONO,fontSize:20,padding:'4px 10px',borderRadius:6,cursor:'pointer',
@@ -2892,15 +2890,24 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         </label>
                         <label style={{display:'flex',flexDirection:'column',gap:4,color:'#a8ccdf'}}>Lista
                           {(()=>{
-                            const allLists=[...new Set(watchlist.map(w=>w.list_name||'General').filter(Boolean))]
-                            return(<>
-                              <input type="text" list="wl-lists" value={editForm.list_name||'General'}
-                                onChange={e=>setEditForm(p=>({...p,list_name:e.target.value}))}
-                                style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'6px 8px',borderRadius:4}}/>
-                              <datalist id="wl-lists">
-                                {allLists.map(l=><option key={l} value={l}/>)}
-                              </datalist>
-                            </>)
+                            const allLists=[...new Set(['General',...watchlist.map(w=>w.list_name||'General')].filter(Boolean))]
+                            const cur=editForm.list_name||'General'
+                            if(!allLists.includes(cur)) allLists.push(cur)
+                            return(
+                              <select value={cur}
+                                onChange={e=>{
+                                  if(e.target.value==='__nueva__'){
+                                    const n=window.prompt('Nombre de la nueva lista:','')
+                                    if(n&&n.trim()) setEditForm(p=>({...p,list_name:n.trim()}))
+                                  } else {
+                                    setEditForm(p=>({...p,list_name:e.target.value}))
+                                  }
+                                }}
+                                style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'6px 8px',borderRadius:4}}>
+                                {allLists.map(l=><option key={l} value={l}>{l}</option>)}
+                                <option value="__nueva__">+ Nueva lista…</option>
+                              </select>
+                            )
                           })()}
                         </label>
                       </div>
@@ -3572,7 +3579,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       {/* Transparent overlay sobre el logo TradingView (esquina inf. izq.) */}
                       <div onClick={()=>window.open(`https://www.tradingview.com/chart/?symbol=${tvSym(simbolo)}`,'_blank')}
                         title={`Abrir ${simbolo} en TradingView`}
-                        style={{position:'absolute',bottom:3,left:3,zIndex:11,width:130,height:22,
+                        style={{position:'absolute',bottom:3,left:3,zIndex:9999,width:130,height:22,
                           cursor:'pointer',background:'transparent'}}/>
                       <CandleChart
                         data={result.chartData} emaRPeriod={emaR} emaLPeriod={emaL}
