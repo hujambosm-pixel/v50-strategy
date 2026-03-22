@@ -2393,7 +2393,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.87</title>
+        <title>Trading Simulator V5.87.1</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2468,7 +2468,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.87
+            <span className="dot"/>Trading Simulator V5.87.1
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5415,7 +5415,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     <div style={{flex:1,overflowY:'auto'}}>
                     </div>
                   )}
-                </>
+                </>}
+                </div>
               </div>
             )}
           </div>
