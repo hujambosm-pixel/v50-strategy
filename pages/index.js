@@ -2328,7 +2328,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.62</title>
+        <title>Trading Simulator V5.63</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2403,7 +2403,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.62
+            <span className="dot"/>Trading Simulator V5.63
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4875,26 +4875,32 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 <div style={{width:270,flexShrink:0,borderLeft:'1px solid var(--border)',background:'var(--bg2)',display:'flex',flexDirection:'column',overflow:'hidden'}}>
                   {/* ── MÉTRICAS SIEMPRE VISIBLES — incluye flotantes ── */}
                   {(()=>{
-                    // Use tlTradesFiltered (pre-computed with live prices via tlFifo/tlLivePrices)
-                    // so _pnl_float_eur is correct for open positions instead of always 0
+                    // Recompute float P&L for open positions directly from tlLivePrices (current state)
+                    // instead of relying on _pnl_float_eur baked into tlTradesFiltered, which may be
+                    // stale if tlFifo useMemo hasn't invalidated yet when live prices arrive.
+                    const liveFloatEur=(t)=>{
+                      const px=tlLivePrices[t.symbol]?.price!=null?parseFloat(tlLivePrices[t.symbol].price):null
+                      if(px!==null){const fxE=t.fx_entry||1;return(px-t.entry_price)*t.shares/fxE}
+                      return typeof t._pnl_float_eur==='number'?t._pnl_float_eur:0
+                    }
+                    const liveFloatPct=(t)=>{
+                      const px=tlLivePrices[t.symbol]?.price!=null?parseFloat(tlLivePrices[t.symbol].price):null
+                      if(px!==null&&t.entry_price>0)return(px/t.entry_price-1)*100
+                      return typeof t._pnl_float_pct==='number'?t._pnl_float_pct:0
+                    }
                     const open = tlTradesFiltered.filter(t=>t.status==='open')
                     const closed = tlTradesFiltered.filter(t=>t.status==='closed').slice().sort((a,b)=>(a.exit_date||'').localeCompare(b.exit_date||''))
                     const today=new Date().toISOString().split('T')[0]
                     // P&L
-                    const pnlReal=closed.reduce((s,t)=>s+(t.pnl_eur||0),0)
-                    const pnlFloat=open.reduce((s,t)=>s+(t._pnl_float_eur||0),0)
+                    const pnlReal=closed.reduce((s,t)=>s+parseFloat(t.pnl_eur||0),0)
+                    const pnlFloat=open.reduce((s,t)=>s+liveFloatEur(t),0)
                     const pnlTotal=pnlReal+pnlFloat
                     const commTotal=[...closed,...open].reduce((s,t)=>s+parseFloat(t.commission||0),0)
                     // Combinamos cerradas + abiertas con su P&L flotante para Win Rate, medias, días
                     const allWithPnl=[
                       ...closed.map(t=>({...t,_eff_pnl:parseFloat(t.pnl_eur)||0,_eff_pct:parseFloat(t.pnl_pct||0),_eff_dias:t.entry_date&&t.exit_date?Math.round((new Date(t.exit_date)-new Date(t.entry_date))/86400000):0})),
-                      ...open.map(t=>({...t,_eff_pnl:typeof t._pnl_float_eur==='number'?t._pnl_float_eur:0,_eff_pct:t._pnl_float_pct||0,_eff_dias:t.entry_date?Math.round((new Date(today)-new Date(t.entry_date))/86400000):0}))
+                      ...open.map(t=>({...t,_eff_pnl:liveFloatEur(t),_eff_pct:liveFloatPct(t),_eff_dias:t.entry_date?Math.round((new Date(today)-new Date(t.entry_date))/86400000):0}))
                     ]
-                    // Debug: log full winners list to verify VRT membership
-                    const _dbgWinners=allWithPnl.filter(t=>t._eff_pnl>=0)
-                    const _dbgLosers=allWithPnl.filter(t=>t._eff_pnl<0)
-                    console.log('[WinRate v5.62] winners ('+_dbgWinners.length+'/'+allWithPnl.length+'):',_dbgWinners.map(t=>'['+t.status+'] '+t.symbol+': '+t._eff_pnl.toFixed(4)))
-                    console.log('[WinRate v5.62] losers  ('+_dbgLosers.length+'/'+allWithPnl.length+'):',_dbgLosers.map(t=>'['+t.status+'] '+t.symbol+': '+t._eff_pnl.toFixed(4)))
                     const wins=allWithPnl.filter(t=>t._eff_pnl>=0)
                     const losses=allWithPnl.filter(t=>t._eff_pnl<0)
                     // Win Rate: todas las ops. Ganadora si P&L >= 0 (incluye break-even y VRT si flotante positivo)
