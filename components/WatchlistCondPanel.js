@@ -79,9 +79,10 @@ export default function WatchlistCondPanel({ conditions, condDotIds, onCondDotId
     if (!form.name.trim()||!form.type) return
     setSaving(true)
     try {
-      // color is a top-level column in Supabase (not inside params)
+      // Save color in BOTH places: params.color (works always) + top-level color column (when migration applied)
       const params = {...(form.params||{})}
-      delete params.color  // clean up legacy storage if present
+      if (form.color) params.color = form.color
+      else delete params.color
       const payload = { name:form.name.trim(), type:form.type, params, color:form.color||null, active:true }
       let savedId = editing?.id
       if (editing?.id) {
