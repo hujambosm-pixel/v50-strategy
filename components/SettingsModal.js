@@ -100,7 +100,7 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
 
   const TABS = [
     { id:'integraciones', label:'🔌 Integraciones' },
-    { id:'alarmas',       label:'🔔 Alertas' },
+    { id:'alarmas',       label:'🔔 Estrategias' },
     { id:'grafico',       label:'📈 Gráfico' },
     { id:'ranking',       label:'🏆 Ranking' },
     { id:'watchlist',     label:'📋 Watchlist' },
@@ -217,51 +217,12 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
           {/* ── ALARMAS ── */}
           {tab==='alarmas'&&(
             <div>
-              {sep('Canal de notificaciones')}
-              {row('Método de envío','',
-                <select value={settings.alarms?.method||'none'} onChange={e=>upd('alarms.method',e.target.value)}
-                  style={{background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,
-                    color:'#e2eaf5',fontFamily:MONO,fontSize:12,padding:'6px 10px',width:'100%'}}>
-                  <option value="none">Sin notificaciones</option>
-                  <option value="email">Email</option>
-                  <option value="webhook">Webhook (Slack, Discord, etc.)</option>
-                  <option value="telegram">Telegram</option>
-                </select>
-              )}
-
-              {settings.alarms?.method==='email'&&(
-                <>{sep('Email')}{row('Dirección de correo','',inp(settings.alarms?.email, v=>upd('alarms.email',v), {placeholder:'tu@email.com',type:'email'}))}</>
-              )}
-
-              {settings.alarms?.method==='webhook'&&(
-                <>{sep('Webhook')}{row('URL del webhook','',inp(settings.alarms?.webhookUrl, v=>upd('alarms.webhookUrl',v), {placeholder:'https://hooks.slack.com/...'}))}</>
-              )}
-
-              {settings.alarms?.method==='telegram'&&(
-                <>
-                  {sep('Telegram')}
-                  {row('Bot Token','',inp(settings.alarms?.telegramToken, v=>upd('alarms.telegramToken',v), {placeholder:'123456:ABC-...', mono:true}))}
-                  {row('Chat ID','',inp(settings.alarms?.telegramChatId, v=>upd('alarms.telegramChatId',v), {placeholder:'-100123456789', mono:true}))}
-                  <div style={{fontSize:10,color:'#3d5a7a',lineHeight:1.6,marginTop:-6}}>
-                    Crea un bot con @BotFather y añade el bot a tu canal/grupo para obtener el Chat ID.
-                  </div>
-                </>
-              )}
-
-              {sep('Parpadeo de alarmas')}
-              <div style={{marginBottom:12}}>
-                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
-                  <span style={{fontFamily:MONO,fontSize:10,color:'#cce0f5',flex:1}}>Parpadear cuando la alarma lleva ≤ N velas activa</span>
-                  <span style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:'#ffd166',minWidth:24,textAlign:'right'}}>{settings.alarmas?.blinkCandles??3}</span>
-                  <input type="range" min={1} max={20} value={settings.alarmas?.blinkCandles??3}
-                    onChange={e=>upd('alarmas.blinkCandles',Number(e.target.value))}
-                    style={{width:100,accentColor:'#ffd166'}}/>
-                </div>
-                <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',lineHeight:1.5}}>
-                  El círculo de alarma parpadeará si la condición se activó hace N velas o menos (día actual = 1).
-                </div>
+              <div style={{fontFamily:MONO,fontSize:9,color:'#4a7a9b',background:'rgba(0,180,255,0.06)',
+                border:'1px solid rgba(0,180,255,0.15)',borderRadius:4,padding:'7px 10px',marginBottom:12,lineHeight:1.6}}>
+                ℹ️ Estas opciones aplican únicamente a las <b style={{color:'#7ec8e3'}}>alertas de estrategias</b>.<br/>
+                El parpadeo y el método de envío de las <b style={{color:'#7ec8e3'}}>notificaciones del Watchlist</b> se configuran individualmente en cada notificación (panel Watchlist → ✎).
               </div>
-              {sep('Opciones')}
+              {sep('Opciones de estrategia')}
               <label style={{display:'flex',alignItems:'center',gap:8,marginBottom:8,cursor:'pointer'}}>
                 <input type="checkbox"
                   checked={settings.alarmas?.popupOnTrigger!==false}

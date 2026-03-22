@@ -2427,7 +2427,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V6.13</title>
+        <title>Trading Simulator V6.14</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2504,7 +2504,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V6.13
+            <span className="dot"/>Trading Simulator V6.14
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -2914,7 +2914,6 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                           if(!visibleConds.length) return null
                           const symSt=alarmStatus[w.symbol]
                           const COND_COLORS=['#00e5a0','#ffd166','#00d4ff','#ff7eb3','#9b72ff','#ff4d6d']
-                          const blinkN=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.alarmas?.blinkCandles??3}catch(_){return 3}})()
                           const CTYPE_LABELS={ema_cross_up:'Cruce alcista EMA',ema_cross_down:'Cruce bajista EMA',price_above_ema:'Precio > EMA',price_below_ema:'Precio < EMA',price_above_ma:'Precio > Media',price_below_ma:'Precio < Media',rsi_above:'RSI sobre nivel',rsi_below:'RSI bajo nivel',rsi_cross_up:'RSI cruza ↑',rsi_cross_down:'RSI cruza ↓',macd_cross_up:'MACD ↑',macd_cross_down:'MACD ↓'}
                           return visibleConds.map((c)=>{
                             const st=symSt?.[c.id]
@@ -2925,6 +2924,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                             const globalIdx=conditions.findIndex(x=>x.id===c.id)
                             const col=condColors[c.id]||COND_COLORS[(globalIdx>=0?globalIdx:0)%COND_COLORS.length]
                             const label=bars!=null?String(bars):'·'
+                            const blinkN=c.params?.blinkCandles??3
                             const shouldBlink=active&&bars!=null&&bars<=blinkN
                             const paramStr=c.params?.ma_fast?`EMA ${c.params.ma_fast}/${c.params.ma_slow}`:c.params?.ma_period?`MA(${c.params.ma_period})`:c.params?.period?`RSI(${c.params.period}) niv.${c.params.level}`:''
                             const tooltip=c.name
@@ -3077,7 +3077,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   {alarmLoading&&<div style={{padding:'10px 12px',fontFamily:MONO,fontSize:12,color:'#a8ccdf'}}>⟳ Cargando…</div>}
                   {!alarmLoading&&(()=>{
                     const COLORS=['#00e5a0','#ffd166','#00d4ff','#ff7eb3','#9b72ff','#ff4d6d']
-                    const blinkN=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.alarmas?.blinkCandles??3}catch(_){return 3}})()
+                    const blinkN=3
                     const COND_LABELS={
                       ema_cross_up:'↑ Cruce alcista EMA',ema_cross_down:'↓ Cruce bajista EMA',
                       price_above_ema:'Precio > EMA',price_below_ema:'Precio < EMA',

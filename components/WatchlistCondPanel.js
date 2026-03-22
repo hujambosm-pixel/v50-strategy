@@ -195,6 +195,27 @@ export default function WatchlistCondPanel({ conditions, onToggle, onReload, con
               title="Restablecer color por defecto">✕</span>}
           </div>
 
+          {/* Parpadeo */}
+          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:7}}>
+            <span style={{fontFamily:MONO,fontSize:8,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'0.08em',flexShrink:0}}>Parpadeo ≤</span>
+            <input type="range" min={1} max={20} value={form.params?.blinkCandles??3}
+              onChange={e=>onP('blinkCandles',Number(e.target.value))}
+              style={{flex:1,accentColor:'#ffd166'}}/>
+            <span style={{fontFamily:MONO,fontSize:11,fontWeight:700,color:'#ffd166',minWidth:20,textAlign:'right'}}>{form.params?.blinkCandles??3}</span>
+            <span style={{fontFamily:MONO,fontSize:8,color:'var(--text3)'}}>velas</span>
+          </div>
+
+          {/* Método de envío */}
+          <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:8}}>
+            <span style={{fontFamily:MONO,fontSize:8,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'0.08em',flexShrink:0}}>Envío</span>
+            <select value={form.params?.sendMethod||'none'} onChange={e=>onP('sendMethod',e.target.value)} style={{...SEL,flex:1}}>
+              <option value="none">Sin notificaciones</option>
+              <option value="email">Email</option>
+              <option value="webhook">Webhook (Slack, Discord…)</option>
+              <option value="telegram">Telegram</option>
+            </select>
+          </div>
+
           {/* Constructor SI [...] */}
           <div style={{display:'flex',alignItems:'center',gap:4,flexWrap:'wrap',marginBottom:8}}>
             <span style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',flexShrink:0}}>SI</span>
