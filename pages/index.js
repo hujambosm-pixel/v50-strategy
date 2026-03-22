@@ -2423,7 +2423,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V6.06</title>
+        <title>Trading Simulator V6.07</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2500,7 +2500,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V6.06
+            <span className="dot"/>Trading Simulator V6.07
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -2924,7 +2924,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                             const label=bars!=null?String(bars):'·'
                             const shouldBlink=active&&bars!=null&&bars<=blinkN
                             const paramStr=c.params?.ma_fast?`EMA ${c.params.ma_fast}/${c.params.ma_slow}`:c.params?.ma_period?`MA(${c.params.ma_period})`:c.params?.period?`RSI(${c.params.period}) niv.${c.params.level}`:''
-                            const tooltip=`${c.name}${paramStr?' · '+paramStr:''}${active?' ✓ activa'+(bars!=null?' · '+bars+'v':''):' — inactiva'} · Clic para cambiar color`
+                            const tooltip=c.name
                             return(
                               <span key={c.id} title={tooltip}
                                 onClick={e=>{e.stopPropagation();const r=e.currentTarget.getBoundingClientRect();setCondColorPicker(prev=>prev?.condId===c.id?null:{condId:c.id,x:r.left,y:r.bottom+4})}}
@@ -2934,7 +2934,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                   background:active?col:'rgba(42,63,85,0.5)',
                                   border:`1.5px solid ${active?col:'#2a3f55'}`,
                                   color:active?'#080c14':'#3d5a7a',
-                                  fontFamily:MONO,fontSize:6,fontWeight:800,lineHeight:1,letterSpacing:'-0.5px',
+                                  fontFamily:MONO,fontSize:5,fontWeight:800,lineHeight:1,letterSpacing:'-0.5px',
                                   boxShadow:active?`0 0 6px ${col}55`:undefined,
                                   cursor:'pointer',
                                   animation:shouldBlink?`alarmPulse 1s ease-in-out infinite`:undefined,
