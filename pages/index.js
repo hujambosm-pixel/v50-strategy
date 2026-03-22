@@ -2397,7 +2397,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.91</title>
+        <title>Trading Simulator V5.92</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2472,7 +2472,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.91
+            <span className="dot"/>Trading Simulator V5.92
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -3520,7 +3520,6 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       {/* Nombre del activo */}
                       <div style={{fontFamily:MONO,fontSize:12,color:'#7a9bc0',fontWeight:400}}>{lookupName(simbolo)}</div>
                       <div className="chart-price">{fmt(result.meta?.ultimoPrecio,2)}</div>
-                      <div className="chart-date">{fmtDate(result.meta?.ultimaFecha)}</div>
                       <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:6}}>
                         {/* Estrategia activa */}
                         {stratName&&(

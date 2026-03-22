@@ -160,8 +160,9 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
             }
 
             if(labelMode===2){
-              // ── Modo completo: % + € (sin fechas) ──
-              const line1=`${t.pnlPct>=0?'+':''}${t.pnlPct.toFixed(2)}%`
+              // ── Modo completo: # · % + € ──
+              const num=`#${idx+1}`
+              const line1=`${num} · ${t.pnlPct>=0?'+':''}${t.pnlPct.toFixed(2)}%`
               const line2=`€${t.pnlSimple>=0?'+':''}${Math.round(t.pnlSimple)}  ·  ${t.dias}d`
               const charW=8, BOX_H=40
               const w=Math.max(line1.length,line2.length)*charW+24
@@ -187,7 +188,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
               // ── Modo solo %: más grande, franja alta ──
               const ZONE_TOP=18, ZONE_H=chartH*0.22
               const labelY=ZONE_TOP + (idx % 4)*(ZONE_H/4) + 12
-              const lbl=`${t.pnlPct>=0?'+':''}${t.pnlPct.toFixed(1)}%`
+              const lbl=`#${idx+1} ${t.pnlPct>=0?'+':''}${t.pnlPct.toFixed(1)}%`
               const bw=lbl.length*8+14
               const bg=document.createElementNS(NS,'rect')
               Object.entries({
