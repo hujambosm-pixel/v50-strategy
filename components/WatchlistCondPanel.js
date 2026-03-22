@@ -197,12 +197,11 @@ export default function WatchlistCondPanel({ conditions, onToggle, onReload, con
 
           {/* Parpadeo */}
           <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:7}}>
-            <span style={{fontFamily:MONO,fontSize:8,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'0.08em',flexShrink:0}}>Parpadeo ≤</span>
+            <span style={{fontFamily:MONO,fontSize:8,color:'var(--text3)',flex:1}}>Parpadear cuando lleva ≤ N velas activa</span>
+            <span style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:'#ffd166',minWidth:24,textAlign:'right',flexShrink:0}}>{form.params?.blinkCandles??3}</span>
             <input type="range" min={1} max={20} value={form.params?.blinkCandles??3}
               onChange={e=>onP('blinkCandles',Number(e.target.value))}
-              style={{flex:1,accentColor:'#ffd166'}}/>
-            <span style={{fontFamily:MONO,fontSize:11,fontWeight:700,color:'#ffd166',minWidth:20,textAlign:'right'}}>{form.params?.blinkCandles??3}</span>
-            <span style={{fontFamily:MONO,fontSize:8,color:'var(--text3)'}}>velas</span>
+              style={{width:80,accentColor:'#ffd166',flexShrink:0}}/>
           </div>
 
           {/* Método de envío */}

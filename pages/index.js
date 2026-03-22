@@ -2427,7 +2427,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V6.15</title>
+        <title>Trading Simulator V6.16</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2504,7 +2504,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V6.15
+            <span className="dot"/>Trading Simulator V6.16
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -2823,7 +2823,12 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       const matchSearch=!wlSearch||(w.symbol||'').toLowerCase().includes(searchLower)||(w.name||'').toLowerCase().includes(searchLower)
                       const matchFav=!onlyFavs||w.favorite
                       const symAlarms=alarmStatus[w.symbol]||{}
-                      const matchActive=!condFilterActive||Object.values(symAlarms).some(v=>v?.active===true)
+                      const matchActive=!condFilterActive||conditions.filter(c=>c.active!==false).some(c=>{
+                        const st=symAlarms[c.id]
+                        if(!st?.active) return false
+                        const blinkN=c.params?.blinkCandles??3
+                        return st.bars!=null&&st.bars<=blinkN
+                      })
                       return matchList&&matchSearch&&matchFav&&matchActive
                     })
                     // Sort: 1st by ranking, 2nd by favorite, 3rd alphabetical
