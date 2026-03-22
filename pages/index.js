@@ -737,7 +737,9 @@ export default function Home() {
         if(tlFilterStrat && (t.strategy||'')!==tlFilterStrat) return false
         if(tlSearch && !(t.symbol||'').toLowerCase().includes(tlSearch.toLowerCase())) return false
         if(tlFilterYear||tlFilterMonth){
-          const d=t.entry_date||t.exit_date
+          // Closed trades: filter by exit_date (when the trade was realized)
+          // Open trades: filter by entry_date (when the trade was opened)
+          const d=(t.status==='closed'?t.exit_date:null)||t.entry_date
           if(!d) return false
           if(tlFilterYear && !d.startsWith(tlFilterYear)) return false
           if(tlFilterMonth && d.slice(5,7)!==tlFilterMonth) return false
@@ -2390,7 +2392,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.77</title>
+        <title>Trading Simulator V5.78</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2465,7 +2467,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.77
+            <span className="dot"/>Trading Simulator V5.78
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -3406,11 +3408,11 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
 
                 {/* Filtros */}
                 {(()=>{
-                  const allYears=[...new Set((tlFifo.trades||[]).map(t=>(t.entry_date||t.exit_date)?.slice(0,4)).filter(Boolean))].sort((a,b)=>b-a)
+                  const allYears=[...new Set((tlFifo.trades||[]).map(t=>((t.status==='closed'?t.exit_date:null)||t.entry_date)?.slice(0,4)).filter(Boolean))].sort((a,b)=>b-a)
                   const strats=[...new Set(tlTrades.map(t=>t.strategy||'').filter(Boolean))].sort()
                   const monthsInYear=tlFilterYear?[...new Set((tlFifo.trades||[])
-                    .filter(t=>{const d=t.entry_date||t.exit_date;return d&&d.startsWith(tlFilterYear)})
-                    .map(t=>{const d=t.entry_date||t.exit_date;return d?d.slice(5,7):null}).filter(Boolean)
+                    .filter(t=>{const d=(t.status==='closed'?t.exit_date:null)||t.entry_date;return d&&d.startsWith(tlFilterYear)})
+                    .map(t=>{const d=(t.status==='closed'?t.exit_date:null)||t.entry_date;return d?d.slice(5,7):null}).filter(Boolean)
                   )].sort():[]
                   const MESES=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
                   const selStyle={fontFamily:MONO,fontSize:10,width:'100%',padding:'3px 4px',borderRadius:3,
