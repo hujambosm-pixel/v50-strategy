@@ -2392,7 +2392,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.83</title>
+        <title>Trading Simulator V5.84</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2467,7 +2467,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.83
+            <span className="dot"/>Trading Simulator V5.84
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -2517,12 +2517,6 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 </button>
               )
             })()}
-            {result&&<button onClick={()=>window.open(`https://www.tradingview.com/chart/?symbol=${tvSym(simbolo)}`,'_blank')} style={{background:'#131722',border:'1px solid #2d3748',color:'#00d4ff',fontFamily:MONO,fontSize:11,padding:'3px 9px',borderRadius:4,cursor:'pointer',display:'flex',alignItems:'center',gap:4}}
-              onMouseOver={e=>e.currentTarget.style.borderColor='#00d4ff'}
-              onMouseOut={e=>e.currentTarget.style.borderColor='#2d3748'}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="#00d4ff"><path d="M3 3h7v2H5v14h14v-5h2v7H3V3zm11 0h7v7h-2V6.41l-9.29 9.3-1.42-1.42L17.59 5H14V3z"/></svg>
-              TradingView
-            </button>}
             {result&&metrics&&sidePanel!=='multi'&&<button
               onClick={()=>setMetricsLayout(l=>l==='grid'?'panel':l==='panel'?'multi':'grid')}
               title={metricsLayout==='grid'?'Cambiar a Panel simple':metricsLayout==='panel'?'Cambiar a Panel multi-columna':'Cambiar a Grid'}
@@ -4201,8 +4195,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   )}
                   {/* ── TABS siempre visibles + búsqueda/nueva op ── */}
                   <div style={{display:'flex',borderBottom:'2px solid var(--border)',flexShrink:0,alignItems:'stretch',background:'#0a0f1a'}}>
-                    {/* Search — izquierda, antes de los tabs */}
-                    <div style={{display:'flex',gap:4,alignItems:'center',padding:'4px 8px',borderRight:'1px solid var(--border)',flexShrink:0}}>
+                    {/* Search — solo visible en pestaña Operaciones */}
+                    {tlTab==='ops'&&<div style={{display:'flex',gap:4,alignItems:'center',padding:'4px 8px',borderRight:'1px solid var(--border)',flexShrink:0}}>
                       <input ref={tlSearchRef} type="text" placeholder="🔍 símbolo" value={tlSearch} onChange={e=>setTlSearch(e.target.value)}
                         style={{width:110,background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:10,padding:'3px 7px',borderRadius:4}}/>
                       {tlSearch&&(
@@ -4216,7 +4210,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         {tlTradesFiltered.length}
                       </span>
                       {tlLoading&&<span style={{fontFamily:MONO,fontSize:9,color:'#9b72ff',flexShrink:0}}>⟳</span>}
-                    </div>
+                    </div>}
                     {[{id:'dashboard',label:'📊 Dashboard'},{id:'ops',label:'📋 Operaciones'},{id:'import',label:'📥 Import'},{id:'capital',label:'💰 Capital'},{id:'export',label:'💾 Backup'}].map(t=>(
                       <button key={t.id} onClick={()=>setTlTab(t.id)}
                         style={{padding:'9px 16px',fontFamily:MONO,fontSize:11,cursor:'pointer',
@@ -5329,9 +5323,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     ]
                     return(
                       <div className="tl-resumen" onContextMenu={e=>{e.stopPropagation();openCtx(e,'tl_resumen')}} style={{flex:tlSelected?'0 0 auto':1,overflowY:'auto',borderBottom:tlSelected?'1px solid var(--border)':'none'}}>
-                        <div style={{padding:'6px 10px',borderBottom:'1px solid var(--border)',fontFamily:MONO,fontSize:8,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',display:'flex',justifyContent:'space-between'}}>
-                          <span>Resumen · {tlTradesFiltered.filter(t=>t.status==='open').length}ab/{tlTradesFiltered.filter(t=>t.status==='closed').length}cerr</span>
-                          <span style={{color:'#1a3a5a'}}>{allWithPnl.length} ops</span>
+                        <div style={{padding:'6px 10px',borderBottom:'1px solid var(--border)',fontFamily:MONO,fontSize:8,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase'}}>
+                          Resumen
                         </div>
                         <table style={{width:'100%',borderCollapse:'collapse'}}>
                           <tbody>
