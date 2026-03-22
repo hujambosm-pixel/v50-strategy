@@ -2392,7 +2392,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.80</title>
+        <title>Trading Simulator V5.81</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2467,7 +2467,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.80
+            <span className="dot"/>Trading Simulator V5.81
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -2529,7 +2529,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               style={{background:'rgba(13,21,32,0.9)',border:'1px solid #1a2d45',color:'#7a9bc0',fontFamily:MONO,fontSize:11,padding:'3px 9px',borderRadius:4,cursor:'pointer'}}>
               {metricsLayout==='grid'?'☰ Panel':metricsLayout==='panel'?'⊞ Multi':'⊟ Grid'}
             </button>}
-            <button onClick={()=>setSettingsOpen(true)} title="Configuración" style={{background:'rgba(13,21,32,0.9)',border:'1px solid #1a2d45',color:'#7a9bc0',fontFamily:MONO,fontSize:14,padding:'2px 8px',borderRadius:4,cursor:'pointer',lineHeight:1}} onMouseOver={e=>e.currentTarget.style.borderColor='#4a7fa0'} onMouseOut={e=>e.currentTarget.style.borderColor='#1a2d45'}>
+            <button onClick={()=>setSettingsOpen(true)} title="Configuración" style={{background:'rgba(13,21,32,0.9)',border:'1px solid #1a2d45',color:'#7a9bc0',fontFamily:MONO,fontSize:18,padding:'2px 8px',borderRadius:4,cursor:'pointer',lineHeight:1.1}} onMouseOver={e=>e.currentTarget.style.borderColor='#4a7fa0'} onMouseOut={e=>e.currentTarget.style.borderColor='#1a2d45'}>
               ⚙
             </button>
             <div style={{fontFamily:MONO,fontSize:11,color:'#5a7a95'}}>Stooq · diario</div>
@@ -2547,7 +2547,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               zIndex:15,paddingTop:6,paddingBottom:6,zoom:panelScale.nav||1}}
           >
             {[
-              {id:'config',     icon:'⚙', label:'Estrategias'},
+              {id:'config',     icon:'📈', label:'Estrategias'},
               {id:'alarms',     icon:'🔔',label:'Alertas',   hasAlerts:alarmActiveCount>0, alertCount:alarmActiveCount},
               {id:'watchlist',  icon:'📋',label:'Watchlist'},
               {id:'multi',      icon:'📊',label:'Backtesting'},
@@ -4211,7 +4211,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       </span>
                       {tlLoading&&<span style={{fontFamily:MONO,fontSize:9,color:'#9b72ff',flexShrink:0}}>⟳</span>}
                     </div>
-                    {[{id:'ops',label:'Ops'},{id:'import',label:'📥 Import'},{id:'export',label:'💾 Backup'},{id:'dashboard',label:'📊 Dashboard'},{id:'capital',label:'💰 Capital'}].map(t=>(
+                    {[{id:'dashboard',label:'📊 Dashboard'},{id:'ops',label:'📋 Operaciones'},{id:'import',label:'📥 Import'},{id:'capital',label:'💰 Capital'},{id:'export',label:'💾 Backup'}].map(t=>(
                       <button key={t.id} onClick={()=>setTlTab(t.id)}
                         style={{padding:'9px 16px',fontFamily:MONO,fontSize:11,cursor:'pointer',
                           background:tlTab===t.id?'rgba(155,114,255,0.12)':'transparent',
