@@ -2392,7 +2392,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.84</title>
+        <title>Trading Simulator V5.85</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2467,7 +2467,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.84
+            <span className="dot"/>Trading Simulator V5.85
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -2517,12 +2517,18 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 </button>
               )
             })()}
-            {result&&metrics&&sidePanel!=='multi'&&<button
-              onClick={()=>setMetricsLayout(l=>l==='grid'?'panel':l==='panel'?'multi':'grid')}
-              title={metricsLayout==='grid'?'Cambiar a Panel simple':metricsLayout==='panel'?'Cambiar a Panel multi-columna':'Cambiar a Grid'}
-              style={{background:'rgba(13,21,32,0.9)',border:'1px solid #1a2d45',color:'#7a9bc0',fontFamily:MONO,fontSize:11,padding:'3px 9px',borderRadius:4,cursor:'pointer'}}>
-              {metricsLayout==='grid'?'☰ Panel':metricsLayout==='panel'?'⊞ Multi':'⊟ Grid'}
-            </button>}
+            {sidePanel==='tradelog'&&(tlUseLocal()
+              ? <span style={{fontFamily:MONO,fontSize:9,padding:'3px 8px',borderRadius:4,
+                  background:'rgba(255,209,102,0.1)',border:'1px solid rgba(255,209,102,0.3)',color:'#ffd166'}}>
+                  💾 Local
+                </span>
+              : <a href={`https://supabase.com/dashboard/project/${(getSupaUrl().match(/https:\/\/([^.]+)\.supabase\.co/)||[])[1]||''}`} target="_blank" rel="noreferrer"
+                  style={{fontFamily:MONO,fontSize:11,padding:'3px 9px',borderRadius:4,cursor:'pointer',textDecoration:'none',
+                    background:'rgba(0,212,255,0.06)',border:'1px solid rgba(0,212,255,0.25)',color:'#00d4ff',
+                    display:'flex',alignItems:'center',gap:5}}>
+                  ☁ Supabase ↗
+                </a>
+            )}
             <button onClick={()=>setSettingsOpen(true)} title="Settings"
               style={{background:'rgba(0,212,255,0.06)',border:'1px solid rgba(0,212,255,0.25)',color:'#00d4ff',
                 fontFamily:MONO,fontSize:20,padding:'4px 10px',borderRadius:6,cursor:'pointer',
@@ -2560,11 +2566,11 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   background:sidePanel===item.id?'var(--bg3)':'transparent',
                   border:'none',borderLeft:sidePanel===item.id?`2px solid ${item.accent||'var(--accent)'}`:'2px solid transparent',
                   color:sidePanel===item.id?(item.accent||'var(--accent)'):'var(--text3)',
-                  fontFamily:MONO,fontSize:20,cursor:'pointer',whiteSpace:'nowrap',textAlign:'left',
+                  fontFamily:MONO,fontSize:26,cursor:'pointer',whiteSpace:'nowrap',textAlign:'left',
                   transition:'background 0.12s,color 0.12s',position:'relative'}}
               >
                 <span title={item.hasAlerts?`${item.alertCount} alerta${item.alertCount!==1?'s':''} activa${item.alertCount!==1?'s':''}`:undefined}
-                  style={{fontSize:20,flexShrink:0,width:24,textAlign:'center',
+                  style={{fontSize:26,flexShrink:0,width:28,textAlign:'center',
                     display:'inline-block',
                     animation:item.hasAlerts?'bellSwing 1.2s ease-in-out infinite':undefined,
                     transformOrigin:'top center'}}>{item.icon}</span>
@@ -5323,8 +5329,16 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     ]
                     return(
                       <div className="tl-resumen" onContextMenu={e=>{e.stopPropagation();openCtx(e,'tl_resumen')}} style={{flex:tlSelected?'0 0 auto':1,overflowY:'auto',borderBottom:tlSelected?'1px solid var(--border)':'none'}}>
-                        <div style={{padding:'6px 10px',borderBottom:'1px solid var(--border)',fontFamily:MONO,fontSize:8,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase'}}>
-                          Resumen
+                        <div style={{padding:'4px 6px 4px 10px',borderBottom:'1px solid var(--border)',fontFamily:MONO,fontSize:8,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                          <span>Resumen</span>
+                          {result&&metrics&&sidePanel!=='multi'&&sidePanel!=='tradelog'&&(
+                            <button onClick={()=>setMetricsLayout(l=>l==='grid'?'panel':l==='panel'?'multi':'grid')}
+                              title={metricsLayout==='grid'?'Panel simple':metricsLayout==='panel'?'Multi-columna':'Grid'}
+                              style={{background:'transparent',border:'1px solid #1a2d45',color:'#3d5a7a',fontFamily:MONO,fontSize:9,
+                                padding:'2px 6px',borderRadius:3,cursor:'pointer',letterSpacing:'normal',textTransform:'none'}}>
+                              {metricsLayout==='grid'?'☰':metricsLayout==='panel'?'⊞':'⊟'}
+                            </button>
+                          )}
                         </div>
                         <table style={{width:'100%',borderCollapse:'collapse'}}>
                           <tbody>
