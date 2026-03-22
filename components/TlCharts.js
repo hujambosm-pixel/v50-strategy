@@ -9,7 +9,7 @@ const CONTRIB_MARKER = {
   dividendo:  { color:'#aaff44', shape:'circle',     position:'belowBar', prefix:'D+' },
 }
 
-export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContribs, contributions, showWithContribs, onToggleContribs }) {
+export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContribs, contributions, showWithContribs, onToggleContribs, syncRef }) {
   const ref = useRef(null), chartRef = useRef(null), equityTooltipRef = useRef(null)
   const [showSinFx, setShowSinFx] = useState(true)
   const [showSinComm, setShowSinComm] = useState(true)
@@ -77,6 +77,19 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
           .setData(curveSinComm.map(p=>({time:p.date,value:p.value})))
         track(curveSinComm,'comm')
       }
+      // Cross-chart time sync (logical range — works for all series types)
+      if(syncRef?.current){
+        const syncId=Symbol()
+        const unsub=chart.timeScale().subscribeVisibleLogicalRangeChange(range=>{
+          if(!range||syncRef.current.syncing) return
+          syncRef.current.syncing=true
+          syncRef.current.listeners.forEach(fn=>{if(fn.id!==syncId)try{fn.handler(range)}catch(_){}})
+          syncRef.current.syncing=false
+        })
+        const handler=(range)=>{try{chart.timeScale().setVisibleLogicalRange(range)}catch(_){}}
+        syncRef.current.listeners.push({id:syncId,handler})
+        chartRef.current.__syncCleanup=()=>{try{unsub()}catch(_){};if(syncRef.current)syncRef.current.listeners=syncRef.current.listeners.filter(e=>e.id!==syncId)}
+      }
       // Crosshair tooltip
       const MONO2='"JetBrains Mono",monospace'
       chart.subscribeCrosshairMove(param=>{
@@ -92,14 +105,14 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
         tt.style.display='block'
         tt.style.left=((param.point.x+200>cw)?param.point.x-210:param.point.x+14)+'px'
         tt.style.top=Math.max(4,param.point.y-40)+'px'
-        tt.innerHTML=`<div style="font-size:10px;color:#7a9bc0;margin-bottom:4px;font-family:${MONO2}">${param.time}</div>`+rows.join('')
+        tt.innerHTML=rows.join('')
       })
       chart.timeScale().fitContent()
       const ro = new ResizeObserver(()=>{ if(ref.current) chart.applyOptions({width:ref.current.clientWidth}) })
       ro.observe(ref.current)
       return ()=>ro.disconnect()
     })
-    return ()=>{ if(chartRef.current){chartRef.current.remove();chartRef.current=null} }
+    return ()=>{ if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null} }
   },[activeCurve, curveSinFx, curveSinComm, showSinFx, showSinComm, showWithContribs, contributions, showAportacion, showRetirada, showDividendo])
 
   const btnStyle = (active, color) => ({
@@ -167,7 +180,7 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
 }
 
 // ── Capital Invertido vs Profit acumulado (area + line) ──
-export function TlInvestChart({ investData }) {
+export function TlInvestChart({ investData, syncRef }) {
   // investData: [{date, capital, profit}]  sorted by date
   const ref = useRef(null), chartRef = useRef(null)
   useEffect(()=>{
@@ -209,12 +222,25 @@ export function TlInvestChart({ investData }) {
         chart.addLineSeries({color:'#2a3f55',lineWidth:1,lineStyle:LineStyle.Dotted,lastValueVisible:false,priceLineVisible:false})
           .setData([{time:investData[0].date,value:0},{time:investData[investData.length-1].date,value:0}])
       }
+      // Cross-chart time sync
+      if(syncRef?.current){
+        const syncId=Symbol()
+        const unsub=chart.timeScale().subscribeVisibleLogicalRangeChange(range=>{
+          if(!range||syncRef.current.syncing) return
+          syncRef.current.syncing=true
+          syncRef.current.listeners.forEach(fn=>{if(fn.id!==syncId)try{fn.handler(range)}catch(_){}})
+          syncRef.current.syncing=false
+        })
+        const handler=(range)=>{try{chart.timeScale().setVisibleLogicalRange(range)}catch(_){}}
+        syncRef.current.listeners.push({id:syncId,handler})
+        chartRef.current.__syncCleanup=()=>{try{unsub()}catch(_){};if(syncRef.current)syncRef.current.listeners=syncRef.current.listeners.filter(e=>e.id!==syncId)}
+      }
       chart.timeScale().fitContent()
       const ro = new ResizeObserver(()=>{ if(ref.current) chart.applyOptions({width:ref.current.clientWidth}) })
       ro.observe(ref.current)
       return ()=>ro.disconnect()
     })
-    return ()=>{ if(chartRef.current){chartRef.current.remove();chartRef.current=null} }
+    return ()=>{ if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null} }
   },[investData])
   return (
     <div style={{borderTop:'1px solid var(--border)'}}>

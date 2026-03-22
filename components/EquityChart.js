@@ -93,7 +93,7 @@ export default function EquityChart({
         tt.style.display='block'
         tt.style.left=((param.point.x+200>cw)?param.point.x-210:param.point.x+14)+'px'
         tt.style.top=Math.max(4,param.point.y-40)+'px'
-        tt.innerHTML=`<div style="font-size:10px;color:#7a9bc0;margin-bottom:4px;font-family:${MONO2}">${param.time}</div>`+rows.join('')
+        tt.innerHTML=rows.join('')
       })
 
       chart.timeScale().fitContent()
