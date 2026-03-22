@@ -126,6 +126,22 @@ function parseDegiroCSV(csvText) {
   return fills
 }
 
+// Auto-detect CSV broker by headers and dispatch to the right parser
+function autoDetectCSV(csvText) {
+  // IBKR: characteristic "Trades,Header" or "Statement,Header" sections
+  if (/Trades[,"]/.test(csvText) && /Header/.test(csvText)) return parseIBKRcsv(csvText)
+  // Degiro: first line contains typical Spanish/English Degiro headers
+  const firstLine = csvText.split('\n')[0].toLowerCase()
+  if (firstLine.includes('producto') || firstLine.includes('product') ||
+      firstLine.includes('datum') || firstLine.includes('fecha')) return parseDegiroCSV(csvText)
+  // Fallback: try each parser and return whichever gets results
+  const ibkr = parseIBKRcsv(csvText)
+  if (ibkr.length) return ibkr
+  const degiro = parseDegiroCSV(csvText)
+  if (degiro.length) return degiro
+  return []
+}
+
 function parseIBKRtext(text) {
   const fills = []
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean)
@@ -403,8 +419,9 @@ export default async function handler(req, res) {
       const useDDMM = ibkrDateFormat !== 'MM/DD'
       let parsed = []
 
-      if (format === 'ibkr_csv')       parsed = parseIBKRcsv(text)
-      else if (format === 'degiro_csv') parsed = parseDegiroCSV(text)
+      if (format === 'csv')             parsed = autoDetectCSV(text)
+      else if (format === 'ibkr_csv')   parsed = parseIBKRcsv(text)   // legacy compat
+      else if (format === 'degiro_csv') parsed = parseDegiroCSV(text)  // legacy compat
       else if (format === 'ai') {
         const local = autoParseText(text, useDDMM)
         if (local && local.fills.length > 0) {
@@ -413,7 +430,7 @@ export default async function handler(req, res) {
           parsed = await parseWithAI(text, apiKey)
         }
       }
-      else return res.status(400).json({ error: 'Formato no soportado: ibkr_csv | degiro_csv | ai' })
+      else return res.status(400).json({ error: 'Formato no soportado: csv | ai' })
 
       // Enriquecer con FX automático
       for (const t of parsed) {

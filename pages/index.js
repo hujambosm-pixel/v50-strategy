@@ -763,7 +763,7 @@ export default function Home() {
   const [tlSideEdit,setTlSideEdit]=useState(false)   // edit panel in left sidebar
   const [tlCloseOpen,setTlCloseOpen]=useState(false)
   const [tlImportText,setTlImportText]=useState('')
-  const [tlImportFormat,setTlImportFormat]=useState('ai')
+  const [tlImportFormat,setTlImportFormat]=useState('csv')
   const [tlParsedRaw,setTlParsedRaw]=useState([])  // raw fills from parser (always saved)
   const [tlParsed,setTlParsed]=useState([])          // grouped preview (display only)
 
@@ -2392,7 +2392,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.85</title>
+        <title>Trading Simulator V5.86</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2467,7 +2467,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.85
+            <span className="dot"/>Trading Simulator V5.86
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4497,25 +4497,53 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
 
                 {/* IMPORTAR */}
                 {tlTab==='import'&&(
-                  <div style={{flex:1,display:'flex',flexDirection:'column',padding:'16px',gap:12,overflowY:'auto'}}>
+                  <div style={{flex:1,display:'flex',flexDirection:'column',padding:'16px',gap:14,overflowY:'auto'}}>
                     <div style={{fontFamily:MONO,fontSize:13,color:'#c8dff5',fontWeight:700}}>📥 Importar operaciones</div>
-                    {/* Selector de formato */}
-                    <div style={{display:'flex',gap:6}}>
-                      {[['ibkr_csv','CSV IBKR'],['degiro_csv','CSV Degiro'],['ai','Texto / Pegar']].map(([v,l])=>(
-                        <button key={v} onClick={()=>setTlImportFormat(v)}
-                          style={{fontFamily:MONO,fontSize:11,padding:'5px 10px',borderRadius:4,cursor:'pointer',
-                            border:`1px solid ${tlImportFormat===v?'#9b72ff':'#1a2d45'}`,
-                            background:tlImportFormat===v?'rgba(155,114,255,0.12)':'transparent',
-                            color:tlImportFormat===v?'#9b72ff':'#7a9bc0'}}>{l}</button>
-                      ))}
+                    {/* Selector de modo — dos tarjetas */}
+                    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+                      {[
+                        {v:'csv',  icon:'📄', title:'CSV',
+                         desc:'Sube un archivo CSV. Detección automática de formato, compatible con cualquier broker. Sin IA.'},
+                        {v:'ai',   icon:'📋', title:'Texto / Portapapeles',
+                         desc:'Pega cualquier texto o tabla copiada del broker o de un PDF. Interpretado con IA.'},
+                      ].map(({v,icon,title,desc})=>{
+                        const active=tlImportFormat===v
+                        return(
+                          <button key={v} onClick={()=>setTlImportFormat(v)}
+                            style={{textAlign:'left',padding:'12px 14px',borderRadius:6,cursor:'pointer',
+                              border:`1px solid ${active?'#9b72ff':'#1a2d45'}`,
+                              background:active?'rgba(155,114,255,0.1)':'rgba(10,15,26,0.6)',
+                              transition:'border-color 0.15s,background 0.15s',fontFamily:MONO}}>
+                            <div style={{fontSize:18,marginBottom:5}}>{icon}</div>
+                            <div style={{fontSize:12,fontWeight:700,color:active?'#d0aaff':'#c8dff5',marginBottom:4}}>{title}</div>
+                            <div style={{fontSize:10,color:active?'#9b72ff':'#4a6a88',lineHeight:1.5}}>{desc}</div>
+                          </button>
+                        )
+                      })}
                     </div>
-                    <div style={{fontFamily:MONO,fontSize:11,color:'#5a8aaa'}}>
-                      {tlImportFormat==='ibkr_csv'&&'Exporta desde IBKR: Informes → Extracto de cuenta → CSV. Pega el contenido aquí.'}
-                      {tlImportFormat==='degiro_csv'&&'Exporta desde Degiro: Actividad → Exportar → CSV. Pega el contenido aquí.'}
-                      {tlImportFormat==='ai'&&'Pega cualquier texto: historial de broker, tabla HTML o detalle de orden. Se interpretará automáticamente.'}
-                    </div>
+                    {/* Sube archivo CSV */}
+                    {tlImportFormat==='csv'&&(
+                      <label style={{display:'flex',alignItems:'center',gap:8,fontFamily:MONO,fontSize:11,
+                        color:'#7a9bc0',cursor:'pointer',padding:'6px 0'}}>
+                        <span style={{padding:'4px 10px',borderRadius:4,border:'1px solid #1a3a5a',
+                          background:'rgba(0,212,255,0.05)',color:'#00d4ff',fontSize:10,whiteSpace:'nowrap'}}>
+                          📁 Subir archivo CSV
+                        </span>
+                        <span style={{color:'#3d5a7a',fontSize:10}}>o pega el contenido directamente abajo</span>
+                        <input type="file" accept=".csv,.txt" style={{display:'none'}}
+                          onChange={e=>{
+                            const f=e.target.files?.[0]; if(!f) return
+                            const r=new FileReader()
+                            r.onload=ev=>setTlImportText(ev.target.result||'')
+                            r.readAsText(f,'utf-8')
+                            e.target.value=''
+                          }}/>
+                      </label>
+                    )}
                     <textarea value={tlImportText} onChange={e=>setTlImportText(e.target.value)}
-                      placeholder={tlImportFormat==='ai'?'Pega aquí el historial, tabla o describe la operación... Ej: Compré 50 NVDA el 12/02/2025 a $485.20, comisión $1.50':'Pega el contenido del CSV aquí...'}
+                      placeholder={tlImportFormat==='csv'
+                        ? 'Pega aquí el contenido del CSV (IBKR, Degiro u otro broker)...'
+                        : 'Pega aquí cualquier texto: historial del broker, tabla HTML, extracto de PDF... Ej: Compré 50 NVDA el 12/02/2025 a $485.20, comisión $1.50'}
                       style={{flex:'none',height:200,background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',
                         fontFamily:MONO,fontSize:11,padding:'10px',borderRadius:4,resize:'vertical',minHeight:120}}/>
                     <div style={{display:'flex',gap:8,alignItems:'center'}}>
