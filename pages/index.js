@@ -2392,7 +2392,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.79</title>
+        <title>Trading Simulator V5.80</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2467,7 +2467,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.79
+            <span className="dot"/>Trading Simulator V5.80
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -2491,7 +2491,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
 
           {/* Botones derecha */}
           <div style={{display:'flex',alignItems:'center',gap:8,marginLeft:'auto',padding:'0 12px'}}>
-            <button onClick={()=>setRulerOn(r=>!r)} style={{
+            {sidePanel!=='tradelog'&&<button onClick={()=>setRulerOn(r=>!r)} style={{
               background:rulerOn?'rgba(255,209,102,0.15)':'rgba(13,21,32,0.9)',
               border:`1px solid ${rulerOn?'#ffd166':'#2d3748'}`,
               color:rulerOn?'#ffd166':'#7a9bc0',
@@ -2499,8 +2499,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               display:'flex',alignItems:'center',gap:4
             }}>
               📏 {rulerOn?'ON':'Regla'}
-            </button>
-            {(()=>{
+            </button>}
+            {sidePanel!=='tradelog'&&(()=>{
               const modes=[
                 {label:'🏷 OFF',bg:'rgba(13,21,32,0.9)',border:'#2d3748',color:'#7a9bc0'},
                 {label:'🏷 %',bg:'rgba(0,229,160,0.08)',border:'#00e5a0',color:'#00e5a0'},
@@ -4886,6 +4886,20 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                           if(today>lastW) curveWithContribs.push({date:today,value:runContribW+runPnlW+floatPnl,isFloat:true})
                         }
                       }
+                      // V5.80: clip all display curves to active filter period → both charts share same x-axis range
+                      const _clip = arr => (tlFilterYear||tlFilterMonth)
+                        ? (arr||[]).filter(p=>{
+                            if(!p?.date) return false
+                            if(tlFilterYear&&!p.date.startsWith(tlFilterYear)) return false
+                            if(tlFilterMonth&&p.date.slice(5,7)!==tlFilterMonth) return false
+                            return true
+                          })
+                        : (arr||[])
+                      const eqDisp   = _clip(equityCurve)
+                      const sfxDisp  = _clip(curveSinFx)
+                      const scommDisp= _clip(curveSinComm)
+                      const cwcDisp  = _clip(curveWithContribs)
+
                       // Build invest chart data: timeline of capital invested vs cumulative profit
                       // Bug fix V5.60: include open trade entry events in the events array so their
                       // capital propagates correctly through the timeline up to today (instead of
@@ -4952,9 +4966,9 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                           )}
 
                           {/* Equity curve — P&L acumulado */}
-                          {equityCurve.length>1&&<TlEquityChart curve={equityCurve} curveSinFx={curveSinFx.length>1?curveSinFx:null} curveSinComm={curveSinComm.length>1?curveSinComm:null} curveWithContribs={curveWithContribs.length>1?curveWithContribs:null} contributions={contributions} showWithContribs={showWithContribs} onToggleContribs={()=>setShowWithContribs(v=>!v)} syncRef={tlDashSyncRef}/>}
+                          {eqDisp.length>1&&<TlEquityChart curve={eqDisp} curveSinFx={sfxDisp.length>1?sfxDisp:null} curveSinComm={scommDisp.length>1?scommDisp:null} curveWithContribs={cwcDisp.length>1?cwcDisp:null} contributions={contributions} showWithContribs={showWithContribs} onToggleContribs={()=>setShowWithContribs(v=>!v)} syncRef={tlDashSyncRef}/>}
                           {/* Capital Invertido vs Profit */}
-                          {investData.length>1&&<TlInvestChart investData={investData} syncRef={tlDashSyncRef} patrimonyCurve={curveWithContribs.length>1?curveWithContribs:null}/>}
+                          {investData.length>1&&<TlInvestChart investData={investData} syncRef={tlDashSyncRef} patrimonyCurve={cwcDisp.length>1?cwcDisp:null}/>}
                           {/* Barras P&L por trade — cerradas + abiertas */}
                           {(closed.length>0||openTrades.length>0)&&(
                             <div style={{padding:'12px 16px 8px',borderTop:'1px solid var(--border)'}}>
@@ -5158,11 +5172,25 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     const aniosPeriodo=firstDate?Math.max((new Date(today)-new Date(firstDate))/86400000/365.25,0.01):null
                     const aniosInv=totalDias/365.25
                     const tiempoInvPct=aniosPeriodo?Math.round(totalDias/(aniosPeriodo*365.25)*100):null
-                    // Capital actual en posiciones abiertas
+                    // Capital actual en posiciones abiertas (filtradas — para CAGR base)
                     const capitalEmp=open.reduce((s,t)=>{
                       const fxE=t.fx_entry>0?(t.fx_entry<1?1/t.fx_entry:t.fx_entry):1
                       return s+(parseFloat(t.shares||0)*parseFloat(t.entry_price||0))/fxE
                     },0)
+                    // V5.80: Patrimonio actual y Capital disponible usan TODOS los trades (ignoran filtro período)
+                    // para reflejar el estado real de la cartera, no solo el período filtrado.
+                    const _allOpen=(tlFifo.trades||[]).filter(t=>t.status==='open')
+                    const capitalEmpAll=_allOpen.reduce((s,t)=>{
+                      const fxE=t.fx_entry>0?(t.fx_entry<1?1/t.fx_entry:t.fx_entry):1
+                      return s+(parseFloat(t.shares||0)*parseFloat(t.entry_price||0))/fxE
+                    },0)
+                    const pnlRealAll=(tlFifo.trades||[]).filter(t=>t.status==='closed').reduce((s,t)=>s+parseFloat(t.pnl_eur||0),0)
+                    const pnlFloatAll=_allOpen.reduce((s,t)=>{
+                      const px=tlLivePrices[t.symbol]?.price!=null?parseFloat(tlLivePrices[t.symbol].price):null
+                      const fxE=t.fx_entry||1
+                      return s+(px!==null?(px-t.entry_price)*t.shares/fxE:(typeof t._pnl_float_eur==='number'?t._pnl_float_eur:0))
+                    },0)
+                    const pnlTotalAll=pnlRealAll+pnlFloatAll
                     // CAGR base = máximo capital concurrente histórico, consistente con el pico del gráfico Capital Invertido
                     // Incluye comisión/2 en el capital de entrada igual que lo hace el invest chart
                     const capEvents=[];[...closed,...open].forEach(t=>{
@@ -5182,8 +5210,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     const hasContribs=contributions.length>0
                     const capitalNeto=contributions.reduce((s,c)=>c.type==='aportacion'?s+parseFloat(c.amount||0):c.type==='retirada'?s-parseFloat(c.amount||0):s,0)
                     const dividendosAcum=contributions.filter(c=>c.type==='dividendo').reduce((s,c)=>s+parseFloat(c.amount||0),0)
-                    const patrimonioActual=hasContribs?capitalNeto+dividendosAcum+pnlTotal:null
-                    const capitalDisp=hasContribs&&patrimonioActual!=null?patrimonioActual-capitalEmp:null
+                    const patrimonioActual=hasContribs?capitalNeto+dividendosAcum+pnlTotalAll:null
+                    const capitalDisp=hasContribs&&patrimonioActual!=null?patrimonioActual-capitalEmpAll:null
                     const capitalBase=showWithContribs&&netContrib>0?netContrib:peakCapBase
                     const cagrLabel=showWithContribs&&netContrib>0?'global':'op.'
                     const cagrReal=aniosPeriodo&&pnlTotal!==0?
@@ -5204,9 +5232,9 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                        c:patrimonioActual==null?'#3d5a7a':patrimonioActual>=0?'#00e5a0':'#ff4d6d',
                        tip:'Capital neto aportado + dividendos acumulados + P&L total (realizado + flotante). Requiere registros en pestaña Capital.'},
                       {l:'Capital Empleado',
-                       v:capitalEmp>0?'€'+Math.round(capitalEmp).toLocaleString('es-ES'):'—',
+                       v:capitalEmpAll>0?'€'+Math.round(capitalEmpAll).toLocaleString('es-ES'):'—',
                        c:'#00d4ff',
-                       tip:'Suma del capital actual en posiciones abiertas (acciones × precio entrada ÷ FX). No incluye P&L flotante.'},
+                       tip:'Suma del capital actual en posiciones abiertas (acciones × precio entrada ÷ FX). No incluye P&L flotante. Siempre global, independiente del filtro de período.'},
                       {l:'Capital disponible',
                        v:capitalDisp!=null?(capitalDisp>=0?'€':'-€')+Math.abs(Math.round(capitalDisp)).toLocaleString('es-ES'):'—',
                        c:capitalDisp==null?'#3d5a7a':capitalDisp>=0?'#00e5a0':'#ff4d6d',
