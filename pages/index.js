@@ -2393,7 +2393,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.88</title>
+        <title>Trading Simulator V5.89</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2468,7 +2468,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.88
+            <span className="dot"/>Trading Simulator V5.89
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -2492,7 +2492,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
 
           {/* Botones derecha */}
           <div style={{display:'flex',alignItems:'center',gap:8,marginLeft:'auto',padding:'0 12px'}}>
-            {sidePanel==='tradelog'&&(tlUseLocal()
+            {tlUseLocal()
               ? <span style={{fontFamily:MONO,fontSize:9,padding:'3px 8px',borderRadius:4,
                   background:'rgba(255,209,102,0.1)',border:'1px solid rgba(255,209,102,0.3)',color:'#ffd166'}}>
                   💾 Local
@@ -2503,7 +2503,13 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     display:'flex',alignItems:'center',gap:5}}>
                   ☁ Supabase ↗
                 </a>
-            )}
+            }
+            <a href="https://vercel.com/hujambosm-pixel/v50-strategy" target="_blank" rel="noreferrer"
+              style={{fontFamily:MONO,fontSize:11,padding:'3px 9px',borderRadius:4,cursor:'pointer',textDecoration:'none',
+                background:'rgba(0,212,255,0.06)',border:'1px solid rgba(0,212,255,0.25)',color:'#00d4ff',
+                display:'flex',alignItems:'center',gap:5}}>
+              ▲ Vercel ↗
+            </a>
             <button onClick={()=>setSettingsOpen(true)} title="Settings"
               style={{background:'rgba(0,212,255,0.06)',border:'1px solid rgba(0,212,255,0.25)',color:'#00d4ff',
                 fontFamily:MONO,fontSize:20,padding:'4px 10px',borderRadius:6,cursor:'pointer',
@@ -3563,6 +3569,11 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       </div>
                     </div>
                     <div style={{position:'relative'}}>
+                      {/* Transparent overlay sobre el logo TradingView (esquina inf. izq.) */}
+                      <div onClick={()=>window.open(`https://www.tradingview.com/chart/?symbol=${tvSym(simbolo)}`,'_blank')}
+                        title={`Abrir ${simbolo} en TradingView`}
+                        style={{position:'absolute',bottom:3,left:3,zIndex:11,width:130,height:22,
+                          cursor:'pointer',background:'transparent'}}/>
                       <CandleChart
                         data={result.chartData} emaRPeriod={emaR} emaLPeriod={emaL}
                         trades={result.trades||[]} maxDD={metrics?.ddSimple||0}
