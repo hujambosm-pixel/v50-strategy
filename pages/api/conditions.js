@@ -130,7 +130,7 @@ export default async function handler(req, res) {
 
   // ── GET — listar condiciones ──
   if (req.method === 'GET') {
-    const r = await fetch(`${SUPA_URL}/rest/v1/conditions?active=eq.true&order=created_at.asc`, { headers: H })
+    const r = await fetch(`${SUPA_URL}/rest/v1/conditions?order=created_at.asc`, { headers: H })
     if (!r.ok) {
       // If table doesn't exist yet, return empty array gracefully
       return res.status(200).json([])
@@ -152,7 +152,7 @@ export default async function handler(req, res) {
     const { id } = req.query
     if (!id) return res.status(400).json({ error: 'id requerido' })
     const updates = {}
-    const allowed = ['name','description','type','params','source','role','color']
+    const allowed = ['name','description','type','params','source','role','active']
     allowed.forEach(k => { if (req.body[k] !== undefined) updates[k] = req.body[k] })
     const r = await fetch(`${SUPA_URL}/rest/v1/conditions?id=eq.${id}`, {
       method: 'PATCH',
@@ -167,12 +167,12 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
 
   // ── POST — crear condición ──
-  const { name, description, type, params, source, role, color } = req.body
+  const { name, description, type, params, source, role } = req.body
   if (!name || !type || !params) return res.status(400).json({ error: 'name, type y params son requeridos' })
   const r = await fetch(`${SUPA_URL}/rest/v1/conditions`, {
     method: 'POST',
     headers: { ...H, 'Prefer':'return=representation' },
-    body: JSON.stringify({ name, description: description||'', type, params, source: source||'manual', role: role||null, color: color||null, active: true })
+    body: JSON.stringify({ name, description: description||'', type, params, source: source||'manual', role: role||null, active: true })
   })
   if (!r.ok) {
     let detail = ''

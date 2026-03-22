@@ -43,7 +43,8 @@ function Num({ label, value, onChange, min=1, max=9999 }) {
 
 const PICKER_COLORS = ['#00e5a0','#ffd166','#00d4ff','#ff7eb3','#9b72ff','#ff4d6d','#ff9a3c','#a78bfa','#7ec8e3','#f472b6']
 
-export default function WatchlistCondPanel({ conditions, condDotIds, onCondDotIdsChange, onReload, condColors={}, onColorChange }) {
+// onToggle(condId, active) — called when user toggles a pill; parent persists via PATCH
+export default function WatchlistCondPanel({ conditions, onToggle, onReload, condColors={}, onColorChange }) {
   const [editing, setEditing] = useState(null)
   const [form, setForm]       = useState({})
   const [saving, setSaving]   = useState(false)
@@ -52,7 +53,7 @@ export default function WatchlistCondPanel({ conditions, condDotIds, onCondDotId
   function openEdit(c, e) {
     e?.stopPropagation()
     const rev = CREV[c.type]||[]
-    const existingColor = condColors[c.id] || c.color || c.params?.color || ''
+    const existingColor = condColors[c.id] || c.params?.color || ''
     setForm({ name:c.name||'', ind:rev[0]||'', op:rev[1]||'', params:{...c.params||{}}, type:c.type||'', color:existingColor })
     setEditing(c)
     setOpen(true)
@@ -79,11 +80,11 @@ export default function WatchlistCondPanel({ conditions, condDotIds, onCondDotId
     if (!form.name.trim()||!form.type) return
     setSaving(true)
     try {
-      // Save color in BOTH places: params.color (works always) + top-level color column (when migration applied)
+      // color stored in params.color (JSONB) — no top-level color column
       const params = {...(form.params||{})}
       if (form.color) params.color = form.color
       else delete params.color
-      const payload = { name:form.name.trim(), type:form.type, params, color:form.color||null, active:true }
+      const payload = { name:form.name.trim(), type:form.type, params, active:true }
       let savedId = editing?.id
       if (editing?.id) {
         const { updateCondition } = await import('../lib/conditions')
@@ -92,12 +93,9 @@ export default function WatchlistCondPanel({ conditions, condDotIds, onCondDotId
         const { saveCondition } = await import('../lib/conditions')
         const saved = await saveCondition(payload)
         savedId = saved.id
-        // Auto-activate new condition in the watchlist dots
-        onCondDotIdsChange([...condDotIds, saved.id])
       }
       // Propagate color choice to parent immediately
       if (onColorChange && savedId) onColorChange(savedId, form.color||null)
-      // onReload now returns a Promise — await it so conditions are loaded before closing
       await onReload()
       cancel()
     } catch(e) {
@@ -114,16 +112,15 @@ export default function WatchlistCondPanel({ conditions, condDotIds, onCondDotId
     try {
       const { deleteCondition } = await import('../lib/conditions')
       await deleteCondition(editing.id)
-      if (condDotIds.includes(editing.id)) onCondDotIdsChange(condDotIds.filter(x=>x!==editing.id))
       await onReload()
       cancel()
     } catch(e) { console.error(e) }
     finally { setSaving(false) }
   }
 
-  function toggleDot(c, i) {
-    const sel = condDotIds.includes(c.id)
-    onCondDotIdsChange(sel ? condDotIds.filter(x=>x!==c.id) : [...condDotIds, c.id])
+  function toggleDot(c) {
+    // active is the source of truth — delegate to parent for optimistic update + PATCH
+    onToggle(c.id, !(c.active !== false))
   }
 
   return (
@@ -145,11 +142,11 @@ export default function WatchlistCondPanel({ conditions, condDotIds, onCondDotId
       {open&&conditions.length>0&&!editing&&(
         <div style={{display:'flex',flexWrap:'wrap',gap:4,padding:'0 8px 6px',alignItems:'center'}}>
           {conditions.map((c,i)=>{
-            const sel = condDotIds.includes(c.id)
+            const sel = c.active !== false  // undefined → active for backward compat
             const col = condColors[c.id] || COND_COLORS[i%COND_COLORS.length]
             return (
               <div key={c.id} style={{display:'flex',alignItems:'center',gap:2}}>
-                <span onClick={()=>toggleDot(c,i)} title={`${sel?'Ocultar':'Mostrar'}: ${c.name}`}
+                <span onClick={()=>toggleDot(c)} title={`${sel?'Desactivar':'Activar'}: ${c.name}`}
                   style={{display:'inline-flex',alignItems:'center',gap:4,cursor:'pointer',
                     padding:'2px 7px',borderRadius:10,
                     border:`1px solid ${sel?col:'#1e3a52'}`,

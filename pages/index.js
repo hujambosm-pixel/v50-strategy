@@ -400,8 +400,14 @@ export default function Home() {
   const [conditions,setConditions]=useState([])
   const [condLoading,setCondLoading]=useState(false)
   const [panelScale,setPanelScale]=useState(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.ui?.panelScale||{}}catch{return{}}})
-  const [wlCondDotIds,setWlCondDotIdsState]=useState(()=>{try{const s=JSON.parse(localStorage.getItem('v50_settings')||'{}');const ids=s?.watchlist?.condDotIds;return Array.isArray(ids)?ids:[]}catch{return[]}})
-  const updateWlCondDotIds=useCallback((ids)=>{setWlCondDotIdsState(ids);try{const s=JSON.parse(localStorage.getItem('v50_settings')||'{}');if(!s.watchlist)s.watchlist={};s.watchlist.condDotIds=ids;localStorage.setItem('v50_settings',JSON.stringify(s))}catch{}},[])
+  // Toggle active state of a condition: optimistic update + PATCH to Supabase
+  const handleToggleCondition=useCallback(async(condId,active)=>{
+    setConditions(prev=>prev.map(c=>c.id===condId?{...c,active}:c))
+    try{
+      const {updateCondition}=await import('../lib/conditions')
+      await updateCondition(condId,{active})
+    }catch(e){console.error('toggle condition active:',e)}
+  },[])
   const [condColors,setCondColorsState]=useState(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.watchlist?.condColors||{}}catch{return{}}})
   const [condColorPicker,setCondColorPicker]=useState(null) // {condId,x,y} or null
   const setCondColor=useCallback((condId,color)=>{
@@ -1125,14 +1131,14 @@ export default function Home() {
     return fetchConditions().then(d=>setConditions(d||[])).catch(()=>{}).finally(()=>setCondLoading(false))
   }
 
-  // Sync colors from Supabase (c.color column, fallback to legacy params.color) into local condColors
+  // Sync colors from params.color (JSONB) into local condColors state
   useEffect(()=>{
     if(!conditions.length) return
     setCondColorsState(prev=>{
       const next={...prev}
       let changed=false
       conditions.forEach(c=>{
-        const col = c.color || c.params?.color  // c.color = dedicated column (new); params.color = legacy
+        const col = c.params?.color
         if(col&&!next[c.id]){next[c.id]=col;changed=true}
       })
       if(!changed) return prev
@@ -1420,10 +1426,8 @@ export default function Home() {
     setAlarmStatusLoading(true)
     try{
       // Merge real alarms + library conditions for watchlist dots
-      // If condDotIds empty/unset → evaluate ALL library conditions
-      const condDotIds=(()=>{try{const s=JSON.parse(localStorage.getItem('v50_settings')||'{}');const ids=s?.watchlist?.condDotIds;return Array.isArray(ids)&&ids.length>0?ids:null}catch(_){return null}})()
-      const allLibConds=lsGetConds()
-      const libConds = condDotIds ? allLibConds.filter(c=>condDotIds.includes(c.id)) : allLibConds
+      // Only evaluate conditions where active !== false
+      const libConds = conditions.filter(c=>c.active!==false)
       const pseudoAlarms = libConds.map(c=>({
         id: c.id,
         condition: c.type,
@@ -2423,7 +2427,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V6.12</title>
+        <title>Trading Simulator V6.13</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2500,7 +2504,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V6.12
+            <span className="dot"/>Trading Simulator V6.13
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -2802,8 +2806,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 {/* ── Círculos de condiciones del watchlist ── */}
                 <WatchlistCondPanel
                   conditions={conditions}
-                  condDotIds={wlCondDotIds}
-                  onCondDotIdsChange={updateWlCondDotIds}
+                  onToggle={handleToggleCondition}
                   onReload={reloadConditions}
                   condColors={condColors}
                   onColorChange={setCondColor}
@@ -2906,8 +2909,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         {/* Badges condiciones librería — círculos de color con velas */}
                         {(()=>{
                           if(!conditions.length) return null
-                          // wlCondDotIds desde estado React (se actualiza al hacer toggle en WatchlistCondPanel)
-                          const visibleConds = wlCondDotIds.length>0 ? conditions.filter(c=>wlCondDotIds.includes(c.id)) : conditions
+                          // Only show dots for active conditions (active !== false)
+                          const visibleConds = conditions.filter(c=>c.active!==false)
                           if(!visibleConds.length) return null
                           const symSt=alarmStatus[w.symbol]
                           const COND_COLORS=['#00e5a0','#ffd166','#00d4ff','#ff7eb3','#9b72ff','#ff4d6d']
