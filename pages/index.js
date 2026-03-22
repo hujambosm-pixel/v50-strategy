@@ -2328,7 +2328,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V5.65</title>
+        <title>Trading Simulator V5.66</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2403,7 +2403,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V5.65
+            <span className="dot"/>Trading Simulator V5.66
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4875,12 +4875,10 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 <div style={{width:270,flexShrink:0,borderLeft:'1px solid var(--border)',background:'var(--bg2)',display:'flex',flexDirection:'column',overflow:'hidden'}}>
                   {/* ── MÉTRICAS SIEMPRE VISIBLES — incluye flotantes ── */}
                   {(()=>{
-                    // Diagnostic: log open/closed split and liveFloatEur inputs
                     const liveFloatEur=(t)=>{
                       const px=tlLivePrices[t.symbol]?.price!=null?parseFloat(tlLivePrices[t.symbol].price):null
-                      const result=px!==null?(px-t.entry_price)*t.shares/(t.fx_entry||1):(typeof t._pnl_float_eur==='number'?t._pnl_float_eur:0)
-                      console.log('[liveFloat '+t.symbol+']',{livePx:px,entry_price:t.entry_price,shares:t.shares,fx_entry:t.fx_entry,_pnl_float_eur:t._pnl_float_eur,result})
-                      return result
+                      if(px!==null){const fxE=t.fx_entry||1;return(px-t.entry_price)*t.shares/fxE}
+                      return typeof t._pnl_float_eur==='number'?t._pnl_float_eur:0
                     }
                     const liveFloatPct=(t)=>{
                       const px=tlLivePrices[t.symbol]?.price!=null?parseFloat(tlLivePrices[t.symbol].price):null
@@ -4889,7 +4887,6 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     }
                     const open = tlTradesFiltered.filter(t=>t.status==='open')
                     const closed = tlTradesFiltered.filter(t=>t.status==='closed').slice().sort((a,b)=>(a.exit_date||'').localeCompare(b.exit_date||''))
-                    console.log('[metrics split] open:',open.map(t=>t.symbol+'/'+t.status),'closed sample:',closed.slice(0,3).map(t=>t.symbol+'/'+t.status))
                     const today=new Date().toISOString().split('T')[0]
                     // P&L
                     const pnlReal=closed.reduce((s,t)=>s+parseFloat(t.pnl_eur||0),0)
