@@ -1968,6 +1968,14 @@ export default function Home() {
   },[riskMode])
   useEffect(()=>{ if(sidePanel!=='risk'){ setRiskMode(null); setRiskChartActive(false) } },[sidePanel])
 
+  // ── onRiskLevelChange: drag de líneas risk actualiza el formulario en tiempo real ──
+  const onRiskLevelChange = useCallback((type, price)=>{
+    const p = parseFloat(price.toFixed(4))
+    const key = type==='entry'?'entry':type==='stop'?'stop':'tp'
+    setRiskCalc(c=>({...c,[key]:String(p)}))
+    setRiskChartActive(true)
+  },[])
+
   // ── onRiskPrice: captura clics del gráfico en modo risk ──
   const onRiskPrice = useCallback((rawPrice)=>{
     const price=parseFloat(rawPrice.toFixed(4))
@@ -4103,11 +4111,26 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         tlOpenTrades={tlTrades.filter(t=>t.status==='open'&&t.fill_type!=='sell'&&(t.symbol||'').toUpperCase()===(simbolo||'').toUpperCase())}
                         riskMode={sidePanel==='risk'?riskMode:null}
                         onRiskPrice={onRiskPrice}
-                        riskLevels={sidePanel==='risk'&&riskChartActive?{
-                          entry:parseFloat(riskCalc.entry)||null,
-                          stop:parseFloat(riskCalc.stop)||null,
-                          tp:parseFloat(riskCalc.tp)||null
-                        }:null}
+                        onRiskLevelChange={sidePanel==='risk'?onRiskLevelChange:null}
+                        riskLevels={sidePanel==='risk'&&riskChartActive?(()=>{
+                          const _e=parseFloat(riskCalc.entry)||null
+                          const _s=parseFloat(riskCalc.stop)||null
+                          const _t=parseFloat(riskCalc.tp)||null
+                          const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>s+Number(c.amount||0),0)
+                          const _ret=(contributions||[]).filter(c=>c.type==='retirada').reduce((s,c)=>s+Number(c.amount||0),0)
+                          const _bal=_aport-_ret
+                          const _pnlR=(tlFifo.closedTrades||[]).reduce((s,t)=>s+(t.pnl_eur||t._pnl_eur||0),0)
+                          const _pnlF=(tlFifo.openPositions||[]).reduce((s,p)=>s+(p._pnl_float_eur||0),0)
+                          const _eq=_bal+_pnlR+_pnlF
+                          const _rpt=riskActiveProfile?.risk_per_trade_value||1
+                          const _rptT=riskActiveProfile?.risk_per_trade_type||'%'
+                          const _capC=_rptT==='%'?(_eq*(_rpt/100)):_rpt
+                          const _dS=_e&&_s?Math.abs(_e-_s):0
+                          const _shs=_e&&_dS>0?Math.floor(_capC/_dS):0
+                          const _trReur=_shs*_dS
+                          const _rr=_t&&_e&&_dS>0?Math.abs(_t-_e)/_dS:0
+                          return {entry:_e,stop:_s,tp:_t,shares:_shs,tradeRiskEur:_trReur,rrRatio:_rr}
+                        })():null}
                         fillHeight={sidePanel==='risk'}
                       />
                       {/* ── Botón "Definir Niveles" — solo en Risk Management ── */}

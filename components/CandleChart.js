@@ -1,13 +1,13 @@
 import { useRef, useEffect } from 'react'
 import { MONO, f2, fmtDate } from '../lib/utils'
 
-// ── Risk-band primitive: shaded rectangle between two price levels ──
-function createBandPrimitive(bands) {
+// ── Risk primitive: bands + labels + R:R (TradingView Long Position style) ──
+function createRiskPrimitive(configRef) {
   return {
-    _bands: bands,
+    _configRef: configRef,
     _series: null,
-    attached(params) { this._series = params.series },
-    detached()       { this._series = null },
+    attached(p) { this._series = p.series },
+    detached()  { this._series = null },
     paneViews() {
       const self = this
       return [{
@@ -15,29 +15,83 @@ function createBandPrimitive(bands) {
           return {
             draw(target) {
               if (!self._series) return
+              const cfg = self._configRef.current
+              if (!cfg?.entry) return
+              const { entry, stop, tp, shares=0, tradeRiskEur=0, rrRatio=0 } = cfg
               target.useBitmapCoordinateSpace(scope => {
                 const ctx = scope.context
                 const vpr = scope.verticalPixelRatio
-                for (const { p1, p2, color } of self._bands) {
-                  const y1 = self._series.priceToCoordinate(p1)
-                  const y2 = self._series.priceToCoordinate(p2)
-                  if (y1 == null || y2 == null) continue
-                  const top = Math.min(y1, y2) * vpr
-                  const h   = Math.abs(y1 - y2) * vpr
+                const hpr = scope.horizontalPixelRatio
+                const W = scope.bitmapSize.width
+                const yE = self._series.priceToCoordinate(entry)
+                const yS = stop ? self._series.priceToCoordinate(stop) : null
+                const yT = tp   ? self._series.priceToCoordinate(tp)   : null
+                if (yE == null) return
+                // ── Shaded bands ──
+                const band = (y1, y2, color) => {
+                  if (y1==null||y2==null) return
+                  ctx.globalAlpha = 0.13
                   ctx.fillStyle = color
-                  ctx.fillRect(0, top, scope.bitmapSize.width, h)
+                  ctx.fillRect(0, Math.min(y1,y2)*vpr, W, Math.abs(y1-y2)*vpr)
+                  ctx.globalAlpha = 1
+                }
+                if (yS!=null) band(yE, yS, '#ff4d6d')
+                if (yT!=null) band(yE, yT, '#00e5a0')
+                // ── Label boxes ──
+                const lh  = Math.round(16 * vpr)
+                const lw  = Math.round(162 * hpr)
+                const lx  = W - lw - Math.round(72 * hpr)
+                const lbl = (y, color, main, sub) => {
+                  if (y==null) return
+                  const yp = y * vpr
+                  ctx.fillStyle = color + '28'
+                  ctx.fillRect(lx, yp - lh/2, lw, lh)
+                  ctx.strokeStyle = color + 'cc'
+                  ctx.lineWidth = Math.max(1, hpr * 0.8)
+                  ctx.strokeRect(lx, yp - lh/2, lw, lh)
+                  ctx.font = `bold ${Math.round(8.5*hpr)}px monospace`
+                  ctx.fillStyle = color
+                  ctx.textAlign = 'left'
+                  ctx.textBaseline = 'middle'
+                  ctx.fillText(main, lx + 4*hpr, yp)
+                  if (sub) {
+                    ctx.font = `${Math.round(7.5*hpr)}px monospace`
+                    ctx.fillStyle = color + 'cc'
+                    ctx.textAlign = 'right'
+                    ctx.fillText(sub, lx + lw - 4*hpr, yp)
+                  }
+                }
+                lbl(yE, '#00d4ff', `↔ ENTRADA  ${entry.toFixed(2)}`, '')
+                if (yS!=null && stop) {
+                  const dp = ((stop-entry)/entry*100).toFixed(2)+'%'
+                  const ls = shares>0 ? ` -€${Math.round(tradeRiskEur)}` : ''
+                  lbl(yS, '#ff4d6d', `▼ STOP  ${stop.toFixed(2)}`, dp+ls)
+                }
+                if (yT!=null && tp) {
+                  const dp = '+'+((tp-entry)/entry*100).toFixed(2)+'%'
+                  const gs = shares>0&&rrRatio>0 ? ` +€${Math.round(tradeRiskEur*rrRatio)}` : ''
+                  lbl(yT, '#00e5a0', `▲ TP  ${tp.toFixed(2)}`, dp+gs)
+                }
+                // ── R:R ratio ──
+                if (yT!=null && rrRatio>0) {
+                  const my = ((yE+yT)/2) * vpr
+                  ctx.font = `bold ${Math.round(10*hpr)}px monospace`
+                  ctx.fillStyle = 'rgba(0,229,160,0.85)'
+                  ctx.textAlign = 'center'
+                  ctx.textBaseline = 'middle'
+                  ctx.fillText(`R:R  1 : ${rrRatio.toFixed(2)}`, W*0.38, my)
                 }
               })
             }
           }
         },
-        zOrder() { return 'bottom' }
+        zOrder() { return 'normal' }
       }]
     }
   }
 }
 
-export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, fillHeight=false }) {
+export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, onRiskLevelChange, fillHeight=false }) {
   const containerRef=useRef(null), svgRef=useRef(null), legendRef=useRef(null), tooltipRef=useRef(null)
   const activeLegendRef = externalLegendRef || legendRef
   const chartRef=useRef(null), candlesRef=useRef(null)
@@ -47,10 +101,13 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
   const dragRef=useRef(null)             // {lineObj} while dragging
   const priceAlarmTimersRef=useRef([])   // setInterval IDs for blinking
   const lastCloseRef=useRef(null)        // último close cargado
-  const riskLinesRef=useRef([])          // createPriceLine refs for risk levels
-  const riskBandSeriesRef=useRef(null)   // dummy LineSeries hosting band primitive
+  const riskLinesRef=useRef([null,null,null]) // [entryLine, stopLine, tpLine]
+  const riskBandSeriesRef=useRef(null)         // dummy LineSeries hosting risk primitive
+  const riskConfigRef=useRef({entry:null,stop:null,tp:null,shares:0,tradeRiskEur:0,rrRatio:0})
+  const onRiskLevelChangeRef=useRef(onRiskLevelChange)
   const fillHeightRef=useRef(fillHeight)
   useEffect(()=>{ fillHeightRef.current=fillHeight },[fillHeight])
+  useEffect(()=>{ onRiskLevelChangeRef.current=onRiskLevelChange },[onRiskLevelChange])
   useEffect(()=>{
     rulerActiveR.current=rulerActive
     if(!rulerActive){
@@ -744,62 +801,132 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
     }
   },[priceAlarms,ackedAlarms,data])
 
-  // ── Risk levels: price lines + shaded band ──
+  // ── Risk levels: price lines + labels + bands (update-in-place to avoid flicker) ──
   useEffect(()=>{
     const chart   = chartRef.current
     const candles = candlesRef.current
     if (!chart || !candles) return
 
-    // Clean previous lines
-    riskLinesRef.current.forEach(pl=>{ try{ candles.removePriceLine(pl) }catch(_){} })
-    riskLinesRef.current = []
-    // Clean previous band series
-    if (riskBandSeriesRef.current) {
-      try{ chart.removeSeries(riskBandSeriesRef.current) }catch(_){}
-      riskBandSeriesRef.current = null
+    const cleanup = () => {
+      riskLinesRef.current.forEach((pl,i)=>{ if(pl){ try{candles.removePriceLine(pl)}catch(_){}; riskLinesRef.current[i]=null } })
+      if(riskBandSeriesRef.current){ try{chart.removeSeries(riskBandSeriesRef.current)}catch(_){}; riskBandSeriesRef.current=null }
+      Object.assign(riskConfigRef.current,{entry:null,stop:null,tp:null,shares:0,tradeRiskEur:0,rrRatio:0})
     }
 
-    if (!riskLevels?.entry) return
-    const { entry, stop, tp } = riskLevels
+    if (!riskLevels?.entry) { cleanup(); return }
 
-    // Entry — blue
-    riskLinesRef.current.push(candles.createPriceLine({
-      price: entry, color:'#00d4ff', lineWidth:2, lineStyle:0,
-      axisLabelVisible:true, title:`Entrada: ${entry.toFixed(2)}`
-    }))
-    // Stop — red
-    if (stop) {
-      riskLinesRef.current.push(candles.createPriceLine({
-        price: stop, color:'#ff4d6d', lineWidth:2, lineStyle:0,
-        axisLabelVisible:true, title:`Stop: ${stop.toFixed(2)}`
-      }))
-    }
-    // TP — green
-    if (tp) {
-      riskLinesRef.current.push(candles.createPriceLine({
-        price: tp, color:'#00e5a0', lineWidth:2, lineStyle:0,
-        axisLabelVisible:true, title:`Objetivo: ${tp.toFixed(2)}`
-      }))
-    }
+    const { entry, stop=null, tp=null, shares=0, tradeRiskEur=0, rrRatio=0 } = riskLevels
+    Object.assign(riskConfigRef.current, { entry, stop, tp, shares, tradeRiskEur, rrRatio })
 
-    // Shaded bands via Primitive (only if there's range to fill)
-    if ((stop || tp) && data?.length) {
-      const firstDate = data[0].date, lastDate = data[data.length-1].date
-      const bands = []
-      if (stop) bands.push({ p1:Math.min(entry,stop), p2:Math.max(entry,stop), color:'rgba(255,77,109,0.13)' })
-      if (tp)   bands.push({ p1:Math.min(entry,tp),   p2:Math.max(entry,tp),   color:'rgba(0,229,160,0.10)' })
+    // Update or create a price line (update-in-place avoids flicker)
+    const upsertLine = (idx, price, color, title) => {
+      if (!price) {
+        if (riskLinesRef.current[idx]) { try{candles.removePriceLine(riskLinesRef.current[idx])}catch(_){}; riskLinesRef.current[idx]=null }
+        return
+      }
+      if (riskLinesRef.current[idx]) {
+        try { riskLinesRef.current[idx].applyOptions({ price, title }); return } catch(_) { riskLinesRef.current[idx]=null }
+      }
+      try { riskLinesRef.current[idx]=candles.createPriceLine({price,color,lineWidth:2,lineStyle:0,axisLabelVisible:true,title}) } catch(_) {}
+    }
+    upsertLine(0, entry,  '#00d4ff', `Entrada: ${entry.toFixed(2)}`)
+    upsertLine(1, stop,   '#ff4d6d', stop ? `Stop: ${stop.toFixed(2)}`     : '')
+    upsertLine(2, tp,     '#00e5a0', tp   ? `Objetivo: ${tp.toFixed(2)}`   : '')
+
+    // Create primitive once (it reads from riskConfigRef which we mutate in place)
+    if (!riskBandSeriesRef.current && data?.length) {
+      const fd=data[0].date, ld=data[data.length-1].date
       try {
-        const dummy = chart.addLineSeries({
-          lastValueVisible:false, priceLineVisible:false,
-          crosshairMarkerVisible:false, visible:false, color:'transparent'
-        })
-        dummy.setData([{time:firstDate,value:entry},{time:lastDate,value:entry}])
-        dummy.attachPrimitive(createBandPrimitive(bands))
-        riskBandSeriesRef.current = dummy
+        const dummy=chart.addLineSeries({lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false,visible:false,color:'transparent'})
+        dummy.setData([{time:fd,value:entry},{time:ld,value:entry}])
+        dummy.attachPrimitive(createRiskPrimitive(riskConfigRef))
+        riskBandSeriesRef.current=dummy
       } catch(_) {}
     }
   // eslint-disable-next-line
   },[riskLevels, data])
+
+  // ── Risk drag: mousedown near a line → drag to update prices ──
+  useEffect(()=>{
+    const container = containerRef.current
+    if (!container) return
+    let dragging = null // 'entry'|'stop'|'tp'|null
+
+    const snap = (rawPrice, e, x) => {
+      if (!e.ctrlKey || !data?.length || !chartRef.current) return rawPrice
+      try {
+        const time = chartRef.current.timeScale().coordinateToTime(x)
+        if (!time) return rawPrice
+        const bar = data.find(d=>d.date===time)
+        if (!bar) return rawPrice
+        const ohlc = [bar.open, bar.high, bar.low, bar.close]
+        return ohlc.reduce((a,b)=>Math.abs(b-rawPrice)<Math.abs(a-rawPrice)?b:a)
+      } catch(_) { return rawPrice }
+    }
+
+    const onDown = (e) => {
+      const cfg = riskConfigRef.current
+      if (!cfg?.entry) return
+      const rect = container.getBoundingClientRect()
+      const y = e.clientY - rect.top
+      const THRESH = 8
+      const candles = candlesRef.current
+      if (!candles) return
+      for (const [type, price] of [['entry',cfg.entry],['stop',cfg.stop],['tp',cfg.tp]]) {
+        if (!price) continue
+        const lineY = candles.priceToCoordinate(price)
+        if (lineY!=null && Math.abs(y-lineY)<=THRESH) {
+          dragging = type
+          e.preventDefault()
+          e.stopPropagation()
+          container.style.cursor = 'ns-resize'
+          break
+        }
+      }
+    }
+
+    const onMove = (e) => {
+      if (!dragging) return
+      const candles = candlesRef.current
+      if (!candles) return
+      const rect = container.getBoundingClientRect()
+      const y = e.clientY - rect.top
+      const x = e.clientX - rect.left
+      let price = candles.coordinateToPrice(y)
+      if (price==null) return
+      price = snap(price, e, x)
+      price = parseFloat(price.toFixed(4))
+
+      // Validate: stop must be below entry, tp above
+      const cfg = riskConfigRef.current
+      if (dragging==='stop'  && cfg.entry && price>=cfg.entry) return
+      if (dragging==='tp'    && cfg.entry && price<=cfg.entry) return
+
+      // Update config ref (read by primitive on next repaint)
+      riskConfigRef.current[dragging] = price
+      // Update price line directly (triggers LWC repaint which redraws primitive)
+      const lineIdx = {entry:0,stop:1,tp:2}
+      const titles  = {entry:`Entrada: ${price.toFixed(2)}`,stop:`Stop: ${price.toFixed(2)}`,tp:`Objetivo: ${price.toFixed(2)}`}
+      const pl = riskLinesRef.current[lineIdx[dragging]]
+      if (pl) try { pl.applyOptions({price, title: titles[dragging]}) } catch(_) {}
+      // Sync to form (real-time update)
+      onRiskLevelChangeRef.current?.(dragging, price)
+    }
+
+    const onUp = () => {
+      if (dragging) { dragging=null; container.style.cursor='' }
+    }
+
+    container.addEventListener('mousedown', onDown, true)
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    return () => {
+      container.removeEventListener('mousedown', onDown, true)
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+  // eslint-disable-next-line
+  }, [data])
 
   return (
     <div style={{position:'relative'}}>
@@ -813,8 +940,18 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
           onClick={e=>{
             if(!candlesRef.current||!containerRef.current) return
             const rect=containerRef.current.getBoundingClientRect()
-            const price=candlesRef.current.coordinateToPrice(e.clientY-rect.top)
-            if(price!=null&&onRiskPrice) onRiskPrice(price)
+            let price=candlesRef.current.coordinateToPrice(e.clientY-rect.top)
+            if(price==null) return
+            // Magnet: snap to nearest OHLC when Ctrl is held
+            if(e.ctrlKey&&data?.length&&chartRef.current){
+              try{
+                const x=e.clientX-rect.left
+                const time=chartRef.current.timeScale().coordinateToTime(x)
+                const bar=time&&data.find(d=>d.date===time)
+                if(bar){const ohlc=[bar.open,bar.high,bar.low,bar.close];price=ohlc.reduce((a,b)=>Math.abs(b-price)<Math.abs(a-price)?b:a)}
+              }catch(_){}
+            }
+            if(onRiskPrice) onRiskPrice(price)
             e.stopPropagation()
           }}
           style={{position:'absolute',inset:0,zIndex:20,cursor:'crosshair',
