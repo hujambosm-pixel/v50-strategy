@@ -586,6 +586,13 @@ export default function Home() {
   const [contribEditType,setContribEditType]=useState('aportacion')
   const [contribEditAmount,setContribEditAmount]=useState('')
   const [contribEditNotes,setContribEditNotes]=useState('')
+  // ── Risk Management ──
+  const [riskProfiles,setRiskProfiles]=useState([])
+  const [riskActiveId,setRiskActiveId]=useState(()=>{try{return localStorage.getItem('v50_risk_active_id')||null}catch{return null}})
+  const [riskForm,setRiskForm]=useState({name:'',risk_per_trade_type:'%',risk_per_trade_value:1,max_total_risk:5,max_simultaneous_positions:5})
+  const [riskEditing,setRiskEditing]=useState(null) // null | 'new' | id
+  const [riskSaving,setRiskSaving]=useState(false)
+  const [riskCalc,setRiskCalc]=useState({entry:'',stop:'',tp:''})
   const [tlFilterBroker,setTlFilterBroker]=useState('')
   const [tlFilterYear,setTlFilterYear]=useState('')
   const [tlFilterMonth,setTlFilterMonth]=useState('')  // '01'..'12'
@@ -712,6 +719,48 @@ export default function Home() {
     apiFetch('/api/tradelog?action=contributions').then(r=>r.json())
       .then(d=>{ if(Array.isArray(d)) setContributions(d) }).catch(()=>{})
   },[session?.user?.id]) // eslint-disable-line
+
+  // ── Risk profiles: fetch ──
+  useEffect(()=>{
+    if(!session?.user?.id) return
+    apiFetch('/api/risk').then(r=>r.json())
+      .then(d=>{ if(Array.isArray(d)) setRiskProfiles(d) }).catch(()=>{})
+  },[session?.user?.id]) // eslint-disable-line
+
+  const riskActiveProfile = riskProfiles.find(p=>p.id===riskActiveId)||riskProfiles[0]||null
+
+  const riskSaveProfile=async()=>{
+    if(!riskForm.name.trim()) return
+    setRiskSaving(true)
+    try{
+      if(riskEditing&&riskEditing!=='new'){
+        await apiFetch(`/api/risk?action=update&id=${riskEditing}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(riskForm)})
+        setRiskProfiles(prev=>prev.map(p=>p.id===riskEditing?{...p,...riskForm}:p))
+      } else {
+        const r=await apiFetch('/api/risk?action=create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(riskForm)})
+        const d=await r.json()
+        if(d?.id){
+          setRiskProfiles(prev=>[...prev,d])
+          setRiskActiveId(d.id)
+          try{localStorage.setItem('v50_risk_active_id',d.id)}catch{}
+        }
+      }
+      setRiskEditing(null)
+    }finally{setRiskSaving(false)}
+  }
+
+  const riskDeleteProfile=async(id)=>{
+    if(!confirm('¿Eliminar este perfil de riesgo?')) return
+    await apiFetch(`/api/risk?action=delete&id=${id}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})})
+    setRiskProfiles(prev=>prev.filter(p=>p.id!==id))
+    if(riskActiveId===id){
+      const remaining=riskProfiles.filter(p=>p.id!==id)
+      const next=remaining[0]?.id||null
+      setRiskActiveId(next)
+      try{localStorage.setItem('v50_risk_active_id',next||'')}catch{}
+    }
+  }
+
   const addContribution=async()=>{
     if(!contribDate||!contribAmount||isNaN(parseFloat(contribAmount))||parseFloat(contribAmount)<=0) return
     // Convert DD/MM/YYYY → YYYY-MM-DD for Supabase
@@ -2511,7 +2560,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V6.17</title>
+        <title>Trading Simulator V6.18</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2588,7 +2637,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V6.17
+            <span className="dot"/>Trading Simulator V6.18
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -2661,6 +2710,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               {id:'watchlist',  icon:'📋',label:'Watchlist'},
               {id:'multi',      icon:'📊',label:'Backtesting'},
               {id:'tradelog',   icon:'📒',label:'TradeLog',  accent:'#9b72ff'},
+              {id:'risk',       icon:'🛡', label:'Risk Mgmt', accent:'#ff4d6d'},
             ].map(item=>(
               <button key={item.id}
                 onClick={()=>setSidePanel(item.id)}
@@ -3519,6 +3569,314 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 </div>
               </div>
             )}
+
+            {/* ══ PANEL RISK MANAGEMENT ══ */}
+            {sidePanel==='risk'&&(()=>{
+              // ── Métricas de capital ──
+              const totalAportaciones=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>s+Number(c.amount||0),0)
+              const totalRetiradas=(contributions||[]).filter(c=>c.type==='retirada').reduce((s,c)=>s+Number(c.amount||0),0)
+              const balanceInicial=totalAportaciones-totalRetiradas
+              const pnlRealizado=(tlFifo.closedTrades||[]).reduce((s,t)=>s+(t.pnl_eur||t._pnl_eur||0),0)
+              const pnlFlotante=(tlFifo.openPositions||[]).reduce((s,p)=>s+(p._pnl_float_eur||0),0)
+              const pnlTotal=pnlRealizado+pnlFlotante
+              const equity=balanceInicial+pnlTotal
+              const pnlPct=balanceInicial>0?(pnlTotal/balanceInicial)*100:0
+              const openPositions=tlFifo.openPositions||[]
+              const openCount=openPositions.length
+
+              // ── Riesgo actual en cartera (usando perfil activo) ──
+              const rpt=riskActiveProfile?.risk_per_trade_value||1
+              const rptType=riskActiveProfile?.risk_per_trade_type||'%'
+              const capitalArriesgarPorPos=rptType==='%'?(equity*(rpt/100)):rpt
+              const riesgoActualEur=openCount*capitalArriesgarPorPos
+              const riesgoActualPct=equity>0?(riesgoActualEur/equity)*100:0
+              const maxTotalRisk=riskActiveProfile?.max_total_risk||5
+              const maxSimultaneous=riskActiveProfile?.max_simultaneous_positions||5
+
+              // ── Exposición total (capital invertido / equity) ──
+              const totalInvertido=openPositions.reduce((s,p)=>{
+                const shares=p.shares||p.open_shares||0
+                const entry=p.entry_price||p.avg_buy_price||0
+                const fx=p.fx_entry||1
+                return s+(shares*entry/fx)
+              },0)
+              const exposurePct=equity>0?(totalInvertido/equity)*100:0
+
+              // ── Calculadora ──
+              const entryN=parseFloat(riskCalc.entry)||0
+              const stopN=parseFloat(riskCalc.stop)||0
+              const tpN=parseFloat(riskCalc.tp)||0
+              const capitalArriesgar=rptType==='%'?(equity*(rpt/100)):rpt
+              const distStop=entryN>0&&stopN>0?Math.abs(entryN-stopN):0
+              const distStopPct=entryN>0&&distStop>0?(distStop/entryN)*100:0
+              const shares=entryN>0&&distStop>0?Math.floor(capitalArriesgar/distStop):0
+              const tradeRiskEur=shares*distStop
+              const tradeRiskPct=equity>0?(tradeRiskEur/equity)*100:0
+              const rrRatio=tpN>0&&distStop>0?Math.abs(tpN-entryN)/distStop:0
+              const postTradeRiskPct=equity>0?((riesgoActualEur+tradeRiskEur)/equity)*100:0
+              const semaforoColor=postTradeRiskPct>=maxTotalRisk?'#ff4d6d':postTradeRiskPct>=(maxTotalRisk*0.8)?'#ffd166':'#00e5a0'
+
+              const fmtEur=(v,decimals=0)=>{
+                if(!isFinite(v)) return '—'
+                return (v<0?'-':'')+'€'+Math.abs(v).toLocaleString('es-ES',{minimumFractionDigits:decimals,maximumFractionDigits:decimals})
+              }
+              const fmtPct=(v,d=1)=>isFinite(v)?v.toFixed(d)+'%':'—'
+
+              const CARD={background:'var(--bg3)',border:'1px solid var(--border)',borderRadius:6,padding:'10px 12px'}
+              const LBL={fontFamily:MONO,fontSize:8,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:3}
+              const VAL={fontFamily:MONO,fontSize:15,fontWeight:700,color:'var(--text)'}
+              const SUB={fontFamily:MONO,fontSize:10,color:'var(--text3)',marginTop:1}
+              const INPUT_S={background:'#0a1520',border:'1px solid var(--border)',borderRadius:4,color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'5px 8px',width:'100%',boxSizing:'border-box',outline:'none'}
+
+              return(
+              <div style={{display:'flex',flexDirection:'column',flex:1,overflowY:'auto',padding:'12px 10px',gap:10}}>
+
+                {/* ── Header: 4 tarjetas ── */}
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+
+                  {/* Equity */}
+                  <div style={CARD}>
+                    <div style={LBL}>Equity actual</div>
+                    <div style={{...VAL,color:equity>=0?'#00e5a0':'#ff4d6d'}}>{fmtEur(equity)}</div>
+                    <div style={SUB}>Capital neto + P&amp;L</div>
+                  </div>
+
+                  {/* Balance inicial */}
+                  <div style={CARD}>
+                    <div style={LBL}>Balance inicial</div>
+                    <div style={VAL}>{fmtEur(balanceInicial)}</div>
+                    <div style={SUB}>Aportaciones − retiradas</div>
+                  </div>
+
+                  {/* P&L */}
+                  <div style={CARD}>
+                    <div style={LBL}>P&amp;L actual</div>
+                    <div style={{...VAL,color:pnlTotal>=0?'#00e5a0':'#ff4d6d'}}>
+                      {fmtEur(pnlTotal)} <span style={{fontSize:11,fontWeight:500}}>{fmtPct(pnlPct)}</span>
+                    </div>
+                    <div style={SUB}>Realizado + flotante</div>
+                  </div>
+
+                  {/* Gauge de riesgo actual */}
+                  <div style={CARD}>
+                    <div style={LBL}>Riesgo en cartera</div>
+                    {/* Gauge semicircular SVG */}
+                    <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:4}}>
+                      {(()=>{
+                        const pct=Math.min(riesgoActualPct,maxTotalRisk*1.5)
+                        const maxPct=maxTotalRisk*1.5
+                        const ratio=maxPct>0?pct/maxPct:0
+                        const clampedRatio=Math.min(ratio,1)
+                        const R=28,cx=34,cy=34
+                        const startAngle=Math.PI
+                        const endAngle=2*Math.PI
+                        const angle=startAngle+clampedRatio*(endAngle-startAngle)
+                        const x1=cx+R*Math.cos(startAngle),y1=cy+R*Math.sin(startAngle)
+                        const x2=cx+R*Math.cos(angle),y2=cy+R*Math.sin(angle)
+                        const large=clampedRatio>0.5?1:0
+                        const trackD=`M ${cx-R} ${cy} A ${R} ${R} 0 0 1 ${cx+R} ${cy}`
+                        const fillD=clampedRatio>0?`M ${x1} ${y1} A ${R} ${R} 0 ${large} 1 ${x2} ${y2}`:''
+                        const gColor=riesgoActualPct>=maxTotalRisk?'#ff4d6d':riesgoActualPct>=(maxTotalRisk*0.8)?'#ffd166':'#00e5a0'
+                        return(
+                          <svg width={68} height={40} style={{overflow:'visible'}}>
+                            <path d={trackD} fill="none" stroke="#1a2d45" strokeWidth={6} strokeLinecap="round"/>
+                            {fillD&&<path d={fillD} fill="none" stroke={gColor} strokeWidth={6} strokeLinecap="round"/>}
+                            <text x={cx} y={cy-2} textAnchor="middle" fill={gColor} fontSize={10} fontFamily={MONO} fontWeight="700">{fmtPct(riesgoActualPct,1)}</text>
+                            <text x={cx} y={cy+8} textAnchor="middle" fill="#4a6a88" fontSize={7} fontFamily={MONO}>/ {maxTotalRisk}% máx</text>
+                          </svg>
+                        )
+                      })()}
+                      <div style={{fontFamily:MONO,fontSize:10,color:'var(--text3)',textAlign:'center'}}>{fmtEur(riesgoActualEur)}</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── Selector de perfil ── */}
+                <div style={{...CARD,display:'flex',flexDirection:'column',gap:8}}>
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                    <span style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'0.08em'}}>Perfil de riesgo</span>
+                    <button onClick={()=>{setRiskForm({name:'',risk_per_trade_type:'%',risk_per_trade_value:1,max_total_risk:5,max_simultaneous_positions:5});setRiskEditing('new')}}
+                      style={{background:'rgba(0,212,255,0.08)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:10,padding:'2px 8px',borderRadius:3,cursor:'pointer'}}>
+                      + Nuevo
+                    </button>
+                  </div>
+                  {riskProfiles.length===0
+                    ? <div style={{fontFamily:MONO,fontSize:10,color:'var(--text3)',textAlign:'center',padding:'4px 0'}}>Sin perfiles. Crea uno.</div>
+                    : <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                        {riskProfiles.map(p=>(
+                          <div key={p.id} style={{display:'flex',alignItems:'center',gap:6,padding:'5px 8px',borderRadius:4,
+                            background:p.id===riskActiveProfile?.id?'rgba(255,77,109,0.08)':'transparent',
+                            border:`1px solid ${p.id===riskActiveProfile?.id?'rgba(255,77,109,0.3)':'transparent'}`}}>
+                            <span onClick={()=>{setRiskActiveId(p.id);try{localStorage.setItem('v50_risk_active_id',p.id)}catch{}}}
+                              style={{flex:1,fontFamily:MONO,fontSize:11,color:p.id===riskActiveProfile?.id?'#ff4d6d':'var(--text)',cursor:'pointer',fontWeight:p.id===riskActiveProfile?.id?700:400}}>
+                              {p.name}
+                            </span>
+                            <span style={{fontFamily:MONO,fontSize:9,color:'var(--text3)'}}>{p.risk_per_trade_value}{p.risk_per_trade_type} · {p.max_total_risk}% · {p.max_simultaneous_positions}pos</span>
+                            <button onClick={()=>{setRiskForm({name:p.name,risk_per_trade_type:p.risk_per_trade_type,risk_per_trade_value:p.risk_per_trade_value,max_total_risk:p.max_total_risk,max_simultaneous_positions:p.max_simultaneous_positions});setRiskEditing(p.id)}}
+                              style={{background:'transparent',border:'none',color:'var(--text3)',cursor:'pointer',fontSize:11,padding:'0 2px'}}>✎</button>
+                            <button onClick={()=>riskDeleteProfile(p.id)}
+                              style={{background:'transparent',border:'none',color:'#ff4d6d55',cursor:'pointer',fontSize:11,padding:'0 2px'}}
+                              onMouseOver={e=>e.currentTarget.style.color='#ff4d6d'}
+                              onMouseOut={e=>e.currentTarget.style.color='#ff4d6d55'}>✕</button>
+                          </div>
+                        ))}
+                      </div>
+                  }
+                </div>
+
+                {/* ── Formulario de perfil (crear / editar) ── */}
+                {riskEditing&&(
+                  <div style={{...CARD,border:'1px solid rgba(255,77,109,0.3)',gap:8,display:'flex',flexDirection:'column'}}>
+                    <div style={{fontFamily:MONO,fontSize:9,color:'#ff4d6d',textTransform:'uppercase',letterSpacing:'0.08em',fontWeight:700}}>
+                      {riskEditing==='new'?'Nuevo perfil':'Editar perfil'}
+                    </div>
+                    <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                      <input value={riskForm.name} onChange={e=>setRiskForm(f=>({...f,name:e.target.value}))}
+                        placeholder="Nombre del perfil" style={INPUT_S}/>
+                      <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                        <span style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',flexShrink:0}}>Riesgo/trade</span>
+                        <select value={riskForm.risk_per_trade_type} onChange={e=>setRiskForm(f=>({...f,risk_per_trade_type:e.target.value}))}
+                          style={{...INPUT_S,width:50}}>
+                          <option>%</option><option>€</option>
+                        </select>
+                        <input type="number" min={0} step={0.1} value={riskForm.risk_per_trade_value}
+                          onChange={e=>setRiskForm(f=>({...f,risk_per_trade_value:e.target.value}))}
+                          style={{...INPUT_S,flex:1}}/>
+                      </div>
+                      <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                        <span style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',flexShrink:0}}>Riesgo máx. total</span>
+                        <input type="number" min={0} max={100} step={0.5} value={riskForm.max_total_risk}
+                          onChange={e=>setRiskForm(f=>({...f,max_total_risk:e.target.value}))}
+                          style={{...INPUT_S,flex:1}}/>
+                        <span style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',flexShrink:0}}>%</span>
+                      </div>
+                      <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                        <span style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',flexShrink:0}}>Pos. simultáneas</span>
+                        <input type="number" min={1} max={50} step={1} value={riskForm.max_simultaneous_positions}
+                          onChange={e=>setRiskForm(f=>({...f,max_simultaneous_positions:e.target.value}))}
+                          style={{...INPUT_S,flex:1}}/>
+                      </div>
+                      <div style={{display:'flex',gap:6}}>
+                        <button onClick={riskSaveProfile} disabled={riskSaving||!riskForm.name.trim()}
+                          style={{flex:1,background:'#ff4d6d',border:'none',color:'#fff',fontFamily:MONO,fontSize:11,fontWeight:700,padding:'6px',borderRadius:4,cursor:'pointer',opacity:riskSaving||!riskForm.name.trim()?0.4:1}}>
+                          {riskSaving?'Guardando…':'Guardar'}
+                        </button>
+                        <button onClick={()=>setRiskEditing(null)}
+                          style={{padding:'6px 10px',background:'transparent',border:'1px solid var(--border)',color:'var(--text3)',fontFamily:MONO,fontSize:11,borderRadius:4,cursor:'pointer'}}>
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Configuración del perfil activo ── */}
+                {riskActiveProfile&&(
+                  <div style={CARD}>
+                    <div style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:8}}>
+                      Configuración — <span style={{color:'#ff4d6d'}}>{riskActiveProfile.name}</span>
+                    </div>
+                    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}}>
+                      <div>
+                        <div style={LBL}>Riesgo / operación</div>
+                        <div style={{...VAL,fontSize:13}}>{riskActiveProfile.risk_per_trade_value}{riskActiveProfile.risk_per_trade_type}</div>
+                        <div style={SUB}>{fmtEur(capitalArriesgarPorPos)} por trade</div>
+                      </div>
+                      <div>
+                        <div style={LBL}>Riesgo máx. total</div>
+                        <div style={{...VAL,fontSize:13}}>{riskActiveProfile.max_total_risk}%</div>
+                        <div style={SUB}>{fmtEur(equity*(maxTotalRisk/100))}</div>
+                      </div>
+                      <div>
+                        <div style={LBL}>Pos. simultáneas</div>
+                        <div style={{...VAL,fontSize:13,color:openCount>=maxSimultaneous?'#ff4d6d':'var(--text)'}}>{openCount} / {maxSimultaneous}</div>
+                        <div style={SUB}>{openCount>=maxSimultaneous?'⚠ Límite alcanzado':'slots disponibles: '+(maxSimultaneous-openCount)}</div>
+                      </div>
+                      <div>
+                        <div style={LBL}>Exposición total</div>
+                        <div style={{...VAL,fontSize:13,color:exposurePct>80?'#ffd166':'var(--text)'}}>{fmtPct(exposurePct)}</div>
+                        <div style={SUB}>{fmtEur(totalInvertido)} invertidos</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Calculadora de riesgo ── */}
+                <div style={CARD}>
+                  <div style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:8}}>
+                    Calculadora de riesgo
+                  </div>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+                    {/* Inputs */}
+                    <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                      <div>
+                        <div style={LBL}>Precio entrada</div>
+                        <input type="number" min={0} step="any" placeholder="0.00" value={riskCalc.entry}
+                          onChange={e=>setRiskCalc(c=>({...c,entry:e.target.value}))} style={INPUT_S}/>
+                      </div>
+                      <div>
+                        <div style={LBL}>Stop Loss</div>
+                        <input type="number" min={0} step="any" placeholder="0.00" value={riskCalc.stop}
+                          onChange={e=>setRiskCalc(c=>({...c,stop:e.target.value}))} style={INPUT_S}/>
+                      </div>
+                      <div>
+                        <div style={LBL}>Take Profit (opcional)</div>
+                        <input type="number" min={0} step="any" placeholder="0.00" value={riskCalc.tp}
+                          onChange={e=>setRiskCalc(c=>({...c,tp:e.target.value}))} style={INPUT_S}/>
+                      </div>
+                    </div>
+
+                    {/* Resultados */}
+                    <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                      <div>
+                        <div style={LBL}>Acciones</div>
+                        <div style={{...VAL,fontSize:18,color:shares>0?'var(--text)':'var(--text3)'}}>{shares>0?shares:'—'}</div>
+                      </div>
+                      <div>
+                        <div style={LBL}>Riesgo del trade</div>
+                        <div style={{fontFamily:MONO,fontSize:12,color:tradeRiskEur>0?'#ff4d6d':'var(--text3)',fontWeight:700}}>
+                          {tradeRiskEur>0?fmtEur(tradeRiskEur)+' · '+fmtPct(tradeRiskPct):'—'}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={LBL}>Distancia al stop</div>
+                        <div style={{fontFamily:MONO,fontSize:11,color:'var(--text3)'}}>
+                          {distStop>0?`${fmtEur(distStop,2)} · ${fmtPct(distStopPct)}`:'—'}
+                        </div>
+                      </div>
+                      {tpN>0&&entryN>0&&stopN>0&&(
+                        <div>
+                          <div style={LBL}>Ratio R:R</div>
+                          <div style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:rrRatio>=2?'#00e5a0':rrRatio>=1?'#ffd166':'#ff4d6d'}}>
+                            {rrRatio>0?`1 : ${rrRatio.toFixed(2)}`:'—'}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Semáforo post-trade */}
+                      {entryN>0&&stopN>0&&(
+                        <div style={{marginTop:4,padding:'6px 8px',borderRadius:4,background:`${semaforoColor}15`,border:`1px solid ${semaforoColor}44`,display:'flex',alignItems:'center',gap:6}}>
+                          <span style={{width:10,height:10,borderRadius:'50%',background:semaforoColor,flexShrink:0,boxShadow:`0 0 6px ${semaforoColor}`}}/>
+                          <span style={{fontFamily:MONO,fontSize:9,color:semaforoColor,fontWeight:700}}>
+                            {postTradeRiskPct>=maxTotalRisk?'RIESGO MÁXIMO SUPERADO':postTradeRiskPct>=(maxTotalRisk*0.8)?'Cerca del límite':'Dentro de parámetros'}
+                          </span>
+                          <span style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',marginLeft:'auto'}}>{fmtPct(postTradeRiskPct)}</span>
+                        </div>
+                      )}
+
+                      {/* Advertencia posiciones simultáneas */}
+                      {openCount>=maxSimultaneous&&(
+                        <div style={{padding:'5px 8px',borderRadius:4,background:'rgba(255,77,109,0.08)',border:'1px solid rgba(255,77,109,0.3)'}}>
+                          <span style={{fontFamily:MONO,fontSize:9,color:'#ff4d6d'}}>⚠ Posiciones abiertas ({openCount}) = máximo permitido ({maxSimultaneous})</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+              )
+            })()}
 
             {/* ══ PANEL TRADELOG ══ */}
             {sidePanel==='tradelog'&&(
