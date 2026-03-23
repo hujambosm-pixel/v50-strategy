@@ -3950,14 +3950,17 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       <div style={{display:'flex',gap:5,padding:'0 8px 5px',alignItems:'stretch',flexWrap:'wrap'}}>
 
                         {riskActiveProfile&&(
-                          <div style={{..._C,flex:'0 0 auto',minWidth:195}}>
+                          <div style={{..._C,flex:'0 0 auto'}}>
                             <div style={{fontFamily:MONO,fontSize:7,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:4}}>
                               Config — <span style={{color:'#ff4d6d'}}>{riskActiveProfile.name}</span>
                             </div>
-                            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:4}}>
+                            <div style={{display:'flex',gap:12,alignItems:'flex-start'}}>
                               <div><div style={_L}>Riesgo/op.</div><div style={{..._V,fontSize:11}}>{riskActiveProfile.risk_per_trade_value}{riskActiveProfile.risk_per_trade_type}</div><div style={_S}>{_fe(_capPos)}/trade</div></div>
+                              <div style={{width:1,alignSelf:'stretch',background:'var(--border)',flexShrink:0}}/>
                               <div><div style={_L}>Riesgo máx.</div><div style={{..._V,fontSize:11}}>{riskActiveProfile.max_total_risk}%</div><div style={_S}>{_fe(_eq*(_maxR/100))}</div></div>
+                              <div style={{width:1,alignSelf:'stretch',background:'var(--border)',flexShrink:0}}/>
                               <div><div style={_L}>Posiciones</div><div style={{..._V,fontSize:11,color:_openCnt>=_maxS?'#ff4d6d':'var(--text)'}}>{_openCnt}/{_maxS}</div><div style={_S}>{_openCnt>=_maxS?'⚠ Límite':`${_maxS-_openCnt} libres`}</div></div>
+                              <div style={{width:1,alignSelf:'stretch',background:'var(--border)',flexShrink:0}}/>
                               <div><div style={_L}>Exposición</div><div style={{..._V,fontSize:11,color:_expPct>80?'#ffd166':'var(--text)'}}>{_fp(_expPct)}</div><div style={_S}>{_fe(_invt)}</div></div>
                             </div>
                           </div>
