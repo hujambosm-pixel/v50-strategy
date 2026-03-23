@@ -706,10 +706,12 @@ export default function Home() {
   },[tlTrades])
 
   // ── Capital contributions: fetch + CRUD ──
+  // Depende de session?.user?.id para esperar a que el JWT esté disponible antes de hacer la llamada
   useEffect(()=>{
+    if(!session?.user?.id) return
     apiFetch('/api/tradelog?action=contributions').then(r=>r.json())
       .then(d=>{ if(Array.isArray(d)) setContributions(d) }).catch(()=>{})
-  },[])
+  },[session?.user?.id]) // eslint-disable-line
   const addContribution=async()=>{
     if(!contribDate||!contribAmount||isNaN(parseFloat(contribAmount))||parseFloat(contribAmount)<=0) return
     // Convert DD/MM/YYYY → YYYY-MM-DD for Supabase
@@ -1877,7 +1879,7 @@ export default function Home() {
       // ── modo Supabase ── load all fills; status/year/month filtered client-side after FIFO grouping
       let url = '/api/tradelog?action=list'
       if(tlFilterBroker) url += `&broker=${tlFilterBroker}`
-      const res = await fetch(url)
+      const res = await apiFetch(url)
       const json = await res.json()
       if(!res.ok) throw new Error(json.error||'Error')
       setTlTrades(json.trades||[])
@@ -1903,13 +1905,13 @@ export default function Home() {
     finally { setTlLoading(false) }
   },[tlFilterBroker])
 
-  useEffect(()=>{ loadTrades() },[loadTrades])  // carga siempre al inicio para tener tlTrades disponible (líneas en gráfico, etc.)
+  useEffect(()=>{ if(session?.user?.id) loadTrades() },[loadTrades,session?.user?.id]) // eslint-disable-line
   useEffect(()=>{ if(sidePanel==='tradelog') loadTrades() },[sidePanel,loadTrades])
 
   const loadFills = useCallback(async(id)=>{
     try{
       if(tlUseLocal()){ setTlFills([]); setTlFillsList([]); return }
-      const res=await fetch(`/api/tradelog?action=fills&id=${id}`)
+      const res=await apiFetch(`/api/tradelog?action=fills&id=${id}`)
       const json=await res.json()
       const fills=json.fills||[]
       setTlFills(fills)
@@ -1920,7 +1922,7 @@ export default function Home() {
   const loadExitFills = useCallback(async(id)=>{
     try{
       if(tlUseLocal()){ setTlExitFillsList([]); return }
-      const res=await fetch(`/api/tradelog?action=fills&id=${id}`)
+      const res=await apiFetch(`/api/tradelog?action=fills&id=${id}`)
       const json=await res.json()
       const fills=json.fills||[]
       setTlExitFillsList(fills.map(f=>({date:toDisplayDate(f.date)||f.date||'',price:String(f.price||''),shares:String(f.shares||''),_dbId:f.id})))
