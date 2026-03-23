@@ -37,7 +37,7 @@ function createBandPrimitive(bands) {
   }
 }
 
-export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null }) {
+export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, fillHeight=false }) {
   const containerRef=useRef(null), svgRef=useRef(null), legendRef=useRef(null), tooltipRef=useRef(null)
   const activeLegendRef = externalLegendRef || legendRef
   const chartRef=useRef(null), candlesRef=useRef(null)
@@ -49,6 +49,8 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
   const lastCloseRef=useRef(null)        // último close cargado
   const riskLinesRef=useRef([])          // createPriceLine refs for risk levels
   const riskBandSeriesRef=useRef(null)   // dummy LineSeries hosting band primitive
+  const fillHeightRef=useRef(fillHeight)
+  useEffect(()=>{ fillHeightRef.current=fillHeight },[fillHeight])
   useEffect(()=>{
     rulerActiveR.current=rulerActive
     if(!rulerActive){
@@ -673,7 +675,11 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
 
       const ro=new ResizeObserver(()=>{
         if(!containerRef.current||!chartRef.current) return
-        try{chart.applyOptions({width:containerRef.current.clientWidth})}catch(_){}
+        try{
+          const opts={width:containerRef.current.clientWidth}
+          if(fillHeightRef.current){const h=containerRef.current.clientHeight;if(h>0)opts.height=h}
+          chart.applyOptions(opts)
+        }catch(_){}
         setTimeout(drawTradeLabels,50)
       })
       ro.observe(containerRef.current)
@@ -798,7 +804,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
   return (
     <div style={{position:'relative'}}>
       <div ref={legendRef} style={{position:'absolute',top:8,left:8,zIndex:10,fontFamily:MONO,fontSize:12,color:'#7a9bc0',background:'rgba(8,12,20,0.82)',padding:'4px 10px',borderRadius:4,pointerEvents:'none',whiteSpace:'nowrap',display:externalLegendRef?'none':'block'}}/>
-      <div ref={containerRef} style={{minHeight:480}}/>
+      <div ref={containerRef} style={fillHeight?{height:'100%',minHeight:0}:{minHeight:480}}/>
       <svg ref={svgRef} style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',pointerEvents:'none',zIndex:5}}/>
       <div ref={tooltipRef} style={{position:'absolute',display:'none',pointerEvents:'none',background:'rgba(8,12,20,0.96)',border:'1px solid #00e5a0',borderRadius:6,padding:'8px 12px',fontFamily:MONO,fontSize:12,color:'#e2eaf5',zIndex:15,minWidth:200,boxShadow:'0 4px 20px rgba(0,0,0,0.5)'}}/>
       {/* ── Overlay de captura de clics en modo risk ── */}
