@@ -3,8 +3,9 @@ import Head from 'next/head'
 import { ListFilter, Briefcase, Star, Bell, X as LucideX } from 'lucide-react'
 import { calcMetrics, MONO, fmt, fmtDate, f2, tvSym } from '../lib/utils'
 import { WATCHLIST_DEFAULT, DEFAULT_DEFINITION } from '../lib/constants'
-import { getSupaUrl, getSupaKey, getSupaH } from '../lib/supabase'
+import { getSupaUrl, getSupaKey, getSupaH, setCurrentJwt, getCurrentJwt } from '../lib/supabase'
 import { loadSettings, saveSettings, saveSettingsRemote, loadSettingsRemote } from '../lib/settings'
+import { supabase } from '../lib/supabaseClient'
 import { fetchConditions, lsGetConds, lsSaveConds, COND_LS_KEY } from '../lib/conditions'
 import CandleChart from '../components/CandleChart'
 import EquityChart from '../components/EquityChart'
@@ -351,6 +352,14 @@ function lookupName(sym) {
 
 
 
+// apiFetch — wrapper de fetch que añade el JWT activo en x-supa-jwt
+function apiFetch(url, opts={}) {
+  const jwt=getCurrentJwt()
+  const headers={...(opts.headers||{})}
+  if(jwt) headers['x-supa-jwt']=jwt
+  return fetch(url,{...opts,headers})
+}
+
 export default function Home() {
   const [simbolo,setSimbolo]=useState('^GSPC')
   const [symSearchOpen,setSymSearchOpen]=useState(false)
@@ -462,6 +471,12 @@ export default function Home() {
     prevSymboloRef.current=simbolo
   }
   const [mcLayout,setMcLayout]=useState('panel')  // 'panel' | 'grid'
+  // ── Auth ───────────────────────────────────────────────────
+  const [session,setSession]=useState(undefined)  // undefined=loading, null=no sesión, obj=autenticado
+  const [loginEmail,setLoginEmail]=useState('')
+  const [loginPassword,setLoginPassword]=useState('')
+  const [loginError,setLoginError]=useState('')
+  const [loginLoading,setLoginLoading]=useState(false)
   // ── Resizable panels ────────────────────────────────────────
   const [sidebarW,setSidebarW]=useState(240)
   const [rightPanelW,setRightPanelW]=useState(275)
@@ -474,6 +489,19 @@ export default function Home() {
   const sidebarResizing=useRef(false), rightResizing=useRef(false)
   const sidebarStartX=useRef(0), sidebarStartW=useRef(0)
   const rightStartX=useRef(0), rightStartW=useRef(0)
+
+  // ── Auth: verificar sesión al montar + suscribirse a cambios ──
+  useEffect(()=>{
+    supabase.auth.getSession().then(({data:{session}})=>{
+      setSession(session||null)
+      if(session?.access_token) setCurrentJwt(session.access_token)
+    })
+    const {data:{subscription}}=supabase.auth.onAuthStateChange((_e,session)=>{
+      setSession(session||null)
+      setCurrentJwt(session?.access_token||null)
+    })
+    return ()=>subscription.unsubscribe()
+  },[]) // eslint-disable-line
 
   useEffect(()=>{
     const onMove=e=>{
@@ -646,7 +674,7 @@ export default function Home() {
     // Live prices
     Promise.all(symbols.map(async sym=>{
       try{
-        const r=await fetch('/api/datos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({simbolo:sym,cfg})})
+        const r=await apiFetch('/api/datos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({simbolo:sym,cfg})})
         const j=await r.json()
         if(j.meta?.ultimoPrecio) return {sym,price:j.meta.ultimoPrecio}
       }catch(_){}
@@ -679,7 +707,7 @@ export default function Home() {
 
   // ── Capital contributions: fetch + CRUD ──
   useEffect(()=>{
-    fetch('/api/tradelog?action=contributions').then(r=>r.json())
+    apiFetch('/api/tradelog?action=contributions').then(r=>r.json())
       .then(d=>{ if(Array.isArray(d)) setContributions(d) }).catch(()=>{})
   },[])
   const addContribution=async()=>{
@@ -690,7 +718,7 @@ export default function Home() {
     if(!/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) return
     setContribSaving(true)
     try{
-      const r=await fetch('/api/tradelog?action=add-contribution',{method:'POST',headers:{'Content-Type':'application/json'},
+      const r=await apiFetch('/api/tradelog?action=add-contribution',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({date:isoDate,amount:parseFloat(contribAmount),type:contribType,notes:contribNotes||null})})
       const d=await r.json()
       if(d.id){
@@ -700,7 +728,7 @@ export default function Home() {
     }finally{setContribSaving(false)}
   }
   const deleteContribution=async(id)=>{
-    await fetch('/api/tradelog?action=delete-contribution',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})})
+    await apiFetch('/api/tradelog?action=delete-contribution',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})})
     setContributions(prev=>prev.filter(c=>c.id!==id))
   }
   const startEditContrib=(c)=>{
@@ -715,7 +743,7 @@ export default function Home() {
     const isoDate=parts.length===3?`${parts[2]}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`:contribEditDate
     if(!/^\d{4}-\d{2}-\d{2}$/.test(isoDate)||!contribEditAmount||parseFloat(contribEditAmount)<=0) return
     try{
-      const r=await fetch('/api/tradelog?action=update-contribution',{method:'POST',headers:{'Content-Type':'application/json'},
+      const r=await apiFetch('/api/tradelog?action=update-contribution',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({id,date:isoDate,amount:parseFloat(contribEditAmount),type:contribEditType,notes:contribEditNotes||null})})
       const d=await r.json()
       if(d.id){
@@ -1440,7 +1468,7 @@ export default function Home() {
       const extraConds = pseudoAlarms.filter(p=>!realAlarmIds.has(p.id))
       const allEvalAlarms = [...alarmList.map(a=>({id:a.id,symbol:a.symbol,condition:a.condition,condition_detail:a.condition_detail,price_level:a.price_level,ema_r:a.ema_r,ema_l:a.ema_l,params:a.params})), ...extraConds]
 
-      const res=await fetch('/api/status',{
+      const res=await apiFetch('/api/status',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body:JSON.stringify({symbols,alarms:allEvalAlarms})
@@ -1501,7 +1529,7 @@ export default function Home() {
       const batch = syms.slice(i, i+BATCH)
       await Promise.allSettled(batch.map(async sym => {
         try {
-          const res = await fetch('/api/datos', {
+          const res = await apiFetch('/api/datos', {
             method:'POST', headers:{'Content-Type':'application/json'},
             body: JSON.stringify({ simbolo:sym, cfg })
           })
@@ -1552,7 +1580,7 @@ export default function Home() {
       const body = payload.definition
         ? { simbolo:sym, definition:payload.definition }
         : { simbolo:sym, cfg:payload.cfg||payload }
-      const res=await fetch('/api/datos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+      const res=await apiFetch('/api/datos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
       const json=await res.json()
       if(!res.ok)throw new Error(json.error||'Error')
       setResult(json)
@@ -1568,11 +1596,11 @@ export default function Home() {
         definition:{ ...definition }, color:stratColor }
       const method = overwriteId ? 'PUT' : 'POST'
       if(overwriteId) body.id = overwriteId
-      const res=await fetch('/api/strategies',{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+      const res=await apiFetch('/api/strategies',{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
       const json=await res.json()
       if(!res.ok) throw new Error(json.error||'Error')
       // Recargar lista
-      const list=await fetch('/api/strategies').then(r=>r.json())
+      const list=await apiFetch('/api/strategies').then(r=>r.json())
       if(Array.isArray(list)) setStrategies(list)
       setCurrentStratId(json?.id||overwriteId||null)
       setStratMsg({type:'ok',text:'Estrategia guardada ✓'})
@@ -1822,7 +1850,7 @@ export default function Home() {
             if(!sym) return
             try{
               if(!priceCache[sym]){
-                const r=await fetch('/api/datos',{method:'POST',headers:{'Content-Type':'application/json'},
+                const r=await apiFetch('/api/datos',{method:'POST',headers:{'Content-Type':'application/json'},
                   body:JSON.stringify({simbolo:sym,cfg:{emaR:10,emaL:11,years:1,capitalIni:1000,tipoStop:'none',atrPeriod:14,atrMult:1,sinPerdidas:false,reentry:false,tipoFiltro:'none',sp500EmaR:10,sp500EmaL:11}})})
                 const j=await r.json()
                 if(j.meta?.ultimoPrecio) priceCache[sym]={price:j.meta.ultimoPrecio,date:j.meta.ultimaFecha}
@@ -1937,7 +1965,7 @@ export default function Home() {
       commission_sell:n0(trade.commission_sell),
       fx_entry: n(trade.fx_entry), fx_exit: n(trade.fx_exit),
     }
-    const res=await fetch('/api/tradelog?action=save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(clean)})
+    const res=await apiFetch('/api/tradelog?action=save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(clean)})
     const json=await res.json()
     if(!res.ok) throw new Error(json.error||'Error')
     await loadTrades()
@@ -1962,7 +1990,7 @@ export default function Home() {
         tlSetLS([...all,newT]); await loadTrades(); return newT
       }
     }
-    const res=await fetch('/api/tradelog?action=save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(fill)})
+    const res=await apiFetch('/api/tradelog?action=save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(fill)})
     const json=await res.json()
     if(!res.ok) throw new Error(json.error||'Error')
     await loadTrades()
@@ -1976,7 +2004,7 @@ export default function Home() {
       await loadTrades()
       return
     }
-    await fetch('/api/tradelog?action=delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})})
+    await apiFetch('/api/tradelog?action=delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})})
     setTlSelected(null); setTlFills([])
     await loadTrades()
   }
@@ -1991,7 +2019,7 @@ export default function Home() {
     }
     // Delete each via API
     await Promise.all([...ids].map(id=>
-      fetch('/api/tradelog?action=delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})})
+      apiFetch('/api/tradelog?action=delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})})
     ))
     setTlSelected(null); setTlMultiSel(new Set()); setTlMultiMode(false)
     await loadTrades()
@@ -2018,7 +2046,7 @@ export default function Home() {
       setTlSelected(updated)
       return
     }
-    const res=await fetch('/api/tradelog?action=close',{method:'POST',headers:{'Content-Type':'application/json'},
+    const res=await apiFetch('/api/tradelog?action=close',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({id:tlSelected.id,...tlCloseForm})})
     const json=await res.json()
     if(!res.ok) throw new Error(json.error||'Error')
@@ -2033,7 +2061,7 @@ export default function Home() {
     try{
       const s=JSON.parse(localStorage.getItem('v50_settings')||'{}')
       const apiKey=s?.integrations?.groqKey||''
-      const res=await fetch('/api/tradelog?action=parse',{method:'POST',headers:{'Content-Type':'application/json'},
+      const res=await apiFetch('/api/tradelog?action=parse',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({text:tlImportText,format:tlImportFormat,apiKey,
           ibkrDateFormat:s?.tradelog?.ibkrDateFormat||'DD/MM'})})
 
@@ -2110,7 +2138,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
           all.push({...trade, id:'local_'+Date.now()+'_'+Math.random().toString(36).slice(2)})
           tlSetLS(all)
         } else {
-          const res=await fetch('/api/tradelog?action=save',{method:'POST',
+          const res=await apiFetch('/api/tradelog?action=save',{method:'POST',
             headers:{'Content-Type':'application/json'},body:JSON.stringify(trade)})
           const json=await res.json()
           if(!res.ok) errors.push(json.error||'Error guardando '+trade.symbol)
@@ -2152,7 +2180,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         const total=mcSelected.reduce((s,sym)=>s+(Number(mcWeights[sym])||0),0)
         mcSelected.forEach(sym=>{ weightsNorm[sym]=total>0?(Number(mcWeights[sym])||0)/total*100:100/mcSelected.length })
       }
-      const res=await fetch('/api/multibacktest',{
+      const res=await apiFetch('/api/multibacktest',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body:JSON.stringify({
@@ -2424,10 +2452,64 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   // Altura de los tabs = 33px aprox. (padding 8px top+bottom + 17px línea)
   const TAB_H=33
 
+  // ── Auth handlers ────────────────────────────────────────────
+  async function handleLogin(e) {
+    e.preventDefault()
+    setLoginLoading(true)
+    setLoginError('')
+    const {error}=await supabase.auth.signInWithPassword({email:loginEmail,password:loginPassword})
+    if(error) setLoginError(error.message)
+    setLoginLoading(false)
+  }
+  async function handleLogout() { await supabase.auth.signOut() }
+
+  // ── Login screen ─────────────────────────────────────────────
+  if(session===undefined) return (
+    <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',
+      background:'#080c14',color:'#5a7a95',fontFamily:'"JetBrains Mono","Fira Code",monospace',fontSize:12}}>
+      Verificando sesión…
+    </div>
+  )
+  if(session===null) return (
+    <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',
+      background:'#080c14',fontFamily:'"JetBrains Mono","Fira Code",monospace'}}>
+      <div style={{width:340,padding:'40px 32px',background:'#0a101a',
+        border:'1px solid #1a2d45',borderRadius:12,boxShadow:'0 8px 40px rgba(0,0,0,0.6)'}}>
+        <div style={{textAlign:'center',marginBottom:32}}>
+          <div style={{fontSize:20,fontWeight:700,color:'#eef5ff',marginBottom:6,letterSpacing:'0.02em'}}>
+            <span style={{color:'#00d4ff'}}>⬡ </span>Trading Simulator
+          </div>
+          <div style={{fontSize:10,color:'#3a5a75',letterSpacing:'0.1em',textTransform:'uppercase'}}>Acceso privado</div>
+        </div>
+        <form onSubmit={handleLogin}>
+          <input type="email" value={loginEmail} onChange={e=>setLoginEmail(e.target.value)}
+            placeholder="Email" autoFocus required
+            style={{display:'block',width:'100%',padding:'10px 12px',marginBottom:10,
+              background:'#080c14',border:'1px solid #1a2d45',borderRadius:6,
+              color:'#eef5ff',fontSize:13,fontFamily:'inherit',boxSizing:'border-box',outline:'none'}}/>
+          <input type="password" value={loginPassword} onChange={e=>setLoginPassword(e.target.value)}
+            placeholder="Contraseña" required
+            style={{display:'block',width:'100%',padding:'10px 12px',marginBottom:16,
+              background:'#080c14',border:'1px solid #1a2d45',borderRadius:6,
+              color:'#eef5ff',fontSize:13,fontFamily:'inherit',boxSizing:'border-box',outline:'none'}}/>
+          {loginError&&<div style={{marginBottom:12,padding:'8px 12px',
+            background:'rgba(255,77,109,0.08)',border:'1px solid rgba(255,77,109,0.3)',
+            borderRadius:6,color:'#ff4d6d',fontSize:11}}>{loginError}</div>}
+          <button type="submit" disabled={loginLoading}
+            style={{width:'100%',padding:'11px',background:'#00d4ff',border:'none',borderRadius:6,
+              color:'#080c14',fontSize:13,fontWeight:700,cursor:loginLoading?'wait':'pointer',
+              fontFamily:'inherit',opacity:loginLoading?0.6:1,letterSpacing:'0.02em'}}>
+            {loginLoading?'Iniciando sesión…':'Iniciar sesión'}
+          </button>
+        </form>
+      </div>
+    </div>
+  )
+
   return (
     <>
       <Head>
-        <title>Trading Simulator V6.16</title>
+        <title>Trading Simulator V6.17</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2504,7 +2586,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V6.16
+            <span className="dot"/>Trading Simulator V6.17
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -2540,6 +2622,14 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   ☁ Supabase ↗
                 </a>
             }
+            <button onClick={handleLogout} title={`Cerrar sesión (${session?.user?.email||''})`}
+              style={{background:'rgba(255,77,109,0.06)',border:'1px solid rgba(255,77,109,0.2)',color:'#ff4d6d',
+                fontFamily:MONO,fontSize:11,padding:'4px 10px',borderRadius:6,cursor:'pointer',
+                display:'flex',alignItems:'center',gap:5,transition:'background 0.15s,border-color 0.15s'}}
+              onMouseOver={e=>{e.currentTarget.style.background='rgba(255,77,109,0.14)';e.currentTarget.style.borderColor='#ff4d6d'}}
+              onMouseOut={e=>{e.currentTarget.style.background='rgba(255,77,109,0.06)';e.currentTarget.style.borderColor='rgba(255,77,109,0.2)'}}>
+              ⏻ Salir
+            </button>
             <button onClick={()=>setSettingsOpen(true)} title="Settings"
               style={{background:'rgba(0,212,255,0.06)',border:'1px solid rgba(0,212,255,0.25)',color:'#00d4ff',
                 fontFamily:MONO,fontSize:20,padding:'4px 10px',borderRadius:6,cursor:'pointer',
@@ -4942,7 +5032,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                             let ok=0, fail=0
                             for(const fill of trades){
                               try{
-                                const res=await fetch('/api/tradelog?action=save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(fill)})
+                                const res=await apiFetch('/api/tradelog?action=save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(fill)})
                                 if(res.ok) ok++; else fail++
                               }catch{ fail++ }
                             }
@@ -5945,7 +6035,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                           e.preventDefault()
                           const sym=hit.symbol, cur='USD'
                           setTlForm(f=>({...f,symbol:sym,currency:cur,_symSearch:'',price:'',_fxLoading:false}))
-                          fetch('/api/datos',{method:'POST',headers:{'Content-Type':'application/json'},
+                          apiFetch('/api/datos',{method:'POST',headers:{'Content-Type':'application/json'},
                             body:JSON.stringify({simbolo:sym,cfg:{emaR:10,emaL:11,years:1,capitalIni:1000,tipoStop:'none',atrPeriod:14,atrMult:1,sinPerdidas:false,reentry:false,tipoFiltro:'none',sp500EmaR:10,sp500EmaL:11}})})
                             .then(r=>r.json())
                             .then(j=>{ if(j.meta?.ultimoPrecio) setTlForm(f=>({...f,price:String(j.meta.ultimoPrecio.toFixed(2))})) })

@@ -7,6 +7,9 @@
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://uqjngxxbdlquiuhywiuc.supabase.co'
 const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY || 'sb_publishable_st9QJ3zcQbY5ec-JhxwqXQ_joy3udz3'
 
+// JWT inyectado por el cliente en cada request (set en handler, leído por sb())
+let _reqJwt = null
+
 const ALLOWED_COLS = new Set([
   'id','symbol','fill_type','date','price','shares',
   'commission','currency','fx','broker','strategy','notes','import_source',
@@ -16,7 +19,7 @@ async function sb(path, opts = {}) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1${path}`, {
     headers: {
       apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`,
+      Authorization: `Bearer ${_reqJwt || SUPABASE_KEY}`,
       'Content-Type': 'application/json',
       Prefer: opts.prefer || 'return=representation',
     },
@@ -303,6 +306,7 @@ ${text.slice(0, 3500)}`
 
 // ── Handler principal ────────────────────────────────────────
 export default async function handler(req, res) {
+  _reqJwt = req.headers['x-supa-jwt'] || null
   const { action } = req.query
 
   // ── GET list — devuelve todos los fills + precios actuales por símbolo ──

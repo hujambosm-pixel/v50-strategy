@@ -7,11 +7,12 @@
 // POST ?action=groq → pide a Groq que traduzca lenguaje natural → JSON de condición
 
 // Supabase credentials: env vars take priority, client headers as fallback
-// (client passes x-supa-url / x-supa-key from localStorage settings)
+// JWT from x-supa-jwt header takes precedence over anon key for Authorization
 function getSupaCreds(req) {
   const url = process.env.SUPABASE_URL || req?.headers?.['x-supa-url'] || ''
   const key = process.env.SUPABASE_ANON_KEY || req?.headers?.['x-supa-key'] || ''
-  const h = { 'Content-Type':'application/json', apikey: key, Authorization:`Bearer ${key}` }
+  const jwt = req?.headers?.['x-supa-jwt'] || null
+  const h = { 'Content-Type':'application/json', apikey: key, Authorization:`Bearer ${jwt || key}` }
   return { url, key, h }
 }
 

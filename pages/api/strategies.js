@@ -3,12 +3,13 @@
 
 const SUPA_URL = process.env.SUPABASE_URL || 'https://uqjngxxbdlquiuhywiuc.supabase.co'
 const SUPA_KEY = process.env.SUPABASE_ANON_KEY || 'sb_publishable_st9QJ3zcQbY5ec-JhxwqXQ_joy3udz3'
+let _reqJwt = null
 
 async function supa(path, options = {}) {
   const res = await fetch(`${SUPA_URL}/rest/v1${path}`, {
     headers: {
       'apikey': SUPA_KEY,
-      'Authorization': `Bearer ${SUPA_KEY}`,
+      'Authorization': `Bearer ${_reqJwt || SUPA_KEY}`,
       'Content-Type': 'application/json',
       'Prefer': options.prefer || 'return=representation',
     },
@@ -20,6 +21,7 @@ async function supa(path, options = {}) {
 }
 
 export default async function handler(req, res) {
+  _reqJwt = req.headers['x-supa-jwt'] || null
   try {
     switch (req.method) {
 
