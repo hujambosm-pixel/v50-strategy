@@ -1,7 +1,43 @@
 import { useRef, useEffect } from 'react'
 import { MONO, f2, fmtDate } from '../lib/utils'
 
-export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef }) {
+// ── Risk-band primitive: shaded rectangle between two price levels ──
+function createBandPrimitive(bands) {
+  return {
+    _bands: bands,
+    _series: null,
+    attached(params) { this._series = params.series },
+    detached()       { this._series = null },
+    paneViews() {
+      const self = this
+      return [{
+        renderer() {
+          return {
+            draw(target) {
+              if (!self._series) return
+              target.useBitmapCoordinateSpace(scope => {
+                const ctx = scope.context
+                const vpr = scope.verticalPixelRatio
+                for (const { p1, p2, color } of self._bands) {
+                  const y1 = self._series.priceToCoordinate(p1)
+                  const y2 = self._series.priceToCoordinate(p2)
+                  if (y1 == null || y2 == null) continue
+                  const top = Math.min(y1, y2) * vpr
+                  const h   = Math.abs(y1 - y2) * vpr
+                  ctx.fillStyle = color
+                  ctx.fillRect(0, top, scope.bitmapSize.width, h)
+                }
+              })
+            }
+          }
+        },
+        zOrder() { return 'bottom' }
+      }]
+    }
+  }
+}
+
+export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null }) {
   const containerRef=useRef(null), svgRef=useRef(null), legendRef=useRef(null), tooltipRef=useRef(null)
   const activeLegendRef = externalLegendRef || legendRef
   const chartRef=useRef(null), candlesRef=useRef(null)
@@ -11,6 +47,8 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
   const dragRef=useRef(null)             // {lineObj} while dragging
   const priceAlarmTimersRef=useRef([])   // setInterval IDs for blinking
   const lastCloseRef=useRef(null)        // último close cargado
+  const riskLinesRef=useRef([])          // createPriceLine refs for risk levels
+  const riskBandSeriesRef=useRef(null)   // dummy LineSeries hosting band primitive
   useEffect(()=>{
     rulerActiveR.current=rulerActive
     if(!rulerActive){
@@ -700,12 +738,90 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
     }
   },[priceAlarms,ackedAlarms,data])
 
+  // ── Risk levels: price lines + shaded band ──
+  useEffect(()=>{
+    const chart   = chartRef.current
+    const candles = candlesRef.current
+    if (!chart || !candles) return
+
+    // Clean previous lines
+    riskLinesRef.current.forEach(pl=>{ try{ candles.removePriceLine(pl) }catch(_){} })
+    riskLinesRef.current = []
+    // Clean previous band series
+    if (riskBandSeriesRef.current) {
+      try{ chart.removeSeries(riskBandSeriesRef.current) }catch(_){}
+      riskBandSeriesRef.current = null
+    }
+
+    if (!riskLevels?.entry) return
+    const { entry, stop, tp } = riskLevels
+
+    // Entry — blue
+    riskLinesRef.current.push(candles.createPriceLine({
+      price: entry, color:'#00d4ff', lineWidth:2, lineStyle:0,
+      axisLabelVisible:true, title:`Entrada: ${entry.toFixed(2)}`
+    }))
+    // Stop — red
+    if (stop) {
+      riskLinesRef.current.push(candles.createPriceLine({
+        price: stop, color:'#ff4d6d', lineWidth:2, lineStyle:0,
+        axisLabelVisible:true, title:`Stop: ${stop.toFixed(2)}`
+      }))
+    }
+    // TP — green
+    if (tp) {
+      riskLinesRef.current.push(candles.createPriceLine({
+        price: tp, color:'#00e5a0', lineWidth:2, lineStyle:0,
+        axisLabelVisible:true, title:`Objetivo: ${tp.toFixed(2)}`
+      }))
+    }
+
+    // Shaded bands via Primitive (only if there's range to fill)
+    if ((stop || tp) && data?.length) {
+      const firstDate = data[0].date, lastDate = data[data.length-1].date
+      const bands = []
+      if (stop) bands.push({ p1:Math.min(entry,stop), p2:Math.max(entry,stop), color:'rgba(255,77,109,0.13)' })
+      if (tp)   bands.push({ p1:Math.min(entry,tp),   p2:Math.max(entry,tp),   color:'rgba(0,229,160,0.10)' })
+      try {
+        const dummy = chart.addLineSeries({
+          lastValueVisible:false, priceLineVisible:false,
+          crosshairMarkerVisible:false, visible:false, color:'transparent'
+        })
+        dummy.setData([{time:firstDate,value:entry},{time:lastDate,value:entry}])
+        dummy.attachPrimitive(createBandPrimitive(bands))
+        riskBandSeriesRef.current = dummy
+      } catch(_) {}
+    }
+  // eslint-disable-next-line
+  },[riskLevels, data])
+
   return (
     <div style={{position:'relative'}}>
       <div ref={legendRef} style={{position:'absolute',top:8,left:8,zIndex:10,fontFamily:MONO,fontSize:12,color:'#7a9bc0',background:'rgba(8,12,20,0.82)',padding:'4px 10px',borderRadius:4,pointerEvents:'none',whiteSpace:'nowrap',display:externalLegendRef?'none':'block'}}/>
       <div ref={containerRef} style={{minHeight:480}}/>
       <svg ref={svgRef} style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',pointerEvents:'none',zIndex:5}}/>
       <div ref={tooltipRef} style={{position:'absolute',display:'none',pointerEvents:'none',background:'rgba(8,12,20,0.96)',border:'1px solid #00e5a0',borderRadius:6,padding:'8px 12px',fontFamily:MONO,fontSize:12,color:'#e2eaf5',zIndex:15,minWidth:200,boxShadow:'0 4px 20px rgba(0,0,0,0.5)'}}/>
+      {/* ── Overlay de captura de clics en modo risk ── */}
+      {riskMode&&(
+        <div
+          onClick={e=>{
+            if(!candlesRef.current||!containerRef.current) return
+            const rect=containerRef.current.getBoundingClientRect()
+            const price=candlesRef.current.coordinateToPrice(e.clientY-rect.top)
+            if(price!=null&&onRiskPrice) onRiskPrice(price)
+            e.stopPropagation()
+          }}
+          style={{position:'absolute',inset:0,zIndex:20,cursor:'crosshair',
+            display:'flex',alignItems:'flex-end',justifyContent:'center',paddingBottom:10,
+            background:'transparent'}}>
+          <div style={{fontFamily:MONO,fontSize:11,color:'#00d4ff',
+            background:'rgba(8,12,20,0.88)',border:'1px solid rgba(0,212,255,0.5)',
+            borderRadius:4,padding:'3px 12px',pointerEvents:'none',
+            boxShadow:'0 2px 8px rgba(0,0,0,0.5)'}}>
+            {riskMode==='waiting_entry'?'▶ Clic para definir precio de entrada':'▶ Clic para definir stop loss'}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

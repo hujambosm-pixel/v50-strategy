@@ -593,6 +593,8 @@ export default function Home() {
   const [riskEditing,setRiskEditing]=useState(null) // null | 'new' | id
   const [riskSaving,setRiskSaving]=useState(false)
   const [riskCalc,setRiskCalc]=useState({entry:'',stop:'',tp:''})
+  const [riskMode,setRiskMode]=useState(null)        // null|'waiting_entry'|'waiting_stop'
+  const [riskChartActive,setRiskChartActive]=useState(false) // si hay líneas visibles en el gráfico
   const [tlFilterBroker,setTlFilterBroker]=useState('')
   const [tlFilterYear,setTlFilterYear]=useState('')
   const [tlFilterMonth,setTlFilterMonth]=useState('')  // '01'..'12'
@@ -1957,6 +1959,31 @@ export default function Home() {
   useEffect(()=>{ if(session?.user?.id) loadTrades() },[loadTrades,session?.user?.id]) // eslint-disable-line
   useEffect(()=>{ if(sidePanel==='tradelog') loadTrades() },[sidePanel,loadTrades])
 
+  // ── Risk mode: Escape cancela, cambio de sección limpia también ──
+  useEffect(()=>{
+    if(!riskMode) return
+    const handler=e=>{ if(e.key==='Escape'){ setRiskMode(null); setRiskChartActive(false) } }
+    window.addEventListener('keydown',handler)
+    return()=>window.removeEventListener('keydown',handler)
+  },[riskMode])
+  useEffect(()=>{ if(sidePanel!=='risk'){ setRiskMode(null); setRiskChartActive(false) } },[sidePanel])
+
+  // ── onRiskPrice: captura clics del gráfico en modo risk ──
+  const onRiskPrice = useCallback((rawPrice)=>{
+    const price=parseFloat(rawPrice.toFixed(4))
+    if(riskMode==='waiting_entry'){
+      setRiskCalc(c=>({...c,entry:String(price),stop:''}))
+      setRiskChartActive(true)
+      setRiskMode('waiting_stop')
+    } else if(riskMode==='waiting_stop'){
+      const entryN=parseFloat(riskCalc.entry)||0
+      if(entryN>0&&price>=entryN) return // stop debe estar por debajo de la entrada
+      setRiskCalc(c=>({...c,stop:String(price)}))
+      setRiskMode(null)
+      setRiskChartActive(true)
+    }
+  },[riskMode,riskCalc.entry])
+
   const loadFills = useCallback(async(id)=>{
     try{
       if(tlUseLocal()){ setTlFills([]); setTlFillsList([]); return }
@@ -2560,7 +2587,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V6.19</title>
+        <title>Trading Simulator V6.20</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2637,7 +2664,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V6.19
+            <span className="dot"/>Trading Simulator V6.20
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4187,7 +4214,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         trades={result.trades||[]} maxDD={metrics?.ddSimple||0}
                         labelMode={labelMode} rulerActive={rulerOn}
                         onChartReady={api=>{chartApiRef.current=api}}
-                        onPriceAlarm={sidePanel!=='watchlist'?price=>setPriceAlarmDlg({price,symbol:simbolo}):null}
+                        onPriceAlarm={sidePanel!=='watchlist'&&sidePanel!=='risk'?price=>setPriceAlarmDlg({price,symbol:simbolo}):null}
                         onAlarmPriceDrag={onAlarmPriceDrag}
                         ackedAlarms={ackedAlarms}
                         savedRangeRef={savedRangeRef}
@@ -4196,7 +4223,48 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         externalLegendRef={chartLegendRef}
                         priceAlarms={alarms.filter(a=>a.condition==='price_level'&&(a.symbol||'').toUpperCase()===(simbolo||'').toUpperCase())}
                         tlOpenTrades={tlTrades.filter(t=>t.status==='open'&&t.fill_type!=='sell'&&(t.symbol||'').toUpperCase()===(simbolo||'').toUpperCase())}
+                        riskMode={sidePanel==='risk'?riskMode:null}
+                        onRiskPrice={onRiskPrice}
+                        riskLevels={sidePanel==='risk'&&riskChartActive?{
+                          entry:parseFloat(riskCalc.entry)||null,
+                          stop:parseFloat(riskCalc.stop)||null,
+                          tp:parseFloat(riskCalc.tp)||null
+                        }:null}
                       />
+                      {/* ── Botón "Definir Niveles" — solo en Risk Management ── */}
+                      {sidePanel==='risk'&&(
+                        <div style={{position:'absolute',top:36,left:8,zIndex:12,display:'flex',gap:6,alignItems:'center'}}>
+                          <button
+                            onClick={()=>{
+                              if(riskMode){
+                                setRiskMode(null)
+                                setRiskChartActive(false)
+                              } else {
+                                setRiskCalc(c=>({...c,entry:'',stop:''}))
+                                setRiskChartActive(false)
+                                setRiskMode('waiting_entry')
+                              }
+                            }}
+                            style={{fontFamily:MONO,fontSize:10,padding:'4px 10px',borderRadius:4,cursor:'pointer',
+                              border:`1px solid ${riskMode?'#ff4d6d':'rgba(0,212,255,0.5)'}`,
+                              background:riskMode?'rgba(255,77,109,0.15)':'rgba(0,212,255,0.1)',
+                              color:riskMode?'#ff4d6d':'#00d4ff',
+                              display:'flex',alignItems:'center',gap:5,
+                              boxShadow:'0 2px 8px rgba(0,0,0,0.5)'}}>
+                            {riskMode?'✕ Cancelar':'📍 Definir Niveles'}
+                          </button>
+                          {riskChartActive&&!riskMode&&(
+                            <button
+                              onClick={()=>{ setRiskChartActive(false); setRiskCalc(c=>({...c,entry:'',stop:''})) }}
+                              title="Limpiar líneas del gráfico"
+                              style={{fontFamily:MONO,fontSize:10,padding:'4px 8px',borderRadius:4,cursor:'pointer',
+                                border:'1px solid rgba(255,166,0,0.4)',background:'rgba(255,166,0,0.08)',
+                                color:'#ffd166',boxShadow:'0 2px 8px rgba(0,0,0,0.5)'}}>
+                              🗑 Limpiar
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
                     {/* Drag handle — resize candle chart */}
                     <div onMouseDown={e=>{candleResizing.current=true;candleStartY.current=e.clientY;candleStartH.current=candleH;document.body.style.cursor='row-resize';document.body.style.userSelect='none'}}
