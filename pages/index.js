@@ -2560,7 +2560,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V6.18</title>
+        <title>Trading Simulator V6.19</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2637,7 +2637,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V6.18
+            <span className="dot"/>Trading Simulator V6.19
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4208,8 +4208,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     </div>
                   </div>
 
-                  {/* Métricas en cuadrícula (si layout=grid) */}
-                  {metricsLayout==='grid'&&metrics&&(
+                  {/* Métricas en cuadrícula (si layout=grid) — oculto en Risk */}
+                  {sidePanel!=='risk'&&metricsLayout==='grid'&&metrics&&(
                     <div style={{border:'1px solid var(--border)',borderRadius:4,margin:'8px 0',overflow:'hidden'}}>
                       <div style={{display:'flex',alignItems:'center',gap:6,padding:'4px 10px 0'}}>
                         <button onClick={()=>setMetricsView(v=>v==='multi'?'single':'multi')}
@@ -4223,7 +4223,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     </div>
                   )}
 
-                  {/* Equity con toggles */}
+                  {/* Equity + Barras + Historial — ocultos en Risk Management */}
+                  {sidePanel!=='risk'&&<>
                   <div className="equity-section" onContextMenu={e=>openCtx(e,'equity')}>
                     <div className="section-title" style={{display:'flex',alignItems:'center',flexWrap:'wrap',gap:6,fontSize:14}}>
                       <span>Equity</span>
@@ -4395,10 +4396,11 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       </div>
                     </div>
                   )}
+                  </>}
                 </div>
 
                 {/* Panel derecho de métricas */}
-                {sidePanel!=='multi'&&(metricsLayout==='panel'||metricsLayout==='multi')&&metrics&&(
+                {sidePanel!=='multi'&&sidePanel!=='risk'&&(metricsLayout==='panel'||metricsLayout==='multi')&&metrics&&(
                   <div style={{width:rightPanelW,flexShrink:0,borderLeft:'1px solid var(--border)',background:'var(--bg2)',overflowY:'auto',position:'relative'}} onContextMenu={e=>openCtx(e,'metrics')}>
                     {/* Resize handle — left edge */}
                     <div onMouseDown={e=>{rightResizing.current=true;rightStartX.current=e.clientX;rightStartW.current=rightPanelW;document.body.style.cursor='col-resize';document.body.style.userSelect='none'}}
