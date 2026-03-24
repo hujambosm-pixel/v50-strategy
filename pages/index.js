@@ -593,8 +593,8 @@ export default function Home() {
   const [riskEditing,setRiskEditing]=useState(null) // null | 'new' | id
   const [riskSaving,setRiskSaving]=useState(false)
   const [riskCalc,setRiskCalc]=useState({entry:'',stop:'',tp:''})
-  const [riskMode,setRiskMode]=useState(null)        // null|'waiting_entry'|'waiting_stop'
-  const [riskChartActive,setRiskChartActive]=useState(false) // si hay líneas visibles en el gráfico
+  const [riskLineActive,setRiskLineActive]=useState({entry:false,stop:false,tp:false})
+  const [riskProfileDropOpen,setRiskProfileDropOpen]=useState(false)
   const [tlFilterBroker,setTlFilterBroker]=useState('')
   const [tlFilterYear,setTlFilterYear]=useState('')
   const [tlFilterMonth,setTlFilterMonth]=useState('')  // '01'..'12'
@@ -1959,38 +1959,21 @@ export default function Home() {
   useEffect(()=>{ if(session?.user?.id) loadTrades() },[loadTrades,session?.user?.id]) // eslint-disable-line
   useEffect(()=>{ if(sidePanel==='tradelog') loadTrades() },[sidePanel,loadTrades])
 
-  // ── Risk mode: Escape cancela, cambio de sección limpia también ──
+  // ── Risk: Escape limpia líneas, cambio de sección también ──
   useEffect(()=>{
-    if(!riskMode) return
-    const handler=e=>{ if(e.key==='Escape'){ setRiskMode(null); setRiskChartActive(false) } }
+    const handler=e=>{ if(e.key==='Escape'&&sidePanel==='risk'){ setRiskLineActive({entry:false,stop:false,tp:false}); setRiskCalc({entry:'',stop:'',tp:''}) } }
     window.addEventListener('keydown',handler)
     return()=>window.removeEventListener('keydown',handler)
-  },[riskMode])
-  useEffect(()=>{ if(sidePanel!=='risk'){ setRiskMode(null); setRiskChartActive(false) } },[sidePanel])
+  },[sidePanel])
+  useEffect(()=>{ if(sidePanel!=='risk'){ setRiskLineActive({entry:false,stop:false,tp:false}); setRiskProfileDropOpen(false) } },[sidePanel])
 
-  // ── onRiskLevelChange: drag de líneas risk actualiza el formulario en tiempo real ──
+  // ── onRiskLevelChange: drag de líneas en gráfico actualiza campos en tiempo real ──
   const onRiskLevelChange = useCallback((type, price)=>{
     const p = parseFloat(price.toFixed(4))
     const key = type==='entry'?'entry':type==='stop'?'stop':'tp'
     setRiskCalc(c=>({...c,[key]:String(p)}))
-    setRiskChartActive(true)
+    setRiskLineActive(v=>({...v,[key]:true}))
   },[])
-
-  // ── onRiskPrice: captura clics del gráfico en modo risk ──
-  const onRiskPrice = useCallback((rawPrice)=>{
-    const price=parseFloat(rawPrice.toFixed(4))
-    if(riskMode==='waiting_entry'){
-      setRiskCalc(c=>({...c,entry:String(price),stop:''}))
-      setRiskChartActive(true)
-      setRiskMode('waiting_stop')
-    } else if(riskMode==='waiting_stop'){
-      const entryN=parseFloat(riskCalc.entry)||0
-      if(entryN>0&&price>=entryN) return // stop debe estar por debajo de la entrada
-      setRiskCalc(c=>({...c,stop:String(price)}))
-      setRiskMode(null)
-      setRiskChartActive(true)
-    }
-  },[riskMode,riskCalc.entry])
 
   const loadFills = useCallback(async(id)=>{
     try{
@@ -3851,81 +3834,59 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     const _V={fontFamily:MONO,fontSize:12,fontWeight:700,color:'var(--text)'}
                     const _S={fontFamily:MONO,fontSize:8,color:'var(--text3)',marginTop:1}
                     const _I={background:'#0a1520',border:'1px solid var(--border)',borderRadius:4,color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'3px 6px',boxSizing:'border-box',outline:'none'}
+                    const _gRv=16,_gcx=20,_gcy=18
                     const _gR=_eq>0?Math.min(_riskPct/(_maxR*1.5),1):0
-                    const _gRv=20,_gcx=26,_gcy=23
                     const _gA=Math.PI+_gR*Math.PI
                     const _gxe=_gcx+_gRv*Math.cos(_gA),_gye=_gcy+_gRv*Math.sin(_gA)
                     const _trkD=`M ${_gcx-_gRv} ${_gcy} A ${_gRv} ${_gRv} 0 0 1 ${_gcx+_gRv} ${_gcy}`
                     const _filD=_gR>0?`M ${_gcx-_gRv} ${_gcy} A ${_gRv} ${_gRv} 0 ${_gR>0.5?1:0} 1 ${_gxe} ${_gye}`:''
                     const _gC=_riskPct>=_maxR?'#ff4d6d':_riskPct>=(_maxR*0.8)?'#ffd166':'#00e5a0'
+                    const _btnIcon={width:20,height:20,borderRadius:3,fontFamily:MONO,fontSize:11,cursor:'pointer',padding:0,textAlign:'center',lineHeight:'18px',flexShrink:0,display:'inline-flex',alignItems:'center',justifyContent:'center'}
                     return(
                     <div style={{background:'var(--bg2)',borderBottom:'2px solid var(--border)',flexShrink:0}}>
 
-                      {/* ── Fila 1: 4 métricas + dropdown perfil ── */}
+                      {/* ── Fila 1: 4 tarjetas métricas compactas ── */}
                       <div style={{display:'flex',gap:5,padding:'5px 8px 4px',alignItems:'stretch',flexWrap:'wrap'}}>
 
-                        <div style={{..._C,minWidth:90,flex:'0 0 auto'}}>
-                          <div style={_L}>Equity</div>
-                          <div style={{..._V,color:_eq>=0?'#00e5a0':'#ff4d6d'}}>{_fe(_eq)}</div>
-                          <div style={_S}>Capital + P&amp;L</div>
+                        <div style={{..._C,flex:'1 1 0',minWidth:90}}>
+                          <div style={_L}>Equity actual</div>
+                          <div style={{..._V,fontSize:13,color:_eq>=0?'#00e5a0':'#ff4d6d'}}>{_fe(_eq)}</div>
+                          <div style={_S}>Capital neto + P&amp;L</div>
                         </div>
 
-                        <div style={{..._C,minWidth:90,flex:'0 0 auto'}}>
-                          <div style={_L}>Balance</div>
+                        <div style={{..._C,flex:'1 1 0',minWidth:90}}>
+                          <div style={_L}>Balance inicial</div>
                           <div style={_V}>{_fe(_bal)}</div>
-                          <div style={_S}>Aport.−retiradas</div>
+                          <div style={_S}>Aportaciones − retiradas</div>
                         </div>
 
-                        <div style={{..._C,minWidth:110,flex:'0 0 auto'}}>
-                          <div style={_L}>P&amp;L</div>
-                          <div style={{..._V,color:_pnl>=0?'#00e5a0':'#ff4d6d'}}>
+                        <div style={{..._C,flex:'1 1 0',minWidth:110}}>
+                          <div style={_L}>P&amp;L actual</div>
+                          <div style={{..._V,fontSize:13,color:_pnl>=0?'#00e5a0':'#ff4d6d'}}>
                             {_fe(_pnl)}&nbsp;<span style={{fontSize:9,fontWeight:500}}>{_fp(_pnlPct)}</span>
                           </div>
-                          <div style={_S}>Realizado+flotante</div>
+                          <div style={_S}>Realizado + flotante</div>
                         </div>
 
-                        <div style={{..._C,minWidth:88,flex:'0 0 auto',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:1,padding:'4px 8px'}}>
-                          <div style={_L}>Riesgo</div>
-                          <svg width={52} height={30} style={{overflow:'visible'}}>
-                            <path d={_trkD} fill="none" stroke="#1a2d45" strokeWidth={4} strokeLinecap="round"/>
-                            {_filD&&<path d={_filD} fill="none" stroke={_gC} strokeWidth={4} strokeLinecap="round"/>}
-                            <text x={_gcx} y={_gcy-1} textAnchor="middle" fill={_gC} fontSize={8} fontFamily={MONO} fontWeight="700">{_fp(_riskPct)}</text>
-                            <text x={_gcx} y={_gcy+7} textAnchor="middle" fill="#4a6a88" fontSize={5.5} fontFamily={MONO}>/{_maxR}%</text>
+                        <div style={{..._C,flex:'1 1 0',minWidth:110,display:'flex',alignItems:'center',gap:8,padding:'4px 10px'}}>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={_L}>Riesgo en cartera</div>
+                            <div style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:_gC,lineHeight:1.2}}>
+                              {_fp(_riskPct)}&nbsp;<span style={{fontSize:8,color:'var(--text3)',fontWeight:400}}>/{_maxR}%</span>
+                            </div>
+                            <div style={_S}>{_fe(_riskEur)} estimado</div>
+                          </div>
+                          <svg width={40} height={24} style={{overflow:'visible',flexShrink:0}}>
+                            <path d={_trkD} fill="none" stroke="#1a2d45" strokeWidth={3.5} strokeLinecap="round"/>
+                            {_filD&&<path d={_filD} fill="none" stroke={_gC} strokeWidth={3.5} strokeLinecap="round"/>}
+                            <text x={_gcx} y={_gcy+1} textAnchor="middle" fill={_gC} fontSize={7} fontFamily={MONO} fontWeight="700">{_fp(_riskPct,0)}</text>
+                            <text x={_gcx} y={_gcy+8} textAnchor="middle" fill="#4a6a88" fontSize={5} fontFamily={MONO}>/{_maxR}%</text>
                           </svg>
-                          <div style={{fontFamily:MONO,fontSize:8,color:'var(--text3)'}}>{_fe(_riskEur)}</div>
                         </div>
 
-                        {/* Dropdown de perfil — una línea */}
-                        <div style={{..._C,flex:'1 1 200px',minWidth:200,display:'flex',alignItems:'center',gap:5}}>
-                          <span style={{fontFamily:MONO,fontSize:7,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'0.07em',flexShrink:0}}>Perfil</span>
-                          {riskProfiles.length===0
-                            ?<span style={{fontFamily:MONO,fontSize:10,color:'var(--text3)',flex:1}}>Sin perfiles</span>
-                            :<select
-                              value={riskActiveProfile?.id||''}
-                              onChange={e=>{setRiskActiveId(e.target.value);try{localStorage.setItem('v50_risk_active_id',e.target.value)}catch{}}}
-                              style={{..._I,flex:1,minWidth:0}}>
-                              {riskProfiles.map(p=>(
-                                <option key={p.id} value={p.id}>{p.name} — {p.risk_per_trade_value}{p.risk_per_trade_type}·{p.max_total_risk}%·{p.max_simultaneous_positions}pos</option>
-                              ))}
-                            </select>
-                          }
-                          {riskActiveProfile&&<>
-                            <button title="Editar perfil"
-                              onClick={()=>{setRiskForm({name:riskActiveProfile.name,risk_per_trade_type:riskActiveProfile.risk_per_trade_type,risk_per_trade_value:riskActiveProfile.risk_per_trade_value,max_total_risk:riskActiveProfile.max_total_risk,max_simultaneous_positions:riskActiveProfile.max_simultaneous_positions});setRiskEditing(riskActiveProfile.id)}}
-                              style={{background:'transparent',border:'1px solid var(--border)',color:'var(--text3)',fontFamily:MONO,fontSize:10,padding:'2px 5px',borderRadius:3,cursor:'pointer',flexShrink:0}}>✎</button>
-                            <button title="Eliminar perfil"
-                              onClick={()=>riskDeleteProfile(riskActiveProfile.id)}
-                              style={{background:'transparent',border:'1px solid rgba(255,77,109,0.3)',color:'#ff4d6d55',fontFamily:MONO,fontSize:10,padding:'2px 5px',borderRadius:3,cursor:'pointer',flexShrink:0}}
-                              onMouseOver={e=>e.currentTarget.style.color='#ff4d6d'}
-                              onMouseOut={e=>e.currentTarget.style.color='#ff4d6d55'}>✕</button>
-                          </>}
-                          <button title="Nuevo perfil"
-                            onClick={()=>{setRiskForm({name:'',risk_per_trade_type:'%',risk_per_trade_value:1,max_total_risk:5,max_simultaneous_positions:5});setRiskEditing('new')}}
-                            style={{background:'rgba(0,212,255,0.08)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:9,padding:'2px 7px',borderRadius:3,cursor:'pointer',flexShrink:0}}>+</button>
-                        </div>
                       </div>
 
-                      {/* Profile form (expandible, solo cuando editing) */}
+                      {/* Profile edit form (expandible) */}
                       {riskEditing&&(
                         <div style={{margin:'0 8px 4px',padding:'6px 8px',background:'var(--bg3)',border:'1px solid rgba(255,77,109,0.3)',borderRadius:5}}>
                           <div style={{fontFamily:MONO,fontSize:8,color:'#ff4d6d',textTransform:'uppercase',letterSpacing:'0.08em',fontWeight:700,marginBottom:4}}>
@@ -3949,47 +3910,140 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       {/* ── Fila 2: Config + Calculadora ── */}
                       <div style={{display:'flex',gap:5,padding:'0 8px 5px',alignItems:'stretch',flexWrap:'wrap'}}>
 
-                        {riskActiveProfile&&(
-                          <div style={{..._C,flex:'0 0 auto'}}>
-                            <div style={{fontFamily:MONO,fontSize:7,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:4}}>
-                              Config — <span style={{color:'#ff4d6d'}}>{riskActiveProfile.name}</span>
+                        {/* Config block con dropdown integrado */}
+                        <div style={{..._C,flex:'0 0 auto',position:'relative'}}>
+                          <div style={{display:'flex',alignItems:'center',gap:5,marginBottom:5,position:'relative'}}>
+                            <div
+                              onClick={()=>setRiskProfileDropOpen(v=>!v)}
+                              style={{fontFamily:MONO,fontSize:7,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'0.07em',cursor:'pointer',display:'flex',alignItems:'center',gap:3,userSelect:'none'}}>
+                              Config —&nbsp;<span style={{color:'#ff4d6d'}}>{riskActiveProfile?.name||'Sin perfil'}</span>&nbsp;<span style={{opacity:0.5,fontSize:8}}>▾</span>
                             </div>
-                            <div style={{display:'flex',gap:12,alignItems:'flex-start'}}>
-                              <div><div style={_L}>Riesgo/op.</div><div style={{..._V,fontSize:11}}>{riskActiveProfile.risk_per_trade_value}{riskActiveProfile.risk_per_trade_type}</div><div style={_S}>{_fe(_capPos)}/trade</div></div>
-                              <div style={{width:1,alignSelf:'stretch',background:'var(--border)',flexShrink:0}}/>
-                              <div><div style={_L}>Riesgo máx.</div><div style={{..._V,fontSize:11}}>{riskActiveProfile.max_total_risk}%</div><div style={_S}>{_fe(_eq*(_maxR/100))}</div></div>
-                              <div style={{width:1,alignSelf:'stretch',background:'var(--border)',flexShrink:0}}/>
-                              <div><div style={_L}>Posiciones</div><div style={{..._V,fontSize:11,color:_openCnt>=_maxS?'#ff4d6d':'var(--text)'}}>{_openCnt}/{_maxS}</div><div style={_S}>{_openCnt>=_maxS?'⚠ Límite':`${_maxS-_openCnt} libres`}</div></div>
-                              <div style={{width:1,alignSelf:'stretch',background:'var(--border)',flexShrink:0}}/>
-                              <div><div style={_L}>Exposición</div><div style={{..._V,fontSize:11,color:_expPct>80?'#ffd166':'var(--text)'}}>{_fp(_expPct)}</div><div style={_S}>{_fe(_invt)}</div></div>
-                            </div>
+                            <div style={{flex:1}}/>
+                            {riskActiveProfile&&<button title="Editar perfil"
+                              onClick={()=>{setRiskForm({name:riskActiveProfile.name,risk_per_trade_type:riskActiveProfile.risk_per_trade_type,risk_per_trade_value:riskActiveProfile.risk_per_trade_value,max_total_risk:riskActiveProfile.max_total_risk,max_simultaneous_positions:riskActiveProfile.max_simultaneous_positions});setRiskEditing(riskActiveProfile.id);setRiskProfileDropOpen(false)}}
+                              style={{background:'transparent',border:'1px solid var(--border)',color:'var(--text3)',fontFamily:MONO,fontSize:10,padding:'1px 5px',borderRadius:3,cursor:'pointer',flexShrink:0}}>✎</button>}
+                            <button title="Nuevo perfil"
+                              onClick={()=>{setRiskForm({name:'',risk_per_trade_type:'%',risk_per_trade_value:1,max_total_risk:5,max_simultaneous_positions:5});setRiskEditing('new');setRiskProfileDropOpen(false)}}
+                              style={{background:'rgba(0,212,255,0.08)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:9,padding:'1px 7px',borderRadius:3,cursor:'pointer',flexShrink:0}}>+</button>
+                            {riskProfileDropOpen&&(
+                              <div style={{position:'absolute',top:'calc(100% + 4px)',left:0,zIndex:200,background:'#0d1b2a',border:'1px solid var(--border)',borderRadius:5,minWidth:220,boxShadow:'0 6px 20px rgba(0,0,0,0.6)',overflow:'hidden'}}>
+                                {riskProfiles.length===0
+                                  ?<div style={{padding:'8px 12px',fontFamily:MONO,fontSize:10,color:'var(--text3)'}}>Sin perfiles — crea uno con +</div>
+                                  :riskProfiles.map(p=>(
+                                    <div key={p.id}
+                                      onClick={()=>{setRiskActiveId(p.id);try{localStorage.setItem('v50_risk_active_id',p.id)}catch{};setRiskProfileDropOpen(false)}}
+                                      style={{padding:'6px 12px',cursor:'pointer',display:'flex',alignItems:'baseline',gap:8,
+                                        background:p.id===(riskActiveProfile?.id)?'rgba(255,77,109,0.08)':'transparent',
+                                        borderLeft:`2px solid ${p.id===(riskActiveProfile?.id)?'#ff4d6d':'transparent'}`}}
+                                      onMouseOver={e=>e.currentTarget.style.background='rgba(255,255,255,0.04)'}
+                                      onMouseOut={e=>e.currentTarget.style.background=p.id===(riskActiveProfile?.id)?'rgba(255,77,109,0.08)':'transparent'}>
+                                      <span style={{fontFamily:MONO,fontSize:11,color:p.id===(riskActiveProfile?.id)?'#ff4d6d':'var(--text)',fontWeight:p.id===(riskActiveProfile?.id)?700:400}}>{p.name}</span>
+                                      <span style={{fontFamily:MONO,fontSize:8,color:'var(--text3)',marginLeft:'auto'}}>{p.risk_per_trade_value}{p.risk_per_trade_type}·{p.max_total_risk}%·{p.max_simultaneous_positions}pos</span>
+                                    </div>
+                                  ))
+                                }
+                              </div>
+                            )}
                           </div>
-                        )}
-
-                        <div style={{..._C,flex:1,minWidth:300}}>
-                          <div style={{fontFamily:MONO,fontSize:7,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:4}}>Calculadora</div>
-                          <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'flex-end'}}>
-                            <div style={{display:'flex',gap:6,flexWrap:'wrap',flexShrink:0}}>
-                              <div><div style={_L}>Entrada</div><input type="number" min={0} step="any" placeholder="0.00" value={riskCalc.entry} onChange={e=>setRiskCalc(c=>({...c,entry:e.target.value}))} style={{..._I,width:82}}/></div>
-                              <div><div style={_L}>Stop</div><input type="number" min={0} step="any" placeholder="0.00" value={riskCalc.stop} onChange={e=>setRiskCalc(c=>({...c,stop:e.target.value}))} style={{..._I,width:82}}/></div>
-                              <div><div style={_L}>TP (opc.)</div><input type="number" min={0} step="any" placeholder="—" value={riskCalc.tp} onChange={e=>setRiskCalc(c=>({...c,tp:e.target.value}))} style={{..._I,width:82}}/></div>
-                            </div>
-                            <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'flex-end',flex:1}}>
-                              <div><div style={_L}>Acciones</div><div style={{..._V,fontSize:15,color:_shs>0?'var(--text)':'var(--text3)'}}>{_shs>0?_shs:'—'}</div></div>
-                              <div><div style={_L}>Riesgo</div><div style={{fontFamily:MONO,fontSize:10,color:_trReur>0?'#ff4d6d':'var(--text3)',fontWeight:700}}>{_trReur>0?_fe(_trReur)+' · '+_fp(_trRpct):'—'}</div></div>
-                              <div><div style={_L}>Dist. stop</div><div style={{fontFamily:MONO,fontSize:10,color:'var(--text3)'}}>{_dS>0?`${_fe(_dS,2)} · ${_fp(_dSPct)}`:'—'}</div></div>
-                              {_tN>0&&_eN>0&&_sN>0&&<div><div style={_L}>R:R</div><div style={{fontFamily:MONO,fontSize:11,fontWeight:700,color:_rr>=2?'#00e5a0':_rr>=1?'#ffd166':'#ff4d6d'}}>{_rr>0?`1:${_rr.toFixed(2)}`:'—'}</div></div>}
-                              {_eN>0&&_sN>0&&(
-                                <div style={{display:'flex',alignItems:'center',gap:5,padding:'3px 7px',borderRadius:4,background:`${_semC}15`,border:`1px solid ${_semC}44`,flexShrink:0}}>
-                                  <span style={{width:7,height:7,borderRadius:'50%',background:_semC,flexShrink:0,boxShadow:`0 0 4px ${_semC}`}}/>
-                                  <span style={{fontFamily:MONO,fontSize:8,color:_semC,fontWeight:700,whiteSpace:'nowrap'}}>{_postPct>=_maxR?'LÍMITE':_postPct>=(_maxR*0.8)?'⚠ Cerca':'OK'}</span>
-                                  <span style={{fontFamily:MONO,fontSize:8,color:'var(--text3)'}}>{_fp(_postPct)}</span>
-                                </div>
-                              )}
-                              {_openCnt>=_maxS&&<div style={{padding:'3px 6px',borderRadius:4,background:'rgba(255,77,109,0.08)',border:'1px solid rgba(255,77,109,0.3)'}}><span style={{fontFamily:MONO,fontSize:8,color:'#ff4d6d'}}>⚠ {_openCnt}/{_maxS}</span></div>}
-                            </div>
+                          <div style={{display:'flex',gap:12,alignItems:'flex-start'}}>
+                            <div><div style={_L}>Riesgo/op.</div><div style={{..._V,fontSize:11}}>{riskActiveProfile?.risk_per_trade_value}{riskActiveProfile?.risk_per_trade_type}</div><div style={_S}>{_fe(_capPos)}/trade</div></div>
+                            <div style={{width:1,alignSelf:'stretch',background:'var(--border)',flexShrink:0}}/>
+                            <div><div style={_L}>Máx. total</div><div style={{..._V,fontSize:11}}>{riskActiveProfile?.max_total_risk}%</div><div style={_S}>{_fe(_eq*(_maxR/100))}</div></div>
+                            <div style={{width:1,alignSelf:'stretch',background:'var(--border)',flexShrink:0}}/>
+                            <div><div style={_L}>Posiciones</div><div style={{..._V,fontSize:11,color:_openCnt>=_maxS?'#ff4d6d':'var(--text)'}}>{_openCnt}/{_maxS}</div><div style={_S}>{_openCnt>=_maxS?'⚠ Límite':`${_maxS-_openCnt} libres`}</div></div>
+                            <div style={{width:1,alignSelf:'stretch',background:'var(--border)',flexShrink:0}}/>
+                            <div><div style={_L}>Exposición</div><div style={{..._V,fontSize:11,color:_expPct>80?'#ffd166':'var(--text)'}}>{_fp(_expPct)}</div><div style={_S}>{_fe(_invt)}</div></div>
                           </div>
                         </div>
+
+                        {/* Calculadora: dos columnas */}
+                        <div style={{..._C,flex:1,minWidth:320}}>
+                          <div style={{fontFamily:MONO,fontSize:7,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:5}}>Calculadora</div>
+                          <div style={{display:'flex',gap:10,alignItems:'flex-start'}}>
+
+                            {/* Col izquierda: inputs con ⊕ / ✕ */}
+                            <div style={{display:'flex',flexDirection:'column',gap:5,flexShrink:0}}>
+                              {/* Entrada */}
+                              <div style={{display:'flex',alignItems:'center',gap:3}}>
+                                <div style={{..._L,width:42,flexShrink:0,marginBottom:0}}>Entrada</div>
+                                <input type="number" min={0} step="any" placeholder="0.00" value={riskCalc.entry}
+                                  onChange={e=>setRiskCalc(c=>({...c,entry:e.target.value}))}
+                                  style={{..._I,width:78}}/>
+                                <button title="Mostrar línea en gráfico"
+                                  onClick={()=>{ if(parseFloat(riskCalc.entry)>0) setRiskLineActive(v=>({...v,entry:true})) }}
+                                  style={{..._btnIcon,border:`1px solid ${riskLineActive.entry?'#4488cc':'#4488cc55'}`,background:riskLineActive.entry?'rgba(68,136,204,0.25)':'rgba(68,136,204,0.06)',color:'#6ab0ff'}}>⊕</button>
+                                <button title="Eliminar línea"
+                                  onClick={()=>{setRiskCalc(c=>({...c,entry:''}));setRiskLineActive(v=>({...v,entry:false}))}}
+                                  style={{..._btnIcon,border:'1px solid var(--border)',background:'transparent',color:'var(--text3)'}}>✕</button>
+                              </div>
+                              {/* Stop */}
+                              <div style={{display:'flex',alignItems:'center',gap:3}}>
+                                <div style={{..._L,width:42,flexShrink:0,marginBottom:0}}>Stop</div>
+                                <input type="number" min={0} step="any" placeholder="0.00" value={riskCalc.stop}
+                                  onChange={e=>setRiskCalc(c=>({...c,stop:e.target.value}))}
+                                  style={{..._I,width:78}}/>
+                                <button title="Mostrar línea en gráfico"
+                                  onClick={()=>{ if(parseFloat(riskCalc.stop)>0) setRiskLineActive(v=>({...v,stop:true})) }}
+                                  style={{..._btnIcon,border:`1px solid ${riskLineActive.stop?'#cc4444':'#cc444455'}`,background:riskLineActive.stop?'rgba(204,68,68,0.25)':'rgba(204,68,68,0.06)',color:'#ff7070'}}>⊕</button>
+                                <button title="Eliminar línea"
+                                  onClick={()=>{setRiskCalc(c=>({...c,stop:''}));setRiskLineActive(v=>({...v,stop:false}))}}
+                                  style={{..._btnIcon,border:'1px solid var(--border)',background:'transparent',color:'var(--text3)'}}>✕</button>
+                              </div>
+                              {/* TP */}
+                              <div style={{display:'flex',alignItems:'center',gap:3}}>
+                                <div style={{..._L,width:42,flexShrink:0,marginBottom:0}}>TP (opc.)</div>
+                                <input type="number" min={0} step="any" placeholder="—" value={riskCalc.tp}
+                                  onChange={e=>setRiskCalc(c=>({...c,tp:e.target.value}))}
+                                  style={{..._I,width:78}}/>
+                                <button title="Mostrar línea en gráfico"
+                                  onClick={()=>{ if(parseFloat(riskCalc.tp)>0) setRiskLineActive(v=>({...v,tp:true})) }}
+                                  style={{..._btnIcon,border:`1px solid ${riskLineActive.tp?'#44cc88':'#44cc8855'}`,background:riskLineActive.tp?'rgba(68,204,136,0.25)':'rgba(68,204,136,0.06)',color:'#00e5a0'}}>⊕</button>
+                                <button title="Eliminar línea"
+                                  onClick={()=>{setRiskCalc(c=>({...c,tp:''}));setRiskLineActive(v=>({...v,tp:false}))}}
+                                  style={{..._btnIcon,border:'1px solid var(--border)',background:'transparent',color:'var(--text3)'}}>✕</button>
+                              </div>
+                            </div>
+
+                            {/* Separador vertical */}
+                            <div style={{width:1,alignSelf:'stretch',background:'var(--border)',flexShrink:0}}/>
+
+                            {/* Col derecha: resultados */}
+                            <div style={{display:'flex',flexDirection:'column',gap:5,flex:1,minWidth:0}}>
+                              <div style={{display:'flex',gap:10,flexWrap:'wrap',alignItems:'flex-end'}}>
+                                <div>
+                                  <div style={_L}>Acciones</div>
+                                  <div style={{fontFamily:MONO,fontSize:20,fontWeight:700,color:_shs>0?'#ffd166':'var(--text3)',lineHeight:1}}>{_shs>0?_shs:'—'}</div>
+                                </div>
+                                <div>
+                                  <div style={_L}>Riesgo trade</div>
+                                  <div style={{fontFamily:MONO,fontSize:10,color:_trReur>0?'#ff4d6d':'var(--text3)',fontWeight:700}}>{_trReur>0?_fe(_trReur)+' · '+_fp(_trRpct):'—'}</div>
+                                </div>
+                                <div>
+                                  <div style={_L}>Dist. stop</div>
+                                  <div style={{fontFamily:MONO,fontSize:10,color:'var(--text3)'}}>{_dS>0?`${_fe(_dS,2)} · ${_fp(_dSPct)}`:'—'}</div>
+                                </div>
+                                {_tN>0&&_eN>0&&_sN>0&&(
+                                  <div>
+                                    <div style={_L}>R:R</div>
+                                    <div style={{fontFamily:MONO,fontSize:11,fontWeight:700,color:_rr>=2?'#00e5a0':_rr>=1?'#ffd166':'#ff4d6d'}}>{_rr>0?`1:${_rr.toFixed(2)}`:'—'}</div>
+                                  </div>
+                                )}
+                              </div>
+                              <div style={{display:'flex',gap:5,flexWrap:'wrap',alignItems:'center'}}>
+                                {_eN>0&&_sN>0&&(
+                                  <div style={{display:'flex',alignItems:'center',gap:5,padding:'3px 7px',borderRadius:4,background:`${_semC}15`,border:`1px solid ${_semC}44`}}>
+                                    <span style={{width:7,height:7,borderRadius:'50%',background:_semC,flexShrink:0,boxShadow:`0 0 4px ${_semC}`}}/>
+                                    <span style={{fontFamily:MONO,fontSize:8,color:_semC,fontWeight:700,whiteSpace:'nowrap'}}>{_postPct>=_maxR?'LÍMITE':_postPct>=(_maxR*0.8)?'⚠ Cerca':'OK'}</span>
+                                    <span style={{fontFamily:MONO,fontSize:8,color:'var(--text3)'}}>{_fp(_postPct)}</span>
+                                  </div>
+                                )}
+                                {_openCnt>=_maxS&&<div style={{padding:'3px 6px',borderRadius:4,background:'rgba(255,77,109,0.08)',border:'1px solid rgba(255,77,109,0.3)'}}><span style={{fontFamily:MONO,fontSize:8,color:'#ff4d6d'}}>⚠ {_openCnt}/{_maxS}</span></div>}
+                              </div>
+                            </div>
+
+                          </div>
+                        </div>
+
                       </div>
 
                     </div>
@@ -4112,13 +4166,13 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         externalLegendRef={chartLegendRef}
                         priceAlarms={alarms.filter(a=>a.condition==='price_level'&&(a.symbol||'').toUpperCase()===(simbolo||'').toUpperCase())}
                         tlOpenTrades={tlTrades.filter(t=>t.status==='open'&&t.fill_type!=='sell'&&(t.symbol||'').toUpperCase()===(simbolo||'').toUpperCase())}
-                        riskMode={sidePanel==='risk'?riskMode:null}
-                        onRiskPrice={onRiskPrice}
+                        riskMode={null}
+                        onRiskPrice={null}
                         onRiskLevelChange={sidePanel==='risk'?onRiskLevelChange:null}
-                        riskLevels={sidePanel==='risk'&&riskChartActive?(()=>{
-                          const _e=parseFloat(riskCalc.entry)||null
-                          const _s=parseFloat(riskCalc.stop)||null
-                          const _t=parseFloat(riskCalc.tp)||null
+                        riskLevels={sidePanel==='risk'&&(riskLineActive.entry||riskLineActive.stop||riskLineActive.tp)?(()=>{
+                          const _e=riskLineActive.entry?(parseFloat(riskCalc.entry)||null):null
+                          const _s=riskLineActive.stop?(parseFloat(riskCalc.stop)||null):null
+                          const _t=riskLineActive.tp?(parseFloat(riskCalc.tp)||null):null
                           const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>s+Number(c.amount||0),0)
                           const _ret=(contributions||[]).filter(c=>c.type==='retirada').reduce((s,c)=>s+Number(c.amount||0),0)
                           const _bal=_aport-_ret
@@ -4136,40 +4190,6 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         })():null}
                         fillHeight={sidePanel==='risk'}
                       />
-                      {/* ── Botón "Definir Niveles" — solo en Risk Management ── */}
-                      {sidePanel==='risk'&&(
-                        <div style={{position:'absolute',top:36,left:8,zIndex:12,display:'flex',gap:6,alignItems:'center'}}>
-                          <button
-                            onClick={()=>{
-                              if(riskMode){
-                                setRiskMode(null)
-                                setRiskChartActive(false)
-                              } else {
-                                setRiskCalc(c=>({...c,entry:'',stop:''}))
-                                setRiskChartActive(false)
-                                setRiskMode('waiting_entry')
-                              }
-                            }}
-                            style={{fontFamily:MONO,fontSize:10,padding:'4px 10px',borderRadius:4,cursor:'pointer',
-                              border:`1px solid ${riskMode?'#ff4d6d':'rgba(0,212,255,0.5)'}`,
-                              background:riskMode?'rgba(255,77,109,0.15)':'rgba(0,212,255,0.1)',
-                              color:riskMode?'#ff4d6d':'#00d4ff',
-                              display:'flex',alignItems:'center',gap:5,
-                              boxShadow:'0 2px 8px rgba(0,0,0,0.5)'}}>
-                            {riskMode?'✕ Cancelar':'📍 Definir Niveles'}
-                          </button>
-                          {riskChartActive&&!riskMode&&(
-                            <button
-                              onClick={()=>{ setRiskChartActive(false); setRiskCalc(c=>({...c,entry:'',stop:''})) }}
-                              title="Limpiar líneas del gráfico"
-                              style={{fontFamily:MONO,fontSize:10,padding:'4px 8px',borderRadius:4,cursor:'pointer',
-                                border:'1px solid rgba(255,166,0,0.4)',background:'rgba(255,166,0,0.08)',
-                                color:'#ffd166',boxShadow:'0 2px 8px rgba(0,0,0,0.5)'}}>
-                              🗑 Limpiar
-                            </button>
-                          )}
-                        </div>
-                      )}
                     </div>
                     {/* Drag handle — resize candle chart */}
                     <div onMouseDown={e=>{candleResizing.current=true;candleStartY.current=e.clientY;candleStartH.current=candleH;document.body.style.cursor='row-resize';document.body.style.userSelect='none'}}
