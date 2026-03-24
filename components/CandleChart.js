@@ -805,8 +805,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
   useEffect(()=>{
     const chart   = chartRef.current
     const candles = candlesRef.current
-    console.log('[Risk] useEffect triggered — chart:', !!chart, 'candles:', !!candles, 'riskLevels:', riskLevels, 'riskLineActive:', riskLineActive)
-    if (!chart || !candles) { console.log('[Risk] chart/candles not ready, skipping'); return }
+    if (!chart || !candles) return
 
     const cleanup = () => {
       riskLinesRef.current.forEach((pl,i)=>{ if(pl){ try{candles.removePriceLine(pl)}catch(_){}; riskLinesRef.current[i]=null } })
@@ -826,12 +825,11 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         return
       }
       if (riskLinesRef.current[idx]) {
-        try { riskLinesRef.current[idx].applyOptions({ price, title }); return } catch(e) { console.warn('[Risk] applyOptions failed:', e); riskLinesRef.current[idx]=null }
+        try { riskLinesRef.current[idx].applyOptions({ price, title }); return } catch(_) { riskLinesRef.current[idx]=null }
       }
       try {
         riskLinesRef.current[idx]=candles.createPriceLine({price,color,lineWidth:2,lineStyle:0,axisLabelVisible:true,title})
-        console.log('[Risk] createPriceLine OK idx='+idx+' price='+price)
-      } catch(e) { console.error('[Risk] createPriceLine FAILED idx='+idx+':', e) }
+      } catch(_) {}
     }
     upsertLine(0, entry,  '#00d4ff', entry ? `Entrada: ${entry.toFixed(2)}` : '')
     upsertLine(1, stop,   '#ff4d6d', stop  ? `Stop: ${stop.toFixed(2)}`    : '')
@@ -845,7 +843,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         dummy.setData([{time:fd,value:entry},{time:ld,value:entry}])
         dummy.attachPrimitive(createRiskPrimitive(riskConfigRef))
         riskBandSeriesRef.current=dummy
-      } catch(e) { console.error('[Risk] primitive creation failed:', e) }
+      } catch(_) {}
     }
   // eslint-disable-next-line
   },[riskLevels, riskLineActive, data])

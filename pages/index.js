@@ -2596,7 +2596,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V6.26</title>
+        <title>Trading Simulator V6.29</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2673,7 +2673,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V6.26
+            <span className="dot"/>Trading Simulator V6.29
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4261,8 +4261,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                           const _e=_eA?(parseFloat(riskCalc.entry)||null):null
                           const _s=_sA?(parseFloat(riskCalc.stop)||null):null
                           const _t=_tA?(parseFloat(riskCalc.tp)||null):null
-                          console.log('[Risk] riskLevels computed — entry:',_e,'stop:',_s,'tp:',_t,'riskLineActive:',riskLineActive)
-                          const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>s+Number(c.amount||0),0)
+const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>s+Number(c.amount||0),0)
                           const _ret=(contributions||[]).filter(c=>c.type==='retirada').reduce((s,c)=>s+Number(c.amount||0),0)
                           const _bal=_aport-_ret
                           const _pnlR=(tlFifo.closedTrades||[]).reduce((s,t)=>s+(t.pnl_eur||t._pnl_eur||0),0)
