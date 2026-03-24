@@ -92,6 +92,8 @@ function createRiskPrimitive(configRef) {
 }
 
 export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, onRiskLevelChange, fillHeight=false }) {
+  // DEBUG: log riskLevels on every render to trace prop changes
+  if (riskLevels !== null) console.log('[Risk] CandleChart render — riskLevels:', JSON.stringify(riskLevels))
   const containerRef=useRef(null), svgRef=useRef(null), legendRef=useRef(null), tooltipRef=useRef(null)
   const activeLegendRef = externalLegendRef || legendRef
   const chartRef=useRef(null), candlesRef=useRef(null)
