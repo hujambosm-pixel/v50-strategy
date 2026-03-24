@@ -200,6 +200,11 @@ async function deleteWatchlistItem(id) {
   const res=await fetch(`${getSupaUrl()}/rest/v1/watchlist?id=eq.${id}`,{method:'DELETE',headers:getSupaH()})
   if(!res.ok) throw new Error('Error eliminando')
 }
+async function renameWatchlistList(oldName, newName) {
+  const res=await fetch(`${getSupaUrl()}/rest/v1/watchlist?list_name=eq.${encodeURIComponent(oldName)}`,{
+    method:'PATCH',headers:{...getSupaH(),'Prefer':'return=minimal'},body:JSON.stringify({list_name:newName})})
+  if(!res.ok){const t=await res.text();throw new Error('Error renombrando lista: '+t)}
+}
 
 // ── Ranking results API ───────────────────────────────────────
 async function saveRankingRemote(rankingData, stratId) {
@@ -2634,7 +2639,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V6.36</title>
+        <title>Trading Simulator V6.37</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2711,7 +2716,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V6.36
+            <span className="dot"/>Trading Simulator V6.37
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -2965,12 +2970,29 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                 Todas las listas
                               </div>
                               {allLists.map(l=>(
-                                <div key={l} onClick={()=>{setSelectedLists([l]);setListDropOpen(null)}}
-                                  style={{padding:'6px 10px',fontFamily:MONO,fontSize:11,cursor:'pointer',
-                                    display:'flex',alignItems:'center',gap:6,color:'var(--text)',whiteSpace:'nowrap'}}>
-                                  <span style={{color:selectedLists.includes(l)?'var(--accent)':'var(--text3)',fontSize:10}}>
-                                    {selectedLists.includes(l)?'●':'○'}
-                                  </span>{l}
+                                <div key={l}
+                                  style={{padding:'4px 6px 4px 10px',fontFamily:MONO,fontSize:11,cursor:'pointer',
+                                    display:'flex',alignItems:'center',gap:4,color:'var(--text)',whiteSpace:'nowrap'}}>
+                                  <span onClick={()=>{setSelectedLists([l]);setListDropOpen(null)}}
+                                    style={{display:'flex',alignItems:'center',gap:6,flex:1,padding:'2px 0'}}>
+                                    <span style={{color:selectedLists.includes(l)?'var(--accent)':'var(--text3)',fontSize:10}}>
+                                      {selectedLists.includes(l)?'●':'○'}
+                                    </span>{l}
+                                  </span>
+                                  <span onClick={async e=>{
+                                      e.stopPropagation()
+                                      const n=window.prompt(`Renombrar lista "${l}":`,l)
+                                      if(!n||!n.trim()||n.trim()===l) return
+                                      try{
+                                        await renameWatchlistList(l,n.trim())
+                                        if(selectedLists.includes(l)) setSelectedLists([n.trim()])
+                                        reloadWatchlist(); setListDropOpen(null)
+                                      }catch(err){alert('Error: '+err.message)}
+                                    }}
+                                    title="Renombrar lista"
+                                    style={{color:'#3d5a7a',fontSize:11,cursor:'pointer',padding:'2px 4px',borderRadius:2,flexShrink:0,lineHeight:1}}
+                                    onMouseOver={e=>e.currentTarget.style.color='#ffd166'}
+                                    onMouseOut={e=>e.currentTarget.style.color='#3d5a7a'}>✏</span>
                                 </div>
                               ))}
                             </div>
@@ -3673,7 +3695,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     </div>
                   </div>
                   <div style={{overflowY:'auto',flex:1}}>
-                  {[...watchlist].filter(w=>{
+                  {[...new Map(watchlist.map(w=>[w.symbol,w])).values()].filter(w=>{
                     const matchSearch=!mcSearch||(w.symbol||'').toLowerCase().includes(mcSearch.toLowerCase())||(w.name||'').toLowerCase().includes(mcSearch.toLowerCase())
                     const matchFav=!mcOnlyFavs||w.favorite
                     const matchList=!mcListFilter||(w.list_name||'General')===mcListFilter
