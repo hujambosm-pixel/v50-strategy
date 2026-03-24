@@ -2634,7 +2634,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V6.34</title>
+        <title>Trading Simulator V6.35</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2711,7 +2711,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V6.34
+            <span className="dot"/>Trading Simulator V6.35
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5033,12 +5033,21 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                     </div>
                   </div>
                 )}
-                {/* ── Vista de gráficos — solo en comparación multi-estrategia ── */}
-                {mcMultiResults.length>1&&(()=>{
+                {/* ── Vista de gráficos — una o varias estrategias ── */}
+                {mcResult&&(()=>{
                   const MAX_SYMS=10,MAX_STRATS=3
-                  const overLimit=mcSelected.length>MAX_SYMS||mcMultiResults.length>MAX_STRATS
+                  const isMulti=mcMultiResults.length>1
+                  // Estrategias efectivas: multi-run o estrategia activa única
+                  const strats=isMulti
+                    ? mcMultiResults.slice(0,MAX_STRATS)
+                    : [{
+                        id:currentStratId||'__single__',
+                        name:stratName||'Estrategia',
+                        color:STRAT_COMPARE_COLORS[0],
+                        result:mcResult
+                      }]
                   const syms=mcSelected.slice(0,MAX_SYMS)
-                  const strats=mcMultiResults.slice(0,MAX_STRATS)
+                  const overLimit=mcSelected.length>MAX_SYMS||(isMulti&&mcMultiResults.length>MAX_STRATS)
                   return(
                     <div style={{borderTop:'1px solid var(--border)'}}>
                       {/* Cabecera colapsable */}
@@ -5049,7 +5058,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         onMouseOut={e=>e.currentTarget.style.background='var(--bg2)'}>
                         <span style={{fontFamily:MONO,fontSize:9,color:'#4a7a9a',width:10}}>{mcChartsOpen?'▼':'▶'}</span>
                         <span style={{fontFamily:MONO,fontSize:11,color:'#c8dff5',fontWeight:600,letterSpacing:'0.05em'}}>VISTA DE GRÁFICOS</span>
-                        <span style={{fontFamily:MONO,fontSize:10,color:'#4a6a88',marginLeft:4}}>{syms.length} activos · {strats.length} estrategias</span>
+                        <span style={{fontFamily:MONO,fontSize:10,color:'#4a6a88',marginLeft:4}}>{syms.length} activos · {strats.length} {strats.length===1?'estrategia':'estrategias'}</span>
                         {overLimit&&<span style={{marginLeft:'auto',fontFamily:MONO,fontSize:9,color:'#ffd166',background:'rgba(255,209,102,0.1)',border:'1px solid rgba(255,209,102,0.3)',borderRadius:3,padding:'1px 6px'}}>⚠ Límite 10×3</span>}
                       </div>
                       {mcChartsOpen&&(
@@ -5059,7 +5068,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               ⚠ Límite: máximo 10 activos × 3 estrategias. Se muestran los primeros {syms.length} activos y {strats.length} estrategias.
                             </div>
                           )}
-                          {/* Leyenda de colores */}
+                          {/* Leyenda */}
                           <div style={{padding:'4px 16px',borderBottom:'1px solid var(--border)',display:'flex',gap:10,flexWrap:'wrap',background:'var(--bg2)'}}>
                             {strats.map(r=>(
                               <span key={r.id} style={{fontFamily:MONO,fontSize:10,color:r.color,display:'flex',alignItems:'center',gap:4}}>
