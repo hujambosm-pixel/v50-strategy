@@ -813,6 +813,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       Object.assign(riskConfigRef.current,{entry:null,stop:null,tp:null,shares:0,tradeRiskEur:0,rrRatio:0})
     }
 
+    console.log('[Risk] riskLevels recibido en CandleChart:', riskLevels)
     if (!riskLevels?.entry && !riskLevels?.stop && !riskLevels?.tp) { cleanup(); return }
 
     const { entry=null, stop=null, tp=null, shares=0, tradeRiskEur=0, rrRatio=0 } = riskLevels

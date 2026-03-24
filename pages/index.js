@@ -3956,110 +3956,112 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                           </div>
                         </div>
 
-                        {/* Calculadora */}
-                        <div style={{..._C,flex:1,minWidth:340}}>
-                          <div style={{fontFamily:MONO,fontSize:7,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:6}}>Calculadora</div>
+                        {/* Calculadora — todo en una sola fila horizontal */}
+                        <div style={{..._C,flex:1,minWidth:400}}>
+                          <div style={{fontFamily:MONO,fontSize:7,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:5}}>Calculadora</div>
+                          <div style={{display:'flex',gap:10,alignItems:'flex-end',flexWrap:'wrap'}}>
 
-                          {/* Fila inputs: los 3 en horizontal */}
-                          <div style={{display:'flex',gap:8,alignItems:'flex-end',flexWrap:'wrap',marginBottom:8}}>
                             {/* Entrada */}
                             <div style={{display:'flex',flexDirection:'column',gap:2}}>
                               <div style={_L}>Entrada</div>
                               <div style={{display:'flex',alignItems:'center',gap:2}}>
                                 <input type="number" min={0} step="any" placeholder="0.00" value={riskCalc.entry}
                                   onChange={e=>setRiskCalc(c=>({...c,entry:e.target.value}))}
-                                  style={{..._I,width:80}}/>
+                                  style={{..._I,width:76}}/>
                                 <button title="Mostrar línea en gráfico"
-                                  onClick={()=>{ if(parseFloat(riskCalc.entry)>0) setRiskLineActive(v=>({...v,entry:true})) }}
+                                  onClick={()=>{const v=parseFloat(riskCalc.entry);console.log('[Risk] ⊕ entry clicked, value=',v,'active=',riskLineActive.entry);if(v>0){setRiskLineActive(p=>({...p,entry:true}));console.log('[Risk] entry activado')}}}
                                   style={{..._btnIcon,border:`1px solid ${riskLineActive.entry?'#4488cc':'#4488cc55'}`,background:riskLineActive.entry?'rgba(68,136,204,0.25)':'rgba(68,136,204,0.06)',color:'#6ab0ff'}}>⊕</button>
                                 <button title="Eliminar línea"
-                                  onClick={()=>{setRiskCalc(c=>({...c,entry:''}));setRiskLineActive(v=>({...v,entry:false}))}}
+                                  onClick={()=>{setRiskCalc(c=>({...c,entry:''}));setRiskLineActive(p=>({...p,entry:false}))}}
                                   style={{..._btnIcon,border:'1px solid var(--border)',background:'transparent',color:'var(--text3)'}}>✕</button>
                               </div>
                             </div>
+
                             {/* Stop */}
                             <div style={{display:'flex',flexDirection:'column',gap:2}}>
                               <div style={_L}>Stop</div>
                               <div style={{display:'flex',alignItems:'center',gap:2}}>
                                 <input type="number" min={0} step="any" placeholder="0.00" value={riskCalc.stop}
                                   onChange={e=>setRiskCalc(c=>({...c,stop:e.target.value}))}
-                                  style={{..._I,width:80}}/>
+                                  style={{..._I,width:76}}/>
                                 <button title="Mostrar línea en gráfico"
-                                  onClick={()=>{ if(parseFloat(riskCalc.stop)>0) setRiskLineActive(v=>({...v,stop:true})) }}
+                                  onClick={()=>{const v=parseFloat(riskCalc.stop);console.log('[Risk] ⊕ stop clicked, value=',v,'active=',riskLineActive.stop);if(v>0){setRiskLineActive(p=>({...p,stop:true}));console.log('[Risk] stop activado')}}}
                                   style={{..._btnIcon,border:`1px solid ${riskLineActive.stop?'#cc4444':'#cc444455'}`,background:riskLineActive.stop?'rgba(204,68,68,0.25)':'rgba(204,68,68,0.06)',color:'#ff7070'}}>⊕</button>
                                 <button title="Eliminar línea"
-                                  onClick={()=>{setRiskCalc(c=>({...c,stop:''}));setRiskLineActive(v=>({...v,stop:false}))}}
+                                  onClick={()=>{setRiskCalc(c=>({...c,stop:''}));setRiskLineActive(p=>({...p,stop:false}))}}
                                   style={{..._btnIcon,border:'1px solid var(--border)',background:'transparent',color:'var(--text3)'}}>✕</button>
                               </div>
                             </div>
+
                             {/* TP */}
                             <div style={{display:'flex',flexDirection:'column',gap:2}}>
                               <div style={_L}>TP (opc.)</div>
                               <div style={{display:'flex',alignItems:'center',gap:2}}>
                                 <input type="number" min={0} step="any" placeholder="—" value={riskCalc.tp}
                                   onChange={e=>setRiskCalc(c=>({...c,tp:e.target.value}))}
-                                  style={{..._I,width:80}}/>
+                                  style={{..._I,width:76}}/>
                                 <button title="Mostrar línea en gráfico"
-                                  onClick={()=>{ if(parseFloat(riskCalc.tp)>0) setRiskLineActive(v=>({...v,tp:true})) }}
+                                  onClick={()=>{const v=parseFloat(riskCalc.tp);console.log('[Risk] ⊕ tp clicked, value=',v,'active=',riskLineActive.tp);if(v>0){setRiskLineActive(p=>({...p,tp:true}));console.log('[Risk] tp activado')}}}
                                   style={{..._btnIcon,border:`1px solid ${riskLineActive.tp?'#44cc88':'#44cc8855'}`,background:riskLineActive.tp?'rgba(68,204,136,0.25)':'rgba(68,204,136,0.06)',color:'#00e5a0'}}>⊕</button>
                                 <button title="Eliminar línea"
-                                  onClick={()=>{setRiskCalc(c=>({...c,tp:''}));setRiskLineActive(v=>({...v,tp:false}))}}
+                                  onClick={()=>{setRiskCalc(c=>({...c,tp:''}));setRiskLineActive(p=>({...p,tp:false}))}}
                                   style={{..._btnIcon,border:'1px solid var(--border)',background:'transparent',color:'var(--text3)'}}>✕</button>
                               </div>
                             </div>
-                          </div>
 
-                          {/* Separador horizontal */}
-                          <div style={{height:1,background:'var(--border)',marginBottom:8}}/>
+                            {/* Separador vertical */}
+                            <div style={{width:1,alignSelf:'stretch',background:'var(--border)',flexShrink:0,marginBottom:1}}/>
 
-                          {/* Resultados prominentes */}
-                          <div style={{display:'flex',gap:14,alignItems:'flex-end',flexWrap:'wrap',marginBottom:6}}>
                             {/* Acciones — grande y dorado */}
-                            <div>
+                            <div style={{display:'flex',flexDirection:'column',gap:1}}>
                               <div style={_L}>Acciones</div>
-                              <div style={{fontFamily:MONO,fontSize:28,fontWeight:700,lineHeight:1,
+                              <div style={{fontFamily:MONO,fontSize:26,fontWeight:700,lineHeight:1,
                                 color:_shs>0?'#ffd166':'var(--text3)',
-                                textShadow:_shs>0?'0 0 14px rgba(255,209,102,0.4)':''}}>{_shs>0?_shs:'—'}</div>
+                                textShadow:_shs>0?'0 0 14px rgba(255,209,102,0.35)':''}}>{_shs>0?_shs:'—'}</div>
                             </div>
+
                             {/* Riesgo trade */}
-                            <div>
+                            <div style={{display:'flex',flexDirection:'column',gap:1}}>
                               <div style={_L}>Riesgo trade</div>
-                              <div style={{fontFamily:MONO,fontSize:13,fontWeight:700,color:_trReur>0?'#ff4d6d':'var(--text3)',lineHeight:1.3}}>
-                                {_trReur>0?<>{_fe(_trReur)}&nbsp;<span style={{fontSize:10,fontWeight:500,opacity:0.75}}>{_fp(_trRpct)}</span></>:'—'}
+                              <div style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:_trReur>0?'#ff4d6d':'var(--text3)',lineHeight:1.3}}>
+                                {_trReur>0?<>{_fe(_trReur)}&nbsp;<span style={{fontSize:9,fontWeight:500,opacity:0.75}}>{_fp(_trRpct)}</span></>:'—'}
                               </div>
                             </div>
+
                             {/* Dist. stop */}
-                            <div>
+                            <div style={{display:'flex',flexDirection:'column',gap:1}}>
                               <div style={_L}>Dist. stop</div>
-                              <div style={{fontFamily:MONO,fontSize:13,fontWeight:600,color:_dS>0?'var(--text)':'var(--text3)',lineHeight:1.3}}>
-                                {_dS>0?<>{_fe(_dS,2)}&nbsp;<span style={{fontSize:10,fontWeight:400,opacity:0.7}}>{_fp(_dSPct)}</span></>:'—'}
+                              <div style={{fontFamily:MONO,fontSize:12,fontWeight:600,color:_dS>0?'var(--text)':'var(--text3)',lineHeight:1.3}}>
+                                {_dS>0?<>{_fe(_dS,2)}&nbsp;<span style={{fontSize:9,fontWeight:400,opacity:0.7}}>{_fp(_dSPct)}</span></>:'—'}
                               </div>
                             </div>
+
                             {/* R:R */}
                             {_tN>0&&_eN>0&&_sN>0&&(
-                              <div>
+                              <div style={{display:'flex',flexDirection:'column',gap:1}}>
                                 <div style={_L}>R:R</div>
-                                <div style={{fontFamily:MONO,fontSize:15,fontWeight:700,color:_rr>=2?'#00e5a0':_rr>=1?'#ffd166':'#ff4d6d'}}>{_rr>0?`1:${_rr.toFixed(2)}`:'—'}</div>
+                                <div style={{fontFamily:MONO,fontSize:14,fontWeight:700,color:_rr>=2?'#00e5a0':_rr>=1?'#ffd166':'#ff4d6d'}}>{_rr>0?`1:${_rr.toFixed(2)}`:'—'}</div>
                               </div>
                             )}
-                          </div>
 
-                          {/* Semáforo banner */}
-                          {_eN>0&&_sN>0&&(
-                            <div style={{display:'flex',alignItems:'center',gap:10,padding:'7px 12px',borderRadius:5,
-                              background:`${_semC}20`,border:`1px solid ${_semC}55`,boxSizing:'border-box'}}>
-                              <span style={{width:10,height:10,borderRadius:'50%',background:_semC,flexShrink:0,boxShadow:`0 0 7px ${_semC}`}}/>
-                              <span style={{fontFamily:MONO,fontSize:10,color:_semC,fontWeight:700,flex:1}}>
-                                {_postPct>=_maxR?'LÍMITE — Riesgo máximo alcanzado':_postPct>=(_maxR*0.8)?'⚠ Cerca del límite de riesgo':'OK — Dentro del riesgo permitido'}
-                              </span>
-                              <span style={{fontFamily:MONO,fontSize:10,color:_semC,opacity:0.85,fontWeight:600}}>{_fp(_postPct)}</span>
-                            </div>
-                          )}
-                          {_openCnt>=_maxS&&(
-                            <div style={{marginTop:5,padding:'5px 10px',borderRadius:4,background:'rgba(255,77,109,0.1)',border:'1px solid rgba(255,77,109,0.35)'}}>
-                              <span style={{fontFamily:MONO,fontSize:9,color:'#ff4d6d',fontWeight:700}}>⚠ Posiciones: {_openCnt}/{_maxS} — Límite alcanzado</span>
-                            </div>
-                          )}
+                            {/* Semáforo compacto en línea */}
+                            {_eN>0&&_sN>0&&(
+                              <div style={{display:'flex',alignItems:'center',gap:6,padding:'4px 9px',borderRadius:4,
+                                background:`${_semC}22`,border:`1px solid ${_semC}55`,alignSelf:'flex-end',marginBottom:1}}>
+                                <span style={{width:8,height:8,borderRadius:'50%',background:_semC,flexShrink:0,boxShadow:`0 0 5px ${_semC}`}}/>
+                                <span style={{fontFamily:MONO,fontSize:9,color:_semC,fontWeight:700,whiteSpace:'nowrap'}}>
+                                  {_postPct>=_maxR?'LÍMITE':_postPct>=(_maxR*0.8)?'⚠ Cerca':'OK'}
+                                </span>
+                                <span style={{fontFamily:MONO,fontSize:9,color:_semC,opacity:0.8}}>{_fp(_postPct)}</span>
+                              </div>
+                            )}
+                            {_openCnt>=_maxS&&(
+                              <div style={{display:'flex',alignItems:'center',padding:'4px 7px',borderRadius:4,background:'rgba(255,77,109,0.1)',border:'1px solid rgba(255,77,109,0.35)',alignSelf:'flex-end',marginBottom:1}}>
+                                <span style={{fontFamily:MONO,fontSize:8,color:'#ff4d6d',fontWeight:700}}>⚠ {_openCnt}/{_maxS}</span>
+                              </div>
+                            )}
+
+                          </div>
                         </div>
 
                       </div>
