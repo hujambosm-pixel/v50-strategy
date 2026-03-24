@@ -594,6 +594,7 @@ export default function Home() {
   const [riskSaving,setRiskSaving]=useState(false)
   const [riskCalc,setRiskCalc]=useState({entry:'',stop:'',tp:''})
   const [riskLineActive,setRiskLineActive]=useState({entry:false,stop:false,tp:false})
+  const [riskCaptureMode,setRiskCaptureMode]=useState(null) // null|'capture_entry'|'capture_stop'|'capture_tp'
   const [riskProfileDropOpen,setRiskProfileDropOpen]=useState(false)
   const [tlFilterBroker,setTlFilterBroker]=useState('')
   const [tlFilterYear,setTlFilterYear]=useState('')
@@ -1959,13 +1960,30 @@ export default function Home() {
   useEffect(()=>{ if(session?.user?.id) loadTrades() },[loadTrades,session?.user?.id]) // eslint-disable-line
   useEffect(()=>{ if(sidePanel==='tradelog') loadTrades() },[sidePanel,loadTrades])
 
-  // ── Risk: Escape limpia líneas, cambio de sección también ──
+  // ── Risk: Escape cancela capture mode o limpia todo ──
   useEffect(()=>{
-    const handler=e=>{ if(e.key==='Escape'&&sidePanel==='risk'){ setRiskLineActive({entry:false,stop:false,tp:false}); setRiskCalc({entry:'',stop:'',tp:''}) } }
+    const handler=e=>{
+      if(e.key==='Escape'&&sidePanel==='risk'){
+        if(riskCaptureMode){ setRiskCaptureMode(null) }
+        else { setRiskLineActive({entry:false,stop:false,tp:false}); setRiskCalc({entry:'',stop:'',tp:''}) }
+      }
+    }
     window.addEventListener('keydown',handler)
     return()=>window.removeEventListener('keydown',handler)
-  },[sidePanel])
-  useEffect(()=>{ if(sidePanel!=='risk'){ setRiskLineActive({entry:false,stop:false,tp:false}); setRiskProfileDropOpen(false) } },[sidePanel])
+  },[sidePanel,riskCaptureMode])
+  useEffect(()=>{ if(sidePanel!=='risk'){ setRiskLineActive({entry:false,stop:false,tp:false}); setRiskCaptureMode(null); setRiskProfileDropOpen(false) } },[sidePanel])
+
+  // ── onRiskPrice: captura clic en gráfico durante capture mode ──
+  const onRiskPrice = useCallback((rawPrice)=>{
+    const p = parseFloat(rawPrice.toFixed(4))
+    setRiskCaptureMode(cur=>{
+      if(!cur) return null
+      const key = cur==='capture_entry'?'entry':cur==='capture_stop'?'stop':'tp'
+      setRiskCalc(c=>({...c,[key]:String(p)}))
+      setRiskLineActive(v=>({...v,[key]:true}))
+      return null // sale de capture mode
+    })
+  },[])
 
   // ── onRiskLevelChange: drag de líneas en gráfico actualiza campos en tiempo real ──
   const onRiskLevelChange = useCallback((type, price)=>{
@@ -3962,52 +3980,98 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                           <div style={{display:'flex',gap:10,alignItems:'flex-end',flexWrap:'wrap'}}>
 
                             {/* Entrada */}
-                            <div style={{display:'flex',flexDirection:'column',gap:2}}>
-                              <div style={_L}>Entrada</div>
-                              <div style={{display:'flex',alignItems:'center',gap:2}}>
-                                <input type="number" min={0} step="any" placeholder="0.00" value={riskCalc.entry}
-                                  onChange={e=>setRiskCalc(c=>({...c,entry:e.target.value}))}
-                                  style={{..._I,width:76}}/>
-                                <button title="Mostrar línea en gráfico"
-                                  onClick={()=>{const v=parseFloat(riskCalc.entry);console.log('[⊕ click] entry value=',v,'riskCalc.entry=',riskCalc.entry,'riskLineActive=',riskLineActive);if(v>0){setRiskLineActive(p=>{console.log('[⊕ click] setRiskLineActive entry true, prev=',p);return{...p,entry:true}})}}}
-                                  style={{..._btnIcon,border:`1px solid ${riskLineActive.entry?'#4488cc':'#4488cc55'}`,background:riskLineActive.entry?'rgba(68,136,204,0.25)':'rgba(68,136,204,0.06)',color:'#6ab0ff'}}>⊕</button>
-                                <button title="Eliminar línea"
-                                  onClick={()=>{setRiskCalc(c=>({...c,entry:''}));setRiskLineActive(p=>({...p,entry:false}))}}
-                                  style={{..._btnIcon,border:'1px solid var(--border)',background:'transparent',color:'var(--text3)'}}>✕</button>
+                            {(()=>{
+                              const isCapturing=riskCaptureMode==='capture_entry'
+                              const isActive=riskLineActive.entry
+                              return(
+                              <div style={{display:'flex',flexDirection:'column',gap:2}}>
+                                <div style={_L}>Entrada</div>
+                                <div style={{display:'flex',alignItems:'center',gap:2}}>
+                                  <input type="number" min={0} step="any" placeholder="clic ⊕" value={riskCalc.entry}
+                                    onChange={e=>{
+                                      const v=parseFloat(e.target.value)
+                                      setRiskCalc(c=>({...c,entry:e.target.value}))
+                                      setRiskLineActive(p=>({...p,entry:v>0}))
+                                      if(v>0&&riskCaptureMode==='capture_entry') setRiskCaptureMode(null)
+                                    }}
+                                    style={{..._I,width:76,borderColor:isActive?'#4488cc':isCapturing?'rgba(68,136,204,0.6)':'var(--border)'}}/>
+                                  <button title={isCapturing?'Cancelar captura':'Clic en gráfico para definir entrada'}
+                                    onClick={()=>setRiskCaptureMode(c=>c==='capture_entry'?null:'capture_entry')}
+                                    style={{..._btnIcon,
+                                      border:`1px solid ${isCapturing?'#4488cc':isActive?'#4488cc88':'#4488cc44'}`,
+                                      background:isCapturing?'rgba(68,136,204,0.35)':isActive?'rgba(68,136,204,0.2)':'rgba(68,136,204,0.05)',
+                                      color:'#6ab0ff',
+                                      animation:isCapturing?'pulse-ring 1s infinite':''
+                                    }}>⊕</button>
+                                  <button title="Eliminar línea"
+                                    onClick={()=>{setRiskCalc(c=>({...c,entry:''}));setRiskLineActive(p=>({...p,entry:false}));if(riskCaptureMode==='capture_entry')setRiskCaptureMode(null)}}
+                                    style={{..._btnIcon,border:'1px solid var(--border)',background:'transparent',color:'var(--text3)'}}>✕</button>
+                                </div>
                               </div>
-                            </div>
+                              )
+                            })()}
 
                             {/* Stop */}
-                            <div style={{display:'flex',flexDirection:'column',gap:2}}>
-                              <div style={_L}>Stop</div>
-                              <div style={{display:'flex',alignItems:'center',gap:2}}>
-                                <input type="number" min={0} step="any" placeholder="0.00" value={riskCalc.stop}
-                                  onChange={e=>setRiskCalc(c=>({...c,stop:e.target.value}))}
-                                  style={{..._I,width:76}}/>
-                                <button title="Mostrar línea en gráfico"
-                                  onClick={()=>{const v=parseFloat(riskCalc.stop);console.log('[⊕ click] stop value=',v,'riskCalc.stop=',riskCalc.stop);if(v>0){setRiskLineActive(p=>{console.log('[⊕ click] setRiskLineActive stop true');return{...p,stop:true}})}}}
-                                  style={{..._btnIcon,border:`1px solid ${riskLineActive.stop?'#cc4444':'#cc444455'}`,background:riskLineActive.stop?'rgba(204,68,68,0.25)':'rgba(204,68,68,0.06)',color:'#ff7070'}}>⊕</button>
-                                <button title="Eliminar línea"
-                                  onClick={()=>{setRiskCalc(c=>({...c,stop:''}));setRiskLineActive(p=>({...p,stop:false}))}}
-                                  style={{..._btnIcon,border:'1px solid var(--border)',background:'transparent',color:'var(--text3)'}}>✕</button>
+                            {(()=>{
+                              const isCapturing=riskCaptureMode==='capture_stop'
+                              const isActive=riskLineActive.stop
+                              return(
+                              <div style={{display:'flex',flexDirection:'column',gap:2}}>
+                                <div style={_L}>Stop</div>
+                                <div style={{display:'flex',alignItems:'center',gap:2}}>
+                                  <input type="number" min={0} step="any" placeholder="clic ⊕" value={riskCalc.stop}
+                                    onChange={e=>{
+                                      const v=parseFloat(e.target.value)
+                                      setRiskCalc(c=>({...c,stop:e.target.value}))
+                                      setRiskLineActive(p=>({...p,stop:v>0}))
+                                      if(v>0&&riskCaptureMode==='capture_stop') setRiskCaptureMode(null)
+                                    }}
+                                    style={{..._I,width:76,borderColor:isActive?'#cc4444':isCapturing?'rgba(204,68,68,0.6)':'var(--border)'}}/>
+                                  <button title={isCapturing?'Cancelar captura':'Clic en gráfico para definir stop'}
+                                    onClick={()=>setRiskCaptureMode(c=>c==='capture_stop'?null:'capture_stop')}
+                                    style={{..._btnIcon,
+                                      border:`1px solid ${isCapturing?'#cc4444':isActive?'#cc444488':'#cc444444'}`,
+                                      background:isCapturing?'rgba(204,68,68,0.35)':isActive?'rgba(204,68,68,0.2)':'rgba(204,68,68,0.05)',
+                                      color:'#ff7070'
+                                    }}>⊕</button>
+                                  <button title="Eliminar línea"
+                                    onClick={()=>{setRiskCalc(c=>({...c,stop:''}));setRiskLineActive(p=>({...p,stop:false}));if(riskCaptureMode==='capture_stop')setRiskCaptureMode(null)}}
+                                    style={{..._btnIcon,border:'1px solid var(--border)',background:'transparent',color:'var(--text3)'}}>✕</button>
+                                </div>
                               </div>
-                            </div>
+                              )
+                            })()}
 
                             {/* TP */}
-                            <div style={{display:'flex',flexDirection:'column',gap:2}}>
-                              <div style={_L}>TP (opc.)</div>
-                              <div style={{display:'flex',alignItems:'center',gap:2}}>
-                                <input type="number" min={0} step="any" placeholder="—" value={riskCalc.tp}
-                                  onChange={e=>setRiskCalc(c=>({...c,tp:e.target.value}))}
-                                  style={{..._I,width:76}}/>
-                                <button title="Mostrar línea en gráfico"
-                                  onClick={()=>{const v=parseFloat(riskCalc.tp);console.log('[⊕ click] tp value=',v,'riskCalc.tp=',riskCalc.tp);if(v>0){setRiskLineActive(p=>{console.log('[⊕ click] setRiskLineActive tp true');return{...p,tp:true}})}}}
-                                  style={{..._btnIcon,border:`1px solid ${riskLineActive.tp?'#44cc88':'#44cc8855'}`,background:riskLineActive.tp?'rgba(68,204,136,0.25)':'rgba(68,204,136,0.06)',color:'#00e5a0'}}>⊕</button>
-                                <button title="Eliminar línea"
-                                  onClick={()=>{setRiskCalc(c=>({...c,tp:''}));setRiskLineActive(p=>({...p,tp:false}))}}
-                                  style={{..._btnIcon,border:'1px solid var(--border)',background:'transparent',color:'var(--text3)'}}>✕</button>
+                            {(()=>{
+                              const isCapturing=riskCaptureMode==='capture_tp'
+                              const isActive=riskLineActive.tp
+                              return(
+                              <div style={{display:'flex',flexDirection:'column',gap:2}}>
+                                <div style={_L}>TP (opc.)</div>
+                                <div style={{display:'flex',alignItems:'center',gap:2}}>
+                                  <input type="number" min={0} step="any" placeholder="clic ⊕" value={riskCalc.tp}
+                                    onChange={e=>{
+                                      const v=parseFloat(e.target.value)
+                                      setRiskCalc(c=>({...c,tp:e.target.value}))
+                                      setRiskLineActive(p=>({...p,tp:v>0}))
+                                      if(v>0&&riskCaptureMode==='capture_tp') setRiskCaptureMode(null)
+                                    }}
+                                    style={{..._I,width:76,borderColor:isActive?'#44cc88':isCapturing?'rgba(68,204,136,0.6)':'var(--border)'}}/>
+                                  <button title={isCapturing?'Cancelar captura':'Clic en gráfico para definir TP'}
+                                    onClick={()=>setRiskCaptureMode(c=>c==='capture_tp'?null:'capture_tp')}
+                                    style={{..._btnIcon,
+                                      border:`1px solid ${isCapturing?'#44cc88':isActive?'#44cc8888':'#44cc8844'}`,
+                                      background:isCapturing?'rgba(68,204,136,0.35)':isActive?'rgba(68,204,136,0.2)':'rgba(68,204,136,0.05)',
+                                      color:'#00e5a0'
+                                    }}>⊕</button>
+                                  <button title="Eliminar línea"
+                                    onClick={()=>{setRiskCalc(c=>({...c,tp:''}));setRiskLineActive(p=>({...p,tp:false}));if(riskCaptureMode==='capture_tp')setRiskCaptureMode(null)}}
+                                    style={{..._btnIcon,border:'1px solid var(--border)',background:'transparent',color:'var(--text3)'}}>✕</button>
+                                </div>
                               </div>
-                            </div>
+                              )
+                            })()}
 
                             {/* Separador vertical */}
                             <div style={{width:1,alignSelf:'stretch',background:'var(--border)',flexShrink:0,marginBottom:1}}/>
@@ -4186,8 +4250,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         externalLegendRef={chartLegendRef}
                         priceAlarms={alarms.filter(a=>a.condition==='price_level'&&(a.symbol||'').toUpperCase()===(simbolo||'').toUpperCase())}
                         tlOpenTrades={tlTrades.filter(t=>t.status==='open'&&t.fill_type!=='sell'&&(t.symbol||'').toUpperCase()===(simbolo||'').toUpperCase())}
-                        riskMode={null}
-                        onRiskPrice={null}
+                        riskMode={sidePanel==='risk'&&riskCaptureMode?riskCaptureMode:null}
+                        onRiskPrice={sidePanel==='risk'&&riskCaptureMode?onRiskPrice:null}
                         onRiskLevelChange={sidePanel==='risk'?onRiskLevelChange:null}
                         riskLineActive={sidePanel==='risk'?riskLineActive:null}
                         riskLevels={(()=>{

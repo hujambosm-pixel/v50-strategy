@@ -965,7 +965,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
             background:'rgba(8,12,20,0.88)',border:'1px solid rgba(0,212,255,0.5)',
             borderRadius:4,padding:'3px 12px',pointerEvents:'none',
             boxShadow:'0 2px 8px rgba(0,0,0,0.5)'}}>
-            {riskMode==='waiting_entry'?'▶ Clic para definir precio de entrada':'▶ Clic para definir stop loss'}
+            {riskMode==='capture_entry'?'▶ Clic en el gráfico para definir la Entrada':riskMode==='capture_stop'?'▶ Clic en el gráfico para definir el Stop':'▶ Clic en el gráfico para definir el TP'}
           </div>
         </div>
       )}
