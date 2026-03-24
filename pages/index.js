@@ -4656,52 +4656,82 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                 </div>
 
                 {/* ── Tabla comparativa de estrategias (multi-estrategia) ── */}
-                {mcMultiResults.length>1&&(
-                  <div style={{padding:'10px 16px',borderBottom:'1px solid var(--border)'}}>
-                    <div style={{fontFamily:MONO,fontSize:10,color:'var(--text3)',marginBottom:8,letterSpacing:'0.05em'}}>COMPARATIVA DE ESTRATEGIAS</div>
-                    <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:11}}>
-                      <thead>
-                        <tr style={{borderBottom:'1px solid var(--border)'}}>
-                          {['Estrategia','Win Rate','CAGR','Max DD','P.Factor'].map(h=>(
-                            <th key={h} style={{padding:'3px 8px',textAlign:'left',color:'var(--text3)',fontWeight:400,fontSize:9}}>{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {mcMultiResults.map((r)=>{
-                          const allT=r.result.allTrades||[]
-                          const wins=allT.filter(t=>t.pnlPct>=0),losses=allT.filter(t=>t.pnlPct<0)
-                          const winRate=allT.length?wins.length/allT.length*100:0
-                          const lastC=r.result.compoundCurve?.slice(-1)[0]?.value||Number(capitalIni)
-                          const capIni=Number(capitalIni)
-                          const fd=r.result.startDate?new Date(r.result.startDate):null
-                          const ld=r.result.compoundCurve?.slice(-1)[0]?.date?new Date(r.result.compoundCurve.slice(-1)[0].date):new Date()
-                          const anios=fd&&ld?(ld-fd)/86400000/365.25:1
-                          const cagrC=(Math.pow(Math.max(lastC,0.01)/capIni,1/Math.max(anios,0.01))-1)*100
-                          const grossWin=wins.reduce((s,t)=>s+(t.pnlSimple||0),0)
-                          const grossLoss=Math.abs(losses.reduce((s,t)=>s+(t.pnlSimple||0),0))
-                          const pf=grossLoss>0?grossWin/grossLoss:grossWin>0?99:0
-                          const isActive=r.id===currentStratId
-                          return(
-                            <tr key={r.id} style={{borderBottom:'1px solid rgba(255,255,255,0.03)'}}>
-                              <td style={{padding:'4px 8px'}}>
-                                <div style={{display:'flex',alignItems:'center',gap:5}}>
-                                  <div style={{width:8,height:8,borderRadius:'50%',background:r.color,flexShrink:0}}/>
-                                  <span style={{color:r.color,fontWeight:isActive?700:400,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:90}}>{r.name}</span>
-                                  {isActive&&<span style={{fontSize:7,color:'#00d4ff',background:'rgba(0,212,255,0.1)',border:'1px solid rgba(0,212,255,0.25)',borderRadius:2,padding:'0 3px',flexShrink:0}}>activa</span>}
+                {mcMultiResults.length>1&&(()=>{
+                  // B&H reference row from active strategy result
+                  const bhLast=mcResult.bhCurve?.slice(-1)[0]?.value||Number(capitalIni)
+                  const bhCapIni=Number(capitalIni)
+                  const bhFd=mcResult.startDate?new Date(mcResult.startDate):null
+                  const bhLd=mcResult.bhCurve?.slice(-1)[0]?.date?new Date(mcResult.bhCurve.slice(-1)[0].date):new Date()
+                  const bhAnios=bhFd&&bhLd?(bhLd-bhFd)/86400000/365.25:1
+                  const bhCagr=(Math.pow(Math.max(bhLast,0.01)/bhCapIni,1/Math.max(bhAnios,0.01))-1)*100
+                  const bhProfit=bhLast-bhCapIni
+                  return(
+                    <div style={{padding:'10px 16px',borderBottom:'1px solid var(--border)'}}>
+                      <div style={{fontFamily:MONO,fontSize:10,color:'var(--text3)',marginBottom:8,letterSpacing:'0.05em'}}>COMPARATIVA DE ESTRATEGIAS</div>
+                      <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:11}}>
+                        <thead>
+                          <tr style={{borderBottom:'1px solid var(--border)'}}>
+                            {['Estrategia','Ops','Win %','CAGR','Max DD','P.Fac','Profit €'].map(h=>(
+                              <th key={h} style={{padding:'3px 6px',textAlign:'left',color:'var(--text3)',fontWeight:400,fontSize:9}}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {mcMultiResults.map((r)=>{
+                            const allT=r.result.allTrades||[]
+                            const wins=allT.filter(t=>t.pnlPct>=0),losses=allT.filter(t=>t.pnlPct<0)
+                            const winRate=allT.length?wins.length/allT.length*100:0
+                            const lastC=r.result.compoundCurve?.slice(-1)[0]?.value||Number(capitalIni)
+                            const capIni=Number(capitalIni)
+                            const fd=r.result.startDate?new Date(r.result.startDate):null
+                            const ld=r.result.compoundCurve?.slice(-1)[0]?.date?new Date(r.result.compoundCurve.slice(-1)[0].date):new Date()
+                            const anios=fd&&ld?(ld-fd)/86400000/365.25:1
+                            const cagrC=(Math.pow(Math.max(lastC,0.01)/capIni,1/Math.max(anios,0.01))-1)*100
+                            const grossWin=wins.reduce((s,t)=>s+(t.pnlSimple||0),0)
+                            const grossLoss=Math.abs(losses.reduce((s,t)=>s+(t.pnlSimple||0),0))
+                            const pf=grossLoss>0?grossWin/grossLoss:grossWin>0?99:0
+                            const profit=lastC-capIni
+                            const isActive=r.id===currentStratId
+                            return(
+                              <tr key={r.id} style={{borderBottom:'1px solid rgba(255,255,255,0.03)'}}>
+                                <td style={{padding:'4px 6px'}}>
+                                  <div style={{display:'flex',alignItems:'center',gap:4}}>
+                                    <div style={{width:7,height:7,borderRadius:'50%',background:r.color,flexShrink:0}}/>
+                                    <span style={{color:r.color,fontWeight:isActive?700:400,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:80}}>{r.name}</span>
+                                    {isActive&&<span style={{fontSize:7,color:'#00d4ff',background:'rgba(0,212,255,0.1)',border:'1px solid rgba(0,212,255,0.25)',borderRadius:2,padding:'0 3px',flexShrink:0}}>✓</span>}
+                                  </div>
+                                </td>
+                                <td style={{padding:'4px 6px',color:'#ffd166'}}>{allT.length}</td>
+                                <td style={{padding:'4px 6px',color:winRate>=50?'#00e5a0':'#ff4d6d'}}>{winRate.toFixed(1)}%</td>
+                                <td style={{padding:'4px 6px',color:cagrC>=0?'#00e5a0':'#ff4d6d'}}>{cagrC>=0?'+':''}{cagrC.toFixed(2)}%</td>
+                                <td style={{padding:'4px 6px',color:'#ff4d6d'}}>-{(r.result.maxDDCompound||0).toFixed(1)}%</td>
+                                <td style={{padding:'4px 6px',color:pf>=1.5?'#00e5a0':pf>=1?'#ffd166':'#ff4d6d'}}>{pf.toFixed(2)}x</td>
+                                <td style={{padding:'4px 6px',color:profit>=0?'#00e5a0':'#ff4d6d'}}>{profit>=0?'+':''}{fmt(profit,0,'€')}</td>
+                              </tr>
+                            )
+                          })}
+                          {/* B&H reference row */}
+                          {mcResult.bhCurve?.length>0&&(
+                            <tr style={{borderTop:'1px solid rgba(255,209,102,0.2)',background:'rgba(255,209,102,0.03)'}}>
+                              <td style={{padding:'4px 6px'}}>
+                                <div style={{display:'flex',alignItems:'center',gap:4}}>
+                                  <div style={{width:7,height:7,borderRadius:2,background:'#ffd166',flexShrink:0}}/>
+                                  <span style={{color:'#ffd166',fontStyle:'italic',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:80}}>B&H Diversif.</span>
                                 </div>
                               </td>
-                              <td style={{padding:'4px 8px',color:winRate>=50?'#00e5a0':'#ff4d6d'}}>{winRate.toFixed(1)}%</td>
-                              <td style={{padding:'4px 8px',color:cagrC>=0?'#00e5a0':'#ff4d6d'}}>{cagrC>=0?'+':''}{cagrC.toFixed(2)}%</td>
-                              <td style={{padding:'4px 8px',color:'#ff4d6d'}}>-{(r.result.maxDDCompound||0).toFixed(1)}%</td>
-                              <td style={{padding:'4px 8px',color:pf>=1.5?'#00e5a0':pf>=1?'#ffd166':'#ff4d6d'}}>{pf.toFixed(2)}x</td>
+                              <td style={{padding:'4px 6px',color:'#4a6a88'}}>—</td>
+                              <td style={{padding:'4px 6px',color:'#4a6a88'}}>—</td>
+                              <td style={{padding:'4px 6px',color:bhCagr>=0?'#ffd166':'#ff4d6d'}}>{bhCagr>=0?'+':''}{bhCagr.toFixed(2)}%</td>
+                              <td style={{padding:'4px 6px',color:'#ff9a3c'}}>-{(mcResult.maxDDBH||0).toFixed(1)}%</td>
+                              <td style={{padding:'4px 6px',color:'#4a6a88'}}>—</td>
+                              <td style={{padding:'4px 6px',color:bhProfit>=0?'#ffd166':'#ff4d6d'}}>{bhProfit>=0?'+':''}{fmt(bhProfit,0,'€')}</td>
                             </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  )
+                })()}
 
                 {/* ── Equity — misma estructura que activos individuales ── */}
                 <div className="equity-section">
@@ -4981,8 +5011,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                   </div>
                 )}
               </div>
-              {/* Right: metrics summary panel — hidden when mcLayout==='grid' */}
-              {mcLayout==='panel'&&<div style={{width:rightPanelW,flexShrink:0,borderLeft:'1px solid var(--border)',background:'var(--bg2)',overflowY:'auto',position:'relative'}}>
+              {/* Right: metrics summary panel — hidden when mcLayout==='grid' or multi-strategy comparison */}
+              {mcLayout==='panel'&&mcMultiResults.length<=1&&<div style={{width:rightPanelW,flexShrink:0,borderLeft:'1px solid var(--border)',background:'var(--bg2)',overflowY:'auto',position:'relative'}}>
                 {/* Resize handle */}
                 <div onMouseDown={e=>{rightResizing.current=true;rightStartX.current=e.clientX;rightStartW.current=rightPanelW;document.body.style.cursor='col-resize';document.body.style.userSelect='none'}}
                   style={{position:'absolute',top:0,left:0,width:4,height:'100%',cursor:'col-resize',zIndex:20,background:'transparent'}}
