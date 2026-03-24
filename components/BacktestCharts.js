@@ -185,3 +185,53 @@ export function McOccupancyChart({occupancyCurve, compoundCurve, capitalIni, occ
   },[occupancyCurve,compoundCurve,capitalIni,occMode,syncRef])
   return <div ref={ref} style={{minHeight:100}}/>
 }
+
+// ── StratCompareChart — multiple strategy equity curves ──────────────────────
+export function StratCompareChart({curves,capitalIni,chartHeight=300,syncRef,onReady}) {
+  const ref=useRef(null),chartRef=useRef(null)
+  useEffect(()=>{
+    if(!ref.current||!curves?.length) return
+    import('lightweight-charts').then(({createChart,CrosshairMode,LineStyle})=>{
+      if(chartRef.current){chartRef.current.__syncCleanup?.();chartRef.current.remove();chartRef.current=null}
+      const chart=createChart(ref.current,{
+        width:ref.current.clientWidth,height:chartHeight,
+        layout:{background:{color:'#080c14'},textColor:'#7a9bc0'},
+        grid:{vertLines:{color:'#0d1520'},horzLines:{color:'#0d1520'}},
+        crosshair:{mode:CrosshairMode.Normal},
+        rightPriceScale:{borderColor:'#1a2d45'},
+        timeScale:{borderColor:'#1a2d45',timeVisible:false},
+      })
+      chartRef.current=chart
+      const base=curves.find(c=>c.data?.length)?.data
+      if(base?.length) chart.addLineSeries({color:'#2a3f55',lineWidth:1,lineStyle:LineStyle.Dotted,lastValueVisible:false,priceLineVisible:false})
+        .setData([{time:base[0].date,value:capitalIni},{time:base[base.length-1].date,value:capitalIni}])
+      curves.forEach(c=>{
+        if(!c.show||!c.data?.length) return
+        chart.addLineSeries({color:c.color,lineWidth:2,lastValueVisible:true,priceLineVisible:false})
+          .setData(c.data.map(p=>({time:p.date,value:p.value})))
+      })
+      if(syncRef?.current){
+        const syncId=Symbol()
+        const unsub=chart.timeScale().subscribeVisibleTimeRangeChange(range=>{
+          if(!range||syncRef.current.syncing) return
+          syncRef.current.syncing=true
+          syncRef.current.listeners.forEach(fn=>{if(fn.id!==syncId)try{fn.handler(range)}catch(_){}})
+          syncRef.current.syncing=false
+        })
+        const handler=(range)=>{try{chart.timeScale().setVisibleRange(range)}catch(_){}}
+        syncRef.current.listeners.push({id:syncId,handler})
+        chart.__syncCleanup=()=>{try{unsub()}catch(_){};if(syncRef.current)syncRef.current.listeners=syncRef.current.listeners.filter(e=>e.id!==syncId)}
+      }
+      chart.timeScale().fitContent()
+      if(onReady) onReady({fitAll:()=>{try{chart.timeScale().fitContent()}catch(_){}}})
+      const ro=new ResizeObserver(()=>{if(ref.current&&chartRef.current){try{chart.applyOptions({width:ref.current.clientWidth})}catch(_){}}})
+      ro.observe(ref.current)
+      return()=>ro.disconnect()
+    })
+    return()=>{if(chartRef.current){chartRef.current.__syncCleanup?.();chartRef.current.remove();chartRef.current=null}}
+  },[curves,capitalIni])
+  useEffect(()=>{
+    if(chartRef.current) try{chartRef.current.applyOptions({height:chartHeight})}catch(_){}
+  },[chartHeight])
+  return <div ref={ref} style={{minHeight:chartHeight}}/>
+}

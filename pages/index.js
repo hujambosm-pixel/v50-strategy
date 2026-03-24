@@ -13,7 +13,7 @@ import Tip from '../components/Tip'
 import SettingsModal from '../components/SettingsModal'
 import StrategyAIPanel from '../components/StrategyAIPanel'
 import StrategyBuilder from '../components/StrategyBuilder'
-import { MultiCartChart, OccupancyBarChart, McOccupancyChart } from '../components/BacktestCharts'
+import { MultiCartChart, OccupancyBarChart, McOccupancyChart, StratCompareChart } from '../components/BacktestCharts'
 import { TlEquityChart, TlInvestChart } from '../components/TlCharts'
 import ContextThemeMenu, { applyTema } from '../components/ContextThemeMenu'
 import MetricRow from '../components/MetricRow'
@@ -337,6 +337,7 @@ function lookupName(sym) {
 
 
 // ── MultiCartChart ───────────────────────────────────────────
+const STRAT_COMPARE_COLORS=['#00d4ff','#ffd166','#00e5a0','#ff6b9d','#9b72ff','#ff9a3c','#4ecdc4','#c8f7c5']
 
 
 
@@ -563,6 +564,11 @@ export default function Home() {
   const chartLegendRef=useRef(null)   // external legend ref for integrated chart info bar
 
   const mcChartApiRef=useRef(null)
+  const [mcStratSelected,setMcStratSelected]=useState([])   // strategy IDs selected for comparison
+  const [mcMultiResults,setMcMultiResults]=useState([])     // [{id,name,color,result}]
+  const [mcProgress,setMcProgress]=useState(null)           // null|{current,total,name}
+  const [mcSectionOpen,setMcSectionOpen]=useState({mode:false,strats:false})
+  const [mcStratVisible,setMcStratVisible]=useState({})     // {id:bool}
 
   // ── TradeLog state ───────────────────────────────────────────
   const [tlTrades,setTlTrades]=useState([])
@@ -1266,6 +1272,11 @@ export default function Home() {
     reloadAlarms()
     reloadConditions()
   },[])
+
+  // Auto-include active strategy in comparison selection
+  useEffect(()=>{
+    if(currentStratId) setMcStratSelected(prev=>prev.includes(currentStratId)?prev:[currentStratId,...prev.filter(id=>id!==currentStratId)])
+  },[currentStratId])
 
   // Abrir editor watchlist
   const openEditItem=(item)=>{
@@ -2248,43 +2259,66 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   // ── Backtesting runner ─────────────────────────────────────
   const runBacktesting=useCallback(async()=>{
     if(mcSelected.length<2){setMcError('Selecciona al menos 2 activos');return}
-    // Validar pesos si modo custom
     if(mcMode==='custom'){
       const total=mcSelected.reduce((s,sym)=>s+(Number(mcWeights[sym])||0),0)
       if(Math.abs(total-100)>0.5){setMcError(`Los pesos suman ${total.toFixed(1)}% — deben sumar 100%`);return}
     }
-    setMcLoading(true);setMcError(null);setMcResult(null)
-    try{
-      // rankMap para prioridad en modo rotativo: {symbol: rank}
-      const rankMap={}
-      mcSelected.forEach((sym,i)=>{
-        const rd=rankingData[sym]
-        rankMap[sym]=rd?.rank??i+1
-      })
-      // Normalizar pesos antes de enviar
-      const weightsNorm={}
-      if(mcMode==='custom'){
-        const total=mcSelected.reduce((s,sym)=>s+(Number(mcWeights[sym])||0),0)
-        mcSelected.forEach(sym=>{ weightsNorm[sym]=total>0?(Number(mcWeights[sym])||0)/total*100:100/mcSelected.length })
-      }
-      const res=await apiFetch('/api/multibacktest',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({
-          symbols:mcSelected,
-          modoAsig:mcMode,
-          weights:weightsNorm,
-          rankMap,
-          cfg:{emaR:Number(emaR),emaL:Number(emaL),years:Number(years),capitalIni:Number(capitalIni),
-            tipoStop,atrPeriod:Number(atrP),atrMult:Number(atrM),sinPerdidas,reentry,
-            tipoFiltro,sp500EmaR:Number(sp500EmaR),sp500EmaL:Number(sp500EmaL),tipoCapital:mcCapital}
-        })
-      })
-      const json=await res.json()
-      if(!res.ok) throw new Error(json.error||'Error')
-      setMcResult(json)
-    }catch(e){setMcError(e.message)}finally{setMcLoading(false)}
-  },[mcSelected,mcMode,mcWeights,mcCapital,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL,rankingData])
+    setMcLoading(true);setMcError(null);setMcResult(null);setMcMultiResults([]);setMcProgress(null)
+    const rankMap={}
+    mcSelected.forEach((sym,i)=>{const rd=rankingData[sym];rankMap[sym]=rd?.rank??i+1})
+    const weightsNorm={}
+    if(mcMode==='custom'){
+      const total=mcSelected.reduce((s,sym)=>s+(Number(mcWeights[sym])||0),0)
+      mcSelected.forEach(sym=>{weightsNorm[sym]=total>0?(Number(mcWeights[sym])||0)/total*100:100/mcSelected.length})
+    }
+    const baseCfg={emaR:Number(emaR),emaL:Number(emaL),years:Number(years),capitalIni:Number(capitalIni),
+      tipoStop,atrPeriod:Number(atrP),atrMult:Number(atrM),sinPerdidas,reentry,
+      tipoFiltro,sp500EmaR:Number(sp500EmaR),sp500EmaL:Number(sp500EmaL),tipoCapital:mcCapital}
+    const buildCfgFromStrat=(strat)=>{
+      if(!strat?.definition||!Object.keys(strat.definition).length) return baseCfg
+      const def=strat.definition,entry=def.entry||{},stop=def.stop||{},mgmt=def.management||{},filt=def.filters?.market?.[0]||{}
+      return{emaR:entry.ma_fast||entry.ma_period||Number(emaR),emaL:entry.ma_slow||Number(emaL),
+        years:strat.years||Number(years),capitalIni:strat.capital_ini||Number(capitalIni),
+        tipoStop:stop.type==='atr_based'?'atr':stop.type==='none'?'none':'tecnico',
+        atrPeriod:stop.atr_period||Number(atrP),atrMult:stop.atr_mult||Number(atrM),
+        sinPerdidas:mgmt.sin_perdidas!==false,reentry:mgmt.reentry!==false,
+        tipoFiltro:filt.condition||'none',sp500EmaR:filt.ma_fast||Number(sp500EmaR),sp500EmaL:filt.ma_slow||Number(sp500EmaL),
+        tipoCapital:mcCapital}
+    }
+    const stratIds=mcStratSelected.filter(Boolean)
+    if(stratIds.length<=1){
+      try{
+        const res=await apiFetch('/api/multibacktest',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({symbols:mcSelected,modoAsig:mcMode,weights:weightsNorm,rankMap,cfg:baseCfg})})
+        const json=await res.json()
+        if(!res.ok) throw new Error(json.error||'Error')
+        setMcResult(json)
+      }catch(e){setMcError(e.message)}finally{setMcLoading(false);setMcProgress(null)}
+      return
+    }
+    // Multiple strategies — run sequentially with progress
+    const results=[]
+    for(let i=0;i<stratIds.length;i++){
+      const sid=stratIds[i]
+      const strat=strategies.find(s=>s.id===sid)
+      const name=strat?.name||`Estrategia ${i+1}`
+      const color=STRAT_COMPARE_COLORS[i%STRAT_COMPARE_COLORS.length]
+      setMcProgress({current:i+1,total:stratIds.length,name})
+      try{
+        const cfg=buildCfgFromStrat(strat)
+        const res=await apiFetch('/api/multibacktest',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({symbols:mcSelected,modoAsig:mcMode,weights:weightsNorm,rankMap,cfg})})
+        const json=await res.json()
+        if(!res.ok) throw new Error(json.error||'Error en '+name)
+        results.push({id:sid,name,color,result:json})
+      }catch(e){setMcError(e.message);setMcLoading(false);setMcProgress(null);return}
+    }
+    const activeResult=results.find(r=>r.id===currentStratId)||results[0]
+    setMcResult(activeResult.result)
+    setMcMultiResults(results)
+    const vis={};results.forEach(r=>{vis[r.id]=true});setMcStratVisible(vis)
+    setMcLoading(false);setMcProgress(null)
+  },[mcSelected,mcMode,mcWeights,mcCapital,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL,rankingData,mcStratSelected,strategies,currentStratId])
 
   // Auto-inicializar pesos iguales cuando cambian activos seleccionados (modo custom)
   useEffect(()=>{
@@ -2596,7 +2630,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V6.29</title>
+        <title>Trading Simulator V6.30</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2673,7 +2707,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V6.29
+            <span className="dot"/>Trading Simulator V6.30
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -3410,12 +3444,21 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               <div style={{display:'flex',flexDirection:'column',flex:1,overflowY:'auto'}}>
                 {/* Botón ejecutar — fijado arriba */}
                 <div style={{padding:'8px 10px',borderBottom:'1px solid var(--border)',background:'var(--bg2)',flexShrink:0}}>
-                  {mcSelected.length>=2?(
+                  {mcProgress?(
+                    <div style={{display:'flex',flexDirection:'column',gap:5}}>
+                      <div style={{fontFamily:MONO,fontSize:11,color:'#00d4ff'}}>
+                        ⟳ Estrategia {mcProgress.current}/{mcProgress.total}: <span style={{color:'#d0e8fa'}}>{mcProgress.name}</span>
+                      </div>
+                      <div style={{width:'100%',height:3,background:'rgba(0,212,255,0.1)',borderRadius:2}}>
+                        <div style={{width:`${(mcProgress.current/mcProgress.total)*100}%`,height:'100%',background:'var(--accent)',borderRadius:2,transition:'width 0.3s'}}/>
+                      </div>
+                    </div>
+                  ):mcSelected.length>=2?(
                     <button onClick={runBacktesting} disabled={mcLoading}
                       style={{width:'100%',fontFamily:MONO,fontSize:11,padding:'7px 10px',borderRadius:4,cursor:mcLoading?'wait':'pointer',
                         background:mcLoading?'rgba(0,212,255,0.05)':'rgba(0,212,255,0.15)',
                         border:'1px solid var(--accent)',color:'var(--accent)',fontWeight:700,letterSpacing:'0.05em'}}>
-                      {mcLoading?'⟳ Calculando...':'▶ EJECUTAR BACKTESTING'}
+                      {mcLoading?'⟳ Calculando...':mcStratSelected.length>1?`▶ EJECUTAR (${mcStratSelected.length} ESTRATEGIAS)`:'▶ EJECUTAR BACKTESTING'}
                     </button>
                   ):(
                     <button disabled style={{width:'100%',fontFamily:MONO,fontSize:12,padding:'7px 10px',borderRadius:4,cursor:'not-allowed',
@@ -3426,40 +3469,104 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   {mcError&&<div style={{fontFamily:MONO,fontSize:12,color:'#ff4d6d',marginTop:5}}>⚠ {mcError}</div>}
                 </div>
 
-                {/* Modo de asignación */}
-                <div style={{padding:'10px 12px',borderBottom:'1px solid var(--border)'}}>
-                  <div style={{fontFamily:MONO,fontSize:12,color:'#c8dff5',marginBottom:6,letterSpacing:'0.05em',fontWeight:600}}>MODO DE ASIGNACIÓN</div>
-                  {(()=>{
-                    // eslint-disable-next-line
-                    return [
-                      {id:'slots',label:'Slots iguales',ready:true,
-                        desc:'El capital se divide en N partes iguales, una por activo. Cada slot opera de forma independiente con su fracción fija. Ejemplo: 4 activos con €10.000 → cada uno opera con €2.500 en paralelo, sin interferir entre sí.'},
-                      {id:'rotativo',label:'Capital rotativo',ready:true,
-                        desc:'Un único pool de capital se asigna a los activos según van generando señales. Al cerrar una posición, el capital liberado vuelve al pool para la siguiente señal. Si hay señales simultáneas, se prioriza por ranking.'},
-                      {id:'custom',label:'Pesos personalizados',ready:true,
-                        desc:'Define manualmente qué porcentaje del capital va a cada activo. La suma debe ser 100%. Ideal para sobreponderar activos de mayor convicción.'},
-                    ].map(m=>(
-                      <div key={m.id} style={{marginBottom:3}}>
-                        <div onClick={()=>m.ready&&setMcMode(m.id)}
-                          style={{display:'flex',alignItems:'center',gap:8,padding:'6px 8px',borderRadius:4,
-                            background:mcMode===m.id?'rgba(0,212,255,0.08)':'transparent',
-                            border:`1px solid ${mcMode===m.id?'var(--accent)':'var(--border)'}`,
-                            cursor:m.ready?'pointer':'not-allowed',opacity:m.ready?1:0.45}}>
-                          <div style={{width:14,height:14,borderRadius:'50%',border:`2px solid ${mcMode===m.id?'var(--accent)':'#3d5a7a'}`,
-                            background:mcMode===m.id?'var(--accent)':'transparent',flexShrink:0}}/>
-                          <span style={{fontFamily:MONO,fontSize:12,color:mcMode===m.id?'var(--accent)':'#c8dff5',fontWeight:600,flex:1}}>
-                            {m.label}{!m.ready&&<span style={{fontSize:8,color:'#ffd166',marginLeft:5,verticalAlign:'middle'}}>⏳</span>}
-                          </span>
-                          <span
-                            title={m.desc}
-                            style={{width:16,height:16,borderRadius:'50%',border:'1px solid #3d5a7a',color:'#3d5a7a',fontSize:10,
-                              display:'flex',alignItems:'center',justifyContent:'center',cursor:'help',flexShrink:0,fontWeight:700,lineHeight:1}}>
-                            ?
-                          </span>
+                {/* MODO DE ASIGNACIÓN — colapsable */}
+                <div style={{flexShrink:0}}>
+                  <div onClick={()=>setMcSectionOpen(s=>({...s,mode:!s.mode}))}
+                    style={{padding:'8px 12px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:6,cursor:'pointer',background:'var(--bg2)',userSelect:'none'}}
+                    onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.04)'}
+                    onMouseOut={e=>e.currentTarget.style.background='var(--bg2)'}>
+                    <span style={{fontFamily:MONO,fontSize:9,color:'#4a7a9a',width:10}}>{mcSectionOpen.mode?'▼':'▶'}</span>
+                    <span style={{fontFamily:MONO,fontSize:12,color:'#c8dff5',fontWeight:600,letterSpacing:'0.05em'}}>MODO DE ASIGNACIÓN</span>
+                    <span style={{marginLeft:'auto',fontFamily:MONO,fontSize:10,color:'#4a6a88'}}>
+                      {mcMode==='slots'?'Slots iguales':mcMode==='rotativo'?'Capital rotativo':'Pesos personalizados'}
+                    </span>
+                  </div>
+                  {mcSectionOpen.mode&&(
+                    <div style={{padding:'10px 12px',borderBottom:'1px solid var(--border)'}}>
+                      {[
+                        {id:'slots',label:'Slots iguales',ready:true,
+                          desc:'El capital se divide en N partes iguales, una por activo. Cada slot opera de forma independiente con su fracción fija.'},
+                        {id:'rotativo',label:'Capital rotativo',ready:true,
+                          desc:'Un único pool de capital se asigna a los activos según van generando señales. Al cerrar una posición, el capital liberado vuelve al pool para la siguiente señal.'},
+                        {id:'custom',label:'Pesos personalizados',ready:true,
+                          desc:'Define manualmente qué porcentaje del capital va a cada activo. La suma debe ser 100%.'},
+                      ].map(m=>(
+                        <div key={m.id} style={{marginBottom:3}}>
+                          <div onClick={()=>m.ready&&setMcMode(m.id)}
+                            style={{display:'flex',alignItems:'center',gap:8,padding:'6px 8px',borderRadius:4,
+                              background:mcMode===m.id?'rgba(0,212,255,0.08)':'transparent',
+                              border:`1px solid ${mcMode===m.id?'var(--accent)':'var(--border)'}`,
+                              cursor:m.ready?'pointer':'not-allowed',opacity:m.ready?1:0.45}}>
+                            <div style={{width:14,height:14,borderRadius:'50%',border:`2px solid ${mcMode===m.id?'var(--accent)':'#3d5a7a'}`,
+                              background:mcMode===m.id?'var(--accent)':'transparent',flexShrink:0}}/>
+                            <span style={{fontFamily:MONO,fontSize:12,color:mcMode===m.id?'var(--accent)':'#c8dff5',fontWeight:600,flex:1}}>{m.label}</span>
+                            <span title={m.desc}
+                              style={{width:16,height:16,borderRadius:'50%',border:'1px solid #3d5a7a',color:'#3d5a7a',fontSize:10,
+                                display:'flex',alignItems:'center',justifyContent:'center',cursor:'help',flexShrink:0,fontWeight:700,lineHeight:1}}>?</span>
+                          </div>
                         </div>
-                      </div>
-                    ))
-                  })()}
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* ESTRATEGIAS — colapsable */}
+                <div style={{flexShrink:0}}>
+                  <div onClick={()=>setMcSectionOpen(s=>({...s,strats:!s.strats}))}
+                    style={{padding:'8px 12px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:6,cursor:'pointer',background:'var(--bg2)',userSelect:'none'}}
+                    onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.04)'}
+                    onMouseOut={e=>e.currentTarget.style.background='var(--bg2)'}>
+                    <span style={{fontFamily:MONO,fontSize:9,color:'#4a7a9a',width:10}}>{mcSectionOpen.strats?'▼':'▶'}</span>
+                    <span style={{fontFamily:MONO,fontSize:12,color:'#c8dff5',fontWeight:600,letterSpacing:'0.05em'}}>ESTRATEGIAS</span>
+                    {mcStratSelected.length>1&&<span style={{marginLeft:'auto',fontFamily:MONO,fontSize:9,color:'#ffd166',background:'rgba(255,209,102,0.12)',border:'1px solid rgba(255,209,102,0.3)',borderRadius:3,padding:'1px 5px'}}>{mcStratSelected.length}</span>}
+                  </div>
+                  {mcSectionOpen.strats&&(
+                    <div style={{padding:'8px 10px',borderBottom:'1px solid var(--border)'}}>
+                      {strLoading?(
+                        <div style={{fontFamily:MONO,fontSize:11,color:'var(--text3)',padding:'4px 0'}}>Cargando...</div>
+                      ):strategies.length===0?(
+                        <div style={{fontFamily:MONO,fontSize:11,color:'var(--text3)',padding:'4px 0'}}>No hay estrategias guardadas</div>
+                      ):(
+                        <div style={{display:'flex',flexDirection:'column',gap:3}}>
+                          {strategies.map((s,i)=>{
+                            const isActive=s.id===currentStratId
+                            const selIdx=mcStratSelected.indexOf(s.id)
+                            const isSel=selIdx!==-1
+                            const color=isSel?STRAT_COMPARE_COLORS[selIdx%STRAT_COMPARE_COLORS.length]:'#3d5a7a'
+                            return(
+                              <div key={s.id}
+                                onClick={()=>{
+                                  if(isActive) return
+                                  setMcStratSelected(prev=>prev.includes(s.id)?prev.filter(id=>id!==s.id):[...prev,s.id])
+                                }}
+                                style={{display:'flex',alignItems:'center',gap:7,padding:'5px 7px',borderRadius:4,
+                                  background:isSel?'rgba(0,212,255,0.06)':'transparent',
+                                  border:`1px solid ${isSel?'rgba(0,212,255,0.2)':'transparent'}`,
+                                  cursor:isActive?'default':'pointer'}}
+                                onMouseOver={e=>{if(!isActive)e.currentTarget.style.background=isSel?'rgba(0,212,255,0.09)':'rgba(255,255,255,0.03)'}}
+                                onMouseOut={e=>e.currentTarget.style.background=isSel?'rgba(0,212,255,0.06)':'transparent'}>
+                                <div style={{width:14,height:14,borderRadius:3,border:`1.5px solid ${isSel?'var(--accent)':'#3d5a7a'}`,
+                                  background:isSel?'var(--accent)':'transparent',flexShrink:0,
+                                  display:'flex',alignItems:'center',justifyContent:'center'}}>
+                                  {isSel&&<span style={{color:'#000',fontSize:11,lineHeight:1,fontWeight:900}}>✓</span>}
+                                </div>
+                                {isSel&&<div style={{width:9,height:9,borderRadius:'50%',background:STRAT_COMPARE_COLORS[selIdx%STRAT_COMPARE_COLORS.length],flexShrink:0}}/>}
+                                <span style={{fontFamily:MONO,fontSize:11,color:isSel?'#d0e8fa':'#7a9bc0',flex:1,minWidth:0,
+                                  overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.name||`Estrategia ${i+1}`}</span>
+                                {isActive&&<span style={{fontFamily:MONO,fontSize:8,color:'#00d4ff',background:'rgba(0,212,255,0.12)',
+                                  border:'1px solid rgba(0,212,255,0.3)',borderRadius:3,padding:'1px 4px',flexShrink:0}}>activa</span>}
+                              </div>
+                            )
+                          })}
+                          {mcStratSelected.length>1&&(
+                            <div style={{marginTop:4,paddingTop:4,borderTop:'1px solid var(--border)',fontFamily:MONO,fontSize:10,color:'#7aabc8'}}>
+                              {mcStratSelected.length} estrategias · comparación al ejecutar
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Pesos personalizados — solo visible cuando modo=custom y hay activos seleccionados */}
@@ -4510,8 +4617,15 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
             )}
 
             {/* ══ MULTICARTERA — loading / empty state ══ */}
-            {sidePanel==='multi'&&mcLoading&&(
+            {sidePanel==='multi'&&mcLoading&&!mcProgress&&(
               <div className="loading"><div className="spinner"/><div className="loading-text">CALCULANDO MULTICARTERA...</div></div>
+            )}
+            {sidePanel==='multi'&&mcLoading&&mcProgress&&(
+              <div className="loading"><div className="spinner"/>
+                <div className="loading-text">
+                  ESTRATEGIA {mcProgress.current}/{mcProgress.total}: {mcProgress.name.toUpperCase()}
+                </div>
+              </div>
             )}
             {sidePanel==='multi'&&!mcLoading&&!mcResult&&(
               <div style={{display:'flex',flex:1,alignItems:'center',justifyContent:'center',flexDirection:'column',gap:12,color:'var(--text3)',fontFamily:MONO,fontSize:12}}>
@@ -4541,39 +4655,114 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                   </div>
                 </div>
 
+                {/* ── Tabla comparativa de estrategias (multi-estrategia) ── */}
+                {mcMultiResults.length>1&&(
+                  <div style={{padding:'10px 16px',borderBottom:'1px solid var(--border)'}}>
+                    <div style={{fontFamily:MONO,fontSize:10,color:'var(--text3)',marginBottom:8,letterSpacing:'0.05em'}}>COMPARATIVA DE ESTRATEGIAS</div>
+                    <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:11}}>
+                      <thead>
+                        <tr style={{borderBottom:'1px solid var(--border)'}}>
+                          {['Estrategia','Win Rate','CAGR','Max DD','P.Factor'].map(h=>(
+                            <th key={h} style={{padding:'3px 8px',textAlign:'left',color:'var(--text3)',fontWeight:400,fontSize:9}}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {mcMultiResults.map((r)=>{
+                          const allT=r.result.allTrades||[]
+                          const wins=allT.filter(t=>t.pnlPct>=0),losses=allT.filter(t=>t.pnlPct<0)
+                          const winRate=allT.length?wins.length/allT.length*100:0
+                          const lastC=r.result.compoundCurve?.slice(-1)[0]?.value||Number(capitalIni)
+                          const capIni=Number(capitalIni)
+                          const fd=r.result.startDate?new Date(r.result.startDate):null
+                          const ld=r.result.compoundCurve?.slice(-1)[0]?.date?new Date(r.result.compoundCurve.slice(-1)[0].date):new Date()
+                          const anios=fd&&ld?(ld-fd)/86400000/365.25:1
+                          const cagrC=(Math.pow(Math.max(lastC,0.01)/capIni,1/Math.max(anios,0.01))-1)*100
+                          const grossWin=wins.reduce((s,t)=>s+(t.pnlSimple||0),0)
+                          const grossLoss=Math.abs(losses.reduce((s,t)=>s+(t.pnlSimple||0),0))
+                          const pf=grossLoss>0?grossWin/grossLoss:grossWin>0?99:0
+                          const isActive=r.id===currentStratId
+                          return(
+                            <tr key={r.id} style={{borderBottom:'1px solid rgba(255,255,255,0.03)'}}>
+                              <td style={{padding:'4px 8px'}}>
+                                <div style={{display:'flex',alignItems:'center',gap:5}}>
+                                  <div style={{width:8,height:8,borderRadius:'50%',background:r.color,flexShrink:0}}/>
+                                  <span style={{color:r.color,fontWeight:isActive?700:400,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:90}}>{r.name}</span>
+                                  {isActive&&<span style={{fontSize:7,color:'#00d4ff',background:'rgba(0,212,255,0.1)',border:'1px solid rgba(0,212,255,0.25)',borderRadius:2,padding:'0 3px',flexShrink:0}}>activa</span>}
+                                </div>
+                              </td>
+                              <td style={{padding:'4px 8px',color:winRate>=50?'#00e5a0':'#ff4d6d'}}>{winRate.toFixed(1)}%</td>
+                              <td style={{padding:'4px 8px',color:cagrC>=0?'#00e5a0':'#ff4d6d'}}>{cagrC>=0?'+':''}{cagrC.toFixed(2)}%</td>
+                              <td style={{padding:'4px 8px',color:'#ff4d6d'}}>-{(r.result.maxDDCompound||0).toFixed(1)}%</td>
+                              <td style={{padding:'4px 8px',color:pf>=1.5?'#00e5a0':pf>=1?'#ffd166':'#ff4d6d'}}>{pf.toFixed(2)}x</td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
                 {/* ── Equity — misma estructura que activos individuales ── */}
                 <div className="equity-section">
                   <div className="section-title" style={{display:'flex',alignItems:'center',flexWrap:'wrap',gap:6,fontSize:14}}>
                     <span>Equity</span>
-                    {[
-                      {key:'simple',  label:'Simple',           color:'#00d4ff',state:mcShowSimple,  set:setMcShowSimple},
-                      {key:'compound',label:'Compuesto',        color:'#00e5a0',state:mcShowCompound,set:setMcShowCompound},
-                      {key:'bh',      label:'B&H Diversificado',color:'#ffd166',state:mcShowBH,      set:setMcShowBH},
-                      {key:'sp500',   label:'B&H SP500',        color:'#9b72ff',state:mcShowSP500,   set:setMcShowSP500},
-                    ].map(({key,label,color,state,set})=>(
-                      <button key={key} onClick={()=>set(s=>!s)}
-                        style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',
-                          border:`1px solid ${state?color:'#3d5a7a'}`,background:state?`${color}18`:'transparent',color:state?color:'#3d5a7a'}}>
-                        {label}
-                      </button>
-                    ))}
+                    {mcMultiResults.length>1?(
+                      mcMultiResults.map(r=>(
+                        <button key={r.id} onClick={()=>setMcStratVisible(v=>({...v,[r.id]:!v[r.id]}))}
+                          style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',
+                            border:`1px solid ${mcStratVisible[r.id]!==false?r.color:'#3d5a7a'}`,
+                            background:mcStratVisible[r.id]!==false?`${r.color}18`:'transparent',
+                            color:mcStratVisible[r.id]!==false?r.color:'#3d5a7a',maxWidth:120,
+                            overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                          {r.name}
+                        </button>
+                      ))
+                    ):(
+                      [
+                        {key:'simple',  label:'Simple',           color:'#00d4ff',state:mcShowSimple,  set:setMcShowSimple},
+                        {key:'compound',label:'Compuesto',        color:'#00e5a0',state:mcShowCompound,set:setMcShowCompound},
+                        {key:'bh',      label:'B&H Diversificado',color:'#ffd166',state:mcShowBH,      set:setMcShowBH},
+                        {key:'sp500',   label:'B&H SP500',        color:'#9b72ff',state:mcShowSP500,   set:setMcShowSP500},
+                      ].map(({key,label,color,state,set})=>(
+                        <button key={key} onClick={()=>set(s=>!s)}
+                          style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',
+                            border:`1px solid ${state?color:'#3d5a7a'}`,background:state?`${color}18`:'transparent',color:state?color:'#3d5a7a'}}>
+                          {label}
+                        </button>
+                      ))
+                    )}
                   </div>
-                  <MultiCartChart
-                    simpleCurve={mcResult.simpleCurve}
-                    compoundCurve={mcResult.compoundCurve}
-                    bhCurve={mcResult.bhCurve}
-                    sp500BHCurve={mcResult.sp500BHCurve||[]}
-                    capitalIni={Number(capitalIni)}
-                    maxDDSimple={mcResult.maxDDSimple}   maxDDSimpleDate={mcResult.maxDDSimpleDate}
-                    maxDDCompound={mcResult.maxDDCompound} maxDDCompoundDate={mcResult.maxDDCompoundDate}
-                    maxDDBH={mcResult.maxDDBH}           maxDDBHDate={mcResult.maxDDBHDate}
-                    maxDDSP500={mcResult.maxDDSP500||0}  maxDDSP500Date={mcResult.maxDDSP500Date||null}
-                    showSimple={mcShowSimple} showCompound={mcShowCompound}
-                    showBH={mcShowBH} showSP500={mcShowSP500}
-                    onReady={api=>{mcChartApiRef.current=api}}
-                    syncRef={chartSyncRef}
-                    chartHeight={mcEquityH}
-                  />
+                  {mcMultiResults.length>1?(
+                    <StratCompareChart
+                      curves={mcMultiResults.map(r=>({
+                        id:r.id,name:r.name,color:r.color,
+                        data:r.result.compoundCurve,
+                        show:mcStratVisible[r.id]!==false
+                      }))}
+                      capitalIni={Number(capitalIni)}
+                      onReady={api=>{mcChartApiRef.current=api}}
+                      syncRef={chartSyncRef}
+                      chartHeight={mcEquityH}
+                    />
+                  ):(
+                    <MultiCartChart
+                      simpleCurve={mcResult.simpleCurve}
+                      compoundCurve={mcResult.compoundCurve}
+                      bhCurve={mcResult.bhCurve}
+                      sp500BHCurve={mcResult.sp500BHCurve||[]}
+                      capitalIni={Number(capitalIni)}
+                      maxDDSimple={mcResult.maxDDSimple}   maxDDSimpleDate={mcResult.maxDDSimpleDate}
+                      maxDDCompound={mcResult.maxDDCompound} maxDDCompoundDate={mcResult.maxDDCompoundDate}
+                      maxDDBH={mcResult.maxDDBH}           maxDDBHDate={mcResult.maxDDBHDate}
+                      maxDDSP500={mcResult.maxDDSP500||0}  maxDDSP500Date={mcResult.maxDDSP500Date||null}
+                      showSimple={mcShowSimple} showCompound={mcShowCompound}
+                      showBH={mcShowBH} showSP500={mcShowSP500}
+                      onReady={api=>{mcChartApiRef.current=api}}
+                      syncRef={chartSyncRef}
+                      chartHeight={mcEquityH}
+                    />
+                  )}
                   <div onMouseDown={e=>{mcEquityResizing.current=true;mcEquityStartY.current=e.clientY;mcEquityStartH.current=mcEquityH;document.body.style.cursor='row-resize';document.body.style.userSelect='none'}}
                     style={{height:6,cursor:'row-resize',background:'transparent',transition:'background 0.15s',
                       borderTop:'2px solid var(--border)',display:'flex',alignItems:'center',justifyContent:'center'}}
