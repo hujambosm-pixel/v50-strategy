@@ -207,7 +207,8 @@ export function StratCompareChart({curves,capitalIni,chartHeight=300,syncRef,onR
         .setData([{time:base[0].date,value:capitalIni},{time:base[base.length-1].date,value:capitalIni}])
       curves.forEach(c=>{
         if(!c.show||!c.data?.length) return
-        chart.addLineSeries({color:c.color,lineWidth:2,lastValueVisible:true,priceLineVisible:false})
+        chart.addLineSeries({color:c.color,lineWidth:2,lastValueVisible:true,priceLineVisible:false,
+          lineStyle:c.dashed?LineStyle.Dashed:LineStyle.Solid})
           .setData(c.data.map(p=>({time:p.date,value:p.value})))
       })
       if(syncRef?.current){

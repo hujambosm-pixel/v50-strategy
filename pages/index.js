@@ -569,6 +569,7 @@ export default function Home() {
   const [mcProgress,setMcProgress]=useState(null)           // null|{current,total,name}
   const [mcSectionOpen,setMcSectionOpen]=useState({mode:false,strats:false})
   const [mcStratVisible,setMcStratVisible]=useState({})     // {id:bool}
+  const [mcShowBHCompare,setMcShowBHCompare]=useState(true) // B&H curve toggle in multi-strategy chart
 
   // ── TradeLog state ───────────────────────────────────────────
   const [tlTrades,setTlTrades]=useState([])
@@ -4719,7 +4720,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                   <span style={{color:'#ffd166',fontStyle:'italic',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:80}}>B&H Diversif.</span>
                                 </div>
                               </td>
-                              <td style={{padding:'4px 6px',color:'#4a6a88'}}>—</td>
+                              <td style={{padding:'4px 6px',color:'#ffd166'}}>1</td>
                               <td style={{padding:'4px 6px',color:'#4a6a88'}}>—</td>
                               <td style={{padding:'4px 6px',color:bhCagr>=0?'#ffd166':'#ff4d6d'}}>{bhCagr>=0?'+':''}{bhCagr.toFixed(2)}%</td>
                               <td style={{padding:'4px 6px',color:'#ff9a3c'}}>-{(mcResult.maxDDBH||0).toFixed(1)}%</td>
@@ -4738,16 +4739,27 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                   <div className="section-title" style={{display:'flex',alignItems:'center',flexWrap:'wrap',gap:6,fontSize:14}}>
                     <span>Equity</span>
                     {mcMultiResults.length>1?(
-                      mcMultiResults.map(r=>(
-                        <button key={r.id} onClick={()=>setMcStratVisible(v=>({...v,[r.id]:!v[r.id]}))}
-                          style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',
-                            border:`1px solid ${mcStratVisible[r.id]!==false?r.color:'#3d5a7a'}`,
-                            background:mcStratVisible[r.id]!==false?`${r.color}18`:'transparent',
-                            color:mcStratVisible[r.id]!==false?r.color:'#3d5a7a',maxWidth:120,
-                            overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-                          {r.name}
-                        </button>
-                      ))
+                      <>
+                        {mcMultiResults.map(r=>(
+                          <button key={r.id} onClick={()=>setMcStratVisible(v=>({...v,[r.id]:!v[r.id]}))}
+                            style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',
+                              border:`1px solid ${mcStratVisible[r.id]!==false?r.color:'#3d5a7a'}`,
+                              background:mcStratVisible[r.id]!==false?`${r.color}18`:'transparent',
+                              color:mcStratVisible[r.id]!==false?r.color:'#3d5a7a',maxWidth:120,
+                              overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                            {r.name}
+                          </button>
+                        ))}
+                        {mcResult.bhCurve?.length>0&&(
+                          <button onClick={()=>setMcShowBHCompare(s=>!s)}
+                            style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',
+                              border:`1px solid ${mcShowBHCompare?'#ffd166':'#3d5a7a'}`,
+                              background:mcShowBHCompare?'rgba(255,209,102,0.12)':'transparent',
+                              color:mcShowBHCompare?'#ffd166':'#3d5a7a'}}>
+                            B&H Diversif.
+                          </button>
+                        )}
+                      </>
                     ):(
                       [
                         {key:'simple',  label:'Simple',           color:'#00d4ff',state:mcShowSimple,  set:setMcShowSimple},
@@ -4765,11 +4777,19 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                   </div>
                   {mcMultiResults.length>1?(
                     <StratCompareChart
-                      curves={mcMultiResults.map(r=>({
-                        id:r.id,name:r.name,color:r.color,
-                        data:r.result.compoundCurve,
-                        show:mcStratVisible[r.id]!==false
-                      }))}
+                      curves={[
+                        ...mcMultiResults.map(r=>({
+                          id:r.id,name:r.name,color:r.color,
+                          data:r.result.compoundCurve,
+                          show:mcStratVisible[r.id]!==false
+                        })),
+                        ...(mcResult.bhCurve?.length>0?[{
+                          id:'__bh__',name:'B&H Diversificado',color:'#ffd166',
+                          data:mcResult.bhCurve,
+                          show:mcShowBHCompare,
+                          dashed:true
+                        }]:[])
+                      ]}
                       capitalIni={Number(capitalIni)}
                       onReady={api=>{mcChartApiRef.current=api}}
                       syncRef={chartSyncRef}
