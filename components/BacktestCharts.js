@@ -239,8 +239,9 @@ export function StratCompareChart({curves,capitalIni,chartHeight=300,syncRef,onR
 
 // ── AssetSignalChart — candles + strategy entry/exit markers, lazy-loaded ──
 // stratSignals: [{id, name, color, entries:[{date,price}], exits:[{date,price}]}]
+// syncRef: {syncing:bool, listeners:[{id,handler}]} — shared across all instances for logical-range sync
 const _MONO='"Roboto Mono",monospace'
-export function AssetSignalChart({symbol,stratSignals,years=5,height=200}) {
+export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef}) {
   const containerRef=useRef(null)
   const chartDivRef=useRef(null)
   const chartRef=useRef(null)
@@ -249,7 +250,7 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=200}) {
   const [loading,setLoading]=useState(false)
   const [err,setErr]=useState(null)
 
-  // Lazy: IntersectionObserver — trigger when container scrolls into view
+  // Lazy: IntersectionObserver — trigger when container scrolls near viewport
   useEffect(()=>{
     if(!containerRef.current) return
     const obs=new IntersectionObserver(([e])=>{
@@ -277,7 +278,7 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=200}) {
   useEffect(()=>{
     if(!ohlcv?.length||!chartDivRef.current) return
     import('lightweight-charts').then(({createChart,CrosshairMode})=>{
-      if(chartRef.current){chartRef.current.remove();chartRef.current=null}
+      if(chartRef.current){chartRef.current.__syncCleanup?.();chartRef.current.remove();chartRef.current=null}
       const chart=createChart(chartDivRef.current,{
         width:chartDivRef.current.clientWidth,height,
         layout:{background:{color:'#080c14'},textColor:'#7a9bc0'},
@@ -285,8 +286,8 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=200}) {
         crosshair:{mode:CrosshairMode.Normal},
         rightPriceScale:{borderColor:'#1a2d45',scaleMargins:{top:0.15,bottom:0.05}},
         timeScale:{borderColor:'#1a2d45',timeVisible:false},
-        handleScroll:{mouseWheel:false,pressedMouseMove:true},
-        handleScale:{mouseWheel:false,pinch:false},
+        handleScroll:{mouseWheel:true,pressedMouseMove:true},
+        handleScale:{mouseWheel:true,pinch:true},
       })
       chartRef.current=chart
       const candles=chart.addCandlestickSeries({
@@ -295,7 +296,7 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=200}) {
         wickUpColor:'#3a7a6a',wickDownColor:'#7a3a4a',
       })
       candles.setData(ohlcv.map(d=>({time:d.date,open:d.open,high:d.high,low:d.low,close:d.close})))
-      // Build sorted markers (entries=arrowUp, exits=arrowDown)
+      // Build sorted markers (entries=arrowUp belowBar, exits=arrowDown aboveBar)
       const markers=[]
       stratSignals.forEach(s=>{
         ;(s.entries||[]).forEach(e=>{
@@ -308,6 +309,22 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=200}) {
       markers.sort((a,b)=>a.time.localeCompare(b.time))
       if(markers.length) candles.setMarkers(markers)
       chart.timeScale().fitContent()
+      // Logical-range sync across all AssetSignalChart instances
+      if(syncRef?.current){
+        const syncId=Symbol()
+        const unsub=chart.timeScale().subscribeVisibleLogicalRangeChange(range=>{
+          if(!range||syncRef.current.syncing) return
+          syncRef.current.syncing=true
+          syncRef.current.listeners.forEach(fn=>{if(fn.id!==syncId)try{fn.handler(range)}catch(_){}})
+          syncRef.current.syncing=false
+        })
+        const handler=(range)=>{try{chart.timeScale().setVisibleLogicalRange(range)}catch(_){}}
+        syncRef.current.listeners.push({id:syncId,handler})
+        chart.__syncCleanup=()=>{
+          try{unsub()}catch(_){}
+          if(syncRef.current) syncRef.current.listeners=syncRef.current.listeners.filter(e=>e.id!==syncId)
+        }
+      }
       const ro=new ResizeObserver(()=>{
         if(chartDivRef.current&&chartRef.current){
           try{chart.applyOptions({width:chartDivRef.current.clientWidth})}catch(_){}
@@ -316,21 +333,26 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=200}) {
       ro.observe(chartDivRef.current)
       return()=>ro.disconnect()
     })
-    return()=>{if(chartRef.current){chartRef.current.remove();chartRef.current=null}}
+    return()=>{if(chartRef.current){chartRef.current.__syncCleanup?.();chartRef.current.remove();chartRef.current=null}}
   },[ohlcv,stratSignals,height])
 
   return(
     <div ref={containerRef} style={{borderBottom:'1px solid var(--border)'}}>
-      {/* Mini header */}
-      <div style={{padding:'3px 10px',display:'flex',alignItems:'center',gap:8,background:'#050c18',borderBottom:'1px solid var(--border)'}}>
-        <span style={{fontFamily:_MONO,fontSize:11,color:'#a8d8f0',fontWeight:700,minWidth:60}}>{symbol}</span>
-        {stratSignals.map(s=>(
-          <span key={s.id} style={{fontFamily:_MONO,fontSize:9,color:s.color,display:'flex',alignItems:'center',gap:3}}>
-            <span>▲{s.entries?.length||0}</span>
-            <span style={{opacity:0.4}}>·</span>
-            <span>▼{s.exits?.length||0}</span>
-          </span>
-        ))}
+      {/* Header: symbol + strategy signals */}
+      <div style={{padding:'5px 12px',display:'flex',alignItems:'flex-start',gap:10,background:'#050c18',
+        borderBottom:'1px solid var(--border)',flexWrap:'wrap'}}>
+        <span style={{fontFamily:_MONO,fontSize:12,color:'#a8d8f0',fontWeight:700,flexShrink:0}}>{symbol}</span>
+        <div style={{display:'flex',flexWrap:'wrap',gap:8,flex:1}}>
+          {stratSignals.map(s=>(
+            <span key={s.id} style={{fontFamily:_MONO,fontSize:10,color:s.color,display:'flex',alignItems:'center',gap:4,flexShrink:0}}>
+              <span style={{fontWeight:600}}>{s.name}</span>
+              <span style={{opacity:0.5}}>·</span>
+              <span>▲{s.entries?.length||0}</span>
+              <span style={{opacity:0.4}}>·</span>
+              <span>▼{s.exits?.length||0}</span>
+            </span>
+          ))}
+        </div>
       </div>
       {/* Chart area */}
       {!inView?(
