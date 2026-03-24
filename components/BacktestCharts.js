@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useState } from 'react'
 
 export function MultiCartChart({simpleCurve,compoundCurve,bhCurve,sp500BHCurve,capitalIni,
   maxDDSimple,maxDDSimpleDate,maxDDCompound,maxDDCompoundDate,maxDDBH,maxDDBHDate,
@@ -235,4 +235,113 @@ export function StratCompareChart({curves,capitalIni,chartHeight=300,syncRef,onR
     if(chartRef.current) try{chartRef.current.applyOptions({height:chartHeight})}catch(_){}
   },[chartHeight])
   return <div ref={ref} style={{minHeight:chartHeight}}/>
+}
+
+// ── AssetSignalChart — candles + strategy entry/exit markers, lazy-loaded ──
+// stratSignals: [{id, name, color, entries:[{date,price}], exits:[{date,price}]}]
+const _MONO='"Roboto Mono",monospace'
+export function AssetSignalChart({symbol,stratSignals,years=5,height=200}) {
+  const containerRef=useRef(null)
+  const chartDivRef=useRef(null)
+  const chartRef=useRef(null)
+  const [inView,setInView]=useState(false)
+  const [ohlcv,setOhlcv]=useState(null)
+  const [loading,setLoading]=useState(false)
+  const [err,setErr]=useState(null)
+
+  // Lazy: IntersectionObserver — trigger when container scrolls into view
+  useEffect(()=>{
+    if(!containerRef.current) return
+    const obs=new IntersectionObserver(([e])=>{
+      if(e.isIntersecting){setInView(true);obs.disconnect()}
+    },{rootMargin:'200px'})
+    obs.observe(containerRef.current)
+    return()=>obs.disconnect()
+  },[])
+
+  // Fetch OHLCV once visible
+  useEffect(()=>{
+    if(!inView||ohlcv!==null||loading) return
+    setLoading(true)
+    fetch(`/api/chartdata?symbol=${encodeURIComponent(symbol)}&years=${years}`)
+      .then(r=>r.json())
+      .then(d=>{
+        if(d.error) throw new Error(d.error)
+        setOhlcv(Array.isArray(d)?d:[])
+        setLoading(false)
+      })
+      .catch(e=>{setErr(e.message);setLoading(false)})
+  },[inView,symbol,years])
+
+  // Build/rebuild chart when data or signals change
+  useEffect(()=>{
+    if(!ohlcv?.length||!chartDivRef.current) return
+    import('lightweight-charts').then(({createChart,CrosshairMode})=>{
+      if(chartRef.current){chartRef.current.remove();chartRef.current=null}
+      const chart=createChart(chartDivRef.current,{
+        width:chartDivRef.current.clientWidth,height,
+        layout:{background:{color:'#080c14'},textColor:'#7a9bc0'},
+        grid:{vertLines:{color:'#0d1520'},horzLines:{color:'#0d1520'}},
+        crosshair:{mode:CrosshairMode.Normal},
+        rightPriceScale:{borderColor:'#1a2d45',scaleMargins:{top:0.15,bottom:0.05}},
+        timeScale:{borderColor:'#1a2d45',timeVisible:false},
+        handleScroll:{mouseWheel:false,pressedMouseMove:true},
+        handleScale:{mouseWheel:false,pinch:false},
+      })
+      chartRef.current=chart
+      const candles=chart.addCandlestickSeries({
+        upColor:'#00e5a0',downColor:'#ff4d6d',
+        borderUpColor:'#00e5a0',borderDownColor:'#ff4d6d',
+        wickUpColor:'#3a7a6a',wickDownColor:'#7a3a4a',
+      })
+      candles.setData(ohlcv.map(d=>({time:d.date,open:d.open,high:d.high,low:d.low,close:d.close})))
+      // Build sorted markers (entries=arrowUp, exits=arrowDown)
+      const markers=[]
+      stratSignals.forEach(s=>{
+        ;(s.entries||[]).forEach(e=>{
+          markers.push({time:e.date,position:'belowBar',color:s.color,shape:'arrowUp',text:'',size:1})
+        })
+        ;(s.exits||[]).forEach(e=>{
+          markers.push({time:e.date,position:'aboveBar',color:s.color,shape:'arrowDown',text:'',size:1})
+        })
+      })
+      markers.sort((a,b)=>a.time.localeCompare(b.time))
+      if(markers.length) candles.setMarkers(markers)
+      chart.timeScale().fitContent()
+      const ro=new ResizeObserver(()=>{
+        if(chartDivRef.current&&chartRef.current){
+          try{chart.applyOptions({width:chartDivRef.current.clientWidth})}catch(_){}
+        }
+      })
+      ro.observe(chartDivRef.current)
+      return()=>ro.disconnect()
+    })
+    return()=>{if(chartRef.current){chartRef.current.remove();chartRef.current=null}}
+  },[ohlcv,stratSignals,height])
+
+  return(
+    <div ref={containerRef} style={{borderBottom:'1px solid var(--border)'}}>
+      {/* Mini header */}
+      <div style={{padding:'3px 10px',display:'flex',alignItems:'center',gap:8,background:'#050c18',borderBottom:'1px solid var(--border)'}}>
+        <span style={{fontFamily:_MONO,fontSize:11,color:'#a8d8f0',fontWeight:700,minWidth:60}}>{symbol}</span>
+        {stratSignals.map(s=>(
+          <span key={s.id} style={{fontFamily:_MONO,fontSize:9,color:s.color,display:'flex',alignItems:'center',gap:3}}>
+            <span>▲{s.entries?.length||0}</span>
+            <span style={{opacity:0.4}}>·</span>
+            <span>▼{s.exits?.length||0}</span>
+          </span>
+        ))}
+      </div>
+      {/* Chart area */}
+      {!inView?(
+        <div style={{height,display:'flex',alignItems:'center',justifyContent:'center',color:'#1a2d45',fontFamily:_MONO,fontSize:10}}>···</div>
+      ):loading?(
+        <div style={{height,display:'flex',alignItems:'center',justifyContent:'center',color:'#4a6a88',fontFamily:_MONO,fontSize:10}}>Cargando {symbol}...</div>
+      ):err?(
+        <div style={{height,display:'flex',alignItems:'center',justifyContent:'center',color:'#ff4d6d',fontFamily:_MONO,fontSize:10}}>⚠ {err}</div>
+      ):(
+        <div ref={chartDivRef} style={{height}}/>
+      )}
+    </div>
+  )
 }

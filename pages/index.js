@@ -13,7 +13,7 @@ import Tip from '../components/Tip'
 import SettingsModal from '../components/SettingsModal'
 import StrategyAIPanel from '../components/StrategyAIPanel'
 import StrategyBuilder from '../components/StrategyBuilder'
-import { MultiCartChart, OccupancyBarChart, McOccupancyChart, StratCompareChart } from '../components/BacktestCharts'
+import { MultiCartChart, OccupancyBarChart, McOccupancyChart, StratCompareChart, AssetSignalChart } from '../components/BacktestCharts'
 import { TlEquityChart, TlInvestChart } from '../components/TlCharts'
 import ContextThemeMenu, { applyTema } from '../components/ContextThemeMenu'
 import MetricRow from '../components/MetricRow'
@@ -570,6 +570,7 @@ export default function Home() {
   const [mcSectionOpen,setMcSectionOpen]=useState({mode:false,strats:false})
   const [mcStratVisible,setMcStratVisible]=useState({})     // {id:bool}
   const [mcShowBHCompare,setMcShowBHCompare]=useState(true) // B&H curve toggle in multi-strategy chart
+  const [mcChartsOpen,setMcChartsOpen]=useState(false)     // Vista de gráficos collapsible
 
   // ── TradeLog state ───────────────────────────────────────────
   const [tlTrades,setTlTrades]=useState([])
@@ -2631,7 +2632,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V6.31</title>
+        <title>Trading Simulator V6.32</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2708,7 +2709,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V6.31
+            <span className="dot"/>Trading Simulator V6.32
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5030,6 +5031,59 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                     </div>
                   </div>
                 )}
+                {/* ── Vista de gráficos — solo en comparación multi-estrategia ── */}
+                {mcMultiResults.length>1&&(()=>{
+                  const MAX_SYMS=10,MAX_STRATS=3
+                  const overLimit=mcSelected.length>MAX_SYMS||mcMultiResults.length>MAX_STRATS
+                  const syms=mcSelected.slice(0,MAX_SYMS)
+                  const strats=mcMultiResults.slice(0,MAX_STRATS)
+                  return(
+                    <div style={{borderTop:'1px solid var(--border)'}}>
+                      {/* Cabecera colapsable */}
+                      <div onClick={()=>setMcChartsOpen(o=>!o)}
+                        style={{padding:'7px 16px',display:'flex',alignItems:'center',gap:6,cursor:'pointer',
+                          background:'var(--bg2)',borderBottom:'1px solid var(--border)',userSelect:'none'}}
+                        onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.04)'}
+                        onMouseOut={e=>e.currentTarget.style.background='var(--bg2)'}>
+                        <span style={{fontFamily:MONO,fontSize:9,color:'#4a7a9a',width:10}}>{mcChartsOpen?'▼':'▶'}</span>
+                        <span style={{fontFamily:MONO,fontSize:11,color:'#c8dff5',fontWeight:600,letterSpacing:'0.05em'}}>VISTA DE GRÁFICOS</span>
+                        <span style={{fontFamily:MONO,fontSize:10,color:'#4a6a88',marginLeft:4}}>{syms.length} activos · {strats.length} estrategias</span>
+                        {overLimit&&<span style={{marginLeft:'auto',fontFamily:MONO,fontSize:9,color:'#ffd166',background:'rgba(255,209,102,0.1)',border:'1px solid rgba(255,209,102,0.3)',borderRadius:3,padding:'1px 6px'}}>⚠ Límite 10×3</span>}
+                      </div>
+                      {mcChartsOpen&&(
+                        <>
+                          {overLimit&&(
+                            <div style={{padding:'6px 16px',background:'rgba(255,209,102,0.06)',borderBottom:'1px solid rgba(255,209,102,0.2)',fontFamily:MONO,fontSize:10,color:'#ffd166'}}>
+                              ⚠ Límite: máximo 10 activos × 3 estrategias. Se muestran los primeros {syms.length} activos y {strats.length} estrategias.
+                            </div>
+                          )}
+                          {/* Leyenda de colores */}
+                          <div style={{padding:'4px 16px',borderBottom:'1px solid var(--border)',display:'flex',gap:10,flexWrap:'wrap',background:'var(--bg2)'}}>
+                            {strats.map(r=>(
+                              <span key={r.id} style={{fontFamily:MONO,fontSize:10,color:r.color,display:'flex',alignItems:'center',gap:4}}>
+                                <span>▲▼</span><span>{r.name}</span>
+                              </span>
+                            ))}
+                          </div>
+                          {/* Gráficos por activo */}
+                          {syms.map(sym=>{
+                            const stratSignals=strats.map(r=>({
+                              id:r.id,name:r.name,color:r.color,
+                              entries:(r.result.allTrades||[]).filter(t=>t.symbol===sym).map(t=>({date:t.entryDate,price:t.entryPx})),
+                              exits:(r.result.allTrades||[]).filter(t=>t.symbol===sym).map(t=>({date:t.exitDate,price:t.exitPx})),
+                            }))
+                            return(
+                              <AssetSignalChart key={sym} symbol={sym}
+                                stratSignals={stratSignals}
+                                years={Number(years)||5}
+                                height={200}/>
+                            )
+                          })}
+                        </>
+                      )}
+                    </div>
+                  )
+                })()}
               </div>
               {/* Right: metrics summary panel — hidden when mcLayout==='grid' or multi-strategy comparison */}
               {mcLayout==='panel'&&mcMultiResults.length<=1&&<div style={{width:rightPanelW,flexShrink:0,borderLeft:'1px solid var(--border)',background:'var(--bg2)',overflowY:'auto',position:'relative'}}>
