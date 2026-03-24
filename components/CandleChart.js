@@ -91,9 +91,7 @@ function createRiskPrimitive(configRef) {
   }
 }
 
-export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, onRiskLevelChange, fillHeight=false }) {
-  // DEBUG: log riskLevels on every render to trace prop changes
-  if (riskLevels !== null) console.log('[Risk] CandleChart render — riskLevels:', JSON.stringify(riskLevels))
+export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false }) {
   const containerRef=useRef(null), svgRef=useRef(null), legendRef=useRef(null), tooltipRef=useRef(null)
   const activeLegendRef = externalLegendRef || legendRef
   const chartRef=useRef(null), candlesRef=useRef(null)
@@ -807,7 +805,8 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
   useEffect(()=>{
     const chart   = chartRef.current
     const candles = candlesRef.current
-    if (!chart || !candles) return
+    console.log('[Risk] useEffect triggered — chart:', !!chart, 'candles:', !!candles, 'riskLevels:', riskLevels, 'riskLineActive:', riskLineActive)
+    if (!chart || !candles) { console.log('[Risk] chart/candles not ready, skipping'); return }
 
     const cleanup = () => {
       riskLinesRef.current.forEach((pl,i)=>{ if(pl){ try{candles.removePriceLine(pl)}catch(_){}; riskLinesRef.current[i]=null } })
@@ -815,7 +814,6 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       Object.assign(riskConfigRef.current,{entry:null,stop:null,tp:null,shares:0,tradeRiskEur:0,rrRatio:0})
     }
 
-    console.log('[Risk] riskLevels recibido en CandleChart:', riskLevels)
     if (!riskLevels?.entry && !riskLevels?.stop && !riskLevels?.tp) { cleanup(); return }
 
     const { entry=null, stop=null, tp=null, shares=0, tradeRiskEur=0, rrRatio=0 } = riskLevels
@@ -828,9 +826,12 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         return
       }
       if (riskLinesRef.current[idx]) {
-        try { riskLinesRef.current[idx].applyOptions({ price, title }); return } catch(_) { riskLinesRef.current[idx]=null }
+        try { riskLinesRef.current[idx].applyOptions({ price, title }); return } catch(e) { console.warn('[Risk] applyOptions failed:', e); riskLinesRef.current[idx]=null }
       }
-      try { riskLinesRef.current[idx]=candles.createPriceLine({price,color,lineWidth:2,lineStyle:0,axisLabelVisible:true,title}) } catch(_) {}
+      try {
+        riskLinesRef.current[idx]=candles.createPriceLine({price,color,lineWidth:2,lineStyle:0,axisLabelVisible:true,title})
+        console.log('[Risk] createPriceLine OK idx='+idx+' price='+price)
+      } catch(e) { console.error('[Risk] createPriceLine FAILED idx='+idx+':', e) }
     }
     upsertLine(0, entry,  '#00d4ff', entry ? `Entrada: ${entry.toFixed(2)}` : '')
     upsertLine(1, stop,   '#ff4d6d', stop  ? `Stop: ${stop.toFixed(2)}`    : '')
@@ -844,10 +845,10 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         dummy.setData([{time:fd,value:entry},{time:ld,value:entry}])
         dummy.attachPrimitive(createRiskPrimitive(riskConfigRef))
         riskBandSeriesRef.current=dummy
-      } catch(_) {}
+      } catch(e) { console.error('[Risk] primitive creation failed:', e) }
     }
   // eslint-disable-next-line
-  },[riskLevels, data])
+  },[riskLevels, riskLineActive, data])
 
   // ── Risk drag: mousedown near a line → drag to update prices ──
   useEffect(()=>{

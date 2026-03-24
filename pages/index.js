@@ -3969,7 +3969,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                   onChange={e=>setRiskCalc(c=>({...c,entry:e.target.value}))}
                                   style={{..._I,width:76}}/>
                                 <button title="Mostrar línea en gráfico"
-                                  onClick={()=>{const v=parseFloat(riskCalc.entry);console.log('[Risk] ⊕ entry clicked, value=',v,'active=',riskLineActive.entry);if(v>0){setRiskLineActive(p=>({...p,entry:true}));console.log('[Risk] entry activado')}}}
+                                  onClick={()=>{const v=parseFloat(riskCalc.entry);console.log('[⊕ click] entry value=',v,'riskCalc.entry=',riskCalc.entry,'riskLineActive=',riskLineActive);if(v>0){setRiskLineActive(p=>{console.log('[⊕ click] setRiskLineActive entry true, prev=',p);return{...p,entry:true}})}}}
                                   style={{..._btnIcon,border:`1px solid ${riskLineActive.entry?'#4488cc':'#4488cc55'}`,background:riskLineActive.entry?'rgba(68,136,204,0.25)':'rgba(68,136,204,0.06)',color:'#6ab0ff'}}>⊕</button>
                                 <button title="Eliminar línea"
                                   onClick={()=>{setRiskCalc(c=>({...c,entry:''}));setRiskLineActive(p=>({...p,entry:false}))}}
@@ -3985,7 +3985,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                   onChange={e=>setRiskCalc(c=>({...c,stop:e.target.value}))}
                                   style={{..._I,width:76}}/>
                                 <button title="Mostrar línea en gráfico"
-                                  onClick={()=>{const v=parseFloat(riskCalc.stop);console.log('[Risk] ⊕ stop clicked, value=',v,'active=',riskLineActive.stop);if(v>0){setRiskLineActive(p=>({...p,stop:true}));console.log('[Risk] stop activado')}}}
+                                  onClick={()=>{const v=parseFloat(riskCalc.stop);console.log('[⊕ click] stop value=',v,'riskCalc.stop=',riskCalc.stop);if(v>0){setRiskLineActive(p=>{console.log('[⊕ click] setRiskLineActive stop true');return{...p,stop:true}})}}}
                                   style={{..._btnIcon,border:`1px solid ${riskLineActive.stop?'#cc4444':'#cc444455'}`,background:riskLineActive.stop?'rgba(204,68,68,0.25)':'rgba(204,68,68,0.06)',color:'#ff7070'}}>⊕</button>
                                 <button title="Eliminar línea"
                                   onClick={()=>{setRiskCalc(c=>({...c,stop:''}));setRiskLineActive(p=>({...p,stop:false}))}}
@@ -4001,7 +4001,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                   onChange={e=>setRiskCalc(c=>({...c,tp:e.target.value}))}
                                   style={{..._I,width:76}}/>
                                 <button title="Mostrar línea en gráfico"
-                                  onClick={()=>{const v=parseFloat(riskCalc.tp);console.log('[Risk] ⊕ tp clicked, value=',v,'active=',riskLineActive.tp);if(v>0){setRiskLineActive(p=>({...p,tp:true}));console.log('[Risk] tp activado')}}}
+                                  onClick={()=>{const v=parseFloat(riskCalc.tp);console.log('[⊕ click] tp value=',v,'riskCalc.tp=',riskCalc.tp);if(v>0){setRiskLineActive(p=>{console.log('[⊕ click] setRiskLineActive tp true');return{...p,tp:true}})}}}
                                   style={{..._btnIcon,border:`1px solid ${riskLineActive.tp?'#44cc88':'#44cc8855'}`,background:riskLineActive.tp?'rgba(68,204,136,0.25)':'rgba(68,204,136,0.06)',color:'#00e5a0'}}>⊕</button>
                                 <button title="Eliminar línea"
                                   onClick={()=>{setRiskCalc(c=>({...c,tp:''}));setRiskLineActive(p=>({...p,tp:false}))}}
@@ -4189,10 +4189,15 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         riskMode={null}
                         onRiskPrice={null}
                         onRiskLevelChange={sidePanel==='risk'?onRiskLevelChange:null}
-                        riskLevels={sidePanel==='risk'&&(riskLineActive.entry||riskLineActive.stop||riskLineActive.tp)?(()=>{
-                          const _e=riskLineActive.entry?(parseFloat(riskCalc.entry)||null):null
-                          const _s=riskLineActive.stop?(parseFloat(riskCalc.stop)||null):null
-                          const _t=riskLineActive.tp?(parseFloat(riskCalc.tp)||null):null
+                        riskLineActive={sidePanel==='risk'?riskLineActive:null}
+                        riskLevels={(()=>{
+                          if(sidePanel!=='risk') return null
+                          const _eA=riskLineActive.entry, _sA=riskLineActive.stop, _tA=riskLineActive.tp
+                          if(!_eA&&!_sA&&!_tA) return null
+                          const _e=_eA?(parseFloat(riskCalc.entry)||null):null
+                          const _s=_sA?(parseFloat(riskCalc.stop)||null):null
+                          const _t=_tA?(parseFloat(riskCalc.tp)||null):null
+                          console.log('[Risk] riskLevels computed — entry:',_e,'stop:',_s,'tp:',_t,'riskLineActive:',riskLineActive)
                           const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>s+Number(c.amount||0),0)
                           const _ret=(contributions||[]).filter(c=>c.type==='retirada').reduce((s,c)=>s+Number(c.amount||0),0)
                           const _bal=_aport-_ret
@@ -4207,7 +4212,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                           const _trReur=_shs*_dS
                           const _rr=_t&&_e&&_dS>0?Math.abs(_t-_e)/_dS:0
                           return {entry:_e,stop:_s,tp:_t,shares:_shs,tradeRiskEur:_trReur,rrRatio:_rr}
-                        })():null}
+                        })()}
                         fillHeight={sidePanel==='risk'}
                       />
                     </div>
