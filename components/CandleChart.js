@@ -813,9 +813,9 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       Object.assign(riskConfigRef.current,{entry:null,stop:null,tp:null,shares:0,tradeRiskEur:0,rrRatio:0})
     }
 
-    if (!riskLevels?.entry) { cleanup(); return }
+    if (!riskLevels?.entry && !riskLevels?.stop && !riskLevels?.tp) { cleanup(); return }
 
-    const { entry, stop=null, tp=null, shares=0, tradeRiskEur=0, rrRatio=0 } = riskLevels
+    const { entry=null, stop=null, tp=null, shares=0, tradeRiskEur=0, rrRatio=0 } = riskLevels
     Object.assign(riskConfigRef.current, { entry, stop, tp, shares, tradeRiskEur, rrRatio })
 
     // Update or create a price line (update-in-place avoids flicker)
@@ -829,12 +829,12 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       }
       try { riskLinesRef.current[idx]=candles.createPriceLine({price,color,lineWidth:2,lineStyle:0,axisLabelVisible:true,title}) } catch(_) {}
     }
-    upsertLine(0, entry,  '#00d4ff', `Entrada: ${entry.toFixed(2)}`)
-    upsertLine(1, stop,   '#ff4d6d', stop ? `Stop: ${stop.toFixed(2)}`     : '')
-    upsertLine(2, tp,     '#00e5a0', tp   ? `Objetivo: ${tp.toFixed(2)}`   : '')
+    upsertLine(0, entry,  '#00d4ff', entry ? `Entrada: ${entry.toFixed(2)}` : '')
+    upsertLine(1, stop,   '#ff4d6d', stop  ? `Stop: ${stop.toFixed(2)}`    : '')
+    upsertLine(2, tp,     '#00e5a0', tp    ? `Objetivo: ${tp.toFixed(2)}`  : '')
 
     // Create primitive once (it reads from riskConfigRef which we mutate in place)
-    if (!riskBandSeriesRef.current && data?.length) {
+    if (!riskBandSeriesRef.current && data?.length && entry) {
       const fd=data[0].date, ld=data[data.length-1].date
       try {
         const dummy=chart.addLineSeries({lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false,visible:false,color:'transparent'})
