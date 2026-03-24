@@ -576,7 +576,7 @@ export default function Home() {
   const [mcStratVisible,setMcStratVisible]=useState({})     // {id:bool}
   const [mcShowBHCompare,setMcShowBHCompare]=useState(true) // B&H curve toggle in multi-strategy chart
   const [mcChartsOpen,setMcChartsOpen]=useState(false)     // Vista de gráficos collapsible
-  const mcChartsSyncRef=useRef({syncing:false,listeners:[],lastRange:null}) // sync group for signal charts
+  const mcChartsSyncRef=useRef({isSyncing:false,charts:[],lastRange:null}) // sync group for signal charts
 
   // ── TradeLog state ───────────────────────────────────────────
   const [tlTrades,setTlTrades]=useState([])
@@ -2272,7 +2272,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
       if(Math.abs(total-100)>0.5){setMcError(`Los pesos suman ${total.toFixed(1)}% — deben sumar 100%`);return}
     }
     setMcLoading(true);setMcError(null);setMcResult(null);setMcMultiResults([]);setMcProgress(null)
-    mcChartsSyncRef.current={syncing:false,listeners:[],lastRange:null}  // reset sync group for new run
+    mcChartsSyncRef.current={isSyncing:false,charts:[],lastRange:null}  // reset sync group for new run
     const rankMap={}
     mcSelected.forEach((sym,i)=>{const rd=rankingData[sym];rankMap[sym]=rd?.rank??i+1})
     const weightsNorm={}
@@ -2639,7 +2639,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V6.37</title>
+        <title>Trading Simulator V6.38</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2716,7 +2716,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V6.37
+            <span className="dot"/>Trading Simulator V6.38
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}

@@ -239,7 +239,7 @@ export function StratCompareChart({curves,capitalIni,chartHeight=300,syncRef,onR
 
 // ── AssetSignalChart — candles + strategy entry/exit markers, lazy-loaded ──
 // stratSignals: [{id, name, color, entries:[{date,price}], exits:[{date,price}]}]
-// syncRef: {syncing:bool, listeners:[{id,handler}]} — shared across all instances for logical-range sync
+// syncRef: {isSyncing:bool, charts:[], lastRange} — shared across all instances for logical-range sync
 const _MONO='"Roboto Mono",monospace'
 export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef}) {
   const containerRef=useRef(null)
@@ -278,6 +278,7 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
   useEffect(()=>{
     if(!ohlcv?.length||!chartDivRef.current) return
     import('lightweight-charts').then(({createChart,CrosshairMode})=>{
+      // Cleanup previous instance and remove from sync group
       if(chartRef.current){chartRef.current.__syncCleanup?.();chartRef.current.remove();chartRef.current=null}
       const chart=createChart(chartDivRef.current,{
         width:chartDivRef.current.clientWidth,height,
@@ -295,6 +296,7 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
         borderUpColor:'#00e5a0',borderDownColor:'#ff4d6d',
         wickUpColor:'#3a7a6a',wickDownColor:'#7a3a4a',
       })
+      // ── Load data ──
       candles.setData(ohlcv.map(d=>({time:d.date,open:d.open,high:d.high,low:d.low,close:d.close})))
       // Build sorted markers — use explicit entryColor/exitColor when provided
       const markers=[]
@@ -309,28 +311,31 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
       })
       markers.sort((a,b)=>a.time.localeCompare(b.time))
       if(markers.length) candles.setMarkers(markers)
+      // ── fitContent first, then apply sync range ──
       chart.timeScale().fitContent()
-      // Logical-range sync — stores lastRange so late-joining charts snap to group zoom
+      // ── Logical-range sync — set up AFTER data is loaded ──
+      // Uses direct chart instance array + isSyncing flag to avoid callback-chain loops
       if(syncRef?.current){
-        const syncId=Symbol()
+        // Register this chart in the shared pool
+        syncRef.current.charts.push(chart)
+        // Subscribe to range changes — propagate to all peer charts directly
         const unsub=chart.timeScale().subscribeVisibleLogicalRangeChange(range=>{
-          if(!range||syncRef.current.syncing) return
-          syncRef.current.syncing=true
+          if(!range||syncRef.current.isSyncing) return
+          syncRef.current.isSyncing=true
           syncRef.current.lastRange=range
-          syncRef.current.listeners.forEach(fn=>{
-            if(fn.id!==syncId) try{fn.handler(range)}catch(_){}
+          syncRef.current.charts.forEach(c=>{
+            if(c!==chart) try{c.timeScale().setVisibleLogicalRange(range)}catch(_){}
           })
-          syncRef.current.syncing=false
+          syncRef.current.isSyncing=false
         })
-        const handler=(range)=>{try{chart.timeScale().setVisibleLogicalRange(range)}catch(_){}}
-        syncRef.current.listeners.push({id:syncId,handler})
-        // Snap to group range if others have already zoomed
+        // Late-join: snap immediately to the group's current zoom level
         if(syncRef.current.lastRange){
           try{chart.timeScale().setVisibleLogicalRange(syncRef.current.lastRange)}catch(_){}
         }
+        // Cleanup: deregister from pool and unsubscribe
         chart.__syncCleanup=()=>{
           try{unsub()}catch(_){}
-          if(syncRef.current) syncRef.current.listeners=syncRef.current.listeners.filter(e=>e.id!==syncId)
+          if(syncRef.current) syncRef.current.charts=syncRef.current.charts.filter(c=>c!==chart)
         }
       }
       const ro=new ResizeObserver(()=>{
