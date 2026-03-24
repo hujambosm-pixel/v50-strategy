@@ -2634,7 +2634,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V6.33</title>
+        <title>Trading Simulator V6.34</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2711,7 +2711,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V6.33
+            <span className="dot"/>Trading Simulator V6.34
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4701,7 +4701,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                 <td style={{padding:'4px 6px'}}>
                                   <div style={{display:'flex',alignItems:'center',gap:4}}>
                                     <div style={{width:7,height:7,borderRadius:'50%',background:r.color,flexShrink:0}}/>
-                                    <span style={{color:r.color,fontWeight:isActive?700:400,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:80}}>{r.name}</span>
+                                    <span style={{color:r.color,fontWeight:isActive?700:400}}>{r.name}</span>
                                     {isActive&&<span style={{fontSize:7,color:'#00d4ff',background:'rgba(0,212,255,0.1)',border:'1px solid rgba(0,212,255,0.25)',borderRadius:2,padding:'0 3px',flexShrink:0}}>✓</span>}
                                   </div>
                                 </td>
@@ -4720,7 +4720,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               <td style={{padding:'4px 6px'}}>
                                 <div style={{display:'flex',alignItems:'center',gap:4}}>
                                   <div style={{width:7,height:7,borderRadius:2,background:'#ffd166',flexShrink:0}}/>
-                                  <span style={{color:'#ffd166',fontStyle:'italic',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:80}}>B&H Diversif.</span>
+                                  <span style={{color:'#ffd166',fontStyle:'italic'}}>B&H Diversif.</span>
                                 </div>
                               </td>
                               <td style={{padding:'4px 6px',color:'#ffd166'}}>1</td>
