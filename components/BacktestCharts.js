@@ -296,30 +296,38 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
         wickUpColor:'#3a7a6a',wickDownColor:'#7a3a4a',
       })
       candles.setData(ohlcv.map(d=>({time:d.date,open:d.open,high:d.high,low:d.low,close:d.close})))
-      // Build sorted markers (entries=arrowUp belowBar, exits=arrowDown aboveBar)
+      // Build sorted markers — use explicit entryColor/exitColor when provided
       const markers=[]
       stratSignals.forEach(s=>{
+        const ec=s.entryColor||s.color, xc=s.exitColor||s.color
         ;(s.entries||[]).forEach(e=>{
-          markers.push({time:e.date,position:'belowBar',color:s.color,shape:'arrowUp',text:'',size:1})
+          markers.push({time:e.date,position:'belowBar',color:ec,shape:'arrowUp',text:'',size:1})
         })
         ;(s.exits||[]).forEach(e=>{
-          markers.push({time:e.date,position:'aboveBar',color:s.color,shape:'arrowDown',text:'',size:1})
+          markers.push({time:e.date,position:'aboveBar',color:xc,shape:'arrowDown',text:'',size:1})
         })
       })
       markers.sort((a,b)=>a.time.localeCompare(b.time))
       if(markers.length) candles.setMarkers(markers)
       chart.timeScale().fitContent()
-      // Logical-range sync across all AssetSignalChart instances
+      // Logical-range sync — stores lastRange so late-joining charts snap to group zoom
       if(syncRef?.current){
         const syncId=Symbol()
         const unsub=chart.timeScale().subscribeVisibleLogicalRangeChange(range=>{
           if(!range||syncRef.current.syncing) return
           syncRef.current.syncing=true
-          syncRef.current.listeners.forEach(fn=>{if(fn.id!==syncId)try{fn.handler(range)}catch(_){}})
+          syncRef.current.lastRange=range
+          syncRef.current.listeners.forEach(fn=>{
+            if(fn.id!==syncId) try{fn.handler(range)}catch(_){}
+          })
           syncRef.current.syncing=false
         })
         const handler=(range)=>{try{chart.timeScale().setVisibleLogicalRange(range)}catch(_){}}
         syncRef.current.listeners.push({id:syncId,handler})
+        // Snap to group range if others have already zoomed
+        if(syncRef.current.lastRange){
+          try{chart.timeScale().setVisibleLogicalRange(syncRef.current.lastRange)}catch(_){}
+        }
         chart.__syncCleanup=()=>{
           try{unsub()}catch(_){}
           if(syncRef.current) syncRef.current.listeners=syncRef.current.listeners.filter(e=>e.id!==syncId)
