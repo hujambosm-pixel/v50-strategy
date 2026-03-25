@@ -2893,7 +2893,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
           </nav>
 
           {/* ── SIDEBAR ── */}
-          <aside className="sidebar" style={{padding:0,gap:0,position:'relative',width:sidebarW,flexShrink:0,flexGrow:0}} onContextMenu={e=>openCtx(e,'sidebar')}
+          <aside className="sidebar" style={{padding:0,gap:0,position:'relative',width:sidePanel==='tradelog'&&tlTab==='dashboard'?0:sidebarW,overflow:'hidden',flexShrink:0,flexGrow:0,transition:'width 0.15s ease'}} onContextMenu={e=>openCtx(e,'sidebar')}
             onWheel={e=>{if(e.ctrlKey){e.preventDefault();handlePanelScaleWheel(sidePanel,e)}}}>
             {/* Resize handle — right edge */}
             <div onMouseDown={e=>{sidebarResizing.current=true;sidebarStartX.current=e.clientX;sidebarStartW.current=sidebarW;document.body.style.cursor='col-resize';document.body.style.userSelect='none'}}
@@ -6131,7 +6131,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       const aniosPeriodo_=firstDate_?Math.max((new Date(today)-new Date(firstDate_))/86400000/365.25,0.01):null
                       const totalDiasInv=totalDias
                       const tiempoInvPct_=aniosPeriodo_?Math.round(totalDias/(aniosPeriodo_*365.25)*100):null
-                      const _allOpen_=(tlFifo.trades||[]).filter(t=>t.status==='open')
+                      const _allOpen_=tlFifo.openPositions||[]
                       const capitalEmpAll=_allOpen_.reduce((s,t)=>{const fxE=t.fx_entry>0?(t.fx_entry<1?1/t.fx_entry:t.fx_entry):1;return s+(parseFloat(t.shares||0)*parseFloat(t.entry_price||0))/fxE},0)
                       const pnlRealAll=(tlFifo.trades||[]).filter(t=>t.status==='closed').reduce((s,t)=>s+parseFloat(t.pnl_eur||0),0)
                       const pnlFloatAll=_allOpen_.reduce((s,t)=>{const px=tlLivePrices[t.symbol]?.price!=null?parseFloat(tlLivePrices[t.symbol].price):null;const fxE=t.fx_entry||1;return s+(px!==null?(px-t.entry_price)*t.shares/fxE:(typeof t._pnl_float_eur==='number'?t._pnl_float_eur:0))},0)
@@ -6225,8 +6225,9 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                             {/* Col invest + P&L */}
                             <div style={{flex:1,borderRight:'1px solid var(--border)',display:'flex',flexDirection:'column',overflow:'hidden',minWidth:0}}>
                               <div style={{flex:1,borderBottom:'1px solid var(--border)',overflow:'hidden',position:'relative',cursor:'pointer'}} onClick={()=>setTlDashFullscreen('invest')}>
-                                <div style={{position:'absolute',top:3,left:6,fontFamily:MONO,fontSize:7,color:'#3d5a7a',letterSpacing:'0.07em',textTransform:'uppercase',zIndex:10,pointerEvents:'none'}}>Cap. inv. vs Profit</div>
-                                {investData.length>1?<TlInvestChart investData={investData} syncRef={tlDashSyncRef} patrimonyCurve={cwcDisp.length>1?cwcDisp:null}/>:<div style={{height:'100%',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:MONO,fontSize:9,color:'#3d5a7a'}}>—</div>}
+                                {investData.length>1
+                                  ?<TlInvestChart investData={investData} syncRef={tlDashSyncRef} patrimonyCurve={cwcDisp.length>1?cwcDisp:null} compact={true}/>
+                                  :<div style={{height:'100%',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:MONO,fontSize:9,color:'#3d5a7a'}}>—</div>}
                               </div>
                               <div style={{flex:1,overflow:'hidden',position:'relative',cursor:'pointer',padding:'16px 6px 4px'}} onClick={()=>setTlDashFullscreen('pnl')}>
                                 <div style={{position:'absolute',top:3,left:6,fontFamily:MONO,fontSize:7,color:'#3d5a7a',letterSpacing:'0.07em',textTransform:'uppercase',zIndex:10,pointerEvents:'none'}}>P&L por operación</div>

@@ -180,8 +180,9 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
 }
 
 // ── Capital Invertido vs Profit acumulado (area + line) ──
-export function TlInvestChart({ investData, syncRef, patrimonyCurve }) {
+export function TlInvestChart({ investData, syncRef, patrimonyCurve, compact }) {
   // investData: [{date, capital, profit}]  sorted by date
+  // compact=true: no header/legend, chart fills container height (used in Dashboard mini view)
   const ref = useRef(null), chartRef = useRef(null), investTooltipRef = useRef(null)
   const [showPatrimony, setShowPatrimony] = useState(false)
 
@@ -189,7 +190,10 @@ export function TlInvestChart({ investData, syncRef, patrimonyCurve }) {
     if(!ref.current||!investData?.length) return
     import('lightweight-charts').then(({createChart,CrosshairMode,LineStyle})=>{
       if(chartRef.current){chartRef.current.remove();chartRef.current=null}
-      const chartH=Math.max(60,ref.current.clientHeight||200)
+      // compact mode: inherit container height; standalone mode: use clientHeight or default 200
+      const chartH=compact
+        ? Math.max(40, ref.current.parentElement?.clientHeight||ref.current.clientHeight||120)
+        : Math.max(60, ref.current.clientHeight||200)
       const chart = createChart(ref.current,{
         width:ref.current.clientWidth, height:chartH,
         layout:{background:{color:'#0b0f1a'},textColor:'#7a9bc0'},
@@ -284,6 +288,14 @@ export function TlInvestChart({ investData, syncRef, patrimonyCurve }) {
     cursor:'pointer',background:'none',border:'none',padding:'1px 4px',
     borderRadius:3,opacity:active?1:0.5,transition:'opacity 0.15s',
   })
+  // Compact mode: bare chart, no header, fills parent height
+  if(compact) return (
+    <div style={{position:'relative',height:'100%',width:'100%'}}>
+      <div ref={ref} style={{height:'100%',width:'100%',minHeight:0}}/>
+      <div ref={investTooltipRef} style={{position:'absolute',display:'none',pointerEvents:'none',background:'rgba(8,12,20,0.96)',border:'1px solid #1a2d45',borderRadius:6,padding:'6px 10px',fontFamily:'"JetBrains Mono",monospace',fontSize:11,color:'#e2eaf5',zIndex:15,minWidth:140,boxShadow:'0 4px 20px rgba(0,0,0,0.5)'}}/>
+    </div>
+  )
+
   return (
     <div style={{borderTop:'1px solid var(--border)'}}>
       <div style={{padding:'6px 14px 0',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
