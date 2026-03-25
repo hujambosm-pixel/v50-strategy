@@ -243,6 +243,12 @@ async function renameWatchlistList(listId,newName) {
     method:'PATCH',headers:{...getSupaH(),'Prefer':'return=minimal'},body:JSON.stringify({name:newName})})
   if(!res.ok){const t=await res.text();throw new Error('Error renombrando lista: '+t)}
 }
+async function deleteWatchlistList(listId) {
+  // Deleting watchlist_lists cascades to watchlist_list_members automatically
+  const res=await fetch(`${getSupaUrl()}/rest/v1/watchlist_lists?id=eq.${listId}`,{
+    method:'DELETE',headers:getSupaH()})
+  if(!res.ok){const t=await res.text();throw new Error('Error eliminando lista: '+t)}
+}
 
 // ── Ranking results API ───────────────────────────────────────
 async function saveRankingRemote(rankingData, stratId) {
@@ -2685,7 +2691,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V6.41</title>
+        <title>Trading Simulator V6.42</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2762,7 +2768,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V6.41
+            <span className="dot"/>Trading Simulator V6.42
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -3038,6 +3044,19 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                     style={{color:'#3d5a7a',fontSize:11,cursor:'pointer',padding:'2px 4px',borderRadius:2,flexShrink:0,lineHeight:1}}
                                     onMouseOver={e=>e.currentTarget.style.color='#ffd166'}
                                     onMouseOut={e=>e.currentTarget.style.color='#3d5a7a'}>✏</span>
+                                  <span onClick={async e=>{
+                                      e.stopPropagation()
+                                      if(!window.confirm(`¿Eliminar lista "${l.name}"?\nLos activos no se eliminarán.`)) return
+                                      try{
+                                        await deleteWatchlistList(l.id)
+                                        if(selectedLists.includes(l.name)) setSelectedLists([])
+                                        reloadWatchlist(); setListDropOpen(null)
+                                      }catch(err){alert('Error: '+err.message)}
+                                    }}
+                                    title="Eliminar lista"
+                                    style={{color:'#3d3a3a',fontSize:11,cursor:'pointer',padding:'2px 4px',borderRadius:2,flexShrink:0,lineHeight:1}}
+                                    onMouseOver={e=>e.currentTarget.style.color='#ff4d6d'}
+                                    onMouseOut={e=>e.currentTarget.style.color='#3d3a3a'}>✕</span>
                                 </div>
                               ))}
                             </div>
@@ -3311,18 +3330,36 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                           <div style={{background:'var(--bg3)',border:'1px solid var(--border)',borderRadius:4,padding:'6px 8px',display:'flex',flexWrap:'wrap',gap:5,minHeight:34,alignItems:'center'}}>
                             {wlLists.map(l=>{
                               const checked=(editForm.list_ids||[]).includes(l.id)
+                              const borderCol=checked?'rgba(0,212,255,0.35)':'var(--border)'
                               return(
-                                <label key={l.id} style={{display:'flex',alignItems:'center',gap:4,cursor:'pointer',fontFamily:MONO,fontSize:11,
-                                  color:checked?'var(--accent)':'var(--text)',padding:'2px 7px',borderRadius:3,whiteSpace:'nowrap',
-                                  background:checked?'rgba(0,212,255,0.12)':'transparent',
-                                  border:`1px solid ${checked?'rgba(0,212,255,0.35)':'var(--border)'}`}}>
-                                  <input type="checkbox" checked={checked} onChange={ev=>{
-                                    setEditForm(p=>({...p,list_ids:ev.target.checked
-                                      ?[...(p.list_ids||[]),l.id]
-                                      :(p.list_ids||[]).filter(id=>id!==l.id)}))
-                                  }} style={{width:11,height:11,accentColor:'var(--accent)'}}/>
-                                  {l.name}
-                                </label>
+                                <div key={l.id} style={{display:'flex',alignItems:'stretch'}}>
+                                  <label style={{display:'flex',alignItems:'center',gap:4,cursor:'pointer',fontFamily:MONO,fontSize:11,
+                                    color:checked?'var(--accent)':'var(--text)',padding:'2px 7px 2px 5px',whiteSpace:'nowrap',
+                                    background:checked?'rgba(0,212,255,0.12)':'transparent',
+                                    border:`1px solid ${borderCol}`,borderRight:'none',borderRadius:'3px 0 0 3px'}}>
+                                    <input type="checkbox" checked={checked} onChange={ev=>{
+                                      setEditForm(p=>({...p,list_ids:ev.target.checked
+                                        ?[...(p.list_ids||[]),l.id]
+                                        :(p.list_ids||[]).filter(id=>id!==l.id)}))
+                                    }} style={{width:11,height:11,accentColor:'var(--accent)'}}/>
+                                    {l.name}
+                                  </label>
+                                  <button type="button" title={`Eliminar lista "${l.name}"`}
+                                    onClick={async e=>{
+                                      e.preventDefault()
+                                      if(!window.confirm(`¿Eliminar lista "${l.name}"?\nLos activos no se eliminarán.`)) return
+                                      try{
+                                        await deleteWatchlistList(l.id)
+                                        setWlLists(prev=>prev.filter(x=>x.id!==l.id))
+                                        setEditForm(p=>({...p,list_ids:(p.list_ids||[]).filter(id=>id!==l.id)}))
+                                      }catch(err){alert('Error: '+err.message)}
+                                    }}
+                                    style={{fontFamily:MONO,fontSize:9,color:'#4a3535',background:checked?'rgba(0,212,255,0.06)':'transparent',
+                                      border:`1px solid ${borderCol}`,borderRadius:'0 3px 3px 0',
+                                      padding:'0 5px',cursor:'pointer',lineHeight:1,display:'flex',alignItems:'center'}}
+                                    onMouseOver={e=>{e.currentTarget.style.color='#ff4d6d';e.currentTarget.style.background='rgba(255,77,109,0.1)'}}
+                                    onMouseOut={e=>{e.currentTarget.style.color='#4a3535';e.currentTarget.style.background=checked?'rgba(0,212,255,0.06)':'transparent'}}>✕</button>
+                                </div>
                               )
                             })}
                             <button type="button" onClick={async()=>{
