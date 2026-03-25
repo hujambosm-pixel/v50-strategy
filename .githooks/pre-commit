@@ -1,0 +1,3 @@
+#!/bin/sh
+# Pre-commit hook: auto-bumps version in pages/index.js if unchanged
+node "$(git rev-parse --show-toplevel)/scripts/bump-version.js"
