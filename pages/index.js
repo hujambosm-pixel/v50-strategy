@@ -560,32 +560,6 @@ export default function Home() {
   },[]) // eslint-disable-line
 
   useEffect(()=>{
-    if(tlTab!=='dashboard') return
-    if(tlDashMarkets.length>0) return
-    const MARKETS=[
-      {symbol:'^spx',name:'S&P 500'},
-      {symbol:'^ibex',name:'IBEX 35'},
-      {symbol:'^nkx',name:'Nikkei'},
-      {symbol:'^dax',name:'DAX'},
-      {symbol:'^ndq',name:'Nasdaq'},
-    ]
-    const fetchMarket=async(m)=>{
-      try{
-        const r=await fetch(`/api/chartdata?symbol=${encodeURIComponent(m.symbol)}&years=1`)
-        if(!r.ok) return null
-        const data=await r.json()
-        if(!data||data.length<11) return null
-        const prices=data.map(d=>d.close)
-        let ema=prices.slice(0,10).reduce((s,p)=>s+p,0)/10
-        const k=2/11
-        for(let i=10;i<prices.length;i++) ema=prices[i]*k+ema*(1-k)
-        return{...m,price:prices[prices.length-1],ema10:ema,trend:prices[prices.length-1]>ema?'bull':'bear'}
-      }catch(_){return null}
-    }
-    Promise.all(MARKETS.map(fetchMarket)).then(r=>setTlDashMarkets(r.filter(Boolean))).catch(()=>{})
-  },[tlTab])
-
-  useEffect(()=>{
     const onMove=e=>{
       if(sidebarResizing.current){
         const delta=e.clientX-sidebarStartX.current
@@ -702,6 +676,32 @@ export default function Home() {
   const [tlFilterStrat,setTlFilterStrat]=useState('')
   const [tlDashFullscreen,setTlDashFullscreen]=useState(null) // null|'equity'|'invest'|'pnl'
   const [tlDashMarkets,setTlDashMarkets]=useState([])         // [{symbol,name,price,ema10,trend}]
+  // ── Dashboard: fetch market trend data when tab becomes active ──
+  useEffect(()=>{
+    if(tlTab!=='dashboard') return
+    if(tlDashMarkets.length>0) return
+    const MARKETS=[
+      {symbol:'^spx',name:'S&P 500'},
+      {symbol:'^ibex',name:'IBEX 35'},
+      {symbol:'^nkx',name:'Nikkei'},
+      {symbol:'^dax',name:'DAX'},
+      {symbol:'^ndq',name:'Nasdaq'},
+    ]
+    const fetchMarket=async(m)=>{
+      try{
+        const r=await fetch(`/api/chartdata?symbol=${encodeURIComponent(m.symbol)}&years=1`)
+        if(!r.ok) return null
+        const data=await r.json()
+        if(!data||data.length<11) return null
+        const prices=data.map(d=>d.close)
+        let ema=prices.slice(0,10).reduce((s,p)=>s+p,0)/10
+        const k=2/11
+        for(let i=10;i<prices.length;i++) ema=prices[i]*k+ema*(1-k)
+        return{...m,price:prices[prices.length-1],ema10:ema,trend:prices[prices.length-1]>ema?'bull':'bear'}
+      }catch(_){return null}
+    }
+    Promise.all(MARKETS.map(fetchMarket)).then(r=>setTlDashMarkets(r.filter(Boolean))).catch(()=>{})
+  },[tlTab,tlDashMarkets.length]) // eslint-disable-line
   // ── groupTradesForDisplay: FIFO match individual fills → virtual grouped rows ──
   // tlTrades stores raw fills (fill_type:'buy'|'sell', status:'open').
   // This function pairs them chronologically per symbol so the UI shows closed ops with entry+exit.
