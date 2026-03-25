@@ -3949,8 +3949,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     </div>
                   </div>
                 )}
-                {/* ── PANEL NORMAL (subtabs + filtros) — oculto cuando side edit abierto ── */}
-                {!tlSideEdit&&(
+                {/* ── PANEL NORMAL (subtabs + filtros) — oculto cuando side edit abierto O Dashboard activo ── */}
+                {!tlSideEdit&&tlTab!=='dashboard'&&(
                 <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
                 {/* Header + badge */}
                 <div style={{padding:'8px 10px',borderBottom:'1px solid var(--border)',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0}}>
@@ -5979,7 +5979,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
 
                 {/* DASHBOARD */}
                 {tlTab==='dashboard'&&(
-                  <div style={{flex:1,display:'flex',flexDirection:'column',gap:0,overflowY:'auto'}}>
+                  <div style={{flex:1,display:'flex',flexDirection:'column',gap:0,minHeight:0,overflow:'hidden'}}>
                     {(()=>{
                       // Bug fix V5.60: use tlTradesFiltered (pre-computed with live prices) instead of
                       // re-running computeFifo with empty prices, which caused pnl_eur to never resolve
@@ -6160,10 +6160,11 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       const hasFilters_=!!(tlFilterStatus||tlFilterBroker||tlFilterYear||tlFilterStrat)
                       const openSorted_=[..._allOpen_].sort((a,b)=>(b._pnl_float_eur||0)-(a._pnl_float_eur||0))
                       const top3_=openSorted_.slice(0,3)
-                      const bot3_=[...openSorted_].reverse().slice(0,3)
+                      // bot3_ only shows positions not already in top3_ (avoids duplicates when ≤3 open)
+                      const bot3_=openSorted_.length>3?[...openSorted_].reverse().slice(0,Math.min(3,openSorted_.length-3)):[]
                       const ps_={fontFamily:MONO,fontSize:10,padding:'2px 8px',border:'1px solid var(--border)',borderRadius:10,background:'var(--bg3)',cursor:'pointer',outline:'none',color:'#4a6a88'}
                       return (
-                        <div style={{display:'flex',flexDirection:'column',background:'var(--bg)'}}>
+                        <div style={{display:'flex',flexDirection:'column',background:'var(--bg)',flex:1,minHeight:0,overflow:'hidden'}}>
                           {/* BARRA SUPERIOR */}
                           <div style={{display:'flex',alignItems:'center',gap:6,padding:'7px 14px',borderBottom:'1px solid var(--border)',background:'var(--bg2)',flexShrink:0,flexWrap:'wrap'}}>
                             <span style={{fontFamily:MONO,fontSize:11,fontWeight:700,color:'var(--text)',letterSpacing:'0.08em',textTransform:'uppercase',marginRight:6}}>Dashboard</span>
@@ -6211,7 +6212,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                             ))}
                           </div>
                           {/* ZONA CENTRAL */}
-                          <div style={{display:'flex',height:220,borderBottom:'1px solid var(--border)',flexShrink:0,overflow:'hidden'}}>
+                          <div style={{display:'flex',flex:1,minHeight:0,borderBottom:'1px solid var(--border)',overflow:'hidden'}}>
                             {/* Col equity */}
                             <div style={{flex:2.5,borderRight:'1px solid var(--border)',display:'flex',flexDirection:'column',overflow:'hidden',position:'relative',minWidth:0}}>
                               {eqDisp.length>1
@@ -6249,7 +6250,9 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                   :tlDashMarkets.map(m=>(
                                     <div key={m.symbol} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'2px 0',borderBottom:'1px solid rgba(255,255,255,0.03)'}}>
                                       <span style={{fontFamily:MONO,fontSize:9,color:'#a8ccdf'}}>{m.name}</span>
-                                      <span style={{fontFamily:MONO,fontSize:9,fontWeight:700,color:m.trend==='bull'?'#00e5a0':'#ff4d6d'}}>{m.trend==='bull'?'▲':'▼'}</span>
+                                      <span style={{fontFamily:MONO,fontSize:8,fontWeight:700,color:m.trend==='bull'?'#00e5a0':'#ff4d6d',whiteSpace:'nowrap'}}>
+                                        {m.trend==='bull'?'▲ p>ema10':'▼ p<ema10'}
+                                      </span>
                                     </div>
                                   ))
                                 }
@@ -6319,7 +6322,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                             ))}
                           </div>
                           {/* GRÁFICOS DETALLADOS (scroll) */}
-                          <div style={{flexShrink:0}}>
+                          <div style={{flexShrink:0,overflowY:'auto'}}>
                             <div style={{padding:'5px 14px 3px',fontFamily:MONO,fontSize:8,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',borderBottom:'1px solid var(--border)'}}>Gráficos detallados</div>
                             {eqDisp.length>1&&<TlEquityChart curve={eqDisp} curveSinFx={sfxDisp.length>1?sfxDisp:null} curveSinComm={scommDisp.length>1?scommDisp:null} curveWithContribs={cwcDisp.length>1?cwcDisp:null} contributions={contributions} showWithContribs={showWithContribs} onToggleContribs={()=>setShowWithContribs(v=>!v)} syncRef={tlDashSyncRef}/>}
                             {investData.length>1&&<TlInvestChart investData={investData} syncRef={tlDashSyncRef} patrimonyCurve={cwcDisp.length>1?cwcDisp:null}/>}

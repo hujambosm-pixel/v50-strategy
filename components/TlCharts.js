@@ -189,8 +189,9 @@ export function TlInvestChart({ investData, syncRef, patrimonyCurve }) {
     if(!ref.current||!investData?.length) return
     import('lightweight-charts').then(({createChart,CrosshairMode,LineStyle})=>{
       if(chartRef.current){chartRef.current.remove();chartRef.current=null}
+      const chartH=Math.max(60,ref.current.clientHeight||200)
       const chart = createChart(ref.current,{
-        width:ref.current.clientWidth, height:200,
+        width:ref.current.clientWidth, height:chartH,
         layout:{background:{color:'#0b0f1a'},textColor:'#7a9bc0'},
         grid:{vertLines:{color:'#0d1520'},horzLines:{color:'#0d1520'}},
         crosshair:{mode:CrosshairMode.Normal},
