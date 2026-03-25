@@ -180,6 +180,13 @@ function todayDisplay(){ return toDisplayDate(new Date().toISOString().slice(0,1
 
 
 
+// ── Watchlist helpers ──────────────────────────────────────────
+// Decode the user UUID (sub) from the current JWT without a library
+function getUidFromJwt() {
+  const jwt=getCurrentJwt(); if(!jwt) return null
+  try{ return JSON.parse(atob(jwt.split('.')[1])).sub||null }catch(_){ return null }
+}
+
 // ── Watchlist API ─────────────────────────────────────────────
 async function fetchWatchlist() {
   const [itemsRes,membersRes]=await Promise.all([
@@ -218,8 +225,11 @@ async function setItemLists(itemId,listIds) {
   }
 }
 async function createWatchlistList(name) {
+  // user_id must be explicit — watchlist_lists has no DEFAULT auth.uid()
+  const uid=getUidFromJwt()
+  const body=uid?{name,user_id:uid}:{name}
   const res=await fetch(`${getSupaUrl()}/rest/v1/watchlist_lists`,{
-    method:'POST',headers:{...getSupaH(),'Prefer':'return=representation'},body:JSON.stringify({name})})
+    method:'POST',headers:{...getSupaH(),'Prefer':'return=representation'},body:JSON.stringify(body)})
   if(!res.ok){const t=await res.text();throw new Error('Error creando lista: '+t)}
   return (await res.json())[0]
 }
@@ -529,11 +539,16 @@ export default function Home() {
   useEffect(()=>{
     supabase.auth.getSession().then(({data:{session}})=>{
       setSession(session||null)
-      if(session?.access_token) setCurrentJwt(session.access_token)
+      if(session?.access_token){
+        setCurrentJwt(session.access_token)
+        // Re-fetch watchlist data now that JWT is available (RLS requires auth.uid())
+        reloadWatchlist()
+      }
     })
     const {data:{subscription}}=supabase.auth.onAuthStateChange((_e,session)=>{
       setSession(session||null)
       setCurrentJwt(session?.access_token||null)
+      if(session?.access_token) reloadWatchlist()
     })
     return ()=>subscription.unsubscribe()
   },[]) // eslint-disable-line
@@ -2670,7 +2685,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V6.40</title>
+        <title>Trading Simulator V6.41</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2747,7 +2762,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V6.40
+            <span className="dot"/>Trading Simulator V6.41
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
