@@ -2719,7 +2719,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V6.44</title>
+        <title>Trading Simulator V6.45</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2796,7 +2796,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V6.44
+            <span className="dot"/>Trading Simulator V6.45
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5992,7 +5992,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       const monthsInYear_=tlFilterYear?[...new Set((tlFifo.trades||[]).filter(t=>{const d=(t.status==='closed'?t.exit_date:null)||t.entry_date;return d&&d.startsWith(tlFilterYear)}).map(t=>{const d=(t.status==='closed'?t.exit_date:null)||t.entry_date;return d?d.slice(5,7):null}).filter(Boolean))].sort():[]
                       const MESES_=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
                       const brokerOpts_=[...new Set((tlFifo.trades||[]).map(t=>t.broker).filter(Boolean))].sort()
-                      const stratOpts_=[...new Set((tlFifo.trades||[]).map(t=>t.strategy).filter(Boolean))].sort()
+                      const stratOpts_=[...new Set((tlTrades||[]).map(t=>t.strategy||'').filter(Boolean))].sort()
                       const hasFilters_=!!(tlFilterStatus||tlFilterBroker||tlFilterYear||tlFilterStrat)
                       const today = new Date().toISOString().split('T')[0]
                       // Build equity curve — deduplicated by date (lightweight-charts requires strictly ascending times)
@@ -6161,9 +6161,9 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       const top3_=openSorted_.slice(0,3)
                       // bot3_ only shows positions not already in top3_ (avoids duplicates when ≤3 open)
                       const bot3_=openSorted_.length>3?[...openSorted_].reverse().slice(0,Math.min(3,openSorted_.length-3)):[]
-                      const ps_={fontFamily:MONO,fontSize:10,padding:'2px 8px',border:'1px solid var(--border)',borderRadius:10,background:'var(--bg3)',cursor:'pointer',outline:'none',color:'#4a6a88'}
+                      const ps_={fontFamily:MONO,fontSize:10,padding:'2px 8px',border:'1px solid var(--border)',borderRadius:10,background:'var(--bg3)',cursor:'pointer',outline:'none',color:'#4a6a88',maxWidth:110}
                       return (
-                        <div style={{display:'flex',flexDirection:'column',background:'var(--bg)',flex:1,minHeight:0,overflow:'hidden'}}>
+                        <div style={{display:'flex',flexDirection:'column',background:'var(--bg)',flex:1,minHeight:0,overflowY:'auto'}}>
                           {/* BARRA SUPERIOR — always visible even when noData */}
                           <div style={{display:'flex',alignItems:'center',gap:5,padding:'6px 12px',borderBottom:'1px solid var(--border)',background:'var(--bg2)',flexShrink:0,flexWrap:'nowrap',overflowX:'auto'}}>
                             <span style={{fontFamily:MONO,fontSize:11,fontWeight:700,color:'var(--text)',letterSpacing:'0.08em',textTransform:'uppercase',marginRight:8,flexShrink:0}}>Dashboard</span>
@@ -6195,10 +6195,10 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               ✕ Limpiar
                             </button>}
                           </div>
-                          {/* When filter produces no data, show message but keep filters accessible */}
-                          {noData&&<div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:MONO,fontSize:12,color:'#3d5a7a'}}>Sin datos para el filtro seleccionado.</div>}
-                          {/* FILA 1 — 10 métricas (only when data exists) */}
-                          {!noData&&<>
+                          {/* Thin banner when no data — layout stays fully visible */}
+                          {noData&&<div style={{padding:'4px 12px',background:'rgba(255,77,109,0.07)',borderBottom:'1px solid rgba(255,77,109,0.18)',fontFamily:MONO,fontSize:9,color:'#ff6b85',flexShrink:0,letterSpacing:'0.05em'}}>Sin resultados para este filtro — mostrando métricas en cero</div>}
+                          {/* FILA 1 — 10 métricas */}
+                          <>
                           <div style={{display:'flex',borderBottom:'1px solid var(--border)',flexShrink:0,overflowX:'auto'}}>
                             {[
                               {l:'Patrimonio',v:patrimonioActual!=null?fmtAbs_(patrimonioActual):'—',c:'#00d4ff'},
@@ -6220,7 +6220,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                             ))}
                           </div>
                           {/* ZONA CENTRAL */}
-                          <div style={{display:'flex',flex:1,minHeight:0,borderBottom:'1px solid var(--border)',overflow:'hidden'}}>
+                          <div style={{display:'flex',flex:1,minHeight:'calc(100vh - 350px)',borderBottom:'1px solid var(--border)',overflow:'hidden'}}>
                             {/* Col equity */}
                             <div style={{flex:2.5,borderRight:'1px solid var(--border)',display:'flex',flexDirection:'column',overflow:'hidden',position:'relative',minWidth:0}}>
                               {eqDisp.length>1
@@ -6351,7 +6351,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               </div>
                             )}
                           </div>
-                          </>}
+                          </>
                           {/* FULLSCREEN MODAL — position:fixed, always available */}
                           {tlDashFullscreen&&(
                             <div style={{position:'fixed',inset:'0 0 0 0',zIndex:9999,background:'rgba(0,5,12,0.96)',display:'flex',flexDirection:'column'}}
