@@ -560,6 +560,32 @@ export default function Home() {
   },[]) // eslint-disable-line
 
   useEffect(()=>{
+    if(tlTab!=='dashboard') return
+    if(tlDashMarkets.length>0) return
+    const MARKETS=[
+      {symbol:'^spx',name:'S&P 500'},
+      {symbol:'^ibex',name:'IBEX 35'},
+      {symbol:'^nkx',name:'Nikkei'},
+      {symbol:'^dax',name:'DAX'},
+      {symbol:'^ndq',name:'Nasdaq'},
+    ]
+    const fetchMarket=async(m)=>{
+      try{
+        const r=await fetch(`/api/chartdata?symbol=${encodeURIComponent(m.symbol)}&years=1`)
+        if(!r.ok) return null
+        const data=await r.json()
+        if(!data||data.length<11) return null
+        const prices=data.map(d=>d.close)
+        let ema=prices.slice(0,10).reduce((s,p)=>s+p,0)/10
+        const k=2/11
+        for(let i=10;i<prices.length;i++) ema=prices[i]*k+ema*(1-k)
+        return{...m,price:prices[prices.length-1],ema10:ema,trend:prices[prices.length-1]>ema?'bull':'bear'}
+      }catch(_){return null}
+    }
+    Promise.all(MARKETS.map(fetchMarket)).then(r=>setTlDashMarkets(r.filter(Boolean))).catch(()=>{})
+  },[tlTab])
+
+  useEffect(()=>{
     const onMove=e=>{
       if(sidebarResizing.current){
         const delta=e.clientX-sidebarStartX.current
@@ -674,6 +700,8 @@ export default function Home() {
   const [tlShowFxCols,setTlShowFxCols]=useState(false) // toggle FX impact columns
   const [tlFormOpen,setTlFormOpen]=useState(false)
   const [tlFilterStrat,setTlFilterStrat]=useState('')
+  const [tlDashFullscreen,setTlDashFullscreen]=useState(null) // null|'equity'|'invest'|'pnl'
+  const [tlDashMarkets,setTlDashMarkets]=useState([])         // [{symbol,name,price,ema10,trend}]
   // ── groupTradesForDisplay: FIFO match individual fills → virtual grouped rows ──
   // tlTrades stores raw fills (fill_type:'buy'|'sell', status:'open').
   // This function pairs them chronologically per symbol so the UI shows closed ops with entry+exit.
@@ -6075,53 +6103,273 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                             return true
                           })
                         : investDataRaw
-                      const wins = closed.filter(t=>(t.pnl_eur||0)>=0)
-                      const losses = closed.filter(t=>(t.pnl_eur||0)<0)
-                      const totalPnl = closed.reduce((s,t)=>s+(t.pnl_eur||0),0)+floatPnl
-                      const avgWin = wins.length?wins.reduce((s,t)=>s+(t.pnl_eur||0),0)/wins.length:0
-                      const avgLoss = losses.length?losses.reduce((s,t)=>s+Math.abs(t.pnl_eur||0),0)/losses.length:0
-                      const factorBen = avgLoss>0?avgWin/avgLoss:0
-                      const bestTrade = closed.length?closed.reduce((b,t)=>(t.pnl_eur||0)>(b.pnl_eur||0)?t:b, closed[0]):null
-                      let peak=0, maxDD=0
-                      equityCurve.forEach(p=>{if(p.value>peak)peak=p.value;const dd=peak-p.value;if(dd>maxDD)maxDD=dd})
+                      const liveFloatEur_=(t)=>{const px=tlLivePrices[t.symbol]?.price!=null?parseFloat(tlLivePrices[t.symbol].price):null;if(px!==null){const fxE=t.fx_entry||1;return(px-t.entry_price)*t.shares/fxE};return typeof t._pnl_float_eur==='number'?t._pnl_float_eur:0}
+                      const pnlReal=closed.reduce((s,t)=>s+parseFloat(t.pnl_eur||0),0)
+                      const pnlFloat_=openTrades.reduce((s,t)=>s+liveFloatEur_(t),0)
+                      const pnlTotal=pnlReal+pnlFloat_
+                      const commTotal=[...closed,...openTrades].reduce((s,t)=>s+parseFloat(t.commission||0),0)
+                      const allWithPnl=[
+                        ...closed.map(t=>({...t,_ep:parseFloat(t.pnl_eur)||0,_epct:parseFloat(t.pnl_pct||0),_ed:t.entry_date&&t.exit_date?Math.round((new Date(t.exit_date)-new Date(t.entry_date))/86400000):0})),
+                        ...openTrades.map(t=>({...t,_ep:liveFloatEur_(t),_epct:(()=>{const px=tlLivePrices[t.symbol]?.price!=null?parseFloat(tlLivePrices[t.symbol].price):null;if(px!==null&&t.entry_price>0)return(px/t.entry_price-1)*100;return typeof t._pnl_float_pct==='number'?t._pnl_float_pct:0})(),_ed:t.entry_date?Math.round((new Date(today)-new Date(t.entry_date))/86400000):0}))
+                      ]
+                      const wins_=allWithPnl.filter(t=>t._ep>=0)
+                      const losses_=allWithPnl.filter(t=>t._ep<0)
+                      const wr=allWithPnl.length?wins_.length/allWithPnl.length*100:0
+                      const avgWinPct=wins_.length?wins_.reduce((s,t)=>s+t._epct,0)/wins_.length:0
+                      const avgLossPct=losses_.length?losses_.reduce((s,t)=>s+Math.abs(t._epct),0)/losses_.length:0
+                      const avgWinEur=wins_.length?wins_.reduce((s,t)=>s+t._ep,0)/wins_.length:0
+                      const avgLossEur=losses_.length?losses_.reduce((s,t)=>s+Math.abs(t._ep),0)/losses_.length:0
+                      const factorBen_=avgLossEur>0?(avgWinEur/avgLossEur):null
+                      const bestT_=allWithPnl.length?allWithPnl.reduce((b,t)=>t._ep>b._ep?t:b,allWithPnl[0]):null
+                      const worstT_=allWithPnl.length?allWithPnl.reduce((b,t)=>t._ep<b._ep?t:b,allWithPnl[0]):null
+                      const diasArr=allWithPnl.map(t=>t._ed).filter(d=>d!=null&&d>=0)
+                      const diasProm=diasArr.length?diasArr.reduce((s,d)=>s+d,0)/diasArr.length:null
+                      const totalDias=diasArr.reduce((s,d)=>s+d,0)
+                      let peak_=0,maxDD=0
+                      closed.slice().sort((a,b)=>(a.exit_date||'').localeCompare(b.exit_date||'')).reduce((cum,t)=>{const eq=cum+(t.pnl_eur||0);if(eq>peak_)peak_=eq;const dd=peak_-eq;if(dd>maxDD)maxDD=dd;return eq},0)
+                      const firstDate_=allWithPnl.length?allWithPnl.reduce((a,t)=>t.entry_date<a?t.entry_date:a,allWithPnl[0].entry_date):null
+                      const aniosPeriodo_=firstDate_?Math.max((new Date(today)-new Date(firstDate_))/86400000/365.25,0.01):null
+                      const totalDiasInv=totalDias
+                      const tiempoInvPct_=aniosPeriodo_?Math.round(totalDias/(aniosPeriodo_*365.25)*100):null
+                      const _allOpen_=(tlFifo.trades||[]).filter(t=>t.status==='open')
+                      const capitalEmpAll=_allOpen_.reduce((s,t)=>{const fxE=t.fx_entry>0?(t.fx_entry<1?1/t.fx_entry:t.fx_entry):1;return s+(parseFloat(t.shares||0)*parseFloat(t.entry_price||0))/fxE},0)
+                      const pnlRealAll=(tlFifo.trades||[]).filter(t=>t.status==='closed').reduce((s,t)=>s+parseFloat(t.pnl_eur||0),0)
+                      const pnlFloatAll=_allOpen_.reduce((s,t)=>{const px=tlLivePrices[t.symbol]?.price!=null?parseFloat(tlLivePrices[t.symbol].price):null;const fxE=t.fx_entry||1;return s+(px!==null?(px-t.entry_price)*t.shares/fxE:(typeof t._pnl_float_eur==='number'?t._pnl_float_eur:0))},0)
+                      const pnlTotalAll=pnlRealAll+pnlFloatAll
+                      const capEvts=[];[...closed,...openTrades].forEach(t=>{const fxE2=t.fx_entry>0?(t.fx_entry<1?1/t.fx_entry:t.fx_entry):1;const cap=(parseFloat(t.shares||0)*parseFloat(t.entry_price||0))/fxE2;const ch=parseFloat(t.commission||0)/2;capEvts.push({date:t.entry_date||today,delta:+cap+ch});if(t.status==='closed')capEvts.push({date:t.exit_date||today,delta:-cap})})
+                      capEvts.sort((a,b)=>(a.date||'').localeCompare(b.date||''))
+                      let rce=0,mce=0; capEvts.forEach(ev=>{rce+=ev.delta;if(rce>mce)mce=rce})
+                      const capitalEmp_=openTrades.reduce((s,t)=>{const fxE=t.fx_entry>0?(t.fx_entry<1?1/t.fx_entry:t.fx_entry):1;return s+(parseFloat(t.shares||0)*parseFloat(t.entry_price||0))/fxE},0)
+                      const peakCapBase=Math.max(mce,capitalEmp_>0?capitalEmp_:0,1000)
+                      const netContrib=contributions.reduce((s,c)=>s+(c.type==='retirada'?-1:1)*parseFloat(c.amount||0),0)
+                      const hasContribs=contributions.length>0
+                      const capitalNeto=contributions.reduce((s,c)=>c.type==='aportacion'?s+parseFloat(c.amount||0):c.type==='retirada'?s-parseFloat(c.amount||0):s,0)
+                      const dividendosAcum=contributions.filter(c=>c.type==='dividendo').reduce((s,c)=>s+parseFloat(c.amount||0),0)
+                      const patrimonioActual=hasContribs?capitalNeto+dividendosAcum+pnlTotalAll:null
+                      const capitalDisp=hasContribs&&patrimonioActual!=null?patrimonioActual-capitalEmpAll:null
+                      const capitalBase=showWithContribs&&netContrib>0?netContrib:peakCapBase
+                      const cagrReal_=aniosPeriodo_&&pnlTotal!==0?(Math.pow(Math.max((capitalBase+pnlTotal)/capitalBase,0.001),1/aniosPeriodo_)-1)*100:null
+                      const maxDDPct=maxDD>0&&capitalBase>0?(maxDD/capitalBase*100):0
+                      const fxImpact=(()=>{const t2=closed.reduce((s,t)=>{const fE=parseFloat(t.fx_entry||0)||1;const fX=parseFloat(t.fx_exit||t.fx_entry||0)||fE;return s+(parseFloat(t.exit_price||0)-parseFloat(t.entry_price||0))*parseFloat(t.shares||0)*(1/fX-1/fE)},0);return t2})()
+                      const pnlSCapPct=capitalBase>0?(pnlTotal/capitalBase*100):null
+                      const fmtEur_=v=>v>=0?'+€'+Math.round(v).toLocaleString('es-ES'):'-€'+Math.round(Math.abs(v)).toLocaleString('es-ES')
+                      const fmtAbs_=v=>'€'+Math.round(Math.abs(v)).toLocaleString('es-ES')
+                      const yearOpts=[...new Set([...closed,...openTrades].map(t=>(t.exit_date||t.entry_date||'').slice(0,4)).filter(Boolean))].sort().reverse()
+                      const brokerOpts=[...new Set((tlFifo.trades||[]).map(t=>t.broker).filter(Boolean))].sort()
+                      const stratOpts=[...new Set((tlFifo.trades||[]).map(t=>t.strategy).filter(Boolean))].sort()
+                      const hasFilters_=!!(tlFilterStatus||tlFilterBroker||tlFilterYear||tlFilterStrat)
+                      const openSorted_=[..._allOpen_].sort((a,b)=>(b._pnl_float_eur||0)-(a._pnl_float_eur||0))
+                      const top3_=openSorted_.slice(0,3)
+                      const bot3_=[...openSorted_].reverse().slice(0,3)
+                      const ps_={fontFamily:MONO,fontSize:10,padding:'2px 8px',border:'1px solid var(--border)',borderRadius:10,background:'var(--bg3)',cursor:'pointer',outline:'none',color:'#4a6a88'}
                       return (
-                        <div style={{display:'flex',flexDirection:'column',gap:0}}>
-                          {/* Filtros activos badge */}
-                          {(tlFilterStatus||tlFilterBroker||tlFilterYear||tlFilterMonth||tlFilterStrat||tlSearch)&&(
-                            <div style={{padding:'4px 10px',background:'rgba(155,114,255,0.06)',borderBottom:'1px solid var(--border)',display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
-                              <span style={{fontFamily:MONO,fontSize:8,color:'#4a5a70',flexShrink:0}}>Filtros:</span>
-                              {tlFilterStatus&&<span style={{fontFamily:MONO,fontSize:9,color:'#9b72ff',border:'1px solid rgba(155,114,255,0.3)',borderRadius:3,padding:'1px 5px'}}>Estado: {tlFilterStatus}</span>}
-                              {tlFilterBroker&&<span style={{fontFamily:MONO,fontSize:9,color:'#9b72ff',border:'1px solid rgba(155,114,255,0.3)',borderRadius:3,padding:'1px 5px'}}>Broker: {tlFilterBroker}</span>}
-                              {tlFilterYear&&<span style={{fontFamily:MONO,fontSize:9,color:'#9b72ff',border:'1px solid rgba(155,114,255,0.3)',borderRadius:3,padding:'1px 5px'}}>Año: {tlFilterYear}{tlFilterMonth?' · '+['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][parseInt(tlFilterMonth)-1]:''}</span>}
-                              {tlFilterStrat&&<span style={{fontFamily:MONO,fontSize:9,color:'#00d4ff',border:'1px solid rgba(0,212,255,0.3)',borderRadius:3,padding:'1px 5px',maxWidth:100,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={tlFilterStrat}>{tlFilterStrat}</span>}
-                              {tlSearch&&<span style={{fontFamily:MONO,fontSize:9,color:'#ffd166',border:'1px solid rgba(255,209,102,0.3)',borderRadius:3,padding:'1px 5px'}}>"{tlSearch}"</span>}
-                              <button onClick={()=>{setTlFilterStatus('');setTlFilterBroker('');setTlFilterYear('');setTlFilterMonth('');setTlFilterStrat('');setTlSearch('')}}
-                                style={{fontFamily:MONO,fontSize:8,padding:'1px 5px',borderRadius:3,cursor:'pointer',
-                                  background:'rgba(255,77,109,0.08)',border:'1px solid rgba(255,77,109,0.3)',color:'#ff4d6d',marginLeft:'auto',flexShrink:0}}>
-                                ✕ Limpiar todo
-                              </button>
+                        <div style={{display:'flex',flexDirection:'column',background:'var(--bg)'}}>
+                          {/* BARRA SUPERIOR */}
+                          <div style={{display:'flex',alignItems:'center',gap:6,padding:'7px 14px',borderBottom:'1px solid var(--border)',background:'var(--bg2)',flexShrink:0,flexWrap:'wrap'}}>
+                            <span style={{fontFamily:MONO,fontSize:11,fontWeight:700,color:'var(--text)',letterSpacing:'0.08em',textTransform:'uppercase',marginRight:6}}>Dashboard</span>
+                            <select value={tlFilterStatus} onChange={e=>setTlFilterStatus(e.target.value)} style={{...ps_,color:tlFilterStatus?'#9b72ff':'#4a6a88'}}>
+                              <option value="">Estado ▾</option>
+                              <option value="open">Abiertas</option>
+                              <option value="closed">Cerradas</option>
+                            </select>
+                            <select value={tlFilterYear} onChange={e=>setTlFilterYear(e.target.value)} style={{...ps_,color:tlFilterYear?'#ffd166':'#4a6a88'}}>
+                              <option value="">Año ▾</option>
+                              {yearOpts.map(y=><option key={y} value={y}>{y}</option>)}
+                            </select>
+                            <select value={tlFilterBroker} onChange={e=>setTlFilterBroker(e.target.value)} style={{...ps_,color:tlFilterBroker?'#00d4ff':'#4a6a88'}}>
+                              <option value="">Broker ▾</option>
+                              {brokerOpts.map(b=><option key={b} value={b}>{b}</option>)}
+                            </select>
+                            <select value={tlFilterStrat} onChange={e=>setTlFilterStrat(e.target.value)} style={{...ps_,color:tlFilterStrat?'#00e5a0':'#4a6a88'}}>
+                              <option value="">Estrategia ▾</option>
+                              {stratOpts.map(s=><option key={s} value={s}>{s}</option>)}
+                            </select>
+                            {hasFilters_&&<button onClick={()=>{setTlFilterStatus('');setTlFilterBroker('');setTlFilterYear('');setTlFilterMonth('');setTlFilterStrat('');setTlSearch('')}}
+                              style={{fontFamily:MONO,fontSize:9,padding:'2px 8px',borderRadius:10,border:'1px solid rgba(255,77,109,0.4)',background:'rgba(255,77,109,0.08)',color:'#ff4d6d',cursor:'pointer',whiteSpace:'nowrap'}}>
+                              ✕ Limpiar
+                            </button>}
+                          </div>
+                          {/* FILA 1 — 10 métricas */}
+                          <div style={{display:'flex',borderBottom:'1px solid var(--border)',flexShrink:0,overflowX:'auto'}}>
+                            {[
+                              {l:'Patrimonio',v:patrimonioActual!=null?fmtAbs_(patrimonioActual):'—',c:'#00d4ff'},
+                              {l:'Cap. disponible',v:capitalDisp!=null?fmtEur_(capitalDisp):'—',c:capitalDisp==null?'#3d5a7a':capitalDisp>=0?'#00e5a0':'#ff4d6d'},
+                              {l:'Balance inicial',v:hasContribs?fmtAbs_(capitalNeto):'—',c:'#a8ccdf'},
+                              {l:'Capital emp.',v:capitalEmpAll>0?fmtAbs_(capitalEmpAll):'—',c:'#00d4ff'},
+                              {l:'P&L total',v:fmtEur_(pnlTotal),c:pnlTotal>=0?'#00e5a0':'#ff4d6d',hl:true},
+                              {l:'P&L realizado',v:fmtEur_(pnlReal),c:pnlReal>=0?'#00e5a0':'#ff4d6d'},
+                              {l:'P&L flotante',v:fmtEur_(pnlFloat_),c:pnlFloat_>=0?'#00e5a0':'#ffd166'},
+                              {l:'Total ops.',v:String(allWithPnl.length),sub:openTrades.length+'ab / '+closed.length+'cerr',c:'#ffd166'},
+                              {l:'Comisiones',v:commTotal>0?'-€'+Math.round(commTotal).toLocaleString('es-ES'):'€0',c:'#ff4d6d'},
+                              {l:'Dividendos',v:dividendosAcum>0?'+€'+Math.round(dividendosAcum).toLocaleString('es-ES'):'—',c:'#00e5a0'},
+                            ].map(({l,v,c,hl,sub},i)=>(
+                              <div key={i} style={{flex:'1 0 9%',padding:'7px 8px',borderRight:'1px solid var(--border)',borderLeft:hl?'3px solid #ff4d6d':'none',background:hl?'rgba(255,77,109,0.04)':'transparent',display:'flex',flexDirection:'column',gap:1,minWidth:80}}>
+                                <div style={{fontFamily:MONO,fontSize:7,color:'#4a6a88',letterSpacing:'0.08em',textTransform:'uppercase',whiteSpace:'nowrap'}}>{l}</div>
+                                <div style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:c,lineHeight:1.1,whiteSpace:'nowrap'}}>{v}</div>
+                                {sub&&<div style={{fontFamily:MONO,fontSize:7,color:'#3d5a7a'}}>{sub}</div>}
+                              </div>
+                            ))}
+                          </div>
+                          {/* ZONA CENTRAL */}
+                          <div style={{display:'flex',height:220,borderBottom:'1px solid var(--border)',flexShrink:0,overflow:'hidden'}}>
+                            {/* Col equity */}
+                            <div style={{flex:2.5,borderRight:'1px solid var(--border)',display:'flex',flexDirection:'column',overflow:'hidden',position:'relative',minWidth:0}}>
+                              {eqDisp.length>1
+                                ?<TlEquityChart curve={eqDisp} curveSinFx={sfxDisp.length>1?sfxDisp:null} curveSinComm={scommDisp.length>1?scommDisp:null} curveWithContribs={cwcDisp.length>1?cwcDisp:null} contributions={contributions} showWithContribs={showWithContribs} onToggleContribs={()=>setShowWithContribs(v=>!v)} syncRef={tlDashSyncRef}/>
+                                :<div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:MONO,fontSize:10,color:'#3d5a7a'}}>Sin datos equity</div>}
+                              <div onClick={()=>setTlDashFullscreen('equity')} title="Pantalla completa"
+                                style={{position:'absolute',top:6,right:6,zIndex:10,cursor:'pointer',color:'#3d5a7a',fontSize:13,lineHeight:1,background:'rgba(13,21,32,0.75)',borderRadius:3,padding:'2px 5px',border:'1px solid #1a2d45'}}
+                                onMouseOver={e=>e.currentTarget.style.color='#00d4ff'} onMouseOut={e=>e.currentTarget.style.color='#3d5a7a'}>⤢</div>
                             </div>
-                          )}
-
-                          {/* Equity curve — P&L acumulado */}
-                          {eqDisp.length>1&&<TlEquityChart curve={eqDisp} curveSinFx={sfxDisp.length>1?sfxDisp:null} curveSinComm={scommDisp.length>1?scommDisp:null} curveWithContribs={cwcDisp.length>1?cwcDisp:null} contributions={contributions} showWithContribs={showWithContribs} onToggleContribs={()=>setShowWithContribs(v=>!v)} syncRef={tlDashSyncRef}/>}
-                          {/* Capital Invertido vs Profit */}
-                          {investData.length>1&&<TlInvestChart investData={investData} syncRef={tlDashSyncRef} patrimonyCurve={cwcDisp.length>1?cwcDisp:null}/>}
-                          {/* Barras P&L por trade — cerradas + abiertas */}
-                          {(closed.length>0||openTrades.length>0)&&(
-                            <div style={{padding:'12px 16px 8px',borderTop:'1px solid var(--border)'}}>
-                              <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:8}}>P&L por operación</div>
-                              <div style={{display:'flex',alignItems:'flex-end',gap:2,height:60}}>
-                                {[...closed.map(t=>({...t,isOpen:false})),...openTrades.map(t=>({...t,pnl_eur:t._pnl_float_eur||0,isOpen:true}))].map((t,i)=>{
-                                  const allPnls=[...closed.map(x=>Math.abs(x.pnl_eur||0)),...openTrades.map(x=>Math.abs(x._pnl_float_eur||0))]
-                                  const mx=Math.max(...allPnls,1)
-                                  const h=Math.max(3,Math.abs(t.pnl_eur||0)/mx*56)
-                                  const isW=(t.pnl_eur||0)>=0
-                                  const bar=t.isOpen?(isW?'rgba(0,229,160,0.5)':'rgba(255,77,109,0.45)'):(isW?'#00e5a0':'#ff4d6d')
-                                  return <div key={i} title={t.symbol+' '+(isW?'+':'')+('€'+Math.round(t.pnl_eur||0))+(t.isOpen?' (abierta)':'')}
-                                    style={{flex:1,height:h,background:bar,borderRadius:'2px 2px 0 0',minWidth:2,
-                                      opacity:0.85,cursor:'default',border:t.isOpen?'1px solid '+(isW?'#00e5a0':'#ff4d6d'):'none'}}/>
-                                })}
+                            {/* Col invest + P&L */}
+                            <div style={{flex:1,borderRight:'1px solid var(--border)',display:'flex',flexDirection:'column',overflow:'hidden',minWidth:0}}>
+                              <div style={{flex:1,borderBottom:'1px solid var(--border)',overflow:'hidden',position:'relative',cursor:'pointer'}} onClick={()=>setTlDashFullscreen('invest')}>
+                                <div style={{position:'absolute',top:3,left:6,fontFamily:MONO,fontSize:7,color:'#3d5a7a',letterSpacing:'0.07em',textTransform:'uppercase',zIndex:10,pointerEvents:'none'}}>Cap. inv. vs Profit</div>
+                                {investData.length>1?<TlInvestChart investData={investData} syncRef={tlDashSyncRef} patrimonyCurve={cwcDisp.length>1?cwcDisp:null}/>:<div style={{height:'100%',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:MONO,fontSize:9,color:'#3d5a7a'}}>—</div>}
+                              </div>
+                              <div style={{flex:1,overflow:'hidden',position:'relative',cursor:'pointer',padding:'16px 6px 4px'}} onClick={()=>setTlDashFullscreen('pnl')}>
+                                <div style={{position:'absolute',top:3,left:6,fontFamily:MONO,fontSize:7,color:'#3d5a7a',letterSpacing:'0.07em',textTransform:'uppercase',zIndex:10,pointerEvents:'none'}}>P&L por operación</div>
+                                <div style={{display:'flex',alignItems:'flex-end',gap:1,height:'calc(100% - 16px)'}}>
+                                  {[...closed.map(t=>({...t,isOpen:false})),...openTrades.map(t=>({...t,pnl_eur:t._pnl_float_eur||0,isOpen:true}))].map((t,i)=>{
+                                    const allPnls=[...closed.map(x=>Math.abs(x.pnl_eur||0)),...openTrades.map(x=>Math.abs(x._pnl_float_eur||0))]
+                                    const mx=Math.max(...allPnls,1)
+                                    const h=Math.max(3,Math.abs(t.pnl_eur||0)/mx*90)+'%'
+                                    const isW=(t.pnl_eur||0)>=0
+                                    return <div key={i} style={{flex:1,height:h,background:t.isOpen?(isW?'rgba(0,229,160,0.5)':'rgba(255,77,109,0.45)'):(isW?'#00e5a0':'#ff4d6d'),borderRadius:'2px 2px 0 0',minWidth:2}}/>
+                                  })}
+                                </div>
+                              </div>
+                            </div>
+                            {/* Col mercados + posiciones */}
+                            <div style={{flex:0.9,display:'flex',flexDirection:'column',overflow:'hidden',minWidth:120}}>
+                              <div style={{flex:1,borderBottom:'1px solid var(--border)',overflow:'hidden',padding:'4px 8px'}}>
+                                <div style={{fontFamily:MONO,fontSize:7,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:3}}>Mercados</div>
+                                {tlDashMarkets.length===0
+                                  ?<div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a'}}>Cargando…</div>
+                                  :tlDashMarkets.map(m=>(
+                                    <div key={m.symbol} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'2px 0',borderBottom:'1px solid rgba(255,255,255,0.03)'}}>
+                                      <span style={{fontFamily:MONO,fontSize:9,color:'#a8ccdf'}}>{m.name}</span>
+                                      <span style={{fontFamily:MONO,fontSize:9,fontWeight:700,color:m.trend==='bull'?'#00e5a0':'#ff4d6d'}}>{m.trend==='bull'?'▲':'▼'}</span>
+                                    </div>
+                                  ))
+                                }
+                              </div>
+                              <div style={{flex:1,overflow:'hidden',padding:'4px 8px'}}>
+                                <div style={{fontFamily:MONO,fontSize:7,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:2}}>Posiciones abiertas</div>
+                                {_allOpen_.length===0
+                                  ?<div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a'}}>Sin posiciones</div>
+                                  :<>
+                                    {top3_.map((t,i)=>{const pnl=liveFloatEur_(t);const pct=typeof t._pnl_float_pct==='number'?t._pnl_float_pct:0;return(<div key={t.id||t.symbol+i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'1px 0'}}><span style={{fontFamily:MONO,fontSize:8,color:'#a8ccdf',minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.symbol}</span><span style={{fontFamily:MONO,fontSize:8,color:'#00e5a0',flexShrink:0,marginLeft:4}}>{pnl>=0?'+':''}{Math.round(pnl)}€</span></div>)})}
+                                    {top3_.length>0&&bot3_.length>0&&<div style={{borderTop:'1px dashed #1a2d45',margin:'2px 0'}}/>}
+                                    {bot3_.map((t,i)=>{const pnl=liveFloatEur_(t);return(<div key={t.id||t.symbol+'b'+i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'1px 0'}}><span style={{fontFamily:MONO,fontSize:8,color:'#a8ccdf',minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.symbol}</span><span style={{fontFamily:MONO,fontSize:8,color:'#ff4d6d',flexShrink:0,marginLeft:4}}>{pnl>=0?'+':''}{Math.round(pnl)}€</span></div>)})}
+                                  </>
+                                }
+                              </div>
+                            </div>
+                          </div>
+                          {/* FILA 3 — KPIs + secundarias */}
+                          <div style={{display:'flex',flexWrap:'nowrap',borderBottom:'1px solid var(--border)',flexShrink:0,overflowX:'auto'}}>
+                            {[
+                              {l:'CAGR',v:cagrReal_!=null?(cagrReal_>=0?'+':'')+cagrReal_.toFixed(2)+'%':'—',c:cagrReal_!=null&&cagrReal_>=0?'#00e5a0':'#ff4d6d',b:cagrReal_!=null&&cagrReal_>=0?'#00e5a0':'#ff4d6d'},
+                              {l:'Max Drawdown',v:maxDD>0?('-€'+Math.round(maxDD)+' ('+maxDDPct.toFixed(1)+'%)'):' — ',c:'#ff4d6d',b:'#ff4d6d'},
+                              {l:'Win Rate',v:allWithPnl.length?wr.toFixed(1)+'%':'—',c:wr>=50?'#00e5a0':'#ff4d6d',b:wr>=50?'#00e5a0':'#ff4d6d'},
+                              {l:'Factor Beneficio',v:factorBen_!=null?factorBen_.toFixed(2):'—',c:factorBen_!=null&&factorBen_>=1?'#00e5a0':'#ff4d6d',b:factorBen_!=null&&factorBen_>=1?'#00e5a0':'#ff4d6d'},
+                            ].map(({l,v,c,b},i)=>(
+                              <div key={i} style={{flex:'1 0 10%',padding:'8px 12px',borderRight:'1px solid var(--border)',borderLeft:'3px solid '+b,background:'rgba(255,255,255,0.015)',display:'flex',flexDirection:'column',gap:2,minWidth:100}}>
+                                <div style={{fontFamily:MONO,fontSize:7,color:'#4a6a88',letterSpacing:'0.08em',textTransform:'uppercase'}}>{l}</div>
+                                <div style={{fontFamily:MONO,fontSize:15,fontWeight:700,color:c,lineHeight:1}}>{v}</div>
+                              </div>
+                            ))}
+                            {[
+                              {l:'Impacto FX',v:fxImpact!==0?(fxImpact>=0?'+':'')+'€'+Math.abs(fxImpact).toFixed(0):'€0',c:'#ffd166'},
+                              {l:'Gan. media %',v:avgWinPct>0?('+'+avgWinPct.toFixed(2)+'%'):'—',c:'#00e5a0'},
+                              {l:'Pérd. media %',v:avgLossPct>0?(avgLossPct.toFixed(2)+'%'):'—',c:'#ff4d6d'},
+                              {l:'Días prom.',v:diasProm!=null?Math.round(diasProm)+' d':'—',c:'#a8ccdf'},
+                              {l:'Total días',v:totalDiasInv+' d',c:'#a8ccdf'},
+                              {l:'T. invertido',v:tiempoInvPct_!=null?tiempoInvPct_+'%':'—',c:'#ffd166'},
+                            ].map(({l,v,c},i)=>(
+                              <div key={i} style={{flex:'1 0 8%',padding:'8px 10px',borderRight:'1px solid var(--border)',display:'flex',flexDirection:'column',gap:2,minWidth:80}}>
+                                <div style={{fontFamily:MONO,fontSize:7,color:'#4a6a88',letterSpacing:'0.08em',textTransform:'uppercase',whiteSpace:'nowrap'}}>{l}</div>
+                                <div style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:c,lineHeight:1.1}}>{v}</div>
+                              </div>
+                            ))}
+                          </div>
+                          {/* FILA 4 */}
+                          <div style={{display:'flex',flexWrap:'nowrap',borderBottom:'1px solid var(--border)',flexShrink:0,overflowX:'auto'}}>
+                            <div style={{flex:'1 0 15%',padding:'6px 10px',borderRight:'1px solid var(--border)',background:'rgba(0,229,160,0.05)',borderLeft:'3px solid #00e5a0',minWidth:100}}>
+                              <div style={{fontFamily:MONO,fontSize:7,color:'#00e5a0',letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:2}}>Mejor op.</div>
+                              <div style={{fontFamily:MONO,fontSize:10,fontWeight:700,color:'#00e5a0',lineHeight:1.2}}>{bestT_?(bestT_.symbol+' '+fmtEur_(bestT_._ep)):'—'}</div>
+                            </div>
+                            <div style={{flex:'1 0 15%',padding:'6px 10px',borderRight:'1px solid var(--border)',background:'rgba(255,77,109,0.05)',borderLeft:'3px solid #ff4d6d',minWidth:100}}>
+                              <div style={{fontFamily:MONO,fontSize:7,color:'#ff4d6d',letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:2}}>Peor op.</div>
+                              <div style={{fontFamily:MONO,fontSize:10,fontWeight:700,color:'#ff4d6d',lineHeight:1.2}}>{worstT_?(worstT_.symbol+' '+fmtEur_(worstT_._ep)):'—'}</div>
+                            </div>
+                            {[
+                              {l:'Ganadoras',v:wins_.length,c:'#00e5a0'},
+                              {l:'Perdedoras',v:losses_.length,c:'#ff4d6d'},
+                              {l:'Balance inicial',v:hasContribs?fmtAbs_(capitalNeto):'—',c:'#a8ccdf'},
+                              {l:'P&L s/capital',v:pnlSCapPct!=null?(pnlSCapPct>=0?'+':'')+pnlSCapPct.toFixed(2)+'%':'—',c:pnlSCapPct!=null&&pnlSCapPct>=0?'#00e5a0':'#ff4d6d'},
+                              {l:'Días promedio',v:diasProm!=null?Math.round(diasProm)+' d':'—',c:'#a8ccdf'},
+                              {l:'Total días inv.',v:totalDiasInv+' d',c:'#a8ccdf'},
+                            ].map(({l,v,c},i)=>(
+                              <div key={i} style={{flex:'1 0 9%',padding:'6px 10px',borderRight:'1px solid var(--border)',display:'flex',flexDirection:'column',gap:2,minWidth:80}}>
+                                <div style={{fontFamily:MONO,fontSize:7,color:'#4a6a88',letterSpacing:'0.08em',textTransform:'uppercase',whiteSpace:'nowrap'}}>{l}</div>
+                                <div style={{fontFamily:MONO,fontSize:13,fontWeight:700,color:c,lineHeight:1}}>{v}</div>
+                              </div>
+                            ))}
+                          </div>
+                          {/* GRÁFICOS DETALLADOS (scroll) */}
+                          <div style={{flexShrink:0}}>
+                            <div style={{padding:'5px 14px 3px',fontFamily:MONO,fontSize:8,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',borderBottom:'1px solid var(--border)'}}>Gráficos detallados</div>
+                            {eqDisp.length>1&&<TlEquityChart curve={eqDisp} curveSinFx={sfxDisp.length>1?sfxDisp:null} curveSinComm={scommDisp.length>1?scommDisp:null} curveWithContribs={cwcDisp.length>1?cwcDisp:null} contributions={contributions} showWithContribs={showWithContribs} onToggleContribs={()=>setShowWithContribs(v=>!v)} syncRef={tlDashSyncRef}/>}
+                            {investData.length>1&&<TlInvestChart investData={investData} syncRef={tlDashSyncRef} patrimonyCurve={cwcDisp.length>1?cwcDisp:null}/>}
+                            {(closed.length>0||openTrades.length>0)&&(
+                              <div style={{padding:'12px 16px 8px',borderTop:'1px solid var(--border)'}}>
+                                <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:8}}>P&L por operación</div>
+                                <div style={{display:'flex',alignItems:'flex-end',gap:2,height:60}}>
+                                  {[...closed.map(t=>({...t,isOpen:false})),...openTrades.map(t=>({...t,pnl_eur:t._pnl_float_eur||0,isOpen:true}))].map((t,i)=>{
+                                    const allPnls=[...closed.map(x=>Math.abs(x.pnl_eur||0)),...openTrades.map(x=>Math.abs(x._pnl_float_eur||0))]
+                                    const mx=Math.max(...allPnls,1)
+                                    const h=Math.max(3,Math.abs(t.pnl_eur||0)/mx*56)
+                                    const isW=(t.pnl_eur||0)>=0
+                                    return <div key={i} title={t.symbol+' '+(isW?'+':'')+('€'+Math.round(t.pnl_eur||0))+(t.isOpen?' (abierta)':'')}
+                                      style={{flex:1,height:h,background:t.isOpen?(isW?'rgba(0,229,160,0.5)':'rgba(255,77,109,0.45)'):(isW?'#00e5a0':'#ff4d6d'),borderRadius:'2px 2px 0 0',minWidth:2,opacity:0.85,border:t.isOpen?'1px solid '+(isW?'#00e5a0':'#ff4d6d'):'none'}}/>
+                                  })}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                          {/* FULLSCREEN MODAL */}
+                          {tlDashFullscreen&&(
+                            <div style={{position:'fixed',inset:'0 0 0 0',zIndex:9999,background:'rgba(0,5,12,0.96)',display:'flex',flexDirection:'column'}}
+                              onClick={e=>{if(e.target===e.currentTarget)setTlDashFullscreen(null)}}>
+                              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 16px',background:'var(--bg2)',borderBottom:'1px solid var(--border)',flexShrink:0}}>
+                                <span style={{fontFamily:MONO,fontSize:11,color:'var(--text)',letterSpacing:'0.05em'}}>
+                                  {tlDashFullscreen==='equity'?'Equity — P&L Acumulado':tlDashFullscreen==='invest'?'Capital Invertido vs Profit':'P&L por Operación'}
+                                </span>
+                                <button onClick={()=>setTlDashFullscreen(null)}
+                                  style={{background:'transparent',border:'1px solid #2a3a4a',color:'#a8ccdf',fontFamily:MONO,fontSize:10,padding:'3px 10px',borderRadius:3,cursor:'pointer'}}>
+                                  ✕ Cerrar
+                                </button>
+                              </div>
+                              <div style={{flex:1,overflow:'hidden',padding:8}}>
+                                {tlDashFullscreen==='equity'&&eqDisp.length>1&&<TlEquityChart curve={eqDisp} curveSinFx={sfxDisp.length>1?sfxDisp:null} curveSinComm={scommDisp.length>1?scommDisp:null} curveWithContribs={cwcDisp.length>1?cwcDisp:null} contributions={contributions} showWithContribs={showWithContribs} onToggleContribs={()=>setShowWithContribs(v=>!v)} syncRef={tlDashSyncRef}/>}
+                                {tlDashFullscreen==='invest'&&investData.length>1&&<TlInvestChart investData={investData} syncRef={tlDashSyncRef} patrimonyCurve={cwcDisp.length>1?cwcDisp:null}/>}
+                                {tlDashFullscreen==='pnl'&&(
+                                  <div style={{height:'100%',display:'flex',flexDirection:'column',padding:'10px 16px'}}>
+                                    <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:12}}>P&L por operación</div>
+                                    <div style={{display:'flex',alignItems:'flex-end',gap:3,flex:1}}>
+                                      {[...closed.map(t=>({...t,isOpen:false})),...openTrades.map(t=>({...t,pnl_eur:t._pnl_float_eur||0,isOpen:true}))].map((t,i)=>{
+                                        const allPnls=[...closed.map(x=>Math.abs(x.pnl_eur||0)),...openTrades.map(x=>Math.abs(x._pnl_float_eur||0))]
+                                        const mx=Math.max(...allPnls,1)
+                                        const h=Math.max(2,Math.abs(t.pnl_eur||0)/mx*95)+'%'
+                                        const isW=(t.pnl_eur||0)>=0
+                                        return <div key={i} title={t.symbol+' '+(isW?'+':'')+('€'+Math.round(t.pnl_eur||0))+(t.isOpen?' (abierta)':'')}
+                                          style={{flex:1,height:h,background:t.isOpen?(isW?'rgba(0,229,160,0.5)':'rgba(255,77,109,0.45)'):(isW?'#00e5a0':'#ff4d6d'),borderRadius:'3px 3px 0 0',minWidth:3,border:t.isOpen?'1px solid '+(isW?'#00e5a0':'#ff4d6d'):'none'}}/>
+                                      })}
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             </div>
                           )}
@@ -6259,7 +6507,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                 )}
                 </div>
                 {/* COLUMNA DERECHA — métricas siempre + detalle trade */}
-                <div style={{width:tlResumenCollapsed?28:rightPanelW,flexShrink:0,borderLeft:'1px solid var(--border)',background:'var(--bg2)',display:'flex',flexDirection:'column',overflow:'hidden',position:'relative',transition:'width 0.18s ease'}}>
+                <div style={{width:tlTab==='dashboard'?0:tlResumenCollapsed?28:rightPanelW,flexShrink:0,borderLeft:tlTab==='dashboard'?'none':'1px solid var(--border)',background:'var(--bg2)',display:tlTab==='dashboard'?'none':'flex',flexDirection:'column',overflow:'hidden',position:'relative',transition:'width 0.18s ease'}}>
                   {/* Drag handle — igual que panel de estrategias */}
                   {!tlResumenCollapsed&&<div
                     onMouseDown={e=>{rightResizing.current=true;rightStartX.current=e.clientX;rightStartW.current=rightPanelW;document.body.style.cursor='col-resize';document.body.style.userSelect='none'}}
