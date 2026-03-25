@@ -182,27 +182,55 @@ function todayDisplay(){ return toDisplayDate(new Date().toISOString().slice(0,1
 
 // ── Watchlist API ─────────────────────────────────────────────
 async function fetchWatchlist() {
-  const res=await fetch(`${getSupaUrl()}/rest/v1/watchlist?order=favorite.desc,name.asc`,{headers:getSupaH()})
-  if(!res.ok) throw new Error('Error cargando watchlist')
-  return await res.json() // devuelve filas completas con todos los campos
+  const [itemsRes,membersRes]=await Promise.all([
+    fetch(`${getSupaUrl()}/rest/v1/watchlist?order=favorite.desc,name.asc`,{headers:getSupaH()}),
+    fetch(`${getSupaUrl()}/rest/v1/watchlist_list_members?select=watchlist_id,list_id`,{headers:getSupaH()})
+  ])
+  if(!itemsRes.ok) throw new Error('Error cargando watchlist')
+  const items=await itemsRes.json()
+  const members=membersRes.ok?await membersRes.json():[]
+  const byItem={}
+  for(const m of members){if(!byItem[m.watchlist_id])byItem[m.watchlist_id]=[];byItem[m.watchlist_id].push(m.list_id)}
+  return items.map(item=>({...item,list_ids:byItem[item.id]||[]}))
+}
+async function fetchWatchlistLists() {
+  const res=await fetch(`${getSupaUrl()}/rest/v1/watchlist_lists?order=name.asc`,{headers:getSupaH()})
+  if(!res.ok) return []
+  return await res.json()
 }
 async function upsertWatchlistItem(item) {
   const method=item.id?'PATCH':'POST'
   const url=item.id?`${getSupaUrl()}/rest/v1/watchlist?id=eq.${item.id}`:`${getSupaUrl()}/rest/v1/watchlist`
-  // Limpiar campos internos (prefijo _) y campos no existentes en la tabla
+  // Limpiar campos internos y campos no existentes en la tabla
   const ALLOWED=['symbol','name','group_name','list_name','position','active','favorite','observations']
   const body={}; ALLOWED.forEach(k=>{if(item[k]!==undefined)body[k]=item[k]})
   const res=await fetch(url,{method,headers:{...getSupaH(),'Prefer':'return=representation'},body:JSON.stringify(body)})
   if(!res.ok){const t=await res.text();throw new Error('Error guardando: '+t)}
   return (await res.json())[0]
 }
+async function setItemLists(itemId,listIds) {
+  // Delete existing memberships for this item, then insert the new set
+  await fetch(`${getSupaUrl()}/rest/v1/watchlist_list_members?watchlist_id=eq.${itemId}`,{method:'DELETE',headers:getSupaH()})
+  if(listIds.length>0){
+    await fetch(`${getSupaUrl()}/rest/v1/watchlist_list_members`,{
+      method:'POST',headers:{...getSupaH(),'Prefer':'return=minimal'},
+      body:JSON.stringify(listIds.map(list_id=>({watchlist_id:itemId,list_id})))})
+  }
+}
+async function createWatchlistList(name) {
+  const res=await fetch(`${getSupaUrl()}/rest/v1/watchlist_lists`,{
+    method:'POST',headers:{...getSupaH(),'Prefer':'return=representation'},body:JSON.stringify({name})})
+  if(!res.ok){const t=await res.text();throw new Error('Error creando lista: '+t)}
+  return (await res.json())[0]
+}
 async function deleteWatchlistItem(id) {
   const res=await fetch(`${getSupaUrl()}/rest/v1/watchlist?id=eq.${id}`,{method:'DELETE',headers:getSupaH()})
   if(!res.ok) throw new Error('Error eliminando')
 }
-async function renameWatchlistList(oldName, newName) {
-  const res=await fetch(`${getSupaUrl()}/rest/v1/watchlist?list_name=eq.${encodeURIComponent(oldName)}`,{
-    method:'PATCH',headers:{...getSupaH(),'Prefer':'return=minimal'},body:JSON.stringify({list_name:newName})})
+async function renameWatchlistList(listId,newName) {
+  // Renames by list id in watchlist_lists table
+  const res=await fetch(`${getSupaUrl()}/rest/v1/watchlist_lists?id=eq.${listId}`,{
+    method:'PATCH',headers:{...getSupaH(),'Prefer':'return=minimal'},body:JSON.stringify({name:newName})})
   if(!res.ok){const t=await res.text();throw new Error('Error renombrando lista: '+t)}
 }
 
@@ -389,6 +417,7 @@ export default function Home() {
   const [showSP500,setShowSP500]=useState(false),[showCompound,setShowCompound]=useState(true)
   const [watchlist,setWatchlist]=useState(WATCHLIST_DEFAULT)
   const [wlLoading,setWlLoading]=useState(true)
+  const [wlLists,setWlLists]=useState([])             // [{id,name,position}] from watchlist_lists
   const [selectedLists,setSelectedLists]=useState([])
   const [listDropOpen,setListDropOpen]=useState(null) // null | {x,y}
   const [editingItem,setEditingItem]=useState(null) // item watchlist en edición
@@ -1194,8 +1223,8 @@ export default function Home() {
 
   const reloadWatchlist=()=>{
     setWlLoading(true)
-    fetchWatchlist()
-      .then(data=>{ if(data.length>0) setWatchlist(data) })
+    Promise.all([fetchWatchlist(),fetchWatchlistLists()])
+      .then(([data,lists])=>{ if(data.length>0) setWatchlist(data); setWlLists(lists) })
       .catch(()=>{})
       .finally(()=>setWlLoading(false))
   }
@@ -1291,7 +1320,7 @@ export default function Home() {
     setEditingItem(item)
     setEditForm({
       symbol:item.symbol,name:item.name,group_name:item.group_name,
-      list_name:item.list_name||'General',favorite:item.favorite||false,
+      list_ids:item.list_ids||[],favorite:item.favorite||false,
       observations:item.observations||''
     })
   }
@@ -1299,7 +1328,9 @@ export default function Home() {
   const saveEditItem=async()=>{
     setEditSaving(true)
     try{
-      await upsertWatchlistItem({...editForm,id:editingItem?.id||undefined})
+      const saved=await upsertWatchlistItem({...editForm,id:editingItem?.id||undefined})
+      const itemId=saved?.id||editingItem?.id
+      if(itemId) await setItemLists(itemId,editForm.list_ids||[])
       reloadWatchlist(); closeEditItem()
     }catch(e){alert('Error: '+e.message)}
     finally{setEditSaving(false)}
@@ -2639,7 +2670,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V6.38</title>
+        <title>Trading Simulator V6.39</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2716,7 +2747,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V6.38
+            <span className="dot"/>Trading Simulator V6.39
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -2958,7 +2989,6 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                           <ListFilter size={16}/>
                         </button>
                         {listDropOpen&&(()=>{
-                          const allLists=[...new Set(watchlist.map(w=>w.list_name||'General').filter(Boolean))]
                           return(
                             <div style={{position:'fixed',top:listDropOpen.y,left:listDropOpen.x,background:'var(--bg3)',
                               border:'1px solid var(--border)',borderRadius:4,zIndex:9990,
@@ -2969,23 +2999,23 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                   borderBottom:'1px solid var(--border)'}}>
                                 Todas las listas
                               </div>
-                              {allLists.map(l=>(
-                                <div key={l}
+                              {wlLists.map(l=>(
+                                <div key={l.id}
                                   style={{padding:'4px 6px 4px 10px',fontFamily:MONO,fontSize:11,cursor:'pointer',
                                     display:'flex',alignItems:'center',gap:4,color:'var(--text)',whiteSpace:'nowrap'}}>
-                                  <span onClick={()=>{setSelectedLists([l]);setListDropOpen(null)}}
+                                  <span onClick={()=>{setSelectedLists([l.name]);setListDropOpen(null)}}
                                     style={{display:'flex',alignItems:'center',gap:6,flex:1,padding:'2px 0'}}>
-                                    <span style={{color:selectedLists.includes(l)?'var(--accent)':'var(--text3)',fontSize:10}}>
-                                      {selectedLists.includes(l)?'●':'○'}
-                                    </span>{l}
+                                    <span style={{color:selectedLists.includes(l.name)?'var(--accent)':'var(--text3)',fontSize:10}}>
+                                      {selectedLists.includes(l.name)?'●':'○'}
+                                    </span>{l.name}
                                   </span>
                                   <span onClick={async e=>{
                                       e.stopPropagation()
-                                      const n=window.prompt(`Renombrar lista "${l}":`,l)
-                                      if(!n||!n.trim()||n.trim()===l) return
+                                      const n=window.prompt(`Renombrar lista "${l.name}":`,l.name)
+                                      if(!n||!n.trim()||n.trim()===l.name) return
                                       try{
-                                        await renameWatchlistList(l,n.trim())
-                                        if(selectedLists.includes(l)) setSelectedLists([n.trim()])
+                                        await renameWatchlistList(l.id,n.trim())
+                                        if(selectedLists.includes(l.name)) setSelectedLists([n.trim()])
                                         reloadWatchlist(); setListDropOpen(null)
                                       }catch(err){alert('Error: '+err.message)}
                                     }}
@@ -3057,7 +3087,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     const searchLower=wlSearch.toLowerCase()
                     const fCondId=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.watchlist?.filterConditionId||null}catch(_){return null}})()
                     const filtered=watchlist.filter(w=>{
-                      const matchList=selectedLists.length===0||selectedLists.includes(w.list_name||'General')
+                      const matchList=selectedLists.length===0||(w.list_ids||[]).some(lid=>{const l=wlLists.find(x=>x.id===lid);return l&&selectedLists.includes(l.name)})
                       const matchSearch=!wlSearch||(w.symbol||'').toLowerCase().includes(searchLower)||(w.name||'').toLowerCase().includes(searchLower)
                       const matchFav=!onlyFavs||w.favorite
                       const symAlarms=alarmStatus[w.symbol]||{}
@@ -3262,27 +3292,37 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                             {['Índices','Acciones','Crypto','Materias Primas'].map(o=><option key={o} value={o}>{o}</option>)}
                           </select>
                         </label>
-                        <label style={{display:'flex',flexDirection:'column',gap:4,color:'#a8ccdf'}}>Lista
-                          {(()=>{
-                            const allLists=[...new Set(['General',...watchlist.map(w=>w.list_name||'General')].filter(Boolean))]
-                            const cur=editForm.list_name||'General'
-                            if(!allLists.includes(cur)) allLists.push(cur)
-                            return(
-                              <select value={cur}
-                                onChange={e=>{
-                                  if(e.target.value==='__nueva__'){
-                                    const n=window.prompt('Nombre de la nueva lista:','')
-                                    if(n&&n.trim()) setEditForm(p=>({...p,list_name:n.trim()}))
-                                  } else {
-                                    setEditForm(p=>({...p,list_name:e.target.value}))
-                                  }
-                                }}
-                                style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'6px 8px',borderRadius:4}}>
-                                {allLists.map(l=><option key={l} value={l}>{l}</option>)}
-                                <option value="__nueva__">+ Nueva lista…</option>
-                              </select>
-                            )
-                          })()}
+                        <label style={{gridColumn:'1/-1',display:'flex',flexDirection:'column',gap:4,color:'#a8ccdf'}}>Listas
+                          <div style={{background:'var(--bg3)',border:'1px solid var(--border)',borderRadius:4,padding:'6px 8px',display:'flex',flexWrap:'wrap',gap:5,minHeight:34,alignItems:'center'}}>
+                            {wlLists.map(l=>{
+                              const checked=(editForm.list_ids||[]).includes(l.id)
+                              return(
+                                <label key={l.id} style={{display:'flex',alignItems:'center',gap:4,cursor:'pointer',fontFamily:MONO,fontSize:11,
+                                  color:checked?'var(--accent)':'var(--text)',padding:'2px 7px',borderRadius:3,whiteSpace:'nowrap',
+                                  background:checked?'rgba(0,212,255,0.12)':'transparent',
+                                  border:`1px solid ${checked?'rgba(0,212,255,0.35)':'var(--border)'}`}}>
+                                  <input type="checkbox" checked={checked} onChange={ev=>{
+                                    setEditForm(p=>({...p,list_ids:ev.target.checked
+                                      ?[...(p.list_ids||[]),l.id]
+                                      :(p.list_ids||[]).filter(id=>id!==l.id)}))
+                                  }} style={{width:11,height:11,accentColor:'var(--accent)'}}/>
+                                  {l.name}
+                                </label>
+                              )
+                            })}
+                            <button type="button" onClick={async()=>{
+                              const n=window.prompt('Nombre de la nueva lista:','')
+                              if(!n||!n.trim()) return
+                              try{
+                                const nl=await createWatchlistList(n.trim())
+                                setWlLists(prev=>[...prev,nl].sort((a,b)=>a.name.localeCompare(b.name)))
+                                setEditForm(p=>({...p,list_ids:[...(p.list_ids||[]),nl.id]}))
+                              }catch(e){alert('Error: '+e.message)}
+                            }} style={{fontFamily:MONO,fontSize:10,color:'#5a8aaa',background:'transparent',
+                              border:'1px dashed #2a4a6a',borderRadius:3,padding:'2px 7px',cursor:'pointer',whiteSpace:'nowrap'}}>
+                              + Nueva lista
+                            </button>
+                          </div>
                         </label>
                       </div>
                       <label style={{display:'flex',alignItems:'center',gap:8,color:'#a8ccdf',cursor:'pointer',padding:'4px 0'}}>
@@ -3671,12 +3711,11 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       ★
                     </button>
                     {(()=>{
-                      const allLists=[...new Set(watchlist.map(w=>w.list_name||'General').filter(Boolean))]
                       return(
                         <select value={mcListFilter||''} onChange={e=>setMcListFilter(e.target.value)}
                           style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:10,padding:'3px 5px',borderRadius:4,maxWidth:80}}>
                           <option value="">Todas</option>
-                          {allLists.map(l=><option key={l} value={l}>{l}</option>)}
+                          {wlLists.map(l=><option key={l.id} value={l.name}>{l.name}</option>)}
                         </select>
                       )
                     })()}
@@ -3698,7 +3737,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   {[...new Map(watchlist.map(w=>[w.symbol,w])).values()].filter(w=>{
                     const matchSearch=!mcSearch||(w.symbol||'').toLowerCase().includes(mcSearch.toLowerCase())||(w.name||'').toLowerCase().includes(mcSearch.toLowerCase())
                     const matchFav=!mcOnlyFavs||w.favorite
-                    const matchList=!mcListFilter||(w.list_name||'General')===mcListFilter
+                    const matchList=!mcListFilter||(w.list_ids||[]).some(lid=>{const l=wlLists.find(x=>x.id===lid);return l&&l.name===mcListFilter})
                     return matchSearch&&matchFav&&matchList
                   }).sort((a,b)=>{
                     const ra=rankingData[a.symbol]?.rank, rb=rankingData[b.symbol]?.rank
