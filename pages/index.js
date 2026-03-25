@@ -5986,11 +5986,14 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       // for open positions and the equity curve to be empty when ≤1 closed trade existed.
                       const closed = tlTradesFiltered.filter(t=>t.status==='closed').slice().sort((a,b)=>(a.exit_date||a.entry_date||'').localeCompare(b.exit_date||b.entry_date||''))
                       const openTrades = tlTradesFiltered.filter(t=>t.status==='open')
-                      if(!closed.length&&!openTrades.length) return (
-                        <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:MONO,fontSize:12,color:'#3d5a7a'}}>
-                          Sin operaciones para mostrar el dashboard.
-                        </div>
-                      )
+                      const noData=!closed.length&&!openTrades.length
+                      // Filter options — derived from ALL trades so dropdowns stay populated even when filtered results are empty
+                      const allYears_=[...new Set((tlFifo.trades||[]).map(t=>((t.status==='closed'?t.exit_date:null)||t.entry_date)?.slice(0,4)).filter(Boolean))].sort((a,b)=>b-a)
+                      const monthsInYear_=tlFilterYear?[...new Set((tlFifo.trades||[]).filter(t=>{const d=(t.status==='closed'?t.exit_date:null)||t.entry_date;return d&&d.startsWith(tlFilterYear)}).map(t=>{const d=(t.status==='closed'?t.exit_date:null)||t.entry_date;return d?d.slice(5,7):null}).filter(Boolean))].sort():[]
+                      const MESES_=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
+                      const brokerOpts_=[...new Set((tlFifo.trades||[]).map(t=>t.broker).filter(Boolean))].sort()
+                      const stratOpts_=[...new Set((tlFifo.trades||[]).map(t=>t.strategy).filter(Boolean))].sort()
+                      const hasFilters_=!!(tlFilterStatus||tlFilterBroker||tlFilterYear||tlFilterStrat)
                       const today = new Date().toISOString().split('T')[0]
                       // Build equity curve — deduplicated by date (lightweight-charts requires strictly ascending times)
                       // Multiple closed trades on same day would cause duplicate timestamps → chart fails silently
@@ -6154,10 +6157,6 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       const pnlSCapPct=capitalBase>0?(pnlTotal/capitalBase*100):null
                       const fmtEur_=v=>v>=0?'+€'+Math.round(v).toLocaleString('es-ES'):'-€'+Math.round(Math.abs(v)).toLocaleString('es-ES')
                       const fmtAbs_=v=>'€'+Math.round(Math.abs(v)).toLocaleString('es-ES')
-                      const yearOpts=[...new Set([...closed,...openTrades].map(t=>(t.exit_date||t.entry_date||'').slice(0,4)).filter(Boolean))].sort().reverse()
-                      const brokerOpts=[...new Set((tlFifo.trades||[]).map(t=>t.broker).filter(Boolean))].sort()
-                      const stratOpts=[...new Set((tlFifo.trades||[]).map(t=>t.strategy).filter(Boolean))].sort()
-                      const hasFilters_=!!(tlFilterStatus||tlFilterBroker||tlFilterYear||tlFilterStrat)
                       const openSorted_=[..._allOpen_].sort((a,b)=>(b._pnl_float_eur||0)-(a._pnl_float_eur||0))
                       const top3_=openSorted_.slice(0,3)
                       // bot3_ only shows positions not already in top3_ (avoids duplicates when ≤3 open)
@@ -6165,32 +6164,41 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       const ps_={fontFamily:MONO,fontSize:10,padding:'2px 8px',border:'1px solid var(--border)',borderRadius:10,background:'var(--bg3)',cursor:'pointer',outline:'none',color:'#4a6a88'}
                       return (
                         <div style={{display:'flex',flexDirection:'column',background:'var(--bg)',flex:1,minHeight:0,overflow:'hidden'}}>
-                          {/* BARRA SUPERIOR */}
-                          <div style={{display:'flex',alignItems:'center',gap:6,padding:'7px 14px',borderBottom:'1px solid var(--border)',background:'var(--bg2)',flexShrink:0,flexWrap:'wrap'}}>
-                            <span style={{fontFamily:MONO,fontSize:11,fontWeight:700,color:'var(--text)',letterSpacing:'0.08em',textTransform:'uppercase',marginRight:6}}>Dashboard</span>
-                            <select value={tlFilterStatus} onChange={e=>setTlFilterStatus(e.target.value)} style={{...ps_,color:tlFilterStatus?'#9b72ff':'#4a6a88'}}>
+                          {/* BARRA SUPERIOR — always visible even when noData */}
+                          <div style={{display:'flex',alignItems:'center',gap:5,padding:'6px 12px',borderBottom:'1px solid var(--border)',background:'var(--bg2)',flexShrink:0,flexWrap:'nowrap',overflowX:'auto'}}>
+                            <span style={{fontFamily:MONO,fontSize:11,fontWeight:700,color:'var(--text)',letterSpacing:'0.08em',textTransform:'uppercase',marginRight:8,flexShrink:0}}>Dashboard</span>
+                            <select value={tlFilterStatus} onChange={e=>setTlFilterStatus(e.target.value)} style={{...ps_,flexShrink:0,color:tlFilterStatus?'#9b72ff':'#4a6a88'}}>
                               <option value="">Estado ▾</option>
                               <option value="open">Abiertas</option>
                               <option value="closed">Cerradas</option>
                             </select>
-                            <select value={tlFilterYear} onChange={e=>setTlFilterYear(e.target.value)} style={{...ps_,color:tlFilterYear?'#ffd166':'#4a6a88'}}>
+                            <select value={tlFilterYear} onChange={e=>{setTlFilterYear(e.target.value);setTlFilterMonth('')}} style={{...ps_,flexShrink:0,color:tlFilterYear?'#ffd166':'#4a6a88'}}>
                               <option value="">Año ▾</option>
-                              {yearOpts.map(y=><option key={y} value={y}>{y}</option>)}
+                              {allYears_.map(y=><option key={y} value={y}>{y}</option>)}
                             </select>
-                            <select value={tlFilterBroker} onChange={e=>setTlFilterBroker(e.target.value)} style={{...ps_,color:tlFilterBroker?'#00d4ff':'#4a6a88'}}>
+                            {tlFilterYear&&monthsInYear_.length>0&&(
+                              <select value={tlFilterMonth} onChange={e=>setTlFilterMonth(e.target.value)} style={{...ps_,flexShrink:0,color:tlFilterMonth?'#ffd166':'#4a6a88'}}>
+                                <option value="">Mes ▾</option>
+                                {monthsInYear_.map(m=><option key={m} value={m}>{MESES_[parseInt(m)-1]}</option>)}
+                              </select>
+                            )}
+                            <select value={tlFilterBroker} onChange={e=>setTlFilterBroker(e.target.value)} style={{...ps_,flexShrink:0,color:tlFilterBroker?'#00d4ff':'#4a6a88'}}>
                               <option value="">Broker ▾</option>
-                              {brokerOpts.map(b=><option key={b} value={b}>{b}</option>)}
+                              {brokerOpts_.map(b=><option key={b} value={b}>{b}</option>)}
                             </select>
-                            <select value={tlFilterStrat} onChange={e=>setTlFilterStrat(e.target.value)} style={{...ps_,color:tlFilterStrat?'#00e5a0':'#4a6a88'}}>
+                            <select value={tlFilterStrat} onChange={e=>setTlFilterStrat(e.target.value)} style={{...ps_,flexShrink:0,color:tlFilterStrat?'#00e5a0':'#4a6a88'}}>
                               <option value="">Estrategia ▾</option>
-                              {stratOpts.map(s=><option key={s} value={s}>{s}</option>)}
+                              {stratOpts_.map(s=><option key={s} value={s}>{s}</option>)}
                             </select>
                             {hasFilters_&&<button onClick={()=>{setTlFilterStatus('');setTlFilterBroker('');setTlFilterYear('');setTlFilterMonth('');setTlFilterStrat('');setTlSearch('')}}
-                              style={{fontFamily:MONO,fontSize:9,padding:'2px 8px',borderRadius:10,border:'1px solid rgba(255,77,109,0.4)',background:'rgba(255,77,109,0.08)',color:'#ff4d6d',cursor:'pointer',whiteSpace:'nowrap'}}>
+                              style={{fontFamily:MONO,fontSize:9,padding:'2px 8px',borderRadius:10,border:'1px solid rgba(255,77,109,0.4)',background:'rgba(255,77,109,0.08)',color:'#ff4d6d',cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>
                               ✕ Limpiar
                             </button>}
                           </div>
-                          {/* FILA 1 — 10 métricas */}
+                          {/* When filter produces no data, show message but keep filters accessible */}
+                          {noData&&<div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:MONO,fontSize:12,color:'#3d5a7a'}}>Sin datos para el filtro seleccionado.</div>}
+                          {/* FILA 1 — 10 métricas (only when data exists) */}
+                          {!noData&&<>
                           <div style={{display:'flex',borderBottom:'1px solid var(--border)',flexShrink:0,overflowX:'auto'}}>
                             {[
                               {l:'Patrimonio',v:patrimonioActual!=null?fmtAbs_(patrimonioActual):'—',c:'#00d4ff'},
@@ -6343,7 +6351,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               </div>
                             )}
                           </div>
-                          {/* FULLSCREEN MODAL */}
+                          </>}
+                          {/* FULLSCREEN MODAL — position:fixed, always available */}
                           {tlDashFullscreen&&(
                             <div style={{position:'fixed',inset:'0 0 0 0',zIndex:9999,background:'rgba(0,5,12,0.96)',display:'flex',flexDirection:'column'}}
                               onClick={e=>{if(e.target===e.currentTarget)setTlDashFullscreen(null)}}>
