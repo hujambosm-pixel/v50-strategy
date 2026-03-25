@@ -6224,14 +6224,14 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                             {/* Col equity */}
                             <div style={{flex:2.5,borderRight:'1px solid var(--border)',display:'flex',flexDirection:'column',overflow:'hidden',position:'relative',minWidth:0}}>
                               {eqDisp.length>1
-                                ?<TlEquityChart curve={eqDisp} curveSinFx={sfxDisp.length>1?sfxDisp:null} curveSinComm={scommDisp.length>1?scommDisp:null} curveWithContribs={cwcDisp.length>1?cwcDisp:null} contributions={contributions} showWithContribs={showWithContribs} onToggleContribs={()=>setShowWithContribs(v=>!v)} syncRef={tlDashSyncRef}/>
+                                ?<div style={{flex:1,minHeight:0}}><TlEquityChart curve={eqDisp} curveSinFx={sfxDisp.length>1?sfxDisp:null} curveSinComm={scommDisp.length>1?scommDisp:null} curveWithContribs={cwcDisp.length>1?cwcDisp:null} contributions={contributions} showWithContribs={showWithContribs} onToggleContribs={()=>setShowWithContribs(v=>!v)} syncRef={tlDashSyncRef}/></div>
                                 :<div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:MONO,fontSize:10,color:'#3d5a7a'}}>Sin datos equity</div>}
                               <div onClick={()=>setTlDashFullscreen('equity')} title="Pantalla completa"
                                 style={{position:'absolute',top:6,right:6,zIndex:10,cursor:'pointer',color:'#3d5a7a',fontSize:13,lineHeight:1,background:'rgba(13,21,32,0.75)',borderRadius:3,padding:'2px 5px',border:'1px solid #1a2d45'}}
                                 onMouseOver={e=>e.currentTarget.style.color='#00d4ff'} onMouseOut={e=>e.currentTarget.style.color='#3d5a7a'}>⤢</div>
                             </div>
                             {/* Col invest + P&L */}
-                            <div style={{flex:1,borderRight:'1px solid var(--border)',display:'flex',flexDirection:'column',overflow:'hidden',minWidth:0}}>
+                            <div style={{flex:1.4,borderRight:'1px solid var(--border)',display:'flex',flexDirection:'column',overflow:'hidden',minWidth:0}}>
                               <div style={{flex:1,borderBottom:'1px solid var(--border)',overflow:'hidden',position:'relative',cursor:'pointer'}} onClick={()=>setTlDashFullscreen('invest')}>
                                 {investData.length>1
                                   ?<TlInvestChart investData={investData} syncRef={tlDashSyncRef} patrimonyCurve={cwcDisp.length>1?cwcDisp:null} compact={true}/>
@@ -6251,7 +6251,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               </div>
                             </div>
                             {/* Col mercados + posiciones */}
-                            <div style={{flex:0.9,display:'flex',flexDirection:'column',overflow:'hidden',minWidth:120}}>
+                            <div style={{flex:0.8,display:'flex',flexDirection:'column',overflow:'hidden',minWidth:120}}>
                               <div style={{flex:1,borderBottom:'1px solid var(--border)',overflow:'hidden',padding:'4px 8px'}}>
                                 <div style={{fontFamily:MONO,fontSize:7,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:3}}>Mercados</div>
                                 {tlDashMarkets.length===0
@@ -6287,9 +6287,9 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               {l:'Win Rate',v:allWithPnl.length?wr.toFixed(1)+'%':'—',c:wr>=50?'#00e5a0':'#ff4d6d',b:wr>=50?'#00e5a0':'#ff4d6d'},
                               {l:'Factor Beneficio',v:factorBen_!=null?factorBen_.toFixed(2):'—',c:factorBen_!=null&&factorBen_>=1?'#00e5a0':'#ff4d6d',b:factorBen_!=null&&factorBen_>=1?'#00e5a0':'#ff4d6d'},
                             ].map(({l,v,c,b},i)=>(
-                              <div key={i} style={{flex:'1 0 10%',padding:'8px 12px',borderRight:'1px solid var(--border)',borderLeft:'3px solid '+b,background:'rgba(255,255,255,0.015)',display:'flex',flexDirection:'column',gap:2,minWidth:100}}>
-                                <div style={{fontFamily:MONO,fontSize:7,color:'#4a6a88',letterSpacing:'0.08em',textTransform:'uppercase'}}>{l}</div>
-                                <div style={{fontFamily:MONO,fontSize:15,fontWeight:700,color:c,lineHeight:1}}>{v}</div>
+                              <div key={i} style={{flex:'1 0 10%',padding:'10px 12px',borderRight:'1px solid var(--border)',borderLeft:'3px solid '+b,background:'rgba(255,255,255,0.015)',display:'flex',flexDirection:'column',gap:2,minWidth:100}}>
+                                <div style={{fontFamily:MONO,fontSize:8,color:'#4a6a88',letterSpacing:'0.08em',textTransform:'uppercase'}}>{l}</div>
+                                <div style={{fontFamily:MONO,fontSize:17,fontWeight:700,color:c,lineHeight:1}}>{v}</div>
                               </div>
                             ))}
                             {[
@@ -6300,21 +6300,21 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               {l:'Total días',v:totalDiasInv+' d',c:'#a8ccdf'},
                               {l:'T. invertido',v:tiempoInvPct_!=null?tiempoInvPct_+'%':'—',c:'#ffd166'},
                             ].map(({l,v,c},i)=>(
-                              <div key={i} style={{flex:'1 0 8%',padding:'8px 10px',borderRight:'1px solid var(--border)',display:'flex',flexDirection:'column',gap:2,minWidth:80}}>
-                                <div style={{fontFamily:MONO,fontSize:7,color:'#4a6a88',letterSpacing:'0.08em',textTransform:'uppercase',whiteSpace:'nowrap'}}>{l}</div>
-                                <div style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:c,lineHeight:1.1}}>{v}</div>
+                              <div key={i} style={{flex:'1 0 8%',padding:'10px 10px',borderRight:'1px solid var(--border)',display:'flex',flexDirection:'column',gap:2,minWidth:80}}>
+                                <div style={{fontFamily:MONO,fontSize:8,color:'#4a6a88',letterSpacing:'0.08em',textTransform:'uppercase',whiteSpace:'nowrap'}}>{l}</div>
+                                <div style={{fontFamily:MONO,fontSize:14,fontWeight:700,color:c,lineHeight:1.1}}>{v}</div>
                               </div>
                             ))}
                           </div>
                           {/* FILA 4 */}
                           <div style={{display:'flex',flexWrap:'nowrap',borderBottom:'1px solid var(--border)',flexShrink:0,overflowX:'auto'}}>
-                            <div style={{flex:'1 0 15%',padding:'6px 10px',borderRight:'1px solid var(--border)',background:'rgba(0,229,160,0.05)',borderLeft:'3px solid #00e5a0',minWidth:100}}>
-                              <div style={{fontFamily:MONO,fontSize:7,color:'#00e5a0',letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:2}}>Mejor op.</div>
-                              <div style={{fontFamily:MONO,fontSize:10,fontWeight:700,color:'#00e5a0',lineHeight:1.2}}>{bestT_?(bestT_.symbol+' '+fmtEur_(bestT_._ep)):'—'}</div>
+                            <div style={{flex:'1 0 15%',padding:'10px 10px',borderRight:'1px solid var(--border)',background:'rgba(0,229,160,0.05)',borderLeft:'3px solid #00e5a0',minWidth:100}}>
+                              <div style={{fontFamily:MONO,fontSize:8,color:'#00e5a0',letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:2}}>Mejor op.</div>
+                              <div style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:'#00e5a0',lineHeight:1.2}}>{bestT_?(bestT_.symbol+' '+fmtEur_(bestT_._ep)):'—'}</div>
                             </div>
-                            <div style={{flex:'1 0 15%',padding:'6px 10px',borderRight:'1px solid var(--border)',background:'rgba(255,77,109,0.05)',borderLeft:'3px solid #ff4d6d',minWidth:100}}>
-                              <div style={{fontFamily:MONO,fontSize:7,color:'#ff4d6d',letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:2}}>Peor op.</div>
-                              <div style={{fontFamily:MONO,fontSize:10,fontWeight:700,color:'#ff4d6d',lineHeight:1.2}}>{worstT_?(worstT_.symbol+' '+fmtEur_(worstT_._ep)):'—'}</div>
+                            <div style={{flex:'1 0 15%',padding:'10px 10px',borderRight:'1px solid var(--border)',background:'rgba(255,77,109,0.05)',borderLeft:'3px solid #ff4d6d',minWidth:100}}>
+                              <div style={{fontFamily:MONO,fontSize:8,color:'#ff4d6d',letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:2}}>Peor op.</div>
+                              <div style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:'#ff4d6d',lineHeight:1.2}}>{worstT_?(worstT_.symbol+' '+fmtEur_(worstT_._ep)):'—'}</div>
                             </div>
                             {[
                               {l:'Ganadoras',v:wins_.length,c:'#00e5a0'},
@@ -6324,9 +6324,9 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               {l:'Días promedio',v:diasProm!=null?Math.round(diasProm)+' d':'—',c:'#a8ccdf'},
                               {l:'Total días inv.',v:totalDiasInv+' d',c:'#a8ccdf'},
                             ].map(({l,v,c},i)=>(
-                              <div key={i} style={{flex:'1 0 9%',padding:'6px 10px',borderRight:'1px solid var(--border)',display:'flex',flexDirection:'column',gap:2,minWidth:80}}>
-                                <div style={{fontFamily:MONO,fontSize:7,color:'#4a6a88',letterSpacing:'0.08em',textTransform:'uppercase',whiteSpace:'nowrap'}}>{l}</div>
-                                <div style={{fontFamily:MONO,fontSize:13,fontWeight:700,color:c,lineHeight:1}}>{v}</div>
+                              <div key={i} style={{flex:'1 0 9%',padding:'10px 10px',borderRight:'1px solid var(--border)',display:'flex',flexDirection:'column',gap:2,minWidth:80}}>
+                                <div style={{fontFamily:MONO,fontSize:8,color:'#4a6a88',letterSpacing:'0.08em',textTransform:'uppercase',whiteSpace:'nowrap'}}>{l}</div>
+                                <div style={{fontFamily:MONO,fontSize:15,fontWeight:700,color:c,lineHeight:1}}>{v}</div>
                               </div>
                             ))}
                           </div>
