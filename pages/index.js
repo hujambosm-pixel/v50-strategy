@@ -209,7 +209,7 @@ async function upsertWatchlistItem(item) {
   const method=item.id?'PATCH':'POST'
   const url=item.id?`${getSupaUrl()}/rest/v1/watchlist?id=eq.${item.id}`:`${getSupaUrl()}/rest/v1/watchlist`
   // Limpiar campos internos y campos no existentes en la tabla
-  const ALLOWED=['symbol','name','group_name','list_name','position','active','favorite','observations']
+  const ALLOWED=['symbol','name','group_name','position','active','favorite','observations']
   const body={}; ALLOWED.forEach(k=>{if(item[k]!==undefined)body[k]=item[k]})
   const res=await fetch(url,{method,headers:{...getSupaH(),'Prefer':'return=representation'},body:JSON.stringify(body)})
   if(!res.ok){const t=await res.text();throw new Error('Error guardando: '+t)}
@@ -1363,7 +1363,7 @@ export default function Home() {
   const newItem=()=>{
     const sym=simbolo||''
     const nm=sym?lookupName(sym)||'':''
-    openEditItem({id:null,symbol:sym,name:nm,group_name:'Acciones',list_name:'General',favorite:false,observations:''})
+    openEditItem({id:null,symbol:sym,name:nm,group_name:'Acciones',list_ids:[],favorite:false,observations:''})
   }
 
   // Abrir editor estrategia
@@ -2691,7 +2691,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V6.42</title>
+        <title>Trading Simulator V6.43</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2768,7 +2768,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V6.42
+            <span className="dot"/>Trading Simulator V6.43
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -3258,7 +3258,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                           })
                         })()}
                         {/* Lista badge */}
-                        {wlShowListBadge&&<span style={{fontFamily:MONO,fontSize:8,color:'#7fb8d8',background:'var(--bg2)',padding:'1px 4px',borderRadius:2,flexShrink:0}}>{w.list_name||'General'}</span>}
+                        {wlShowListBadge&&(w.list_ids||[]).length>0&&<span style={{fontFamily:MONO,fontSize:8,color:'#7fb8d8',background:'var(--bg2)',padding:'1px 4px',borderRadius:2,flexShrink:0}}>{(w.list_ids||[]).map(lid=>wlLists.find(l=>l.id===lid)?.name).filter(Boolean).join(', ')}</span>}
                         {/* Editar */}
                         <span onClick={e=>{e.stopPropagation();openEditItem(w)}} style={{cursor:'pointer',color:'#a8ccdf',fontSize:11,padding:'0 2px',flexShrink:0}} title="Editar">✎</span>
                       </div>
