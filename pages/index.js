@@ -2691,7 +2691,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V6.43</title>
+        <title>Trading Simulator V6.44</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2768,7 +2768,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V6.43
+            <span className="dot"/>Trading Simulator V6.44
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -3164,8 +3164,11 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     // Símbolos con posición abierta en Tradelog
                     const openSymbols=new Set((tlFifo.openPositions||[]).map(p=>(p.symbol||'').toUpperCase()))
                     const allFiltered=onlyOpen?all.filter(w=>openSymbols.has((w.symbol||'').toUpperCase())):all
-                    return (<>{countBadge}{allFiltered.map(w=>(
+                    return (<>{countBadge}{allFiltered.map(w=>{
+                      const wListNames=(w.list_ids||[]).map(lid=>wlLists.find(l=>l.id===lid)?.name).filter(Boolean)
+                      return(
                       <div key={w.id||w.symbol}
+                        title={wListNames.length?`Listas: ${wListNames.join(', ')}`:undefined}
                         style={{padding:'6px 10px',display:'flex',alignItems:'center',gap:6,borderBottom:'1px solid var(--border)',
                           background:simbolo===w.symbol?'rgba(0,212,255,0.07)':'transparent',
                           borderLeft:`3px solid ${openSymbols.has((w.symbol||'').toUpperCase())?'#ffd166':'transparent'}`,
@@ -3257,13 +3260,12 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                             )
                           })
                         })()}
-                        {/* Lista badge */}
-                        {wlShowListBadge&&(w.list_ids||[]).length>0&&<span style={{fontFamily:MONO,fontSize:8,color:'#7fb8d8',background:'var(--bg2)',padding:'1px 4px',borderRadius:2,flexShrink:0}}>{(w.list_ids||[]).map(lid=>wlLists.find(l=>l.id===lid)?.name).filter(Boolean).join(', ')}</span>}
                         {/* Editar */}
                         <span onClick={e=>{e.stopPropagation();openEditItem(w)}} style={{cursor:'pointer',color:'#a8ccdf',fontSize:11,padding:'0 2px',flexShrink:0}} title="Editar">✎</span>
                       </div>
-                    ))}
-                  </>)
+                    )
+                    })}
+                    </>)
                   })()}
                 </div>
 
