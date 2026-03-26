@@ -96,7 +96,7 @@ export const TIP_DATA = {
   ganadoras: { title: 'Ganadoras', text: 'Número de operaciones cerradas con P&L positivo.' },
   perdedoras: { title: 'Perdedoras', text: 'Número de operaciones cerradas con P&L negativo o cero.' },
   balanceInicial: { title: 'Balance Inicial', text: 'Capital de referencia inicial para el cálculo de rentabilidades y métricas.' },
-  pnlSCapital: { title: 'P&L s/Capital', text: 'P&L realizado total expresado como porcentaje del balance inicial.' },
+  pnlSCapital: { title: 'P&L s/Capital', text: 'P&L total (realizado + flotante) expresado como porcentaje del balance inicial. Permite comparar directamente con un Buy & Hold u otro benchmark.' },
   diasPromedioInv: { title: 'Días Promedio', text: 'Media de días en posición por operación, incluyendo solo días con capital invertido.' },
   totalDiasInv: { title: 'Total Días Inv.', text: 'Suma total de días-posición de todas las operaciones cerradas.' },
 }

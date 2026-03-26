@@ -2741,7 +2741,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V6.58</title>
+        <title>Trading Simulator V6.59</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2818,7 +2818,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V6.58
+            <span className="dot"/>Trading Simulator V6.59
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6176,7 +6176,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       const cagrReal_=aniosPeriodo_&&pnlTotal!==0?(Math.pow(Math.max((capitalBase+pnlTotal)/capitalBase,0.001),1/aniosPeriodo_)-1)*100:null
                       const maxDDPct=maxDD>0&&capitalBase>0?(maxDD/capitalBase*100):0
                       const fxImpact=(()=>{const t2=closed.reduce((s,t)=>{const fE=parseFloat(t.fx_entry||0)||1;const fX=parseFloat(t.fx_exit||t.fx_entry||0)||fE;return s+(parseFloat(t.exit_price||0)-parseFloat(t.entry_price||0))*parseFloat(t.shares||0)*(1/fX-1/fE)},0);return t2})()
-                      const pnlSCapPct=capitalBase>0?(pnlTotal/capitalBase*100):null
+                      const pnlSCapPct=(hasContribs&&capitalNeto>0)?(pnlTotal/capitalNeto*100):capitalBase>0?(pnlTotal/capitalBase*100):null
                       const fmtEur_=v=>v>=0?'+€'+Math.round(v).toLocaleString('es-ES'):'-€'+Math.round(Math.abs(v)).toLocaleString('es-ES')
                       const fmtAbs_=v=>'€'+Math.round(Math.abs(v)).toLocaleString('es-ES')
                       const openSorted_=[..._allOpen_].sort((a,b)=>(b._pnl_float_eur||0)-(a._pnl_float_eur||0))
@@ -6227,7 +6227,6 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               {l:'Cap. disponible',v:capitalDisp!=null?fmtEur_(capitalDisp):'—',c:capitalDisp==null?'#3d5a7a':capitalDisp>=0?'#00e5a0':'#ff4d6d'},
                               {l:'Balance inicial',v:hasContribs?fmtAbs_(capitalNeto):'—',c:'#a8ccdf'},
                               {l:'Capital emp.',v:capitalEmpAll>0?fmtAbs_(capitalEmpAll):'—',c:'#00d4ff'},
-                              {l:'P&L total',v:fmtEur_(pnlTotal),c:pnlTotal>=0?'#00e5a0':'#ff4d6d',hl:true},
                               {l:'P&L realizado',v:fmtEur_(pnlReal),c:pnlReal>=0?'#00e5a0':'#ff4d6d'},
                               {l:'P&L flotante',v:fmtEur_(pnlFloat_),c:pnlFloat_>=0?'#00e5a0':'#ffd166'},
                               {l:'Total ops.',v:String(allWithPnl.length),sub:openTrades.length+'ab / '+closed.length+'cerr',c:'#ffd166'},
@@ -6246,7 +6245,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                             {/* Col equity */}
                             <div style={{flex:2.5,borderRight:'1px solid var(--border)',display:'flex',flexDirection:'column',overflow:'hidden',position:'relative',minWidth:0}}>
                               {/* Subcol equity */}
-                              <div style={{flex:1.5,position:'relative',display:'flex',flexDirection:'column',overflow:'hidden',minHeight:0}}>
+                              <div style={{flex:1,position:'relative',display:'flex',flexDirection:'column',overflow:'hidden',minHeight:0}}>
                                 {eqDisp.length>1
                                   ?<div ref={tlEquityContainerRef} style={{flex:1,minHeight:0}}><TlEquityChart curve={eqDisp} curveSinFx={sfxDisp.length>1?sfxDisp:null} curveSinComm={scommDisp.length>1?scommDisp:null} curveWithContribs={cwcDisp.length>1?cwcDisp:null} contributions={contributions} showWithContribs={showWithContribs} onToggleContribs={()=>setShowWithContribs(v=>!v)} height={tlEquityHeight} syncRef={tlDashSyncRef}/></div>
                                   :<div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:MONO,fontSize:10,color:'#3d5a7a'}}>Sin datos equity</div>}
@@ -6354,7 +6353,6 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                             {[
                               {l:'Ganadoras',t:'ganadoras',v:wins_.length,c:'#00e5a0'},
                               {l:'Perdedoras',t:'perdedoras',v:losses_.length,c:'#ff4d6d'},
-                              {l:'Balance inicial',t:'balanceInicial',v:hasContribs?fmtAbs_(capitalNeto):'—',c:'#a8ccdf'},
                               {l:'Días promedio',t:'diasPromedioInv',v:diasProm!=null?Math.round(diasProm)+' d':'—',c:'#a8ccdf'},
                               {l:'Total días inv.',t:'totalDiasInv',v:totalDiasInv+' d',c:'#a8ccdf'},
                             ].map(({l,t,v,c},i)=>(

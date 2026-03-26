@@ -203,7 +203,7 @@ export function TlInvestChart({ investData, syncRef, patrimonyCurve, compact, he
         grid:{vertLines:{color:'#0d1520'},horzLines:{color:'#0d1520'}},
         crosshair:{mode:CrosshairMode.Normal},
         rightPriceScale:{borderColor:'#1a2d45',scaleMargins:{top:0.08,bottom:0.06}},
-        timeScale:{borderColor:'#1a2d45',timeVisible:true},
+        timeScale:{borderColor:'#1a2d45',timeVisible:!compact,visible:!compact},
         localization:{priceFormatter:v=>'€'+Math.round(v)},
       })
       chartRef.current = chart
