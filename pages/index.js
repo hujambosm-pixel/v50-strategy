@@ -681,7 +681,6 @@ export default function Home() {
   const [tlInvestHeight,setTlInvestHeight]=useState(200)
   const [tlEquityFlex,setTlEquityFlex]=useState(()=>{try{const saved=localStorage.getItem('tlEquityFlex');const v=saved?parseFloat(saved):1;return isNaN(v)?1:Math.min(1.8,Math.max(0.2,v))}catch(_){return 1}})
   const tlEquityFlexRef=useRef(tlEquityFlex)
-  const [tlShowBackBtn,setTlShowBackBtn]=useState(false)
   // ── Dashboard: fetch market trend data when tab becomes active ──
   useEffect(()=>{
     if(tlTab!=='dashboard') return
@@ -726,13 +725,6 @@ export default function Home() {
     ro.observe(tlInvestContainerRef.current)
     return ()=>ro.disconnect()
   },[])
-  useEffect(()=>{
-    const el=document.getElementById('tlDetailEquity')
-    if(!el) return
-    const observer=new IntersectionObserver(([entry])=>setTlShowBackBtn(entry.isIntersecting),{threshold:0.1})
-    observer.observe(el)
-    return ()=>observer.disconnect()
-  },[tlTab])
   // ── groupTradesForDisplay: FIFO match individual fills → virtual grouped rows ──
   // tlTrades stores raw fills (fill_type:'buy'|'sell', status:'open').
   // This function pairs them chronologically per symbol so the UI shows closed ops with entry+exit.
@@ -2750,7 +2742,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V6.72</title>
+        <title>Trading Simulator V6.73</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2827,7 +2819,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V6.72
+            <span className="dot"/>Trading Simulator V6.73
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6195,7 +6187,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       const bot3_=openSorted_.length>3?[...openSorted_].reverse().slice(0,Math.min(3,openSorted_.length-3)):[]
                       const ps_={fontFamily:MONO,fontSize:10,padding:'2px 8px',border:'1px solid var(--border)',borderRadius:10,background:'var(--bg3)',cursor:'pointer',outline:'none',color:'#4a6a88',maxWidth:110}
                       return (
-                        <div style={{display:'flex',flexDirection:'column',background:'var(--bg)',flex:1,minHeight:0,overflowY:'auto'}}>
+                        <div id="tlDashOuter" style={{display:'flex',flexDirection:'column',background:'var(--bg)',flex:1,minHeight:0,overflowY:'auto'}}>
                           {/* BARRA SUPERIOR — always visible even when noData */}
                           <div style={{display:'flex',alignItems:'center',gap:5,padding:'6px 12px',borderBottom:'1px solid var(--border)',background:'var(--bg2)',flexShrink:0,flexWrap:'nowrap',overflowX:'auto'}}>
                             <span style={{fontFamily:MONO,fontSize:11,fontWeight:700,color:'var(--text)',letterSpacing:'0.08em',textTransform:'uppercase',marginRight:8,flexShrink:0}}>Dashboard</span>
@@ -6398,28 +6390,19 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               </div>
                             ))}
                           </div>
-                          {/* BOTÓN VOLVER — sticky, visible solo cuando gráficos detallados son visibles */}
-                          {tlShowBackBtn&&(
-                            <div style={{position:'sticky',bottom:16,zIndex:50,display:'flex',justifyContent:'flex-end',pointerEvents:'none',flexShrink:0}}>
-                              <button onClick={()=>window.scrollTo({top:0,behavior:'smooth'})}
-                                style={{pointerEvents:'all',background:'rgba(13,21,32,0.9)',border:'1px solid #1a2d45',color:'#00d4ff',fontFamily:MONO,fontSize:10,padding:'6px 12px',borderRadius:4,cursor:'pointer',marginRight:16}}>
-                                ↑ Dashboard
-                              </button>
-                            </div>
-                          )}
                           {/* GRÁFICOS DETALLADOS (scroll) */}
                           <div style={{flexShrink:0,overflowY:'auto'}}>
                             <div style={{padding:'5px 14px 3px',fontFamily:MONO,fontSize:8,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',borderBottom:'1px solid var(--border)'}}>Gráficos detallados</div>
                             {eqDisp.length>1&&<div id="tlDetailEquity" style={{height:'calc(100vh - 30px)',position:'relative'}}><TlEquityChart curve={eqDisp} curveSinFx={sfxDisp.length>1?sfxDisp:null} curveSinComm={scommDisp.length>1?scommDisp:null} curveWithContribs={cwcDisp.length>1?cwcDisp:null} contributions={contributions} showWithContribs={showWithContribs} onToggleContribs={()=>setShowWithContribs(v=>!v)} height={typeof window!=='undefined'?window.innerHeight-30:700} showTimeScale={true} syncRef={tlDashSyncRef}/></div>}
                             {investData.length>1&&<div id="tlDetailInvest" style={{height:'calc(100vh - 30px)',position:'relative'}}><TlInvestChart investData={investData} syncRef={tlDashSyncRef} patrimonyCurve={cwcDisp.length>1?cwcDisp:null} height={typeof window!=='undefined'?window.innerHeight-30:700} compact={false}/></div>}
                             {(closed.length>0||openTrades.length>0)&&(
-                              <div id="tlDetailPnl" style={{padding:'12px 16px 8px',borderTop:'1px solid var(--border)'}}>
-                                <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:8}}>P&L por operación</div>
-                                <div style={{display:'flex',alignItems:'flex-end',gap:2,height:200}}>
+                              <div id="tlDetailPnl" style={{height:'calc(100vh - 30px)',padding:'12px 16px 8px',borderTop:'1px solid var(--border)',display:'flex',flexDirection:'column'}}>
+                                <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:8,flexShrink:0}}>P&L por operación</div>
+                                <div style={{display:'flex',alignItems:'flex-end',gap:2,flex:1}}>
                                   {[...closed.map(t=>({...t,isOpen:false})),...openTrades.map(t=>({...t,pnl_eur:t._pnl_float_eur||0,isOpen:true}))].map((t,i)=>{
                                     const allPnls=[...closed.map(x=>Math.abs(x.pnl_eur||0)),...openTrades.map(x=>Math.abs(x._pnl_float_eur||0))]
                                     const mx=Math.max(...allPnls,1)
-                                    const h=Math.max(3,Math.abs(t.pnl_eur||0)/mx*56)
+                                    const h=Math.max(3,Math.abs(t.pnl_eur||0)/mx*96)+'%'
                                     const isW=(t.pnl_eur||0)>=0
                                     return <div key={i} title={t.symbol+' '+(isW?'+':'')+('€'+Math.round(t.pnl_eur||0))+(t.isOpen?' (abierta)':'')}
                                       style={{flex:1,height:h,background:t.isOpen?(isW?'rgba(0,229,160,0.5)':'rgba(255,77,109,0.45)'):(isW?'#00e5a0':'#ff4d6d'),borderRadius:'2px 2px 0 0',minWidth:2,opacity:0.85,border:t.isOpen?'1px solid '+(isW?'#00e5a0':'#ff4d6d'):'none'}}/>
@@ -6433,6 +6416,12 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       )
                     })()}
                   </div>
+                )}
+                {tlTab==='dashboard'&&(
+                  <button onClick={()=>{const el=document.getElementById('tlDashOuter');if(el)el.scrollTop=0}}
+                    style={{position:'fixed',bottom:20,right:20,zIndex:9999,background:'rgba(13,21,32,0.95)',border:'1px solid #1a2d45',color:'#00d4ff',fontFamily:MONO,fontSize:10,padding:'8px 14px',borderRadius:4,cursor:'pointer',boxShadow:'0 2px 12px rgba(0,0,0,0.5)'}}>
+                    ↑ Dashboard
+                  </button>
                 )}
                 {/* CAPITAL */}
                 {tlTab==='capital'&&(
