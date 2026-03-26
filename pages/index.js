@@ -681,6 +681,7 @@ export default function Home() {
   const [tlInvestHeight,setTlInvestHeight]=useState(200)
   const [tlEquityFlex,setTlEquityFlex]=useState(()=>{try{const saved=localStorage.getItem('tlEquityFlex');const v=saved?parseFloat(saved):1;return isNaN(v)?1:Math.min(1.8,Math.max(0.2,v))}catch(_){return 1}})
   const tlEquityFlexRef=useRef(tlEquityFlex)
+  const [tlScrolled,setTlScrolled]=useState(false)
   // ── Dashboard: fetch market trend data when tab becomes active ──
   useEffect(()=>{
     if(tlTab!=='dashboard') return
@@ -725,6 +726,13 @@ export default function Home() {
     ro.observe(tlInvestContainerRef.current)
     return ()=>ro.disconnect()
   },[])
+  useEffect(()=>{
+    const el=document.getElementById('tlDashOuter')
+    if(!el) return
+    const onScroll=()=>setTlScrolled(el.scrollTop>200)
+    el.addEventListener('scroll',onScroll)
+    return ()=>el.removeEventListener('scroll',onScroll)
+  },[tlTab])
   // ── groupTradesForDisplay: FIFO match individual fills → virtual grouped rows ──
   // tlTrades stores raw fills (fill_type:'buy'|'sell', status:'open').
   // This function pairs them chronologically per symbol so the UI shows closed ops with entry+exit.
@@ -2742,7 +2750,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V6.78</title>
+        <title>Trading Simulator V6.79</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2819,7 +2827,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V6.78
+            <span className="dot"/>Trading Simulator V6.79
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6417,7 +6425,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                     })()}
                   </div>
                 )}
-                {tlTab==='dashboard'&&(
+                {tlTab==='dashboard'&&tlScrolled&&(
                   <button onClick={()=>{
                     let el=document.getElementById('tlDashOuter')
                     while(el){if(el.scrollTop>0){el.scrollTo({top:0,behavior:'smooth'});return}; el=el.parentElement}

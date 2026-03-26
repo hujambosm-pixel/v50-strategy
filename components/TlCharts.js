@@ -317,7 +317,7 @@ export function TlInvestChart({ investData, syncRef, patrimonyCurve, compact, he
 
   return (
     <div style={{borderTop:'1px solid var(--border)',display:'flex',flexDirection:'column',height:'100%'}}>
-      <div style={{padding:'6px 14px 0',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+      <div style={{padding:'6px 14px 0',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',flexShrink:0}}>
         <span style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',marginRight:4}}>Capital Invertido vs Profit</span>
         <span style={{display:'flex',alignItems:'center',gap:4,fontFamily:MONO,fontSize:9,color:'#2a7fff'}}>
           <span style={{display:'inline-block',width:10,height:2,background:'#2a7fff',borderRadius:1}}/> Capital inv.
