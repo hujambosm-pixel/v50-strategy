@@ -711,8 +711,8 @@ export default function Home() {
   useEffect(()=>{
     if(!tlEquityContainerRef.current) return
     const ro=new ResizeObserver(entries=>{
-      const h=entries[0]?.contentRect?.height
-      if(h&&h>50) setTlEquityHeight(h)
+      const h=Math.round(entries[0]?.contentRect?.height)
+      if(h&&h>50) setTlEquityHeight(prev=>prev===h?prev:h)
     })
     ro.observe(tlEquityContainerRef.current)
     return ()=>ro.disconnect()
@@ -720,8 +720,8 @@ export default function Home() {
   useEffect(()=>{
     if(!tlDashFullscreen||!tlFullscreenContainerRef.current) return
     const ro=new ResizeObserver(entries=>{
-      const h=entries[0]?.contentRect?.height
-      if(h&&h>50) setTlFullscreenHeight(h)
+      const h=Math.round(entries[0]?.contentRect?.height)
+      if(h&&h>50) setTlFullscreenHeight(prev=>prev===h?prev:h)
     })
     ro.observe(tlFullscreenContainerRef.current)
     return ()=>ro.disconnect()
@@ -729,8 +729,8 @@ export default function Home() {
   useEffect(()=>{
     if(!tlInvestContainerRef.current) return
     const ro=new ResizeObserver(entries=>{
-      const h=entries[0]?.contentRect?.height
-      if(h&&h>50) setTlInvestHeight(h)
+      const h=Math.round(entries[0]?.contentRect?.height)
+      if(h&&h>50) setTlInvestHeight(prev=>prev===h?prev:h)
     })
     ro.observe(tlInvestContainerRef.current)
     return ()=>ro.disconnect()
@@ -2752,7 +2752,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V6.57</title>
+        <title>Trading Simulator V6.58</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2829,7 +2829,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V6.57
+            <span className="dot"/>Trading Simulator V6.58
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
