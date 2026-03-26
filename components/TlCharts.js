@@ -27,7 +27,7 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
     import('lightweight-charts').then(({createChart,CrosshairMode,LineStyle})=>{
       if(chartRef.current){chartRef.current.remove();chartRef.current=null}
       const chart = createChart(ref.current,{
-        width:ref.current.clientWidth, height:height||ref.current.clientHeight||200,
+        width:ref.current.clientWidth, height:Math.max(80,(height||ref.current.clientHeight||200)-22),
         layout:{background:{color:'#080c14'},textColor:'#7a9bc0'},
         grid:{vertLines:{color:'#0d1520'},horzLines:{color:'#0d1520'}},
         crosshair:{mode:CrosshairMode.Normal},
@@ -113,7 +113,7 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
       }
       const ro = new ResizeObserver(()=>{
         if(!ref.current) return
-        chart.applyOptions({width:ref.current.clientWidth, height:height||ref.current.clientHeight||200})
+        const w=ref.current.clientWidth;const h=Math.max(80,(height||ref.current.clientHeight||200)-22);chart.applyOptions({width:w,height:h})
       })
       ro.observe(ref.current)
       return ()=>ro.disconnect()
