@@ -27,7 +27,7 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
     import('lightweight-charts').then(({createChart,CrosshairMode,LineStyle})=>{
       if(chartRef.current){chartRef.current.remove();chartRef.current=null}
       const chart = createChart(ref.current,{
-        width:ref.current.clientWidth, height:200,
+        width:ref.current.clientWidth, height:ref.current.clientHeight||200,
         layout:{background:{color:'#080c14'},textColor:'#7a9bc0'},
         grid:{vertLines:{color:'#0d1520'},horzLines:{color:'#0d1520'}},
         crosshair:{mode:CrosshairMode.Normal},
@@ -108,7 +108,7 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
         tt.innerHTML=rows.join('')
       })
       chart.timeScale().fitContent()
-      const ro = new ResizeObserver(()=>{ if(ref.current) chart.applyOptions({width:ref.current.clientWidth}) })
+      const ro = new ResizeObserver(()=>{ if(ref.current) chart.applyOptions({width:ref.current.clientWidth,height:ref.current.clientHeight}) })
       ro.observe(ref.current)
       return ()=>ro.disconnect()
     })
@@ -171,8 +171,8 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
           )
         })()}
       </div>
-      <div style={{position:'relative'}}>
-        <div ref={ref} style={{minHeight:200}}/>
+      <div style={{position:'relative',height:'100%'}}>
+        <div ref={ref} style={{height:'100%'}}/>
         <div ref={equityTooltipRef} style={{position:'absolute',display:'none',pointerEvents:'none',background:'rgba(8,12,20,0.96)',border:'1px solid #1a2d45',borderRadius:6,padding:'8px 12px',fontFamily:'"JetBrains Mono",monospace',fontSize:12,color:'#e2eaf5',zIndex:15,minWidth:160,boxShadow:'0 4px 20px rgba(0,0,0,0.5)'}}/>
       </div>
     </div>
