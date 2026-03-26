@@ -118,8 +118,6 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
     return ()=>{ if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null} }
   },[activeCurve, curveSinFx, curveSinComm, showSinFx, showSinComm, showWithContribs, contributions, showAportacion, showRetirada, showDividendo])
 
-  useEffect(()=>{ if(chartRef.current&&height) chartRef.current.applyOptions({height}) },[height])
-
   const btnStyle = (active, color) => ({
     display:'flex',alignItems:'center',gap:4,
     fontFamily:MONO,fontSize:9,color:active?color:'#3d5a7a',
@@ -129,8 +127,8 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
   })
 
   return (
-    <div style={{borderTop:'1px solid var(--border)',display:'flex',flexDirection:'column',height:'100%'}}>
-      <div style={{padding:'4px 14px 0',display:'flex',gap:10,alignItems:'center',flexWrap:'wrap',flexShrink:0}}>
+    <div style={{borderTop:'1px solid var(--border)'}}>
+      <div style={{padding:'4px 14px 0',display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
         <span style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',marginRight:4}}>Equity</span>
         {/* Main legend */}
         <span style={{display:'flex',alignItems:'center',gap:4,fontFamily:MONO,fontSize:9,color:lineColor}}>
@@ -176,8 +174,8 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
           )
         })()}
       </div>
-      <div style={{position:'relative',flex:1,minHeight:0}}>
-        <div ref={ref} style={{height:'100%',minHeight:height?0:200}}/>
+      <div style={{position:'relative',height:'100%'}}>
+        <div ref={ref} style={{height:'100%'}}/>
         <div ref={equityTooltipRef} style={{position:'absolute',display:'none',pointerEvents:'none',background:'rgba(8,12,20,0.96)',border:'1px solid #1a2d45',borderRadius:6,padding:'8px 12px',fontFamily:'"JetBrains Mono",monospace',fontSize:12,color:'#e2eaf5',zIndex:15,minWidth:160,boxShadow:'0 4px 20px rgba(0,0,0,0.5)'}}/>
       </div>
     </div>
@@ -280,15 +278,12 @@ export function TlInvestChart({ investData, syncRef, patrimonyCurve, compact, he
         chartRef.current.__syncCleanup=()=>{try{unsub()}catch(_){};if(syncRef.current)syncRef.current.listeners=syncRef.current.listeners.filter(e=>e.id!==syncId)}
       }
       chart.timeScale().fitContent()
-      try{chart.timeScale().scrollToRealTime()}catch(_){}
       const ro = new ResizeObserver(()=>{ if(ref.current) chart.applyOptions({width:ref.current.clientWidth}) })
       ro.observe(ref.current)
       return ()=>ro.disconnect()
     })
     return ()=>{ if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null} }
   },[investData, showPatrimony, patrimonyCurve])
-
-  useEffect(()=>{ if(chartRef.current&&height&&!compact) chartRef.current.applyOptions({height}) },[height,compact])
 
   const btnStyle = (active, color) => ({
     display:'flex',alignItems:'center',gap:4,
@@ -305,8 +300,8 @@ export function TlInvestChart({ investData, syncRef, patrimonyCurve, compact, he
   )
 
   return (
-    <div style={{borderTop:'1px solid var(--border)',display:'flex',flexDirection:'column',height:'100%'}}>
-      <div style={{padding:'6px 14px 0',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',flexShrink:0}}>
+    <div style={{borderTop:'1px solid var(--border)'}}>
+      <div style={{padding:'6px 14px 0',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
         <span style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',marginRight:4}}>Capital Invertido vs Profit</span>
         <span style={{display:'flex',alignItems:'center',gap:4,fontFamily:MONO,fontSize:9,color:'#2a7fff'}}>
           <span style={{display:'inline-block',width:10,height:2,background:'#2a7fff',borderRadius:1}}/> Capital inv.
@@ -323,8 +318,8 @@ export function TlInvestChart({ investData, syncRef, patrimonyCurve, compact, he
           </button>
         )}
       </div>
-      <div style={{position:'relative',flex:1,minHeight:0}}>
-        <div ref={ref} style={{height:'100%',minHeight:height?0:200}}/>
+      <div style={{position:'relative'}}>
+        <div ref={ref} style={{minHeight:200}}/>
         <div ref={investTooltipRef} style={{position:'absolute',display:'none',pointerEvents:'none',background:'rgba(8,12,20,0.96)',border:'1px solid #1a2d45',borderRadius:6,padding:'8px 12px',fontFamily:'"JetBrains Mono",monospace',fontSize:12,color:'#e2eaf5',zIndex:15,minWidth:160,boxShadow:'0 4px 20px rgba(0,0,0,0.5)'}}/>
       </div>
     </div>
