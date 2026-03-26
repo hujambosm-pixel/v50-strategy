@@ -80,6 +80,25 @@ export const TIP_DATA = {
     title: 'SIZING — Tamaño de posición',
     text: 'Capital fijo: cada trade usa siempre el mismo importe en euros. El P&L Simple suma linealmente. El P&L Compuesto reinvierte las ganancias: cada operación usa el capital acumulado del trade anterior. El sizing no afecta a las señales, solo a los resultados monetarios.'
   },
+  // ── Dashboard métricas ──────────────────────────────────────
+  cagr: { title: 'CAGR', text: 'Tasa de crecimiento anual compuesto del portfolio durante el período analizado.' },
+  maxDrawdown: { title: 'Max Drawdown', text: 'Caída máxima desde un máximo hasta el mínimo posterior. Mide el peor escenario de pérdida.' },
+  winRate: { title: 'Win Rate', text: 'Porcentaje de operaciones cerradas con beneficio sobre el total de operaciones cerradas.' },
+  factorBeneficio: { title: 'Factor Beneficio', text: 'Ratio entre ganancias brutas y pérdidas brutas. Mayor de 1 indica sistema rentable.' },
+  impactoFx: { title: 'Impacto FX', text: 'Efecto del tipo de cambio en el P&L total. Diferencia entre P&L real y P&L sin conversión de divisa.' },
+  ganMediaPct: { title: 'Gan. Media %', text: 'Rentabilidad media de las operaciones ganadoras, expresada en porcentaje.' },
+  perdMediaPct: { title: 'Pérd. Media %', text: 'Pérdida media de las operaciones perdedoras, expresada en porcentaje.' },
+  diasProm: { title: 'Días Prom.', text: 'Duración media de las operaciones cerradas, en días naturales.' },
+  totalDias: { title: 'Total Días', text: 'Días naturales totales entre la primera entrada y la última salida del período.' },
+  tInvertido: { title: 'T. Invertido', text: 'Porcentaje del tiempo total en que había al menos una posición abierta.' },
+  mejorOp: { title: 'Mejor Op.', text: 'Operación cerrada con mayor beneficio absoluto en euros.' },
+  peorOp: { title: 'Peor Op.', text: 'Operación cerrada con mayor pérdida absoluta en euros.' },
+  ganadoras: { title: 'Ganadoras', text: 'Número de operaciones cerradas con P&L positivo.' },
+  perdedoras: { title: 'Perdedoras', text: 'Número de operaciones cerradas con P&L negativo o cero.' },
+  balanceInicial: { title: 'Balance Inicial', text: 'Capital de referencia inicial para el cálculo de rentabilidades y métricas.' },
+  pnlSCapital: { title: 'P&L s/Capital', text: 'P&L realizado total expresado como porcentaje del balance inicial.' },
+  diasPromedioInv: { title: 'Días Promedio', text: 'Media de días en posición por operación, incluyendo solo días con capital invertido.' },
+  totalDiasInv: { title: 'Total Días Inv.', text: 'Suma total de días-posición de todas las operaciones cerradas.' },
 }
 
 export default function Tip({id, style}) {

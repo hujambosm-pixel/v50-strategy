@@ -2719,7 +2719,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V6.53</title>
+        <title>Trading Simulator V6.54</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2796,7 +2796,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V6.53
+            <span className="dot"/>Trading Simulator V6.54
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6282,26 +6282,26 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           {/* FILA 3 — KPIs + secundarias */}
                           <div style={{display:'flex',flexWrap:'nowrap',borderBottom:'1px solid var(--border)',flexShrink:0,overflowX:'auto'}}>
                             {[
-                              {l:'CAGR',v:cagrReal_!=null?(cagrReal_>=0?'+':'')+cagrReal_.toFixed(2)+'%':'—',c:cagrReal_!=null&&cagrReal_>=0?'#00e5a0':'#ff4d6d',b:cagrReal_!=null&&cagrReal_>=0?'#00e5a0':'#ff4d6d'},
-                              {l:'Max Drawdown',v:maxDD>0?('-€'+Math.round(maxDD)+' ('+maxDDPct.toFixed(1)+'%)'):' — ',c:'#ff4d6d',b:'#ff4d6d'},
-                              {l:'Win Rate',v:allWithPnl.length?wr.toFixed(1)+'%':'—',c:wr>=50?'#00e5a0':'#ff4d6d',b:wr>=50?'#00e5a0':'#ff4d6d'},
-                              {l:'Factor Beneficio',v:factorBen_!=null?factorBen_.toFixed(2):'—',c:factorBen_!=null&&factorBen_>=1?'#00e5a0':'#ff4d6d',b:factorBen_!=null&&factorBen_>=1?'#00e5a0':'#ff4d6d'},
-                            ].map(({l,v,c,b},i)=>(
+                              {l:'CAGR',t:'cagr',v:cagrReal_!=null?(cagrReal_>=0?'+':'')+cagrReal_.toFixed(2)+'%':'—',c:cagrReal_!=null&&cagrReal_>=0?'#00e5a0':'#ff4d6d',b:cagrReal_!=null&&cagrReal_>=0?'#00e5a0':'#ff4d6d'},
+                              {l:'Max Drawdown',t:'maxDrawdown',v:maxDD>0?('-€'+Math.round(maxDD)+' ('+maxDDPct.toFixed(1)+'%)'):' — ',c:'#ff4d6d',b:'#ff4d6d'},
+                              {l:'Win Rate',t:'winRate',v:allWithPnl.length?wr.toFixed(1)+'%':'—',c:wr>=50?'#00e5a0':'#ff4d6d',b:wr>=50?'#00e5a0':'#ff4d6d'},
+                              {l:'Factor Beneficio',t:'factorBeneficio',v:factorBen_!=null?factorBen_.toFixed(2):'—',c:factorBen_!=null&&factorBen_>=1?'#00e5a0':'#ff4d6d',b:factorBen_!=null&&factorBen_>=1?'#00e5a0':'#ff4d6d'},
+                            ].map(({l,t,v,c,b},i)=>(
                               <div key={i} style={{flex:'1 0 10%',padding:'10px 12px',borderRight:'1px solid var(--border)',borderLeft:'3px solid '+b,background:'rgba(255,255,255,0.015)',display:'flex',flexDirection:'column',gap:2,minWidth:100}}>
-                                <div style={{fontFamily:MONO,fontSize:8,color:'#4a6a88',letterSpacing:'0.08em',textTransform:'uppercase'}}>{l}</div>
+                                <div style={{fontFamily:MONO,fontSize:8,color:'#4a6a88',letterSpacing:'0.08em',textTransform:'uppercase',display:'flex',alignItems:'center'}}>{l}<Tip id={t} style={{marginLeft:3}}/></div>
                                 <div style={{fontFamily:MONO,fontSize:17,fontWeight:700,color:c,lineHeight:1}}>{v}</div>
                               </div>
                             ))}
                             {[
-                              {l:'Impacto FX',v:fxImpact!==0?(fxImpact>=0?'+':'')+'€'+Math.abs(fxImpact).toFixed(0):'€0',c:'#ffd166'},
-                              {l:'Gan. media %',v:avgWinPct>0?('+'+avgWinPct.toFixed(2)+'%'):'—',c:'#00e5a0'},
-                              {l:'Pérd. media %',v:avgLossPct>0?(avgLossPct.toFixed(2)+'%'):'—',c:'#ff4d6d'},
-                              {l:'Días prom.',v:diasProm!=null?Math.round(diasProm)+' d':'—',c:'#a8ccdf'},
-                              {l:'Total días',v:totalDiasInv+' d',c:'#a8ccdf'},
-                              {l:'T. invertido',v:tiempoInvPct_!=null?tiempoInvPct_+'%':'—',c:'#ffd166'},
-                            ].map(({l,v,c},i)=>(
+                              {l:'Impacto FX',t:'impactoFx',v:fxImpact!==0?(fxImpact>=0?'+':'')+'€'+Math.abs(fxImpact).toFixed(0):'€0',c:'#ffd166'},
+                              {l:'Gan. media %',t:'ganMediaPct',v:avgWinPct>0?('+'+avgWinPct.toFixed(2)+'%'):'—',c:'#00e5a0'},
+                              {l:'Pérd. media %',t:'perdMediaPct',v:avgLossPct>0?(avgLossPct.toFixed(2)+'%'):'—',c:'#ff4d6d'},
+                              {l:'Días prom.',t:'diasProm',v:diasProm!=null?Math.round(diasProm)+' d':'—',c:'#a8ccdf'},
+                              {l:'Total días',t:'totalDias',v:totalDiasInv+' d',c:'#a8ccdf'},
+                              {l:'T. invertido',t:'tInvertido',v:tiempoInvPct_!=null?tiempoInvPct_+'%':'—',c:'#ffd166'},
+                            ].map(({l,t,v,c},i)=>(
                               <div key={i} style={{flex:'1 0 8%',padding:'10px 10px',borderRight:'1px solid var(--border)',display:'flex',flexDirection:'column',gap:2,minWidth:80}}>
-                                <div style={{fontFamily:MONO,fontSize:8,color:'#4a6a88',letterSpacing:'0.08em',textTransform:'uppercase',whiteSpace:'nowrap'}}>{l}</div>
+                                <div style={{fontFamily:MONO,fontSize:8,color:'#4a6a88',letterSpacing:'0.08em',textTransform:'uppercase',whiteSpace:'nowrap',display:'flex',alignItems:'center'}}>{l}<Tip id={t} style={{marginLeft:3}}/></div>
                                 <div style={{fontFamily:MONO,fontSize:14,fontWeight:700,color:c,lineHeight:1.1}}>{v}</div>
                               </div>
                             ))}
@@ -6309,23 +6309,23 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           {/* FILA 4 */}
                           <div style={{display:'flex',flexWrap:'nowrap',borderBottom:'1px solid var(--border)',flexShrink:0,overflowX:'auto'}}>
                             <div style={{flex:'1 0 15%',padding:'10px 10px',borderRight:'1px solid var(--border)',background:'rgba(0,229,160,0.05)',borderLeft:'3px solid #00e5a0',minWidth:100}}>
-                              <div style={{fontFamily:MONO,fontSize:8,color:'#00e5a0',letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:2}}>Mejor op.</div>
+                              <div style={{fontFamily:MONO,fontSize:8,color:'#00e5a0',letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:2,display:'flex',alignItems:'center'}}>Mejor op.<Tip id="mejorOp" style={{marginLeft:3}}/></div>
                               <div style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:'#00e5a0',lineHeight:1.2}}>{bestT_?(bestT_.symbol+' '+fmtEur_(bestT_._ep)):'—'}</div>
                             </div>
                             <div style={{flex:'1 0 15%',padding:'10px 10px',borderRight:'1px solid var(--border)',background:'rgba(255,77,109,0.05)',borderLeft:'3px solid #ff4d6d',minWidth:100}}>
-                              <div style={{fontFamily:MONO,fontSize:8,color:'#ff4d6d',letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:2}}>Peor op.</div>
+                              <div style={{fontFamily:MONO,fontSize:8,color:'#ff4d6d',letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:2,display:'flex',alignItems:'center'}}>Peor op.<Tip id="peorOp" style={{marginLeft:3}}/></div>
                               <div style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:'#ff4d6d',lineHeight:1.2}}>{worstT_?(worstT_.symbol+' '+fmtEur_(worstT_._ep)):'—'}</div>
                             </div>
                             {[
-                              {l:'Ganadoras',v:wins_.length,c:'#00e5a0'},
-                              {l:'Perdedoras',v:losses_.length,c:'#ff4d6d'},
-                              {l:'Balance inicial',v:hasContribs?fmtAbs_(capitalNeto):'—',c:'#a8ccdf'},
-                              {l:'P&L s/capital',v:pnlSCapPct!=null?(pnlSCapPct>=0?'+':'')+pnlSCapPct.toFixed(2)+'%':'—',c:pnlSCapPct!=null&&pnlSCapPct>=0?'#00e5a0':'#ff4d6d'},
-                              {l:'Días promedio',v:diasProm!=null?Math.round(diasProm)+' d':'—',c:'#a8ccdf'},
-                              {l:'Total días inv.',v:totalDiasInv+' d',c:'#a8ccdf'},
-                            ].map(({l,v,c},i)=>(
+                              {l:'Ganadoras',t:'ganadoras',v:wins_.length,c:'#00e5a0'},
+                              {l:'Perdedoras',t:'perdedoras',v:losses_.length,c:'#ff4d6d'},
+                              {l:'Balance inicial',t:'balanceInicial',v:hasContribs?fmtAbs_(capitalNeto):'—',c:'#a8ccdf'},
+                              {l:'P&L s/capital',t:'pnlSCapital',v:pnlSCapPct!=null?(pnlSCapPct>=0?'+':'')+pnlSCapPct.toFixed(2)+'%':'—',c:pnlSCapPct!=null&&pnlSCapPct>=0?'#00e5a0':'#ff4d6d'},
+                              {l:'Días promedio',t:'diasPromedioInv',v:diasProm!=null?Math.round(diasProm)+' d':'—',c:'#a8ccdf'},
+                              {l:'Total días inv.',t:'totalDiasInv',v:totalDiasInv+' d',c:'#a8ccdf'},
+                            ].map(({l,t,v,c},i)=>(
                               <div key={i} style={{flex:'1 0 9%',padding:'10px 10px',borderRight:'1px solid var(--border)',display:'flex',flexDirection:'column',gap:2,minWidth:80}}>
-                                <div style={{fontFamily:MONO,fontSize:8,color:'#4a6a88',letterSpacing:'0.08em',textTransform:'uppercase',whiteSpace:'nowrap'}}>{l}</div>
+                                <div style={{fontFamily:MONO,fontSize:8,color:'#4a6a88',letterSpacing:'0.08em',textTransform:'uppercase',whiteSpace:'nowrap',display:'flex',alignItems:'center'}}>{l}<Tip id={t} style={{marginLeft:3}}/></div>
                                 <div style={{fontFamily:MONO,fontSize:15,fontWeight:700,color:c,lineHeight:1}}>{v}</div>
                               </div>
                             ))}
@@ -6365,11 +6365,11 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                   ✕ Cerrar
                                 </button>
                               </div>
-                              <div style={{flex:1,overflow:'hidden',padding:8}}>
-                                {tlDashFullscreen==='equity'&&eqDisp.length>1&&<TlEquityChart curve={eqDisp} curveSinFx={sfxDisp.length>1?sfxDisp:null} curveSinComm={scommDisp.length>1?scommDisp:null} curveWithContribs={cwcDisp.length>1?cwcDisp:null} contributions={contributions} showWithContribs={showWithContribs} onToggleContribs={()=>setShowWithContribs(v=>!v)} syncRef={tlDashSyncRef}/>}
-                                {tlDashFullscreen==='invest'&&investData.length>1&&<TlInvestChart investData={investData} syncRef={tlDashSyncRef} patrimonyCurve={cwcDisp.length>1?cwcDisp:null}/>}
+                              <div style={{flex:1,overflow:'hidden',padding:0}}>
+                                {tlDashFullscreen==='equity'&&eqDisp.length>1&&<div style={{height:'100%',width:'100%'}}><TlEquityChart curve={eqDisp} curveSinFx={sfxDisp.length>1?sfxDisp:null} curveSinComm={scommDisp.length>1?scommDisp:null} curveWithContribs={cwcDisp.length>1?cwcDisp:null} contributions={contributions} showWithContribs={showWithContribs} onToggleContribs={()=>setShowWithContribs(v=>!v)} syncRef={tlDashSyncRef}/></div>}
+                                {tlDashFullscreen==='invest'&&investData.length>1&&<div style={{height:'100%',width:'100%'}}><TlInvestChart investData={investData} syncRef={tlDashSyncRef} patrimonyCurve={cwcDisp.length>1?cwcDisp:null}/></div>}
                                 {tlDashFullscreen==='pnl'&&(
-                                  <div style={{height:'100%',display:'flex',flexDirection:'column',padding:'10px 16px'}}>
+                                  <div style={{height:'100%',display:'flex',flexDirection:'column',padding:'4px 12px'}}>
                                     <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:12}}>P&L por operación</div>
                                     <div style={{display:'flex',alignItems:'flex-end',gap:3,flex:1}}>
                                       {[...closed.map(t=>({...t,isOpen:false})),...openTrades.map(t=>({...t,pnl_eur:t._pnl_float_eur||0,isOpen:true}))].map((t,i)=>{
