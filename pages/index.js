@@ -2741,7 +2741,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V6.57</title>
+        <title>Trading Simulator V6.58</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2818,7 +2818,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V6.57
+            <span className="dot"/>Trading Simulator V6.58
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6266,9 +6266,24 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                   onMouseOver={e=>e.currentTarget.style.color='#00d4ff'} onMouseOut={e=>e.currentTarget.style.color='#3d5a7a'}>⤢</div>
                               </div>
                             </div>
-                            {/* Col P&L */}
+                            {/* Col métricas + P&L */}
                             <div style={{flex:1.4,borderRight:'1px solid var(--border)',display:'flex',flexDirection:'column',overflow:'hidden',minWidth:0}}>
-                              <div style={{flex:2,overflow:'hidden',position:'relative',cursor:'pointer',padding:'16px 6px 4px'}} onClick={()=>setTlDashFullscreen('pnl')}>
+                              <div style={{flex:1,borderBottom:'1px solid var(--border)',overflow:'hidden',display:'flex',flexDirection:'column'}}>
+                                {[
+                                  {l:'P&L TOTAL',t:'pnlTotal',v:fmtEur_(pnlTotal),c:pnlTotal>=0?'#00e5a0':'#ff4d6d'},
+                                  {l:'P&L S/CAPITAL',t:'pnlSCapital',v:pnlSCapPct!=null?(pnlSCapPct>=0?'+':'')+pnlSCapPct.toFixed(2)+'%':'—',c:pnlSCapPct!=null&&pnlSCapPct>=0?'#00e5a0':'#ff4d6d'},
+                                  {l:'CAGR',t:'cagr',v:cagrReal_!=null?(cagrReal_>=0?'+':'')+cagrReal_.toFixed(2)+'%':'—',c:cagrReal_!=null&&cagrReal_>=0?'#00e5a0':'#ff4d6d'},
+                                  {l:'MAX DRAWDOWN',t:'maxDrawdown',v:maxDD>0?('-€'+Math.round(maxDD)+' ('+maxDDPct.toFixed(1)+'%)'):'—',c:'#ff4d6d'},
+                                  {l:'WIN RATE',t:'winRate',v:allWithPnl.length?wr.toFixed(1)+'%':'—',c:wr>=50?'#00e5a0':'#ff4d6d'},
+                                  {l:'FACTOR BEN.',t:'factorBeneficio',v:factorBen_!=null?factorBen_.toFixed(2):'—',c:factorBen_!=null&&factorBen_>=1?'#00e5a0':'#ff4d6d'},
+                                ].map(({l,t,v,c},i)=>(
+                                  <div key={i} style={{display:'flex',flexDirection:'column',justifyContent:'center',flex:1,padding:'0 10px',borderBottom:'1px solid var(--border)'}}>
+                                    <div style={{fontFamily:MONO,fontSize:7,color:'#3d5a7a',letterSpacing:'0.08em',textTransform:'uppercase',display:'flex',alignItems:'center',gap:3}}>{l}<Tip id={t}/></div>
+                                    <div style={{fontFamily:MONO,fontSize:15,fontWeight:600,color:c,lineHeight:1.1}}>{v}</div>
+                                  </div>
+                                ))}
+                              </div>
+                              <div style={{flex:1,overflow:'hidden',position:'relative',cursor:'pointer',padding:'16px 6px 4px'}} onClick={()=>setTlDashFullscreen('pnl')}>
                                 <div style={{position:'absolute',top:3,left:6,fontFamily:MONO,fontSize:7,color:'#3d5a7a',letterSpacing:'0.07em',textTransform:'uppercase',zIndex:10,pointerEvents:'none'}}>P&L por operación</div>
                                 <div style={{display:'flex',alignItems:'flex-end',gap:1,height:'calc(100% - 16px)'}}>
                                   {[...closed.map(t=>({...t,isOpen:false})),...openTrades.map(t=>({...t,pnl_eur:t._pnl_float_eur||0,isOpen:true}))].map((t,i)=>{
@@ -6313,17 +6328,6 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           {/* FILA 3 — KPIs + secundarias */}
                           <div style={{display:'flex',flexWrap:'nowrap',borderBottom:'1px solid var(--border)',flexShrink:0,overflowX:'auto'}}>
                             {[
-                              {l:'CAGR',t:'cagr',v:cagrReal_!=null?(cagrReal_>=0?'+':'')+cagrReal_.toFixed(2)+'%':'—',c:cagrReal_!=null&&cagrReal_>=0?'#00e5a0':'#ff4d6d',b:cagrReal_!=null&&cagrReal_>=0?'#00e5a0':'#ff4d6d'},
-                              {l:'Max Drawdown',t:'maxDrawdown',v:maxDD>0?('-€'+Math.round(maxDD)+' ('+maxDDPct.toFixed(1)+'%)'):' — ',c:'#ff4d6d',b:'#ff4d6d'},
-                              {l:'Win Rate',t:'winRate',v:allWithPnl.length?wr.toFixed(1)+'%':'—',c:wr>=50?'#00e5a0':'#ff4d6d',b:wr>=50?'#00e5a0':'#ff4d6d'},
-                              {l:'Factor Beneficio',t:'factorBeneficio',v:factorBen_!=null?factorBen_.toFixed(2):'—',c:factorBen_!=null&&factorBen_>=1?'#00e5a0':'#ff4d6d',b:factorBen_!=null&&factorBen_>=1?'#00e5a0':'#ff4d6d'},
-                            ].map(({l,t,v,c,b},i)=>(
-                              <div key={i} style={{flex:'1 0 10%',padding:'10px 12px',borderRight:'1px solid var(--border)',borderLeft:'3px solid '+b,background:'rgba(255,255,255,0.015)',display:'flex',flexDirection:'column',gap:2,minWidth:100}}>
-                                <div style={{fontFamily:MONO,fontSize:8,color:'#4a6a88',letterSpacing:'0.08em',textTransform:'uppercase',display:'flex',alignItems:'center'}}>{l}<Tip id={t} style={{marginLeft:3}}/></div>
-                                <div style={{fontFamily:MONO,fontSize:17,fontWeight:700,color:c,lineHeight:1}}>{v}</div>
-                              </div>
-                            ))}
-                            {[
                               {l:'Impacto FX',t:'impactoFx',v:fxImpact!==0?(fxImpact>=0?'+':'')+'€'+Math.abs(fxImpact).toFixed(0):'€0',c:'#ffd166'},
                               {l:'Gan. media %',t:'ganMediaPct',v:avgWinPct>0?('+'+avgWinPct.toFixed(2)+'%'):'—',c:'#00e5a0'},
                               {l:'Pérd. media %',t:'perdMediaPct',v:avgLossPct>0?(avgLossPct.toFixed(2)+'%'):'—',c:'#ff4d6d'},
@@ -6351,7 +6355,6 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               {l:'Ganadoras',t:'ganadoras',v:wins_.length,c:'#00e5a0'},
                               {l:'Perdedoras',t:'perdedoras',v:losses_.length,c:'#ff4d6d'},
                               {l:'Balance inicial',t:'balanceInicial',v:hasContribs?fmtAbs_(capitalNeto):'—',c:'#a8ccdf'},
-                              {l:'P&L s/capital',t:'pnlSCapital',v:pnlSCapPct!=null?(pnlSCapPct>=0?'+':'')+pnlSCapPct.toFixed(2)+'%':'—',c:pnlSCapPct!=null&&pnlSCapPct>=0?'#00e5a0':'#ff4d6d'},
                               {l:'Días promedio',t:'diasPromedioInv',v:diasProm!=null?Math.round(diasProm)+' d':'—',c:'#a8ccdf'},
                               {l:'Total días inv.',t:'totalDiasInv',v:totalDiasInv+' d',c:'#a8ccdf'},
                             ].map(({l,t,v,c},i)=>(
