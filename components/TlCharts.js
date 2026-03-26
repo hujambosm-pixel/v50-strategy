@@ -175,7 +175,7 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
         })()}
       </div>
       <div style={{position:'relative',height:'100%'}}>
-        <div ref={ref} style={{width:'100%',height:'100%'}}/>
+        <div ref={ref} style={{height:'100%'}}/>
         <div ref={equityTooltipRef} style={{position:'absolute',display:'none',pointerEvents:'none',background:'rgba(8,12,20,0.96)',border:'1px solid #1a2d45',borderRadius:6,padding:'8px 12px',fontFamily:'"JetBrains Mono",monospace',fontSize:12,color:'#e2eaf5',zIndex:15,minWidth:160,boxShadow:'0 4px 20px rgba(0,0,0,0.5)'}}/>
       </div>
     </div>
@@ -277,6 +277,7 @@ export function TlInvestChart({ investData, syncRef, patrimonyCurve, compact, he
         syncRef.current.listeners.push({id:syncId,handler})
         chartRef.current.__syncCleanup=()=>{try{unsub()}catch(_){};if(syncRef.current)syncRef.current.listeners=syncRef.current.listeners.filter(e=>e.id!==syncId)}
       }
+      chart.timeScale().fitContent()
       const ro = new ResizeObserver(()=>{
         if(!ref.current) return
         const w=ref.current.clientWidth||300
@@ -288,25 +289,6 @@ export function TlInvestChart({ investData, syncRef, patrimonyCurve, compact, he
         }
       })
       ro.observe(ref.current)
-      if(!compact){
-        // FIX 1: leer altura real tras primer paint del flex layout
-        requestAnimationFrame(()=>{
-          if(!ref.current) return
-          const h=ref.current.parentElement?.clientHeight||ref.current.clientHeight||200
-          const w=ref.current.clientWidth||300
-          if(h>50) chart.applyOptions({width:w,height:h})
-        })
-        // FIX 3: fitContent en RAF para no pisar rango de equity si ya está montado
-        requestAnimationFrame(()=>{
-          if(syncRef?.current?.listeners?.length>0){
-            try{chart.timeScale().fitContent()}catch(_){}
-          } else {
-            chart.timeScale().fitContent()
-          }
-        })
-      } else {
-        chart.timeScale().fitContent()
-      }
       return ()=>ro.disconnect()
     })
     return ()=>{ if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null} }
