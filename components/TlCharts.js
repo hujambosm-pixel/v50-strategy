@@ -9,7 +9,7 @@ const CONTRIB_MARKER = {
   dividendo:  { color:'#aaff44', shape:'circle',     position:'belowBar', prefix:'D+' },
 }
 
-export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContribs, contributions, showWithContribs, onToggleContribs, height, syncRef }) {
+export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContribs, contributions, showWithContribs, onToggleContribs, height, showTimeScale, syncRef }) {
   const ref = useRef(null), chartRef = useRef(null), equityTooltipRef = useRef(null)
   const [showSinFx, setShowSinFx] = useState(false)
   const [showSinComm, setShowSinComm] = useState(false)
@@ -27,12 +27,12 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
     import('lightweight-charts').then(({createChart,CrosshairMode,LineStyle})=>{
       if(chartRef.current){chartRef.current.remove();chartRef.current=null}
       const chart = createChart(ref.current,{
-        width:ref.current.clientWidth, height:Math.max(80,(height||ref.current.clientHeight||200)-22),
+        width:ref.current.clientWidth, height:height||ref.current.clientHeight||200,
         layout:{background:{color:'#080c14'},textColor:'#7a9bc0'},
         grid:{vertLines:{color:'#0d1520'},horzLines:{color:'#0d1520'}},
         crosshair:{mode:CrosshairMode.Normal},
         rightPriceScale:{borderColor:'#1a2d45'},
-        timeScale:{borderColor:'#1a2d45',timeVisible:true},
+        timeScale:{borderColor:'#1a2d45',timeVisible:true,visible:showTimeScale!==false},
         localization:{priceFormatter:v=>'€'+Math.round(v)},
       })
       chartRef.current = chart
@@ -113,7 +113,7 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
       }
       const ro = new ResizeObserver(()=>{
         if(!ref.current) return
-        const w=ref.current.clientWidth;const h=Math.max(80,(height||ref.current.clientHeight||200)-22);chart.applyOptions({width:w,height:h})
+        chart.applyOptions({width:ref.current.clientWidth,height:height||ref.current.clientHeight||200})
       })
       ro.observe(ref.current)
       return ()=>ro.disconnect()
