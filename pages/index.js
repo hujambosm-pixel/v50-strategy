@@ -674,7 +674,6 @@ export default function Home() {
   const [tlShowFxCols,setTlShowFxCols]=useState(false) // toggle FX impact columns
   const [tlFormOpen,setTlFormOpen]=useState(false)
   const [tlFilterStrat,setTlFilterStrat]=useState('')
-  const [tlDashFullscreen,setTlDashFullscreen]=useState(null) // null|'equity'|'invest'|'pnl'
   const [tlDashMarkets,setTlDashMarkets]=useState([])         // [{symbol,name,price,ema10,trend}]
   const tlEquityContainerRef=useRef(null)
   const [tlEquityHeight,setTlEquityHeight]=useState(300)
@@ -682,8 +681,6 @@ export default function Home() {
   const [tlInvestHeight,setTlInvestHeight]=useState(200)
   const [tlEquityFlex,setTlEquityFlex]=useState(()=>{try{const saved=localStorage.getItem('tlEquityFlex');const v=saved?parseFloat(saved):1;return isNaN(v)?1:Math.min(1.8,Math.max(0.2,v))}catch(_){return 1}})
   const tlEquityFlexRef=useRef(tlEquityFlex)
-  const tlFullscreenContainerRef=useRef(null)
-  const [tlFullscreenHeight,setTlFullscreenHeight]=useState(500)
   // ── Dashboard: fetch market trend data when tab becomes active ──
   useEffect(()=>{
     if(tlTab!=='dashboard') return
@@ -728,15 +725,6 @@ export default function Home() {
     ro.observe(tlInvestContainerRef.current)
     return ()=>ro.disconnect()
   },[])
-  useEffect(()=>{
-    if(!tlDashFullscreen||!tlFullscreenContainerRef.current) return
-    const ro=new ResizeObserver(entries=>{
-      const h=entries[0]?.contentRect?.height
-      if(h&&h>50) setTlFullscreenHeight(h)
-    })
-    ro.observe(tlFullscreenContainerRef.current)
-    return ()=>ro.disconnect()
-  },[tlDashFullscreen])
   // ── groupTradesForDisplay: FIFO match individual fills → virtual grouped rows ──
   // tlTrades stores raw fills (fill_type:'buy'|'sell', status:'open').
   // This function pairs them chronologically per symbol so the UI shows closed ops with entry+exit.
@@ -2754,7 +2742,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V6.70</title>
+        <title>Trading Simulator V6.71</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2831,7 +2819,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V6.70
+            <span className="dot"/>Trading Simulator V6.71
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6263,7 +6251,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                 {eqDisp.length>1
                                   ?<div ref={tlEquityContainerRef} style={{flex:1,minHeight:0}}><TlEquityChart curve={eqDisp} curveSinFx={sfxDisp.length>1?sfxDisp:null} curveSinComm={scommDisp.length>1?scommDisp:null} curveWithContribs={cwcDisp.length>1?cwcDisp:null} contributions={contributions} showWithContribs={showWithContribs} onToggleContribs={()=>setShowWithContribs(v=>!v)} height={tlEquityHeight} showTimeScale={false} syncRef={tlDashSyncRef}/></div>
                                   :<div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:MONO,fontSize:10,color:'#3d5a7a'}}>Sin datos equity</div>}
-                                <div onClick={()=>setTlDashFullscreen('equity')} title="Pantalla completa"
+                                <div onClick={()=>{document.getElementById('tlDetailEquity')?.scrollIntoView({behavior:'smooth'})}} title="Ir al gráfico detallado"
                                   style={{position:'absolute',top:6,right:6,zIndex:10,cursor:'pointer',color:'#3d5a7a',fontSize:13,lineHeight:1,background:'rgba(13,21,32,0.75)',borderRadius:3,padding:'2px 5px',border:'1px solid #1a2d45'}}
                                   onMouseOver={e=>e.currentTarget.style.color='#00d4ff'} onMouseOut={e=>e.currentTarget.style.color='#3d5a7a'}>⤢</div>
                               </div>
@@ -6297,7 +6285,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                     ?<TlInvestChart investData={investData} syncRef={tlDashSyncRef} patrimonyCurve={cwcDisp.length>1?cwcDisp:null} compact={false} height={tlInvestHeight}/>
                                     :<div style={{height:'100%',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:MONO,fontSize:9,color:'#3d5a7a'}}>—</div>}
                                 </div>
-                                <div onClick={()=>setTlDashFullscreen('invest')} title="Pantalla completa"
+                                <div onClick={()=>{document.getElementById('tlDetailInvest')?.scrollIntoView({behavior:'smooth'})}} title="Ir al gráfico detallado"
                                   style={{position:'absolute',top:6,right:6,zIndex:10,cursor:'pointer',color:'#3d5a7a',fontSize:13,lineHeight:1,background:'rgba(13,21,32,0.75)',borderRadius:3,padding:'2px 5px',border:'1px solid #1a2d45'}}
                                   onMouseOver={e=>e.currentTarget.style.color='#00d4ff'} onMouseOut={e=>e.currentTarget.style.color='#3d5a7a'}>⤢</div>
                               </div>
@@ -6319,7 +6307,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                   </div>
                                 ))}
                               </div>
-                              <div style={{flex:1,overflow:'hidden',position:'relative',cursor:'pointer',padding:'16px 6px 4px'}} onClick={()=>setTlDashFullscreen('pnl')}>
+                              <div style={{flex:1,overflow:'hidden',position:'relative',padding:'16px 6px 4px'}}>
                                 <div style={{position:'absolute',top:3,left:6,fontFamily:MONO,fontSize:7,color:'#3d5a7a',letterSpacing:'0.07em',textTransform:'uppercase',zIndex:10,pointerEvents:'none'}}>P&L por operación</div>
                                 <div style={{display:'flex',alignItems:'flex-end',gap:1,height:'calc(100% - 16px)'}}>
                                   {[...closed.map(t=>({...t,isOpen:false})),...openTrades.map(t=>({...t,pnl_eur:t._pnl_float_eur||0,isOpen:true}))].map((t,i)=>{
@@ -6402,12 +6390,12 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           {/* GRÁFICOS DETALLADOS (scroll) */}
                           <div style={{flexShrink:0,overflowY:'auto'}}>
                             <div style={{padding:'5px 14px 3px',fontFamily:MONO,fontSize:8,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',borderBottom:'1px solid var(--border)'}}>Gráficos detallados</div>
-                            {eqDisp.length>1&&<TlEquityChart curve={eqDisp} curveSinFx={sfxDisp.length>1?sfxDisp:null} curveSinComm={scommDisp.length>1?scommDisp:null} curveWithContribs={cwcDisp.length>1?cwcDisp:null} contributions={contributions} showWithContribs={showWithContribs} onToggleContribs={()=>setShowWithContribs(v=>!v)} syncRef={tlDashSyncRef}/>}
-                            {investData.length>1&&<TlInvestChart investData={investData} syncRef={tlDashSyncRef} patrimonyCurve={cwcDisp.length>1?cwcDisp:null}/>}
+                            {eqDisp.length>1&&<div id="tlDetailEquity" style={{height:'100vh',position:'relative'}}><TlEquityChart curve={eqDisp} curveSinFx={sfxDisp.length>1?sfxDisp:null} curveSinComm={scommDisp.length>1?scommDisp:null} curveWithContribs={cwcDisp.length>1?cwcDisp:null} contributions={contributions} showWithContribs={showWithContribs} onToggleContribs={()=>setShowWithContribs(v=>!v)} height={typeof window!=='undefined'?window.innerHeight:700} showTimeScale={true} syncRef={tlDashSyncRef}/></div>}
+                            {investData.length>1&&<div id="tlDetailInvest" style={{height:'100vh',position:'relative'}}><TlInvestChart investData={investData} syncRef={tlDashSyncRef} patrimonyCurve={cwcDisp.length>1?cwcDisp:null} height={typeof window!=='undefined'?window.innerHeight:700} compact={false}/></div>}
                             {(closed.length>0||openTrades.length>0)&&(
                               <div style={{padding:'12px 16px 8px',borderTop:'1px solid var(--border)'}}>
                                 <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:8}}>P&L por operación</div>
-                                <div style={{display:'flex',alignItems:'flex-end',gap:2,height:60}}>
+                                <div style={{display:'flex',alignItems:'flex-end',gap:2,height:200}}>
                                   {[...closed.map(t=>({...t,isOpen:false})),...openTrades.map(t=>({...t,pnl_eur:t._pnl_float_eur||0,isOpen:true}))].map((t,i)=>{
                                     const allPnls=[...closed.map(x=>Math.abs(x.pnl_eur||0)),...openTrades.map(x=>Math.abs(x._pnl_float_eur||0))]
                                     const mx=Math.max(...allPnls,1)
@@ -6421,40 +6409,6 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                             )}
                           </div>
                           </>
-                          {/* FULLSCREEN MODAL — position:fixed, always available */}
-                          {tlDashFullscreen&&(
-                            <div style={{position:'fixed',inset:'0 0 0 0',zIndex:9999,background:'rgba(0,5,12,0.96)',display:'flex',flexDirection:'column'}}
-                              onClick={e=>{if(e.target===e.currentTarget)setTlDashFullscreen(null)}}>
-                              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 16px',background:'var(--bg2)',borderBottom:'1px solid var(--border)',flexShrink:0}}>
-                                <span style={{fontFamily:MONO,fontSize:11,color:'var(--text)',letterSpacing:'0.05em'}}>
-                                  {tlDashFullscreen==='equity'?'Equity — P&L Acumulado':tlDashFullscreen==='invest'?'Capital Invertido vs Profit':'P&L por Operación'}
-                                </span>
-                                <button onClick={()=>setTlDashFullscreen(null)}
-                                  style={{background:'transparent',border:'1px solid #2a3a4a',color:'#a8ccdf',fontFamily:MONO,fontSize:10,padding:'3px 10px',borderRadius:3,cursor:'pointer'}}>
-                                  ✕ Cerrar
-                                </button>
-                              </div>
-                              <div ref={tlFullscreenContainerRef} style={{flex:1,overflow:'hidden',padding:0}}>
-                                {tlDashFullscreen==='equity'&&eqDisp.length>1&&<div style={{height:'100%',width:'100%'}}><TlEquityChart curve={eqDisp} curveSinFx={sfxDisp.length>1?sfxDisp:null} curveSinComm={scommDisp.length>1?scommDisp:null} curveWithContribs={cwcDisp.length>1?cwcDisp:null} contributions={contributions} showWithContribs={showWithContribs} onToggleContribs={()=>setShowWithContribs(v=>!v)} height={tlFullscreenHeight} showTimeScale={true} syncRef={tlDashSyncRef}/></div>}
-                                {tlDashFullscreen==='invest'&&investData.length>1&&<div style={{height:'100%',width:'100%'}}><TlInvestChart investData={investData} syncRef={tlDashSyncRef} patrimonyCurve={cwcDisp.length>1?cwcDisp:null} height={tlFullscreenHeight}/></div>}
-                                {tlDashFullscreen==='pnl'&&(
-                                  <div style={{height:'100%',display:'flex',flexDirection:'column',padding:'4px 12px'}}>
-                                    <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:12}}>P&L por operación</div>
-                                    <div style={{display:'flex',alignItems:'flex-end',gap:3,flex:1}}>
-                                      {[...closed.map(t=>({...t,isOpen:false})),...openTrades.map(t=>({...t,pnl_eur:t._pnl_float_eur||0,isOpen:true}))].map((t,i)=>{
-                                        const allPnls=[...closed.map(x=>Math.abs(x.pnl_eur||0)),...openTrades.map(x=>Math.abs(x._pnl_float_eur||0))]
-                                        const mx=Math.max(...allPnls,1)
-                                        const h=Math.max(2,Math.abs(t.pnl_eur||0)/mx*95)+'%'
-                                        const isW=(t.pnl_eur||0)>=0
-                                        return <div key={i} title={t.symbol+' '+(isW?'+':'')+('€'+Math.round(t.pnl_eur||0))+(t.isOpen?' (abierta)':'')}
-                                          style={{flex:1,height:h,background:t.isOpen?(isW?'rgba(0,229,160,0.5)':'rgba(255,77,109,0.45)'):(isW?'#00e5a0':'#ff4d6d'),borderRadius:'3px 3px 0 0',minWidth:3,border:t.isOpen?'1px solid '+(isW?'#00e5a0':'#ff4d6d'):'none'}}/>
-                                      })}
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          )}
                         </div>
                       )
                     })()}
