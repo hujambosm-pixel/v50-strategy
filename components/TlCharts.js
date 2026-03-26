@@ -108,8 +108,13 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
         tt.innerHTML=rows.join('')
       })
       chart.timeScale().fitContent()
-      const ro = new ResizeObserver(()=>{ if(ref.current) chart.applyOptions({width:ref.current.clientWidth,height:ref.current.clientHeight}) })
+      const ro = new ResizeObserver(()=>{
+        if(!ref.current) return
+        const h = ref.current.clientHeight || ref.current.parentElement?.clientHeight || 200
+        chart.applyOptions({width:ref.current.clientWidth, height:h})
+      })
       ro.observe(ref.current)
+      ro.takeRecords()
       return ()=>ro.disconnect()
     })
     return ()=>{ if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null} }
