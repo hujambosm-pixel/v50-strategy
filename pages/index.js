@@ -680,6 +680,8 @@ export default function Home() {
   const [tlEquityHeight,setTlEquityHeight]=useState(300)
   const tlFullscreenContainerRef=useRef(null)
   const [tlFullscreenHeight,setTlFullscreenHeight]=useState(500)
+  const tlInvestContainerRef=useRef(null)
+  const [tlInvestHeight,setTlInvestHeight]=useState(200)
   // ── Dashboard: fetch market trend data when tab becomes active ──
   useEffect(()=>{
     if(tlTab!=='dashboard') return
@@ -724,6 +726,15 @@ export default function Home() {
     ro.observe(tlFullscreenContainerRef.current)
     return ()=>ro.disconnect()
   },[tlDashFullscreen])
+  useEffect(()=>{
+    if(!tlInvestContainerRef.current) return
+    const ro=new ResizeObserver(entries=>{
+      const h=entries[0]?.contentRect?.height
+      if(h&&h>50) setTlInvestHeight(h)
+    })
+    ro.observe(tlInvestContainerRef.current)
+    return ()=>ro.disconnect()
+  },[])
   // ── groupTradesForDisplay: FIFO match individual fills → virtual grouped rows ──
   // tlTrades stores raw fills (fill_type:'buy'|'sell', status:'open').
   // This function pairs them chronologically per symbol so the UI shows closed ops with entry+exit.
@@ -2741,7 +2752,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V6.56</title>
+        <title>Trading Simulator V6.57</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2818,7 +2829,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V6.56
+            <span className="dot"/>Trading Simulator V6.57
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6243,21 +6254,43 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           </div>
                           {/* ZONA CENTRAL */}
                           <div style={{display:'flex',flex:1,minHeight:'calc(100vh - 350px)',borderBottom:'1px solid var(--border)',overflow:'hidden'}}>
-                            {/* Col equity */}
-                            <div style={{flex:2.5,borderRight:'1px solid var(--border)',display:'flex',flexDirection:'column',overflow:'hidden',position:'relative',minWidth:0}}>
-                              {eqDisp.length>1
-                                ?<div ref={tlEquityContainerRef} style={{flex:1,minHeight:0}}><TlEquityChart curve={eqDisp} curveSinFx={sfxDisp.length>1?sfxDisp:null} curveSinComm={scommDisp.length>1?scommDisp:null} curveWithContribs={cwcDisp.length>1?cwcDisp:null} contributions={contributions} showWithContribs={showWithContribs} onToggleContribs={()=>setShowWithContribs(v=>!v)} height={tlEquityHeight} syncRef={tlDashSyncRef}/></div>
-                                :<div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:MONO,fontSize:10,color:'#3d5a7a'}}>Sin datos equity</div>}
-                              <div onClick={()=>setTlDashFullscreen('equity')} title="Pantalla completa"
-                                style={{position:'absolute',top:6,right:6,zIndex:10,cursor:'pointer',color:'#3d5a7a',fontSize:13,lineHeight:1,background:'rgba(13,21,32,0.75)',borderRadius:3,padding:'2px 5px',border:'1px solid #1a2d45'}}
-                                onMouseOver={e=>e.currentTarget.style.color='#00d4ff'} onMouseOut={e=>e.currentTarget.style.color='#3d5a7a'}>⤢</div>
-                            </div>
-                            {/* Col invest + P&L */}
-                            <div style={{flex:1.4,borderRight:'1px solid var(--border)',display:'flex',flexDirection:'column',overflow:'hidden',minWidth:0}}>
-                              <div style={{flex:1,borderBottom:'1px solid var(--border)',overflow:'hidden',position:'relative',cursor:'pointer'}} onClick={()=>setTlDashFullscreen('invest')}>
+                            {/* Col equity + invest */}
+                            <div style={{flex:2.5,borderRight:'1px solid var(--border)',display:'flex',flexDirection:'column',overflow:'hidden',minWidth:0}}>
+                              {/* Subcol equity */}
+                              <div style={{flex:1.5,borderBottom:'1px solid var(--border)',display:'flex',flexDirection:'column',overflow:'hidden',position:'relative',minHeight:0}}>
+                                {eqDisp.length>1
+                                  ?<div ref={tlEquityContainerRef} style={{flex:1,minHeight:0}}><TlEquityChart curve={eqDisp} curveSinFx={sfxDisp.length>1?sfxDisp:null} curveSinComm={scommDisp.length>1?scommDisp:null} curveWithContribs={cwcDisp.length>1?cwcDisp:null} contributions={contributions} showWithContribs={showWithContribs} onToggleContribs={()=>setShowWithContribs(v=>!v)} height={tlEquityHeight} syncRef={tlDashSyncRef}/></div>
+                                  :<div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:MONO,fontSize:10,color:'#3d5a7a'}}>Sin datos equity</div>}
+                                <div onClick={()=>setTlDashFullscreen('equity')} title="Pantalla completa"
+                                  style={{position:'absolute',top:6,right:6,zIndex:10,cursor:'pointer',color:'#3d5a7a',fontSize:13,lineHeight:1,background:'rgba(13,21,32,0.75)',borderRadius:3,padding:'2px 5px',border:'1px solid #1a2d45'}}
+                                  onMouseOver={e=>e.currentTarget.style.color='#00d4ff'} onMouseOut={e=>e.currentTarget.style.color='#3d5a7a'}>⤢</div>
+                              </div>
+                              {/* Subcol invest */}
+                              <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',position:'relative',minHeight:0}}>
                                 {investData.length>1
-                                  ?<TlInvestChart investData={investData} syncRef={tlDashSyncRef} patrimonyCurve={cwcDisp.length>1?cwcDisp:null} compact={true}/>
-                                  :<div style={{height:'100%',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:MONO,fontSize:9,color:'#3d5a7a'}}>—</div>}
+                                  ?<div ref={tlInvestContainerRef} style={{flex:1,minHeight:0}}><TlInvestChart investData={investData} syncRef={tlDashSyncRef} patrimonyCurve={cwcDisp.length>1?cwcDisp:null} compact={false} height={tlInvestHeight}/></div>
+                                  :<div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:MONO,fontSize:9,color:'#3d5a7a'}}>—</div>}
+                                <div onClick={()=>setTlDashFullscreen('invest')} title="Pantalla completa"
+                                  style={{position:'absolute',top:6,right:6,zIndex:10,cursor:'pointer',color:'#3d5a7a',fontSize:13,lineHeight:1,background:'rgba(13,21,32,0.75)',borderRadius:3,padding:'2px 5px',border:'1px solid #1a2d45'}}
+                                  onMouseOver={e=>e.currentTarget.style.color='#00d4ff'} onMouseOut={e=>e.currentTarget.style.color='#3d5a7a'}>⤢</div>
+                              </div>
+                            </div>
+                            {/* Col métricas + P&L */}
+                            <div style={{flex:1.4,borderRight:'1px solid var(--border)',display:'flex',flexDirection:'column',overflow:'hidden',minWidth:0}}>
+                              <div style={{flex:1,borderBottom:'1px solid var(--border)',overflow:'hidden',padding:'8px 6px',display:'flex',flexDirection:'column',gap:4}}>
+                                {[
+                                  {l:'P&L TOTAL',t:'pnlTotal',v:fmtEur_(pnlTotal),c:pnlTotal>=0?'#00e5a0':'#ff4d6d'},
+                                  {l:'P&L S/CAPITAL',t:'pnlSCapital',v:pnlSCapPct!=null?(pnlSCapPct>=0?'+':'')+pnlSCapPct.toFixed(2)+'%':'—',c:pnlSCapPct!=null&&pnlSCapPct>=0?'#00e5a0':'#ff4d6d'},
+                                  {l:'CAGR',t:'cagr',v:cagrReal_!=null?(cagrReal_>=0?'+':'')+cagrReal_.toFixed(2)+'%':'—',c:cagrReal_!=null&&cagrReal_>=0?'#00e5a0':'#ff4d6d'},
+                                  {l:'MAX DRAWDOWN',t:'maxDrawdown',v:maxDD>0?('-€'+Math.round(maxDD)+' ('+maxDDPct.toFixed(1)+'%)'):'—',c:'#ff4d6d'},
+                                  {l:'WIN RATE',t:'winRate',v:allWithPnl.length?wr.toFixed(1)+'%':'—',c:wr>=50?'#00e5a0':'#ff4d6d'},
+                                  {l:'FACTOR BEN.',t:'factorBeneficio',v:factorBen_!=null?factorBen_.toFixed(2):'—',c:factorBen_!=null&&factorBen_>=1?'#00e5a0':'#ff4d6d'},
+                                ].map(({l,t,v,c},i)=>(
+                                  <div key={i} style={{display:'flex',flexDirection:'column',gap:1,flex:1,justifyContent:'center'}}>
+                                    <div style={{fontFamily:MONO,fontSize:7,color:'#3d5a7a',letterSpacing:'0.08em',display:'flex',alignItems:'center'}}>{l}<Tip id={t} style={{marginLeft:3}}/></div>
+                                    <div style={{fontFamily:MONO,fontSize:16,fontWeight:700,color:c,lineHeight:1}}>{v}</div>
+                                  </div>
+                                ))}
                               </div>
                               <div style={{flex:1,overflow:'hidden',position:'relative',cursor:'pointer',padding:'16px 6px 4px'}} onClick={()=>setTlDashFullscreen('pnl')}>
                                 <div style={{position:'absolute',top:3,left:6,fontFamily:MONO,fontSize:7,color:'#3d5a7a',letterSpacing:'0.07em',textTransform:'uppercase',zIndex:10,pointerEvents:'none'}}>P&L por operación</div>
@@ -6273,7 +6306,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               </div>
                             </div>
                             {/* Col mercados + posiciones */}
-                            <div style={{flex:0.8,display:'flex',flexDirection:'column',overflow:'hidden',minWidth:120}}>
+                            <div style={{flex:0.6,display:'flex',flexDirection:'column',overflow:'hidden',minWidth:120}}>
                               <div style={{flex:1,borderBottom:'1px solid var(--border)',overflow:'hidden',padding:'4px 8px'}}>
                                 <div style={{fontFamily:MONO,fontSize:7,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:3}}>Mercados</div>
                                 {tlDashMarkets.length===0
@@ -6341,7 +6374,6 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                             {[
                               {l:'Ganadoras',t:'ganadoras',v:wins_.length,c:'#00e5a0'},
                               {l:'Perdedoras',t:'perdedoras',v:losses_.length,c:'#ff4d6d'},
-                              {l:'Balance inicial',t:'balanceInicial',v:hasContribs?fmtAbs_(capitalNeto):'—',c:'#a8ccdf'},
                               {l:'P&L s/capital',t:'pnlSCapital',v:pnlSCapPct!=null?(pnlSCapPct>=0?'+':'')+pnlSCapPct.toFixed(2)+'%':'—',c:pnlSCapPct!=null&&pnlSCapPct>=0?'#00e5a0':'#ff4d6d'},
                               {l:'Días promedio',t:'diasPromedioInv',v:diasProm!=null?Math.round(diasProm)+' d':'—',c:'#a8ccdf'},
                               {l:'Total días inv.',t:'totalDiasInv',v:totalDiasInv+' d',c:'#a8ccdf'},

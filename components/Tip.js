@@ -81,6 +81,7 @@ export const TIP_DATA = {
     text: 'Capital fijo: cada trade usa siempre el mismo importe en euros. El P&L Simple suma linealmente. El P&L Compuesto reinvierte las ganancias: cada operación usa el capital acumulado del trade anterior. El sizing no afecta a las señales, solo a los resultados monetarios.'
   },
   // ── Dashboard métricas ──────────────────────────────────────
+  pnlTotal: { title: 'P&L Total', text: 'P&L total acumulado de todas las operaciones cerradas y flotantes del período filtrado.' },
   cagr: { title: 'CAGR', text: 'Tasa de crecimiento anual compuesto del portfolio durante el período analizado.' },
   maxDrawdown: { title: 'Max Drawdown', text: 'Caída máxima desde un máximo hasta el mínimo posterior. Mide el peor escenario de pérdida.' },
   winRate: { title: 'Win Rate', text: 'Porcentaje de operaciones cerradas con beneficio sobre el total de operaciones cerradas.' },
