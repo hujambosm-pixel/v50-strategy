@@ -2742,7 +2742,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V6.73</title>
+        <title>Trading Simulator V6.74</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2819,7 +2819,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V6.73
+            <span className="dot"/>Trading Simulator V6.74
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6187,7 +6187,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       const bot3_=openSorted_.length>3?[...openSorted_].reverse().slice(0,Math.min(3,openSorted_.length-3)):[]
                       const ps_={fontFamily:MONO,fontSize:10,padding:'2px 8px',border:'1px solid var(--border)',borderRadius:10,background:'var(--bg3)',cursor:'pointer',outline:'none',color:'#4a6a88',maxWidth:110}
                       return (
-                        <div id="tlDashOuter" style={{display:'flex',flexDirection:'column',background:'var(--bg)',flex:1,minHeight:0,overflowY:'auto'}}>
+                        <div id="tlDashOuter" data-dash-outer="1" style={{display:'flex',flexDirection:'column',background:'var(--bg)',flex:1,minHeight:0,overflowY:'auto'}}>
                           {/* BARRA SUPERIOR — always visible even when noData */}
                           <div style={{display:'flex',alignItems:'center',gap:5,padding:'6px 12px',borderBottom:'1px solid var(--border)',background:'var(--bg2)',flexShrink:0,flexWrap:'nowrap',overflowX:'auto'}}>
                             <span style={{fontFamily:MONO,fontSize:11,fontWeight:700,color:'var(--text)',letterSpacing:'0.08em',textTransform:'uppercase',marginRight:8,flexShrink:0}}>Dashboard</span>
@@ -6418,8 +6418,12 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                   </div>
                 )}
                 {tlTab==='dashboard'&&(
-                  <button onClick={()=>{const el=document.getElementById('tlDashOuter');if(el)el.scrollTop=0}}
-                    style={{position:'fixed',bottom:20,right:20,zIndex:9999,background:'rgba(13,21,32,0.95)',border:'1px solid #1a2d45',color:'#00d4ff',fontFamily:MONO,fontSize:10,padding:'8px 14px',borderRadius:4,cursor:'pointer',boxShadow:'0 2px 12px rgba(0,0,0,0.5)'}}>
+                  <button onClick={()=>{
+                    const candidates=[document.getElementById('tlDashOuter'),document.querySelector('[data-dash-outer]'),document.querySelector('.tl-dash-outer')]
+                    const el=candidates.find(e=>e&&e.scrollTop!==undefined)
+                    if(el){el.scrollTop=0}else{window.scrollTo({top:0,behavior:'smooth'})}
+                  }}
+                    style={{position:'fixed',top:60,right:20,zIndex:9999,background:'rgba(13,21,32,0.95)',border:'1px solid #1a2d45',color:'#00d4ff',fontFamily:MONO,fontSize:10,padding:'8px 14px',borderRadius:4,cursor:'pointer',boxShadow:'0 2px 12px rgba(0,0,0,0.5)'}}>
                     ↑ Dashboard
                   </button>
                 )}
