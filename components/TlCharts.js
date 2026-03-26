@@ -32,7 +32,7 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
         grid:{vertLines:{color:'#0d1520'},horzLines:{color:'#0d1520'}},
         crosshair:{mode:CrosshairMode.Normal},
         rightPriceScale:{borderColor:'#1a2d45'},
-        timeScale:{borderColor:'#1a2d45',timeVisible:false,visible:false},
+        timeScale:{borderColor:'#1a2d45',timeVisible:true},
         localization:{priceFormatter:v=>'€'+Math.round(v)},
       })
       chartRef.current = chart
