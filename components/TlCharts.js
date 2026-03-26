@@ -77,16 +77,16 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
           .setData(curveSinComm.map(p=>({time:p.date,value:p.value})))
         track(curveSinComm,'comm')
       }
-      // Cross-chart time sync (logical range — works for all series types)
+      // Cross-chart time sync (time range)
       if(syncRef?.current){
         const syncId=Symbol()
-        const unsub=chart.timeScale().subscribeVisibleLogicalRangeChange(range=>{
+        const unsub=chart.timeScale().subscribeVisibleTimeRangeChange(range=>{
           if(!range||syncRef.current.syncing) return
           syncRef.current.syncing=true
           syncRef.current.listeners.forEach(fn=>{if(fn.id!==syncId)try{fn.handler(range)}catch(_){}})
           syncRef.current.syncing=false
         })
-        const handler=(range)=>{try{chart.timeScale().setVisibleLogicalRange(range)}catch(_){}}
+        const handler=(range)=>{try{chart.timeScale().setVisibleRange(range)}catch(_){}}
         syncRef.current.listeners.push({id:syncId,handler})
         chartRef.current.__syncCleanup=()=>{try{unsub()}catch(_){};if(syncRef.current)syncRef.current.listeners=syncRef.current.listeners.filter(e=>e.id!==syncId)}
       }
@@ -109,7 +109,7 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
       })
       chart.timeScale().fitContent()
       if(syncRef?.current){
-        syncRef.current.getRange=()=>{try{return chart.timeScale().getVisibleLogicalRange()}catch(_){return null}}
+        syncRef.current.getRange=()=>{try{return chart.timeScale().getVisibleRange()}catch(_){return null}}
       }
       const ro = new ResizeObserver(()=>{
         if(!ref.current) return
@@ -267,23 +267,23 @@ export function TlInvestChart({ investData, syncRef, patrimonyCurve, compact, he
         tt.style.top=Math.max(4,param.point.y-40)+'px'
         tt.innerHTML=rows.join('')
       })
-      // Cross-chart time sync
+      // Cross-chart time sync (time range)
       if(syncRef?.current){
         const syncId=Symbol()
-        const unsub=chart.timeScale().subscribeVisibleLogicalRangeChange(range=>{
+        const unsub=chart.timeScale().subscribeVisibleTimeRangeChange(range=>{
           if(!range||syncRef.current.syncing) return
           syncRef.current.syncing=true
           syncRef.current.listeners.forEach(fn=>{if(fn.id!==syncId)try{fn.handler(range)}catch(_){}})
           syncRef.current.syncing=false
         })
-        const handler=(range)=>{try{chart.timeScale().setVisibleLogicalRange(range)}catch(_){}}
+        const handler=(range)=>{try{chart.timeScale().setVisibleRange(range)}catch(_){}}
         syncRef.current.listeners.push({id:syncId,handler})
         chartRef.current.__syncCleanup=()=>{try{unsub()}catch(_){};if(syncRef.current)syncRef.current.listeners=syncRef.current.listeners.filter(e=>e.id!==syncId)}
       }
       chart.timeScale().fitContent()
       if(syncRef?.current?.getRange){
         const range=syncRef.current.getRange()
-        if(range){try{chart.timeScale().setVisibleLogicalRange(range)}catch(_){}}
+        if(range){try{chart.timeScale().setVisibleRange(range)}catch(_){}}
       }
       const ro = new ResizeObserver(()=>{
         if(!ref.current) return
