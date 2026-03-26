@@ -32,7 +32,7 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
         grid:{vertLines:{color:'#0d1520'},horzLines:{color:'#0d1520'}},
         crosshair:{mode:CrosshairMode.Normal},
         rightPriceScale:{borderColor:'#1a2d45'},
-        timeScale:{borderColor:'#1a2d45',timeVisible:true},
+        timeScale:{borderColor:'#1a2d45',timeVisible:false,visible:false},
         localization:{priceFormatter:v=>'€'+Math.round(v)},
       })
       chartRef.current = chart
@@ -291,7 +291,7 @@ export function TlInvestChart({ investData, syncRef, patrimonyCurve, compact, he
         if(compact){
           chart.applyOptions({width:w})
         } else {
-          const h=ref.current.parentElement?.clientHeight||ref.current.clientHeight||200
+          const h=ref.current.getBoundingClientRect().height||ref.current.parentElement?.getBoundingClientRect().height||200
           chart.applyOptions({width:w,height:h})
         }
       })
