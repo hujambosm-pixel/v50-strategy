@@ -676,6 +676,10 @@ export default function Home() {
   const [tlFilterStrat,setTlFilterStrat]=useState('')
   const [tlDashFullscreen,setTlDashFullscreen]=useState(null) // null|'equity'|'invest'|'pnl'
   const [tlDashMarkets,setTlDashMarkets]=useState([])         // [{symbol,name,price,ema10,trend}]
+  const tlEquityContainerRef=useRef(null)
+  const [tlEquityHeight,setTlEquityHeight]=useState(300)
+  const tlFullscreenContainerRef=useRef(null)
+  const [tlFullscreenHeight,setTlFullscreenHeight]=useState(500)
   // ── Dashboard: fetch market trend data when tab becomes active ──
   useEffect(()=>{
     if(tlTab!=='dashboard') return
@@ -702,6 +706,24 @@ export default function Home() {
     }
     Promise.all(MARKETS.map(fetchMarket)).then(r=>setTlDashMarkets(r.filter(Boolean))).catch(()=>{})
   },[tlTab,tlDashMarkets.length]) // eslint-disable-line
+  useEffect(()=>{
+    if(!tlEquityContainerRef.current) return
+    const ro=new ResizeObserver(entries=>{
+      const h=entries[0]?.contentRect?.height
+      if(h&&h>50) setTlEquityHeight(h)
+    })
+    ro.observe(tlEquityContainerRef.current)
+    return ()=>ro.disconnect()
+  },[])
+  useEffect(()=>{
+    if(!tlDashFullscreen||!tlFullscreenContainerRef.current) return
+    const ro=new ResizeObserver(entries=>{
+      const h=entries[0]?.contentRect?.height
+      if(h&&h>50) setTlFullscreenHeight(h)
+    })
+    ro.observe(tlFullscreenContainerRef.current)
+    return ()=>ro.disconnect()
+  },[tlDashFullscreen])
   // ── groupTradesForDisplay: FIFO match individual fills → virtual grouped rows ──
   // tlTrades stores raw fills (fill_type:'buy'|'sell', status:'open').
   // This function pairs them chronologically per symbol so the UI shows closed ops with entry+exit.
@@ -2719,7 +2741,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V6.55</title>
+        <title>Trading Simulator V6.56</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2796,7 +2818,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V6.55
+            <span className="dot"/>Trading Simulator V6.56
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6224,7 +6246,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                             {/* Col equity */}
                             <div style={{flex:2.5,borderRight:'1px solid var(--border)',display:'flex',flexDirection:'column',overflow:'hidden',position:'relative',minWidth:0}}>
                               {eqDisp.length>1
-                                ?<div style={{flex:1,minHeight:0}}><TlEquityChart curve={eqDisp} curveSinFx={sfxDisp.length>1?sfxDisp:null} curveSinComm={scommDisp.length>1?scommDisp:null} curveWithContribs={cwcDisp.length>1?cwcDisp:null} contributions={contributions} showWithContribs={showWithContribs} onToggleContribs={()=>setShowWithContribs(v=>!v)} syncRef={tlDashSyncRef}/></div>
+                                ?<div ref={tlEquityContainerRef} style={{flex:1,minHeight:0}}><TlEquityChart curve={eqDisp} curveSinFx={sfxDisp.length>1?sfxDisp:null} curveSinComm={scommDisp.length>1?scommDisp:null} curveWithContribs={cwcDisp.length>1?cwcDisp:null} contributions={contributions} showWithContribs={showWithContribs} onToggleContribs={()=>setShowWithContribs(v=>!v)} height={tlEquityHeight} syncRef={tlDashSyncRef}/></div>
                                 :<div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:MONO,fontSize:10,color:'#3d5a7a'}}>Sin datos equity</div>}
                               <div onClick={()=>setTlDashFullscreen('equity')} title="Pantalla completa"
                                 style={{position:'absolute',top:6,right:6,zIndex:10,cursor:'pointer',color:'#3d5a7a',fontSize:13,lineHeight:1,background:'rgba(13,21,32,0.75)',borderRadius:3,padding:'2px 5px',border:'1px solid #1a2d45'}}
@@ -6365,9 +6387,9 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                   ✕ Cerrar
                                 </button>
                               </div>
-                              <div style={{flex:1,overflow:'hidden',padding:0}}>
-                                {tlDashFullscreen==='equity'&&eqDisp.length>1&&<div style={{height:'100%',width:'100%'}}><TlEquityChart curve={eqDisp} curveSinFx={sfxDisp.length>1?sfxDisp:null} curveSinComm={scommDisp.length>1?scommDisp:null} curveWithContribs={cwcDisp.length>1?cwcDisp:null} contributions={contributions} showWithContribs={showWithContribs} onToggleContribs={()=>setShowWithContribs(v=>!v)} syncRef={tlDashSyncRef}/></div>}
-                                {tlDashFullscreen==='invest'&&investData.length>1&&<div style={{height:'100%',width:'100%'}}><TlInvestChart investData={investData} syncRef={tlDashSyncRef} patrimonyCurve={cwcDisp.length>1?cwcDisp:null}/></div>}
+                              <div ref={tlFullscreenContainerRef} style={{flex:1,overflow:'hidden',padding:0}}>
+                                {tlDashFullscreen==='equity'&&eqDisp.length>1&&<div style={{height:'100%',width:'100%'}}><TlEquityChart curve={eqDisp} curveSinFx={sfxDisp.length>1?sfxDisp:null} curveSinComm={scommDisp.length>1?scommDisp:null} curveWithContribs={cwcDisp.length>1?cwcDisp:null} contributions={contributions} showWithContribs={showWithContribs} onToggleContribs={()=>setShowWithContribs(v=>!v)} height={tlFullscreenHeight} syncRef={tlDashSyncRef}/></div>}
+                                {tlDashFullscreen==='invest'&&investData.length>1&&<div style={{height:'100%',width:'100%'}}><TlInvestChart investData={investData} syncRef={tlDashSyncRef} patrimonyCurve={cwcDisp.length>1?cwcDisp:null} height={tlFullscreenHeight}/></div>}
                                 {tlDashFullscreen==='pnl'&&(
                                   <div style={{height:'100%',display:'flex',flexDirection:'column',padding:'4px 12px'}}>
                                     <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:12}}>P&L por operación</div>

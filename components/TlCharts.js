@@ -9,7 +9,7 @@ const CONTRIB_MARKER = {
   dividendo:  { color:'#aaff44', shape:'circle',     position:'belowBar', prefix:'D+' },
 }
 
-export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContribs, contributions, showWithContribs, onToggleContribs, syncRef }) {
+export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContribs, contributions, showWithContribs, onToggleContribs, height, syncRef }) {
   const ref = useRef(null), chartRef = useRef(null), equityTooltipRef = useRef(null)
   const [showSinFx, setShowSinFx] = useState(false)
   const [showSinComm, setShowSinComm] = useState(false)
@@ -27,7 +27,7 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
     import('lightweight-charts').then(({createChart,CrosshairMode,LineStyle})=>{
       if(chartRef.current){chartRef.current.remove();chartRef.current=null}
       const chart = createChart(ref.current,{
-        width:ref.current.clientWidth, height:ref.current.clientHeight||200,
+        width:ref.current.clientWidth, height:height||ref.current.clientHeight||200,
         layout:{background:{color:'#080c14'},textColor:'#7a9bc0'},
         grid:{vertLines:{color:'#0d1520'},horzLines:{color:'#0d1520'}},
         crosshair:{mode:CrosshairMode.Normal},
@@ -110,17 +110,9 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
       chart.timeScale().fitContent()
       const ro = new ResizeObserver(()=>{
         if(!ref.current) return
-        const h = ref.current.clientHeight || ref.current.parentElement?.clientHeight || 200
-        chart.applyOptions({width:ref.current.clientWidth, height:h})
+        chart.applyOptions({width:ref.current.clientWidth, height:height||ref.current.clientHeight||200})
       })
       ro.observe(ref.current)
-      ro.takeRecords()
-      requestAnimationFrame(()=>{
-        if(ref.current) chart.applyOptions({
-          width:ref.current.clientWidth,
-          height:ref.current.clientHeight||ref.current.parentElement?.clientHeight||200
-        })
-      })
       return ()=>ro.disconnect()
     })
     return ()=>{ if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null} }
@@ -191,7 +183,7 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
 }
 
 // ── Capital Invertido vs Profit acumulado (area + line) ──
-export function TlInvestChart({ investData, syncRef, patrimonyCurve, compact }) {
+export function TlInvestChart({ investData, syncRef, patrimonyCurve, compact, height }) {
   // investData: [{date, capital, profit}]  sorted by date
   // compact=true: no header/legend, chart fills container height (used in Dashboard mini view)
   const ref = useRef(null), chartRef = useRef(null), investTooltipRef = useRef(null)
@@ -204,7 +196,7 @@ export function TlInvestChart({ investData, syncRef, patrimonyCurve, compact }) 
       // compact mode: inherit container height; standalone mode: use clientHeight or default 200
       const chartH=compact
         ? Math.max(40, ref.current.parentElement?.clientHeight||ref.current.clientHeight||120)
-        : Math.max(60, ref.current.clientHeight||200)
+        : Math.max(60, height||ref.current.clientHeight||200)
       const chart = createChart(ref.current,{
         width:ref.current.clientWidth, height:chartH,
         layout:{background:{color:'#0b0f1a'},textColor:'#7a9bc0'},
@@ -288,14 +280,6 @@ export function TlInvestChart({ investData, syncRef, patrimonyCurve, compact }) 
       chart.timeScale().fitContent()
       const ro = new ResizeObserver(()=>{ if(ref.current) chart.applyOptions({width:ref.current.clientWidth}) })
       ro.observe(ref.current)
-      if(!compact){
-        requestAnimationFrame(()=>{
-          if(ref.current) chart.applyOptions({
-            width:ref.current.clientWidth,
-            height:ref.current.clientHeight||ref.current.parentElement?.clientHeight||200
-          })
-        })
-      }
       return ()=>ro.disconnect()
     })
     return ()=>{ if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null} }
