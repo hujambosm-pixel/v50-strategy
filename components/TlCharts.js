@@ -316,7 +316,7 @@ export function TlInvestChart({ investData, syncRef, patrimonyCurve, compact, he
   )
 
   return (
-    <div style={{borderTop:'1px solid var(--border)'}}>
+    <div style={{borderTop:'1px solid var(--border)',display:'flex',flexDirection:'column',height:'100%'}}>
       <div style={{padding:'6px 14px 0',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
         <span style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',marginRight:4}}>Capital Invertido vs Profit</span>
         <span style={{display:'flex',alignItems:'center',gap:4,fontFamily:MONO,fontSize:9,color:'#2a7fff'}}>
@@ -334,8 +334,8 @@ export function TlInvestChart({ investData, syncRef, patrimonyCurve, compact, he
           </button>
         )}
       </div>
-      <div style={{position:'relative'}}>
-        <div ref={ref} style={{minHeight:200}}/>
+      <div style={{position:'relative',flex:1,minHeight:0}}>
+        <div ref={ref} style={{width:'100%',height:'100%',minHeight:200}}/>
         <div ref={investTooltipRef} style={{position:'absolute',display:'none',pointerEvents:'none',background:'rgba(8,12,20,0.96)',border:'1px solid #1a2d45',borderRadius:6,padding:'8px 12px',fontFamily:'"JetBrains Mono",monospace',fontSize:12,color:'#e2eaf5',zIndex:15,minWidth:160,boxShadow:'0 4px 20px rgba(0,0,0,0.5)'}}/>
       </div>
     </div>
