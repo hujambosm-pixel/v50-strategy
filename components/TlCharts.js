@@ -278,7 +278,16 @@ export function TlInvestChart({ investData, syncRef, patrimonyCurve, compact, he
         chartRef.current.__syncCleanup=()=>{try{unsub()}catch(_){};if(syncRef.current)syncRef.current.listeners=syncRef.current.listeners.filter(e=>e.id!==syncId)}
       }
       chart.timeScale().fitContent()
-      const ro = new ResizeObserver(()=>{ if(ref.current) chart.applyOptions({width:ref.current.clientWidth}) })
+      const ro = new ResizeObserver(()=>{
+        if(!ref.current) return
+        const w=ref.current.clientWidth||300
+        if(compact){
+          chart.applyOptions({width:w})
+        } else {
+          const h=ref.current.parentElement?.clientHeight||ref.current.clientHeight||200
+          chart.applyOptions({width:w,height:h})
+        }
+      })
       ro.observe(ref.current)
       return ()=>ro.disconnect()
     })
