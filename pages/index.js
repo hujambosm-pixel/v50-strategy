@@ -680,7 +680,8 @@ export default function Home() {
   const [tlEquityHeight,setTlEquityHeight]=useState(300)
   const tlInvestContainerRef=useRef(null)
   const [tlInvestHeight,setTlInvestHeight]=useState(200)
-  const [tlEquityFlex,setTlEquityFlex]=useState(1)
+  const [tlEquityFlex,setTlEquityFlex]=useState(()=>{try{const saved=localStorage.getItem('tlEquityFlex');const v=saved?parseFloat(saved):1;return isNaN(v)?1:Math.min(1.8,Math.max(0.2,v))}catch(_){return 1}})
+  const tlEquityFlexRef=useRef(tlEquityFlex)
   const tlFullscreenContainerRef=useRef(null)
   const [tlFullscreenHeight,setTlFullscreenHeight]=useState(500)
   // ── Dashboard: fetch market trend data when tab becomes active ──
@@ -2753,7 +2754,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V6.69</title>
+        <title>Trading Simulator V6.70</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2830,7 +2831,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V6.69
+            <span className="dot"/>Trading Simulator V6.70
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6277,10 +6278,12 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                     const delta=mv.clientY-startY
                                     const newFlex=Math.min(1.8,Math.max(0.2,startFlex+(delta/totalH)*2))
                                     setTlEquityFlex(newFlex)
+                                    tlEquityFlexRef.current=newFlex
                                   }
                                   const onUp=()=>{
                                     window.removeEventListener('mousemove',onMove)
                                     window.removeEventListener('mouseup',onUp)
+                                    try{localStorage.setItem('tlEquityFlex',tlEquityFlexRef.current)}catch(_){}
                                   }
                                   window.addEventListener('mousemove',onMove)
                                   window.addEventListener('mouseup',onUp)
