@@ -108,6 +108,9 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
         tt.innerHTML=rows.join('')
       })
       chart.timeScale().fitContent()
+      if(syncRef?.current){
+        syncRef.current.getRange=()=>{try{return chart.timeScale().getVisibleLogicalRange()}catch(_){return null}}
+      }
       const ro = new ResizeObserver(()=>{
         if(!ref.current) return
         chart.applyOptions({width:ref.current.clientWidth, height:height||ref.current.clientHeight||200})
@@ -278,6 +281,10 @@ export function TlInvestChart({ investData, syncRef, patrimonyCurve, compact, he
         chartRef.current.__syncCleanup=()=>{try{unsub()}catch(_){};if(syncRef.current)syncRef.current.listeners=syncRef.current.listeners.filter(e=>e.id!==syncId)}
       }
       chart.timeScale().fitContent()
+      if(syncRef?.current?.getRange){
+        const range=syncRef.current.getRange()
+        if(range){try{chart.timeScale().setVisibleLogicalRange(range)}catch(_){}}
+      }
       const ro = new ResizeObserver(()=>{
         if(!ref.current) return
         const w=ref.current.clientWidth||300
