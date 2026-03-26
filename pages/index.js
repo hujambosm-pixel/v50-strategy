@@ -678,6 +678,8 @@ export default function Home() {
   const [tlDashMarkets,setTlDashMarkets]=useState([])         // [{symbol,name,price,ema10,trend}]
   const tlEquityContainerRef=useRef(null)
   const [tlEquityHeight,setTlEquityHeight]=useState(300)
+  const tlInvestContainerRef=useRef(null)
+  const [tlInvestHeight,setTlInvestHeight]=useState(200)
   const tlFullscreenContainerRef=useRef(null)
   const [tlFullscreenHeight,setTlFullscreenHeight]=useState(500)
   // ── Dashboard: fetch market trend data when tab becomes active ──
@@ -709,10 +711,19 @@ export default function Home() {
   useEffect(()=>{
     if(!tlEquityContainerRef.current) return
     const ro=new ResizeObserver(entries=>{
-      const h=entries[0]?.contentRect?.height
-      if(h&&h>50) setTlEquityHeight(h)
+      const h=Math.round(entries[0]?.contentRect?.height)
+      if(h&&h>50) setTlEquityHeight(prev=>prev===h?prev:h)
     })
     ro.observe(tlEquityContainerRef.current)
+    return ()=>ro.disconnect()
+  },[])
+  useEffect(()=>{
+    if(!tlInvestContainerRef.current) return
+    const ro=new ResizeObserver(entries=>{
+      const h=Math.round(entries[0]?.contentRect?.height)
+      if(h&&h>50) setTlInvestHeight(prev=>prev===h?prev:h)
+    })
+    ro.observe(tlInvestContainerRef.current)
     return ()=>ro.disconnect()
   },[])
   useEffect(()=>{
@@ -2741,7 +2752,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V6.65</title>
+        <title>Trading Simulator V6.66</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2818,7 +2829,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V6.65
+            <span className="dot"/>Trading Simulator V6.66
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6246,7 +6257,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                             {/* Col equity */}
                             <div style={{flex:2.5,borderRight:'1px solid var(--border)',display:'flex',flexDirection:'column',overflow:'hidden',position:'relative',minWidth:0}}>
                               {/* Subcol equity */}
-                              <div style={{flex:1,borderBottom:'1px solid var(--border)',display:'flex',flexDirection:'column',overflow:'hidden',position:'relative'}}>
+                              <div style={{flex:1,borderBottom:'1px solid var(--border)',display:'flex',flexDirection:'column',overflow:'hidden',position:'relative',minHeight:0}}>
                                 {eqDisp.length>1
                                   ?<div ref={tlEquityContainerRef} style={{flex:1,minHeight:0}}><TlEquityChart curve={eqDisp} curveSinFx={sfxDisp.length>1?sfxDisp:null} curveSinComm={scommDisp.length>1?scommDisp:null} curveWithContribs={cwcDisp.length>1?cwcDisp:null} contributions={contributions} showWithContribs={showWithContribs} onToggleContribs={()=>setShowWithContribs(v=>!v)} height={tlEquityHeight} syncRef={tlDashSyncRef}/></div>
                                   :<div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:MONO,fontSize:10,color:'#3d5a7a'}}>Sin datos equity</div>}
@@ -6256,9 +6267,9 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               </div>
                               {/* Subcol invest */}
                               <div style={{flex:1,position:'relative',borderTop:'1px solid var(--border)',display:'flex',flexDirection:'column',overflow:'hidden',minHeight:0}}>
-                                <div style={{flex:1,minHeight:0,height:'100%',paddingTop:22}}>
+                                <div ref={tlInvestContainerRef} style={{flex:1,minHeight:0,height:'100%'}}>
                                   {investData.length>1
-                                    ?<TlInvestChart investData={investData} syncRef={tlDashSyncRef} patrimonyCurve={cwcDisp.length>1?cwcDisp:null} compact={false}/>
+                                    ?<TlInvestChart investData={investData} syncRef={tlDashSyncRef} patrimonyCurve={cwcDisp.length>1?cwcDisp:null} compact={false} height={tlInvestHeight}/>
                                     :<div style={{height:'100%',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:MONO,fontSize:9,color:'#3d5a7a'}}>—</div>}
                                 </div>
                                 <div onClick={()=>setTlDashFullscreen('invest')} title="Pantalla completa"
