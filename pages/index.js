@@ -684,22 +684,16 @@ export default function Home() {
   // ── Dashboard: fetch market trend data when tab becomes active ──
   useEffect(()=>{
     if(tlTab!=='dashboard') return
-    if(tlDashMarkets.length>=10) return
     const MARKETS=[
-      {symbol:'^GSPC',  name:'S&P 500'},
-      {symbol:'^NDX',   name:'Nasdaq'},
-      {symbol:'^DJI',   name:'Dow Jones'},
-      {symbol:'^IBEX',  name:'IBEX 35'},
-      {symbol:'^GDAXI', name:'DAX'},
-      {symbol:'^CAC',   name:'CAC 40'},
-      {symbol:'^FTSE',  name:'FTSE 100'},
-      {symbol:'^N225',  name:'Nikkei'},
-      {symbol:'^HSI',   name:'Hang Seng'},
-      {symbol:'^STOXX', name:'Euro Stoxx 50'},
+      {symbol:'^ibex', name:'IBEX 35'},
+      {symbol:'^dax',  name:'DAX'},
+      {symbol:'^cac',  name:'CAC 40'},
+      {symbol:'^nkx',  name:'Nikkei'},
     ]
+    if(tlDashMarkets.length>=MARKETS.length) return
     const fetchMarket=async(m)=>{
       try{
-        const r=await fetch(`/api/chartdata?symbol=${encodeURIComponent(m.symbol.toUpperCase())}&years=1`)
+        const r=await fetch(`/api/chartdata?symbol=${encodeURIComponent(m.symbol)}&years=1`)
         if(!r.ok) return null
         const data=await r.json()
         if(!data||data.length<11) return null
@@ -2750,7 +2744,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V6.97</title>
+        <title>Trading Simulator V6.98</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2827,7 +2821,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V6.97
+            <span className="dot"/>Trading Simulator V6.98
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
