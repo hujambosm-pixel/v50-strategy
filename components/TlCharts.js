@@ -112,13 +112,13 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
         syncRef.current.getRange=()=>{try{return chart.timeScale().getVisibleRange()}catch(_){return null}}
       }
       const ro = new ResizeObserver(()=>{
-        if(!ref.current) return
-        chart.applyOptions({width:ref.current.clientWidth,height:height||ref.current.clientHeight||200})
+        if(!ref.current||!chartRef.current) return
+        try{chart.applyOptions({width:ref.current.clientWidth,height:height||ref.current.clientHeight||200})}catch(_){}
       })
       ro.observe(ref.current)
       return ()=>ro.disconnect()
     })
-    return ()=>{ if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null} }
+    return ()=>{ if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};try{chartRef.current.remove()}catch(_){};chartRef.current=null} }
   },[activeCurve, curveSinFx, curveSinComm, showSinFx, showSinComm, showWithContribs, contributions, showAportacion, showRetirada, showDividendo])
 
   const btnStyle = (active, color) => ({
@@ -286,19 +286,21 @@ export function TlInvestChart({ investData, syncRef, patrimonyCurve, compact, he
         if(range){try{chart.timeScale().setVisibleRange(range)}catch(_){}}
       }
       const ro = new ResizeObserver(()=>{
-        if(!ref.current) return
-        const w=ref.current.clientWidth||300
-        if(compact){
-          chart.applyOptions({width:w})
-        } else {
-          const h=ref.current.getBoundingClientRect().height||ref.current.parentElement?.getBoundingClientRect().height||200
-          chart.applyOptions({width:w,height:h})
-        }
+        if(!ref.current||!chartRef.current) return
+        try{
+          const w=ref.current.clientWidth||300
+          if(compact){
+            chart.applyOptions({width:w})
+          } else {
+            const h=ref.current.getBoundingClientRect().height||ref.current.parentElement?.getBoundingClientRect().height||200
+            chart.applyOptions({width:w,height:h})
+          }
+        }catch(_){}
       })
       ro.observe(ref.current)
       return ()=>ro.disconnect()
     })
-    return ()=>{ if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null} }
+    return ()=>{ if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};try{chartRef.current.remove()}catch(_){};chartRef.current=null} }
   },[investData, showPatrimony, patrimonyCurve])
 
   const btnStyle = (active, color) => ({
