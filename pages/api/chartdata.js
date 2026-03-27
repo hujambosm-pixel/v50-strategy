@@ -2,13 +2,9 @@
 
 function stooqSym(symbol) {
   const MAP={
-    '^GSPC':'spx.us','^NDX':'ndx.us','^IBEX':'ibex.es','^GDAXI':'dax.de',
+    '^GSPC':'spy.us','^NDX':'ndx.us','^IBEX':'ibex.es','^GDAXI':'dax.de',
     '^FTSE':'ftse.uk','^N225':'n225.jp','BTC-USD':'btc-usd.v','ETH-USD':'eth-usd.v',
     'GC=F':'gc.f','CL=F':'cl.f',
-    '^DJI':'dji.us','^CAC':'cac.fr','^HSI':'hsi.hk','^STOXX':'sx5e.de',
-    '^spx':'spx.us','^ndx':'ndx.us','^dji':'dji.us','^ibex':'ibex.es',
-    '^dax':'dax.de','^cac':'cac.fr','^ftse':'ftse.uk','^nkx':'n225.jp',
-    '^hsi':'hsi.hk','^wig':'wig.pl',
   }
   if(MAP[symbol]) return MAP[symbol]
   if(symbol.endsWith('=F')) return symbol.replace('=F','').toLowerCase()+'.f'

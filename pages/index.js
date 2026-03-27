@@ -688,16 +688,10 @@ export default function Home() {
   useEffect(()=>{
     if(tlTab!=='dashboard') return
     const MARKETS=[
-      {symbol:'^spx',  name:'S&P 500'},
-      {symbol:'^ndx',  name:'Nasdaq'},
-      {symbol:'^dji',  name:'Dow Jones'},
-      {symbol:'^ibex', name:'IBEX 35'},
-      {symbol:'^dax',  name:'DAX'},
-      {symbol:'^cac',  name:'CAC 40'},
-      {symbol:'^ftse', name:'FTSE 100'},
-      {symbol:'^nkx',  name:'Nikkei'},
-      {symbol:'^hsi',  name:'Hang Seng'},
-      {symbol:'^wig',  name:'Polonia WIG'},
+      {symbol:'^IBEX',  name:'IBEX 35'},
+      {symbol:'^GDAXI', name:'DAX'},
+      {symbol:'^CAC',   name:'CAC 40'},
+      {symbol:'^N225',  name:'Nikkei'},
     ]
     if(tlDashMarkets.length>=MARKETS.length) return
     const fetchMarket=async(m)=>{
@@ -2753,7 +2747,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V7.3</title>
+        <title>Trading Simulator V7.4</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2830,7 +2824,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V7.3
+            <span className="dot"/>Trading Simulator V7.4
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
