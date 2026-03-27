@@ -688,19 +688,25 @@ export default function Home() {
   useEffect(()=>{
     if(tlTab!=='dashboard') return
     const MARKETS=[
-      {symbol:'^IBEX',  name:'IBEX 35'},
-      {symbol:'^GDAXI', name:'DAX'},
-      {symbol:'^CAC',   name:'CAC 40'},
-      {symbol:'^N225',  name:'Nikkei'},
+      {symbol:'^GSPC',    name:'S&P 500'},
+      {symbol:'^IXIC',    name:'Nasdaq'},
+      {symbol:'^DJI',     name:'Dow Jones'},
+      {symbol:'^IBEX',    name:'IBEX 35'},
+      {symbol:'^GDAXI',   name:'DAX'},
+      {symbol:'^FCHI',    name:'CAC 40'},
+      {symbol:'^FTSE',    name:'FTSE 100'},
+      {symbol:'^N225',    name:'Nikkei'},
+      {symbol:'^HSI',     name:'Hang Seng'},
+      {symbol:'^STOXX50E',name:'Euro Stoxx 50'},
     ]
     if(tlDashMarkets.length>=MARKETS.length) return
     const fetchMarket=async(m)=>{
       try{
-        const r=await fetch(`/api/chartdata?symbol=${encodeURIComponent(m.symbol)}&years=1`)
+        const r=await fetch('/api/datos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({simbolo:m.symbol,cfg:{years:1}})})
         if(!r.ok) return null
         const data=await r.json()
-        if(!data||data.length<11) return null
-        const prices=data.map(d=>d.close)
+        const prices=data?.ohlcv?.map(d=>d.close)
+        if(!prices||prices.length<11) return null
         let ema=prices.slice(0,10).reduce((s,p)=>s+p,0)/10
         const k=2/11
         for(let i=10;i<prices.length;i++) ema=prices[i]*k+ema*(1-k)
@@ -2747,7 +2753,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V7.41</title>
+        <title>Trading Simulator V7.42</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2824,7 +2830,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V7.41
+            <span className="dot"/>Trading Simulator V7.42
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}

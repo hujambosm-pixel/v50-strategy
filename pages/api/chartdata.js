@@ -15,14 +15,12 @@ function stooqSym(symbol) {
 
 async function fetchOHLCV(symbol) {
   const sym = stooqSym(symbol)
-  console.log('[chartdata] symbol:', symbol, '→ stooq:', sym)
   const url = `https://stooq.com/q/d/l/?s=${sym}&i=d`
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 10000)
   try {
     const res = await fetch(url, { signal: controller.signal })
     const text = await res.text()
-    console.log('[chartdata] status:', res.status, 'length:', text?.length, 'preview:', text?.slice(0,100))
     if (!text || text.includes('No data') || text.trim().length < 50) return null
     return text.trim().split('\n').slice(1).filter(l => l.trim()).map(l => {
       const [date, open, high, low, close] = l.split(',')
