@@ -2742,7 +2742,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V6.91</title>
+        <title>Trading Simulator V6.92</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2819,7 +2819,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V6.91
+            <span className="dot"/>Trading Simulator V6.92
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6329,13 +6329,22 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                 }
                               </div>
                               <div style={{flex:1,overflow:'hidden',padding:'4px 8px'}}>
-                                <div style={{fontFamily:MONO,fontSize:7,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:2}}>Posiciones abiertas</div>
-                                {_allOpen_.length===0
-                                  ?<div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a'}}>Sin posiciones</div>
+                                <div style={{fontFamily:MONO,fontSize:7,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:2}}>Rendimientos</div>
+                                {_allOpen_.length===0&&!bestT_&&!worstT_
+                                  ?<div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a'}}>Sin datos</div>
                                   :<>
-                                    {top3_.map((t,i)=>{const pnl=liveFloatEur_(t);const pct=typeof t._pnl_float_pct==='number'?t._pnl_float_pct:0;return(<div key={t.id||t.symbol+i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'1px 0'}}><span style={{fontFamily:MONO,fontSize:8,color:'#a8ccdf',minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.symbol}</span><span style={{fontFamily:MONO,fontSize:8,color:'#00e5a0',flexShrink:0,marginLeft:4}}>{pnl>=0?'+':''}{Math.round(pnl)}€</span></div>)})}
-                                    {top3_.length>0&&bot3_.length>0&&<div style={{borderTop:'1px dashed #1a2d45',margin:'2px 0'}}/>}
-                                    {bot3_.map((t,i)=>{const pnl=liveFloatEur_(t);return(<div key={t.id||t.symbol+'b'+i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'1px 0'}}><span style={{fontFamily:MONO,fontSize:8,color:'#a8ccdf',minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.symbol}</span><span style={{fontFamily:MONO,fontSize:8,color:'#ff4d6d',flexShrink:0,marginLeft:4}}>{pnl>=0?'+':''}{Math.round(pnl)}€</span></div>)})}
+                                    {_allOpen_.length>0&&<>
+                                      <div style={{fontFamily:MONO,fontSize:6,color:'#3d5a7a',letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:1}}>Abiertas</div>
+                                      {top3_.map((t,i)=>{const pnl=liveFloatEur_(t);return(<div key={t.id||t.symbol+i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'1px 0'}}><span style={{fontFamily:MONO,fontSize:8,color:'#a8ccdf',minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.symbol}</span><span style={{fontFamily:MONO,fontSize:8,color:'#00e5a0',flexShrink:0,marginLeft:4}}>{pnl>=0?'+':''}{Math.round(pnl)}€</span></div>)})}
+                                      {top3_.length>0&&bot3_.length>0&&<div style={{borderTop:'1px dashed #1a2d45',margin:'2px 0'}}/>}
+                                      {bot3_.map((t,i)=>{const pnl=liveFloatEur_(t);return(<div key={t.id||t.symbol+'b'+i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'1px 0'}}><span style={{fontFamily:MONO,fontSize:8,color:'#a8ccdf',minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.symbol}</span><span style={{fontFamily:MONO,fontSize:8,color:'#ff4d6d',flexShrink:0,marginLeft:4}}>{pnl>=0?'+':''}{Math.round(pnl)}€</span></div>)})}
+                                    </>}
+                                    {(bestT_||worstT_)&&<>
+                                      {_allOpen_.length>0&&<div style={{borderTop:'1px dashed #1a2d45',margin:'3px 0'}}/>}
+                                      <div style={{fontFamily:MONO,fontSize:6,color:'#3d5a7a',letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:1}}>Cerradas</div>
+                                      {bestT_&&<div style={{display:'flex',justifyContent:'space-between',padding:'1px 0'}}><span style={{fontFamily:MONO,fontSize:8,color:'#a8ccdf'}}>{bestT_.symbol}</span><span style={{fontFamily:MONO,fontSize:8,color:'#00e5a0'}}>{fmtEur_(bestT_._ep)}</span></div>}
+                                      {worstT_&&<div style={{display:'flex',justifyContent:'space-between',padding:'1px 0'}}><span style={{fontFamily:MONO,fontSize:8,color:'#a8ccdf'}}>{worstT_.symbol}</span><span style={{fontFamily:MONO,fontSize:8,color:'#ff4d6d'}}>{fmtEur_(worstT_._ep)}</span></div>}
+                                    </>}
                                   </>
                                 }
                               </div>
@@ -6359,14 +6368,6 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           </div>
                           {/* FILA 4 */}
                           <div style={{display:'flex',flexWrap:'nowrap',borderBottom:'1px solid var(--border)',flexShrink:0,overflowX:'auto'}}>
-                            <div style={{flex:'1 0 15%',padding:'10px 10px',borderRight:'1px solid var(--border)',background:'rgba(0,229,160,0.05)',borderLeft:'3px solid #00e5a0',minWidth:100}}>
-                              <div style={{fontFamily:MONO,fontSize:8,color:'#00e5a0',letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:2,display:'flex',alignItems:'center'}}>Mejor op.<Tip id="mejorOp" style={{marginLeft:3}}/></div>
-                              <div style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:'#00e5a0',lineHeight:1.2}}>{bestT_?(bestT_.symbol+' '+fmtEur_(bestT_._ep)):'—'}</div>
-                            </div>
-                            <div style={{flex:'1 0 15%',padding:'10px 10px',borderRight:'1px solid var(--border)',background:'rgba(255,77,109,0.05)',borderLeft:'3px solid #ff4d6d',minWidth:100}}>
-                              <div style={{fontFamily:MONO,fontSize:8,color:'#ff4d6d',letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:2,display:'flex',alignItems:'center'}}>Peor op.<Tip id="peorOp" style={{marginLeft:3}}/></div>
-                              <div style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:'#ff4d6d',lineHeight:1.2}}>{worstT_?(worstT_.symbol+' '+fmtEur_(worstT_._ep)):'—'}</div>
-                            </div>
                             {[
                               {l:'Ganadoras',t:'ganadoras',v:wins_.length,c:'#00e5a0'},
                               {l:'Perdedoras',t:'perdedoras',v:losses_.length,c:'#ff4d6d'},
