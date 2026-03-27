@@ -2742,7 +2742,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V6.88</title>
+        <title>Trading Simulator V6.89</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2819,7 +2819,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V6.88
+            <span className="dot"/>Trading Simulator V6.89
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6289,10 +6289,10 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                   {l:'MAX DRAWDOWN',t:'maxDrawdown',v:maxDD>0?('-€'+Math.round(maxDD)+' ('+maxDDPct.toFixed(1)+'%)'):'—',c:'#ff4d6d'},
                                   {l:'WIN RATE',t:'winRate',v:allWithPnl.length?wr.toFixed(1)+'%':'—',c:wr>=50?'#00e5a0':'#ff4d6d'},
                                   {l:'FACTOR BEN.',t:'factorBeneficio',v:factorBen_!=null?factorBen_.toFixed(2):'—',c:factorBen_!=null&&factorBen_>=1?'#00e5a0':'#ff4d6d'},
-                                ].map(({l,t,v,c},i)=>(
-                                  <div key={i} style={{display:'flex',flexDirection:'column',justifyContent:'center',flex:1,padding:'0 10px',borderBottom:'1px solid var(--border)'}}>
-                                    <div style={{fontFamily:MONO,fontSize:7,color:'#3d5a7a',letterSpacing:'0.08em',textTransform:'uppercase',display:'flex',alignItems:'center',gap:3}}>{l}<Tip id={t}/></div>
-                                    <div style={{fontFamily:MONO,fontSize:15,fontWeight:600,color:c,lineHeight:1.1}}>{v}</div>
+                                ].map(({l,t,v,c},i,arr)=>(
+                                  <div key={i} style={{display:'flex',flexDirection:'column',justifyContent:'center',flex:1,padding:'6px 12px',borderBottom:i<arr.length-1?'1px solid var(--border)':'none',borderRadius:6,background:'rgba(255,255,255,0.02)'}}>
+                                    <div style={{fontFamily:MONO,fontSize:8,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',display:'flex',alignItems:'center',gap:4}}>{l}<Tip id={t}/></div>
+                                    <div style={{fontFamily:MONO,fontSize:18,fontWeight:700,color:c,lineHeight:1.1}}>{v}</div>
                                   </div>
                                 ))}
                               </div>
@@ -6313,7 +6313,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               </div>
                             </div>
                             {/* Col mercados + posiciones */}
-                            <div style={{flex:0.8,display:'flex',flexDirection:'column',overflow:'hidden',minWidth:120}}>
+                            <div style={{flex:0.45,display:'flex',flexDirection:'column',overflow:'hidden',minWidth:120}}>
                               <div style={{flex:1,borderBottom:'1px solid var(--border)',overflow:'hidden',padding:'4px 8px'}}>
                                 <div style={{fontFamily:MONO,fontSize:7,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:3}}>Mercados</div>
                                 {tlDashMarkets.length===0
