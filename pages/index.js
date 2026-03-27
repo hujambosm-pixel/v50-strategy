@@ -681,7 +681,6 @@ export default function Home() {
   const [tlInvestHeight,setTlInvestHeight]=useState(200)
   const [tlEquityFlex,setTlEquityFlex]=useState(()=>{try{const saved=localStorage.getItem('tlEquityFlex');const v=saved?parseFloat(saved):1;return isNaN(v)?1:Math.min(1.8,Math.max(0.2,v))}catch(_){return 1}})
   const tlEquityFlexRef=useRef(tlEquityFlex)
-  const tlDashOuterRef=useRef(null)
   // ── Dashboard: fetch market trend data when tab becomes active ──
   useEffect(()=>{
     if(tlTab!=='dashboard') return
@@ -6177,8 +6176,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       const bot3_=openSorted_.length>3?[...openSorted_].reverse().slice(0,Math.min(3,openSorted_.length-3)):[]
                       const ps_={fontFamily:MONO,fontSize:10,padding:'2px 8px',border:'1px solid var(--border)',borderRadius:10,background:'var(--bg3)',cursor:'pointer',outline:'none',color:'#4a6a88',maxWidth:110}
                       return (
-                        <>
-                        <div ref={tlDashOuterRef} id="tlDashOuter" data-dash-outer="1" style={{display:'flex',flexDirection:'column',background:'var(--bg)',flex:1,minHeight:0,overflowY:'auto'}}>
+                        <div id="tlDashOuter" data-dash-outer="1" style={{display:'flex',flexDirection:'column',background:'var(--bg)',flex:1,minHeight:0,overflowY:'auto'}}>
                           {/* BARRA SUPERIOR — always visible even when noData */}
                           <div style={{display:'flex',alignItems:'center',gap:5,padding:'6px 12px',borderBottom:'1px solid var(--border)',background:'var(--bg2)',flexShrink:0,flexWrap:'nowrap',overflowX:'auto'}}>
                             <span style={{fontFamily:MONO,fontSize:11,fontWeight:700,color:'var(--text)',letterSpacing:'0.08em',textTransform:'uppercase',marginRight:8,flexShrink:0}}>Dashboard</span>
@@ -6404,15 +6402,14 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           </div>
                           </>
                         </div>
-                        {tlTab==='dashboard'&&(
-                          <button onClick={()=>{const el=document.getElementById('tlDashOuter');if(el)el.scrollTo({top:0,behavior:'smooth'})}}
-                            style={{position:'fixed',top:60,right:20,zIndex:9999,background:'rgba(13,21,32,0.95)',border:'1px solid #1a2d45',color:'#00d4ff',fontFamily:MONO,fontSize:10,padding:'8px 14px',borderRadius:4,cursor:'pointer',boxShadow:'0 2px 12px rgba(0,0,0,0.5)'}}>
-                            ↑ Dashboard
-                          </button>
-                        )}
-                        </>
                       )
                     })()}
+                    {tlTab==='dashboard'&&(
+                      <button onClick={()=>{let el=document.getElementById('tlDashOuter');while(el){if(el.scrollTop>0){el.scrollTo({top:0,behavior:'smooth'});return};el=el.parentElement};window.scrollTo({top:0,behavior:'smooth'})}}
+                        style={{position:'fixed',top:60,right:20,zIndex:9999,background:'rgba(13,21,32,0.95)',border:'1px solid #1a2d45',color:'#00d4ff',fontFamily:MONO,fontSize:10,padding:'8px 14px',borderRadius:4,cursor:'pointer',boxShadow:'0 2px 12px rgba(0,0,0,0.5)'}}>
+                        ↑ Dashboard
+                      </button>
+                    )}
                   </div>
                 )}
                 {/* CAPITAL */}
