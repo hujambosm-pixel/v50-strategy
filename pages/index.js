@@ -2753,7 +2753,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V7.42</title>
+        <title>Trading Simulator V7.43</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2830,7 +2830,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V7.42
+            <span className="dot"/>Trading Simulator V7.43
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6333,7 +6333,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               <div style={{flex:1,borderBottom:'1px solid var(--border)',overflow:'hidden',padding:'4px 8px'}}>
                                 <div style={{fontFamily:MONO,fontSize:7,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:3}}>Mercados</div>
                                 {tlDashMarkets.length===0
-                                  ?<div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a'}}>Cargando…</div>
+                                  ?<div style={{fontFamily:MONO,fontSize:8,color:'#3d5a7a',lineHeight:1.5}}>No disponible</div>
                                   :tlDashMarkets.map(m=>(
                                     <div key={m.symbol} onClick={()=>{setSimbolo(m.symbol);setSidePanel('watchlist');navegarTab('ops')}} onMouseOver={e=>e.currentTarget.style.background='rgba(255,255,255,0.04)'} onMouseOut={e=>e.currentTarget.style.background='transparent'} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'2px 0',borderBottom:'1px solid rgba(255,255,255,0.03)',cursor:'pointer'}}>
                                       <span style={{fontFamily:MONO,fontSize:9,color:'#a8ccdf'}}>{m.name}</span>
