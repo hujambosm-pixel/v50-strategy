@@ -2744,7 +2744,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V6.83</title>
+        <title>Trading Simulator V6.84</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2821,7 +2821,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V6.83
+            <span className="dot"/>Trading Simulator V6.84
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6418,12 +6418,12 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       )
                     })()}
                   </div>
-                )}
-                {tlScrolled&&(
-                  <button onClick={()=>{const el=tlDashOuterRef.current;if(el)el.scrollTo({top:0,behavior:'smooth'})}}
-                    style={{position:'fixed',top:60,right:20,zIndex:9999,background:'rgba(13,21,32,0.95)',border:'1px solid #1a2d45',color:'#00d4ff',fontFamily:MONO,fontSize:10,padding:'8px 14px',borderRadius:4,cursor:'pointer',boxShadow:'0 2px 12px rgba(0,0,0,0.5)'}}>
-                    ↑ Dashboard
-                  </button>
+                  {tlScrolled&&(
+                    <button onClick={()=>{const el=tlDashOuterRef.current;if(el)el.scrollTo({top:0,behavior:'smooth'})}}
+                      style={{position:'fixed',top:60,right:20,zIndex:9999,background:'rgba(13,21,32,0.95)',border:'1px solid #1a2d45',color:'#00d4ff',fontFamily:MONO,fontSize:10,padding:'8px 14px',borderRadius:4,cursor:'pointer',boxShadow:'0 2px 12px rgba(0,0,0,0.5)'}}>
+                      ↑ Dashboard
+                    </button>
+                  )}
                 )}
                 {/* CAPITAL */}
                 {tlTab==='capital'&&(
