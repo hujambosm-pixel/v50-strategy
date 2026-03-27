@@ -2,7 +2,7 @@
 
 function stooqSym(symbol) {
   const MAP={
-    '^GSPC':'spy.us','^NDX':'ndx.us','^IBEX':'ibex.es','^GDAXI':'dax.de',
+    '^GSPC':'spx.us','^NDX':'ndx.us','^IBEX':'ibex.es','^GDAXI':'dax.de',
     '^FTSE':'ftse.uk','^N225':'n225.jp','BTC-USD':'btc-usd.v','ETH-USD':'eth-usd.v',
     'GC=F':'gc.f','CL=F':'cl.f',
     '^DJI':'dji.us','^CAC':'cac.fr','^HSI':'hsi.hk','^STOXX':'sx5e.de',

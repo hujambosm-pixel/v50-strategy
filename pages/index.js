@@ -684,7 +684,7 @@ export default function Home() {
   // ── Dashboard: fetch market trend data when tab becomes active ──
   useEffect(()=>{
     if(tlTab!=='dashboard') return
-    if(tlDashMarkets.length>0) return
+    if(tlDashMarkets.length>=10) return
     const MARKETS=[
       {symbol:'^GSPC',  name:'S&P 500'},
       {symbol:'^NDX',   name:'Nasdaq'},
@@ -707,7 +707,10 @@ export default function Home() {
         let ema=prices.slice(0,10).reduce((s,p)=>s+p,0)/10
         const k=2/11
         for(let i=10;i<prices.length;i++) ema=prices[i]*k+ema*(1-k)
-        return{...m,price:prices[prices.length-1],ema10:ema,trend:prices[prices.length-1]>ema?'bull':'bear'}
+        const prev=prices[prices.length-2]||prices[prices.length-1]
+        const last=prices[prices.length-1]
+        const dayPct=prev?((last-prev)/prev*100):0
+        return{...m,price:last,ema10:ema,dayPct,trend:last>ema?'bull':'bear'}
       }catch(_){return null}
     }
     Promise.all(MARKETS.map(fetchMarket)).then(r=>setTlDashMarkets(r.filter(Boolean))).catch(()=>{})
@@ -2747,7 +2750,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V6.94</title>
+        <title>Trading Simulator V6.95</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2824,7 +2827,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V6.94
+            <span className="dot"/>Trading Simulator V6.95
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6326,8 +6329,9 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                   :tlDashMarkets.map(m=>(
                                     <div key={m.symbol} onClick={()=>{setSimbolo(m.symbol);setSidePanel('watchlist');setTlTab('ops')}} onMouseOver={e=>e.currentTarget.style.background='rgba(255,255,255,0.04)'} onMouseOut={e=>e.currentTarget.style.background='transparent'} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'2px 0',borderBottom:'1px solid rgba(255,255,255,0.03)',cursor:'pointer'}}>
                                       <span style={{fontFamily:MONO,fontSize:9,color:'#a8ccdf'}}>{m.name}</span>
-                                      <span style={{fontFamily:MONO,fontSize:8,fontWeight:700,color:m.trend==='bull'?'#00e5a0':'#ff4d6d',whiteSpace:'nowrap'}}>
-                                        {m.trend==='bull'?'▲ p>ema10':'▼ p<ema10'}
+                                      <span style={{display:'flex',alignItems:'center',gap:4,flexShrink:0}}>
+                                        <span style={{fontFamily:MONO,fontSize:8,fontWeight:700,color:m.dayPct>=0?'#00e5a0':'#ff4d6d'}}>{m.dayPct>=0?'+':''}{m.dayPct.toFixed(2)}%</span>
+                                        <span title={m.trend==='bull'?'Precio > EMA10':'Precio < EMA10'} style={{fontFamily:MONO,fontSize:10,fontWeight:700,color:m.trend==='bull'?'#00e5a0':'#ff4d6d',cursor:'default'}}>{m.trend==='bull'?'▲':'▼'}</span>
                                       </span>
                                     </div>
                                   ))
