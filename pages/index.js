@@ -2742,7 +2742,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V6.90</title>
+        <title>Trading Simulator V6.91</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2819,7 +2819,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V6.90
+            <span className="dot"/>Trading Simulator V6.91
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6281,7 +6281,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                             </div>
                             {/* Col métricas + P&L */}
                             <div style={{flex:1.4,borderRight:'1px solid var(--border)',display:'flex',flexDirection:'column',overflow:'hidden',minWidth:0}}>
-                              <div style={{flex:1,borderBottom:'1px solid var(--border)',overflow:'hidden',display:'flex',flexDirection:'column'}}>
+                              <div style={{flex:1,borderBottom:'1px solid var(--border)',overflow:'hidden',display:'grid',gridTemplateColumns:'1fr 1fr',gridTemplateRows:'1fr 1fr 1fr',gap:0}}>
                                 {[
                                   {l:'P&L TOTAL',t:'pnlTotal',v:fmtEur_(pnlTotal),c:pnlTotal>=0?'#00e5a0':'#ff4d6d'},
                                   {l:'P&L S/CAPITAL',t:'pnlSCapital',v:pnlSCapPct!=null?(pnlSCapPct>=0?'+':'')+pnlSCapPct.toFixed(2)+'%':'—',c:pnlSCapPct!=null&&pnlSCapPct>=0?'#00e5a0':'#ff4d6d'},
@@ -6289,10 +6289,10 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                   {l:'MAX DRAWDOWN',t:'maxDrawdown',v:maxDD>0?('-€'+Math.round(maxDD)+' ('+maxDDPct.toFixed(1)+'%)'):'—',c:'#ff4d6d'},
                                   {l:'WIN RATE',t:'winRate',v:allWithPnl.length?wr.toFixed(1)+'%':'—',c:wr>=50?'#00e5a0':'#ff4d6d'},
                                   {l:'FACTOR BEN.',t:'factorBeneficio',v:factorBen_!=null?factorBen_.toFixed(2):'—',c:factorBen_!=null&&factorBen_>=1?'#00e5a0':'#ff4d6d'},
-                                ].map(({l,t,v,c},i,arr)=>(
-                                  <div key={i} style={{flex:1,padding:'7px 10px',borderBottom:i<arr.length-1?'1px solid var(--border)':'none',display:'flex',flexDirection:'column',gap:2,minWidth:0}}>
-                                    <div style={{fontFamily:MONO,fontSize:9,color:'#4a6a88',letterSpacing:'0.08em',textTransform:'uppercase',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:4}}>{l}<Tip id={t}/></div>
-                                    <div style={{fontFamily:MONO,fontSize:15,fontWeight:700,color:c,lineHeight:1.1,whiteSpace:'nowrap'}}>{v}</div>
+                                ].map(({l,t,v,c},i)=>(
+                                  <div key={i} style={{padding:'10px 12px',borderRight:i%2===0?'1px solid var(--border)':'none',borderBottom:i<4?'1px solid var(--border)':'none',display:'flex',flexDirection:'column',justifyContent:'center',gap:3}}>
+                                    <div style={{fontFamily:MONO,fontSize:9,color:'#4a6a88',letterSpacing:'0.08em',textTransform:'uppercase',display:'flex',alignItems:'center',gap:4}}>{l}<Tip id={t}/></div>
+                                    <div style={{fontFamily:MONO,fontSize:17,fontWeight:700,color:c,lineHeight:1.1}}>{v}</div>
                                   </div>
                                 ))}
                               </div>
