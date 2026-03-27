@@ -637,6 +637,8 @@ export default function Home() {
   const [tlMultiSel,setTlMultiSel]=useState(new Set()) // ids seleccionados para borrado
   const [tlMultiMode,setTlMultiMode]=useState(false)   // modo multiselección activo
   const [tlTab,setTlTab]=useState('dashboard')          // 'ops'|'import'|'export'|'dashboard'|'capital'
+  const [tlTabHistory,setTlTabHistory]=useState([])
+  const navegarTab=(tab)=>{setTlTabHistory(prev=>[...prev.slice(-9),tlTab]);setTlTab(tab)}
   const [tlResumenCollapsed,setTlResumenCollapsed]=useState(false)
   // ── Capital contributions ──
   const [contributions,setContributions]=useState([])
@@ -700,21 +702,28 @@ export default function Home() {
     if(tlDashMarkets.length>=MARKETS.length) return
     const fetchMarket=async(m)=>{
       try{
-        const r=await fetch(`/api/chartdata?symbol=${encodeURIComponent(m.symbol)}&years=1`)
+        const sym=m.symbol.replace('^','').toLowerCase()
+        const domainMap={'ibex':'ibex.es','dax':'dax.de','cac':'cac.fr','ftse':'ftse.uk','nkx':'n225.jp','hsi':'hsi.hk','wig':'wig.pl','spx':'spx.us','ndx':'ndx.us','dji':'dji.us'}
+        const stooqSym=domainMap[sym]||sym+'.us'
+        const url=`https://stooq.com/q/d/l/?s=${stooqSym}&i=d`
+        const r=await fetch(url)
         if(!r.ok) return null
-        const data=await r.json()
-        if(!data||data.length<11) return null
-        const prices=data.map(d=>d.close)
+        const text=await r.text()
+        if(!text||text.includes('No data')||text.trim().length<50) return null
+        const lines=text.trim().split('\n').slice(1)
+        if(lines.length<11) return null
+        const prices=lines.map(l=>parseFloat(l.split(',')[4])).filter(p=>!isNaN(p)&&p>0)
+        if(prices.length<11) return null
         let ema=prices.slice(0,10).reduce((s,p)=>s+p,0)/10
         const k=2/11
         for(let i=10;i<prices.length;i++) ema=prices[i]*k+ema*(1-k)
-        const prev=prices[prices.length-2]||prices[prices.length-1]
         const last=prices[prices.length-1]
-        const dayPct=prev?((last-prev)/prev*100):0
+        const prev=prices[prices.length-2]||last
+        const dayPct=((last-prev)/prev*100)
         return{...m,price:last,ema10:ema,dayPct,trend:last>ema?'bull':'bear'}
       }catch(_){return null}
     }
-    Promise.all(MARKETS.map(fetchMarket)).then(r=>{const filtered=r.filter(Boolean);console.log('Markets cargados:',filtered.length,filtered.map(m=>m.name));setTlDashMarkets(filtered)}).catch(()=>{})
+    Promise.all(MARKETS.map(fetchMarket)).then(r=>setTlDashMarkets(r.filter(Boolean))).catch(()=>{})
   },[tlTab,tlDashMarkets.length]) // eslint-disable-line
   useEffect(()=>{
     if(!tlEquityContainerRef.current) return
@@ -2365,7 +2374,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
       if(errors.length) alert('Errores al guardar:\n'+errors.join('\n'))
       setTlParsed([]); setTlParsedRaw([]); setTlImportText('')
       await loadTrades()
-      setTlTab('ops')
+      navegarTab('ops')
     }catch(e){alert('Error al importar: '+e.message)}
     finally{setTlImportLoading(false)}
   }
@@ -2751,7 +2760,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V7.01</title>
+        <title>Trading Simulator V7.2</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2828,7 +2837,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V7.01
+            <span className="dot"/>Trading Simulator V7.2
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -2852,6 +2861,11 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
 
           {/* Botones derecha */}
           <div style={{display:'flex',alignItems:'center',gap:8,marginLeft:'auto',padding:'0 12px'}}>
+            {tlTabHistory.length>0&&(
+              <button onClick={()=>{const prev=tlTabHistory[tlTabHistory.length-1];setTlTabHistory(h=>h.slice(0,-1));setTlTab(prev)}}
+                title="Volver atrás"
+                style={{background:'transparent',border:'1px solid #1a2d45',color:'#4a6a88',fontFamily:MONO,fontSize:13,padding:'3px 8px',borderRadius:3,cursor:'pointer',lineHeight:1}}>←</button>
+            )}
             {tlUseLocal()
               ? <span style={{fontFamily:MONO,fontSize:9,padding:'3px 8px',borderRadius:4,
                   background:'rgba(255,209,102,0.1)',border:'1px solid rgba(255,209,102,0.3)',color:'#ffd166'}}>
@@ -5371,7 +5385,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       {tlLoading&&<span style={{fontFamily:MONO,fontSize:9,color:'#9b72ff',flexShrink:0}}>⟳</span>}
                     </div>}
                     {[{id:'dashboard',label:'📊 Dashboard'},{id:'ops',label:'📋 Operaciones'},{id:'import',label:'📥 Import'},{id:'capital',label:'💰 Capital'},{id:'export',label:'💾 Backup'}].map(t=>(
-                      <button key={t.id} onClick={()=>setTlTab(t.id)}
+                      <button key={t.id} onClick={()=>navegarTab(t.id)}
                         style={{padding:'9px 16px',fontFamily:MONO,fontSize:11,cursor:'pointer',
                           background:tlTab===t.id?'rgba(155,114,255,0.12)':'transparent',
                           border:'none',
@@ -6328,7 +6342,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                 {tlDashMarkets.length===0
                                   ?<div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a'}}>Cargando…</div>
                                   :tlDashMarkets.map(m=>(
-                                    <div key={m.symbol} onClick={()=>{setSimbolo(m.symbol);setSidePanel('watchlist');setTlTab('ops')}} onMouseOver={e=>e.currentTarget.style.background='rgba(255,255,255,0.04)'} onMouseOut={e=>e.currentTarget.style.background='transparent'} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'2px 0',borderBottom:'1px solid rgba(255,255,255,0.03)',cursor:'pointer'}}>
+                                    <div key={m.symbol} onClick={()=>{setSimbolo(m.symbol);setSidePanel('watchlist');navegarTab('ops')}} onMouseOver={e=>e.currentTarget.style.background='rgba(255,255,255,0.04)'} onMouseOut={e=>e.currentTarget.style.background='transparent'} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'2px 0',borderBottom:'1px solid rgba(255,255,255,0.03)',cursor:'pointer'}}>
                                       <span style={{fontFamily:MONO,fontSize:9,color:'#a8ccdf'}}>{m.name}</span>
                                       <span style={{display:'flex',alignItems:'center',gap:4,flexShrink:0}}>
                                         <span style={{fontFamily:MONO,fontSize:8,fontWeight:700,color:m.dayPct>=0?'#00e5a0':'#ff4d6d'}}>{m.dayPct>=0?'+':''}{m.dayPct.toFixed(2)}%</span>
@@ -6345,15 +6359,15 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                   :<>
                                     {_allOpen_.length>0&&<>
                                       <div style={{fontFamily:MONO,fontSize:6,color:'#3d5a7a',letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:1}}>Abiertas</div>
-                                      {top3_.map((t,i)=>{const pnl=liveFloatEur_(t);return(<div key={t.id||t.symbol+i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'1px 0'}}><span onClick={()=>{setSimbolo(t.symbol);setSidePanel('watchlist');setTlTab('ops')}} style={{fontFamily:MONO,fontSize:8,color:'#a8ccdf',minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:'pointer',textDecoration:'underline',textDecorationColor:'rgba(168,204,223,0.3)'}}>{t.symbol}</span><span style={{fontFamily:MONO,fontSize:8,color:'#00e5a0',flexShrink:0,marginLeft:4}}>{pnl>=0?'+':''}{Math.round(pnl)}€</span></div>)})}
+                                      {top3_.map((t,i)=>{const pnl=liveFloatEur_(t);return(<div key={t.id||t.symbol+i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'1px 0'}}><span onClick={()=>{setSimbolo(t.symbol);setSidePanel('watchlist');navegarTab('ops')}} style={{fontFamily:MONO,fontSize:8,color:'#a8ccdf',minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:'pointer',textDecoration:'underline',textDecorationColor:'rgba(168,204,223,0.3)'}}>{t.symbol}</span><span style={{fontFamily:MONO,fontSize:8,color:'#00e5a0',flexShrink:0,marginLeft:4}}>{pnl>=0?'+':''}{Math.round(pnl)}€</span></div>)})}
                                       {top3_.length>0&&bot3_.length>0&&<div style={{borderTop:'1px dashed #1a2d45',margin:'2px 0'}}/>}
-                                      {bot3_.map((t,i)=>{const pnl=liveFloatEur_(t);return(<div key={t.id||t.symbol+'b'+i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'1px 0'}}><span onClick={()=>{setSimbolo(t.symbol);setSidePanel('watchlist');setTlTab('ops')}} style={{fontFamily:MONO,fontSize:8,color:'#a8ccdf',minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:'pointer',textDecoration:'underline',textDecorationColor:'rgba(168,204,223,0.3)'}}>{t.symbol}</span><span style={{fontFamily:MONO,fontSize:8,color:'#ff4d6d',flexShrink:0,marginLeft:4}}>{pnl>=0?'+':''}{Math.round(pnl)}€</span></div>)})}
+                                      {bot3_.map((t,i)=>{const pnl=liveFloatEur_(t);return(<div key={t.id||t.symbol+'b'+i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'1px 0'}}><span onClick={()=>{setSimbolo(t.symbol);setSidePanel('watchlist');navegarTab('ops')}} style={{fontFamily:MONO,fontSize:8,color:'#a8ccdf',minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:'pointer',textDecoration:'underline',textDecorationColor:'rgba(168,204,223,0.3)'}}>{t.symbol}</span><span style={{fontFamily:MONO,fontSize:8,color:'#ff4d6d',flexShrink:0,marginLeft:4}}>{pnl>=0?'+':''}{Math.round(pnl)}€</span></div>)})}
                                     </>}
                                     {(bestT_||worstT_)&&<>
                                       {_allOpen_.length>0&&<div style={{borderTop:'1px dashed #1a2d45',margin:'3px 0'}}/>}
                                       <div style={{fontFamily:MONO,fontSize:6,color:'#3d5a7a',letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:1}}>Cerradas</div>
-                                      {bestT_&&<div style={{display:'flex',justifyContent:'space-between',padding:'1px 0'}}><span onClick={()=>{setSimbolo(bestT_.symbol);setSidePanel('watchlist');setTlTab('ops')}} style={{fontFamily:MONO,fontSize:8,color:'#a8ccdf',cursor:'pointer',textDecoration:'underline',textDecorationColor:'rgba(168,204,223,0.3)'}}>{bestT_.symbol}</span><span style={{fontFamily:MONO,fontSize:8,color:'#00e5a0'}}>{fmtEur_(bestT_._ep)}</span></div>}
-                                      {worstT_&&<div style={{display:'flex',justifyContent:'space-between',padding:'1px 0'}}><span onClick={()=>{setSimbolo(worstT_.symbol);setSidePanel('watchlist');setTlTab('ops')}} style={{fontFamily:MONO,fontSize:8,color:'#a8ccdf',cursor:'pointer',textDecoration:'underline',textDecorationColor:'rgba(168,204,223,0.3)'}}>{worstT_.symbol}</span><span style={{fontFamily:MONO,fontSize:8,color:'#ff4d6d'}}>{fmtEur_(worstT_._ep)}</span></div>}
+                                      {bestT_&&<div style={{display:'flex',justifyContent:'space-between',padding:'1px 0'}}><span onClick={()=>{setSimbolo(bestT_.symbol);setSidePanel('watchlist');navegarTab('ops')}} style={{fontFamily:MONO,fontSize:8,color:'#a8ccdf',cursor:'pointer',textDecoration:'underline',textDecorationColor:'rgba(168,204,223,0.3)'}}>{bestT_.symbol}</span><span style={{fontFamily:MONO,fontSize:8,color:'#00e5a0'}}>{fmtEur_(bestT_._ep)}</span></div>}
+                                      {worstT_&&<div style={{display:'flex',justifyContent:'space-between',padding:'1px 0'}}><span onClick={()=>{setSimbolo(worstT_.symbol);setSidePanel('watchlist');navegarTab('ops')}} style={{fontFamily:MONO,fontSize:8,color:'#a8ccdf',cursor:'pointer',textDecoration:'underline',textDecorationColor:'rgba(168,204,223,0.3)'}}>{worstT_.symbol}</span><span style={{fontFamily:MONO,fontSize:8,color:'#ff4d6d'}}>{fmtEur_(worstT_._ep)}</span></div>}
                                     </>}
                                   </>
                                 }
