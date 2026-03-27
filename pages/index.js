@@ -686,16 +686,16 @@ export default function Home() {
     if(tlTab!=='dashboard') return
     if(tlDashMarkets.length>0) return
     const MARKETS=[
-      {symbol:'^spx',  name:'S&P 500'},
-      {symbol:'^ndq',  name:'Nasdaq'},
-      {symbol:'^dji',  name:'Dow Jones'},
-      {symbol:'^ibex', name:'IBEX 35'},
-      {symbol:'^dax',  name:'DAX'},
-      {symbol:'^cac',  name:'CAC 40'},
-      {symbol:'^ftse', name:'FTSE 100'},
-      {symbol:'^nkx',  name:'Nikkei'},
-      {symbol:'^hsi',  name:'Hang Seng'},
-      {symbol:'^stoxx',name:'Euro Stoxx 50'},
+      {symbol:'^GSPC',  name:'S&P 500'},
+      {symbol:'^NDX',   name:'Nasdaq'},
+      {symbol:'^DJI',   name:'Dow Jones'},
+      {symbol:'^IBEX',  name:'IBEX 35'},
+      {symbol:'^GDAXI', name:'DAX'},
+      {symbol:'^CAC',   name:'CAC 40'},
+      {symbol:'^FTSE',  name:'FTSE 100'},
+      {symbol:'^N225',  name:'Nikkei'},
+      {symbol:'^HSI',   name:'Hang Seng'},
+      {symbol:'^STOXX', name:'Euro Stoxx 50'},
     ]
     const fetchMarket=async(m)=>{
       try{
@@ -2747,7 +2747,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V6.93</title>
+        <title>Trading Simulator V6.94</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2824,7 +2824,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V6.93
+            <span className="dot"/>Trading Simulator V6.94
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
