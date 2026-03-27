@@ -702,18 +702,11 @@ export default function Home() {
     if(tlDashMarkets.length>=MARKETS.length) return
     const fetchMarket=async(m)=>{
       try{
-        const sym=m.symbol.replace('^','').toLowerCase()
-        const domainMap={'ibex':'ibex.es','dax':'dax.de','cac':'cac.fr','ftse':'ftse.uk','nkx':'n225.jp','hsi':'hsi.hk','wig':'wig.pl','spx':'spx.us','ndx':'ndx.us','dji':'dji.us'}
-        const stooqSym=domainMap[sym]||sym+'.us'
-        const url=`https://stooq.com/q/d/l/?s=${stooqSym}&i=d`
-        const r=await fetch(url)
+        const r=await fetch(`/api/chartdata?symbol=${encodeURIComponent(m.symbol)}&years=1`)
         if(!r.ok) return null
-        const text=await r.text()
-        if(!text||text.includes('No data')||text.trim().length<50) return null
-        const lines=text.trim().split('\n').slice(1)
-        if(lines.length<11) return null
-        const prices=lines.map(l=>parseFloat(l.split(',')[4])).filter(p=>!isNaN(p)&&p>0)
-        if(prices.length<11) return null
+        const data=await r.json()
+        if(!data||data.length<11) return null
+        const prices=data.map(d=>d.close)
         let ema=prices.slice(0,10).reduce((s,p)=>s+p,0)/10
         const k=2/11
         for(let i=10;i<prices.length;i++) ema=prices[i]*k+ema*(1-k)
@@ -2760,7 +2753,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V7.2</title>
+        <title>Trading Simulator V7.3</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2837,7 +2830,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V7.2
+            <span className="dot"/>Trading Simulator V7.3
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
