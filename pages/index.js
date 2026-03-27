@@ -2743,7 +2743,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V6.86</title>
+        <title>Trading Simulator V6.87</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2820,7 +2820,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V6.86
+            <span className="dot"/>Trading Simulator V6.87
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -3979,17 +3979,6 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 {/* Header + badge */}
                 <div style={{padding:'8px 10px',borderBottom:'1px solid var(--border)',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0}}>
                   <span style={{fontFamily:MONO,fontSize:9,color:'#9b72ff',letterSpacing:'0.1em',textTransform:'uppercase',fontWeight:700}}>📒 TradeLog</span>
-                  {tlUseLocal()
-                    ? <span style={{fontFamily:MONO,fontSize:9,padding:'2px 5px',borderRadius:3,
-                        background:'rgba(255,209,102,0.1)',border:'1px solid rgba(255,209,102,0.3)',color:'#ffd166'}}>
-                        💾 Local
-                      </span>
-                    : <a href={`https://supabase.com/dashboard/project/${(getSupaUrl().match(/https:\/\/([^.]+)\.supabase\.co/)||[])[1]||''}`} target="_blank" rel="noreferrer"
-                        style={{fontFamily:MONO,fontSize:9,padding:'2px 5px',borderRadius:3,cursor:'pointer',textDecoration:'none',
-                          background:'rgba(0,212,255,0.08)',border:'1px solid rgba(0,212,255,0.2)',color:'#00d4ff'}}>
-                        ☁ Supabase ↗
-                      </a>
-                  }
                 </div>
 
                 {/* Filtros */}
@@ -6416,7 +6405,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           </>
                         </div>
                         {tlTab==='dashboard'&&(
-                          <button onClick={()=>{const el=tlDashOuterRef.current;if(el)el.scrollTo({top:0,behavior:'smooth'})}}
+                          <button onClick={()=>{const el=document.getElementById('tlDashOuter');if(el)el.scrollTo({top:0,behavior:'smooth'})}}
                             style={{position:'fixed',top:60,right:20,zIndex:9999,background:'rgba(13,21,32,0.95)',border:'1px solid #1a2d45',color:'#00d4ff',fontFamily:MONO,fontSize:10,padding:'8px 14px',borderRadius:4,cursor:'pointer',boxShadow:'0 2px 12px rgba(0,0,0,0.5)'}}>
                             ↑ Dashboard
                           </button>
