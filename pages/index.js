@@ -686,11 +686,16 @@ export default function Home() {
     if(tlTab!=='dashboard') return
     if(tlDashMarkets.length>0) return
     const MARKETS=[
-      {symbol:'^spx',name:'S&P 500'},
-      {symbol:'^ibex',name:'IBEX 35'},
-      {symbol:'^nkx',name:'Nikkei'},
-      {symbol:'^dax',name:'DAX'},
-      {symbol:'^ndq',name:'Nasdaq'},
+      {symbol:'^spx',  name:'S&P 500'},
+      {symbol:'^ndq',  name:'Nasdaq'},
+      {symbol:'^dji',  name:'Dow Jones'},
+      {symbol:'^ibex', name:'IBEX 35'},
+      {symbol:'^dax',  name:'DAX'},
+      {symbol:'^cac',  name:'CAC 40'},
+      {symbol:'^ftse', name:'FTSE 100'},
+      {symbol:'^nkx',  name:'Nikkei'},
+      {symbol:'^hsi',  name:'Hang Seng'},
+      {symbol:'^stoxx',name:'Euro Stoxx 50'},
     ]
     const fetchMarket=async(m)=>{
       try{
@@ -2742,7 +2747,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V6.92</title>
+        <title>Trading Simulator V6.93</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2819,7 +2824,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
-            <span className="dot"/>Trading Simulator V6.92
+            <span className="dot"/>Trading Simulator V6.93
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6319,7 +6324,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                 {tlDashMarkets.length===0
                                   ?<div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a'}}>Cargando…</div>
                                   :tlDashMarkets.map(m=>(
-                                    <div key={m.symbol} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'2px 0',borderBottom:'1px solid rgba(255,255,255,0.03)'}}>
+                                    <div key={m.symbol} onClick={()=>{setSimbolo(m.symbol);setSidePanel('watchlist');setTlTab('ops')}} onMouseOver={e=>e.currentTarget.style.background='rgba(255,255,255,0.04)'} onMouseOut={e=>e.currentTarget.style.background='transparent'} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'2px 0',borderBottom:'1px solid rgba(255,255,255,0.03)',cursor:'pointer'}}>
                                       <span style={{fontFamily:MONO,fontSize:9,color:'#a8ccdf'}}>{m.name}</span>
                                       <span style={{fontFamily:MONO,fontSize:8,fontWeight:700,color:m.trend==='bull'?'#00e5a0':'#ff4d6d',whiteSpace:'nowrap'}}>
                                         {m.trend==='bull'?'▲ p>ema10':'▼ p<ema10'}
@@ -6335,15 +6340,15 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                   :<>
                                     {_allOpen_.length>0&&<>
                                       <div style={{fontFamily:MONO,fontSize:6,color:'#3d5a7a',letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:1}}>Abiertas</div>
-                                      {top3_.map((t,i)=>{const pnl=liveFloatEur_(t);return(<div key={t.id||t.symbol+i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'1px 0'}}><span style={{fontFamily:MONO,fontSize:8,color:'#a8ccdf',minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.symbol}</span><span style={{fontFamily:MONO,fontSize:8,color:'#00e5a0',flexShrink:0,marginLeft:4}}>{pnl>=0?'+':''}{Math.round(pnl)}€</span></div>)})}
+                                      {top3_.map((t,i)=>{const pnl=liveFloatEur_(t);return(<div key={t.id||t.symbol+i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'1px 0'}}><span onClick={()=>{setSimbolo(t.symbol);setSidePanel('watchlist');setTlTab('ops')}} style={{fontFamily:MONO,fontSize:8,color:'#a8ccdf',minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:'pointer',textDecoration:'underline',textDecorationColor:'rgba(168,204,223,0.3)'}}>{t.symbol}</span><span style={{fontFamily:MONO,fontSize:8,color:'#00e5a0',flexShrink:0,marginLeft:4}}>{pnl>=0?'+':''}{Math.round(pnl)}€</span></div>)})}
                                       {top3_.length>0&&bot3_.length>0&&<div style={{borderTop:'1px dashed #1a2d45',margin:'2px 0'}}/>}
-                                      {bot3_.map((t,i)=>{const pnl=liveFloatEur_(t);return(<div key={t.id||t.symbol+'b'+i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'1px 0'}}><span style={{fontFamily:MONO,fontSize:8,color:'#a8ccdf',minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.symbol}</span><span style={{fontFamily:MONO,fontSize:8,color:'#ff4d6d',flexShrink:0,marginLeft:4}}>{pnl>=0?'+':''}{Math.round(pnl)}€</span></div>)})}
+                                      {bot3_.map((t,i)=>{const pnl=liveFloatEur_(t);return(<div key={t.id||t.symbol+'b'+i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'1px 0'}}><span onClick={()=>{setSimbolo(t.symbol);setSidePanel('watchlist');setTlTab('ops')}} style={{fontFamily:MONO,fontSize:8,color:'#a8ccdf',minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:'pointer',textDecoration:'underline',textDecorationColor:'rgba(168,204,223,0.3)'}}>{t.symbol}</span><span style={{fontFamily:MONO,fontSize:8,color:'#ff4d6d',flexShrink:0,marginLeft:4}}>{pnl>=0?'+':''}{Math.round(pnl)}€</span></div>)})}
                                     </>}
                                     {(bestT_||worstT_)&&<>
                                       {_allOpen_.length>0&&<div style={{borderTop:'1px dashed #1a2d45',margin:'3px 0'}}/>}
                                       <div style={{fontFamily:MONO,fontSize:6,color:'#3d5a7a',letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:1}}>Cerradas</div>
-                                      {bestT_&&<div style={{display:'flex',justifyContent:'space-between',padding:'1px 0'}}><span style={{fontFamily:MONO,fontSize:8,color:'#a8ccdf'}}>{bestT_.symbol}</span><span style={{fontFamily:MONO,fontSize:8,color:'#00e5a0'}}>{fmtEur_(bestT_._ep)}</span></div>}
-                                      {worstT_&&<div style={{display:'flex',justifyContent:'space-between',padding:'1px 0'}}><span style={{fontFamily:MONO,fontSize:8,color:'#a8ccdf'}}>{worstT_.symbol}</span><span style={{fontFamily:MONO,fontSize:8,color:'#ff4d6d'}}>{fmtEur_(worstT_._ep)}</span></div>}
+                                      {bestT_&&<div style={{display:'flex',justifyContent:'space-between',padding:'1px 0'}}><span onClick={()=>{setSimbolo(bestT_.symbol);setSidePanel('watchlist');setTlTab('ops')}} style={{fontFamily:MONO,fontSize:8,color:'#a8ccdf',cursor:'pointer',textDecoration:'underline',textDecorationColor:'rgba(168,204,223,0.3)'}}>{bestT_.symbol}</span><span style={{fontFamily:MONO,fontSize:8,color:'#00e5a0'}}>{fmtEur_(bestT_._ep)}</span></div>}
+                                      {worstT_&&<div style={{display:'flex',justifyContent:'space-between',padding:'1px 0'}}><span onClick={()=>{setSimbolo(worstT_.symbol);setSidePanel('watchlist');setTlTab('ops')}} style={{fontFamily:MONO,fontSize:8,color:'#a8ccdf',cursor:'pointer',textDecoration:'underline',textDecorationColor:'rgba(168,204,223,0.3)'}}>{worstT_.symbol}</span><span style={{fontFamily:MONO,fontSize:8,color:'#ff4d6d'}}>{fmtEur_(worstT_._ep)}</span></div>}
                                     </>}
                                   </>
                                 }
