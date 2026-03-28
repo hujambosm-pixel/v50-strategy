@@ -106,6 +106,8 @@ function computeFifo(fills, prices={}) {
           if(lot.remaining<=0.001){ fillStatus[lot.fill.id]='closed'; buyQueue.shift() }
           else fillStatus[lot.fill.id]='partial'
         }
+        // Si quedan shares sin cubrir → posible split
+        if(sellRem>0.001&&cur) cur._possibleSplit=true
         if(!buyQueue.length){
           // Posición cerrada completamente → emitir trade
           const entryPx=cur._totalBuySh>0?cur._wBuyPxSh/cur._totalBuySh:0
@@ -121,7 +123,8 @@ function computeFifo(fills, prices={}) {
             currency:cur._currency||'USD', broker:cur._broker, strategy:cur._strategy,
             pnl_eur:parseFloat(cur._pnlEur.toFixed(4)), pnl_pct:parseFloat(pnlPct.toFixed(4)),
             _pnl_float_eur:null, _pnl_float_pct:null,
-            _buyFills:cur._buyFills, _sellFills:cur._sellFills})
+            _buyFills:cur._buyFills, _sellFills:cur._sellFills,
+            _possibleSplit:cur._possibleSplit||false})
           cur=null
         }
       }
@@ -156,7 +159,8 @@ function computeFifo(fills, prices={}) {
           currency:cur._currency||'USD', broker:cur._broker, strategy:cur._strategy,
           pnl_eur:null, pnl_pct:null,
           _pnl_float_eur:parseFloat(floatEur.toFixed(4)), _pnl_float_pct:parseFloat(floatPct.toFixed(4)),
-          _buyFills:cur._buyFills, _sellFills:cur._sellFills})
+          _buyFills:cur._buyFills, _sellFills:cur._sellFills,
+          _possibleSplit:cur._possibleSplit||false})
       }
     }
   })
@@ -2758,7 +2762,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V7.73</title>
+        <title>Trading Simulator V7.74</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2835,7 +2839,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V7.73
+            <span className="dot"/>Trading Simulator V7.74
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5591,6 +5595,12 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                       textDecoration:'underline',textDecorationColor:'rgba(0,212,255,0.3)',textUnderlineOffset:2}}>
                                     {trade.symbol}
                                   </span>
+                                  {trade._possibleSplit&&(
+                                    <span title="Posible split detectado: las acciones vendidas superan las compradas. Revisa y ajusta el precio/cantidad manualmente."
+                                      style={{fontFamily:MONO,fontSize:7,background:'rgba(255,165,0,0.15)',border:'1px solid orange',color:'orange',borderRadius:3,padding:'1px 4px',marginLeft:4,cursor:'default',verticalAlign:'middle'}}>
+                                      Split?
+                                    </span>
+                                  )}
                                 </td>
                                 <td style={{padding:'6px 4px',maxWidth:90,overflow:'hidden'}}>
                                   <span style={{fontFamily:MONO,fontSize:9,color:'#5a8aaa',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',display:'block'}}
