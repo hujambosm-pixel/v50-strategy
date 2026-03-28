@@ -2758,7 +2758,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V7.62</title>
+        <title>Trading Simulator V7.63</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2835,7 +2835,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V7.62
+            <span className="dot"/>Trading Simulator V7.63
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5466,13 +5466,13 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                     {/* Bulk strategy bar */}
                     {tlBulkMode&&tlBulkSel.size>0&&(()=>{
                       const stratOpts_=[...new Set((tlTrades||[]).map(t=>t.strategy||'').filter(Boolean))].sort()
-                      const bulkStratOpts_=[...new Set([...(strategies||[]).map(s=>s.name).filter(Boolean),...(stratOpts_||[]).filter(Boolean)])].sort()
+                      const bulkStratOpts_=['Unspecified',...new Set([...(strategies||[]).map(s=>s.name).filter(Boolean),...(stratOpts_||[]).filter(Boolean)])].sort((a,b)=>a==='Unspecified'?-1:b==='Unspecified'?1:a.localeCompare(b))
                       return(
                       <div style={{display:'flex',alignItems:'center',gap:8,padding:'6px 12px',background:'rgba(0,212,255,0.05)',border:'1px solid rgba(0,212,255,0.2)',borderRadius:4,marginBottom:6,flexShrink:0}}>
                         <span style={{fontFamily:MONO,fontSize:10,color:'#00d4ff'}}>{tlBulkSel.size} operación{tlBulkSel.size>1?'es':''} seleccionada{tlBulkSel.size>1?'s':''}</span>
                         <input list="bulk-strat-list" value={tlBulkStrat} onChange={e=>setTlBulkStrat(e.target.value)}
                           placeholder="Estrategia..."
-                          style={{fontFamily:MONO,fontSize:10,background:'var(--bg2)',border:'1px solid #1a2d45',color:'var(--text)',padding:'3px 6px',borderRadius:3,width:160}}/>
+                          style={{fontFamily:MONO,fontSize:10,background:'var(--bg2)',border:'1px solid #1a2d45',color:'#e2eaf5',padding:'3px 6px',borderRadius:3,width:160}}/>
                         <datalist id="bulk-strat-list">
                           {bulkStratOpts_.map(s=><option key={s} value={s}/>)}
                         </datalist>
