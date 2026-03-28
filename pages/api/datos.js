@@ -30,6 +30,7 @@ function stooqSym(symbol) {
     '^FTSE':'ftse.uk','^N225':'n225.jp','BTC-USD':'btc-usd.v','ETH-USD':'eth-usd.v',
     'GC=F':'gc.f','CL=F':'cl.f',
     '^IXIC':'ndx.us','^DJI':'dji.us','^FCHI':'cac.fr','^STOXX50E':'sx5e.de','^HSI':'hsi.hk',
+    'SI=F':'si.f',
   }
   if(MAP[symbol]) return MAP[symbol]
   // Futures (end in =F) -> lowercase, strip =F, add .f
