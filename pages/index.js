@@ -2758,7 +2758,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V7.71</title>
+        <title>Trading Simulator V7.72</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2835,7 +2835,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V7.71
+            <span className="dot"/>Trading Simulator V7.72
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6289,7 +6289,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           {/* Thin banner when no data — layout stays fully visible */}
                           {noData&&<div style={{padding:'4px 12px',background:'rgba(255,77,109,0.07)',borderBottom:'1px solid rgba(255,77,109,0.18)',fontFamily:MONO,fontSize:9,color:'#ff6b85',flexShrink:0,letterSpacing:'0.05em'}}>Sin resultados para este filtro — mostrando métricas en cero</div>}
                           {/* FILA 1 — 10 métricas */}
-                          <div style={{display:'flex',flex:1,minHeight:0,overflow:'hidden',alignItems:'stretch',maxHeight:'calc(100vh - 130px)'}}>
+                          <div style={{display:'flex',flex:1,minHeight:0,overflow:'hidden',alignItems:'stretch',maxHeight:'calc(100vh - 100px)'}}>
                           <div style={{flex:1,display:'flex',flexDirection:'column',minWidth:0,overflow:'hidden'}}>
                           <div style={{display:'flex',borderBottom:'1px solid var(--border)',flexShrink:0,overflowX:'auto'}}>
                             {[
