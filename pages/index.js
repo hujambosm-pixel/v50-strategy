@@ -2705,13 +2705,14 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   async function handleLogout() { await supabase.auth.signOut() }
 
   // ── Login screen ─────────────────────────────────────────────
-  if(session===undefined) return (
+  const skipAuth=process.env.NEXT_PUBLIC_SKIP_AUTH==='true'
+  if(session===undefined&&!skipAuth) return (
     <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',
       background:'#080c14',color:'#5a7a95',fontFamily:'"JetBrains Mono","Fira Code",monospace',fontSize:12}}>
       Verificando sesión…
     </div>
   )
-  if(session===null) return (
+  if(session===null&&!skipAuth) return (
     <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',
       background:'#080c14',fontFamily:'"JetBrains Mono","Fira Code",monospace'}}>
       <div style={{width:340,padding:'40px 32px',background:'#0a101a',
@@ -2750,7 +2751,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V7.48</title>
+        <title>Trading Simulator V7.49</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2827,7 +2828,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>setTlTab('dashboard')} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V7.48
+            <span className="dot"/>Trading Simulator V7.49
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
