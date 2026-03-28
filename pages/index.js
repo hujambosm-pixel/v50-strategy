@@ -702,14 +702,10 @@ export default function Home() {
     if(tlDashMarkets.length>=MARKETS.length) return
     const fetchMarket=async(m)=>{
       try{
-        const url=`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(m.symbol)}?interval=1d&range=3mo`
-        const r=await fetch(url,{headers:{'Accept':'application/json'}})
+        const r=await fetch(`/api/markets?symbol=${encodeURIComponent(m.symbol)}`)
         if(!r.ok) return null
-        const json=await r.json()
-        const closes=json?.chart?.result?.[0]?.indicators?.quote?.[0]?.close
-        if(!closes||closes.length<11) return null
-        const prices=closes.filter(p=>p!=null)
-        if(prices.length<11) return null
+        const{prices}=await r.json()
+        if(!prices||prices.length<11) return null
         let ema=prices.slice(0,10).reduce((s,p)=>s+p,0)/10
         const k=2/11
         for(let i=10;i<prices.length;i++) ema=prices[i]*k+ema*(1-k)
@@ -2756,7 +2752,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V7.45</title>
+        <title>Trading Simulator V7.46</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2833,7 +2829,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>navegarTab('dashboard')} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer'}}>
-            <span className="dot"/>Trading Simulator V7.45
+            <span className="dot"/>Trading Simulator V7.46
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
