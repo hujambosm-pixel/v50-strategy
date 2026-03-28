@@ -2755,7 +2755,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V7.55</title>
+        <title>Trading Simulator V7.56</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2832,7 +2832,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V7.55
+            <span className="dot"/>Trading Simulator V7.56
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6224,7 +6224,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           {/* Thin banner when no data — layout stays fully visible */}
                           {noData&&<div style={{padding:'4px 12px',background:'rgba(255,77,109,0.07)',borderBottom:'1px solid rgba(255,77,109,0.18)',fontFamily:MONO,fontSize:9,color:'#ff6b85',flexShrink:0,letterSpacing:'0.05em'}}>Sin resultados para este filtro — mostrando métricas en cero</div>}
                           {/* FILA 1 — 10 métricas */}
-                          <>
+                          <div style={{display:'flex',flex:1,minHeight:0,overflow:'hidden'}}>
+                          <div style={{flex:1,display:'flex',flexDirection:'column',minWidth:0,overflow:'hidden'}}>
                           <div style={{display:'flex',borderBottom:'1px solid var(--border)',flexShrink:0,overflowX:'auto'}}>
                             {[
                               {l:'Patrimonio',v:patrimonioActual!=null?fmtAbs_(patrimonioActual):'—',c:'#00d4ff'},
@@ -6325,55 +6326,6 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                 </div>
                               </div>
                             </div>
-                            {/* Col mercados + posiciones */}
-                            <div style={{flex:0.45,display:'flex',flexDirection:'column',overflow:'hidden',minWidth:120}}>
-                              <div style={{flex:1,borderBottom:'1px solid var(--border)',overflow:'hidden',padding:'4px 8px'}}>
-                                <div style={{fontFamily:MONO,fontSize:7,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:3}}>Mercados</div>
-                                {tlDashMarkets.length===0
-                                  ?<div style={{fontFamily:MONO,fontSize:8,color:'#3d5a7a',lineHeight:1.5}}>No disponible</div>
-                                  :tlDashMarkets.map(m=>(
-                                    <div key={m.symbol} onClick={()=>{setSimbolo(m.symbol);setSidePanel('watchlist');setTlTab('ops')}} onMouseOver={e=>e.currentTarget.style.background='rgba(255,255,255,0.04)'} onMouseOut={e=>e.currentTarget.style.background='transparent'} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'2px 0',borderBottom:'1px solid rgba(255,255,255,0.03)',cursor:'pointer'}}>
-                                      <span style={{fontFamily:MONO,fontSize:9,color:'#a8ccdf'}}>{m.name}</span>
-                                      <span style={{display:'flex',alignItems:'center',gap:4,flexShrink:0}}>
-                                        <span style={{fontFamily:MONO,fontSize:8,fontWeight:700,color:m.dayPct>=0?'#00e5a0':'#ff4d6d'}}>{m.dayPct>=0?'+':''}{m.dayPct.toFixed(2)}%</span>
-                                        <span title={m.trend==='bull'?'Precio > EMA10':'Precio < EMA10'} style={{fontFamily:MONO,fontSize:10,fontWeight:700,color:m.trend==='bull'?'#00e5a0':'#ff4d6d',cursor:'default'}}>{m.trend==='bull'?'▲':'▼'}</span>
-                                      </span>
-                                    </div>
-                                  ))
-                                }
-                              </div>
-                              <div style={{flex:1,overflow:'auto',padding:'4px 8px'}}>
-                                <div style={{fontFamily:MONO,fontSize:7,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:2}}>Rendimientos</div>
-                                {(()=>{
-                                  const allRendimientos_=[
-                                    ...(tlFifo.openPositions||[]).map(t=>({symbol:t.symbol,pnlEur:t._pnl_float_eur||0,pnlPct:t._pnl_float_pct||0,strategy:t.strategy||'—',isOpen:true})),
-                                    ...(tlTradesFiltered||[]).filter(t=>t.status==='closed').map(t=>({symbol:t.symbol,pnlEur:t.pnl_eur||0,pnlPct:t.pnl_pct||0,strategy:t.strategy||'—',isOpen:false}))
-                                  ].sort((a,b)=>b.pnlEur-a.pnlEur)
-                                  const top3Rend_=allRendimientos_.slice(0,3)
-                                  const bot3Rend_=allRendimientos_.slice(-3).reverse()
-                                  if(!allRendimientos_.length) return <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a'}}>Sin datos</div>
-                                  const renderRow=(t,i)=>(
-                                    <div key={t.symbol+(t.isOpen?'o':'c')+i} style={{display:'flex',flexDirection:'column',padding:'2px 0',borderBottom:'1px solid rgba(255,255,255,0.03)'}}>
-                                      <div style={{display:'flex',justifyContent:'space-between'}}>
-                                        <span onClick={()=>{setSimbolo(t.symbol);setSidePanel('watchlist');setTlTab('ops')}} style={{fontFamily:MONO,fontSize:8,color:'#a8ccdf',cursor:'pointer',textDecoration:'underline',textDecorationColor:'rgba(168,204,223,0.3)'}}>
-                                          {t.symbol}{t.isOpen&&<span style={{fontSize:8,color:'#ffd700',marginLeft:3}}>●</span>}
-                                        </span>
-                                        <span style={{fontFamily:MONO,fontSize:8,fontWeight:700,color:t.pnlEur>=0?'#00e5a0':'#ff4d6d',flexShrink:0,marginLeft:4}}>{t.pnlEur>=0?'+':''}{Math.round(t.pnlEur)}€</span>
-                                      </div>
-                                      <div style={{display:'flex',justifyContent:'space-between'}}>
-                                        <span style={{fontFamily:MONO,fontSize:7,color:'#3d5a7a'}}>{t.strategy}</span>
-                                        <span style={{fontFamily:MONO,fontSize:7,color:t.pnlPct>=0?'rgba(0,229,160,0.7)':'rgba(255,77,109,0.7)'}}>{t.pnlPct>=0?'+':''}{typeof t.pnlPct==='number'?t.pnlPct.toFixed(1):'—'}%</span>
-                                      </div>
-                                    </div>
-                                  )
-                                  return <>
-                                    {top3Rend_.map((t,i)=>renderRow(t,i))}
-                                    {top3Rend_.length>0&&bot3Rend_.length>0&&<div style={{borderTop:'1px dashed #1a2d45',margin:'2px 0'}}/>}
-                                    {bot3Rend_.map((t,i)=>renderRow(t,i))}
-                                  </>
-                                })()}
-                              </div>
-                            </div>
                           </div>
                           {/* FILA 3 — KPIs + secundarias */}
                           <div style={{display:'flex',flexWrap:'nowrap',borderBottom:'1px solid var(--border)',flexShrink:0,overflowX:'auto'}}>
@@ -6404,6 +6356,59 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                 <div style={{fontFamily:MONO,fontSize:15,fontWeight:700,color:c,lineHeight:1}}>{v}</div>
                               </div>
                             ))}
+                          </div>
+                          </div>
+                          {/* Col derecha permanente — Mercados + Rendimientos */}
+                          <div style={{width:180,borderLeft:'1px solid var(--border)',display:'flex',flexDirection:'column',overflow:'hidden',flexShrink:0}}>
+                            {/* Mercados */}
+                            <div style={{flex:1,overflow:'auto',padding:'4px 8px',borderBottom:'1px solid var(--border)'}}>
+                              <div style={{fontFamily:MONO,fontSize:7,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:3,position:'sticky',top:0,background:'var(--bg)',paddingTop:4}}>Mercados</div>
+                              {tlDashMarkets.length===0
+                                ?<div style={{fontFamily:MONO,fontSize:8,color:'#3d5a7a',lineHeight:1.5}}>No disponible</div>
+                                :tlDashMarkets.map(m=>(
+                                  <div key={m.symbol} onClick={()=>{setSimbolo(m.symbol);setSidePanel('watchlist');setTlTab('ops')}} onMouseOver={e=>e.currentTarget.style.background='rgba(255,255,255,0.04)'} onMouseOut={e=>e.currentTarget.style.background='transparent'} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'2px 0',borderBottom:'1px solid rgba(255,255,255,0.03)',cursor:'pointer'}}>
+                                    <span style={{fontFamily:MONO,fontSize:9,color:'#a8ccdf'}}>{m.name}</span>
+                                    <span style={{display:'flex',alignItems:'center',gap:4,flexShrink:0}}>
+                                      <span style={{fontFamily:MONO,fontSize:8,fontWeight:700,color:m.dayPct>=0?'#00e5a0':'#ff4d6d'}}>{m.dayPct>=0?'+':''}{m.dayPct.toFixed(2)}%</span>
+                                      <span title={m.trend==='bull'?'Precio > EMA10':'Precio < EMA10'} style={{fontFamily:MONO,fontSize:10,fontWeight:700,color:m.trend==='bull'?'#00e5a0':'#ff4d6d',cursor:'default'}}>{m.trend==='bull'?'▲':'▼'}</span>
+                                    </span>
+                                  </div>
+                                ))
+                              }
+                            </div>
+                            {/* Rendimientos */}
+                            <div style={{flex:1,overflow:'auto',padding:'4px 8px'}}>
+                              <div style={{fontFamily:MONO,fontSize:7,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:3,position:'sticky',top:0,background:'var(--bg)',paddingTop:4}}>Rendimientos</div>
+                              {(()=>{
+                                const allRendimientos_=[
+                                  ...(tlFifo.openPositions||[]).map(t=>({symbol:t.symbol,pnlEur:t._pnl_float_eur||0,pnlPct:t._pnl_float_pct||0,strategy:t.strategy||'—',isOpen:true})),
+                                  ...(tlTradesFiltered||[]).filter(t=>t.status==='closed').map(t=>({symbol:t.symbol,pnlEur:t.pnl_eur||0,pnlPct:t.pnl_pct||0,strategy:t.strategy||'—',isOpen:false}))
+                                ].sort((a,b)=>b.pnlEur-a.pnlEur)
+                                const top3Rend_=allRendimientos_.slice(0,3)
+                                const bot3Rend_=allRendimientos_.slice(-3).reverse()
+                                if(!allRendimientos_.length) return <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a'}}>Sin datos</div>
+                                const renderRow=(t,i)=>(
+                                  <div key={t.symbol+(t.isOpen?'o':'c')+i} style={{display:'flex',flexDirection:'column',padding:'2px 0',borderBottom:'1px solid rgba(255,255,255,0.03)'}}>
+                                    <div style={{display:'flex',justifyContent:'space-between'}}>
+                                      <span onClick={()=>{setSimbolo(t.symbol);setSidePanel('watchlist');setTlTab('ops')}} style={{fontFamily:MONO,fontSize:8,color:'#a8ccdf',cursor:'pointer',textDecoration:'underline',textDecorationColor:'rgba(168,204,223,0.3)'}}>
+                                        {t.symbol}{t.isOpen&&<span style={{fontSize:8,color:'#ffd700',marginLeft:3}}>●</span>}
+                                      </span>
+                                      <span style={{fontFamily:MONO,fontSize:8,fontWeight:700,color:t.pnlEur>=0?'#00e5a0':'#ff4d6d',flexShrink:0,marginLeft:4}}>{t.pnlEur>=0?'+':''}{Math.round(t.pnlEur)}€</span>
+                                    </div>
+                                    <div style={{display:'flex',justifyContent:'space-between'}}>
+                                      <span style={{fontFamily:MONO,fontSize:7,color:'#3d5a7a'}}>{t.strategy}</span>
+                                      <span style={{fontFamily:MONO,fontSize:7,color:t.pnlPct>=0?'rgba(0,229,160,0.7)':'rgba(255,77,109,0.7)'}}>{t.pnlPct>=0?'+':''}{typeof t.pnlPct==='number'?t.pnlPct.toFixed(1):'—'}%</span>
+                                    </div>
+                                  </div>
+                                )
+                                return <>
+                                  {top3Rend_.map((t,i)=>renderRow(t,i))}
+                                  {top3Rend_.length>0&&bot3Rend_.length>0&&<div style={{borderTop:'1px dashed #1a2d45',margin:'2px 0'}}/>}
+                                  {bot3Rend_.map((t,i)=>renderRow(t,i))}
+                                </>
+                              })()}
+                            </div>
+                          </div>
                           </div>
                           {/* GRÁFICOS DETALLADOS (scroll) */}
                           <div style={{flexShrink:0,overflowY:'auto'}}>
