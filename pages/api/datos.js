@@ -46,11 +46,41 @@ async function fetchAV(symbol) {
   const url = `https://stooq.com/q/d/l/?s=${sym}&i=d`
   const res = await fetch(url)
   const text = await res.text()
-  if (!text || text.includes('No data') || text.trim().length < 50) throw new Error(`Sin datos para ${symbol}`)
-  return text.trim().split('\n').slice(1).filter(l=>l.trim()).map(l=>{
-    const [date,open,high,low,close,volume] = l.split(',')
-    return { date, open:parseFloat(open), high:parseFloat(high), low:parseFloat(low), close:parseFloat(close), volume:parseFloat(volume)||0 }
-  }).filter(d=>d.close&&!isNaN(d.close)).sort((a,b)=>a.date.localeCompare(b.date))
+  let rawData = null
+  if (text && !text.includes('No data') && text.trim().length >= 50) {
+    rawData = text.trim().split('\n').slice(1).filter(l=>l.trim()).map(l=>{
+      const [date,open,high,low,close,volume] = l.split(',')
+      return { date, open:parseFloat(open), high:parseFloat(high), low:parseFloat(low), close:parseFloat(close), volume:parseFloat(volume)||0 }
+    }).filter(d=>d.close&&!isNaN(d.close)).sort((a,b)=>a.date.localeCompare(b.date))
+  }
+  if (!rawData || rawData.length === 0) {
+    try {
+      const yfUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=2y`
+      const yfR = await fetch(yfUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Accept': 'application/json'
+        }
+      })
+      if (yfR.ok) {
+        const yfJson = await yfR.json()
+        const timestamps = yfJson?.chart?.result?.[0]?.timestamp
+        const quotes = yfJson?.chart?.result?.[0]?.indicators?.quote?.[0]
+        if (timestamps && quotes) {
+          rawData = timestamps.map((t,i) => ({
+            date: new Date(t*1000).toISOString().slice(0,10),
+            open:  quotes.open?.[i]  || quotes.close?.[i],
+            high:  quotes.high?.[i]  || quotes.close?.[i],
+            low:   quotes.low?.[i]   || quotes.close?.[i],
+            close: quotes.close?.[i],
+            volume: quotes.volume?.[i] || 0
+          })).filter(d=>d.close&&!isNaN(d.close))
+        }
+      }
+    } catch(_) {}
+  }
+  if (!rawData || rawData.length === 0) throw new Error(`Sin datos para ${symbol}`)
+  return rawData
 }
 
 // ── Motor V50 — fiel al Pine Script ─────────────────────────
