@@ -2758,7 +2758,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V7.60</title>
+        <title>Trading Simulator V7.61</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2835,7 +2835,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V7.60
+            <span className="dot"/>Trading Simulator V7.61
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5417,7 +5417,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               background:tlBulkMode?'rgba(0,212,255,0.15)':'transparent',
                               border:'1px solid '+(tlBulkMode?'#00d4ff':'#1a2d45'),
                               color:tlBulkMode?'#00d4ff':'#4a6a88',whiteSpace:'nowrap'}}>
-                            ☑ Seleccionar
+                            ☑ Set strategy
                           </button>
                           <button onClick={()=>setTlMultiMode(true)}
                             title="Selección múltiple para borrar"
@@ -5471,24 +5471,24 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         <span style={{fontFamily:MONO,fontSize:10,color:'#00d4ff'}}>{tlBulkSel.size} operación{tlBulkSel.size>1?'es':''} seleccionada{tlBulkSel.size>1?'s':''}</span>
                         <select value={tlBulkStrat} onChange={e=>setTlBulkStrat(e.target.value)}
                           style={{fontFamily:MONO,fontSize:10,background:'var(--bg2)',border:'1px solid #1a2d45',color:'var(--text)',padding:'3px 6px',borderRadius:3}}>
-                          <option value=''>— Asignar estrategia —</option>
+                          <option value=''>— Sin estrategia —</option>
                           {stratOpts_.map(s=><option key={s} value={s}>{s||'(sin nombre)'}</option>)}
                         </select>
-                        <button disabled={!tlBulkStrat}
+                        <button disabled={false}
                           onClick={async()=>{
                             const trades=tlTradesFiltered.filter(t=>tlBulkSel.has(t.id))
                             await Promise.all(trades.map(async trade=>{
-                              const firstBuy=tlTrades.filter(f=>f.symbol===trade.symbol&&f.fill_type==='buy').sort((a,b)=>a.date.localeCompare(b.date))[0]
+                              const firstBuy=tlTrades.find(f=>f.id===trade.entry_fill_id)||tlTrades.filter(f=>f.symbol===trade.symbol&&f.fill_type==='buy'&&f.date===trade.entry_date).sort((a,b)=>a.created_at?.localeCompare(b.created_at||'')||0)[0]
                               if(!firstBuy) return
-                              return apiFetch('/api/tradelog?action=save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:firstBuy.id,strategy:tlBulkStrat})})
+                              return apiFetch('/api/tradelog?action=save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:firstBuy.id,strategy:tlBulkStrat||null})})
                             }))
                             await loadTrades()
                             setTlBulkSel(new Set())
                             setTlBulkStrat('')
                             setTlBulkMode(false)
                           }}
-                          style={{fontFamily:MONO,fontSize:10,background:tlBulkStrat?'#00d4ff':'#1a2d45',color:tlBulkStrat?'#000':'#3d5a7a',border:'none',padding:'4px 10px',borderRadius:3,cursor:tlBulkStrat?'pointer':'default'}}>
-                          Aplicar
+                          style={{fontFamily:MONO,fontSize:10,background:'#00d4ff',color:'#000',border:'none',padding:'4px 10px',borderRadius:3,cursor:'pointer'}}>
+                          {tlBulkStrat?'Aplicar':'Quitar estrategia'}
                         </button>
                         <button onClick={()=>{setTlBulkSel(new Set());setTlBulkMode(false)}}
                           style={{fontFamily:MONO,fontSize:10,background:'transparent',border:'1px solid #1a2d45',color:'#4a6a88',padding:'4px 8px',borderRadius:3,cursor:'pointer'}}>
