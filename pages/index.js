@@ -636,7 +636,8 @@ export default function Home() {
   const [tlSelected,setTlSelected]=useState(null)      // trade seleccionado en detalle
   const [tlMultiSel,setTlMultiSel]=useState(new Set()) // ids seleccionados para borrado
   const [tlMultiMode,setTlMultiMode]=useState(false)   // modo multiselección activo
-  const [tlBulkSel,setTlBulkSel]=useState(new Set())   // fills seleccionados para bulk strategy
+  const [tlBulkMode,setTlBulkMode]=useState(false)      // modo selección masiva por operación
+  const [tlBulkSel,setTlBulkSel]=useState(new Set())   // operaciones seleccionadas para bulk strategy
   const [tlBulkStrat,setTlBulkStrat]=useState('')       // estrategia a asignar en bulk
   const [tlTab,setTlTab]=useState('dashboard')          // 'ops'|'import'|'export'|'dashboard'|'capital'
   const [tlResumenCollapsed,setTlResumenCollapsed]=useState(false)
@@ -2757,7 +2758,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V7.59</title>
+        <title>Trading Simulator V7.60</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2834,7 +2835,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V7.59
+            <span className="dot"/>Trading Simulator V7.60
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5411,6 +5412,13 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         </>
                       ):(
                         <>
+                          <button onClick={()=>{setTlBulkMode(v=>!v);setTlBulkSel(new Set());setTlBulkStrat('')}}
+                            style={{flexShrink:0,fontFamily:MONO,fontSize:10,padding:'3px 10px',borderRadius:3,cursor:'pointer',
+                              background:tlBulkMode?'rgba(0,212,255,0.15)':'transparent',
+                              border:'1px solid '+(tlBulkMode?'#00d4ff':'#1a2d45'),
+                              color:tlBulkMode?'#00d4ff':'#4a6a88',whiteSpace:'nowrap'}}>
+                            ☑ Seleccionar
+                          </button>
                           <button onClick={()=>setTlMultiMode(true)}
                             title="Selección múltiple para borrar"
                             style={{flexShrink:0,fontFamily:MONO,fontSize:10,padding:'4px 8px',borderRadius:4,cursor:'pointer',
@@ -5456,37 +5464,54 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                   <div style={{flex:1,display:'flex',flexDirection:'column',minWidth:0,overflow:'hidden'}}>
 
                     {/* Bulk strategy bar */}
-                    {tlBulkSel.size>0&&(
+                    {tlBulkMode&&tlBulkSel.size>0&&(()=>{
+                      const stratOpts_=[...new Set((tlTrades||[]).map(t=>t.strategy||'').filter(Boolean))].sort()
+                      return(
                       <div style={{display:'flex',alignItems:'center',gap:8,padding:'6px 12px',background:'rgba(0,212,255,0.05)',border:'1px solid rgba(0,212,255,0.2)',borderRadius:4,marginBottom:6,flexShrink:0}}>
-                        <span style={{fontFamily:MONO,fontSize:10,color:'#00d4ff'}}>{tlBulkSel.size} fill{tlBulkSel.size>1?'s':''} seleccionado{tlBulkSel.size>1?'s':''}</span>
+                        <span style={{fontFamily:MONO,fontSize:10,color:'#00d4ff'}}>{tlBulkSel.size} operación{tlBulkSel.size>1?'es':''} seleccionada{tlBulkSel.size>1?'s':''}</span>
                         <select value={tlBulkStrat} onChange={e=>setTlBulkStrat(e.target.value)}
                           style={{fontFamily:MONO,fontSize:10,background:'var(--bg2)',border:'1px solid #1a2d45',color:'var(--text)',padding:'3px 6px',borderRadius:3}}>
                           <option value=''>— Asignar estrategia —</option>
-                          {strategies.map(st=>{const n=st.name||`V50 EMA ${st.ema_r}/${st.ema_l}`;return <option key={st.id} value={n}>{n}</option>})}
+                          {stratOpts_.map(s=><option key={s} value={s}>{s||'(sin nombre)'}</option>)}
                         </select>
                         <button disabled={!tlBulkStrat}
                           onClick={async()=>{
-                            const ids=[...tlBulkSel]
-                            await Promise.all(ids.map(id=>apiFetch('/api/tradelog?action=save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,strategy:tlBulkStrat})})))
+                            const trades=tlTradesFiltered.filter(t=>tlBulkSel.has(t.id))
+                            await Promise.all(trades.map(async trade=>{
+                              const firstBuy=tlTrades.filter(f=>f.symbol===trade.symbol&&f.fill_type==='buy').sort((a,b)=>a.date.localeCompare(b.date))[0]
+                              if(!firstBuy) return
+                              return apiFetch('/api/tradelog?action=save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:firstBuy.id,strategy:tlBulkStrat})})
+                            }))
                             await loadTrades()
                             setTlBulkSel(new Set())
                             setTlBulkStrat('')
+                            setTlBulkMode(false)
                           }}
                           style={{fontFamily:MONO,fontSize:10,background:tlBulkStrat?'#00d4ff':'#1a2d45',color:tlBulkStrat?'#000':'#3d5a7a',border:'none',padding:'4px 10px',borderRadius:3,cursor:tlBulkStrat?'pointer':'default'}}>
                           Aplicar
                         </button>
-                        <button onClick={()=>setTlBulkSel(new Set())}
+                        <button onClick={()=>{setTlBulkSel(new Set());setTlBulkMode(false)}}
                           style={{fontFamily:MONO,fontSize:10,background:'transparent',border:'1px solid #1a2d45',color:'#4a6a88',padding:'4px 8px',borderRadius:3,cursor:'pointer'}}>
                           Cancelar
                         </button>
                       </div>
-                    )}
+                      )
+                    })()}
 
                     {/* Tabla */}
                     <div style={{flex:1,overflowY:'auto'}}>
                       <table className="tl-ops-table" onContextMenu={e=>{e.stopPropagation();openCtx(e,'tl_table')}} style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:11,textAlign:'center'}}>
                         <thead>
                           <tr style={{background:'var(--bg2)',position:'sticky',top:0,zIndex:5}}>
+                            {tlBulkMode&&(
+                              <th style={{padding:'0 6px',width:24,borderBottom:'1px solid var(--border)'}}>
+                                <input type="checkbox"
+                                  checked={tlBulkSel.size===tlTradesFiltered.length&&tlTradesFiltered.length>0}
+                                  onChange={e=>setTlBulkSel(e.target.checked?new Set(tlTradesFiltered.map(t=>t.id)):new Set())}
+                                  style={{cursor:'pointer',accentColor:'#00d4ff'}}
+                                />
+                              </th>
+                            )}
                             <th style={{width:28,padding:'6px 4px',borderBottom:'1px solid var(--border)',cursor:tlMultiMode?'pointer':'default'}}
                               onClick={()=>{
                                 if(!tlMultiMode) return
@@ -5540,6 +5565,15 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                 onMouseOver={e=>e.currentTarget.style.background='rgba(255,255,255,0.03)'}
                                 onMouseOut={e=>e.currentTarget.style.background=rowBg}
                                 onClick={()=>{if(tlMultiMode){toggleMultiRow()}else{if(fills.length)setTlExpandedTrades(prev=>{const n=new Set(prev);n.has(trade.id)?n.delete(trade.id):n.add(trade.id);return n})}}}>
+                                {tlBulkMode&&(
+                                  <td style={{padding:'0 6px',width:24}} onClick={e=>e.stopPropagation()}>
+                                    <input type="checkbox"
+                                      checked={tlBulkSel.has(trade.id)}
+                                      onChange={e=>{setTlBulkSel(prev=>{const n=new Set(prev);e.target.checked?n.add(trade.id):n.delete(trade.id);return n})}}
+                                      style={{cursor:'pointer',accentColor:'#00d4ff'}}
+                                    />
+                                  </td>
+                                )}
                                 {/* Expand / multiselect button */}
                                 <td style={{padding:'6px 4px',textAlign:'center',width:28,cursor:'pointer'}}
                                   onClick={e=>{e.stopPropagation();if(tlMultiMode){toggleMultiRow()}else{if(fills.length)setTlExpandedTrades(prev=>{const n=new Set(prev);n.has(trade.id)?n.delete(trade.id):n.add(trade.id);return n})}}}>
@@ -5620,9 +5654,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                     <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:10,textAlign:'center'}}>
                                       <thead>
                                         <tr style={{background:'rgba(0,212,255,0.04)'}}>
-                                          <th style={{width:20,padding:'3px 4px'}}>
-                                            {(()=>{const fids=fills.map(f=>f.id).filter(Boolean);const allSel=fids.length>0&&fids.every(id=>tlBulkSel.has(id));return <input type="checkbox" checked={allSel} onChange={e=>setTlBulkSel(prev=>{const n=new Set(prev);fids.forEach(id=>e.target.checked?n.add(id):n.delete(id));return n})} style={{cursor:'pointer',accentColor:'#00d4ff',width:11,height:11}}/>})()}
-                                          </th>
+                                          <th style={{width:20,padding:'3px 4px'}}/>
                                           {['Tipo','Fecha','Acciones','Precio','Capital €','Comisión','Divisa','FX'].map(h=>(
                                             <th key={h} style={{padding:'3px 8px',color:'#2a4060',fontWeight:600,fontSize:8,
                                               letterSpacing:'0.08em',textTransform:'uppercase',textAlign:'center'}}>{h}</th>
@@ -5643,10 +5675,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                             onClick={e=>{e.stopPropagation();if(tlMultiMode){if(fill.id)setTlMultiSel(prev=>{const n=new Set(prev);n.has(fill.id)?n.delete(fill.id):n.add(fill.id);return n});return}const df=tlDefaultForm();setTlForm({...df,id:fill.id,fill_type:fill.fill_type||'buy',symbol:fill.symbol||trade.symbol||'',broker:fill.broker||df.broker,date:toDisplayDate(fill.date)||'',price:fill.price||'',shares:fill.shares||'',currency:fill.currency||'USD',commission:fill.commission||0,fx:fill.fx?String(fill.fx):'',fx_manual:!!fill.fx,notes:fill.notes||'',strategy:fill.strategy||df.strategy,import_source:fill.import_source||'manual',_isFirstBuy:isFirstBuy});setTlFormOpen(true)}}>
                                             <td style={{width:20,padding:'4px 4px',textAlign:'center'}}
                                               onClick={e=>{e.stopPropagation();if(tlMultiMode&&fill.id)setTlMultiSel(prev=>{const n=new Set(prev);n.has(fill.id)?n.delete(fill.id):n.add(fill.id);return n})}}>
-                                              {tlMultiMode
-                                                ?<input type="checkbox" readOnly checked={!!fill.id&&tlMultiSel.has(fill.id)} style={{cursor:'pointer',width:11,height:11,pointerEvents:'none'}}/>
-                                                :fill.id&&<input type="checkbox" checked={tlBulkSel.has(fill.id)} onChange={e=>{e.stopPropagation();setTlBulkSel(prev=>{const n=new Set(prev);e.target.checked?n.add(fill.id):n.delete(fill.id);return n})}} style={{cursor:'pointer',accentColor:'#00d4ff',width:11,height:11}}/>
-                                              }
+                                              {tlMultiMode&&<input type="checkbox" readOnly checked={!!fill.id&&tlMultiSel.has(fill.id)} style={{cursor:'pointer',width:11,height:11,pointerEvents:'none'}}/>}
                                             </td>
                                             <td style={{padding:'4px 8px',textAlign:'center'}}>
                                               <span style={{fontSize:9,padding:'1px 5px',borderRadius:3,fontWeight:700,
