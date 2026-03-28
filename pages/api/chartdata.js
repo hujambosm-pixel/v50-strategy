@@ -5,6 +5,7 @@ function stooqSym(symbol) {
     '^GSPC':'spy.us','^NDX':'ndx.us','^IBEX':'ibex.es','^GDAXI':'dax.de',
     '^FTSE':'ftse.uk','^N225':'n225.jp','BTC-USD':'btc-usd.v','ETH-USD':'eth-usd.v',
     'GC=F':'gc.f','CL=F':'cl.f',
+    '^IXIC':'ndx.us','^DJI':'dji.us','^FCHI':'cac.fr','^STOXX50E':'sx5e.de','^HSI':'hsi.hk',
   }
   if(MAP[symbol]) return MAP[symbol]
   if(symbol.endsWith('=F')) return symbol.replace('=F','').toLowerCase()+'.f'
