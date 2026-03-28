@@ -2758,7 +2758,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V7.65</title>
+        <title>Trading Simulator V7.66</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2835,7 +2835,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V7.65
+            <span className="dot"/>Trading Simulator V7.66
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6254,7 +6254,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       const bot3_=openSorted_.length>3?[...openSorted_].reverse().slice(0,Math.min(3,openSorted_.length-3)):[]
                       const ps_={fontFamily:MONO,fontSize:10,padding:'2px 8px',border:'1px solid var(--border)',borderRadius:10,background:'var(--bg3)',cursor:'pointer',outline:'none',color:'#4a6a88',maxWidth:110}
                       return (
-                        <div id="tlDashOuter" data-dash-outer="1" style={{display:'flex',flexDirection:'column',background:'var(--bg)',flex:1,minHeight:0,overflow:'hidden'}}>
+                        <div id="tlDashOuter" data-dash-outer="1" style={{display:'flex',flexDirection:'column',background:'var(--bg)',flex:1,minHeight:0,overflow:'hidden',alignItems:'stretch'}}>
                           {/* BARRA SUPERIOR — always visible even when noData */}
                           <div style={{display:'flex',alignItems:'center',gap:5,padding:'6px 12px',borderBottom:'1px solid var(--border)',background:'var(--bg2)',flexShrink:0,flexWrap:'nowrap',overflowX:'auto'}}>
                             <span style={{fontFamily:MONO,fontSize:11,fontWeight:700,color:'var(--text)',letterSpacing:'0.08em',textTransform:'uppercase',marginRight:8,flexShrink:0}}>Dashboard</span>
@@ -6289,8 +6289,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           {/* Thin banner when no data — layout stays fully visible */}
                           {noData&&<div style={{padding:'4px 12px',background:'rgba(255,77,109,0.07)',borderBottom:'1px solid rgba(255,77,109,0.18)',fontFamily:MONO,fontSize:9,color:'#ff6b85',flexShrink:0,letterSpacing:'0.05em'}}>Sin resultados para este filtro — mostrando métricas en cero</div>}
                           {/* FILA 1 — 10 métricas */}
-                          <div style={{display:'flex',flex:1,minHeight:0,overflow:'hidden',height:'100%'}}>
-                          <div style={{flex:1,display:'flex',flexDirection:'column',minWidth:0,overflow:'hidden',height:'100%'}}>
+                          <div style={{display:'flex',flex:1,minHeight:0,overflow:'hidden',alignItems:'stretch'}}>
+                          <div style={{flex:1,display:'flex',flexDirection:'column',minWidth:0,overflow:'hidden'}}>
                           <div style={{display:'flex',borderBottom:'1px solid var(--border)',flexShrink:0,overflowX:'auto'}}>
                             {[
                               {l:'Patrimonio',v:patrimonioActual!=null?fmtAbs_(patrimonioActual):'—',c:'#00d4ff'},
@@ -6424,7 +6424,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           </div>
                           </div>
                           {/* Col derecha permanente — Mercados + Rendimientos */}
-                          <div style={{width:180,borderLeft:'1px solid var(--border)',display:'flex',flexDirection:'column',flexShrink:0,overflow:'hidden',alignSelf:'stretch'}}>
+                          <div style={{width:180,borderLeft:'1px solid var(--border)',display:'flex',flexDirection:'column',flexShrink:0,overflow:'hidden'}}>
                             {/* Mercados */}
                             <div style={{flex:1,overflow:'auto',padding:'4px 8px',borderBottom:'1px solid var(--border)'}}>
                               <div style={{fontFamily:MONO,fontSize:7,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:3,position:'sticky',top:0,background:'var(--bg)',paddingTop:4}}>Mercados</div>
