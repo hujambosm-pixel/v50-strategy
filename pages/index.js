@@ -85,7 +85,7 @@ function computeFifo(fills, prices={}) {
           const matched=Math.min(lot.remaining, sellRem)
           const buyPx=parseFloat(lot.fill.price||0)
           let buyFx=parseFloat(lot.fill.fx||1); if(buyFx>0&&buyFx<1) buyFx=1/buyFx; if(!buyFx||isNaN(buyFx)) buyFx=1
-          const pnlEur=(price-buyPx)*matched/fx
+          const pnlEur=(price*matched/fx)-(buyPx*matched/buyFx)
           const pnlPct=buyPx>0?(price/buyPx-1)*100:0
           const buyComm=lot.orig>0?parseFloat(lot.fill.commission||0)/lot.orig*matched:0
           const sellComm=shares>0?comm/shares*matched:0
@@ -2762,7 +2762,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V7.74</title>
+        <title>Trading Simulator V7.75</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2839,7 +2839,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V7.74
+            <span className="dot"/>Trading Simulator V7.75
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
