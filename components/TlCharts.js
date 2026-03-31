@@ -9,7 +9,7 @@ const CONTRIB_MARKER = {
   dividendo:  { color:'#aaff44', shape:'circle',     position:'belowBar', prefix:'D+' },
 }
 
-export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContribs, curveBH, showBH, onToggleBH, contributions, showWithContribs, onToggleContribs, height, showTimeScale, syncRef }) {
+export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContribs, curveBH, showBH, onToggleBH, equityMode, onToggleMode, contributions, showWithContribs, onToggleContribs, height, showTimeScale, syncRef }) {
   const ref = useRef(null), chartRef = useRef(null), equityTooltipRef = useRef(null)
   const [showSinFx, setShowSinFx] = useState(false)
   const [showSinComm, setShowSinComm] = useState(false)
@@ -17,10 +17,20 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
   const [showRetirada, setShowRetirada] = useState(true)
   const [showDividendo, setShowDividendo] = useState(true)
 
-  // Active main curve
-  const activeCurve = showWithContribs && curveWithContribs?.length > 1 ? curveWithContribs : curve
-  // Derive legend color from final active curve value
+  const isEquityMode = equityMode === 'equity'
+  // Active main curve: equity mode → curveWithContribs; P&L mode → existing logic
+  const activeCurve = isEquityMode
+    ? (curveWithContribs?.length > 1 ? curveWithContribs : curve)
+    : (showWithContribs && curveWithContribs?.length > 1 ? curveWithContribs : curve)
   const lineColor = activeCurve?.length ? (activeCurve[activeCurve.length-1].value >= 0 ? '#00e5a0' : '#ff4d6d') : '#00e5a0'
+
+  // Date formatter for tooltip: "2025-03-15" → "15 Mar 2025"
+  const fmtDate = d => {
+    if(!d||typeof d!=='string') return ''
+    const months=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
+    const [y,m,day]=d.split('-')
+    return `${parseInt(day)} ${months[parseInt(m)-1]} ${y}`
+  }
 
   useEffect(()=>{
     if(!ref.current||!activeCurve?.length) return
@@ -36,21 +46,23 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
         localization:{priceFormatter:v=>'€'+Math.round(v)},
       })
       chartRef.current = chart
-      // Zero baseline
-      chart.addLineSeries({color:'#2a3f55',lineWidth:1,lineStyle:LineStyle.Dotted,lastValueVisible:false,priceLineVisible:false})
-        .setData([{time:activeCurve[0].date,value:0},{time:activeCurve[activeCurve.length-1].date,value:0}])
+      // Zero baseline (only in P&L mode where 0 is meaningful)
+      if(!isEquityMode){
+        chart.addLineSeries({color:'#2a3f55',lineWidth:1,lineStyle:LineStyle.Dotted,lastValueVisible:false,priceLineVisible:false})
+          .setData([{time:activeCurve[0].date,value:0},{time:activeCurve[activeCurve.length-1].date,value:0}])
+      }
       // Track series data by date for crosshair tooltip
       const eqData={}
-      const track=(arr,key)=>arr?.forEach(p=>{if(!eqData[p.date])eqData[p.date]={};eqData[p.date][key]=p.value})
+      const track=(arr,key,valFn)=>arr?.forEach(p=>{if(!eqData[p.date])eqData[p.date]={};eqData[p.date][key]=valFn?valFn(p):p.value})
       // Main series
       const finalVal = activeCurve[activeCurve.length-1].value
       const lc = finalVal >= 0 ? '#00e5a0' : '#ff4d6d'
-      const label = showWithContribs ? 'Patrimonio' : 'P&L real'
+      const label = isEquityMode ? 'Equity' : 'P&L real'
       const mainSeries = chart.addLineSeries({color:lc,lineWidth:2,lastValueVisible:true,priceLineVisible:false,title:label})
       mainSeries.setData(activeCurve.map(p=>({time:p.date,value:p.value})))
       track(activeCurve,'main')
-      // Contribution markers on main series
-      if(showWithContribs && contributions?.length){
+      // Contribution markers — only in equity mode
+      if(isEquityMode && contributions?.length){
         const activeTypes = new Set(['aportacion','retirada','dividendo'].filter(t=>
           t==='aportacion'?showAportacion:t==='retirada'?showRetirada:showDividendo
         ))
@@ -65,25 +77,27 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
           .sort((a,b)=>a.time.localeCompare(b.time))
         if(markers.length) mainSeries.setMarkers(markers)
       }
-      // Sin FX line (hidden when showWithContribs — patrimony doesn't split FX)
-      if(!showWithContribs && showSinFx && curveSinFx?.length>1){
+      // Sin FX / Sin Comm — only in P&L mode
+      if(!isEquityMode && showSinFx && curveSinFx?.length>1){
         chart.addLineSeries({color:'#7a9bc0',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:true,priceLineVisible:false,title:'Sin FX'})
           .setData(curveSinFx.map(p=>({time:p.date,value:p.value})))
         track(curveSinFx,'fx')
       }
-      // Sin Comisiones line
-      if(!showWithContribs && showSinComm && curveSinComm?.length>1){
+      if(!isEquityMode && showSinComm && curveSinComm?.length>1){
         chart.addLineSeries({color:'#ffd166',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:true,priceLineVisible:false,title:'Sin Comm'})
           .setData(curveSinComm.map(p=>({time:p.date,value:p.value})))
         track(curveSinComm,'comm')
       }
-      // Buy & Hold SP500 line
+      // B&H line — value depends on mode
       if(showBH && curveBH?.length>1){
+        const bhData = isEquityMode
+          ? curveBH.map(p=>({time:p.date, value:(p.capitalAcum||0)+p.value}))
+          : curveBH.map(p=>({time:p.date, value:p.value}))
         chart.addLineSeries({color:'#f59e0b',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:true,priceLineVisible:false,title:'B&H SP500'})
-          .setData(curveBH.map(p=>({time:p.date,value:p.value})))
-        track(curveBH,'bh')
+          .setData(bhData)
+        track(bhData,'bh')
       }
-      // Cross-chart time sync (time range)
+      // Cross-chart time sync
       if(syncRef?.current){
         const syncId=Symbol()
         const unsub=chart.timeScale().subscribeVisibleTimeRangeChange(range=>{
@@ -96,18 +110,18 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
         syncRef.current.listeners.push({id:syncId,handler})
         chartRef.current.__syncCleanup=()=>{try{unsub()}catch(_){};if(syncRef.current)syncRef.current.listeners=syncRef.current.listeners.filter(e=>e.id!==syncId)}
       }
-      // Crosshair tooltip
-      const MONO2='"JetBrains Mono",monospace'
+      // Crosshair tooltip with date
       chart.subscribeCrosshairMove(param=>{
         const tt=equityTooltipRef.current; if(!tt) return
         if(!param.time||!param.point){tt.style.display='none';return}
         const d=eqData[param.time]; if(!d){tt.style.display='none';return}
         const rows=[]
-        if(d.main!=null) rows.push(`<div style="display:flex;justify-content:space-between;gap:20px"><span style="color:${lc}">${label}</span><b style="color:${lc}">€${Math.round(d.main).toLocaleString('es-ES')}</b></div>`)
-        if(d.fx!=null)   rows.push(`<div style="display:flex;justify-content:space-between;gap:20px"><span style="color:#7a9bc0">Sin FX</span><b style="color:#7a9bc0">€${Math.round(d.fx).toLocaleString('es-ES')}</b></div>`)
-        if(d.comm!=null) rows.push(`<div style="display:flex;justify-content:space-between;gap:20px"><span style="color:#ffd166">Sin Comm</span><b style="color:#ffd166">€${Math.round(d.comm).toLocaleString('es-ES')}</b></div>`)
-        if(d.bh!=null)   rows.push(`<div style="display:flex;justify-content:space-between;gap:20px"><span style="color:#f59e0b">B&H SP500</span><b style="color:#f59e0b">€${Math.round(d.bh).toLocaleString('es-ES')}</b></div>`)
-        if(!rows.length){tt.style.display='none';return}
+        rows.push(`<div style="color:#4a6a88;font-size:10px;margin-bottom:4px">${fmtDate(param.time)}</div>`)
+        if(d.main!=null) rows.push(`<div style="display:flex;justify-content:space-between;gap:20px"><span style="color:${lc}">${label}</span><b style="color:${lc}">${d.main>=0?'':'-'}€${Math.abs(Math.round(d.main)).toLocaleString('es-ES')}</b></div>`)
+        if(d.fx!=null)   rows.push(`<div style="display:flex;justify-content:space-between;gap:20px"><span style="color:#7a9bc0">Sin FX</span><b style="color:#7a9bc0">${d.fx>=0?'':'-'}€${Math.abs(Math.round(d.fx)).toLocaleString('es-ES')}</b></div>`)
+        if(d.comm!=null) rows.push(`<div style="display:flex;justify-content:space-between;gap:20px"><span style="color:#ffd166">Sin Comm</span><b style="color:#ffd166">${d.comm>=0?'':'-'}€${Math.abs(Math.round(d.comm)).toLocaleString('es-ES')}</b></div>`)
+        if(d.bh!=null)   rows.push(`<div style="display:flex;justify-content:space-between;gap:20px"><span style="color:#f59e0b">B&H SP500</span><b style="color:#f59e0b">${d.bh>=0?'':'-'}€${Math.abs(Math.round(d.bh)).toLocaleString('es-ES')}</b></div>`)
+        if(rows.length<=1){tt.style.display='none';return}
         const cw=ref.current?.clientWidth||600
         tt.style.display='block'
         tt.style.left=((param.point.x+200>cw)?param.point.x-210:param.point.x+14)+'px'
@@ -126,7 +140,7 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
       return ()=>ro.disconnect()
     })
     return ()=>{ if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};try{chartRef.current.remove()}catch(_){};chartRef.current=null} }
-  },[activeCurve, curveSinFx, curveSinComm, showSinFx, showSinComm, showWithContribs, contributions, showAportacion, showRetirada, showDividendo, showBH, curveBH])
+  },[activeCurve, curveSinFx, curveSinComm, showSinFx, showSinComm, showWithContribs, contributions, showAportacion, showRetirada, showDividendo, showBH, curveBH, isEquityMode])
 
   const btnStyle = (active, color) => ({
     display:'flex',alignItems:'center',gap:4,
@@ -139,40 +153,38 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
   return (
     <div style={{borderTop:'1px solid var(--border)'}}>
       <div style={{padding:'4px 14px 0',display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
-        <span style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',marginRight:4}}>Equity</span>
+        {/* Mode toggle: P&L | Equity */}
+        {onToggleMode&&(
+          <span style={{display:'flex',borderRadius:4,overflow:'hidden',border:'1px solid #1a2d45',flexShrink:0}}>
+            <button onClick={()=>!isEquityMode||onToggleMode()} style={{fontFamily:MONO,fontSize:9,padding:'2px 7px',border:'none',cursor:'pointer',background:!isEquityMode?'#1a2d45':'transparent',color:!isEquityMode?'#00d4ff':'#3d5a7a'}}>P&L</button>
+            <button onClick={()=>isEquityMode||onToggleMode()} style={{fontFamily:MONO,fontSize:9,padding:'2px 7px',border:'none',cursor:'pointer',background:isEquityMode?'#1a2d45':'transparent',color:isEquityMode?'#00e5a0':'#3d5a7a'}}>Equity</button>
+          </span>
+        )}
         {/* Main legend */}
         <span style={{display:'flex',alignItems:'center',gap:4,fontFamily:MONO,fontSize:9,color:lineColor}}>
           <span style={{display:'inline-block',width:10,height:2,background:lineColor,borderRadius:1}}/>
-          {showWithContribs ? 'Patrimonio' : 'P&L real'}
+          {isEquityMode ? 'Equity' : 'P&L real'}
         </span>
-        {/* Con aportaciones toggle — only when data available */}
-        {curveWithContribs?.length>1&&onToggleContribs&&(
-          <button onClick={onToggleContribs} style={btnStyle(showWithContribs,'#9b72ff')}
-            title={showWithContribs?'Mostrar solo P&L':'Mostrar patrimonio con aportaciones'}>
-            <span style={{display:'inline-block',width:8,height:8,borderRadius:'50%',
-              background:showWithContribs?'#9b72ff':'#3d5a7a',marginRight:2}}/> Con aport.
-          </button>
-        )}
-        {/* Sin FX toggle — hidden when showWithContribs */}
-        {!showWithContribs&&curveSinFx?.length>1&&(
+        {/* Sin FX toggle — P&L mode only */}
+        {!isEquityMode&&curveSinFx?.length>1&&(
           <button onClick={()=>setShowSinFx(v=>!v)} style={btnStyle(showSinFx,'#7a9bc0')} title={showSinFx?'Ocultar Sin FX':'Mostrar Sin FX'}>
             <span style={{display:'inline-block',width:10,height:2,background:'#7a9bc0',borderRadius:1,opacity:showSinFx?0.8:0.3,borderBottom:'1px dashed #7a9bc0'}}/> Sin FX
           </button>
         )}
-        {/* Sin Comisiones toggle — hidden when showWithContribs */}
-        {!showWithContribs&&curveSinComm?.length>1&&(
+        {/* Sin Comisiones toggle — P&L mode only */}
+        {!isEquityMode&&curveSinComm?.length>1&&(
           <button onClick={()=>setShowSinComm(v=>!v)} style={btnStyle(showSinComm,'#ffd166')} title={showSinComm?'Ocultar Sin Comisiones':'Mostrar Sin Comisiones'}>
             <span style={{display:'inline-block',width:10,height:2,background:'#ffd166',borderRadius:1,opacity:showSinComm?0.8:0.3,borderBottom:'1px dashed #ffd166'}}/> Sin Comm.
           </button>
         )}
-        {/* B&H SP500 toggle */}
+        {/* B&H SP500 toggle — both modes */}
         {onToggleBH&&(
           <button onClick={onToggleBH} style={btnStyle(showBH,'#f59e0b')} title={showBH?'Ocultar B&H SP500':'Mostrar Buy & Hold SP500'}>
             <span style={{display:'inline-block',width:10,height:2,background:'#f59e0b',borderRadius:1,opacity:showBH?0.8:0.3,borderBottom:'1px dashed #f59e0b'}}/> B&H SP500
           </button>
         )}
-        {/* Contribution type toggles when showWithContribs */}
-        {showWithContribs&&contributions?.length>0&&(()=>{
+        {/* Contribution type toggles — equity mode only */}
+        {isEquityMode&&contributions?.length>0&&(()=>{
           const cfg=[
             {type:'aportacion', label:'Aport.', icon:'↑', show:showAportacion, set:setShowAportacion},
             {type:'retirada',   label:'Retir.', icon:'↓', show:showRetirada,   set:setShowRetirada},
@@ -192,7 +204,7 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
       </div>
       <div style={{position:'relative',height:'100%'}}>
         <div ref={ref} style={{height:'100%'}}/>
-        <div ref={equityTooltipRef} style={{position:'absolute',display:'none',pointerEvents:'none',background:'rgba(8,12,20,0.96)',border:'1px solid #1a2d45',borderRadius:6,padding:'8px 12px',fontFamily:'"JetBrains Mono",monospace',fontSize:12,color:'#e2eaf5',zIndex:15,minWidth:160,boxShadow:'0 4px 20px rgba(0,0,0,0.5)'}}/>
+        <div ref={equityTooltipRef} style={{position:'absolute',display:'none',pointerEvents:'none',background:'rgba(8,12,20,0.96)',border:'1px solid #1a2d45',borderRadius:6,padding:'8px 12px',fontFamily:'"JetBrains Mono",monospace',fontSize:11,color:'#e2eaf5',zIndex:15,minWidth:160,boxShadow:'0 4px 20px rgba(0,0,0,0.5)'}}/>
       </div>
     </div>
   )
