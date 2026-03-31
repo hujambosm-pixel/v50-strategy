@@ -553,13 +553,12 @@ export default function Home() {
         setCurrentJwt(session.access_token)
         // Re-fetch watchlist data now that JWT is available (RLS requires auth.uid())
         reloadWatchlist()
-        setTlTab('dashboard')
       }
     })
     const {data:{subscription}}=supabase.auth.onAuthStateChange((_e,session)=>{
       setSession(session||null)
       setCurrentJwt(session?.access_token||null)
-      if(session?.access_token){ reloadWatchlist(); setTlTab('dashboard') }
+      if(session?.access_token){ reloadWatchlist() }
     })
     return ()=>subscription.unsubscribe()
   },[]) // eslint-disable-line
@@ -2762,7 +2761,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V7.76</title>
+        <title>Trading Simulator V7.77</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2839,7 +2838,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V7.76
+            <span className="dot"/>Trading Simulator V7.77
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6254,7 +6253,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       const cagrReal_=aniosPeriodo_&&pnlTotal!==0?(Math.pow(Math.max((capitalBase+pnlTotal)/capitalBase,0.001),1/aniosPeriodo_)-1)*100:null
                       const _capRef_=capitalNeto>0?capitalNeto:capitalBase
                       const maxDDPct=maxDD>0&&_capRef_>0?(maxDD/_capRef_*100):0
-                      const fxImpact=(()=>{const t2=closed.reduce((s,t)=>{const fE=parseFloat(t.fx_entry||0)||1;const fX=parseFloat(t.fx_exit||t.fx_entry||0)||fE;return s+parseFloat(t.exit_price||0)*parseFloat(t.shares||0)*(1/fX-1/fE)},0);return t2})()
+                      const fxImpact=pnlReal-closed.reduce((s,t)=>{const fE=parseFloat(t.fx_entry||0)||1;return s+(parseFloat(t.exit_price||0)-parseFloat(t.entry_price||0))*parseFloat(t.shares||0)/fE},0)
                       const pnlSCapPct=capitalNeto>0?(pnlTotal/capitalNeto*100):capitalBase>0?(pnlTotal/capitalBase*100):null
                       const fmtEur_=v=>v>=0?'+€'+Math.round(v).toLocaleString('es-ES'):'-€'+Math.round(Math.abs(v)).toLocaleString('es-ES')
                       const fmtAbs_=v=>'€'+Math.round(Math.abs(v)).toLocaleString('es-ES')
@@ -6405,7 +6404,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           {/* FILA 3 — KPIs + secundarias */}
                           <div style={{display:'flex',flexWrap:'nowrap',borderBottom:'1px solid var(--border)',flexShrink:0,overflowX:'auto'}}>
                             {[
-                              {l:'Impacto FX',t:'impactoFx',v:fxImpact!==0?(fxImpact>=0?'+':'')+'€'+Math.abs(fxImpact).toFixed(0):'€0',c:'#ffd166'},
+                              {l:'Impacto FX',t:'impactoFx',v:fxImpact!==0?(fxImpact>=0?'+':'-')+'€'+Math.round(Math.abs(fxImpact)).toLocaleString('es-ES'):'€0',c:fxImpact>=0?'#00e5a0':'#ff4d6d'},
                               {l:'Gan. media %',t:'ganMediaPct',v:avgWinPct>0?('+'+avgWinPct.toFixed(2)+'%'):'—',c:'#00e5a0'},
                               {l:'Pérd. media %',t:'perdMediaPct',v:avgLossPct>0?(avgLossPct.toFixed(2)+'%'):'—',c:'#ff4d6d'},
                               {l:'Días prom.',t:'diasProm',v:diasProm!=null?Math.round(diasProm)+' d':'—',c:'#a8ccdf'},
