@@ -9,7 +9,7 @@ const CONTRIB_MARKER = {
   dividendo:  { color:'#aaff44', shape:'circle',     position:'belowBar', prefix:'D+' },
 }
 
-export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContribs, contributions, showWithContribs, onToggleContribs, height, showTimeScale, syncRef }) {
+export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContribs, curveBH, showBH, onToggleBH, contributions, showWithContribs, onToggleContribs, height, showTimeScale, syncRef }) {
   const ref = useRef(null), chartRef = useRef(null), equityTooltipRef = useRef(null)
   const [showSinFx, setShowSinFx] = useState(false)
   const [showSinComm, setShowSinComm] = useState(false)
@@ -77,6 +77,12 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
           .setData(curveSinComm.map(p=>({time:p.date,value:p.value})))
         track(curveSinComm,'comm')
       }
+      // Buy & Hold SP500 line
+      if(showBH && curveBH?.length>1){
+        chart.addLineSeries({color:'#f59e0b',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:true,priceLineVisible:false,title:'B&H SP500'})
+          .setData(curveBH.map(p=>({time:p.date,value:p.value})))
+        track(curveBH,'bh')
+      }
       // Cross-chart time sync (time range)
       if(syncRef?.current){
         const syncId=Symbol()
@@ -100,6 +106,7 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
         if(d.main!=null) rows.push(`<div style="display:flex;justify-content:space-between;gap:20px"><span style="color:${lc}">${label}</span><b style="color:${lc}">€${Math.round(d.main).toLocaleString('es-ES')}</b></div>`)
         if(d.fx!=null)   rows.push(`<div style="display:flex;justify-content:space-between;gap:20px"><span style="color:#7a9bc0">Sin FX</span><b style="color:#7a9bc0">€${Math.round(d.fx).toLocaleString('es-ES')}</b></div>`)
         if(d.comm!=null) rows.push(`<div style="display:flex;justify-content:space-between;gap:20px"><span style="color:#ffd166">Sin Comm</span><b style="color:#ffd166">€${Math.round(d.comm).toLocaleString('es-ES')}</b></div>`)
+        if(d.bh!=null)   rows.push(`<div style="display:flex;justify-content:space-between;gap:20px"><span style="color:#f59e0b">B&H SP500</span><b style="color:#f59e0b">€${Math.round(d.bh).toLocaleString('es-ES')}</b></div>`)
         if(!rows.length){tt.style.display='none';return}
         const cw=ref.current?.clientWidth||600
         tt.style.display='block'
@@ -119,7 +126,7 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
       return ()=>ro.disconnect()
     })
     return ()=>{ if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};try{chartRef.current.remove()}catch(_){};chartRef.current=null} }
-  },[activeCurve, curveSinFx, curveSinComm, showSinFx, showSinComm, showWithContribs, contributions, showAportacion, showRetirada, showDividendo])
+  },[activeCurve, curveSinFx, curveSinComm, showSinFx, showSinComm, showWithContribs, contributions, showAportacion, showRetirada, showDividendo, showBH, curveBH])
 
   const btnStyle = (active, color) => ({
     display:'flex',alignItems:'center',gap:4,
@@ -156,6 +163,12 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
         {!showWithContribs&&curveSinComm?.length>1&&(
           <button onClick={()=>setShowSinComm(v=>!v)} style={btnStyle(showSinComm,'#ffd166')} title={showSinComm?'Ocultar Sin Comisiones':'Mostrar Sin Comisiones'}>
             <span style={{display:'inline-block',width:10,height:2,background:'#ffd166',borderRadius:1,opacity:showSinComm?0.8:0.3,borderBottom:'1px dashed #ffd166'}}/> Sin Comm.
+          </button>
+        )}
+        {/* B&H SP500 toggle */}
+        {onToggleBH&&(
+          <button onClick={onToggleBH} style={btnStyle(showBH,'#f59e0b')} title={showBH?'Ocultar B&H SP500':'Mostrar Buy & Hold SP500'}>
+            <span style={{display:'inline-block',width:10,height:2,background:'#f59e0b',borderRadius:1,opacity:showBH?0.8:0.3,borderBottom:'1px dashed #f59e0b'}}/> B&H SP500
           </button>
         )}
         {/* Contribution type toggles when showWithContribs */}

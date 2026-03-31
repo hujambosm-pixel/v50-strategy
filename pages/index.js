@@ -167,6 +167,30 @@ function computeFifo(fills, prices={}) {
   return {openPositions, closedTrades, fillStatus, trades}
 }
 
+// ── Buy & Hold SP500 reference curve ──
+function computeBuyAndHold(contributions, priceHistory) {
+  if (!contributions?.length || !priceHistory?.length) return []
+  const aportaciones = contributions
+    .filter(c => c.type === 'aportacion')
+    .slice()
+    .sort((a, b) => (a.date || '').localeCompare(b.date || ''))
+  if (!aportaciones.length) return []
+  let units = 0, capitalInvertido = 0, pendingIdx = 0
+  const result = []
+  for (const day of priceHistory) {
+    const sp500Eur = day.sp500_usd / day.eur_usd
+    while (pendingIdx < aportaciones.length && aportaciones[pendingIdx].date <= day.date) {
+      const amount = parseFloat(aportaciones[pendingIdx].amount || 0)
+      if (sp500Eur > 0) units += amount / sp500Eur
+      capitalInvertido += amount
+      pendingIdx++
+    }
+    if (units === 0) continue
+    result.push({ date: day.date, value: units * sp500Eur - capitalInvertido })
+  }
+  return result
+}
+
 // ── Date helpers for TradeLog (dd/mm/yyyy ↔ yyyy-mm-dd) ──
 function toDisplayDate(iso){ // '2024-03-15' → '15/03/2024'
   if(!iso) return ''
@@ -647,6 +671,8 @@ export default function Home() {
   // ── Capital contributions ──
   const [contributions,setContributions]=useState([])
   const [showWithContribs,setShowWithContribs]=useState(false)
+  const [tlBHData,setTlBHData]=useState(null)     // cached SP500+FX history from /api/sp500history
+  const [tlShowBH,setTlShowBH]=useState(false)    // toggle B&H line in equity chart
   const [contribDate,setContribDate]=useState(()=>{const d=new Date();return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear()})
   const [contribAmount,setContribAmount]=useState('')
   const [contribType,setContribType]=useState('aportacion')
@@ -2761,7 +2787,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V7.77</title>
+        <title>Trading Simulator V7.78</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2838,7 +2864,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V7.77
+            <span className="dot"/>Trading Simulator V7.78
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6167,6 +6193,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       const sfxDisp  = _clip(curveSinFx)
                       const scommDisp= _clip(curveSinComm)
                       const cwcDisp  = _clip(curveWithContribs)
+                      const bhRaw    = tlShowBH&&tlBHData?.length ? computeBuyAndHold(contributions, tlBHData) : null
+                      const bhDisp   = bhRaw ? _clip(bhRaw) : null
 
                       // Build invest chart data: timeline of capital invested vs cumulative profit
                       // Bug fix V5.60: include open trade entry events in the events array so their
@@ -6326,7 +6354,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               {/* Subcol equity */}
                               <div style={{flex:tlEquityFlex,display:'flex',flexDirection:'column',overflow:'hidden',position:'relative',minHeight:0}}>
                                 {eqDisp.length>1
-                                  ?<div ref={tlEquityContainerRef} style={{flex:1,minHeight:0}}><TlEquityChart curve={eqDisp} curveSinFx={sfxDisp.length>1?sfxDisp:null} curveSinComm={scommDisp.length>1?scommDisp:null} curveWithContribs={cwcDisp.length>1?cwcDisp:null} contributions={contributions} showWithContribs={showWithContribs} onToggleContribs={()=>setShowWithContribs(v=>!v)} height={tlEquityHeight} showTimeScale={false} syncRef={tlDashSyncRef}/></div>
+                                  ?<div ref={tlEquityContainerRef} style={{flex:1,minHeight:0}}><TlEquityChart curve={eqDisp} curveSinFx={sfxDisp.length>1?sfxDisp:null} curveSinComm={scommDisp.length>1?scommDisp:null} curveWithContribs={cwcDisp.length>1?cwcDisp:null} curveBH={bhDisp?.length>1?bhDisp:null} showBH={tlShowBH} onToggleBH={async()=>{const next=!tlShowBH;setTlShowBH(next);if(next&&!tlBHData){const first=contributions.filter(c=>c.type==='aportacion').sort((a,b)=>(a.date||'').localeCompare(b.date||''))[0]?.date;const r=await fetch('/api/sp500history'+(first?'?from='+first:''));if(r.ok){const{history}=await r.json();setTlBHData(history||[])}}}} contributions={contributions} showWithContribs={showWithContribs} onToggleContribs={()=>setShowWithContribs(v=>!v)} height={tlEquityHeight} showTimeScale={false} syncRef={tlDashSyncRef}/></div>
                                   :<div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:MONO,fontSize:10,color:'#3d5a7a'}}>Sin datos equity</div>}
                                 <div onClick={()=>{document.getElementById('tlDetailEquity')?.scrollIntoView({behavior:'smooth'})}} title="Ir al gráfico detallado"
                                   style={{position:'absolute',top:6,right:6,zIndex:10,cursor:'pointer',color:'#3d5a7a',fontSize:13,lineHeight:1,background:'rgba(13,21,32,0.75)',borderRadius:3,padding:'2px 5px',border:'1px solid #1a2d45'}}
@@ -6487,7 +6515,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           {/* GRÁFICOS DETALLADOS (scroll) */}
                           <div style={{flexShrink:0,overflowY:'auto'}}>
                             <div style={{padding:'5px 14px 3px',fontFamily:MONO,fontSize:8,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',borderBottom:'1px solid var(--border)'}}>Gráficos detallados</div>
-                            {eqDisp.length>1&&<div id="tlDetailEquity" style={{height:'calc(100vh - 30px)',position:'relative',display:'flex',flexDirection:'column'}}><TlEquityChart curve={eqDisp} curveSinFx={sfxDisp.length>1?sfxDisp:null} curveSinComm={scommDisp.length>1?scommDisp:null} curveWithContribs={cwcDisp.length>1?cwcDisp:null} contributions={contributions} showWithContribs={showWithContribs} onToggleContribs={()=>setShowWithContribs(v=>!v)} height={typeof window!=='undefined'?window.innerHeight-30:700} showTimeScale={true} syncRef={tlDashSyncRef}/></div>}
+                            {eqDisp.length>1&&<div id="tlDetailEquity" style={{height:'calc(100vh - 30px)',position:'relative',display:'flex',flexDirection:'column'}}><TlEquityChart curve={eqDisp} curveSinFx={sfxDisp.length>1?sfxDisp:null} curveSinComm={scommDisp.length>1?scommDisp:null} curveWithContribs={cwcDisp.length>1?cwcDisp:null} curveBH={bhDisp?.length>1?bhDisp:null} showBH={tlShowBH} onToggleBH={async()=>{const next=!tlShowBH;setTlShowBH(next);if(next&&!tlBHData){const first=contributions.filter(c=>c.type==='aportacion').sort((a,b)=>(a.date||'').localeCompare(b.date||''))[0]?.date;const r=await fetch('/api/sp500history'+(first?'?from='+first:''));if(r.ok){const{history}=await r.json();setTlBHData(history||[])}}}} contributions={contributions} showWithContribs={showWithContribs} onToggleContribs={()=>setShowWithContribs(v=>!v)} height={typeof window!=='undefined'?window.innerHeight-30:700} showTimeScale={true} syncRef={tlDashSyncRef}/></div>}
                             {investData.length>1&&<div id="tlDetailInvest" style={{height:'calc(100vh - 30px)',position:'relative',display:'flex',flexDirection:'column'}}><TlInvestChart investData={investData} syncRef={tlDashSyncRef} patrimonyCurve={cwcDisp.length>1?cwcDisp:null} height={typeof window!=='undefined'?window.innerHeight-30:700} compact={false}/></div>}
                             {(closed.length>0||openTrades.length>0)&&(
                               <div id="tlDetailPnl" style={{height:'calc(100vh - 30px)',padding:'12px 16px 8px',borderTop:'1px solid var(--border)',display:'flex',flexDirection:'column'}}>
