@@ -72,7 +72,7 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
             const m = CONTRIB_MARKER[c.type] || CONTRIB_MARKER.aportacion
             const amt = Math.round(parseFloat(c.amount||0))
             const txt = amt>=1000 ? m.prefix+(amt/1000).toFixed(0)+'k' : m.prefix+amt
-            return { time:c.date, position:m.position, color:m.color, shape:m.shape, size:0.3, text:txt }
+            return { time:c.date, position:m.position, color:m.color, shape:m.shape, size:1, text:txt }
           })
           .sort((a,b)=>a.time.localeCompare(b.time))
         if(markers.length) mainSeries.setMarkers(markers)
@@ -131,14 +131,25 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
           if(midDate2&&midDate2!==dd.peakDate&&midDate2!==dd.troughDate) pts.push({time:midDate2,value:midVal2})
           pts.push({time:dd.troughDate,value:dd.troughVal})
           s.setData(pts)
-          if(midDate2) s.setMarkers([{time:midDate2,position:'aboveBar',color:'#ff4d6d',shape:'circle',size:0,text:`-${pct2}% · -€${eur2}`}])
+          if(midDate2) s.setMarkers([{time:midDate2,position:'aboveBar',color:'#ff4d6d',shape:'circle',size:1,text:`-${pct2}% · -€${eur2}`}])
         }
         if(showBH && curveBH?.length>1){
           const bhAbsData = curveBH.map(p=>({date:p.date,value:(p.capitalAcum||0)+p.value}))
           const bhDD = computeMaxDD(bhAbsData)
           if(bhDD){
-            const s=chart.addLineSeries({color:'#f59e0b',lineWidth:1,lastValueVisible:false,priceLineVisible:false,title:''})
-            s.setData([{time:bhDD.peakDate,value:bhDD.peakVal},{time:bhDD.troughDate,value:bhDD.troughVal}])
+            const bPeakIdx=bhAbsData.findIndex(p=>p.date===bhDD.peakDate)
+            const bTroughIdx=bhAbsData.findIndex(p=>p.date===bhDD.troughDate)
+            const bMidIdx=bPeakIdx>=0&&bTroughIdx>bPeakIdx?Math.round((bPeakIdx+bTroughIdx)/2):-1
+            const bMidDate=bMidIdx>=0?bhAbsData[bMidIdx].date:null
+            const bMidVal=(bhDD.peakVal+bhDD.troughVal)/2
+            const bPct=Math.abs(parseFloat(bhDD.ddPct)).toFixed(1)
+            const bEur=Math.round(bhDD.peakVal-bhDD.troughVal).toLocaleString('de-DE')
+            const bs=chart.addLineSeries({color:'#f59e0b',lineWidth:1,lastValueVisible:false,priceLineVisible:false,title:''})
+            const bPts=[{time:bhDD.peakDate,value:bhDD.peakVal}]
+            if(bMidDate&&bMidDate!==bhDD.peakDate&&bMidDate!==bhDD.troughDate) bPts.push({time:bMidDate,value:bMidVal})
+            bPts.push({time:bhDD.troughDate,value:bhDD.troughVal})
+            bs.setData(bPts)
+            if(bMidDate) bs.setMarkers([{time:bMidDate,position:'aboveBar',color:'#f59e0b',shape:'circle',size:1,text:`-${bPct}% · -€${bEur}`}])
           }
         }
       }
