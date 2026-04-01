@@ -2788,7 +2788,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V7.84</title>
+        <title>Trading Simulator V7.85</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2865,7 +2865,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V7.84
+            <span className="dot"/>Trading Simulator V7.85
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6256,8 +6256,6 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       const diasArr=allWithPnl.map(t=>t._ed).filter(d=>d!=null&&d>=0)
                       const diasProm=diasArr.length?diasArr.reduce((s,d)=>s+d,0)/diasArr.length:null
                       const totalDias=diasArr.reduce((s,d)=>s+d,0)
-                      let maxDD=0,maxDDPct=0
-                      if(eqDisp.length>1){let peakIdx=0;for(let i=1;i<eqDisp.length;i++){if(eqDisp[i].value>eqDisp[peakIdx].value)peakIdx=i;if(eqDisp[peakIdx].value!==0){const dd=(eqDisp[i].value-eqDisp[peakIdx].value)/Math.abs(eqDisp[peakIdx].value);if(dd<0&&Math.abs(dd)*100>maxDDPct){maxDD=eqDisp[peakIdx].value-eqDisp[i].value;maxDDPct=Math.abs(dd)*100}}}}
                       const firstDate_=allWithPnl.length?allWithPnl.reduce((a,t)=>t.entry_date<a?t.entry_date:a,allWithPnl[0].entry_date):null
                       const aniosPeriodo_=firstDate_?Math.max((new Date(today)-new Date(firstDate_))/86400000/365.25,0.01):null
                       const totalDiasInv=totalDias
@@ -6279,6 +6277,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       const patrimonioActual=hasContribs?capitalNeto+dividendosAcum+pnlTotalAll:null
                       const capitalDisp=hasContribs&&patrimonioActual!=null?patrimonioActual-capitalEmpAll:null
                       const capitalBase=showWithContribs&&netContrib>0?netContrib:peakCapBase
+                      let maxDD=0,maxDDPct=0
+                      if(eqDisp.length>0){let peak=capitalBase;eqDisp.forEach(p=>{const val=capitalBase+p.value;if(val>peak)peak=val;const dd=peak-val;const ddPct=peak>0?(dd/peak)*100:0;if(dd>maxDD){maxDD=dd;maxDDPct=ddPct}})}
                       const cagrReal_=aniosPeriodo_&&pnlTotal!==0?(Math.pow(Math.max((capitalBase+pnlTotal)/capitalBase,0.001),1/aniosPeriodo_)-1)*100:null
                       const _capRef_=capitalNeto>0?capitalNeto:capitalBase
                       const fxImpact=pnlReal-closed.reduce((s,t)=>{const fE=parseFloat(t.fx_entry||0)||1;return s+(parseFloat(t.exit_price||0)-parseFloat(t.entry_price||0))*parseFloat(t.shares||0)/fE},0)
