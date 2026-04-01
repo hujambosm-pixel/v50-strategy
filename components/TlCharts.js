@@ -119,15 +119,26 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
         }
         const dd = computeMaxDD(activeCurve)
         if(dd){
-          chart.addLineSeries({color:'#ff4d6d',lineWidth:2,lastValueVisible:true,priceLineVisible:false,title:`\u2212${Math.abs(parseFloat(dd.ddPct))}% DD`})
-            .setData([{time:dd.peakDate,value:dd.peakVal},{time:dd.troughDate,value:dd.troughVal}])
+          const peakIdx2=activeCurve.findIndex(p=>p.date===dd.peakDate)
+          const troughIdx2=activeCurve.findIndex(p=>p.date===dd.troughDate)
+          const midIdx2=peakIdx2>=0&&troughIdx2>peakIdx2?Math.round((peakIdx2+troughIdx2)/2):- 1
+          const midDate2=midIdx2>=0?activeCurve[midIdx2].date:null
+          const midVal2=(dd.peakVal+dd.troughVal)/2
+          const pct2=Math.abs(parseFloat(dd.ddPct)).toFixed(1)
+          const eur2=Math.round(dd.peakVal-dd.troughVal).toLocaleString('de-DE')
+          const s=chart.addLineSeries({color:'#ff4d6d',lineWidth:2,lastValueVisible:false,priceLineVisible:false,title:''})
+          const pts=[{time:dd.peakDate,value:dd.peakVal}]
+          if(midDate2&&midDate2!==dd.peakDate&&midDate2!==dd.troughDate) pts.push({time:midDate2,value:midVal2})
+          pts.push({time:dd.troughDate,value:dd.troughVal})
+          s.setData(pts)
+          if(midDate2) s.setMarkers([{time:midDate2,position:'aboveBar',color:'#ff4d6d',shape:'circle',size:0,text:`-${pct2}% · -€${eur2}`}])
         }
         if(showBH && curveBH?.length>1){
           const bhAbsData = curveBH.map(p=>({date:p.date,value:(p.capitalAcum||0)+p.value}))
           const bhDD = computeMaxDD(bhAbsData)
           if(bhDD){
-            chart.addLineSeries({color:'#f59e0b',lineWidth:1,lastValueVisible:true,priceLineVisible:false,title:`B&H \u2212${Math.abs(parseFloat(bhDD.ddPct))}%`})
-              .setData([{time:bhDD.peakDate,value:bhDD.peakVal},{time:bhDD.troughDate,value:bhDD.troughVal}])
+            const s=chart.addLineSeries({color:'#f59e0b',lineWidth:1,lastValueVisible:false,priceLineVisible:false,title:''})
+            s.setData([{time:bhDD.peakDate,value:bhDD.peakVal},{time:bhDD.troughDate,value:bhDD.troughVal}])
           }
         }
       }
