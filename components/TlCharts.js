@@ -10,19 +10,20 @@ const CONTRIB_MARKER = {
 }
 
 export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContribs, curveBH, showBH, onToggleBH, equityMode, onToggleMode, contributions, showWithContribs, onToggleContribs, height, showTimeScale, syncRef }) {
-  const ref = useRef(null), chartRef = useRef(null), equityTooltipRef = useRef(null)
+  const ref = useRef(null), chartRef = useRef(null), equityTooltipRef = useRef(null), lastTTStateRef = useRef(null)
   const [showSinFx, setShowSinFx] = useState(false)
   const [showSinComm, setShowSinComm] = useState(false)
   const [showAportacion, setShowAportacion] = useState(true)
   const [showRetirada, setShowRetirada] = useState(true)
   const [showDividendo, setShowDividendo] = useState(true)
+  const [showDD, setShowDD] = useState(false)
 
   const isEquityMode = equityMode === 'equity'
   // Active main curve: equity mode → curveWithContribs; P&L mode → existing logic
   const activeCurve = isEquityMode
     ? (curveWithContribs?.length > 1 ? curveWithContribs : curve)
     : (showWithContribs && curveWithContribs?.length > 1 ? curveWithContribs : curve)
-  const lineColor = activeCurve?.length ? (activeCurve[activeCurve.length-1].value >= 0 ? '#00e5a0' : '#ff4d6d') : '#00e5a0'
+  const lineColor = '#00e676'
 
   // Date formatter for tooltip: "2025-03-15" → "15 Mar 2025"
   const fmtDate = d => {
@@ -54,11 +55,10 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
       // Track series data by date for crosshair tooltip
       const eqData={}
       const track=(arr,key,valFn)=>arr?.forEach(p=>{if(!eqData[p.date])eqData[p.date]={};eqData[p.date][key]=valFn?valFn(p):p.value})
-      // Main series
-      const finalVal = activeCurve[activeCurve.length-1].value
-      const lc = finalVal >= 0 ? '#00e5a0' : '#ff4d6d'
-      const label = isEquityMode ? 'Equity' : 'P&L real'
-      const mainSeries = chart.addLineSeries({color:lc,lineWidth:2,lastValueVisible:true,priceLineVisible:false,title:label})
+      // Main series — always green
+      lastTTStateRef.current = null
+      const lc = '#00e676'
+      const mainSeries = chart.addLineSeries({color:lc,lineWidth:2,lastValueVisible:true,priceLineVisible:false})
       mainSeries.setData(activeCurve.map(p=>({time:p.date,value:p.value})))
       track(activeCurve,'main')
       // Contribution markers — only in equity mode
@@ -97,6 +97,27 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
           .setData(bhData)
         track(bhData,'bh')
       }
+      // Drawdown lines — equity mode only
+      if(showDD && isEquityMode && activeCurve.length > 1){
+        const vals = activeCurve.map(p=>p.value)
+        const maxVal = Math.max(...vals), minVal = Math.min(...vals)
+        const ddPct = maxVal !== 0 ? ((maxVal-minVal)/Math.abs(maxVal)*100).toFixed(1) : '0.0'
+        const t0 = activeCurve[0].date, t1 = activeCurve[activeCurve.length-1].date
+        chart.addLineSeries({color:'rgba(0,230,118,0.4)',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:true,priceLineVisible:false,title:'Peak'})
+          .setData([{time:t0,value:maxVal},{time:t1,value:maxVal}])
+        chart.addLineSeries({color:'rgba(255,77,109,0.4)',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:true,priceLineVisible:false,title:`\u2212${ddPct}% DD`})
+          .setData([{time:t0,value:minVal},{time:t1,value:minVal}])
+        if(showBH && curveBH?.length>1){
+          const bhVals = curveBH.map(p=>(p.capitalAcum||0)+p.value)
+          const bhMax = Math.max(...bhVals), bhMin = Math.min(...bhVals)
+          const bhDdPct = bhMax !== 0 ? ((bhMax-bhMin)/Math.abs(bhMax)*100).toFixed(1) : '0.0'
+          const bt0 = curveBH[0].date, bt1 = curveBH[curveBH.length-1].date
+          chart.addLineSeries({color:'rgba(245,158,11,0.35)',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:true,priceLineVisible:false,title:'B&H Peak'})
+            .setData([{time:bt0,value:bhMax},{time:bt1,value:bhMax}])
+          chart.addLineSeries({color:'rgba(245,100,70,0.4)',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:true,priceLineVisible:false,title:`B&H \u2212${bhDdPct}%`})
+            .setData([{time:bt0,value:bhMin},{time:bt1,value:bhMin}])
+        }
+      }
       // Cross-chart time sync
       if(syncRef?.current){
         const syncId=Symbol()
@@ -113,19 +134,23 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
       // Crosshair tooltip with date
       chart.subscribeCrosshairMove(param=>{
         const tt=equityTooltipRef.current; if(!tt) return
-        if(!param.time||!param.point){tt.style.display='none';return}
-        const d=eqData[param.time]; if(!d){tt.style.display='none';return}
+        if(param.time && param.point){
+          const d=eqData[param.time]
+          if(d) lastTTStateRef.current={d,point:param.point,time:param.time}
+        }
+        const state=lastTTStateRef.current; if(!state){tt.style.display='none';return}
+        const {d,point,time}=state
         const rows=[]
-        rows.push(`<div style="color:#4a6a88;font-size:10px;margin-bottom:4px">${fmtDate(param.time)}</div>`)
-        if(d.main!=null) rows.push(`<div style="display:flex;justify-content:space-between;gap:20px"><span style="color:${lc}">${label}</span><b style="color:${lc}">${d.main>=0?'':'-'}€${Math.abs(Math.round(d.main)).toLocaleString('es-ES')}</b></div>`)
+        rows.push(`<div style="color:#4a6a88;font-size:10px;margin-bottom:4px">${fmtDate(time)}</div>`)
+        if(d.main!=null) rows.push(`<div style="display:flex;justify-content:space-between;gap:20px"><span style="color:${lc}">${isEquityMode?'Equity':'P&L'}</span><b style="color:${lc}">${d.main>=0?'':'-'}€${Math.abs(Math.round(d.main)).toLocaleString('es-ES')}</b></div>`)
         if(d.fx!=null)   rows.push(`<div style="display:flex;justify-content:space-between;gap:20px"><span style="color:#7a9bc0">Sin FX</span><b style="color:#7a9bc0">${d.fx>=0?'':'-'}€${Math.abs(Math.round(d.fx)).toLocaleString('es-ES')}</b></div>`)
         if(d.comm!=null) rows.push(`<div style="display:flex;justify-content:space-between;gap:20px"><span style="color:#ffd166">Sin Comm</span><b style="color:#ffd166">${d.comm>=0?'':'-'}€${Math.abs(Math.round(d.comm)).toLocaleString('es-ES')}</b></div>`)
         if(d.bh!=null)   rows.push(`<div style="display:flex;justify-content:space-between;gap:20px"><span style="color:#f59e0b">B&H SP500</span><b style="color:#f59e0b">${d.bh>=0?'':'-'}€${Math.abs(Math.round(d.bh)).toLocaleString('es-ES')}</b></div>`)
         if(rows.length<=1){tt.style.display='none';return}
         const cw=ref.current?.clientWidth||600
         tt.style.display='block'
-        tt.style.left=((param.point.x+200>cw)?param.point.x-210:param.point.x+14)+'px'
-        tt.style.top=Math.max(4,param.point.y-40)+'px'
+        tt.style.left=((point.x+200>cw)?point.x-210:point.x+14)+'px'
+        tt.style.top=Math.max(4,point.y-40)+'px'
         tt.innerHTML=rows.join('')
       })
       chart.timeScale().fitContent()
@@ -140,7 +165,7 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
       return ()=>ro.disconnect()
     })
     return ()=>{ if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};try{chartRef.current.remove()}catch(_){};chartRef.current=null} }
-  },[activeCurve, curveSinFx, curveSinComm, showSinFx, showSinComm, showWithContribs, contributions, showAportacion, showRetirada, showDividendo, showBH, curveBH, isEquityMode])
+  },[activeCurve, curveSinFx, curveSinComm, showSinFx, showSinComm, showWithContribs, contributions, showAportacion, showRetirada, showDividendo, showBH, curveBH, isEquityMode, showDD])
 
   const btnStyle = (active, color) => ({
     display:'flex',alignItems:'center',gap:4,
@@ -160,11 +185,6 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
             <button onClick={()=>isEquityMode||onToggleMode()} style={{fontFamily:MONO,fontSize:9,padding:'2px 7px',border:'none',cursor:'pointer',background:isEquityMode?'#1a2d45':'transparent',color:isEquityMode?'#00e5a0':'#3d5a7a'}}>Equity</button>
           </span>
         )}
-        {/* Main legend */}
-        <span style={{display:'flex',alignItems:'center',gap:4,fontFamily:MONO,fontSize:9,color:lineColor}}>
-          <span style={{display:'inline-block',width:10,height:2,background:lineColor,borderRadius:1}}/>
-          {isEquityMode ? 'Equity' : 'P&L real'}
-        </span>
         {/* Sin FX toggle — P&L mode only */}
         {!isEquityMode&&curveSinFx?.length>1&&(
           <button onClick={()=>setShowSinFx(v=>!v)} style={btnStyle(showSinFx,'#7a9bc0')} title={showSinFx?'Ocultar Sin FX':'Mostrar Sin FX'}>
@@ -181,6 +201,12 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
         {onToggleBH&&(
           <button onClick={onToggleBH} style={btnStyle(showBH,'#f59e0b')} title={showBH?'Ocultar B&H SP500':'Mostrar Buy & Hold SP500'}>
             <span style={{display:'inline-block',width:10,height:2,background:'#f59e0b',borderRadius:1,opacity:showBH?0.8:0.3,borderBottom:'1px dashed #f59e0b'}}/> B&H SP500
+          </button>
+        )}
+        {/* Max Drawdown toggle — equity mode only */}
+        {isEquityMode&&activeCurve?.length>1&&(
+          <button onClick={()=>setShowDD(v=>!v)} style={btnStyle(showDD,'#ff4d6d')} title={showDD?'Ocultar Max Drawdown':'Mostrar Max Drawdown'}>
+            Max DD
           </button>
         )}
         {/* Contribution type toggles — equity mode only */}
