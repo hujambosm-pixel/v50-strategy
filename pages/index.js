@@ -2755,7 +2755,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V7.57</title>
+        <title>Trading Simulator V7.58</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2832,7 +2832,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V7.57
+            <span className="dot"/>Trading Simulator V7.58
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6178,7 +6178,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       const capitalBase=showWithContribs&&netContrib>0?netContrib:peakCapBase
                       const cagrReal_=aniosPeriodo_&&pnlTotal!==0?(Math.pow(Math.max((capitalBase+pnlTotal)/capitalBase,0.001),1/aniosPeriodo_)-1)*100:null
                       const _capRef_=capitalNeto>0?capitalNeto:capitalBase
-                      const maxDDPct=maxDD>0&&_capRef_>0?(maxDD/_capRef_*100):0
+                      const maxDDPct=maxDD>0&&peak_>0?(maxDD/peak_*100):0
                       const fxImpact=(()=>{const t2=closed.reduce((s,t)=>{const fE=parseFloat(t.fx_entry||0)||1;const fX=parseFloat(t.fx_exit||t.fx_entry||0)||fE;return s+(parseFloat(t.exit_price||0)-parseFloat(t.entry_price||0))*parseFloat(t.shares||0)*(1/fX-1/fE)},0);return t2})()
                       const pnlSCapPct=capitalNeto>0?(pnlTotal/capitalNeto*100):capitalBase>0?(pnlTotal/capitalBase*100):null
                       const fmtEur_=v=>v>=0?'+€'+Math.round(v).toLocaleString('es-ES'):'-€'+Math.round(Math.abs(v)).toLocaleString('es-ES')
@@ -6709,7 +6709,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       (Math.pow(Math.max((capitalBase+pnlTotal)/capitalBase,0.001),1/aniosPeriodo)-1)*100:null
                     const fmtEur=v=>v>=0?'+€'+Math.round(v):'-€'+Math.round(Math.abs(v))
                     // Max DD como % sobre capital base
-                    const maxDDPct=maxDD>0&&capitalBase>0?(maxDD/capitalBase*100):0
+                    const maxDDPct=maxDD>0&&peak>0?(maxDD/peak*100):0
                     // Mejor/Peor usa _eff_pnl (incluye flotante de abiertas)
                     const bestV=bestT?bestT._eff_pnl:null
                     const worstV=worstT?worstT._eff_pnl:null
