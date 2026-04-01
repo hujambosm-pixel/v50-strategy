@@ -55,20 +55,20 @@ export default function EquityChart({
         for(const p of curve){if(p.date>date)break;if(p.value>peak.value)peak=p}
         const trough=curve.find(p=>p.date===date)
         if(!trough||peak.date===trough.date) return
-        const s=chart.addLineSeries({color,lineWidth:2,lastValueVisible:false,priceLineVisible:false})
-        s.setData([{time:peak.date,value:peak.value},{time:trough.date,value:trough.value}])
-        // Etiqueta centrada sobre la línea diagonal
         const peakIdx=curve.findIndex(p=>p.date===peak.date)
         const troughIdx=curve.findIndex(p=>p.date===trough.date)
+        const s=chart.addLineSeries({color,lineWidth:2,lastValueVisible:false,priceLineVisible:false})
         if(peakIdx>=0&&troughIdx>peakIdx){
           const midIdx=Math.round((peakIdx+troughIdx)/2)
           const midDate=curve[midIdx].date
           const midVal=(peak.value+trough.value)/2
           const eurAmt=Math.round(peak.value-trough.value)
           const label=`-${dd.toFixed(1)}% · -€${eurAmt.toLocaleString('es-ES')}`
-          const ls=chart.addLineSeries({color:'rgba(0,0,0,0)',lineWidth:0,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
-          ls.setData([{time:midDate,value:midVal}])
-          ls.setMarkers([{time:midDate,position:'aboveBar',color,shape:'circle',size:0,text:label}])
+          // Añadir midDate a los datos de la serie para anclar el marker en la línea
+          s.setData([{time:peak.date,value:peak.value},{time:midDate,value:midVal},{time:trough.date,value:trough.value}])
+          s.setMarkers([{time:midDate,position:'aboveBar',color,shape:'circle',size:0,text:label}])
+        } else {
+          s.setData([{time:peak.date,value:peak.value},{time:trough.date,value:trough.value}])
         }
       }
       if(showStrategy) addDD(strategyCurve,maxDDStrategyDate,maxDDStrategy,'#ff4d6d')
