@@ -97,25 +97,38 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
           .setData(bhData)
         track(bhData,'bh')
       }
-      // Drawdown lines — equity mode only
+      // Drawdown diagonal (peak → trough) — equity mode only
       if(showDD && isEquityMode && activeCurve.length > 1){
-        const vals = activeCurve.map(p=>p.value)
-        const maxVal = Math.max(...vals), minVal = Math.min(...vals)
-        const ddPct = maxVal !== 0 ? ((maxVal-minVal)/Math.abs(maxVal)*100).toFixed(1) : '0.0'
-        const t0 = activeCurve[0].date, t1 = activeCurve[activeCurve.length-1].date
-        chart.addLineSeries({color:'rgba(0,230,118,0.4)',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:true,priceLineVisible:false,title:'Peak'})
-          .setData([{time:t0,value:maxVal},{time:t1,value:maxVal}])
-        chart.addLineSeries({color:'rgba(255,77,109,0.4)',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:true,priceLineVisible:false,title:`\u2212${ddPct}% DD`})
-          .setData([{time:t0,value:minVal},{time:t1,value:minVal}])
+        // Computes max drawdown: finds peak then deepest subsequent trough
+        // Returns real temporal coordinates for the diagonal line
+        const computeMaxDD = (data) => {
+          let bestPeakIdx=0, bestTroughIdx=0, bestDD=0, peakIdx=0
+          for(let i=1; i<data.length; i++){
+            if(data[i].value > data[peakIdx].value) peakIdx=i
+            if(data[peakIdx].value !== 0){
+              const dd=(data[i].value - data[peakIdx].value)/Math.abs(data[peakIdx].value)
+              if(dd < bestDD){ bestDD=dd; bestPeakIdx=peakIdx; bestTroughIdx=i }
+            }
+          }
+          if(bestDD===0) return null
+          return {
+            peakDate:data[bestPeakIdx].date, peakVal:data[bestPeakIdx].value,
+            troughDate:data[bestTroughIdx].date, troughVal:data[bestTroughIdx].value,
+            ddPct:(bestDD*100).toFixed(1)
+          }
+        }
+        const dd = computeMaxDD(activeCurve)
+        if(dd){
+          chart.addLineSeries({color:'#ff4d6d',lineWidth:2,lastValueVisible:true,priceLineVisible:false,title:`\u2212${Math.abs(parseFloat(dd.ddPct))}% DD`})
+            .setData([{time:dd.peakDate,value:dd.peakVal},{time:dd.troughDate,value:dd.troughVal}])
+        }
         if(showBH && curveBH?.length>1){
-          const bhVals = curveBH.map(p=>(p.capitalAcum||0)+p.value)
-          const bhMax = Math.max(...bhVals), bhMin = Math.min(...bhVals)
-          const bhDdPct = bhMax !== 0 ? ((bhMax-bhMin)/Math.abs(bhMax)*100).toFixed(1) : '0.0'
-          const bt0 = curveBH[0].date, bt1 = curveBH[curveBH.length-1].date
-          chart.addLineSeries({color:'rgba(245,158,11,0.35)',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:true,priceLineVisible:false,title:'B&H Peak'})
-            .setData([{time:bt0,value:bhMax},{time:bt1,value:bhMax}])
-          chart.addLineSeries({color:'rgba(245,100,70,0.4)',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:true,priceLineVisible:false,title:`B&H \u2212${bhDdPct}%`})
-            .setData([{time:bt0,value:bhMin},{time:bt1,value:bhMin}])
+          const bhAbsData = curveBH.map(p=>({date:p.date,value:(p.capitalAcum||0)+p.value}))
+          const bhDD = computeMaxDD(bhAbsData)
+          if(bhDD){
+            chart.addLineSeries({color:'#f59e0b',lineWidth:1,lastValueVisible:true,priceLineVisible:false,title:`B&H \u2212${Math.abs(parseFloat(bhDD.ddPct))}%`})
+              .setData([{time:bhDD.peakDate,value:bhDD.peakVal},{time:bhDD.troughDate,value:bhDD.troughVal}])
+          }
         }
       }
       // Cross-chart time sync
