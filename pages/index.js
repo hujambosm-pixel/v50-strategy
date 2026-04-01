@@ -2788,7 +2788,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V7.85</title>
+        <title>Trading Simulator V7.86</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2865,7 +2865,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V7.85
+            <span className="dot"/>Trading Simulator V7.86
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6278,7 +6278,9 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       const capitalDisp=hasContribs&&patrimonioActual!=null?patrimonioActual-capitalEmpAll:null
                       const capitalBase=showWithContribs&&netContrib>0?netContrib:peakCapBase
                       let maxDD=0,maxDDPct=0
-                      if(eqDisp.length>0){let peak=capitalBase;eqDisp.forEach(p=>{const val=capitalBase+p.value;if(val>peak)peak=val;const dd=peak-val;const ddPct=peak>0?(dd/peak)*100:0;if(dd>maxDD){maxDD=dd;maxDDPct=ddPct}})}
+                      // Usa la misma curva que TlCharts computeMaxDD: cwcDisp (valores absolutos) si existe, sino eqDisp+capitalBase
+                      const _ddCurve=cwcDisp?.length>1?cwcDisp:eqDisp.map(p=>({date:p.date,value:capitalBase+p.value}))
+                      if(_ddCurve.length>1){let peak=_ddCurve[0].value;_ddCurve.forEach(p=>{if(p.value>peak)peak=p.value;const dd=peak-p.value;const ddPct=peak>0?(dd/peak)*100:0;if(dd>maxDD){maxDD=dd;maxDDPct=ddPct}})}
                       const cagrReal_=aniosPeriodo_&&pnlTotal!==0?(Math.pow(Math.max((capitalBase+pnlTotal)/capitalBase,0.001),1/aniosPeriodo_)-1)*100:null
                       const _capRef_=capitalNeto>0?capitalNeto:capitalBase
                       const fxImpact=pnlReal-closed.reduce((s,t)=>{const fE=parseFloat(t.fx_entry||0)||1;return s+(parseFloat(t.exit_price||0)-parseFloat(t.entry_price||0))*parseFloat(t.shares||0)/fE},0)
