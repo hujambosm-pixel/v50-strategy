@@ -131,7 +131,8 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
           if(midDate2&&midDate2!==dd.peakDate&&midDate2!==dd.troughDate) pts.push({time:midDate2,value:midVal2})
           pts.push({time:dd.troughDate,value:dd.troughVal})
           s.setData(pts)
-          if(midDate2) s.setMarkers([{time:midDate2,position:'aboveBar',color:'#ff4d6d',shape:'circle',size:1,text:`-${pct2}% · -€${eur2}`}])
+          const trough2=Math.round(dd.troughVal).toLocaleString('de-DE')
+          if(midDate2) s.setMarkers([{time:midDate2,position:'aboveBar',color:'#ff4d6d',shape:'circle',size:1,text:`-${pct2}% · -€${eur2} (valle: €${trough2})`}])
         }
         if(showBH && curveBH?.length>1){
           const bhAbsData = curveBH.map(p=>({date:p.date,value:(p.capitalAcum||0)+p.value}))
@@ -149,7 +150,8 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
             if(bMidDate&&bMidDate!==bhDD.peakDate&&bMidDate!==bhDD.troughDate) bPts.push({time:bMidDate,value:bMidVal})
             bPts.push({time:bhDD.troughDate,value:bhDD.troughVal})
             bs.setData(bPts)
-            if(bMidDate) bs.setMarkers([{time:bMidDate,position:'aboveBar',color:'#f59e0b',shape:'circle',size:1,text:`-${bPct}% · -€${bEur}`}])
+            const bTrough=Math.round(bhDD.troughVal).toLocaleString('de-DE')
+            if(bMidDate) bs.setMarkers([{time:bMidDate,position:'aboveBar',color:'#f59e0b',shape:'circle',size:1,text:`-${bPct}% · -€${bEur} (valle: €${bTrough})`}])
           }
         }
       }
