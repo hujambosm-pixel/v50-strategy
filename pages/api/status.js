@@ -66,7 +66,10 @@ function toStooqSym(symbol) {
   return symbol.toLowerCase()+'.us'
 }
 
-async function fetchCloses(symbol) {
+async function fetchCloses(symbol, bodyCloses) {
+  // Prefer closes pre-fetched by the client (Stooq blocks server IPs on Vercel)
+  if (bodyCloses?.[symbol]?.length >= 30) return bodyCloses[symbol]
+  // Fallback: fetch from Stooq (works locally, may fail on Vercel)
   const sym = toStooqSym(symbol)
   const url = `https://stooq.com/q/d/l/?s=${sym}&i=d`
   const controller = new AbortController()
@@ -145,7 +148,6 @@ function evalConditionFull(alarm, closes, sym) {
     if (ma == null) return { active: null, bars: null }
     const isAbove = condition === 'price_above_ma' || condition === 'price_above_ema'
     const active = isAbove ? price > ma : price < ma
-    console.log(`[status:${sym||'?'}] ${condition}(period=${maPeriod}) lastClose=${price?.toFixed(3)} EMA${maPeriod}=${ma?.toFixed(3)} active=${active} closes[-3]=${last.slice(-3).map(v=>v?.toFixed(2)).join(',')}`)
     if (!active) return { active: false, bars: null }
     let count = 0
     for (let i = n; i >= 0; i--) {
@@ -238,7 +240,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms))
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
 
-  const { symbols, alarms } = req.body
+  const { symbols, alarms, closes: bodyCloses } = req.body
   if (!Array.isArray(symbols) || !Array.isArray(alarms)) {
     return res.status(400).json({ error: 'symbols y alarms son requeridos' })
   }
@@ -252,7 +254,7 @@ export default async function handler(req, res) {
     await Promise.all(
       chunk.map(async sym => {
         try {
-          const closes = await fetchCloses(sym)
+          const closes = await fetchCloses(sym, bodyCloses)
           if (!closes) { result[sym] = null; return }
           const symResult = {}
           alarms.forEach(a => {
