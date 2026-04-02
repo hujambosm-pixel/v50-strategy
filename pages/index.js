@@ -1690,11 +1690,15 @@ export default function Home() {
       const extraConds = pseudoAlarms.filter(p=>!realAlarmIds.has(p.id))
       const allEvalAlarms = [...alarmList.map(a=>({id:a.id,symbol:a.symbol,condition:a.condition,condition_detail:a.condition_detail,price_level:a.price_level,ema_r:a.ema_r,ema_l:a.ema_l,params:a.params})), ...extraConds]
 
-      // Pre-fetch closes browser-side (Stooq blocks Vercel server IPs)
-      const toSym=s=>{const M={'^GSPC':'spy.us','^NDX':'ndx.us','^IBEX':'ibex.es','^GDAXI':'dax.de','^FTSE':'ftse.uk','^N225':'n225.jp','BTC-USD':'btc-usd.v','ETH-USD':'eth-usd.v','GC=F':'gc.f','CL=F':'cl.f'};if(M[s])return M[s];if(s.endsWith('=F'))return s.replace('=F','').toLowerCase()+'.f';if(s.includes('-'))return s.toLowerCase()+'.v';if(s.startsWith('^'))return s.slice(1).toLowerCase()+'.us';return s.toLowerCase()+'.us'}
-      const fetchC=async s=>{try{const r=await fetch(`https://stooq.com/q/d/l/?s=${toSym(s)}&i=d`);const t=await r.text();if(!t||t.includes('No data')||t.trim().length<50)return null;const c=t.trim().split('\n').slice(1).filter(l=>l.trim()).map(l=>parseFloat(l.split(',')[4])).filter(v=>!isNaN(v));return c.length>=30?c:null}catch{return null}}
+      // Pre-fetch closes via /api/chartdata (server-side Stooq, evita CORS)
       const closes={}
-      await Promise.all(symbols.map(async s=>{const c=await fetchC(s);if(c)closes[s]=c}))
+      await Promise.all(symbols.map(async sym=>{
+        try{
+          const r=await apiFetch(`/api/chartdata?symbol=${encodeURIComponent(sym)}&years=1`)
+          const data=await r.json()
+          if(Array.isArray(data)&&data.length>=30) closes[sym]=data.map(d=>d.close)
+        }catch{}
+      }))
 
       const res=await apiFetch('/api/status',{
         method:'POST',
@@ -2795,7 +2799,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V7.98</title>
+        <title>Trading Simulator V7.99</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2872,7 +2876,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V7.98
+            <span className="dot"/>Trading Simulator V7.99
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
