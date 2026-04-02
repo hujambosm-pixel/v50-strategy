@@ -177,12 +177,11 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
           // Nearest-neighbor bh lookup for dates without equity data
           if(d.bh==null&&bhDataForTooltip?.length){
             let bhi=0
-            while(bhi<bhDataForTooltip.length-1&&bhDataForTooltip[bhi+1].date<param.time)bhi++
+            while(bhi<bhDataForTooltip.length-1&&bhDataForTooltip[bhi+1].time<param.time)bhi++
             const prev=bhi>0?bhDataForTooltip[bhi-1]:null
             const curr=bhDataForTooltip[bhi]
-            const pick=prev&&Math.abs(new Date(prev.date)-new Date(param.time))<Math.abs(new Date(curr.date)-new Date(param.time))?prev:curr
-            if(Math.abs(new Date(pick.date)-new Date(param.time))/86400000<5)d.bh=pick.value
-            console.log('bh debug:',param.time,pick?.date,pick?.value,d?.bh)
+            const pick=prev&&Math.abs(new Date(prev.time)-new Date(param.time))<Math.abs(new Date(curr.time)-new Date(param.time))?prev:curr
+            if(Math.abs(new Date(pick.time)-new Date(param.time))/86400000<5)d.bh=pick.value
           }
           lastTTStateRef.current={d,point:param.point,time:param.time}
         }
