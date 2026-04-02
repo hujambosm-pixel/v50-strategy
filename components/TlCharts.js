@@ -174,6 +174,15 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
         const tt=equityTooltipRef.current; if(!tt) return
         if(param.time && param.point){
           const d=eqData[param.time]||{}
+          // Nearest-neighbor main lookup for dates without equity data
+          if(d.main==null&&activeCurve?.length){
+            let aci=0
+            while(aci<activeCurve.length-1&&activeCurve[aci+1].date<param.time)aci++
+            const aprev=aci>0?activeCurve[aci-1]:null
+            const acurr=activeCurve[aci]
+            const apick=aprev&&Math.abs(new Date(aprev.date)-new Date(param.time))<Math.abs(new Date(acurr.date)-new Date(param.time))?aprev:acurr
+            if(Math.abs(new Date(apick.date)-new Date(param.time))/86400000<5)d.main=apick.value
+          }
           // Nearest-neighbor bh lookup for dates without equity data
           if(d.bh==null&&bhDataForTooltip?.length){
             let bhi=0

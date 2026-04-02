@@ -1673,6 +1673,7 @@ export default function Home() {
     const symbols=wlList.map(w=>w.symbol)
     const libCondsCheck=lsGetConds().filter(c=>c.active!==false)
     if(!symbols.length||(!alarmList.length&&!libCondsCheck.length)) return
+    console.log('alarmStatus debug:',symbols.length,alarmList.length,libCondsCheck.length)
     setAlarmStatusLoading(true)
     try{
       // Merge real alarms + library conditions for watchlist dots
@@ -1698,6 +1699,7 @@ export default function Home() {
       const data=await res.json()
       const prev=alarmStatus||{}
     const newStatus=data||{}
+    console.log('alarmStatus result:',JSON.stringify(newStatus).slice(0,200))
     setAlarmStatus(newStatus)
     // Check if setting enabled: show popup on new active alarms
     try{
@@ -2789,7 +2791,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V7.95</title>
+        <title>Trading Simulator V7.96</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2866,7 +2868,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V7.95
+            <span className="dot"/>Trading Simulator V7.96
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
