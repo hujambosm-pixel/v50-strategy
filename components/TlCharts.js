@@ -93,9 +93,10 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
         const bhData = isEquityMode
           ? curveBH.map(p=>({time:p.date, value:(p.capitalAcum||0)+p.value}))
           : curveBH.map(p=>({time:p.date, value:p.value}))
-        chart.addLineSeries({color:'#f59e0b',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:true,priceLineVisible:false,title:'B&H SP500'})
+        chart.addLineSeries({color:'#f59e0b',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:false,priceLineVisible:false,title:'B&H SP500'})
           .setData(bhData)
-        track(bhData,'bh')
+        // Nearest-neighbor fill: bhData may have fewer points than activeCurve (missing weekends/holidays)
+        if(bhData.length){let bhi=0;activeCurve.forEach(p=>{while(bhi<bhData.length-1&&bhData[bhi+1].date<p.date)bhi++;const prev=bhi>0?bhData[bhi-1]:null;const curr=bhData[bhi];const pick=prev&&Math.abs(new Date(prev.date)-new Date(p.date))<Math.abs(new Date(curr.date)-new Date(p.date))?prev:curr;const diff=Math.abs(new Date(pick.date)-new Date(p.date))/86400000;if(diff<5){if(!eqData[p.date])eqData[p.date]={};eqData[p.date].bh=pick.value}})}
       }
       // Drawdown diagonal (peak → trough) — equity mode only
       if(showDD && isEquityMode && activeCurve.length > 1){
