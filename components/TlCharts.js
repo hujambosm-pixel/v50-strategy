@@ -88,14 +88,16 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
           .setData(curveSinComm.map(p=>({time:p.date,value:p.value})))
         track(curveSinComm,'comm')
       }
-      // B&H line — value depends on mode
+      // B&H line — value depends on mode; hoisted so crosshair callback can do nearest-neighbor lookup
+      let bhDataForTooltip = null
       if(showBH && curveBH?.length>1){
         const bhData = isEquityMode
           ? curveBH.map(p=>({time:p.date, value:(p.capitalAcum||0)+p.value}))
           : curveBH.map(p=>({time:p.date, value:p.value}))
-        chart.addLineSeries({color:'#f59e0b',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:false,priceLineVisible:false,title:'B&H SP500'})
+        bhDataForTooltip = bhData
+        chart.addLineSeries({color:'#f59e0b',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:false,priceLineVisible:false,title:''})
           .setData(bhData)
-        // Nearest-neighbor fill: bhData may have fewer points than activeCurve (missing weekends/holidays)
+        // Nearest-neighbor fill for tooltip on dates that have equity data
         if(bhData.length){let bhi=0;activeCurve.forEach(p=>{while(bhi<bhData.length-1&&bhData[bhi+1].date<p.date)bhi++;const prev=bhi>0?bhData[bhi-1]:null;const curr=bhData[bhi];const pick=prev&&Math.abs(new Date(prev.date)-new Date(p.date))<Math.abs(new Date(curr.date)-new Date(p.date))?prev:curr;const diff=Math.abs(new Date(pick.date)-new Date(p.date))/86400000;if(diff<5){if(!eqData[p.date])eqData[p.date]={};eqData[p.date].bh=pick.value}})}
       }
       // Drawdown diagonal (peak → trough) — equity mode only
@@ -171,8 +173,17 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
       chart.subscribeCrosshairMove(param=>{
         const tt=equityTooltipRef.current; if(!tt) return
         if(param.time && param.point){
-          const d=eqData[param.time]
-          if(d) lastTTStateRef.current={d,point:param.point,time:param.time}
+          const d=eqData[param.time]||{}
+          // Nearest-neighbor bh lookup for dates without equity data
+          if(d.bh==null&&bhDataForTooltip?.length){
+            let bhi=0
+            while(bhi<bhDataForTooltip.length-1&&bhDataForTooltip[bhi+1].date<param.time)bhi++
+            const prev=bhi>0?bhDataForTooltip[bhi-1]:null
+            const curr=bhDataForTooltip[bhi]
+            const pick=prev&&Math.abs(new Date(prev.date)-new Date(param.time))<Math.abs(new Date(curr.date)-new Date(param.time))?prev:curr
+            if(Math.abs(new Date(pick.date)-new Date(param.time))/86400000<5)d.bh=pick.value
+          }
+          lastTTStateRef.current={d,point:param.point,time:param.time}
         }
         const state=lastTTStateRef.current; if(!state){tt.style.display='none';return}
         const {d,point,time}=state
