@@ -70,17 +70,27 @@ async function fetchCloses(symbol) {
   const sym = toStooqSym(symbol)
   const url = `https://stooq.com/q/d/l/?s=${sym}&i=d`
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), 8000)
+  const timer = setTimeout(() => controller.abort(), 15000)
   try {
     const res = await fetch(url, { signal: controller.signal })
     const text = await res.text()
-    if (!text || text.includes('No data') || text.trim().length < 50) return null
+    if (!text || text.includes('No data') || text.trim().length < 50) {
+      console.log(`[status] ${symbol}: sin datos de Stooq (${sym})`)
+      return null
+    }
     const closes = text.trim().split('\n').slice(1)
       .filter(l => l.trim())
       .map(l => parseFloat(l.split(',')[4]))
       .filter(v => !isNaN(v))
-    return closes.length >= 30 ? closes : null
-  } catch { return null }
+    if (closes.length < 30) {
+      console.log(`[status] ${symbol}: solo ${closes.length} velas`)
+      return null
+    }
+    return closes
+  } catch(e) {
+    console.log(`[status] ${symbol}: fetch falló — ${e.message}`)
+    return null
+  }
   finally { clearTimeout(timer) }
 }
 
@@ -251,7 +261,7 @@ export default async function handler(req, res) {
             symResult[a.id] = evalConditionFull(a, closes, sym)
           })
           result[sym] = symResult
-        } catch { result[sym] = null }
+        } catch(e) { console.log(`[status] ${sym}: error en eval — ${e.message}`); result[sym] = null }
       })
     )
     if (i + BATCH < symbols.length) await sleep(DELAY)
