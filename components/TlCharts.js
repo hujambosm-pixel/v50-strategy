@@ -95,7 +95,7 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
           ? curveBH.map(p=>({time:p.date, value:(p.capitalAcum||0)+p.value}))
           : curveBH.map(p=>({time:p.date, value:p.value}))
         bhDataForTooltip = bhData
-        chart.addLineSeries({color:'#f59e0b',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:false,priceLineVisible:false,title:''})
+        chart.addLineSeries({color:'#f59e0b',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:true,priceLineVisible:false,title:''})
           .setData(bhData)
         // Nearest-neighbor fill for tooltip on dates that have equity data
         if(bhData.length){let bhi=0;activeCurve.forEach(p=>{while(bhi<bhData.length-1&&bhData[bhi+1].date<p.date)bhi++;const prev=bhi>0?bhData[bhi-1]:null;const curr=bhData[bhi];const pick=prev&&Math.abs(new Date(prev.date)-new Date(p.date))<Math.abs(new Date(curr.date)-new Date(p.date))?prev:curr;const diff=Math.abs(new Date(pick.date)-new Date(p.date))/86400000;if(diff<5){if(!eqData[p.date])eqData[p.date]={};eqData[p.date].bh=pick.value}})}
@@ -182,6 +182,7 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
             const curr=bhDataForTooltip[bhi]
             const pick=prev&&Math.abs(new Date(prev.date)-new Date(param.time))<Math.abs(new Date(curr.date)-new Date(param.time))?prev:curr
             if(Math.abs(new Date(pick.date)-new Date(param.time))/86400000<5)d.bh=pick.value
+            console.log('bh debug:',param.time,pick?.date,pick?.value,d?.bh)
           }
           lastTTStateRef.current={d,point:param.point,time:param.time}
         }
