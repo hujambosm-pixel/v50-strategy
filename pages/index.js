@@ -1690,15 +1690,20 @@ export default function Home() {
       const extraConds = pseudoAlarms.filter(p=>!realAlarmIds.has(p.id))
       const allEvalAlarms = [...alarmList.map(a=>({id:a.id,symbol:a.symbol,condition:a.condition,condition_detail:a.condition_detail,price_level:a.price_level,ema_r:a.ema_r,ema_l:a.ema_l,params:a.params})), ...extraConds]
 
-      // Pre-fetch closes via /api/chartdata (server-side Stooq, evita CORS)
+      // Pre-fetch closes via /api/chartdata en batches (evita rate limit Stooq)
       const closes={}
-      await Promise.all(symbols.map(async sym=>{
-        try{
-          const r=await apiFetch(`/api/chartdata?symbol=${sym}&years=1`)
-          const data=await r.json()
-          if(Array.isArray(data)&&data.length>=30) closes[sym]=data.map(d=>d.close)
-        }catch{}
-      }))
+      const _bs=4
+      for(let _i=0;_i<symbols.length;_i+=_bs){
+        const _batch=symbols.slice(_i,_i+_bs)
+        await Promise.all(_batch.map(async sym=>{
+          try{
+            const r=await apiFetch(`/api/chartdata?symbol=${sym}&years=1`)
+            const data=await r.json()
+            if(Array.isArray(data)&&data.length>=30) closes[sym]=data.map(d=>d.close)
+          }catch{}
+        }))
+        if(_i+_bs<symbols.length) await new Promise(r=>setTimeout(r,400))
+      }
 
       const res=await apiFetch('/api/status',{
         method:'POST',
@@ -2799,7 +2804,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V8.00</title>
+        <title>Trading Simulator V8.01</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2876,7 +2881,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V8.00
+            <span className="dot"/>Trading Simulator V8.01
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
