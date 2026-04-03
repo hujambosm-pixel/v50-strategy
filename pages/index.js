@@ -1671,10 +1671,8 @@ export default function Home() {
     const wlList=wl||watchlist
     const alarmList=al||alarms
     const symbols=wlList.map(w=>w.symbol)
-    console.log('refresh 1: iniciando',symbols.length,'símbolos')
     const libCondsCheck=lsGetConds().filter(c=>c.active!==false)
     if(!symbols.length||(!alarmList.length&&!libCondsCheck.length)) return
-    console.log('refresh 2: guard pasado, prefetching closes...')
     setAlarmStatusLoading(true)
     try{
       // Merge real alarms + library conditions for watchlist dots
@@ -1706,9 +1704,6 @@ export default function Home() {
         }))
         if(_i+_bs<symbols.length) await new Promise(r=>setTimeout(r,400))
       }
-      console.log('refresh 3: closes obtenidos:',Object.keys(closes).length)
-
-      console.log('refresh 4: llamando /api/status...')
       const res=await apiFetch('/api/status',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
@@ -1718,8 +1713,6 @@ export default function Home() {
       const prev=alarmStatus||{}
     const newStatus=data||{}
     setAlarmStatus(newStatus)
-    console.log('refresh 6: alarmStatus actualizado')
-    console.log('alarmStatus activos:',Object.entries(newStatus).filter(([sym,conds])=>conds&&Object.values(conds).some(c=>c?.active===true)).map(([sym])=>sym))
     // Check if setting enabled: show popup on new active alarms
     try{
       const sett=JSON.parse(localStorage.getItem('v50_settings')||'{}')
@@ -1737,7 +1730,7 @@ export default function Home() {
         if(triggered.length>0) setAlarmPopup(triggered)
       }
     }catch(_){}
-    }catch(e){console.log('refresh 5: ERROR en /api/status:',e.message);console.error('refreshAlarmStatus error',e)}
+    }catch(e){console.error('refreshAlarmStatus error',e)}
     finally{setAlarmStatusLoading(false)}
   },[watchlist,alarms])
 
@@ -2810,7 +2803,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V8.04</title>
+        <title>Trading Simulator V8.05</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2887,7 +2880,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V8.04
+            <span className="dot"/>Trading Simulator V8.05
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
