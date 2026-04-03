@@ -42,7 +42,7 @@ try {
 if (committedVer && currentVer.str === committedVer.str) {
   // Versión no fue bumpeada — auto-incrementar minor
   const newMinor = currentVer.minor + 1
-  const newStr = `${currentVer.major}.${newMinor}`
+  const newStr = `${currentVer.major}.${String(newMinor).padStart(2, '0')}`
   const newContent = currentContent.replace(
     /Trading Simulator V\d+\.\d+/g,
     `Trading Simulator V${newStr}`

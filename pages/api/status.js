@@ -128,15 +128,22 @@ function evalConditionFull(alarm, closes, sym) {
     if (er == null || el == null) return { active: null, bars: null }
     const isUp = condition === 'ema_cross_up'
     const active = isUp ? er > el : er < el
-    if (!active) return { active: false, bars: null }
+    if (!active) {
+      if (condition === 'ema_cross_up') console.log(`[eval] ${sym} ${condition}: active=false`)
+      return { active: false, bars: null }
+    }
     for (let i = n; i >= 1; i--) {
       if (erArr[i] != null && elArr[i] != null && erArr[i-1] != null && elArr[i-1] != null) {
         const cross = isUp
           ? (erArr[i] > elArr[i] && erArr[i-1] <= elArr[i-1])
           : (erArr[i] < elArr[i] && erArr[i-1] >= elArr[i-1])
-        if (cross) return { active: true, bars: n - i }
+        if (cross) {
+          if (condition === 'ema_cross_up') console.log(`[eval] ${sym} ${condition}: active=true bars=${n-i}`)
+          return { active: true, bars: n - i }
+        }
       }
     }
+    if (condition === 'ema_cross_up') console.log(`[eval] ${sym} ${condition}: active=true bars=${n}`)
     return { active: true, bars: n }
   }
 
@@ -148,13 +155,17 @@ function evalConditionFull(alarm, closes, sym) {
     if (ma == null) return { active: null, bars: null }
     const isAbove = condition === 'price_above_ma' || condition === 'price_above_ema'
     const active = isAbove ? price > ma : price < ma
-    if (!active) return { active: false, bars: null }
+    if (!active) {
+      if (condition === 'price_above_ema') console.log(`[eval] ${sym} ${condition}: active=false`)
+      return { active: false, bars: null }
+    }
     let count = 0
     for (let i = n; i >= 0; i--) {
       if (maArr[i] == null) break
       const ok = isAbove ? last[i] > maArr[i] : last[i] < maArr[i]
       if (ok) count++; else break
     }
+    if (condition === 'price_above_ema') console.log(`[eval] ${sym} ${condition}: active=true bars=${count}`)
     return { active: true, bars: count }
   }
 
