@@ -42,7 +42,7 @@ function stooqSym(symbol) {
   // Default: US stock
   return symbol.toLowerCase()+'.us'
 }
-async function fetchAV(symbol) {
+async function fetchAV(symbol, years=5) {
   const sym = stooqSym(symbol)
   const url = `https://stooq.com/q/d/l/?s=${sym}&i=d`
   const res = await fetch(url)
@@ -56,7 +56,10 @@ async function fetchAV(symbol) {
   }
   if (!rawData || rawData.length === 0) {
     try {
-      const yfUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=2y`
+      const yfYears = Math.min(Math.max(Math.ceil(years), 1), 10)
+      const yfUrl = yfYears <= 10
+        ? `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=${yfYears}y`
+        : (() => { const p1=Math.floor(Date.now()/1000)-Math.ceil(years)*365*24*3600; return `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&period1=${p1}&period2=${Math.floor(Date.now()/1000)}` })()
       const yfR = await fetch(yfUrl, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
@@ -385,9 +388,10 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
   const { simbolo, cfg, definition } = req.body
   try {
-    const data = await fetchAV(simbolo)
+    const reqYears = Number(cfg?.years ?? definition?.years ?? 5)
+    const data = await fetchAV(simbolo, reqYears)
     if (!data||!data.length) return res.status(404).json({error:`Sin datos para "${simbolo}"`})
-    let sp500Data=null; try { sp500Data=await fetchAV('^GSPC') } catch(_) {}
+    let sp500Data=null; try { sp500Data=await fetchAV('^GSPC', reqYears) } catch(_) {}
 
     let cfgFinal = cfg
 
