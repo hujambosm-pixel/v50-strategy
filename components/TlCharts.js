@@ -9,7 +9,7 @@ const CONTRIB_MARKER = {
   dividendo:  { color:'#aaff44', shape:'circle',     position:'belowBar', prefix:'D+' },
 }
 
-export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContribs, curveBH, showBH, onToggleBH, equityMode, onToggleMode, contributions, showWithContribs, onToggleContribs, height, showTimeScale, syncRef }) {
+export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContribs, curveBH, showBH, onToggleBH, equityMode, onToggleMode, contributions, showWithContribs, onToggleContribs, curveFloat, floatLoading, height, showTimeScale, syncRef }) {
   const ref = useRef(null), chartRef = useRef(null), equityTooltipRef = useRef(null), lastTTStateRef = useRef(null)
   const [showSinFx, setShowSinFx] = useState(false)
   const [showSinComm, setShowSinComm] = useState(false)
@@ -17,6 +17,7 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
   const [showRetirada, setShowRetirada] = useState(true)
   const [showDividendo, setShowDividendo] = useState(true)
   const [showDD, setShowDD] = useState(false)
+  const [showFloat, setShowFloat] = useState(false)
 
   const isEquityMode = equityMode === 'equity'
   // Active main curve: equity mode → curveWithContribs; P&L mode → existing logic
@@ -99,6 +100,11 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
           .setData(bhData)
         // Nearest-neighbor fill for tooltip on dates that have equity data
         if(bhData.length){let bhi=0;activeCurve.forEach(p=>{while(bhi<bhData.length-1&&bhData[bhi+1].date<p.date)bhi++;const prev=bhi>0?bhData[bhi-1]:null;const curr=bhData[bhi];const pick=prev&&Math.abs(new Date(prev.date)-new Date(p.date))<Math.abs(new Date(curr.date)-new Date(p.date))?prev:curr;const diff=Math.abs(new Date(pick.date)-new Date(p.date))/86400000;if(diff<5){if(!eqData[p.date])eqData[p.date]={};eqData[p.date].bh=pick.value}})}
+      }
+      // Float equity curve — equity mode only, dashed lighter green
+      if(showFloat && isEquityMode && curveFloat?.length > 1){
+        chart.addLineSeries({color:'#52c788',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:true,priceLineVisible:false,title:'Con flotante'})
+          .setData(curveFloat.map(p=>({time:p.date,value:p.value})))
       }
       // Drawdown diagonal (peak → trough) — equity mode only
       if(showDD && isEquityMode && activeCurve.length > 1){
@@ -221,7 +227,7 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
       return ()=>ro.disconnect()
     })
     return ()=>{ if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};try{chartRef.current.remove()}catch(_){};chartRef.current=null} }
-  },[activeCurve, curveSinFx, curveSinComm, showSinFx, showSinComm, showWithContribs, contributions, showAportacion, showRetirada, showDividendo, showBH, curveBH, isEquityMode, showDD])
+  },[activeCurve, curveSinFx, curveSinComm, showSinFx, showSinComm, showWithContribs, contributions, showAportacion, showRetirada, showDividendo, showBH, curveBH, isEquityMode, showDD, curveFloat, showFloat])
 
   const btnStyle = (active, color) => ({
     display:'flex',alignItems:'center',gap:4,
@@ -263,6 +269,12 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
         {isEquityMode&&activeCurve?.length>1&&(
           <button onClick={()=>setShowDD(v=>!v)} style={btnStyle(showDD,'#ff4d6d')} title={showDD?'Ocultar Max Drawdown':'Mostrar Max Drawdown'}>
             Max DD
+          </button>
+        )}
+        {/* Float curve toggle — equity mode only */}
+        {isEquityMode&&(curveFloat?.length>1||floatLoading)&&(
+          <button onClick={()=>setShowFloat(v=>!v)} style={btnStyle(showFloat,'#52c788')} title={floatLoading?'Cargando precios históricos…':showFloat?'Ocultar curva con flotante':'Mostrar curva con flotante'} disabled={floatLoading}>
+            <span style={{display:'inline-block',width:10,height:2,background:'#52c788',borderRadius:1,opacity:showFloat?0.8:0.3,borderBottom:'1px dashed #52c788'}}/>{floatLoading?' ⟳':' Flotante'}
           </button>
         )}
         {/* Contribution type toggles — equity mode only */}
