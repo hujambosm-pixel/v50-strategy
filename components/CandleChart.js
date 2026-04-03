@@ -144,8 +144,22 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       const elS=chart.addLineSeries({color:'#ff4d6d',lineWidth:1,lastValueVisible:false,priceLineVisible:false})
       elS.setData(data.filter(d=>d.emaL!=null).map(d=>({time:d.date,value:d.emaL})))
 
+      // ── MAE (Maximum Adverse Excursion) por trade ──
+      const tradeMAEs = trades.map(t => {
+        if(!t.entryDate||!t.exitDate||!t.entryPx) return { ...t, mae:0, minLow:t.entryPx, minDate:t.entryDate }
+        const velas = data.filter(d => d.date >= t.entryDate && d.date <= t.exitDate)
+        if(!velas.length) return { ...t, mae:0, minLow:t.entryPx, minDate:t.entryDate }
+        const minLow = Math.min(...velas.map(v => v.low))
+        const mae = (minLow - t.entryPx) / t.entryPx * 100  // negativo = caída
+        const minDate = velas.find(v => v.low === minLow)?.date || t.entryDate
+        return { ...t, mae, minLow, minDate }
+      })
+      const worstMAETrade = tradeMAEs.length
+        ? tradeMAEs.reduce((worst, t) => t.mae < worst.mae ? t : worst, tradeMAEs[0])
+        : null
+
       // Líneas de trades — diagonal P&L + horizontales entrada/stop estilo TV
-      trades.forEach(t=>{
+      tradeMAEs.forEach(t=>{
         if(!t.entryDate||!t.exitDate) return
         // Diagonal P&L
         const ls=chart.addLineSeries({color:t.pnlPct>=0?'#00e5a0':'#ff4d6d',lineWidth:2,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
@@ -159,6 +173,15 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
           stopLine.setData([{time:t.entryDate,value:t.stopPx},{time:t.exitDate,value:t.stopPx}])
         }
       })
+
+      // ── MAE visual — solo el peor trade ──
+      if(worstMAETrade && worstMAETrade.mae < 0 && worstMAETrade.minDate && worstMAETrade.minDate !== worstMAETrade.entryDate){
+        // A) Línea vertical discontinua desde minLow hasta entryPx
+        const maeLine=chart.addLineSeries({color:'rgba(255,77,109,0.55)',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
+        maeLine.setData([{time:worstMAETrade.minDate,value:worstMAETrade.entryPx},{time:worstMAETrade.minDate,value:worstMAETrade.minLow}])
+        // B) Marker en minDate con texto "MAE: -X.X%"
+        maeLine.setMarkers([{time:worstMAETrade.minDate,position:'belowBar',color:'#ff4d6d',shape:'circle',size:1,text:`MAE: ${worstMAETrade.mae.toFixed(1)}%`}])
+      }
 
       // ── Flechas de cruce EMA ──
       // shape:'circle' size:1 → punto invisible, solo muestra el texto diagonal ↗↘
@@ -233,7 +256,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         const svg=svgRef.current; if(!svg||!candlesRef.current||!chartRef.current) return
         svg.querySelectorAll('.trade-label').forEach(el=>el.remove())
         const NS='http://www.w3.org/2000/svg'
-        trades.forEach((t,idx)=>{
+        tradeMAEs.forEach((t,idx)=>{
           if(!t.entryDate||!t.exitDate) return
           try {
             const ts=chartRef.current.timeScale()
@@ -256,12 +279,14 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
               }).forEach(([k,v])=>l.setAttribute(k,v))
               return l
             }
+            // C) Añadir MAE% al label del peor trade
+            const isWorstMAE = worstMAETrade && t.entryDate === worstMAETrade.entryDate && t.exitDate === worstMAETrade.exitDate
 
             if(labelMode===2){
               // ── Modo completo: # · % + € ──
               const num=`#${idx+1}`
               const line1=`${num} · ${t.pnlPct>=0?'+':''}${t.pnlPct.toFixed(2)}%`
-              const line2=`€${t.pnlSimple>=0?'+':''}${Math.round(t.pnlSimple)}  ·  ${t.dias}d`
+              const line2=`€${t.pnlSimple>=0?'+':''}${Math.round(t.pnlSimple)}  ·  ${t.dias}d${isWorstMAE&&t.mae<0?`  ·  MAE:${t.mae.toFixed(1)}%`:''}`
               const charW=8, BOX_H=40
               const w=Math.max(line1.length,line2.length)*charW+24
               const ZONE_TOP=22, ZONE_H=chartH*0.26
