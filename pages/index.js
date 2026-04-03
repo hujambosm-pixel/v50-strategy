@@ -440,12 +440,13 @@ function apiFetch(url, opts={}) {
 
 // ── Build equity curve with daily float P&L ──────────────────────────────────
 // allTrades: all trades (open+closed); historicalCloses: {sym:[{date,close}]}
-// capitalBase: base portfolio value (contributions or peak deployed capital)
-function buildFloatCurve(allTrades, historicalCloses, capitalBase) {
+// capitalBase: fallback base when no contributions; contributions: aportaciones array
+function buildFloatCurve(allTrades, historicalCloses, capitalBase, contributions=[]) {
   if(!allTrades?.length||!Object.keys(historicalCloses).length) return []
-  // Build sorted date list from union of all symbol close dates
+  // Time axis: union of close dates, but only from first trade entry onward
+  const firstTradeDate=allTrades.map(t=>t.entry_date).filter(Boolean).sort()[0]||''
   const dateSet=new Set()
-  Object.values(historicalCloses).forEach(arr=>arr.forEach(p=>dateSet.add(p.date)))
+  Object.values(historicalCloses).forEach(arr=>arr.forEach(p=>{if(!firstTradeDate||p.date>=firstTradeDate)dateSet.add(p.date)}))
   const allDates=[...dateSet].sort()
   if(!allDates.length) return []
   // Per-symbol sorted arrays for binary-search forward-fill
@@ -459,10 +460,19 @@ function buildFloatCurve(allTrades, historicalCloses, capitalBase) {
     while(lo<=hi){const mid=(lo+hi)>>1;if(arr[mid].date<=date){best=arr[mid].close;lo=mid+1}else hi=mid-1}
     return best
   }
+  // Pre-sort contributions (same sign logic as cwcDisp: retirada=-amount, rest=+amount)
+  const contribsSorted=[...contributions].filter(c=>c.date).sort((a,b)=>a.date.localeCompare(b.date))
+  const hasContribs=contribsSorted.length>0
   const closed=allTrades.filter(t=>t.status==='closed').sort((a,b)=>(a.exit_date||'').localeCompare(b.exit_date||''))
-  let pnlClosed=0, closedIdx=0
+  let pnlClosed=0, closedIdx=0, runContrib=0, contribIdx=0
   const curve=[]
   for(const date of allDates){
+    // Accumulate contributions up to this date
+    while(contribIdx<contribsSorted.length&&contribsSorted[contribIdx].date<=date){
+      const c=contribsSorted[contribIdx]
+      runContrib+=c.type==='retirada'?-parseFloat(c.amount||0):parseFloat(c.amount||0)
+      contribIdx++
+    }
     // Accumulate closed P&L up to this date
     while(closedIdx<closed.length&&(closed[closedIdx].exit_date||'')<=date){
       pnlClosed+=parseFloat(closed[closedIdx].pnl_eur||0); closedIdx++
@@ -482,10 +492,11 @@ function buildFloatCurve(allTrades, historicalCloses, capitalBase) {
       pnlFloat+=(px-entryPx)*shares/fx
       tradesAbiertosList.push(sym)
     }
-    curve.push({date,value:capitalBase+pnlClosed+pnlFloat})
+    const base=hasContribs?runContrib:capitalBase
+    curve.push({date,value:base+pnlClosed+pnlFloat})
     // Debug: log last 3 days
     if(allDates.indexOf(date)>=allDates.length-3){
-      console.log('float debug:',{date,pnlCerrado:Math.round(pnlClosed),pnlFlotante:Math.round(pnlFloat),total:Math.round(capitalBase+pnlClosed+pnlFloat),tradesAbiertos:tradesAbiertosList.length})
+      console.log('float debug:',{date,base:Math.round(base),pnlCerrado:Math.round(pnlClosed),pnlFlotante:Math.round(pnlFloat),total:Math.round(base+pnlClosed+pnlFloat),tradesAbiertos:tradesAbiertosList.length})
     }
   }
   return curve
@@ -2886,7 +2897,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V8.11</title>
+        <title>Trading Simulator V8.12</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2963,7 +2974,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V8.11
+            <span className="dot"/>Trading Simulator V8.12
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6377,7 +6388,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       const capitalBase=showWithContribs&&netContrib>0?netContrib:peakCapBase
                       // Float equity curve — daily P&L including open positions
                       const floatCurveRaw=Object.keys(floatCloses).length>0
-                        ?buildFloatCurve(tlTradesFiltered,floatCloses,capitalBase):[]
+                        ?buildFloatCurve(tlTradesFiltered,floatCloses,capitalBase,contributions):[]
                       const floatCurveDisp=_clip(floatCurveRaw)
                       let maxDD=0,maxDDPct=0
                       // Usa la misma curva que TlCharts computeMaxDD: cwcDisp (valores absolutos) si existe, sino eqDisp+capitalBase
