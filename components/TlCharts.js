@@ -20,9 +20,9 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
   const [showFloat, setShowFloat] = useState(false)
 
   const isEquityMode = equityMode === 'equity'
-  // Active main curve: equity mode → curveWithContribs; P&L mode → existing logic
+  // Active main curve: equity mode + float toggle → floatCurve; equity mode → curveWithContribs; P&L mode → existing logic
   const activeCurve = isEquityMode
-    ? (curveWithContribs?.length > 1 ? curveWithContribs : curve)
+    ? (showFloat && curveFloat?.length > 1 ? curveFloat : curveWithContribs?.length > 1 ? curveWithContribs : curve)
     : (showWithContribs && curveWithContribs?.length > 1 ? curveWithContribs : curve)
   const lineColor = '#00e676'
 
@@ -100,11 +100,6 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
           .setData(bhData)
         // Nearest-neighbor fill for tooltip on dates that have equity data
         if(bhData.length){let bhi=0;activeCurve.forEach(p=>{while(bhi<bhData.length-1&&bhData[bhi+1].date<p.date)bhi++;const prev=bhi>0?bhData[bhi-1]:null;const curr=bhData[bhi];const pick=prev&&Math.abs(new Date(prev.date)-new Date(p.date))<Math.abs(new Date(curr.date)-new Date(p.date))?prev:curr;const diff=Math.abs(new Date(pick.date)-new Date(p.date))/86400000;if(diff<5){if(!eqData[p.date])eqData[p.date]={};eqData[p.date].bh=pick.value}})}
-      }
-      // Float equity curve — equity mode only, dashed lighter green
-      if(showFloat && isEquityMode && curveFloat?.length > 1){
-        chart.addLineSeries({color:'#52c788',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:true,priceLineVisible:false,title:'Con flotante'})
-          .setData(curveFloat.map(p=>({time:p.date,value:p.value})))
       }
       // Drawdown diagonal (peak → trough) — equity mode only
       if(showDD && isEquityMode && activeCurve.length > 1){

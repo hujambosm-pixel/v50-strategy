@@ -469,6 +469,7 @@ function buildFloatCurve(allTrades, historicalCloses, capitalBase) {
     }
     // Float P&L for positions open on this date
     let pnlFloat=0
+    const tradesAbiertosList=[]
     for(const t of allTrades){
       if(!t.entry_date||t.entry_date>date) continue
       if(t.status==='closed'&&t.exit_date&&t.exit_date<=date) continue
@@ -479,8 +480,13 @@ function buildFloatCurve(allTrades, historicalCloses, capitalBase) {
       const fxE=parseFloat(t.fx_entry||0)
       const fx=fxE>0?(fxE<1?1/fxE:fxE):1
       pnlFloat+=(px-entryPx)*shares/fx
+      tradesAbiertosList.push(sym)
     }
     curve.push({date,value:capitalBase+pnlClosed+pnlFloat})
+    // Debug: log last 3 days
+    if(allDates.indexOf(date)>=allDates.length-3){
+      console.log('float debug:',{date,pnlCerrado:Math.round(pnlClosed),pnlFlotante:Math.round(pnlFloat),total:Math.round(capitalBase+pnlClosed+pnlFloat),tradesAbiertos:tradesAbiertosList.length})
+    }
   }
   return curve
 }
@@ -2880,7 +2886,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V8.10</title>
+        <title>Trading Simulator V8.11</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2957,7 +2963,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V8.10
+            <span className="dot"/>Trading Simulator V8.11
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
