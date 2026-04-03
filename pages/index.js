@@ -494,10 +494,6 @@ function buildFloatCurve(allTrades, historicalCloses, capitalBase, contributions
     }
     const base=hasContribs?runContrib:capitalBase
     curve.push({date,value:base+pnlClosed+pnlFloat})
-    // Debug: log last 3 days
-    if(allDates.indexOf(date)>=allDates.length-3){
-      console.log('float debug:',{date,base:Math.round(base),pnlCerrado:Math.round(pnlClosed),pnlFlotante:Math.round(pnlFloat),total:Math.round(base+pnlClosed+pnlFloat),tradesAbiertos:tradesAbiertosList.length})
-    }
   }
   return curve
 }
@@ -2897,7 +2893,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V8.12</title>
+        <title>Trading Simulator V8.13</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2974,7 +2970,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V8.12
+            <span className="dot"/>Trading Simulator V8.13
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}

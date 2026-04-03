@@ -17,7 +17,7 @@ export default async function handler(req, res) {
         'Accept-Language': 'en-US,en;q=0.9',
       }
     })
-    if (!r.ok) return res.status(502).json({ error: `Yahoo fetch failed: ${r.status}` })
+    if (!r.ok) return res.status(404).json({ error: `Yahoo fetch failed: ${r.status}` })
     const json = await r.json()
     const result = json?.chart?.result?.[0]
     const timestamps = result?.timestamp || []

@@ -11,6 +11,7 @@ const CONTRIB_MARKER = {
 
 export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContribs, curveBH, showBH, onToggleBH, equityMode, onToggleMode, contributions, showWithContribs, onToggleContribs, curveFloat, floatLoading, height, showTimeScale, syncRef }) {
   const ref = useRef(null), chartRef = useRef(null), equityTooltipRef = useRef(null), lastTTStateRef = useRef(null)
+  const mainSeriesRef = useRef(null)
   const [showSinFx, setShowSinFx] = useState(false)
   const [showSinComm, setShowSinComm] = useState(false)
   const [showAportacion, setShowAportacion] = useState(true)
@@ -24,6 +25,9 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
   const activeCurve = isEquityMode
     ? (showFloat && curveFloat?.length > 1 ? curveFloat : curveWithContribs?.length > 1 ? curveWithContribs : curve)
     : (showWithContribs && curveWithContribs?.length > 1 ? curveWithContribs : curve)
+  // Keep a ref to activeCurve so the chart-creation effect can read the latest value without depending on it
+  const activeCurveRef = useRef(activeCurve)
+  activeCurveRef.current = activeCurve
   const lineColor = '#00e676'
 
   // Date formatter for tooltip: "2025-03-15" → "15 Mar 2025"
@@ -35,9 +39,12 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
   }
 
   useEffect(()=>{
-    if(!ref.current||!activeCurve?.length) return
+    const ac = activeCurveRef.current
+    if(!ref.current||!ac?.length) return
+    let cancelled = false
     import('lightweight-charts').then(({createChart,CrosshairMode,LineStyle})=>{
-      if(chartRef.current){chartRef.current.remove();chartRef.current=null}
+      if(cancelled) return
+      if(chartRef.current){chartRef.current.remove();chartRef.current=null;mainSeriesRef.current=null}
       const chart = createChart(ref.current,{
         width:ref.current.clientWidth, height:height||ref.current.clientHeight||200,
         layout:{background:{color:'#080c14'},textColor:'#7a9bc0'},
@@ -51,7 +58,7 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
       // Zero baseline (only in P&L mode where 0 is meaningful)
       if(!isEquityMode){
         chart.addLineSeries({color:'#2a3f55',lineWidth:1,lineStyle:LineStyle.Dotted,lastValueVisible:false,priceLineVisible:false})
-          .setData([{time:activeCurve[0].date,value:0},{time:activeCurve[activeCurve.length-1].date,value:0}])
+          .setData([{time:ac[0].date,value:0},{time:ac[ac.length-1].date,value:0}])
       }
       // Track series data by date for crosshair tooltip
       const eqData={}
@@ -60,8 +67,9 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
       lastTTStateRef.current = null
       const lc = '#00e676'
       const mainSeries = chart.addLineSeries({color:lc,lineWidth:2,lastValueVisible:true,priceLineVisible:false})
-      mainSeries.setData(activeCurve.map(p=>({time:p.date,value:p.value})))
-      track(activeCurve,'main')
+      mainSeries.setData(activeCurveRef.current.map(p=>({time:p.date,value:p.value})))
+      mainSeriesRef.current = mainSeries
+      track(activeCurveRef.current,'main')
       // Contribution markers — only in equity mode
       if(isEquityMode && contributions?.length){
         const activeTypes = new Set(['aportacion','retirada','dividendo'].filter(t=>
@@ -99,10 +107,10 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
         chart.addLineSeries({color:'#f59e0b',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:true,priceLineVisible:false,title:''})
           .setData(bhData)
         // Nearest-neighbor fill for tooltip on dates that have equity data
-        if(bhData.length){let bhi=0;activeCurve.forEach(p=>{while(bhi<bhData.length-1&&bhData[bhi+1].date<p.date)bhi++;const prev=bhi>0?bhData[bhi-1]:null;const curr=bhData[bhi];const pick=prev&&Math.abs(new Date(prev.date)-new Date(p.date))<Math.abs(new Date(curr.date)-new Date(p.date))?prev:curr;const diff=Math.abs(new Date(pick.date)-new Date(p.date))/86400000;if(diff<5){if(!eqData[p.date])eqData[p.date]={};eqData[p.date].bh=pick.value}})}
+        if(bhData.length){let bhi=0;ac.forEach(p=>{while(bhi<bhData.length-1&&bhData[bhi+1].date<p.date)bhi++;const prev=bhi>0?bhData[bhi-1]:null;const curr=bhData[bhi];const pick=prev&&Math.abs(new Date(prev.date)-new Date(p.date))<Math.abs(new Date(curr.date)-new Date(p.date))?prev:curr;const diff=Math.abs(new Date(pick.date)-new Date(p.date))/86400000;if(diff<5){if(!eqData[p.date])eqData[p.date]={};eqData[p.date].bh=pick.value}})}
       }
       // Drawdown diagonal (peak → trough) — equity mode only
-      if(showDD && isEquityMode && activeCurve.length > 1){
+      if(showDD && isEquityMode && ac.length > 1){
         // Computes max drawdown: finds peak then deepest subsequent trough
         // Returns real temporal coordinates for the diagonal line
         const computeMaxDD = (data) => {
@@ -121,12 +129,12 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
             ddPct:(bestDD*100).toFixed(1)
           }
         }
-        const dd = computeMaxDD(activeCurve)
+        const dd = computeMaxDD(ac)
         if(dd){
-          const peakIdx2=activeCurve.findIndex(p=>p.date===dd.peakDate)
-          const troughIdx2=activeCurve.findIndex(p=>p.date===dd.troughDate)
+          const peakIdx2=ac.findIndex(p=>p.date===dd.peakDate)
+          const troughIdx2=ac.findIndex(p=>p.date===dd.troughDate)
           const midIdx2=peakIdx2>=0&&troughIdx2>peakIdx2?Math.round((peakIdx2+troughIdx2)/2):- 1
-          const midDate2=midIdx2>=0?activeCurve[midIdx2].date:null
+          const midDate2=midIdx2>=0?ac[midIdx2].date:null
           const midVal2=(dd.peakVal+dd.troughVal)/2
           const pct2=Math.abs(parseFloat(dd.ddPct)).toFixed(1)
           const eur2=Math.round(dd.peakVal-dd.troughVal).toLocaleString('de-DE')
@@ -176,11 +184,11 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
         if(param.time && param.point){
           const d=eqData[param.time]||{}
           // Nearest-neighbor main lookup for dates without equity data
-          if(d.main==null&&activeCurve?.length){
+          if(d.main==null&&ac?.length){
             let aci=0
-            while(aci<activeCurve.length-1&&activeCurve[aci+1].date<param.time)aci++
-            const aprev=aci>0?activeCurve[aci-1]:null
-            const acurr=activeCurve[aci]
+            while(aci<ac.length-1&&ac[aci+1].date<param.time)aci++
+            const aprev=aci>0?ac[aci-1]:null
+            const acurr=ac[aci]
             const apick=aprev&&Math.abs(new Date(aprev.date)-new Date(param.time))<Math.abs(new Date(acurr.date)-new Date(param.time))?aprev:acurr
             if(Math.abs(new Date(apick.date)-new Date(param.time))/86400000<5)d.main=apick.value
           }
@@ -221,8 +229,16 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
       ro.observe(ref.current)
       return ()=>ro.disconnect()
     })
-    return ()=>{ if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};try{chartRef.current.remove()}catch(_){};chartRef.current=null} }
-  },[activeCurve, curveSinFx, curveSinComm, showSinFx, showSinComm, showWithContribs, contributions, showAportacion, showRetirada, showDividendo, showBH, curveBH, isEquityMode, showDD, curveFloat, showFloat])
+    return ()=>{ cancelled=true; if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};try{chartRef.current.remove()}catch(_){};chartRef.current=null;mainSeriesRef.current=null} }
+  },[curve, curveWithContribs, curveSinFx, curveSinComm, showSinFx, showSinComm, showWithContribs, contributions, showAportacion, showRetirada, showDividendo, showBH, curveBH, isEquityMode, showDD])
+
+  // Secondary effect: update main series data only when activeCurve changes (e.g. float toggle)
+  // This avoids full chart recreation and prevents "Object is disposed" errors
+  useEffect(()=>{
+    if(mainSeriesRef.current && chartRef.current){
+      try{ mainSeriesRef.current.setData(activeCurve.map(p=>({time:p.date,value:p.value}))) }catch(_){}
+    }
+  },[activeCurve])
 
   const btnStyle = (active, color) => ({
     display:'flex',alignItems:'center',gap:4,
