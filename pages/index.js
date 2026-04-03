@@ -2894,7 +2894,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V8.16</title>
+        <title>Trading Simulator V8.17</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2971,7 +2971,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V8.16
+            <span className="dot"/>Trading Simulator V8.17
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6451,7 +6451,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               {l:'Balance inicial',v:hasContribs?fmtAbs_(capitalNeto):'—',c:'#a8ccdf'},
                               {l:'Capital emp.',v:capitalEmpAll>0?fmtAbs_(capitalEmpAll):'—',c:'#00d4ff'},
                               {l:'P&L realizado',v:fmtEur_(pnlReal),c:pnlReal>=0?'#00e5a0':'#ff4d6d'},
-                              {l:'P&L flotante',v:fmtEur_(pnlFloat_),c:pnlFloat_>=0?'#00e5a0':'#ffd166'},
+                              {l:'P&L flotante',v:fmtEur_(pnlFloat_),c:pnlFloat_>=0?'#00e5a0':'#ff4d6d'},
                               {l:'Total ops.',v:String(allWithPnl.length),sub:openTrades.length+'ab / '+closed.length+'cerr',c:'#ffd166'},
                               {l:'Comisiones',v:commTotal>0?'-€'+Math.round(commTotal).toLocaleString('es-ES'):'€0',c:'#ff4d6d'},
                               {l:'Dividendos',v:dividendosAcum>0?'+€'+Math.round(dividendosAcum).toLocaleString('es-ES'):'—',c:'#00e5a0'},
