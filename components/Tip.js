@@ -81,10 +81,11 @@ export const TIP_DATA = {
     text: 'Capital fijo: cada trade usa siempre el mismo importe en euros. El P&L Simple suma linealmente. El P&L Compuesto reinvierte las ganancias: cada operación usa el capital acumulado del trade anterior. El sizing no afecta a las señales, solo a los resultados monetarios.'
   },
   // ── Dashboard métricas ──────────────────────────────────────
-  cagr: { title: 'CAGR', text: 'Tasa de crecimiento anual compuesto del portfolio durante el período analizado.' },
-  maxDrawdown: { title: 'Max Drawdown', text: 'Caída máxima desde un máximo hasta el mínimo posterior. Mide el peor escenario de pérdida.' },
-  winRate: { title: 'Win Rate', text: 'Porcentaje de operaciones cerradas con beneficio sobre el total de operaciones cerradas.' },
-  factorBeneficio: { title: 'Factor Beneficio', text: 'Ratio entre ganancias brutas y pérdidas brutas. Mayor de 1 indica sistema rentable.' },
+  pnlTotal: { title: 'P&L Total', text: 'P&L Realizado + P&L Flotante + Dividendos. Suma de todo el beneficio/pérdida del portfolio, incluyendo posiciones abiertas valoradas a precio actual y dividendos recibidos.' },
+  cagr: { title: 'CAGR', text: 'Rentabilidad anualizada. Fórmula: (1 + P&L / Capital)^(1/años) − 1. Expresa a qué tasa anual compuesta ha crecido el portfolio desde la primera operación hasta hoy.' },
+  maxDrawdown: { title: 'Max Drawdown', text: 'Mayor caída desde un máximo histórico hasta el mínimo posterior, calculada sobre la equity curve diaria. Mide el peor escenario de pérdida que habría sufrido el portfolio.' },
+  winRate: { title: 'Win Rate', text: '% de operaciones cerradas con beneficio sobre el total de cerradas. No incluye posiciones abiertas.' },
+  factorBeneficio: { title: 'Factor Beneficio', text: 'Suma de ganancias / Suma de pérdidas (en valor absoluto). >1 = sistema con expectativa positiva. Incluye operaciones abiertas por su flotante actual.' },
   impactoFx: { title: 'Impacto FX', text: 'Efecto del tipo de cambio en el P&L total. Diferencia entre P&L real y P&L sin conversión de divisa.' },
   ganMediaPct: { title: 'Gan. Media %', text: 'Rentabilidad media de las operaciones ganadoras, expresada en porcentaje.' },
   perdMediaPct: { title: 'Pérd. Media %', text: 'Pérdida media de las operaciones perdedoras, expresada en porcentaje.' },
@@ -96,7 +97,7 @@ export const TIP_DATA = {
   ganadoras: { title: 'Ganadoras', text: 'Número de operaciones cerradas con P&L positivo.' },
   perdedoras: { title: 'Perdedoras', text: 'Número de operaciones cerradas con P&L negativo o cero.' },
   balanceInicial: { title: 'Balance Inicial', text: 'Capital de referencia inicial para el cálculo de rentabilidades y métricas.' },
-  pnlSCapital: { title: 'P&L s/Capital', text: 'P&L total (realizado + flotante) expresado como porcentaje del balance inicial. Permite comparar directamente con un Buy & Hold u otro benchmark.' },
+  pnlSCapital: { title: 'P&L s/Capital', text: 'P&L Total / Capital Base × 100. Rentabilidad total del portfolio expresada en porcentaje sobre el capital de referencia (pico de capital desplegado o capital neto aportado si hay aportaciones).' },
   diasPromedioInv: { title: 'Días Promedio', text: 'Media de días en posición por operación, incluyendo solo días con capital invertido.' },
   totalDiasInv: { title: 'Total Días Inv.', text: 'Suma total de días-posición de todas las operaciones cerradas.' },
 }
