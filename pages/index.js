@@ -2894,7 +2894,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V8.17</title>
+        <title>Trading Simulator V8.18</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2971,7 +2971,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V8.17
+            <span className="dot"/>Trading Simulator V8.18
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6343,7 +6343,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       const liveFloatEur_=(t)=>{const px=tlLivePrices[t.symbol]?.price!=null?parseFloat(tlLivePrices[t.symbol].price):null;if(px!==null){const fxE=t.fx_entry||1;return(px-t.entry_price)*t.shares/fxE};return typeof t._pnl_float_eur==='number'?t._pnl_float_eur:0}
                       const pnlReal=closed.reduce((s,t)=>s+parseFloat(t.pnl_eur||0),0)
                       const pnlFloat_=openTrades.reduce((s,t)=>s+liveFloatEur_(t),0)
-                      const pnlTotal=pnlReal+pnlFloat_
+                      const _dividendosAcum_=contributions.filter(c=>c.type==='dividendo').reduce((s,c)=>s+parseFloat(c.amount||0),0)
+                      const pnlTotal=pnlReal+pnlFloat_+_dividendosAcum_
                       const commTotal=[...closed,...openTrades].reduce((s,t)=>s+parseFloat(t.commission||0),0)
                       const allWithPnl=[
                         ...closed.map(t=>({...t,_ep:parseFloat(t.pnl_eur)||0,_epct:parseFloat(t.pnl_pct||0),_ed:t.entry_date&&t.exit_date?Math.round((new Date(t.exit_date)-new Date(t.entry_date))/86400000):0})),

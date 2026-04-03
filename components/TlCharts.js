@@ -128,16 +128,6 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
             ddPct:(bestDD*100).toFixed(1)
           }
         }
-        // FIX: helper — true if any contribution is within 30 days of midDate → omit the marker
-        const hasContribNear=(midDate)=>{
-          if(!contributions?.length||!midDate) return false
-          return contributions.some(c=>c.date&&Math.abs(new Date(midDate)-new Date(c.date))/86400000<30)
-        }
-        // Normalised vertical position within ac range (0=bottom, 1=top) — used for B&H label placement
-        const acVals=ac.map(p=>p.value)
-        const acMin=Math.min(...acVals), acMax=Math.max(...acVals)
-        const acRange=acMax-acMin||1
-        const normPos=(v)=>(v-acMin)/acRange
 
         const dd = computeMaxDD(ac)
         if(dd){
@@ -153,10 +143,7 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
           if(midDate2&&midDate2!==dd.peakDate&&midDate2!==dd.troughDate) pts.push({time:midDate2,value:midVal2})
           pts.push({time:dd.troughDate,value:dd.troughVal})
           s.setData(pts)
-          // Si hay aportación a <30 días del midpoint → omitir etiqueta para evitar solapamiento
-          if(midDate2&&!hasContribNear(midDate2)){
-            s.setMarkers([{time:midDate2,position:'aboveBar',color:'#ff4d6d',shape:'circle',size:2,text:`-${pct2}% · -€${eur2}`}])
-          }
+          if(midDate2) s.setMarkers([{time:midDate2,position:'aboveBar',color:'#ff4d6d',shape:'circle',size:2,text:`-${pct2}% · -€${eur2}`}])
         }
         if(showBH && curveBH?.length>1){
           const bhAbsData = curveBH.map(p=>({date:p.date,value:(p.capitalAcum||0)+p.value}))
@@ -174,10 +161,7 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
             if(bMidDate&&bMidDate!==bhDD.peakDate&&bMidDate!==bhDD.troughDate) bPts.push({time:bMidDate,value:bMidVal})
             bPts.push({time:bhDD.troughDate,value:bhDD.troughVal})
             bs.setData(bPts)
-            // Si hay aportación a <30 días → omitir etiqueta para evitar solapamiento
-            if(bMidDate&&!hasContribNear(bMidDate)){
-              bs.setMarkers([{time:bMidDate,position:'aboveBar',color:'#f59e0b',shape:'circle',size:2,text:`-${bPct}% · -€${bEur}`}])
-            }
+            if(bMidDate) bs.setMarkers([{time:bMidDate,position:'aboveBar',color:'#f59e0b',shape:'circle',size:2,text:`-${bPct}% · -€${bEur}`}])
           }
         }
       }
