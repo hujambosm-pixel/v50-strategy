@@ -128,6 +128,25 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
             ddPct:(bestDD*100).toFixed(1)
           }
         }
+        // MEJORA 1: helper — true if a DD midpoint is within 30 days OR 2000€ of any contribution marker
+        const isNearContrib=(midDate,midVal)=>{
+          if(!contributions?.length||!midDate) return false
+          return contributions.some(c=>{
+            if(!c.date) return false
+            const days=Math.abs(new Date(midDate)-new Date(c.date))/86400000
+            if(days<30) return true
+            // equity value at contribution date (nearest point in ac)
+            const ci=ac.findIndex(p=>p.date>=c.date)
+            if(ci>=0&&Math.abs(midVal-ac[ci].value)<2000) return true
+            return false
+          })
+        }
+        // MEJORA 3: normalised vertical position of a value within the ac range (0=bottom, 1=top)
+        const acVals=ac.map(p=>p.value)
+        const acMin=Math.min(...acVals), acMax=Math.max(...acVals)
+        const acRange=acMax-acMin||1
+        const normPos=(v)=>(v-acMin)/acRange
+
         const dd = computeMaxDD(ac)
         if(dd){
           const peakIdx2=ac.findIndex(p=>p.date===dd.peakDate)
@@ -142,7 +161,11 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
           if(midDate2&&midDate2!==dd.peakDate&&midDate2!==dd.troughDate) pts.push({time:midDate2,value:midVal2})
           pts.push({time:dd.troughDate,value:dd.troughVal})
           s.setData(pts)
-          if(midDate2) s.setMarkers([{time:midDate2,position:'belowBar',color:'#ff4d6d',shape:'circle',size:2,text:`-${pct2}% · -€${eur2}`}])
+          // MEJORA 1+2: default aboveBar; shift belowBar when near a contribution marker; size:2
+          if(midDate2){
+            const ddPos=isNearContrib(midDate2,midVal2)?'belowBar':'aboveBar'
+            s.setMarkers([{time:midDate2,position:ddPos,color:'#ff4d6d',shape:'circle',size:2,text:`-${pct2}% · -€${eur2}`}])
+          }
         }
         if(showBH && curveBH?.length>1){
           const bhAbsData = curveBH.map(p=>({date:p.date,value:(p.capitalAcum||0)+p.value}))
@@ -160,7 +183,13 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
             if(bMidDate&&bMidDate!==bhDD.peakDate&&bMidDate!==bhDD.troughDate) bPts.push({time:bMidDate,value:bMidVal})
             bPts.push({time:bhDD.troughDate,value:bhDD.troughVal})
             bs.setData(bPts)
-            if(bMidDate) bs.setMarkers([{time:bMidDate,position:'belowBar',color:'#f59e0b',shape:'circle',size:2,text:`-${bPct}% · -€${bEur}`}])
+            if(bMidDate){
+              // MEJORA 3: if midpoint is in the bottom 30% of chart range → aboveBar to avoid clutter
+              // MEJORA 1: else if near contribution → belowBar; otherwise default aboveBar
+              const bNorm=normPos(bMidVal)
+              const bDDPos=bNorm<0.30?'aboveBar':isNearContrib(bMidDate,bMidVal)?'belowBar':'aboveBar'
+              bs.setMarkers([{time:bMidDate,position:bDDPos,color:'#f59e0b',shape:'circle',size:2,text:`-${bPct}% · -€${bEur}`}])
+            }
           }
         }
       }
