@@ -2894,7 +2894,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V8.14</title>
+        <title>Trading Simulator V8.15</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2971,7 +2971,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V8.14
+            <span className="dot"/>Trading Simulator V8.15
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6391,9 +6391,11 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       // DD curve: float curve when toggle active; else cwcDisp; else eqDisp+capitalBase
                       const _ddCurve=tlShowFloat&&floatCurveDisp?.length>1?floatCurveDisp:(cwcDisp?.length>1?cwcDisp:eqDisp.map(p=>({date:p.date,value:capitalBase+p.value})))
                       if(_ddCurve.length>1){let peak=_ddCurve[0].value;_ddCurve.forEach(p=>{if(p.value>peak)peak=p.value;const dd=peak-p.value;const ddPct=peak>0?(dd/peak)*100:0;if(dd>maxDD){maxDD=dd;maxDDPct=ddPct}})}
-                      // CAGR: float mode → derived from float curve start→end; else closed P&L vs capitalBase
-                      let cagrReal_=aniosPeriodo_&&pnlTotal!==0?(Math.pow(Math.max((capitalBase+pnlTotal)/capitalBase,0.001),1/aniosPeriodo_)-1)*100:null
-                      if(tlShowFloat&&floatCurveDisp?.length>1){const fS=floatCurveDisp[0].value,fE=floatCurveDisp[floatCurveDisp.length-1].value;const fY=(new Date(floatCurveDisp[floatCurveDisp.length-1].date)-new Date(floatCurveDisp[0].date))/(365.25*24*3600*1000);if(fY>0.01&&fS>0)cagrReal_=(Math.pow(Math.max(fE/fS,0.001),1/fY)-1)*100}
+                      // CAGR: misma fórmula siempre — (1 + pnlTotal/capitalBase)^(1/años) - 1
+                      // Sin flotante: pnlTotal = pnlReal; Con flotante: pnlTotal = pnlReal + pnlFloat_
+                      // capitalBase y aniosPeriodo_ no cambian entre modos
+                      const _pnlForCagr_=tlShowFloat?pnlReal+pnlFloat_:pnlReal
+                      const cagrReal_=aniosPeriodo_&&_pnlForCagr_!==0?(Math.pow(Math.max((capitalBase+_pnlForCagr_)/capitalBase,0.001),1/aniosPeriodo_)-1)*100:null
                       const _capRef_=capitalNeto>0?capitalNeto:capitalBase
                       const fxImpact=pnlReal-closed.reduce((s,t)=>{const fE=parseFloat(t.fx_entry||0)||1;return s+(parseFloat(t.exit_price||0)-parseFloat(t.entry_price||0))*parseFloat(t.shares||0)/fE},0)
                       const pnlSCapPct=capitalNeto>0?(pnlTotal/capitalNeto*100):capitalBase>0?(pnlTotal/capitalBase*100):null
