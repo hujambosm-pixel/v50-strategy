@@ -736,6 +736,8 @@ export default function Home() {
   const [tlEquityMode,setTlEquityMode]=useState('pnl') // 'pnl' | 'equity'
   const [floatCloses,setFloatCloses]=useState({})      // {sym: [{date,close}]}
   const [floatLoading,setFloatLoading]=useState(false)
+  const [tlShowFloat,setTlShowFloat]=useState(false)   // float toggle (lifted from TlCharts)
+  const floatFetched=useRef(false)                     // lazy: only fetch once per session
   const [contribDate,setContribDate]=useState(()=>{const d=new Date();return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear()})
   const [contribAmount,setContribAmount]=useState('')
   const [contribType,setContribType]=useState('aportacion')
@@ -1078,17 +1080,18 @@ export default function Home() {
       })
   },[tlFifo,tlFilterBroker,tlFilterStrat,tlSearch,tlFilterYear,tlFilterMonth,tlFilterStatus])
 
-  // ── Prefetch historical closes for float equity curve ──
-  useEffect(()=>{
+  // ── Lazy fetch of historical closes for float equity curve ──
+  // Triggered only on first "Flotante" toggle click (not on mount)
+  const triggerFloatFetch=useCallback(()=>{
+    if(floatFetched.current) return          // already fetched or in progress
     const syms=[...new Set(tlTradesFiltered.map(t=>t.symbol).filter(Boolean))]
     if(!syms.length) return
-    let cancelled=false
-    const run=async()=>{
+    floatFetched.current=true
+    ;(async()=>{
       setFloatLoading(true)
       const result={}
       const bs=4
       for(let i=0;i<syms.length;i+=bs){
-        if(cancelled) break
         const batch=syms.slice(i,i+bs)
         await Promise.all(batch.map(async sym=>{
           try{
@@ -1097,14 +1100,12 @@ export default function Home() {
             if(Array.isArray(data)&&data.length>=10) result[sym]=data
           }catch{}
         }))
-        if(i+bs<syms.length&&!cancelled) await new Promise(r=>setTimeout(r,400))
+        if(i+bs<syms.length) await new Promise(r=>setTimeout(r,400))
       }
-      if(!cancelled) setFloatCloses(result)
-      if(!cancelled) setFloatLoading(false)
-    }
-    run()
-    return()=>{cancelled=true}
-  },[tlTradesFiltered.length, tlTradesFiltered.map(t=>t.symbol).join(',')]) // eslint-disable-line
+      setFloatCloses(result)
+      setFloatLoading(false)
+    })()
+  },[tlTradesFiltered]) // eslint-disable-line
 
   const tlPrices = {}
   const [tlFillsList,setTlFillsList]=useState([])  // fills entrada para modal
@@ -2893,7 +2894,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V8.13</title>
+        <title>Trading Simulator V8.14</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2970,7 +2971,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V8.13
+            <span className="dot"/>Trading Simulator V8.14
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6387,10 +6388,12 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         ?buildFloatCurve(tlTradesFiltered,floatCloses,capitalBase,contributions):[]
                       const floatCurveDisp=_clip(floatCurveRaw)
                       let maxDD=0,maxDDPct=0
-                      // Usa la misma curva que TlCharts computeMaxDD: cwcDisp (valores absolutos) si existe, sino eqDisp+capitalBase
-                      const _ddCurve=cwcDisp?.length>1?cwcDisp:eqDisp.map(p=>({date:p.date,value:capitalBase+p.value}))
+                      // DD curve: float curve when toggle active; else cwcDisp; else eqDisp+capitalBase
+                      const _ddCurve=tlShowFloat&&floatCurveDisp?.length>1?floatCurveDisp:(cwcDisp?.length>1?cwcDisp:eqDisp.map(p=>({date:p.date,value:capitalBase+p.value})))
                       if(_ddCurve.length>1){let peak=_ddCurve[0].value;_ddCurve.forEach(p=>{if(p.value>peak)peak=p.value;const dd=peak-p.value;const ddPct=peak>0?(dd/peak)*100:0;if(dd>maxDD){maxDD=dd;maxDDPct=ddPct}})}
-                      const cagrReal_=aniosPeriodo_&&pnlTotal!==0?(Math.pow(Math.max((capitalBase+pnlTotal)/capitalBase,0.001),1/aniosPeriodo_)-1)*100:null
+                      // CAGR: float mode → derived from float curve start→end; else closed P&L vs capitalBase
+                      let cagrReal_=aniosPeriodo_&&pnlTotal!==0?(Math.pow(Math.max((capitalBase+pnlTotal)/capitalBase,0.001),1/aniosPeriodo_)-1)*100:null
+                      if(tlShowFloat&&floatCurveDisp?.length>1){const fS=floatCurveDisp[0].value,fE=floatCurveDisp[floatCurveDisp.length-1].value;const fY=(new Date(floatCurveDisp[floatCurveDisp.length-1].date)-new Date(floatCurveDisp[0].date))/(365.25*24*3600*1000);if(fY>0.01&&fS>0)cagrReal_=(Math.pow(Math.max(fE/fS,0.001),1/fY)-1)*100}
                       const _capRef_=capitalNeto>0?capitalNeto:capitalBase
                       const fxImpact=pnlReal-closed.reduce((s,t)=>{const fE=parseFloat(t.fx_entry||0)||1;return s+(parseFloat(t.exit_price||0)-parseFloat(t.entry_price||0))*parseFloat(t.shares||0)/fE},0)
                       const pnlSCapPct=capitalNeto>0?(pnlTotal/capitalNeto*100):capitalBase>0?(pnlTotal/capitalBase*100):null
@@ -6465,7 +6468,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               {/* Subcol equity */}
                               <div style={{flex:tlEquityFlex,display:'flex',flexDirection:'column',overflow:'hidden',position:'relative',minHeight:0}}>
                                 {eqDisp.length>1
-                                  ?<div ref={tlEquityContainerRef} style={{flex:1,minHeight:0}}><TlEquityChart curve={eqDisp} curveSinFx={sfxDisp.length>1?sfxDisp:null} curveSinComm={scommDisp.length>1?scommDisp:null} curveWithContribs={cwcDisp.length>1?cwcDisp:null} curveBH={bhDisp?.length>1?bhDisp:null} showBH={tlShowBH} onToggleBH={async()=>{const next=!tlShowBH;setTlShowBH(next);if(next&&!tlBHData){const first=contributions.filter(c=>c.type==='aportacion').sort((a,b)=>(a.date||'').localeCompare(b.date||''))[0]?.date;const r=await fetch('/api/sp500history'+(first?'?from='+first:''));if(r.ok){const{history}=await r.json();setTlBHData(history||[])}}}} equityMode={tlEquityMode} onToggleMode={()=>setTlEquityMode(m=>m==='pnl'?'equity':'pnl')} contributions={contributions} showWithContribs={showWithContribs} onToggleContribs={()=>setShowWithContribs(v=>!v)} curveFloat={floatCurveDisp.length>1?floatCurveDisp:null} floatLoading={floatLoading} height={tlEquityHeight} showTimeScale={false} syncRef={tlDashSyncRef}/></div>
+                                  ?<div ref={tlEquityContainerRef} style={{flex:1,minHeight:0}}><TlEquityChart curve={eqDisp} curveSinFx={sfxDisp.length>1?sfxDisp:null} curveSinComm={scommDisp.length>1?scommDisp:null} curveWithContribs={cwcDisp.length>1?cwcDisp:null} curveBH={bhDisp?.length>1?bhDisp:null} showBH={tlShowBH} onToggleBH={async()=>{const next=!tlShowBH;setTlShowBH(next);if(next&&!tlBHData){const first=contributions.filter(c=>c.type==='aportacion').sort((a,b)=>(a.date||'').localeCompare(b.date||''))[0]?.date;const r=await fetch('/api/sp500history'+(first?'?from='+first:''));if(r.ok){const{history}=await r.json();setTlBHData(history||[])}}}} equityMode={tlEquityMode} onToggleMode={()=>setTlEquityMode(m=>m==='pnl'?'equity':'pnl')} contributions={contributions} showWithContribs={showWithContribs} onToggleContribs={()=>setShowWithContribs(v=>!v)} curveFloat={floatCurveDisp.length>1?floatCurveDisp:null} floatLoading={floatLoading} showFloat={tlShowFloat} onToggleFloat={()=>setTlShowFloat(v=>!v)} onFirstFloat={triggerFloatFetch} height={tlEquityHeight} showTimeScale={false} syncRef={tlDashSyncRef}/></div>
                                   :<div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:MONO,fontSize:10,color:'#3d5a7a'}}>Sin datos equity</div>}
                                 <div onClick={()=>{document.getElementById('tlDetailEquity')?.scrollIntoView({behavior:'smooth'})}} title="Ir al gráfico detallado"
                                   style={{position:'absolute',top:6,right:6,zIndex:10,cursor:'pointer',color:'#3d5a7a',fontSize:13,lineHeight:1,background:'rgba(13,21,32,0.75)',borderRadius:3,padding:'2px 5px',border:'1px solid #1a2d45'}}
@@ -6626,7 +6629,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           {/* GRÁFICOS DETALLADOS (scroll) */}
                           <div style={{flexShrink:0,overflowY:'auto'}}>
                             <div style={{padding:'5px 14px 3px',fontFamily:MONO,fontSize:8,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',borderBottom:'1px solid var(--border)'}}>Gráficos detallados</div>
-                            {eqDisp.length>1&&<div id="tlDetailEquity" style={{height:'calc(100vh - 30px)',position:'relative',display:'flex',flexDirection:'column'}}><TlEquityChart curve={eqDisp} curveSinFx={sfxDisp.length>1?sfxDisp:null} curveSinComm={scommDisp.length>1?scommDisp:null} curveWithContribs={cwcDisp.length>1?cwcDisp:null} curveBH={bhDisp?.length>1?bhDisp:null} showBH={tlShowBH} onToggleBH={async()=>{const next=!tlShowBH;setTlShowBH(next);if(next&&!tlBHData){const first=contributions.filter(c=>c.type==='aportacion').sort((a,b)=>(a.date||'').localeCompare(b.date||''))[0]?.date;const r=await fetch('/api/sp500history'+(first?'?from='+first:''));if(r.ok){const{history}=await r.json();setTlBHData(history||[])}}}} equityMode={tlEquityMode} onToggleMode={()=>setTlEquityMode(m=>m==='pnl'?'equity':'pnl')} contributions={contributions} showWithContribs={showWithContribs} onToggleContribs={()=>setShowWithContribs(v=>!v)} curveFloat={floatCurveDisp.length>1?floatCurveDisp:null} floatLoading={floatLoading} height={typeof window!=='undefined'?window.innerHeight-30:700} showTimeScale={true} syncRef={tlDashSyncRef}/></div>}
+                            {eqDisp.length>1&&<div id="tlDetailEquity" style={{height:'calc(100vh - 30px)',position:'relative',display:'flex',flexDirection:'column'}}><TlEquityChart curve={eqDisp} curveSinFx={sfxDisp.length>1?sfxDisp:null} curveSinComm={scommDisp.length>1?scommDisp:null} curveWithContribs={cwcDisp.length>1?cwcDisp:null} curveBH={bhDisp?.length>1?bhDisp:null} showBH={tlShowBH} onToggleBH={async()=>{const next=!tlShowBH;setTlShowBH(next);if(next&&!tlBHData){const first=contributions.filter(c=>c.type==='aportacion').sort((a,b)=>(a.date||'').localeCompare(b.date||''))[0]?.date;const r=await fetch('/api/sp500history'+(first?'?from='+first:''));if(r.ok){const{history}=await r.json();setTlBHData(history||[])}}}} equityMode={tlEquityMode} onToggleMode={()=>setTlEquityMode(m=>m==='pnl'?'equity':'pnl')} contributions={contributions} showWithContribs={showWithContribs} onToggleContribs={()=>setShowWithContribs(v=>!v)} curveFloat={floatCurveDisp.length>1?floatCurveDisp:null} floatLoading={floatLoading} showFloat={tlShowFloat} onToggleFloat={()=>setTlShowFloat(v=>!v)} onFirstFloat={triggerFloatFetch} height={typeof window!=='undefined'?window.innerHeight-30:700} showTimeScale={true} syncRef={tlDashSyncRef}/></div>}
                             {investData.length>1&&<div id="tlDetailInvest" style={{height:'calc(100vh - 30px)',position:'relative',display:'flex',flexDirection:'column'}}><TlInvestChart investData={investData} syncRef={tlDashSyncRef} patrimonyCurve={cwcDisp.length>1?cwcDisp:null} height={typeof window!=='undefined'?window.innerHeight-30:700} compact={false}/></div>}
                             {(closed.length>0||openTrades.length>0)&&(
                               <div id="tlDetailPnl" style={{height:'calc(100vh - 30px)',padding:'12px 16px 8px',borderTop:'1px solid var(--border)',display:'flex',flexDirection:'column'}}>

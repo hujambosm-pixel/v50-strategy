@@ -9,7 +9,7 @@ const CONTRIB_MARKER = {
   dividendo:  { color:'#aaff44', shape:'circle',     position:'belowBar', prefix:'D+' },
 }
 
-export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContribs, curveBH, showBH, onToggleBH, equityMode, onToggleMode, contributions, showWithContribs, onToggleContribs, curveFloat, floatLoading, height, showTimeScale, syncRef }) {
+export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContribs, curveBH, showBH, onToggleBH, equityMode, onToggleMode, contributions, showWithContribs, onToggleContribs, curveFloat, floatLoading, showFloat, onToggleFloat, onFirstFloat, height, showTimeScale, syncRef }) {
   const ref = useRef(null), chartRef = useRef(null), equityTooltipRef = useRef(null), lastTTStateRef = useRef(null)
   const mainSeriesRef = useRef(null)
   const [showSinFx, setShowSinFx] = useState(false)
@@ -18,7 +18,6 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
   const [showRetirada, setShowRetirada] = useState(true)
   const [showDividendo, setShowDividendo] = useState(true)
   const [showDD, setShowDD] = useState(false)
-  const [showFloat, setShowFloat] = useState(false)
 
   const isEquityMode = equityMode === 'equity'
   // Active main curve: equity mode + float toggle → floatCurve; equity mode → curveWithContribs; P&L mode → existing logic
@@ -282,9 +281,19 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
             Max DD
           </button>
         )}
-        {/* Float curve toggle — equity mode only */}
-        {isEquityMode&&(curveFloat?.length>1||floatLoading)&&(
-          <button onClick={()=>setShowFloat(v=>!v)} style={btnStyle(showFloat,'#52c788')} title={floatLoading?'Cargando precios históricos…':showFloat?'Ocultar curva con flotante':'Mostrar curva con flotante'} disabled={floatLoading}>
+        {/* Float curve toggle — equity mode, always visible; lazy fetch on first click */}
+        {isEquityMode&&(
+          <button
+            onClick={()=>{
+              const next=!showFloat
+              onToggleFloat?.(next)
+              // First activation: trigger the lazy fetch if data not yet loaded
+              if(next && !curveFloat && !floatLoading) onFirstFloat?.()
+            }}
+            style={btnStyle(showFloat,'#52c788')}
+            title={floatLoading?'Cargando precios históricos…':showFloat?'Ocultar curva con flotante':'Mostrar curva con flotante'}
+            disabled={floatLoading}
+          >
             <span style={{display:'inline-block',width:10,height:2,background:'#52c788',borderRadius:1,opacity:showFloat?0.8:0.3,borderBottom:'1px dashed #52c788'}}/>{floatLoading?' ⟳':' Flotante'}
           </button>
         )}
