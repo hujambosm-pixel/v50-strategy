@@ -510,6 +510,7 @@ export default function Home() {
   const [tipoFiltro,setTipoFiltro]=useState('none'),[sp500EmaR,setSp500EmaR]=useState(10),[sp500EmaL,setSp500EmaL]=useState(11)
   const [result,setResult]=useState(null),[loading,setLoading]=useState(false),[error,setError]=useState(null)
   const [labelMode,setLabelMode]=useState(0),[rulerOn,setRulerOn]=useState(false)
+  const [worstTradeDd,setWorstTradeDd]=useState(0)
   const [chartViewFull,setChartViewFull]=useState(false)
   const [settingsOpen,setSettingsOpen]=useState(false)
   const [settingsInitTab,setSettingsInitTab]=useState('integraciones')
@@ -519,6 +520,7 @@ export default function Home() {
   const [metricsView,setMetricsView]=useState('panel')   // 'multi'=3col | 'single'=one strat per block
   const [showStrategy,setShowStrategy]=useState(false),[showBH,setShowBH]=useState(true)
   const [showSP500,setShowSP500]=useState(false),[showCompound,setShowCompound]=useState(true)
+  const [showBacktestFloat,setShowBacktestFloat]=useState(false)
   const [watchlist,setWatchlist]=useState(WATCHLIST_DEFAULT)
   const [wlLoading,setWlLoading]=useState(true)
   const [wlLists,setWlLists]=useState([])             // [{id,name,position}] from watchlist_lists
@@ -2613,6 +2615,35 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   },[simbolo, tlTrades, tlFifo, result])
 
   const metrics=result?calcMetrics(result.trades,Number(capitalIni),result.capitalReinv,result.gananciaSimple,result.ganBH||0,result.startDate,result.meta?.ultimaFecha,Number(years)):null
+
+  // ── Backtest float equity curve — simple curve + open-trade unrealized P&L ──
+  const backtestFloatCurve = useMemo(()=>{
+    if(!result?.chartData?.length||!result?.trades?.length) return null
+    const cap=Number(capitalIni)
+    const trades=result.trades
+    const closeMap={}
+    result.chartData.forEach(d=>{closeMap[d.date]=d.close})
+    return result.chartData.map(({date})=>{
+      const closedPnl=trades.filter(t=>t.exitDate&&t.exitDate<=date).reduce((s,t)=>s+(t.pnlSimple||0),0)
+      const openPnl=trades.filter(t=>t.entryDate&&t.entryDate<=date&&t.exitDate&&t.exitDate>date).reduce((s,t)=>{
+        const c=closeMap[date]
+        if(!c||!t.entryPx) return s
+        return s+(c-t.entryPx)/t.entryPx*cap
+      },0)
+      return {date,value:cap+closedPnl+openPnl}
+    })
+  },[result,capitalIni])
+
+  const [maxDDFloat,maxDDFloatDate]=useMemo(()=>{
+    if(!backtestFloatCurve?.length) return [0,null]
+    let peak=backtestFloatCurve[0].value,maxDD=0,ddDate=null
+    for(const p of backtestFloatCurve){
+      if(p.value>peak) peak=p.value
+      const dd=peak>0?(peak-p.value)/peak*100:0
+      if(dd>maxDD){maxDD=dd;ddDate=p.date}
+    }
+    return [maxDD,ddDate]
+  },[backtestFloatCurve])
   // Load settings from Supabase on mount (overrides localStorage if newer)
   // Also apply ui defaults from localStorage (safe: runs client-side only)
   useEffect(()=>{
@@ -2711,13 +2742,14 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   // ── Unified metrics table definition ──
   // Each row: { label, strats: {compound:val, bh:val, simple:val} or 'all'/'trade'/'notbh' }
   // null = empty cell for that strategy
-  const buildUnifiedRows=(m, maxDDBH)=>{
+  const buildUnifiedRows=(m, maxDDBH, worstTradeDD=0)=>{
     if(!m) return []
     const v=(val,color)=>({val,color})
     const wr=m.winRate>=50?'#00e5a0':'#ff4d6d'
     const fb=m.factorBen>=1?'#00e5a0':'#ff4d6d'
     // Strategy-specific gains
     const cS=m.ganSimple>=0?'#00e5a0':'#ff4d6d', cC=m.ganComp>=0?'#00e5a0':'#ff4d6d', cBH=m.ganBH>=0?'#00e5a0':'#ff4d6d'
+    const wddStr=worstTradeDD<0?`${worstTradeDD.toFixed(1)}%`:'—'
     // B&H = buy & hold, no individual trades → trade-specific stats = null (—)
     return [
       {label:'Total Operaciones',     compound:v(m.n,'#ffd166'),            bh:null,                   simple:v(m.n,'#ffd166')},
@@ -2735,6 +2767,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
       {label:'Ganancia (%)',          compound:v(fmt(m.ganComp/Number(capitalIni)*100,2,'%'),cC), bh:v(fmt(m.ganBH/Number(capitalIni)*100,2,'%'),cBH), simple:v(fmt(m.ganTotalPct,2,'%'),cS)},
       {label:`CAGR (${fmt(m.anios,2)}a)`, compound:v(fmt(m.cagrC,2,'%'),m.cagrC>=0?'#00e5a0':'#ff4d6d'), bh:v(fmt(m.cagrBH,2,'%'),m.cagrBH>=0?'#00e5a0':'#ff4d6d'), simple:v(fmt(m.cagrS,2,'%'),m.cagrS>=0?'#00e5a0':'#ff4d6d')},
       {label:'Max Drawdown (%)',      compound:v(fmt(m.ddComp,2,'%'),'#ff4d6d'), bh:v(fmt(maxDDBH,2,'%'),'#ff4d6d'), simple:v(fmt(m.ddSimple,2,'%'),'#ff4d6d')},
+      {label:'Peor trade Max DD (%)', compound:v(wddStr,'#ff4d6d'),          bh:null,                   simple:v(wddStr,'#ff4d6d')},
     ]
   }
 
@@ -2894,7 +2927,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V8.20</title>
+        <title>Trading Simulator V8.21</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2971,7 +3004,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V8.20
+            <span className="dot"/>Trading Simulator V8.21
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4657,6 +4690,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       <CandleChart
                         data={result.chartData} emaRPeriod={emaR} emaLPeriod={emaL}
                         trades={result.trades||[]} maxDD={metrics?.ddSimple||0}
+                        onWorstDD={pct=>setWorstTradeDd(pct)}
                         labelMode={labelMode} rulerActive={rulerOn}
                         onChartReady={api=>{chartApiRef.current=api}}
                         onPriceAlarm={sidePanel!=='watchlist'&&sidePanel!=='risk'?price=>setPriceAlarmDlg({price,symbol:simbolo}):null}
@@ -4718,7 +4752,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         </button>
                       </div>
                       <StratSelector strats={metricsStrats} setStrats={setMetricsStrats}/>
-                      <MetricsWrapper rows={buildUnifiedRows(metrics,result?.maxDDBH||0)} strats={metricsStrats}/>
+                      <MetricsWrapper rows={buildUnifiedRows(metrics,result?.maxDDBH||0,worstTradeDd)} strats={metricsStrats}/>
                     </div>
                   )}
 
@@ -4732,6 +4766,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         {key:'co',label:'Compuesta',color:'#00e5a0',state:showCompound,set:setShowCompound},
                         {key:'bh',label:'B&H Activo',color:'#ffd166',state:showBH,set:setShowBH},
                         {key:'sp',label:'B&H SP500',color:'#9b72ff',state:showSP500,set:setShowSP500},
+                        {key:'fl',label:'Flotante',color:'#ff9a3c',state:showBacktestFloat,set:setShowBacktestFloat},
                       ].map(({key,label,color,state,set})=>(
                         <button key={key} onClick={()=>set(s=>!s)}
                           style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',border:`1px solid ${state?color:'#3d5a7a'}`,background:state?`${color}18`:'transparent',color:state?color:'#3d5a7a'}}>
@@ -4755,6 +4790,10 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       capitalIni={Number(capitalIni)}
                       showStrategy={showStrategy} showBH={showBH}
                       showSP500={showSP500} showCompound={showCompound}
+                      floatCurve={backtestFloatCurve}
+                      showFloat={showBacktestFloat}
+                      maxDDFloat={maxDDFloat}
+                      maxDDFloatDate={maxDDFloatDate}
                       syncRef={chartSyncRef}
                       chartHeight={equityH}
                     />

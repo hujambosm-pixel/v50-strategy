@@ -91,7 +91,7 @@ function createRiskPrimitive(configRef) {
   }
 }
 
-export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false }) {
+export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, onWorstDD }) {
   const containerRef=useRef(null), svgRef=useRef(null), legendRef=useRef(null), tooltipRef=useRef(null)
   const activeLegendRef = externalLegendRef || legendRef
   const chartRef=useRef(null), candlesRef=useRef(null)
@@ -122,7 +122,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       if(chartRef.current){chartRef.current.remove();chartRef.current=null}
       const chart=createChart(containerRef.current,{
         width:containerRef.current.clientWidth,height:chartHeight,
-        layout:{background:{color:'#080c14'},textColor:'#7a9bc0'},
+        layout:{background:{color:'#080c14'},textColor:'#7a9bc0',fontFamily:'-apple-system, BlinkMacSystemFont, Trebuchet MS, Roboto, Ubuntu, sans-serif'},
         grid:{vertLines:{color:'#0d1520'},horzLines:{color:'#0d1520'}},
         crosshair:{mode:CrosshairMode.Normal},
         rightPriceScale:{borderColor:'#1a2d45'},
@@ -157,6 +157,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       const worstMAETrade = tradeMAEs.length
         ? tradeMAEs.reduce((worst, t) => t.mae < worst.mae ? t : worst, tradeMAEs[0])
         : null
+      onWorstDD?.(worstMAETrade?.mae ?? 0)
 
       // Líneas de trades — diagonal P&L + horizontales entrada/stop estilo TV
       tradeMAEs.forEach(t=>{
@@ -180,7 +181,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         const maeLine=chart.addLineSeries({color:'rgba(255,77,109,0.55)',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
         maeLine.setData([{time:worstMAETrade.minDate,value:worstMAETrade.entryPx},{time:worstMAETrade.minDate,value:worstMAETrade.minLow}])
         // B) Marker en minDate con texto "MAE: -X.X%"
-        maeLine.setMarkers([{time:worstMAETrade.minDate,position:'belowBar',color:'#ff4d6d',shape:'circle',size:1,text:`MAE: ${worstMAETrade.mae.toFixed(1)}%`}])
+        maeLine.setMarkers([{time:worstMAETrade.minDate,position:'belowBar',color:'#ff4d6d',shape:'circle',size:1,text:`Max DD: ${worstMAETrade.mae.toFixed(1)}%`}])
       }
 
       // ── Flechas de cruce EMA ──
@@ -286,7 +287,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
               // ── Modo completo: # · % + € ──
               const num=`#${idx+1}`
               const line1=`${num} · ${t.pnlPct>=0?'+':''}${t.pnlPct.toFixed(2)}%`
-              const line2=`€${t.pnlSimple>=0?'+':''}${Math.round(t.pnlSimple)}  ·  ${t.dias}d${isWorstMAE&&t.mae<0?`  ·  MAE:${t.mae.toFixed(1)}%`:''}`
+              const line2=`€${t.pnlSimple>=0?'+':''}${Math.round(t.pnlSimple)}  ·  ${t.dias}d${isWorstMAE&&t.mae<0?`  ·  Max DD:${t.mae.toFixed(1)}%`:''}`
               const charW=8, BOX_H=40
               const w=Math.max(line1.length,line2.length)*charW+24
               const ZONE_TOP=22, ZONE_H=chartH*0.26

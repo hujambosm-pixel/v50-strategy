@@ -5,7 +5,9 @@ export default function EquityChart({
   strategyCurve,bhCurve,sp500BHCurve,compoundCurve,
   maxDDStrategy,maxDDBH,maxDDSP500,maxDDCompound,
   maxDDStrategyDate,maxDDBHDate,maxDDSP500Date,maxDDCompoundDate,
-  capitalIni,showStrategy,showBH,showSP500,showCompound,syncRef,chartHeight=260
+  capitalIni,showStrategy,showBH,showSP500,showCompound,
+  floatCurve,showFloat,maxDDFloat,maxDDFloatDate,
+  syncRef,chartHeight=260
 }) {
   const ref=useRef(null),chartRef=useRef(null),equityTooltipRef=useRef(null)
   useEffect(()=>{
@@ -14,7 +16,7 @@ export default function EquityChart({
       if(chartRef.current){chartRef.current.remove();chartRef.current=null}
       const chart=createChart(ref.current,{
         width:ref.current.clientWidth,height:chartHeight,
-        layout:{background:{color:'#080c14'},textColor:'#7a9bc0'},
+        layout:{background:{color:'#080c14'},textColor:'#7a9bc0',fontFamily:'-apple-system, BlinkMacSystemFont, Trebuchet MS, Roboto, Ubuntu, sans-serif'},
         grid:{vertLines:{color:'#0d1520'},horzLines:{color:'#0d1520'}},
         crosshair:{mode:CrosshairMode.Normal},
         rightPriceScale:{borderColor:'#1a2d45'},
@@ -45,7 +47,12 @@ export default function EquityChart({
           .setData(sp500BHCurve.map(p=>({time:p.date,value:p.value})))
         trackSeries(sp500BHCurve,'sp')
       }
-      const base=strategyCurve||compoundCurve||bhCurve||sp500BHCurve
+      if(showFloat&&floatCurve?.length){
+        chart.addLineSeries({color:'#ff9a3c',lineWidth:2,lineStyle:LineStyle.Dashed,lastValueVisible:true,priceLineVisible:false})
+          .setData(floatCurve.map(p=>({time:p.date,value:p.value})))
+        trackSeries(floatCurve,'fl')
+      }
+      const base=strategyCurve||compoundCurve||bhCurve||sp500BHCurve||floatCurve
       if(base?.length)
         chart.addLineSeries({color:'#3d5a7a',lineWidth:1,lineStyle:LineStyle.Dotted,lastValueVisible:false,priceLineVisible:false})
           .setData([{time:base[0].date,value:capitalIni},{time:base[base.length-1].date,value:capitalIni}])
@@ -73,8 +80,9 @@ export default function EquityChart({
       }
       if(showStrategy) addDD(strategyCurve,maxDDStrategyDate,maxDDStrategy,'#ff4d6d')
       if(showCompound) addDD(compoundCurve,maxDDCompoundDate,maxDDCompound,'#00a870')
-      if(showBH)       addDD(bhCurve,maxDDBHDate,maxDDBH,'#ff9a3c')
+      if(showBH)       addDD(bhCurve,maxDDBHDate,maxDDBH,'#cc7a1a')
       if(showSP500)    addDD(sp500BHCurve,maxDDSP500Date,maxDDSP500,'#7b5fe0')
+      if(showFloat)    addDD(floatCurve,maxDDFloatDate,maxDDFloat,'#e07030')
       // ── Cross-chart time sync ──
       if(syncRef?.current){
         const syncId=Symbol()
@@ -100,6 +108,7 @@ export default function EquityChart({
         if(d.co!=null) rows.push(`<div style="display:flex;justify-content:space-between;gap:20px"><span style="color:#00e5a0">Compuesta</span><b style="color:#00e5a0">€${d.co.toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2})}</b></div>`)
         if(d.bh!=null) rows.push(`<div style="display:flex;justify-content:space-between;gap:20px"><span style="color:#ffd166">B&H Activo</span><b style="color:#ffd166">€${d.bh.toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2})}</b></div>`)
         if(d.sp!=null) rows.push(`<div style="display:flex;justify-content:space-between;gap:20px"><span style="color:#9b72ff">B&H SP500</span><b style="color:#9b72ff">€${d.sp.toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2})}</b></div>`)
+        if(d.fl!=null) rows.push(`<div style="display:flex;justify-content:space-between;gap:20px"><span style="color:#ff9a3c">Flotante</span><b style="color:#ff9a3c">€${d.fl.toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2})}</b></div>`)
         if(!rows.length){tt.style.display='none';return}
         const cw=ref.current?.clientWidth||600
         tt.style.display='block'
@@ -114,7 +123,7 @@ export default function EquityChart({
       return()=>ro.disconnect()
     })
     return()=>{if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null}}
-  },[strategyCurve,bhCurve,sp500BHCurve,compoundCurve,maxDDStrategy,maxDDBH,maxDDSP500,maxDDCompound,maxDDStrategyDate,maxDDBHDate,maxDDSP500Date,maxDDCompoundDate,capitalIni,showStrategy,showBH,showSP500,showCompound])
+  },[strategyCurve,bhCurve,sp500BHCurve,compoundCurve,maxDDStrategy,maxDDBH,maxDDSP500,maxDDCompound,maxDDStrategyDate,maxDDBHDate,maxDDSP500Date,maxDDCompoundDate,capitalIni,showStrategy,showBH,showSP500,showCompound,floatCurve,showFloat,maxDDFloat,maxDDFloatDate])
 
   useEffect(()=>{
     if(chartRef.current) try{chartRef.current.applyOptions({height:chartHeight})}catch(_){}

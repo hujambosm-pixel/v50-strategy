@@ -46,7 +46,7 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
       if(chartRef.current){chartRef.current.remove();chartRef.current=null;mainSeriesRef.current=null}
       const chart = createChart(ref.current,{
         width:ref.current.clientWidth, height:height||ref.current.clientHeight||200,
-        layout:{background:{color:'#080c14'},textColor:'#7a9bc0'},
+        layout:{background:{color:'#080c14'},textColor:'#7a9bc0',fontFamily:'-apple-system, BlinkMacSystemFont, Trebuchet MS, Roboto, Ubuntu, sans-serif'},
         grid:{vertLines:{color:'#0d1520'},horzLines:{color:'#0d1520'}},
         crosshair:{mode:CrosshairMode.Normal},
         rightPriceScale:{borderColor:'#1a2d45'},
@@ -342,7 +342,7 @@ export function TlInvestChart({ investData, syncRef, patrimonyCurve, compact, he
         : Math.max(60, height||ref.current.clientHeight||200)
       const chart = createChart(ref.current,{
         width:ref.current.clientWidth, height:chartH,
-        layout:{background:{color:'#0b0f1a'},textColor:'#7a9bc0'},
+        layout:{background:{color:'#0b0f1a'},textColor:'#7a9bc0',fontFamily:'-apple-system, BlinkMacSystemFont, Trebuchet MS, Roboto, Ubuntu, sans-serif'},
         grid:{vertLines:{color:'#0d1520'},horzLines:{color:'#0d1520'}},
         crosshair:{mode:CrosshairMode.Normal},
         rightPriceScale:{borderColor:'#1a2d45',scaleMargins:{top:0.08,bottom:0.06}},
