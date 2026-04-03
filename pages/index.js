@@ -1714,6 +1714,7 @@ export default function Home() {
       const prev=alarmStatus||{}
     const newStatus=data||{}
     setAlarmStatus(newStatus)
+    console.log('alarmStatus activos:',Object.entries(newStatus).filter(([sym,conds])=>conds&&Object.values(conds).some(c=>c?.active===true)).map(([sym])=>sym))
     // Check if setting enabled: show popup on new active alarms
     try{
       const sett=JSON.parse(localStorage.getItem('v50_settings')||'{}')
@@ -2804,7 +2805,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V8.01</title>
+        <title>Trading Simulator V8.2</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2881,7 +2882,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V8.01
+            <span className="dot"/>Trading Simulator V8.2
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
