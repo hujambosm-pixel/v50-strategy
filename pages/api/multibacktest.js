@@ -153,33 +153,37 @@ function buildSlotsCurves(assetResults, capitalIni) {
       const exitsBefore = trades.filter(t => t.exitDate <= date)
       const simple = slotCapital + exitsBefore.reduce((s,t) => s + t.pnlSimple, 0)
       const compound = exitsBefore.length ? exitsBefore[exitsBefore.length-1].capitalTras : slotCapital
-      const open = trades.some(t => t.entryDate <= date && t.exitDate > date)
-      let bh = slotCapital
+      const openTrades = trades.filter(t => t.entryDate <= date && t.exitDate > date)
+      const open = openTrades.length > 0
+      let bh = slotCapital, closePx = null
       if (p0 && filtData.length) {
         let bar = null
         for (let i = filtData.length-1; i>=0; i--) { if (filtData[i].date <= date) { bar=filtData[i]; break } }
-        if (bar) bh = slotCapital * (bar.close / p0)
+        if (bar) { bh = slotCapital * (bar.close / p0); closePx = bar.close }
       }
-      byDate[date] = { simple, compound, open, bh }
+      const openPnl = openTrades.reduce((s,t) => closePx!=null ? s+(closePx-t.entryPx)/t.entryPx*slotCapital : s, 0)
+      byDate[date] = { simple, compound, open, bh, openPnl }
     })
     return byDate
   })
 
-  const simpleCurve=[], compoundCurve=[], bhCurve=[], occupancyCurve=[]
+  const simpleCurve=[], compoundCurve=[], bhCurve=[], occupancyCurve=[], floatSimpleCurve=[], floatCompoundCurve=[]
   const step = Math.max(1, Math.floor(filteredDates.length / 400))
   filteredDates.filter((_,i)=>i%step===0||i===filteredDates.length-1).forEach(date => {
-    let totSimple=0, totCompound=0, totBH=0, openSlots=0
+    let totSimple=0, totCompound=0, totBH=0, openSlots=0, totOpenPnl=0
     assetEquities.forEach(byDate => {
       const e = byDate[date]
-      if (e) { totSimple+=e.simple; totCompound+=e.compound; totBH+=e.bh; if(e.open)openSlots++ }
+      if (e) { totSimple+=e.simple; totCompound+=e.compound; totBH+=e.bh; if(e.open)openSlots++; totOpenPnl+=e.openPnl||0 }
     })
     simpleCurve.push({ date, value: totSimple })
     compoundCurve.push({ date, value: totCompound })
     bhCurve.push({ date, value: totBH })
     occupancyCurve.push({ date, value: (openSlots/n)*100 })
+    floatSimpleCurve.push({ date, value: totSimple+totOpenPnl })
+    floatCompoundCurve.push({ date, value: totCompound+totOpenPnl })
   })
 
-  return { simpleCurve, compoundCurve, bhCurve, occupancyCurve, startDate, ..._calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni) }
+  return { simpleCurve, compoundCurve, bhCurve, occupancyCurve, startDate, floatSimpleCurve, floatCompoundCurve, ..._calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni), ..._calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni) }
 }
 
 // ── MODO ROTATIVO: pool único, una posición a la vez ─────────
@@ -225,6 +229,13 @@ function buildRotativoCurves(assetResults, capitalIni, rankMap) {
     activeUntil = trade.exitDate
   }
 
+  // Precompute capital at entry per trade (= pool before the trade started)
+  executedTrades.forEach((t,i)=>{ t._capitalAtEntry = i===0 ? capitalIni : executedTrades[i-1].capitalTras })
+
+  // Build symbol → filtered OHLCV map for float curve
+  const symbolDataMap={}
+  assetResults.forEach(ar=>{ symbolDataMap[ar.symbol] = ar.data ? ar.data.filter(d=>d.date>=startDate) : [] })
+
   // Construir curva de equity (step function en cierres)
   // Para cada fecha: pool = capitalTras del último trade cerrado antes de esa fecha
   const closedByDate = {}
@@ -235,7 +246,7 @@ function buildRotativoCurves(assetResults, capitalIni, rankMap) {
   const step = Math.max(1, Math.floor(filteredDates.length / 400))
   const sampledDates = filteredDates.filter((_,i) => i%step===0 || i===filteredDates.length-1)
 
-  const compoundCurve = []
+  const compoundCurve=[], floatSimpleCurve=[], floatCompoundCurve=[]
   let lastPool = capitalIni
   sampledDates.forEach(date => {
     // Actualizar pool con todos los cierres hasta esta fecha
@@ -246,6 +257,17 @@ function buildRotativoCurves(assetResults, capitalIni, rankMap) {
     const closedSoFar = executedTrades.filter(t => t.exitDate <= date)
     const val = closedSoFar.length ? closedSoFar[closedSoFar.length-1].capitalTras : capitalIni
     compoundCurve.push({ date, value: val })
+    // Float: unrealized P&L of the single active trade (rotativo = only one at a time)
+    const activeTrade = executedTrades.find(t => t.entryDate <= date && t.exitDate > date)
+    let openPnl = 0
+    if(activeTrade) {
+      const fData = symbolDataMap[activeTrade.symbol]||[]
+      let closePx = null
+      for(let i=fData.length-1;i>=0;i--){if(fData[i].date<=date){closePx=fData[i].close;break}}
+      if(closePx!=null) openPnl = (closePx-activeTrade.entryPx)/activeTrade.entryPx*activeTrade._capitalAtEntry
+    }
+    floatSimpleCurve.push({date, value:val+openPnl})
+    floatCompoundCurve.push({date, value:val+openPnl})
   })
 
   // Ocupación: ¿hay trade abierto en esa fecha?
@@ -274,8 +296,9 @@ function buildRotativoCurves(assetResults, capitalIni, rankMap) {
 
   return {
     simpleCurve, compoundCurve, bhCurve, occupancyCurve, startDate,
-    executedTrades,
-    ..._calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni)
+    executedTrades, floatSimpleCurve, floatCompoundCurve,
+    ..._calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni),
+    ..._calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni)
   }
 }
 
@@ -306,40 +329,46 @@ function buildCustomCurves(assetResults, capitalIni, weights) {
       const compound = exitsBefore.length
         ? slotCapital + (exitsBefore[exitsBefore.length-1].capitalTras - origSlot) * scale
         : slotCapital
-      const open = trades.some(t => t.entryDate <= date && t.exitDate > date)
-      let bh = slotCapital
+      const openTrades = trades.filter(t => t.entryDate <= date && t.exitDate > date)
+      const open = openTrades.length > 0
+      let bh = slotCapital, closePx = null
       if (p0 && filtData.length) {
         let bar = null
         for (let i = filtData.length-1; i>=0; i--) { if (filtData[i].date <= date) { bar=filtData[i]; break } }
-        if (bar) bh = slotCapital * (bar.close / p0)
+        if (bar) { bh = slotCapital * (bar.close / p0); closePx = bar.close }
       }
-      byDate[date] = { simple, compound, open, bh }
+      const openPnl = openTrades.reduce((s,t) => closePx!=null ? s+(closePx-t.entryPx)/t.entryPx*slotCapital : s, 0)
+      byDate[date] = { simple, compound, open, bh, openPnl }
     })
     return { byDate, slotCapital }
   })
 
-  const simpleCurve=[], compoundCurve=[], bhCurve=[], occupancyCurve=[]
+  const simpleCurve=[], compoundCurve=[], bhCurve=[], occupancyCurve=[], floatSimpleCurve=[], floatCompoundCurve=[]
   const totalSlots = assetResults.length
   const step = Math.max(1, Math.floor(filteredDates.length / 400))
   filteredDates.filter((_,i)=>i%step===0||i===filteredDates.length-1).forEach(date => {
-    let totSimple=0, totCompound=0, totBH=0, openSlots=0
+    let totSimple=0, totCompound=0, totBH=0, openSlots=0, totOpenPnl=0
     assetEquities.forEach(({ byDate }) => {
       const e = byDate[date]
-      if (e) { totSimple+=e.simple; totCompound+=e.compound; totBH+=e.bh; if(e.open)openSlots++ }
+      if (e) { totSimple+=e.simple; totCompound+=e.compound; totBH+=e.bh; if(e.open)openSlots++; totOpenPnl+=e.openPnl||0 }
     })
     simpleCurve.push({ date, value: totSimple })
     compoundCurve.push({ date, value: totCompound })
     bhCurve.push({ date, value: totBH })
     occupancyCurve.push({ date, value: (openSlots/totalSlots)*100 })
+    floatSimpleCurve.push({ date, value: totSimple+totOpenPnl })
+    floatCompoundCurve.push({ date, value: totCompound+totOpenPnl })
   })
 
-  return { simpleCurve, compoundCurve, bhCurve, occupancyCurve, startDate, ..._calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni) }
+  return { simpleCurve, compoundCurve, bhCurve, occupancyCurve, startDate, floatSimpleCurve, floatCompoundCurve, ..._calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni), ..._calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni) }
 }
 
 // ── Helpers ──────────────────────────────────────────────────
 function _emptyCurves(startDate=null) {
   return { simpleCurve:[], compoundCurve:[], bhCurve:[], occupancyCurve:[], startDate,
-    maxDDSimple:0, maxDDSimpleDate:null, maxDDCompound:0, maxDDCompoundDate:null, maxDDBH:0, maxDDBHDate:null }
+    maxDDSimple:0, maxDDSimpleDate:null, maxDDCompound:0, maxDDCompoundDate:null, maxDDBH:0, maxDDBHDate:null,
+    floatSimpleCurve:[], floatCompoundCurve:[],
+    maxDDFloatSimple:0, maxDDFloatSimpleDate:null, maxDDFloatCompound:0, maxDDFloatCompoundDate:null }
 }
 function _commonDates(assetResults) {
   const dateSet = new Set()
@@ -362,6 +391,17 @@ function _calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni) {
   const { maxDD:maxDDCompound, maxDDDate:maxDDCompoundDate } = calcDD(compoundCurve)
   const { maxDD:maxDDBH, maxDDDate:maxDDBHDate } = calcDD(bhCurve)
   return { maxDDSimple, maxDDSimpleDate, maxDDCompound, maxDDCompoundDate, maxDDBH, maxDDBHDate }
+}
+function _calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni) {
+  const calcDD = curve => {
+    if(!curve?.length) return { maxDD:0, maxDDDate:null }
+    let peak=curve[0]?.value||capitalIni, maxDD=0, maxDDDate=null
+    curve.forEach(p=>{ if(!p)return; if(p.value>peak)peak=p.value; const dd=(peak-p.value)/peak*100; if(dd>maxDD){maxDD=dd;maxDDDate=p.date} })
+    return { maxDD, maxDDDate }
+  }
+  const { maxDD:maxDDFloatSimple, maxDDDate:maxDDFloatSimpleDate } = calcDD(floatSimpleCurve)
+  const { maxDD:maxDDFloatCompound, maxDDDate:maxDDFloatCompoundDate } = calcDD(floatCompoundCurve)
+  return { maxDDFloatSimple, maxDDFloatSimpleDate, maxDDFloatCompound, maxDDFloatCompoundDate }
 }
 
 const sleep = ms => new Promise(r => setTimeout(r, ms))

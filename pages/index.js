@@ -696,6 +696,7 @@ export default function Home() {
   const [mcShowCompound,setMcShowCompound]=useState(true)
   const [mcShowBH,setMcShowBH]=useState(true)
   const [mcShowSP500,setMcShowSP500]=useState(true)
+  const [showMultiFloat,setShowMultiFloat]=useState(false)
   const [mcShowOccupancy,setMcShowOccupancy]=useState(true)
   const [mcOccMode,setMcOccMode]=useState('compound')  // own filter for MC capital chart
   const mcChartRef=useRef(null)
@@ -2934,7 +2935,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V8.24</title>
+        <title>Trading Simulator V8.25</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3011,7 +3012,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V8.24
+            <span className="dot"/>Trading Simulator V8.25
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5124,6 +5125,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         {key:'compound',label:'Compuesto',        color:'#00e5a0',state:mcShowCompound,set:setMcShowCompound},
                         {key:'bh',      label:'B&H Diversificado',color:'#ffd166',state:mcShowBH,      set:setMcShowBH},
                         {key:'sp500',   label:'B&H SP500',        color:'#9b72ff',state:mcShowSP500,   set:setMcShowSP500},
+                        {key:'fl',      label:'Flotante',         color:'#ff9a3c',state:showMultiFloat, set:setShowMultiFloat},
                       ].map(({key,label,color,state,set})=>(
                         <button key={key} onClick={()=>set(s=>!s)}
                           style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',
@@ -5164,6 +5166,11 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       maxDDCompound={mcResult.maxDDCompound} maxDDCompoundDate={mcResult.maxDDCompoundDate}
                       maxDDBH={mcResult.maxDDBH}           maxDDBHDate={mcResult.maxDDBHDate}
                       maxDDSP500={mcResult.maxDDSP500||0}  maxDDSP500Date={mcResult.maxDDSP500Date||null}
+                      floatSimpleCurve={mcResult.floatSimpleCurve||[]}
+                      floatCompoundCurve={mcResult.floatCompoundCurve||[]}
+                      showFloat={showMultiFloat}
+                      maxDDFloatSimple={mcResult.maxDDFloatSimple||0}      maxDDFloatSimpleDate={mcResult.maxDDFloatSimpleDate||null}
+                      maxDDFloatCompound={mcResult.maxDDFloatCompound||0}  maxDDFloatCompoundDate={mcResult.maxDDFloatCompoundDate||null}
                       showSimple={mcShowSimple} showCompound={mcShowCompound}
                       showBH={mcShowBH} showSP500={mcShowSP500}
                       onReady={api=>{mcChartApiRef.current=api}}
@@ -5231,8 +5238,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                     {label:'Ganancia Compuesta',val:fmt(lastC-capIni,0,'€'),color:lastC>=capIni?'#00e5a0':'#ff4d6d'},
                     {label:`CAGR Simple (${fmt(anios,2)}a)`,val:fmt(cagrS,2,'%'),color:cagrS>=0?'#00e5a0':'#ff4d6d'},
                     {label:`CAGR Compuesto (${fmt(anios,2)}a)`,val:fmt(cagrC,2,'%'),color:cagrC>=0?'#00e5a0':'#ff4d6d'},
-                    {label:'Max DD Simple',val:fmt(mcResult.maxDDSimple,2,'%'),color:'#ff4d6d'},
-                    {label:'Max DD Compuesto',val:fmt(mcResult.maxDDCompound,2,'%'),color:'#ff4d6d'},
+                    {label:'Max DD Simple',val:fmt(showMultiFloat&&mcResult.maxDDFloatSimple?mcResult.maxDDFloatSimple:mcResult.maxDDSimple,2,'%'),color:'#ff4d6d'},
+                    {label:'Max DD Compuesto',val:fmt(showMultiFloat&&mcResult.maxDDFloatCompound?mcResult.maxDDFloatCompound:mcResult.maxDDCompound,2,'%'),color:'#ff4d6d'},
                   ]
                   return(
                     <div className="metrics-section" style={{borderBottom:'1px solid var(--border)'}}>

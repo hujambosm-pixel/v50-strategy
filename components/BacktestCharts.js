@@ -3,6 +3,8 @@ import { useRef, useEffect, useState } from 'react'
 export function MultiCartChart({simpleCurve,compoundCurve,bhCurve,sp500BHCurve,capitalIni,
   maxDDSimple,maxDDSimpleDate,maxDDCompound,maxDDCompoundDate,maxDDBH,maxDDBHDate,
   maxDDSP500,maxDDSP500Date,
+  floatSimpleCurve,floatCompoundCurve,showFloat,
+  maxDDFloatSimple,maxDDFloatSimpleDate,maxDDFloatCompound,maxDDFloatCompoundDate,
   showSimple,showCompound,showBH,showSP500,onReady,syncRef,chartHeight=300}) {
   const ref=useRef(null),chartRef=useRef(null)
 
@@ -19,11 +21,18 @@ export function MultiCartChart({simpleCurve,compoundCurve,bhCurve,sp500BHCurve,c
         timeScale:{borderColor:'#1a2d45',timeVisible:false},
       })
       chartRef.current=chart
-      const base=simpleCurve||compoundCurve||bhCurve||sp500BHCurve
+      // Resolve float vs closed curves
+      const stCurve=(showFloat&&floatSimpleCurve?.length)?floatSimpleCurve:simpleCurve
+      const coCurve=(showFloat&&floatCompoundCurve?.length)?floatCompoundCurve:compoundCurve
+      const stDD=(showFloat&&floatSimpleCurve?.length)?maxDDFloatSimple:maxDDSimple
+      const stDDDate=(showFloat&&floatSimpleCurve?.length)?maxDDFloatSimpleDate:maxDDSimpleDate
+      const cDD=(showFloat&&floatCompoundCurve?.length)?maxDDFloatCompound:maxDDCompound
+      const cDDDate=(showFloat&&floatCompoundCurve?.length)?maxDDFloatCompoundDate:maxDDCompoundDate
+      const base=stCurve||coCurve||bhCurve||sp500BHCurve
       if(base?.length) chart.addLineSeries({color:'#2a3f55',lineWidth:1,lineStyle:LineStyle.Dotted,lastValueVisible:false,priceLineVisible:false})
         .setData([{time:base[0].date,value:capitalIni},{time:base[base.length-1].date,value:capitalIni}])
-      if(showSimple&&simpleCurve?.length) chart.addLineSeries({color:'#00d4ff',lineWidth:2,lastValueVisible:true,priceLineVisible:false}).setData(simpleCurve.map(p=>({time:p.date,value:p.value})))
-      if(showCompound&&compoundCurve?.length) chart.addLineSeries({color:'#00e5a0',lineWidth:2,lastValueVisible:true,priceLineVisible:false}).setData(compoundCurve.map(p=>({time:p.date,value:p.value})))
+      if(showSimple&&stCurve?.length) chart.addLineSeries({color:'#00d4ff',lineWidth:2,lastValueVisible:true,priceLineVisible:false}).setData(stCurve.map(p=>({time:p.date,value:p.value})))
+      if(showCompound&&coCurve?.length) chart.addLineSeries({color:'#00e5a0',lineWidth:2,lastValueVisible:true,priceLineVisible:false}).setData(coCurve.map(p=>({time:p.date,value:p.value})))
       if(showBH&&bhCurve?.length) chart.addLineSeries({color:'#ffd166',lineWidth:2,lineStyle:LineStyle.Dashed,lastValueVisible:true,priceLineVisible:false}).setData(bhCurve.map(p=>({time:p.date,value:p.value})))
       if(showSP500&&sp500BHCurve?.length) chart.addLineSeries({color:'#9b72ff',lineWidth:2,lineStyle:LineStyle.Dotted,lastValueVisible:true,priceLineVisible:false}).setData(sp500BHCurve.map(p=>({time:p.date,value:p.value})))
       const addDD=(curve,date,dd,color)=>{
@@ -36,8 +45,8 @@ export function MultiCartChart({simpleCurve,compoundCurve,bhCurve,sp500BHCurve,c
         s.setData([{time:peak.date,value:peak.value},{time:trough.date,value:trough.value}])
         s.setMarkers([{time:trough.date,position:'belowBar',color,shape:'circle',size:0,text:`↓ -${dd.toFixed(1)}%`}])
       }
-      if(showSimple) addDD(simpleCurve,maxDDSimpleDate,maxDDSimple,'#ff4d6d')
-      if(showCompound) addDD(compoundCurve,maxDDCompoundDate,maxDDCompound,'#00a870')
+      if(showSimple) addDD(stCurve,stDDDate,stDD,'#ff4d6d')
+      if(showCompound) addDD(coCurve,cDDDate,cDD,'#00a870')
       if(showBH) addDD(bhCurve,maxDDBHDate,maxDDBH,'#ff9a3c')
       if(showSP500) addDD(sp500BHCurve,maxDDSP500Date,maxDDSP500,'#7b5fe0')
       // Cross-chart sync
@@ -60,7 +69,7 @@ export function MultiCartChart({simpleCurve,compoundCurve,bhCurve,sp500BHCurve,c
       return()=>ro.disconnect()
     })
     return()=>{if(chartRef.current){chartRef.current.remove();chartRef.current=null}}
-  },[simpleCurve,compoundCurve,bhCurve,sp500BHCurve,capitalIni,maxDDSimple,maxDDSimpleDate,maxDDCompound,maxDDCompoundDate,maxDDBH,maxDDBHDate,maxDDSP500,maxDDSP500Date,showSimple,showCompound,showBH,showSP500])
+  },[simpleCurve,compoundCurve,bhCurve,sp500BHCurve,capitalIni,maxDDSimple,maxDDSimpleDate,maxDDCompound,maxDDCompoundDate,maxDDBH,maxDDBHDate,maxDDSP500,maxDDSP500Date,floatSimpleCurve,floatCompoundCurve,showFloat,maxDDFloatSimple,maxDDFloatSimpleDate,maxDDFloatCompound,maxDDFloatCompoundDate,showSimple,showCompound,showBH,showSP500])
 
   useEffect(()=>{
     if(chartRef.current) try{chartRef.current.applyOptions({height:chartHeight})}catch(_){}
