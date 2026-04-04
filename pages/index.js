@@ -510,7 +510,6 @@ export default function Home() {
   const [tipoFiltro,setTipoFiltro]=useState('none'),[sp500EmaR,setSp500EmaR]=useState(10),[sp500EmaL,setSp500EmaL]=useState(11)
   const [result,setResult]=useState(null),[loading,setLoading]=useState(false),[error,setError]=useState(null)
   const [labelMode,setLabelMode]=useState(0),[rulerOn,setRulerOn]=useState(false)
-  const [worstTradeDd,setWorstTradeDd]=useState(0)
   const [chartViewFull,setChartViewFull]=useState(false)
   const [settingsOpen,setSettingsOpen]=useState(false)
   const [settingsInitTab,setSettingsInitTab]=useState('integraciones')
@@ -2634,16 +2633,26 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
     })
   },[result,capitalIni])
 
-  const [maxDDFloat,maxDDFloatDate]=useMemo(()=>{
-    if(!backtestFloatCurve?.length) return [0,null]
-    let peak=backtestFloatCurve[0].value,maxDD=0,ddDate=null
-    for(const p of backtestFloatCurve){
-      if(p.value>peak) peak=p.value
-      const dd=peak>0?(peak-p.value)/peak*100:0
-      if(dd>maxDD){maxDD=dd;ddDate=p.date}
-    }
+  const computeMaxDD=curve=>{
+    if(!curve?.length) return [0,null]
+    let peak=curve[0].value,maxDD=0,ddDate=null
+    for(const p of curve){if(p.value>peak)peak=p.value;const dd=peak>0?(peak-p.value)/peak*100:0;if(dd>maxDD){maxDD=dd;ddDate=p.date}}
     return [maxDD,ddDate]
-  },[backtestFloatCurve])
+  }
+  const [maxDDFloat,maxDDFloatDate]=useMemo(()=>computeMaxDD(backtestFloatCurve),[backtestFloatCurve])
+
+  // ── Backtest float compound curve — compound curve + same unrealized delta as simple ──
+  const backtestFloatCompoundCurve=useMemo(()=>{
+    if(!backtestFloatCurve||!result?.strategyCurve?.length||!result?.compoundCurve?.length) return null
+    const stratMap={};result.strategyCurve.forEach(p=>{stratMap[p.date]=p.value})
+    const floatMap={};backtestFloatCurve.forEach(p=>{floatMap[p.date]=p.value})
+    return result.compoundCurve.map(p=>{
+      const stratVal=stratMap[p.date]??p.value
+      const delta=(floatMap[p.date]??stratVal)-stratVal
+      return {date:p.date,value:p.value+delta}
+    })
+  },[backtestFloatCurve,result])
+  const [maxDDFloatCompound,maxDDFloatCompoundDate]=useMemo(()=>computeMaxDD(backtestFloatCompoundCurve),[backtestFloatCompoundCurve])
   // Load settings from Supabase on mount (overrides localStorage if newer)
   // Also apply ui defaults from localStorage (safe: runs client-side only)
   useEffect(()=>{
@@ -2742,14 +2751,13 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   // ── Unified metrics table definition ──
   // Each row: { label, strats: {compound:val, bh:val, simple:val} or 'all'/'trade'/'notbh' }
   // null = empty cell for that strategy
-  const buildUnifiedRows=(m, maxDDBH, worstTradeDD=0)=>{
+  const buildUnifiedRows=(m, maxDDBH)=>{
     if(!m) return []
     const v=(val,color)=>({val,color})
     const wr=m.winRate>=50?'#00e5a0':'#ff4d6d'
     const fb=m.factorBen>=1?'#00e5a0':'#ff4d6d'
     // Strategy-specific gains
     const cS=m.ganSimple>=0?'#00e5a0':'#ff4d6d', cC=m.ganComp>=0?'#00e5a0':'#ff4d6d', cBH=m.ganBH>=0?'#00e5a0':'#ff4d6d'
-    const wddStr=worstTradeDD<0?`${worstTradeDD.toFixed(1)}%`:'—'
     // B&H = buy & hold, no individual trades → trade-specific stats = null (—)
     return [
       {label:'Total Operaciones',     compound:v(m.n,'#ffd166'),            bh:null,                   simple:v(m.n,'#ffd166')},
@@ -2767,7 +2775,6 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
       {label:'Ganancia (%)',          compound:v(fmt(m.ganComp/Number(capitalIni)*100,2,'%'),cC), bh:v(fmt(m.ganBH/Number(capitalIni)*100,2,'%'),cBH), simple:v(fmt(m.ganTotalPct,2,'%'),cS)},
       {label:`CAGR (${fmt(m.anios,2)}a)`, compound:v(fmt(m.cagrC,2,'%'),m.cagrC>=0?'#00e5a0':'#ff4d6d'), bh:v(fmt(m.cagrBH,2,'%'),m.cagrBH>=0?'#00e5a0':'#ff4d6d'), simple:v(fmt(m.cagrS,2,'%'),m.cagrS>=0?'#00e5a0':'#ff4d6d')},
       {label:'Max Drawdown (%)',      compound:v(fmt(m.ddComp,2,'%'),'#ff4d6d'), bh:v(fmt(maxDDBH,2,'%'),'#ff4d6d'), simple:v(fmt(m.ddSimple,2,'%'),'#ff4d6d')},
-      {label:'Peor trade Max DD (%)', compound:v(wddStr,'#ff4d6d'),          bh:null,                   simple:v(wddStr,'#ff4d6d')},
     ]
   }
 
@@ -2927,7 +2934,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V8.21</title>
+        <title>Trading Simulator V8.22</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3004,7 +3011,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V8.21
+            <span className="dot"/>Trading Simulator V8.22
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4690,7 +4697,6 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       <CandleChart
                         data={result.chartData} emaRPeriod={emaR} emaLPeriod={emaL}
                         trades={result.trades||[]} maxDD={metrics?.ddSimple||0}
-                        onWorstDD={pct=>setWorstTradeDd(pct)}
                         labelMode={labelMode} rulerActive={rulerOn}
                         onChartReady={api=>{chartApiRef.current=api}}
                         onPriceAlarm={sidePanel!=='watchlist'&&sidePanel!=='risk'?price=>setPriceAlarmDlg({price,symbol:simbolo}):null}
@@ -4752,7 +4758,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         </button>
                       </div>
                       <StratSelector strats={metricsStrats} setStrats={setMetricsStrats}/>
-                      <MetricsWrapper rows={buildUnifiedRows(metrics,result?.maxDDBH||0,worstTradeDd)} strats={metricsStrats}/>
+                      <MetricsWrapper rows={buildUnifiedRows(metrics,result?.maxDDBH||0)} strats={metricsStrats}/>
                     </div>
                   )}
 
@@ -4791,9 +4797,12 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       showStrategy={showStrategy} showBH={showBH}
                       showSP500={showSP500} showCompound={showCompound}
                       floatCurve={backtestFloatCurve}
+                      floatCompoundCurve={backtestFloatCompoundCurve}
                       showFloat={showBacktestFloat}
                       maxDDFloat={maxDDFloat}
                       maxDDFloatDate={maxDDFloatDate}
+                      maxDDFloatCompound={maxDDFloatCompound}
+                      maxDDFloatCompoundDate={maxDDFloatCompoundDate}
                       syncRef={chartSyncRef}
                       chartHeight={equityH}
                     />

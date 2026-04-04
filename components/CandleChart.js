@@ -91,7 +91,7 @@ function createRiskPrimitive(configRef) {
   }
 }
 
-export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, onWorstDD }) {
+export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false }) {
   const containerRef=useRef(null), svgRef=useRef(null), legendRef=useRef(null), tooltipRef=useRef(null)
   const activeLegendRef = externalLegendRef || legendRef
   const chartRef=useRef(null), candlesRef=useRef(null)
@@ -149,15 +149,15 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         if(!t.entryDate||!t.exitDate||!t.entryPx) return { ...t, mae:0, minLow:t.entryPx, minDate:t.entryDate }
         const velas = data.filter(d => d.date >= t.entryDate && d.date <= t.exitDate)
         if(!velas.length) return { ...t, mae:0, minLow:t.entryPx, minDate:t.entryDate }
+        const maxHigh = Math.max(...velas.map(v => v.high))
         const minLow = Math.min(...velas.map(v => v.low))
-        const mae = (minLow - t.entryPx) / t.entryPx * 100  // negativo = caída
+        const mae = (minLow - maxHigh) / maxHigh * 100  // negativo = caída desde el máximo del trade
         const minDate = velas.find(v => v.low === minLow)?.date || t.entryDate
         return { ...t, mae, minLow, minDate }
       })
       const worstMAETrade = tradeMAEs.length
         ? tradeMAEs.reduce((worst, t) => t.mae < worst.mae ? t : worst, tradeMAEs[0])
         : null
-      onWorstDD?.(worstMAETrade?.mae ?? 0)
 
       // Líneas de trades — diagonal P&L + horizontales entrada/stop estilo TV
       tradeMAEs.forEach(t=>{
