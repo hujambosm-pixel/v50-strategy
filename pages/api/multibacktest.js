@@ -448,7 +448,7 @@ export default async function handler(req, res) {
     try { sp500Data = await fetchData('^GSPC') } catch(_) {}
 
     // Capital por slot (base para pnlPct; reescalado en modos rotativo/custom)
-    const n = symbols.filter(s => allData[s]).length
+    const n = symbols.filter(s => allData[s]?.length).length
     if (!n) return res.status(400).json({ error: 'No se pudieron cargar datos de ningún símbolo' })
     const slotCapital = cfg.capitalIni / n
 
