@@ -26,6 +26,7 @@ function stooqSym(symbol) {
     '^GSPC':'spy.us','^NDX':'ndx.us','^IBEX':'ibex.es','^GDAXI':'dax.de',
     '^FTSE':'ftse.uk','^N225':'n225.jp','BTC-USD':'btc-usd.v','ETH-USD':'eth-usd.v',
     'GC=F':'gc.f','CL=F':'cl.f',
+    '^IXIC':'ndx.us','^DJI':'dji.us','^FCHI':'cac.fr','^STOXX50E':'sx5e.de','^HSI':'hsi.hk','SI=F':'si.f',
   }
   if(MAP[symbol]) return MAP[symbol]
   if(symbol.endsWith('=F')) return symbol.replace('=F','').toLowerCase()+'.f'
@@ -39,7 +40,7 @@ async function fetchData(symbol) {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 10000)
   try {
-    const res = await fetch(url, { signal: controller.signal })
+    const res = await fetch(url, { signal: controller.signal, headers: { 'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36','Accept':'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8','Accept-Language':'en-US,en;q=0.5' } })
     const text = await res.text()
     if (!text || text.includes('No data') || text.trim().length < 50) return null
     return text.trim().split('\n').slice(1).filter(l=>l.trim()).map(l=>{
