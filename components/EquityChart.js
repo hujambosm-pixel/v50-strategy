@@ -59,9 +59,9 @@ export default function EquityChart({
         chart.addLineSeries({color:'#3d5a7a',lineWidth:1,lineStyle:LineStyle.Dotted,lastValueVisible:false,priceLineVisible:false})
           .setData([{time:base[0].date,value:capitalIni},{time:base[base.length-1].date,value:capitalIni}])
       const addDD=(curve,date,dd,color)=>{
-        if(!date||!dd||!curve?.length) return
+        if(!date||!dd||!curve?.length||!curve[0]) return
         let peak={date:curve[0].date,value:curve[0].value}
-        for(const p of curve){if(p.date>date)break;if(p.value>peak.value)peak=p}
+        for(const p of curve){if(!p)continue;if(p.date>date)break;if(p.value>peak.value)peak=p}
         const trough=curve.find(p=>p.date===date)
         if(!trough||peak.date===trough.date) return
         const peakIdx=curve.findIndex(p=>p.date===peak.date)

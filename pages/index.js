@@ -2636,7 +2636,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   const computeMaxDD=curve=>{
     if(!curve?.length) return [0,null]
     let peak=curve[0].value,maxDD=0,ddDate=null
-    for(const p of curve){if(p.value>peak)peak=p.value;const dd=peak>0?(peak-p.value)/peak*100:0;if(dd>maxDD){maxDD=dd;ddDate=p.date}}
+    for(const p of curve){if(!p)continue;if(p.value>peak)peak=p.value;const dd=peak>0?(peak-p.value)/peak*100:0;if(dd>maxDD){maxDD=dd;ddDate=p.date}}
     return [maxDD,ddDate]
   }
   const [maxDDFloat,maxDDFloatDate]=useMemo(()=>computeMaxDD(backtestFloatCurve),[backtestFloatCurve])
@@ -2646,7 +2646,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
     if(!backtestFloatCurve||!result?.strategyCurve?.length||!result?.compoundCurve?.length) return null
     const stratMap={};result.strategyCurve.forEach(p=>{stratMap[p.date]=p.value})
     const floatMap={};backtestFloatCurve.forEach(p=>{floatMap[p.date]=p.value})
-    return result.compoundCurve.map(p=>{
+    return result.compoundCurve.filter(p=>p&&p.date).map(p=>{
       const stratVal=stratMap[p.date]??p.value
       const delta=(floatMap[p.date]??stratVal)-stratVal
       return {date:p.date,value:p.value+delta}
@@ -2934,7 +2934,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V8.23</title>
+        <title>Trading Simulator V8.24</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3011,7 +3011,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V8.23
+            <span className="dot"/>Trading Simulator V8.24
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}

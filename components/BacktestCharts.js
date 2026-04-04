@@ -27,9 +27,9 @@ export function MultiCartChart({simpleCurve,compoundCurve,bhCurve,sp500BHCurve,c
       if(showBH&&bhCurve?.length) chart.addLineSeries({color:'#ffd166',lineWidth:2,lineStyle:LineStyle.Dashed,lastValueVisible:true,priceLineVisible:false}).setData(bhCurve.map(p=>({time:p.date,value:p.value})))
       if(showSP500&&sp500BHCurve?.length) chart.addLineSeries({color:'#9b72ff',lineWidth:2,lineStyle:LineStyle.Dotted,lastValueVisible:true,priceLineVisible:false}).setData(sp500BHCurve.map(p=>({time:p.date,value:p.value})))
       const addDD=(curve,date,dd,color)=>{
-        if(!date||!dd||!curve?.length) return
+        if(!date||!dd||!curve?.length||!curve[0]) return
         let peak={date:curve[0].date,value:curve[0].value}
-        for(const p of curve){if(p.date>date)break;if(p.value>peak.value)peak=p}
+        for(const p of curve){if(!p)continue;if(p.date>date)break;if(p.value>peak.value)peak=p}
         const trough=curve.find(p=>p.date===date)
         if(!trough||peak.date===trough.date) return
         const s=chart.addLineSeries({color,lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:false,priceLineVisible:false})
