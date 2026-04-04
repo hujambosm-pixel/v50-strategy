@@ -455,7 +455,7 @@ export default async function handler(req, res) {
     // Ejecutar backtest individual por activo (siempre con slotCapital como base para pnlPct)
     const assetResults = symbols.map(sym => {
       const data = allData[sym]
-      if (!data) return null
+      if (!data?.length) return null
       const slotCfg = { ...cfg, capitalIni: slotCapital }
       const { trades, capitalReinv, gananciaSimple, startDate } = runSingleBacktest(data, sp500Data, slotCfg)
       return { symbol: sym, data, trades, capitalReinv, gananciaSimple, startDate }
