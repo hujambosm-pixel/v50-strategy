@@ -177,16 +177,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         }
       })
 
-      // ── MAE visual — solo el peor trade ──
-      if(worstMAETrade && worstMAETrade.mae < 0 && worstMAETrade.minDate && worstMAETrade.minDate !== worstMAETrade.entryDate){
-        // A) Línea vertical discontinua desde minLow hasta entryPx
-        const maeLine=chart.addLineSeries({color:'rgba(255,77,109,0.55)',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
-        maeLine.setData([{time:worstMAETrade.minDate,value:worstMAETrade.entryPx},{time:worstMAETrade.minDate,value:worstMAETrade.minLow}])
-        // B) Marker en minDate con texto "MAE: -X.X%"
-        maeLine.setMarkers([{time:worstMAETrade.minDate,position:'belowBar',color:'#ff4d6d',shape:'circle',size:1,text:`Max DD: ${worstMAETrade.mae.toFixed(1)}%`}])
-      }
-
-      // ── Flechas de cruce EMA ──
+      // ── Flechas de cruce EMA + marker Max DD peor trade ──
       // shape:'circle' size:1 → punto invisible, solo muestra el texto diagonal ↗↘
       const marks=[]
       for(let i=1;i<data.length;i++){
@@ -197,7 +188,11 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         else if(p.emaR>p.emaL&&c.emaR<=c.emaL)
           marks.push({time:c.date,position:'aboveBar',color:'#ff4d6d',shape:'circle',size:1,text:'↘'})
       }
-      if(marks.length) candles.setMarkers(marks)
+      // Max DD peor trade: añadir marker directamente sobre las velas (sin serie extra)
+      if(worstMAETrade && worstMAETrade.mae < 0 && worstMAETrade.minDate && worstMAETrade.minDate !== worstMAETrade.entryDate){
+        marks.push({time:worstMAETrade.minDate,position:'belowBar',color:'#ff4d6d',shape:'circle',size:1,text:`Max DD: ${worstMAETrade.mae.toFixed(1)}%`})
+      }
+      if(marks.length) candles.setMarkers(marks.sort((a,b)=>a.time.localeCompare(b.time)))
 
       // ── Línea amarilla de entrada para posiciones abiertas (Tradelog) ──
       // tlOpenTrades usa campos de Supabase: entry_price, entry_date (distinto al backtest)
