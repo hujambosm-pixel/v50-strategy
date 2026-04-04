@@ -149,11 +149,13 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         if(!t.entryDate||!t.exitDate||!t.entryPx) return { ...t, mae:0, minLow:t.entryPx, minDate:t.entryDate }
         const velas = data.filter(d => d.date >= t.entryDate && d.date <= t.exitDate)
         if(!velas.length) return { ...t, mae:0, minLow:t.entryPx, minDate:t.entryDate }
-        const maxHigh = Math.max(...velas.map(v => v.high))
-        const minLow = Math.min(...velas.map(v => v.low))
-        const mae = (minLow - maxHigh) / maxHigh * 100  // negativo = caída desde el máximo del trade
-        const minDate = velas.find(v => v.low === minLow)?.date || t.entryDate
-        return { ...t, mae, minLow, minDate }
+        let peak=t.entryPx, maxDD=0, minDate=null, minLow=t.entryPx
+        velas.forEach(v=>{
+          if(v.high>peak) peak=v.high
+          const dd=(v.low-peak)/peak*100
+          if(dd<maxDD){maxDD=dd;minDate=v.date;minLow=v.low}
+        })
+        return { ...t, mae:maxDD, minLow, minDate:minDate||t.entryDate }
       })
       const worstMAETrade = tradeMAEs.length
         ? tradeMAEs.reduce((worst, t) => t.mae < worst.mae ? t : worst, tradeMAEs[0])
