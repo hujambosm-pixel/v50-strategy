@@ -254,6 +254,7 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
   const containerRef=useRef(null)
   const chartDivRef=useRef(null)
   const chartRef=useRef(null)
+  const tradeSeriesMapRef=useRef(new Map())
   const [inView,setInView]=useState(false)
   const [ohlcv,setOhlcv]=useState(null)
   const [loading,setLoading]=useState(false)
@@ -308,7 +309,7 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
       candles.setData(ohlcv.map(d=>({time:d.date,open:d.open,high:d.high,low:d.low,close:d.close})))
 
       // ── Diagonal trade lines (MEJORA 1) ──
-      const tradeSeriesMap=new Map() // n → {series, color}
+      tradeSeriesMapRef.current=new Map()
       stratSignals.forEach(s=>{
         ;(s.trades||[]).forEach(t=>{
           if(!t.entryDate||!t.exitDate||!t.entryPx||!t.exitPx) return
@@ -316,7 +317,7 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
           try{
             const ls=chart.addLineSeries({color,lineWidth:2,lastValueVisible:false,priceLineVisible:false})
             ls.setData([{time:t.entryDate,value:t.entryPx},{time:t.exitDate,value:t.exitPx}])
-            tradeSeriesMap.set(t.n,{series:ls,color})
+            tradeSeriesMapRef.current.set(t.n,{series:ls,color})
           }catch(_){}
         })
       })
@@ -347,12 +348,12 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
 
       // ── Highlight function (MEJORA 3) ──
       const highlightTrade=n=>{
-        const entry=tradeSeriesMap.get(n)
+        const entry=tradeSeriesMapRef.current.get(n)
         if(!entry) return
         try{
           entry.series.applyOptions({color:'#FFD700'})
-          setTimeout(()=>{try{entry.series.applyOptions({color:entry.color})}catch(_){}},2000)
-        }catch(_){}
+          setTimeout(()=>{try{entry.series.applyOptions({color:entry.color})}catch(e){if(!e.message?.includes('disposed'))throw e}},2000)
+        }catch(e){if(!e.message?.includes('disposed'))throw e}
       }
       onReady?.({chart,highlightTrade})
 
@@ -391,7 +392,7 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
       ro.observe(chartDivRef.current)
       return()=>ro.disconnect()
     })
-    return()=>{if(chartRef.current){chartRef.current.__syncCleanup?.();chartRef.current.remove();chartRef.current=null}}
+    return()=>{tradeSeriesMapRef.current=new Map();if(chartRef.current){chartRef.current.__syncCleanup?.();chartRef.current.remove();chartRef.current=null}}
   },[ohlcv,stratSignals,height])
 
   return(
