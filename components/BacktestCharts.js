@@ -250,7 +250,7 @@ export function StratCompareChart({curves,capitalIni,chartHeight=300,syncRef,onR
 // stratSignals: [{id, name, color, entries:[{date,price}], exits:[{date,price}]}]
 // syncRef: {isSyncing:bool, charts:[], lastRange} — shared across all instances for logical-range sync
 const _MONO='"Roboto Mono",monospace'
-export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef}) {
+export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef,onReady}) {
   const containerRef=useRef(null)
   const chartDivRef=useRef(null)
   const chartRef=useRef(null)
@@ -300,6 +300,7 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
         handleScale:{mouseWheel:true,pinch:true},
       })
       chartRef.current=chart
+      onReady?.(chart)
       const candles=chart.addCandlestickSeries({
         upColor:'#00e5a0',downColor:'#ff4d6d',
         borderUpColor:'#00e5a0',borderDownColor:'#ff4d6d',
@@ -312,7 +313,10 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
       stratSignals.forEach(s=>{
         const ec=s.entryColor||s.color, xc=s.exitColor||s.color
         ;(s.entries||[]).forEach(e=>{
-          markers.push({time:e.date,position:'belowBar',color:ec,shape:'arrowUp',text:'',size:1})
+          const lbl=e.n!=null
+            ?[`#${e.n}`,e.capital?`€${Math.round(e.capital)}`:null,e.pnlPct!=null?`${e.pnlPct>=0?'+':''}${e.pnlPct.toFixed(1)}%`:null].filter(Boolean).join(' · ')
+            :''
+          markers.push({time:e.date,position:'belowBar',color:ec,shape:'arrowUp',text:lbl,size:1})
         })
         ;(s.exits||[]).forEach(e=>{
           markers.push({time:e.date,position:'aboveBar',color:xc,shape:'arrowDown',text:'',size:1})
@@ -359,7 +363,7 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
   },[ohlcv,stratSignals,height])
 
   return(
-    <div ref={containerRef} style={{borderBottom:'1px solid var(--border)'}}>
+    <div ref={containerRef} data-mcsym={symbol} style={{borderBottom:'1px solid var(--border)'}}>
       {/* Header: symbol + strategy signals */}
       <div style={{padding:'5px 12px',display:'flex',alignItems:'flex-start',gap:10,background:'#050c18',
         borderBottom:'1px solid var(--border)',flexWrap:'wrap'}}>

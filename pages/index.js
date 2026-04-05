@@ -716,6 +716,7 @@ export default function Home() {
   const [mcShowBHCompare,setMcShowBHCompare]=useState(true) // B&H curve toggle in multi-strategy chart
   const [mcChartsOpen,setMcChartsOpen]=useState(false)     // Vista de gráficos collapsible
   const mcChartsSyncRef=useRef({isSyncing:false,charts:[],lastRange:null}) // sync group for signal charts
+  const mcChartRefsMap=useRef({}) // symbol → chart instance for trade navigation
 
   // ── TradeLog state ───────────────────────────────────────────
   const [tlTrades,setTlTrades]=useState([])
@@ -2528,6 +2529,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
     }
     setMcLoading(true);setMcError(null);setMcResult(null);setMcMultiResults([]);setMcProgress(null)
     mcChartsSyncRef.current={isSyncing:false,charts:[],lastRange:null}  // reset sync group for new run
+    mcChartRefsMap.current={}  // reset chart refs for new run
     const rankMap={}
     mcSelected.forEach((sym,i)=>{const rd=rankingData[sym];rankMap[sym]=rd?.rank??i+1})
     const weightsNorm={}
@@ -2934,7 +2936,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V8.33</title>
+        <title>Trading Simulator V8.34</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3011,7 +3013,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V8.33
+            <span className="dot"/>Trading Simulator V8.34
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5331,7 +5333,24 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               return(
                                 <tr key={i}
                                   style={{borderBottom:'1px solid rgba(255,255,255,0.03)',cursor:'pointer'}}
-                                  onClick={()=>{setSimbolo(t.symbol);setSidePanel('watchlist')}}
+                                  onClick={()=>{
+                                    setMcChartsOpen(true)
+                                    setTimeout(()=>{
+                                      const el=document.querySelector(`[data-mcsym="${t.symbol}"]`)
+                                      if(el) el.scrollIntoView({behavior:'smooth',block:'start'})
+                                      const chart=mcChartRefsMap.current[t.symbol]
+                                      if(chart&&t.entryDate){
+                                        const fd=new Date(t.entryDate); fd.setDate(fd.getDate()-60)
+                                        const td2=new Date(t.entryDate); td2.setDate(td2.getDate()+60)
+                                        try{chart.timeScale().setVisibleRange({from:fd.toISOString().slice(0,10),to:td2.toISOString().slice(0,10)})}catch(_){}
+                                        try{
+                                          const hl=chart.addLineSeries({color:'#ffd700',lineWidth:2,lastValueVisible:false,priceLineVisible:false})
+                                          hl.setData([{time:fd.toISOString().slice(0,10),value:t.entryPx},{time:td2.toISOString().slice(0,10),value:t.entryPx}])
+                                          setTimeout(()=>{try{chart.removeSeries(hl)}catch(_){}},2000)
+                                        }catch(_){}
+                                      }
+                                    },300)
+                                  }}
                                   onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.05)'}
                                   onMouseOut={e=>e.currentTarget.style.background='transparent'}>
                                   <td style={{padding:'4px 8px',color:'#7a9bc0',fontSize:11}}>{allT2.length-i}</td>
@@ -5410,7 +5429,12 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               // Single strategy: green entries, red exits. Multi: strategy color for both.
                               entryColor:isMulti?r.color:'#00e5a0',
                               exitColor:isMulti?r.color:'#ff4d6d',
-                              entries:(r.result.allTrades||[]).filter(t=>t.symbol===sym).map(t=>({date:t.entryDate,price:t.entryPx})),
+                              entries:(r.result.allTrades||[]).filter(t=>t.symbol===sym).map((t,idx)=>({
+                                date:t.entryDate,price:t.entryPx,
+                                n:idx+1,
+                                capital:t.pnlPct!==0?Math.abs(t.pnlSimple/(t.pnlPct/100)):0,
+                                pnlPct:t.pnlPct,
+                              })),
                               exits:(r.result.allTrades||[]).filter(t=>t.symbol===sym).map(t=>({date:t.exitDate,price:t.exitPx})),
                             }))
                             return(
@@ -5418,7 +5442,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                 stratSignals={stratSignals}
                                 years={Number(years)||5}
                                 height={400}
-                                syncRef={mcChartsSyncRef}/>
+                                syncRef={mcChartsSyncRef}
+                                onReady={chart=>{mcChartRefsMap.current[sym]=chart}}/>
                             )
                           })}
                         </>
@@ -5484,15 +5509,10 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                     <div style={{display:'flex',flexDirection:'column',height:'100%'}}>
                       <div style={{display:'flex',alignItems:'center',padding:'4px 12px',borderBottom:'1px solid var(--border)'}}>
                         <span style={{fontFamily:MONO,fontSize:10,color:'#9acce0',flex:1}}>MULTICARTERA</span>
-                        <button onClick={()=>setMetricsView(v=>v==='multi'?'single':'multi')}
-                          style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',
-                            border:'1px solid #2a4060',background:'rgba(0,0,0,0.3)',color:'#7aabc8'}}>
-                          {metricsView==='multi'?'⊟ 1col':'⊞ 3col'}
-                        </button>
                       </div>
                       <StratSelector strats={metricsStrats} setStrats={setMetricsStrats}/>
                       <div style={{overflowY:'auto',flex:1}}>
-                        <MetricsWrapper rows={mcRows} strats={metricsStrats}/>
+                        <SingleColumnTable rows={mcRows} strats={metricsStrats}/>
                       </div>
                     </div>
                   )
