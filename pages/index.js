@@ -2936,7 +2936,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V8.34</title>
+        <title>Trading Simulator V8.35</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3013,7 +3013,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V8.34
+            <span className="dot"/>Trading Simulator V8.35
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5338,16 +5338,16 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                     setTimeout(()=>{
                                       const el=document.querySelector(`[data-mcsym="${t.symbol}"]`)
                                       if(el) el.scrollIntoView({behavior:'smooth',block:'start'})
-                                      const chart=mcChartRefsMap.current[t.symbol]
-                                      if(chart&&t.entryDate){
-                                        const fd=new Date(t.entryDate); fd.setDate(fd.getDate()-60)
-                                        const td2=new Date(t.entryDate); td2.setDate(td2.getDate()+60)
-                                        try{chart.timeScale().setVisibleRange({from:fd.toISOString().slice(0,10),to:td2.toISOString().slice(0,10)})}catch(_){}
-                                        try{
-                                          const hl=chart.addLineSeries({color:'#ffd700',lineWidth:2,lastValueVisible:false,priceLineVisible:false})
-                                          hl.setData([{time:fd.toISOString().slice(0,10),value:t.entryPx},{time:td2.toISOString().slice(0,10),value:t.entryPx}])
-                                          setTimeout(()=>{try{chart.removeSeries(hl)}catch(_){}},2000)
-                                        }catch(_){}
+                                      const chartApi=mcChartRefsMap.current[t.symbol]
+                                      if(chartApi){
+                                        const {chart,highlightTrade}=chartApi
+                                        if(chart&&t.entryDate){
+                                          const fd=new Date(t.entryDate); fd.setDate(fd.getDate()-60)
+                                          const td2=new Date(t.entryDate); td2.setDate(td2.getDate()+60)
+                                          try{chart.timeScale().setVisibleRange({from:fd.toISOString().slice(0,10),to:td2.toISOString().slice(0,10)})}catch(_){}
+                                        }
+                                        const symN=mcResult.allTrades.filter(x=>x.symbol===t.symbol).indexOf(t)+1
+                                        highlightTrade?.(symN)
                                       }
                                     },300)
                                   }}
@@ -5424,18 +5424,21 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           </div>
                           {/* Gráficos por activo */}
                           {syms.map(sym=>{
+                            const symTrades=(r.result.allTrades||[]).filter(t=>t.symbol===sym)
                             const stratSignals=strats.map(r=>({
                               id:r.id,name:r.name,color:r.color,
                               // Single strategy: green entries, red exits. Multi: strategy color for both.
                               entryColor:isMulti?r.color:'#00e5a0',
                               exitColor:isMulti?r.color:'#ff4d6d',
-                              entries:(r.result.allTrades||[]).filter(t=>t.symbol===sym).map((t,idx)=>({
-                                date:t.entryDate,price:t.entryPx,
+                              entries:symTrades.map(t=>({date:t.entryDate,price:t.entryPx})),
+                              exits:symTrades.map(t=>({date:t.exitDate,price:t.exitPx})),
+                              trades:symTrades.map((t,idx)=>({
                                 n:idx+1,
+                                entryDate:t.entryDate,entryPx:t.entryPx,
+                                exitDate:t.exitDate,exitPx:t.exitPx,
+                                pnlPct:t.pnlPct,pnlSimple:t.pnlSimple,
                                 capital:t.pnlPct!==0?Math.abs(t.pnlSimple/(t.pnlPct/100)):0,
-                                pnlPct:t.pnlPct,
                               })),
-                              exits:(r.result.allTrades||[]).filter(t=>t.symbol===sym).map(t=>({date:t.exitDate,price:t.exitPx})),
                             }))
                             return(
                               <AssetSignalChart key={sym} symbol={sym}
@@ -5443,7 +5446,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                 years={Number(years)||5}
                                 height={400}
                                 syncRef={mcChartsSyncRef}
-                                onReady={chart=>{mcChartRefsMap.current[sym]=chart}}/>
+                                onReady={({chart,highlightTrade})=>{mcChartRefsMap.current[sym]={chart,highlightTrade}}}/>
                             )
                           })}
                         </>

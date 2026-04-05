@@ -300,30 +300,62 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
         handleScale:{mouseWheel:true,pinch:true},
       })
       chartRef.current=chart
-      onReady?.(chart)
       const candles=chart.addCandlestickSeries({
         upColor:'#00e5a0',downColor:'#ff4d6d',
         borderUpColor:'#00e5a0',borderDownColor:'#ff4d6d',
         wickUpColor:'#3a7a6a',wickDownColor:'#7a3a4a',
       })
-      // ── Load data ──
       candles.setData(ohlcv.map(d=>({time:d.date,open:d.open,high:d.high,low:d.low,close:d.close})))
-      // Build sorted markers — use explicit entryColor/exitColor when provided
+
+      // ── Diagonal trade lines (MEJORA 1) ──
+      const tradeSeriesMap=new Map() // n → {series, color}
+      stratSignals.forEach(s=>{
+        ;(s.trades||[]).forEach(t=>{
+          if(!t.entryDate||!t.exitDate||!t.entryPx||!t.exitPx) return
+          const color=t.pnlPct>=0?'#00e5a0':'#ff4d6d'
+          try{
+            const ls=chart.addLineSeries({color,lineWidth:2,lastValueVisible:false,priceLineVisible:false})
+            ls.setData([{time:t.entryDate,value:t.entryPx},{time:t.exitDate,value:t.exitPx}])
+            tradeSeriesMap.set(t.n,{series:ls,color})
+          }catch(_){}
+        })
+      })
+
+      // ── Entry/exit arrows + midpoint labels (MEJORA 2) ──
       const markers=[]
       stratSignals.forEach(s=>{
         const ec=s.entryColor||s.color, xc=s.exitColor||s.color
         ;(s.entries||[]).forEach(e=>{
-          const lbl=e.n!=null
-            ?[`#${e.n}`,e.capital?`€${Math.round(e.capital)}`:null,e.pnlPct!=null?`${e.pnlPct>=0?'+':''}${e.pnlPct.toFixed(1)}%`:null].filter(Boolean).join(' · ')
-            :''
-          markers.push({time:e.date,position:'belowBar',color:ec,shape:'arrowUp',text:lbl,size:1})
+          markers.push({time:e.date,position:'belowBar',color:ec,shape:'arrowUp',text:'',size:1})
         })
         ;(s.exits||[]).forEach(e=>{
           markers.push({time:e.date,position:'aboveBar',color:xc,shape:'arrowDown',text:'',size:1})
         })
+        ;(s.trades||[]).forEach(t=>{
+          if(!t.entryDate||!t.exitDate) return
+          const midTs=(new Date(t.entryDate).getTime()+new Date(t.exitDate).getTime())/2
+          const midDate=ohlcv.reduce((best,d)=>(
+            Math.abs(new Date(d.date).getTime()-midTs)<Math.abs(new Date(best.date).getTime()-midTs)?d:best
+          ),ohlcv[0]).date
+          const profit=t.pnlSimple??0
+          const lbl=`#${t.n} · €${Math.round(t.capital??0)} · ${t.pnlPct>=0?'+':''}${(t.pnlPct||0).toFixed(1)}% · €${profit>=0?'+':''}${Math.round(profit)}`
+          markers.push({time:midDate,position:'belowBar',color:t.pnlPct>=0?'#00e5a0':'#ff4d6d',shape:'circle',size:0,text:lbl})
+        })
       })
       markers.sort((a,b)=>a.time.localeCompare(b.time))
       if(markers.length) candles.setMarkers(markers)
+
+      // ── Highlight function (MEJORA 3) ──
+      const highlightTrade=n=>{
+        const entry=tradeSeriesMap.get(n)
+        if(!entry) return
+        try{
+          entry.series.applyOptions({color:'#FFD700'})
+          setTimeout(()=>{try{entry.series.applyOptions({color:entry.color})}catch(_){}},2000)
+        }catch(_){}
+      }
+      onReady?.({chart,highlightTrade})
+
       // ── fitContent first, then apply sync range ──
       chart.timeScale().fitContent()
       // ── Logical-range sync — set up AFTER data is loaded ──
