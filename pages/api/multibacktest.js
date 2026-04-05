@@ -241,28 +241,35 @@ function buildRotativoCurves(assetResults, capitalIni, rankMap) {
   const step = Math.max(1, Math.floor(filteredDates.length / 400))
   const sampledDates = filteredDates.filter((_,i) => i%step===0 || i===filteredDates.length-1)
 
-  const compoundCurve=[], floatSimpleCurve=[], floatCompoundCurve=[]
+  const simpleCurve=[], compoundCurve=[], floatSimpleCurve=[], floatCompoundCurve=[]
   let lastPool = capitalIni
   sampledDates.forEach(date => {
     // Actualizar pool con todos los cierres hasta esta fecha
     executedTrades
       .filter(t => t.exitDate <= date)
       .forEach(t => { lastPool = Math.max(lastPool, 0); lastPool = t.capitalTras })
-    // La última asignación da el valor real
+    // Compuesta: pool real acumulado (reinvierte beneficios)
     const closedSoFar = executedTrades.filter(t => t.exitDate <= date)
     const val = closedSoFar.length ? closedSoFar[closedSoFar.length-1].capitalTras : capitalIni
     compoundCurve.push({ date, value: val })
-    // Float: unrealized P&L of the single active trade (rotativo = only one at a time)
+    // Simple: capitalIni fijo como base de cada trade (no reinvierte)
+    const simpleVal = capitalIni + closedSoFar.reduce((s,t) => s + capitalIni*(t.pnlPct/100), 0)
+    simpleCurve.push({ date, value: simpleVal })
+    // Float: unrealized P&L del trade activo (rotativo = máximo uno a la vez)
     const activeTrade = executedTrades.find(t => t.entryDate <= date && t.exitDate > date)
-    let openPnl = 0
+    let openPnlSimple = 0, openPnlCompound = 0
     if(activeTrade) {
       const fData = symbolDataMap[activeTrade.symbol]||[]
       let closePx = null
       for(let i=fData.length-1;i>=0;i--){if(fData[i].date<=date){closePx=fData[i].close;break}}
-      if(closePx!=null) openPnl = (closePx-activeTrade.entryPx)/activeTrade.entryPx*activeTrade._capitalAtEntry
+      if(closePx!=null){
+        const ret = (closePx-activeTrade.entryPx)/activeTrade.entryPx
+        openPnlSimple  = ret * capitalIni
+        openPnlCompound = ret * activeTrade._capitalAtEntry
+      }
     }
-    floatSimpleCurve.push({date, value:val+openPnl})
-    floatCompoundCurve.push({date, value:val+openPnl})
+    floatSimpleCurve.push({date, value:simpleVal+openPnlSimple})
+    floatCompoundCurve.push({date, value:val+openPnlCompound})
   })
 
   // Ocupación: ¿hay trade abierto en esa fecha?
@@ -285,9 +292,6 @@ function buildRotativoCurves(assetResults, capitalIni, rankMap) {
     })
     return { date, value: total }
   })
-
-  // Simple = compuesta en rotativo (no hay distinción sin reinversión; usamos compuesta)
-  const simpleCurve = compoundCurve
 
   return {
     simpleCurve, compoundCurve, bhCurve, occupancyCurve, startDate,

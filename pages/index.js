@@ -2935,7 +2935,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V8.30</title>
+        <title>Trading Simulator V8.31</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3012,7 +3012,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V8.30
+            <span className="dot"/>Trading Simulator V8.31
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5513,7 +5513,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                     {label:'Ganancia (€)',          compound:v2(fmt(lastC-capIni,2,'€'),cC2), bh:v2(fmt(lastBH-capIni,2,'€'),cBH2), simple:v2(fmt(lastS-capIni,2,'€'),cS2)},
                     {label:'Ganancia (%)',          compound:v2(fmt((lastC-capIni)/capIni*100,2,'%'),cC2), bh:v2(fmt((lastBH-capIni)/capIni*100,2,'%'),cBH2), simple:v2(fmt((lastS-capIni)/capIni*100,2,'%'),cS2)},
                     {label:`CAGR (${fmt(anios,2)}a)`, compound:v2(fmt(cagrC,2,'%'),cagrC>=0?'#00e5a0':'#ff4d6d'), bh:v2(fmt(cagrBH,2,'%'),cagrBH>=0?'#00e5a0':'#ff4d6d'), simple:v2(fmt(cagrS,2,'%'),cagrS>=0?'#00e5a0':'#ff4d6d')},
-                    {label:'Max Drawdown (%)',      compound:v2(fmt(mcResult.maxDDCompound,2,'%'),'#ff4d6d'), bh:v2(fmt(mcResult.maxDDBH,2,'%'),'#ff4d6d'), simple:v2(fmt(mcResult.maxDDSimple,2,'%'),'#ff4d6d')},
+                    {label:'Max Drawdown (%)',      compound:v2(fmt(showMultiFloat&&mcResult.maxDDFloatCompound?mcResult.maxDDFloatCompound:mcResult.maxDDCompound,2,'%'),'#ff4d6d'), bh:v2(fmt(mcResult.maxDDBH,2,'%'),'#ff4d6d'), simple:v2(fmt(showMultiFloat&&mcResult.maxDDFloatSimple?mcResult.maxDDFloatSimple:mcResult.maxDDSimple,2,'%'),'#ff4d6d')},
                   ]
                   return(
                     <div style={{display:'flex',flexDirection:'column',height:'100%'}}>
