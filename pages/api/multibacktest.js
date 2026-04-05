@@ -21,34 +21,28 @@ function calcATR(highs, lows, closes, period) {
   return calcEMA(tr, period)
 }
 
-function stooqSym(symbol) {
-  const MAP={
-    '^GSPC':'spy.us','^NDX':'ndx.us','^IBEX':'ibex.es','^GDAXI':'dax.de',
-    '^FTSE':'ftse.uk','^N225':'n225.jp','BTC-USD':'btc-usd.v','ETH-USD':'eth-usd.v',
-    'GC=F':'gc.f','CL=F':'cl.f',
-    '^IXIC':'ndx.us','^DJI':'dji.us','^FCHI':'cac.fr','^STOXX50E':'sx5e.de','^HSI':'hsi.hk','SI=F':'si.f',
-  }
-  if(MAP[symbol]) return MAP[symbol]
-  if(symbol.endsWith('=F')) return symbol.replace('=F','').toLowerCase()+'.f'
-  if(symbol.includes('-')) return symbol.toLowerCase()+'.v'
-  if(symbol.startsWith('^')) return symbol.slice(1).toLowerCase()+'.us'
-  return symbol.toLowerCase()+'.us'
-}
-async function fetchData(symbol) {
-  const sym = stooqSym(symbol)
-  const url = `https://stooq.com/q/d/l/?s=${sym}&i=d`
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), 10000)
+async function fetchData(symbol, years=5) {
   try {
-    const res = await fetch(url, { signal: controller.signal, headers: { 'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36','Accept':'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8','Accept-Language':'en-US,en;q=0.5' } })
-    const text = await res.text()
-    if (!text || text.includes('No data') || text.trim().length < 50) return null
-    return text.trim().split('\n').slice(1).filter(l=>l.trim()).map(l=>{
-      const [date,open,high,low,close,volume] = l.split(',')
-      return { date, open:parseFloat(open), high:parseFloat(high), low:parseFloat(low), close:parseFloat(close), volume:parseFloat(volume)||0 }
-    }).filter(d=>d.close&&!isNaN(d.close)).sort((a,b)=>a.date.localeCompare(b.date))
+    const encoded = encodeURIComponent(symbol)
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encoded}?interval=1d&range=${Math.min(years,10)}y`
+    const res = await fetch(url, { headers: { 'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36','Accept':'application/json' } })
+    if (!res.ok) return null
+    const json = await res.json()
+    const timestamps = json?.chart?.result?.[0]?.timestamp
+    const closes    = json?.chart?.result?.[0]?.indicators?.quote?.[0]?.close
+    const opens     = json?.chart?.result?.[0]?.indicators?.quote?.[0]?.open
+    const highs     = json?.chart?.result?.[0]?.indicators?.quote?.[0]?.high
+    const lows      = json?.chart?.result?.[0]?.indicators?.quote?.[0]?.low
+    if (!timestamps?.length) return null
+    return timestamps.map((ts,i) => ({
+      date:  new Date(ts*1000).toISOString().slice(0,10),
+      open:  opens?.[i]  ?? null,
+      high:  highs?.[i]  ?? null,
+      low:   lows?.[i]   ?? null,
+      close: closes?.[i] ?? null,
+    })).filter(d => d.close && !isNaN(d.close))
+      .sort((a,b) => a.date.localeCompare(b.date))
   } catch { return null }
-  finally { clearTimeout(timer) }
 }
 
 function runSingleBacktest(data, sp500Data, cfg) {
@@ -440,13 +434,13 @@ export default async function handler(req, res) {
     const allData = {}
     for (let i = 0; i < symbols.length; i += BATCH) {
       const chunk = symbols.slice(i, i+BATCH)
-      await Promise.all(chunk.map(async sym => { allData[sym] = await fetchData(sym) }))
+      await Promise.all(chunk.map(async sym => { allData[sym] = await fetchData(sym, cfg.years ?? 5) }))
       if (i+BATCH < symbols.length) await sleep(400)
     }
 
     // SP500 para el filtro
     let sp500Data = null
-    try { sp500Data = await fetchData('^GSPC') } catch(_) {}
+    try { sp500Data = await fetchData('^GSPC', cfg.years ?? 5) } catch(_) {}
 
     // Capital por slot (base para pnlPct; reescalado en modos rotativo/custom)
     const n = symbols.filter(s => allData[s]?.length).length
