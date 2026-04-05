@@ -610,7 +610,6 @@ export default function Home() {
     chartSyncRef.current={syncing:false,listeners:[]}
     prevSymboloRef.current=simbolo
   }
-  const [mcLayout,setMcLayout]=useState('panel')  // 'panel' | 'grid'
   // ── Auth ───────────────────────────────────────────────────
   const [session,setSession]=useState(undefined)  // undefined=loading, null=no sesión, obj=autenticado
   const [loginEmail,setLoginEmail]=useState('')
@@ -692,11 +691,11 @@ export default function Home() {
   const [mcResult,setMcResult]=useState(null)
   const [mcLoading,setMcLoading]=useState(false)
   const [mcError,setMcError]=useState(null)
-  const [mcShowSimple,setMcShowSimple]=useState(true)
+  const [mcShowSimple,setMcShowSimple]=useState(false)
   const [mcShowCompound,setMcShowCompound]=useState(true)
   const [mcShowBH,setMcShowBH]=useState(true)
-  const [mcShowSP500,setMcShowSP500]=useState(true)
-  const [showMultiFloat,setShowMultiFloat]=useState(false)
+  const [mcShowSP500,setMcShowSP500]=useState(false)
+  const [showMultiFloat,setShowMultiFloat]=useState(true)
   const [mcShowOccupancy,setMcShowOccupancy]=useState(true)
   const [mcOccMode,setMcOccMode]=useState('compound')  // own filter for MC capital chart
   const mcChartRef=useRef(null)
@@ -2935,7 +2934,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V8.32</title>
+        <title>Trading Simulator V8.33</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3012,7 +3011,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V8.32
+            <span className="dot"/>Trading Simulator V8.33
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -3065,7 +3064,6 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               onMouseOut={e=>{e.currentTarget.style.background='rgba(0,212,255,0.06)';e.currentTarget.style.borderColor='rgba(0,212,255,0.25)'}}>
               ⚙
             </button>
-            <div style={{fontFamily:MONO,fontSize:11,color:'#5a7a95'}}>Stooq · diario</div>
           </div>
         </header>
 
@@ -4021,7 +4019,15 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   <div style={{padding:'4px 8px',borderBottom:'1px solid var(--border)',flexShrink:0,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                     <div style={{fontFamily:MONO,fontSize:10,color:'#cde5ff',fontWeight:700}}>{mcSelected.length} seleccionados</div>
                     <div style={{display:'flex',gap:4}}>
-                      <button onClick={()=>setMcSelected(watchlist.map(w=>w.symbol))}
+                      <button onClick={()=>{
+                        const filtered=[...new Map(watchlist.map(w=>[w.symbol,w])).values()].filter(w=>{
+                          const matchSearch=!mcSearch||(w.symbol||'').toLowerCase().includes(mcSearch.toLowerCase())||(w.name||'').toLowerCase().includes(mcSearch.toLowerCase())
+                          const matchFav=!mcOnlyFavs||w.favorite
+                          const matchList=!mcListFilter||(w.list_ids||[]).some(lid=>{const l=wlLists.find(x=>x.id===lid);return l&&l.name===mcListFilter})
+                          return matchSearch&&matchFav&&matchList
+                        })
+                        setMcSelected(filtered.map(w=>w.symbol))
+                      }}
                         style={{fontFamily:MONO,fontSize:8,padding:'2px 5px',borderRadius:3,border:'1px solid var(--border)',background:'transparent',color:'#a8ccdf',cursor:'pointer'}}>
                         Todos
                       </button>
@@ -5008,10 +5014,6 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                     <button onClick={()=>mcChartApiRef.current?.fitAll()}
                       style={{fontFamily:MONO,fontSize:10,padding:'3px 8px',borderRadius:3,cursor:'pointer',border:'1px solid #1a2d45',background:'rgba(0,212,255,0.07)',color:'#7a9bc0'}}
                       title="Ver periodo completo">⊠ Periodo completo</button>
-                    <button onClick={()=>setMcLayout(l=>l==='grid'?'panel':'grid')}
-                      style={{fontFamily:MONO,fontSize:10,padding:'3px 8px',borderRadius:3,cursor:'pointer',border:'1px solid #1a2d45',background:'rgba(13,21,32,0.9)',color:'#7a9bc0'}}>
-                      {mcLayout==='grid'?'⊞ Panel':'⊟ Grid'}
-                    </button>
                   </div>
                 </div>
 
@@ -5215,43 +5217,6 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                     />
                   </div>
                 )}
-                {/* Métricas en grid cuando mcLayout==='grid' */}
-                {mcLayout==='grid'&&(()=>{
-                  const capIni=Number(capitalIni)
-                  const lastS=(showMultiFloat&&mcResult.floatSimpleCurve?.length?mcResult.floatSimpleCurve.slice(-1)[0]?.value:mcResult.simpleCurve.slice(-1)[0]?.value)||capIni
-                  const lastC=(showMultiFloat&&mcResult.floatCompoundCurve?.length?mcResult.floatCompoundCurve.slice(-1)[0]?.value:mcResult.compoundCurve.slice(-1)[0]?.value)||capIni
-                  const lastBH=mcResult.bhCurve.slice(-1)[0]?.value||capIni
-                  const totalDiasNat=mcResult.startDate?(new Date(mcResult.simpleCurve.slice(-1)[0]?.date)-new Date(mcResult.startDate))/86400000:365
-                  const anios=Math.max(totalDiasNat/365.25,0.01)
-                  const cagrS=(Math.pow(Math.max(lastS,0.01)/capIni,1/anios)-1)*100
-                  const cagrC=(Math.pow(Math.max(lastC,0.01)/capIni,1/anios)-1)*100
-                  const cagrBH=(Math.pow(Math.max(lastBH,0.01)/capIni,1/anios)-1)*100
-                  const allT=mcResult.allTrades||[]
-                  const wins=allT.filter(t=>t.pnlPct>=0),losses=allT.filter(t=>t.pnlPct<0)
-                  const winRate=allT.length?wins.length/allT.length*100:0
-                  const cols=[
-                    {label:'Total Operaciones',val:allT.length,color:'#ffd166'},
-                    {label:'Ganadoras / Perdedoras',val:`${wins.length} / ${losses.length}`,color:'#00e5a0'},
-                    {label:'Win Rate',val:fmt(winRate,1,'%'),color:winRate>=50?'#00e5a0':'#ff4d6d'},
-                    {label:'Capital inv. medio',val:fmt(mcResult.avgOccupancy,1,'%'),color:'#9b72ff'},
-                    {label:'Ganancia Simple',val:fmt(lastS-capIni,0,'€'),color:lastS>=capIni?'#00e5a0':'#ff4d6d'},
-                    {label:'Ganancia Compuesta',val:fmt(lastC-capIni,0,'€'),color:lastC>=capIni?'#00e5a0':'#ff4d6d'},
-                    {label:`CAGR Simple (${fmt(anios,2)}a)`,val:fmt(cagrS,2,'%'),color:cagrS>=0?'#00e5a0':'#ff4d6d'},
-                    {label:`CAGR Compuesto (${fmt(anios,2)}a)`,val:fmt(cagrC,2,'%'),color:cagrC>=0?'#00e5a0':'#ff4d6d'},
-                    {label:'Max DD Simple',val:fmt(showMultiFloat&&mcResult.maxDDFloatSimple?mcResult.maxDDFloatSimple:mcResult.maxDDSimple,2,'%'),color:'#ff4d6d'},
-                    {label:'Max DD Compuesto',val:fmt(showMultiFloat&&mcResult.maxDDFloatCompound?mcResult.maxDDFloatCompound:mcResult.maxDDCompound,2,'%'),color:'#ff4d6d'},
-                  ]
-                  return(
-                    <div className="metrics-section" style={{borderBottom:'1px solid var(--border)'}}>
-                      {cols.map(c=>(
-                        <div key={c.label} className="metric-card">
-                          <span className="metric-label">{c.label}</span>
-                          <span className="metric-val" style={{color:c.color}}>{c.val}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )
-                })()}
 
                 {/* Tabla por activo */}
                 <div style={{padding:'12px 16px',borderBottom:'1px solid var(--border)'}}>
@@ -5462,8 +5427,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                   )
                 })()}
               </div>
-              {/* Right: metrics summary panel — hidden when mcLayout==='grid' or multi-strategy comparison */}
-              {mcLayout==='panel'&&mcMultiResults.length<=1&&<div style={{width:rightPanelW,flexShrink:0,borderLeft:'1px solid var(--border)',background:'var(--bg2)',overflowY:'auto',position:'relative'}}>
+              {/* Right: metrics summary panel — hidden when multi-strategy comparison */}
+              {mcMultiResults.length<=1&&<div style={{width:rightPanelW,flexShrink:0,borderLeft:'1px solid var(--border)',background:'var(--bg2)',overflowY:'auto',position:'relative'}}>
                 {/* Resize handle */}
                 <div onMouseDown={e=>{rightResizing.current=true;rightStartX.current=e.clientX;rightStartW.current=rightPanelW;document.body.style.cursor='col-resize';document.body.style.userSelect='none'}}
                   style={{position:'absolute',top:0,left:0,width:4,height:'100%',cursor:'col-resize',zIndex:20,background:'transparent'}}
