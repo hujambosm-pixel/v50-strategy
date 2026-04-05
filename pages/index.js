@@ -2755,7 +2755,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V7.58</title>
+        <title>Trading Simulator V8.32</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -2832,7 +2832,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V7.58
+            <span className="dot"/>Trading Simulator V8.32
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5023,10 +5023,10 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                 )}
                 {/* Métricas en grid cuando mcLayout==='grid' */}
                 {mcLayout==='grid'&&(()=>{
-                  const lastS=mcResult.simpleCurve.slice(-1)[0]?.value||Number(capitalIni)
-                  const lastC=mcResult.compoundCurve.slice(-1)[0]?.value||Number(capitalIni)
-                  const lastBH=mcResult.bhCurve.slice(-1)[0]?.value||Number(capitalIni)
                   const capIni=Number(capitalIni)
+                  const lastS=(showMultiFloat&&mcResult.floatSimpleCurve?.length?mcResult.floatSimpleCurve.slice(-1)[0]?.value:mcResult.simpleCurve.slice(-1)[0]?.value)||capIni
+                  const lastC=(showMultiFloat&&mcResult.floatCompoundCurve?.length?mcResult.floatCompoundCurve.slice(-1)[0]?.value:mcResult.compoundCurve.slice(-1)[0]?.value)||capIni
+                  const lastBH=mcResult.bhCurve.slice(-1)[0]?.value||capIni
                   const totalDiasNat=mcResult.startDate?(new Date(mcResult.simpleCurve.slice(-1)[0]?.date)-new Date(mcResult.startDate))/86400000:365
                   const anios=Math.max(totalDiasNat/365.25,0.01)
                   const cagrS=(Math.pow(Math.max(lastS,0.01)/capIni,1/anios)-1)*100
@@ -5044,8 +5044,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                     {label:'Ganancia Compuesta',val:fmt(lastC-capIni,0,'€'),color:lastC>=capIni?'#00e5a0':'#ff4d6d'},
                     {label:`CAGR Simple (${fmt(anios,2)}a)`,val:fmt(cagrS,2,'%'),color:cagrS>=0?'#00e5a0':'#ff4d6d'},
                     {label:`CAGR Compuesto (${fmt(anios,2)}a)`,val:fmt(cagrC,2,'%'),color:cagrC>=0?'#00e5a0':'#ff4d6d'},
-                    {label:'Max DD Simple',val:fmt(mcResult.maxDDSimple,2,'%'),color:'#ff4d6d'},
-                    {label:'Max DD Compuesto',val:fmt(mcResult.maxDDCompound,2,'%'),color:'#ff4d6d'},
+                    {label:'Max DD Simple',val:fmt(showMultiFloat&&mcResult.maxDDFloatSimple?mcResult.maxDDFloatSimple:mcResult.maxDDSimple,2,'%'),color:'#ff4d6d'},
+                    {label:'Max DD Compuesto',val:fmt(showMultiFloat&&mcResult.maxDDFloatCompound?mcResult.maxDDFloatCompound:mcResult.maxDDCompound,2,'%'),color:'#ff4d6d'},
                   ]
                   return(
                     <div className="metrics-section" style={{borderBottom:'1px solid var(--border)'}}>
@@ -5277,10 +5277,10 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                   onMouseOut={e=>e.currentTarget.style.background='transparent'}/>
                 <div style={{padding:'7px 12px',borderBottom:'1px solid var(--border)',fontFamily:MONO,fontSize:10,color:'#8ab8d4',letterSpacing:'0.1em',fontWeight:600}}>RESUMEN MULTICARTERA</div>
                 {(()=>{
-                  const lastS=mcResult.simpleCurve.slice(-1)[0]?.value||Number(capitalIni)
-                  const lastC=mcResult.compoundCurve.slice(-1)[0]?.value||Number(capitalIni)
-                  const lastBH=mcResult.bhCurve.slice(-1)[0]?.value||Number(capitalIni)
                   const capIni=Number(capitalIni)
+                  const lastS=(showMultiFloat&&mcResult.floatSimpleCurve?.length?mcResult.floatSimpleCurve.slice(-1)[0]?.value:mcResult.simpleCurve.slice(-1)[0]?.value)||capIni
+                  const lastC=(showMultiFloat&&mcResult.floatCompoundCurve?.length?mcResult.floatCompoundCurve.slice(-1)[0]?.value:mcResult.compoundCurve.slice(-1)[0]?.value)||capIni
+                  const lastBH=mcResult.bhCurve.slice(-1)[0]?.value||capIni
                   const totalDiasNat=mcResult.startDate?(new Date(mcResult.simpleCurve.slice(-1)[0]?.date)-new Date(mcResult.startDate))/86400000:365
                   const anios=Math.max(totalDiasNat/365.25,0.01)
                   const cagrS=(Math.pow(Math.max(lastS,0.01)/capIni,1/anios)-1)*100
@@ -5319,7 +5319,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                     {label:'Ganancia (€)',          compound:v2(fmt(lastC-capIni,2,'€'),cC2), bh:v2(fmt(lastBH-capIni,2,'€'),cBH2), simple:v2(fmt(lastS-capIni,2,'€'),cS2)},
                     {label:'Ganancia (%)',          compound:v2(fmt((lastC-capIni)/capIni*100,2,'%'),cC2), bh:v2(fmt((lastBH-capIni)/capIni*100,2,'%'),cBH2), simple:v2(fmt((lastS-capIni)/capIni*100,2,'%'),cS2)},
                     {label:`CAGR (${fmt(anios,2)}a)`, compound:v2(fmt(cagrC,2,'%'),cagrC>=0?'#00e5a0':'#ff4d6d'), bh:v2(fmt(cagrBH,2,'%'),cagrBH>=0?'#00e5a0':'#ff4d6d'), simple:v2(fmt(cagrS,2,'%'),cagrS>=0?'#00e5a0':'#ff4d6d')},
-                    {label:'Max Drawdown (%)',      compound:v2(fmt(mcResult.maxDDCompound,2,'%'),'#ff4d6d'), bh:v2(fmt(mcResult.maxDDBH,2,'%'),'#ff4d6d'), simple:v2(fmt(mcResult.maxDDSimple,2,'%'),'#ff4d6d')},
+                    {label:'Max Drawdown (%)',      compound:v2(fmt(showMultiFloat&&mcResult.maxDDFloatCompound?mcResult.maxDDFloatCompound:mcResult.maxDDCompound,2,'%'),'#ff4d6d'), bh:v2(fmt(mcResult.maxDDBH,2,'%'),'#ff4d6d'), simple:v2(fmt(showMultiFloat&&mcResult.maxDDFloatSimple?mcResult.maxDDFloatSimple:mcResult.maxDDSimple,2,'%'),'#ff4d6d')},
                   ]
                   return(
                     <div style={{display:'flex',flexDirection:'column',height:'100%'}}>
