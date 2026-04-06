@@ -274,12 +274,12 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         const mtype=ep.type||'EMA'
         if(ep.fast){
           const fv=(ep.fast===emaRPeriod&&data[0]?.emaR!=null)?data.map(d=>d.emaR):(mtype==='SMA'?calcSMA(_closes,ep.fast):calcEMA(_closes,ep.fast))
-          const fs=chart.addLineSeries({color:'#ffd166',lineWidth:1,lastValueVisible:false,priceLineVisible:false,title:`${mtype} ${ep.fast}`})
+          const fs=chart.addLineSeries({color:'#ffd166',lineWidth:1,lastValueVisible:false,priceLineVisible:false})
           fs.setData(data.map((d,i)=>({time:d.date,value:fv[i]})).filter(x=>x.value!=null))
         }
         if(ep.slow){
           const sv=(ep.slow===emaLPeriod&&data[0]?.emaL!=null)?data.map(d=>d.emaL):(mtype==='SMA'?calcSMA(_closes,ep.slow):calcEMA(_closes,ep.slow))
-          const ss=chart.addLineSeries({color:'#06b6d4',lineWidth:1,lastValueVisible:false,priceLineVisible:false,title:`${mtype} ${ep.slow}`})
+          const ss=chart.addLineSeries({color:'#06b6d4',lineWidth:1,lastValueVisible:false,priceLineVisible:false})
           ss.setData(data.map((d,i)=>({time:d.date,value:sv[i]})).filter(x=>x.value!=null))
         }
       }
