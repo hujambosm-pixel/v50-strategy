@@ -20,6 +20,7 @@ import MetricRow from '../components/MetricRow'
 import PriceAlarmQuickForm from '../components/PriceAlarmQuickForm'
 import StrategiesManager from '../components/StrategiesManager'
 import StrategyEditorPanel from '../components/StrategyEditorPanel'
+import TemplateGallery from '../components/TemplateGallery'
 import WatchlistCondPanel from '../components/WatchlistCondPanel'
 
 
@@ -531,6 +532,7 @@ export default function Home() {
   const [strategies,setStrategies]=useState([])
   const [strLoading,setStrLoading]=useState(true)
   const [editingStr,setEditingStr]=useState(null)
+  const [showTemplateGallery,setShowTemplateGallery]=useState(false)
   const [strForm,setStrForm]=useState({})
   const [strSaving,setStrSaving]=useState(false)
   // ── Strategy Builder (definition-based) ──
@@ -1567,9 +1569,12 @@ export default function Home() {
       observations:s.observations||''
     })
     // Use definition directly; seed condition_refs from FK columns if absent
-    const def = (s.id && s.definition && Object.keys(s.definition).length>0)
-      ? { ...s.definition }
-      : (s.id ? { ...DEFAULT_DEFINITION } : {})
+    // _templateDefinition: viene de TemplateGallery; tiene prioridad sobre todo
+    const def = s._templateDefinition !== undefined
+      ? { ...(s._templateDefinition || {}) }
+      : (s.id && s.definition && Object.keys(s.definition).length>0)
+        ? { ...s.definition }
+        : (s.id ? { ...DEFAULT_DEFINITION } : {})
     if (!def.condition_refs) {
       def.condition_refs = {
         filter:     s.condition_filter_id     || null,
@@ -1684,7 +1689,7 @@ export default function Home() {
       }).catch(()=>{})
     }
   }
-  const newStrategy=()=>openEditStr({id:null})
+  const newStrategy=()=>setShowTemplateGallery(true)
   const duplicateStr=(s)=>openEditStr({...s,id:null,name:s.name+' (copia)'})
 
   // ── Panel scale (Ctrl+Scroll por panel) ──
@@ -2936,7 +2941,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V8.45</title>
+        <title>Trading Simulator V8.46</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3013,7 +3018,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V8.45
+            <span className="dot"/>Trading Simulator V8.46
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4251,6 +4256,17 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
           {/* ── CONTENT ── */}
           <div className="content">
 
+            {/* ══ TEMPLATE GALLERY ══ */}
+            {showTemplateGallery&&sidePanel==='config'&&(
+              <TemplateGallery
+                onSelect={(definition,focusAI)=>{
+                  setShowTemplateGallery(false)
+                  openEditStr({id:null,_templateDefinition:definition,_focusAI:!!focusAI})
+                }}
+                onCancel={()=>setShowTemplateGallery(false)}
+              />
+            )}
+
             {/* ══ STRATEGY EDITOR PANEL ══ */}
             {editingStr!==null&&sidePanel==='config'&&(
               <StrategyEditorPanel
@@ -4260,6 +4276,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 setDefinition={setDefinition}
                 conditions={conditions}
                 strategy={editingStr}
+                focusAI={!!editingStr._focusAI}
                 onSave={saveEditStr}
                 onCancel={closeEditStr}
                 onDelete={()=>deleteStr(editingStr.id)}
