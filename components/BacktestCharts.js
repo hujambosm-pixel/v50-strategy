@@ -254,6 +254,8 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
   const containerRef=useRef(null)
   const chartDivRef=useRef(null)
   const chartRef=useRef(null)
+  const svgRef=useRef(null)
+  const candlesRef=useRef(null)
   const tradeSeriesMapRef=useRef(new Map())
   const [inView,setInView]=useState(false)
   const [ohlcv,setOhlcv]=useState(null)
@@ -307,6 +309,7 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
         wickUpColor:'#3a7a6a',wickDownColor:'#7a3a4a',
       })
       candles.setData(ohlcv.map(d=>({time:d.date,open:d.open,high:d.high,low:d.low,close:d.close})))
+      candlesRef.current=candles
 
       // ── Diagonal trade lines (MEJORA 1) ──
       tradeSeriesMapRef.current=new Map()
@@ -332,18 +335,6 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
         ;(s.exits||[]).forEach(e=>{
           markers.push({time:e.date,position:'aboveBar',color:xc,shape:'arrowDown',text:'',size:1})
         })
-        ;(s.trades||[]).forEach(t=>{
-          if(!t.entryDate||!t.exitDate) return
-          const tradeBars=ohlcv.filter(d=>d.date>=t.entryDate&&d.date<=t.exitDate)
-          if(!tradeBars.length) return
-          const isWinner=t.pnlPct>=0
-          const labelBar=isWinner
-            ?tradeBars.reduce((best,d)=>(d.high>best.high?d:best),tradeBars[0])
-            :tradeBars.reduce((best,d)=>(d.low<best.low?d:best),tradeBars[0])
-          const profit=t.pnlSimple??0
-          const lbl=`#${t.n} · ${t.pnlPct>=0?'+':''}${(t.pnlPct||0).toFixed(1)}% · €${profit>=0?'+':''}${Math.round(profit)}`
-          markers.push({time:labelBar.date,position:isWinner?'aboveBar':'belowBar',color:isWinner?'#00e5a0':'#ff4d6d',shape:'circle',size:0,text:lbl})
-        })
       })
       markers.sort((a,b)=>a.time.localeCompare(b.time))
       if(markers.length) candles.setMarkers(markers)
@@ -358,6 +349,59 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
         }catch(e){if(!e.message?.includes('disposed'))throw e}
       }
       onReady?.({chart,highlightTrade})
+
+      // ── SVG trade labels (two-line: #N·€cap / X%·€profit) ──
+      const drawTradeLabels=()=>{
+        const svg=svgRef.current
+        if(!svg||!candlesRef.current||!chartRef.current) return
+        svg.querySelectorAll('.trade-label').forEach(el=>el.remove())
+        const NS='http://www.w3.org/2000/svg'
+        const ts=chartRef.current.timeScale()
+        const chartH=chartDivRef.current?.clientHeight||height
+        let winIdx=0,lossIdx=0
+        stratSignals.forEach(s=>{
+          ;(s.trades||[]).forEach(t=>{
+            if(!t.entryDate||!t.exitDate) return
+            try{
+              const x1=ts.timeToCoordinate(t.entryDate),x2=ts.timeToCoordinate(t.exitDate)
+              if(x1==null||x2==null) return
+              const midX=(x1+x2)/2
+              const isWin=t.pnlPct>=0
+              const bc=isWin?'#00e5a0':'#ff4d6d'
+              const iidx=isWin?winIdx++:lossIdx++
+              const line1=`#${t.n} · €${Math.round(t.capital??0)}`
+              const profit=t.pnlSimple??0
+              const line2=`${t.pnlPct>=0?'+':''}${(t.pnlPct||0).toFixed(1)}% · €${profit>=0?'+':''}${Math.round(profit)}`
+              const BOX_H=34,BOX_STEP=BOX_H+4,MARGIN=6
+              const w=Math.max(line1.length,line2.length)*7.5+20
+              const labelY=isWin?MARGIN+BOX_H/2+(iidx%4)*BOX_STEP:chartH-MARGIN-BOX_H/2-(iidx%4)*BOX_STEP
+              const g=document.createElementNS(NS,'g')
+              g.setAttribute('class','trade-label'); g.setAttribute('pointer-events','none')
+              const rect=document.createElementNS(NS,'rect')
+              Object.entries({x:midX-w/2,y:labelY-BOX_H/2,width:w,height:BOX_H,
+                fill:isWin?'rgba(0,229,160,0.14)':'rgba(255,77,109,0.14)',
+                rx:'4',stroke:bc,'stroke-width':'1'}).forEach(([k,v])=>rect.setAttribute(k,v))
+              g.appendChild(rect)
+              const midPrice=(t.entryPx+t.exitPx)/2
+              const pyBase=candlesRef.current.priceToCoordinate(midPrice)
+              if(pyBase!=null){
+                const cy1=isWin?labelY+BOX_H/2:labelY-BOX_H/2
+                const cy2=isWin?Math.max(cy1+4,pyBase-4):Math.min(cy1-4,pyBase+4)
+                if(Math.abs(cy2-cy1)>4){
+                  const l=document.createElementNS(NS,'line')
+                  Object.entries({x1:midX,y1:cy1,x2:midX,y2:cy2,stroke:bc,'stroke-width':'1','stroke-dasharray':'3,3',opacity:'0.35'}).forEach(([k,v])=>l.setAttribute(k,v))
+                  g.appendChild(l)
+                }
+              }
+              const mkT=(txt,y,sz,fill,fw)=>{const el=document.createElementNS(NS,'text');Object.entries({x:midX,y,'font-size':sz,'font-family':_MONO,'text-anchor':'middle',fill,'font-weight':fw}).forEach(([k,v])=>el.setAttribute(k,v));el.textContent=txt;return el}
+              g.appendChild(mkT(line1,labelY-4,'11','#cde8ff','700'))
+              g.appendChild(mkT(line2,labelY+11,'10',bc,'600'))
+              svg.appendChild(g)
+            }catch(_){}
+          })
+        })
+      }
+      const unsubLabels=chart.timeScale().subscribeVisibleTimeRangeChange(()=>setTimeout(drawTradeLabels,30))
 
       // ── fitContent first, then apply sync range ──
       chart.timeScale().fitContent()
@@ -386,15 +430,22 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
           if(syncRef.current) syncRef.current.charts=syncRef.current.charts.filter(c=>c!==chart)
         }
       }
+      setTimeout(drawTradeLabels,100)
       const ro=new ResizeObserver(()=>{
         if(chartDivRef.current&&chartRef.current){
           try{chart.applyOptions({width:chartDivRef.current.clientWidth})}catch(_){}
+          setTimeout(drawTradeLabels,30)
         }
       })
       ro.observe(chartDivRef.current)
       return()=>ro.disconnect()
     })
-    return()=>{tradeSeriesMapRef.current=new Map();if(chartRef.current){chartRef.current.__syncCleanup?.();chartRef.current.remove();chartRef.current=null}}
+    return()=>{
+      svgRef.current?.querySelectorAll('.trade-label').forEach(el=>el.remove())
+      candlesRef.current=null
+      tradeSeriesMapRef.current=new Map()
+      if(chartRef.current){chartRef.current.__syncCleanup?.();chartRef.current.remove();chartRef.current=null}
+    }
   },[ohlcv,stratSignals,height])
 
   return(
@@ -423,7 +474,10 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
       ):err?(
         <div style={{height,display:'flex',alignItems:'center',justifyContent:'center',color:'#ff4d6d',fontFamily:_MONO,fontSize:10}}>⚠ {err}</div>
       ):(
-        <div ref={chartDivRef} style={{height}}/>
+        <div style={{position:'relative',height}}>
+          <div ref={chartDivRef} style={{height:'100%'}}/>
+          <svg ref={svgRef} style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',pointerEvents:'none',zIndex:5}}/>
+        </div>
       )}
     </div>
   )
