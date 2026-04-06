@@ -40,27 +40,111 @@ REGLAS:
 - Si el usuario no especifica parámetros, usa los valores por defecto más comunes.
 - Si la descripción no corresponde a ningún tipo disponible, devuelve { "error": "No puedo modelar esta condición con los tipos disponibles." }`
 
-const GROQ_STRATEGY_SYSTEM = `Eres un experto en análisis técnico de trading. Convierte una descripción en lenguaje natural en una configuración JSON de estrategia con 7 bloques.
+const GROQ_STRATEGY_SYSTEM = `Eres un asistente que convierte descripciones de estrategias de trading al siguiente esquema JSON. Responde ÚNICAMENTE con JSON válido, sin explicaciones, sin markdown, sin backticks.
 
-TIPOS DE CONDICIÓN (únicos disponibles) y sus params:
-- ema_cross_up / ema_cross_down:   { ma_fast: int, ma_slow: int }
-- price_above_ma / price_below_ma: { ma_period: int, ma_type?: "EMA"|"SMA" }
-- close_above_ma / close_below_ma: { ma_period: int, ma_type?: "EMA"|"SMA" }
-- rsi_above / rsi_below / rsi_cross_up / rsi_cross_down: { period: int, level: int }
-- macd_cross_up / macd_cross_down: { fast: int, slow: int, signal: int }
+Esquema obligatorio:
+{
+  "filter": { "type": "string | null" },
+  "setup": {
+    "indicator": "EMA | SMA | RSI | MACD | PRICE | VOLUME | null",
+    "condition": "string",
+    "params": {}
+  },
+  "trigger": {
+    "indicator": "EMA | SMA | RSI | MACD | PRICE | VOLUME | null",
+    "condition": "string",
+    "params": {}
+  },
+  "abort": { "type": "string | null" },
+  "exit": {
+    "type": "string | null",
+    "params": {}
+  },
+  "stop": {
+    "type": "fixed_pct | trailing_pct | below_ma_at_signal | null",
+    "params": {}
+  },
+  "mgmt": {
+    "trailing": false,
+    "reentry": false
+  }
+}
 
-TIPOS DE STOP:
-- { "type": "tecnico", "ma_period": int }
-- { "type": "atr_based", "atr_period": int, "atr_mult": float }
-- null
+Valores válidos para condition en EMA/SMA: 'crosses_above', 'crosses_below', 'price_above', 'price_below'.
+Para RSI: 'below', 'above', 'crosses_above', 'crosses_below'.
+Para MACD: 'crosses_signal_up', 'crosses_signal_down'.
+Params para EMA/SMA: { fast: number, slow: number }.
+Params para RSI: { period: number, level: number }.
+Params para MACD: { fast: number, slow: number, signal: number }.
 
-REGLAS:
-- Responde ÚNICAMENTE con JSON válido. Sin texto adicional, sin markdown.
-- Estructura exacta: { "filter", "setup", "trigger", "abort", "stop_loss", "exit", "management" }
-- Bloques no aplicables → null. management nunca es null.
-- Cada bloque de condición: { "type": "tipo", ...params }
-- management: { "sin_perdidas": bool, "reentry": bool }
-- Si faltan parámetros usa los valores más comunes.`
+Si algo no se menciona, usa null.`
+
+// ── Transform new schema → flat frontend schema ───────────────────────
+function transformGroqStrategy(parsed) {
+  const result = {}
+
+  // Helper: convert { indicator, condition, params } → flat condition block
+  function toCondBlock(block) {
+    if (!block || !block.indicator || block.indicator === 'null') return null
+    const ind  = String(block.indicator).toUpperCase()
+    const cond = block.condition || ''
+    const p    = block.params || {}
+
+    if (ind === 'EMA' || ind === 'SMA') {
+      const maType = ind === 'SMA' ? 'SMA' : 'EMA'
+      if (cond === 'crosses_above') return { type: 'ema_cross_up',    ma_fast: p.fast ?? 10, ma_slow: p.slow ?? 20 }
+      if (cond === 'crosses_below') return { type: 'ema_cross_down',  ma_fast: p.fast ?? 10, ma_slow: p.slow ?? 20 }
+      if (cond === 'price_above')   return { type: 'price_above_ma',  ma_period: p.slow ?? p.fast ?? 50, ma_type: maType }
+      if (cond === 'price_below')   return { type: 'price_below_ma',  ma_period: p.slow ?? p.fast ?? 50, ma_type: maType }
+    }
+    if (ind === 'RSI') {
+      if (cond === 'below')         return { type: 'rsi_below',      period: p.period ?? 14, level: p.level ?? 30 }
+      if (cond === 'above')         return { type: 'rsi_above',      period: p.period ?? 14, level: p.level ?? 70 }
+      if (cond === 'crosses_above') return { type: 'rsi_cross_up',   period: p.period ?? 14, level: p.level ?? 30 }
+      if (cond === 'crosses_below') return { type: 'rsi_cross_down', period: p.period ?? 14, level: p.level ?? 70 }
+    }
+    if (ind === 'MACD') {
+      if (cond === 'crosses_signal_up')   return { type: 'macd_cross_up',   fast: p.fast ?? 12, slow: p.slow ?? 26, signal: p.signal ?? 9 }
+      if (cond === 'crosses_signal_down') return { type: 'macd_cross_down', fast: p.fast ?? 12, slow: p.slow ?? 26, signal: p.signal ?? 9 }
+    }
+    return null
+  }
+
+  // filter: { type: string | null } → flat block (type string maps directly to CREV)
+  result.filter  = parsed.filter?.type  ? { type: parsed.filter.type }  : null
+
+  // setup / trigger: full indicator+condition+params → flat
+  result.setup   = toCondBlock(parsed.setup)
+  result.trigger = toCondBlock(parsed.trigger)
+
+  // abort: { type: string | null }
+  result.abort = parsed.abort?.type ? { type: parsed.abort.type } : null
+
+  // exit: { type: string | null, params: {...} }
+  result.exit = parsed.exit?.type
+    ? { type: parsed.exit.type, ...(parsed.exit.params || {}) }
+    : null
+
+  // stop → stop_loss
+  const st = parsed.stop
+  if (st?.type === 'below_ma_at_signal') {
+    result.stop_loss = { type: 'tecnico',   ma_period:  st.params?.period ?? st.params?.ma_period ?? 20 }
+  } else if (st?.type === 'trailing_pct') {
+    result.stop_loss = { type: 'atr_based', atr_period: st.params?.period ?? 14, atr_mult: st.params?.mult ?? 1.5 }
+  } else if (st?.type === 'fixed_pct') {
+    result.stop_loss = { type: 'tecnico',   ma_period:  st.params?.period ?? 20 }
+  } else {
+    result.stop_loss = null
+  }
+
+  // mgmt → management  (trailing → sin_perdidas)
+  result.management = {
+    sin_perdidas: !!(parsed.mgmt?.trailing),
+    reentry:      !!(parsed.mgmt?.reentry),
+  }
+
+  return result
+}
 
 export default async function handler(req, res) {
   // ── POST ?action=groq_strategy ──
@@ -88,7 +172,7 @@ export default async function handler(req, res) {
       const raw    = data.choices?.[0]?.message?.content || ''
       const clean  = raw.replace(/```json|```/g, '').trim()
       const parsed = JSON.parse(clean)
-      return res.status(200).json(parsed)
+      return res.status(200).json(transformGroqStrategy(parsed))
     } catch(e) {
       return res.status(500).json({ error: `Error parseando respuesta de Groq: ${e.message}` })
     }
