@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { MONO } from '../lib/utils'
 
-// ── Templates ─────────────────────────────────────────────────────────
+// ── Templates — schema plano compatible con RoleRow/StopRow/MgmtRow ──
+// Claves: setup, trigger, filter, exit, stop_loss, management (NO stop, NO mgmt)
+// Tipos: ema_cross_up, rsi_cross_up, macd_cross_up, price_above_ma, etc. (de CMAP)
 const TEMPLATES = [
   {
     id: 'blank',
@@ -31,10 +33,10 @@ const TEMPLATES = [
     badgeColor: '#ffd166',
     icon: '📈',
     definition: {
-      setup: { indicator:'EMA', condition:'crosses_above', params:{ fast:10, slow:20 } },
-      exit:  { type:'close_below_ma', params:{ ma_period:10 } },
-      stop:  { type:'tecnico' },
-      mgmt:  { trailing:true, reentry:false },
+      setup:      { type:'ema_cross_up', ma_fast:10, ma_slow:20 },
+      exit:       { type:'close_below_ma', ma_period:10, ma_type:'EMA' },
+      stop_loss:  { type:'tecnico', ma_period:10 },
+      management: { sin_perdidas:true, reentry:false },
     },
   },
   {
@@ -45,10 +47,10 @@ const TEMPLATES = [
     badgeColor: '#a78bfa',
     icon: '📉',
     definition: {
-      setup: { indicator:'RSI', condition:'rsi_cross_up', params:{ period:14, level:30 } },
-      exit:  { type:'rsi_above', params:{ period:14, level:70 } },
-      stop:  { type:'fixed_pct', params:{ pct:5 } },
-      mgmt:  { trailing:false, reentry:false },
+      setup:      { type:'rsi_cross_up', period:14, level:30 },
+      exit:       { type:'rsi_above', period:14, level:70 },
+      stop_loss:  { type:'fixed_pct', params:{ pct:5 } },
+      management: { sin_perdidas:false, reentry:false },
     },
   },
   {
@@ -59,10 +61,10 @@ const TEMPLATES = [
     badgeColor: '#fb923c',
     icon: '🔀',
     definition: {
-      setup: { indicator:'MACD', condition:'macd_cross_up', params:{ fast:12, slow:26, signal:9 } },
-      exit:  { type:'macd_cross_down', params:{ fast:12, slow:26, signal:9 } },
-      stop:  { type:'atr_based', params:{ atr_period:14, atr_mult:2 } },
-      mgmt:  { trailing:false, reentry:false },
+      setup:      { type:'macd_cross_up', fast:12, slow:26, signal:9 },
+      exit:       { type:'macd_cross_down', fast:12, slow:26, signal:9 },
+      stop_loss:  { type:'atr_based', atr_period:14, atr_mult:2 },
+      management: { sin_perdidas:false, reentry:false },
     },
   },
   {
@@ -73,41 +75,41 @@ const TEMPLATES = [
     badgeColor: '#00d4ff',
     icon: '🎯',
     definition: {
-      setup: { indicator:'PRICE', condition:'price_above', params:{ ma_period:50 } },
-      exit:  { type:'price_below_ma', params:{ ma_period:50 } },
-      stop:  { type:'trailing_atr', params:{ atr_period:14, atr_mult:2 } },
-      mgmt:  { trailing:true, reentry:false },
+      setup:      { type:'price_above_ma', ma_period:50, ma_type:'EMA' },
+      exit:       { type:'price_below_ma', ma_period:50, ma_type:'EMA' },
+      stop_loss:  { type:'trailing_atr', params:{ atr_period:14, atr_mult:2 } },
+      management: { sin_perdidas:true, reentry:false },
     },
   },
   {
     id: 'ema_sp500_filter',
-    title: 'Cruce EMA + Filtro SP500',
-    desc: 'Cruce de EMAs solo cuando SP500 está en tendencia',
+    title: 'Cruce EMA + Filtro MA',
+    desc: 'Cruce de EMAs solo cuando el precio está sobre su MA larga',
     badge: 'EMA + FILTER',
     badgeColor: '#00e5a0',
     icon: '🛡️',
     definition: {
-      filter: { market:[{ type:'precio_ema', params:{ sp500EmaR:50, sp500EmaL:200 } }] },
-      setup:  { indicator:'EMA', condition:'crosses_above', params:{ fast:10, slow:20 } },
-      exit:   { type:'close_below_ma', params:{ ma_period:10 } },
-      stop:   { type:'tecnico' },
-      mgmt:   { trailing:true, reentry:false },
+      filter:     { type:'price_above_ma', ma_period:200, ma_type:'EMA' },
+      setup:      { type:'ema_cross_up', ma_fast:10, ma_slow:20 },
+      exit:       { type:'close_below_ma', ma_period:10, ma_type:'EMA' },
+      stop_loss:  { type:'tecnico', ma_period:20 },
+      management: { sin_perdidas:true, reentry:false },
     },
   },
   {
     id: 'ema_rsi_combo',
-    title: 'RSI + EMA Combinado',
+    title: 'EMA + RSI Combinado',
     desc: 'EMA como setup, RSI como confirmación de entrada',
     badge: 'EMA + RSI',
     badgeColor: '#c084fc',
     badgeColor2: '#ffd166',
     icon: '⚡',
     definition: {
-      setup:   { indicator:'EMA', condition:'crosses_above', params:{ fast:10, slow:20 } },
-      trigger: { indicator:'RSI', condition:'rsi_below', params:{ period:14, level:50 } },
-      exit:    { type:'rsi_above', params:{ period:14, level:70 } },
-      stop:    { type:'tecnico' },
-      mgmt:    { trailing:true, reentry:false },
+      setup:      { type:'ema_cross_up', ma_fast:10, ma_slow:20 },
+      trigger:    { type:'rsi_below', period:14, level:50 },
+      exit:       { type:'rsi_above', period:14, level:70 },
+      stop_loss:  { type:'tecnico', ma_period:10 },
+      management: { sin_perdidas:true, reentry:false },
     },
   },
 ]
@@ -122,7 +124,7 @@ function TemplateCard({ tpl, onSelect, hovered, setHovered }) {
     <button
       onMouseEnter={() => setHovered(tpl.id)}
       onMouseLeave={() => setHovered(null)}
-      onClick={() => onSelect(tpl.definition, tpl.focusAI)}
+      onClick={() => onSelect(tpl.definition, tpl.focusAI, tpl.title)}
       style={{
         textAlign: 'left',
         background: isH ? `${color}0d` : '#0a101a',

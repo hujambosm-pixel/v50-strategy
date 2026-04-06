@@ -28,7 +28,6 @@ const CMAP = {
   'rsi.cross_up':'rsi_cross_up','rsi.cross_down':'rsi_cross_down',
   'macd.cross_up':'macd_cross_up','macd.cross_down':'macd_cross_down',
 }
-// Reverse: conditionType → [ind, op]
 const CREV = Object.fromEntries(Object.entries(CMAP).map(([k,v])=>[v,k.split('.')]))
 
 const IND_DEFAULTS = {
@@ -85,6 +84,113 @@ const SEL = {
   padding:'4px 6px', borderRadius:3, cursor:'pointer', outline:'none',
 }
 
+// ── Path helpers ──────────────────────────────────────────────────────
+function getByPath(obj, path) {
+  return path.split('.').reduce((acc, k) => acc?.[k], obj)
+}
+function setByPath(obj, path, value) {
+  const keys = path.split('.')
+  if (keys.length === 1) return { ...obj, [keys[0]]: value }
+  return { ...obj, [keys[0]]: setByPath(obj?.[keys[0]] || {}, keys.slice(1).join('.'), value) }
+}
+
+// ── Summary fields — qué parámetros mostrar en vista rápida ──────────
+function getTemplateSummaryFields(definition) {
+  const rows = []
+  const setup = definition?.setup
+  const exit  = definition?.exit
+  const stop  = definition?.stop_loss
+
+  if (setup) {
+    const t = setup.type
+    if (t === 'ema_cross_up' || t === 'ema_cross_down') {
+      rows.push({ label:'ENTRADA', color:'#00d4ff', desc: t === 'ema_cross_up' ? 'EMA cruza ↑' : 'EMA cruza ↓',
+        params:[
+          { label:'EMA rápida', path:'setup.ma_fast', min:1,   max:500 },
+          { label:'EMA lenta',  path:'setup.ma_slow', min:2,   max:500 },
+        ]})
+    } else if (t?.startsWith('rsi_')) {
+      const desc = t==='rsi_cross_up'?'RSI cruza ↑ nivel':t==='rsi_cross_down'?'RSI cruza ↓ nivel':t==='rsi_above'?'RSI > nivel':'RSI < nivel'
+      rows.push({ label:'ENTRADA', color:'#a78bfa', desc,
+        params:[
+          { label:'Período', path:'setup.period', min:2, max:50 },
+          { label:'Nivel',   path:'setup.level',  min:1, max:99 },
+        ]})
+    } else if (t?.startsWith('macd_')) {
+      rows.push({ label:'ENTRADA', color:'#fb923c', desc: t==='macd_cross_up' ? 'MACD cruza ↑ señal' : 'MACD cruza ↓ señal',
+        params:[
+          { label:'Rápida', path:'setup.fast',   min:2, max:100 },
+          { label:'Lenta',  path:'setup.slow',   min:3, max:200 },
+          { label:'Señal',  path:'setup.signal', min:2, max:50  },
+        ]})
+    } else if (t === 'price_above_ma' || t === 'price_below_ma' || t === 'close_above_ma' || t === 'close_below_ma') {
+      const desc = t.includes('above') ? 'Precio/Cierre > MA' : 'Precio/Cierre < MA'
+      rows.push({ label:'ENTRADA', color:'#00d4ff', desc,
+        params:[
+          { label:'Período MA', path:'setup.ma_period', min:2, max:500 },
+        ]})
+    }
+  }
+
+  if (exit) {
+    const t = exit.type
+    if (t === 'close_below_ma' || t === 'price_below_ma' || t === 'close_above_ma') {
+      rows.push({ label:'SALIDA', color:'#ffd166', desc: t.includes('above') ? 'Cierre sobre MA' : 'Cierre bajo MA',
+        params:[
+          { label:'Período MA', path:'exit.ma_period', min:1, max:500 },
+        ]})
+    } else if (t === 'rsi_above' || t === 'rsi_below') {
+      rows.push({ label:'SALIDA', color:'#ffd166', desc: t === 'rsi_above' ? 'RSI supera nivel' : 'RSI baja de nivel',
+        params:[
+          { label:'Período', path:'exit.period', min:2, max:50 },
+          { label:'Nivel',   path:'exit.level',  min:1, max:99 },
+        ]})
+    } else if (t?.startsWith('macd_')) {
+      rows.push({ label:'SALIDA', color:'#ffd166', desc:'MACD cruza señal',
+        params:[
+          { label:'Rápida', path:'exit.fast',   min:2, max:100 },
+          { label:'Lenta',  path:'exit.slow',   min:3, max:200 },
+          { label:'Señal',  path:'exit.signal', min:2, max:50  },
+        ]})
+    } else if (t === 'ema_cross_down') {
+      rows.push({ label:'SALIDA', color:'#ffd166', desc:'EMA cruza ↓',
+        params:[
+          { label:'EMA rápida', path:'exit.ma_fast', min:1, max:500 },
+          { label:'EMA lenta',  path:'exit.ma_slow', min:2, max:500 },
+        ]})
+    }
+  }
+
+  if (stop) {
+    const t = stop.type
+    if (t === 'tecnico') {
+      rows.push({ label:'STOP', color:'#ff4d6d', desc:'Stop técnico (MA)',
+        params:[
+          { label:'Período MA', path:'stop_loss.ma_period', min:1, max:200 },
+        ]})
+    } else if (t === 'fixed_pct') {
+      rows.push({ label:'STOP', color:'#ff4d6d', desc:'Stop fijo desde entrada',
+        params:[
+          { label:'%', path:'stop_loss.params.pct', min:0.5, max:50, step:0.5 },
+        ]})
+    } else if (t === 'atr_based') {
+      rows.push({ label:'STOP', color:'#ff4d6d', desc:'Stop ATR dinámico',
+        params:[
+          { label:'Período ATR', path:'stop_loss.atr_period', min:5,   max:50 },
+          { label:'×Mult',       path:'stop_loss.atr_mult',   min:0.5, max:5, step:0.5 },
+        ]})
+    } else if (t === 'trailing_atr') {
+      rows.push({ label:'STOP', color:'#ff4d6d', desc:'Stop ATR trailing',
+        params:[
+          { label:'Período ATR', path:'stop_loss.params.atr_period', min:5,   max:50 },
+          { label:'×Mult',       path:'stop_loss.params.atr_mult',   min:0.5, max:5, step:0.5 },
+        ]})
+    }
+  }
+
+  return rows
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────
 function getAuthH() {
   let s = {}
@@ -124,6 +230,55 @@ function Num({ label, value, onChange, min=1, max=9999, step='any' }) {
   )
 }
 
+// ── SectionJsonEditor — edición bidireccional del bloque JSON ─────────
+function SectionJsonEditor({ value, onChange }) {
+  const [raw, setRaw]       = useState(() => JSON.stringify(value ?? null, null, 2))
+  const [error, setError]   = useState(false)
+  const focusedRef          = useRef(false)
+  const valueStr            = JSON.stringify(value ?? null)
+
+  useEffect(() => {
+    if (!focusedRef.current) {
+      setRaw(JSON.stringify(value ?? null, null, 2))
+      setError(false)
+    }
+  }, [valueStr]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function handleChange(text) {
+    setRaw(text)
+    try {
+      const parsed = JSON.parse(text)
+      setError(false)
+      onChange(parsed)
+    } catch {
+      setError(true)
+    }
+  }
+
+  return (
+    <textarea
+      value={raw}
+      spellCheck={false}
+      onFocus={() => { focusedRef.current = true }}
+      onBlur={() => {
+        focusedRef.current = false
+        if (error) { setRaw(JSON.stringify(value ?? null, null, 2)); setError(false) }
+      }}
+      onChange={e => handleChange(e.target.value)}
+      style={{
+        width:'100%', height:'100%', minHeight:72,
+        fontFamily:'monospace', fontSize:10,
+        background:'#050810',
+        color: error ? '#ff7a7a' : '#5a8aaa',
+        border: `1px solid ${error ? '#ff4d6d' : '#12253a'}`,
+        borderRadius:4, padding:'6px 8px',
+        resize:'none', boxSizing:'border-box',
+        outline:'none',
+      }}
+    />
+  )
+}
+
 // ── Role row (FILTER, SETUP, TRIGGER, ABORT, EXIT) ────────────────────
 function RoleRow({ role, definition, setDefinition }) {
   const r = ROLES.find(x => x.key === role)
@@ -147,7 +302,7 @@ function RoleRow({ role, definition, setDefinition }) {
   function onP(key, val) { setBlock({ ...block, [key]: val }) }
 
   return (
-    <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 12px', background:'var(--bg2)', borderLeft:`3px solid ${r.color}`, borderRadius:'0 4px 4px 0', minHeight:44, flexWrap:'wrap' }}>
+    <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 12px', background:'var(--bg2)', borderLeft:`3px solid ${r.color}`, borderRadius:'0 4px 4px 0', minHeight:44, flexWrap:'wrap', flex:1 }}>
       <span style={{ fontFamily:MONO, fontSize:9, fontWeight:700, letterSpacing:'0.1em', color:r.color, background:`${r.color}14`, border:`1px solid ${r.color}33`, padding:'3px 8px', borderRadius:3, whiteSpace:'nowrap', flexShrink:0, minWidth:72, textAlign:'center' }}>{r.label}</span>
 
       <select value={ind} onChange={e=>onIndChange(e.target.value)} style={{ ...SEL, minWidth:82 }}>
@@ -211,7 +366,7 @@ function StopRow({ definition, setDefinition }) {
   function onParam(key,val) { setBlock({ ...block, params:{ ...(block.params||{}), [key]:val } }) }
 
   return (
-    <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 12px', background:'var(--bg2)', borderLeft:`3px solid ${r.color}`, borderRadius:'0 4px 4px 0', minHeight:44, flexWrap:'wrap' }}>
+    <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 12px', background:'var(--bg2)', borderLeft:`3px solid ${r.color}`, borderRadius:'0 4px 4px 0', minHeight:44, flexWrap:'wrap', flex:1 }}>
       <span style={{ fontFamily:MONO, fontSize:9, fontWeight:700, letterSpacing:'0.1em', color:r.color, background:`${r.color}14`, border:`1px solid ${r.color}33`, padding:'3px 8px', borderRadius:3, whiteSpace:'nowrap', flexShrink:0, minWidth:72, textAlign:'center' }}>STOP</span>
       <select value={stopType} onChange={e=>onTypeChange(e.target.value)} style={{ ...SEL, minWidth:148 }}>
         <option value="">— Sin stop —</option>
@@ -245,7 +400,7 @@ function MgmtRow({ definition, setDefinition }) {
   const mgmt = definition?.management || {}
   function setMgmt(key,val) { setDefinition(prev => ({ ...prev, management: { ...(prev?.management||{}), [key]: val } })) }
   return (
-    <div style={{ display:'flex', alignItems:'center', gap:16, padding:'8px 12px', background:'var(--bg2)', borderLeft:`3px solid ${r.color}`, borderRadius:'0 4px 4px 0', minHeight:44 }}>
+    <div style={{ display:'flex', alignItems:'center', gap:16, padding:'8px 12px', background:'var(--bg2)', borderLeft:`3px solid ${r.color}`, borderRadius:'0 4px 4px 0', minHeight:44, flex:1 }}>
       <span style={{ fontFamily:MONO, fontSize:9, fontWeight:700, letterSpacing:'0.1em', color:r.color, background:`${r.color}14`, border:`1px solid ${r.color}33`, padding:'3px 8px', borderRadius:3, whiteSpace:'nowrap', flexShrink:0, minWidth:72, textAlign:'center' }}>MGMT</span>
       <label style={{ display:'flex', alignItems:'center', gap:6, cursor:'pointer' }}>
         <input type="checkbox" checked={!!mgmt.sin_perdidas} onChange={e=>setMgmt('sin_perdidas',e.target.checked)} style={{ accentColor:r.color }} />
@@ -259,16 +414,38 @@ function MgmtRow({ definition, setDefinition }) {
   )
 }
 
+// ── SectionRow — wrapper 60/40 con JSON editor lateral ───────────────
+function SectionRow({ left, sectionKey, definition, setDefinition }) {
+  function onChange(val) {
+    setDefinition(prev => {
+      const n = { ...prev }
+      if (val == null) delete n[sectionKey]
+      else n[sectionKey] = val
+      return n
+    })
+  }
+  return (
+    <div style={{ display:'flex', gap:6, alignItems:'stretch', marginBottom:3 }}>
+      <div style={{ flex:'6 0 0', minWidth:0 }}>{left}</div>
+      <div style={{ flex:'4 0 0', minWidth:120, maxWidth:260 }}>
+        <SectionJsonEditor value={definition?.[sectionKey] ?? null} onChange={onChange} />
+      </div>
+    </div>
+  )
+}
+
 // ── Main export ───────────────────────────────────────────────────────
 export default function StrategyEditorPanel({
   strForm, setStrForm, definition, setDefinition,
   conditions, strategy,
   onSave, onCancel, onDelete, saving,
   focusAI = false,
+  templateName = '',
 }) {
-  const [aiText, setAiText] = useState('')
+  const [aiText, setAiText]       = useState('')
   const [aiLoading, setAiLoading] = useState(false)
-  const [aiError, setAiError] = useState('')
+  const [aiError, setAiError]     = useState('')
+  const [showSummary, setShowSummary] = useState(() => !!templateName && !focusAI)
   const aiInputRef = useRef(null)
 
   useEffect(() => {
@@ -287,7 +464,6 @@ export default function StrategyEditorPanel({
       })
       const data = await res.json()
       if (data.error) throw new Error(data.error)
-      // Merge AI result into definition, keep condition_refs and other keys
       setDefinition(prev => ({ ...prev, ...data }))
     } catch(e) { setAiError(e.message) }
     finally { setAiLoading(false) }
@@ -299,20 +475,116 @@ export default function StrategyEditorPanel({
     setDefinition(prev => ({ ...prev, ...t.def }))
   }
 
+  // ── Shared header ─────────────────────────────────────────────────
+  const Header = ({ extra }) => (
+    <div style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 16px', borderBottom:'1px solid var(--border)', background:'var(--bg2)', flexShrink:0 }}>
+      <button onClick={onCancel} style={{ background:'transparent', border:'1px solid var(--border)', color:'var(--text3)', fontFamily:MONO, fontSize:11, padding:'3px 10px', borderRadius:4, cursor:'pointer' }}>← Volver</button>
+      <span style={{ fontFamily:MONO, fontSize:12, color:'var(--text3)' }}>{strategy?.id ? 'Editando' : templateName || 'Nueva estrategia'}</span>
+      <span style={{ fontFamily:MONO, fontSize:14, fontWeight:700, color:strForm.color||'var(--accent)' }}>{strForm.name||'—'}</span>
+      <div style={{ marginLeft:'auto', display:'flex', gap:8 }}>
+        {extra}
+        {strategy?.id && <button onClick={onDelete} style={{ background:'rgba(255,77,109,0.1)', border:'1px solid #ff4d6d', color:'#ff4d6d', fontFamily:MONO, fontSize:11, padding:'4px 12px', borderRadius:4, cursor:'pointer' }}>🗑 Eliminar</button>}
+        <button onClick={onCancel} style={{ background:'transparent', border:'1px solid var(--border)', color:'var(--text3)', fontFamily:MONO, fontSize:11, padding:'4px 12px', borderRadius:4, cursor:'pointer' }}>✕ Cancelar</button>
+        <button onClick={onSave} disabled={saving} style={{ background:'rgba(0,212,255,0.15)', border:'1px solid var(--accent)', color:'var(--accent)', fontFamily:MONO, fontSize:11, fontWeight:700, padding:'4px 16px', borderRadius:4, cursor:saving?'not-allowed':'pointer' }}>{saving?'⟳ Guardando…':'💾 Guardar'}</button>
+      </div>
+    </div>
+  )
+
+  // ════════════════════════════════════════════════════════════════════
+  // VISTA RESUMEN — solo para templates (no blank, no AI)
+  // ════════════════════════════════════════════════════════════════════
+  if (showSummary) {
+    const summaryFields = getTemplateSummaryFields(definition)
+    return (
+      <div style={{ display:'flex', flexDirection:'column', height:'100%', overflow:'hidden', background:'var(--bg1)', fontFamily:MONO }}>
+        <Header extra={
+          <button onClick={() => setShowSummary(false)} style={{ background:'rgba(0,212,255,0.07)', border:'1px solid #1a3d5a', color:'#7aabc8', fontFamily:MONO, fontSize:11, padding:'4px 12px', borderRadius:4, cursor:'pointer' }}>
+            ⚙ Ajuste avanzado
+          </button>
+        }/>
+
+        <div style={{ flex:1, overflowY:'auto', padding:'24px 24px 40px' }}>
+          {/* Template title */}
+          <div style={{ fontFamily:MONO, fontSize:20, fontWeight:700, color:'#eef5ff', marginBottom:6 }}>{templateName}</div>
+          <div style={{ fontFamily:MONO, fontSize:10, color:'#3a5a75', marginBottom:28, letterSpacing:'0.05em' }}>
+            Ajusta los parámetros clave y guarda, o usa ⚙ Ajuste avanzado para control total.
+          </div>
+
+          {/* Nombre */}
+          <div style={{ marginBottom:20 }}>
+            <div style={{ fontFamily:MONO, fontSize:9, color:'#7aabc8', letterSpacing:'0.1em', textTransform:'uppercase', marginBottom:6 }}>Nombre de la estrategia</div>
+            <input
+              type="text"
+              value={strForm.name||''}
+              onChange={e => setStrForm(p => ({ ...p, name:e.target.value }))}
+              placeholder="Nombre…"
+              autoFocus
+              style={{ ...INPUT, fontSize:14, padding:'8px 12px' }}
+            />
+          </div>
+
+          {/* Param rows */}
+          {summaryFields.map((row, ri) => (
+            <div key={ri} style={{
+              display:'flex', alignItems:'center', gap:14, flexWrap:'wrap',
+              padding:'14px 18px', marginBottom:8,
+              background:'var(--bg2)', border:'1px solid var(--border)',
+              borderLeft:`4px solid ${row.color}`, borderRadius:'0 6px 6px 0',
+            }}>
+              <span style={{
+                fontFamily:MONO, fontSize:9, fontWeight:700, letterSpacing:'0.1em',
+                color:row.color, background:`${row.color}14`, border:`1px solid ${row.color}33`,
+                padding:'3px 8px', borderRadius:3, textTransform:'uppercase',
+                whiteSpace:'nowrap', minWidth:70, textAlign:'center', flexShrink:0,
+              }}>{row.label}</span>
+              <span style={{ fontFamily:MONO, fontSize:12, color:'#c8dff5', flex:1, minWidth:120 }}>{row.desc}</span>
+              {row.params.map(p => (
+                <label key={p.path} style={{ display:'flex', flexDirection:'column', gap:3, alignItems:'center', flexShrink:0 }}>
+                  <span style={{ fontFamily:MONO, fontSize:8, color:'var(--text3)', textTransform:'uppercase', letterSpacing:'0.07em' }}>{p.label}</span>
+                  <input
+                    type="number"
+                    value={getByPath(definition, p.path) ?? ''}
+                    min={p.min} max={p.max} step={p.step || 1}
+                    onChange={e => {
+                      const n = parseFloat(e.target.value)
+                      if (!isNaN(n)) setDefinition(d => setByPath(d, p.path, n))
+                    }}
+                    style={{ width:64, background:'var(--bg3)', border:'1px solid var(--border)', color:'var(--text1)', fontFamily:MONO, fontSize:13, fontWeight:600, padding:'4px 6px', borderRadius:3, textAlign:'center' }}
+                  />
+                </label>
+              ))}
+            </div>
+          ))}
+
+          {/* Capital rápido */}
+          <div style={{ display:'flex', gap:12, flexWrap:'wrap', marginTop:20 }}>
+            <label style={{ display:'flex', flexDirection:'column', gap:4 }}>
+              <span style={{ fontFamily:MONO, fontSize:9, color:'#7aabc8', letterSpacing:'0.1em', textTransform:'uppercase' }}>Capital (€)</span>
+              <input type="number" min={100} value={strForm.capital_ini||''} onChange={e=>setStrForm(p=>({...p,capital_ini:Number(e.target.value)}))}
+                style={{ ...INPUT, width:120, fontSize:13, padding:'6px 10px' }} />
+            </label>
+            <label style={{ display:'flex', flexDirection:'column', gap:4 }}>
+              <span style={{ fontFamily:MONO, fontSize:9, color:'#7aabc8', letterSpacing:'0.1em', textTransform:'uppercase' }}>Años BT</span>
+              <input type="number" min={1} max={20} value={strForm.years||5} onChange={e=>setStrForm(p=>({...p,years:Number(e.target.value)}))}
+                style={{ ...INPUT, width:80, fontSize:13, padding:'6px 10px' }} />
+            </label>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ════════════════════════════════════════════════════════════════════
+  // FORMULARIO COMPLETO
+  // ════════════════════════════════════════════════════════════════════
   return (
     <div style={{ display:'flex', flexDirection:'column', height:'100%', overflow:'hidden', background:'var(--bg1)', fontFamily:MONO }}>
 
-      {/* ── Header ── */}
-      <div style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 16px', borderBottom:'1px solid var(--border)', background:'var(--bg2)', flexShrink:0 }}>
-        <button onClick={onCancel} style={{ background:'transparent', border:'1px solid var(--border)', color:'var(--text3)', fontFamily:MONO, fontSize:11, padding:'3px 10px', borderRadius:4, cursor:'pointer' }}>← Volver</button>
-        <span style={{ fontFamily:MONO, fontSize:12, color:'var(--text3)' }}>{strategy?.id ? 'Editando' : 'Nueva estrategia'}</span>
-        <span style={{ fontFamily:MONO, fontSize:14, fontWeight:700, color:strForm.color||'var(--accent)' }}>{strForm.name||'—'}</span>
-        <div style={{ marginLeft:'auto', display:'flex', gap:8 }}>
-          {strategy?.id && <button onClick={onDelete} style={{ background:'rgba(255,77,109,0.1)', border:'1px solid #ff4d6d', color:'#ff4d6d', fontFamily:MONO, fontSize:11, padding:'4px 12px', borderRadius:4, cursor:'pointer' }}>🗑 Eliminar</button>}
-          <button onClick={onCancel} style={{ background:'transparent', border:'1px solid var(--border)', color:'var(--text3)', fontFamily:MONO, fontSize:11, padding:'4px 12px', borderRadius:4, cursor:'pointer' }}>✕ Cancelar</button>
-          <button onClick={onSave} disabled={saving} style={{ background:'rgba(0,212,255,0.15)', border:'1px solid var(--accent)', color:'var(--accent)', fontFamily:MONO, fontSize:11, fontWeight:700, padding:'4px 16px', borderRadius:4, cursor:saving?'not-allowed':'pointer' }}>{saving?'⟳ Guardando…':'💾 Guardar'}</button>
-        </div>
-      </div>
+      <Header extra={showSummary === false && templateName ? (
+        <button onClick={() => setShowSummary(true)} style={{ background:'rgba(0,212,255,0.07)', border:'1px solid #1a3d5a', color:'#7aabc8', fontFamily:MONO, fontSize:11, padding:'4px 12px', borderRadius:4, cursor:'pointer' }}>
+          ← Vista rápida
+        </button>
+      ) : null}/>
 
       {/* ── Body ── */}
       <div style={{ flex:1, overflowY:'auto', padding:'16px 16px 32px' }}>
@@ -354,26 +626,44 @@ export default function StrategyEditorPanel({
           {aiError && <div style={{ marginTop:6, fontFamily:MONO, fontSize:10, color:'#ff7a7a' }}>⚠ {aiError}</div>}
         </div>
 
-        {/* Role builders */}
-        <div style={{ display:'flex', flexDirection:'column', gap:3, marginBottom:10 }}>
-          {['filter','setup','trigger','abort','exit'].map(role=>(
-            <RoleRow key={role} role={role} definition={definition} setDefinition={setDefinition} />
+        {/* Cabecera columnas */}
+        <div style={{ display:'flex', gap:6, marginBottom:4 }}>
+          <div style={{ flex:'6 0 0', fontFamily:MONO, fontSize:8, color:'#2a4a6a', letterSpacing:'0.08em', textTransform:'uppercase', paddingLeft:4 }}>Controles</div>
+          <div style={{ flex:'4 0 0', maxWidth:260, fontFamily:MONO, fontSize:8, color:'#2a4a6a', letterSpacing:'0.08em', textTransform:'uppercase', paddingLeft:4 }}>JSON directo</div>
+        </div>
+
+        {/* Role builders con JSON lateral */}
+        <div style={{ display:'flex', flexDirection:'column', gap:0, marginBottom:10 }}>
+          {['filter','setup','trigger','abort','exit'].map(role => (
+            <SectionRow key={role} sectionKey={role} definition={definition} setDefinition={setDefinition}
+              left={<RoleRow role={role} definition={definition} setDefinition={setDefinition} />}
+            />
           ))}
-          <StopRow definition={definition} setDefinition={setDefinition} />
-          <MgmtRow definition={definition} setDefinition={setDefinition} />
+          <SectionRow sectionKey="stop_loss" definition={definition} setDefinition={setDefinition}
+            left={<StopRow definition={definition} setDefinition={setDefinition} />}
+          />
+          <div style={{ display:'flex', gap:6, alignItems:'stretch', marginBottom:3 }}>
+            <div style={{ flex:'6 0 0', minWidth:0 }}>
+              <MgmtRow definition={definition} setDefinition={setDefinition} />
+            </div>
+            <div style={{ flex:'4 0 0', minWidth:120, maxWidth:260 }}>
+              <SectionJsonEditor
+                value={definition?.management ?? null}
+                onChange={val => setDefinition(prev => {
+                  const n = { ...prev }
+                  if (val == null) delete n.management; else n.management = val
+                  return n
+                })}
+              />
+            </div>
+          </div>
         </div>
 
         {/* Observations */}
-        <div style={{ padding:'12px', background:'var(--bg2)', border:'1px solid var(--border)', borderRadius:6, marginBottom:10 }}>
+        <div style={{ padding:'12px', background:'var(--bg2)', border:'1px solid var(--border)', borderRadius:6 }}>
           <Cell label="Observaciones" wide style={{ flex:1 }}>
             <textarea value={strForm.observations||''} onChange={e=>setStrForm(p=>({...p,observations:e.target.value}))} rows={3} style={{ ...INPUT, resize:'vertical', width:'100%', minHeight:60 }} placeholder="Notas sobre la estrategia…" />
           </Cell>
-        </div>
-
-        {/* JSON preview */}
-        <div style={{ padding:'12px', background:'var(--bg2)', border:'1px solid var(--border)', borderRadius:6 }}>
-          <div style={{ fontFamily:MONO, fontSize:9, color:'var(--text3)', letterSpacing:'0.1em', textTransform:'uppercase', marginBottom:6 }}>definition — columna guardada en Supabase</div>
-          <textarea readOnly value={definition ? JSON.stringify(definition, null, 2) : '{}'} rows={8} style={{ ...INPUT, resize:'vertical', width:'100%', color:'#7ab8d8', fontSize:10 }} />
         </div>
 
       </div>

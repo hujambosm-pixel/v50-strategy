@@ -2941,7 +2941,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V8.46</title>
+        <title>Trading Simulator V8.47</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3018,7 +3018,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V8.46
+            <span className="dot"/>Trading Simulator V8.47
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4259,9 +4259,9 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
             {/* ══ TEMPLATE GALLERY ══ */}
             {showTemplateGallery&&sidePanel==='config'&&(
               <TemplateGallery
-                onSelect={(definition,focusAI)=>{
+                onSelect={(definition,focusAI,templateName)=>{
                   setShowTemplateGallery(false)
-                  openEditStr({id:null,_templateDefinition:definition,_focusAI:!!focusAI})
+                  openEditStr({id:null,_templateDefinition:definition,_focusAI:!!focusAI,_templateName:templateName||''})
                 }}
                 onCancel={()=>setShowTemplateGallery(false)}
               />
@@ -4277,6 +4277,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 conditions={conditions}
                 strategy={editingStr}
                 focusAI={!!editingStr._focusAI}
+                templateName={editingStr._templateName||''}
                 onSave={saveEditStr}
                 onCancel={closeEditStr}
                 onDelete={()=>deleteStr(editingStr.id)}
