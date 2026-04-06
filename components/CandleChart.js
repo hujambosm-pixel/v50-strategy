@@ -1,6 +1,113 @@
 import { useRef, useEffect } from 'react'
 import { MONO, f2, fmtDate } from '../lib/utils'
 
+// ── Indicator calc functions ───────────────────────────────────────────
+export function calcEMA(closes, period) {
+  if (!closes?.length || period < 1) return []
+  const k = 2 / (period + 1)
+  const out = new Array(closes.length).fill(null)
+  let sum = 0, valid = 0
+  for (let i = 0; i < closes.length; i++) {
+    sum += closes[i]; valid++
+    if (valid < period) continue
+    if (valid === period) { out[i] = sum / period; continue }
+    out[i] = closes[i] * k + out[i - 1] * (1 - k)
+  }
+  return out
+}
+export function calcSMA(closes, period) {
+  if (!closes?.length || period < 1) return []
+  const out = new Array(closes.length).fill(null)
+  for (let i = period - 1; i < closes.length; i++) {
+    let s = 0
+    for (let j = i - period + 1; j <= i; j++) s += closes[j]
+    out[i] = s / period
+  }
+  return out
+}
+export function calcRSI(closes, period = 14) {
+  if (!closes?.length || period < 1) return []
+  const out = new Array(closes.length).fill(null)
+  let gains = 0, losses = 0
+  for (let i = 1; i <= period && i < closes.length; i++) {
+    const d = closes[i] - closes[i - 1]
+    if (d > 0) gains += d; else losses -= d
+  }
+  if (period >= closes.length) return out
+  gains /= period; losses /= period
+  out[period] = losses === 0 ? 100 : 100 - 100 / (1 + gains / losses)
+  for (let i = period + 1; i < closes.length; i++) {
+    const d = closes[i] - closes[i - 1]
+    gains = (gains * (period - 1) + Math.max(d, 0)) / period
+    losses = (losses * (period - 1) + Math.max(-d, 0)) / period
+    out[i] = losses === 0 ? 100 : 100 - 100 / (1 + gains / losses)
+  }
+  return out
+}
+export function calcMACD(closes, fast = 12, slow = 26, signal = 9) {
+  const emaFast = calcEMA(closes, fast)
+  const emaSlow = calcEMA(closes, slow)
+  const macdLine = closes.map((_, i) =>
+    emaFast[i] != null && emaSlow[i] != null ? emaFast[i] - emaSlow[i] : null)
+  // Signal line: EMA of valid MACD values
+  const signalLine = new Array(closes.length).fill(null)
+  const firstIdx = macdLine.findIndex(v => v != null)
+  if (firstIdx >= 0) {
+    const validMacd = []
+    const validIdxs = []
+    macdLine.forEach((v, i) => { if (v != null) { validMacd.push(v); validIdxs.push(i) } })
+    const sigEMA = calcEMA(validMacd, signal)
+    validIdxs.forEach((idx, j) => { signalLine[idx] = sigEMA[j] })
+  }
+  const histogram = closes.map((_, i) =>
+    macdLine[i] != null && signalLine[i] != null ? macdLine[i] - signalLine[i] : null)
+  return { macdLine, signalLine, histogram }
+}
+
+// ── Indicator detection helpers ────────────────────────────────────────
+function _blockInd(block) {
+  if (!block) return null
+  if (block.indicator) return String(block.indicator).toUpperCase()
+  const t = block.type || ''
+  if (['ema_cross_up','ema_cross_down','price_above_ma','price_below_ma','close_above_ma','close_below_ma'].includes(t)) return 'EMA'
+  if (['rsi_above','rsi_below','rsi_cross_up','rsi_cross_down'].includes(t)) return 'RSI'
+  if (['macd_cross_up','macd_cross_down'].includes(t)) return 'MACD'
+  if (t === 'volume') return 'VOLUME'
+  return null
+}
+function getActiveIndicator(definition) {
+  return _blockInd(definition?.setup) || _blockInd(definition?.trigger) || null
+}
+function getEmaParams(definition, emaRPeriod, emaLPeriod) {
+  for (const role of ['setup','trigger']) {
+    const b = definition?.[role]
+    if (!b || !['EMA','SMA'].includes(_blockInd(b))) continue
+    const maType = b.ma_type || (b.indicator === 'SMA' ? 'SMA' : 'EMA')
+    const t = b.type || ''
+    if (['ema_cross_up','ema_cross_down'].includes(t) || ['crosses_above','crosses_below'].includes(b.condition))
+      return { fast: b.ma_fast ?? b.params?.fast ?? emaRPeriod ?? 10, slow: b.ma_slow ?? b.params?.slow ?? emaLPeriod ?? 20, type: maType }
+    if (['price_above_ma','price_below_ma','close_above_ma','close_below_ma'].includes(t) || ['price_above','price_below'].includes(b.condition))
+      return { fast: b.ma_period ?? b.params?.slow ?? b.params?.fast ?? emaRPeriod ?? 50, slow: null, type: maType }
+  }
+  return { fast: emaRPeriod ?? 10, slow: emaLPeriod ?? 20, type: 'EMA' }
+}
+function getRsiParams(definition) {
+  for (const role of ['setup','trigger']) {
+    const b = definition?.[role]
+    if (!b || _blockInd(b) !== 'RSI') continue
+    return { period: b.period ?? b.params?.period ?? 14 }
+  }
+  return { period: 14 }
+}
+function getMacdParams(definition) {
+  for (const role of ['setup','trigger']) {
+    const b = definition?.[role]
+    if (!b || _blockInd(b) !== 'MACD') continue
+    return { fast: b.fast ?? b.params?.fast ?? 12, slow: b.slow ?? b.params?.slow ?? 26, signal: b.signal ?? b.params?.signal ?? 9 }
+  }
+  return { fast: 12, slow: 26, signal: 9 }
+}
+
 // ── Risk primitive: bands + labels + R:R (TradingView Long Position style) ──
 function createRiskPrimitive(configRef) {
   return {
@@ -91,10 +198,12 @@ function createRiskPrimitive(configRef) {
   }
 }
 
-export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false }) {
+export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null }) {
   const containerRef=useRef(null), svgRef=useRef(null), legendRef=useRef(null), tooltipRef=useRef(null)
   const activeLegendRef = externalLegendRef || legendRef
   const chartRef=useRef(null), candlesRef=useRef(null)
+  const rsiChartRef=useRef(null), macdChartRef=useRef(null)
+  const rsiContainerRef=useRef(null), macdContainerRef=useRef(null)
   const chartAliveRef=useRef(true)
   const rulerStart=useRef(null), rulerActiveR=useRef(rulerActive)
   const priceAlarmLinesRef=useRef([])    // [{alarmId, priceLine, price}]
@@ -138,11 +247,24 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       candles.setData(data.map(d=>({time:d.date,open:d.open,high:d.high,low:d.low,close:d.close})))
       candlesRef.current=candles
 
-      // EMA series — sin title para no generar leyenda inferior
-      const erS=chart.addLineSeries({color:'#ffd166',lineWidth:1,lastValueVisible:false,priceLineVisible:false})
-      erS.setData(data.filter(d=>d.emaR!=null).map(d=>({time:d.date,value:d.emaR})))
-      const elS=chart.addLineSeries({color:'#ff4d6d',lineWidth:1,lastValueVisible:false,priceLineVisible:false})
-      elS.setData(data.filter(d=>d.emaL!=null).map(d=>({time:d.date,value:d.emaL})))
+      // ── Dynamic indicator overlay ──────────────────────────────────
+      const _closes=data.map(d=>d.close)
+      const _indType=getActiveIndicator(definition)
+      const _showEma=!definition||_indType==='EMA'||_indType==='SMA'
+      if(_showEma){
+        const ep=definition?getEmaParams(definition,emaRPeriod,emaLPeriod):{fast:emaRPeriod,slow:emaLPeriod,type:'EMA'}
+        const mtype=ep.type||'EMA'
+        if(ep.fast){
+          const fv=(!definition||ep.fast===emaRPeriod)?data.map(d=>d.emaR):(mtype==='SMA'?calcSMA(_closes,ep.fast):calcEMA(_closes,ep.fast))
+          const fs=chart.addLineSeries({color:'#ffd166',lineWidth:1,lastValueVisible:false,priceLineVisible:false,title:`${mtype} ${ep.fast}`})
+          fs.setData(data.map((d,i)=>({time:d.date,value:fv[i]})).filter(x=>x.value!=null))
+        }
+        if(ep.slow){
+          const sv=(!definition||ep.slow===emaLPeriod)?data.map(d=>d.emaL):(mtype==='SMA'?calcSMA(_closes,ep.slow):calcEMA(_closes,ep.slow))
+          const ss=chart.addLineSeries({color:'#06b6d4',lineWidth:1,lastValueVisible:false,priceLineVisible:false,title:`${mtype} ${ep.slow}`})
+          ss.setData(data.map((d,i)=>({time:d.date,value:sv[i]})).filter(x=>x.value!=null))
+        }
+      }
 
       // ── MAE (Maximum Adverse Excursion) por trade ──
       const tradeMAEs = trades.map(t => {
@@ -177,22 +299,83 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         }
       })
 
-      // ── Flechas de cruce EMA + marker Max DD peor trade ──
-      // shape:'circle' size:1 → punto invisible, solo muestra el texto diagonal ↗↘
+      // ── Marcadores: flechas cruce EMA (solo si EMA activo) + Max DD ──
       const marks=[]
-      for(let i=1;i<data.length;i++){
-        const p=data[i-1],c=data[i]
-        if(!p.emaR||!p.emaL||!c.emaR||!c.emaL) continue
-        if(p.emaR<p.emaL&&c.emaR>=c.emaL)
-          marks.push({time:c.date,position:'belowBar',color:'#00e5a0',shape:'circle',size:1,text:'↗'})
-        else if(p.emaR>p.emaL&&c.emaR<=c.emaL)
-          marks.push({time:c.date,position:'aboveBar',color:'#ff4d6d',shape:'circle',size:1,text:'↘'})
+      if(_showEma){
+        for(let i=1;i<data.length;i++){
+          const p=data[i-1],c=data[i]
+          if(!p.emaR||!p.emaL||!c.emaR||!c.emaL) continue
+          if(p.emaR<p.emaL&&c.emaR>=c.emaL)
+            marks.push({time:c.date,position:'belowBar',color:'#00e5a0',shape:'circle',size:1,text:'↗'})
+          else if(p.emaR>p.emaL&&c.emaR<=c.emaL)
+            marks.push({time:c.date,position:'aboveBar',color:'#ff4d6d',shape:'circle',size:1,text:'↘'})
+        }
       }
-      // Max DD peor trade: añadir marker directamente sobre las velas (sin serie extra)
-      if(worstMAETrade && worstMAETrade.mae < 0 && worstMAETrade.minDate && worstMAETrade.minDate !== worstMAETrade.entryDate){
+      if(worstMAETrade&&worstMAETrade.mae<0&&worstMAETrade.minDate&&worstMAETrade.minDate!==worstMAETrade.entryDate)
         marks.push({time:worstMAETrade.minDate,position:'belowBar',color:'#ff4d6d',shape:'circle',size:1,text:`Max DD: ${worstMAETrade.mae.toFixed(1)}%`})
-      }
       if(marks.length) candles.setMarkers(marks.sort((a,b)=>a.time.localeCompare(b.time)))
+
+      // ── Paneles secundarios (RSI / MACD / VOLUME) ─────────────────────
+      const _panelOpts=(h)=>({
+        width:containerRef.current?.clientWidth||400, height:h,
+        layout:{background:{color:'#080c14'},textColor:'#7a9bc0',fontFamily:'-apple-system,BlinkMacSystemFont,Trebuchet MS,Roboto,Ubuntu,sans-serif'},
+        grid:{vertLines:{color:'#0d1520'},horzLines:{color:'#0d1520'}},
+        rightPriceScale:{borderColor:'#1a2d45',scaleMargins:{top:0.1,bottom:0.1}},
+        timeScale:{borderColor:'#1a2d45',timeVisible:true,visible:false},
+        crosshair:{mode:CrosshairMode.Normal},
+        handleScroll:false,handleScale:false,
+      })
+      const _syncPanels=(panelChart)=>{
+        chart.timeScale().subscribeVisibleLogicalRangeChange(range=>{
+          if(range)try{panelChart.timeScale().setVisibleLogicalRange(range)}catch(_){}
+        })
+        panelChart.timeScale().subscribeVisibleLogicalRangeChange(range=>{
+          if(range)try{chart.timeScale().setVisibleLogicalRange(range)}catch(_){}
+        })
+      }
+
+      if(_indType==='RSI'&&rsiContainerRef.current){
+        const rp=getRsiParams(definition)
+        const rsiVals=calcRSI(_closes,rp.period)
+        if(rsiChartRef.current){try{rsiChartRef.current.remove()}catch(_){};rsiChartRef.current=null}
+        const rsiChart=createChart(rsiContainerRef.current,_panelOpts(120))
+        rsiChartRef.current=rsiChart
+        const rsiS=rsiChart.addLineSeries({color:'#a78bfa',lineWidth:1,lastValueVisible:true,priceLineVisible:false,title:`RSI ${rp.period}`})
+        rsiS.setData(data.map((d,i)=>({time:d.date,value:rsiVals[i]})).filter(x=>x.value!=null))
+        const d0=data[0].date, dN=data[data.length-1].date
+        const l30=rsiChart.addLineSeries({color:'rgba(0,200,80,0.35)',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:false,priceLineVisible:false})
+        l30.setData([{time:d0,value:30},{time:dN,value:30}])
+        const l70=rsiChart.addLineSeries({color:'rgba(255,100,100,0.35)',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:false,priceLineVisible:false})
+        l70.setData([{time:d0,value:70},{time:dN,value:70}])
+        _syncPanels(rsiChart)
+      }
+
+      if(_indType==='MACD'&&macdContainerRef.current){
+        const mp=getMacdParams(definition)
+        const {macdLine,signalLine,histogram}=calcMACD(_closes,mp.fast,mp.slow,mp.signal)
+        if(macdChartRef.current){try{macdChartRef.current.remove()}catch(_){};macdChartRef.current=null}
+        const macdChart=createChart(macdContainerRef.current,_panelOpts(100))
+        macdChartRef.current=macdChart
+        const histS=macdChart.addHistogramSeries({lastValueVisible:false,priceLineVisible:false})
+        histS.setData(data.map((d,i)=>({time:d.date,value:histogram[i],color:histogram[i]>=0?'rgba(0,229,160,0.7)':'rgba(255,77,109,0.7)'})).filter(x=>x.value!=null))
+        const macdS=macdChart.addLineSeries({color:'#06b6d4',lineWidth:1,lastValueVisible:false,priceLineVisible:false,title:`MACD ${mp.fast}/${mp.slow}`})
+        macdS.setData(data.map((d,i)=>({time:d.date,value:macdLine[i]})).filter(x=>x.value!=null))
+        const sigS=macdChart.addLineSeries({color:'#ff8c00',lineWidth:1,lastValueVisible:false,priceLineVisible:false,title:`Signal ${mp.signal}`})
+        sigS.setData(data.map((d,i)=>({time:d.date,value:signalLine[i]})).filter(x=>x.value!=null))
+        _syncPanels(macdChart)
+      }
+
+      if(_indType==='VOLUME'&&macdContainerRef.current){
+        if(macdChartRef.current){try{macdChartRef.current.remove()}catch(_){};macdChartRef.current=null}
+        const volData=data.filter(d=>d.volume!=null)
+        if(volData.length){
+          const volChart=createChart(macdContainerRef.current,_panelOpts(80))
+          macdChartRef.current=volChart
+          const volS=volChart.addHistogramSeries({lastValueVisible:false,priceLineVisible:false,title:'Volume'})
+          volS.setData(volData.map(d=>({time:d.date,value:d.volume,color:d.close>=d.open?'rgba(0,229,160,0.5)':'rgba(255,77,109,0.5)'})))
+          _syncPanels(volChart)
+        }
+      }
 
       // ── Línea amarilla de entrada para posiciones abiertas (Tradelog) ──
       // tlOpenTrades usa campos de Supabase: entry_price, entry_date (distinto al backtest)
@@ -767,8 +950,8 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
 
       return()=>{chartAliveRef.current=false;try{unsubLabels()}catch(_){};cnt.removeEventListener('mousemove',onMove);cnt.removeEventListener('mousedown',onMouseDown);window.removeEventListener('mouseup',onMouseUp);window.removeEventListener('keydown',onKeyDown);window.removeEventListener('keyup',onKeyUp);ro.disconnect()}
     })
-    return()=>{chartAliveRef.current=false;if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null}}
-  },[data,emaRPeriod,emaLPeriod,trades,maxDD,labelMode])
+    return()=>{chartAliveRef.current=false;if(rsiChartRef.current){try{rsiChartRef.current.remove()}catch(_){};rsiChartRef.current=null};if(macdChartRef.current){try{macdChartRef.current.remove()}catch(_){};macdChartRef.current=null};if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null}}
+  },[data,emaRPeriod,emaLPeriod,trades,maxDD,labelMode,definition])
 
   // Mantener lastCloseRef actualizado sin recrear el chart
   useEffect(()=>{
@@ -953,8 +1136,10 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
   // eslint-disable-next-line
   }, [data])
 
+  const activeIndType = definition ? getActiveIndicator(definition) : null
   return (
-    <div style={{position:'relative'}}>
+    <div style={{display:'flex',flexDirection:'column',...(fillHeight?{flex:1,minHeight:0}:{})}}>
+    <div style={{position:'relative',...(fillHeight?{flex:1,minHeight:0}:{})}}>
       <div ref={legendRef} style={{position:'absolute',top:8,left:8,zIndex:10,fontFamily:MONO,fontSize:12,color:'#7a9bc0',background:'rgba(8,12,20,0.82)',padding:'4px 10px',borderRadius:4,pointerEvents:'none',whiteSpace:'nowrap',display:externalLegendRef?'none':'block'}}/>
       <div ref={containerRef} style={fillHeight?{height:'100%',minHeight:0}:{minHeight:480}}/>
       <svg ref={svgRef} style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',pointerEvents:'none',zIndex:5}}/>
@@ -990,6 +1175,14 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
           </div>
         </div>
       )}
+    </div>
+    {/* ── Paneles de indicadores secundarios ── */}
+    {activeIndType==='RSI'&&(
+      <div ref={rsiContainerRef} style={{width:'100%',height:120,background:'#080c14',borderTop:'1px solid #1a2d45'}}/>
+    )}
+    {(activeIndType==='MACD'||activeIndType==='VOLUME')&&(
+      <div ref={macdContainerRef} style={{width:'100%',height:activeIndType==='VOLUME'?80:100,background:'#080c14',borderTop:'1px solid #1a2d45'}}/>
+    )}
     </div>
   )
 }
