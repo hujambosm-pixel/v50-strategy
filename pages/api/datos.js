@@ -91,7 +91,8 @@ async function fetchAV(symbol, years=5) {
 // Reproduce exactamente la lógica de TradingView V50_17
 function runBacktestV50(data, sp500Data, cfg) {
   const { emaR, emaL, capitalIni, tipoStop, atrPeriod, atrMult,
-          sinPerdidas, reentry, tipoFiltro, sp500EmaR, sp500EmaL, years } = cfg
+          sinPerdidas, reentry, tipoFiltro, sp500EmaR, sp500EmaL, years,
+          fixedPct, trailingAtrPeriod, trailingAtrMult } = cfg
 
   const closes = data.map(d=>d.close)
   const highs   = data.map(d=>d.high)
@@ -99,7 +100,9 @@ function runBacktestV50(data, sp500Data, cfg) {
 
   const emaRArr = calcEMA(closes, emaR)
   const emaLArr = calcEMA(closes, emaL)
-  const atrArr  = tipoStop === 'atr' ? calcATR(highs, lows, closes, atrPeriod) : null
+  const atrArr  = tipoStop === 'atr'          ? calcATR(highs, lows, closes, atrPeriod) :
+                  tipoStop === 'trailing_atr'  ? calcATR(highs, lows, closes, trailingAtrPeriod || 14) :
+                  null
 
   // Filtro SP500
   let filtroArr = new Array(data.length).fill(false)
@@ -195,6 +198,12 @@ function runBacktestV50(data, sp500Data, cfg) {
         continue
       }
 
+      // 2a. TRAILING ATR — actualizar stop (solo sube) antes de evaluar hit
+      if (tipoStop === 'trailing_atr' && atrArr?.[i]) {
+        const newStop = bar.close - atrArr[i] * (trailingAtrMult || 2)
+        if (stopNivel === null || newStop > stopNivel) stopNivel = newStop
+      }
+
       // 2. STOP HIT — if gap-down opens below stop, use open (realistic fill)
       if (stopNivel != null && bar.low <= stopNivel) {
         const fillPx = bar.open <= stopNivel ? bar.open : stopNivel
@@ -278,6 +287,12 @@ function runBacktestV50(data, sp500Data, cfg) {
         chartData[i].signal = 'entry'
         if (tipoStop === 'atr' && atrArr?.[i]) {
           stopNivel = precioEntrada - atrArr[i] * atrMult
+        }
+        if (tipoStop === 'fixed_pct' && fixedPct > 0) {
+          stopNivel = precioEntrada * (1 - fixedPct / 100)
+        }
+        if (tipoStop === 'trailing_atr' && atrArr?.[i]) {
+          stopNivel = precioEntrada - atrArr[i] * (trailingAtrMult || 2)
         }
         if (tipoStop === 'none') stopNivel = null
         if (stopNivel != null) chartData[i].stopLine = stopNivel
@@ -406,9 +421,16 @@ export default async function handler(req, res) {
         emaL:        entry.ma_slow   || 11,
         capitalIni:  definition.capitalIni || 10000,
         years:       definition.years      || 5,
-        tipoStop:    stop.type === 'atr_based' ? 'atr' : stop.type === 'none' ? 'none' : 'tecnico',
-        atrPeriod:   stop.atr_period || 14,
-        atrMult:     stop.atr_mult   || 1.0,
+        tipoStop:          stop.type === 'atr_based'    ? 'atr'          :
+                           stop.type === 'none'         ? 'none'         :
+                           stop.type === 'fixed_pct'    ? 'fixed_pct'    :
+                           stop.type === 'trailing_atr' ? 'trailing_atr' :
+                           'tecnico',
+        atrPeriod:         stop.atr_period              || 14,
+        atrMult:           stop.atr_mult                || 1.0,
+        fixedPct:          stop.params?.pct             ?? stop.pct             ?? 5,
+        trailingAtrPeriod: stop.params?.atr_period      ?? stop.atr_period      ?? 14,
+        trailingAtrMult:   stop.params?.atr_mult        ?? stop.atr_mult        ?? 2.0,
         sinPerdidas: mgmt.sin_perdidas !== false,
         reentry:     mgmt.reentry     !== false,
         tipoFiltro:  filt.condition   || 'none',

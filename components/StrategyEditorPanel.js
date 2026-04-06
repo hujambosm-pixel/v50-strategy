@@ -200,26 +200,40 @@ function StopRow({ definition, setDefinition }) {
   const stopType = block?.type || ''
   function setBlock(b) { setDefinition(prev => { const n={...prev}; if(b) n.stop_loss=b; else delete n.stop_loss; return n }) }
   function onTypeChange(t) {
-    if (!t) { setBlock(null); return }
-    if (t==='tecnico')   setBlock({ type:'tecnico',   ma_period:10 })
-    if (t==='atr_based') setBlock({ type:'atr_based', atr_period:14, atr_mult:1.5 })
-    if (t==='none')      setBlock({ type:'none' })
+    if (!t)                setBlock(null)
+    else if (t==='tecnico')      setBlock({ type:'tecnico',      ma_period:10 })
+    else if (t==='atr_based')    setBlock({ type:'atr_based',    atr_period:14, atr_mult:1.5 })
+    else if (t==='none')         setBlock({ type:'none' })
+    else if (t==='fixed_pct')    setBlock({ type:'fixed_pct',    params:{ pct:5 } })
+    else if (t==='trailing_atr') setBlock({ type:'trailing_atr', params:{ atr_period:14, atr_mult:2 } })
   }
   function onP(key,val) { setBlock({ ...block, [key]: val }) }
+  function onParam(key,val) { setBlock({ ...block, params:{ ...(block.params||{}), [key]:val } }) }
 
   return (
     <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 12px', background:'var(--bg2)', borderLeft:`3px solid ${r.color}`, borderRadius:'0 4px 4px 0', minHeight:44, flexWrap:'wrap' }}>
       <span style={{ fontFamily:MONO, fontSize:9, fontWeight:700, letterSpacing:'0.1em', color:r.color, background:`${r.color}14`, border:`1px solid ${r.color}33`, padding:'3px 8px', borderRadius:3, whiteSpace:'nowrap', flexShrink:0, minWidth:72, textAlign:'center' }}>STOP</span>
-      <select value={stopType} onChange={e=>onTypeChange(e.target.value)} style={{ ...SEL, minWidth:140 }}>
+      <select value={stopType} onChange={e=>onTypeChange(e.target.value)} style={{ ...SEL, minWidth:148 }}>
         <option value="">— Sin stop —</option>
         <option value="tecnico">Técnico (MA)</option>
         <option value="atr_based">ATR dinámico</option>
+        <option value="fixed_pct">Stop fijo %</option>
+        <option value="trailing_atr">Trailing ATR</option>
         <option value="none">Ninguno</option>
       </select>
-      {stopType==='tecnico'   && <Num label="Período MA"  value={block.ma_period??10}  onChange={v=>onP('ma_period',v)} />}
+      {stopType==='tecnico' && (
+        <Num label="Período MA"    value={block.ma_period??10}      onChange={v=>onP('ma_period',v)} />
+      )}
       {stopType==='atr_based' && <>
-        <Num label="Período ATR" value={block.atr_period??14}  onChange={v=>onP('atr_period',v)} />
-        <Num label="×Mult"       value={block.atr_mult??1.5}   onChange={v=>onP('atr_mult',v)} min={0.1} max={10} />
+        <Num label="Período ATR"   value={block.atr_period??14}     onChange={v=>onP('atr_period',v)} />
+        <Num label="×Mult"         value={block.atr_mult??1.5}      onChange={v=>onP('atr_mult',v)} min={0.1} max={10} />
+      </>}
+      {stopType==='fixed_pct' && (
+        <Num label="% entrada"     value={block.params?.pct??5}     onChange={v=>onParam('pct',v)} min={0.5} max={50} />
+      )}
+      {stopType==='trailing_atr' && <>
+        <Num label="Período ATR"   value={block.params?.atr_period??14}  onChange={v=>onParam('atr_period',v)} min={5} max={50} />
+        <Num label="×Mult"         value={block.params?.atr_mult??2}     onChange={v=>onParam('atr_mult',v)} min={0.5} max={5} />
       </>}
     </div>
   )
