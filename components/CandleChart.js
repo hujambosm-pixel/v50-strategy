@@ -76,7 +76,16 @@ function _blockInd(block) {
   return null
 }
 function getActiveIndicator(definition) {
-  return _blockInd(definition?.setup) || _blockInd(definition?.trigger) || null
+  const fromBlocks = _blockInd(definition?.setup) || _blockInd(definition?.trigger)
+  if (fromBlocks) return fromBlocks
+  // FIX 1 — fallback para estrategias antiguas con definition.entry
+  const t = (definition?.entry?.type || '').toLowerCase()
+  if (!t) return null
+  if (t.includes('ema') || t.includes('sma') || t.includes('ma_')) return t.includes('sma') ? 'SMA' : 'EMA'
+  if (t.includes('rsi'))    return 'RSI'
+  if (t.includes('macd'))   return 'MACD'
+  if (t.includes('volume')) return 'VOLUME'
+  return null
 }
 function getEmaParams(definition, emaRPeriod, emaLPeriod) {
   for (const role of ['setup','trigger']) {
@@ -88,6 +97,15 @@ function getEmaParams(definition, emaRPeriod, emaLPeriod) {
       return { fast: b.ma_fast ?? b.params?.fast ?? emaRPeriod ?? 10, slow: b.ma_slow ?? b.params?.slow ?? emaLPeriod ?? 20, type: maType }
     if (['price_above_ma','price_below_ma','close_above_ma','close_below_ma'].includes(t) || ['price_above','price_below'].includes(b.condition))
       return { fast: b.ma_period ?? b.params?.slow ?? b.params?.fast ?? emaRPeriod ?? 50, slow: null, type: maType }
+  }
+  // FIX 2 — fallback para estrategias antiguas con definition.entry
+  const e = definition?.entry
+  if (e) {
+    const maType = e.ma_type || 'EMA'
+    if (e.ma_fast != null || e.ma_slow != null)
+      return { fast: e.ma_fast ?? emaRPeriod ?? 10, slow: e.ma_slow ?? emaLPeriod ?? 20, type: maType }
+    if (e.ma_period != null)
+      return { fast: e.ma_period ?? emaRPeriod ?? 50, slow: null, type: maType }
   }
   return { fast: emaRPeriod ?? 10, slow: emaLPeriod ?? 20, type: 'EMA' }
 }
@@ -255,12 +273,12 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         const ep=definition?getEmaParams(definition,emaRPeriod,emaLPeriod):{fast:emaRPeriod,slow:emaLPeriod,type:'EMA'}
         const mtype=ep.type||'EMA'
         if(ep.fast){
-          const fv=(!definition||ep.fast===emaRPeriod)?data.map(d=>d.emaR):(mtype==='SMA'?calcSMA(_closes,ep.fast):calcEMA(_closes,ep.fast))
+          const fv=(ep.fast===emaRPeriod&&data[0]?.emaR!=null)?data.map(d=>d.emaR):(mtype==='SMA'?calcSMA(_closes,ep.fast):calcEMA(_closes,ep.fast))
           const fs=chart.addLineSeries({color:'#ffd166',lineWidth:1,lastValueVisible:false,priceLineVisible:false,title:`${mtype} ${ep.fast}`})
           fs.setData(data.map((d,i)=>({time:d.date,value:fv[i]})).filter(x=>x.value!=null))
         }
         if(ep.slow){
-          const sv=(!definition||ep.slow===emaLPeriod)?data.map(d=>d.emaL):(mtype==='SMA'?calcSMA(_closes,ep.slow):calcEMA(_closes,ep.slow))
+          const sv=(ep.slow===emaLPeriod&&data[0]?.emaL!=null)?data.map(d=>d.emaL):(mtype==='SMA'?calcSMA(_closes,ep.slow):calcEMA(_closes,ep.slow))
           const ss=chart.addLineSeries({color:'#06b6d4',lineWidth:1,lastValueVisible:false,priceLineVisible:false,title:`${mtype} ${ep.slow}`})
           ss.setData(data.map((d,i)=>({time:d.date,value:sv[i]})).filter(x=>x.value!=null))
         }
