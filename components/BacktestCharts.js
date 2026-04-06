@@ -334,13 +334,15 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
         })
         ;(s.trades||[]).forEach(t=>{
           if(!t.entryDate||!t.exitDate) return
-          const midTs=(new Date(t.entryDate).getTime()+new Date(t.exitDate).getTime())/2
-          const midDate=ohlcv.reduce((best,d)=>(
-            Math.abs(new Date(d.date).getTime()-midTs)<Math.abs(new Date(best.date).getTime()-midTs)?d:best
-          ),ohlcv[0]).date
+          const tradeBars=ohlcv.filter(d=>d.date>=t.entryDate&&d.date<=t.exitDate)
+          if(!tradeBars.length) return
+          const isWinner=t.pnlPct>=0
+          const labelBar=isWinner
+            ?tradeBars.reduce((best,d)=>(d.high>best.high?d:best),tradeBars[0])
+            :tradeBars.reduce((best,d)=>(d.low<best.low?d:best),tradeBars[0])
           const profit=t.pnlSimple??0
-          const lbl=`#${t.n} · €${Math.round(t.capital??0)} · ${t.pnlPct>=0?'+':''}${(t.pnlPct||0).toFixed(1)}% · €${profit>=0?'+':''}${Math.round(profit)}`
-          markers.push({time:midDate,position:'belowBar',color:t.pnlPct>=0?'#00e5a0':'#ff4d6d',shape:'circle',size:0,text:lbl})
+          const lbl=`#${t.n} · ${t.pnlPct>=0?'+':''}${(t.pnlPct||0).toFixed(1)}% · €${profit>=0?'+':''}${Math.round(profit)}`
+          markers.push({time:labelBar.date,position:isWinner?'aboveBar':'belowBar',color:isWinner?'#00e5a0':'#ff4d6d',shape:'circle',size:0,text:lbl})
         })
       })
       markers.sort((a,b)=>a.time.localeCompare(b.time))

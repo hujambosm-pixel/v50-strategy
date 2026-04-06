@@ -2936,7 +2936,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V8.36</title>
+        <title>Trading Simulator V8.37</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3013,7 +3013,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V8.36
+            <span className="dot"/>Trading Simulator V8.37
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5342,8 +5342,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                       if(chartApi){
                                         const {chart,highlightTrade}=chartApi
                                         if(chart&&t.entryDate){
-                                          const fd=new Date(t.entryDate); fd.setDate(fd.getDate()-60)
-                                          const td2=new Date(t.entryDate); td2.setDate(td2.getDate()+60)
+                                          const fd=new Date(t.entryDate); fd.setDate(fd.getDate()-30)
+                                          const td2=new Date(t.exitDate||t.entryDate); td2.setDate(td2.getDate()+30)
                                           try{chart.timeScale().setVisibleRange({from:fd.toISOString().slice(0,10),to:td2.toISOString().slice(0,10)})}catch(_){}
                                         }
                                         const symN=mcResult.allTrades.filter(x=>x.symbol===t.symbol).indexOf(t)+1
