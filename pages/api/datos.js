@@ -24,6 +24,108 @@ function calcATR(highs, lows, closes, period) {
   return calcEMA(tr, period)
 }
 
+function calcSMA(values, period) {
+  const res = new Array(values.length).fill(null)
+  for (let i = period - 1; i < values.length; i++) {
+    let sum = 0
+    for (let j = i - period + 1; j <= i; j++) sum += (values[j] ?? 0)
+    res[i] = sum / period
+  }
+  return res
+}
+
+function calcRSI(values, period=14) {
+  const res = new Array(values.length).fill(null)
+  if (values.length <= period) return res
+  let avgGain = 0, avgLoss = 0
+  for (let i = 1; i <= period; i++) {
+    const diff = (values[i] ?? 0) - (values[i-1] ?? 0)
+    if (diff > 0) avgGain += diff; else avgLoss -= diff
+  }
+  avgGain /= period; avgLoss /= period
+  res[period] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss)
+  for (let i = period + 1; i < values.length; i++) {
+    const diff = (values[i] ?? 0) - (values[i-1] ?? 0)
+    avgGain = (avgGain * (period - 1) + Math.max(diff, 0)) / period
+    avgLoss = (avgLoss * (period - 1) + Math.max(-diff, 0)) / period
+    res[i] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss)
+  }
+  return res
+}
+
+function calcMACD(values, fast=12, slow=26, sig=9) {
+  const emaF = calcEMA(values, fast)
+  const emaS = calcEMA(values, slow)
+  const line  = values.map((_, i) => (emaF[i] != null && emaS[i] != null) ? emaF[i] - emaS[i] : null)
+  const signal = calcEMA(line.map(v => v ?? 0), sig)
+  return { line, signal }
+}
+
+// ── evaluateSetup — returns true if setup condition fires at bar i ──────
+function evaluateSetup(i, cfg, data, ind) {
+  const { setupType = 'ema_cross_up', setupParams = {} } = cfg
+  const bar = data[i], prev = data[i-1]
+  const eF = ind.emaFast, eS = ind.emaSlow
+  switch (setupType) {
+    case 'ema_cross_up':
+      return eF[i-1] != null && eS[i-1] != null && eF[i-1] < eS[i-1] && eF[i] >= eS[i]
+    case 'ema_cross_down':
+      return eF[i-1] != null && eS[i-1] != null && eF[i-1] > eS[i-1] && eF[i] <= eS[i]
+    case 'price_above_ma':
+      return ind.setupMA?.[i] != null && bar.close > ind.setupMA[i]
+    case 'price_below_ma':
+      return ind.setupMA?.[i] != null && bar.close < ind.setupMA[i]
+    case 'close_above_ma':
+      return ind.setupMA?.[i] != null && ind.setupMA?.[i-1] != null &&
+             prev.close <= ind.setupMA[i-1] && bar.close > ind.setupMA[i]
+    case 'close_below_ma':
+      return ind.setupMA?.[i] != null && ind.setupMA?.[i-1] != null &&
+             prev.close >= ind.setupMA[i-1] && bar.close < ind.setupMA[i]
+    case 'rsi_above':
+      return ind.rsiSetup?.[i] != null && ind.rsiSetup[i] > (setupParams.level ?? 50)
+    case 'rsi_below':
+      return ind.rsiSetup?.[i] != null && ind.rsiSetup[i] < (setupParams.level ?? 50)
+    case 'rsi_cross_up':
+      return ind.rsiSetup?.[i] != null && ind.rsiSetup?.[i-1] != null &&
+             ind.rsiSetup[i-1] <= (setupParams.level ?? 50) && ind.rsiSetup[i] > (setupParams.level ?? 50)
+    case 'rsi_cross_down':
+      return ind.rsiSetup?.[i] != null && ind.rsiSetup?.[i-1] != null &&
+             ind.rsiSetup[i-1] >= (setupParams.level ?? 50) && ind.rsiSetup[i] < (setupParams.level ?? 50)
+    case 'macd_cross_up':
+      return ind.macdSetup?.line[i] != null && ind.macdSetup.line[i-1] != null &&
+             ind.macdSetup.line[i-1] <= ind.macdSetup.signal[i-1] && ind.macdSetup.line[i] > ind.macdSetup.signal[i]
+    case 'macd_cross_down':
+      return ind.macdSetup?.line[i] != null && ind.macdSetup.line[i-1] != null &&
+             ind.macdSetup.line[i-1] >= ind.macdSetup.signal[i-1] && ind.macdSetup.line[i] < ind.macdSetup.signal[i]
+    default:
+      return eF[i-1] != null && eS[i-1] != null && eF[i-1] < eS[i-1] && eF[i] >= eS[i]
+  }
+}
+
+// ── evaluateExit — returns true if exit signal fires at bar i ────────────
+function evaluateExit(i, cfg, data, ind) {
+  const { exitType = 'close_below_ma', exitParams = {} } = cfg
+  const bar = data[i], prev = data[i-1]
+  const eF = ind.emaFast
+  switch (exitType) {
+    case 'ema_cross_down':
+      return ind.emaSlow[i] != null && eF[i-1] != null &&
+             eF[i-1] > ind.emaSlow[i-1] && eF[i] <= ind.emaSlow[i]
+    case 'rsi_above':
+      return ind.rsiExit?.[i] != null && ind.rsiExit[i] > (exitParams.level ?? 70)
+    case 'rsi_cross_down':
+      return ind.rsiExit?.[i] != null && ind.rsiExit?.[i-1] != null &&
+             ind.rsiExit[i-1] >= (exitParams.level ?? 70) && ind.rsiExit[i] < (exitParams.level ?? 70)
+    case 'macd_cross_down':
+      return ind.macdExit?.line[i] != null && ind.macdExit.line[i-1] != null &&
+             ind.macdExit.line[i-1] >= ind.macdExit.signal[i-1] && ind.macdExit.line[i] < ind.macdExit.signal[i]
+    default: { // close_below_ma, breakout_low_after_close_below_ma
+      const ma = ind.exitMA || eF
+      return ma[i] != null && ma[i-1] != null && prev.close >= ma[i-1] && bar.close < ma[i]
+    }
+  }
+}
+
 function stooqSym(symbol) {
   const MAP={
     '^GSPC':'spy.us','^NDX':'ndx.us','^IBEX':'ibex.es','^GDAXI':'dax.de',
@@ -92,7 +194,9 @@ async function fetchAV(symbol, years=5) {
 function runBacktestV50(data, sp500Data, cfg) {
   const { emaR, emaL, capitalIni, tipoStop, atrPeriod, atrMult,
           sinPerdidas, reentry, tipoFiltro, sp500EmaR, sp500EmaL, years,
-          fixedPct, trailingAtrPeriod, trailingAtrMult } = cfg
+          fixedPct, trailingAtrPeriod, trailingAtrMult,
+          setupType = 'ema_cross_up', setupParams = {},
+          exitType  = 'close_below_ma', exitParams  = {} } = cfg
 
   const closes = data.map(d=>d.close)
   const highs   = data.map(d=>d.high)
@@ -103,6 +207,30 @@ function runBacktestV50(data, sp500Data, cfg) {
   const atrArr  = tipoStop === 'atr'          ? calcATR(highs, lows, closes, atrPeriod) :
                   tipoStop === 'trailing_atr'  ? calcATR(highs, lows, closes, trailingAtrPeriod || 14) :
                   null
+
+  // ── Indicadores adicionales según setup/exit ────────────────
+  let setupMA = null, exitMA = null, rsiSetup = null, rsiExit = null, macdSetup = null, macdExit = null
+  if (['price_above_ma','price_below_ma','close_above_ma','close_below_ma'].includes(setupType)) {
+    const p = setupParams?.ma_period || 50
+    setupMA = setupParams?.ma_type === 'SMA' ? calcSMA(closes, p) : calcEMA(closes, p)
+  }
+  if (['rsi_above','rsi_below','rsi_cross_up','rsi_cross_down'].includes(setupType)) {
+    rsiSetup = calcRSI(closes, setupParams?.period || 14)
+  }
+  if (['macd_cross_up','macd_cross_down'].includes(setupType)) {
+    macdSetup = calcMACD(closes, setupParams?.fast||12, setupParams?.slow||26, setupParams?.signal||9)
+  }
+  if (['close_below_ma','price_below_ma','close_above_ma','price_above_ma'].includes(exitType)) {
+    const p = exitParams?.ma_period || 10
+    exitMA = exitParams?.ma_type === 'SMA' ? calcSMA(closes, p) : calcEMA(closes, p)
+  }
+  if (['rsi_above','rsi_below','rsi_cross_up','rsi_cross_down'].includes(exitType)) {
+    rsiExit = calcRSI(closes, exitParams?.period || 14)
+  }
+  if (['macd_cross_up','macd_cross_down'].includes(exitType)) {
+    macdExit = calcMACD(closes, exitParams?.fast||12, exitParams?.slow||26, exitParams?.signal||9)
+  }
+  const indicators = { emaFast:emaRArr, emaSlow:emaLArr, setupMA, exitMA, rsiSetup, rsiExit, macdSetup, macdExit }
 
   // Filtro SP500
   let filtroArr = new Array(data.length).fill(false)
@@ -236,10 +364,10 @@ function runBacktestV50(data, sp500Data, cfg) {
         }
       }
 
-      // 4. NUEVA SEÑAL DE SALIDA — cierre_bajo_ema_rapida (crossunder)
+      // 4. NUEVA SEÑAL DE SALIDA — evaluateExit (crossunder close/ema, RSI, MACD, etc.)
       //    Pine siempre actualiza precio_breakout_salida y cancela stops.
       //    Removemos !salidaPend para actualizar bkSalida en nuevos cruces.
-      if (cierreBaj) {
+      if (evaluateExit(i, cfg, data, indicators)) {
         bkSalida  = bar.low
         stopNivel = null  // cancela stop loss técnico/ATR
         if (sinPerdidas) {
@@ -304,16 +432,16 @@ function runBacktestV50(data, sp500Data, cfg) {
       if (bar.high < prevBk) bkEntrada = bar.high
       chartData[i].breakoutLine = bkEntrada
 
-      // Abort — Pine: if cierre_bajo_ema_rapida and entrada_pendiente and not reentry_mode_activo
-      if (cierreBaj && !reentryPend) {
+      // Abort — Pine: if exit signal and entrada_pendiente and not reentry_mode_activo
+      if (evaluateExit(i, cfg, data, indicators) && !reentryPend) {
         entradaPend = false; bkEntrada = 0; stopNivel = null
       }
       continue
     }
 
-    // ── SETUP — cruce alcista de EMAs ────────────────────────
-    // Pine: if cruce_alcista and position==0 and backtestWindow and not reentry_mode and not filtro
-    if (cruceAlc && !reentryMode && !filt) {
+    // ── SETUP — evaluateSetup (EMA cross, RSI, MACD, etc.) ──────────────
+    // Pine: if setup_signal and position==0 and backtestWindow and not reentry_mode and not filtro
+    if (evaluateSetup(i, cfg, data, indicators) && !reentryMode && !filt) {
       entradaPend = true
       reentryPend = false
       bkEntrada   = bar.high
@@ -412,13 +540,18 @@ export default async function handler(req, res) {
 
     // Si viene definition, convertir a cfg para usar el motor V50 fiel
     if (!cfgFinal && definition) {
-      const entry = definition.entry || {}
+      const setup = definition.setup || definition.entry || {}
+      const exit  = definition.exit  || {}
       const stop  = definition.stop  || {}
       const mgmt  = definition.management || {}
       const filt  = definition.filters?.market?.[0] || {}
       cfgFinal = {
-        emaR:        entry.ma_fast   || 10,
-        emaL:        entry.ma_slow   || 11,
+        emaR:        setup.ma_fast  || 10,
+        emaL:        setup.ma_slow  || 11,
+        setupType:   setup.type     || 'ema_cross_up',
+        setupParams: setup,
+        exitType:    exit.type      || 'close_below_ma',
+        exitParams:  exit,
         capitalIni:  definition.capitalIni || 10000,
         years:       definition.years      || 5,
         tipoStop:          stop.type === 'atr_based'    ? 'atr'          :
