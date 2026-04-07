@@ -300,7 +300,7 @@ function BlockSelector({ blocks, value, onSelect, onDelete, onRename, onCreateAI
 }
 
 // ── Role row (FILTER, SETUP, TRIGGER, ABORT, EXIT) ────────────────────
-function RoleRow({ role, definition, setDefinition }) {
+function RoleRow({ role, definition, setDefinition, hideTypeSelect = false }) {
   const r = ROLES.find(x => x.key === role)
   const block = definition?.[role] || null
   const rev = CREV[block?.type]
@@ -325,21 +325,28 @@ function RoleRow({ role, definition, setDefinition }) {
     <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 12px', background:'var(--bg2)', borderLeft:`3px solid ${r.color}`, borderRadius:'0 4px 4px 0', minHeight:44, flexWrap:'wrap', flex:1 }}>
       <span style={{ fontFamily:MONO, fontSize:9, fontWeight:700, letterSpacing:'0.1em', color:r.color, background:`${r.color}14`, border:`1px solid ${r.color}33`, padding:'3px 8px', borderRadius:3, whiteSpace:'nowrap', flexShrink:0, minWidth:72, textAlign:'center' }}>{r.label}</span>
 
-      <select value={ind} onChange={e=>onIndChange(e.target.value)} style={{ ...SEL, minWidth:82 }}>
-        <option value="">— Ninguno —</option>
-        <option value="ema">EMA</option>
-        <option value="precio">Precio</option>
-        <option value="cierre">Cierre</option>
-        <option value="rsi">RSI</option>
-        <option value="macd">MACD</option>
-      </select>
+      {!hideTypeSelect && (
+        <select value={ind} onChange={e=>onIndChange(e.target.value)} style={{ ...SEL, minWidth:82 }}>
+          <option value="">— Ninguno —</option>
+          <option value="ema">EMA</option>
+          <option value="precio">Precio</option>
+          <option value="cierre">Cierre</option>
+          <option value="rsi">RSI</option>
+          <option value="macd">MACD</option>
+        </select>
+      )}
 
       {ind && <span style={{ fontFamily:MONO, fontSize:9, color:'var(--text3)', flexShrink:0 }}>SI</span>}
 
-      {ind && (
+      {!hideTypeSelect && ind && (
         <select value={op} onChange={e=>onOpChange(e.target.value)} style={{ ...SEL, minWidth:148 }}>
           {(OPS[ind]||[]).map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
         </select>
+      )}
+      {hideTypeSelect && ind && (
+        <span style={{ fontFamily:MONO, fontSize:10, color:'#7a9bc0', flexShrink:0 }}>
+          {(OPS[ind]||[]).find(o=>o.v===op)?.l || op}
+        </span>
       )}
 
       {ind==='ema' && block && <>
@@ -369,7 +376,7 @@ function RoleRow({ role, definition, setDefinition }) {
 }
 
 // ── Stop row ──────────────────────────────────────────────────────────
-function StopRow({ definition, setDefinition }) {
+function StopRow({ definition, setDefinition, hideTypeSelect = false }) {
   const r = ROLES.find(x => x.key === 'stop_loss')
   const block = definition?.stop_loss || null
   const stopType = block?.type || ''
@@ -388,14 +395,21 @@ function StopRow({ definition, setDefinition }) {
   return (
     <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 12px', background:'var(--bg2)', borderLeft:`3px solid ${r.color}`, borderRadius:'0 4px 4px 0', minHeight:44, flexWrap:'wrap', flex:1 }}>
       <span style={{ fontFamily:MONO, fontSize:9, fontWeight:700, letterSpacing:'0.1em', color:r.color, background:`${r.color}14`, border:`1px solid ${r.color}33`, padding:'3px 8px', borderRadius:3, whiteSpace:'nowrap', flexShrink:0, minWidth:72, textAlign:'center' }}>STOP</span>
-      <select value={stopType} onChange={e=>onTypeChange(e.target.value)} style={{ ...SEL, minWidth:148 }}>
-        <option value="">— Sin stop —</option>
-        <option value="tecnico">Técnico (MA)</option>
-        <option value="atr_based">ATR dinámico</option>
-        <option value="fixed_pct">Stop fijo %</option>
-        <option value="trailing_atr">Trailing ATR</option>
-        <option value="none">Ninguno</option>
-      </select>
+      {!hideTypeSelect && (
+        <select value={stopType} onChange={e=>onTypeChange(e.target.value)} style={{ ...SEL, minWidth:148 }}>
+          <option value="">— Sin stop —</option>
+          <option value="tecnico">Técnico (MA)</option>
+          <option value="atr_based">ATR dinámico</option>
+          <option value="fixed_pct">Stop fijo %</option>
+          <option value="trailing_atr">Trailing ATR</option>
+          <option value="none">Ninguno</option>
+        </select>
+      )}
+      {hideTypeSelect && stopType && (
+        <span style={{ fontFamily:MONO, fontSize:10, color:'#7a9bc0', flexShrink:0 }}>
+          {{'tecnico':'Técnico (MA)','atr_based':'ATR dinámico','fixed_pct':'Stop fijo %','trailing_atr':'Trailing ATR','none':'Ninguno'}[stopType] || stopType}
+        </span>
+      )}
       {stopType==='tecnico' && (
         <Num label="Período MA"  value={block.ma_period??10}         onChange={v=>onP('ma_period',v)} />
       )}
@@ -683,12 +697,12 @@ export default function StrategyEditorPanel({
         <div style={{ display:'flex', flexDirection:'column', gap:0, marginBottom:10 }}>
           {['filter','setup','trigger','abort','exit'].map(role => (
             <SectionRow key={role} sectionKey={role} definition={definition} setDefinition={setDefinition}
-              left={<RoleRow role={role} definition={definition} setDefinition={setDefinition} />}
+              left={<RoleRow role={role} definition={definition} setDefinition={setDefinition} hideTypeSelect={true} />}
               blocks={blocks} saveBlock={saveBlock} deleteBlock={deleteBlock} updateBlockName={updateBlockName}
             />
           ))}
           <SectionRow sectionKey="stop_loss" definition={definition} setDefinition={setDefinition}
-            left={<StopRow definition={definition} setDefinition={setDefinition} />}
+            left={<StopRow definition={definition} setDefinition={setDefinition} hideTypeSelect={true} />}
             blocks={blocks} saveBlock={saveBlock} deleteBlock={deleteBlock} updateBlockName={updateBlockName}
           />
           <div style={{ display:'flex', gap:6, alignItems:'stretch', marginBottom:3 }}>
