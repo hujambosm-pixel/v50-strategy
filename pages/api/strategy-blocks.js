@@ -2,6 +2,7 @@
 // Sin RLS, sin user_id — app de usuario único
 // GET    → SELECT * FROM strategy_blocks ORDER BY role, name
 // POST   → INSERT { role, name, definition }
+// PATCH  → UPDATE name WHERE id = ?
 // DELETE → DELETE WHERE id = ?
 
 const SUPA_URL = process.env.SUPABASE_URL || 'https://uqjngxxbdlquiuhywiuc.supabase.co'
@@ -43,6 +44,17 @@ export default async function handler(req, res) {
           body: JSON.stringify({ role, name, definition }),
         })
         return res.status(201).json(Array.isArray(data) ? data[0] : data)
+      }
+
+      // PATCH /api/strategy-blocks — renombrar bloque
+      case 'PATCH': {
+        const { id, name } = req.body
+        if (!id || !name) return res.status(400).json({ error: 'id y name requeridos' })
+        const data = await supa(`/strategy_blocks?id=eq.${id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ name }),
+        })
+        return res.status(200).json(Array.isArray(data) ? data[0] : data)
       }
 
       // DELETE /api/strategy-blocks?id=...

@@ -92,10 +92,10 @@ function Num({ label, value, onChange, min=1, max=9999, step='any' }) {
 
 // ── SectionJsonEditor — edición bidireccional del bloque JSON ─────────
 function SectionJsonEditor({ value, onChange }) {
-  const [raw, setRaw]       = useState(() => JSON.stringify(value ?? null, null, 2))
-  const [error, setError]   = useState(false)
-  const focusedRef          = useRef(false)
-  const valueStr            = JSON.stringify(value ?? null)
+  const [raw, setRaw]     = useState(() => JSON.stringify(value ?? null, null, 2))
+  const [error, setError] = useState(false)
+  const focusedRef        = useRef(false)
+  const valueStr          = JSON.stringify(value ?? null)
 
   useEffect(() => {
     if (!focusedRef.current) {
@@ -110,9 +110,7 @@ function SectionJsonEditor({ value, onChange }) {
       const parsed = JSON.parse(text)
       setError(false)
       onChange(parsed)
-    } catch {
-      setError(true)
-    }
+    } catch { setError(true) }
   }
 
   return (
@@ -132,10 +130,172 @@ function SectionJsonEditor({ value, onChange }) {
         color: error ? '#ff7a7a' : '#5a8aaa',
         border: `1px solid ${error ? '#ff4d6d' : '#12253a'}`,
         borderRadius:4, padding:'6px 8px',
-        resize:'none', boxSizing:'border-box',
-        outline:'none',
+        resize:'none', boxSizing:'border-box', outline:'none',
       }}
     />
+  )
+}
+
+// ── BlockSelector — dropdown personalizado de biblioteca de bloques ───
+function BlockSelector({ blocks, value, onSelect, onDelete, onRename, onCreateAI }) {
+  const [open, setOpen]         = useState(false)
+  const [hoverId, setHoverId]   = useState(null)
+  const [editingId, setEditingId] = useState(null)
+  const [editName, setEditName] = useState('')
+  const containerRef            = useRef(null)
+  const editInputRef            = useRef(null)
+
+  // Cerrar al click fuera
+  useEffect(() => {
+    if (!open) return
+    function onMouseDown(e) {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setOpen(false)
+        setEditingId(null)
+      }
+    }
+    document.addEventListener('mousedown', onMouseDown)
+    return () => document.removeEventListener('mousedown', onMouseDown)
+  }, [open])
+
+  // Focus al editar
+  useEffect(() => {
+    if (editingId && editInputRef.current) editInputRef.current.focus()
+  }, [editingId])
+
+  function startEdit(e, blk) {
+    e.stopPropagation()
+    setEditingId(blk.id)
+    setEditName(blk.name)
+  }
+
+  function confirmRename(id) {
+    if (editName.trim()) onRename(id, editName.trim())
+    setEditingId(null)
+  }
+
+  function handleDelete(e, blk) {
+    e.stopPropagation()
+    if (window.confirm(`¿Eliminar bloque "${blk.name}"?`)) onDelete(blk.id)
+  }
+
+  function selectBlock(blk) {
+    onSelect(blk)
+    setOpen(false)
+    setEditingId(null)
+  }
+
+  return (
+    <div ref={containerRef} style={{ position:'relative' }}>
+      {/* Botón trigger */}
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          display:'flex', alignItems:'center', justifyContent:'space-between',
+          width:'100%', gap:6,
+          background:'var(--bg3)', border:'1px solid var(--border)',
+          color: value ? '#c8dff5' : '#3a5a75',
+          fontFamily:MONO, fontSize:11,
+          padding:'4px 8px', borderRadius:3, cursor:'pointer', textAlign:'left',
+          boxSizing:'border-box',
+        }}
+      >
+        <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex:1 }}>
+          {value || '— Ninguno —'}
+        </span>
+        <span style={{ color:'#3a5a75', flexShrink:0, fontSize:9 }}>▼</span>
+      </button>
+
+      {/* Panel flotante */}
+      {open && (
+        <div style={{
+          position:'absolute', top:'100%', left:0, right:0, zIndex:999, marginTop:2,
+          background:'#0d1520', border:'1px solid #1a2d45', borderRadius:4,
+          boxShadow:'0 4px 20px rgba(0,0,0,0.6)', overflow:'hidden', minWidth:180,
+        }}>
+          {blocks.length === 0 && (
+            <div style={{ padding:'8px 10px', fontFamily:MONO, fontSize:10, color:'#3a5a75' }}>
+              Sin bloques guardados
+            </div>
+          )}
+          {blocks.map(blk => (
+            <div
+              key={blk.id}
+              onMouseEnter={() => setHoverId(blk.id)}
+              onMouseLeave={() => setHoverId(null)}
+              style={{
+                display:'flex', alignItems:'center', gap:4,
+                padding:'5px 8px',
+                background: hoverId === blk.id ? '#1a2d45' : 'transparent',
+                cursor:'pointer',
+              }}
+            >
+              {editingId === blk.id ? (
+                <input
+                  ref={editInputRef}
+                  value={editName}
+                  onChange={e => setEditName(e.target.value)}
+                  onKeyDown={e => {
+                    e.stopPropagation()
+                    if (e.key === 'Enter') confirmRename(blk.id)
+                    if (e.key === 'Escape') setEditingId(null)
+                  }}
+                  onBlur={() => confirmRename(blk.id)}
+                  onClick={e => e.stopPropagation()}
+                  style={{
+                    flex:1, background:'#0a1520', border:'1px solid #2a4a6a',
+                    color:'#c8dff5', fontFamily:MONO, fontSize:11,
+                    padding:'2px 6px', borderRadius:3, outline:'none',
+                  }}
+                />
+              ) : (
+                <span
+                  onClick={() => selectBlock(blk)}
+                  style={{
+                    flex:1, fontFamily:MONO, fontSize:11, color:'#7a9bc0',
+                    overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
+                  }}
+                >
+                  {blk.name}
+                </span>
+              )}
+              <span
+                title="Renombrar"
+                onClick={e => startEdit(e, blk)}
+                style={{
+                  opacity: hoverId === blk.id ? 1 : 0, transition:'opacity 0.1s',
+                  cursor:'pointer', fontSize:12, padding:'0 2px', lineHeight:1,
+                  userSelect:'none',
+                }}
+              >✏️</span>
+              <span
+                title="Eliminar"
+                onClick={e => handleDelete(e, blk)}
+                style={{
+                  opacity: hoverId === blk.id ? 1 : 0, transition:'opacity 0.1s',
+                  cursor:'pointer', fontSize:12, padding:'0 2px', lineHeight:1,
+                  userSelect:'none',
+                }}
+              >🗑️</span>
+            </div>
+          ))}
+
+          {/* Separador + opción IA */}
+          <div style={{ borderTop:'1px solid #1a2d45' }} />
+          <div
+            onMouseEnter={e => e.currentTarget.style.background='#1a2d45'}
+            onMouseLeave={e => e.currentTarget.style.background='transparent'}
+            onClick={() => { onCreateAI(); setOpen(false) }}
+            style={{
+              padding:'7px 10px', fontFamily:MONO, fontSize:11,
+              color:'#a78bfa', cursor:'pointer', background:'transparent',
+            }}
+          >
+            ✨ Crear con IA...
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -215,7 +375,7 @@ function StopRow({ definition, setDefinition }) {
   const stopType = block?.type || ''
   function setBlock(b) { setDefinition(prev => { const n={...prev}; if(b) n.stop_loss=b; else delete n.stop_loss; return n }) }
   function onTypeChange(t) {
-    if (!t)                setBlock(null)
+    if (!t)                     setBlock(null)
     else if (t==='tecnico')      setBlock({ type:'tecnico',      ma_period:10 })
     else if (t==='atr_based')    setBlock({ type:'atr_based',    atr_period:14, atr_mult:1.5 })
     else if (t==='none')         setBlock({ type:'none' })
@@ -237,18 +397,18 @@ function StopRow({ definition, setDefinition }) {
         <option value="none">Ninguno</option>
       </select>
       {stopType==='tecnico' && (
-        <Num label="Período MA"    value={block.ma_period??10}      onChange={v=>onP('ma_period',v)} />
+        <Num label="Período MA"  value={block.ma_period??10}         onChange={v=>onP('ma_period',v)} />
       )}
       {stopType==='atr_based' && <>
-        <Num label="Período ATR"   value={block.atr_period??14}     onChange={v=>onP('atr_period',v)} />
-        <Num label="×Mult"         value={block.atr_mult??1.5}      onChange={v=>onP('atr_mult',v)} min={0.1} max={10} />
+        <Num label="Período ATR" value={block.atr_period??14}        onChange={v=>onP('atr_period',v)} />
+        <Num label="×Mult"       value={block.atr_mult??1.5}         onChange={v=>onP('atr_mult',v)} min={0.1} max={10} />
       </>}
       {stopType==='fixed_pct' && (
-        <Num label="% entrada"     value={block.params?.pct??5}     onChange={v=>onParam('pct',v)} min={0.5} max={50} />
+        <Num label="% entrada"   value={block.params?.pct??5}        onChange={v=>onParam('pct',v)} min={0.5} max={50} />
       )}
       {stopType==='trailing_atr' && <>
-        <Num label="Período ATR"   value={block.params?.atr_period??14}  onChange={v=>onParam('atr_period',v)} min={5} max={50} />
-        <Num label="×Mult"         value={block.params?.atr_mult??2}     onChange={v=>onParam('atr_mult',v)} min={0.5} max={5} />
+        <Num label="Período ATR" value={block.params?.atr_period??14} onChange={v=>onParam('atr_period',v)} min={5} max={50} />
+        <Num label="×Mult"       value={block.params?.atr_mult??2}    onChange={v=>onParam('atr_mult',v)} min={0.5} max={5} />
       </>}
     </div>
   )
@@ -274,16 +434,17 @@ function MgmtRow({ definition, setDefinition }) {
   )
 }
 
-// ── SectionRow — wrapper 60/40 con JSON editor + biblioteca de bloques ─
-function SectionRow({ left, sectionKey, definition, setDefinition, blocks = {}, saveBlock }) {
-  const role = sectionKey === 'stop_loss' ? 'stop' : sectionKey
+// ── SectionRow — 60/40: BlockSelector + controles | JSON editor ───────
+function SectionRow({ left, sectionKey, definition, setDefinition, blocks = {}, saveBlock, deleteBlock, updateBlockName }) {
+  const role         = sectionKey === 'stop_loss' ? 'stop' : sectionKey
   const sectionBlocks = blocks[role] || []
-  const [saveMode, setSaveMode] = useState(false)
-  const [saveName, setSaveName] = useState('')
-  const [aiMode, setAiMode]     = useState(false)
-  const [aiText, setAiText]     = useState('')
-  const [aiLoading, setAiLoading] = useState(false)
-  const [aiError, setAiError]   = useState('')
+  const [activeName, setActiveName]   = useState('')
+  const [aiMode, setAiMode]           = useState(false)
+  const [aiText, setAiText]           = useState('')
+  const [aiLoading, setAiLoading]     = useState(false)
+  const [aiError, setAiError]         = useState('')
+  const [aiResult, setAiResult]       = useState(null)  // definición generada, pendiente de guardar
+  const [saveName, setSaveName]       = useState('')
 
   function onSectionChange(val) {
     setDefinition(prev => {
@@ -294,24 +455,24 @@ function SectionRow({ left, sectionKey, definition, setDefinition, blocks = {}, 
     })
   }
 
-  function handleSelect(value) {
-    if (!value) return
-    if (value === '__save__') { setSaveMode(true); setSaveName(''); return }
-    if (value === '__ai__')  { setAiMode(true); setAiText(''); setAiError(''); return }
-    const blk = sectionBlocks.find(b => b.id === value)
-    if (blk) onSectionChange(blk.definition)
+  function handleSelect(blk) {
+    onSectionChange(blk.definition)
+    setActiveName(blk.name)
+    setAiMode(false)
+    setAiResult(null)
   }
 
-  async function confirmSave() {
-    if (!saveName.trim() || !saveBlock) return
-    const cur = definition?.[sectionKey] ?? null
-    if (cur) await saveBlock(role, saveName.trim(), cur)
-    setSaveMode(false); setSaveName('')
+  function openAI() {
+    setAiMode(true)
+    setAiText('')
+    setAiError('')
+    setAiResult(null)
+    setSaveName('')
   }
 
   async function generateAI() {
     if (!aiText.trim()) return
-    setAiLoading(true); setAiError('')
+    setAiLoading(true); setAiError(''); setAiResult(null)
     try {
       const res = await fetch('/api/conditions?action=groq_block', {
         method: 'POST',
@@ -321,59 +482,100 @@ function SectionRow({ left, sectionKey, definition, setDefinition, blocks = {}, 
       const data = await res.json()
       if (data.error) throw new Error(data.error)
       onSectionChange(data)
-      setAiMode(false); setAiText('')
+      setAiResult(data)
+      setActiveName('')
     } catch(e) { setAiError(e.message) }
     finally { setAiLoading(false) }
   }
 
-  const btnPrimary = { background:'rgba(0,212,255,0.12)', border:'1px solid rgba(0,212,255,0.4)', color:'var(--accent)', fontFamily:MONO, fontSize:10, padding:'3px 8px', borderRadius:3, cursor:'pointer' }
-  const btnGhost   = { background:'transparent', border:'1px solid var(--border)', color:'var(--text3)', fontFamily:MONO, fontSize:10, padding:'3px 8px', borderRadius:3, cursor:'pointer' }
-  const btnAI      = { background:'rgba(155,114,255,0.12)', border:'1px solid rgba(155,114,255,0.4)', color:'#9b72ff', fontFamily:MONO, fontSize:10, padding:'3px 8px', borderRadius:3, cursor:'pointer', whiteSpace:'nowrap' }
+  async function saveToLibrary() {
+    if (!saveName.trim() || !saveBlock || !aiResult) return
+    await saveBlock(role, saveName.trim(), aiResult)
+    setActiveName(saveName.trim())
+    setAiMode(false)
+    setAiResult(null)
+    setSaveName('')
+  }
+
+  const btnGhost  = { background:'transparent', border:'1px solid var(--border)', color:'var(--text3)', fontFamily:MONO, fontSize:10, padding:'3px 8px', borderRadius:3, cursor:'pointer' }
+  const btnAI     = { background:'rgba(155,114,255,0.12)', border:'1px solid rgba(155,114,255,0.4)', color:'#9b72ff', fontFamily:MONO, fontSize:10, padding:'3px 10px', borderRadius:3, whiteSpace:'nowrap' }
+  const btnSave   = { background:'rgba(0,212,255,0.12)', border:'1px solid rgba(0,212,255,0.4)', color:'var(--accent)', fontFamily:MONO, fontSize:10, padding:'3px 10px', borderRadius:3, cursor:'pointer', whiteSpace:'nowrap' }
 
   return (
     <div style={{ display:'flex', gap:6, alignItems:'stretch', marginBottom:3 }}>
       <div style={{ flex:'6 0 0', minWidth:0, display:'flex', flexDirection:'column', gap:3 }}>
 
-        {/* Bloque dropdown */}
-        <select value="" onChange={e => handleSelect(e.target.value)} style={{ ...SEL, width:'100%', fontSize:10 }}>
-          <option value="">— Cargar bloque —</option>
-          {sectionBlocks.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-          {sectionBlocks.length > 0 && <option disabled>──────────</option>}
-          <option value="__ai__">✨ Crear con IA...</option>
-          <option value="__save__">💾 Guardar bloque actual...</option>
-        </select>
+        {/* Selector de biblioteca */}
+        <BlockSelector
+          blocks={sectionBlocks}
+          value={activeName}
+          onSelect={handleSelect}
+          onDelete={id => { deleteBlock && deleteBlock(id); setActiveName(prev => prev ? '' : prev) }}
+          onRename={(id, name) => {
+            updateBlockName && updateBlockName(id, name)
+            setActiveName(prev => {
+              const blk = sectionBlocks.find(b => b.id === id)
+              return (blk && blk.name === prev) ? name : prev
+            })
+          }}
+          onCreateAI={openAI}
+        />
 
-        {/* Modo guardar */}
-        {saveMode && (
-          <div style={{ display:'flex', gap:4, alignItems:'center' }}>
-            <input autoFocus type="text" value={saveName}
-              onChange={e => setSaveName(e.target.value)}
-              onKeyDown={e => { if (e.key==='Enter') confirmSave(); if (e.key==='Escape') setSaveMode(false) }}
-              placeholder="Nombre del bloque…"
-              style={{ ...INPUT, flex:1, fontSize:10, padding:'3px 6px' }}
-            />
-            <button onClick={confirmSave} style={btnPrimary}>OK</button>
-            <button onClick={() => setSaveMode(false)} style={btnGhost}>✕</button>
-          </div>
-        )}
-
-        {/* Modo IA */}
+        {/* Panel IA inline */}
         {aiMode && (
-          <div style={{ display:'flex', flexDirection:'column', gap:3 }}>
-            <div style={{ display:'flex', gap:4, alignItems:'center' }}>
-              <input autoFocus type="text" value={aiText}
+          <div style={{ display:'flex', flexDirection:'column', gap:4, padding:'8px 10px', background:'#080f1a', border:'1px solid #1a2d45', borderRadius:4 }}>
+            <div style={{ display:'flex', gap:4, alignItems:'flex-start' }}>
+              <textarea
+                autoFocus
+                rows={2}
+                value={aiText}
                 onChange={e => setAiText(e.target.value)}
-                onKeyDown={e => { if (e.key==='Enter') generateAI(); if (e.key==='Escape') setAiMode(false) }}
-                placeholder="describe el bloque (ej: RSI cruza 30 al alza)"
-                style={{ ...INPUT, flex:1, fontSize:10, padding:'3px 6px' }}
+                onKeyDown={e => { if (e.key === 'Escape') setAiMode(false) }}
+                placeholder="describe el bloque (ej: RSI cruza nivel 30 al alza)"
+                style={{
+                  flex:1, background:'#040810', border:'1px solid #1a2d45',
+                  color:'#7a9bc0', fontFamily:MONO, fontSize:10,
+                  padding:'4px 6px', borderRadius:3, resize:'none', outline:'none',
+                }}
               />
-              <button onClick={generateAI} disabled={aiLoading || !aiText.trim()}
-                style={{ ...btnAI, opacity:(aiLoading||!aiText.trim())?0.5:1, cursor:(aiLoading||!aiText.trim())?'not-allowed':'pointer' }}>
-                {aiLoading ? '⟳' : '✨ Gen'}
-              </button>
-              <button onClick={() => setAiMode(false)} style={btnGhost}>✕</button>
+              <div style={{ display:'flex', flexDirection:'column', gap:3 }}>
+                <button
+                  onClick={generateAI}
+                  disabled={aiLoading || !aiText.trim()}
+                  style={{ ...btnAI, opacity:(aiLoading||!aiText.trim())?0.5:1, cursor:(aiLoading||!aiText.trim())?'not-allowed':'pointer' }}
+                >
+                  {aiLoading ? '⟳' : '✨ Generar'}
+                </button>
+                <button onClick={() => { setAiMode(false); setAiResult(null) }} style={btnGhost}>✕ Cerrar</button>
+              </div>
             </div>
-            {aiError && <div style={{ fontFamily:MONO, fontSize:9, color:'#ff7a7a' }}>⚠ {aiError}</div>}
+            {aiError && (
+              <div style={{ fontFamily:MONO, fontSize:9, color:'#ff7a7a' }}>⚠ {aiError}</div>
+            )}
+            {aiResult && (
+              <div style={{ display:'flex', gap:4, alignItems:'center', paddingTop:2 }}>
+                <input
+                  autoFocus
+                  type="text"
+                  value={saveName}
+                  onChange={e => setSaveName(e.target.value)}
+                  onKeyDown={e => { if (e.key==='Enter') saveToLibrary() }}
+                  placeholder="Nombre para la biblioteca…"
+                  style={{
+                    flex:1, background:'#040810', border:'1px solid #1a2d45',
+                    color:'#c8dff5', fontFamily:MONO, fontSize:10,
+                    padding:'3px 6px', borderRadius:3, outline:'none',
+                  }}
+                />
+                <button
+                  onClick={saveToLibrary}
+                  disabled={!saveName.trim()}
+                  style={{ ...btnSave, opacity:saveName.trim()?1:0.45 }}
+                >
+                  Guardar en biblioteca
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -396,8 +598,8 @@ export default function StrategyEditorPanel({
   const [aiText, setAiText]       = useState('')
   const [aiLoading, setAiLoading] = useState(false)
   const [aiError, setAiError]     = useState('')
-  const aiInputRef = useRef(null)
-  const { blocks, saveBlock } = useStrategyBlocks()
+  const aiInputRef                = useRef(null)
+  const { blocks, saveBlock, deleteBlock, updateBlockName } = useStrategyBlocks()
 
   useEffect(() => {
     if (focusAI) {
@@ -477,17 +679,17 @@ export default function StrategyEditorPanel({
           <div style={{ flex:'4 0 0', maxWidth:260, fontFamily:MONO, fontSize:8, color:'#2a4a6a', letterSpacing:'0.08em', textTransform:'uppercase', paddingLeft:4 }}>JSON directo</div>
         </div>
 
-        {/* Role builders con JSON lateral y biblioteca de bloques */}
+        {/* Role builders */}
         <div style={{ display:'flex', flexDirection:'column', gap:0, marginBottom:10 }}>
           {['filter','setup','trigger','abort','exit'].map(role => (
             <SectionRow key={role} sectionKey={role} definition={definition} setDefinition={setDefinition}
               left={<RoleRow role={role} definition={definition} setDefinition={setDefinition} />}
-              blocks={blocks} saveBlock={saveBlock}
+              blocks={blocks} saveBlock={saveBlock} deleteBlock={deleteBlock} updateBlockName={updateBlockName}
             />
           ))}
           <SectionRow sectionKey="stop_loss" definition={definition} setDefinition={setDefinition}
             left={<StopRow definition={definition} setDefinition={setDefinition} />}
-            blocks={blocks} saveBlock={saveBlock}
+            blocks={blocks} saveBlock={saveBlock} deleteBlock={deleteBlock} updateBlockName={updateBlockName}
           />
           <div style={{ display:'flex', gap:6, alignItems:'stretch', marginBottom:3 }}>
             <div style={{ flex:'6 0 0', minWidth:0 }}>
