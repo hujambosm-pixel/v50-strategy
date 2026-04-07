@@ -300,7 +300,7 @@ function BlockSelector({ blocks, value, onSelect, onDelete, onRename, onCreateAI
 }
 
 // ── Role row (FILTER, SETUP, TRIGGER, ABORT, EXIT) ────────────────────
-function RoleRow({ role, definition, setDefinition, hideTypeSelect = false }) {
+function RoleRow({ role, definition, setDefinition, hideTypeSelect = false, librarySlot = null }) {
   const r = ROLES.find(x => x.key === role)
   const block = definition?.[role] || null
   const rev = CREV[block?.type]
@@ -324,6 +324,8 @@ function RoleRow({ role, definition, setDefinition, hideTypeSelect = false }) {
   return (
     <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 12px', background:'var(--bg2)', borderLeft:`3px solid ${r.color}`, borderRadius:'0 4px 4px 0', minHeight:44, flexWrap:'wrap', flex:1 }}>
       <span style={{ fontFamily:MONO, fontSize:9, fontWeight:700, letterSpacing:'0.1em', color:r.color, background:`${r.color}14`, border:`1px solid ${r.color}33`, padding:'3px 8px', borderRadius:3, whiteSpace:'nowrap', flexShrink:0, minWidth:72, textAlign:'center' }}>{r.label}</span>
+
+      {librarySlot}
 
       {!hideTypeSelect && (
         <select value={ind} onChange={e=>onIndChange(e.target.value)} style={{ ...SEL, minWidth:82 }}>
@@ -376,7 +378,7 @@ function RoleRow({ role, definition, setDefinition, hideTypeSelect = false }) {
 }
 
 // ── Stop row ──────────────────────────────────────────────────────────
-function StopRow({ definition, setDefinition, hideTypeSelect = false }) {
+function StopRow({ definition, setDefinition, hideTypeSelect = false, librarySlot = null }) {
   const r = ROLES.find(x => x.key === 'stop_loss')
   const block = definition?.stop_loss || null
   const stopType = block?.type || ''
@@ -395,6 +397,9 @@ function StopRow({ definition, setDefinition, hideTypeSelect = false }) {
   return (
     <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 12px', background:'var(--bg2)', borderLeft:`3px solid ${r.color}`, borderRadius:'0 4px 4px 0', minHeight:44, flexWrap:'wrap', flex:1 }}>
       <span style={{ fontFamily:MONO, fontSize:9, fontWeight:700, letterSpacing:'0.1em', color:r.color, background:`${r.color}14`, border:`1px solid ${r.color}33`, padding:'3px 8px', borderRadius:3, whiteSpace:'nowrap', flexShrink:0, minWidth:72, textAlign:'center' }}>STOP</span>
+
+      {librarySlot}
+
       {!hideTypeSelect && (
         <select value={stopType} onChange={e=>onTypeChange(e.target.value)} style={{ ...SEL, minWidth:148 }}>
           <option value="">— Sin stop —</option>
@@ -448,17 +453,17 @@ function MgmtRow({ definition, setDefinition }) {
   )
 }
 
-// ── SectionRow — 60/40: BlockSelector + controles | JSON editor ───────
-function SectionRow({ left, sectionKey, definition, setDefinition, blocks = {}, saveBlock, deleteBlock, updateBlockName }) {
-  const role         = sectionKey === 'stop_loss' ? 'stop' : sectionKey
+// ── SectionRow — 60/40: controles (con BlockSelector integrado) | JSON editor ─
+function SectionRow({ sectionKey, definition, setDefinition, blocks = {}, saveBlock, deleteBlock, updateBlockName }) {
+  const role          = sectionKey === 'stop_loss' ? 'stop' : sectionKey
   const sectionBlocks = blocks[role] || []
-  const [activeName, setActiveName]   = useState('')
-  const [aiMode, setAiMode]           = useState(false)
-  const [aiText, setAiText]           = useState('')
-  const [aiLoading, setAiLoading]     = useState(false)
-  const [aiError, setAiError]         = useState('')
-  const [aiResult, setAiResult]       = useState(null)  // definición generada, pendiente de guardar
-  const [saveName, setSaveName]       = useState('')
+  const [activeName, setActiveName] = useState('')
+  const [aiMode, setAiMode]         = useState(false)
+  const [aiText, setAiText]         = useState('')
+  const [aiLoading, setAiLoading]   = useState(false)
+  const [aiError, setAiError]       = useState('')
+  const [aiResult, setAiResult]     = useState(null)
+  const [saveName, setSaveName]     = useState('')
 
   function onSectionChange(val) {
     setDefinition(prev => {
@@ -477,11 +482,7 @@ function SectionRow({ left, sectionKey, definition, setDefinition, blocks = {}, 
   }
 
   function openAI() {
-    setAiMode(true)
-    setAiText('')
-    setAiError('')
-    setAiResult(null)
-    setSaveName('')
+    setAiMode(true); setAiText(''); setAiError(''); setAiResult(null); setSaveName('')
   }
 
   async function generateAI() {
@@ -489,15 +490,12 @@ function SectionRow({ left, sectionKey, definition, setDefinition, blocks = {}, 
     setAiLoading(true); setAiError(''); setAiResult(null)
     try {
       const res = await fetch('/api/conditions?action=groq_block', {
-        method: 'POST',
-        headers: getAuthH(),
+        method: 'POST', headers: getAuthH(),
         body: JSON.stringify({ text: aiText.trim(), role }),
       })
       const data = await res.json()
       if (data.error) throw new Error(data.error)
-      onSectionChange(data)
-      setAiResult(data)
-      setActiveName('')
+      onSectionChange(data); setAiResult(data); setActiveName('')
     } catch(e) { setAiError(e.message) }
     finally { setAiLoading(false) }
   }
@@ -506,94 +504,79 @@ function SectionRow({ left, sectionKey, definition, setDefinition, blocks = {}, 
     if (!saveName.trim() || !saveBlock || !aiResult) return
     await saveBlock(role, saveName.trim(), aiResult)
     setActiveName(saveName.trim())
-    setAiMode(false)
-    setAiResult(null)
-    setSaveName('')
+    setAiMode(false); setAiResult(null); setSaveName('')
   }
 
-  const btnGhost  = { background:'transparent', border:'1px solid var(--border)', color:'var(--text3)', fontFamily:MONO, fontSize:10, padding:'3px 8px', borderRadius:3, cursor:'pointer' }
-  const btnAI     = { background:'rgba(155,114,255,0.12)', border:'1px solid rgba(155,114,255,0.4)', color:'#9b72ff', fontFamily:MONO, fontSize:10, padding:'3px 10px', borderRadius:3, whiteSpace:'nowrap' }
-  const btnSave   = { background:'rgba(0,212,255,0.12)', border:'1px solid rgba(0,212,255,0.4)', color:'var(--accent)', fontFamily:MONO, fontSize:10, padding:'3px 10px', borderRadius:3, cursor:'pointer', whiteSpace:'nowrap' }
+  const btnGhost = { background:'transparent', border:'1px solid var(--border)', color:'var(--text3)', fontFamily:MONO, fontSize:10, padding:'3px 8px', borderRadius:3, cursor:'pointer' }
+  const btnAI    = { background:'rgba(155,114,255,0.12)', border:'1px solid rgba(155,114,255,0.4)', color:'#9b72ff', fontFamily:MONO, fontSize:10, padding:'3px 10px', borderRadius:3, whiteSpace:'nowrap' }
+  const btnSave  = { background:'rgba(0,212,255,0.12)', border:'1px solid rgba(0,212,255,0.4)', color:'var(--accent)', fontFamily:MONO, fontSize:10, padding:'3px 10px', borderRadius:3, cursor:'pointer', whiteSpace:'nowrap' }
+
+  // Slot que se inyecta dentro de RoleRow/StopRow justo después del label
+  const librarySlot = (
+    <div style={{ display:'flex', alignItems:'center', minWidth:160, flexShrink:0 }}>
+      <BlockSelector
+        blocks={sectionBlocks}
+        value={activeName}
+        onSelect={handleSelect}
+        onDelete={id => { deleteBlock && deleteBlock(id); setActiveName(p => p ? '' : p) }}
+        onRename={(id, name) => {
+          updateBlockName && updateBlockName(id, name)
+          setActiveName(prev => {
+            const blk = sectionBlocks.find(b => b.id === id)
+            return (blk && blk.name === prev) ? name : prev
+          })
+        }}
+        onCreateAI={openAI}
+      />
+    </div>
+  )
+
+  // Panel IA expandido — aparece DEBAJO de la sección cuando está activo
+  const aiPanel = aiMode && (
+    <div style={{ display:'flex', flexDirection:'column', gap:4, padding:'8px 10px', background:'#080f1a', border:'1px solid #1a2d45', borderRadius:4, marginTop:2 }}>
+      <div style={{ display:'flex', gap:4, alignItems:'flex-start' }}>
+        <textarea autoFocus rows={2} value={aiText}
+          onChange={e => setAiText(e.target.value)}
+          onKeyDown={e => { if (e.key==='Escape') setAiMode(false) }}
+          placeholder="describe el bloque (ej: RSI cruza nivel 30 al alza)"
+          style={{ flex:1, background:'#040810', border:'1px solid #1a2d45', color:'#7a9bc0', fontFamily:MONO, fontSize:10, padding:'4px 6px', borderRadius:3, resize:'none', outline:'none' }}
+        />
+        <div style={{ display:'flex', flexDirection:'column', gap:3 }}>
+          <button onClick={generateAI} disabled={aiLoading||!aiText.trim()}
+            style={{ ...btnAI, opacity:(aiLoading||!aiText.trim())?0.5:1, cursor:(aiLoading||!aiText.trim())?'not-allowed':'pointer' }}>
+            {aiLoading ? '⟳' : '✨ Generar'}
+          </button>
+          <button onClick={() => { setAiMode(false); setAiResult(null) }} style={btnGhost}>✕ Cerrar</button>
+        </div>
+      </div>
+      {aiError && <div style={{ fontFamily:MONO, fontSize:9, color:'#ff7a7a' }}>⚠ {aiError}</div>}
+      {aiResult && (
+        <div style={{ display:'flex', gap:4, alignItems:'center', paddingTop:2 }}>
+          <input autoFocus type="text" value={saveName}
+            onChange={e => setSaveName(e.target.value)}
+            onKeyDown={e => { if (e.key==='Enter') saveToLibrary() }}
+            placeholder="Nombre para la biblioteca…"
+            style={{ flex:1, background:'#040810', border:'1px solid #1a2d45', color:'#c8dff5', fontFamily:MONO, fontSize:10, padding:'3px 6px', borderRadius:3, outline:'none' }}
+          />
+          <button onClick={saveToLibrary} disabled={!saveName.trim()}
+            style={{ ...btnSave, opacity:saveName.trim()?1:0.45 }}>
+            Guardar en biblioteca
+          </button>
+        </div>
+      )}
+    </div>
+  )
+
+  const isStop = sectionKey === 'stop_loss'
 
   return (
     <div style={{ display:'flex', gap:6, alignItems:'stretch', marginBottom:3 }}>
-      <div style={{ flex:'6 0 0', minWidth:0, display:'flex', flexDirection:'column', gap:3 }}>
-
-        {/* Selector de biblioteca */}
-        <BlockSelector
-          blocks={sectionBlocks}
-          value={activeName}
-          onSelect={handleSelect}
-          onDelete={id => { deleteBlock && deleteBlock(id); setActiveName(prev => prev ? '' : prev) }}
-          onRename={(id, name) => {
-            updateBlockName && updateBlockName(id, name)
-            setActiveName(prev => {
-              const blk = sectionBlocks.find(b => b.id === id)
-              return (blk && blk.name === prev) ? name : prev
-            })
-          }}
-          onCreateAI={openAI}
-        />
-
-        {/* Panel IA inline */}
-        {aiMode && (
-          <div style={{ display:'flex', flexDirection:'column', gap:4, padding:'8px 10px', background:'#080f1a', border:'1px solid #1a2d45', borderRadius:4 }}>
-            <div style={{ display:'flex', gap:4, alignItems:'flex-start' }}>
-              <textarea
-                autoFocus
-                rows={2}
-                value={aiText}
-                onChange={e => setAiText(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Escape') setAiMode(false) }}
-                placeholder="describe el bloque (ej: RSI cruza nivel 30 al alza)"
-                style={{
-                  flex:1, background:'#040810', border:'1px solid #1a2d45',
-                  color:'#7a9bc0', fontFamily:MONO, fontSize:10,
-                  padding:'4px 6px', borderRadius:3, resize:'none', outline:'none',
-                }}
-              />
-              <div style={{ display:'flex', flexDirection:'column', gap:3 }}>
-                <button
-                  onClick={generateAI}
-                  disabled={aiLoading || !aiText.trim()}
-                  style={{ ...btnAI, opacity:(aiLoading||!aiText.trim())?0.5:1, cursor:(aiLoading||!aiText.trim())?'not-allowed':'pointer' }}
-                >
-                  {aiLoading ? '⟳' : '✨ Generar'}
-                </button>
-                <button onClick={() => { setAiMode(false); setAiResult(null) }} style={btnGhost}>✕ Cerrar</button>
-              </div>
-            </div>
-            {aiError && (
-              <div style={{ fontFamily:MONO, fontSize:9, color:'#ff7a7a' }}>⚠ {aiError}</div>
-            )}
-            {aiResult && (
-              <div style={{ display:'flex', gap:4, alignItems:'center', paddingTop:2 }}>
-                <input
-                  autoFocus
-                  type="text"
-                  value={saveName}
-                  onChange={e => setSaveName(e.target.value)}
-                  onKeyDown={e => { if (e.key==='Enter') saveToLibrary() }}
-                  placeholder="Nombre para la biblioteca…"
-                  style={{
-                    flex:1, background:'#040810', border:'1px solid #1a2d45',
-                    color:'#c8dff5', fontFamily:MONO, fontSize:10,
-                    padding:'3px 6px', borderRadius:3, outline:'none',
-                  }}
-                />
-                <button
-                  onClick={saveToLibrary}
-                  disabled={!saveName.trim()}
-                  style={{ ...btnSave, opacity:saveName.trim()?1:0.45 }}
-                >
-                  Guardar en biblioteca
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {left}
+      <div style={{ flex:'6 0 0', minWidth:0, display:'flex', flexDirection:'column', gap:0 }}>
+        {isStop
+          ? <StopRow definition={definition} setDefinition={setDefinition} hideTypeSelect={true} librarySlot={librarySlot} />
+          : <RoleRow role={sectionKey} definition={definition} setDefinition={setDefinition} hideTypeSelect={true} librarySlot={librarySlot} />
+        }
+        {aiPanel}
       </div>
       <div style={{ flex:'4 0 0', minWidth:120, maxWidth:260 }}>
         <SectionJsonEditor value={definition?.[sectionKey] ?? null} onChange={onSectionChange} />
@@ -697,12 +680,10 @@ export default function StrategyEditorPanel({
         <div style={{ display:'flex', flexDirection:'column', gap:0, marginBottom:10 }}>
           {['filter','setup','trigger','abort','exit'].map(role => (
             <SectionRow key={role} sectionKey={role} definition={definition} setDefinition={setDefinition}
-              left={<RoleRow role={role} definition={definition} setDefinition={setDefinition} hideTypeSelect={true} />}
               blocks={blocks} saveBlock={saveBlock} deleteBlock={deleteBlock} updateBlockName={updateBlockName}
             />
           ))}
           <SectionRow sectionKey="stop_loss" definition={definition} setDefinition={setDefinition}
-            left={<StopRow definition={definition} setDefinition={setDefinition} hideTypeSelect={true} />}
             blocks={blocks} saveBlock={saveBlock} deleteBlock={deleteBlock} updateBlockName={updateBlockName}
           />
           <div style={{ display:'flex', gap:6, alignItems:'stretch', marginBottom:3 }}>
