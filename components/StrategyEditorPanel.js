@@ -262,8 +262,16 @@ function BlockSelector({ blocks, value, onSelect, onDelete, onRename, onCreateAI
           background:'#0d1520', border:'1px solid #1a2d45', borderRadius:4,
           boxShadow:'0 4px 20px rgba(0,0,0,0.6)', overflow:'hidden', minWidth:180,
         }}>
+          {/* Opción Ninguno — siempre visible */}
+          <div
+            onMouseEnter={e => e.currentTarget.style.background='#1a2d45'}
+            onMouseLeave={e => e.currentTarget.style.background='transparent'}
+            onClick={() => { onSelect(null); setOpen(false); setEditingId(null) }}
+            style={{ padding:'5px 10px', fontFamily:MONO, fontSize:11, color:'#3a5a75', cursor:'pointer', background:'transparent' }}
+          >— Ninguno —</div>
+          {blocks.length > 0 && <div style={{ borderTop:'1px solid #1a2d45' }} />}
           {blocks.length === 0 && (
-            <div style={{ padding:'8px 10px', fontFamily:MONO, fontSize:10, color:'#3a5a75' }}>
+            <div style={{ padding:'5px 10px', fontFamily:MONO, fontSize:10, color:'#3a5a75' }}>
               Sin bloques guardados
             </div>
           )}
@@ -368,7 +376,8 @@ function RoleRow({ role, definition, setDefinition, hideTypeSelect = false, libr
     const type = CMAP[`${ind}.${newOp}`]
     if (type) setBlock({ ...block, type })
   }
-  function onP(key, val) { setBlock({ ...block, [key]: val }) }
+  // Escribe siempre con nombre canónico y limpia aliases/campos inválidos
+  function onP(key, val) { setBlock(validateBlockDefinition({ ...block, [key]: val })) }
 
   return (
     <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 12px', background:'var(--bg2)', borderLeft:`3px solid ${r.color}`, borderRadius:'0 4px 4px 0', minHeight:44, flexWrap:'wrap', flex:1 }}>
@@ -401,26 +410,20 @@ function RoleRow({ role, definition, setDefinition, hideTypeSelect = false, libr
       )}
 
       {ind==='ema' && block && <>
-        <Num label="Rápida" value={block.ma_fast??10} onChange={v=>onP('ma_fast',v)} />
-        <Num label="Lenta"  value={block.ma_slow??20} onChange={v=>onP('ma_slow',v)} />
+        <Num label="Rápida" value={block.ma_fast??10}  onChange={v=>onP('ma_fast',v)} />
+        <Num label="Lenta"  value={block.ma_slow??20}  onChange={v=>onP('ma_slow',v)} />
       </>}
       {(ind==='precio'||ind==='cierre') && block && <>
         <Num label="Período" value={block.ma_period??50} onChange={v=>onP('ma_period',v)} />
-        <label style={{ display:'flex', flexDirection:'column', gap:2, alignItems:'center', flexShrink:0 }}>
-          <span style={{ fontFamily:MONO, fontSize:8, color:'var(--text3)', textTransform:'uppercase' }}>Tipo</span>
-          <select value={block.ma_type||'EMA'} onChange={e=>onP('ma_type',e.target.value)} style={{ ...SEL, width:56 }}>
-            <option>EMA</option><option>SMA</option>
-          </select>
-        </label>
       </>}
       {ind==='rsi' && block && <>
-        <Num label="Período" value={block.period??14} onChange={v=>onP('period',v)} />
-        <Num label="Nivel"   value={block.level??50}  onChange={v=>onP('level',v)} />
+        <Num label="Período" value={block.rsi_period ?? block.period ?? 14} onChange={v=>onP('rsi_period',v)} />
+        <Num label="Nivel"   value={block.level ?? 50}                      onChange={v=>onP('level',v)} />
       </>}
       {ind==='macd' && block && <>
-        <Num label="Rápida" value={block.fast??12}   onChange={v=>onP('fast',v)} />
-        <Num label="Lenta"  value={block.slow??26}   onChange={v=>onP('slow',v)} />
-        <Num label="Señal"  value={block.signal??9}  onChange={v=>onP('signal',v)} />
+        <Num label="Rápida" value={block.macd_fast   ?? block.fast   ?? 12} onChange={v=>onP('macd_fast',v)} />
+        <Num label="Lenta"  value={block.macd_slow   ?? block.slow   ?? 26} onChange={v=>onP('macd_slow',v)} />
+        <Num label="Señal"  value={block.macd_signal ?? block.signal ?? 9}  onChange={v=>onP('macd_signal',v)} />
       </>}
     </div>
   )
@@ -524,6 +527,7 @@ function SectionRow({ sectionKey, definition, setDefinition, blocks = {}, saveBl
   }
 
   function handleSelect(blk) {
+    if (!blk) { onSectionChange(null); setActiveName(''); setAiMode(false); setAiResult(null); return }
     onSectionChange(blk.definition)
     setActiveName(blk.name)
     setAiMode(false)
