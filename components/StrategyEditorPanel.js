@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { MONO } from '../lib/utils'
+import { useStrategyBlocks } from '../lib/useStrategyBlocks'
 
 // ── Data ─────────────────────────────────────────────────────────────
 const ROLES = [
@@ -38,40 +39,6 @@ const IND_DEFAULTS = {
   macd:   {fast:12,slow:26,signal:9},
 }
 
-const TEMPLATES = [
-  {label:'📈 Cruce EMA 10/20', def:{
-    setup:{type:'ema_cross_up',ma_fast:10,ma_slow:20},
-    trigger:{type:'ema_cross_up',ma_fast:10,ma_slow:20},
-    abort:{type:'ema_cross_down',ma_fast:10,ma_slow:20},
-    stop_loss:{type:'tecnico',ma_period:10},
-    exit:{type:'ema_cross_down',ma_fast:10,ma_slow:20},
-    management:{sin_perdidas:true,reentry:true},
-  }},
-  {label:'📉 RSI Sobrevendido', def:{
-    setup:{type:'rsi_below',period:14,level:30},
-    trigger:{type:'rsi_cross_up',period:14,level:30},
-    stop_loss:{type:'tecnico',ma_period:14},
-    exit:{type:'rsi_above',period:14,level:70},
-    management:{sin_perdidas:true,reentry:false},
-  }},
-  {label:'🚀 Cruce MACD', def:{
-    setup:{type:'macd_cross_up',fast:12,slow:26,signal:9},
-    trigger:{type:'macd_cross_up',fast:12,slow:26,signal:9},
-    abort:{type:'macd_cross_down',fast:12,slow:26,signal:9},
-    stop_loss:{type:'tecnico',ma_period:20},
-    exit:{type:'macd_cross_down',fast:12,slow:26,signal:9},
-    management:{sin_perdidas:false,reentry:true},
-  }},
-  {label:'🛡️ EMA 200 Filter', def:{
-    filter:{type:'price_above_ma',ma_period:200,ma_type:'EMA'},
-    setup:{type:'ema_cross_up',ma_fast:10,ma_slow:50},
-    trigger:{type:'close_above_ma',ma_period:10,ma_type:'EMA'},
-    stop_loss:{type:'tecnico',ma_period:50},
-    exit:{type:'close_below_ma',ma_period:10,ma_type:'EMA'},
-    management:{sin_perdidas:true,reentry:true},
-  }},
-]
-
 // ── Styles ────────────────────────────────────────────────────────────
 const INPUT = {
   width:'100%', background:'var(--bg3)', border:'1px solid var(--border)',
@@ -82,113 +49,6 @@ const SEL = {
   background:'var(--bg3)', border:'1px solid var(--border)',
   color:'var(--text1)', fontFamily:MONO, fontSize:11,
   padding:'4px 6px', borderRadius:3, cursor:'pointer', outline:'none',
-}
-
-// ── Path helpers ──────────────────────────────────────────────────────
-function getByPath(obj, path) {
-  return path.split('.').reduce((acc, k) => acc?.[k], obj)
-}
-function setByPath(obj, path, value) {
-  const keys = path.split('.')
-  if (keys.length === 1) return { ...obj, [keys[0]]: value }
-  return { ...obj, [keys[0]]: setByPath(obj?.[keys[0]] || {}, keys.slice(1).join('.'), value) }
-}
-
-// ── Summary fields — qué parámetros mostrar en vista rápida ──────────
-function getTemplateSummaryFields(definition) {
-  const rows = []
-  const setup = definition?.setup
-  const exit  = definition?.exit
-  const stop  = definition?.stop_loss
-
-  if (setup) {
-    const t = setup.type
-    if (t === 'ema_cross_up' || t === 'ema_cross_down') {
-      rows.push({ label:'ENTRADA', color:'#00d4ff', desc: t === 'ema_cross_up' ? 'EMA cruza ↑' : 'EMA cruza ↓',
-        params:[
-          { label:'EMA rápida', path:'setup.ma_fast', min:1,   max:500 },
-          { label:'EMA lenta',  path:'setup.ma_slow', min:2,   max:500 },
-        ]})
-    } else if (t?.startsWith('rsi_')) {
-      const desc = t==='rsi_cross_up'?'RSI cruza ↑ nivel':t==='rsi_cross_down'?'RSI cruza ↓ nivel':t==='rsi_above'?'RSI > nivel':'RSI < nivel'
-      rows.push({ label:'ENTRADA', color:'#a78bfa', desc,
-        params:[
-          { label:'Período', path:'setup.period', min:2, max:50 },
-          { label:'Nivel',   path:'setup.level',  min:1, max:99 },
-        ]})
-    } else if (t?.startsWith('macd_')) {
-      rows.push({ label:'ENTRADA', color:'#fb923c', desc: t==='macd_cross_up' ? 'MACD cruza ↑ señal' : 'MACD cruza ↓ señal',
-        params:[
-          { label:'Rápida', path:'setup.fast',   min:2, max:100 },
-          { label:'Lenta',  path:'setup.slow',   min:3, max:200 },
-          { label:'Señal',  path:'setup.signal', min:2, max:50  },
-        ]})
-    } else if (t === 'price_above_ma' || t === 'price_below_ma' || t === 'close_above_ma' || t === 'close_below_ma') {
-      const desc = t.includes('above') ? 'Precio/Cierre > MA' : 'Precio/Cierre < MA'
-      rows.push({ label:'ENTRADA', color:'#00d4ff', desc,
-        params:[
-          { label:'Período MA', path:'setup.ma_period', min:2, max:500 },
-        ]})
-    }
-  }
-
-  if (exit) {
-    const t = exit.type
-    if (t === 'close_below_ma' || t === 'price_below_ma' || t === 'close_above_ma') {
-      rows.push({ label:'SALIDA', color:'#ffd166', desc: t.includes('above') ? 'Cierre sobre MA' : 'Cierre bajo MA',
-        params:[
-          { label:'Período MA', path:'exit.ma_period', min:1, max:500 },
-        ]})
-    } else if (t === 'rsi_above' || t === 'rsi_below') {
-      rows.push({ label:'SALIDA', color:'#ffd166', desc: t === 'rsi_above' ? 'RSI supera nivel' : 'RSI baja de nivel',
-        params:[
-          { label:'Período', path:'exit.period', min:2, max:50 },
-          { label:'Nivel',   path:'exit.level',  min:1, max:99 },
-        ]})
-    } else if (t?.startsWith('macd_')) {
-      rows.push({ label:'SALIDA', color:'#ffd166', desc:'MACD cruza señal',
-        params:[
-          { label:'Rápida', path:'exit.fast',   min:2, max:100 },
-          { label:'Lenta',  path:'exit.slow',   min:3, max:200 },
-          { label:'Señal',  path:'exit.signal', min:2, max:50  },
-        ]})
-    } else if (t === 'ema_cross_down') {
-      rows.push({ label:'SALIDA', color:'#ffd166', desc:'EMA cruza ↓',
-        params:[
-          { label:'EMA rápida', path:'exit.ma_fast', min:1, max:500 },
-          { label:'EMA lenta',  path:'exit.ma_slow', min:2, max:500 },
-        ]})
-    }
-  }
-
-  if (stop) {
-    const t = stop.type
-    if (t === 'tecnico') {
-      rows.push({ label:'STOP', color:'#ff4d6d', desc:'Stop técnico (MA)',
-        params:[
-          { label:'Período MA', path:'stop_loss.ma_period', min:1, max:200 },
-        ]})
-    } else if (t === 'fixed_pct') {
-      rows.push({ label:'STOP', color:'#ff4d6d', desc:'Stop fijo desde entrada',
-        params:[
-          { label:'%', path:'stop_loss.params.pct', min:0.5, max:50, step:0.5 },
-        ]})
-    } else if (t === 'atr_based') {
-      rows.push({ label:'STOP', color:'#ff4d6d', desc:'Stop ATR dinámico',
-        params:[
-          { label:'Período ATR', path:'stop_loss.atr_period', min:5,   max:50 },
-          { label:'×Mult',       path:'stop_loss.atr_mult',   min:0.5, max:5, step:0.5 },
-        ]})
-    } else if (t === 'trailing_atr') {
-      rows.push({ label:'STOP', color:'#ff4d6d', desc:'Stop ATR trailing',
-        params:[
-          { label:'Período ATR', path:'stop_loss.params.atr_period', min:5,   max:50 },
-          { label:'×Mult',       path:'stop_loss.params.atr_mult',   min:0.5, max:5, step:0.5 },
-        ]})
-    }
-  }
-
-  return rows
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────
@@ -414,9 +274,18 @@ function MgmtRow({ definition, setDefinition }) {
   )
 }
 
-// ── SectionRow — wrapper 60/40 con JSON editor lateral ───────────────
-function SectionRow({ left, sectionKey, definition, setDefinition }) {
-  function onChange(val) {
+// ── SectionRow — wrapper 60/40 con JSON editor + biblioteca de bloques ─
+function SectionRow({ left, sectionKey, definition, setDefinition, blocks = {}, saveBlock }) {
+  const role = sectionKey === 'stop_loss' ? 'stop' : sectionKey
+  const sectionBlocks = blocks[role] || []
+  const [saveMode, setSaveMode] = useState(false)
+  const [saveName, setSaveName] = useState('')
+  const [aiMode, setAiMode]     = useState(false)
+  const [aiText, setAiText]     = useState('')
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiError, setAiError]   = useState('')
+
+  function onSectionChange(val) {
     setDefinition(prev => {
       const n = { ...prev }
       if (val == null) delete n[sectionKey]
@@ -424,11 +293,94 @@ function SectionRow({ left, sectionKey, definition, setDefinition }) {
       return n
     })
   }
+
+  function handleSelect(value) {
+    if (!value) return
+    if (value === '__save__') { setSaveMode(true); setSaveName(''); return }
+    if (value === '__ai__')  { setAiMode(true); setAiText(''); setAiError(''); return }
+    const blk = sectionBlocks.find(b => b.id === value)
+    if (blk) onSectionChange(blk.definition)
+  }
+
+  async function confirmSave() {
+    if (!saveName.trim() || !saveBlock) return
+    const cur = definition?.[sectionKey] ?? null
+    if (cur) await saveBlock(role, saveName.trim(), cur)
+    setSaveMode(false); setSaveName('')
+  }
+
+  async function generateAI() {
+    if (!aiText.trim()) return
+    setAiLoading(true); setAiError('')
+    try {
+      const res = await fetch('/api/conditions?action=groq_block', {
+        method: 'POST',
+        headers: getAuthH(),
+        body: JSON.stringify({ text: aiText.trim(), role }),
+      })
+      const data = await res.json()
+      if (data.error) throw new Error(data.error)
+      onSectionChange(data)
+      setAiMode(false); setAiText('')
+    } catch(e) { setAiError(e.message) }
+    finally { setAiLoading(false) }
+  }
+
+  const btnPrimary = { background:'rgba(0,212,255,0.12)', border:'1px solid rgba(0,212,255,0.4)', color:'var(--accent)', fontFamily:MONO, fontSize:10, padding:'3px 8px', borderRadius:3, cursor:'pointer' }
+  const btnGhost   = { background:'transparent', border:'1px solid var(--border)', color:'var(--text3)', fontFamily:MONO, fontSize:10, padding:'3px 8px', borderRadius:3, cursor:'pointer' }
+  const btnAI      = { background:'rgba(155,114,255,0.12)', border:'1px solid rgba(155,114,255,0.4)', color:'#9b72ff', fontFamily:MONO, fontSize:10, padding:'3px 8px', borderRadius:3, cursor:'pointer', whiteSpace:'nowrap' }
+
   return (
     <div style={{ display:'flex', gap:6, alignItems:'stretch', marginBottom:3 }}>
-      <div style={{ flex:'6 0 0', minWidth:0 }}>{left}</div>
+      <div style={{ flex:'6 0 0', minWidth:0, display:'flex', flexDirection:'column', gap:3 }}>
+
+        {/* Bloque dropdown */}
+        <select value="" onChange={e => handleSelect(e.target.value)} style={{ ...SEL, width:'100%', fontSize:10 }}>
+          <option value="">— Cargar bloque —</option>
+          {sectionBlocks.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+          {sectionBlocks.length > 0 && <option disabled>──────────</option>}
+          <option value="__ai__">✨ Crear con IA...</option>
+          <option value="__save__">💾 Guardar bloque actual...</option>
+        </select>
+
+        {/* Modo guardar */}
+        {saveMode && (
+          <div style={{ display:'flex', gap:4, alignItems:'center' }}>
+            <input autoFocus type="text" value={saveName}
+              onChange={e => setSaveName(e.target.value)}
+              onKeyDown={e => { if (e.key==='Enter') confirmSave(); if (e.key==='Escape') setSaveMode(false) }}
+              placeholder="Nombre del bloque…"
+              style={{ ...INPUT, flex:1, fontSize:10, padding:'3px 6px' }}
+            />
+            <button onClick={confirmSave} style={btnPrimary}>OK</button>
+            <button onClick={() => setSaveMode(false)} style={btnGhost}>✕</button>
+          </div>
+        )}
+
+        {/* Modo IA */}
+        {aiMode && (
+          <div style={{ display:'flex', flexDirection:'column', gap:3 }}>
+            <div style={{ display:'flex', gap:4, alignItems:'center' }}>
+              <input autoFocus type="text" value={aiText}
+                onChange={e => setAiText(e.target.value)}
+                onKeyDown={e => { if (e.key==='Enter') generateAI(); if (e.key==='Escape') setAiMode(false) }}
+                placeholder="describe el bloque (ej: RSI cruza 30 al alza)"
+                style={{ ...INPUT, flex:1, fontSize:10, padding:'3px 6px' }}
+              />
+              <button onClick={generateAI} disabled={aiLoading || !aiText.trim()}
+                style={{ ...btnAI, opacity:(aiLoading||!aiText.trim())?0.5:1, cursor:(aiLoading||!aiText.trim())?'not-allowed':'pointer' }}>
+                {aiLoading ? '⟳' : '✨ Gen'}
+              </button>
+              <button onClick={() => setAiMode(false)} style={btnGhost}>✕</button>
+            </div>
+            {aiError && <div style={{ fontFamily:MONO, fontSize:9, color:'#ff7a7a' }}>⚠ {aiError}</div>}
+          </div>
+        )}
+
+        {left}
+      </div>
       <div style={{ flex:'4 0 0', minWidth:120, maxWidth:260 }}>
-        <SectionJsonEditor value={definition?.[sectionKey] ?? null} onChange={onChange} />
+        <SectionJsonEditor value={definition?.[sectionKey] ?? null} onChange={onSectionChange} />
       </div>
     </div>
   )
@@ -440,13 +392,12 @@ export default function StrategyEditorPanel({
   conditions, strategy,
   onSave, onCancel, onDelete, saving,
   focusAI = false,
-  templateName = '',
 }) {
   const [aiText, setAiText]       = useState('')
   const [aiLoading, setAiLoading] = useState(false)
   const [aiError, setAiError]     = useState('')
-  const [showSummary, setShowSummary] = useState(() => !!templateName && !focusAI)
   const aiInputRef = useRef(null)
+  const { blocks, saveBlock } = useStrategyBlocks()
 
   useEffect(() => {
     if (focusAI) {
@@ -469,122 +420,20 @@ export default function StrategyEditorPanel({
     finally { setAiLoading(false) }
   }
 
-  function loadTemplate(idx) {
-    const t = TEMPLATES[parseInt(idx)]
-    if (!t) return
-    setDefinition(prev => ({ ...prev, ...t.def }))
-  }
-
-  // ── Shared header ─────────────────────────────────────────────────
-  const Header = ({ extra }) => (
-    <div style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 16px', borderBottom:'1px solid var(--border)', background:'var(--bg2)', flexShrink:0 }}>
-      <button onClick={onCancel} style={{ background:'transparent', border:'1px solid var(--border)', color:'var(--text3)', fontFamily:MONO, fontSize:11, padding:'3px 10px', borderRadius:4, cursor:'pointer' }}>← Volver</button>
-      <span style={{ fontFamily:MONO, fontSize:12, color:'var(--text3)' }}>{strategy?.id ? 'Editando' : templateName || 'Nueva estrategia'}</span>
-      <span style={{ fontFamily:MONO, fontSize:14, fontWeight:700, color:strForm.color||'var(--accent)' }}>{strForm.name||'—'}</span>
-      <div style={{ marginLeft:'auto', display:'flex', gap:8 }}>
-        {extra}
-        {strategy?.id && <button onClick={onDelete} style={{ background:'rgba(255,77,109,0.1)', border:'1px solid #ff4d6d', color:'#ff4d6d', fontFamily:MONO, fontSize:11, padding:'4px 12px', borderRadius:4, cursor:'pointer' }}>🗑 Eliminar</button>}
-        <button onClick={onCancel} style={{ background:'transparent', border:'1px solid var(--border)', color:'var(--text3)', fontFamily:MONO, fontSize:11, padding:'4px 12px', borderRadius:4, cursor:'pointer' }}>✕ Cancelar</button>
-        <button onClick={onSave} disabled={saving} style={{ background:'rgba(0,212,255,0.15)', border:'1px solid var(--accent)', color:'var(--accent)', fontFamily:MONO, fontSize:11, fontWeight:700, padding:'4px 16px', borderRadius:4, cursor:saving?'not-allowed':'pointer' }}>{saving?'⟳ Guardando…':'💾 Guardar'}</button>
-      </div>
-    </div>
-  )
-
-  // ════════════════════════════════════════════════════════════════════
-  // VISTA RESUMEN — solo para templates (no blank, no AI)
-  // ════════════════════════════════════════════════════════════════════
-  if (showSummary) {
-    const summaryFields = getTemplateSummaryFields(definition)
-    return (
-      <div style={{ display:'flex', flexDirection:'column', height:'100%', overflow:'hidden', background:'var(--bg1)', fontFamily:MONO }}>
-        <Header extra={
-          <button onClick={() => setShowSummary(false)} style={{ background:'rgba(0,212,255,0.07)', border:'1px solid #1a3d5a', color:'#7aabc8', fontFamily:MONO, fontSize:11, padding:'4px 12px', borderRadius:4, cursor:'pointer' }}>
-            ⚙ Ajuste avanzado
-          </button>
-        }/>
-
-        <div style={{ flex:1, overflowY:'auto', padding:'24px 24px 40px' }}>
-          {/* Template title */}
-          <div style={{ fontFamily:MONO, fontSize:20, fontWeight:700, color:'#eef5ff', marginBottom:6 }}>{templateName}</div>
-          <div style={{ fontFamily:MONO, fontSize:10, color:'#3a5a75', marginBottom:28, letterSpacing:'0.05em' }}>
-            Ajusta los parámetros clave y guarda, o usa ⚙ Ajuste avanzado para control total.
-          </div>
-
-          {/* Nombre */}
-          <div style={{ marginBottom:20 }}>
-            <div style={{ fontFamily:MONO, fontSize:9, color:'#7aabc8', letterSpacing:'0.1em', textTransform:'uppercase', marginBottom:6 }}>Nombre de la estrategia</div>
-            <input
-              type="text"
-              value={strForm.name||''}
-              onChange={e => setStrForm(p => ({ ...p, name:e.target.value }))}
-              placeholder="Nombre…"
-              autoFocus
-              style={{ ...INPUT, fontSize:14, padding:'8px 12px' }}
-            />
-          </div>
-
-          {/* Param rows */}
-          {summaryFields.map((row, ri) => (
-            <div key={ri} style={{
-              display:'flex', alignItems:'center', gap:14, flexWrap:'wrap',
-              padding:'14px 18px', marginBottom:8,
-              background:'var(--bg2)', border:'1px solid var(--border)',
-              borderLeft:`4px solid ${row.color}`, borderRadius:'0 6px 6px 0',
-            }}>
-              <span style={{
-                fontFamily:MONO, fontSize:9, fontWeight:700, letterSpacing:'0.1em',
-                color:row.color, background:`${row.color}14`, border:`1px solid ${row.color}33`,
-                padding:'3px 8px', borderRadius:3, textTransform:'uppercase',
-                whiteSpace:'nowrap', minWidth:70, textAlign:'center', flexShrink:0,
-              }}>{row.label}</span>
-              <span style={{ fontFamily:MONO, fontSize:12, color:'#c8dff5', flex:1, minWidth:120 }}>{row.desc}</span>
-              {row.params.map(p => (
-                <label key={p.path} style={{ display:'flex', flexDirection:'column', gap:3, alignItems:'center', flexShrink:0 }}>
-                  <span style={{ fontFamily:MONO, fontSize:8, color:'var(--text3)', textTransform:'uppercase', letterSpacing:'0.07em' }}>{p.label}</span>
-                  <input
-                    type="number"
-                    value={getByPath(definition, p.path) ?? ''}
-                    min={p.min} max={p.max} step={p.step || 1}
-                    onChange={e => {
-                      const n = parseFloat(e.target.value)
-                      if (!isNaN(n)) setDefinition(d => setByPath(d, p.path, n))
-                    }}
-                    style={{ width:64, background:'var(--bg3)', border:'1px solid var(--border)', color:'var(--text1)', fontFamily:MONO, fontSize:13, fontWeight:600, padding:'4px 6px', borderRadius:3, textAlign:'center' }}
-                  />
-                </label>
-              ))}
-            </div>
-          ))}
-
-          {/* Capital rápido */}
-          <div style={{ display:'flex', gap:12, flexWrap:'wrap', marginTop:20 }}>
-            <label style={{ display:'flex', flexDirection:'column', gap:4 }}>
-              <span style={{ fontFamily:MONO, fontSize:9, color:'#7aabc8', letterSpacing:'0.1em', textTransform:'uppercase' }}>Capital (€)</span>
-              <input type="number" min={100} value={strForm.capital_ini||''} onChange={e=>setStrForm(p=>({...p,capital_ini:Number(e.target.value)}))}
-                style={{ ...INPUT, width:120, fontSize:13, padding:'6px 10px' }} />
-            </label>
-            <label style={{ display:'flex', flexDirection:'column', gap:4 }}>
-              <span style={{ fontFamily:MONO, fontSize:9, color:'#7aabc8', letterSpacing:'0.1em', textTransform:'uppercase' }}>Años BT</span>
-              <input type="number" min={1} max={20} value={strForm.years||5} onChange={e=>setStrForm(p=>({...p,years:Number(e.target.value)}))}
-                style={{ ...INPUT, width:80, fontSize:13, padding:'6px 10px' }} />
-            </label>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  // ════════════════════════════════════════════════════════════════════
-  // FORMULARIO COMPLETO
-  // ════════════════════════════════════════════════════════════════════
   return (
     <div style={{ display:'flex', flexDirection:'column', height:'100%', overflow:'hidden', background:'var(--bg1)', fontFamily:MONO }}>
 
-      <Header extra={showSummary === false && templateName ? (
-        <button onClick={() => setShowSummary(true)} style={{ background:'rgba(0,212,255,0.07)', border:'1px solid #1a3d5a', color:'#7aabc8', fontFamily:MONO, fontSize:11, padding:'4px 12px', borderRadius:4, cursor:'pointer' }}>
-          ← Vista rápida
-        </button>
-      ) : null}/>
+      {/* ── Header ── */}
+      <div style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 16px', borderBottom:'1px solid var(--border)', background:'var(--bg2)', flexShrink:0 }}>
+        <button onClick={onCancel} style={{ background:'transparent', border:'1px solid var(--border)', color:'var(--text3)', fontFamily:MONO, fontSize:11, padding:'3px 10px', borderRadius:4, cursor:'pointer' }}>← Volver</button>
+        <span style={{ fontFamily:MONO, fontSize:12, color:'var(--text3)' }}>{strategy?.id ? 'Editando' : 'Nueva estrategia'}</span>
+        <span style={{ fontFamily:MONO, fontSize:14, fontWeight:700, color:strForm.color||'var(--accent)' }}>{strForm.name||'—'}</span>
+        <div style={{ marginLeft:'auto', display:'flex', gap:8 }}>
+          {strategy?.id && <button onClick={onDelete} style={{ background:'rgba(255,77,109,0.1)', border:'1px solid #ff4d6d', color:'#ff4d6d', fontFamily:MONO, fontSize:11, padding:'4px 12px', borderRadius:4, cursor:'pointer' }}>🗑 Eliminar</button>}
+          <button onClick={onCancel} style={{ background:'transparent', border:'1px solid var(--border)', color:'var(--text3)', fontFamily:MONO, fontSize:11, padding:'4px 12px', borderRadius:4, cursor:'pointer' }}>✕ Cancelar</button>
+          <button onClick={onSave} disabled={saving} style={{ background:'rgba(0,212,255,0.15)', border:'1px solid var(--accent)', color:'var(--accent)', fontFamily:MONO, fontSize:11, fontWeight:700, padding:'4px 16px', borderRadius:4, cursor:saving?'not-allowed':'pointer' }}>{saving?'⟳ Guardando…':'💾 Guardar'}</button>
+        </div>
+      </div>
 
       {/* ── Body ── */}
       <div style={{ flex:1, overflowY:'auto', padding:'16px 16px 32px' }}>
@@ -608,9 +457,9 @@ export default function StrategyEditorPanel({
           </Cell>
         </div>
 
-        {/* AI + Templates */}
+        {/* AI global */}
         <div style={{ padding:'10px 12px', background:'var(--bg2)', border:'1px solid var(--border)', borderRadius:6, marginBottom:10 }}>
-          <div style={{ fontFamily:MONO, fontSize:9, color:'var(--text3)', letterSpacing:'0.1em', textTransform:'uppercase', marginBottom:8 }}>🤖 Asistente IA — describe tu estrategia en español</div>
+          <div style={{ fontFamily:MONO, fontSize:9, color:'var(--text3)', letterSpacing:'0.1em', textTransform:'uppercase', marginBottom:8 }}>🤖 Asistente IA — describe tu estrategia completa en español</div>
           <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
             <input ref={aiInputRef} type="text" value={aiText} onChange={e=>setAiText(e.target.value)} onKeyDown={e=>e.key==='Enter'&&runAI()}
               placeholder="ej: comprar cuando EMA10 cruce al alza EMA20, stop técnico bajo EMA20, salir cuando RSI>70…"
@@ -618,10 +467,6 @@ export default function StrategyEditorPanel({
             <button onClick={runAI} disabled={aiLoading||!aiText.trim()} style={{ background:'rgba(155,114,255,0.15)', border:'1px solid #9b72ff', color:'#9b72ff', fontFamily:MONO, fontSize:11, fontWeight:700, padding:'6px 14px', borderRadius:4, cursor:(aiLoading||!aiText.trim())?'not-allowed':'pointer', flexShrink:0, whiteSpace:'nowrap' }}>
               {aiLoading?'⟳ Generando…':'🤖 Generar'}
             </button>
-            <select value="" onChange={e=>{ if(e.target.value!=='') loadTemplate(e.target.value) }} style={{ ...SEL, flexShrink:0 }}>
-              <option value="">📋 Cargar plantilla…</option>
-              {TEMPLATES.map((t,i)=><option key={i} value={i}>{t.label}</option>)}
-            </select>
           </div>
           {aiError && <div style={{ marginTop:6, fontFamily:MONO, fontSize:10, color:'#ff7a7a' }}>⚠ {aiError}</div>}
         </div>
@@ -632,15 +477,17 @@ export default function StrategyEditorPanel({
           <div style={{ flex:'4 0 0', maxWidth:260, fontFamily:MONO, fontSize:8, color:'#2a4a6a', letterSpacing:'0.08em', textTransform:'uppercase', paddingLeft:4 }}>JSON directo</div>
         </div>
 
-        {/* Role builders con JSON lateral */}
+        {/* Role builders con JSON lateral y biblioteca de bloques */}
         <div style={{ display:'flex', flexDirection:'column', gap:0, marginBottom:10 }}>
           {['filter','setup','trigger','abort','exit'].map(role => (
             <SectionRow key={role} sectionKey={role} definition={definition} setDefinition={setDefinition}
               left={<RoleRow role={role} definition={definition} setDefinition={setDefinition} />}
+              blocks={blocks} saveBlock={saveBlock}
             />
           ))}
           <SectionRow sectionKey="stop_loss" definition={definition} setDefinition={setDefinition}
             left={<StopRow definition={definition} setDefinition={setDefinition} />}
+            blocks={blocks} saveBlock={saveBlock}
           />
           <div style={{ display:'flex', gap:6, alignItems:'stretch', marginBottom:3 }}>
             <div style={{ flex:'6 0 0', minWidth:0 }}>

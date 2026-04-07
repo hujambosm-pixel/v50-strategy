@@ -40,6 +40,22 @@ REGLAS:
 - Si el usuario no especifica parámetros, usa los valores por defecto más comunes.
 - Si la descripción no corresponde a ningún tipo disponible, devuelve { "error": "No puedo modelar esta condición con los tipos disponibles." }`
 
+// ── System prompts por role para groq_block ──────────────────────────
+const GROQ_BLOCK_BASE = `Eres un asistente que convierte descripciones de condiciones de trading al siguiente JSON. Responde ÚNICAMENTE con JSON válido sin explicaciones ni markdown.`
+
+const GROQ_BLOCK_COND_SCHEMA = `${GROQ_BLOCK_BASE}
+Esquema válido: { "type": string, "ma_fast"?: number, "ma_slow"?: number, "ma_period"?: number, "ma_type"?: "EMA"|"SMA", "period"?: number, "level"?: number, "fast"?: number, "slow"?: number, "signal"?: number }
+Valores de type: ema_cross_up, ema_cross_down, price_above_ma, price_below_ma, close_above_ma, close_below_ma, rsi_cross_up, rsi_cross_down, rsi_above, rsi_below, macd_cross_up, macd_cross_down`
+
+const GROQ_BLOCK_SYSTEMS = {
+  filter:  `${GROQ_BLOCK_BASE}\nEsquema válido: { "type": string, "sp500EmaR"?: number, "sp500EmaL"?: number }\nValores de type: precio_ema, ema_ema, none`,
+  setup:   GROQ_BLOCK_COND_SCHEMA,
+  trigger: GROQ_BLOCK_COND_SCHEMA,
+  abort:   GROQ_BLOCK_COND_SCHEMA,
+  exit:    GROQ_BLOCK_COND_SCHEMA,
+  stop:    `${GROQ_BLOCK_BASE}\nEsquema válido: { "type": string, "ma_period"?: number, "atr_period"?: number, "atr_mult"?: number, "pct"?: number }\nValores de type: tecnico, atr_based, fixed_pct, trailing_atr, none`,
+}
+
 const GROQ_STRATEGY_SYSTEM = `Eres un asistente que convierte descripciones de estrategias de trading al siguiente esquema JSON. Responde ÚNICAMENTE con JSON válido, sin explicaciones, sin markdown, sin backticks.
 
 Esquema obligatorio:
@@ -147,6 +163,39 @@ function transformGroqStrategy(parsed) {
 }
 
 export default async function handler(req, res) {
+  // ── POST ?action=groq_block — genera un bloque JSON para una sección ──
+  if (req.method === 'POST' && req.query.action === 'groq_block') {
+    const { text, role } = req.body
+    if (!text?.trim() || !role) return res.status(400).json({ error: 'text y role requeridos' })
+    const apiKey = process.env.GROQ_API_KEY || req.headers['x-groq-key'] || ''
+    if (!apiKey) return res.status(400).json({ error: 'No hay Groq API Key configurada. Añádela en ⚙ Configuración → Integraciones.' })
+    const system = GROQ_BLOCK_SYSTEMS[role] || GROQ_BLOCK_COND_SCHEMA
+    try {
+      const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          model: 'llama-3.1-8b-instant',
+          max_tokens: 200,
+          temperature: 0.1,
+          messages: [
+            { role: 'system', content: system },
+            { role: 'user',   content: text.trim() },
+          ]
+        })
+      })
+      if (!groqRes.ok) return res.status(502).json({ error: `Groq error: ${await groqRes.text()}` })
+      const data  = await groqRes.json()
+      const raw   = data.choices?.[0]?.message?.content || ''
+      const clean = raw.replace(/```json|```/g, '').trim()
+      const parsed = JSON.parse(clean)
+      if (parsed.error) return res.status(422).json({ error: parsed.error })
+      return res.status(200).json(parsed)
+    } catch(e) {
+      return res.status(500).json({ error: `Error parseando respuesta de Groq: ${e.message}` })
+    }
+  }
+
   // ── POST ?action=groq_strategy ──
   if (req.method === 'POST' && req.query.action === 'groq_strategy') {
     const { text } = req.body
