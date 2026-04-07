@@ -45,7 +45,8 @@ const GROQ_BLOCK_BASE = `Eres un asistente que convierte descripciones de condic
 
 const GROQ_BLOCK_COND_SCHEMA = `${GROQ_BLOCK_BASE}
 Esquema válido: { "type": string, "ma_fast"?: number, "ma_slow"?: number, "ma_period"?: number, "ma_type"?: "EMA"|"SMA", "period"?: number, "level"?: number, "fast"?: number, "slow"?: number, "signal"?: number }
-Valores de type: ema_cross_up, ema_cross_down, price_above_ma, price_below_ma, close_above_ma, close_below_ma, rsi_cross_up, rsi_cross_down, rsi_above, rsi_below, macd_cross_up, macd_cross_down`
+Valores de type: ema_cross_up, ema_cross_down, price_above_ma, price_below_ma, close_above_ma, close_below_ma, rsi_cross_up, rsi_cross_down, rsi_above, rsi_below, macd_cross_up, macd_cross_down
+IMPORTANTE para RSI: solo existe UN parámetro 'level' (número entre 1-99). No existe 'signal', 'level2', ni ningún otro parámetro de nivel. Si la descripción menciona dos niveles, usa el nivel de entrada como 'level' e ignora el segundo. Nunca incluyas campos con valor null.`
 
 const GROQ_BLOCK_SYSTEMS = {
   filter:  `${GROQ_BLOCK_BASE}\nEsquema válido: { "type": string, "sp500EmaR"?: number, "sp500EmaL"?: number }\nValores de type: precio_ema, ema_ema, none`,

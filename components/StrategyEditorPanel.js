@@ -52,6 +52,15 @@ const SEL = {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────
+function stripNulls(obj) {
+  if (!obj || typeof obj !== 'object') return obj
+  return Object.fromEntries(
+    Object.entries(obj)
+      .filter(([, v]) => v !== null && v !== undefined)
+      .map(([k, v]) => [k, typeof v === 'object' ? stripNulls(v) : v])
+  )
+}
+
 function getAuthH() {
   let s = {}
   try { s = JSON.parse(localStorage.getItem('v50_settings')||'{}') } catch(_) {}
@@ -495,14 +504,15 @@ function SectionRow({ sectionKey, definition, setDefinition, blocks = {}, saveBl
       })
       const data = await res.json()
       if (data.error) throw new Error(data.error)
-      onSectionChange(data); setAiResult(data); setActiveName('')
+      const clean = stripNulls(data)
+      onSectionChange(clean); setAiResult(clean); setActiveName('')
     } catch(e) { setAiError(e.message) }
     finally { setAiLoading(false) }
   }
 
   async function saveToLibrary() {
     if (!saveName.trim() || !saveBlock || !aiResult) return
-    await saveBlock(role, saveName.trim(), aiResult)
+    await saveBlock(role, saveName.trim(), stripNulls(aiResult))
     setActiveName(saveName.trim())
     setAiMode(false); setAiResult(null); setSaveName('')
   }
