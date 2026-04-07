@@ -528,7 +528,7 @@ function SectionRow({ sectionKey, definition, setDefinition, blocks = {}, saveBl
 
   function handleSelect(blk) {
     if (!blk) { onSectionChange(null); setActiveName(''); setAiMode(false); setAiResult(null); return }
-    onSectionChange(blk.definition)
+    onSectionChange(validateBlockDefinition(blk.definition))
     setActiveName(blk.name)
     setAiMode(false)
     setAiResult(null)
