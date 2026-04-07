@@ -61,6 +61,46 @@ function stripNulls(obj) {
   )
 }
 
+const VALID_FIELDS = {
+  ema_cross_up:    ['type','ma_fast','ma_slow'],
+  ema_cross_down:  ['type','ma_fast','ma_slow'],
+  price_above_ma:  ['type','ma_period'],
+  price_below_ma:  ['type','ma_period'],
+  rsi_cross_up:    ['type','rsi_period','level'],
+  rsi_cross_down:  ['type','rsi_period','level'],
+  rsi_above:       ['type','rsi_period','level'],
+  rsi_below:       ['type','rsi_period','level'],
+  macd_cross_up:   ['type','macd_fast','macd_slow','macd_signal'],
+  macd_cross_down: ['type','macd_fast','macd_slow','macd_signal'],
+}
+
+const FIELD_ALIASES = {
+  period:     'rsi_period',
+  fast:       'macd_fast',
+  slow:       'macd_slow',
+  signal:     'macd_signal',
+  ma_type:    null,
+  level2:     null,
+  level_exit: null,
+}
+
+function validateBlockDefinition(def) {
+  if (!def?.type) return def
+  // 1. Renombrar aliases
+  const renamed = {}
+  Object.entries(def).forEach(([k, v]) => {
+    const alias = FIELD_ALIASES[k]
+    if (alias === null) return       // eliminar
+    if (alias) renamed[alias] = v
+    else renamed[k] = v
+  })
+  // 2. Eliminar campos no válidos para este type
+  const allowed = VALID_FIELDS[renamed.type] || []
+  return Object.fromEntries(
+    Object.entries(renamed).filter(([k]) => allowed.includes(k))
+  )
+}
+
 function getAuthH() {
   let s = {}
   try { s = JSON.parse(localStorage.getItem('v50_settings')||'{}') } catch(_) {}
@@ -504,7 +544,7 @@ function SectionRow({ sectionKey, definition, setDefinition, blocks = {}, saveBl
       })
       const data = await res.json()
       if (data.error) throw new Error(data.error)
-      const clean = stripNulls(data)
+      const clean = validateBlockDefinition(stripNulls(data))
       onSectionChange(clean); setAiResult(clean); setActiveName('')
     } catch(e) { setAiError(e.message) }
     finally { setAiLoading(false) }
@@ -512,7 +552,7 @@ function SectionRow({ sectionKey, definition, setDefinition, blocks = {}, saveBl
 
   async function saveToLibrary() {
     if (!saveName.trim() || !saveBlock || !aiResult) return
-    await saveBlock(role, saveName.trim(), stripNulls(aiResult))
+    await saveBlock(role, saveName.trim(), validateBlockDefinition(stripNulls(aiResult)))
     setActiveName(saveName.trim())
     setAiMode(false); setAiResult(null); setSaveName('')
   }
