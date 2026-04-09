@@ -116,10 +116,9 @@ function getRsiParams(definition) {
     return {
       period: b.rsi_period ?? b.period ?? b.params?.period ?? 14,
       level: b.level ?? b.params?.level ?? null,
-      levelExit: b.level_exit ?? b.levelExit ?? b.params?.level_exit ?? null,
     }
   }
-  return { period: 14, level: null, levelExit: null }
+  return { period: 14, level: null }
 }
 function getMacdParams(definition) {
   for (const role of ['setup','trigger']) {
@@ -366,7 +365,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         rsiS.setData(data.map((d,i)=>({time:d.date,value:rsiVals[i]})).filter(x=>x.value!=null))
         const d0=data[0].date, dN=data[data.length-1].date
         const rsiLevel=rp.level??30
-        const rsiOverbought=rp.levelExit??(100-rsiLevel)
+        const rsiOverbought=100-rsiLevel
         const l30=rsiChart.addLineSeries({color:'rgba(0,200,80,0.35)',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:false,priceLineVisible:false})
         l30.setData([{time:d0,value:rsiLevel},{time:dN,value:rsiLevel}])
         const l70=rsiChart.addLineSeries({color:'rgba(255,100,100,0.35)',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:false,priceLineVisible:false})
