@@ -61,24 +61,24 @@ const GROQ_STRATEGY_SYSTEM = `Eres un asistente que convierte descripciones de e
 
 Esquema obligatorio:
 {
-  "filter": { "type": "string | null" },
+  "filter": { "type": null },
   "setup": {
-    "indicator": "EMA | SMA | RSI | MACD | PRICE | VOLUME | null",
-    "condition": "string",
+    "indicator": null,
+    "condition": null,
     "params": {}
   },
   "trigger": {
-    "indicator": "EMA | SMA | RSI | MACD | PRICE | VOLUME | null",
-    "condition": "string",
+    "indicator": null,
+    "condition": null,
     "params": {}
   },
-  "abort": { "type": "string | null" },
+  "abort": { "type": null },
   "exit": {
-    "type": "string | null",
+    "type": null,
     "params": {}
   },
   "stop": {
-    "type": "fixed_pct | trailing_pct | below_ma_at_signal | null",
+    "type": null,
     "params": {}
   },
   "mgmt": {
@@ -87,12 +87,22 @@ Esquema obligatorio:
   }
 }
 
+IMPORTANTE: cuando un campo no aplica, usa null (el valor JSON), NUNCA el string "null".
+Indicadores válidos para setup/trigger: EMA, SMA, RSI, MACD.
 Valores válidos para condition en EMA/SMA: 'crosses_above', 'crosses_below', 'price_above', 'price_below'.
 Para RSI: 'below', 'above', 'crosses_above', 'crosses_below'.
 Para MACD: 'crosses_signal_up', 'crosses_signal_down'.
-Params para EMA/SMA: { fast: number, slow: number }.
+Valores válidos para stop.type: fixed_pct, trailing_pct, below_ma_at_signal.
+Params para EMA/SMA cruce: { fast: number, slow: number }.
+Params para EMA/SMA precio: { slow: number } — usa el número de periodos mencionado exactamente.
 Params para RSI: { period: number, level: number }.
 Params para MACD: { fast: number, slow: number, signal: number }.
+
+Ejemplos de periodos:
+- 'precio cruza EMA 10' → params: { slow: 10 }
+- 'precio sobre media 20 periodos' → params: { slow: 20 }
+- 'EMA rápida 10, lenta 20' → params: { fast: 10, slow: 20 }
+Siempre leer el número de periodos exacto de la descripción del usuario.
 
 Si algo no se menciona, usa null.`
 
@@ -127,18 +137,21 @@ function transformGroqStrategy(parsed) {
     return null
   }
 
+  // Helper: rechaza el string literal "null" que la IA devuelve cuando no aplica
+  const notNull = v => v && v !== 'null'
+
   // filter: { type: string | null } → flat block (type string maps directly to CREV)
-  result.filter  = parsed.filter?.type  ? { type: parsed.filter.type }  : null
+  result.filter  = notNull(parsed.filter?.type)  ? { type: parsed.filter.type }  : null
 
   // setup / trigger: full indicator+condition+params → flat
   result.setup   = toCondBlock(parsed.setup)
   result.trigger = toCondBlock(parsed.trigger)
 
   // abort: { type: string | null }
-  result.abort = parsed.abort?.type ? { type: parsed.abort.type } : null
+  result.abort = notNull(parsed.abort?.type) ? { type: parsed.abort.type } : null
 
   // exit: { type: string | null, params: {...} }
-  result.exit = parsed.exit?.type
+  result.exit = notNull(parsed.exit?.type)
     ? { type: parsed.exit.type, ...(parsed.exit.params || {}) }
     : null
 
