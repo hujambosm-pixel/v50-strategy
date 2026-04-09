@@ -113,9 +113,13 @@ function getRsiParams(definition) {
   for (const role of ['setup','trigger']) {
     const b = definition?.[role]
     if (!b || _blockInd(b) !== 'RSI') continue
-    return { period: b.period ?? b.params?.period ?? 14 }
+    return {
+      period: b.rsi_period ?? b.period ?? b.params?.period ?? 14,
+      level: b.level ?? b.params?.level ?? null,
+      levelExit: b.level_exit ?? b.levelExit ?? b.params?.level_exit ?? null,
+    }
   }
-  return { period: 14 }
+  return { period: 14, level: null, levelExit: null }
 }
 function getMacdParams(definition) {
   for (const role of ['setup','trigger']) {
@@ -361,10 +365,12 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         const rsiS=rsiChart.addLineSeries({color:'#a78bfa',lineWidth:1,lastValueVisible:true,priceLineVisible:false,title:`RSI ${rp.period}`})
         rsiS.setData(data.map((d,i)=>({time:d.date,value:rsiVals[i]})).filter(x=>x.value!=null))
         const d0=data[0].date, dN=data[data.length-1].date
+        const rsiLevel=rp.level??30
+        const rsiOverbought=rp.levelExit??(100-rsiLevel)
         const l30=rsiChart.addLineSeries({color:'rgba(0,200,80,0.35)',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:false,priceLineVisible:false})
-        l30.setData([{time:d0,value:30},{time:dN,value:30}])
+        l30.setData([{time:d0,value:rsiLevel},{time:dN,value:rsiLevel}])
         const l70=rsiChart.addLineSeries({color:'rgba(255,100,100,0.35)',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:false,priceLineVisible:false})
-        l70.setData([{time:d0,value:70},{time:dN,value:70}])
+        l70.setData([{time:d0,value:rsiOverbought},{time:dN,value:rsiOverbought}])
         _syncPanels(rsiChart)
       }
 
