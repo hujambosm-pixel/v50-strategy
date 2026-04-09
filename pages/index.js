@@ -1450,12 +1450,15 @@ export default function Home() {
           try{
             const sett=JSON.parse(localStorage.getItem('v50_settings')||'{}')
             const defId=sett.defaultStrategyId
+            console.log('[v50] restore check',{defId,dataLength:data.length,stratLoaded:stratLoadedRef.current})
             if(defId){
               const match=data.find(s=>s.id===defId)
+              if(!match) console.log('[v50] strategies ids',data.map(s=>s.id))
+              console.log('[v50] restore: match=',match?.name??'NOT FOUND')
               if(match) loadStrategyLegacy(match,{navigateToConfig:false})
               // loadStrategyLegacy already calls loadRankingRemote internally
             }
-          }catch(_){}
+          }catch(e){console.error('[v50] restore failed',e)}
         }
       })
       .catch(()=>{})
@@ -1684,7 +1687,16 @@ export default function Home() {
       }).catch(()=>{})
     }
     setDefinition(s.definition || DEFAULT_DEFINITION)
-    try{const _s=JSON.parse(localStorage.getItem('v50_settings')||'{}');_s.defaultStrategyId=s.id;localStorage.setItem('v50_settings',JSON.stringify(_s))}catch(_){}
+    try{
+      if(s?.id){
+        const _s=JSON.parse(localStorage.getItem('v50_settings')||'{}')
+        _s.defaultStrategyId=s.id
+        localStorage.setItem('v50_settings',JSON.stringify(_s))
+        console.log('[v50] saving defaultStrategyId',s.id)
+      }else{
+        console.warn('[v50] loadStrategyLegacy: s.id undefined, skip save')
+      }
+    }catch(e){console.error('[v50] localStorage write failed',e)}
   }
   const newStrategy=()=>openEditStr({id:null})
   const duplicateStr=(s)=>openEditStr({...s,id:null,name:s.name+' (copia)'})
@@ -2939,7 +2951,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V8.60</title>
+        <title>Trading Simulator V8.61</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3016,7 +3028,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V8.60
+            <span className="dot"/>Trading Simulator V8.61
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
