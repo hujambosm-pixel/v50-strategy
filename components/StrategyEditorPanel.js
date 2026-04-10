@@ -4,13 +4,14 @@ import { useStrategyBlocks } from '../lib/useStrategyBlocks'
 
 // ── Data ─────────────────────────────────────────────────────────────
 const ROLES = [
-  { key:'filter',     label:'FILTER',     color:'#4a9eff', desc:'Condición global de mercado' },
-  { key:'setup',      label:'SETUP',      color:'#00d4ff', desc:'Señal de alerta/espera' },
-  { key:'trigger',    label:'TRIGGER',    color:'#00e5a0', desc:'Disparo de entrada' },
-  { key:'abort',      label:'ABORT',      color:'#ff7a7a', desc:'Cancelar entrada pendiente' },
-  { key:'stop_loss',  label:'STOP',       color:'#ff4d6d', desc:'Límite de pérdida' },
-  { key:'exit',       label:'EXIT',       color:'#ffd166', desc:'Señal de salida' },
-  { key:'management', label:'MANAGEMENT', color:'#9b72ff', desc:'Gestión de posición' },
+  { key:'filter',      label:'FILTER',      color:'#4a9eff', desc:'Condición global de mercado' },
+  { key:'setup',       label:'SETUP IN',    color:'#00d4ff', desc:'Señal de alerta/espera' },
+  { key:'trigger',     label:'TRIGGER IN',  color:'#00e5a0', desc:'Disparo de entrada' },
+  { key:'abort',       label:'ABORT',       color:'#ff7a7a', desc:'Cancelar entrada pendiente' },
+  { key:'exit',        label:'SETUP OUT',   color:'#ffd166', desc:'Señal de salida' },
+  { key:'trigger_out', label:'TRIGGER OUT', color:'#f97316', desc:'Disparo de salida' },
+  { key:'stop_loss',   label:'STOP LOSS',   color:'#ff4d6d', desc:'Límite de pérdida' },
+  { key:'management',  label:'MANAGEMENT',  color:'#9b72ff', desc:'Gestión de posición' },
 ]
 
 const OPS = {
@@ -81,6 +82,11 @@ function summarizeBlock(role, block) {
       return '— Sin filtro —'
     case 'setup': case 'trigger': case 'abort': case 'exit':
       return summarizeCondition(block)
+    case 'trigger_out':
+      if (block.type === 'breakout_low')   return 'Breakout del low de la vela de setup out'
+      if (block.type === 'next_open')      return 'Entrada a la apertura de la siguiente vela'
+      if (block.type === 'close_of_setup') return 'Salida al cierre de la vela de setup out'
+      return '— Sin trigger out —'
     case 'stop_loss':
       if (block.type === 'tecnico')      return `Stop técnico: mínimo entre EMA(${block.ma_period ?? '—'}) y low de vela de entrada`
       if (block.type === 'atr_based')    return `Stop ATR fijo: entrada − ATR(${block.atr_period ?? 14}) × ${block.atr_mult ?? 2}`
@@ -508,7 +514,7 @@ function StopRow({ definition, setDefinition, hideTypeSelect = false, librarySlo
 
   return (
     <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 12px', background:'var(--bg2)', borderLeft:`3px solid ${r.color}`, borderRadius:'0 4px 4px 0', minHeight:44, flexWrap:'wrap', flex:1 }}>
-      <span style={{ fontFamily:MONO, fontSize:9, fontWeight:700, letterSpacing:'0.1em', color:r.color, background:`${r.color}14`, border:`1px solid ${r.color}33`, padding:'3px 8px', borderRadius:3, whiteSpace:'nowrap', flexShrink:0, minWidth:72, textAlign:'center' }}>STOP</span>
+      <span style={{ fontFamily:MONO, fontSize:9, fontWeight:700, letterSpacing:'0.1em', color:r.color, background:`${r.color}14`, border:`1px solid ${r.color}33`, padding:'3px 8px', borderRadius:3, whiteSpace:'nowrap', flexShrink:0, minWidth:72, textAlign:'center' }}>STOP LOSS</span>
 
       {librarySlot}
 
@@ -568,6 +574,7 @@ function MgmtRow({ definition, setDefinition }) {
 // ── SectionRow — 4 columnas: Label+Selector | Params | Resumen | JSON ─
 function SectionRow({ sectionKey, definition, setDefinition, blocks = {}, saveBlock, deleteBlock, updateBlockName }) {
   const isStop        = sectionKey === 'stop_loss'
+  const isTriggerOut  = sectionKey === 'trigger_out'
   const role          = isStop ? 'stop' : sectionKey
   const sectionBlocks = blocks[role] || []
   const r             = ROLES.find(x => x.key === sectionKey)
@@ -648,7 +655,22 @@ function SectionRow({ sectionKey, definition, setDefinition, blocks = {}, saveBl
   const colBase = { padding:'8px 10px', background:'var(--bg2)', minHeight:80, boxSizing:'border-box' }
 
   // Col 2: param controls
-  const paramControls = isStop ? (
+  const paramControls = isTriggerOut ? (
+    <select
+      value={block?.type || ''}
+      onChange={e => {
+        const t = e.target.value
+        if (!t) setBlock(null)
+        else setBlock({ type: t })
+      }}
+      style={{ ...SEL, width:'100%' }}
+    >
+      <option value="">— Sin trigger out —</option>
+      <option value="breakout_low">Breakout del low</option>
+      <option value="next_open">Apertura siguiente vela</option>
+      <option value="close_of_setup">Cierre vela de setup out</option>
+    </select>
+  ) : isStop ? (
     <>
       {stopType==='tecnico' && <Num label="Período MA"  value={block.ma_period??10}          onChange={v=>onStopP('ma_period',v)} />}
       {stopType==='atr_based' && <>
@@ -889,7 +911,7 @@ export default function StrategyEditorPanel({
 
         {/* Role builders */}
         <div style={{ display:'flex', flexDirection:'column', gap:0, marginBottom:10 }}>
-          {['filter','setup','trigger','abort','exit'].map(role => (
+          {['filter','setup','trigger','abort','exit','trigger_out'].map(role => (
             <SectionRow key={role} sectionKey={role} definition={definition} setDefinition={setDefinition}
               blocks={blocks} saveBlock={saveBlock} deleteBlock={deleteBlock} updateBlockName={updateBlockName}
             />
