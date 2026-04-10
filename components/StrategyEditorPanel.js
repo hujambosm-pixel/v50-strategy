@@ -99,6 +99,19 @@ function summarizeBlock(role, block) {
   }
 }
 
+function getIndicatorLabel(block) {
+  if (!block?.type) return ''
+  const t = block.type
+  if (t.startsWith('ema_')) return 'EMA'
+  if (t.startsWith('rsi_') || t === 'rsi_above' || t === 'rsi_below') return 'RSI'
+  if (t.startsWith('macd_')) return 'MACD'
+  if (t.includes('ma')) return 'Precio / MA'
+  if (t === 'tecnico') return 'Stop técnico'
+  if (t === 'atr_based' || t === 'trailing_atr') return 'ATR'
+  if (t === 'fixed_pct') return 'Fijo %'
+  return ''
+}
+
 function stripNulls(obj) {
   if (!obj || typeof obj !== 'object') return obj
   return Object.fromEntries(
@@ -186,9 +199,8 @@ function Num({ label, value, onChange, min=1, max=9999, step='any' }) {
   )
 }
 
-// ── SectionJsonEditor — edición bidireccional del bloque JSON + tab Resumen ──
-function SectionJsonEditor({ value, onChange, role }) {
-  const [tab, setTab]     = useState('json')
+// ── SectionJsonEditor — edición bidireccional del bloque JSON ─────────
+function SectionJsonEditor({ value, onChange }) {
   const [raw, setRaw]     = useState(() => JSON.stringify(value ?? null, null, 2))
   const [error, setError] = useState(false)
   const focusedRef        = useRef(false)
@@ -210,59 +222,26 @@ function SectionJsonEditor({ value, onChange, role }) {
     } catch { setError(true) }
   }
 
-  const tabBtn = (id, label) => (
-    <button onClick={() => setTab(id)} style={{
-      fontFamily:MONO, fontSize:9, letterSpacing:'0.06em',
-      background:'transparent', border:'none',
-      borderBottom: tab===id ? '2px solid #00d4ff' : '2px solid transparent',
-      color: tab===id ? '#00d4ff' : '#7a9bc0',
-      padding:'3px 8px 2px', cursor:'pointer', outline:'none',
-    }}>{label}</button>
-  )
-
   return (
-    <div style={{ display:'flex', flexDirection:'column', height:'100%', minHeight:88 }}>
-      {/* Tab bar */}
-      <div style={{ display:'flex', background:'#0d1520', borderBottom:'1px solid #12253a', flexShrink:0 }}>
-        {tabBtn('json','JSON')}
-        {tabBtn('resumen','Resumen')}
-      </div>
-
-      {/* JSON tab */}
-      {tab === 'json' && (
-        <textarea
-          value={raw}
-          spellCheck={false}
-          onFocus={() => { focusedRef.current = true }}
-          onBlur={() => {
-            focusedRef.current = false
-            if (error) { setRaw(JSON.stringify(value ?? null, null, 2)); setError(false) }
-          }}
-          onChange={e => handleChange(e.target.value)}
-          style={{
-            flex:1, width:'100%',
-            fontFamily:'monospace', fontSize:10,
-            background:'#050810',
-            color: error ? '#ff7a7a' : '#5a8aaa',
-            border: `1px solid ${error ? '#ff4d6d' : 'transparent'}`,
-            borderRadius:'0 0 4px 4px', padding:'6px 8px',
-            resize:'none', boxSizing:'border-box', outline:'none',
-          }}
-        />
-      )}
-
-      {/* Resumen tab */}
-      {tab === 'resumen' && (
-        <div style={{
-          flex:1, padding:'8px 10px',
-          background:'#050810', borderRadius:'0 0 4px 4px',
-          fontFamily:MONO, fontSize:11, color:'#c8dff5',
-          lineHeight:1.5, overflowY:'auto',
-        }}>
-          {summarizeBlock(role, value)}
-        </div>
-      )}
-    </div>
+    <textarea
+      value={raw}
+      spellCheck={false}
+      onFocus={() => { focusedRef.current = true }}
+      onBlur={() => {
+        focusedRef.current = false
+        if (error) { setRaw(JSON.stringify(value ?? null, null, 2)); setError(false) }
+      }}
+      onChange={e => handleChange(e.target.value)}
+      style={{
+        width:'100%', height:'100%', minHeight:80,
+        fontFamily:'monospace', fontSize:10,
+        background:'#050810',
+        color: error ? '#ff7a7a' : '#5a8aaa',
+        border: `1px solid ${error ? '#ff4d6d' : '#12253a'}`,
+        borderRadius:4, padding:'6px 8px',
+        resize:'none', boxSizing:'border-box', outline:'none',
+      }}
+    />
   )
 }
 
@@ -586,10 +565,13 @@ function MgmtRow({ definition, setDefinition }) {
   )
 }
 
-// ── SectionRow — 60/40: controles (con BlockSelector integrado) | JSON editor ─
+// ── SectionRow — 4 columnas: Label+Selector | Params | Resumen | JSON ─
 function SectionRow({ sectionKey, definition, setDefinition, blocks = {}, saveBlock, deleteBlock, updateBlockName }) {
-  const role          = sectionKey === 'stop_loss' ? 'stop' : sectionKey
+  const isStop        = sectionKey === 'stop_loss'
+  const role          = isStop ? 'stop' : sectionKey
   const sectionBlocks = blocks[role] || []
+  const r             = ROLES.find(x => x.key === sectionKey)
+
   const [activeName, setActiveName] = useState('')
   const [aiMode, setAiMode]         = useState(false)
   const [aiText, setAiText]         = useState('')
@@ -598,34 +580,53 @@ function SectionRow({ sectionKey, definition, setDefinition, blocks = {}, saveBl
   const [aiResult, setAiResult]     = useState(null)
   const [saveName, setSaveName]     = useState('')
 
+  const block    = definition?.[sectionKey] || null
+  // For regular role rows
+  const rev      = !isStop ? (CREV[block?.type] || []) : []
+  const ind      = rev[0] || ''
+  const op       = rev[1] || ''
+  // For stop rows
+  const stopType = isStop ? (block?.type || '') : ''
+
   function onSectionChange(val) {
-    setDefinition(prev => {
-      const n = { ...prev }
-      if (val == null) delete n[sectionKey]
-      else n[sectionKey] = val
-      return n
-    })
+    setDefinition(prev => { const n={...prev}; if(val==null) delete n[sectionKey]; else n[sectionKey]=val; return n })
   }
+  function setBlock(b) {
+    setDefinition(prev => { const n={...prev}; if(b) n[sectionKey]=b; else delete n[sectionKey]; return n })
+  }
+  // Regular role helpers
+  function onP(key, val) { setBlock(validateBlockDefinition({ ...block, [key]: val })) }
+  function onIndChange(newInd) {
+    if (!newInd) { setBlock(null); return }
+    const firstOp = OPS[newInd]?.[0]?.v || ''
+    setBlock({ type: CMAP[`${newInd}.${firstOp}`], ...IND_DEFAULTS[newInd] })
+  }
+  // Stop helpers
+  function onStopTypeChange(t) {
+    if (!t)                     setBlock(null)
+    else if (t==='tecnico')     setBlock({ type:'tecnico',      ma_period:10 })
+    else if (t==='atr_based')   setBlock({ type:'atr_based',    atr_period:14, atr_mult:1.5 })
+    else if (t==='none')        setBlock({ type:'none' })
+    else if (t==='fixed_pct')   setBlock({ type:'fixed_pct',    params:{ pct:5 } })
+    else if (t==='trailing_atr')setBlock({ type:'trailing_atr', params:{ atr_period:14, atr_mult:2 } })
+  }
+  function onStopP(key,val)     { setBlock({ ...block, [key]: val }) }
+  function onStopParam(key,val) { setBlock({ ...block, params:{ ...(block?.params||{}), [key]:val } }) }
 
   function handleSelect(blk) {
     if (!blk) { onSectionChange(null); setActiveName(''); setAiMode(false); setAiResult(null); return }
     onSectionChange(validateBlockDefinition(blk.definition))
-    setActiveName(blk.name)
-    setAiMode(false)
-    setAiResult(null)
+    setActiveName(blk.name); setAiMode(false); setAiResult(null)
   }
-
-  function openAI() {
-    setAiMode(true); setAiText(''); setAiError(''); setAiResult(null); setSaveName('')
-  }
+  function openAI() { setAiMode(true); setAiText(''); setAiError(''); setAiResult(null); setSaveName('') }
 
   async function generateAI() {
     if (!aiText.trim()) return
     setAiLoading(true); setAiError(''); setAiResult(null)
     try {
       const res = await fetch('/api/conditions?action=groq_block', {
-        method: 'POST', headers: getAuthH(),
-        body: JSON.stringify({ text: aiText.trim(), role }),
+        method:'POST', headers:getAuthH(),
+        body:JSON.stringify({ text:aiText.trim(), role }),
       })
       const data = await res.json()
       if (data.error) throw new Error(data.error)
@@ -634,39 +635,56 @@ function SectionRow({ sectionKey, definition, setDefinition, blocks = {}, saveBl
     } catch(e) { setAiError(e.message) }
     finally { setAiLoading(false) }
   }
-
   async function saveToLibrary() {
     if (!saveName.trim() || !saveBlock || !aiResult) return
     await saveBlock(role, saveName.trim(), validateBlockDefinition(stripNulls(aiResult)))
-    setActiveName(saveName.trim())
-    setAiMode(false); setAiResult(null); setSaveName('')
+    setActiveName(saveName.trim()); setAiMode(false); setAiResult(null); setSaveName('')
   }
 
   const btnGhost = { background:'transparent', border:'1px solid var(--border)', color:'var(--text3)', fontFamily:MONO, fontSize:10, padding:'3px 8px', borderRadius:3, cursor:'pointer' }
   const btnAI    = { background:'rgba(155,114,255,0.12)', border:'1px solid rgba(155,114,255,0.4)', color:'#9b72ff', fontFamily:MONO, fontSize:10, padding:'3px 10px', borderRadius:3, whiteSpace:'nowrap' }
   const btnSave  = { background:'rgba(0,212,255,0.12)', border:'1px solid rgba(0,212,255,0.4)', color:'var(--accent)', fontFamily:MONO, fontSize:10, padding:'3px 10px', borderRadius:3, cursor:'pointer', whiteSpace:'nowrap' }
 
-  // Slot que se inyecta dentro de RoleRow/StopRow justo después del label
-  const librarySlot = (
-    <div style={{ display:'flex', alignItems:'center', minWidth:160, flexShrink:0 }}>
-      <BlockSelector
-        blocks={sectionBlocks}
-        value={activeName}
-        onSelect={handleSelect}
-        onDelete={id => { deleteBlock && deleteBlock(id); setActiveName(p => p ? '' : p) }}
-        onRename={(id, name) => {
-          updateBlockName && updateBlockName(id, name)
-          setActiveName(prev => {
-            const blk = sectionBlocks.find(b => b.id === id)
-            return (blk && blk.name === prev) ? name : prev
-          })
-        }}
-        onCreateAI={openAI}
-      />
-    </div>
+  const colBase = { padding:'8px 10px', background:'var(--bg2)', minHeight:80, boxSizing:'border-box' }
+
+  // Col 2: param controls
+  const paramControls = isStop ? (
+    <>
+      {stopType==='tecnico' && <Num label="Período MA"  value={block.ma_period??10}          onChange={v=>onStopP('ma_period',v)} />}
+      {stopType==='atr_based' && <>
+        <Num label="Período ATR" value={block.atr_period??14}         onChange={v=>onStopP('atr_period',v)} />
+        <Num label="×Mult"       value={block.atr_mult??1.5}          onChange={v=>onStopP('atr_mult',v)} min={0.1} max={10} />
+      </>}
+      {stopType==='fixed_pct' && <Num label="% entrada" value={block.params?.pct??5}         onChange={v=>onStopParam('pct',v)} min={0.5} max={50} />}
+      {stopType==='trailing_atr' && <>
+        <Num label="Período ATR" value={block.params?.atr_period??14} onChange={v=>onStopParam('atr_period',v)} min={5} max={50} />
+        <Num label="×Mult"       value={block.params?.atr_mult??2}    onChange={v=>onStopParam('atr_mult',v)} min={0.5} max={5} />
+      </>}
+    </>
+  ) : (
+    <>
+      {ind==='ema' && block && <>
+        <Num label="Rápida" value={block.ma_fast??10}  onChange={v=>onP('ma_fast',v)} />
+        <Num label="Lenta"  value={block.ma_slow??20}  onChange={v=>onP('ma_slow',v)} />
+      </>}
+      {(ind==='precio'||ind==='cierre') && block && <>
+        <Num label="Período" value={block.ma_period??50} onChange={v=>onP('ma_period',v)} />
+      </>}
+      {ind==='rsi' && block && <>
+        <Num label="Período" value={block.rsi_period ?? block.period ?? 14} onChange={v=>onP('rsi_period',v)} />
+        <Num label="Nivel"   value={block.level ?? 50}                      onChange={v=>onP('level',v)} />
+      </>}
+      {ind==='macd' && block && <>
+        <Num label="Rápida" value={block.macd_fast   ?? block.fast   ?? 12} onChange={v=>onP('macd_fast',v)} />
+        <Num label="Lenta"  value={block.macd_slow   ?? block.slow   ?? 26} onChange={v=>onP('macd_slow',v)} />
+        <Num label="Señal"  value={block.macd_signal ?? block.signal ?? 9}  onChange={v=>onP('macd_signal',v)} />
+      </>}
+    </>
   )
 
-  // Panel IA expandido — aparece DEBAJO de la sección cuando está activo
+  const indLabel = getIndicatorLabel(block)
+
+  // Panel IA — debajo de la fila, ancho completo
   const aiPanel = aiMode && (
     <div style={{ display:'flex', flexDirection:'column', gap:4, padding:'8px 10px', background:'#080f1a', border:'1px solid #1a2d45', borderRadius:4, marginTop:2 }}>
       <div style={{ display:'flex', gap:4, alignItems:'flex-start' }}>
@@ -702,20 +720,50 @@ function SectionRow({ sectionKey, definition, setDefinition, blocks = {}, saveBl
     </div>
   )
 
-  const isStop = sectionKey === 'stop_loss'
-
   return (
-    <div style={{ display:'flex', gap:6, alignItems:'stretch', marginBottom:3 }}>
-      <div style={{ flex:'6 0 0', minWidth:0, display:'flex', flexDirection:'column', gap:0 }}>
-        {isStop
-          ? <StopRow definition={definition} setDefinition={setDefinition} hideTypeSelect={true} librarySlot={librarySlot} />
-          : <RoleRow role={sectionKey} definition={definition} setDefinition={setDefinition} hideTypeSelect={true} librarySlot={librarySlot} />
-        }
-        {aiPanel}
+    <div style={{ marginBottom:3 }}>
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', gap:6, alignItems:'start' }}>
+
+        {/* Col 1 — Label + BlockSelector */}
+        <div style={{ ...colBase, borderLeft:`3px solid ${r.color}`, borderRadius:'0 4px 4px 0', display:'flex', flexDirection:'column', gap:8 }}>
+          <span style={{ fontFamily:MONO, fontSize:9, fontWeight:700, letterSpacing:'0.1em', color:r.color, background:`${r.color}14`, border:`1px solid ${r.color}33`, padding:'3px 8px', borderRadius:3, textAlign:'center', alignSelf:'flex-start' }}>
+            {r.label}
+          </span>
+          <BlockSelector
+            blocks={sectionBlocks}
+            value={activeName}
+            onSelect={handleSelect}
+            onDelete={id => { deleteBlock && deleteBlock(id); setActiveName(p => p ? '' : p) }}
+            onRename={(id, name) => {
+              updateBlockName && updateBlockName(id, name)
+              setActiveName(prev => { const blk=sectionBlocks.find(b=>b.id===id); return (blk&&blk.name===prev)?name:prev })
+            }}
+            onCreateAI={openAI}
+          />
+        </div>
+
+        {/* Col 2 — Tipo activo + Parámetros */}
+        <div style={{ ...colBase, borderRadius:4, display:'flex', flexDirection:'column', gap:8 }}>
+          {indLabel && (
+            <span style={{ fontFamily:MONO, fontSize:9, color:'#7a9bc0', letterSpacing:'0.06em', textTransform:'uppercase' }}>{indLabel}</span>
+          )}
+          <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
+            {paramControls}
+          </div>
+        </div>
+
+        {/* Col 3 — Resumen legible */}
+        <div style={{ ...colBase, background:'#050810', border:'1px solid #1a2d45', borderRadius:4, fontFamily:MONO, fontSize:11, lineHeight:1.6, color: block ? '#e2e8f0' : '#3a5a75' }}>
+          {summarizeBlock(sectionKey, block)}
+        </div>
+
+        {/* Col 4 — JSON directo */}
+        <div style={{ minHeight:80 }}>
+          <SectionJsonEditor value={definition?.[sectionKey] ?? null} onChange={onSectionChange} />
+        </div>
+
       </div>
-      <div style={{ flex:'4 0 0', minWidth:120, maxWidth:260 }}>
-        <SectionJsonEditor value={definition?.[sectionKey] ?? null} onChange={onSectionChange} role={sectionKey} />
-      </div>
+      {aiPanel}
     </div>
   )
 }
@@ -805,40 +853,6 @@ export default function StrategyEditorPanel({
           {aiError && <div style={{ marginTop:6, fontFamily:MONO, fontSize:10, color:'#ff7a7a' }}>⚠ {aiError}</div>}
         </div>
 
-        {/* Cabecera columnas */}
-        <div style={{ display:'flex', gap:6, marginBottom:4 }}>
-          <div style={{ flex:'6 0 0', fontFamily:MONO, fontSize:8, color:'#2a4a6a', letterSpacing:'0.08em', textTransform:'uppercase', paddingLeft:4 }}>Controles</div>
-          <div style={{ flex:'4 0 0', maxWidth:260, fontFamily:MONO, fontSize:8, color:'#2a4a6a', letterSpacing:'0.08em', textTransform:'uppercase', paddingLeft:4 }}>JSON directo</div>
-        </div>
-
-        {/* Role builders */}
-        <div style={{ display:'flex', flexDirection:'column', gap:0, marginBottom:10 }}>
-          {['filter','setup','trigger','abort','exit'].map(role => (
-            <SectionRow key={role} sectionKey={role} definition={definition} setDefinition={setDefinition}
-              blocks={blocks} saveBlock={saveBlock} deleteBlock={deleteBlock} updateBlockName={updateBlockName}
-            />
-          ))}
-          <SectionRow sectionKey="stop_loss" definition={definition} setDefinition={setDefinition}
-            blocks={blocks} saveBlock={saveBlock} deleteBlock={deleteBlock} updateBlockName={updateBlockName}
-          />
-          <div style={{ display:'flex', gap:6, alignItems:'stretch', marginBottom:3 }}>
-            <div style={{ flex:'6 0 0', minWidth:0 }}>
-              <MgmtRow definition={definition} setDefinition={setDefinition} />
-            </div>
-            <div style={{ flex:'4 0 0', minWidth:120, maxWidth:260 }}>
-              <SectionJsonEditor
-                value={definition?.management ?? null}
-                role="management"
-                onChange={val => setDefinition(prev => {
-                  const n = { ...prev }
-                  if (val == null) delete n.management; else n.management = val
-                  return n
-                })}
-              />
-            </div>
-          </div>
-        </div>
-
         {/* ── RESUMEN DE ESTRATEGIA ── */}
         <div style={{ marginBottom:10, background:'#080c14', border:'1px solid #1a2d45', borderRadius:6, overflow:'hidden' }}>
           <div style={{ padding:'6px 12px', borderBottom:'1px solid #1a2d45', fontFamily:MONO, fontSize:9, letterSpacing:'0.1em', color:'#2a5a7a', textTransform:'uppercase' }}>
@@ -862,6 +876,44 @@ export default function StrategyEditorPanel({
                 </span>
               </div>
             ))}
+          </div>
+        </div>
+
+        {/* Cabecera columnas */}
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', gap:6, marginBottom:4 }}>
+          <div style={{ fontFamily:MONO, fontSize:8, color:'#2a4a6a', letterSpacing:'0.08em', textTransform:'uppercase', paddingLeft:4 }}>Bloque</div>
+          <div style={{ fontFamily:MONO, fontSize:8, color:'#2a4a6a', letterSpacing:'0.08em', textTransform:'uppercase', paddingLeft:4 }}>Parámetros</div>
+          <div style={{ fontFamily:MONO, fontSize:8, color:'#2a4a6a', letterSpacing:'0.08em', textTransform:'uppercase', paddingLeft:4 }}>Resumen</div>
+          <div style={{ fontFamily:MONO, fontSize:8, color:'#2a4a6a', letterSpacing:'0.08em', textTransform:'uppercase', paddingLeft:4 }}>JSON directo</div>
+        </div>
+
+        {/* Role builders */}
+        <div style={{ display:'flex', flexDirection:'column', gap:0, marginBottom:10 }}>
+          {['filter','setup','trigger','abort','exit'].map(role => (
+            <SectionRow key={role} sectionKey={role} definition={definition} setDefinition={setDefinition}
+              blocks={blocks} saveBlock={saveBlock} deleteBlock={deleteBlock} updateBlockName={updateBlockName}
+            />
+          ))}
+          <SectionRow sectionKey="stop_loss" definition={definition} setDefinition={setDefinition}
+            blocks={blocks} saveBlock={saveBlock} deleteBlock={deleteBlock} updateBlockName={updateBlockName}
+          />
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', gap:6, alignItems:'stretch', marginBottom:3 }}>
+            <div style={{ gridColumn:'1 / 3' }}>
+              <MgmtRow definition={definition} setDefinition={setDefinition} />
+            </div>
+            <div style={{ fontFamily:MONO, fontSize:11, color: definition?.management ? '#e2e8f0' : '#3a5a75', padding:'6px 8px', background:'#080c14', border:'1px solid #1a2d45', borderRadius:4, alignSelf:'start' }}>
+              {summarizeBlock('management', definition?.management)}
+            </div>
+            <div>
+              <SectionJsonEditor
+                value={definition?.management ?? null}
+                onChange={val => setDefinition(prev => {
+                  const n = { ...prev }
+                  if (val == null) delete n.management; else n.management = val
+                  return n
+                })}
+              />
+            </div>
           </div>
         </div>
 
