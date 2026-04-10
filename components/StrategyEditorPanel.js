@@ -52,6 +52,53 @@ const SEL = {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────
+function summarizeCondition(block) {
+  if (!block?.type) return '— Sin configurar —'
+  const rp = block.rsi_period ?? block.period ?? 14
+  const typeMap = {
+    'ema_cross_up':   `EMA(${block.ma_fast ?? '—'}) cruza ↑ EMA(${block.ma_slow ?? '—'})`,
+    'ema_cross_down': `EMA(${block.ma_fast ?? '—'}) cruza ↓ EMA(${block.ma_slow ?? '—'})`,
+    'price_above_ma': `Precio cierra sobre EMA(${block.ma_period ?? '—'})`,
+    'price_below_ma': `Precio cierra bajo EMA(${block.ma_period ?? '—'})`,
+    'close_above_ma': `Cierre sobre EMA(${block.ma_period ?? '—'})`,
+    'close_below_ma': `Cierre bajo EMA(${block.ma_period ?? '—'})`,
+    'rsi_above':      `RSI(${rp}) por encima de ${block.level ?? '—'}`,
+    'rsi_below':      `RSI(${rp}) por debajo de ${block.level ?? '—'}`,
+    'rsi_cross_up':   `RSI(${rp}) cruza ↑ nivel ${block.level ?? '—'}`,
+    'rsi_cross_down': `RSI(${rp}) cruza ↓ nivel ${block.level ?? '—'}`,
+    'macd_cross_up':  `MACD(${block.macd_fast ?? 12},${block.macd_slow ?? 26},${block.macd_signal ?? 9}) cruza ↑ señal`,
+    'macd_cross_down':`MACD(${block.macd_fast ?? 12},${block.macd_slow ?? 26},${block.macd_signal ?? 9}) cruza ↓ señal`,
+  }
+  return typeMap[block.type] ?? `Tipo desconocido: ${block.type}`
+}
+
+function summarizeBlock(role, block) {
+  if (!block) return '— Sin configurar —'
+  switch(role) {
+    case 'filter':
+      if (block.type === 'precio_ema') return `SP500 cierra por encima de su EMA(${block.sp500EmaR ?? 50})`
+      if (block.type === 'ema_ema')    return `EMA(${block.sp500EmaR ?? 50}) de SP500 sobre EMA(${block.sp500EmaL ?? 200})`
+      return '— Sin filtro —'
+    case 'setup': case 'trigger': case 'abort': case 'exit':
+      return summarizeCondition(block)
+    case 'stop_loss':
+      if (block.type === 'tecnico')      return `Stop técnico: mínimo entre EMA(${block.ma_period ?? '—'}) y low de vela de entrada`
+      if (block.type === 'atr_based')    return `Stop ATR fijo: entrada − ATR(${block.atr_period ?? 14}) × ${block.atr_mult ?? 2}`
+      if (block.type === 'fixed_pct')    return `Stop fijo: ${block.pct ?? 5}% por debajo del precio de entrada`
+      if (block.type === 'trailing_atr') return `Trailing ATR: stop sube con el precio, ATR(${block.atr_period ?? 14}) × ${block.atr_mult ?? 2}`
+      if (block.type === 'none')         return '— Sin stop —'
+      return '— Sin stop —'
+    case 'management': {
+      const parts = []
+      if (block.sin_perdidas) parts.push('Trailing de breakeven activo')
+      if (block.reentry)      parts.push('Reentrada permitida')
+      return parts.length ? parts.join(' · ') : 'Sin opciones de gestión'
+    }
+    default:
+      return JSON.stringify(block, null, 2)
+  }
+}
+
 function stripNulls(obj) {
   if (!obj || typeof obj !== 'object') return obj
   return Object.fromEntries(
@@ -139,8 +186,9 @@ function Num({ label, value, onChange, min=1, max=9999, step='any' }) {
   )
 }
 
-// ── SectionJsonEditor — edición bidireccional del bloque JSON ─────────
-function SectionJsonEditor({ value, onChange }) {
+// ── SectionJsonEditor — edición bidireccional del bloque JSON + tab Resumen ──
+function SectionJsonEditor({ value, onChange, role }) {
+  const [tab, setTab]     = useState('json')
   const [raw, setRaw]     = useState(() => JSON.stringify(value ?? null, null, 2))
   const [error, setError] = useState(false)
   const focusedRef        = useRef(false)
@@ -162,26 +210,59 @@ function SectionJsonEditor({ value, onChange }) {
     } catch { setError(true) }
   }
 
+  const tabBtn = (id, label) => (
+    <button onClick={() => setTab(id)} style={{
+      fontFamily:MONO, fontSize:9, letterSpacing:'0.06em',
+      background:'transparent', border:'none',
+      borderBottom: tab===id ? '2px solid #00d4ff' : '2px solid transparent',
+      color: tab===id ? '#00d4ff' : '#7a9bc0',
+      padding:'3px 8px 2px', cursor:'pointer', outline:'none',
+    }}>{label}</button>
+  )
+
   return (
-    <textarea
-      value={raw}
-      spellCheck={false}
-      onFocus={() => { focusedRef.current = true }}
-      onBlur={() => {
-        focusedRef.current = false
-        if (error) { setRaw(JSON.stringify(value ?? null, null, 2)); setError(false) }
-      }}
-      onChange={e => handleChange(e.target.value)}
-      style={{
-        width:'100%', height:'100%', minHeight:72,
-        fontFamily:'monospace', fontSize:10,
-        background:'#050810',
-        color: error ? '#ff7a7a' : '#5a8aaa',
-        border: `1px solid ${error ? '#ff4d6d' : '#12253a'}`,
-        borderRadius:4, padding:'6px 8px',
-        resize:'none', boxSizing:'border-box', outline:'none',
-      }}
-    />
+    <div style={{ display:'flex', flexDirection:'column', height:'100%', minHeight:88 }}>
+      {/* Tab bar */}
+      <div style={{ display:'flex', background:'#0d1520', borderBottom:'1px solid #12253a', flexShrink:0 }}>
+        {tabBtn('json','JSON')}
+        {tabBtn('resumen','Resumen')}
+      </div>
+
+      {/* JSON tab */}
+      {tab === 'json' && (
+        <textarea
+          value={raw}
+          spellCheck={false}
+          onFocus={() => { focusedRef.current = true }}
+          onBlur={() => {
+            focusedRef.current = false
+            if (error) { setRaw(JSON.stringify(value ?? null, null, 2)); setError(false) }
+          }}
+          onChange={e => handleChange(e.target.value)}
+          style={{
+            flex:1, width:'100%',
+            fontFamily:'monospace', fontSize:10,
+            background:'#050810',
+            color: error ? '#ff7a7a' : '#5a8aaa',
+            border: `1px solid ${error ? '#ff4d6d' : 'transparent'}`,
+            borderRadius:'0 0 4px 4px', padding:'6px 8px',
+            resize:'none', boxSizing:'border-box', outline:'none',
+          }}
+        />
+      )}
+
+      {/* Resumen tab */}
+      {tab === 'resumen' && (
+        <div style={{
+          flex:1, padding:'8px 10px',
+          background:'#050810', borderRadius:'0 0 4px 4px',
+          fontFamily:MONO, fontSize:11, color:'#c8dff5',
+          lineHeight:1.5, overflowY:'auto',
+        }}>
+          {summarizeBlock(role, value)}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -633,7 +714,7 @@ function SectionRow({ sectionKey, definition, setDefinition, blocks = {}, saveBl
         {aiPanel}
       </div>
       <div style={{ flex:'4 0 0', minWidth:120, maxWidth:260 }}>
-        <SectionJsonEditor value={definition?.[sectionKey] ?? null} onChange={onSectionChange} />
+        <SectionJsonEditor value={definition?.[sectionKey] ?? null} onChange={onSectionChange} role={sectionKey} />
       </div>
     </div>
   )
@@ -747,6 +828,7 @@ export default function StrategyEditorPanel({
             <div style={{ flex:'4 0 0', minWidth:120, maxWidth:260 }}>
               <SectionJsonEditor
                 value={definition?.management ?? null}
+                role="management"
                 onChange={val => setDefinition(prev => {
                   const n = { ...prev }
                   if (val == null) delete n.management; else n.management = val
@@ -754,6 +836,32 @@ export default function StrategyEditorPanel({
                 })}
               />
             </div>
+          </div>
+        </div>
+
+        {/* ── RESUMEN DE ESTRATEGIA ── */}
+        <div style={{ marginBottom:10, background:'#080c14', border:'1px solid #1a2d45', borderRadius:6, overflow:'hidden' }}>
+          <div style={{ padding:'6px 12px', borderBottom:'1px solid #1a2d45', fontFamily:MONO, fontSize:9, letterSpacing:'0.1em', color:'#2a5a7a', textTransform:'uppercase' }}>
+            Resumen de estrategia
+          </div>
+          <div style={{ padding:'8px 12px', display:'flex', flexDirection:'column', gap:4 }}>
+            {[
+              { label:'FILTRO',      role:'filter',     block: definition?.filter     },
+              { label:'SETUP IN',    role:'setup',      block: definition?.setup      },
+              { label:'TRIGGER IN',  role:'trigger',    block: definition?.trigger    },
+              { label:'ABORT',       role:'abort',      block: definition?.abort      },
+              { label:'SETUP OUT',   role:'exit',       block: definition?.exit       },
+              { label:'TRIGGER OUT', role:'trigger',    block: definition?.trigger_out},
+              { label:'STOP LOSS',   role:'stop_loss',  block: definition?.stop_loss  },
+              { label:'GESTIÓN',     role:'management', block: definition?.management },
+            ].map(({ label, role, block }) => (
+              <div key={label} style={{ display:'flex', gap:10, alignItems:'baseline' }}>
+                <span style={{ fontFamily:MONO, fontSize:9, color:'#7a9bc0', minWidth:88, flexShrink:0, letterSpacing:'0.05em' }}>{label}</span>
+                <span style={{ fontFamily:MONO, fontSize:11, color: block ? '#e2e8f0' : '#3a5a75' }}>
+                  {summarizeBlock(role, block)}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
 
