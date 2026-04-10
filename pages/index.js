@@ -562,7 +562,7 @@ export default function Home() {
   const setCondColor=useCallback((condId,color)=>{
     setCondColorsState(prev=>{
       const next=color?{...prev,[condId]:color}:Object.fromEntries(Object.entries(prev).filter(([k])=>k!==condId))
-      try{const s=JSON.parse(localStorage.getItem('v50_settings')||'{}');if(!s.watchlist)s.watchlist={};s.watchlist.condColors=next;localStorage.setItem('v50_settings',JSON.stringify(s))}catch{}
+      try{const s=JSON.parse(localStorage.getItem('v50_settings')||'{}');if(!s.watchlist)s.watchlist={};s.watchlist.condColors=next;const _f0=JSON.parse(localStorage.getItem('v50_settings')||'{}');if(_f0.defaultStrategyId)s.defaultStrategyId=_f0.defaultStrategyId;localStorage.setItem('v50_settings',JSON.stringify(s))}catch{}
       return next
     })
     setCondColorPicker(null)
@@ -1481,7 +1481,7 @@ export default function Home() {
         if(col&&!next[c.id]){next[c.id]=col;changed=true}
       })
       if(!changed) return prev
-      try{const s=JSON.parse(localStorage.getItem('v50_settings')||'{}');if(!s.watchlist)s.watchlist={};s.watchlist.condColors=next;localStorage.setItem('v50_settings',JSON.stringify(s))}catch{}
+      try{const s=JSON.parse(localStorage.getItem('v50_settings')||'{}');if(!s.watchlist)s.watchlist={};s.watchlist.condColors=next;const _f1=JSON.parse(localStorage.getItem('v50_settings')||'{}');if(_f1.defaultStrategyId)s.defaultStrategyId=_f1.defaultStrategyId;localStorage.setItem('v50_settings',JSON.stringify(s))}catch{}
       return next
     })
   },[conditions]) // eslint-disable-line
@@ -1508,6 +1508,9 @@ export default function Home() {
             s.watchlist.alarmDotNames=nameMap
             // Legacy: migrate alarmDotIds → condDotIds (no-op if already done)
             // condDotIds is managed by Settings Watchlist tab
+            // Re-leer por si loadStrategyLegacy escribió defaultStrategyId mientras tanto
+            const _fresh1=JSON.parse(localStorage.getItem('v50_settings')||'{}')
+            if(_fresh1.defaultStrategyId) s.defaultStrategyId=_fresh1.defaultStrategyId
             localStorage.setItem('v50_settings',JSON.stringify(s))
           }catch(_){}
         }
@@ -2954,7 +2957,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V8.62</title>
+        <title>Trading Simulator V8.63</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3031,7 +3034,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V8.62
+            <span className="dot"/>Trading Simulator V8.63
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
