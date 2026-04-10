@@ -655,21 +655,45 @@ function SectionRow({ sectionKey, definition, setDefinition, blocks = {}, saveBl
   const colBase = { padding:'8px 10px', background:'var(--bg2)', minHeight:80, boxSizing:'border-box' }
 
   // Col 2: param controls
+  const TRIGGER_OUT_NATIVE = ['breakout_low','next_open','close_of_setup']
+  const isTriggerOutNative = !block?.type || TRIGGER_OUT_NATIVE.includes(block?.type)
   const paramControls = isTriggerOut ? (
-    <select
-      value={block?.type || ''}
-      onChange={e => {
-        const t = e.target.value
-        if (!t) setBlock(null)
-        else setBlock({ type: t })
-      }}
-      style={{ ...SEL, width:'100%' }}
-    >
-      <option value="">— Sin trigger out —</option>
-      <option value="breakout_low">Breakout del low</option>
-      <option value="next_open">Apertura siguiente vela</option>
-      <option value="close_of_setup">Cierre vela de setup out</option>
-    </select>
+    <>
+      {/* Select nativo — solo cuando no hay tipo de indicador cargado */}
+      {isTriggerOutNative && (
+        <select
+          value={block?.type || ''}
+          onChange={e => {
+            const t = e.target.value
+            if (!t) setBlock(null)
+            else setBlock({ type: t })
+          }}
+          style={{ ...SEL, width:'100%' }}
+        >
+          <option value="">— Sin trigger out —</option>
+          <option value="breakout_low">Breakout del low</option>
+          <option value="next_open">Apertura siguiente vela</option>
+          <option value="close_of_setup">Cierre vela de setup out</option>
+        </select>
+      )}
+      {/* Params de indicador — cuando se carga un bloque de biblioteca */}
+      {ind==='ema' && block && <>
+        <Num label="Rápida" value={block.ma_fast??10}  onChange={v=>onP('ma_fast',v)} />
+        <Num label="Lenta"  value={block.ma_slow??20}  onChange={v=>onP('ma_slow',v)} />
+      </>}
+      {(ind==='precio'||ind==='cierre') && block && <>
+        <Num label="Período" value={block.ma_period??50} onChange={v=>onP('ma_period',v)} />
+      </>}
+      {ind==='rsi' && block && <>
+        <Num label="Período" value={block.rsi_period ?? block.period ?? 14} onChange={v=>onP('rsi_period',v)} />
+        <Num label="Nivel"   value={block.level ?? 50}                      onChange={v=>onP('level',v)} />
+      </>}
+      {ind==='macd' && block && <>
+        <Num label="Rápida" value={block.macd_fast   ?? block.fast   ?? 12} onChange={v=>onP('macd_fast',v)} />
+        <Num label="Lenta"  value={block.macd_slow   ?? block.slow   ?? 26} onChange={v=>onP('macd_slow',v)} />
+        <Num label="Señal"  value={block.macd_signal ?? block.signal ?? 9}  onChange={v=>onP('macd_signal',v)} />
+      </>}
+    </>
   ) : isStop ? (
     <>
       {stopType==='tecnico' && <Num label="Período MA"  value={block.ma_period??10}          onChange={v=>onStopP('ma_period',v)} />}
