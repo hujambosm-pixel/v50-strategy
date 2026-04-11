@@ -1676,6 +1676,15 @@ export default function Home() {
       delete s.defaultStrategyId
       localStorage.setItem('v50_settings', JSON.stringify(s))
     } catch(_) {}
+    // Cargar velas limpias del símbolo activo sin backtest
+    fetch(`/api/chartdata?symbol=${encodeURIComponent(simbolo)}&years=${years}`)
+      .then(r => r.json())
+      .then(data => {
+        if (Array.isArray(data) && data.length) {
+          setResult({ chartData: data, trades: [], isBareChart: true })
+        }
+      })
+      .catch(() => {})
   }
 
   const loadStrategyLegacy=(s,{navigateToConfig=true}={})=>{
@@ -2975,7 +2984,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V8.73</title>
+        <title>Trading Simulator V8.74</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3052,7 +3061,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V8.73
+            <span className="dot"/>Trading Simulator V8.74
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4743,8 +4752,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         })()}
                       </div>
                       <CandleChart
-                        data={result.chartData} emaRPeriod={emaR} emaLPeriod={emaL} definition={definition}
-                        trades={result.trades||[]} maxDD={metrics?.ddSimple||0}
+                        data={result.chartData} emaRPeriod={emaR} emaLPeriod={emaL} definition={result.isBareChart?null:definition}
+                        trades={result.isBareChart?[]:result.trades||[]} maxDD={result.isBareChart?0:metrics?.ddSimple||0}
                         labelMode={labelMode} rulerActive={rulerOn}
                         onChartReady={api=>{chartApiRef.current=api}}
                         onPriceAlarm={sidePanel!=='watchlist'&&sidePanel!=='risk'?price=>setPriceAlarmDlg({price,symbol:simbolo}):null}
@@ -4795,8 +4804,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                     </div>
                   </div>
 
-                  {/* Métricas en cuadrícula (si layout=grid) — oculto en Risk */}
-                  {sidePanel!=='risk'&&metricsLayout==='grid'&&metrics&&(
+                  {/* Métricas en cuadrícula (si layout=grid) — oculto en Risk y bare chart */}
+                  {!result.isBareChart&&sidePanel!=='risk'&&metricsLayout==='grid'&&metrics&&(
                     <div style={{border:'1px solid var(--border)',borderRadius:4,margin:'8px 0',overflow:'hidden'}}>
                       <div style={{display:'flex',alignItems:'center',gap:6,padding:'4px 10px 0'}}>
                         <button onClick={()=>setMetricsView(v=>v==='multi'?'single':'multi')}
@@ -4810,8 +4819,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                     </div>
                   )}
 
-                  {/* Equity + Barras + Historial — ocultos en Risk Management */}
-                  {sidePanel!=='risk'&&<>
+                  {/* Equity + Barras + Historial — ocultos en Risk Management y bare chart */}
+                  {!result.isBareChart&&sidePanel!=='risk'&&<>
                   <div className="equity-section" onContextMenu={e=>openCtx(e,'equity')}>
                     <div className="section-title" style={{display:'flex',alignItems:'center',flexWrap:'wrap',gap:6,fontSize:14}}>
                       <span>Equity</span>
@@ -4995,7 +5004,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                 </div>
 
                 {/* Panel derecho de métricas */}
-                {sidePanel!=='multi'&&sidePanel!=='risk'&&(metricsLayout==='panel'||metricsLayout==='multi')&&metrics&&(
+                {!result.isBareChart&&sidePanel!=='multi'&&sidePanel!=='risk'&&(metricsLayout==='panel'||metricsLayout==='multi')&&metrics&&(
                   <div style={{width:rightPanelW,flexShrink:0,borderLeft:'1px solid var(--border)',background:'var(--bg2)',overflowY:'auto',position:'relative'}} onContextMenu={e=>openCtx(e,'metrics')}>
                     {/* Resize handle — left edge */}
                     <div onMouseDown={e=>{rightResizing.current=true;rightStartX.current=e.clientX;rightStartW.current=rightPanelW;document.body.style.cursor='col-resize';document.body.style.userSelect='none'}}
