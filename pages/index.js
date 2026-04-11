@@ -1455,11 +1455,18 @@ export default function Home() {
             console.log('[v50] restore check',{defId,dataLength:data.length})
             if(defId){
               const match=data.find(s=>s.id===defId)
-              if(!match) console.log('[v50] strategies ids',data.map(s=>s.id))
+              console.log('[v50] defId vs strategies', defId, data.map(s=>s.id).slice(0,3))
               console.log('[v50] restore: match=',match?.name??'NOT FOUND')
               if(match){
                 console.log('[v50] restoring strategy', match.name, match.id)
                 loadStrategyLegacy(match,{navigateToConfig:false})
+              } else {
+                try{
+                  const _s=JSON.parse(localStorage.getItem('v50_settings')||'{}')
+                  delete _s.defaultStrategyId
+                  localStorage.setItem('v50_settings',JSON.stringify(_s))
+                  console.log('[v50] cleared stale defaultStrategyId',defId)
+                }catch(_){}
               }
             }
           }catch(e){console.error('[v50] restore failed',e)}
@@ -2984,7 +2991,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V8.76</title>
+        <title>Trading Simulator V8.77</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3061,7 +3068,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V8.76
+            <span className="dot"/>Trading Simulator V8.77
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4796,14 +4803,14 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         fillHeight={sidePanel==='risk'}
                       />
                     </div>
-                    {/* Drag handle — resize candle chart */}
-                    <div onMouseDown={e=>{candleResizing.current=true;candleStartY.current=e.clientY;candleStartH.current=candleH;document.body.style.cursor='row-resize';document.body.style.userSelect='none'}}
+                    {/* Drag handle — resize candle chart (oculto en bare chart) */}
+                    {!result.isBareChart&&<div onMouseDown={e=>{candleResizing.current=true;candleStartY.current=e.clientY;candleStartH.current=candleH;document.body.style.cursor='row-resize';document.body.style.userSelect='none'}}
                       style={{height:6,cursor:'row-resize',background:'transparent',transition:'background 0.15s',
                         borderTop:'2px solid var(--border)',display:'flex',alignItems:'center',justifyContent:'center'}}
                       onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.15)'}
                       onMouseOut={e=>e.currentTarget.style.background='transparent'}>
                       <div style={{width:32,height:2,borderRadius:1,background:'rgba(0,212,255,0.3)'}}/>
-                    </div>
+                    </div>}
                   </div>
 
                   {/* Métricas en cuadrícula (si layout=grid) — oculto en Risk y bare chart */}
