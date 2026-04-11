@@ -2984,7 +2984,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V8.74</title>
+        <title>Trading Simulator V8.75</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3061,7 +3061,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V8.74
+            <span className="dot"/>Trading Simulator V8.75
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4322,7 +4322,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
             {sidePanel!=='multi'&&sidePanel!=='tradelog'&&!(editingStr&&sidePanel==='config')&&result&&(
               <div style={{display:'flex',flex:1,minHeight:0,overflow:'hidden',height:'100%'}}>
                 {/* Columna principal */}
-                <div ref={contentRef} style={sidePanel==='risk'?{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',height:'100%'}:{flex:1,overflowY:'auto'}}>
+                <div ref={contentRef} style={(sidePanel==='risk'||result.isBareChart)?{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',height:'100%'}:{flex:1,overflowY:'auto'}}>
 
                   {/* ══════════════════════════════════════════════════════
                       RISK MANAGEMENT — Fila 1 (métricas) + Fila 2 (config + calc)
@@ -4754,6 +4754,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       <CandleChart
                         data={result.chartData} emaRPeriod={emaR} emaLPeriod={emaL} definition={result.isBareChart?null:definition}
                         trades={result.isBareChart?[]:result.trades||[]} maxDD={result.isBareChart?0:metrics?.ddSimple||0}
+                        isBareChart={result.isBareChart??false}
+                        fillHeight={result.isBareChart??false}
                         labelMode={labelMode} rulerActive={rulerOn}
                         onChartReady={api=>{chartApiRef.current=api}}
                         onPriceAlarm={sidePanel!=='watchlist'&&sidePanel!=='risk'?price=>setPriceAlarmDlg({price,symbol:simbolo}):null}

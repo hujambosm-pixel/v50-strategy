@@ -219,7 +219,7 @@ function createRiskPrimitive(configRef) {
   }
 }
 
-export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null }) {
+export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null, isBareChart=false }) {
   const containerRef=useRef(null), svgRef=useRef(null), legendRef=useRef(null), tooltipRef=useRef(null)
   const activeLegendRef = externalLegendRef || legendRef
   const chartRef=useRef(null), candlesRef=useRef(null)
@@ -271,7 +271,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       // ── Dynamic indicator overlay ──────────────────────────────────
       const _closes=data.map(d=>d.close)
       const _indType=getActiveIndicator(definition)
-      const _showEma=!definition||_indType==='EMA'||_indType==='SMA'
+      const _showEma=!isBareChart&&(!definition||_indType==='EMA'||_indType==='SMA')
       if(_showEma){
         const ep=definition?getEmaParams(definition,emaRPeriod,emaLPeriod):{fast:emaRPeriod,slow:emaLPeriod,type:'EMA'}
         const mtype=ep.type||'EMA'
@@ -974,7 +974,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       return()=>{chartAliveRef.current=false;try{unsubLabels()}catch(_){};cnt.removeEventListener('mousemove',onMove);cnt.removeEventListener('mousedown',onMouseDown);window.removeEventListener('mouseup',onMouseUp);window.removeEventListener('keydown',onKeyDown);window.removeEventListener('keyup',onKeyUp);ro.disconnect()}
     })
     return()=>{chartAliveRef.current=false;if(rsiChartRef.current){try{rsiChartRef.current.remove()}catch(_){};rsiChartRef.current=null};if(macdChartRef.current){try{macdChartRef.current.remove()}catch(_){};macdChartRef.current=null};if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null}}
-  },[data,emaRPeriod,emaLPeriod,trades,maxDD,labelMode,definition])
+  },[data,emaRPeriod,emaLPeriod,trades,maxDD,labelMode,definition,isBareChart])
 
   // Mantener lastCloseRef actualizado sin recrear el chart
   useEffect(()=>{
