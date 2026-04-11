@@ -250,6 +250,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
     if(typeof window==='undefined'||!containerRef.current) return
     import('lightweight-charts').then(({createChart,CrosshairMode,LineStyle})=>{
       if(chartRef.current){chartRef.current.remove();chartRef.current=null}
+      console.log('[v50] chart created height',chartHeight)
       const chart=createChart(containerRef.current,{
         width:containerRef.current.clientWidth,height:chartHeight,
         layout:{background:{color:'#080c14'},textColor:'#7a9bc0',fontFamily:'-apple-system, BlinkMacSystemFont, Trebuchet MS, Roboto, Ubuntu, sans-serif'},

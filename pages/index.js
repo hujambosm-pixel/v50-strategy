@@ -2937,6 +2937,13 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
 
   // Altura de los tabs = 33px aprox. (padding 8px top+bottom + 17px línea)
   const TAB_H=33
+  // Diagnóstico: altura calculada para el gráfico bare
+  const bareChartHeight=useMemo(()=>{
+    if(typeof window==='undefined') return 480
+    const h=window.innerHeight-TAB_H
+    console.log('[v50] bareChartHeight calc',{innerHeight:window.innerHeight,TAB_H,result:h,isBareChart:result?.isBareChart})
+    return h
+  },[result?.isBareChart])
 
   // ── Auth handlers ────────────────────────────────────────────
   async function handleLogin(e) {
@@ -2996,7 +3003,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V8.83</title>
+        <title>Trading Simulator V8.84</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3073,7 +3080,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V8.83
+            <span className="dot"/>Trading Simulator V8.84
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4768,7 +4775,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         trades={result.isBareChart?[]:result.trades||[]} maxDD={result.isBareChart?0:metrics?.ddSimple||0}
                         isBareChart={result.isBareChart??false}
                         fillHeight={false}
-                        chartHeight={result.isBareChart?(typeof window!=='undefined'?window.innerHeight-TAB_H:480):candleH}
+                        chartHeight={result.isBareChart?bareChartHeight:candleH}
                         labelMode={labelMode} rulerActive={rulerOn}
                         onChartReady={api=>{chartApiRef.current=api}}
                         onPriceAlarm={sidePanel!=='watchlist'&&sidePanel!=='risk'?price=>setPriceAlarmDlg({price,symbol:simbolo}):null}
