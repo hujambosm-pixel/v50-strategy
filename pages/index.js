@@ -3004,7 +3004,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V8.91</title>
+        <title>Trading Simulator V8.92</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3081,7 +3081,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V8.91
+            <span className="dot"/>Trading Simulator V8.92
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6570,7 +6570,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               {l:'Capital emp.',v:capitalEmpAll>0?fmtAbs_(capitalEmpAll):'—',c:'#00d4ff'},
                               {l:'P&L realizado',v:fmtEur_(pnlReal),c:pnlReal>=0?'#00e5a0':'#ff4d6d'},
                               {l:'P&L flotante',v:fmtEur_(pnlFloat_),c:pnlFloat_>=0?'#00e5a0':'#ff4d6d'},
-                              {l:'Total ops.',v:String(allWithPnl.length),sub:openTrades.length+'ab / '+closed.length+'cerr',c:'#ffd166'},
+                              {l:'Total ops.',v:<span style={{fontSize:13,fontWeight:700,color:'#f59e0b',lineHeight:1.2,fontFamily:MONO}}>{closed.length} cer. / {openTrades.length} ab.</span>,c:'#ffd166'},
                               {l:'Comisiones',v:commTotal>0?'-€'+Math.round(commTotal).toLocaleString('es-ES'):'€0',c:'#ff4d6d'},
                               {l:'Dividendos',v:dividendosAcum>0?'+€'+Math.round(dividendosAcum).toLocaleString('es-ES'):'—',c:'#00e5a0'},
                             ].map(({l,v,c,hl,sub},i)=>(
@@ -6681,7 +6681,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                           {trades.map((t,i)=>{
                                             const val=t.pnl_eur||0
                                             const isW=val>=0
-                                            const barW=Math.max(2,(100/trades.length)-0.3)
+                                            const barW=Math.max(0.3,(80/trades.length))
                                             const barL=i/trades.length*100
                                             const pct=isW
                                               ? Math.max(1,(val/maxPos)*zeroPct)
@@ -6802,12 +6802,12 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                 const renderRow=(t,i)=>(
                                   <div key={t.symbol+(t.isOpen?'o':'c')+i} style={{display:'flex',flexDirection:'column',padding:'2px 0',borderBottom:'1px solid rgba(255,255,255,0.03)'}}>
                                     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                                      <span onClick={()=>{setSimbolo(t.symbol);setSidePanel('watchlist');setTlTab('ops')}} style={{fontFamily:MONO,fontSize:8,color:'#a8ccdf',cursor:'pointer',textDecoration:'underline',textDecorationColor:'rgba(168,204,223,0.3)'}}>
+                                      <span onClick={()=>{setSimbolo(t.symbol);setSidePanel('watchlist');setTlTab('ops')}} style={{fontFamily:MONO,fontSize:11,color:'#a8ccdf',cursor:'pointer',textDecoration:'underline',textDecorationColor:'rgba(168,204,223,0.3)'}}>
                                         {t.symbol}{t.isOpen&&<span style={{color:'#ffd700'}}>●</span>}
                                       </span>
                                       <span style={{display:'flex',gap:4,alignItems:'center',flexShrink:0}}>
-                                        <span style={{fontFamily:MONO,fontSize:8,fontWeight:700,color:t.pnlEur>=0?'#00e5a0':'#ff4d6d'}}>{t.pnlEur>=0?'+':''}{Math.round(t.pnlEur)}€</span>
-                                        <span style={{fontFamily:MONO,fontSize:7,color:t.pnlPct>=0?'rgba(0,229,160,0.7)':'rgba(255,77,109,0.7)'}}>{t.pnlPct>=0?'+':''}{typeof t.pnlPct==='number'?t.pnlPct.toFixed(1):'—'}%</span>
+                                        <span style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:t.pnlEur>=0?'#00e5a0':'#ff4d6d'}}>{t.pnlEur>=0?'+':''}{Math.round(t.pnlEur)}€</span>
+                                        <span style={{fontFamily:MONO,fontSize:10,color:t.pnlPct>=0?'rgba(0,229,160,0.7)':'rgba(255,77,109,0.7)'}}>{t.pnlPct>=0?'+':''}{typeof t.pnlPct==='number'?t.pnlPct.toFixed(1):'—'}%</span>
                                       </span>
                                     </div>
                                     {t.strategy&&t.strategy!=='—'&&<div style={{fontFamily:MONO,fontSize:7,color:'#3d5a7a'}}>{t.strategy}</div>}
