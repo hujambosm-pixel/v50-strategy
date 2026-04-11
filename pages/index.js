@@ -704,7 +704,7 @@ export default function Home() {
   const [showIndivOccupancy,setShowIndivOccupancy]=useState(true)  // % capital invertido chart for individual
   const [indivOccMode,setIndivOccMode]=useState('compound')  // independent filter for indiv occupancy chart
 
-  const debounceRef=useRef(null),chartApiRef=useRef(null),contentRef=useRef(null)
+  const debounceRef=useRef(null),chartApiRef=useRef(null),contentRef=useRef(null),skipNextRunRef=useRef(false)
   const chartLegendRef=useRef(null)   // external legend ref for integrated chart info bar
 
   const mcChartApiRef=useRef(null)
@@ -1665,6 +1665,7 @@ export default function Home() {
     await deleteStrategy(id); reloadStrategies()
   }
   function stopStrategy() {
+    skipNextRunRef.current = true
     setResult(null)
     setError(null)
     setCurrentStratId(null)
@@ -2003,6 +2004,7 @@ export default function Home() {
 
   // ── Debounce: lanza backtest automáticamente al cambiar parámetros ──
   useEffect(()=>{
+    if(skipNextRunRef.current){skipNextRunRef.current=false;return}
     if(debounceRef.current)clearTimeout(debounceRef.current)
     const payload = (currentStratId || sidePanel==='strats')
       ? { definition:{ ...definition, capitalIni:Number(capitalIni), years:Number(years) } }
@@ -2973,7 +2975,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V8.70</title>
+        <title>Trading Simulator V8.71</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3050,7 +3052,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V8.70
+            <span className="dot"/>Trading Simulator V8.71
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
