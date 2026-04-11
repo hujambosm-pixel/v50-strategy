@@ -3004,7 +3004,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V8.90</title>
+        <title>Trading Simulator V8.91</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3081,7 +3081,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V8.90
+            <span className="dot"/>Trading Simulator V8.91
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6666,18 +6666,37 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                   (()=>{
                                     const trades=[...closed.map(t=>({...t,isOpen:false})),...openTrades.map(t=>({...t,pnl_eur:t._pnl_float_eur||0,isOpen:true}))]
                                     const mx=Math.max(...trades.map(t=>Math.abs(t.pnl_eur||0)),1)
+                                    const maxPos=Math.max(...trades.map(t=>Math.max(t.pnl_eur||0,0)),0.01)
+                                    const maxNeg=Math.max(...trades.map(t=>Math.max(-(t.pnl_eur||0),0)),0.01)
+                                    const totalRange=maxPos+maxNeg
+                                    const zeroPct=(maxNeg/totalRange)*100
                                     return (
                                       <div style={{display:'flex',flex:1,minHeight:0,gap:0}}>
-                                        <div style={{display:'flex',alignItems:'flex-end',gap:1,flex:1,minHeight:0}}>
+                                        <div style={{flex:1,position:'relative',minWidth:0}}>
+                                          {/* línea cero dinámica */}
+                                          <div style={{position:'absolute',left:0,right:0,top:zeroPct+'%',height:1,background:'rgba(255,255,255,0.15)',pointerEvents:'none'}}/>
+                                          {/* líneas mitad zona positiva y negativa */}
+                                          <div style={{position:'absolute',left:0,right:0,top:(zeroPct/2)+'%',height:1,background:'rgba(255,255,255,0.04)',pointerEvents:'none'}}/>
+                                          <div style={{position:'absolute',left:0,right:0,top:(zeroPct+(100-zeroPct)/2)+'%',height:1,background:'rgba(255,255,255,0.04)',pointerEvents:'none'}}/>
                                           {trades.map((t,i)=>{
-                                            const h=Math.max(3,Math.abs(t.pnl_eur||0)/mx*90)+'%'
-                                            const isW=(t.pnl_eur||0)>=0
-                                            return <div key={i} style={{flex:1,height:h,background:t.isOpen?(isW?'rgba(0,229,160,0.5)':'rgba(255,77,109,0.45)'):(isW?'#00e5a0':'#ff4d6d'),borderRadius:'2px 2px 0 0',minWidth:2}}/>
+                                            const val=t.pnl_eur||0
+                                            const isW=val>=0
+                                            const barW=Math.max(2,(100/trades.length)-0.3)
+                                            const barL=i/trades.length*100
+                                            const pct=isW
+                                              ? Math.max(1,(val/maxPos)*zeroPct)
+                                              : Math.max(1,(Math.abs(val)/maxNeg)*(100-zeroPct))
+                                            return <div key={i}
+                                              title={t.symbol+' '+(isW?'+':'')+'€'+Math.round(val)+(t.isOpen?' (abierta)':'')}
+                                              style={{position:'absolute',left:barL+'%',width:barW+'%',height:pct+'%',
+                                                top:isW?(zeroPct-pct)+'%':zeroPct+'%',
+                                                background:t.isOpen?(isW?'rgba(0,229,160,0.5)':'rgba(255,77,109,0.45)'):(isW?'#00e5a0':'#ff4d6d'),
+                                                borderRadius:isW?'2px 2px 0 0':'0 0 2px 2px',minWidth:2}}/>
                                           })}
                                         </div>
-                                        <div style={{display:'flex',flexDirection:'column',justifyContent:'space-between',width:42,flexShrink:0,paddingLeft:4,paddingBottom:2,fontFamily:MONO,fontSize:8,color:'#3d5a7a',textAlign:'left'}}>
+                                        <div style={{display:'flex',flexDirection:'column',justifyContent:'space-between',width:42,flexShrink:0,paddingLeft:4,fontFamily:MONO,fontSize:8,color:'#3d5a7a',textAlign:'left'}}>
                                           {[mx,mx*0.5,0,-mx*0.5,-mx].map((v,i)=>(
-                                            <span key={i} style={{lineHeight:1}}>{(v>0?'+':'')}{'€'+Math.round(v)}</span>
+                                            <span key={i} style={{lineHeight:1}}>{v>0?'+':''}{'\u20AC'+Math.round(v)}</span>
                                           ))}
                                         </div>
                                       </div>
