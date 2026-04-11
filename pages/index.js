@@ -1457,7 +1457,10 @@ export default function Home() {
               const match=data.find(s=>s.id===defId)
               if(!match) console.log('[v50] strategies ids',data.map(s=>s.id))
               console.log('[v50] restore: match=',match?.name??'NOT FOUND')
-              if(match) loadStrategyLegacy(match,{navigateToConfig:false})
+              if(match){
+                console.log('[v50] restoring name', match.name)
+                loadStrategyLegacy(match,{navigateToConfig:false})
+              }
             }
           }catch(e){console.error('[v50] restore failed',e)}
         }
@@ -2957,7 +2960,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V8.67</title>
+        <title>Trading Simulator V8.68</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3034,7 +3037,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V8.67
+            <span className="dot"/>Trading Simulator V8.68
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}

@@ -659,8 +659,8 @@ function SectionRow({ sectionKey, definition, setDefinition, blocks = {}, saveBl
   const isTriggerOutNative = !block?.type || TRIGGER_OUT_NATIVE.includes(block?.type)
   const paramControls = isTriggerOut ? (
     <>
-      {/* Select nativo — solo cuando no hay tipo de indicador cargado */}
-      {isTriggerOutNative && (
+      {/* Select nativo — solo cuando no hay tipo de indicador cargado y hay bloque */}
+      {isTriggerOutNative && block && (
         <select
           value={block?.type || ''}
           onChange={e => {
