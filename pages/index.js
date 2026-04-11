@@ -1454,8 +1454,9 @@ export default function Home() {
             const defId=sett.defaultStrategyId
             console.log('[v50] restore check',{defId,dataLength:data.length})
             if(defId){
-              const match=data.find(s=>s.id===defId)
-              console.log('[v50] defId vs strategies', defId, data.map(s=>s.id).slice(0,3))
+              // Robust comparison: stringify both sides in case of number/string mismatch
+              const match=data.find(s=>String(s.id)===String(defId))
+              console.log('[v50] defId vs strategies', defId, typeof defId, data.map(s=>({id:s.id,t:typeof s.id})).slice(0,3))
               console.log('[v50] restore: match=',match?.name??'NOT FOUND')
               if(match){
                 console.log('[v50] restoring strategy', match.name, match.id)
@@ -1467,10 +1468,10 @@ export default function Home() {
                   localStorage.setItem('v50_settings',JSON.stringify(_s))
                   console.log('[v50] cleared stale defaultStrategyId',defId)
                 }catch(_){}
-                stopStrategy()
+                stopStrategy({skipDebounce:false})
               }
             } else {
-              stopStrategy()
+              stopStrategy({skipDebounce:false})
             }
           }catch(e){console.error('[v50] restore failed',e)}
         }
@@ -1674,8 +1675,8 @@ export default function Home() {
     if(!confirm('¿Eliminar esta estrategia?')) return
     await deleteStrategy(id); reloadStrategies()
   }
-  function stopStrategy() {
-    skipNextRunRef.current = true
+  function stopStrategy({skipDebounce=true}={}) {
+    if(skipDebounce) skipNextRunRef.current = true
     setResult(null)
     setError(null)
     setCurrentStratId(null)
@@ -2995,7 +2996,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V8.82</title>
+        <title>Trading Simulator V8.83</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3072,7 +3073,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V8.82
+            <span className="dot"/>Trading Simulator V8.83
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
