@@ -519,7 +519,7 @@ export default function Home() {
   const [metricsView,setMetricsView]=useState('panel')   // 'multi'=3col | 'single'=one strat per block
   const [showStrategy,setShowStrategy]=useState(false),[showBH,setShowBH]=useState(true)
   const [showSP500,setShowSP500]=useState(false),[showCompound,setShowCompound]=useState(true)
-  const [showBacktestFloat,setShowBacktestFloat]=useState(false)
+  const [showBacktestFloat,setShowBacktestFloat]=useState(true)
   const [watchlist,setWatchlist]=useState(WATCHLIST_DEFAULT)
   const [wlLoading,setWlLoading]=useState(true)
   const [wlLists,setWlLists]=useState([])             // [{id,name,position}] from watchlist_lists
@@ -2995,7 +2995,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V8.80</title>
+        <title>Trading Simulator V8.81</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3072,7 +3072,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V8.80
+            <span className="dot"/>Trading Simulator V8.81
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
