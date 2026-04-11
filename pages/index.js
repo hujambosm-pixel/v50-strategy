@@ -739,6 +739,7 @@ export default function Home() {
   const [floatCloses,setFloatCloses]=useState({})      // {sym: [{date,close}]}
   const [floatLoading,setFloatLoading]=useState(false)
   const [tlShowFloat,setTlShowFloat]=useState(false)   // float toggle (lifted from TlCharts)
+  const [tlPnlView,setTlPnlView]=useState('operacion') // 'operacion' | 'estrategia'
   const floatFetched=useRef(false)                     // lazy: only fetch once per session
   const [contribDate,setContribDate]=useState(()=>{const d=new Date();return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear()})
   const [contribAmount,setContribAmount]=useState('')
@@ -3003,7 +3004,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V8.85</title>
+        <title>Trading Simulator V8.86</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3080,7 +3081,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V8.85
+            <span className="dot"/>Trading Simulator V8.86
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6325,6 +6326,15 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       // for open positions and the equity curve to be empty when ≤1 closed trade existed.
                       const closed = tlTradesFiltered.filter(t=>t.status==='closed').slice().sort((a,b)=>(a.exit_date||a.entry_date||'').localeCompare(b.exit_date||b.entry_date||''))
                       const openTrades = tlTradesFiltered.filter(t=>t.status==='open')
+                      const tlPnlByStrategy = Object.entries(
+                        (closed || []).reduce((acc, t) => {
+                          const k = t.strategy || 'Sin estrategia'
+                          acc[k] = (acc[k] || 0) + (t.pnl_eur || 0)
+                          return acc
+                        }, {})
+                      )
+                        .map(([name, pnl]) => ({ name, pnl }))
+                        .sort((a, b) => b.pnl - a.pnl)
                       const noData=!closed.length&&!openTrades.length
                       // Filter options — derived from ALL trades so dropdowns stay populated even when filtered results are empty
                       const allYears_=[...new Set((tlFifo.trades||[]).map(t=>((t.status==='closed'?t.exit_date:null)||t.entry_date)?.slice(0,4)).filter(Boolean))].sort((a,b)=>b-a)
@@ -6636,20 +6646,56 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                   </div>
                                 ))}
                               </div>
-                              <div style={{flex:1,overflow:'hidden',position:'relative',padding:'16px 6px 4px'}}>
-                                <div style={{position:'absolute',top:3,left:6,fontFamily:MONO,fontSize:7,color:'#3d5a7a',letterSpacing:'0.07em',textTransform:'uppercase',zIndex:10,pointerEvents:'none'}}>P&L por operación</div>
+                              <div style={{flex:1,overflow:'hidden',position:'relative',padding:'6px 6px 4px',display:'flex',flexDirection:'column'}}>
+                                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4,flexShrink:0,paddingRight:22}}>
+                                  <span style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',letterSpacing:'0.08em',textTransform:'uppercase'}}>
+                                    {tlPnlView==='operacion'?'P&L por operación':'P&L por estrategia'}
+                                  </span>
+                                  <div style={{display:'flex',gap:3}}>
+                                    {['operacion','estrategia'].map(v=>(
+                                      <button key={v} onClick={()=>setTlPnlView(v)} style={{fontFamily:MONO,fontSize:8,padding:'2px 6px',borderRadius:3,border:'1px solid',cursor:'pointer',borderColor:tlPnlView===v?'#00d4ff':'#1a2d45',background:tlPnlView===v?'rgba(0,212,255,0.1)':'transparent',color:tlPnlView===v?'#00d4ff':'#3d5a7a'}}>
+                                        {v==='operacion'?'Op.':'Estrat.'}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
                                 <div onClick={()=>{document.getElementById('tlDetailPnl')?.scrollIntoView({behavior:'smooth'})}} title="Ir al P&L detallado"
                                   style={{position:'absolute',top:6,right:6,zIndex:10,cursor:'pointer',color:'#3d5a7a',fontSize:13,lineHeight:1,background:'rgba(13,21,32,0.75)',borderRadius:3,padding:'2px 5px',border:'1px solid #1a2d45'}}
                                   onMouseOver={e=>e.currentTarget.style.color='#00d4ff'} onMouseOut={e=>e.currentTarget.style.color='#3d5a7a'}>⤢</div>
-                                <div style={{display:'flex',alignItems:'flex-end',gap:1,height:'calc(100% - 16px)'}}>
-                                  {[...closed.map(t=>({...t,isOpen:false})),...openTrades.map(t=>({...t,pnl_eur:t._pnl_float_eur||0,isOpen:true}))].map((t,i)=>{
-                                    const allPnls=[...closed.map(x=>Math.abs(x.pnl_eur||0)),...openTrades.map(x=>Math.abs(x._pnl_float_eur||0))]
-                                    const mx=Math.max(...allPnls,1)
-                                    const h=Math.max(3,Math.abs(t.pnl_eur||0)/mx*90)+'%'
-                                    const isW=(t.pnl_eur||0)>=0
-                                    return <div key={i} style={{flex:1,height:h,background:t.isOpen?(isW?'rgba(0,229,160,0.5)':'rgba(255,77,109,0.45)'):(isW?'#00e5a0':'#ff4d6d'),borderRadius:'2px 2px 0 0',minWidth:2}}/>
-                                  })}
-                                </div>
+                                {tlPnlView==='operacion'?(
+                                  <div style={{display:'flex',alignItems:'flex-end',gap:1,flex:1,minHeight:0}}>
+                                    {[...closed.map(t=>({...t,isOpen:false})),...openTrades.map(t=>({...t,pnl_eur:t._pnl_float_eur||0,isOpen:true}))].map((t,i)=>{
+                                      const allPnls=[...closed.map(x=>Math.abs(x.pnl_eur||0)),...openTrades.map(x=>Math.abs(x._pnl_float_eur||0))]
+                                      const mx=Math.max(...allPnls,1)
+                                      const h=Math.max(3,Math.abs(t.pnl_eur||0)/mx*90)+'%'
+                                      const isW=(t.pnl_eur||0)>=0
+                                      return <div key={i} style={{flex:1,height:h,background:t.isOpen?(isW?'rgba(0,229,160,0.5)':'rgba(255,77,109,0.45)'):(isW?'#00e5a0':'#ff4d6d'),borderRadius:'2px 2px 0 0',minWidth:2}}/>
+                                    })}
+                                  </div>
+                                ):(
+                                  (()=>{
+                                    const data=tlPnlByStrategy
+                                    const mx=Math.max(...data.map(d=>Math.abs(d.pnl)),1)
+                                    const total=data.length||1
+                                    return (
+                                      <div style={{flex:1,position:'relative',minWidth:0}}>
+                                        <div style={{position:'absolute',left:0,right:0,top:'50%',height:1,background:'rgba(255,255,255,0.15)',pointerEvents:'none'}}/>
+                                        {[25,75].map(pct=>(
+                                          <div key={pct} style={{position:'absolute',left:0,right:0,top:pct+'%',height:1,background:'rgba(255,255,255,0.04)',pointerEvents:'none'}}/>
+                                        ))}
+                                        {data.map((d,i)=>{
+                                          const isW=d.pnl>=0
+                                          const pct=Math.max(2,Math.abs(d.pnl)/mx*48)
+                                          const barW=Math.max(4,(100/total)-0.5)
+                                          const barL=i/total*100
+                                          return (
+                                            <div key={i} title={d.name+' '+(isW?'+':'')+'€'+Math.round(d.pnl)} style={{position:'absolute',left:barL+'%',width:barW+'%',height:pct+'%',bottom:isW?'50%':undefined,top:isW?undefined:'50%',background:isW?'rgba(34,197,94,0.75)':'rgba(239,68,68,0.75)',borderRadius:isW?'2px 2px 0 0':'0 0 2px 2px',cursor:'default'}}/>
+                                          )
+                                        })}
+                                      </div>
+                                    )
+                                  })()
+                                )}
                               </div>
                             </div>
                           </div>
@@ -6743,39 +6789,85 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                             {investData.length>1&&<div id="tlDetailInvest" style={{height:'calc(100vh - 30px)',position:'relative',display:'flex',flexDirection:'column'}}><TlInvestChart investData={investData} syncRef={tlDashSyncRef} patrimonyCurve={cwcDisp.length>1?cwcDisp:null} height={typeof window!=='undefined'?window.innerHeight-30:700} compact={false}/></div>}
                             {(closed.length>0||openTrades.length>0)&&(
                               <div id="tlDetailPnl" style={{height:'calc(100vh - 30px)',padding:'12px 16px 8px',borderTop:'1px solid var(--border)',display:'flex',flexDirection:'column'}}>
-                                <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:8,flexShrink:0}}>P&L por operación</div>
-                                {(()=>{
-                                  const trades=[...closed.map(t=>({...t,isOpen:false})),...openTrades.map(t=>({...t,pnl_eur:t._pnl_float_eur||0,isOpen:true}))]
-                                  const mx=Math.max(...trades.map(t=>Math.abs(t.pnl_eur||0)),1)
-                                  const total=trades.length||1
-                                  const levels=[mx,mx*0.5,0,-mx*0.5,-mx]
-                                  return (
-                                    <div style={{display:'flex',flex:1,minHeight:0,gap:0}}>
-                                      <div style={{display:'flex',flexDirection:'column',justifyContent:'space-between',width:58,flexShrink:0,paddingRight:6,paddingBottom:2,fontFamily:MONO,fontSize:9,color:'#3d5a7a',textAlign:'right'}}>
-                                        {levels.map((v,i)=>(
-                                          <span key={i} style={{lineHeight:1}}>{(v>=0?'+':'')}{'€'+Math.round(v)}</span>
-                                        ))}
+                                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8,flexShrink:0}}>
+                                  <span style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',letterSpacing:'0.08em',textTransform:'uppercase'}}>
+                                    {tlPnlView==='operacion'?'P&L por operación':'P&L por estrategia'}
+                                  </span>
+                                  <div style={{display:'flex',gap:3}}>
+                                    {['operacion','estrategia'].map(v=>(
+                                      <button key={v} onClick={()=>setTlPnlView(v)} style={{fontFamily:MONO,fontSize:8,padding:'2px 6px',borderRadius:3,border:'1px solid',cursor:'pointer',borderColor:tlPnlView===v?'#00d4ff':'#1a2d45',background:tlPnlView===v?'rgba(0,212,255,0.1)':'transparent',color:tlPnlView===v?'#00d4ff':'#3d5a7a'}}>
+                                        {v==='operacion'?'Op.':'Estrat.'}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                                {tlPnlView==='operacion'?(
+                                  (()=>{
+                                    const trades=[...closed.map(t=>({...t,isOpen:false})),...openTrades.map(t=>({...t,pnl_eur:t._pnl_float_eur||0,isOpen:true}))]
+                                    const mx=Math.max(...trades.map(t=>Math.abs(t.pnl_eur||0)),1)
+                                    const total=trades.length||1
+                                    const levels=[mx,mx*0.5,0,-mx*0.5,-mx]
+                                    return (
+                                      <div style={{display:'flex',flex:1,minHeight:0,gap:0}}>
+                                        <div style={{display:'flex',flexDirection:'column',justifyContent:'space-between',width:58,flexShrink:0,paddingRight:6,paddingBottom:2,fontFamily:MONO,fontSize:9,color:'#3d5a7a',textAlign:'right'}}>
+                                          {levels.map((v,i)=>(
+                                            <span key={i} style={{lineHeight:1}}>{(v>=0?'+':'')}{'€'+Math.round(v)}</span>
+                                          ))}
+                                        </div>
+                                        <div style={{flex:1,position:'relative',minWidth:0}}>
+                                          {[0,25,50,75,100].map(pct=>(
+                                            <div key={pct} style={{position:'absolute',left:0,right:0,top:pct+'%',height:1,background:pct===50?'rgba(255,255,255,0.15)':'rgba(255,255,255,0.04)',pointerEvents:'none'}}/>
+                                          ))}
+                                          {trades.map((t,i)=>{
+                                            const isW=(t.pnl_eur||0)>=0
+                                            const pct=Math.max(1,Math.abs(t.pnl_eur||0)/mx*48)
+                                            const barW=Math.max(2,(100/total)-0.3)
+                                            const barL=i/total*100
+                                            return (
+                                              <div key={i}
+                                                title={t.symbol+' '+(isW?'+':'')+('€'+Math.round(t.pnl_eur||0))+(t.isOpen?' (abierta)':'')}
+                                                style={{position:'absolute',left:barL+'%',width:barW+'%',height:pct+'%',bottom:isW?'50%':undefined,top:isW?undefined:'50%',background:t.isOpen?(isW?'rgba(0,229,160,0.5)':'rgba(255,77,109,0.45)'):(isW?'#00e5a0':'#ff4d6d'),borderRadius:isW?'2px 2px 0 0':'0 0 2px 2px',opacity:0.85,border:t.isOpen?'1px solid '+(isW?'#00e5a0':'#ff4d6d'):'none'}}
+                                              />
+                                            )
+                                          })}
+                                        </div>
                                       </div>
-                                      <div style={{flex:1,position:'relative',minWidth:0}}>
-                                        {[0,25,50,75,100].map(pct=>(
-                                          <div key={pct} style={{position:'absolute',left:0,right:0,top:pct+'%',height:1,background:pct===50?'rgba(255,255,255,0.15)':'rgba(255,255,255,0.04)',pointerEvents:'none'}}/>
-                                        ))}
-                                        {trades.map((t,i)=>{
-                                          const isW=(t.pnl_eur||0)>=0
-                                          const pct=Math.max(1,Math.abs(t.pnl_eur||0)/mx*48)
-                                          const barW=Math.max(2,(100/total)-0.3)
-                                          const barL=i/total*100
-                                          return (
-                                            <div key={i}
-                                              title={t.symbol+' '+(isW?'+':'')+('€'+Math.round(t.pnl_eur||0))+(t.isOpen?' (abierta)':'')}
-                                              style={{position:'absolute',left:barL+'%',width:barW+'%',height:pct+'%',bottom:isW?'50%':undefined,top:isW?undefined:'50%',background:t.isOpen?(isW?'rgba(0,229,160,0.5)':'rgba(255,77,109,0.45)'):(isW?'#00e5a0':'#ff4d6d'),borderRadius:isW?'2px 2px 0 0':'0 0 2px 2px',opacity:0.85,border:t.isOpen?'1px solid '+(isW?'#00e5a0':'#ff4d6d'):'none'}}
-                                            />
-                                          )
-                                        })}
+                                    )
+                                  })()
+                                ):(
+                                  (()=>{
+                                    const data=tlPnlByStrategy
+                                    const mx=Math.max(...data.map(d=>Math.abs(d.pnl)),1)
+                                    const total=data.length||1
+                                    const levels=[mx,mx*0.5,0,-mx*0.5,-mx]
+                                    return (
+                                      <div style={{display:'flex',flex:1,minHeight:0,gap:0}}>
+                                        <div style={{display:'flex',flexDirection:'column',justifyContent:'space-between',width:58,flexShrink:0,paddingRight:6,paddingBottom:2,fontFamily:MONO,fontSize:9,color:'#3d5a7a',textAlign:'right'}}>
+                                          {levels.map((v,i)=>(
+                                            <span key={i} style={{lineHeight:1}}>{(v>=0?'+':'')}{'€'+Math.round(v)}</span>
+                                          ))}
+                                        </div>
+                                        <div style={{flex:1,position:'relative',minWidth:0}}>
+                                          {[0,25,50,75,100].map(pct=>(
+                                            <div key={pct} style={{position:'absolute',left:0,right:0,top:pct+'%',height:1,background:pct===50?'rgba(255,255,255,0.15)':'rgba(255,255,255,0.04)',pointerEvents:'none'}}/>
+                                          ))}
+                                          {data.map((d,i)=>{
+                                            const isW=d.pnl>=0
+                                            const pct=Math.max(1,Math.abs(d.pnl)/mx*48)
+                                            const barW=Math.max(2,(100/total)-0.3)
+                                            const barL=i/total*100
+                                            return (
+                                              <div key={i}
+                                                title={d.name+' '+(isW?'+':'')+'€'+Math.round(d.pnl)}
+                                                style={{position:'absolute',left:barL+'%',width:barW+'%',height:pct+'%',bottom:isW?'50%':undefined,top:isW?undefined:'50%',background:isW?'rgba(34,197,94,0.75)':'rgba(239,68,68,0.75)',borderRadius:isW?'2px 2px 0 0':'0 0 2px 2px',cursor:'default'}}
+                                              />
+                                            )
+                                          })}
+                                        </div>
                                       </div>
-                                    </div>
-                                  )
-                                })()}
+                                    )
+                                  })()
+                                )}
                               </div>
                             )}
                           </div>
