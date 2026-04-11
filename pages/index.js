@@ -2021,6 +2021,7 @@ export default function Home() {
   // ── Debounce: lanza backtest automáticamente al cambiar parámetros ──
   useEffect(()=>{
     if(skipNextRunRef.current){skipNextRunRef.current=false;return}
+    if(!currentStratId&&sidePanel!=='strats')return
     if(debounceRef.current)clearTimeout(debounceRef.current)
     const payload = (currentStratId || sidePanel==='strats')
       ? { definition:{ ...definition, capitalIni:Number(capitalIni), years:Number(years) } }
@@ -2991,7 +2992,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V8.77</title>
+        <title>Trading Simulator V8.78</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3068,7 +3069,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V8.77
+            <span className="dot"/>Trading Simulator V8.78
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4304,7 +4305,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
           </aside>
 
           {/* ── CONTENT ── */}
-          <div className="content">
+          <div className="content" style={result?.isBareChart?{overflowY:'hidden'}:undefined}>
 
             {/* ══ STRATEGY EDITOR PANEL ══ */}
             {editingStr!==null&&sidePanel==='config'&&(
