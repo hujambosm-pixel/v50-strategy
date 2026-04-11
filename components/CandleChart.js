@@ -969,6 +969,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         setTimeout(drawTradeLabels,50)
       })
       ro.observe(containerRef.current)
+      if(fillHeight) setTimeout(()=>updateHeightRef.current?.(),50)
       setTimeout(drawTradeLabels,200)
 
       return()=>{chartAliveRef.current=false;try{unsubLabels()}catch(_){};cnt.removeEventListener('mousemove',onMove);cnt.removeEventListener('mousedown',onMouseDown);window.removeEventListener('mouseup',onMouseUp);window.removeEventListener('keydown',onKeyDown);window.removeEventListener('keyup',onKeyUp);ro.disconnect()}
@@ -976,19 +977,20 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
     return()=>{chartAliveRef.current=false;if(rsiChartRef.current){try{rsiChartRef.current.remove()}catch(_){};rsiChartRef.current=null};if(macdChartRef.current){try{macdChartRef.current.remove()}catch(_){};macdChartRef.current=null};if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null}}
   },[data,emaRPeriod,emaLPeriod,trades,maxDD,labelMode,definition,isBareChart])
 
-  // ── fillHeight: ResizeObserver en el padre para obtener altura real ──
+  // ── fillHeight: altura real mediante getBoundingClientRect ──
+  const updateHeightRef=useRef(null)
   useEffect(()=>{
-    if(!fillHeight) return
-    const parent=containerRef.current?.parentElement
-    if(!parent) return
-    const ro=new ResizeObserver(entries=>{
-      const h=entries[0].contentRect.height
-      if(h>0&&chartRef.current){
-        try{chartRef.current.applyOptions({height:h})}catch(_){}
-      }
-    })
-    ro.observe(parent)
-    return()=>ro.disconnect()
+    if(!fillHeight||!containerRef.current) return
+    const updateHeight=()=>{
+      const rect=containerRef.current?.getBoundingClientRect()
+      if(!rect||!chartRef.current) return
+      const h=window.innerHeight-rect.top-4
+      if(h>100){try{chartRef.current.applyOptions({height:h})}catch(_){}}
+    }
+    updateHeightRef.current=updateHeight
+    updateHeight()
+    window.addEventListener('resize',updateHeight)
+    return()=>window.removeEventListener('resize',updateHeight)
   },[fillHeight])
 
   // Mantener lastCloseRef actualizado sin recrear el chart
