@@ -3004,7 +3004,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V8.86</title>
+        <title>Trading Simulator V8.87</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3081,7 +3081,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V8.86
+            <span className="dot"/>Trading Simulator V8.87
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6689,7 +6689,10 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                           const barW=Math.max(4,(100/total)-0.5)
                                           const barL=i/total*100
                                           return (
-                                            <div key={i} title={d.name+' '+(isW?'+':'')+'€'+Math.round(d.pnl)} style={{position:'absolute',left:barL+'%',width:barW+'%',height:pct+'%',bottom:isW?'50%':undefined,top:isW?undefined:'50%',background:isW?'rgba(34,197,94,0.75)':'rgba(239,68,68,0.75)',borderRadius:isW?'2px 2px 0 0':'0 0 2px 2px',cursor:'default'}}/>
+                                            <React.Fragment key={i}>
+                                              <div key={'lbl-'+i} style={{position:'absolute',left:barL+'%',width:barW+'%',bottom:'52%',textAlign:'center',fontFamily:MONO,fontSize:7,color:'#64748b',overflow:'hidden',whiteSpace:'nowrap',pointerEvents:'none',lineHeight:1}}>{d.name.slice(0,5)}</div>
+                                              <div title={d.name+' '+(isW?'+':'')+'€'+Math.round(d.pnl)} style={{position:'absolute',left:barL+'%',width:barW+'%',height:pct+'%',bottom:isW?'50%':undefined,top:isW?undefined:'50%',background:isW?'rgba(34,197,94,0.75)':'rgba(239,68,68,0.75)',borderRadius:isW?'2px 2px 0 0':'0 0 2px 2px',cursor:'default'}}/>
+                                            </React.Fragment>
                                           )
                                         })}
                                       </div>
