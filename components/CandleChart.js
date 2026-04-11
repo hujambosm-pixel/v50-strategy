@@ -976,6 +976,21 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
     return()=>{chartAliveRef.current=false;if(rsiChartRef.current){try{rsiChartRef.current.remove()}catch(_){};rsiChartRef.current=null};if(macdChartRef.current){try{macdChartRef.current.remove()}catch(_){};macdChartRef.current=null};if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null}}
   },[data,emaRPeriod,emaLPeriod,trades,maxDD,labelMode,definition,isBareChart])
 
+  // ── fillHeight: ResizeObserver en el padre para obtener altura real ──
+  useEffect(()=>{
+    if(!fillHeight) return
+    const parent=containerRef.current?.parentElement
+    if(!parent) return
+    const ro=new ResizeObserver(entries=>{
+      const h=entries[0].contentRect.height
+      if(h>0&&chartRef.current){
+        try{chartRef.current.applyOptions({height:h})}catch(_){}
+      }
+    })
+    ro.observe(parent)
+    return()=>ro.disconnect()
+  },[fillHeight])
+
   // Mantener lastCloseRef actualizado sin recrear el chart
   useEffect(()=>{
     if(data?.length) lastCloseRef.current=data[data.length-1]?.close
@@ -1164,7 +1179,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
     <div style={{display:'flex',flexDirection:'column',...(fillHeight?{flex:1,minHeight:0}:{})}}>
     <div style={{position:'relative',...(fillHeight?{flex:1,minHeight:0}:{})}}>
       <div ref={legendRef} style={{position:'absolute',top:8,left:8,zIndex:10,fontFamily:MONO,fontSize:12,color:'#7a9bc0',background:'rgba(8,12,20,0.82)',padding:'4px 10px',borderRadius:4,pointerEvents:'none',whiteSpace:'nowrap',display:externalLegendRef?'none':'block'}}/>
-      <div ref={containerRef} style={fillHeight?{height:'100%',minHeight:0}:{minHeight:480}}/>
+      <div ref={containerRef} style={fillHeight?{position:'absolute',top:0,left:0,right:0,bottom:0}:{minHeight:480}}/>
       <svg ref={svgRef} style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',pointerEvents:'none',zIndex:5}}/>
       <div ref={tooltipRef} style={{position:'absolute',display:'none',pointerEvents:'none',background:'rgba(8,12,20,0.96)',border:'1px solid #00e5a0',borderRadius:6,padding:'8px 12px',fontFamily:MONO,fontSize:12,color:'#e2eaf5',zIndex:15,minWidth:200,boxShadow:'0 4px 20px rgba(0,0,0,0.5)'}}/>
       {/* ── Overlay de captura de clics en modo risk ── */}
