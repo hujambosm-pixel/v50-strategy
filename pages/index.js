@@ -1664,6 +1664,18 @@ export default function Home() {
     if(!confirm('¿Eliminar esta estrategia?')) return
     await deleteStrategy(id); reloadStrategies()
   }
+  function stopStrategy() {
+    setResult(null)
+    setCurrentStratId(null)
+    setStratName('')
+    setDefinition(DEFAULT_DEFINITION)
+    try {
+      const s = JSON.parse(localStorage.getItem('v50_settings') || '{}')
+      delete s.defaultStrategyId
+      localStorage.setItem('v50_settings', JSON.stringify(s))
+    } catch(_) {}
+  }
+
   const loadStrategyLegacy=(s,{navigateToConfig=true}={})=>{
     // Load strategy params from definition into the cfg panel state
     const def  = s.definition || {}
@@ -2960,7 +2972,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V8.68</title>
+        <title>Trading Simulator V8.69</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3037,7 +3049,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V8.68
+            <span className="dot"/>Trading Simulator V8.69
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -3218,17 +3230,17 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                             onMouseOut={e=>{e.currentTarget.style.color='var(--text3)';e.currentTarget.style.borderColor='var(--border)'}}>
                             ✎
                           </button>
-                          {/* Play button */}
-                          <button onClick={e=>{e.stopPropagation();loadStrategyLegacy(s)}}
-                            title={`Ejecutar: ${s.name}`}
-                            style={{background:isActive?`${col}22`:'rgba(0,212,255,0.08)',
-                              border:`1px solid ${isActive?col:'var(--accent)'}`,
-                              color:isActive?col:'var(--accent)',
+                          {/* Play/Stop button */}
+                          <button onClick={e=>{e.stopPropagation();isActive?stopStrategy():loadStrategyLegacy(s)}}
+                            title={isActive?`Detener: ${s.name}`:`Ejecutar: ${s.name}`}
+                            style={{background:isActive?'rgba(255,77,109,0.15)':'rgba(0,212,255,0.08)',
+                              border:`1px solid ${isActive?'#ff4d6d':'var(--accent)'}`,
+                              color:isActive?'#ff4d6d':'var(--accent)',
                               fontFamily:MONO,fontSize:12,padding:'2px 7px',borderRadius:3,cursor:'pointer',
                               flexShrink:0,transition:'all 0.1s'}}
-                            onMouseOver={e=>{e.currentTarget.style.background=`${col}33`}}
-                            onMouseOut={e=>{e.currentTarget.style.background=isActive?`${col}22`:'rgba(0,212,255,0.08)'}}>
-                            ▶
+                            onMouseOver={e=>{e.currentTarget.style.background=isActive?'rgba(255,77,109,0.25)':`${col}33`}}
+                            onMouseOut={e=>{e.currentTarget.style.background=isActive?'rgba(255,77,109,0.15)':'rgba(0,212,255,0.08)'}}>
+                            {isActive?'■':'▶'}
                           </button>
                         </div>
                       )
