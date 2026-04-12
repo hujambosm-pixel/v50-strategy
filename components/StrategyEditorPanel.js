@@ -824,6 +824,7 @@ export default function StrategyEditorPanel({
   const [aiText, setAiText]       = useState('')
   const [aiLoading, setAiLoading] = useState(false)
   const [aiError, setAiError]     = useState('')
+  const [visDraft, setVisDraft]   = useState(null)
   const aiInputRef                = useRef(null)
   const { blocks, saveBlock, deleteBlock, updateBlockName } = useStrategyBlocks()
 
@@ -833,6 +834,72 @@ export default function StrategyEditorPanel({
       return () => clearTimeout(t)
     }
   }, [focusAI])
+
+  function deriveIndicators(def) {
+    const result = []
+    const seen = new Set()
+    const blockList = [
+      { key:'filter',      label:'Filter' },
+      { key:'setup',       label:'Setup In' },
+      { key:'trigger',     label:'Trigger In' },
+      { key:'abort',       label:'Abort' },
+      { key:'exit',        label:'Setup Out' },
+      { key:'trigger_out', label:'Trigger Out' },
+      { key:'stop_loss',   label:'Stop Loss' },
+    ]
+    blockList.forEach(({ key, label }) => {
+      const b = def[key]
+      if (!b) return
+      const t = b.type || ''
+      if (t.includes('ema') || t.includes('ma_cross') || t.includes('precio_ema')) {
+        const fast = b.ma_fast || b.ema_r || null
+        const slow = b.ma_slow || b.ema_l || null
+        if (fast) {
+          const id = `ema_${fast}_${key}`
+          if (!seen.has(id)) { seen.add(id); result.push({ id, type:'ema', period:fast, source:label, color:'#00d4ff', lineWidth:1, visible:true }) }
+        }
+        if (slow) {
+          const id = `ema_${slow}_${key}`
+          if (!seen.has(id)) { seen.add(id); result.push({ id, type:'ema', period:slow, source:label, color:'#f59e0b', lineWidth:1, visible:true }) }
+        }
+      }
+      if (t.includes('rsi')) {
+        const period = b.rsi_period || b.period || 14
+        const id = `rsi_${period}_${key}`
+        if (!seen.has(id)) { seen.add(id); result.push({ id, type:'rsi', period, source:label, color:'#a78bfa', lineWidth:1, visible:true }) }
+      }
+      if (t.includes('macd')) {
+        const id = `macd_${key}`
+        if (!seen.has(id)) { seen.add(id); result.push({ id, type:'macd', period:null, source:label, color:'#34d399', lineWidth:1, visible:true }) }
+      }
+      if (t.includes('vol')) {
+        const id = `vol_${key}`
+        if (!seen.has(id)) { seen.add(id); result.push({ id, type:'vol', period:null, source:label, color:'#64748b', lineWidth:1, visible:true }) }
+      }
+    })
+    return result
+  }
+
+  useEffect(() => {
+    const derived = deriveIndicators(definition)
+    const existing = definition.visuals?.indicators || []
+    const merged = derived.map(d => {
+      const saved = existing.find(e => e.id === d.id)
+      return saved ? { ...d, ...saved } : d
+    })
+    const extras = existing.filter(e => e.source === 'manual')
+    setVisDraft({
+      indicators: [...merged, ...extras],
+      blocks: definition.visuals?.blocks || {}
+    })
+  }, [definition.filter, definition.setup, definition.trigger,
+      definition.abort, definition.exit, definition.trigger_out,
+      definition.stop_loss]) // eslint-disable-line
+
+  useEffect(() => {
+    if (!visDraft) return
+    setDefinition(prev => ({ ...prev, visuals: visDraft }))
+  }, [visDraft]) // eslint-disable-line
 
   async function runAI() {
     if (!aiText.trim()) return
@@ -924,6 +991,111 @@ export default function StrategyEditorPanel({
             ))}
           </div>
         </div>
+
+        {/* ── INDICADORES VISUALES ── */}
+        <div style={{ background:'#080c14', border:'1px solid #1a2d45', borderRadius:6, padding:'10px 14px', marginBottom:8 }}>
+          <div style={{ fontFamily:MONO, fontSize:9, color:'#e2e8f0', letterSpacing:'0.08em', textTransform:'uppercase', marginBottom:10 }}>
+            Indicadores visuales
+          </div>
+
+          {/* PARTE 1 — Tabla de indicadores */}
+          <div style={{marginBottom:12}}>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 70px 70px 50px 40px', gap:4, marginBottom:4, fontFamily:MONO, fontSize:8, color:'#3d5a7a', textTransform:'uppercase' }}>
+              <span>Indicador</span><span>Período</span><span>Color</span><span>Grosor</span><span>Vis.</span>
+            </div>
+            {(visDraft?.indicators || []).map((ind, i) => (
+              <div key={ind.id} style={{ display:'grid', gridTemplateColumns:'1fr 70px 70px 50px 40px', gap:4, marginBottom:3, alignItems:'center' }}>
+                <span style={{ fontFamily:MONO, fontSize:9, color:'#7a9bc0' }}>
+                  {ind.type.toUpperCase()}{ind.period ? `(${ind.period})` : ''}{' '}
+                  <span style={{ color:'#334155', fontSize:8 }}>{ind.source}</span>
+                </span>
+                {ind.period !== null ? (
+                  <input type="number" value={ind.period}
+                    onChange={e => { const v=Number(e.target.value); setVisDraft(prev => ({ ...prev, indicators: prev.indicators.map((x,j) => j===i ? {...x,period:v} : x) })) }}
+                    style={{ background:'#0d1420', border:'1px solid #1a2d45', color:'#e2e8f0', fontFamily:MONO, fontSize:9, padding:'2px 4px', borderRadius:3, width:'100%' }}
+                  />
+                ) : (
+                  <span style={{ color:'#334155', fontFamily:MONO, fontSize:8 }}>—</span>
+                )}
+                <input type="color" value={ind.color}
+                  onChange={e => { const v=e.target.value; setVisDraft(prev => ({ ...prev, indicators: prev.indicators.map((x,j) => j===i ? {...x,color:v} : x) })) }}
+                  style={{ width:'100%', height:22, padding:0, background:'none', border:'1px solid #1a2d45', borderRadius:3, cursor:'pointer' }}
+                />
+                <select value={ind.lineWidth}
+                  onChange={e => { const v=Number(e.target.value); setVisDraft(prev => ({ ...prev, indicators: prev.indicators.map((x,j) => j===i ? {...x,lineWidth:v} : x) })) }}
+                  style={{ background:'#0d1420', border:'1px solid #1a2d45', color:'#e2e8f0', fontFamily:MONO, fontSize:9, padding:'2px 2px', borderRadius:3, width:'100%' }}
+                >
+                  {[1,2,3].map(v => <option key={v} value={v}>{v}px</option>)}
+                </select>
+                <button
+                  onClick={() => setVisDraft(prev => ({ ...prev, indicators: prev.indicators.map((x,j) => j===i ? {...x,visible:!x.visible} : x) }))}
+                  style={{ background:ind.visible?'rgba(0,212,255,0.1)':'transparent', border:'1px solid', borderColor:ind.visible?'#00d4ff':'#1a2d45', color:ind.visible?'#00d4ff':'#334155', borderRadius:3, fontSize:9, padding:'2px 4px', cursor:'pointer', fontFamily:MONO, width:'100%' }}
+                >
+                  {ind.visible ? 'ON' : 'OFF'}
+                </button>
+              </div>
+            ))}
+            <button
+              onClick={() => setVisDraft(prev => ({ ...prev, indicators: [...(prev?.indicators||[]), { id:'manual_'+Date.now(), type:'ema', period:20, source:'manual', color:'#94a3b8', lineWidth:1, visible:true }] }))}
+              style={{ marginTop:4, background:'transparent', border:'1px dashed #1a2d45', color:'#3d5a7a', fontFamily:MONO, fontSize:8, padding:'3px 8px', borderRadius:3, cursor:'pointer' }}
+            >
+              + Añadir indicador
+            </button>
+          </div>
+
+          {/* PARTE 2 — Config visual por bloque */}
+          <div>
+            <div style={{ fontFamily:MONO, fontSize:8, color:'#3d5a7a', textTransform:'uppercase', marginBottom:6 }}>Visualización por bloque</div>
+            {[
+              { key:'filter',      label:'FILTER',      types:['none','background'] },
+              { key:'setup',       label:'SETUP IN',    types:['none','background'] },
+              { key:'trigger',     label:'TRIGGER IN',  types:['none','marker'] },
+              { key:'abort',       label:'ABORT',       types:['none','marker'] },
+              { key:'exit',        label:'SETUP OUT',   types:['none','background'] },
+              { key:'trigger_out', label:'TRIGGER OUT', types:['none','marker'] },
+              { key:'stop_loss',   label:'STOP LOSS',   types:['none','marker'] },
+            ].map(({ key, label, types }) => {
+              const blk = visDraft?.blocks?.[key] || { type:'none', color:'#22c55e', opacity:15, shape:'arrow', size:'M' }
+              const update = (patch) => setVisDraft(prev => ({ ...prev, blocks: { ...prev.blocks, [key]: { ...blk, ...patch } } }))
+              const isActive = blk.type !== 'none'
+              const hasBlock = !!definition[key === 'exit' ? 'exit' : key]
+              return (
+                <div key={key} style={{ display:'grid', gridTemplateColumns:'90px 90px 1fr', gap:4, marginBottom:3, alignItems:'center', opacity: hasBlock ? 1 : 0.35 }}>
+                  <span style={{ fontFamily:MONO, fontSize:8, color: isActive ? '#e2e8f0' : '#3d5a7a' }}>{label}</span>
+                  <select disabled={!hasBlock} value={blk.type} onChange={e => update({ type:e.target.value })}
+                    style={{ background:'#0d1420', border:'1px solid #1a2d45', color:'#e2e8f0', fontFamily:MONO, fontSize:8, padding:'2px 3px', borderRadius:3 }}
+                  >
+                    <option value="none">— ninguno —</option>
+                    {types.includes('background') && <option value="background">Fondo color</option>}
+                    {types.includes('marker') && <option value="marker">Marca / flecha</option>}
+                  </select>
+                  {blk.type === 'none' ? <span/> : blk.type === 'background' ? (
+                    <div style={{ display:'flex', gap:4, alignItems:'center' }}>
+                      <input type="color" value={blk.color} onChange={e => update({ color:e.target.value })} style={{ width:28, height:20, padding:0, background:'none', border:'1px solid #1a2d45', borderRadius:3, cursor:'pointer' }}/>
+                      <span style={{ fontFamily:MONO, fontSize:8, color:'#3d5a7a' }}>Opac.</span>
+                      <input type="range" min={5} max={40} value={blk.opacity||15} onChange={e => update({ opacity:Number(e.target.value) })} style={{ width:60 }}/>
+                      <span style={{ fontFamily:MONO, fontSize:8, color:'#7a9bc0' }}>{blk.opacity||15}%</span>
+                    </div>
+                  ) : (
+                    <div style={{ display:'flex', gap:4, alignItems:'center' }}>
+                      <input type="color" value={blk.color} onChange={e => update({ color:e.target.value })} style={{ width:28, height:20, padding:0, background:'none', border:'1px solid #1a2d45', borderRadius:3, cursor:'pointer' }}/>
+                      <select value={blk.shape||'arrow'} onChange={e => update({ shape:e.target.value })} style={{ background:'#0d1420', border:'1px solid #1a2d45', color:'#e2e8f0', fontFamily:MONO, fontSize:8, padding:'2px 3px', borderRadius:3 }}>
+                        <option value="arrow">Flecha</option>
+                        <option value="circle">Círculo</option>
+                        <option value="square">Cuadrado</option>
+                        <option value="cross">Cruz</option>
+                      </select>
+                      <select value={blk.size||'M'} onChange={e => update({ size:e.target.value })} style={{ background:'#0d1420', border:'1px solid #1a2d45', color:'#e2e8f0', fontFamily:MONO, fontSize:8, padding:'2px 3px', borderRadius:3, width:44 }}>
+                        {['S','M','L'].map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+        {/* ── FIN INDICADORES VISUALES ── */}
 
         {/* Cabecera columnas */}
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', gap:6, marginBottom:4 }}>
