@@ -868,7 +868,7 @@ export default function StrategyEditorPanel({
       if (t.includes('rsi')) {
         const period = b.rsi_period || b.period || 14
         const id = `rsi_${period}_${key}`
-        if (!seen.has(id)) { seen.add(id); result.push({ id, type:'rsi', period, source:label, color:'#a78bfa', lineWidth:1, visible:true }) }
+        if (!seen.has(id)) { seen.add(id); result.push({ id, type:'rsi', period, level: b.level ?? null, source:label, color:'#a78bfa', lineWidth:1, visible:true }) }
       }
       if (t.includes('macd')) {
         const id = `macd_${key}`
