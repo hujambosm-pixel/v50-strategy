@@ -3004,7 +3004,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V8.95</title>
+        <title>Trading Simulator V8.96</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3081,7 +3081,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V8.95
+            <span className="dot"/>Trading Simulator V8.96
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6648,7 +6648,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               </div>
                               <div style={{flex:1,overflow:'hidden',position:'relative',padding:'6px 6px 4px',display:'flex',flexDirection:'column'}}>
                                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4,flexShrink:0,paddingRight:22}}>
-                                  <span style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',letterSpacing:'0.08em',textTransform:'uppercase'}}>
+                                  <span style={{fontFamily:MONO,fontSize:11,color:'#e2e8f0',letterSpacing:'0.08em',textTransform:'uppercase'}}>
                                     {tlPnlView==='operacion'?'P&L por operación':'P&L por estrategia'}
                                   </span>
                                   <div style={{display:'flex',gap:3}}>
@@ -6774,7 +6774,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           <div style={{width:180,borderLeft:'1px solid var(--border)',display:'flex',flexDirection:'column',flexShrink:0,overflow:'hidden'}}>
                             {/* Mercados */}
                             <div style={{flex:1,overflow:'auto',padding:'4px 8px',borderBottom:'1px solid var(--border)'}}>
-                              <div style={{fontFamily:MONO,fontSize:7,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:3,position:'sticky',top:0,background:'var(--bg)',paddingTop:4}}>Mercados</div>
+                              <div style={{fontFamily:MONO,fontSize:11,color:'#e2e8f0',letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:3,position:'sticky',top:0,background:'var(--bg)',paddingTop:4}}>Mercados</div>
                               {tlDashMarkets.length===0
                                 ?<div style={{fontFamily:MONO,fontSize:8,color:'#3d5a7a',lineHeight:1.5}}>No disponible</div>
                                 :tlDashMarkets.map(m=>(
@@ -6790,7 +6790,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                             </div>
                             {/* Rendimientos */}
                             <div style={{flex:1,overflow:'auto',padding:'4px 8px',minHeight:0}}>
-                              <div style={{fontFamily:MONO,fontSize:7,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:3,position:'sticky',top:0,background:'var(--bg)',paddingTop:4}}>Rendimientos</div>
+                              <div style={{fontFamily:MONO,fontSize:11,color:'#e2e8f0',letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:3,position:'sticky',top:0,background:'var(--bg)',paddingTop:4}}>Rendimientos</div>
                               {(()=>{
                                 const allRendimientos_=[
                                   ...(tlFifo.openPositions||[]).map(t=>({symbol:t.symbol,pnlEur:t._pnl_float_eur||0,pnlPct:t._pnl_float_pct||0,strategy:t.strategy||'—',isOpen:true})),
@@ -6824,13 +6824,13 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           </div>
                           {/* GRÁFICOS DETALLADOS (scroll) */}
                           <div style={{flexShrink:0,overflowY:'auto'}}>
-                            <div style={{padding:'5px 14px 3px',fontFamily:MONO,fontSize:8,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',borderBottom:'1px solid var(--border)'}}>Gráficos detallados</div>
+                            <div style={{padding:'5px 14px 3px',fontFamily:MONO,fontSize:11,color:'#e2e8f0',letterSpacing:'0.1em',textTransform:'uppercase',borderBottom:'1px solid var(--border)'}}>Gráficos detallados</div>
                             {eqDisp.length>1&&<div id="tlDetailEquity" style={{height:'calc(100vh - 30px)',position:'relative',display:'flex',flexDirection:'column'}}><TlEquityChart curve={eqDisp} curveSinFx={sfxDisp.length>1?sfxDisp:null} curveSinComm={scommDisp.length>1?scommDisp:null} curveWithContribs={cwcDisp.length>1?cwcDisp:null} curveBH={bhDisp?.length>1?bhDisp:null} showBH={tlShowBH} onToggleBH={async()=>{const next=!tlShowBH;setTlShowBH(next);if(next&&!tlBHData){const first=contributions.filter(c=>c.type==='aportacion').sort((a,b)=>(a.date||'').localeCompare(b.date||''))[0]?.date;const r=await fetch('/api/sp500history'+(first?'?from='+first:''));if(r.ok){const{history}=await r.json();setTlBHData(history||[])}}}} equityMode={tlEquityMode} onToggleMode={()=>setTlEquityMode(m=>m==='pnl'?'equity':'pnl')} contributions={contributions} showWithContribs={showWithContribs} onToggleContribs={()=>setShowWithContribs(v=>!v)} curveFloat={floatCurveDisp.length>1?floatCurveDisp:null} floatLoading={floatLoading} showFloat={tlShowFloat} onToggleFloat={()=>setTlShowFloat(v=>!v)} onFirstFloat={triggerFloatFetch} height={typeof window!=='undefined'?window.innerHeight-30:700} showTimeScale={true} syncRef={tlDashSyncRef}/></div>}
                             {investData.length>1&&<div id="tlDetailInvest" style={{height:'calc(100vh - 30px)',position:'relative',display:'flex',flexDirection:'column'}}><TlInvestChart investData={investData} syncRef={tlDashSyncRef} patrimonyCurve={cwcDisp.length>1?cwcDisp:null} height={typeof window!=='undefined'?window.innerHeight-30:700} compact={false}/></div>}
                             {(closed.length>0||openTrades.length>0)&&(
                               <div id="tlDetailPnl" style={{height:'calc(100vh - 30px)',padding:'12px 16px 8px',borderTop:'1px solid var(--border)',display:'flex',flexDirection:'column'}}>
                                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8,flexShrink:0}}>
-                                  <span style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',letterSpacing:'0.08em',textTransform:'uppercase'}}>
+                                  <span style={{fontFamily:MONO,fontSize:11,color:'#e2e8f0',letterSpacing:'0.08em',textTransform:'uppercase'}}>
                                     {tlPnlView==='operacion'?'P&L por operación':'P&L por estrategia'}
                                   </span>
                                   <div style={{display:'flex',gap:3}}>
