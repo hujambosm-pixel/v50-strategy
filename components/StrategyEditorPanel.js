@@ -184,7 +184,7 @@ function Cell({ label, color, children, wide, style }) {
     <div style={{ display:'flex', flexDirection:'column', gap:4, flex:wide?2:1, minWidth:wide?160:100, ...style }}>
       <div style={{
         fontFamily:MONO, fontSize:9, fontWeight:700, letterSpacing:'0.1em',
-        color:color||'var(--text3)', textTransform:'uppercase',
+        color:color||'#e2e8f0', textTransform:'uppercase',
         padding:'4px 8px', background:color?`${color}12`:'var(--bg2)',
         border:`1px solid ${color?color+'30':'var(--border)'}`, borderRadius:'3px 3px 0 0',
       }}>{label}</div>
@@ -922,12 +922,12 @@ export default function StrategyEditorPanel({
 
       {/* ── Header ── */}
       <div style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 16px', borderBottom:'1px solid var(--border)', background:'var(--bg2)', flexShrink:0 }}>
-        <button onClick={onCancel} style={{ background:'transparent', border:'1px solid var(--border)', color:'var(--text3)', fontFamily:MONO, fontSize:11, padding:'3px 10px', borderRadius:4, cursor:'pointer' }}>← Volver</button>
-        <span style={{ fontFamily:MONO, fontSize:12, color:'var(--text3)' }}>{strategy?.id ? 'Editando' : 'Nueva estrategia'}</span>
+        <button onClick={onCancel} style={{ background:'transparent', border:'1px solid var(--border)', color:'#e2e8f0', fontFamily:MONO, fontSize:11, padding:'3px 10px', borderRadius:4, cursor:'pointer' }}>← Volver</button>
+        <span style={{ fontFamily:MONO, fontSize:12, color:'#e2e8f0' }}>{strategy?.id ? 'Editando' : 'Nueva estrategia'}</span>
         <span style={{ fontFamily:MONO, fontSize:14, fontWeight:700, color:strForm.color||'var(--accent)' }}>{strForm.name||'—'}</span>
         <div style={{ marginLeft:'auto', display:'flex', gap:8 }}>
           {strategy?.id && <button onClick={onDelete} style={{ background:'rgba(255,77,109,0.1)', border:'1px solid #ff4d6d', color:'#ff4d6d', fontFamily:MONO, fontSize:11, padding:'4px 12px', borderRadius:4, cursor:'pointer' }}>🗑 Eliminar</button>}
-          <button onClick={onCancel} style={{ background:'transparent', border:'1px solid var(--border)', color:'var(--text3)', fontFamily:MONO, fontSize:11, padding:'4px 12px', borderRadius:4, cursor:'pointer' }}>✕ Cancelar</button>
+          <button onClick={onCancel} style={{ background:'transparent', border:'1px solid var(--border)', color:'#e2e8f0', fontFamily:MONO, fontSize:11, padding:'4px 12px', borderRadius:4, cursor:'pointer' }}>✕ Cancelar</button>
           <button onClick={onSave} disabled={saving} style={{ background:'rgba(0,212,255,0.15)', border:'1px solid var(--accent)', color:'var(--accent)', fontFamily:MONO, fontSize:11, fontWeight:700, padding:'4px 16px', borderRadius:4, cursor:saving?'not-allowed':'pointer' }}>{saving?'⟳ Guardando…':'💾 Guardar'}</button>
         </div>
       </div>
@@ -985,7 +985,7 @@ export default function StrategyEditorPanel({
               { label:'GESTIÓN',     role:'management', block: definition?.management },
             ].map(({ label, role, block }) => (
               <div key={label} style={{ display:'flex', gap:10, alignItems:'baseline' }}>
-                <span style={{ fontFamily:MONO, fontSize:9, color:'#7a9bc0', minWidth:88, flexShrink:0, letterSpacing:'0.05em' }}>{label}</span>
+                <span style={{ fontFamily:MONO, fontSize:9, color:'#e2e8f0', minWidth:88, flexShrink:0, letterSpacing:'0.05em' }}>{label}</span>
                 <span style={{ fontFamily:MONO, fontSize:11, color: block ? '#e2e8f0' : '#3a5a75' }}>
                   {summarizeBlock(role, block)}
                 </span>
@@ -1005,7 +1005,7 @@ export default function StrategyEditorPanel({
           <div>
           {/* PARTE 1 — Tabla de indicadores */}
           <div style={{marginBottom:12}}>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 70px 70px 50px 40px 24px', gap:4, marginBottom:4, fontFamily:MONO, fontSize:8, color:'#3d5a7a', textTransform:'uppercase' }}>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 70px 70px 50px 40px 24px', gap:4, marginBottom:4, fontFamily:MONO, fontSize:8, color:'#e2e8f0', textTransform:'uppercase' }}>
               <span>Indicador</span><span>Período</span><span>Color</span><span>Grosor</span><span>Vis.</span><span/>
             </div>
             {(visDraft?.indicators || []).map((ind, i) => (
@@ -1014,13 +1014,13 @@ export default function StrategyEditorPanel({
                   {ind.type.toUpperCase()}{ind.period ? `(${ind.period})` : ''}{' '}
                   <span style={{ color:'#334155', fontSize:8 }}>{ind.source}</span>
                 </span>
-                {ind.period !== null ? (
-                  <input type="number" value={ind.period}
+                {(ind.type === 'macd' || ind.type === 'vol') ? (
+                  <span style={{ color:'#334155', fontFamily:MONO, fontSize:8, textAlign:'center' }}>—</span>
+                ) : (
+                  <input type="number" value={ind.period || 20}
                     onChange={e => { const v=Number(e.target.value); setVisDraft(prev => ({ ...prev, indicators: prev.indicators.map((x,j) => j===i ? {...x,period:v} : x) })) }}
                     style={{ background:'#0d1420', border:'1px solid #1a2d45', color:'#e2e8f0', fontFamily:MONO, fontSize:9, padding:'2px 4px', borderRadius:3, width:'100%' }}
                   />
-                ) : (
-                  <span style={{ color:'#334155', fontFamily:MONO, fontSize:8 }}>—</span>
                 )}
                 <input type="color" value={ind.color}
                   onChange={e => { const v=e.target.value; setVisDraft(prev => ({ ...prev, indicators: prev.indicators.map((x,j) => j===i ? {...x,color:v} : x) })) }}
