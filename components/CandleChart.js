@@ -409,31 +409,36 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         })
       }
 
-      if(_indType==='RSI'&&rsiContainerRef.current){
+      if(_indType==='RSI'){
+        rsiChartRef.current=null  // chart es nuevo; series anteriores ya destruidas
         const rp=getRsiParams(definition)
         const rsiVals=calcRSI(_closes,rp.period)
-        if(rsiChartRef.current){try{rsiChartRef.current.remove()}catch(_){};rsiChartRef.current=null}
-        const rsiChart=createChart(rsiContainerRef.current,_panelOpts(120))
-        rsiChartRef.current=rsiChart
-        const rsiS=rsiChart.addLineSeries({color:'#a78bfa',lineWidth:1,lastValueVisible:true,priceLineVisible:false,title:`RSI ${rp.period}`})
+        const entryLevel=rp.entryLevel??30
+        const exitLevel=rp.exitLevel??70
+        const visRsiInd=(definition?.visuals?.indicators||[]).find(i=>i.type==='rsi'&&i.visible!==false)
+        const rsiS=chart.addLineSeries({
+          priceScaleId:'rsi',
+          color:visRsiInd?.color||'#a78bfa',
+          lineWidth:visRsiInd?.lineWidth||1,
+          lastValueVisible:false,
+          priceLineVisible:false,
+          crosshairMarkerVisible:true,
+        })
+        chart.priceScale('rsi').applyOptions({
+          scaleMargins:{top:0.75,bottom:0.02},
+          visible:true,
+          borderVisible:true,
+          borderColor:'#1a2d45',
+        })
+        const d0=data[0].date,dN=data[data.length-1].date
         rsiS.setData(data.map((d,i)=>({time:d.date,value:rsiVals[i]})).filter(x=>x.value!=null))
-        const d0=data[0].date, dN=data[data.length-1].date
-        const rsiEntry=rp.entryLevel??30
-        const rsiExit=rp.exitLevel??70
-        const l30=rsiChart.addLineSeries({color:'rgba(0,200,80,0.35)',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:false,priceLineVisible:false})
-        l30.setData([{time:d0,value:rsiEntry},{time:dN,value:rsiEntry}])
-        const l70=rsiChart.addLineSeries({color:'rgba(255,100,100,0.35)',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:false,priceLineVisible:false})
-        l70.setData([{time:d0,value:rsiExit},{time:dN,value:rsiExit}])
-        _syncPanels(rsiChart)
-        // Sync crosshair bidireccional
-        chart.subscribeCrosshairMove(param=>{
-          if(!param.point){rsiChart.clearCrosshairPosition();return}
-          rsiChart.setCrosshairPosition(param.point.x,param.point.y,rsiS)
-        })
-        rsiChart.subscribeCrosshairMove(param=>{
-          if(!param.point){chart.clearCrosshairPosition();return}
-          chart.setCrosshairPosition(param.point.x,param.point.y,candles)
-        })
+        const l30=chart.addLineSeries({priceScaleId:'rsi',color:'rgba(0,200,80,0.4)',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
+        l30.setData([{time:d0,value:entryLevel},{time:dN,value:entryLevel}])
+        const l70=chart.addLineSeries({priceScaleId:'rsi',color:'rgba(255,100,100,0.4)',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
+        l70.setData([{time:d0,value:exitLevel},{time:dN,value:exitLevel}])
+        const l50=chart.addLineSeries({priceScaleId:'rsi',color:'rgba(255,255,255,0.08)',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
+        l50.setData([{time:d0,value:50},{time:dN,value:50}])
+        rsiChartRef.current={_isOverlay:true,_series:[rsiS,l30,l70,l50]}
       }
 
       if(_indType==='MACD'&&macdContainerRef.current){
@@ -1036,7 +1041,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
 
       return()=>{chartAliveRef.current=false;try{unsubLabels()}catch(_){};cnt.removeEventListener('mousemove',onMove);cnt.removeEventListener('mousedown',onMouseDown);window.removeEventListener('mouseup',onMouseUp);window.removeEventListener('keydown',onKeyDown);window.removeEventListener('keyup',onKeyUp);ro.disconnect()}
     })
-    return()=>{chartAliveRef.current=false;if(rsiChartRef.current){try{rsiChartRef.current.remove()}catch(_){};rsiChartRef.current=null};if(macdChartRef.current){try{macdChartRef.current.remove()}catch(_){};macdChartRef.current=null};if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null}}
+    return()=>{chartAliveRef.current=false;if(rsiChartRef.current){if(rsiChartRef.current._isOverlay){try{const c=chartRef.current;if(c){for(const s of rsiChartRef.current._series){c.removeSeries(s)};c.priceScale('rsi').applyOptions({visible:false})}}catch(_){}}else{try{rsiChartRef.current.remove()}catch(_){}};rsiChartRef.current=null};if(macdChartRef.current){try{macdChartRef.current.remove()}catch(_){};macdChartRef.current=null};if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null}}
   },[data,emaRPeriod,emaLPeriod,trades,maxDD,labelMode,definition,isBareChart,blockEvents])
 
   // ── isBareChart: ajustar altura al resize de ventana ──
@@ -1277,9 +1282,6 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       )}
     </div>
     {/* ── Paneles de indicadores secundarios ── */}
-    {activeIndType==='RSI'&&(
-      <div ref={rsiContainerRef} style={{width:'100%',height:120,background:'#080c14',borderTop:'1px solid #1a2d45'}}/>
-    )}
     {(activeIndType==='MACD'||activeIndType==='VOLUME')&&(
       <div ref={macdContainerRef} style={{width:'100%',height:activeIndType==='VOLUME'?80:100,background:'#080c14',borderTop:'1px solid #1a2d45'}}/>
     )}
