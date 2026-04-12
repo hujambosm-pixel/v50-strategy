@@ -69,11 +69,13 @@ function runSingleBacktest(data, sp500Data, cfg) {
   let sinPerdAct=false, reentryMode=false, reentryPend=false
   let capitalReinv=capitalIni, gananciaSimple=0
   const trades=[]
+  const blockEvents={filter:[],setup_in:[],setup_out:[],abort:[],trigger_in:[],trigger_out:[],stop_loss:[]}
   const inWindow=(i)=>new Date(data[i].date)>=startDate
   for (let i=1;i<data.length;i++) {
     const d=data[i],dp=data[i-1],er=emaRArr[i],el=emaLArr[i],erp=emaRArr[i-1],elp=emaLArr[i-1]
     if(!er||!el||!erp||!elp) continue
     const filt=filtroArr[i],inW=inWindow(i)
+    if(filt&&inW) blockEvents.filter.push(d.date)
     const cruceAlc=erp<elp&&er>=el, cruceBaj=erp>elp&&er<=el
     const cierreBaj=dp.close>=erp&&d.close<er, cierreAlc=dp.close<=erp&&d.close>er
     if(cruceBaj){reentryMode=reentryPend=false}
@@ -87,6 +89,7 @@ function runSingleBacktest(data, sp500Data, cfg) {
     if(enPosicion&&stopNivel&&d.low<=stopNivel){
       const pnl=(stopNivel-precioEntrada)/precioEntrada
       gananciaSimple+=pnl*capitalIni;capitalReinv+=pnl*capitalReinv
+      blockEvents.stop_loss.push(d.date)
       trades.push({entryDate:data[idxEntrada].date,exitDate:d.date,entryPx:precioEntrada,exitPx:stopNivel,pnlPct:pnl*100,pnlSimple:pnl*capitalIni,capitalTras:capitalReinv,dias:Math.round((new Date(d.date)-new Date(data[idxEntrada].date))/86400000),tipo:'Stop'})
       enPosicion=false;precioEntrada=stopNivel=null;salidaPend=sinPerdAct=false
       if(reentry&&er>el)reentryMode=true;continue
@@ -96,17 +99,19 @@ function runSingleBacktest(data, sp500Data, cfg) {
       if(sinPerdAct&&d.low<=bkSalida){
         const pnl=(bkSalida-precioEntrada)/precioEntrada
         gananciaSimple+=pnl*capitalIni;capitalReinv+=pnl*capitalReinv
+        blockEvents.trigger_out.push(d.date)
         trades.push({entryDate:data[idxEntrada].date,exitDate:d.date,entryPx:precioEntrada,exitPx:bkSalida,pnlPct:pnl*100,pnlSimple:pnl*capitalIni,capitalTras:capitalReinv,dias:Math.round((new Date(d.date)-new Date(data[idxEntrada].date))/86400000),tipo:'Exit'})
         enPosicion=false;precioEntrada=stopNivel=null;salidaPend=sinPerdAct=false;bkSalida=null
         if(reentry&&er>el)reentryMode=true;continue
       }
     }
-    if(enPosicion&&cierreBaj&&precioEntrada){stopNivel=null;bkSalida=d.low;salidaPend=true;sinPerdAct=sinPerdidas?d.low>precioEntrada:true}
-    if(cruceAlc&&!enPosicion&&inW&&!reentryMode&&!filt){entradaPend=true;breakout=d.high;reentryPend=false;if(tipoStop==='tecnico')stopNivel=Math.min(er,d.low)}
-    if(entradaPend&&!enPosicion&&filt&&!reentryPend){entradaPend=false;breakout=null}
+    if(enPosicion&&cierreBaj&&precioEntrada){blockEvents.setup_out.push(d.date);stopNivel=null;bkSalida=d.low;salidaPend=true;sinPerdAct=sinPerdidas?d.low>precioEntrada:true}
+    if(cruceAlc&&!enPosicion&&inW&&!reentryMode&&!filt){blockEvents.setup_in.push(d.date);entradaPend=true;breakout=d.high;reentryPend=false;if(tipoStop==='tecnico')stopNivel=Math.min(er,d.low)}
+    if(entradaPend&&!enPosicion&&filt&&!reentryPend){blockEvents.abort.push(d.date);entradaPend=false;breakout=null}
     if(entradaPend&&!enPosicion&&inW&&!cruceAlc&&!reentryPend){
       if(d.high<breakout){breakout=d.high;if(tipoStop==='tecnico')stopNivel=Math.min(er,d.low)}
       if(d.high>=breakout){
+        blockEvents.trigger_in.push(d.date)
         precioEntrada=breakout;idxEntrada=i;enPosicion=true;entradaPend=false;salidaPend=false
         if(tipoStop==='atr'&&atrArr?.[i])stopNivel=precioEntrada-atrArr[i]*atrMult
         else if(tipoStop!=='tecnico')stopNivel=null
@@ -120,6 +125,7 @@ function runSingleBacktest(data, sp500Data, cfg) {
     if(entradaPend&&reentryPend&&!enPosicion&&inW&&!cierreAlc){
       if(d.high<breakout){breakout=d.high;if(tipoStop==='tecnico')stopNivel=Math.min(er,d.low)}
       if(d.high>=breakout){
+        blockEvents.trigger_in.push(d.date)
         precioEntrada=breakout;idxEntrada=i;enPosicion=true
         entradaPend=reentryPend=reentryMode=false;salidaPend=false
         if(tipoStop==='atr'&&atrArr?.[i])stopNivel=precioEntrada-atrArr[i]*atrMult
@@ -128,7 +134,7 @@ function runSingleBacktest(data, sp500Data, cfg) {
     }
     if(cierreBaj&&entradaPend&&!reentryMode){entradaPend=false;breakout=null}
   }
-  return { trades, capitalReinv, gananciaSimple, startDate }
+  return { trades, capitalReinv, gananciaSimple, startDate, blockEvents }
 }
 
 // ── MODO SLOTS: capital dividido en N partes iguales ─────────
@@ -456,8 +462,8 @@ export default async function handler(req, res) {
       const data = allData[sym]
       if (!data?.length) return null
       const slotCfg = { ...cfg, capitalIni: slotCapital }
-      const { trades, capitalReinv, gananciaSimple, startDate } = runSingleBacktest(data, sp500Data, slotCfg)
-      return { symbol: sym, data, trades, capitalReinv, gananciaSimple, startDate }
+      const { trades, capitalReinv, gananciaSimple, startDate, blockEvents } = runSingleBacktest(data, sp500Data, slotCfg)
+      return { symbol: sym, data, trades, capitalReinv, gananciaSimple, startDate, blockEvents }
     }).filter(Boolean)
 
     // Calcular curvas según modo de asignación
@@ -530,6 +536,7 @@ export default async function handler(req, res) {
       slotCapital,
       modoAsig,
       startDate: curves.startDate,
+      blockEventsBySymbol: Object.fromEntries(assetResults.map(ar => [ar.symbol, ar.blockEvents])),
     })
   } catch(err) {
     console.error(err)
