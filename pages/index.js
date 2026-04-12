@@ -740,6 +740,7 @@ export default function Home() {
   const [floatLoading,setFloatLoading]=useState(false)
   const [tlShowFloat,setTlShowFloat]=useState(false)   // float toggle (lifted from TlCharts)
   const [tlPnlView,setTlPnlView]=useState('operacion') // 'operacion' | 'estrategia'
+  const [rendView,setRendView]=useState('flotantes')   // 'flotantes' | 'hist'
   const floatFetched=useRef(false)                     // lazy: only fetch once per session
   const [contribDate,setContribDate]=useState(()=>{const d=new Date();return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear()})
   const [contribAmount,setContribAmount]=useState('')
@@ -3004,7 +3005,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.10</title>
+        <title>Trading Simulator V9.11</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3081,7 +3082,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.10
+            <span className="dot"/>Trading Simulator V9.11
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6330,11 +6331,13 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       const tlPnlByStrategy = Object.entries(
                         (closed || []).reduce((acc, t) => {
                           const k = t.strategy || 'Sin estrategia'
-                          acc[k] = (acc[k] || 0) + (t.pnl_eur || 0)
+                          if(!acc[k]) acc[k]={pnl:0,count:0}
+                          acc[k].pnl += (t.pnl_eur || 0)
+                          acc[k].count++
                           return acc
                         }, {})
                       )
-                        .map(([name, pnl]) => ({ name, pnl }))
+                        .map(([name, {pnl,count}]) => ({ name, pnl, count }))
                         .sort((a, b) => b.pnl - a.pnl)
                       const noData=!closed.length&&!openTrades.length
                       // Filter options — derived from ALL trades so dropdowns stay populated even when filtered results are empty
@@ -6571,7 +6574,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               {l:'Capital emp.',v:capitalEmpAll>0?fmtAbs_(capitalEmpAll):'—',c:'#00d4ff'},
                               {l:'P&L realizado',v:fmtEur_(pnlReal),c:pnlReal>=0?'#00e5a0':'#ff4d6d'},
                               {l:'P&L flotante',v:fmtEur_(pnlFloat_),c:pnlFloat_>=0?'#00e5a0':'#ff4d6d'},
-                              {l:'Total ops.',v:<span style={{fontSize:13,fontWeight:700,color:'#f59e0b',lineHeight:1.2,fontFamily:MONO}}>{closed.length} cer. / {openTrades.length} ab.</span>,c:'#ffd166'},
+                              {l:'Nº Operaciones',v:`${closed.length} cer. / ${openTrades.length} ab.`,c:'#f59e0b'},
                               {l:'Comisiones',v:commTotal>0?'-€'+Math.round(commTotal).toLocaleString('es-ES'):'€0',c:'#ff4d6d'},
                               {l:'Dividendos',v:dividendosAcum>0?'+€'+Math.round(dividendosAcum).toLocaleString('es-ES'):'—',c:'#00e5a0'},
                             ].map(({l,v,c,hl,sub},i)=>(
@@ -6722,8 +6725,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                             const barL=i/total*100
                                             return (
                                               <Fragment key={i}>
-                                                <div style={{position:'absolute',left:barL+'%',width:barW+'%',...(isW?{bottom:`calc(50% + ${pct}% + 2px)`}:{top:`calc(50% + ${pct}% + 2px)`}),textAlign:'center',fontFamily:MONO,fontSize:7,color:'#f59e0b',overflow:'hidden',whiteSpace:'nowrap',pointerEvents:'none',lineHeight:1}}>{d.name.slice(0,5)}</div>
-                                                <div title={d.name+' '+(isW?'+':'')+'€'+Math.round(d.pnl)} style={{position:'absolute',left:barL+'%',width:barW+'%',height:pct+'%',bottom:isW?'50%':undefined,top:isW?undefined:'50%',background:isW?'rgba(34,197,94,0.75)':'rgba(239,68,68,0.75)',borderRadius:isW?'2px 2px 0 0':'0 0 2px 2px',cursor:'default'}}/>
+                                                <div style={{position:'absolute',left:barL+'%',width:barW+'%',...(isW?{bottom:`calc(50% + ${pct}% + 2px)`}:{top:`calc(50% + ${pct}% + 2px)`}),textAlign:'center',fontFamily:MONO,fontSize:7,color:'#f59e0b',overflow:'hidden',whiteSpace:'nowrap',pointerEvents:'none',lineHeight:1}}>{d.name.split(' ')[0]}</div>
+                                                <div title={d.name+' ('+d.count+' ops) '+(isW?'+':'')+'€'+Math.round(d.pnl)} style={{position:'absolute',left:barL+'%',width:barW+'%',height:pct+'%',bottom:isW?'50%':undefined,top:isW?undefined:'50%',background:isW?'rgba(34,197,94,0.75)':'rgba(239,68,68,0.75)',borderRadius:isW?'2px 2px 0 0':'0 0 2px 2px',cursor:'default'}}/>
                                               </Fragment>
                                             )
                                           })}
@@ -6789,19 +6792,19 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                 ))
                               }
                             </div>
-                            {/* Rendimientos */}
+                            {/* Rendimientos / Flotantes */}
                             <div style={{flex:1,overflow:'auto',padding:'4px 8px',minHeight:0}}>
-                              <div style={{fontFamily:MONO,fontSize:11,color:'#e2e8f0',letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:3,position:'sticky',top:0,background:'var(--bg)',paddingTop:4}}>Rendimientos</div>
+                              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',position:'sticky',top:0,background:'var(--bg)',paddingTop:4,marginBottom:3}}>
+                                <div style={{fontFamily:MONO,fontSize:11,color:'#e2e8f0',letterSpacing:'0.1em',textTransform:'uppercase'}}>{rendView==='flotantes'?'Flotantes':'Rendimientos'}</div>
+                                <div style={{display:'flex',gap:2,flexShrink:0}}>
+                                  {[['flotantes','Float.'],['hist','Hist.']].map(([v,lbl])=>(
+                                    <button key={v} onClick={()=>setRendView(v)} style={{fontFamily:MONO,fontSize:7,padding:'1px 4px',borderRadius:2,border:'1px solid',cursor:'pointer',borderColor:rendView===v?'#00d4ff':'#1a2d45',background:rendView===v?'rgba(0,212,255,0.1)':'transparent',color:rendView===v?'#00d4ff':'#3d5a7a'}}>{lbl}</button>
+                                  ))}
+                                </div>
+                              </div>
                               {(()=>{
-                                const allRendimientos_=[
-                                  ...(tlFifo.openPositions||[]).map(t=>({symbol:t.symbol,pnlEur:t._pnl_float_eur||0,pnlPct:t._pnl_float_pct||0,strategy:t.strategy||'—',isOpen:true})),
-                                  ...(tlTradesFiltered||[]).filter(t=>t.status==='closed').map(t=>({symbol:t.symbol,pnlEur:t.pnl_eur||0,pnlPct:t.pnl_pct||0,strategy:t.strategy||'—',isOpen:false}))
-                                ].sort((a,b)=>b.pnlEur-a.pnlEur)
-                                const top4Rend_=allRendimientos_.slice(0,4)
-                                const bot4Rend_=allRendimientos_.slice(-4).reverse()
-                                if(!allRendimientos_.length) return <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a'}}>Sin datos</div>
                                 const renderRow=(t,i)=>(
-                                  <div key={t.symbol+(t.isOpen?'o':'c')+i} style={{display:'flex',flexDirection:'column',padding:'2px 0',borderBottom:'1px solid rgba(255,255,255,0.03)'}}>
+                                  <div key={(t.symbol||'')+(t.isOpen?'o':'c')+i} style={{display:'flex',flexDirection:'column',padding:'2px 0',borderBottom:'1px solid rgba(255,255,255,0.03)'}}>
                                     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                                       <span onClick={()=>{setSimbolo(t.symbol);setSidePanel('watchlist');setTlTab('ops')}} style={{fontFamily:MONO,fontSize:11,color:'#a8ccdf',cursor:'pointer',textDecoration:'underline',textDecorationColor:'rgba(168,204,223,0.3)'}}>
                                         {t.symbol}{t.isOpen&&<span style={{color:'#ffd700'}}>●</span>}
@@ -6814,6 +6817,20 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                     {t.strategy&&t.strategy!=='—'&&<div style={{fontFamily:MONO,fontSize:7,color:'#3d5a7a'}}>{t.strategy}</div>}
                                   </div>
                                 )
+                                if(rendView==='flotantes'){
+                                  const floatRows=(tlFifo.openPositions||[])
+                                    .map(t=>({symbol:t.symbol,pnlEur:t._pnl_float_eur||0,pnlPct:t._pnl_float_pct||0,strategy:t.strategy||'—',isOpen:true}))
+                                    .sort((a,b)=>Math.abs(b.pnlEur)-Math.abs(a.pnlEur))
+                                  if(!floatRows.length) return <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a'}}>Sin posiciones abiertas</div>
+                                  return <>{floatRows.map((t,i)=>renderRow(t,i))}</>
+                                }
+                                const allRendimientos_=[
+                                  ...(tlFifo.openPositions||[]).map(t=>({symbol:t.symbol,pnlEur:t._pnl_float_eur||0,pnlPct:t._pnl_float_pct||0,strategy:t.strategy||'—',isOpen:true})),
+                                  ...(tlTradesFiltered||[]).filter(t=>t.status==='closed').map(t=>({symbol:t.symbol,pnlEur:t.pnl_eur||0,pnlPct:t.pnl_pct||0,strategy:t.strategy||'—',isOpen:false}))
+                                ].sort((a,b)=>b.pnlEur-a.pnlEur)
+                                const top4Rend_=allRendimientos_.slice(0,4)
+                                const bot4Rend_=allRendimientos_.slice(-4).reverse()
+                                if(!allRendimientos_.length) return <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a'}}>Sin datos</div>
                                 return <>
                                   {top4Rend_.map((t,i)=>renderRow(t,i))}
                                   {top4Rend_.length>0&&bot4Rend_.length>0&&<div style={{borderTop:'1px dashed #1a2d45',margin:'2px 0'}}/>}
@@ -6899,8 +6916,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                             const barL=i/total*100
                                             return (
                                               <Fragment key={i}>
-                                                <div style={{position:'absolute',left:barL+'%',width:barW+'%',...(isW?{bottom:`calc(50% + ${pct}% + 2px)`}:{top:`calc(50% + ${pct}% + 2px)`}),textAlign:'center',fontFamily:MONO,fontSize:7,color:'#f59e0b',overflow:'hidden',whiteSpace:'nowrap',pointerEvents:'none',lineHeight:1}}>{d.name.slice(0,5)}</div>
-                                                <div title={d.name+' '+(isW?'+':'')+'€'+Math.round(d.pnl)} style={{position:'absolute',left:barL+'%',width:barW+'%',height:pct+'%',bottom:isW?'50%':undefined,top:isW?undefined:'50%',background:isW?'rgba(34,197,94,0.75)':'rgba(239,68,68,0.75)',borderRadius:isW?'2px 2px 0 0':'0 0 2px 2px',cursor:'default'}}/>
+                                                <div style={{position:'absolute',left:barL+'%',width:barW+'%',...(isW?{bottom:`calc(50% + ${pct}% + 2px)`}:{top:`calc(50% + ${pct}% + 2px)`}),textAlign:'center',fontFamily:MONO,fontSize:7,color:'#f59e0b',overflow:'hidden',whiteSpace:'nowrap',pointerEvents:'none',lineHeight:1}}>{d.name.split(' ')[0]}</div>
+                                                <div title={d.name+' ('+d.count+' ops) '+(isW?'+':'')+'€'+Math.round(d.pnl)} style={{position:'absolute',left:barL+'%',width:barW+'%',height:pct+'%',bottom:isW?'50%':undefined,top:isW?undefined:'50%',background:isW?'rgba(34,197,94,0.75)':'rgba(239,68,68,0.75)',borderRadius:isW?'2px 2px 0 0':'0 0 2px 2px',cursor:'default'}}/>
                                               </Fragment>
                                             )
                                           })}
