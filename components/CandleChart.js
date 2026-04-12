@@ -219,7 +219,7 @@ function createRiskPrimitive(configRef) {
   }
 }
 
-export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null, isBareChart=false }) {
+export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null, isBareChart=false, blockEvents=null }) {
   const containerRef=useRef(null), svgRef=useRef(null), legendRef=useRef(null), tooltipRef=useRef(null)
   const activeLegendRef = externalLegendRef || legendRef
   const chartRef=useRef(null), candlesRef=useRef(null)
@@ -335,6 +335,35 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       }
       if(worstMAETrade&&worstMAETrade.mae<0&&worstMAETrade.minDate&&worstMAETrade.minDate!==worstMAETrade.entryDate)
         marks.push({time:worstMAETrade.minDate,position:'belowBar',color:'#ff4d6d',shape:'circle',size:1,text:`Max DD: ${worstMAETrade.mae.toFixed(1)}%`})
+      // ── Markers de blockEvents según definition.visuals.blocks ──
+      if(blockEvents&&definition?.visuals?.blocks){
+        const vb=definition.visuals.blocks
+        const BLOCK_KEYS=[
+          {key:'trigger_in', pos:'belowBar',defColor:'#22c55e',defShape:'arrowUp',  defText:'▲'},
+          {key:'trigger_out',pos:'aboveBar',defColor:'#3b82f6',defShape:'arrowDown',defText:'▼'},
+          {key:'abort',      pos:'aboveBar',defColor:'#f97316',defShape:'circle',   defText:'✕'},
+          {key:'stop_loss',  pos:'aboveBar',defColor:'#ef4444',defShape:'circle',   defText:'⬛'},
+        ]
+        const shapeMap={
+          arrow:(pos)=>pos==='belowBar'?'arrowUp':'arrowDown',
+          circle:()=>'circle',
+          square:()=>'square',
+          cross:()=>'circle',
+        }
+        for(const {key,pos,defColor,defShape,defText} of BLOCK_KEYS){
+          const dates=blockEvents[key]
+          if(!dates||dates.length===0) continue
+          const cfg=vb[key]
+          if(cfg&&cfg.type==='none') continue
+          const color=cfg?.color||defColor
+          const rawShape=cfg?.shape||'arrow'
+          const shape=typeof shapeMap[rawShape]==='function'?shapeMap[rawShape](pos):defShape
+          const size=cfg?.size==='S'?1:cfg?.size==='L'?3:2
+          for(const date of dates){
+            marks.push({time:date,position:pos,color,shape,size,text:defText})
+          }
+        }
+      }
       if(marks.length) candles.setMarkers(marks.sort((a,b)=>a.time.localeCompare(b.time)))
 
       // ── Paneles secundarios (RSI / MACD / VOLUME) ─────────────────────
@@ -975,7 +1004,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       return()=>{chartAliveRef.current=false;try{unsubLabels()}catch(_){};cnt.removeEventListener('mousemove',onMove);cnt.removeEventListener('mousedown',onMouseDown);window.removeEventListener('mouseup',onMouseUp);window.removeEventListener('keydown',onKeyDown);window.removeEventListener('keyup',onKeyUp);ro.disconnect()}
     })
     return()=>{chartAliveRef.current=false;if(rsiChartRef.current){try{rsiChartRef.current.remove()}catch(_){};rsiChartRef.current=null};if(macdChartRef.current){try{macdChartRef.current.remove()}catch(_){};macdChartRef.current=null};if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null}}
-  },[data,emaRPeriod,emaLPeriod,trades,maxDD,labelMode,definition,isBareChart])
+  },[data,emaRPeriod,emaLPeriod,trades,maxDD,labelMode,definition,isBareChart,blockEvents])
 
   // ── isBareChart: ajustar altura al resize de ventana ──
   const updateHeightRef=useRef(null)

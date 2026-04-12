@@ -267,6 +267,10 @@ function runBacktestV50(data, sp500Data, cfg) {
   let capitalReinv   = capitalIni
   let gananciaSimple = 0
   const trades       = []
+  const blockEvents  = {
+    filter: [], setup_in: [], trigger_in: [],
+    abort: [], setup_out: [], trigger_out: [], stop_loss: [],
+  }
 
   const chartData = data.map((d,i)=>({
     ...d,
@@ -307,6 +311,7 @@ function runBacktestV50(data, sp500Data, cfg) {
     const cierreAlc = prev.close <= erp && bar.close > er
     // ema_rapida_sobre_lenta
     const emaAlcista = er > el
+    if (filt && inW) blockEvents.filter.push(bar.date)
 
     // Pine: if cruce_bajista and modo_reentry → resetear reentry
     if (cruceBaj && reentry) {
@@ -321,6 +326,7 @@ function runBacktestV50(data, sp500Data, cfg) {
       // 1. STOP EMERGENCIA — solo si sinPerdidas activo
       //    Pine: if modo_sin_perdidas and cruce_bajista and position > 0
       if (sinPerdidas && cruceBaj) {
+        blockEvents.stop_loss.push(bar.date)
         doExit(i, bar.open, 'Stop Emergencia')
         if (reentry && emaAlcista) reentryMode = true
         continue
@@ -335,6 +341,7 @@ function runBacktestV50(data, sp500Data, cfg) {
       // 2. STOP HIT — if gap-down opens below stop, use open (realistic fill)
       if (stopNivel != null && bar.low <= stopNivel) {
         const fillPx = bar.open <= stopNivel ? bar.open : stopNivel
+        blockEvents.stop_loss.push(bar.date)
         doExit(i, fillPx, 'Stop')
         if (reentry && emaAlcista) reentryMode = true
         continue
@@ -350,6 +357,7 @@ function runBacktestV50(data, sp500Data, cfg) {
           if (!lowSobreEntry && sinPerdAct)    sinPerdAct = false
           if (sinPerdAct && bar.low <= bkSalida) {
             const fillPx = bar.open <= bkSalida ? bar.open : bkSalida
+            blockEvents.trigger_out.push(bar.date)
             doExit(i, fillPx, 'Exit')
             if (reentry && emaAlcista) reentryMode = true
             continue
@@ -357,6 +365,7 @@ function runBacktestV50(data, sp500Data, cfg) {
         } else {
           if (bar.low <= bkSalida) {
             const fillPx = bar.open <= bkSalida ? bar.open : bkSalida
+            blockEvents.trigger_out.push(bar.date)
             doExit(i, fillPx, 'Exit')
             if (reentry && emaAlcista) reentryMode = true
             continue
@@ -368,6 +377,7 @@ function runBacktestV50(data, sp500Data, cfg) {
       //    Pine siempre actualiza precio_breakout_salida y cancela stops.
       //    Removemos !salidaPend para actualizar bkSalida en nuevos cruces.
       if (evaluateExit(i, cfg, data, indicators)) {
+        blockEvents.setup_out.push(bar.date)
         bkSalida  = bar.low
         stopNivel = null  // cancela stop loss técnico/ATR
         if (sinPerdidas) {
@@ -392,9 +402,11 @@ function runBacktestV50(data, sp500Data, cfg) {
 
     // Cancelar entrada si filtro activo
     if (entradaPend && filt && !reentryPend) {
+      blockEvents.abort.push(bar.date)
       entradaPend = false; bkEntrada = 0; stopNivel = null; continue
     }
     if (reentryPend && filt) {
+      blockEvents.abort.push(bar.date)
       entradaPend = false; reentryPend = false; bkEntrada = 0; stopNivel = null; continue
     }
 
@@ -409,6 +421,7 @@ function runBacktestV50(data, sp500Data, cfg) {
 
       if (bar.high >= prevBk) {
         // ✅ Breakout conseguido — entrada al nivel previo
+        blockEvents.trigger_in.push(bar.date)
         precioEntrada = prevBk
         entryIdx      = i
         inPos=true; entradaPend=false; reentryPend=false; salidaPend=false; sinPerdAct=false; reentryMode=false
@@ -442,6 +455,7 @@ function runBacktestV50(data, sp500Data, cfg) {
     // ── SETUP — evaluateSetup (EMA cross, RSI, MACD, etc.) ──────────────
     // Pine: if setup_signal and position==0 and backtestWindow and not reentry_mode and not filtro
     if (evaluateSetup(i, cfg, data, indicators) && !reentryMode && !filt) {
+      blockEvents.setup_in.push(bar.date)
       entradaPend = true
       reentryPend = false
       bkEntrada   = bar.high
@@ -464,7 +478,7 @@ function runBacktestV50(data, sp500Data, cfg) {
     }
   }
 
-  return { chartData, trades, capitalReinv, gananciaSimple, startDate }
+  return { chartData, trades, capitalReinv, gananciaSimple, startDate, blockEvents }
 }
 
 function makeTrade(entryDate,exitDate,entryPx,exitPx,pnl,capitalReinv,capitalIni,tipo,stopPx=null){
@@ -574,7 +588,7 @@ export default async function handler(req, res) {
 
     if (!cfgFinal) return res.status(400).json({error:'Se requiere cfg o definition'})
 
-    const { chartData, trades, capitalReinv, gananciaSimple, startDate } =
+    const { chartData, trades, capitalReinv, gananciaSimple, startDate, blockEvents } =
       runBacktestV50(data, sp500Data, cfgFinal)
 
     const capIni       = cfgFinal.capitalIni
@@ -601,6 +615,7 @@ export default async function handler(req, res) {
       trades, capitalReinv, gananciaSimple, ganBH,
       startDate: startDate.toISOString().split('T')[0],
       sp500Status, ...curves,
+      blockEvents: blockEvents || {filter:[],setup_in:[],trigger_in:[],abort:[],setup_out:[],trigger_out:[],stop_loss:[]},
       meta: {
         simbolo,
         ultimaFecha:  data[data.length-1].date,
