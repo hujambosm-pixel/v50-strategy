@@ -372,7 +372,7 @@ export function TlInvestChart({ investData, syncRef, patrimonyCurve, compact, he
         bottomColor:'rgba(42,127,255,0.04)',
         lineWidth:2,
         title:'',
-        lastValueVisible:false,
+        lastValueVisible:true,
         priceLineVisible:false,
       }).setData(investData.map(p=>({time:p.date,value:p.capital})))
       track(investData.map(p=>({date:p.date,value:p.capital})),'cap')
@@ -381,7 +381,7 @@ export function TlInvestChart({ investData, syncRef, patrimonyCurve, compact, he
         color:'#aaff44',
         lineWidth:2,
         title:'',
-        lastValueVisible:false,
+        lastValueVisible:true,
         priceLineVisible:false,
       }).setData(investData.map(p=>({time:p.date,value:p.profit})))
       track(investData.map(p=>({date:p.date,value:p.profit})),'pnl')
