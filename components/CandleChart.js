@@ -430,11 +430,6 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
           borderVisible:true,
           borderColor:'#1a2d45',
           entireTextOnly:true,
-          autoScale:false,
-        })
-        // Forzar rango 0-100 vía autoscaleInfoProvider en la serie principal
-        rsiS.applyOptions({
-          autoscaleInfoProvider:()=>({priceRange:{minValue:0,maxValue:100}}),
         })
         // Empujar las velas al 70% superior para que no solapen con el RSI
         chart.priceScale('right').applyOptions({
@@ -448,7 +443,13 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         l70.setData([{time:d0,value:exitLevel},{time:dN,value:exitLevel}])
         const l50=chart.addLineSeries({priceScaleId:'rsi',color:'rgba(255,255,255,0.08)',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
         l50.setData([{time:d0,value:50},{time:dN,value:50}])
-        rsiChartRef.current={_isOverlay:true,_series:[rsiS,l30,l70,l50]}
+        // Series ancla visibles (color transparente) para forzar rango 0-100
+        // visible:false las excluye del cálculo de escala — se omite intencionalmente
+        const rsiAnchorMin=chart.addLineSeries({priceScaleId:'rsi',color:'rgba(0,0,0,0)',lineWidth:1,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
+        rsiAnchorMin.setData([{time:d0,value:0},{time:dN,value:0}])
+        const rsiAnchorMax=chart.addLineSeries({priceScaleId:'rsi',color:'rgba(0,0,0,0)',lineWidth:1,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
+        rsiAnchorMax.setData([{time:d0,value:100},{time:dN,value:100}])
+        rsiChartRef.current={_isOverlay:true,_series:[rsiS,l30,l70,l50,rsiAnchorMin,rsiAnchorMax]}
       }
 
       if(_indType==='MACD'&&macdContainerRef.current){
