@@ -271,6 +271,7 @@ function runBacktestV50(data, sp500Data, cfg) {
     filter: [], setup_in: [], trigger_in: [],
     abort: [], setup_out: [], trigger_out: [], stop_loss: [],
   }
+  let prevSetupIn = false
 
   const chartData = data.map((d,i)=>({
     ...d,
@@ -288,6 +289,7 @@ function runBacktestV50(data, sp500Data, cfg) {
     chartData[i].signal = 'exit'
     inPos=false; precioEntrada=null; entryIdx=null
     salidaPend=false; sinPerdAct=false; stopNivel=null; bkSalida=0
+    prevSetupIn=false
   }
 
   for (let i=1; i<data.length; i++) {
@@ -425,6 +427,7 @@ function runBacktestV50(data, sp500Data, cfg) {
         precioEntrada = prevBk
         entryIdx      = i
         inPos=true; entradaPend=false; reentryPend=false; salidaPend=false; sinPerdAct=false; reentryMode=false
+        prevSetupIn=false
         chartData[i].signal = 'entry'
         if (tipoStop === 'atr' && atrArr?.[i]) {
           stopNivel = precioEntrada - atrArr[i] * atrMult
@@ -454,8 +457,9 @@ function runBacktestV50(data, sp500Data, cfg) {
 
     // ── SETUP — evaluateSetup (EMA cross, RSI, MACD, etc.) ──────────────
     // Pine: if setup_signal and position==0 and backtestWindow and not reentry_mode and not filtro
-    if (evaluateSetup(i, cfg, data, indicators) && !reentryMode && !filt) {
-      blockEvents.setup_in.push(bar.date)
+    const setupNow = evaluateSetup(i, cfg, data, indicators)
+    if (setupNow && !reentryMode && !filt) {
+      if (!prevSetupIn) blockEvents.setup_in.push(bar.date)  // solo flanco false→true
       entradaPend = true
       reentryPend = false
       bkEntrada   = bar.high
@@ -464,6 +468,7 @@ function runBacktestV50(data, sp500Data, cfg) {
       else stopNivel = null
       chartData[i].breakoutLine = bkEntrada
     }
+    prevSetupIn = setupNow && !reentryMode && !filt
 
     // ── REENTRY — setup ─────────────────────────────────────
     // Pine: if modo_reentry and reentry_mode_activo and position==0

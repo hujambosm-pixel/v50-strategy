@@ -110,15 +110,26 @@ function getEmaParams(definition, emaRPeriod, emaLPeriod) {
   return { fast: emaRPeriod ?? 10, slow: emaLPeriod ?? 20, type: 'EMA' }
 }
 function getRsiParams(definition) {
-  for (const role of ['setup','trigger']) {
-    const b = definition?.[role]
-    if (!b || _blockInd(b) !== 'RSI') continue
-    return {
-      period: b.rsi_period ?? b.period ?? b.params?.period ?? 14,
-      level: b.level ?? b.params?.level ?? null,
+  const blocks = [
+    definition?.setup,
+    definition?.trigger,
+    definition?.exit,
+    definition?.trigger_out,
+  ]
+  let period = 14
+  let entryLevel = null   // nivel de entrada (bajo, zona sobrevendida)
+  let exitLevel  = null   // nivel de salida (alto, zona sobrecomprada)
+  for (const b of blocks) {
+    if (!b || !b.type?.includes('rsi')) continue
+    if (period === 14) period = b.rsi_period || b.period || 14
+    if (b === definition?.setup || b === definition?.trigger) {
+      if (b.level != null) entryLevel = b.level
+    }
+    if (b === definition?.exit || b === definition?.trigger_out) {
+      if (b.level != null) exitLevel = b.level
     }
   }
-  return { period: 14, level: null }
+  return { period, entryLevel, exitLevel }
 }
 function getMacdParams(definition) {
   for (const role of ['setup','trigger']) {
@@ -394,12 +405,12 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         const rsiS=rsiChart.addLineSeries({color:'#a78bfa',lineWidth:1,lastValueVisible:true,priceLineVisible:false,title:`RSI ${rp.period}`})
         rsiS.setData(data.map((d,i)=>({time:d.date,value:rsiVals[i]})).filter(x=>x.value!=null))
         const d0=data[0].date, dN=data[data.length-1].date
-        const rsiLevel=rp.level??30
-        const rsiOverbought=100-rsiLevel
+        const rsiEntry=rp.entryLevel??30
+        const rsiExit=rp.exitLevel??70
         const l30=rsiChart.addLineSeries({color:'rgba(0,200,80,0.35)',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:false,priceLineVisible:false})
-        l30.setData([{time:d0,value:rsiLevel},{time:dN,value:rsiLevel}])
+        l30.setData([{time:d0,value:rsiEntry},{time:dN,value:rsiEntry}])
         const l70=rsiChart.addLineSeries({color:'rgba(255,100,100,0.35)',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:false,priceLineVisible:false})
-        l70.setData([{time:d0,value:rsiOverbought},{time:dN,value:rsiOverbought}])
+        l70.setData([{time:d0,value:rsiExit},{time:dN,value:rsiExit}])
         _syncPanels(rsiChart)
       }
 

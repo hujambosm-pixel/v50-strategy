@@ -1005,11 +1005,11 @@ export default function StrategyEditorPanel({
           <div>
           {/* PARTE 1 — Tabla de indicadores */}
           <div style={{marginBottom:12}}>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 70px 70px 50px 40px 24px', gap:4, marginBottom:4, fontFamily:MONO, fontSize:8, color:'#e2e8f0', textTransform:'uppercase' }}>
-              <span>Indicador</span><span>Período</span><span>Color</span><span>Grosor</span><span>Vis.</span><span/>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 70px 60px 70px 50px 40px 24px', gap:4, marginBottom:4, fontFamily:MONO, fontSize:8, color:'#e2e8f0', textTransform:'uppercase' }}>
+              <span>Indicador</span><span>Período</span><span>Nivel</span><span>Color</span><span>Grosor</span><span>Vis.</span><span/>
             </div>
             {(visDraft?.indicators || []).map((ind, i) => (
-              <div key={ind.id} style={{ display:'grid', gridTemplateColumns:'1fr 70px 70px 50px 40px 24px', gap:4, marginBottom:3, alignItems:'center' }}>
+              <div key={ind.id} style={{ display:'grid', gridTemplateColumns:'1fr 70px 60px 70px 50px 40px 24px', gap:4, marginBottom:3, alignItems:'center' }}>
                 <span style={{ fontFamily:MONO, fontSize:9, color:'#e2e8f0' }}>
                   {ind.type.toUpperCase()}{ind.period ? `(${ind.period})` : ''}{' '}
                   <span style={{ color:'#334155', fontSize:8 }}>{ind.source}</span>
@@ -1023,6 +1023,14 @@ export default function StrategyEditorPanel({
                     onChange={e => { const v=Number(e.target.value); setVisDraft(prev => ({ ...prev, indicators: prev.indicators.map((x,j) => j===i ? {...x,period:v} : x) })) }}
                     style={{ background:'#0d1420', border:'1px solid #1a2d45', color:'#e2e8f0', fontFamily:MONO, fontSize:9, padding:'2px 4px', borderRadius:3, width:'100%' }}
                   />
+                )}
+                {ind.type === 'rsi' ? (
+                  <input type="number" value={ind.level ?? 30}
+                    onChange={e => { const v=Number(e.target.value); setVisDraft(prev => ({ ...prev, indicators: prev.indicators.map((x,j) => j===i ? {...x,level:v} : x) })) }}
+                    style={{ background:'#0d1420', border:'1px solid #1a2d45', color:'#e2e8f0', fontFamily:MONO, fontSize:9, padding:'2px 4px', borderRadius:3, width:'100%' }}
+                  />
+                ) : (
+                  <span style={{ color:'#334155', fontFamily:MONO, fontSize:8, display:'block', textAlign:'center' }}>—</span>
                 )}
                 <input type="color" value={ind.color}
                   onChange={e => { const v=e.target.value; setVisDraft(prev => ({ ...prev, indicators: prev.indicators.map((x,j) => j===i ? {...x,color:v} : x) })) }}
