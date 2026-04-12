@@ -443,7 +443,12 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         l70.setData([{time:d0,value:exitLevel},{time:dN,value:exitLevel}])
         const l50=chart.addLineSeries({priceScaleId:'rsi',color:'rgba(255,255,255,0.08)',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
         l50.setData([{time:d0,value:50},{time:dN,value:50}])
-        rsiChartRef.current={_isOverlay:true,_series:[rsiS,l30,l70,l50]}
+        // Anclas invisibles para forzar rango 0-100 en el eje RSI
+        const rsiMin=chart.addLineSeries({priceScaleId:'rsi',color:'transparent',lineWidth:1,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false,visible:false})
+        rsiMin.setData([{time:d0,value:0},{time:dN,value:0}])
+        const rsiMax=chart.addLineSeries({priceScaleId:'rsi',color:'transparent',lineWidth:1,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false,visible:false})
+        rsiMax.setData([{time:d0,value:100},{time:dN,value:100}])
+        rsiChartRef.current={_isOverlay:true,_series:[rsiS,l30,l70,l50,rsiMin,rsiMax]}
       }
 
       if(_indType==='MACD'&&macdContainerRef.current){
