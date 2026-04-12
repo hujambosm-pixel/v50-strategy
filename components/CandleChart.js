@@ -110,6 +110,7 @@ function getEmaParams(definition, emaRPeriod, emaLPeriod) {
   return { fast: emaRPeriod ?? 10, slow: emaLPeriod ?? 20, type: 'EMA' }
 }
 function getRsiParams(definition) {
+  // Fuente 1: bloques de definición
   const blocks = [
     definition?.setup,
     definition?.trigger,
@@ -127,6 +128,18 @@ function getRsiParams(definition) {
     }
     if (b === definition?.exit || b === definition?.trigger_out) {
       if (b.level != null) exitLevel = b.level
+    }
+  }
+  // Fuente 2: visuals.indicators — sobreescribe si el usuario editó el nivel
+  const visRsi = (definition?.visuals?.indicators || []).filter(i => i.type === 'rsi' && i.visible !== false)
+  for (const vi of visRsi) {
+    if (vi.level == null) continue
+    const src = vi.source?.toLowerCase() || ''
+    if (src.includes('setup') || src.includes('trigger in')) {
+      entryLevel = vi.level
+      period = vi.period || period
+    } else if (src.includes('trigger out') || src.includes('exit')) {
+      exitLevel = vi.level
     }
   }
   return { period, entryLevel, exitLevel }
@@ -412,6 +425,15 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         const l70=rsiChart.addLineSeries({color:'rgba(255,100,100,0.35)',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:false,priceLineVisible:false})
         l70.setData([{time:d0,value:rsiExit},{time:dN,value:rsiExit}])
         _syncPanels(rsiChart)
+        // Sync crosshair bidireccional
+        chart.subscribeCrosshairMove(param=>{
+          if(!param.point){rsiChart.clearCrosshairPosition();return}
+          rsiChart.setCrosshairPosition(param.point.x,param.point.y,rsiS)
+        })
+        rsiChart.subscribeCrosshairMove(param=>{
+          if(!param.point){chart.clearCrosshairPosition();return}
+          chart.setCrosshairPosition(param.point.x,param.point.y,candles)
+        })
       }
 
       if(_indType==='MACD'&&macdContainerRef.current){
