@@ -825,6 +825,8 @@ export default function StrategyEditorPanel({
   const [aiLoading, setAiLoading] = useState(false)
   const [aiError, setAiError]     = useState('')
   const [visDraft, setVisDraft]   = useState(null)
+  const [visOpen, setVisOpen]     = useState(false)
+  const [addingInd, setAddingInd] = useState(false)
   const aiInputRef                = useRef(null)
   const { blocks, saveBlock, deleteBlock, updateBlockName } = useStrategyBlocks()
 
@@ -968,7 +970,7 @@ export default function StrategyEditorPanel({
 
         {/* ── RESUMEN DE ESTRATEGIA ── */}
         <div style={{ marginBottom:10, background:'#080c14', border:'1px solid #1a2d45', borderRadius:6, overflow:'hidden' }}>
-          <div style={{ padding:'6px 12px', borderBottom:'1px solid #1a2d45', fontFamily:MONO, fontSize:9, letterSpacing:'0.1em', color:'#2a5a7a', textTransform:'uppercase' }}>
+          <div style={{ padding:'6px 12px', borderBottom:'1px solid #1a2d45', fontFamily:MONO, fontSize:9, letterSpacing:'0.1em', color:'#e2e8f0', textTransform:'uppercase' }}>
             Resumen de estrategia
           </div>
           <div style={{ padding:'8px 12px', display:'flex', flexDirection:'column', gap:4 }}>
@@ -994,17 +996,20 @@ export default function StrategyEditorPanel({
 
         {/* ── INDICADORES VISUALES ── */}
         <div style={{ background:'#080c14', border:'1px solid #1a2d45', borderRadius:6, padding:'10px 14px', marginBottom:8 }}>
-          <div style={{ fontFamily:MONO, fontSize:9, color:'#e2e8f0', letterSpacing:'0.08em', textTransform:'uppercase', marginBottom:10 }}>
-            Indicadores visuales
+          <div onClick={() => setVisOpen(v => !v)} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', cursor:'pointer', marginBottom: visOpen ? 10 : 0 }}>
+            <span style={{ fontFamily:MONO, fontSize:9, color:'#e2e8f0', letterSpacing:'0.08em', textTransform:'uppercase' }}>Indicadores visuales</span>
+            <span style={{ color:'#3d5a7a', fontSize:10 }}>{visOpen ? '▲' : '▼'}</span>
           </div>
 
+          {visOpen && (
+          <div>
           {/* PARTE 1 — Tabla de indicadores */}
           <div style={{marginBottom:12}}>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 70px 70px 50px 40px', gap:4, marginBottom:4, fontFamily:MONO, fontSize:8, color:'#3d5a7a', textTransform:'uppercase' }}>
-              <span>Indicador</span><span>Período</span><span>Color</span><span>Grosor</span><span>Vis.</span>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 70px 70px 50px 40px 24px', gap:4, marginBottom:4, fontFamily:MONO, fontSize:8, color:'#3d5a7a', textTransform:'uppercase' }}>
+              <span>Indicador</span><span>Período</span><span>Color</span><span>Grosor</span><span>Vis.</span><span/>
             </div>
             {(visDraft?.indicators || []).map((ind, i) => (
-              <div key={ind.id} style={{ display:'grid', gridTemplateColumns:'1fr 70px 70px 50px 40px', gap:4, marginBottom:3, alignItems:'center' }}>
+              <div key={ind.id} style={{ display:'grid', gridTemplateColumns:'1fr 70px 70px 50px 40px 24px', gap:4, marginBottom:3, alignItems:'center' }}>
                 <span style={{ fontFamily:MONO, fontSize:9, color:'#7a9bc0' }}>
                   {ind.type.toUpperCase()}{ind.period ? `(${ind.period})` : ''}{' '}
                   <span style={{ color:'#334155', fontSize:8 }}>{ind.source}</span>
@@ -1033,19 +1038,43 @@ export default function StrategyEditorPanel({
                 >
                   {ind.visible ? 'ON' : 'OFF'}
                 </button>
+                <button
+                  onClick={() => setVisDraft(prev => ({ ...prev, indicators: prev.indicators.filter((_,j) => j !== i) }))}
+                  style={{ background:'transparent', border:'1px solid #1a2d45', color:'#ef4444', fontFamily:MONO, fontSize:9, padding:'2px 4px', borderRadius:3, cursor:'pointer', lineHeight:1 }}
+                >✕</button>
               </div>
             ))}
-            <button
-              onClick={() => setVisDraft(prev => ({ ...prev, indicators: [...(prev?.indicators||[]), { id:'manual_'+Date.now(), type:'ema', period:20, source:'manual', color:'#94a3b8', lineWidth:1, visible:true }] }))}
-              style={{ marginTop:4, background:'transparent', border:'1px dashed #1a2d45', color:'#3d5a7a', fontFamily:MONO, fontSize:8, padding:'3px 8px', borderRadius:3, cursor:'pointer' }}
-            >
-              + Añadir indicador
-            </button>
+            {!addingInd ? (
+              <button onClick={() => setAddingInd(true)} style={{ marginTop:4, background:'transparent', border:'1px dashed #1a2d45', color:'#3d5a7a', fontFamily:MONO, fontSize:8, padding:'3px 8px', borderRadius:3, cursor:'pointer' }}>
+                + Añadir indicador
+              </button>
+            ) : (
+              <div style={{ display:'flex', gap:4, alignItems:'center', marginTop:4 }}>
+                <select id="newIndType" defaultValue="ema" style={{ background:'#0d1420', border:'1px solid #1a2d45', color:'#e2e8f0', fontFamily:MONO, fontSize:9, padding:'2px 4px', borderRadius:3 }}>
+                  <option value="ema">EMA</option>
+                  <option value="rsi">RSI</option>
+                  <option value="macd">MACD</option>
+                  <option value="vol">Volumen</option>
+                </select>
+                <input id="newIndPeriod" type="number" defaultValue={20} placeholder="período" style={{ width:60, background:'#0d1420', border:'1px solid #1a2d45', color:'#e2e8f0', fontFamily:MONO, fontSize:9, padding:'2px 4px', borderRadius:3 }}/>
+                <button
+                  onClick={() => {
+                    const type = document.getElementById('newIndType').value
+                    const period = Number(document.getElementById('newIndPeriod').value) || null
+                    const noPeriod = ['macd','vol'].includes(type)
+                    setVisDraft(prev => ({ ...prev, indicators: [...(prev?.indicators||[]), { id:'manual_'+Date.now(), type, period:noPeriod?null:(period||20), source:'manual', color:'#94a3b8', lineWidth:1, visible:true }] }))
+                    setAddingInd(false)
+                  }}
+                  style={{ background:'rgba(0,212,255,0.1)', border:'1px solid #00d4ff', color:'#00d4ff', fontFamily:MONO, fontSize:9, padding:'2px 8px', borderRadius:3, cursor:'pointer' }}
+                >Añadir</button>
+                <button onClick={() => setAddingInd(false)} style={{ background:'transparent', border:'1px solid #1a2d45', color:'#3d5a7a', fontFamily:MONO, fontSize:9, padding:'2px 6px', borderRadius:3, cursor:'pointer' }}>Cancelar</button>
+              </div>
+            )}
           </div>
 
           {/* PARTE 2 — Config visual por bloque */}
           <div>
-            <div style={{ fontFamily:MONO, fontSize:8, color:'#3d5a7a', textTransform:'uppercase', marginBottom:6 }}>Visualización por bloque</div>
+            <div style={{ fontFamily:MONO, fontSize:8, color:'#e2e8f0', textTransform:'uppercase', marginBottom:6 }}>Visualización por bloque</div>
             {[
               { key:'filter',      label:'FILTER',      types:['none','background'] },
               { key:'setup',       label:'SETUP IN',    types:['none','background'] },
@@ -1094,15 +1123,16 @@ export default function StrategyEditorPanel({
               )
             })}
           </div>
+          </div>)} {/* fin visOpen */}
         </div>
         {/* ── FIN INDICADORES VISUALES ── */}
 
         {/* Cabecera columnas */}
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', gap:6, marginBottom:4 }}>
-          <div style={{ fontFamily:MONO, fontSize:8, color:'#2a4a6a', letterSpacing:'0.08em', textTransform:'uppercase', paddingLeft:4 }}>Bloque</div>
-          <div style={{ fontFamily:MONO, fontSize:8, color:'#2a4a6a', letterSpacing:'0.08em', textTransform:'uppercase', paddingLeft:4 }}>Parámetros</div>
-          <div style={{ fontFamily:MONO, fontSize:8, color:'#2a4a6a', letterSpacing:'0.08em', textTransform:'uppercase', paddingLeft:4 }}>Resumen</div>
-          <div style={{ fontFamily:MONO, fontSize:8, color:'#2a4a6a', letterSpacing:'0.08em', textTransform:'uppercase', paddingLeft:4 }}>JSON directo</div>
+          <div style={{ fontFamily:MONO, fontSize:8, color:'#e2e8f0', letterSpacing:'0.08em', textTransform:'uppercase', paddingLeft:4 }}>Bloque</div>
+          <div style={{ fontFamily:MONO, fontSize:8, color:'#e2e8f0', letterSpacing:'0.08em', textTransform:'uppercase', paddingLeft:4 }}>Parámetros</div>
+          <div style={{ fontFamily:MONO, fontSize:8, color:'#e2e8f0', letterSpacing:'0.08em', textTransform:'uppercase', paddingLeft:4 }}>Resumen</div>
+          <div style={{ fontFamily:MONO, fontSize:8, color:'#e2e8f0', letterSpacing:'0.08em', textTransform:'uppercase', paddingLeft:4 }}>JSON directo</div>
         </div>
 
         {/* Role builders */}
