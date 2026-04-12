@@ -3004,7 +3004,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V8.92</title>
+        <title>Trading Simulator V8.93</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3081,7 +3081,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V8.92
+            <span className="dot"/>Trading Simulator V8.93
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6694,10 +6694,10 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                                 borderRadius:isW?'2px 2px 0 0':'0 0 2px 2px',minWidth:2}}/>
                                           })}
                                         </div>
-                                        <div style={{display:'flex',flexDirection:'column',justifyContent:'space-between',width:42,flexShrink:0,paddingLeft:4,fontFamily:MONO,fontSize:8,color:'#3d5a7a',textAlign:'left'}}>
-                                          {[mx,mx*0.5,0,-mx*0.5,-mx].map((v,i)=>(
-                                            <span key={i} style={{lineHeight:1}}>{v>0?'+':''}{'\u20AC'+Math.round(v)}</span>
-                                          ))}
+                                        <div style={{position:'relative',width:42,flexShrink:0,paddingLeft:4,fontFamily:MONO,fontSize:8,color:'#3d5a7a'}}>
+                                          <span style={{position:'absolute',top:'0%',left:4,lineHeight:1}}>+€{Math.round(maxPos)}</span>
+                                          <span style={{position:'absolute',top:zeroPct+'%',left:4,lineHeight:1,color:'rgba(255,255,255,0.25)'}}>€0</span>
+                                          <span style={{position:'absolute',bottom:'0%',left:4,lineHeight:1}}>-€{Math.round(maxNeg)}</span>
                                         </div>
                                       </div>
                                     )
@@ -6779,9 +6779,9 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                 ?<div style={{fontFamily:MONO,fontSize:8,color:'#3d5a7a',lineHeight:1.5}}>No disponible</div>
                                 :tlDashMarkets.map(m=>(
                                   <div key={m.symbol} onClick={()=>{setSimbolo(m.symbol);setSidePanel('watchlist');setTlTab('ops')}} onMouseOver={e=>e.currentTarget.style.background='rgba(255,255,255,0.04)'} onMouseOut={e=>e.currentTarget.style.background='transparent'} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'2px 0',borderBottom:'1px solid rgba(255,255,255,0.03)',cursor:'pointer'}}>
-                                    <span style={{fontFamily:MONO,fontSize:9,color:'#a8ccdf'}}>{m.name}</span>
+                                    <span style={{fontFamily:MONO,fontSize:11,color:'#a8ccdf'}}>{m.name}</span>
                                     <span style={{display:'flex',alignItems:'center',gap:4,flexShrink:0}}>
-                                      <span style={{fontFamily:MONO,fontSize:8,fontWeight:700,color:m.dayPct>=0?'#00e5a0':'#ff4d6d'}}>{m.dayPct>=0?'+':''}{m.dayPct.toFixed(2)}%</span>
+                                      <span style={{fontFamily:MONO,fontSize:10,fontWeight:700,color:m.dayPct>=0?'#00e5a0':'#ff4d6d'}}>{m.dayPct>=0?'+':''}{m.dayPct.toFixed(2)}%</span>
                                       <span title={m.trend==='bull'?'Precio > EMA10':'Precio < EMA10'} style={{fontFamily:MONO,fontSize:10,fontWeight:700,color:m.trend==='bull'?'#00e5a0':'#ff4d6d',cursor:'default'}}>{m.trend==='bull'?'▲':'▼'}</span>
                                     </span>
                                   </div>
