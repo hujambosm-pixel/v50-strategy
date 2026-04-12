@@ -425,10 +425,15 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
           crosshairMarkerVisible:true,
         })
         chart.priceScale('rsi').applyOptions({
-          scaleMargins:{top:0.75,bottom:0.02},
+          scaleMargins:{top:0.72,bottom:0.02},
           visible:true,
           borderVisible:true,
           borderColor:'#1a2d45',
+          entireTextOnly:true,
+        })
+        // Empujar las velas al 70% superior para que no solapen con el RSI
+        chart.priceScale('right').applyOptions({
+          scaleMargins:{top:0.02,bottom:0.32},
         })
         const d0=data[0].date,dN=data[data.length-1].date
         rsiS.setData(data.map((d,i)=>({time:d.date,value:rsiVals[i]})).filter(x=>x.value!=null))
@@ -1041,7 +1046,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
 
       return()=>{chartAliveRef.current=false;try{unsubLabels()}catch(_){};cnt.removeEventListener('mousemove',onMove);cnt.removeEventListener('mousedown',onMouseDown);window.removeEventListener('mouseup',onMouseUp);window.removeEventListener('keydown',onKeyDown);window.removeEventListener('keyup',onKeyUp);ro.disconnect()}
     })
-    return()=>{chartAliveRef.current=false;if(rsiChartRef.current){if(rsiChartRef.current._isOverlay){try{const c=chartRef.current;if(c){for(const s of rsiChartRef.current._series){c.removeSeries(s)};c.priceScale('rsi').applyOptions({visible:false})}}catch(_){}}else{try{rsiChartRef.current.remove()}catch(_){}};rsiChartRef.current=null};if(macdChartRef.current){try{macdChartRef.current.remove()}catch(_){};macdChartRef.current=null};if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null}}
+    return()=>{chartAliveRef.current=false;if(rsiChartRef.current){if(rsiChartRef.current._isOverlay){try{const c=chartRef.current;if(c){for(const s of rsiChartRef.current._series){c.removeSeries(s)};c.priceScale('rsi').applyOptions({visible:false});c.priceScale('right').applyOptions({scaleMargins:{top:0.02,bottom:0.02}})}}catch(_){}}else{try{rsiChartRef.current.remove()}catch(_){}};rsiChartRef.current=null};if(macdChartRef.current){try{macdChartRef.current.remove()}catch(_){};macdChartRef.current=null};if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null}}
   },[data,emaRPeriod,emaLPeriod,trades,maxDD,labelMode,definition,isBareChart,blockEvents])
 
   // ── isBareChart: ajustar altura al resize de ventana ──
