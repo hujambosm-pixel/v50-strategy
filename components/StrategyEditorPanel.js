@@ -1010,12 +1010,14 @@ export default function StrategyEditorPanel({
             </div>
             {(visDraft?.indicators || []).map((ind, i) => (
               <div key={ind.id} style={{ display:'grid', gridTemplateColumns:'1fr 70px 70px 50px 40px 24px', gap:4, marginBottom:3, alignItems:'center' }}>
-                <span style={{ fontFamily:MONO, fontSize:9, color:'#7a9bc0' }}>
+                <span style={{ fontFamily:MONO, fontSize:9, color:'#e2e8f0' }}>
                   {ind.type.toUpperCase()}{ind.period ? `(${ind.period})` : ''}{' '}
                   <span style={{ color:'#334155', fontSize:8 }}>{ind.source}</span>
                 </span>
                 {(ind.type === 'macd' || ind.type === 'vol') ? (
-                  <span style={{ color:'#334155', fontFamily:MONO, fontSize:8, textAlign:'center' }}>—</span>
+                  <div style={{ height:22, display:'flex', alignItems:'center', justifyContent:'center' }}>
+                    <span style={{ color:'#3d5a7a', fontFamily:MONO, fontSize:9, display:'block', textAlign:'center', lineHeight:'22px' }}>—</span>
+                  </div>
                 ) : (
                   <input type="number" value={ind.period || 20}
                     onChange={e => { const v=Number(e.target.value); setVisDraft(prev => ({ ...prev, indicators: prev.indicators.map((x,j) => j===i ? {...x,period:v} : x) })) }}
