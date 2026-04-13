@@ -1087,10 +1087,10 @@ export default function StrategyEditorPanel({
             <div style={{ fontFamily:MONO, fontSize:8, color:'#e2e8f0', textTransform:'uppercase', marginBottom:6 }}>Visualización por bloque</div>
             {[
               { key:'filter',      label:'FILTER',      types:['none','background'] },
-              { key:'setup',       label:'SETUP IN',    types:['none','background'] },
+              { key:'setup',       label:'SETUP IN',    types:['none','background','marker'] },
               { key:'trigger',     label:'TRIGGER IN',  types:['none','marker'] },
               { key:'abort',       label:'ABORT',       types:['none','marker'] },
-              { key:'exit',        label:'SETUP OUT',   types:['none','background'] },
+              { key:'exit',        label:'SETUP OUT',   types:['none','background','marker'] },
               { key:'trigger_out', label:'TRIGGER OUT', types:['none','marker'] },
               { key:'stop_loss',   label:'STOP LOSS',   types:['none','marker'] },
             ].map(({ key, label, types }) => {
