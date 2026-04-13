@@ -409,7 +409,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
           {key:'trigger_in', pos:'belowBar',defColor:'#22c55e',defShape:'arrowUp',  defText:'▲'},
           {key:'trigger_out',pos:'aboveBar',defColor:'#3b82f6',defShape:'arrowDown',defText:'▼'},
           {key:'abort',      pos:'aboveBar',defColor:'#f97316',defShape:'circle',   defText:'✕'},
-          {key:'stop_loss',  pos:'aboveBar',defColor:'#ef4444',defShape:'circle',   defText:'⬛'},
+          {key:'stop_loss',  pos:'aboveBar',defColor:'#ef4444',defShape:'circle',   defText:'✕'},
         ]
         const shapeMap={
           arrow:(pos)=>pos==='belowBar'?'arrowUp':'arrowDown',
@@ -421,7 +421,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
           const dates=blockEvents[key]
           if(!dates||dates.length===0) continue
           const cfg=vb[key]
-          if(cfg&&cfg.type==='none') continue
+          if(!cfg||cfg.type==='none'||cfg.type!=='marker') continue
           const color=cfg?.color||defColor
           const rawShape=cfg?.shape||'arrow'
           const shape=typeof shapeMap[rawShape]==='function'?shapeMap[rawShape](pos):defShape
