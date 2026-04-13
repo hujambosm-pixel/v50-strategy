@@ -384,6 +384,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       })
 
       // ── Markers de blockEvents según definition.visuals.blocks ──
+      console.log('[BlockMarkers]','has blockEvents:',!!blockEvents,'trigger_in count:',blockEvents?.trigger_in?.length,'has visuals.blocks:',!!definition?.visuals?.blocks,'blocks:',JSON.stringify(definition?.visuals?.blocks))
       const marks=[]
       if(blockEvents&&definition?.visuals?.blocks){
         const vb=definition.visuals.blocks
