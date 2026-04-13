@@ -268,8 +268,8 @@ function runBacktestV50(data, sp500Data, cfg) {
   let gananciaSimple = 0
   const trades       = []
   const blockEvents  = {
-    filter: [], setup_in: [], trigger_in: [],
-    abort: [], setup_out: [], trigger_out: [], stop_loss: [],
+    filter: [], setup_in: [], setup_in_range: [], trigger_in: [],
+    abort: [], setup_out: [], setup_out_range: [], trigger_out: [], stop_loss: [],
   }
   let prevSetupIn = false
 
@@ -380,6 +380,7 @@ function runBacktestV50(data, sp500Data, cfg) {
       //    Removemos !salidaPend para actualizar bkSalida en nuevos cruces.
       if (evaluateExit(i, cfg, data, indicators)) {
         blockEvents.setup_out.push(bar.date)
+        blockEvents.setup_out_range.push(bar.date)  // todas las barras
         bkSalida  = bar.low
         stopNivel = null  // cancela stop loss técnico/ATR
         if (sinPerdidas) {
@@ -460,6 +461,7 @@ function runBacktestV50(data, sp500Data, cfg) {
     const setupNow = evaluateSetup(i, cfg, data, indicators)
     if (setupNow && !reentryMode && !filt) {
       if (!prevSetupIn) blockEvents.setup_in.push(bar.date)  // solo flanco false→true
+      blockEvents.setup_in_range.push(bar.date)              // todas las barras
       entradaPend = true
       reentryPend = false
       bkEntrada   = bar.high
@@ -620,7 +622,7 @@ export default async function handler(req, res) {
       trades, capitalReinv, gananciaSimple, ganBH,
       startDate: startDate.toISOString().split('T')[0],
       sp500Status, ...curves,
-      blockEvents: blockEvents || {filter:[],setup_in:[],trigger_in:[],abort:[],setup_out:[],trigger_out:[],stop_loss:[]},
+      blockEvents: blockEvents || {filter:[],setup_in:[],setup_in_range:[],trigger_in:[],abort:[],setup_out:[],setup_out_range:[],trigger_out:[],stop_loss:[]},
       meta: {
         simbolo,
         ultimaFecha:  data[data.length-1].date,

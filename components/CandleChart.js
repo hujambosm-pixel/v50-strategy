@@ -383,9 +383,14 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         }
       })
 
-      // ── Marcadores: flechas cruce EMA (solo si EMA activo) + Max DD ──
+      // ── Marcadores: flechas cruce EMA (solo si EMA activo y estrategia usa EMAs) ──
       const marks=[]
-      if(_showEma){
+      const _stratUsesEma=!definition||(
+        definition.setup?.type?.includes('ema')||definition.setup?.type?.includes('ma_cross')||
+        definition.trigger?.type?.includes('ema')||definition.trigger?.type?.includes('ma_cross')||
+        definition.exit?.type?.includes('ema')||definition.trigger_out?.type?.includes('ema')
+      )
+      if(_showEma&&_stratUsesEma){
         for(let i=1;i<data.length;i++){
           const p=data[i-1],c=data[i]
           if(!p.emaR||!p.emaL||!c.emaR||!c.emaL) continue
@@ -536,10 +541,11 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       blockBgPrimsRef.current = []
       if(blockEvents&&definition?.visuals?.blocks){
         const vb=definition.visuals.blocks
+        const BG_KEY_MAP={filter:'filter',setup_in:'setup_in_range',setup_out:'setup_out_range'}
         for(const key of ['filter','setup_in','setup_out']){
           const cfg=vb[key]
           if(!cfg||cfg.type!=='background') continue
-          const dates=blockEvents[key]
+          const dates=blockEvents[BG_KEY_MAP[key]]
           if(!dates||dates.length===0) continue
           const opacity=(cfg.opacity||15)/100
           const color=cfg.color||'#22c55e'
