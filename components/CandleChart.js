@@ -383,33 +383,15 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         }
       })
 
-      // ── Marcadores: flechas cruce EMA (solo si EMA activo y estrategia usa EMAs) ──
-      const marks=[]
-      const _stratUsesEma=!definition||(
-        definition.setup?.type?.includes('ema')||definition.setup?.type?.includes('ma_cross')||
-        definition.trigger?.type?.includes('ema')||definition.trigger?.type?.includes('ma_cross')||
-        definition.exit?.type?.includes('ema')||definition.trigger_out?.type?.includes('ema')
-      )
-      if(_showEma&&_stratUsesEma){
-        for(let i=1;i<data.length;i++){
-          const p=data[i-1],c=data[i]
-          if(!p.emaR||!p.emaL||!c.emaR||!c.emaL) continue
-          if(p.emaR<p.emaL&&c.emaR>=c.emaL)
-            marks.push({time:c.date,position:'belowBar',color:'#00e5a0',shape:'circle',size:1,text:'↗'})
-          else if(p.emaR>p.emaL&&c.emaR<=c.emaL)
-            marks.push({time:c.date,position:'aboveBar',color:'#ff4d6d',shape:'circle',size:1,text:'↘'})
-        }
-      }
-      if(worstMAETrade&&worstMAETrade.mae<0&&worstMAETrade.minDate&&worstMAETrade.minDate!==worstMAETrade.entryDate)
-        marks.push({time:worstMAETrade.minDate,position:'belowBar',color:'#ff4d6d',shape:'circle',size:1,text:`Max DD: ${worstMAETrade.mae.toFixed(1)}%`})
       // ── Markers de blockEvents según definition.visuals.blocks ──
+      const marks=[]
       if(blockEvents&&definition?.visuals?.blocks){
         const vb=definition.visuals.blocks
         const BLOCK_KEYS=[
-          {key:'trigger_in', pos:'belowBar',defColor:'#22c55e',defShape:'arrowUp',  defText:'▲'},
-          {key:'trigger_out',pos:'aboveBar',defColor:'#3b82f6',defShape:'arrowDown',defText:'▼'},
-          {key:'abort',      pos:'aboveBar',defColor:'#f97316',defShape:'circle',   defText:'✕'},
-          {key:'stop_loss',  pos:'aboveBar',defColor:'#ef4444',defShape:'circle',   defText:'✕'},
+          {key:'trigger_in', pos:'belowBar',defColor:'#22c55e',defShape:'arrowUp',  defText:'↗',defSize:2},
+          {key:'trigger_out',pos:'aboveBar',defColor:'#ef4444',defShape:'arrowDown',defText:'↘',defSize:2},
+          {key:'abort',      pos:'aboveBar',defColor:'#f97316',defShape:'circle',   defText:'✕',defSize:1},
+          {key:'stop_loss',  pos:'aboveBar',defColor:'#ef4444',defShape:'circle',   defText:'✕',defSize:1},
         ]
         const shapeMap={
           arrow:(pos)=>pos==='belowBar'?'arrowUp':'arrowDown',
@@ -417,7 +399,8 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
           square:()=>'square',
           cross:()=>'circle',
         }
-        for(const {key,pos,defColor,defShape,defText} of BLOCK_KEYS){
+        for(const block of BLOCK_KEYS){
+          const {key,pos,defColor,defShape,defText,defSize}=block
           const dates=blockEvents[key]
           if(!dates||dates.length===0) continue
           const cfg=vb[key]
@@ -425,7 +408,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
           const color=cfg?.color||defColor
           const rawShape=cfg?.shape||'arrow'
           const shape=typeof shapeMap[rawShape]==='function'?shapeMap[rawShape](pos):defShape
-          const size=cfg?.size==='S'?1:cfg?.size==='L'?3:2
+          const size=cfg?.size==='S'?1:cfg?.size==='L'?3:cfg?.size==='M'?2:defSize
           for(const date of dates){
             marks.push({time:date,position:pos,color,shape,size,text:defText})
           }
