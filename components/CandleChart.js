@@ -243,6 +243,43 @@ function createRiskPrimitive(configRef) {
   }
 }
 
+// ── Block background primitive: bandas verticales por fecha ──
+function createBlockBgPrimitive(configRef) {
+  // configRef.current = { dates: string[], color: string }
+  let _series = null
+  let _chart  = null
+  return {
+    attached({ series, chart }) { _series = series; _chart = chart },
+    detached()                  { _series = null;   _chart = null  },
+    paneViews() {
+      return [{
+        renderer() {
+          return {
+            draw(target) {
+              const cfg = configRef.current
+              if (!cfg?.dates?.length || !_series || !_chart) return
+              target.useBitmapCoordinateSpace(scope => {
+                const ctx    = scope.context
+                const h      = scope.bitmapSize.height
+                const pixRat = scope.horizontalPixelRatio
+                const timeScale = _chart.timeScale()
+                for (const dateStr of cfg.dates) {
+                  const x = timeScale.timeToCoordinate(dateStr)
+                  if (x == null) continue
+                  const barW = Math.max(1, pixRat * 8)
+                  const xPx  = Math.round(x * pixRat)
+                  ctx.fillStyle = cfg.color
+                  ctx.fillRect(xPx - barW / 2, 0, barW, h)
+                }
+              })
+            }
+          }
+        }
+      }]
+    }
+  }
+}
+
 export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null, isBareChart=false, blockEvents=null }) {
   const containerRef=useRef(null), svgRef=useRef(null), legendRef=useRef(null), tooltipRef=useRef(null)
   const activeLegendRef = externalLegendRef || legendRef
@@ -257,6 +294,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
   const lastCloseRef=useRef(null)        // último close cargado
   const riskLinesRef=useRef([null,null,null]) // [entryLine, stopLine, tpLine]
   const riskBandSeriesRef=useRef(null)         // dummy LineSeries hosting risk primitive
+  const blockBgPrimsRef=useRef([])             // [{primitive, series}] for block bg cleanup
   const riskConfigRef=useRef({entry:null,stop:null,tp:null,shares:0,tradeRiskEur:0,rrRatio:0})
   const onRiskLevelChangeRef=useRef(onRiskLevelChange)
   const fillHeightRef=useRef(fillHeight)
@@ -493,6 +531,30 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
           title: '',
         })
       })
+
+      // ── Fondos de color por bloque (Fase 3b) ──
+      blockBgPrimsRef.current = []
+      if(blockEvents&&definition?.visuals?.blocks){
+        const vb=definition.visuals.blocks
+        for(const key of ['filter','setup_in','setup_out']){
+          const cfg=vb[key]
+          if(!cfg||cfg.type!=='background') continue
+          const dates=blockEvents[key]
+          if(!dates||dates.length===0) continue
+          const opacity=(cfg.opacity||15)/100
+          const color=cfg.color||'#22c55e'
+          const r=parseInt(color.slice(1,3),16)
+          const g=parseInt(color.slice(3,5),16)
+          const b=parseInt(color.slice(5,7),16)
+          const rgba=`rgba(${r},${g},${b},${opacity})`
+          const dummySeries=chart.addLineSeries({priceScaleId:'right',color:'transparent',lineWidth:1,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
+          dummySeries.setData([{time:data[0].date,value:0}])
+          const cfgRef={current:{dates,color:rgba}}
+          const prim=createBlockBgPrimitive(cfgRef)
+          dummySeries.attachPrimitive(prim)
+          blockBgPrimsRef.current.push({primitive:prim,series:dummySeries})
+        }
+      }
 
       // ── Líneas de alertas de precio — gestionadas en efecto separado ──
 
@@ -1052,7 +1114,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
 
       return()=>{chartAliveRef.current=false;try{unsubLabels()}catch(_){};cnt.removeEventListener('mousemove',onMove);cnt.removeEventListener('mousedown',onMouseDown);window.removeEventListener('mouseup',onMouseUp);window.removeEventListener('keydown',onKeyDown);window.removeEventListener('keyup',onKeyUp);ro.disconnect()}
     })
-    return()=>{chartAliveRef.current=false;if(rsiChartRef.current){if(rsiChartRef.current._isOverlay){try{const c=chartRef.current;if(c){for(const s of rsiChartRef.current._series){c.removeSeries(s)};c.priceScale('rsi').applyOptions({visible:false});c.priceScale('right').applyOptions({scaleMargins:{top:0.02,bottom:0.02}})}}catch(_){}}else{try{rsiChartRef.current.remove()}catch(_){}};rsiChartRef.current=null};if(macdChartRef.current){try{macdChartRef.current.remove()}catch(_){};macdChartRef.current=null};if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null}}
+    return()=>{chartAliveRef.current=false;if(rsiChartRef.current){if(rsiChartRef.current._isOverlay){try{const c=chartRef.current;if(c){for(const s of rsiChartRef.current._series){c.removeSeries(s)};c.priceScale('rsi').applyOptions({visible:false});c.priceScale('right').applyOptions({scaleMargins:{top:0.02,bottom:0.02}})}}catch(_){}}else{try{rsiChartRef.current.remove()}catch(_){}};rsiChartRef.current=null};if(macdChartRef.current){try{macdChartRef.current.remove()}catch(_){};macdChartRef.current=null};for(const {series} of blockBgPrimsRef.current){try{chartRef.current?.removeSeries(series)}catch(_){}};blockBgPrimsRef.current=[];if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null}}
   },[data,emaRPeriod,emaLPeriod,trades,maxDD,labelMode,definition,isBareChart,blockEvents])
 
   // ── isBareChart: ajustar altura al resize de ventana ──
