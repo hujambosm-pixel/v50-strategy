@@ -431,6 +431,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
           borderVisible:true,
           borderColor:'#1a2d45',
           entireTextOnly:true,
+          position:'left',
         })
         // Empujar las velas al 70% superior para que no solapen con el RSI
         chart.priceScale('right').applyOptions({
@@ -440,8 +441,8 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         rsiS.setData(data.map((d,i)=>({time:d.date,value:rsiVals[i]})).filter(x=>x.value!=null))
         // Niveles de entrada/salida como priceLines sobre rsiS
         // Se destruyen automáticamente al hacer removeSeries(rsiS)
-        rsiS.createPriceLine({price:entryLevel,color:'rgba(0,200,80,0.8)',lineWidth:1,lineStyle:LineStyle.Dashed,axisLabelVisible:false,title:` ${entryLevel} `})
-        rsiS.createPriceLine({price:exitLevel,color:'rgba(255,100,100,0.8)',lineWidth:1,lineStyle:LineStyle.Dashed,axisLabelVisible:false,title:` ${exitLevel} `})
+        rsiS.createPriceLine({price:entryLevel,color:'rgba(0,200,80,0.8)',lineWidth:1,lineStyle:LineStyle.Dashed,axisLabelVisible:true,title:`${entryLevel}`})
+        rsiS.createPriceLine({price:exitLevel,color:'rgba(255,100,100,0.8)',lineWidth:1,lineStyle:LineStyle.Dashed,axisLabelVisible:true,title:`${exitLevel}`})
         // Series ancla visibles (color transparente) para forzar rango 0-100
         // visible:false las excluye del cálculo de escala — se omite intencionalmente
         const rsiAnchorMin=chart.addLineSeries({priceScaleId:'rsi',color:'rgba(0,0,0,0.004)',lineWidth:1,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
