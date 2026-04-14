@@ -389,7 +389,9 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       if(blockEvents&&definition?.visuals?.blocks){
         const vb=definition.visuals.blocks
         const BLOCK_KEYS=[
+          {key:'setup_in',   pos:'belowBar',defColor:'#22c55e',defShape:'arrowUp',  defText:'↗',defSize:2},
           {key:'trigger_in', pos:'belowBar',defColor:'#22c55e',defShape:'arrowUp',  defText:'↗',defSize:2},
+          {key:'setup_out',  pos:'aboveBar',defColor:'#ef4444',defShape:'arrowDown',defText:'↘',defSize:2},
           {key:'trigger_out',pos:'aboveBar',defColor:'#ef4444',defShape:'arrowDown',defText:'↘',defSize:2},
           {key:'abort',      pos:'aboveBar',defColor:'#f97316',defShape:'circle',   defText:'✕',defSize:1},
           {key:'stop_loss',  pos:'aboveBar',defColor:'#ef4444',defShape:'circle',   defText:'✕',defSize:1},
