@@ -1086,13 +1086,13 @@ export default function StrategyEditorPanel({
           <div>
             <div style={{ fontFamily:MONO, fontSize:8, color:'#e2e8f0', textTransform:'uppercase', marginBottom:6 }}>Visualización por bloque</div>
             {[
-              { key:'filter',      label:'FILTER',      types:['none','background'] },
+              { key:'filter',      label:'FILTER',      types:['none','background','marker'] },
               { key:'setup_in',    label:'SETUP IN',    types:['none','background','marker'] },
-              { key:'trigger_in',  label:'TRIGGER IN',  types:['none','marker'] },
-              { key:'abort',       label:'ABORT',       types:['none','marker'] },
+              { key:'trigger_in',  label:'TRIGGER IN',  types:['none','background','marker'] },
+              { key:'abort',       label:'ABORT',       types:['none','background','marker'] },
               { key:'setup_out',   label:'SETUP OUT',   types:['none','background','marker'] },
-              { key:'trigger_out', label:'TRIGGER OUT', types:['none','marker'] },
-              { key:'stop_loss',   label:'STOP LOSS',   types:['none','marker'] },
+              { key:'trigger_out', label:'TRIGGER OUT', types:['none','background','marker'] },
+              { key:'stop_loss',   label:'STOP LOSS',   types:['none','background','marker'] },
             ].map(({ key, label, types }) => {
               const blk = visDraft?.blocks?.[key] || { type:'none', color:'#22c55e', opacity:15, shape:'arrow', size:'M' }
               const update = (patch) => setVisDraft(prev => ({ ...prev, blocks: { ...prev.blocks, [key]: { ...blk, ...patch } } }))
@@ -1119,10 +1119,13 @@ export default function StrategyEditorPanel({
                     <div style={{ display:'flex', gap:4, alignItems:'center' }}>
                       <input type="color" value={blk.color} onChange={e => update({ color:e.target.value })} style={{ width:28, height:20, padding:0, background:'none', border:'1px solid #1a2d45', borderRadius:3, cursor:'pointer' }}/>
                       <select value={blk.shape||'arrow'} onChange={e => update({ shape:e.target.value })} style={{ background:'#0d1420', border:'1px solid #1a2d45', color:'#e2e8f0', fontFamily:MONO, fontSize:8, padding:'2px 3px', borderRadius:3 }}>
-                        <option value="arrow">Flecha</option>
+                        <option value="arrow_up">Flecha ↑</option>
+                        <option value="arrow_down">Flecha ↓</option>
+                        <option value="arrow_ne">Flecha ↗</option>
+                        <option value="arrow_sw">Flecha ↘</option>
                         <option value="circle">Círculo</option>
                         <option value="square">Cuadrado</option>
-                        <option value="cross">Cruz</option>
+                        <option value="cross">Cruz ✕</option>
                       </select>
                       <select value={blk.size||'M'} onChange={e => update({ size:e.target.value })} style={{ background:'#0d1420', border:'1px solid #1a2d45', color:'#e2e8f0', fontFamily:MONO, fontSize:8, padding:'2px 3px', borderRadius:3, width:44 }}>
                         {['S','M','L'].map(s => <option key={s} value={s}>{s}</option>)}

@@ -397,10 +397,19 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
           {key:'stop_loss',  pos:'aboveBar',defColor:'#ef4444',defShape:'circle',   defText:'✕',defSize:1},
         ]
         const shapeMap={
-          arrow:(pos)=>pos==='belowBar'?'arrowUp':'arrowDown',
-          circle:()=>'circle',
-          square:()=>'square',
-          cross:()=>'circle',
+          arrow:      (pos)=>pos==='belowBar'?'arrowUp':'arrowDown',
+          arrow_up:   ()=>'arrowUp',
+          arrow_down: ()=>'arrowDown',
+          arrow_ne:   ()=>'arrowUp',
+          arrow_sw:   ()=>'arrowDown',
+          circle:     ()=>'circle',
+          square:     ()=>'square',
+          cross:      ()=>'circle',
+        }
+        const textMap={
+          arrow_ne:'↗', arrow_sw:'↘',
+          arrow_up:'▲', arrow_down:'▼',
+          circle:'', square:'', cross:'✕', arrow:'',
         }
         for(const block of BLOCK_KEYS){
           const {key,pos,defColor,defShape,defText,defSize}=block
@@ -412,8 +421,9 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
           const rawShape=cfg?.shape||'arrow'
           const shape=typeof shapeMap[rawShape]==='function'?shapeMap[rawShape](pos):defShape
           const size=cfg?.size==='S'?1:cfg?.size==='L'?3:cfg?.size==='M'?2:defSize
+          const text=rawShape in textMap?textMap[rawShape]:defText
           for(const date of dates){
-            marks.push({time:date,position:pos,color,shape,size,text:defText})
+            marks.push({time:date,position:pos,color,shape,size,text})
           }
         }
       }
