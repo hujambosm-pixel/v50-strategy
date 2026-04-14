@@ -1087,17 +1087,17 @@ export default function StrategyEditorPanel({
             <div style={{ fontFamily:MONO, fontSize:8, color:'#e2e8f0', textTransform:'uppercase', marginBottom:6 }}>Visualización por bloque</div>
             {[
               { key:'filter',      label:'FILTER',      types:['none','background'] },
-              { key:'setup',       label:'SETUP IN',    types:['none','background','marker'] },
-              { key:'trigger',     label:'TRIGGER IN',  types:['none','marker'] },
+              { key:'setup_in',    label:'SETUP IN',    types:['none','background','marker'] },
+              { key:'trigger_in',  label:'TRIGGER IN',  types:['none','marker'] },
               { key:'abort',       label:'ABORT',       types:['none','marker'] },
-              { key:'exit',        label:'SETUP OUT',   types:['none','background','marker'] },
+              { key:'setup_out',   label:'SETUP OUT',   types:['none','background','marker'] },
               { key:'trigger_out', label:'TRIGGER OUT', types:['none','marker'] },
               { key:'stop_loss',   label:'STOP LOSS',   types:['none','marker'] },
             ].map(({ key, label, types }) => {
               const blk = visDraft?.blocks?.[key] || { type:'none', color:'#22c55e', opacity:15, shape:'arrow', size:'M' }
               const update = (patch) => setVisDraft(prev => ({ ...prev, blocks: { ...prev.blocks, [key]: { ...blk, ...patch } } }))
               const isActive = blk.type !== 'none'
-              const hasBlock = !!definition[key === 'exit' ? 'exit' : key]
+              const hasBlock = !!definition[key === 'setup_out' ? 'exit' : key === 'setup_in' ? 'setup' : key === 'trigger_in' ? 'trigger' : key]
               return (
                 <div key={key} style={{ display:'grid', gridTemplateColumns:'90px 90px 1fr', gap:4, marginBottom:3, alignItems:'center', opacity: hasBlock ? 1 : 0.35 }}>
                   <span style={{ fontFamily:MONO, fontSize:8, color: isActive ? '#e2e8f0' : '#3d5a7a' }}>{label}</span>
