@@ -235,7 +235,15 @@ export default async function handler(req, res) {
         totalBars:    data.length,
         emaRPeriod:   cfgFinal.emaR,
         emaLPeriod:   cfgFinal.emaL,
-      }
+      },
+      _debug: {
+        trades:      trades?.length,
+        capitalIni:  cfgFinal.capitalIni,
+        years:       cfgFinal.years,
+        startDate:   startDate,
+        setupType:   cfgFinal.setupType,
+        triggerType: cfgFinal.triggerType,
+      },
     })
   } catch(err) {
     console.error(err)
