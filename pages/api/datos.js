@@ -145,9 +145,9 @@ export default async function handler(req, res) {
         emaL: setup.ma_slow || setup.ema_l || 11,
 
         // ── FILTER ──
-        filterType:   filter_.type   || null,
+        filterType:   filter_.type   || undefined,
         filterParams: filter_,
-        tipoFiltro:   filter_.type   || null,
+        tipoFiltro:   filter_.type   || undefined,
         sp500EmaR:    filter_.sp500EmaR || filter_.ma_fast || 10,
         sp500EmaL:    filter_.sp500EmaL || filter_.ma_slow || 20,
 
@@ -156,45 +156,45 @@ export default async function handler(req, res) {
         setupParams:  setup,
 
         // ── TRIGGER IN ──
-        triggerType:   trigger.type  || null,
+        triggerType:   trigger.type  || undefined,
         triggerParams: trigger,
 
         // ── ABORT ──
-        abortType:    abort_.type   || null,
+        abortType:    abort_.type   || undefined,
         abortParams:  abort_,
 
         // ── SETUP OUT (exit) ──
-        exitType:     exit_.type    || null,
+        exitType:     exit_.type    || undefined,
         exitParams:   exit_,
 
         // ── TRIGGER OUT ──
-        triggerOutType:   triggerOut.type  || null,
+        triggerOutType:   triggerOut.type  || undefined,
         triggerOutParams: triggerOut,
 
         // ── STOP LOSS ──
-        stopType:   stopLoss.type  || null,
+        stopType:   stopLoss.type  || undefined,
         stopParams: stopLoss,
         // Compatibilidad con campos legacy de stop:
         tipoStop:          stopLoss.type === 'atr_based'    ? 'atr'          :
                            stopLoss.type === 'none'         ? 'none'         :
                            stopLoss.type === 'fixed_pct'    ? 'fixed_pct'    :
                            stopLoss.type === 'trailing_atr' ? 'trailing_atr' :
-                           stopLoss.type === 'tecnico'      ? 'tecnico'      : null,
+                           stopLoss.type === 'tecnico'      ? 'tecnico'      : undefined,
         atrPeriod:         stopLoss.atr_period              || 14,
         atrMult:           stopLoss.atr_mult                || 2,
-        fixedPct:          stopLoss.params?.pct             ?? stopLoss.pct  ?? null,
+        fixedPct:          stopLoss.params?.pct             ?? stopLoss.pct  ?? undefined,
         trailingAtrPeriod: stopLoss.params?.atr_period      ?? stopLoss.atr_period ?? 14,
         trailingAtrMult:   stopLoss.params?.atr_mult        ?? stopLoss.atr_mult   ?? 2.0,
 
         // ── MANAGEMENT ──
-        sinPerdidas: mgmt.sin_perdidas || false,
-        reentry:     mgmt.reentry      || false,
+        sinPerdidas: mgmt.sin_perdidas ?? false,
+        reentry:     mgmt.reentry      ?? false,
 
         // ── OTROS ──
-        years:       definition.years      || req.body.years      || 5,
-        capitalIni:  definition.capital_ini || req.body.capital_ini || 1000,
-        modoAsig:    req.body.modoAsig     || 'fijo',
-        slotCapital: req.body.slotCapital  || 1000,
+        years:       req.body.years       || 5,
+        capitalIni:  req.body.capital_ini || 1000,
+        modoAsig:    req.body.modoAsig    || 'fijo',
+        slotCapital: req.body.slotCapital || 1000,
       }
     }
 
