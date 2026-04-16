@@ -341,68 +341,73 @@ function SectionJsonEditor({ value, onChange }) {
 }
 
 // ── SimpleBlockSelector — selector con opciones propias + params ──────
-function SimpleBlockSelector({ options, value, onChange, params, onParamChange }) {
+// selectOnly=true → solo renderiza el <select> (para Col 1)
+// paramsOnly=true → solo renderiza los params (para Col 2)
+function SimpleBlockSelector({ options, value, onChange, params, onParamChange, selectOnly=false, paramsOnly=false }) {
+  const paramControls = value && (
+    <div style={{ display:'flex', gap:6, flexWrap:'wrap', paddingLeft:2 }}>
+      {'ma_fast' in (params||{}) && (
+        <Num label="Rápida" value={params.ma_fast??10} onChange={v=>onParamChange('ma_fast',v)} />
+      )}
+      {'ma_slow' in (params||{}) && (
+        <Num label="Lenta" value={params.ma_slow??20} onChange={v=>onParamChange('ma_slow',v)} />
+      )}
+      {'period' in (params||{}) && (
+        <Num label="Período" value={params.period??10} onChange={v=>onParamChange('period',v)} />
+      )}
+      {'ma_type' in (params||{}) && (
+        <label style={{ display:'flex', flexDirection:'column', gap:2, alignItems:'center', flexShrink:0 }}>
+          <span style={{ fontFamily:MONO, fontSize:8, color:'var(--text3)', letterSpacing:'0.07em', textTransform:'uppercase' }}>Tipo</span>
+          <select value={params.ma_type||'EMA'} onChange={e=>onParamChange('ma_type',e.target.value)}
+            style={{ background:'#0d1420', border:'1px solid #1a2d45', color:'#e2e8f0', fontFamily:MONO, fontSize:9, padding:'3px 4px', borderRadius:3, outline:'none' }}>
+            <option value="EMA">EMA</option>
+            <option value="SMA">SMA</option>
+          </select>
+        </label>
+      )}
+      {'rsi_period' in (params||{}) && (
+        <Num label="RSI Per." value={params.rsi_period??9} onChange={v=>onParamChange('rsi_period',v)} />
+      )}
+      {'level' in (params||{}) && (
+        <Num label="Nivel" value={params.level??30} onChange={v=>onParamChange('level',v)} />
+      )}
+      {'n' in (params||{}) && (
+        <Num label="N velas" value={params.n??1} min={1} onChange={v=>onParamChange('n',v)} />
+      )}
+      {'pct' in (params||{}) && (
+        <Num label="%" value={params.pct??10} step={0.5} onChange={v=>onParamChange('pct',v)} />
+      )}
+      {'margin' in (params||{}) && (
+        <Num label="Margen %" value={params.margin??0} step={0.1} onChange={v=>onParamChange('margin',v)} />
+      )}
+      {'atr_period' in (params||{}) && (
+        <Num label="ATR Per." value={params.atr_period??14} onChange={v=>onParamChange('atr_period',v)} />
+      )}
+    </div>
+  )
+  if (paramsOnly) return paramControls || null
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-      <select
-        value={value || ''}
-        onChange={e => {
-          const opt = options.find(o => o.value === e.target.value)
-          onChange(e.target.value, opt?.params || {})
-        }}
-        style={{
-          background:'#0d1420', border:'1px solid #1a2d45',
-          color:'#e2e8f0', fontFamily:MONO, fontSize:10,
-          padding:'4px 6px', borderRadius:3, width:'100%', outline:'none',
-        }}
-      >
-        <option value=''>— Ninguno —</option>
-        {options.map(o => (
-          <option key={o.value} value={o.value}>{o.label}</option>
-        ))}
-      </select>
-
-      {value && (
-        <div style={{ display:'flex', gap:6, flexWrap:'wrap', paddingLeft:2 }}>
-          {'ma_fast' in (params||{}) && (
-            <Num label="Rápida" value={params.ma_fast??10} onChange={v=>onParamChange('ma_fast',v)} />
-          )}
-          {'ma_slow' in (params||{}) && (
-            <Num label="Lenta" value={params.ma_slow??20} onChange={v=>onParamChange('ma_slow',v)} />
-          )}
-          {'period' in (params||{}) && (
-            <Num label="Período" value={params.period??10} onChange={v=>onParamChange('period',v)} />
-          )}
-          {'ma_type' in (params||{}) && (
-            <label style={{ display:'flex', flexDirection:'column', gap:2, alignItems:'center', flexShrink:0 }}>
-              <span style={{ fontFamily:MONO, fontSize:8, color:'var(--text3)', letterSpacing:'0.07em', textTransform:'uppercase' }}>Tipo</span>
-              <select value={params.ma_type||'EMA'} onChange={e=>onParamChange('ma_type',e.target.value)}
-                style={{ background:'#0d1420', border:'1px solid #1a2d45', color:'#e2e8f0', fontFamily:MONO, fontSize:9, padding:'3px 4px', borderRadius:3, outline:'none' }}>
-                <option value="EMA">EMA</option>
-                <option value="SMA">SMA</option>
-              </select>
-            </label>
-          )}
-          {'rsi_period' in (params||{}) && (
-            <Num label="RSI Per." value={params.rsi_period??9} onChange={v=>onParamChange('rsi_period',v)} />
-          )}
-          {'level' in (params||{}) && (
-            <Num label="Nivel" value={params.level??30} onChange={v=>onParamChange('level',v)} />
-          )}
-          {'n' in (params||{}) && (
-            <Num label="N velas" value={params.n??1} min={1} onChange={v=>onParamChange('n',v)} />
-          )}
-          {'pct' in (params||{}) && (
-            <Num label="%" value={params.pct??10} step={0.5} onChange={v=>onParamChange('pct',v)} />
-          )}
-          {'margin' in (params||{}) && (
-            <Num label="Margen %" value={params.margin??0} step={0.1} onChange={v=>onParamChange('margin',v)} />
-          )}
-          {'atr_period' in (params||{}) && (
-            <Num label="ATR Per." value={params.atr_period??14} onChange={v=>onParamChange('atr_period',v)} />
-          )}
-        </div>
+      {!paramsOnly && (
+        <select
+          value={value || ''}
+          onChange={e => {
+            const opt = options.find(o => o.value === e.target.value)
+            onChange(e.target.value, opt?.params || {})
+          }}
+          style={{
+            background:'#0d1420', border:'1px solid #1a2d45',
+            color:'#e2e8f0', fontFamily:MONO, fontSize:10,
+            padding:'4px 6px', borderRadius:3, width:'100%', outline:'none',
+          }}
+        >
+          <option value=''>— Ninguno —</option>
+          {options.map(o => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
       )}
+      {!selectOnly && paramControls}
     </div>
   )
 }
@@ -926,7 +931,7 @@ function SectionRow({ sectionKey, definition, setDefinition, blocks = {}, saveBl
     <div style={{ marginBottom:3 }}>
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', gap:6, alignItems:'start' }}>
 
-        {/* Col 1 — Label + BlockSelector */}
+        {/* Col 1 — Label + BlockSelector (biblioteca) + selector de tipo */}
         <div style={{ ...colBase, borderLeft:`3px solid ${r.color}`, borderRadius:'0 4px 4px 0', display:'flex', flexDirection:'column', gap:8 }}>
           <span style={{ fontFamily:MONO, fontSize:9, fontWeight:700, letterSpacing:'0.1em', color:r.color, background:`${r.color}14`, border:`1px solid ${r.color}33`, padding:'3px 8px', borderRadius:3, textAlign:'center', alignSelf:'flex-start' }}>
             {r.label}
@@ -942,9 +947,24 @@ function SectionRow({ sectionKey, definition, setDefinition, blocks = {}, saveBl
             }}
             onCreateAI={openAI}
           />
+          {/* Selector de tipo propio (filter, trigger, abort, trigger_out, stop_loss) */}
+          {SECTION_OPTIONS_MAP[sectionKey] && (
+            <SimpleBlockSelector
+              options={SECTION_OPTIONS_MAP[sectionKey]}
+              value={block?.type || ''}
+              onChange={(type, defaultParams) => {
+                setBlock(type ? { type, ...defaultParams } : null)
+              }}
+              params={block || {}}
+              onParamChange={(key, val) => {
+                setBlock(block ? { ...block, [key]: val } : { [key]: val })
+              }}
+              selectOnly
+            />
+          )}
         </div>
 
-        {/* Col 2 — Tipo activo + Parámetros (SimpleBlockSelector para bloques propios) */}
+        {/* Col 2 — Parámetros del bloque */}
         <div style={{ ...colBase, borderRadius:4, display:'flex', flexDirection:'column', gap:8 }}>
           {SECTION_OPTIONS_MAP[sectionKey] ? (
             <SimpleBlockSelector
@@ -957,6 +977,7 @@ function SectionRow({ sectionKey, definition, setDefinition, blocks = {}, saveBl
               onParamChange={(key, val) => {
                 setBlock(block ? { ...block, [key]: val } : { [key]: val })
               }}
+              paramsOnly
             />
           ) : (
             <>
