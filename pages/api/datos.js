@@ -139,6 +139,12 @@ export default async function handler(req, res) {
       const mgmt       = definition.management  || {}
       const filter_    = definition.filter      || {}
 
+      // Solo tipos reconocidos por evaluateTrigger/evaluateTriggerOut.
+      // Si definition.trigger contiene un tipo de setup (ej: "ema_cross_up"),
+      // se ignora y el motor usa el breakout rolling legacy.
+      const TRIGGER_IN_TYPES  = new Set(['breakout_high','breakout_close','open_after_n_bars','ma_direction_up','rsi_cross_up','rsi_direction_up','price_below_52w_high_pct'])
+      const TRIGGER_OUT_TYPES = new Set(['breakdown_low','open_after_n_bars','ma_direction_down','rsi_cross_down','rsi_direction_down','profit_pct'])
+
       cfgFinal = {
         // ── EMA base (compatibilidad con estrategias antiguas) ──
         emaR: setup.ma_fast || setup.ema_r || 10,
@@ -155,8 +161,8 @@ export default async function handler(req, res) {
         setupType:    setup.type    || 'ema_cross_up',
         setupParams:  setup,
 
-        // ── TRIGGER IN ──
-        triggerType:   trigger.type  || undefined,
+        // ── TRIGGER IN — solo si es tipo trigger reconocido ──
+        triggerType:   TRIGGER_IN_TYPES.has(trigger.type) ? trigger.type : undefined,
         triggerParams: trigger,
 
         // ── ABORT ──
@@ -167,8 +173,8 @@ export default async function handler(req, res) {
         exitType:     exit_.type    || undefined,
         exitParams:   exit_,
 
-        // ── TRIGGER OUT ──
-        triggerOutType:   triggerOut.type  || undefined,
+        // ── TRIGGER OUT — solo si es tipo trigger out reconocido ──
+        triggerOutType:   TRIGGER_OUT_TYPES.has(triggerOut.type) ? triggerOut.type : undefined,
         triggerOutParams: triggerOut,
 
         // ── STOP LOSS ──
@@ -192,7 +198,7 @@ export default async function handler(req, res) {
 
         // ── OTROS ──
         years:       req.body.years       || 5,
-        capitalIni:  req.body.capital_ini || 1000,
+        capitalIni:  req.body.capital_ini || req.body.capitalIni || 1000,
         modoAsig:    req.body.modoAsig    || 'fijo',
         slotCapital: req.body.slotCapital || 1000,
       }
@@ -235,14 +241,6 @@ export default async function handler(req, res) {
         totalBars:    data.length,
         emaRPeriod:   cfgFinal.emaR,
         emaLPeriod:   cfgFinal.emaL,
-      },
-      _debug: {
-        trades:      trades?.length,
-        capitalIni:  cfgFinal.capitalIni,
-        years:       cfgFinal.years,
-        startDate:   startDate,
-        setupType:   cfgFinal.setupType,
-        triggerType: cfgFinal.triggerType,
       },
     })
   } catch(err) {
