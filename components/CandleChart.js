@@ -537,6 +537,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       if(blockEvents&&definition?.visuals?.blocks){
         const vb=definition.visuals.blocks
         const BG_KEY_MAP={filter:'filter',setup_in:'setup_in_range',setup_out:'setup_out_range'}
+        let blockbgScaleSet=false
         for(const key of ['filter','setup_in','setup_out']){
           const cfg=vb[key]
           if(!cfg||cfg.type!=='background') continue
@@ -548,8 +549,12 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
           const g=parseInt(color.slice(3,5),16)
           const b=parseInt(color.slice(5,7),16)
           const rgba=`rgba(${r},${g},${b},${opacity})`
-          const dummySeries=chart.addLineSeries({priceScaleId:'right',color:'transparent',lineWidth:1,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
+          const dummySeries=chart.addLineSeries({priceScaleId:'blockbg',color:'rgba(0,0,0,0)',lineWidth:1,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
           dummySeries.setData([{time:data[0].date,value:0}])
+          if(!blockbgScaleSet){
+            chart.priceScale('blockbg').applyOptions({visible:false,scaleMargins:{top:0,bottom:0}})
+            blockbgScaleSet=true
+          }
           const cfgRef={current:{dates,color:rgba}}
           const prim=createBlockBgPrimitive(cfgRef)
           dummySeries.attachPrimitive(prim)
@@ -1115,7 +1120,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
 
       return()=>{chartAliveRef.current=false;try{unsubLabels()}catch(_){};cnt.removeEventListener('mousemove',onMove);cnt.removeEventListener('mousedown',onMouseDown);window.removeEventListener('mouseup',onMouseUp);window.removeEventListener('keydown',onKeyDown);window.removeEventListener('keyup',onKeyUp);ro.disconnect()}
     })
-    return()=>{chartAliveRef.current=false;if(rsiChartRef.current){if(rsiChartRef.current._isOverlay){try{const c=chartRef.current;if(c){for(const s of rsiChartRef.current._series){c.removeSeries(s)};c.priceScale('rsi').applyOptions({visible:false});c.priceScale('right').applyOptions({scaleMargins:{top:0.02,bottom:0.02}})}}catch(_){}}else{try{rsiChartRef.current.remove()}catch(_){}};rsiChartRef.current=null};if(macdChartRef.current){try{macdChartRef.current.remove()}catch(_){};macdChartRef.current=null};for(const {series} of blockBgPrimsRef.current){try{chartRef.current?.removeSeries(series)}catch(_){}};blockBgPrimsRef.current=[];if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null}}
+    return()=>{chartAliveRef.current=false;if(rsiChartRef.current){if(rsiChartRef.current._isOverlay){try{const c=chartRef.current;if(c){for(const s of rsiChartRef.current._series){c.removeSeries(s)};c.priceScale('rsi').applyOptions({visible:false});c.priceScale('right').applyOptions({scaleMargins:{top:0.02,bottom:0.02}})}}catch(_){}}else{try{rsiChartRef.current.remove()}catch(_){}};rsiChartRef.current=null};if(macdChartRef.current){try{macdChartRef.current.remove()}catch(_){};macdChartRef.current=null};for(const {series} of blockBgPrimsRef.current){try{chartRef.current?.removeSeries(series)}catch(_){}};blockBgPrimsRef.current=[];try{chartRef.current?.priceScale('blockbg').applyOptions({visible:false})}catch(_){};if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null}}
   },[data,emaRPeriod,emaLPeriod,trades,maxDD,labelMode,definition,isBareChart,blockEvents])
 
   // ── isBareChart: ajustar altura al resize de ventana ──
