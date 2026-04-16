@@ -130,35 +130,71 @@ export default async function handler(req, res) {
 
     // Si viene definition, convertir a cfg para usar el motor V50 fiel
     if (!cfgFinal && definition) {
-      const setup = definition.setup || definition.entry || {}
-      const exit  = definition.exit  || {}
-      const stop  = definition.stop  || {}
-      const mgmt  = definition.management || {}
-      const filt  = definition.filters?.market?.[0] || {}
+      const setup      = definition.setup       || {}
+      const trigger    = definition.trigger     || {}
+      const abort_     = definition.abort       || {}
+      const exit_      = definition.exit        || {}
+      const triggerOut = definition.trigger_out || {}
+      const stopLoss   = definition.stop_loss   || {}
+      const mgmt       = definition.management  || {}
+      const filter_    = definition.filter      || {}
+
       cfgFinal = {
-        emaR:        setup.ma_fast  || 10,
-        emaL:        setup.ma_slow  || 11,
-        setupType:   setup.type     || 'ema_cross_up',
-        setupParams: setup,
-        exitType:    exit.type      || 'close_below_ma',
-        exitParams:  exit,
-        capitalIni:  definition.capitalIni || 10000,
-        years:       definition.years      || 5,
-        tipoStop:          stop.type === 'atr_based'    ? 'atr'          :
-                           stop.type === 'none'         ? 'none'         :
-                           stop.type === 'fixed_pct'    ? 'fixed_pct'    :
-                           stop.type === 'trailing_atr' ? 'trailing_atr' :
-                           'tecnico',
-        atrPeriod:         stop.atr_period              || 14,
-        atrMult:           stop.atr_mult                || 1.0,
-        fixedPct:          stop.params?.pct             ?? stop.pct             ?? 5,
-        trailingAtrPeriod: stop.params?.atr_period      ?? stop.atr_period      ?? 14,
-        trailingAtrMult:   stop.params?.atr_mult        ?? stop.atr_mult        ?? 2.0,
-        sinPerdidas: mgmt.sin_perdidas !== false,
-        reentry:     mgmt.reentry     !== false,
-        tipoFiltro:  filt.condition   || 'none',
-        sp500EmaR:   filt.ma_fast     || 10,
-        sp500EmaL:   filt.ma_slow     || 11,
+        // ── EMA base (compatibilidad con estrategias antiguas) ──
+        emaR: setup.ma_fast || setup.ema_r || 10,
+        emaL: setup.ma_slow || setup.ema_l || 11,
+
+        // ── FILTER ──
+        filterType:   filter_.type   || null,
+        filterParams: filter_,
+        tipoFiltro:   filter_.type   || null,
+        sp500EmaR:    filter_.sp500EmaR || filter_.ma_fast || 10,
+        sp500EmaL:    filter_.sp500EmaL || filter_.ma_slow || 20,
+
+        // ── SETUP IN ──
+        setupType:    setup.type    || 'ema_cross_up',
+        setupParams:  setup,
+
+        // ── TRIGGER IN ──
+        triggerType:   trigger.type  || null,
+        triggerParams: trigger,
+
+        // ── ABORT ──
+        abortType:    abort_.type   || null,
+        abortParams:  abort_,
+
+        // ── SETUP OUT (exit) ──
+        exitType:     exit_.type    || null,
+        exitParams:   exit_,
+
+        // ── TRIGGER OUT ──
+        triggerOutType:   triggerOut.type  || null,
+        triggerOutParams: triggerOut,
+
+        // ── STOP LOSS ──
+        stopType:   stopLoss.type  || null,
+        stopParams: stopLoss,
+        // Compatibilidad con campos legacy de stop:
+        tipoStop:          stopLoss.type === 'atr_based'    ? 'atr'          :
+                           stopLoss.type === 'none'         ? 'none'         :
+                           stopLoss.type === 'fixed_pct'    ? 'fixed_pct'    :
+                           stopLoss.type === 'trailing_atr' ? 'trailing_atr' :
+                           stopLoss.type === 'tecnico'      ? 'tecnico'      : null,
+        atrPeriod:         stopLoss.atr_period              || 14,
+        atrMult:           stopLoss.atr_mult                || 2,
+        fixedPct:          stopLoss.params?.pct             ?? stopLoss.pct  ?? null,
+        trailingAtrPeriod: stopLoss.params?.atr_period      ?? stopLoss.atr_period ?? 14,
+        trailingAtrMult:   stopLoss.params?.atr_mult        ?? stopLoss.atr_mult   ?? 2.0,
+
+        // ── MANAGEMENT ──
+        sinPerdidas: mgmt.sin_perdidas || false,
+        reentry:     mgmt.reentry      || false,
+
+        // ── OTROS ──
+        years:       definition.years      || req.body.years      || 5,
+        capitalIni:  definition.capital_ini || req.body.capital_ini || 1000,
+        modoAsig:    req.body.modoAsig     || 'fijo',
+        slotCapital: req.body.slotCapital  || 1000,
       }
     }
 
