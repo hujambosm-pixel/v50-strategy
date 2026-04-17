@@ -15,11 +15,13 @@ const ROLES = [
 ]
 
 const OPS = {
-  ema:    [{v:'cross_up',l:'cruza al alza'},{v:'cross_down',l:'cruza a la baja'}],
-  precio: [{v:'above',l:'sobre MA'},{v:'below',l:'bajo MA'}],
-  cierre: [{v:'above',l:'sobre MA'},{v:'below',l:'bajo MA'}],
-  rsi:    [{v:'above',l:'sobre nivel'},{v:'below',l:'bajo nivel'},{v:'cross_up',l:'cruza ↑ nivel'},{v:'cross_down',l:'cruza ↓ nivel'}],
-  macd:   [{v:'cross_up',l:'cruza ↑ señal'},{v:'cross_down',l:'cruza ↓ señal'}],
+  ema:       [{v:'cross_up',l:'cruza al alza'},{v:'cross_down',l:'cruza a la baja'}],
+  precio:    [{v:'above',l:'sobre MA'},{v:'below',l:'bajo MA'}],
+  cierre:    [{v:'above',l:'sobre MA'},{v:'below',l:'bajo MA'}],
+  rsi:       [{v:'above',l:'sobre nivel'},{v:'below',l:'bajo nivel'},{v:'cross_up',l:'cruza ↑ nivel'},{v:'cross_down',l:'cruza ↓ nivel'}],
+  macd:      [{v:'cross_up',l:'cruza ↑ señal'},{v:'cross_down',l:'cruza ↓ señal'}],
+  '52w':     [{v:'below',l:'caído ≥X% desde máx. 52s'}],
+  resultado: [{v:'profit',l:'profit ≥X%'}],
 }
 
 const CMAP = {
@@ -29,6 +31,9 @@ const CMAP = {
   'rsi.above':'rsi_above','rsi.below':'rsi_below',
   'rsi.cross_up':'rsi_cross_up','rsi.cross_down':'rsi_cross_down',
   'macd.cross_up':'macd_cross_up','macd.cross_down':'macd_cross_down',
+  'precio.below_52w_high':'price_below_52w_high_pct',
+  '52w.below':'price_below_52w_high_pct',
+  'resultado.profit':'profit_pct',
 }
 const CREV = Object.fromEntries(Object.entries(CMAP).map(([k,v])=>[v,k.split('.')]))
 
@@ -76,11 +81,13 @@ const SECTION_OPTIONS_MAP = {
 }
 
 const IND_DEFAULTS = {
-  ema:    {ma_fast:10,ma_slow:20},
-  precio: {ma_period:50,ma_type:'EMA'},
-  cierre: {ma_period:50,ma_type:'EMA'},
-  rsi:    {period:14,level:50},
-  macd:   {fast:12,slow:26,signal:9},
+  ema:       {ma_fast:10,ma_slow:20},
+  precio:    {ma_period:50,ma_type:'EMA'},
+  cierre:    {ma_period:50,ma_type:'EMA'},
+  rsi:       {period:14,level:50},
+  macd:      {fast:12,slow:26,signal:9},
+  '52w':     {pct:20},
+  resultado: {pct:10},
 }
 
 // ── Styles ────────────────────────────────────────────────────────────
@@ -620,6 +627,8 @@ function RoleRow({ role, definition, setDefinition, hideTypeSelect = false, libr
           <option value="cierre">Cierre</option>
           <option value="rsi">RSI</option>
           <option value="macd">MACD</option>
+          {role==='setup' && <option value="52w">52 Semanas</option>}
+          {role==='exit'  && <option value="resultado">Resultado</option>}
         </select>
       )}
 
@@ -651,6 +660,12 @@ function RoleRow({ role, definition, setDefinition, hideTypeSelect = false, libr
         <Num label="Rápida" value={block.macd_fast   ?? block.fast   ?? 12} onChange={v=>onP('macd_fast',v)} />
         <Num label="Lenta"  value={block.macd_slow   ?? block.slow   ?? 26} onChange={v=>onP('macd_slow',v)} />
         <Num label="Señal"  value={block.macd_signal ?? block.signal ?? 9}  onChange={v=>onP('macd_signal',v)} />
+      </>}
+      {ind==='52w' && block && <>
+        <Num label="%" value={block.pct??20} step={0.5} min={1} max={100} onChange={v=>onP('pct',v)} />
+      </>}
+      {ind==='resultado' && block && <>
+        <Num label="%" value={block.pct??10} step={0.5} min={0.1} max={100} onChange={v=>onP('pct',v)} />
       </>}
     </div>
   )
@@ -854,6 +869,12 @@ function SectionRow({ sectionKey, definition, setDefinition, blocks = {}, saveBl
         <Num label="Lenta"  value={block.macd_slow   ?? block.slow   ?? 26} onChange={v=>onP('macd_slow',v)} />
         <Num label="Señal"  value={block.macd_signal ?? block.signal ?? 9}  onChange={v=>onP('macd_signal',v)} />
       </>}
+      {ind==='52w' && block && <>
+        <Num label="%" value={block.pct??20} step={0.5} min={1} max={100} onChange={v=>onP('pct',v)} />
+      </>}
+      {ind==='resultado' && block && <>
+        <Num label="%" value={block.pct??10} step={0.5} min={0.1} max={100} onChange={v=>onP('pct',v)} />
+      </>}
     </>
   ) : isStop ? (
     <>
@@ -885,6 +906,12 @@ function SectionRow({ sectionKey, definition, setDefinition, blocks = {}, saveBl
         <Num label="Rápida" value={block.macd_fast   ?? block.fast   ?? 12} onChange={v=>onP('macd_fast',v)} />
         <Num label="Lenta"  value={block.macd_slow   ?? block.slow   ?? 26} onChange={v=>onP('macd_slow',v)} />
         <Num label="Señal"  value={block.macd_signal ?? block.signal ?? 9}  onChange={v=>onP('macd_signal',v)} />
+      </>}
+      {ind==='52w' && block && <>
+        <Num label="%" value={block.pct??20} step={0.5} min={1} max={100} onChange={v=>onP('pct',v)} />
+      </>}
+      {ind==='resultado' && block && <>
+        <Num label="%" value={block.pct??10} step={0.5} min={0.1} max={100} onChange={v=>onP('pct',v)} />
       </>}
     </>
   )
@@ -1063,6 +1090,16 @@ export default function StrategyEditorPanel({
       }
       if (t.includes('rsi')) {
         const period = b.rsi_period || b.period || 14
+        const id = `rsi_${period}_${key}`
+        if (!seen.has(id)) { seen.add(id); result.push({ id, type:'rsi', period, level: b.level ?? null, source:label, color:'#a78bfa', lineWidth:1, visible:true }) }
+      }
+      if (t.includes('ma_direction')) {
+        const period = b.period || 10
+        const id = `ema_${period}_${key}`
+        if (!seen.has(id)) { seen.add(id); result.push({ id, type:'ema', period, source:label, color:'#00d4ff', lineWidth:1, visible:true }) }
+      }
+      if (t.includes('rsi_direction') || (t.includes('rsi_cross') && !t.includes('rsi_cross_up') && !t.includes('rsi_cross_down'))) {
+        const period = b.rsi_period || b.period || 9
         const id = `rsi_${period}_${key}`
         if (!seen.has(id)) { seen.add(id); result.push({ id, type:'rsi', period, level: b.level ?? null, source:label, color:'#a78bfa', lineWidth:1, visible:true }) }
       }
