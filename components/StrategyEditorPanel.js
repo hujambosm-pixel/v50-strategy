@@ -936,17 +936,20 @@ function SectionRow({ sectionKey, definition, setDefinition, blocks = {}, saveBl
           <span style={{ fontFamily:MONO, fontSize:9, fontWeight:700, letterSpacing:'0.1em', color:r.color, background:`${r.color}14`, border:`1px solid ${r.color}33`, padding:'3px 8px', borderRadius:3, textAlign:'center', alignSelf:'flex-start' }}>
             {r.label}
           </span>
-          <BlockSelector
-            blocks={sectionBlocks}
-            value={activeName}
-            onSelect={handleSelect}
-            onDelete={id => { deleteBlock && deleteBlock(id); setActiveName(p => p ? '' : p) }}
-            onRename={(id, name) => {
-              updateBlockName && updateBlockName(id, name)
-              setActiveName(prev => { const blk=sectionBlocks.find(b=>b.id===id); return (blk&&blk.name===prev)?name:prev })
-            }}
-            onCreateAI={openAI}
-          />
+          {/* Biblioteca — solo para bloques genéricos (setup, exit) */}
+          {!SECTION_OPTIONS_MAP[sectionKey] && (
+            <BlockSelector
+              blocks={sectionBlocks}
+              value={activeName}
+              onSelect={handleSelect}
+              onDelete={id => { deleteBlock && deleteBlock(id); setActiveName(p => p ? '' : p) }}
+              onRename={(id, name) => {
+                updateBlockName && updateBlockName(id, name)
+                setActiveName(prev => { const blk=sectionBlocks.find(b=>b.id===id); return (blk&&blk.name===prev)?name:prev })
+              }}
+              onCreateAI={openAI}
+            />
+          )}
           {/* Selector de tipo propio (filter, trigger, abort, trigger_out, stop_loss) */}
           {SECTION_OPTIONS_MAP[sectionKey] && (
             <SimpleBlockSelector
