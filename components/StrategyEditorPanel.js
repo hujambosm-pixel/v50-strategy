@@ -105,20 +105,46 @@ const SEL = {
 // ── Helpers ───────────────────────────────────────────────────────────
 function summarizeCondition(block) {
   if (!block?.type) return '— Sin configurar —'
-  const rp = block.rsi_period ?? block.period ?? 14
+  const b  = block
+  const rp = b.rsi_period || b.period || 14
   const typeMap = {
-    'ema_cross_up':   `EMA(${block.ma_fast ?? '—'}) cruza ↑ EMA(${block.ma_slow ?? '—'})`,
-    'ema_cross_down': `EMA(${block.ma_fast ?? '—'}) cruza ↓ EMA(${block.ma_slow ?? '—'})`,
-    'price_above_ma': `Precio cierra sobre EMA(${block.ma_period ?? '—'})`,
-    'price_below_ma': `Precio cierra bajo EMA(${block.ma_period ?? '—'})`,
-    'close_above_ma': `Cierre sobre EMA(${block.ma_period ?? '—'})`,
-    'close_below_ma': `Cierre bajo EMA(${block.ma_period ?? '—'})`,
-    'rsi_above':      `RSI(${rp}) por encima de ${block.level ?? '—'}`,
-    'rsi_below':      `RSI(${rp}) por debajo de ${block.level ?? '—'}`,
-    'rsi_cross_up':   `RSI(${rp}) cruza ↑ nivel ${block.level ?? '—'}`,
-    'rsi_cross_down': `RSI(${rp}) cruza ↓ nivel ${block.level ?? '—'}`,
-    'macd_cross_up':  `MACD(${block.macd_fast ?? 12},${block.macd_slow ?? 26},${block.macd_signal ?? 9}) cruza ↑ señal`,
-    'macd_cross_down':`MACD(${block.macd_fast ?? 12},${block.macd_slow ?? 26},${block.macd_signal ?? 9}) cruza ↓ señal`,
+    // ── indicator types (setup / exit) ──
+    'ema_cross_up':   `EMA(${b.ma_fast||10}) cruza ↑ EMA(${b.ma_slow||11})`,
+    'ema_cross_down': `EMA(${b.ma_fast||10}) cruza ↓ EMA(${b.ma_slow||11})`,
+    'price_above_ma': `Precio cierra sobre EMA(${b.ma_period||50})`,
+    'price_below_ma': `Precio cierra bajo EMA(${b.ma_period||50})`,
+    'close_above_ma': `Cierre sobre EMA(${b.ma_period||50})`,
+    'close_below_ma': `Cierre bajo EMA(${b.ma_period||50})`,
+    'rsi_above':      `RSI(${rp}) sobre ${b.level||70}`,
+    'rsi_below':      `RSI(${rp}) bajo ${b.level||30}`,
+    'rsi_cross_up':   `RSI(${rp}) cruza ↑ nivel ${b.level||30}`,
+    'rsi_cross_down': `RSI(${rp}) cruza ↓ nivel ${b.level||70}`,
+    'macd_cross_up':  `MACD(${b.macd_fast||12},${b.macd_slow||26},${b.macd_signal||9}) cruza ↑ señal`,
+    'macd_cross_down':`MACD(${b.macd_fast||12},${b.macd_slow||26},${b.macd_signal||9}) cruza ↓ señal`,
+    // ── new setup-in / setup-out types ──
+    'price_below_52w_high_pct': `Caída ≥${b.pct||20}% desde máx. 52s`,
+    'profit_pct':               `Profit ≥${b.pct||10}%`,
+    // ── universal fallbacks (trigger / abort / trigger_out / stop_loss) ──
+    'sp500_above_ema':           `SP500 sobre EMA(${b.period||10})`,
+    'sp500_ema_fast_above_slow': `SP500 EMA(${b.ma_fast||10}) > EMA(${b.ma_slow||20})`,
+    'price_above_ema':           `Precio sobre EMA(${b.period||10})`,
+    'breakout_high':             'Supera máximo vela Setup',
+    'breakout_close':            'Supera cierre vela Setup',
+    'open_after_n_bars':         `Apertura tras ${b.n||1} vela(s)`,
+    'ma_direction_up':           `MA(${b.period||10}) cambia a alcista`,
+    'ma_direction_down':         `MA(${b.period||10}) cambia a bajista`,
+    'rsi_direction_up':          `RSI(${b.rsi_period||9}) cambia a alcista`,
+    'rsi_direction_down':        `RSI(${b.rsi_period||9}) cambia a bajista`,
+    'rsi_cross_up':              `RSI(${b.rsi_period||9}) cruza ↑ nivel ${b.level||30}`,
+    'rsi_cross_down':            `RSI(${b.rsi_period||9}) cruza ↓ nivel ${b.level||70}`,
+    'breakdown_low':             'Rompe mínimo vela Setup Out',
+    'price_below_ema':           `Precio bajo EMA(${b.period||10})`,
+    'ema_cross_down':            `EMA(${b.ma_fast||10}) cruza ↓ EMA(${b.ma_slow||11})`,
+    'low_setup_in':              `Bajo vela Setup In (+${b.margin||0}% margen)`,
+    'below_ema':                 `Bajo EMA(${b.period||10})`,
+    'fixed_pct':                 `Stop fijo ${b.pct||5}%`,
+    'atr_multiple':              `ATR(${b.atr_period||14}) × ${b.n||2}`,
+    'atr_trailing':              `ATR trailing(${b.atr_period||14}) × ${b.n||2}`,
   }
   return typeMap[block.type] ?? `Tipo desconocido: ${block.type}`
 }
@@ -129,15 +155,18 @@ function summarizeBlock(role, block) {
   switch(role) {
     case 'filter': {
       const typeMap = {
-        'sp500_above_ema':           `SP500 sobre EMA(${block.period ?? '—'})`,
-        'sp500_ema_fast_above_slow': `SP500 EMA(${block.ma_fast ?? '—'}) > EMA(${block.ma_slow ?? '—'})`,
-        'price_above_ema':           `Precio sobre EMA(${block.period ?? '—'})`,
-        'price_below_52w_high_pct':  `Caída ≥${block.pct ?? '—'}% desde máx. 52s`,
+        'sp500_above_ema':           `SP500 sobre EMA(${block.period||10})`,
+        'sp500_ema_fast_above_slow': `SP500 EMA(${block.ma_fast||10}) > EMA(${block.ma_slow||20})`,
+        'price_above_ema':           `Precio sobre EMA(${block.period||10})`,
+        'price_below_52w_high_pct':  `Caída ≥${block.pct||20}% desde máx. 52s`,
         // legacy
-        'precio_ema': `SP500 cierra por encima de su EMA(${block.sp500EmaR ?? 50})`,
-        'ema_ema':    `EMA(${block.sp500EmaR ?? 50}) de SP500 sobre EMA(${block.sp500EmaL ?? 200})`,
+        'precio_ema': `SP500 cierra por encima de su EMA(${block.sp500EmaR||50})`,
+        'ema_ema':    `EMA(${block.sp500EmaR||50}) de SP500 sobre EMA(${block.sp500EmaL||200})`,
       }
-      return typeMap[t] ?? `Filtro: ${t}`
+      if (t && typeMap[t]) return typeMap[t]
+      // legacy: { logic, conditions[] } — extraer primer condition
+      if (!t && block.conditions?.length) return summarizeBlock('filter', block.conditions[0])
+      return t ? `Filtro: ${t}` : '— Sin configurar —'
     }
     case 'setup': case 'exit':
       return summarizeCondition(block)
@@ -145,48 +174,48 @@ function summarizeBlock(role, block) {
       const typeMap = {
         'breakout_high':            'Supera máximo vela Setup',
         'breakout_close':           'Supera cierre vela Setup',
-        'open_after_n_bars':        `Apertura tras ${block.n ?? 1} vela(s)`,
-        'ma_direction_up':          `MA(${block.period ?? '—'}) cambia a alcista`,
-        'rsi_cross_up':             `RSI(${block.rsi_period ?? '—'}) cruza ↑ nivel ${block.level ?? '—'}`,
-        'rsi_direction_up':         `RSI(${block.rsi_period ?? '—'}) cambia a alcista`,
-        'price_below_52w_high_pct': `Caída ≥${block.pct ?? '—'}% desde máx. 52s`,
+        'open_after_n_bars':        `Apertura tras ${block.n||1} vela(s)`,
+        'ma_direction_up':          `MA(${block.period||10}) cambia a alcista`,
+        'rsi_cross_up':             `RSI(${block.rsi_period||9}) cruza ↑ nivel ${block.level||30}`,
+        'rsi_direction_up':         `RSI(${block.rsi_period||9}) cambia a alcista`,
+        'price_below_52w_high_pct': `Caída ≥${block.pct||20}% desde máx. 52s`,
       }
       return typeMap[t] ?? summarizeCondition(block)
     }
     case 'abort': {
       const typeMap = {
-        'ema_cross_down':  `Cruce bajista EMA(${block.ma_fast ?? '—'})/EMA(${block.ma_slow ?? '—'})`,
-        'price_below_ema': `Precio bajo EMA(${block.period ?? '—'})`,
+        'ema_cross_down':  `Cruce bajista EMA(${block.ma_fast||10})/EMA(${block.ma_slow||11})`,
+        'price_below_ema': `Precio bajo EMA(${block.period||10})`,
       }
       return typeMap[t] ?? summarizeCondition(block)
     }
     case 'trigger_out': {
       const typeMap = {
-        'breakdown_low':    'Rompe mínimo vela Setup Out',
-        'open_after_n_bars':`Apertura tras ${block.n ?? 1} vela(s)`,
-        'ma_direction_down':`MA(${block.period ?? '—'}) cambia a bajista`,
-        'rsi_cross_down':   `RSI(${block.rsi_period ?? '—'}) cruza ↓ nivel ${block.level ?? '—'}`,
-        'rsi_direction_down':`RSI(${block.rsi_period ?? '—'}) cambia a bajista`,
-        'profit_pct':       `Profit ≥${block.pct ?? '—'}%`,
+        'breakdown_low':     'Rompe mínimo vela Setup Out',
+        'open_after_n_bars': `Apertura tras ${block.n||1} vela(s)`,
+        'ma_direction_down': `MA(${block.period||10}) cambia a bajista`,
+        'rsi_cross_down':    `RSI(${block.rsi_period||9}) cruza ↓ nivel ${block.level||70}`,
+        'rsi_direction_down':`RSI(${block.rsi_period||9}) cambia a bajista`,
+        'profit_pct':        `Profit ≥${block.pct||10}%`,
         // legacy
-        'breakout_low':     'Breakout del low de la vela de setup out',
-        'next_open':        'Entrada a la apertura de la siguiente vela',
-        'close_of_setup':   'Salida al cierre de la vela de setup out',
+        'breakout_low':    'Breakout del low de la vela de setup out',
+        'next_open':       'Apertura siguiente vela',
+        'close_of_setup':  'Salida al cierre de la vela de setup out',
       }
-      return typeMap[t] ?? `Trigger out: ${t}`
+      return typeMap[t] ?? summarizeCondition(block)
     }
     case 'stop_loss': {
       const typeMap = {
-        'low_setup_in':  `Bajo vela Setup In (+${block.margin ?? 0}%)`,
-        'below_ema':     `Bajo EMA(${block.period ?? '—'})`,
-        'fixed_pct':     `Stop fijo ${block.pct ?? block.params?.pct ?? '—'}%`,
-        'atr_multiple':  `ATR(${block.atr_period ?? '—'}) × ${block.n ?? '—'}`,
-        'atr_trailing':  `ATR trailing(${block.atr_period ?? '—'}) × ${block.n ?? '—'}`,
+        'low_setup_in': `Bajo vela Setup In (+${block.margin||0}% margen)`,
+        'below_ema':    `Bajo EMA(${block.period||10})`,
+        'fixed_pct':    `Stop fijo ${block.pct || block.params?.pct || 5}%`,
+        'atr_multiple': `ATR(${block.atr_period||14}) × ${block.n||2}`,
+        'atr_trailing': `ATR trailing(${block.atr_period||14}) × ${block.n||2}`,
         // legacy
-        'tecnico':       `Stop técnico: mínimo entre EMA(${block.ma_period ?? '—'}) y low de vela de entrada`,
-        'atr_based':     `Stop ATR fijo: entrada − ATR(${block.atr_period ?? 14}) × ${block.atr_mult ?? 2}`,
-        'trailing_atr':  `Trailing ATR: stop sube con el precio, ATR(${block.atr_period ?? 14}) × ${block.atr_mult ?? 2}`,
-        'none':          '— Sin stop —',
+        'tecnico':      `Stop técnico: mínimo entre EMA(${block.ma_period||10}) y low de vela de entrada`,
+        'atr_based':    `Stop ATR fijo: entrada − ATR(${block.atr_period||14}) × ${block.atr_mult||2}`,
+        'trailing_atr': `Trailing ATR: stop sube con el precio, ATR(${block.atr_period||14}) × ${block.atr_mult||2}`,
+        'none':         '— Sin stop —',
       }
       return typeMap[t] ?? `Stop: ${t}`
     }
@@ -764,12 +793,17 @@ function SectionRow({ sectionKey, definition, setDefinition, blocks = {}, saveBl
   const [saveName, setSaveName]     = useState('')
 
   const block    = definition?.[sectionKey] || null
+  // FIX 3: normalize legacy filter structure { logic, conditions[] } → flat { type, ...params }
+  // (display only — JSON editor still shows raw; onChange always saves flat)
+  const displayBlock = (sectionKey === 'filter' && block?.conditions?.length)
+    ? block.conditions[0]
+    : block
   // For regular role rows
-  const rev      = !isStop ? (CREV[block?.type] || []) : []
+  const rev      = !isStop ? (CREV[displayBlock?.type] || []) : []
   const ind      = rev[0] || ''
   const op       = rev[1] || ''
   // For stop rows
-  const stopType = isStop ? (block?.type || '') : ''
+  const stopType = isStop ? (displayBlock?.type || '') : ''
 
   function onSectionChange(val) {
     setDefinition(prev => { const n={...prev}; if(val==null) delete n[sectionKey]; else n[sectionKey]=val; return n })
@@ -981,13 +1015,13 @@ function SectionRow({ sectionKey, definition, setDefinition, blocks = {}, saveBl
           {SECTION_OPTIONS_MAP[sectionKey] && (
             <SimpleBlockSelector
               options={SECTION_OPTIONS_MAP[sectionKey]}
-              value={block?.type || ''}
+              value={displayBlock?.type || ''}
               onChange={(type, defaultParams) => {
                 setBlock(type ? { type, ...defaultParams } : null)
               }}
-              params={block || {}}
+              params={displayBlock || {}}
               onParamChange={(key, val) => {
-                setBlock(block ? { ...block, [key]: val } : { [key]: val })
+                setBlock(displayBlock ? { ...displayBlock, [key]: val } : { [key]: val })
               }}
               selectOnly
             />
@@ -999,13 +1033,13 @@ function SectionRow({ sectionKey, definition, setDefinition, blocks = {}, saveBl
           {SECTION_OPTIONS_MAP[sectionKey] ? (
             <SimpleBlockSelector
               options={SECTION_OPTIONS_MAP[sectionKey]}
-              value={block?.type || ''}
+              value={displayBlock?.type || ''}
               onChange={(type, defaultParams) => {
                 setBlock(type ? { type, ...defaultParams } : null)
               }}
-              params={block || {}}
+              params={displayBlock || {}}
               onParamChange={(key, val) => {
-                setBlock(block ? { ...block, [key]: val } : { [key]: val })
+                setBlock(displayBlock ? { ...displayBlock, [key]: val } : { [key]: val })
               }}
               paramsOnly
             />
@@ -1022,8 +1056,8 @@ function SectionRow({ sectionKey, definition, setDefinition, blocks = {}, saveBl
         </div>
 
         {/* Col 3 — Resumen legible */}
-        <div style={{ ...colBase, background:'#050810', border:'1px solid #1a2d45', borderRadius:4, fontFamily:MONO, fontSize:11, lineHeight:1.6, color: block ? '#e2e8f0' : '#3a5a75' }}>
-          {summarizeBlock(sectionKey, block)}
+        <div style={{ ...colBase, background:'#050810', border:'1px solid #1a2d45', borderRadius:4, fontFamily:MONO, fontSize:11, lineHeight:1.6, color: displayBlock ? '#e2e8f0' : '#3a5a75' }}>
+          {summarizeBlock(sectionKey, displayBlock)}
         </div>
 
         {/* Col 4 — JSON directo */}
