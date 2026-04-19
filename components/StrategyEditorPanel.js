@@ -695,24 +695,12 @@ function SectionRow({ sectionKey, definition, setDefinition }) {
 // ── Main export ───────────────────────────────────────────────────────
 export default function StrategyEditorPanel({
   strForm, setStrForm, definition, setDefinition,
-  conditions, strategy,
+  strategy,
   onSave, onCancel, onDelete, saving,
-  focusAI = false,
 }) {
-  const [aiText, setAiText]       = useState('')
-  const [aiLoading, setAiLoading] = useState(false)
-  const [aiError, setAiError]     = useState('')
   const [visDraft, setVisDraft]   = useState(null)
   const [visOpen, setVisOpen]     = useState(false)
   const [addingInd, setAddingInd] = useState(false)
-  const aiInputRef                = useRef(null)
-
-  useEffect(() => {
-    if (focusAI) {
-      const t = setTimeout(() => aiInputRef.current?.focus(), 120)
-      return () => clearTimeout(t)
-    }
-  }, [focusAI])
 
   function deriveIndicators(def) {
     const result = []
@@ -790,20 +778,6 @@ export default function StrategyEditorPanel({
     setDefinition(prev => ({ ...prev, visuals: visDraft }))
   }, [visDraft]) // eslint-disable-line
 
-  async function runAI() {
-    if (!aiText.trim()) return
-    setAiLoading(true); setAiError('')
-    try {
-      const res = await fetch('/api/conditions?action=groq_strategy', {
-        method:'POST', headers:getAuthH(), body:JSON.stringify({ text:aiText.trim() }),
-      })
-      const data = await res.json()
-      if (data.error) throw new Error(data.error)
-      setDefinition(prev => ({ ...prev, ...data }))
-    } catch(e) { setAiError(e.message) }
-    finally { setAiLoading(false) }
-  }
-
   return (
     <div style={{ display:'flex', flexDirection:'column', height:'100%', overflow:'hidden', background:'var(--bg1)', fontFamily:MONO }}>
 
@@ -839,20 +813,6 @@ export default function StrategyEditorPanel({
           <Cell label="Color">
             <input type="color" value={strForm.color||'#00d4ff'} onChange={e=>setStrForm(p=>({...p,color:e.target.value}))} style={{ ...INPUT, padding:2, height:32, cursor:'pointer' }} />
           </Cell>
-        </div>
-
-        {/* AI global */}
-        <div style={{ padding:'10px 12px', background:'var(--bg2)', border:'1px solid var(--border)', borderRadius:6, marginBottom:10 }}>
-          <div style={{ fontFamily:MONO, fontSize:9, color:'var(--text3)', letterSpacing:'0.1em', textTransform:'uppercase', marginBottom:8 }}>🤖 Asistente IA — describe tu estrategia completa en español</div>
-          <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
-            <input ref={aiInputRef} type="text" value={aiText} onChange={e=>setAiText(e.target.value)} onKeyDown={e=>e.key==='Enter'&&runAI()}
-              placeholder="ej: comprar cuando EMA10 cruce al alza EMA20, stop técnico bajo EMA20, salir cuando RSI>70…"
-              style={{ ...INPUT, flex:'1 1 200px', width:'auto' }} />
-            <button onClick={runAI} disabled={aiLoading||!aiText.trim()} style={{ background:'rgba(155,114,255,0.15)', border:'1px solid #9b72ff', color:'#9b72ff', fontFamily:MONO, fontSize:11, fontWeight:700, padding:'6px 14px', borderRadius:4, cursor:(aiLoading||!aiText.trim())?'not-allowed':'pointer', flexShrink:0, whiteSpace:'nowrap' }}>
-              {aiLoading?'⟳ Generando…':'🤖 Generar'}
-            </button>
-          </div>
-          {aiError && <div style={{ marginTop:6, fontFamily:MONO, fontSize:10, color:'#ff7a7a' }}>⚠ {aiError}</div>}
         </div>
 
         {/* ── RESUMEN DE ESTRATEGIA ── */}
