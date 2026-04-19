@@ -393,19 +393,19 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       if(blockEvents&&definition?.visuals?.blocks){
         const vb=definition.visuals.blocks
         const BLOCK_KEYS=[
-          {key:'setup_in',   pos:'belowBar',defColor:'#22c55e',defShape:'arrowUp',  defText:'↗',defSize:2},
-          {key:'trigger_in', pos:'belowBar',defColor:'#22c55e',defShape:'arrowUp',  defText:'↗',defSize:2},
-          {key:'setup_out',  pos:'aboveBar',defColor:'#ef4444',defShape:'arrowDown',defText:'↘',defSize:2},
-          {key:'trigger_out',pos:'aboveBar',defColor:'#ef4444',defShape:'arrowDown',defText:'↘',defSize:2},
-          {key:'abort',      pos:'aboveBar',defColor:'#f97316',defShape:'circle',   defText:'✕',defSize:1},
-          {key:'stop_loss',  pos:'aboveBar',defColor:'#ef4444',defShape:'circle',   defText:'✕',defSize:1},
+          {key:'setup_in',   pos:'belowBar',defColor:'#22c55e',defShape:'circle',defText:'↗',defSize:2},
+          {key:'trigger_in', pos:'belowBar',defColor:'#22c55e',defShape:'circle',defText:'↗',defSize:2},
+          {key:'setup_out',  pos:'aboveBar',defColor:'#ef4444',defShape:'circle',defText:'↘',defSize:2},
+          {key:'trigger_out',pos:'aboveBar',defColor:'#ef4444',defShape:'circle',defText:'↘',defSize:2},
+          {key:'abort',      pos:'aboveBar',defColor:'#f97316',defShape:'circle',defText:'✕',defSize:1},
+          {key:'stop_loss',  pos:'aboveBar',defColor:'#ef4444',defShape:'circle',defText:'✕',defSize:1},
         ]
         const shapeMap={
-          arrow:      (pos)=>pos==='belowBar'?'arrowUp':'arrowDown',
-          arrow_up:   ()=>'arrowUp',
-          arrow_down: ()=>'arrowDown',
-          arrow_ne:   ()=>'arrowUp',
-          arrow_sw:   ()=>'arrowDown',
+          arrow:      ()=>'circle',
+          arrow_up:   ()=>'circle',
+          arrow_down: ()=>'circle',
+          arrow_ne:   ()=>'circle',
+          arrow_sw:   ()=>'circle',
           circle:     ()=>'circle',
           square:     ()=>'square',
           cross:      ()=>'circle',
@@ -413,7 +413,8 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         const textMap={
           arrow_ne:'↗', arrow_sw:'↘',
           arrow_up:'▲', arrow_down:'▼',
-          circle:'', square:'', cross:'✕', arrow:'',
+          arrow:'●',    circle:'●',
+          square:'■',   cross:'✕',
         }
         for(const block of BLOCK_KEYS){
           const {key,pos,defColor,defShape,defText,defSize}=block
