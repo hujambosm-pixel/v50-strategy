@@ -263,13 +263,52 @@ function createBlockBgPrimitive(configRef) {
                 const h      = scope.bitmapSize.height
                 const pixRat = scope.horizontalPixelRatio
                 const timeScale = _chart.timeScale()
-                for (const dateStr of cfg.dates) {
+                const dates = cfg.dates
+                if (!dates?.length) return
+
+                ctx.fillStyle = cfg.color
+
+                // Calcular ancho de barra
+                let barW = pixRat * 8
+                if (dates.length >= 2) {
+                  const x0 = timeScale.timeToCoordinate(dates[0])
+                  const x1 = timeScale.timeToCoordinate(dates[1])
+                  if (x0 != null && x1 != null) {
+                    barW = Math.abs(x1 - x0) * pixRat
+                  }
+                }
+
+                // Agrupar fechas contiguas en rangos
+                const ranges = []
+                let rangeStart = null
+                let rangeEnd   = null
+                let prevX      = null
+
+                for (const dateStr of dates) {
                   const x = timeScale.timeToCoordinate(dateStr)
                   if (x == null) continue
-                  const barW = Math.max(1, pixRat * 8)
-                  const xPx  = Math.round(x * pixRat)
-                  ctx.fillStyle = cfg.color
-                  ctx.fillRect(xPx - barW / 2, 0, barW, h)
+                  const xPx = x * pixRat
+
+                  if (prevX === null || Math.abs(xPx - prevX) > barW * 1.5) {
+                    if (rangeStart !== null) {
+                      ranges.push({ start: rangeStart, end: rangeEnd })
+                    }
+                    rangeStart = xPx
+                    rangeEnd   = xPx
+                  } else {
+                    rangeEnd = xPx
+                  }
+                  prevX = xPx
+                }
+                if (rangeStart !== null) {
+                  ranges.push({ start: rangeStart, end: rangeEnd })
+                }
+
+                // Dibujar cada rango como un rectángulo continuo
+                for (const { start, end } of ranges) {
+                  const x     = start - barW / 2
+                  const width = (end - start) + barW
+                  ctx.fillRect(x, 0, width, h)
                 }
               })
             }
