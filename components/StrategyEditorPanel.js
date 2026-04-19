@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
 import { MONO } from '../lib/utils'
-import { useStrategyBlocks } from '../lib/useStrategyBlocks'
 
 // ── Data ─────────────────────────────────────────────────────────────
 const ROLES = [
@@ -72,10 +71,24 @@ const STOP_OPTIONS = [
   { value:'atr_multiple',              label:'ATR múltiplo (fijo)',           params:{ n:2, atr_period:14 } },
   { value:'atr_trailing',              label:'ATR trailing (dinámico)',        params:{ n:2, atr_period:14 } },
 ]
+const SETUP_IN_OPTIONS = [
+  { value:'ema_cross_up',           label:'Cruce alcista EMA',            params:{ ma_fast:10, ma_slow:11 } },
+  { value:'price_above_ema',        label:'Precio sobre EMA',             params:{ period:10, ma_type:'EMA' } },
+  { value:'rsi_below',              label:'RSI sobrevendido',             params:{ rsi_period:9, level:30 } },
+  { value:'price_below_52w_high_pct',label:'Caída desde máx. 52 semanas',params:{ pct:20 } },
+]
+const SETUP_OUT_OPTIONS = [
+  { value:'ema_cross_down',  label:'Cruce bajista EMA',   params:{ ma_fast:10, ma_slow:11 } },
+  { value:'price_below_ema', label:'Precio bajo EMA',     params:{ period:10, ma_type:'EMA' } },
+  { value:'rsi_above',       label:'RSI sobrecomprado',   params:{ rsi_period:9, level:70 } },
+  { value:'profit_pct',      label:'Profit objetivo %',   params:{ pct:10 } },
+]
 const SECTION_OPTIONS_MAP = {
   filter:      FILTER_OPTIONS,
+  setup:       SETUP_IN_OPTIONS,
   trigger:     TRIGGER_IN_OPTIONS,
   abort:       ABORT_OPTIONS,
+  exit:        SETUP_OUT_OPTIONS,
   trigger_out: TRIGGER_OUT_OPTIONS,
   stop_loss:   STOP_OPTIONS,
 }
@@ -448,176 +461,6 @@ function SimpleBlockSelector({ options, value, onChange, params, onParamChange, 
   )
 }
 
-// ── BlockSelector — dropdown personalizado de biblioteca de bloques ───
-function BlockSelector({ blocks, value, onSelect, onDelete, onRename, onCreateAI }) {
-  const [open, setOpen]         = useState(false)
-  const [hoverId, setHoverId]   = useState(null)
-  const [editingId, setEditingId] = useState(null)
-  const [editName, setEditName] = useState('')
-  const containerRef            = useRef(null)
-  const editInputRef            = useRef(null)
-
-  // Cerrar al click fuera
-  useEffect(() => {
-    if (!open) return
-    function onMouseDown(e) {
-      if (containerRef.current && !containerRef.current.contains(e.target)) {
-        setOpen(false)
-        setEditingId(null)
-      }
-    }
-    document.addEventListener('mousedown', onMouseDown)
-    return () => document.removeEventListener('mousedown', onMouseDown)
-  }, [open])
-
-  // Focus al editar
-  useEffect(() => {
-    if (editingId && editInputRef.current) editInputRef.current.focus()
-  }, [editingId])
-
-  function startEdit(e, blk) {
-    e.stopPropagation()
-    setEditingId(blk.id)
-    setEditName(blk.name)
-  }
-
-  function confirmRename(id) {
-    if (editName.trim()) onRename(id, editName.trim())
-    setEditingId(null)
-  }
-
-  function handleDelete(e, blk) {
-    e.stopPropagation()
-    if (window.confirm(`¿Eliminar bloque "${blk.name}"?`)) onDelete(blk.id)
-  }
-
-  function selectBlock(blk) {
-    onSelect(blk)
-    setOpen(false)
-    setEditingId(null)
-  }
-
-  return (
-    <div ref={containerRef} style={{ position:'relative' }}>
-      {/* Botón trigger */}
-      <button
-        onClick={() => setOpen(o => !o)}
-        style={{
-          display:'flex', alignItems:'center', justifyContent:'space-between',
-          width:'100%', gap:6,
-          background:'var(--bg3)', border:'1px solid var(--border)',
-          color: value ? '#c8dff5' : '#3a5a75',
-          fontFamily:MONO, fontSize:11,
-          padding:'4px 8px', borderRadius:3, cursor:'pointer', textAlign:'left',
-          boxSizing:'border-box',
-        }}
-      >
-        <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex:1 }}>
-          {value || '— Ninguno —'}
-        </span>
-        <span style={{ color:'#3a5a75', flexShrink:0, fontSize:9 }}>▼</span>
-      </button>
-
-      {/* Panel flotante */}
-      {open && (
-        <div style={{
-          position:'absolute', top:'100%', left:0, right:0, zIndex:999, marginTop:2,
-          background:'#0d1520', border:'1px solid #1a2d45', borderRadius:4,
-          boxShadow:'0 4px 20px rgba(0,0,0,0.6)', overflow:'hidden', minWidth:180,
-        }}>
-          {/* Opción Ninguno — siempre visible */}
-          <div
-            onMouseEnter={e => e.currentTarget.style.background='#1a2d45'}
-            onMouseLeave={e => e.currentTarget.style.background='transparent'}
-            onClick={() => { onSelect(null); setOpen(false); setEditingId(null) }}
-            style={{ padding:'5px 10px', fontFamily:MONO, fontSize:11, color:'#3a5a75', cursor:'pointer', background:'transparent' }}
-          >— Ninguno —</div>
-          {blocks.length > 0 && <div style={{ borderTop:'1px solid #1a2d45' }} />}
-          {blocks.length === 0 && (
-            <div style={{ padding:'5px 10px', fontFamily:MONO, fontSize:10, color:'#3a5a75' }}>
-              Sin bloques guardados
-            </div>
-          )}
-          {blocks.map(blk => (
-            <div
-              key={blk.id}
-              onMouseEnter={() => setHoverId(blk.id)}
-              onMouseLeave={() => setHoverId(null)}
-              style={{
-                display:'flex', alignItems:'center', gap:4,
-                padding:'5px 8px',
-                background: hoverId === blk.id ? '#1a2d45' : 'transparent',
-                cursor:'pointer',
-              }}
-            >
-              {editingId === blk.id ? (
-                <input
-                  ref={editInputRef}
-                  value={editName}
-                  onChange={e => setEditName(e.target.value)}
-                  onKeyDown={e => {
-                    e.stopPropagation()
-                    if (e.key === 'Enter') confirmRename(blk.id)
-                    if (e.key === 'Escape') setEditingId(null)
-                  }}
-                  onBlur={() => confirmRename(blk.id)}
-                  onClick={e => e.stopPropagation()}
-                  style={{
-                    flex:1, background:'#0a1520', border:'1px solid #2a4a6a',
-                    color:'#c8dff5', fontFamily:MONO, fontSize:11,
-                    padding:'2px 6px', borderRadius:3, outline:'none',
-                  }}
-                />
-              ) : (
-                <span
-                  onClick={() => selectBlock(blk)}
-                  style={{
-                    flex:1, fontFamily:MONO, fontSize:11, color:'#7a9bc0',
-                    overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
-                  }}
-                >
-                  {blk.name}
-                </span>
-              )}
-              <span
-                title="Renombrar"
-                onClick={e => startEdit(e, blk)}
-                style={{
-                  opacity: hoverId === blk.id ? 1 : 0, transition:'opacity 0.1s',
-                  cursor:'pointer', fontSize:12, padding:'0 2px', lineHeight:1,
-                  userSelect:'none',
-                }}
-              >✏️</span>
-              <span
-                title="Eliminar"
-                onClick={e => handleDelete(e, blk)}
-                style={{
-                  opacity: hoverId === blk.id ? 1 : 0, transition:'opacity 0.1s',
-                  cursor:'pointer', fontSize:12, padding:'0 2px', lineHeight:1,
-                  userSelect:'none',
-                }}
-              >🗑️</span>
-            </div>
-          ))}
-
-          {/* Separador + opción IA */}
-          <div style={{ borderTop:'1px solid #1a2d45' }} />
-          <div
-            onMouseEnter={e => e.currentTarget.style.background='#1a2d45'}
-            onMouseLeave={e => e.currentTarget.style.background='transparent'}
-            onClick={() => { onCreateAI(); setOpen(false) }}
-            style={{
-              padding:'7px 10px', fontFamily:MONO, fontSize:11,
-              color:'#a78bfa', cursor:'pointer', background:'transparent',
-            }}
-          >
-            ✨ Crear con IA...
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
 
 // ── Role row (FILTER, SETUP, TRIGGER, ABORT, EXIT) ────────────────────
 function RoleRow({ role, definition, setDefinition, hideTypeSelect = false, librarySlot = null }) {
@@ -777,33 +620,14 @@ function MgmtRow({ definition, setDefinition }) {
 }
 
 // ── SectionRow — 4 columnas: Label+Selector | Params | Resumen | JSON ─
-function SectionRow({ sectionKey, definition, setDefinition, blocks = {}, saveBlock, deleteBlock, updateBlockName }) {
-  const isStop        = sectionKey === 'stop_loss'
-  const isTriggerOut  = sectionKey === 'trigger_out'
-  const role          = isStop ? 'stop' : sectionKey
-  const sectionBlocks = blocks[role] || []
-  const r             = ROLES.find(x => x.key === sectionKey)
+function SectionRow({ sectionKey, definition, setDefinition }) {
+  const r = ROLES.find(x => x.key === sectionKey)
 
-  const [activeName, setActiveName] = useState('')
-  const [aiMode, setAiMode]         = useState(false)
-  const [aiText, setAiText]         = useState('')
-  const [aiLoading, setAiLoading]   = useState(false)
-  const [aiError, setAiError]       = useState('')
-  const [aiResult, setAiResult]     = useState(null)
-  const [saveName, setSaveName]     = useState('')
-
-  const block    = definition?.[sectionKey] || null
-  // FIX 3: normalize legacy filter structure { logic, conditions[] } → flat { type, ...params }
-  // (display only — JSON editor still shows raw; onChange always saves flat)
+  const block = definition?.[sectionKey] || null
+  // Normalize legacy filter structure { logic, conditions[] } → flat { type, ...params }
   const displayBlock = (sectionKey === 'filter' && block?.conditions?.length)
     ? block.conditions[0]
     : block
-  // For regular role rows
-  const rev      = !isStop ? (CREV[displayBlock?.type] || []) : []
-  const ind      = rev[0] || ''
-  const op       = rev[1] || ''
-  // For stop rows
-  const stopType = isStop ? (displayBlock?.type || '') : ''
 
   function onSectionChange(val) {
     setDefinition(prev => { const n={...prev}; if(val==null) delete n[sectionKey]; else n[sectionKey]=val; return n })
@@ -811,248 +635,46 @@ function SectionRow({ sectionKey, definition, setDefinition, blocks = {}, saveBl
   function setBlock(b) {
     setDefinition(prev => { const n={...prev}; if(b) n[sectionKey]=b; else delete n[sectionKey]; return n })
   }
-  // Regular role helpers
-  function onP(key, val) { setBlock(validateBlockDefinition({ ...block, [key]: val })) }
-  function onIndChange(newInd) {
-    if (!newInd) { setBlock(null); return }
-    const firstOp = OPS[newInd]?.[0]?.v || ''
-    setBlock({ type: CMAP[`${newInd}.${firstOp}`], ...IND_DEFAULTS[newInd] })
-  }
-  // Stop helpers
-  function onStopTypeChange(t) {
-    if (!t)                     setBlock(null)
-    else if (t==='tecnico')     setBlock({ type:'tecnico',      ma_period:10 })
-    else if (t==='atr_based')   setBlock({ type:'atr_based',    atr_period:14, atr_mult:1.5 })
-    else if (t==='none')        setBlock({ type:'none' })
-    else if (t==='fixed_pct')   setBlock({ type:'fixed_pct',    params:{ pct:5 } })
-    else if (t==='trailing_atr')setBlock({ type:'trailing_atr', params:{ atr_period:14, atr_mult:2 } })
-  }
-  function onStopP(key,val)     { setBlock({ ...block, [key]: val }) }
-  function onStopParam(key,val) { setBlock({ ...block, params:{ ...(block?.params||{}), [key]:val } }) }
-
-  function handleSelect(blk) {
-    if (!blk) { onSectionChange(null); setActiveName(''); setAiMode(false); setAiResult(null); return }
-    onSectionChange(validateBlockDefinition(blk.definition))
-    setActiveName(blk.name); setAiMode(false); setAiResult(null)
-  }
-  function openAI() { setAiMode(true); setAiText(''); setAiError(''); setAiResult(null); setSaveName('') }
-
-  async function generateAI() {
-    if (!aiText.trim()) return
-    setAiLoading(true); setAiError(''); setAiResult(null)
-    try {
-      const res = await fetch('/api/conditions?action=groq_block', {
-        method:'POST', headers:getAuthH(),
-        body:JSON.stringify({ text:aiText.trim(), role }),
-      })
-      const data = await res.json()
-      if (data.error) throw new Error(data.error)
-      const clean = validateBlockDefinition(stripNulls(data))
-      onSectionChange(clean); setAiResult(clean); setActiveName('')
-    } catch(e) { setAiError(e.message) }
-    finally { setAiLoading(false) }
-  }
-  async function saveToLibrary() {
-    if (!saveName.trim() || !saveBlock || !aiResult) return
-    await saveBlock(role, saveName.trim(), validateBlockDefinition(stripNulls(aiResult)))
-    setActiveName(saveName.trim()); setAiMode(false); setAiResult(null); setSaveName('')
-  }
-
-  const btnGhost = { background:'transparent', border:'1px solid var(--border)', color:'var(--text3)', fontFamily:MONO, fontSize:10, padding:'3px 8px', borderRadius:3, cursor:'pointer' }
-  const btnAI    = { background:'rgba(155,114,255,0.12)', border:'1px solid rgba(155,114,255,0.4)', color:'#9b72ff', fontFamily:MONO, fontSize:10, padding:'3px 10px', borderRadius:3, whiteSpace:'nowrap' }
-  const btnSave  = { background:'rgba(0,212,255,0.12)', border:'1px solid rgba(0,212,255,0.4)', color:'var(--accent)', fontFamily:MONO, fontSize:10, padding:'3px 10px', borderRadius:3, cursor:'pointer', whiteSpace:'nowrap' }
 
   const colBase = { padding:'8px 10px', background:'var(--bg2)', minHeight:80, boxSizing:'border-box' }
-
-  // Col 2: param controls
-  const TRIGGER_OUT_NATIVE = ['breakout_low','next_open','close_of_setup']
-  const isTriggerOutNative = !block?.type || TRIGGER_OUT_NATIVE.includes(block?.type)
-  const paramControls = isTriggerOut ? (
-    <>
-      {/* Select nativo — solo cuando no hay tipo de indicador cargado y hay bloque */}
-      {isTriggerOutNative && block && (
-        <select
-          value={block?.type || ''}
-          onChange={e => {
-            const t = e.target.value
-            if (!t) setBlock(null)
-            else setBlock({ type: t })
-          }}
-          style={{ ...SEL, width:'100%' }}
-        >
-          <option value="">— Sin trigger out —</option>
-          <option value="breakout_low">Breakout del low</option>
-          <option value="next_open">Apertura siguiente vela</option>
-          <option value="close_of_setup">Cierre vela de setup out</option>
-        </select>
-      )}
-      {/* Params de indicador — cuando se carga un bloque de biblioteca */}
-      {ind==='ema' && block && <>
-        <Num label="Rápida" value={block.ma_fast??10}  onChange={v=>onP('ma_fast',v)} />
-        <Num label="Lenta"  value={block.ma_slow??20}  onChange={v=>onP('ma_slow',v)} />
-      </>}
-      {(ind==='precio'||ind==='cierre') && block && <>
-        <Num label="Período" value={block.ma_period??50} onChange={v=>onP('ma_period',v)} />
-      </>}
-      {ind==='rsi' && block && <>
-        <Num label="Período" value={block.rsi_period ?? block.period ?? 14} onChange={v=>onP('rsi_period',v)} />
-        <Num label="Nivel"   value={block.level ?? 50}                      onChange={v=>onP('level',v)} />
-      </>}
-      {ind==='macd' && block && <>
-        <Num label="Rápida" value={block.macd_fast   ?? block.fast   ?? 12} onChange={v=>onP('macd_fast',v)} />
-        <Num label="Lenta"  value={block.macd_slow   ?? block.slow   ?? 26} onChange={v=>onP('macd_slow',v)} />
-        <Num label="Señal"  value={block.macd_signal ?? block.signal ?? 9}  onChange={v=>onP('macd_signal',v)} />
-      </>}
-      {ind==='52w' && block && <>
-        <Num label="%" value={block.pct??20} step={0.5} min={1} max={100} onChange={v=>onP('pct',v)} />
-      </>}
-      {ind==='resultado' && block && <>
-        <Num label="%" value={block.pct??10} step={0.5} min={0.1} max={100} onChange={v=>onP('pct',v)} />
-      </>}
-    </>
-  ) : isStop ? (
-    <>
-      {stopType==='tecnico' && <Num label="Período MA"  value={block.ma_period??10}          onChange={v=>onStopP('ma_period',v)} />}
-      {stopType==='atr_based' && <>
-        <Num label="Período ATR" value={block.atr_period??14}         onChange={v=>onStopP('atr_period',v)} />
-        <Num label="×Mult"       value={block.atr_mult??1.5}          onChange={v=>onStopP('atr_mult',v)} min={0.1} max={10} />
-      </>}
-      {stopType==='fixed_pct' && <Num label="% entrada" value={block.params?.pct??5}         onChange={v=>onStopParam('pct',v)} min={0.5} max={50} />}
-      {stopType==='trailing_atr' && <>
-        <Num label="Período ATR" value={block.params?.atr_period??14} onChange={v=>onStopParam('atr_period',v)} min={5} max={50} />
-        <Num label="×Mult"       value={block.params?.atr_mult??2}    onChange={v=>onStopParam('atr_mult',v)} min={0.5} max={5} />
-      </>}
-    </>
-  ) : (
-    <>
-      {ind==='ema' && block && <>
-        <Num label="Rápida" value={block.ma_fast??10}  onChange={v=>onP('ma_fast',v)} />
-        <Num label="Lenta"  value={block.ma_slow??20}  onChange={v=>onP('ma_slow',v)} />
-      </>}
-      {(ind==='precio'||ind==='cierre') && block && <>
-        <Num label="Período" value={block.ma_period??50} onChange={v=>onP('ma_period',v)} />
-      </>}
-      {ind==='rsi' && block && <>
-        <Num label="Período" value={block.rsi_period ?? block.period ?? 14} onChange={v=>onP('rsi_period',v)} />
-        <Num label="Nivel"   value={block.level ?? 50}                      onChange={v=>onP('level',v)} />
-      </>}
-      {ind==='macd' && block && <>
-        <Num label="Rápida" value={block.macd_fast   ?? block.fast   ?? 12} onChange={v=>onP('macd_fast',v)} />
-        <Num label="Lenta"  value={block.macd_slow   ?? block.slow   ?? 26} onChange={v=>onP('macd_slow',v)} />
-        <Num label="Señal"  value={block.macd_signal ?? block.signal ?? 9}  onChange={v=>onP('macd_signal',v)} />
-      </>}
-      {ind==='52w' && block && <>
-        <Num label="%" value={block.pct??20} step={0.5} min={1} max={100} onChange={v=>onP('pct',v)} />
-      </>}
-      {ind==='resultado' && block && <>
-        <Num label="%" value={block.pct??10} step={0.5} min={0.1} max={100} onChange={v=>onP('pct',v)} />
-      </>}
-    </>
-  )
-
-  const indLabel = getIndicatorLabel(block)
-
-  // Panel IA — debajo de la fila, ancho completo
-  const aiPanel = aiMode && (
-    <div style={{ display:'flex', flexDirection:'column', gap:4, padding:'8px 10px', background:'#080f1a', border:'1px solid #1a2d45', borderRadius:4, marginTop:2 }}>
-      <div style={{ display:'flex', gap:4, alignItems:'flex-start' }}>
-        <textarea autoFocus rows={2} value={aiText}
-          onChange={e => setAiText(e.target.value)}
-          onKeyDown={e => { if (e.key==='Escape') setAiMode(false) }}
-          placeholder="describe el bloque (ej: RSI cruza nivel 30 al alza)"
-          style={{ flex:1, background:'#040810', border:'1px solid #1a2d45', color:'#7a9bc0', fontFamily:MONO, fontSize:10, padding:'4px 6px', borderRadius:3, resize:'none', outline:'none' }}
-        />
-        <div style={{ display:'flex', flexDirection:'column', gap:3 }}>
-          <button onClick={generateAI} disabled={aiLoading||!aiText.trim()}
-            style={{ ...btnAI, opacity:(aiLoading||!aiText.trim())?0.5:1, cursor:(aiLoading||!aiText.trim())?'not-allowed':'pointer' }}>
-            {aiLoading ? '⟳' : '✨ Generar'}
-          </button>
-          <button onClick={() => { setAiMode(false); setAiResult(null) }} style={btnGhost}>✕ Cerrar</button>
-        </div>
-      </div>
-      {aiError && <div style={{ fontFamily:MONO, fontSize:9, color:'#ff7a7a' }}>⚠ {aiError}</div>}
-      {aiResult && (
-        <div style={{ display:'flex', gap:4, alignItems:'center', paddingTop:2 }}>
-          <input autoFocus type="text" value={saveName}
-            onChange={e => setSaveName(e.target.value)}
-            onKeyDown={e => { if (e.key==='Enter') saveToLibrary() }}
-            placeholder="Nombre para la biblioteca…"
-            style={{ flex:1, background:'#040810', border:'1px solid #1a2d45', color:'#c8dff5', fontFamily:MONO, fontSize:10, padding:'3px 6px', borderRadius:3, outline:'none' }}
-          />
-          <button onClick={saveToLibrary} disabled={!saveName.trim()}
-            style={{ ...btnSave, opacity:saveName.trim()?1:0.45 }}>
-            Guardar en biblioteca
-          </button>
-        </div>
-      )}
-    </div>
-  )
 
   return (
     <div style={{ marginBottom:3 }}>
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', gap:6, alignItems:'start' }}>
 
-        {/* Col 1 — Label + BlockSelector (biblioteca) + selector de tipo */}
+        {/* Col 1 — Label + selector de tipo */}
         <div style={{ ...colBase, borderLeft:`3px solid ${r.color}`, borderRadius:'0 4px 4px 0', display:'flex', flexDirection:'column', gap:8 }}>
           <span style={{ fontFamily:MONO, fontSize:9, fontWeight:700, letterSpacing:'0.1em', color:r.color, background:`${r.color}14`, border:`1px solid ${r.color}33`, padding:'3px 8px', borderRadius:3, textAlign:'center', alignSelf:'flex-start' }}>
             {r.label}
           </span>
-          {/* Biblioteca — solo para bloques genéricos (setup, exit) */}
-          {!SECTION_OPTIONS_MAP[sectionKey] && (
-            <BlockSelector
-              blocks={sectionBlocks}
-              value={activeName}
-              onSelect={handleSelect}
-              onDelete={id => { deleteBlock && deleteBlock(id); setActiveName(p => p ? '' : p) }}
-              onRename={(id, name) => {
-                updateBlockName && updateBlockName(id, name)
-                setActiveName(prev => { const blk=sectionBlocks.find(b=>b.id===id); return (blk&&blk.name===prev)?name:prev })
-              }}
-              onCreateAI={openAI}
-            />
-          )}
-          {/* Selector de tipo propio (filter, trigger, abort, trigger_out, stop_loss) */}
-          {SECTION_OPTIONS_MAP[sectionKey] && (
-            <SimpleBlockSelector
-              options={SECTION_OPTIONS_MAP[sectionKey]}
-              value={displayBlock?.type || ''}
-              onChange={(type, defaultParams) => {
-                setBlock(type ? { type, ...defaultParams } : null)
-              }}
-              params={displayBlock || {}}
-              onParamChange={(key, val) => {
-                setBlock(displayBlock ? { ...displayBlock, [key]: val } : { [key]: val })
-              }}
-              selectOnly
-            />
-          )}
+          <SimpleBlockSelector
+            options={SECTION_OPTIONS_MAP[sectionKey]}
+            value={displayBlock?.type || ''}
+            onChange={(type, defaultParams) => {
+              setBlock(type ? { type, ...defaultParams } : null)
+            }}
+            params={displayBlock || {}}
+            onParamChange={(key, val) => {
+              setBlock(displayBlock ? { ...displayBlock, [key]: val } : { [key]: val })
+            }}
+            selectOnly
+          />
         </div>
 
-        {/* Col 2 — Parámetros del bloque */}
+        {/* Col 2 — Parámetros */}
         <div style={{ ...colBase, borderRadius:4, display:'flex', flexDirection:'column', gap:8 }}>
-          {SECTION_OPTIONS_MAP[sectionKey] ? (
-            <SimpleBlockSelector
-              options={SECTION_OPTIONS_MAP[sectionKey]}
-              value={displayBlock?.type || ''}
-              onChange={(type, defaultParams) => {
-                setBlock(type ? { type, ...defaultParams } : null)
-              }}
-              params={displayBlock || {}}
-              onParamChange={(key, val) => {
-                setBlock(displayBlock ? { ...displayBlock, [key]: val } : { [key]: val })
-              }}
-              paramsOnly
-            />
-          ) : (
-            <>
-              {indLabel && (
-                <span style={{ fontFamily:MONO, fontSize:9, color:'#7a9bc0', letterSpacing:'0.06em', textTransform:'uppercase' }}>{indLabel}</span>
-              )}
-              <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
-                {paramControls}
-              </div>
-            </>
-          )}
+          <SimpleBlockSelector
+            options={SECTION_OPTIONS_MAP[sectionKey]}
+            value={displayBlock?.type || ''}
+            onChange={(type, defaultParams) => {
+              setBlock(type ? { type, ...defaultParams } : null)
+            }}
+            params={displayBlock || {}}
+            onParamChange={(key, val) => {
+              setBlock(displayBlock ? { ...displayBlock, [key]: val } : { [key]: val })
+            }}
+            paramsOnly
+          />
         </div>
 
         {/* Col 3 — Resumen legible */}
@@ -1066,7 +688,6 @@ function SectionRow({ sectionKey, definition, setDefinition, blocks = {}, saveBl
         </div>
 
       </div>
-      {aiPanel}
     </div>
   )
 }
@@ -1085,7 +706,6 @@ export default function StrategyEditorPanel({
   const [visOpen, setVisOpen]     = useState(false)
   const [addingInd, setAddingInd] = useState(false)
   const aiInputRef                = useRef(null)
-  const { blocks, saveBlock, deleteBlock, updateBlockName } = useStrategyBlocks()
 
   useEffect(() => {
     if (focusAI) {
@@ -1418,13 +1038,9 @@ export default function StrategyEditorPanel({
         {/* Role builders */}
         <div style={{ display:'flex', flexDirection:'column', gap:0, marginBottom:10 }}>
           {['filter','setup','trigger','abort','exit','trigger_out'].map(role => (
-            <SectionRow key={role} sectionKey={role} definition={definition} setDefinition={setDefinition}
-              blocks={blocks} saveBlock={saveBlock} deleteBlock={deleteBlock} updateBlockName={updateBlockName}
-            />
+            <SectionRow key={role} sectionKey={role} definition={definition} setDefinition={setDefinition} />
           ))}
-          <SectionRow sectionKey="stop_loss" definition={definition} setDefinition={setDefinition}
-            blocks={blocks} saveBlock={saveBlock} deleteBlock={deleteBlock} updateBlockName={updateBlockName}
-          />
+          <SectionRow sectionKey="stop_loss" definition={definition} setDefinition={setDefinition} />
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', gap:6, alignItems:'stretch', marginBottom:3 }}>
             <div style={{ gridColumn:'1 / 3' }}>
               <MgmtRow definition={definition} setDefinition={setDefinition} />
