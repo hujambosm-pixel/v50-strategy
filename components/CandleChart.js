@@ -428,7 +428,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
           const size=cfg?.size==='S'?1:cfg?.size==='L'?3:cfg?.size==='M'?2:defSize
           const text=rawShape in textMap?textMap[rawShape]:defText
           for(const date of dates){
-            marks.push({time:date,position:pos,color,shape,size,text})
+            marks.push({time:date,position:pos,color,shape:'circle',size:0,text})
           }
         }
       }
