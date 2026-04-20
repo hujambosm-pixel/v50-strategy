@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__Claude_Preview__preview_start",
+      "Bash(git -C \"C:\\\\Users\\\\Usuario\\\\Desktop\\\\v50-strategy\" restore pages/index.js)",
+      "Bash(git -C \"C:\\\\Users\\\\Usuario\\\\Desktop\\\\v50-strategy\" status pages/index.js)",
+      "Bash(git -C \"C:\\\\Users\\\\Usuario\\\\Desktop\\\\v50-strategy\" restore --staged pages/index.js)",
+      "Bash(git -C \"C:\\\\Users\\\\Usuario\\\\Desktop\\\\v50-strategy\" merge claude/kind-mahavira)",
+      "Bash(git -C \"C:\\\\Users\\\\Usuario\\\\Desktop\\\\v50-strategy\" push origin main)",
+      "Bash(git -C \"C:\\\\Users\\\\Usuario\\\\Desktop\\\\v50-strategy\" push origin --delete claude/kind-mahavira)",
+      "Bash(node -e ':*)",
+      "Bash(Remove-Item \"C:\\\\Users\\\\Usuario\\\\Desktop\\\\v50-strategy\\\\.claude\\\\worktrees\\\\kind-mahavira\\\\lib\\\\useStrategyBlocks.js\" -Force)"
+    ]
+  }
+}

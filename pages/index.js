@@ -12,7 +12,6 @@ import EquityChart from '../components/EquityChart'
 import Tip from '../components/Tip'
 import SettingsModal from '../components/SettingsModal'
 import StrategyAIPanel from '../components/StrategyAIPanel'
-import StrategyBuilder from '../components/StrategyBuilder'
 import { MultiCartChart, OccupancyBarChart, McOccupancyChart, StratCompareChart, AssetSignalChart } from '../components/BacktestCharts'
 import { TlEquityChart, TlInvestChart } from '../components/TlCharts'
 import ContextThemeMenu, { applyTema } from '../components/ContextThemeMenu'
@@ -1981,7 +1980,7 @@ export default function Home() {
     try{
       const body={ name:stratName, description:stratDesc,
         years:Number(years), capital_ini:Number(capitalIni),
-        definition:{ ...definition }, color:stratColor }
+        definition:JSON.parse(JSON.stringify(definition)), color:stratColor }
       const method = overwriteId ? 'PUT' : 'POST'
       if(overwriteId) body.id = overwriteId
       const res=await apiFetch('/api/strategies',{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
@@ -1995,6 +1994,24 @@ export default function Home() {
     }catch(e){ setStratMsg({type:'err',text:e.message}) }
     finally{ setStratSaving(false) }
   },[stratName,stratDesc,simbolo,years,capitalIni,definition,stratColor])
+
+  // ── Clonar estrategia activa ──
+  const cloneStrategy=useCallback(async()=>{
+    const body={
+      name:        stratName+' (copia)',
+      description: stratDesc,
+      years:       Number(years),
+      capital_ini: Number(capitalIni),
+      definition:  JSON.parse(JSON.stringify(definition)),
+      color:       stratColor,
+    }
+    try{
+      const res=await apiFetch('/api/strategies',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+      if(!res.ok) throw new Error('Error clonando')
+      await reloadStrategies(false)
+      setStratMsg({type:'ok',text:'Estrategia clonada ✓'})
+    }catch(e){ console.error('Error clonando:',e) }
+  },[stratName,stratDesc,years,capitalIni,definition,stratColor])
 
   // ── Cargar estrategia guardada en el builder ──
   const loadStrategy=useCallback((strat)=>{
@@ -3013,7 +3030,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.51</title>
+        <title>Trading Simulator V9.52</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3090,7 +3107,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.51
+            <span className="dot"/>Trading Simulator V9.52
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4340,6 +4357,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 onSave={saveEditStr}
                 onCancel={closeEditStr}
                 onDelete={()=>deleteStr(editingStr.id)}
+                onClone={cloneStrategy}
                 saving={strSaving}
               />
             )}

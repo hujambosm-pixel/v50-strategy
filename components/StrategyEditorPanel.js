@@ -696,7 +696,7 @@ function SectionRow({ sectionKey, definition, setDefinition }) {
 export default function StrategyEditorPanel({
   strForm, setStrForm, definition, setDefinition,
   strategy,
-  onSave, onCancel, onDelete, saving,
+  onSave, onCancel, onDelete, onClone, saving,
 }) {
   const [visDraft, setVisDraft]   = useState(null)
   const [visOpen, setVisOpen]     = useState(false)
@@ -788,6 +788,7 @@ export default function StrategyEditorPanel({
         <span style={{ fontFamily:MONO, fontSize:14, fontWeight:700, color:strForm.color||'var(--accent)' }}>{strForm.name||'—'}</span>
         <div style={{ marginLeft:'auto', display:'flex', gap:8 }}>
           {strategy?.id && <button onClick={onDelete} style={{ background:'rgba(255,77,109,0.1)', border:'1px solid #ff4d6d', color:'#ff4d6d', fontFamily:MONO, fontSize:11, padding:'4px 12px', borderRadius:4, cursor:'pointer' }}>🗑 Eliminar</button>}
+          {onClone && <button onClick={onClone} style={{ background:'rgba(99,102,241,0.15)', border:'1px solid #6366f1', color:'#a5b4fc', fontFamily:MONO, fontSize:11, padding:'6px 14px', borderRadius:4, cursor:'pointer' }}>⧉ Clonar</button>}
           <button onClick={onCancel} style={{ background:'transparent', border:'1px solid var(--border)', color:'#e2e8f0', fontFamily:MONO, fontSize:11, padding:'4px 12px', borderRadius:4, cursor:'pointer' }}>✕ Cancelar</button>
           <button onClick={onSave} disabled={saving} style={{ background:'rgba(0,212,255,0.15)', border:'1px solid var(--accent)', color:'var(--accent)', fontFamily:MONO, fontSize:11, fontWeight:700, padding:'4px 16px', borderRadius:4, cursor:saving?'not-allowed':'pointer' }}>{saving?'⟳ Guardando…':'💾 Guardar'}</button>
         </div>
