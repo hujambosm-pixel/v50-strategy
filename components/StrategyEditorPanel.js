@@ -714,6 +714,13 @@ export default function StrategyEditorPanel({
       { key:'trigger_out', label:'Trigger Out' },
       { key:'stop_loss',   label:'Stop Loss' },
     ]
+    // Helper: añadir o fusionar indicador por id global (sin sufijo de bloque)
+    function addInd(id, entry) {
+      const ex = result.find(r => r.id === id)
+      if (ex) { ex.source = ex.source + ', ' + entry.source }
+      else     { seen.add(id); result.push({ id, ...entry }) }
+    }
+
     blockList.forEach(({ key, label }) => {
       const b = def[key]
       if (!b) return
@@ -721,37 +728,26 @@ export default function StrategyEditorPanel({
       if (t.includes('ema') || t.includes('ma_cross') || t.includes('precio_ema')) {
         const fast = b.ma_fast || b.ema_r || null
         const slow = b.ma_slow || b.ema_l || null
-        if (fast) {
-          const id = `ema_${fast}_${key}`
-          if (!seen.has(id)) { seen.add(id); result.push({ id, type:'ema', period:fast, source:label, color:'#00d4ff', lineWidth:1, visible:true }) }
-        }
-        if (slow) {
-          const id = `ema_${slow}_${key}`
-          if (!seen.has(id)) { seen.add(id); result.push({ id, type:'ema', period:slow, source:label, color:'#f59e0b', lineWidth:1, visible:true }) }
-        }
+        if (fast) addInd(`ema_${fast}`, { type:'ema', period:fast, source:label, color:'#00d4ff', lineWidth:1, visible:true })
+        if (slow) addInd(`ema_${slow}`, { type:'ema', period:slow, source:label, color:'#f59e0b', lineWidth:1, visible:true })
       }
       if (t.includes('rsi')) {
         const period = b.rsi_period || b.period || 14
-        const id = `rsi_${period}_${key}`
-        if (!seen.has(id)) { seen.add(id); result.push({ id, type:'rsi', period, level: b.level ?? null, source:label, color:'#a78bfa', lineWidth:1, visible:true }) }
+        addInd(`rsi_${period}`, { type:'rsi', period, level: b.level ?? null, source:label, color:'#a78bfa', lineWidth:1, visible:true })
       }
       if (t.includes('ma_direction')) {
         const period = b.period || 10
-        const id = `ema_${period}_${key}`
-        if (!seen.has(id)) { seen.add(id); result.push({ id, type:'ema', period, source:label, color:'#00d4ff', lineWidth:1, visible:true }) }
+        addInd(`ema_${period}`, { type:'ema', period, source:label, color:'#00d4ff', lineWidth:1, visible:true })
       }
       if (t.includes('rsi_direction') || (t.includes('rsi_cross') && !t.includes('rsi_cross_up') && !t.includes('rsi_cross_down'))) {
         const period = b.rsi_period || b.period || 9
-        const id = `rsi_${period}_${key}`
-        if (!seen.has(id)) { seen.add(id); result.push({ id, type:'rsi', period, level: b.level ?? null, source:label, color:'#a78bfa', lineWidth:1, visible:true }) }
+        addInd(`rsi_${period}`, { type:'rsi', period, level: b.level ?? null, source:label, color:'#a78bfa', lineWidth:1, visible:true })
       }
       if (t.includes('macd')) {
-        const id = `macd_${key}`
-        if (!seen.has(id)) { seen.add(id); result.push({ id, type:'macd', period:null, source:label, color:'#34d399', lineWidth:1, visible:true }) }
+        addInd('macd', { type:'macd', period:null, source:label, color:'#34d399', lineWidth:1, visible:true })
       }
       if (t.includes('vol')) {
-        const id = `vol_${key}`
-        if (!seen.has(id)) { seen.add(id); result.push({ id, type:'vol', period:null, source:label, color:'#64748b', lineWidth:1, visible:true }) }
+        addInd('vol', { type:'vol', period:null, source:label, color:'#64748b', lineWidth:1, visible:true })
       }
     })
     return result
