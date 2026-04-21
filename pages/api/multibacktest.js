@@ -51,10 +51,12 @@ function runSingleBacktest(data, sp500Data, cfg) {
   const emaRArr = calcEMA(closes, emaR), emaLArr = calcEMA(closes, emaL)
   const atrArr = tipoStop === 'atr' ? calcATR(highs, lows, closes, atrPeriod) : null
   let filtroArr = new Array(data.length).fill(false)
+  let _sp500C = [], _spEmaRArr = []  // DEBUG — hoisted para console.log
   if (sp500Data && tipoFiltro !== 'none') {
     const sp500Closes = data.map(d=>{ const m=sp500Data.find(s=>s.date===d.date); return m?m.close:null })
     let last=null; for(let i=0;i<sp500Closes.length;i++){if(sp500Closes[i]!=null)last=sp500Closes[i];else sp500Closes[i]=last}
     const spEmaR=calcEMA(sp500Closes,sp500EmaR), spEmaL=calcEMA(sp500Closes,sp500EmaL)
+    _sp500C=sp500Closes; _spEmaRArr=spEmaR  // DEBUG
     filtroArr=data.map((_,i)=>{
       if(sp500Closes[i]==null||spEmaR[i]==null) return false
       if(tipoFiltro==='sp500_above_ema'||tipoFiltro==='precio_ema'||tipoFiltro==='price_above_ema') return sp500Closes[i]<spEmaR[i]
@@ -112,6 +114,7 @@ function runSingleBacktest(data, sp500Data, cfg) {
       if(d.high<breakout){breakout=d.high;if(tipoStop==='tecnico')stopNivel=Math.min(er,d.low)}
       if(d.high>=breakout){
         blockEvents.trigger_in.push(d.date)
+        console.log(`[TRIGGER_IN] fecha=${d.date} sp500C=${_sp500C[i]?.toFixed(2)} spEmaR=${_spEmaRArr[i]?.toFixed(2)} filt=${filtroArr[i]} tipoFiltro=${tipoFiltro} px=${breakout}`)
         precioEntrada=breakout;idxEntrada=i;enPosicion=true;entradaPend=false;salidaPend=false
         if(tipoStop==='atr'&&atrArr?.[i])stopNivel=precioEntrada-atrArr[i]*atrMult
         else if(tipoStop!=='tecnico')stopNivel=null
@@ -126,6 +129,7 @@ function runSingleBacktest(data, sp500Data, cfg) {
       if(d.high<breakout){breakout=d.high;if(tipoStop==='tecnico')stopNivel=Math.min(er,d.low)}
       if(d.high>=breakout){
         blockEvents.trigger_in.push(d.date)
+        console.log(`[TRIGGER_IN reentry] fecha=${d.date} sp500C=${_sp500C[i]?.toFixed(2)} spEmaR=${_spEmaRArr[i]?.toFixed(2)} filt=${filtroArr[i]} tipoFiltro=${tipoFiltro} px=${breakout}`)
         precioEntrada=breakout;idxEntrada=i;enPosicion=true
         entradaPend=reentryPend=reentryMode=false;salidaPend=false
         if(tipoStop==='atr'&&atrArr?.[i])stopNivel=precioEntrada-atrArr[i]*atrMult
