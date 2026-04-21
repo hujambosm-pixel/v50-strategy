@@ -589,9 +589,9 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
           const dates=blockEvents[BG_KEY_MAP[key]]
           if(!dates||dates.length===0) continue
           const opacity=(cfg.opacity||15)/100
-          const rgba = key==='filter'
-            ? 'rgba(255,80,80,0.15)'
-            : (()=>{ const c=cfg.color||'#22c55e'; const r=parseInt(c.slice(1,3),16),g=parseInt(c.slice(3,5),16),b=parseInt(c.slice(5,7),16); return `rgba(${r},${g},${b},${opacity})` })()
+          const c=key==='filter'?(cfg.color||'#ff5050'):(cfg.color||'#22c55e')
+          const r=parseInt(c.slice(1,3),16),g=parseInt(c.slice(3,5),16),b=parseInt(c.slice(5,7),16)
+          const rgba=`rgba(${r},${g},${b},${opacity})`
           const dummySeries=chart.addLineSeries({priceScaleId:'blockbg',color:'rgba(0,0,0,0)',lineWidth:1,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
           dummySeries.setData([{time:data[0].date,value:0}])
           if(!blockbgScaleSet){

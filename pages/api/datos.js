@@ -207,7 +207,7 @@ export default async function handler(req, res) {
 
     if (!cfgFinal) return res.status(400).json({error:'Se requiere cfg o definition'})
 
-    const { chartData, trades, capitalReinv, gananciaSimple, startDate, blockEvents, triggerIns } =
+    const { chartData, trades, capitalReinv, gananciaSimple, startDate, blockEvents } =
       runBacktestV50(data, sp500Data, cfgFinal)
 
     const capIni       = cfgFinal.capitalIni
@@ -235,7 +235,6 @@ export default async function handler(req, res) {
       startDate: startDate.toISOString().split('T')[0],
       sp500Status, ...curves,
       blockEvents: blockEvents || {filter:[],setup_in:[],setup_in_range:[],trigger_in:[],abort:[],setup_out:[],setup_out_range:[],trigger_out:[],stop_loss:[]},
-      triggerIns,
       meta: {
         simbolo,
         ultimaFecha:  data[data.length-1].date,
