@@ -137,7 +137,8 @@ export default async function handler(req, res) {
       const triggerOut = definition.trigger_out || {}
       const stopLoss   = definition.stop_loss   || {}
       const mgmt       = definition.management  || {}
-      const filter_    = definition.filter      || {}
+      const rawFilt_   = definition.filter      || {}
+      const filter_    = rawFilt_.conditions?.length ? rawFilt_.conditions[0] : rawFilt_
 
       // Solo tipos reconocidos por evaluateTrigger/evaluateTriggerOut.
       // Si definition.trigger contiene un tipo de setup (ej: "ema_cross_up"),
