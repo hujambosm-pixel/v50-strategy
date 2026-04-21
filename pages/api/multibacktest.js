@@ -57,8 +57,8 @@ function runSingleBacktest(data, sp500Data, cfg) {
     const spEmaR=calcEMA(sp500Closes,sp500EmaR), spEmaL=calcEMA(sp500Closes,sp500EmaL)
     filtroArr=data.map((_,i)=>{
       if(sp500Closes[i]==null||spEmaR[i]==null) return false
-      if(tipoFiltro==='precio_ema') return sp500Closes[i]<spEmaR[i]
-      if(tipoFiltro==='ema_ema') return spEmaR[i]<spEmaL[i]
+      if(tipoFiltro==='sp500_above_ema'||tipoFiltro==='precio_ema'||tipoFiltro==='price_above_ema') return sp500Closes[i]<spEmaR[i]
+      if(tipoFiltro==='sp500_ema_fast_above_slow'||tipoFiltro==='ema_ema') return spEmaR[i]<spEmaL[i]
       return false
     })
   }
@@ -420,7 +420,7 @@ export default async function handler(req, res) {
     const entry = definition.entry || {}
     const stop  = definition.stop  || {}
     const mgmt  = definition.management || {}
-    const filt  = definition.filters?.market?.[0] || {}
+    const filt  = definition.filter || {}
     cfg = {
       emaR:        entry.ma_fast   || 10,
       emaL:        entry.ma_slow   || 11,
@@ -431,9 +431,9 @@ export default async function handler(req, res) {
       atrMult:     stop.atr_mult   || 1.0,
       sinPerdidas: mgmt.sin_perdidas !== false,
       reentry:     mgmt.reentry     !== false,
-      tipoFiltro:  filt.condition   || 'none',
-      sp500EmaR:   filt.ma_fast     || 10,
-      sp500EmaL:   filt.ma_slow     || 11,
+      tipoFiltro:  filt.type        || 'none',
+      sp500EmaR:   filt.sp500EmaR   || filt.ma_fast || 10,
+      sp500EmaL:   filt.sp500EmaL   || filt.ma_slow || 20,
     }
   }
   if (!cfg) return res.status(400).json({ error: 'Se requiere cfg o definition' })
