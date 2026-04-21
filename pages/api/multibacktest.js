@@ -420,7 +420,8 @@ export default async function handler(req, res) {
     const entry = definition.entry || {}
     const stop  = definition.stop  || {}
     const mgmt  = definition.management || {}
-    const filt  = definition.filter || {}
+    const rawFilt = definition.filter || {}
+    const filt    = rawFilt.conditions?.length ? rawFilt.conditions[0] : rawFilt
     cfg = {
       emaR:        entry.ma_fast   || 10,
       emaL:        entry.ma_slow   || 11,

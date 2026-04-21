@@ -2808,8 +2808,6 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   const wlShowRankBadge = wlSettings.showRankBadge       !== false
   // alarm dots now always visible when alarmDotIds has items (managed per-condition)
   const wlShowListBadge = wlSettings.showListBadge       !== false
-  let spStatus='neutral',spTxt='SIN FILTRO'
-  if(sp5&&tipoFiltro!=='none'){const blq=tipoFiltro==='precio_ema'?sp5.precio<sp5.emaR:sp5.emaR<sp5.emaL;spStatus=blq?'bad':'ok';spTxt=blq?'⚠ EVITAR ENTRADAS':'✓ APTO PARA OPERAR'}
 
   // Navegar al trade: scroll arriba + zoom en el gráfico
   const chartWrapRef=useRef(null)
@@ -3125,7 +3123,6 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               <span className="header-sp500-ema">{fmt(sp5.emaR,2)}</span>
               <span className="header-sp500-label">EMA{sp500EmaL}</span>
               <span style={{color:'#ff4d6d',fontWeight:600,fontFamily:MONO,fontSize:12}}>{fmt(sp5.emaL,2)}</span>
-              <span className={`status-badge ${spStatus}`} style={{fontSize:10,padding:'1px 6px'}}>{spTxt}</span>
             </div>
           )}
 
