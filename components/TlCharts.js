@@ -242,12 +242,12 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
 
   const btnStyle = (active, color) => ({
     display:'flex',alignItems:'center',gap:4,
-    fontFamily:MONO,fontSize:9,color:active?'#ffffff':'#7a9bc0',
+    fontFamily:MONO,fontSize:9,color:active?'#ffffff':'#8fb8d8',
     cursor:'pointer',
-    background:active?`${color}26`:'none',
-    border:active?`1px solid ${color}66`:'1px solid transparent',
+    background:active?`${color}40`:'none',
+    border:active?`1px solid ${color}b3`:'1px solid transparent',
     padding:'1px 4px',
-    borderRadius:3,opacity:active?1:0.75,
+    borderRadius:3,opacity:active?1:0.85,
     transition:'opacity 0.15s',
   })
 
@@ -257,8 +257,8 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
         {/* Mode toggle: P&L | Equity */}
         {onToggleMode&&(
           <span style={{display:'flex',borderRadius:4,overflow:'hidden',border:'1px solid #1a2d45',flexShrink:0}}>
-            <button onClick={()=>!isEquityMode||onToggleMode()} style={{fontFamily:MONO,fontSize:9,padding:'2px 7px',border:'none',cursor:'pointer',background:!isEquityMode?'rgba(0,212,255,0.15)':'transparent',color:!isEquityMode?'#00d4ff':'#4a6d8c'}}>P&L</button>
-            <button onClick={()=>isEquityMode||onToggleMode()} style={{fontFamily:MONO,fontSize:9,padding:'2px 7px',border:'none',cursor:'pointer',background:isEquityMode?'rgba(0,229,160,0.15)':'transparent',color:isEquityMode?'#00e5a0':'#4a6d8c'}}>Equity</button>
+            <button onClick={()=>!isEquityMode||onToggleMode()} style={{fontFamily:MONO,fontSize:9,padding:'2px 7px',border:'none',cursor:'pointer',background:!isEquityMode?'rgba(0,212,255,0.25)':'transparent',color:!isEquityMode?'#00d4ff':'#7a9ab8'}}>P&L</button>
+            <button onClick={()=>isEquityMode||onToggleMode()} style={{fontFamily:MONO,fontSize:9,padding:'2px 7px',border:'none',cursor:'pointer',background:isEquityMode?'rgba(0,229,160,0.25)':'transparent',color:isEquityMode?'#00e5a0':'#7a9ab8'}}>Equity</button>
           </span>
         )}
         {/* Sin FX toggle — P&L mode only */}
@@ -465,10 +465,10 @@ export function TlInvestChart({ investData, syncRef, patrimonyCurve, compact, he
       <div style={{padding:'6px 14px 0',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
         <span style={{fontFamily:MONO,fontSize:9,color:'#5a7a9a',letterSpacing:'0.1em',textTransform:'uppercase',marginRight:4}}>Capital Invertido vs Profit</span>
         <span style={{display:'flex',alignItems:'center',gap:4,fontFamily:MONO,fontSize:9,color:'#2a7fff'}}>
-          <span style={{display:'inline-block',width:12,height:3,background:'#2a7fff',borderRadius:1}}/> Capital inv.
+          <span style={{display:'inline-block',width:14,height:4,background:'#2a7fff',borderRadius:1}}/> Capital inv.
         </span>
         <span style={{display:'flex',alignItems:'center',gap:4,fontFamily:MONO,fontSize:9,color:'#aaff44'}}>
-          <span style={{display:'inline-block',width:12,height:3,background:'#aaff44',borderRadius:1}}/> Profit acum.
+          <span style={{display:'inline-block',width:14,height:4,background:'#aaff44',borderRadius:1}}/> Profit acum.
         </span>
         {patrimonyCurve?.length>1&&(
           <button onClick={()=>setShowPatrimony(v=>!v)} style={btnStyle(showPatrimony,'#00e5a0')}
