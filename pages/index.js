@@ -1449,32 +1449,33 @@ export default function Home() {
         if(applyDefault&&!stratLoadedRef.current&&data.length>0){
           stratLoadedRef.current=true
           try{
-            const rawSettings=localStorage.getItem('v50_settings')
-            console.log('[v50] raw settings',rawSettings)
-            const sett=JSON.parse(rawSettings||'{}')
+            const sett=JSON.parse(localStorage.getItem('v50_settings')||'{}')
             const defId=sett.defaultStrategyId
-            console.log('[v50] restore check',{defId,dataLength:data.length})
             if(defId){
               // Robust comparison: stringify both sides in case of number/string mismatch
               const match=data.find(s=>String(s.id)===String(defId))
-              console.log('[v50] defId vs strategies', defId, typeof defId, data.map(s=>({id:s.id,t:typeof s.id})).slice(0,3))
-              console.log('[v50] restore: match=',match?.name??'NOT FOUND')
               if(match){
-                console.log('[v50] restoring strategy', match.name, match.id)
                 loadStrategyLegacy(match,{navigateToConfig:false})
+                // Bypass 800ms debounce — run backtest immediately on restore
+                skipNextRunRef.current=true
+                const normDef=normalizeDefinition(match.definition)
+                setTimeout(()=>run(simbolo,{
+                  definition:normDef,
+                  capital_ini:Number(match.capital_ini||1000),
+                  years:Number(match.years||5)
+                }),0)
               } else {
                 try{
                   const _s=JSON.parse(localStorage.getItem('v50_settings')||'{}')
                   delete _s.defaultStrategyId
                   localStorage.setItem('v50_settings',JSON.stringify(_s))
-                  console.log('[v50] cleared stale defaultStrategyId',defId)
                 }catch(_){}
                 stopStrategy({skipDebounce:false})
               }
             } else {
               stopStrategy({skipDebounce:false})
             }
-          }catch(e){console.error('[v50] restore failed',e)}
+          }catch(e){}
         }
       })
       .catch(()=>{})
@@ -1734,13 +1735,8 @@ export default function Home() {
         const _s=JSON.parse(localStorage.getItem('v50_settings')||'{}')
         _s.defaultStrategyId=s.id
         localStorage.setItem('v50_settings',JSON.stringify(_s))
-        console.log('[v50] saving defaultStrategyId',s.id)
-        const verify=JSON.parse(localStorage.getItem('v50_settings')||'{}')
-        console.log('[v50] verify after save',verify)
-      }else{
-        console.warn('[v50] loadStrategyLegacy: s.id undefined, skip save')
       }
-    }catch(e){console.error('[v50] localStorage write failed',e)}
+    }catch(_){}
   }
   const newStrategy=()=>openEditStr({id:null})
   const duplicateStr=(s)=>openEditStr({...s,id:null,name:s.name+' (copia)'})
@@ -3028,7 +3024,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.66</title>
+        <title>Trading Simulator V9.67</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3105,7 +3101,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.66
+            <span className="dot"/>Trading Simulator V9.67
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}

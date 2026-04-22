@@ -449,9 +449,14 @@ export function TlInvestChart({ investData, syncRef, patrimonyCurve, compact, he
 
   const btnStyle = (active, color) => ({
     display:'flex',alignItems:'center',gap:4,
-    fontFamily:MONO,fontSize:9,color:active?color:'#3d5a7a',
-    cursor:'pointer',background:'none',border:'none',padding:'1px 4px',
-    borderRadius:3,opacity:active?1:0.5,transition:'opacity 0.15s',
+    fontFamily:MONO,fontSize:9,letterSpacing:'0.08em',textTransform:'uppercase',
+    color:'#ffffff',
+    cursor:'pointer',
+    background:active?`${color}40`:'none',
+    border:active?`1px solid ${color}b3`:'1px solid transparent',
+    padding:'1px 4px',
+    borderRadius:3,opacity:1,
+    transition:'opacity 0.15s',
   })
   // Compact mode: bare chart, no header, fills parent height
   if(compact) return (
