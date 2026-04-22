@@ -242,7 +242,8 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
 
   const btnStyle = (active, color) => ({
     display:'flex',alignItems:'center',gap:4,
-    fontFamily:MONO,fontSize:9,color:active?'#ffffff':'#8fb8d8',
+    fontFamily:MONO,fontSize:9,letterSpacing:'0.08em',textTransform:'uppercase',
+    color:active?'#ffffff':'#e2e8f0',
     cursor:'pointer',
     background:active?`${color}40`:'none',
     border:active?`1px solid ${color}b3`:'1px solid transparent',
@@ -463,7 +464,7 @@ export function TlInvestChart({ investData, syncRef, patrimonyCurve, compact, he
   return (
     <div style={{borderTop:'1px solid var(--border)',display:'flex',flexDirection:'column',height:'100%'}}>
       <div style={{padding:'6px 14px 0',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
-        <span style={{fontFamily:MONO,fontSize:9,color:'#5a7a9a',letterSpacing:'0.1em',textTransform:'uppercase',marginRight:4}}>Capital Invertido vs Profit</span>
+        <span style={{fontFamily:MONO,fontSize:9,color:'#e2e8f0',letterSpacing:'0.08em',textTransform:'uppercase',marginRight:4}}>Capital Invertido vs Profit</span>
         <span style={{display:'flex',alignItems:'center',gap:4,fontFamily:MONO,fontSize:9,color:'#2a7fff'}}>
           <span style={{display:'inline-block',width:14,height:4,background:'#2a7fff',borderRadius:1}}/> Capital inv.
         </span>
