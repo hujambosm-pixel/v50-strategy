@@ -248,7 +248,7 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
     background:active?`${color}40`:'none',
     border:active?`1px solid ${color}b3`:'1px solid transparent',
     padding:'1px 4px',
-    borderRadius:3,opacity:active?1:0.85,
+    borderRadius:3,opacity:1,
     transition:'opacity 0.15s',
   })
 
@@ -474,9 +474,9 @@ export function TlInvestChart({ investData, syncRef, patrimonyCurve, compact, he
         {patrimonyCurve?.length>1&&(
           <button onClick={()=>setShowPatrimony(v=>!v)} style={btnStyle(showPatrimony,'#00e5a0')}
             title={showPatrimony?'Ocultar Patrimonio':'Mostrar Patrimonio total'}>
-            <span style={{display:'inline-block',width:10,height:6,borderRadius:1,
-              background:showPatrimony?'rgba(0,229,160,0.4)':'transparent',
-              border:'1px solid '+(showPatrimony?'#00e5a0':'#3d5a7a')}}/> Patrimonio
+            <span style={{display:'inline-block',width:14,height:4,borderRadius:1,
+              background:showPatrimony?'rgba(0,229,160,0.5)':'transparent',
+              border:'1px solid '+(showPatrimony?'#00e5a0':'#e2e8f0')}}/> Patrimonio
           </button>
         )}
       </div>
