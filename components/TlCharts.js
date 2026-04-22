@@ -258,8 +258,8 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
         {/* Mode toggle: P&L | Equity */}
         {onToggleMode&&(
           <span style={{display:'flex',borderRadius:4,overflow:'hidden',border:'1px solid #1a2d45',flexShrink:0}}>
-            <button onClick={()=>!isEquityMode||onToggleMode()} style={{fontFamily:MONO,fontSize:9,padding:'2px 7px',border:'none',cursor:'pointer',background:!isEquityMode?'rgba(0,212,255,0.25)':'transparent',color:!isEquityMode?'#00d4ff':'#7a9ab8'}}>P&L</button>
-            <button onClick={()=>isEquityMode||onToggleMode()} style={{fontFamily:MONO,fontSize:9,padding:'2px 7px',border:'none',cursor:'pointer',background:isEquityMode?'rgba(0,229,160,0.25)':'transparent',color:isEquityMode?'#00e5a0':'#7a9ab8'}}>Equity</button>
+            <button onClick={()=>!isEquityMode||onToggleMode()} style={{fontFamily:MONO,fontSize:9,padding:'2px 7px',border:'none',cursor:'pointer',background:!isEquityMode?'rgba(0,212,255,0.25)':'transparent',color:'#ffffff'}}>P&L</button>
+            <button onClick={()=>isEquityMode||onToggleMode()} style={{fontFamily:MONO,fontSize:9,padding:'2px 7px',border:'none',cursor:'pointer',background:isEquityMode?'rgba(0,229,160,0.25)':'transparent',color:'#ffffff'}}>Equity</button>
           </span>
         )}
         {/* Sin FX toggle — P&L mode only */}
@@ -475,7 +475,7 @@ export function TlInvestChart({ investData, syncRef, patrimonyCurve, compact, he
           <button onClick={()=>setShowPatrimony(v=>!v)} style={btnStyle(showPatrimony,'#00e5a0')}
             title={showPatrimony?'Ocultar Patrimonio':'Mostrar Patrimonio total'}>
             <span style={{display:'inline-block',width:14,height:4,borderRadius:1,
-              background:showPatrimony?'rgba(0,229,160,0.5)':'transparent',
+              background:showPatrimony?'rgba(0,229,160,0.5)':'rgba(0,229,160,0.15)',
               border:'1px solid '+(showPatrimony?'#00e5a0':'#e2e8f0')}}/> Patrimonio
           </button>
         )}
