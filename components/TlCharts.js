@@ -243,7 +243,7 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
   const btnStyle = (active, color) => ({
     display:'flex',alignItems:'center',gap:4,
     fontFamily:MONO,fontSize:9,letterSpacing:'0.08em',textTransform:'uppercase',
-    color:active?'#ffffff':'#e2e8f0',
+    color:'#ffffff',
     cursor:'pointer',
     background:active?`${color}40`:'none',
     border:active?`1px solid ${color}b3`:'1px solid transparent',
