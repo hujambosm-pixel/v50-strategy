@@ -1456,14 +1456,6 @@ export default function Home() {
               const match=data.find(s=>String(s.id)===String(defId))
               if(match){
                 loadStrategyLegacy(match,{navigateToConfig:false})
-                // Bypass 800ms debounce — run backtest immediately on restore
-                skipNextRunRef.current=true
-                const normDef=normalizeDefinition(match.definition)
-                setTimeout(()=>run(simbolo,{
-                  definition:normDef,
-                  capital_ini:Number(match.capital_ini||1000),
-                  years:Number(match.years||5)
-                }),0)
               } else {
                 try{
                   const _s=JSON.parse(localStorage.getItem('v50_settings')||'{}')
@@ -3024,7 +3016,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.69</title>
+        <title>Trading Simulator V9.70</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3101,7 +3093,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.69
+            <span className="dot"/>Trading Simulator V9.70
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}

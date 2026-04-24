@@ -276,6 +276,7 @@ const VALID_FIELDS = {
   rsi_below:       ['type','rsi_period','level'],
   macd_cross_up:   ['type','macd_fast','macd_slow','macd_signal'],
   macd_cross_down: ['type','macd_fast','macd_slow','macd_signal'],
+  price_below_52w_high_pct: ['type','pct'],
 }
 
 const FIELD_ALIASES = {
