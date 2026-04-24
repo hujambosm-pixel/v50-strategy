@@ -159,7 +159,7 @@ export default async function handler(req, res) {
         sp500EmaL:    filter_.sp500EmaL || filter_.ma_slow || 20,
 
         // ── SETUP IN ──
-        setupType:    setup.type    || 'ema_cross_up',
+        setupType:    setup?.type   || 'none',
         setupParams:  setup,
 
         // ── TRIGGER IN — solo si es tipo trigger reconocido ──

@@ -373,24 +373,30 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       // ── Dynamic indicator overlay ──────────────────────────────────
       const _closes=data.map(d=>d.close)
       const _indType=getActiveIndicator(definition)
-      const _showEma=!isBareChart&&(!definition||_indType==='EMA'||_indType==='SMA')
+      // visuals.indicators es la fuente de verdad para EMA/SMA overlay.
+      // Si no hay definition (legacy sin estrategia) se usan emaR/emaL precomputados.
+      const _emaIndicators=(definition?.visuals?.indicators||[])
+        .filter(i=>(i.type==='ema'||i.type==='sma')&&i.visible!==false)
+        .sort((a,b)=>(a.period||0)-(b.period||0))
+      const _showEma=!isBareChart&&(!definition||_emaIndicators.length>0)
       if(_showEma){
-        const ep=definition?getEmaParams(definition,emaRPeriod,emaLPeriod):{fast:emaRPeriod,slow:emaLPeriod,type:'EMA'}
-        const mtype=ep.type||'EMA'
-        const visInds=definition?.visuals?.indicators||[]
-        const emaFastColor=visInds.find(i=>i.type==='ema'&&i.period===ep.fast)?.color||'#00d4ff'
-        const emaSlowColor=visInds.find(i=>i.type==='ema'&&i.period===ep.slow)?.color||'#f59e0b'
-        const emaFastWidth=visInds.find(i=>i.type==='ema'&&i.period===ep.fast)?.lineWidth||1
-        const emaSlowWidth=visInds.find(i=>i.type==='ema'&&i.period===ep.slow)?.lineWidth||1
-        if(ep.fast){
-          const fv=(ep.fast===emaRPeriod&&data[0]?.emaR!=null)?data.map(d=>d.emaR):(mtype==='SMA'?calcSMA(_closes,ep.fast):calcEMA(_closes,ep.fast))
-          const fs=chart.addLineSeries({color:emaFastColor,lineWidth:emaFastWidth,lastValueVisible:false,priceLineVisible:false})
-          fs.setData(data.map((d,i)=>({time:d.date,value:fv[i]})).filter(x=>x.value!=null))
-        }
-        if(ep.slow){
-          const sv=(ep.slow===emaLPeriod&&data[0]?.emaL!=null)?data.map(d=>d.emaL):(mtype==='SMA'?calcSMA(_closes,ep.slow):calcEMA(_closes,ep.slow))
-          const ss=chart.addLineSeries({color:emaSlowColor,lineWidth:emaSlowWidth,lastValueVisible:false,priceLineVisible:false})
-          ss.setData(data.map((d,i)=>({time:d.date,value:sv[i]})).filter(x=>x.value!=null))
+        if(!definition){
+          // Ruta legacy: sin definition, usar emaR/emaL precomputados del chartData
+          const fs=chart.addLineSeries({color:'#00d4ff',lineWidth:1,lastValueVisible:false,priceLineVisible:false})
+          fs.setData(data.map(d=>({time:d.date,value:d.emaR})).filter(x=>x.value!=null))
+          const ss=chart.addLineSeries({color:'#f59e0b',lineWidth:1,lastValueVisible:false,priceLineVisible:false})
+          ss.setData(data.map(d=>({time:d.date,value:d.emaL})).filter(x=>x.value!=null))
+        } else {
+          _emaIndicators.forEach(ind=>{
+            const mtype=(ind.type||'ema').toUpperCase()
+            const p=ind.period
+            // Reutilizar arrays precomputados si el período coincide
+            const vals=(p===emaRPeriod&&data[0]?.emaR!=null)?data.map(d=>d.emaR):
+                       (p===emaLPeriod&&data[0]?.emaL!=null)?data.map(d=>d.emaL):
+                       (mtype==='SMA'?calcSMA(_closes,p):calcEMA(_closes,p))
+            const series=chart.addLineSeries({color:ind.color||'#00d4ff',lineWidth:ind.lineWidth||1,lastValueVisible:false,priceLineVisible:false})
+            series.setData(data.map((d,j)=>({time:d.date,value:vals[j]})).filter(x=>x.value!=null))
+          })
         }
       }
 
