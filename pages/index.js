@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo, Fragment } from 'rea
 import Head from 'next/head'
 import { ListFilter, Briefcase, Star, Bell, X as LucideX } from 'lucide-react'
 import { calcMetrics, MONO, fmt, fmtDate, f2, tvSym } from '../lib/utils'
-import { WATCHLIST_DEFAULT, DEFAULT_DEFINITION, normalizeDefinition } from '../lib/constants'
+import { WATCHLIST_DEFAULT } from '../lib/constants'
 import { getSupaUrl, getSupaKey, getSupaH, setCurrentJwt, getCurrentJwt } from '../lib/supabase'
 import { loadSettings, saveSettings, saveSettingsRemote, loadSettingsRemote } from '../lib/settings'
 import { supabase } from '../lib/supabaseClient'
@@ -11,14 +11,12 @@ import CandleChart from '../components/CandleChart'
 import EquityChart from '../components/EquityChart'
 import Tip from '../components/Tip'
 import SettingsModal from '../components/SettingsModal'
-import StrategyAIPanel from '../components/StrategyAIPanel'
 import { MultiCartChart, OccupancyBarChart, McOccupancyChart, StratCompareChart, AssetSignalChart } from '../components/BacktestCharts'
 import { TlEquityChart, TlInvestChart } from '../components/TlCharts'
 import ContextThemeMenu, { applyTema } from '../components/ContextThemeMenu'
 import MetricRow from '../components/MetricRow'
 import PriceAlarmQuickForm from '../components/PriceAlarmQuickForm'
 import StrategiesManager from '../components/StrategiesManager'
-import StrategyEditorPanel from '../components/StrategyEditorPanel'
 import WatchlistCondPanel from '../components/WatchlistCondPanel'
 
 
@@ -419,8 +417,6 @@ const STRAT_COMPARE_COLORS=['#00d4ff','#ffd166','#00e5a0','#ff6b9d','#9b72ff','#
 
 
 
-// ── StrategyAIPanel — asistente IA para configurar estrategias ─
-
 // ── StrategyBuilder — constructor jerárquico de 8 pasos ───────
 // Cada paso tiene número, título, descripción y controles específicos.
 
@@ -532,8 +528,7 @@ export default function Home() {
   const [editingStr,setEditingStr]=useState(null)
   const [strForm,setStrForm]=useState({})
   const [strSaving,setStrSaving]=useState(false)
-  // ── Strategy Builder (definition-based) ──
-  const [definition, setDefinition]   = useState(DEFAULT_DEFINITION)
+  // ── Strategy Builder ──
   const [stratName, setStratName]     = useState('')
   const [stratDesc, setStratDesc]     = useState('')
   const [stratColor, setStratColor]   = useState('#00d4ff')
@@ -541,7 +536,6 @@ export default function Home() {
   const [stratSaving, setStratSaving] = useState(false)
   const [stratMsg, setStratMsg]       = useState(null)
   const [stratTab, setStratTab]       = useState('build')
-  const [aiPanelOpen, setAiPanelOpen] = useState(false)
   // Alertas
   const [alarms,setAlarms]=useState([])
   const [alarmLoading,setAlarmLoading]=useState(true)
@@ -1581,84 +1575,17 @@ export default function Home() {
       color:s.color||'#00d4ff',
       observations:s.observations||''
     })
-    // Use definition directly; seed condition_refs from FK columns if absent
-    const def = (s.id && s.definition && Object.keys(s.definition).length>0)
-      ? { ...s.definition }
-      : (s.id ? { ...DEFAULT_DEFINITION } : {})
-    if (!def.condition_refs) {
-      def.condition_refs = {
-        filter:     s.condition_filter_id     || null,
-        setup:      s.condition_setup_id      || null,
-        trigger:    s.condition_trigger_id    || null,
-        abort:      s.condition_abort_id      || null,
-        stop_loss:  s.condition_stop_loss_id  || null,
-        exit:       s.condition_exit_id       || null,
-        management: s.condition_management_id || null,
-      }
-    }
-    // Backfill inline role params from condition library so the visual builder shows correct values
-    // for strategies created before Phase 1 that used condition_refs
-    const BUILDER_ROLES = ['filter','setup','trigger','abort','exit','stop_loss']
-    BUILDER_ROLES.forEach(role => {
-      if (!def[role] && def.condition_refs?.[role]) {
-        const c = conditions.find(c => c.id === def.condition_refs[role])
-        if (c) def[role] = { type: c.type, ...c.params }
-      }
-    })
-    // Backfill from legacy definition.entry → definition.setup for old strategies
-    if (!def.setup && def.entry?.type) def.setup = def.entry
-    if (!def.stop_loss && def.stop?.type && ['tecnico','atr_based','none'].includes(def.stop.type)) def.stop_loss = def.stop
-    setDefinition(normalizeDefinition(def))
   }
   const closeEditStr=()=>{setEditingStr(null);setStrForm({})}
   const saveEditStr=async()=>{
     setStrSaving(true)
     try{
-      const refs = definition?.condition_refs || {}
-      const getCond = (id) => conditions.find(c => c.id === id)
-      const condToParams = (c) => c ? { type: c.type, ...(c.params || {}) } : undefined
-
-      // Prefer inline params from visual builder; fall back to linked condition from library
-      const getParams = (role) => {
-        const inline = definition?.[role]
-        if (inline?.type) return inline
-        const cond = getCond(refs[role])
-        return cond ? condToParams(cond) : null
-      }
-
-      const entryParams  = getParams('setup') || getParams('trigger')
-      const stopParams   = getParams('stop_loss')
-      const exitParams   = getParams('exit')
-      const filterParams = getParams('filter')
-      const abortParams  = getParams('abort')
-      const mgmtParams   = definition?.management || {}
-
-      const builtDefinition = {
-        ...definition,
-        condition_refs: refs,
-        ...(entryParams  ? { entry:  entryParams  } : {}),
-        ...(stopParams   ? { stop:   stopParams   } : {}),
-        ...(exitParams   ? { exit:   exitParams   } : {}),
-        ...(filterParams ? { filter: { logic:'AND', conditions:[filterParams] } } : {}),
-        ...(abortParams  ? { abort:  { conditions:[abortParams] }              } : {}),
-        management: mgmtParams,
-      }
-
       const payload={
         ...strForm,
         id:editingStr?.id||undefined,
-        definition: builtDefinition,
         years:Number(strForm.years||5),
         capital_ini:Number(strForm.capital_ini||(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.defaultCapital||1000}catch(_){return 1000}})()),
         allocation_pct:Number(strForm.allocation_pct||100),
-        // Only send real UUIDs — local_ IDs are localStorage-only and not valid for FK columns
-        condition_filter_id:     refs.filter     && !refs.filter.startsWith('local_')     ? refs.filter     : null,
-        condition_setup_id:      refs.setup      && !refs.setup.startsWith('local_')      ? refs.setup      : null,
-        condition_trigger_id:    refs.trigger    && !refs.trigger.startsWith('local_')    ? refs.trigger    : null,
-        condition_abort_id:      refs.abort      && !refs.abort.startsWith('local_')      ? refs.abort      : null,
-        condition_stop_loss_id:  refs.stop_loss  && !refs.stop_loss.startsWith('local_')  ? refs.stop_loss  : null,
-        condition_exit_id:       refs.exit       && !refs.exit.startsWith('local_')       ? refs.exit       : null,
-        condition_management_id: refs.management && !refs.management.startsWith('local_') ? refs.management : null,
       }
       await upsertStrategy(payload)
       reloadStrategies(); closeEditStr()
@@ -1675,7 +1602,6 @@ export default function Home() {
     setError(null)
     setCurrentStratId(null)
     setStratName('')
-    setDefinition(DEFAULT_DEFINITION)
     try {
       const s = JSON.parse(localStorage.getItem('v50_settings') || '{}')
       delete s.defaultStrategyId
@@ -1721,7 +1647,6 @@ export default function Home() {
         if(rd){setRankingData(rd);setRankingStratId(s.id);setRankingStratName(s.name||'')}
       }).catch(()=>{})
     }
-    setDefinition(normalizeDefinition(s.definition))
     try{
       if(s?.id){
         const _s=JSON.parse(localStorage.getItem('v50_settings')||'{}')
@@ -1968,7 +1893,7 @@ export default function Home() {
     try{
       const body={ name:stratName, description:stratDesc,
         years:Number(years), capital_ini:Number(capitalIni),
-        definition:JSON.parse(JSON.stringify(definition)), color:stratColor }
+        color:stratColor }
       const method = overwriteId ? 'PUT' : 'POST'
       if(overwriteId) body.id = overwriteId
       const res=await apiFetch('/api/strategies',{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
@@ -1981,7 +1906,7 @@ export default function Home() {
       setStratMsg({type:'ok',text:'Estrategia guardada ✓'})
     }catch(e){ setStratMsg({type:'err',text:e.message}) }
     finally{ setStratSaving(false) }
-  },[stratName,stratDesc,simbolo,years,capitalIni,definition,stratColor])
+  },[stratName,stratDesc,simbolo,years,capitalIni,stratColor])
 
   // ── Clonar estrategia activa ──
   const cloneStrategy=useCallback(async()=>{
@@ -1990,7 +1915,6 @@ export default function Home() {
       description: stratDesc,
       years:       Number(years),
       capital_ini: Number(capitalIni),
-      definition:  JSON.parse(JSON.stringify(definition)),
       color:       stratColor,
     }
     try{
@@ -1999,12 +1923,11 @@ export default function Home() {
       await reloadStrategies(false)
       setStratMsg({type:'ok',text:'Estrategia clonada ✓'})
     }catch(e){ console.error('Error clonando:',e) }
-  },[stratName,stratDesc,years,capitalIni,definition,stratColor])
+  },[stratName,stratDesc,years,capitalIni,stratColor])
 
   // ── Cargar estrategia guardada en el builder ──
   const loadStrategy=useCallback((strat)=>{
     setResult(null)
-    setDefinition(normalizeDefinition(strat.definition))
     setStratName(strat.name||'')
     setStratDesc(strat.description||'')
     setStratColor(strat.color||'#00d4ff')
@@ -2042,15 +1965,13 @@ export default function Home() {
     if(skipNextRunRef.current){skipNextRunRef.current=false;return}
     if(!currentStratId&&sidePanel!=='strats')return
     if(debounceRef.current)clearTimeout(debounceRef.current)
-    const payload = (currentStratId || sidePanel==='strats')
-      ? { definition, capital_ini:Number(capitalIni), years:Number(years) }
-      : { cfg:{emaR:Number(emaR),emaL:Number(emaL),years:Number(years),capitalIni:Number(capitalIni),
+    const payload = { cfg:{emaR:Number(emaR),emaL:Number(emaL),years:Number(years),capitalIni:Number(capitalIni),
               tipoStop,atrPeriod:Number(atrP),atrMult:Number(atrM),sinPerdidas,reentry,
               tipoFiltro,sp500EmaR:Number(sp500EmaR),sp500EmaL:Number(sp500EmaL)} }
     debounceRef.current=setTimeout(()=>run(simbolo, payload),800)
     return()=>clearTimeout(debounceRef.current)
   },[simbolo,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,
-     sp500EmaR,sp500EmaL,definition,sidePanel,currentStratId,run])
+     sp500EmaR,sp500EmaL,sidePanel,currentStratId,run])
 
   // ── TradeLog helpers ────────────────────────────────────────
   // ── TradeLog: storage mode (local vs supabase) ──────────────
@@ -3016,7 +2937,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.71</title>
+        <title>Trading Simulator V9.72</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3093,7 +3014,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.71
+            <span className="dot"/>Trading Simulator V9.72
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4330,22 +4251,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
           {/* ── CONTENT ── */}
           <div className="content" style={result?.isBareChart?{overflowY:'hidden'}:undefined}>
 
-            {/* ══ STRATEGY EDITOR PANEL ══ */}
-            {editingStr!==null&&sidePanel==='config'&&(
-              <StrategyEditorPanel
-                strForm={strForm}
-                setStrForm={setStrForm}
-                definition={definition}
-                setDefinition={setDefinition}
-                conditions={conditions}
-                strategy={editingStr}
-                onSave={saveEditStr}
-                onCancel={closeEditStr}
-                onDelete={()=>deleteStr(editingStr.id)}
-                onClone={cloneStrategy}
-                saving={strSaving}
-              />
-            )}
+            {/* ══ STRATEGY EDITOR PANEL — FASE 3: nuevo editor aquí ══ */}
 
             {/* Single-asset view — oculto cuando multicartera activa o editando */}
             {sidePanel!=='multi'&&sidePanel!=='tradelog'&&!(editingStr&&sidePanel==='config')&&!result&&!error&&currentStratId&&<div className="loading"><div className="spinner"/><div className="loading-text">CARGANDO DATOS...</div></div>}
@@ -4784,7 +4690,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         })()}
                       </div>
                       <CandleChart
-                        data={result.chartData} emaRPeriod={emaR} emaLPeriod={emaL} definition={result.isBareChart?null:definition}
+                        data={result.chartData} emaRPeriod={emaR} emaLPeriod={emaL} definition={null}
                         trades={result.isBareChart?[]:result.trades||[]} maxDD={result.isBareChart?0:metrics?.ddSimple||0}
                         isBareChart={result.isBareChart??false}
                         fillHeight={false}
@@ -4798,7 +4704,6 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         syncRef={chartSyncRef}
                         externalLegendRef={chartLegendRef}
                         priceAlarms={alarms.filter(a=>a.condition==='price_level'&&(a.symbol||'').toUpperCase()===(simbolo||'').toUpperCase())}
-                        blockEvents={result?.blockEvents||null}
                         tlOpenTrades={tlTrades.filter(t=>t.status==='open'&&t.fill_type!=='sell'&&(t.symbol||'').toUpperCase()===(simbolo||'').toUpperCase())}
                         riskMode={sidePanel==='risk'&&riskCaptureMode?riskCaptureMode:null}
                         onRiskPrice={sidePanel==='risk'&&riskCaptureMode?onRiskPrice:null}
@@ -7636,16 +7541,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
         )
       })()}
 
-      {/* StrategyEditorPanel is rendered in the content area (see above) */}
     {/* ── Modal de configuración global ── */}
     {settingsOpen&&<SettingsModal onClose={()=>{setSettingsOpen(false);setTemaKey(k=>k+1)}} strategies={strategies} initialTab={settingsInitTab}/>}
-
-    {/* ── Panel Asistente IA de estrategias ── */}
-    {aiPanelOpen&&<StrategyAIPanel
-      definition={definition}
-      onApply={(defn, name)=>{setDefinition(defn);if(name)setStratName(name);setAiPanelOpen(false)}}
-      onClose={()=>setAiPanelOpen(false)}
-    />}
 
     {/* ── Modal de alarma de precio (doble-clic en gráfico) ── */}
     {priceAlarmDlg&&(

@@ -243,83 +243,7 @@ function createRiskPrimitive(configRef) {
   }
 }
 
-// ── Block background primitive: bandas verticales por fecha ──
-function createBlockBgPrimitive(configRef) {
-  // configRef.current = { dates: string[], color: string }
-  let _series = null
-  let _chart  = null
-  return {
-    attached({ series, chart }) { _series = series; _chart = chart },
-    detached()                  { _series = null;   _chart = null  },
-    paneViews() {
-      return [{
-        renderer() {
-          return {
-            draw(target) {
-              const cfg = configRef.current
-              if (!cfg?.dates?.length || !_series || !_chart) return
-              target.useBitmapCoordinateSpace(scope => {
-                const ctx    = scope.context
-                const h      = scope.bitmapSize.height
-                const pixRat = scope.horizontalPixelRatio
-                const timeScale = _chart.timeScale()
-                const dates = cfg.dates
-                if (!dates?.length) return
-
-                ctx.fillStyle = cfg.color
-
-                // Calcular ancho de barra
-                let barW = pixRat * 8
-                if (dates.length >= 2) {
-                  const x0 = timeScale.timeToCoordinate(dates[0])
-                  const x1 = timeScale.timeToCoordinate(dates[1])
-                  if (x0 != null && x1 != null) {
-                    barW = Math.abs(x1 - x0) * pixRat
-                  }
-                }
-
-                // Agrupar fechas contiguas en rangos
-                const ranges = []
-                let rangeStart = null
-                let rangeEnd   = null
-                let prevX      = null
-
-                for (const dateStr of dates) {
-                  const x = timeScale.timeToCoordinate(dateStr)
-                  if (x == null) continue
-                  const xPx = x * pixRat
-
-                  if (prevX === null || Math.abs(xPx - prevX) > barW * 1.5) {
-                    if (rangeStart !== null) {
-                      ranges.push({ start: rangeStart, end: rangeEnd })
-                    }
-                    rangeStart = xPx
-                    rangeEnd   = xPx
-                  } else {
-                    rangeEnd = xPx
-                  }
-                  prevX = xPx
-                }
-                if (rangeStart !== null) {
-                  ranges.push({ start: rangeStart, end: rangeEnd })
-                }
-
-                // Dibujar cada rango como un rectángulo continuo
-                for (const { start, end } of ranges) {
-                  const x     = start - barW / 2
-                  const width = (end - start) + barW
-                  ctx.fillRect(x, 0, width, h)
-                }
-              })
-            }
-          }
-        }
-      }]
-    }
-  }
-}
-
-export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null, isBareChart=false, blockEvents=null }) {
+export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null, isBareChart=false }) {
   const containerRef=useRef(null), svgRef=useRef(null), legendRef=useRef(null), tooltipRef=useRef(null)
   const activeLegendRef = externalLegendRef || legendRef
   const chartRef=useRef(null), candlesRef=useRef(null)
@@ -333,7 +257,6 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
   const lastCloseRef=useRef(null)        // último close cargado
   const riskLinesRef=useRef([null,null,null]) // [entryLine, stopLine, tpLine]
   const riskBandSeriesRef=useRef(null)         // dummy LineSeries hosting risk primitive
-  const blockBgPrimsRef=useRef([])             // [{primitive, series}] for block bg cleanup
   const riskConfigRef=useRef({entry:null,stop:null,tp:null,shares:0,tradeRiskEur:0,rrRatio:0})
   const onRiskLevelChangeRef=useRef(onRiskLevelChange)
   const fillHeightRef=useRef(fillHeight)
@@ -433,50 +356,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         }
       })
 
-      // ── Markers de blockEvents según definition.visuals.blocks ──
       const marks=[]
-      if(blockEvents&&definition?.visuals?.blocks){
-        const vb=definition.visuals.blocks
-        const BLOCK_KEYS=[
-          {key:'setup_in',   pos:'belowBar',defColor:'#22c55e',defShape:'circle',defText:'↗',defSize:2},
-          {key:'trigger_in', pos:'belowBar',defColor:'#22c55e',defShape:'circle',defText:'↗',defSize:2},
-          {key:'setup_out',  pos:'aboveBar',defColor:'#ef4444',defShape:'circle',defText:'↘',defSize:2},
-          {key:'trigger_out',pos:'aboveBar',defColor:'#ef4444',defShape:'circle',defText:'↘',defSize:2},
-          {key:'abort',      pos:'aboveBar',defColor:'#f97316',defShape:'circle',defText:'✕',defSize:1},
-          {key:'stop_loss',  pos:'aboveBar',defColor:'#ef4444',defShape:'circle',defText:'✕',defSize:1},
-        ]
-        const shapeMap={
-          arrow:      ()=>'circle',
-          arrow_up:   ()=>'circle',
-          arrow_down: ()=>'circle',
-          arrow_ne:   ()=>'circle',
-          arrow_sw:   ()=>'circle',
-          circle:     ()=>'circle',
-          square:     ()=>'square',
-          cross:      ()=>'circle',
-        }
-        const textMap={
-          arrow_ne:'↗', arrow_sw:'↘',
-          arrow_up:'▲', arrow_down:'▼',
-          arrow:'●',    circle:'●',
-          square:'■',   cross:'✕',
-        }
-        for(const block of BLOCK_KEYS){
-          const {key,pos,defColor,defShape,defText,defSize}=block
-          const dates=blockEvents[key]
-          if(!dates||dates.length===0) continue
-          const cfg=vb[key]
-          if(!cfg||cfg.type==='none'||cfg.type!=='marker') continue
-          const color=cfg?.color||defColor
-          const rawShape=cfg?.shape||'arrow'
-          const shape=typeof shapeMap[rawShape]==='function'?shapeMap[rawShape](pos):defShape
-          const size=cfg?.size==='S'?1:cfg?.size==='L'?3:cfg?.size==='M'?2:defSize
-          const text=rawShape in textMap?textMap[rawShape]:defText
-          for(const date of dates){
-            marks.push({time:date,position:pos,color,shape:'circle',size:0,text})
-          }
-        }
-      }
       if(marks.length) candles.setMarkers(marks.sort((a,b)=>a.time.localeCompare(b.time)))
 
       // ── Paneles secundarios (RSI / MACD / VOLUME) ─────────────────────
@@ -582,34 +462,6 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
           title: '',
         })
       })
-
-      // ── Fondos de color por bloque (Fase 3b) ──
-      blockBgPrimsRef.current = []
-      if(blockEvents&&definition?.visuals?.blocks){
-        const vb=definition.visuals.blocks
-        const BG_KEY_MAP={filter:'filter',setup_in:'setup_in_range',setup_out:'setup_out_range'}
-        let blockbgScaleSet=false
-        for(const key of ['filter','setup_in','setup_out']){
-          const cfg=vb[key]
-          if(!cfg||cfg.type!=='background') continue
-          const dates=blockEvents[BG_KEY_MAP[key]]
-          if(!dates||dates.length===0) continue
-          const opacity=(cfg.opacity||15)/100
-          const c=key==='filter'?(cfg.color||'#ff5050'):(cfg.color||'#22c55e')
-          const r=parseInt(c.slice(1,3),16),g=parseInt(c.slice(3,5),16),b=parseInt(c.slice(5,7),16)
-          const rgba=`rgba(${r},${g},${b},${opacity})`
-          const dummySeries=chart.addLineSeries({priceScaleId:'blockbg',color:'rgba(0,0,0,0)',lineWidth:1,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
-          dummySeries.setData([{time:data[0].date,value:0}])
-          if(!blockbgScaleSet){
-            chart.priceScale('blockbg').applyOptions({visible:false,scaleMargins:{top:0,bottom:0}})
-            blockbgScaleSet=true
-          }
-          const cfgRef={current:{dates,color:rgba}}
-          const prim=createBlockBgPrimitive(cfgRef)
-          dummySeries.attachPrimitive(prim)
-          blockBgPrimsRef.current.push({primitive:prim,series:dummySeries})
-        }
-      }
 
       // ── Líneas de alertas de precio — gestionadas en efecto separado ──
 
@@ -1169,8 +1021,8 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
 
       return()=>{chartAliveRef.current=false;try{unsubLabels()}catch(_){};cnt.removeEventListener('mousemove',onMove);cnt.removeEventListener('mousedown',onMouseDown);window.removeEventListener('mouseup',onMouseUp);window.removeEventListener('keydown',onKeyDown);window.removeEventListener('keyup',onKeyUp);ro.disconnect()}
     })
-    return()=>{chartAliveRef.current=false;if(rsiChartRef.current){if(rsiChartRef.current._isOverlay){try{const c=chartRef.current;if(c){for(const s of rsiChartRef.current._series){c.removeSeries(s)};c.priceScale('rsi').applyOptions({visible:false});c.priceScale('right').applyOptions({scaleMargins:{top:0.02,bottom:0.02}})}}catch(_){}}else{try{rsiChartRef.current.remove()}catch(_){}};rsiChartRef.current=null};if(macdChartRef.current){try{macdChartRef.current.remove()}catch(_){};macdChartRef.current=null};for(const {series} of blockBgPrimsRef.current){try{chartRef.current?.removeSeries(series)}catch(_){}};blockBgPrimsRef.current=[];try{chartRef.current?.priceScale('blockbg').applyOptions({visible:false})}catch(_){};if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null}}
-  },[data,emaRPeriod,emaLPeriod,trades,maxDD,labelMode,definition,isBareChart,blockEvents])
+    return()=>{chartAliveRef.current=false;if(rsiChartRef.current){if(rsiChartRef.current._isOverlay){try{const c=chartRef.current;if(c){for(const s of rsiChartRef.current._series){c.removeSeries(s)};c.priceScale('rsi').applyOptions({visible:false});c.priceScale('right').applyOptions({scaleMargins:{top:0.02,bottom:0.02}})}}catch(_){}}else{try{rsiChartRef.current.remove()}catch(_){}};rsiChartRef.current=null};if(macdChartRef.current){try{macdChartRef.current.remove()}catch(_){};macdChartRef.current=null};if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null}}
+  },[data,emaRPeriod,emaLPeriod,trades,maxDD,labelMode,definition,isBareChart])
 
   // ── isBareChart: ajustar altura al resize de ventana ──
   const updateHeightRef=useRef(null)
