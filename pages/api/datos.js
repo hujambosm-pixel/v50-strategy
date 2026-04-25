@@ -178,7 +178,11 @@ export default async function handler(req, res) {
 
     // ── Enrich trades ──
     const trades = buildTrades(rawTrades, capital_ini, allocation_pct)
-    console.log('[TRADES]', JSON.stringify(trades.slice(0,5), null, 2))
+    console.log('[TRADES]', JSON.stringify(trades.slice(0,3).map(t=>({
+      entryDate: t.entryDate, exitDate: t.exitDate,
+      entryPrice: t.entryPrice, exitPrice: t.exitPrice,
+      pnlPct: t.pnlPct
+    })), null, 2))
 
     // ── Inject indicators into chartData bars ──
     const emaRArr = indicators.emaR || indicators.emaFast || null
