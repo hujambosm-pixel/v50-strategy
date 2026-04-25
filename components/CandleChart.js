@@ -372,8 +372,8 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
           const er=data[j].emaR,el=data[j].emaL,erP=data[j-1].emaR,elP=data[j-1].emaL
           if(er==null||el==null||erP==null||elP==null) continue
           const _cs=visuals?.emaCrossesShape||'circle'
-          if(erP<elP&&er>=el) allMarkers.push({time:data[j].date,position:'aboveBar',color:visuals?.emaCrossesColor||'#00e5a0',shape:_cs,text:''})
-          else if(erP>elP&&er<=el) allMarkers.push({time:data[j].date,position:'belowBar',color:'#ff4d6d',shape:_cs,text:''})
+          if(erP<elP&&er>=el) allMarkers.push({time:data[j].date,position:'belowBar',color:visuals?.emaCrossesColor||'#00e5a0',shape:_cs,text:'↗'})
+          else if(erP>elP&&er<=el) allMarkers.push({time:data[j].date,position:'aboveBar',color:'#ff4d6d',shape:_cs,text:'↘'})
         }
       }
       if(allMarkers.length) candles.setMarkers(allMarkers.sort((a,b)=>a.time.localeCompare(b.time)))
