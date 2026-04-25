@@ -2,22 +2,20 @@ import { useState } from 'react'
 import { MONO } from '../lib/utils'
 
 const S = {
-  wrap:    { display:'flex', flexDirection:'column', gap:16, padding:'20px 24px', fontFamily:MONO, color:'#c8d8e8', maxWidth:720, margin:'0 auto' },
-  label:   { fontSize:11, color:'#7a9bc0', marginBottom:4, display:'block' },
-  input:   { width:'100%', background:'#0d1520', border:'1px solid #1a2d45', borderRadius:4, color:'#c8d8e8', fontFamily:MONO, fontSize:13, padding:'7px 10px', outline:'none', boxSizing:'border-box' },
-  textarea:{ width:'100%', background:'#0d1520', border:'1px solid #1a2d45', borderRadius:4, color:'#c8d8e8', fontFamily:MONO, fontSize:12, padding:'8px 10px', outline:'none', resize:'vertical', boxSizing:'border-box', lineHeight:1.5 },
-  row:     { display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 },
-  row3:    { display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12 },
-  field:   { display:'flex', flexDirection:'column' },
-  btn:     (accent='#00d4ff', disabled=false) => ({
+  wrap:     { display:'flex', flexDirection:'column', gap:16, padding:'20px 24px', fontFamily:MONO, color:'#c8d8e8', maxWidth:760, margin:'0 auto' },
+  label:    { fontSize:11, color:'#7a9bc0', marginBottom:4, display:'block' },
+  input:    { width:'100%', background:'#0d1520', border:'1px solid #1a2d45', borderRadius:4, color:'#c8d8e8', fontFamily:MONO, fontSize:13, padding:'7px 10px', outline:'none', boxSizing:'border-box' },
+  textarea: { width:'100%', background:'#0d1520', border:'1px solid #1a2d45', borderRadius:4, color:'#c8d8e8', fontFamily:MONO, fontSize:12, padding:'8px 10px', outline:'none', resize:'vertical', boxSizing:'border-box', lineHeight:1.5 },
+  row:      { display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 },
+  row3:     { display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12 },
+  field:    { display:'flex', flexDirection:'column' },
+  btn:      (accent='#00d4ff', disabled=false) => ({
     padding:'9px 18px', borderRadius:4, fontFamily:MONO, fontSize:12, fontWeight:600, cursor:disabled?'not-allowed':'pointer',
     background:`rgba(${hexRgb(accent)},0.12)`, border:`1px solid ${disabled?'#2a3d55':accent}`,
     color:disabled?'#3a5070':accent, opacity:disabled?0.5:1, transition:'opacity 0.15s',
   }),
-  separator: { borderTop:'1px solid #1a2d45', marginTop:4 },
-  summaryBox:{ background:'#0a1424', border:'1px solid #1a2d45', borderRadius:4, padding:'10px 12px', fontSize:12, color:'#7a9bc0', lineHeight:1.6, minHeight:60 },
-  title:   { fontSize:14, fontWeight:700, color:'#00d4ff', marginBottom:4 },
-  errBox:  { background:'rgba(255,77,109,0.08)', border:'1px solid #ff4d6d', borderRadius:4, padding:'8px 12px', fontSize:11, color:'#ff4d6d' },
+  separator:{ borderTop:'1px solid #1a2d45', marginTop:4 },
+  title:    { fontSize:14, fontWeight:700, color:'#00d4ff', marginBottom:4 },
 }
 
 function hexRgb(hex) {
@@ -26,44 +24,19 @@ function hexRgb(hex) {
 }
 
 export default function StrategyEditorPanel({ strForm, setStrForm, strategy, onSave, onCancel, onDelete, saving }) {
-  const [generating, setGenerating] = useState(false)
-  const [genError,   setGenError]   = useState(null)
   const [pineCopied, setPineCopied] = useState(false)
 
   const upd = (k, v) => setStrForm(f => ({ ...f, [k]: v }))
-
   const isNew = !strategy?.id
 
-  const handleGenerate = async () => {
-    const desc = (strForm.description || '').trim()
-    if (!desc) { setGenError('Escribe una descripción antes de generar.'); return }
-    setGenerating(true); setGenError(null)
-    try {
-      const r = await fetch('/api/generate-strategy', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ description: desc }),
-      })
-      const json = await r.json()
-      if (!r.ok) throw new Error(json.error || 'Error generando')
-      setStrForm(f => ({ ...f, code_js: json.code_js, code_pine: json.code_pine, summary: json.summary }))
-    } catch (e) {
-      setGenError(e.message)
-    } finally {
-      setGenerating(false)
-    }
-  }
-
   const handleCopyPine = () => {
-    const pine = strForm.code_pine || ''
+    const pine = (strForm.code_pine || '').trim()
     if (!pine) return
     navigator.clipboard.writeText(pine).then(() => {
       setPineCopied(true)
       setTimeout(() => setPineCopied(false), 2000)
     })
   }
-
-  const hasCode = !!(strForm.code_js || '').trim()
 
   return (
     <div style={S.wrap}>
@@ -103,39 +76,42 @@ export default function StrategyEditorPanel({ strForm, setStrForm, strategy, onS
 
       <div style={S.separator} />
 
-      {/* ── Descripción en lenguaje natural ── */}
+      {/* ── Descripción / Resumen ── */}
       <div style={S.field}>
-        <label style={S.label}>Descripción en lenguaje natural</label>
-        <textarea style={{...S.textarea, minHeight:80}}
+        <label style={S.label}>Descripción / Resumen</label>
+        <textarea style={{...S.textarea, minHeight:100}}
           value={strForm.description||''}
           onChange={e=>upd('description',e.target.value)}
-          placeholder="Ej: Compra cuando la EMA10 cruza por encima de la EMA20, vende cuando cruza por debajo. Filtro: precio por encima de la EMA200."
+          placeholder="Descripción o resumen de la lógica de la estrategia"
         />
       </div>
 
-      {/* ── Generar con Claude ── */}
-      <div style={{display:'flex',gap:8,alignItems:'center'}}>
-        <button style={S.btn('#00d4ff', generating)} onClick={handleGenerate} disabled={generating}>
-          {generating ? '⏳ Generando…' : '✦ Generar con Claude'}
-        </button>
-        {hasCode && (
+      {/* ── Código JS ── */}
+      <div style={S.field}>
+        <label style={S.label}>Código JS</label>
+        <textarea style={{...S.textarea, minHeight:200}}
+          value={strForm.code_js||''}
+          onChange={e=>upd('code_js',e.target.value)}
+          placeholder="function run(bars, params) { ... }"
+          spellCheck={false}
+        />
+      </div>
+
+      {/* ── Código Pine Script ── */}
+      <div style={S.field}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
+          <label style={{...S.label,marginBottom:0}}>Código Pine Script</label>
           <button style={S.btn('#a78bfa', false)} onClick={handleCopyPine}>
             {pineCopied ? '✓ Copiado' : '📋 Ver Pine Script'}
           </button>
-        )}
-      </div>
-
-      {genError && <div style={S.errBox}>⚠ {genError}</div>}
-
-      {/* ── Resumen generado (solo lectura) ── */}
-      {(strForm.summary || hasCode) && (
-        <div style={S.field}>
-          <label style={S.label}>Resumen de lógica {hasCode ? '✓' : ''}</label>
-          <div style={S.summaryBox}>
-            {strForm.summary || <span style={{color:'#3a5070',fontStyle:'italic'}}>Sin resumen aún — pulsa Generar.</span>}
-          </div>
         </div>
-      )}
+        <textarea style={{...S.textarea, minHeight:200}}
+          value={strForm.code_pine||''}
+          onChange={e=>upd('code_pine',e.target.value)}
+          placeholder="//@version=5&#10;strategy(...)"
+          spellCheck={false}
+        />
+      </div>
 
       <div style={S.separator} />
 
