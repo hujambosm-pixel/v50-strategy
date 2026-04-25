@@ -24,10 +24,20 @@ function hexRgb(hex) {
 }
 
 export default function StrategyEditorPanel({ strForm, setStrForm, strategy, onSave, onCancel, onDelete, saving }) {
-  const [pineCopied, setPineCopied] = useState(false)
+  const [pineCopied,  setPineCopied]  = useState(false)
+  const [paramsError, setParamsError] = useState(null)
 
   const upd = (k, v) => setStrForm(f => ({ ...f, [k]: v }))
   const isNew = !strategy?.id
+
+  const handleSave = () => {
+    const raw = (strForm.params || '').trim()
+    if (raw) {
+      try { JSON.parse(raw) } catch (_) { setParamsError('JSON inválido'); return }
+    }
+    setParamsError(null)
+    onSave()
+  }
 
   const handleCopyPine = () => {
     const pine = (strForm.code_pine || '').trim()
@@ -86,6 +96,18 @@ export default function StrategyEditorPanel({ strForm, setStrForm, strategy, onS
         />
       </div>
 
+      {/* ── Parámetros (JSON) ── */}
+      <div style={S.field}>
+        <label style={S.label}>Parámetros (JSON)</label>
+        <textarea style={{...S.textarea, minHeight:120}}
+          value={strForm.params||''}
+          onChange={e=>{ upd('params',e.target.value); setParamsError(null) }}
+          placeholder={'{\n  "emaR": 10,\n  "emaL": 11\n}'}
+          spellCheck={false}
+        />
+        {paramsError && <span style={{fontSize:11,color:'#ff4d6d',marginTop:3}}>⚠ {paramsError}</span>}
+      </div>
+
       {/* ── Código JS ── */}
       <div style={S.field}>
         <label style={S.label}>Código JS</label>
@@ -118,7 +140,7 @@ export default function StrategyEditorPanel({ strForm, setStrForm, strategy, onS
       {/* ── Acciones ── */}
       <div style={{display:'flex',gap:8,justifyContent:'space-between'}}>
         <div style={{display:'flex',gap:8}}>
-          <button style={S.btn('#00e5a0', saving)} onClick={onSave} disabled={saving}>
+          <button style={S.btn('#00e5a0', saving)} onClick={handleSave} disabled={saving}>
             {saving ? 'Guardando…' : '💾 Guardar'}
           </button>
           <button style={S.btn('#7a9bc0', false)} onClick={onCancel}>

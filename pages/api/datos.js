@@ -143,14 +143,18 @@ export default async function handler(req, res) {
   if (!simbolo) return res.status(400).json({ error: 'simbolo requerido' })
 
   // ── Fetch code_js from Supabase ──
-  let codeJs = null
+  let codeJs = null, stratParams = null
   if (strategyId) {
     try {
       const r = await fetch(
-        `${SUPA_URL}/rest/v1/strategies?id=eq.${strategyId}&select=code_js`,
+        `${SUPA_URL}/rest/v1/strategies?id=eq.${strategyId}&select=code_js,params`,
         { headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` } }
       )
-      if (r.ok) codeJs = (await r.json())?.[0]?.code_js || null
+      if (r.ok) {
+        const row = (await r.json())?.[0] || {}
+        codeJs      = row.code_js || null
+        stratParams = row.params  || null
+      }
     } catch (_) {}
   }
 
@@ -169,7 +173,8 @@ export default async function handler(req, res) {
     const wrappedCode = `"use strict";\n${codeJs}\nreturn run;`
     const getRunFn = new Function('calcEMA','calcSMA','calcRSI','calcATR','calcMACD', wrappedCode)
     const runFn    = getRunFn(calcEMA, calcSMA, calcRSI, calcATR, calcMACD)
-    const { trades: rawTrades = [], indicators = {} } = runFn(data, { capital_ini, years, allocation_pct })
+    const userParams = stratParams ? JSON.parse(stratParams) : {}
+    const { trades: rawTrades = [], indicators = {} } = runFn(data, { capital_ini, years, allocation_pct, ...userParams })
 
     // ── Enrich trades ──
     const trades = buildTrades(rawTrades, capital_ini, allocation_pct)
