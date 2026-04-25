@@ -130,26 +130,27 @@ export default function StrategyEditorPanel({ strForm, setStrForm, strategy, onS
         <label style={S.label}>Marcadores Visuales</label>
         {(()=>{
           const DEF={
-            lines:true,      linesColor:'#00e5a0',
-            arrows:true,     arrowsColor:'#00d4ff',
-            entryLine:true,  entryLineColor:'#ffffff',
-            labels:true,     labelsColor:'#00d4ff',
-            emaCrosses:false,emaCrossesColor:'#00e5a0',
+            lines:true,         linesColor:'#00e5a0',
+            arrows:true,        arrowsColor:'#00d4ff',      arrowsShape:'arrowUp',
+            entryLine:true,     entryLineColor:'#ffffff',
+            labels:true,        labelsColor:'#00d4ff',
+            emaCrosses:false,   emaCrossesColor:'#00e5a0',  emaCrossesShape:'circle',
           }
           let vis; try{vis={...DEF,...JSON.parse(strForm.visuals||'{}')}}catch{vis={...DEF}}
           const toggle=(key)=>upd('visuals',JSON.stringify({...vis,[key]:!vis[key]}))
           const setColor=(ck,val)=>upd('visuals',JSON.stringify({...vis,[ck]:val}))
           const COLOR_KEY={lines:'linesColor',arrows:'arrowsColor',
             entryLine:'entryLineColor',labels:'labelsColor',emaCrosses:'emaCrossesColor'}
+          const SHAPES=['arrowUp','arrowDown','circle','square']
           return(
             <div style={{display:'flex',flexWrap:'wrap',gap:8,marginTop:4}}>
               {[
-                {key:'lines',     label:'Líneas P&L',   icon:'/'},
-                {key:'arrows',    label:'Flechas ↑↓',   icon:'↑'},
-                {key:'entryLine', label:'Línea entrada', icon:'—'},
-                {key:'labels',    label:'Etiquetas #N',  icon:'#'},
-                {key:'emaCrosses',label:'Cruces EMA',    icon:'◎'},
-              ].map(({key,label,icon})=>{
+                {key:'lines',     label:'Líneas P&L',   icon:'/', hasShape:false},
+                {key:'arrows',    label:'Flechas ↑↓',   icon:'↑', hasShape:true,  shapeKey:'arrowsShape',     shapeDefault:'arrowUp'},
+                {key:'entryLine', label:'Línea entrada', icon:'—', hasShape:false},
+                {key:'labels',    label:'Etiquetas #N',  icon:'#', hasShape:false},
+                {key:'emaCrosses',label:'Cruces EMA',    icon:'◎', hasShape:true,  shapeKey:'emaCrossesShape', shapeDefault:'circle'},
+              ].map(({key,label,icon,hasShape,shapeKey,shapeDefault})=>{
                 const on=vis[key]
                 const ck=COLOR_KEY[key]
                 return(
@@ -174,6 +175,14 @@ export default function StrategyEditorPanel({ strForm, setStrForm, strategy, onS
                         style={{width:28,height:28,border:'1px solid #1a2d45',
                           borderRadius:4,background:'transparent',cursor:'pointer',padding:2}}
                       />
+                    )}
+                    {on&&hasShape&&(
+                      <select value={vis[shapeKey]||shapeDefault}
+                        onChange={e=>upd('visuals',JSON.stringify({...vis,[shapeKey]:e.target.value}))}
+                        onClick={e=>e.stopPropagation()}
+                        style={{...S.input,width:'auto',padding:'4px 8px',fontSize:11,cursor:'pointer'}}>
+                        {SHAPES.map(sh=><option key={sh} value={sh}>{sh}</option>)}
+                      </select>
                     )}
                   </div>
                 )

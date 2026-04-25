@@ -361,16 +361,19 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       const allMarkers=[]
       if(visuals?.arrows!==false){
         tradeMAEs.forEach(t=>{
-          if(t.entryDate) allMarkers.push({time:t.entryDate,position:'belowBar',color:visuals?.arrowsColor||'#00d4ff',shape:'arrowUp',text:''})
-          if(t.exitDate)  allMarkers.push({time:t.exitDate, position:'aboveBar',color:t.pnlPct>=0?'#00e5a0':'#ff4d6d',shape:'arrowDown',text:''})
+          const _as=visuals?.arrowsShape||'arrowUp'
+          const _asExit=_as==='arrowUp'?'arrowDown':_as==='arrowDown'?'arrowUp':_as
+          if(t.entryDate) allMarkers.push({time:t.entryDate,position:'belowBar',color:visuals?.arrowsColor||'#00d4ff',shape:_as,text:''})
+          if(t.exitDate)  allMarkers.push({time:t.exitDate, position:'aboveBar',color:t.pnlPct>=0?'#00e5a0':'#ff4d6d',shape:_asExit,text:''})
         })
       }
       if(visuals?.emaCrosses===true){
         for(let j=1;j<data.length;j++){
           const er=data[j].emaR,el=data[j].emaL,erP=data[j-1].emaR,elP=data[j-1].emaL
           if(er==null||el==null||erP==null||elP==null) continue
-          if(erP<elP&&er>=el) allMarkers.push({time:data[j].date,position:'aboveBar',color:visuals?.emaCrossesColor||'#00e5a0',shape:'circle',text:''})
-          else if(erP>elP&&er<=el) allMarkers.push({time:data[j].date,position:'belowBar',color:'#ff4d6d',shape:'circle',text:''})
+          const _cs=visuals?.emaCrossesShape||'circle'
+          if(erP<elP&&er>=el) allMarkers.push({time:data[j].date,position:'aboveBar',color:visuals?.emaCrossesColor||'#00e5a0',shape:_cs,text:''})
+          else if(erP>elP&&er<=el) allMarkers.push({time:data[j].date,position:'belowBar',color:'#ff4d6d',shape:_cs,text:''})
         }
       }
       if(allMarkers.length) candles.setMarkers(allMarkers.sort((a,b)=>a.time.localeCompare(b.time)))
