@@ -143,17 +143,18 @@ export default async function handler(req, res) {
   if (!simbolo) return res.status(400).json({ error: 'simbolo requerido' })
 
   // ── Fetch code_js from Supabase ──
-  let codeJs = null, stratParams = null
+  let codeJs = null, stratParams = null, stratVisuals = null
   if (strategyId) {
     try {
       const r = await fetch(
-        `${SUPA_URL}/rest/v1/strategies?id=eq.${strategyId}&select=code_js,params`,
+        `${SUPA_URL}/rest/v1/strategies?id=eq.${strategyId}&select=code_js,params,visuals`,
         { headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` } }
       )
       if (r.ok) {
         const row = (await r.json())?.[0] || {}
-        codeJs      = row.code_js || null
-        stratParams = row.params  || null
+        codeJs       = row.code_js || null
+        stratParams  = row.params  || null
+        stratVisuals = row.visuals || null
       }
     } catch (_) {}
   }
@@ -210,6 +211,7 @@ export default async function handler(req, res) {
       ganBH,
       startDate: data[0].date,
       ...curves,
+      visuals: stratVisuals ? JSON.parse(stratVisuals) : null,
       meta: { ultimaFecha: data[data.length - 1].date, ultimoPrecio: data[data.length - 1].close, simbolo },
     })
   } catch (e) {

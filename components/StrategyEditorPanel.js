@@ -108,6 +108,43 @@ export default function StrategyEditorPanel({ strForm, setStrForm, strategy, onS
         {paramsError && <span style={{fontSize:11,color:'#ff4d6d',marginTop:3}}>⚠ {paramsError}</span>}
       </div>
 
+      {/* ── Marcadores Visuales ── */}
+      <div style={S.field}>
+        <label style={S.label}>Marcadores Visuales</label>
+        {(()=>{
+          const DEF={lines:true,arrows:true,entryLine:true,labels:true,emaCrosses:false}
+          let vis; try{vis={...DEF,...JSON.parse(strForm.visuals||'{}')}}catch{vis={...DEF}}
+          const toggle=(key)=>upd('visuals',JSON.stringify({...vis,[key]:!vis[key]}))
+          return(
+            <div style={{display:'flex',flexWrap:'wrap',gap:8,marginTop:4}}>
+              {[
+                {key:'lines',     label:'Líneas P&L',   icon:'/'},
+                {key:'arrows',    label:'Flechas ↑↓',   icon:'↑'},
+                {key:'entryLine', label:'Línea entrada', icon:'—'},
+                {key:'labels',    label:'Etiquetas #N',  icon:'#'},
+                {key:'emaCrosses',label:'Cruces EMA',    icon:'◎'},
+              ].map(({key,label,icon})=>{
+                const on=vis[key]
+                return(
+                  <button key={key} onClick={()=>toggle(key)} style={{
+                    display:'flex',alignItems:'center',gap:6,padding:'6px 14px',
+                    borderRadius:4,cursor:'pointer',fontFamily:MONO,fontSize:12,fontWeight:600,
+                    background:on?'rgba(0,212,255,0.12)':'rgba(0,0,0,0.2)',
+                    border:`1px solid ${on?'#00d4ff':'#1a2d45'}`,
+                    color:on?'#00d4ff':'#3a5070',transition:'all 0.15s',
+                  }}>
+                    <span style={{fontSize:10,opacity:0.7}}>{icon}</span>
+                    {label}
+                    <span style={{width:8,height:8,borderRadius:'50%',
+                      background:on?'#00d4ff':'#1a2d45',transition:'background 0.15s'}}/>
+                  </button>
+                )
+              })}
+            </div>
+          )
+        })()}
+      </div>
+
       {/* ── Código JS ── */}
       <div style={S.field}>
         <label style={S.label}>Código JS</label>

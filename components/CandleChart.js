@@ -243,7 +243,7 @@ function createRiskPrimitive(configRef) {
   }
 }
 
-export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null, isBareChart=false }) {
+export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null, isBareChart=false, visuals=null }) {
   const containerRef=useRef(null), svgRef=useRef(null), legendRef=useRef(null), tooltipRef=useRef(null)
   const activeLegendRef = externalLegendRef || legendRef
   const chartRef=useRef(null), candlesRef=useRef(null)
@@ -325,10 +325,10 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
 
       // ── MAE (Maximum Adverse Excursion) por trade ──
       const tradeMAEs = trades.map(t => {
-        if(!t.entryDate||!t.exitDate||!t.entryPx) return { ...t, mae:0, minLow:t.entryPx, minDate:t.entryDate }
+        if(!t.entryDate||!t.exitDate||!t.entryPrice) return { ...t, mae:0, minLow:t.entryPrice, minDate:t.entryDate }
         const velas = data.filter(d => d && d.date >= t.entryDate && d.date <= t.exitDate)
-        if(!velas.length) return { ...t, mae:0, minLow:t.entryPx, minDate:t.entryDate }
-        let peak=t.entryPx, maxDD=0, minDate=null, minLow=t.entryPx
+        if(!velas.length) return { ...t, mae:0, minLow:t.entryPrice, minDate:t.entryDate }
+        let peak=t.entryPrice, maxDD=0, minDate=null, minLow=t.entryPrice
         velas.forEach(v=>{
           if(v.high>peak) peak=v.high
           const dd=(v.low-peak)/peak*100
@@ -343,21 +343,37 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       // Líneas de trades — diagonal P&L + horizontales entrada/stop estilo TV
       tradeMAEs.forEach(t=>{
         if(!t.entryDate||!t.exitDate) return
-        // Diagonal P&L
-        const ls=chart.addLineSeries({color:t.pnlPct>=0?'#00e5a0':'#ff4d6d',lineWidth:2,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
-        ls.setData([{time:t.entryDate,value:t.entryPx},{time:t.exitDate,value:t.exitPx}])
-        // Línea horizontal blanca intermitente — nivel de entrada
-        const entryLine=chart.addLineSeries({color:'rgba(255,255,255,0.65)',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
-        entryLine.setData([{time:t.entryDate,value:t.entryPx},{time:t.exitDate,value:t.entryPx}])
-        // Línea horizontal roja — stop loss
-        if(t.stopPx!=null){
+        if(visuals?.lines!==false){
+          const ls=chart.addLineSeries({color:t.pnlPct>=0?'#00e5a0':'#ff4d6d',lineWidth:2,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
+          ls.setData([{time:t.entryDate,value:t.entryPrice},{time:t.exitDate,value:t.exitPrice}])
+        }
+        if(visuals?.entryLine!==false){
+          const entryLine=chart.addLineSeries({color:'rgba(255,255,255,0.65)',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
+          entryLine.setData([{time:t.entryDate,value:t.entryPrice},{time:t.exitDate,value:t.entryPrice}])
+        }
+        if(visuals?.lines!==false&&t.stopPx!=null){
           const stopLine=chart.addLineSeries({color:'rgba(255,77,109,0.8)',lineWidth:2,lineStyle:LineStyle.Solid,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
           stopLine.setData([{time:t.entryDate,value:t.stopPx},{time:t.exitDate,value:t.stopPx}])
         }
       })
 
-      const marks=[]
-      if(marks.length) candles.setMarkers(marks.sort((a,b)=>a.time.localeCompare(b.time)))
+      // ── Marcadores: flechas entrada/salida + círculos cruces EMA ──
+      const allMarkers=[]
+      if(visuals?.arrows!==false){
+        tradeMAEs.forEach(t=>{
+          if(t.entryDate) allMarkers.push({time:t.entryDate,position:'belowBar',color:'#00d4ff',shape:'arrowUp',text:''})
+          if(t.exitDate)  allMarkers.push({time:t.exitDate, position:'aboveBar',color:t.pnlPct>=0?'#00e5a0':'#ff4d6d',shape:'arrowDown',text:''})
+        })
+      }
+      if(visuals?.emaCrosses===true){
+        for(let j=1;j<data.length;j++){
+          const er=data[j].emaR,el=data[j].emaL,erP=data[j-1].emaR,elP=data[j-1].emaL
+          if(er==null||el==null||erP==null||elP==null) continue
+          if(erP<elP&&er>=el) allMarkers.push({time:data[j].date,position:'aboveBar',color:'#00e5a0',shape:'circle',text:''})
+          else if(erP>elP&&er<=el) allMarkers.push({time:data[j].date,position:'belowBar',color:'#ff4d6d',shape:'circle',text:''})
+        }
+      }
+      if(allMarkers.length) candles.setMarkers(allMarkers.sort((a,b)=>a.time.localeCompare(b.time)))
 
       // ── Paneles secundarios (RSI / MACD / VOLUME) ─────────────────────
       const _panelOpts=(h)=>({
@@ -507,6 +523,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       const drawTradeLabels=()=>{
         const svg=svgRef.current; if(!svg||!candlesRef.current||!chartRef.current) return
         svg.querySelectorAll('.trade-label').forEach(el=>el.remove())
+        if(visuals?.labels===false) return
         const NS='http://www.w3.org/2000/svg'
         tradeMAEs.forEach((t,idx)=>{
           if(!t.entryDate||!t.exitDate) return
@@ -516,7 +533,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
             if(x1==null||x2==null) return
             const midX=(x1+x2)/2
             // Precio medio del trade para la posición Y base
-            const midPrice=(t.entryPx+t.exitPx)/2
+            const midPrice=(t.entryPrice+t.exitPrice)/2
             const pyBase=candlesRef.current.priceToCoordinate(midPrice)
             if(pyBase==null) return
             const isWin=t.pnlPct>=0
