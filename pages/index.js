@@ -17,6 +17,7 @@ import ContextThemeMenu, { applyTema } from '../components/ContextThemeMenu'
 import MetricRow from '../components/MetricRow'
 import PriceAlarmQuickForm from '../components/PriceAlarmQuickForm'
 import StrategiesManager from '../components/StrategiesManager'
+import StrategyEditorPanel from '../components/StrategyEditorPanel'
 import WatchlistCondPanel from '../components/WatchlistCondPanel'
 
 
@@ -328,9 +329,8 @@ async function upsertStrategy(item) {
   const method=item.id?'PATCH':'POST'
   const url=item.id?`${getSupaUrl()}/rest/v1/strategies?id=eq.${item.id}`:`${getSupaUrl()}/rest/v1/strategies`
   // Only send known DB columns — strip any UI-only keys (prefixed with _)
-  const ALLOWED=['name','years','capital_ini','allocation_pct','color','observations','active','definition',
-    'condition_filter_id','condition_setup_id','condition_trigger_id','condition_abort_id',
-    'condition_stop_loss_id','condition_exit_id','condition_management_id']
+  const ALLOWED=['name','years','capital_ini','allocation_pct','color','observations','active',
+    'description','summary','code_js','code_pine']
   const body={}; ALLOWED.forEach(k=>{if(item[k]!==undefined)body[k]=item[k]})
   const res=await fetch(url,{method,headers:{...getSupaH(),'Prefer':'return=representation'},body:JSON.stringify(body)})
   if(!res.ok){const t=await res.text();throw new Error(`Error guardando estrategia: ${t}`)}
@@ -1573,7 +1573,11 @@ export default function Home() {
       capital_ini:s.capital_ini||(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.defaultCapital||1000}catch(_){return 1000}})(),
       allocation_pct:s.allocation_pct||100,
       color:s.color||'#00d4ff',
-      observations:s.observations||''
+      observations:s.observations||'',
+      description:s.description||'',
+      code_js:s.code_js||'',
+      code_pine:s.code_pine||'',
+      summary:s.summary||'',
     })
   }
   const closeEditStr=()=>{setEditingStr(null);setStrForm({})}
@@ -1877,8 +1881,8 @@ export default function Home() {
   const run=useCallback(async(sym,payload)=>{
     setLoading(true);setError(null)
     try{
-      const body = payload.definition
-        ? { simbolo:sym, definition:payload.definition, capital_ini:payload.capital_ini, years:payload.years }
+      const body = payload.strategyId
+        ? { simbolo:sym, strategyId:payload.strategyId, capital_ini:payload.capital_ini, years:payload.years, allocation_pct:payload.allocation_pct }
         : { simbolo:sym, cfg:payload.cfg||payload }
       const res=await apiFetch('/api/datos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
       const json=await res.json()
@@ -1965,7 +1969,9 @@ export default function Home() {
     if(skipNextRunRef.current){skipNextRunRef.current=false;return}
     if(!currentStratId&&sidePanel!=='strats')return
     if(debounceRef.current)clearTimeout(debounceRef.current)
-    const payload = { cfg:{emaR:Number(emaR),emaL:Number(emaL),years:Number(years),capitalIni:Number(capitalIni),
+    const payload = currentStratId
+      ? { strategyId:currentStratId, capital_ini:Number(capitalIni), years:Number(years), allocation_pct:100 }
+      : { cfg:{emaR:Number(emaR),emaL:Number(emaL),years:Number(years),capitalIni:Number(capitalIni),
               tipoStop,atrPeriod:Number(atrP),atrMult:Number(atrM),sinPerdidas,reentry,
               tipoFiltro,sp500EmaR:Number(sp500EmaR),sp500EmaL:Number(sp500EmaL)} }
     debounceRef.current=setTimeout(()=>run(simbolo, payload),800)
@@ -2937,7 +2943,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.72</title>
+        <title>Trading Simulator V9.73</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3014,7 +3020,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.72
+            <span className="dot"/>Trading Simulator V9.73
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4251,7 +4257,18 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
           {/* ── CONTENT ── */}
           <div className="content" style={result?.isBareChart?{overflowY:'hidden'}:undefined}>
 
-            {/* ══ STRATEGY EDITOR PANEL — FASE 3: nuevo editor aquí ══ */}
+            {/* ══ STRATEGY EDITOR PANEL ══ */}
+            {editingStr!==null&&sidePanel==='config'&&(
+              <StrategyEditorPanel
+                strForm={strForm}
+                setStrForm={setStrForm}
+                strategy={editingStr}
+                onSave={saveEditStr}
+                onCancel={closeEditStr}
+                onDelete={editingStr?.id?()=>deleteStr(editingStr.id):null}
+                saving={strSaving}
+              />
+            )}
 
             {/* Single-asset view — oculto cuando multicartera activa o editando */}
             {sidePanel!=='multi'&&sidePanel!=='tradelog'&&!(editingStr&&sidePanel==='config')&&!result&&!error&&currentStratId&&<div className="loading"><div className="spinner"/><div className="loading-text">CARGANDO DATOS...</div></div>}

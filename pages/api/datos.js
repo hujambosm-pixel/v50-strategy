@@ -1,7 +1,9 @@
 // pages/api/datos.js — Motor V50 v3.0
-// FASE 3 pendiente: motor de backtest en construcción
 
-import { calcEMA } from '../../lib/backtester'
+import { calcEMA, calcSMA, calcRSI, calcATR, calcMACD } from '../../lib/backtester'
+
+const SUPA_URL = process.env.SUPABASE_URL || 'https://uqjngxxbdlquiuhywiuc.supabase.co'
+const SUPA_KEY = process.env.SUPABASE_ANON_KEY || 'sb_publishable_st9QJ3zcQbY5ec-JhxwqXQ_joy3udz3'
 
 function stooqSym(symbol) {
   const MAP={
@@ -111,8 +113,96 @@ export function calcEquityCurves(trades, data, capitalIni, startDate, sp500Data)
   }
 }
 
+// ── Build full trade objects from raw { entryDate, exitDate, entryPrice, exitPrice } ──
+function buildTrades(rawTrades, capitalIni, allocationPct = 100) {
+  const fixedAlloc = capitalIni * (allocationPct / 100)
+  let compoundCapital = capitalIni
+  return rawTrades
+    .filter(t => t.entryDate && t.exitDate && t.entryPrice > 0 && t.exitPrice > 0)
+    .map(t => {
+      const sharesSimple   = fixedAlloc / t.entryPrice
+      const pnlSimple      = (t.exitPrice - t.entryPrice) * sharesSimple
+      const pnlPct         = (t.exitPrice / t.entryPrice - 1) * 100
+
+      const compAlloc      = compoundCapital * (allocationPct / 100)
+      const sharesCompound = compAlloc / t.entryPrice
+      const pnlCompound    = (t.exitPrice - t.entryPrice) * sharesCompound
+      compoundCapital     += pnlCompound
+
+      const dias = Math.max(1, Math.round((new Date(t.exitDate) - new Date(t.entryDate)) / 86400000))
+
+      return { ...t, shares: sharesSimple, pnlSimple, pnlPct, capitalTras: compoundCapital, dias }
+    })
+}
+
 // ── Handler ──────────────────────────────────────────────────
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
-  return res.status(501).json({ error: 'Motor de backtest en construcción — FASE 3 pendiente' })
+
+  const { simbolo, strategyId, capital_ini = 10000, years = 5, allocation_pct = 100 } = req.body || {}
+  if (!simbolo) return res.status(400).json({ error: 'simbolo requerido' })
+
+  // ── Fetch code_js from Supabase ──
+  let codeJs = null
+  if (strategyId) {
+    try {
+      const r = await fetch(
+        `${SUPA_URL}/rest/v1/strategies?id=eq.${strategyId}&select=code_js`,
+        { headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` } }
+      )
+      if (r.ok) codeJs = (await r.json())?.[0]?.code_js || null
+    } catch (_) {}
+  }
+
+  if (!codeJs) {
+    return res.status(400).json({ error: 'Esta estrategia no tiene código generado. Abre el editor y usa "Generar con Claude".' })
+  }
+
+  try {
+    // ── Fetch market data ──
+    const allData = await fetchAV(simbolo, years + 1)
+    const cutoff  = new Date(); cutoff.setFullYear(cutoff.getFullYear() - years)
+    const data    = allData.filter(d => new Date(d.date) >= cutoff)
+    if (!data.length) throw new Error('Sin datos para ' + simbolo)
+
+    // ── Execute strategy in sandbox ──
+    const wrappedCode = `"use strict";\n${codeJs}\nreturn run;`
+    const getRunFn = new Function('calcEMA','calcSMA','calcRSI','calcATR','calcMACD', wrappedCode)
+    const runFn    = getRunFn(calcEMA, calcSMA, calcRSI, calcATR, calcMACD)
+    const { trades: rawTrades = [], indicators = {} } = runFn(data, { capital_ini, years, allocation_pct })
+
+    // ── Enrich trades ──
+    const trades = buildTrades(rawTrades, capital_ini, allocation_pct)
+
+    // ── Inject indicators into chartData bars ──
+    const emaRArr = indicators.emaR || indicators.emaFast || null
+    const emaLArr = indicators.emaL || indicators.emaSlow || null
+    const chartData = data.map((d, i) => ({
+      ...d,
+      emaR: emaRArr?.[i] ?? null,
+      emaL: emaLArr?.[i] ?? null,
+    }))
+
+    // ── Summary metrics ──
+    const gananciaSimple = trades.reduce((s, t) => s + t.pnlSimple, 0)
+    const capitalReinv   = trades.length ? trades[trades.length - 1].capitalTras : capital_ini
+    const p0 = data[0].close, pN = data[data.length - 1].close
+    const ganBH = capital_ini * (pN / p0 - 1)
+
+    // ── Equity curves ──
+    const curves = calcEquityCurves(trades, data, capital_ini, data[0].date, null)
+
+    return res.status(200).json({
+      chartData,
+      trades,
+      gananciaSimple,
+      capitalReinv,
+      ganBH,
+      startDate: data[0].date,
+      ...curves,
+      meta: { ultimaFecha: data[data.length - 1].date, ultimoPrecio: data[data.length - 1].close, simbolo },
+    })
+  } catch (e) {
+    return res.status(500).json({ error: e.message })
+  }
 }
