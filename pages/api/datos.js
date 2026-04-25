@@ -139,8 +139,17 @@ function buildTrades(rawTrades, capitalIni, allocationPct = 100) {
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
 
-  const { simbolo, strategyId, capital_ini = 10000, years = 5, allocation_pct = 100 } = req.body || {}
+  const { simbolo, strategyId, capital_ini = 10000, years = 5, allocation_pct = 100, priceOnly } = req.body || {}
   if (!simbolo) return res.status(400).json({ error: 'simbolo requerido' })
+
+  // ── Price-only mode: last close, no strategy execution ──
+  if (priceOnly) {
+    try {
+      const data = await fetchAV(simbolo, 1)
+      const last = data[data.length - 1]
+      return res.status(200).json({ meta: { ultimaFecha: last.date, ultimoPrecio: last.close, simbolo } })
+    } catch(e) { return res.status(500).json({ error: e.message }) }
+  }
 
   // ── Fetch code_js from Supabase ──
   let codeJs = null, stratParams = null, stratVisuals = null
