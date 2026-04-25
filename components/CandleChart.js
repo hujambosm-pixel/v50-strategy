@@ -344,11 +344,11 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       tradeMAEs.forEach(t=>{
         if(!t.entryDate||!t.exitDate) return
         if(visuals?.lines!==false){
-          const ls=chart.addLineSeries({color:t.pnlPct>=0?'#00e5a0':'#ff4d6d',lineWidth:2,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
+          const ls=chart.addLineSeries({color:t.pnlPct>=0?(visuals?.linesColor||'#00e5a0'):'#ff4d6d',lineWidth:2,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
           ls.setData([{time:t.entryDate,value:t.entryPrice},{time:t.exitDate,value:t.exitPrice}])
         }
         if(visuals?.entryLine!==false){
-          const entryLine=chart.addLineSeries({color:'rgba(255,255,255,0.65)',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
+          const entryLine=chart.addLineSeries({color:visuals?.entryLineColor||'rgba(255,255,255,0.65)',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
           entryLine.setData([{time:t.entryDate,value:t.entryPrice},{time:t.exitDate,value:t.entryPrice}])
         }
         if(visuals?.lines!==false&&t.stopPx!=null){
@@ -361,7 +361,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       const allMarkers=[]
       if(visuals?.arrows!==false){
         tradeMAEs.forEach(t=>{
-          if(t.entryDate) allMarkers.push({time:t.entryDate,position:'belowBar',color:'#00d4ff',shape:'arrowUp',text:''})
+          if(t.entryDate) allMarkers.push({time:t.entryDate,position:'belowBar',color:visuals?.arrowsColor||'#00d4ff',shape:'arrowUp',text:''})
           if(t.exitDate)  allMarkers.push({time:t.exitDate, position:'aboveBar',color:t.pnlPct>=0?'#00e5a0':'#ff4d6d',shape:'arrowDown',text:''})
         })
       }
@@ -369,7 +369,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         for(let j=1;j<data.length;j++){
           const er=data[j].emaR,el=data[j].emaL,erP=data[j-1].emaR,elP=data[j-1].emaL
           if(er==null||el==null||erP==null||elP==null) continue
-          if(erP<elP&&er>=el) allMarkers.push({time:data[j].date,position:'aboveBar',color:'#00e5a0',shape:'circle',text:''})
+          if(erP<elP&&er>=el) allMarkers.push({time:data[j].date,position:'aboveBar',color:visuals?.emaCrossesColor||'#00e5a0',shape:'circle',text:''})
           else if(erP>elP&&er<=el) allMarkers.push({time:data[j].date,position:'belowBar',color:'#ff4d6d',shape:'circle',text:''})
         }
       }
@@ -537,7 +537,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
             const pyBase=candlesRef.current.priceToCoordinate(midPrice)
             if(pyBase==null) return
             const isWin=t.pnlPct>=0
-            const bc=isWin?'#00e5a0':'#ff4d6d'
+            const bc=visuals?.labelsColor||(isWin?'#00e5a0':'#ff4d6d')
             const g=document.createElementNS(NS,'g'); g.setAttribute('class','trade-label')
 
             const chartH=containerRef.current?.clientHeight||480

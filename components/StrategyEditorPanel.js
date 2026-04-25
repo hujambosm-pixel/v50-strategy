@@ -52,6 +52,23 @@ export default function StrategyEditorPanel({ strForm, setStrForm, strategy, onS
     <div style={S.wrap}>
       <div style={S.title}>{isNew ? 'Nueva estrategia' : `Editar: ${strategy.name || '—'}`}</div>
 
+      {/* ── Acciones ── */}
+      <div style={{display:'flex',gap:8,justifyContent:'space-between'}}>
+        <div style={{display:'flex',gap:8}}>
+          <button style={S.btn('#00e5a0', saving)} onClick={handleSave} disabled={saving}>
+            {saving ? 'Guardando…' : '💾 Guardar'}
+          </button>
+          <button style={S.btn('#7a9bc0', false)} onClick={onCancel}>
+            Cancelar
+          </button>
+        </div>
+        {!isNew && onDelete && (
+          <button style={S.btn('#ff4d6d', false)} onClick={onDelete}>
+            🗑 Eliminar
+          </button>
+        )}
+      </div>
+
       {/* ── Nombre + Color ── */}
       <div style={S.row}>
         <div style={S.field}>
@@ -112,9 +129,18 @@ export default function StrategyEditorPanel({ strForm, setStrForm, strategy, onS
       <div style={S.field}>
         <label style={S.label}>Marcadores Visuales</label>
         {(()=>{
-          const DEF={lines:true,arrows:true,entryLine:true,labels:true,emaCrosses:false}
+          const DEF={
+            lines:true,      linesColor:'#00e5a0',
+            arrows:true,     arrowsColor:'#00d4ff',
+            entryLine:true,  entryLineColor:'#ffffff',
+            labels:true,     labelsColor:'#00d4ff',
+            emaCrosses:false,emaCrossesColor:'#00e5a0',
+          }
           let vis; try{vis={...DEF,...JSON.parse(strForm.visuals||'{}')}}catch{vis={...DEF}}
           const toggle=(key)=>upd('visuals',JSON.stringify({...vis,[key]:!vis[key]}))
+          const setColor=(ck,val)=>upd('visuals',JSON.stringify({...vis,[ck]:val}))
+          const COLOR_KEY={lines:'linesColor',arrows:'arrowsColor',
+            entryLine:'entryLineColor',labels:'labelsColor',emaCrosses:'emaCrossesColor'}
           return(
             <div style={{display:'flex',flexWrap:'wrap',gap:8,marginTop:4}}>
               {[
@@ -125,19 +151,31 @@ export default function StrategyEditorPanel({ strForm, setStrForm, strategy, onS
                 {key:'emaCrosses',label:'Cruces EMA',    icon:'◎'},
               ].map(({key,label,icon})=>{
                 const on=vis[key]
+                const ck=COLOR_KEY[key]
                 return(
-                  <button key={key} onClick={()=>toggle(key)} style={{
-                    display:'flex',alignItems:'center',gap:6,padding:'6px 14px',
-                    borderRadius:4,cursor:'pointer',fontFamily:MONO,fontSize:12,fontWeight:600,
-                    background:on?'rgba(0,212,255,0.12)':'rgba(0,0,0,0.2)',
-                    border:`1px solid ${on?'#00d4ff':'#1a2d45'}`,
-                    color:on?'#00d4ff':'#3a5070',transition:'all 0.15s',
-                  }}>
-                    <span style={{fontSize:10,opacity:0.7}}>{icon}</span>
-                    {label}
-                    <span style={{width:8,height:8,borderRadius:'50%',
-                      background:on?'#00d4ff':'#1a2d45',transition:'background 0.15s'}}/>
-                  </button>
+                  <div key={key} style={{display:'flex',alignItems:'center',gap:4}}>
+                    <button onClick={()=>toggle(key)} style={{
+                      display:'flex',alignItems:'center',gap:6,padding:'6px 14px',
+                      borderRadius:4,cursor:'pointer',fontFamily:MONO,fontSize:12,fontWeight:600,
+                      background:on?'rgba(0,212,255,0.12)':'rgba(0,0,0,0.2)',
+                      border:`1px solid ${on?'#00d4ff':'#1a2d45'}`,
+                      color:on?'#00d4ff':'#3a5070',transition:'all 0.15s',
+                    }}>
+                      <span style={{fontSize:10,opacity:0.7}}>{icon}</span>
+                      {label}
+                      <span style={{width:8,height:8,borderRadius:'50%',
+                        background:on?'#00d4ff':'#1a2d45',transition:'background 0.15s'}}/>
+                    </button>
+                    {on&&(
+                      <input type="color" value={vis[ck]||DEF[ck]}
+                        onChange={e=>setColor(ck,e.target.value)}
+                        onClick={e=>e.stopPropagation()}
+                        title={ck}
+                        style={{width:28,height:28,border:'1px solid #1a2d45',
+                          borderRadius:4,background:'transparent',cursor:'pointer',padding:2}}
+                      />
+                    )}
+                  </div>
                 )
               })}
             </div>
@@ -172,24 +210,6 @@ export default function StrategyEditorPanel({ strForm, setStrForm, strategy, onS
         />
       </div>
 
-      <div style={S.separator} />
-
-      {/* ── Acciones ── */}
-      <div style={{display:'flex',gap:8,justifyContent:'space-between'}}>
-        <div style={{display:'flex',gap:8}}>
-          <button style={S.btn('#00e5a0', saving)} onClick={handleSave} disabled={saving}>
-            {saving ? 'Guardando…' : '💾 Guardar'}
-          </button>
-          <button style={S.btn('#7a9bc0', false)} onClick={onCancel}>
-            Cancelar
-          </button>
-        </div>
-        {!isNew && onDelete && (
-          <button style={S.btn('#ff4d6d', false)} onClick={onDelete}>
-            🗑 Eliminar
-          </button>
-        )}
-      </div>
     </div>
   )
 }
