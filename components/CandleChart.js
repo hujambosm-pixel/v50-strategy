@@ -351,9 +351,41 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
           const entryLine=chart.addLineSeries({color:visuals?.entryLineColor||'rgba(255,255,255,0.65)',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
           entryLine.setData([{time:t.entryDate,value:t.entryPrice},{time:t.exitDate,value:t.entryPrice}])
         }
-        if(visuals?.lines!==false&&t.stopPx!=null){
-          const stopLine=chart.addLineSeries({color:'rgba(255,77,109,0.8)',lineWidth:2,lineStyle:LineStyle.Solid,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
-          stopLine.setData([{time:t.entryDate,value:t.stopPx},{time:t.exitDate,value:t.stopPx}])
+        if(visuals?.lines!==false){
+          // Línea de stop: escalonada si hay historial, horizontal si hay stopPx simple
+          const hist=t.stopHistory
+          const hasHist=Array.isArray(hist)&&hist.length>0
+          const hasSimple=t.stopPx!=null
+          if(hasHist||hasSimple){
+            const stopLine=chart.addLineSeries({color:'rgba(255,77,109,0.8)',lineWidth:2,lineStyle:LineStyle.Solid,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
+            if(hasHist){
+              // Construir línea escalonada: cada nivel se mantiene horizontal hasta el siguiente
+              // Garantizar que empiece en entryDate y termine en exitDate
+              const sorted=[...hist].sort((a,b)=>a.date.localeCompare(b.date))
+              const pts=[]
+              // Punto inicial: primer nivel en entryDate (o primer punto del historial)
+              const firstPx=sorted[0].stopPx
+              if(sorted[0].date>t.entryDate) pts.push({time:t.entryDate,value:firstPx})
+              for(let k=0;k<sorted.length;k++){
+                const cur=sorted[k]
+                // Punto de inicio del tramo actual
+                pts.push({time:cur.date,value:cur.stopPx})
+                // Si hay siguiente punto, extender horizontalmente hasta su fecha
+                if(k+1<sorted.length){
+                  pts.push({time:sorted[k+1].date,value:cur.stopPx})
+                }
+              }
+              // Extender el último nivel hasta exitDate
+              const lastPx=sorted[sorted.length-1].stopPx
+              if(sorted[sorted.length-1].date<t.exitDate) pts.push({time:t.exitDate,value:lastPx})
+              // Deduplicar fechas consecutivas iguales (lightweight-charts no acepta duplicados)
+              const deduped=pts.filter((p,i)=>i===0||p.time!==pts[i-1].time)
+              stopLine.setData(deduped)
+            } else {
+              // Sin historial — línea horizontal simple
+              stopLine.setData([{time:t.entryDate,value:t.stopPx},{time:t.exitDate,value:t.stopPx}])
+            }
+          }
         }
       })
 
