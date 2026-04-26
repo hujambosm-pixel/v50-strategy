@@ -2964,7 +2964,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.93</title>
+        <title>Trading Simulator V9.94</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3041,7 +3041,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.93
+            <span className="dot"/>Trading Simulator V9.94
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4648,17 +4648,6 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                             </span>
                           )
                         })()}
-                        {/* ⛶ Pantalla completa */}
-                        <button onClick={()=>setChartFullscreen(f=>!f)}
-                          title={chartFullscreen?'Salir de pantalla completa':'Pantalla completa'}
-                          style={{pointerEvents:'all',
-                            background:chartFullscreen?'rgba(255,77,109,0.12)':'rgba(8,12,20,0.7)',
-                            border:`1px solid ${chartFullscreen?'#ff4d6d':'#2a3d55'}`,
-                            color:chartFullscreen?'#ff4d6d':'#5a7a95',
-                            fontFamily:MONO,fontSize:10,padding:'2px 5px',borderRadius:3,
-                            cursor:'pointer',lineHeight:1,flexShrink:0}}>
-                          {chartFullscreen?'⊠':'⛶'}
-                        </button>
                         {/* Ticker — clic abre TradingView */}
                         <span onClick={()=>window.open(`https://www.tradingview.com/chart/?symbol=${tvSym(simbolo)}`,'_blank')}
                           title={`Abrir ${simbolo} en TradingView ↗`}
@@ -4699,6 +4688,17 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                             fontFamily:MONO,fontSize:9,padding:'2px 5px',borderRadius:3,cursor:'pointer',
                             flexShrink:0,lineHeight:1}}>
                           {chartViewFull?'⊞':'⊡'}
+                        </button>
+                        {/* ⛶ Pantalla completa */}
+                        <button onClick={()=>setChartFullscreen(f=>!f)}
+                          title={chartFullscreen?'Salir de pantalla completa':'Pantalla completa'}
+                          style={{pointerEvents:'all',
+                            background:chartFullscreen?'rgba(255,77,109,0.12)':'rgba(8,12,20,0.7)',
+                            border:`1px solid ${chartFullscreen?'#ff4d6d':'#2a3d55'}`,
+                            color:chartFullscreen?'#ff4d6d':'#5a7a95',
+                            fontFamily:MONO,fontSize:10,padding:'2px 5px',borderRadius:3,
+                            cursor:'pointer',lineHeight:1,flexShrink:0}}>
+                          {chartFullscreen?'⊠':'⛶'}
                         </button>
                         {/* ◀ ▶ */}
                         {[['◀',10],['▶',-10]].map(([lbl,bars])=>(
@@ -4798,7 +4798,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                   {chartFullscreen&&(
                     <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,zIndex:9999,
                       background:'var(--bg)',display:'flex',flexDirection:'column'}}>
-                      <div style={{flex:1,minHeight:0,position:'relative'}}>
+                      <div style={{flex:1,minHeight:0,height:'100vh',position:'relative'}}>
                         <button onClick={()=>setChartFullscreen(false)}
                           style={{position:'absolute',top:6,left:8,zIndex:12,
                             background:'rgba(255,77,109,0.12)',border:'1px solid #ff4d6d',
