@@ -600,14 +600,15 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
           try {
             const ts=chartRef.current.timeScale()
             const x1=ts.timeToCoordinate(t.entryDate), x2=ts.timeToCoordinate(t.exitDate)
-            if(x1==null||x2==null) return
-            const midX=(x1+x2)/2
+            if(x1==null&&x2==null) return  // CAMBIO 3: skip solo si ambas coords son null
+            const midX=x1!=null&&x2!=null?(x1+x2)/2:(x1??x2)  // fallback a la coord disponible
             // Precio medio del trade para la posición Y base
             const midPrice=(t.entryPrice+t.exitPrice)/2
             const pyBase=candlesRef.current.priceToCoordinate(midPrice)
             if(pyBase==null) return
             const isWin=t.pnlPct>=0
-            const bc=visuals?.labelsColor||(isWin?'#00e5a0':'#ff4d6d')
+            const winC=isWin?'#00e5a0':'#ff4d6d'
+            const bc=visuals?.labelsColor||winC
             const g=document.createElementNS(NS,'g'); g.setAttribute('class','trade-label')
 
             const chartH=containerRef.current?.clientHeight||480
@@ -618,55 +619,55 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
               }).forEach(([k,v])=>l.setAttribute(k,v))
               return l
             }
-            // C) Añadir MAE% al label del peor trade
-            const isWorstMAE = worstMAETrade && t.entryDate === worstMAETrade.entryDate && t.exitDate === worstMAETrade.exitDate
+            // Añadir MAE% al label del peor trade
+            const isWorstMAE=worstMAETrade&&t.entryDate===worstMAETrade.entryDate&&t.exitDate===worstMAETrade.exitDate
+
+            // Helpers compartidos CAMBIO 2
+            const mkRect=(x,y,w,h,fill,stroke)=>{
+              const r=document.createElementNS(NS,'rect')
+              Object.entries({x,y,width:w,height:h,fill,rx:'4',stroke,
+                'stroke-width':'1','pointer-events':'none'}).forEach(([k,v])=>r.setAttribute(k,v))
+              return r
+            }
+            const mkTxt=(txt,x,y,sz,anchor='middle')=>{
+              const el=document.createElementNS(NS,'text')
+              Object.entries({x,y,'font-size':sz,'font-family':MONO,'text-anchor':anchor,
+                fill:'#ffffff','font-weight':'600','pointer-events':'none'}).forEach(([k,v])=>el.setAttribute(k,v))
+              el.textContent=txt; return el
+            }
 
             if(labelMode===2){
-              // ── Modo completo: # · % + € ──
-              const num=`#${idx+1}`
-              const line1=`${num} · ${t.pnlPct>=0?'+':''}${t.pnlPct.toFixed(2)}%`
-              const line2=`€${t.pnlSimple>=0?'+':''}${Math.round(t.pnlSimple)}  ·  ${t.dias}d${isWorstMAE&&t.mae<0?`  ·  Max DD:${t.mae.toFixed(1)}%`:''}`
-              const charW=8, BOX_H=40
-              const w=Math.max(line1.length,line2.length)*charW+24
-              const ZONE_TOP=22, ZONE_H=chartH*0.26
-              const labelY=ZONE_TOP + (idx % 3)*(ZONE_H/3) + BOX_H/2
-              const rect=document.createElementNS(NS,'rect')
-              Object.entries({
-                x:midX-w/2, y:labelY-BOX_H/2, width:w, height:BOX_H,
-                fill:isWin?'rgba(0,229,160,0.18)':'rgba(255,77,109,0.18)',
-                rx:'5', stroke:bc, 'stroke-width':'1.5'
-              }).forEach(([k,v])=>rect.setAttribute(k,v))
-              g.appendChild(rect)
-              g.appendChild(mkConnector(labelY+BOX_H/2+2, Math.max(labelY+BOX_H/2+4,pyBase-4)))
-              const mkT=(txt,y,sz)=>{
-                const el=document.createElementNS(NS,'text')
-                Object.entries({x:midX,y,'font-size':sz,'font-family':MONO,'text-anchor':'middle',fill:bc,'font-weight':'700'}).forEach(([k,v])=>el.setAttribute(k,v))
-                el.textContent=txt; return el
-              }
-              g.appendChild(mkT(line1,labelY-4,'13'))
-              g.appendChild(mkT(line2,labelY+12,'10.5'))
+              // ── Modo completo: caja multi-línea estilo TradingView ──
+              const cap=t.capitalTras!=null?`€${Math.round(t.capitalTras).toLocaleString('es-ES')}`:'-'
+              const lines=[
+                `#${idx+1}`,
+                `Capital: ${cap}`,
+                `Profit:  ${t.pnlPct>=0?'+':''}${t.pnlPct.toFixed(2)}%`,
+                `P&L:     ${t.pnlSimple>=0?'+':'-'}€${Math.abs(Math.round(t.pnlSimple)).toLocaleString('es-ES')}`,
+                `Días:    ${t.dias}`,
+                ...(isWorstMAE&&t.mae<0?[`Max DD:  ${Math.abs(t.mae).toFixed(2)}%`]:[]),
+              ]
+              const W=Math.max(...lines.map(l=>l.length))*6.2+24
+              const BOX_H=lines.length*14+12
+              const ZONE_TOP=34, ZONE_H=chartH*0.5
+              const boxY=ZONE_TOP+(idx%4)*(ZONE_H/4)
+              const fillC=isWin?'rgba(0,229,160,0.14)':'rgba(255,77,109,0.14)'
+              const strokeC=isWin?'rgba(0,229,160,0.65)':'rgba(255,77,109,0.65)'
+              g.appendChild(mkRect(midX-W/2,boxY,W,BOX_H,fillC,strokeC))
+              g.appendChild(mkConnector(boxY+BOX_H+2,Math.max(boxY+BOX_H+4,pyBase-4)))
+              lines.forEach((line,i)=>g.appendChild(mkTxt(line,midX-W/2+12,boxY+14+i*14,'10','start')))
 
             } else if(labelMode===1){
-              // ── Modo solo %: más grande, franja alta ──
-              const ZONE_TOP=18, ZONE_H=chartH*0.22
-              const labelY=ZONE_TOP + (idx % 4)*(ZONE_H/4) + 12
-              const lbl=`#${idx+1} ${t.pnlPct>=0?'+':''}${t.pnlPct.toFixed(1)}%`
-              const bw=lbl.length*8+14
-              const bg=document.createElementNS(NS,'rect')
-              Object.entries({
-                x:midX-bw/2, y:labelY-14, width:bw, height:20,
-                fill:isWin?'rgba(0,229,160,0.1)':'rgba(255,77,109,0.1)',
-                rx:'3', stroke:bc, 'stroke-width':'0.7', opacity:'0.9'
-              }).forEach(([k,v])=>bg.setAttribute(k,v))
-              g.appendChild(bg)
-              g.appendChild(mkConnector(labelY+6, pyBase-4))
-              const txt=document.createElementNS(NS,'text')
-              Object.entries({
-                x:midX, y:labelY, 'font-size':'12', 'font-family':MONO,
-                'text-anchor':'middle', fill:bc, 'font-weight':'700'
-              }).forEach(([k,v])=>txt.setAttribute(k,v))
-              txt.textContent=lbl
-              g.appendChild(txt)
+              // ── Modo solo %: caja simple estilo TradingView ──
+              const lbl=`#${idx+1}  ${t.pnlPct>=0?'+':''}${t.pnlPct.toFixed(1)}%`
+              const W=lbl.length*6.8+20, BOX_H=22
+              const ZONE_TOP=34, ZONE_H=chartH*0.22
+              const boxY=ZONE_TOP+(idx%4)*(ZONE_H/4)
+              const fillC=isWin?'rgba(0,229,160,0.14)':'rgba(255,77,109,0.14)'
+              const strokeC=isWin?'rgba(0,229,160,0.65)':'rgba(255,77,109,0.65)'
+              g.appendChild(mkRect(midX-W/2,boxY,W,BOX_H,fillC,strokeC))
+              g.appendChild(mkConnector(boxY+BOX_H+2,Math.max(boxY+BOX_H+4,pyBase-4)))
+              g.appendChild(mkTxt(lbl,midX,boxY+BOX_H/2+4,'11'))
             }
             // labelMode===0 → no se añade nada al svg
             svg.appendChild(g)

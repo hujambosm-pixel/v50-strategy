@@ -2964,7 +2964,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.95</title>
+        <title>Trading Simulator V9.96</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3041,7 +3041,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.95
+            <span className="dot"/>Trading Simulator V9.96
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4797,15 +4797,45 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                   {/* ── Fullscreen overlay — segunda instancia de CandleChart, no desmonta la original ── */}
                   {chartFullscreen&&(
                     <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,zIndex:9999,
-                      background:'var(--bg)',display:'flex',flexDirection:'column'}}>
-                      <div style={{flex:1,minHeight:0,height:'100vh',position:'relative'}}>
-                        <button onClick={()=>setChartFullscreen(false)}
-                          style={{position:'absolute',top:6,left:8,zIndex:12,
-                            background:'rgba(255,77,109,0.12)',border:'1px solid #ff4d6d',
-                            color:'#ff4d6d',fontFamily:MONO,fontSize:10,padding:'2px 7px',
-                            borderRadius:3,cursor:'pointer',lineHeight:1}}>
-                          ⊠ Salir
+                      background:'var(--bg)',display:'flex',flexDirection:'column',height:'100dvh'}}>
+                      {/* Barra superior — misma estructura que la del chart normal */}
+                      <div style={{height:30,display:'flex',alignItems:'center',gap:5,padding:'0 8px',
+                        background:'rgba(8,12,20,0.92)',backdropFilter:'blur(4px)',
+                        borderBottom:'1px solid rgba(26,45,69,0.6)',flexShrink:0,
+                        fontFamily:MONO,fontSize:11,overflow:'hidden'}}>
+                        {(()=>{
+                          const wItem=watchlist.find(w=>w.symbol===simbolo); if(!wItem) return null
+                          return(
+                            <span onClick={async(e)=>{e.stopPropagation();await upsertWatchlistItem({...wItem,favorite:!wItem.favorite});reloadWatchlist()}}
+                              title={wItem.favorite?'Quitar favorito':'Marcar favorito'}
+                              style={{cursor:'pointer',fontSize:12,color:wItem.favorite?'#ffd166':'#3d5a7a',flexShrink:0,lineHeight:1,pointerEvents:'all'}}>
+                              {wItem.favorite?'★':'☆'}
+                            </span>
+                          )
+                        })()}
+                        <button onClick={()=>setChartFullscreen(f=>!f)} title="Salir de pantalla completa"
+                          style={{pointerEvents:'all',background:'rgba(255,77,109,0.12)',border:'1px solid #ff4d6d',
+                            color:'#ff4d6d',fontFamily:MONO,fontSize:10,padding:'2px 5px',
+                            borderRadius:3,cursor:'pointer',lineHeight:1,flexShrink:0}}>
+                          ⊠
                         </button>
+                        <span onClick={()=>window.open(`https://www.tradingview.com/chart/?symbol=${tvSym(simbolo)}`,'_blank')}
+                          style={{cursor:'pointer',fontWeight:700,color:'#e2eaf5',fontSize:13,flexShrink:0,pointerEvents:'all',userSelect:'none'}}>
+                          {simbolo}
+                        </span>
+                        <span ref={chartLegendRef} style={{flex:1,minWidth:0,overflow:'hidden',whiteSpace:'nowrap',textOverflow:'ellipsis'}}/>
+                        {stratName&&(
+                          <span style={{flexShrink:0,fontSize:9,color:'#7a9bc0',background:'rgba(13,21,32,0.85)',
+                            border:'1px solid #1a2d45',borderRadius:3,padding:'1px 6px',
+                            display:'flex',alignItems:'center',gap:3,maxWidth:130,overflow:'hidden'}}>
+                            <span style={{width:6,height:6,borderRadius:'50%',flexShrink:0,
+                              background:stratColor||'#00d4ff',boxShadow:`0 0 4px ${stratColor||'#00d4ff'}88`}}/>
+                            <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{stratName}</span>
+                          </span>
+                        )}
+                      </div>
+                      {/* Gráfico */}
+                      <div style={{flex:1,minHeight:0,position:'relative'}}>
                         <CandleChart
                           data={result.chartData} emaRPeriod={emaR} emaLPeriod={emaL} definition={null}
                           visuals={result.visuals??null}
@@ -4816,6 +4846,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           labelMode={labelMode} rulerActive={rulerOn}
                           savedRangeRef={savedRangeRef}
                           syncRef={chartSyncRef}
+                          externalLegendRef={chartLegendRef}
                           priceAlarms={alarms.filter(a=>a.condition==='price_level'&&(a.symbol||'').toUpperCase()===(simbolo||'').toUpperCase())}
                           tlOpenTrades={tlTrades.filter(t=>t.status==='open'&&t.fill_type!=='sell'&&(t.symbol||'').toUpperCase()===(simbolo||'').toUpperCase())}
                         />
