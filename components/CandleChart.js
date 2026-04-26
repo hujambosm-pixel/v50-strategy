@@ -266,6 +266,18 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
     console.log('[fullscreen] sync  containerRef.h:',containerRef.current?.clientHeight,'parent.h:',containerRef.current?.parentElement?.clientHeight)
     setTimeout(()=>console.log('[fullscreen] async containerRef.h:',containerRef.current?.clientHeight,'parent.h:',containerRef.current?.parentElement?.clientHeight),0)
   },[fillHeight])
+  useEffect(()=>{
+    if(!fillHeight||!containerRef.current) return
+    const forceResize=()=>{
+      if(!chartRef.current||!containerRef.current) return
+      const w=containerRef.current.clientWidth
+      const h=containerRef.current.clientHeight
+      if(w>0&&h>0) chartRef.current.resize(w,h)
+    }
+    setTimeout(forceResize,50)
+    setTimeout(forceResize,150)
+    setTimeout(forceResize,300)
+  },[fillHeight])
   useEffect(()=>{ onRiskLevelChangeRef.current=onRiskLevelChange },[onRiskLevelChange])
   useEffect(()=>{
     rulerActiveR.current=rulerActive
