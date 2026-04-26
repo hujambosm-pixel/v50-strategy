@@ -639,10 +639,12 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
 
             if(labelMode===2){
               // ── Modo completo: caja multi-línea compacta ──
+              const cap=t.capitalTras!=null?`€${Math.round(t.capitalTras).toLocaleString('es-ES')}`:'-'
               const lines=[
                 `#${idx+1}`,
-                `${t.pnlPct.toFixed(2)}%`,
-                `€${t.pnlSimple<0?'-':''}${Math.abs(Math.round(t.pnlSimple)).toLocaleString('es-ES')}`,
+                `Capital: ${cap}`,
+                `Profit:  ${t.pnlPct.toFixed(2)}%`,
+                `P&L:     €${t.pnlSimple<0?'-':''}${Math.abs(Math.round(t.pnlSimple)).toLocaleString('es-ES')}`,
                 `${t.dias}d`,
               ]
               const W=Math.max(...lines.map(l=>l.length))*5.8+20
@@ -1098,6 +1100,15 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       })
       ro.observe(containerRef.current)
       setTimeout(drawTradeLabels,200)
+
+      // FIX 2: si el chart se crea en modo fillHeight, forzar resize a window.innerHeight
+      if(fillHeightRef.current){
+        setTimeout(()=>{
+          const w=containerRef.current?.clientWidth||window.innerWidth
+          const h=window.innerHeight-30
+          if(w>0&&h>0) chartRef.current?.resize(w,h)
+        },50)
+      }
 
       return()=>{chartAliveRef.current=false;try{unsubLabels()}catch(_){};cnt.removeEventListener('mousemove',onMove);cnt.removeEventListener('mousedown',onMouseDown);window.removeEventListener('mouseup',onMouseUp);window.removeEventListener('keydown',onKeyDown);window.removeEventListener('keyup',onKeyUp);ro.disconnect()}
     })

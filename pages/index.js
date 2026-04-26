@@ -2964,7 +2964,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.97</title>
+        <title>Trading Simulator V9.98</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3041,7 +3041,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.97
+            <span className="dot"/>Trading Simulator V9.98
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4813,7 +4813,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                             </span>
                           )
                         })()}
-                        <span onClick={()=>window.open(`https://www.tradingview.com/chart/?symbol=${tvSym(simbolo)}`,'_blank')}
+                        <span onClick={()=>{setSymSearchQ('');setSymSearchOpen(true)}}
+                          title="Cambiar símbolo"
                           style={{cursor:'pointer',fontWeight:700,color:'#e2eaf5',fontSize:13,flexShrink:0,pointerEvents:'all',userSelect:'none'}}>
                           {simbolo}
                         </span>
@@ -7437,7 +7438,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
         const literal=q.length>=1&&!allSyms.has(q)?[{symbol:q,name:'Buscar símbolo directo',src:'literal'}]:[]
         const results=[...wlMatches,...dictMatches,...literal].slice(0,12)
         return(
-          <div style={{position:'fixed',inset:0,zIndex:300,display:'flex',alignItems:'flex-start',justifyContent:'center',paddingTop:80}}
+          <div style={{position:'fixed',inset:0,zIndex:chartFullscreen?10000:300,display:'flex',alignItems:'flex-start',justifyContent:'center',paddingTop:80}}
             onClick={()=>{setSymSearchOpen(false);setSymSearchQ('')}}>
             <div style={{background:'#0d1824',border:'1px solid #1e3a52',borderRadius:10,width:520,maxHeight:480,display:'flex',flexDirection:'column',boxShadow:'0 16px 60px rgba(0,0,0,0.85)',overflow:'hidden',fontFamily:MONO}}
               onClick={e=>e.stopPropagation()}>
