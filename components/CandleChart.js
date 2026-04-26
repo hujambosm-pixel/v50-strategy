@@ -262,21 +262,18 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
   const fillHeightRef=useRef(fillHeight)
   useEffect(()=>{ fillHeightRef.current=fillHeight },[fillHeight])
   useEffect(()=>{
-    if(!fillHeight) return
-    console.log('[fullscreen] sync  containerRef.h:',containerRef.current?.clientHeight,'parent.h:',containerRef.current?.parentElement?.clientHeight)
-    setTimeout(()=>console.log('[fullscreen] async containerRef.h:',containerRef.current?.clientHeight,'parent.h:',containerRef.current?.parentElement?.clientHeight),0)
-  },[fillHeight])
-  useEffect(()=>{
     if(!fillHeight||!containerRef.current) return
     const forceResize=()=>{
       if(!chartRef.current||!containerRef.current) return
-      const w=containerRef.current.clientWidth
-      const h=containerRef.current.clientHeight
+      const w=containerRef.current.clientWidth||window.innerWidth
+      const h=window.innerHeight-30  // 30 = altura barra superior
       if(w>0&&h>0) chartRef.current.resize(w,h)
     }
+    setTimeout(forceResize,0)
     setTimeout(forceResize,50)
     setTimeout(forceResize,150)
-    setTimeout(forceResize,300)
+    window.addEventListener('resize',forceResize)
+    return()=>window.removeEventListener('resize',forceResize)
   },[fillHeight])
   useEffect(()=>{ onRiskLevelChangeRef.current=onRiskLevelChange },[onRiskLevelChange])
   useEffect(()=>{
@@ -636,38 +633,33 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
               el.textContent=txt; return el
             }
 
+            const BAND_TOP=8, BAND_H=112  // zona fija y=8..120px, nunca sobre velas
+            const fillC=isWin?'rgba(0,229,160,0.40)':'rgba(255,77,109,0.40)'
+            const strokeC=isWin?'rgba(0,229,160,0.80)':'rgba(255,77,109,0.80)'
+
             if(labelMode===2){
-              // ── Modo completo: caja multi-línea estilo TradingView ──
-              const cap=t.capitalTras!=null?`€${Math.round(t.capitalTras).toLocaleString('es-ES')}`:'-'
+              // ── Modo completo: caja multi-línea compacta ──
               const lines=[
                 `#${idx+1}`,
-                `Capital: ${cap}`,
-                `Profit:  ${t.pnlPct>=0?'+':''}${t.pnlPct.toFixed(2)}%`,
-                `P&L:     ${t.pnlSimple>=0?'+':'-'}€${Math.abs(Math.round(t.pnlSimple)).toLocaleString('es-ES')}`,
-                `Días:    ${t.dias}`,
-                ...(isWorstMAE&&t.mae<0?[`Max DD:  ${Math.abs(t.mae).toFixed(2)}%`]:[]),
+                `${t.pnlPct.toFixed(2)}%`,
+                `€${t.pnlSimple<0?'-':''}${Math.abs(Math.round(t.pnlSimple)).toLocaleString('es-ES')}`,
+                `${t.dias}d`,
               ]
-              const W=Math.max(...lines.map(l=>l.length))*6.2+24
-              const BOX_H=lines.length*14+12
-              const ZONE_TOP=34, ZONE_H=chartH*0.5
-              const boxY=ZONE_TOP+(idx%4)*(ZONE_H/4)
-              const fillC=isWin?'rgba(0,229,160,0.14)':'rgba(255,77,109,0.14)'
-              const strokeC=isWin?'rgba(0,229,160,0.65)':'rgba(255,77,109,0.65)'
+              const W=Math.max(...lines.map(l=>l.length))*5.8+20
+              const ROW_H=11, BOX_H=lines.length*ROW_H+8
+              const boxY=BAND_TOP+(idx%5)*(BAND_H/5)
               g.appendChild(mkRect(midX-W/2,boxY,W,BOX_H,fillC,strokeC))
               g.appendChild(mkConnector(boxY+BOX_H+2,Math.max(boxY+BOX_H+4,pyBase-4)))
-              lines.forEach((line,i)=>g.appendChild(mkTxt(line,midX-W/2+12,boxY+14+i*14,'10','start')))
+              lines.forEach((line,i)=>g.appendChild(mkTxt(line,midX-W/2+10,boxY+10+i*ROW_H,'9','start')))
 
             } else if(labelMode===1){
-              // ── Modo solo %: caja simple estilo TradingView ──
-              const lbl=`#${idx+1}  ${t.pnlPct>=0?'+':''}${t.pnlPct.toFixed(1)}%`
-              const W=lbl.length*6.8+20, BOX_H=22
-              const ZONE_TOP=34, ZONE_H=chartH*0.22
-              const boxY=ZONE_TOP+(idx%4)*(ZONE_H/4)
-              const fillC=isWin?'rgba(0,229,160,0.14)':'rgba(255,77,109,0.14)'
-              const strokeC=isWin?'rgba(0,229,160,0.65)':'rgba(255,77,109,0.65)'
+              // ── Modo solo %: caja simple compacta ──
+              const lbl=`#${idx+1} ${t.pnlPct.toFixed(1)}%`
+              const W=lbl.length*6.2+16, BOX_H=18
+              const boxY=BAND_TOP+(idx%5)*(BAND_H/5)
               g.appendChild(mkRect(midX-W/2,boxY,W,BOX_H,fillC,strokeC))
               g.appendChild(mkConnector(boxY+BOX_H+2,Math.max(boxY+BOX_H+4,pyBase-4)))
-              g.appendChild(mkTxt(lbl,midX,boxY+BOX_H/2+4,'11'))
+              g.appendChild(mkTxt(lbl,midX,boxY+BOX_H/2+4,'10'))
             }
             // labelMode===0 → no se añade nada al svg
             svg.appendChild(g)

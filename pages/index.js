@@ -699,7 +699,7 @@ export default function Home() {
   const [showIndivOccupancy,setShowIndivOccupancy]=useState(true)  // % capital invertido chart for individual
   const [indivOccMode,setIndivOccMode]=useState('compound')  // independent filter for indiv occupancy chart
 
-  const debounceRef=useRef(null),chartApiRef=useRef(null),contentRef=useRef(null),skipNextRunRef=useRef(false)
+  const debounceRef=useRef(null),chartApiRef=useRef(null),chartApiFullscreenRef=useRef(null),contentRef=useRef(null),skipNextRunRef=useRef(false)
   const chartLegendRef=useRef(null)   // external legend ref for integrated chart info bar
 
   const mcChartApiRef=useRef(null)
@@ -2964,7 +2964,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.96</title>
+        <title>Trading Simulator V9.97</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3041,7 +3041,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.96
+            <span className="dot"/>Trading Simulator V9.97
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4813,12 +4813,6 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                             </span>
                           )
                         })()}
-                        <button onClick={()=>setChartFullscreen(f=>!f)} title="Salir de pantalla completa"
-                          style={{pointerEvents:'all',background:'rgba(255,77,109,0.12)',border:'1px solid #ff4d6d',
-                            color:'#ff4d6d',fontFamily:MONO,fontSize:10,padding:'2px 5px',
-                            borderRadius:3,cursor:'pointer',lineHeight:1,flexShrink:0}}>
-                          ⊠
-                        </button>
                         <span onClick={()=>window.open(`https://www.tradingview.com/chart/?symbol=${tvSym(simbolo)}`,'_blank')}
                           style={{cursor:'pointer',fontWeight:700,color:'#e2eaf5',fontSize:13,flexShrink:0,pointerEvents:'all',userSelect:'none'}}>
                           {simbolo}
@@ -4833,6 +4827,69 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                             <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{stratName}</span>
                           </span>
                         )}
+                        {rulerOn&&<span style={{fontSize:9,color:'#ffd166',flexShrink:0}}>Ctrl=imán · dbl=borrar</span>}
+                        {/* Fit/Recent */}
+                        <button onClick={()=>{
+                            const s=JSON.parse(localStorage.getItem('v50_settings')||'{}')
+                            if(chartViewFull){chartApiFullscreenRef.current?.showRecent(s?.chart?.recentMonths??3,0);setChartViewFull(false)}
+                            else{chartApiFullscreenRef.current?.fitAll();setChartViewFull(true)}
+                          }}
+                          title={chartViewFull?'Ver últimos 3 meses':'Ver período completo'}
+                          style={{pointerEvents:'all',background:'rgba(8,12,20,0.7)',border:'1px solid #1e3a52',
+                            color:chartViewFull?'#00d4ff':'#00e5a0',
+                            fontFamily:MONO,fontSize:9,padding:'2px 5px',borderRadius:3,cursor:'pointer',
+                            flexShrink:0,lineHeight:1}}>
+                          {chartViewFull?'⊞':'⊡'}
+                        </button>
+                        {/* ⛶/⊠ — mismo toggle que en vista normal */}
+                        <button onClick={()=>setChartFullscreen(f=>!f)}
+                          title={chartFullscreen?'Salir de pantalla completa':'Pantalla completa'}
+                          style={{pointerEvents:'all',
+                            background:chartFullscreen?'rgba(255,77,109,0.12)':'rgba(8,12,20,0.7)',
+                            border:`1px solid ${chartFullscreen?'#ff4d6d':'#2a3d55'}`,
+                            color:chartFullscreen?'#ff4d6d':'#5a7a95',
+                            fontFamily:MONO,fontSize:10,padding:'2px 5px',borderRadius:3,
+                            cursor:'pointer',lineHeight:1,flexShrink:0}}>
+                          {chartFullscreen?'⊠':'⛶'}
+                        </button>
+                        {/* ◀ ▶ */}
+                        {[['◀',10],['▶',-10]].map(([lbl,bars])=>(
+                          <button key={lbl} onClick={()=>chartApiFullscreenRef.current?.scrollBy(bars)}
+                            title={bars>0?'Izquierda':'Derecha'}
+                            style={{pointerEvents:'all',background:'rgba(8,12,20,0.7)',border:'1px solid #1a2d45',
+                              color:'#5a8aaa',fontFamily:MONO,fontSize:10,padding:'1px 5px',
+                              borderRadius:3,cursor:'pointer',lineHeight:1,flexShrink:0}}>
+                            {lbl}
+                          </button>
+                        ))}
+                        {/* Regla */}
+                        <button onClick={()=>setRulerOn(r=>!r)}
+                          title={rulerOn?'Desactivar regla':'Activar regla de medición'}
+                          style={{pointerEvents:'all',
+                            background:rulerOn?'rgba(255,209,102,0.18)':'rgba(8,12,20,0.7)',
+                            border:`1px solid ${rulerOn?'#ffd166':'#2a3d55'}`,
+                            color:rulerOn?'#ffd166':'#5a7a95',
+                            fontFamily:MONO,fontSize:10,padding:'2px 5px',borderRadius:3,cursor:'pointer',
+                            display:'flex',alignItems:'center',gap:2,lineHeight:1,flexShrink:0}}>
+                          📏{rulerOn&&<span style={{fontSize:9}}> ON</span>}
+                        </button>
+                        {/* % / All — label mode */}
+                        {(()=>{
+                          const cfgs=[{label:'🏷',active:false},{label:'%',active:true},{label:'All',active:true}]
+                          const c=cfgs[labelMode]
+                          return(
+                            <button onClick={()=>setLabelMode(l=>(l+1)%3)}
+                              title={['Sin etiquetas','Solo %','% + € + días'][labelMode]}
+                              style={{pointerEvents:'all',
+                                background:c.active?'rgba(0,229,160,0.12)':'rgba(8,12,20,0.7)',
+                                border:`1px solid ${c.active?'rgba(0,229,160,0.5)':'#2a3d55'}`,
+                                color:c.active?'#00e5a0':'#5a7a95',
+                                fontFamily:MONO,fontSize:10,padding:'2px 5px',borderRadius:3,cursor:'pointer',
+                                lineHeight:1,flexShrink:0}}>
+                              {c.label}
+                            </button>
+                          )
+                        })()}
                       </div>
                       {/* Gráfico */}
                       <div style={{flex:1,minHeight:0,position:'relative'}}>
@@ -4847,6 +4904,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           savedRangeRef={savedRangeRef}
                           syncRef={chartSyncRef}
                           externalLegendRef={chartLegendRef}
+                          onChartReady={api=>{chartApiFullscreenRef.current=api}}
                           priceAlarms={alarms.filter(a=>a.condition==='price_level'&&(a.symbol||'').toUpperCase()===(simbolo||'').toUpperCase())}
                           tlOpenTrades={tlTrades.filter(t=>t.status==='open'&&t.fill_type!=='sell'&&(t.symbol||'').toUpperCase()===(simbolo||'').toUpperCase())}
                         />
