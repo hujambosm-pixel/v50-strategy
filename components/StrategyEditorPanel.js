@@ -24,7 +24,6 @@ function hexRgb(hex) {
 }
 
 export default function StrategyEditorPanel({ strForm, setStrForm, strategy, onSave, onCancel, onDelete, onClone, saving }) {
-  const [pineCopied,  setPineCopied]  = useState(false)
   const [paramsError, setParamsError] = useState(null)
 
   const upd = (k, v) => setStrForm(f => ({ ...f, [k]: v }))
@@ -39,14 +38,6 @@ export default function StrategyEditorPanel({ strForm, setStrForm, strategy, onS
     onSave()
   }
 
-  const handleCopyPine = () => {
-    const pine = (strForm.code_pine || '').trim()
-    if (!pine) return
-    navigator.clipboard.writeText(pine).then(() => {
-      setPineCopied(true)
-      setTimeout(() => setPineCopied(false), 2000)
-    })
-  }
 
   return (
     <div style={S.wrap}>
@@ -211,21 +202,6 @@ export default function StrategyEditorPanel({ strForm, setStrForm, strategy, onS
         />
       </div>
 
-      {/* ── Código Pine Script ── */}
-      <div style={S.field}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
-          <label style={{...S.label,marginBottom:0}}>Código Pine Script</label>
-          <button style={S.btn('#a78bfa', false)} onClick={handleCopyPine}>
-            {pineCopied ? '✓ Copiado' : '📋 Ver Pine Script'}
-          </button>
-        </div>
-        <textarea style={{...S.textarea, minHeight:200}}
-          value={strForm.code_pine||''}
-          onChange={e=>upd('code_pine',e.target.value)}
-          placeholder="//@version=5&#10;strategy(...)"
-          spellCheck={false}
-        />
-      </div>
 
     </div>
   )
