@@ -261,6 +261,9 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
   const onRiskLevelChangeRef=useRef(onRiskLevelChange)
   const fillHeightRef=useRef(fillHeight)
   useEffect(()=>{ fillHeightRef.current=fillHeight },[fillHeight])
+  useEffect(()=>{
+    if(fillHeight) console.log('[fullscreen] containerRef.h:',containerRef.current?.clientHeight,'parent.h:',containerRef.current?.parentElement?.clientHeight)
+  },[fillHeight])
   useEffect(()=>{ onRiskLevelChangeRef.current=onRiskLevelChange },[onRiskLevelChange])
   useEffect(()=>{
     rulerActiveR.current=rulerActive
@@ -277,7 +280,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       console.log('[v50] chart created height',chartHeight)
       const chart=createChart(containerRef.current,{
         width:containerRef.current.clientWidth,height:chartHeight,
-        layout:{background:{color:'#080c14'},textColor:'#7a9bc0',fontFamily:'-apple-system, BlinkMacSystemFont, Trebuchet MS, Roboto, Ubuntu, sans-serif'},
+        layout:{background:{color:visuals?.chartBg||'#080c14'},textColor:'#7a9bc0',fontFamily:'-apple-system, BlinkMacSystemFont, Trebuchet MS, Roboto, Ubuntu, sans-serif'},
         grid:{vertLines:{color:'#0d1520'},horzLines:{color:'#0d1520'}},
         crosshair:{mode:CrosshairMode.Normal},
         rightPriceScale:{borderColor:'#1a2d45'},

@@ -132,6 +132,7 @@ export default function StrategyEditorPanel({ strForm, setStrForm, strategy, onS
             labels:true,        labelsColor:'#00d4ff',
             emaCrossUp:false,   emaCrossUpColor:'#00e5a0',  emaCrossUpShape:'circle',
             emaCrossDown:false, emaCrossDownColor:'#ff4d6d', emaCrossDownShape:'circle',
+            chartBg:'#080c14',
           }
           let vis; try{vis={...DEF,...JSON.parse(strForm.visuals||'{}')}}catch{vis={...DEF}}
           const toggle=(key)=>upd('visuals',JSON.stringify({...vis,[key]:!vis[key]}))
@@ -186,6 +187,15 @@ export default function StrategyEditorPanel({ strForm, setStrForm, strategy, onS
                   </div>
                 )
               })}
+              <div style={{display:'flex',alignItems:'center',gap:6,marginTop:2}}>
+                <span style={{fontSize:11,color:'#7a9bc0',whiteSpace:'nowrap'}}>Fondo gráfico</span>
+                <input type="color" value={vis.chartBg||'#080c14'}
+                  onChange={e=>upd('visuals',JSON.stringify({...vis,chartBg:e.target.value}))}
+                  style={{width:28,height:28,border:'1px solid #1a2d45',borderRadius:4,background:'transparent',cursor:'pointer',padding:2}}/>
+                <input style={{...S.input,width:90,padding:'4px 8px',fontSize:11}}
+                  value={vis.chartBg||'#080c14'}
+                  onChange={e=>upd('visuals',JSON.stringify({...vis,chartBg:e.target.value}))}/>
+              </div>
             </div>
           )
         })()}
