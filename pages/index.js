@@ -613,6 +613,7 @@ export default function Home() {
   const [sidebarW,setSidebarW]=useState(240)
   const [rightPanelW,setRightPanelW]=useState(275)
   const [candleH,setCandleH]=useState(480)     // resizable candle chart height
+  const [chartFullscreen,setChartFullscreen]=useState(false)
   const [equityH,setEquityH]=useState(260)     // resizable equity chart height
   const [mcEquityH,setMcEquityH]=useState(300) // resizable MC equity chart height
   const candleResizing=useRef(false),candleStartY=useRef(0),candleStartH=useRef(0)
@@ -2961,7 +2962,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.86</title>
+        <title>Trading Simulator V9.87</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3038,7 +3039,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.86
+            <span className="dot"/>Trading Simulator V9.87
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4624,7 +4625,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   })()}
 
                   {/* Gráfico de velas */}
-                  <div className="chart-wrap" ref={chartWrapRef} onContextMenu={e=>openCtx(e,'chart')} style={{padding:0,borderBottom:'1px solid var(--border)',...((sidePanel==='risk'||result.isBareChart)?{flex:1,minHeight:0,display:'flex',flexDirection:'column'}:{})}}>
+                  <div className="chart-wrap" ref={chartWrapRef} onContextMenu={e=>openCtx(e,'chart')} style={{padding:0,borderBottom:'1px solid var(--border)',...(chartFullscreen?{position:'fixed',top:0,left:0,right:0,bottom:0,zIndex:9999,background:'var(--bg)',display:'flex',flexDirection:'column'}:{}),...((sidePanel==='risk'||result.isBareChart)?{flex:1,minHeight:0,display:'flex',flexDirection:'column'}:{})}}>
                     <div style={{position:'relative',...((sidePanel==='risk'||result.isBareChart)?{flex:1,minHeight:0,height:'100%'}:{})}}>
                       {/* ── Barra de info integrada — una sola fila sobre el gráfico ── */}
                       <div style={{position:'absolute',top:0,left:0,right:0,zIndex:11,height:30,
@@ -4707,6 +4708,17 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                             display:'flex',alignItems:'center',gap:2,lineHeight:1,flexShrink:0}}>
                           📏{rulerOn&&<span style={{fontSize:9}}> ON</span>}
                         </button>
+                        {/* ⛶ Pantalla completa */}
+                        <button onClick={()=>setChartFullscreen(f=>!f)}
+                          title={chartFullscreen?'Salir de pantalla completa':'Pantalla completa'}
+                          style={{pointerEvents:'all',
+                            background:chartFullscreen?'rgba(255,77,109,0.12)':'rgba(8,12,20,0.7)',
+                            border:`1px solid ${chartFullscreen?'#ff4d6d':'#2a3d55'}`,
+                            color:chartFullscreen?'#ff4d6d':'#5a7a95',
+                            fontFamily:MONO,fontSize:10,padding:'2px 5px',borderRadius:3,
+                            cursor:'pointer',lineHeight:1,flexShrink:0}}>
+                          {chartFullscreen?'⊠':'⛶'}
+                        </button>
                         {/* % / All — label mode */}
                         {(()=>{
                           const cfgs=[{label:'🏷',active:false},{label:'%',active:true},{label:'All',active:true}]
@@ -4730,8 +4742,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         visuals={result.visuals??null}
                         trades={result.isBareChart?[]:result.trades||[]} maxDD={result.isBareChart?0:metrics?.ddSimple||0}
                         isBareChart={result.isBareChart??false}
-                        fillHeight={false}
-                        chartHeight={result.isBareChart?bareChartHeight:candleH}
+                        fillHeight={chartFullscreen}
+                        chartHeight={chartFullscreen?undefined:(result.isBareChart?bareChartHeight:candleH)}
                         labelMode={labelMode} rulerActive={rulerOn}
                         onChartReady={api=>{chartApiRef.current=api}}
                         onPriceAlarm={sidePanel!=='watchlist'&&sidePanel!=='risk'?price=>setPriceAlarmDlg({price,symbol:simbolo}):null}

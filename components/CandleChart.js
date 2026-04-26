@@ -389,14 +389,13 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
           if(t.exitDate)  allMarkers.push({time:t.exitDate, position:'aboveBar',color:t.pnlPct>=0?'#00e5a0':'#ff4d6d',shape:_asExit,text:''})
         })
       }
-      if(visuals?.emaCrosses===true){
-        for(let j=1;j<data.length;j++){
-          const er=data[j].emaR,el=data[j].emaL,erP=data[j-1].emaR,elP=data[j-1].emaL
-          if(er==null||el==null||erP==null||elP==null) continue
-          const _cs=visuals?.emaCrossesShape||'circle'
-          if(erP<elP&&er>=el) allMarkers.push({time:data[j].date,position:'belowBar',color:visuals?.emaCrossesColor||'#00e5a0',shape:_cs,text:'↗'})
-          else if(erP>elP&&er<=el) allMarkers.push({time:data[j].date,position:'aboveBar',color:'#ff4d6d',shape:_cs,text:'↘'})
-        }
+      for(let j=1;j<data.length;j++){
+        const er=data[j].emaR,el=data[j].emaL,erP=data[j-1].emaR,elP=data[j-1].emaL
+        if(er==null||el==null||erP==null||elP==null) continue
+        if(visuals?.emaCrossUp===true&&erP<elP&&er>=el)
+          allMarkers.push({time:data[j].date,position:'belowBar',color:visuals?.emaCrossUpColor||'#00e5a0',shape:visuals?.emaCrossUpShape||'circle',text:'↗'})
+        if(visuals?.emaCrossDown===true&&erP>elP&&er<=el)
+          allMarkers.push({time:data[j].date,position:'aboveBar',color:visuals?.emaCrossDownColor||'#ff4d6d',shape:visuals?.emaCrossDownShape||'circle',text:'↘'})
       }
       if(allMarkers.length) candles.setMarkers(allMarkers.sort((a,b)=>a.time.localeCompare(b.time)))
 

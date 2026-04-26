@@ -139,13 +139,15 @@ export default function StrategyEditorPanel({ strForm, setStrForm, strategy, onS
             arrows:true,        arrowsColor:'#00d4ff',      arrowsShape:'arrowUp',
             entryLine:true,     entryLineColor:'#ffffff',
             labels:true,        labelsColor:'#00d4ff',
-            emaCrosses:false,   emaCrossesColor:'#00e5a0',  emaCrossesShape:'circle',
+            emaCrossUp:false,   emaCrossUpColor:'#00e5a0',  emaCrossUpShape:'circle',
+            emaCrossDown:false, emaCrossDownColor:'#ff4d6d', emaCrossDownShape:'circle',
           }
           let vis; try{vis={...DEF,...JSON.parse(strForm.visuals||'{}')}}catch{vis={...DEF}}
           const toggle=(key)=>upd('visuals',JSON.stringify({...vis,[key]:!vis[key]}))
           const setColor=(ck,val)=>upd('visuals',JSON.stringify({...vis,[ck]:val}))
           const COLOR_KEY={lines:'linesColor',arrows:'arrowsColor',
-            entryLine:'entryLineColor',labels:'labelsColor',emaCrosses:'emaCrossesColor'}
+            entryLine:'entryLineColor',labels:'labelsColor',
+            emaCrossUp:'emaCrossUpColor',emaCrossDown:'emaCrossDownColor'}
           const SHAPES=['arrowUp','arrowDown','circle','square']
           return(
             <div style={{display:'flex',flexWrap:'wrap',gap:8,marginTop:4}}>
@@ -154,7 +156,8 @@ export default function StrategyEditorPanel({ strForm, setStrForm, strategy, onS
                 {key:'arrows',    label:'Flechas ↑↓',   icon:'↑', hasShape:true,  shapeKey:'arrowsShape',     shapeDefault:'arrowUp'},
                 {key:'entryLine', label:'Línea entrada', icon:'—', hasShape:false},
                 {key:'labels',    label:'Etiquetas #N',  icon:'#', hasShape:false},
-                {key:'emaCrosses',label:'Cruces EMA',    icon:'◎', hasShape:true,  shapeKey:'emaCrossesShape', shapeDefault:'circle'},
+                {key:'emaCrossUp',  label:'Cruces alcistas ↗', icon:'↗', hasShape:true, shapeKey:'emaCrossUpShape',   shapeDefault:'circle'},
+                {key:'emaCrossDown',label:'Cruces bajistas ↘', icon:'↘', hasShape:true, shapeKey:'emaCrossDownShape', shapeDefault:'circle'},
               ].map(({key,label,icon,hasShape,shapeKey,shapeDefault})=>{
                 const on=vis[key]
                 const ck=COLOR_KEY[key]
