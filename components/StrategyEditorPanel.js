@@ -23,7 +23,7 @@ function hexRgb(hex) {
   return `${parseInt(h.slice(0,2),16)},${parseInt(h.slice(2,4),16)},${parseInt(h.slice(4,6),16)}`
 }
 
-export default function StrategyEditorPanel({ strForm, setStrForm, strategy, onSave, onCancel, onDelete, saving }) {
+export default function StrategyEditorPanel({ strForm, setStrForm, strategy, onSave, onCancel, onDelete, onClone, saving }) {
   const [pineCopied,  setPineCopied]  = useState(false)
   const [paramsError, setParamsError] = useState(null)
 
@@ -58,6 +58,11 @@ export default function StrategyEditorPanel({ strForm, setStrForm, strategy, onS
           <button style={S.btn('#00e5a0', saving)} onClick={handleSave} disabled={saving}>
             {saving ? 'Guardando…' : '💾 Guardar'}
           </button>
+          {!isNew && onClone && (
+            <button style={S.btn('#ffd166', saving)} onClick={onClone} disabled={saving} title="Duplicar esta estrategia con otro nombre">
+              📋 Clonar
+            </button>
+          )}
           <button style={S.btn('#7a9bc0', false)} onClick={onCancel}>
             Cancelar
           </button>
