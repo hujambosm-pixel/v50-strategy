@@ -614,6 +614,7 @@ export default function Home() {
   const [rightPanelW,setRightPanelW]=useState(275)
   const [candleH,setCandleH]=useState(480)     // resizable candle chart height
   const [chartFullscreen,setChartFullscreen]=useState(false)
+  useEffect(()=>{ if(chartFullscreen) console.log('[fullscreen] chartFullscreen=true activado') },[chartFullscreen])
   const [equityH,setEquityH]=useState(260)     // resizable equity chart height
   const [mcEquityH,setMcEquityH]=useState(300) // resizable MC equity chart height
   const candleResizing=useRef(false),candleStartY=useRef(0),candleStartH=useRef(0)
@@ -2963,7 +2964,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.91</title>
+        <title>Trading Simulator V9.92</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3040,7 +3041,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.91
+            <span className="dot"/>Trading Simulator V9.92
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4626,14 +4627,25 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   })()}
 
                   {/* Gráfico de velas */}
-                  <div className="chart-wrap" ref={chartWrapRef} onContextMenu={e=>openCtx(e,'chart')} style={{padding:0,borderBottom:'1px solid var(--border)',...(chartFullscreen?{position:'fixed',top:0,left:0,right:0,bottom:0,zIndex:9999,background:'var(--bg)',display:'flex',flexDirection:'column',height:'100vh'}:{}),...((sidePanel==='risk'||result.isBareChart)?{flex:1,minHeight:0,display:'flex',flexDirection:'column'}:{})}}>
-                    <div style={{position:'relative',...((chartFullscreen||sidePanel==='risk'||result.isBareChart)?{flex:1,minHeight:0,height:'100%'}:{})}}>
+                  <div className="chart-wrap" ref={chartWrapRef} onContextMenu={e=>openCtx(e,'chart')} style={{padding:0,borderBottom:'1px solid var(--border)',...((sidePanel==='risk'||result.isBareChart)?{flex:1,minHeight:0,display:'flex',flexDirection:'column'}:{})}}>
+                    <div style={{position:'relative',...((sidePanel==='risk'||result.isBareChart)?{flex:1,minHeight:0,height:'100%'}:{})}}>
                       {/* ── Barra de info integrada — una sola fila sobre el gráfico ── */}
                       <div style={{position:'absolute',top:0,left:0,right:0,zIndex:11,height:30,
                         display:'flex',alignItems:'center',gap:5,padding:'0 8px',
                         background:'rgba(8,12,20,0.92)',backdropFilter:'blur(4px)',
                         borderBottom:'1px solid rgba(26,45,69,0.6)',
                         pointerEvents:'none',fontFamily:MONO,fontSize:11,overflow:'hidden'}}>
+                        {/* ⛶ Pantalla completa */}
+                        <button onClick={()=>setChartFullscreen(f=>!f)}
+                          title={chartFullscreen?'Salir de pantalla completa':'Pantalla completa'}
+                          style={{pointerEvents:'all',
+                            background:chartFullscreen?'rgba(255,77,109,0.12)':'rgba(8,12,20,0.7)',
+                            border:`1px solid ${chartFullscreen?'#ff4d6d':'#2a3d55'}`,
+                            color:chartFullscreen?'#ff4d6d':'#5a7a95',
+                            fontFamily:MONO,fontSize:10,padding:'2px 5px',borderRadius:3,
+                            cursor:'pointer',lineHeight:1,flexShrink:0}}>
+                          {chartFullscreen?'⊠':'⛶'}
+                        </button>
                         {/* ★ favorito */}
                         {(()=>{
                           const wItem=watchlist.find(w=>w.symbol===simbolo)
@@ -4709,17 +4721,6 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                             display:'flex',alignItems:'center',gap:2,lineHeight:1,flexShrink:0}}>
                           📏{rulerOn&&<span style={{fontSize:9}}> ON</span>}
                         </button>
-                        {/* ⛶ Pantalla completa */}
-                        <button onClick={()=>setChartFullscreen(f=>!f)}
-                          title={chartFullscreen?'Salir de pantalla completa':'Pantalla completa'}
-                          style={{pointerEvents:'all',
-                            background:chartFullscreen?'rgba(255,77,109,0.12)':'rgba(8,12,20,0.7)',
-                            border:`1px solid ${chartFullscreen?'#ff4d6d':'#2a3d55'}`,
-                            color:chartFullscreen?'#ff4d6d':'#5a7a95',
-                            fontFamily:MONO,fontSize:10,padding:'2px 5px',borderRadius:3,
-                            cursor:'pointer',lineHeight:1,flexShrink:0}}>
-                          {chartFullscreen?'⊠':'⛶'}
-                        </button>
                         {/* % / All — label mode */}
                         {(()=>{
                           const cfgs=[{label:'🏷',active:false},{label:'%',active:true},{label:'All',active:true}]
@@ -4743,8 +4744,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         visuals={result.visuals??null}
                         trades={result.isBareChart?[]:result.trades||[]} maxDD={result.isBareChart?0:metrics?.ddSimple||0}
                         isBareChart={result.isBareChart??false}
-                        fillHeight={chartFullscreen}
-                        chartHeight={chartFullscreen?undefined:(result.isBareChart?bareChartHeight:candleH)}
+                        chartHeight={result.isBareChart?bareChartHeight:candleH}
                         labelMode={labelMode} rulerActive={rulerOn}
                         onChartReady={api=>{chartApiRef.current=api}}
                         onPriceAlarm={sidePanel!=='watchlist'&&sidePanel!=='risk'?price=>setPriceAlarmDlg({price,symbol:simbolo}):null}
@@ -4793,6 +4793,35 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       <div style={{width:32,height:2,borderRadius:1,background:'rgba(0,212,255,0.3)'}}/>
                     </div>}
                   </div>
+
+                  {/* ── Fullscreen overlay — segunda instancia de CandleChart, no desmonta la original ── */}
+                  {chartFullscreen&&(
+                    <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,zIndex:9999,
+                      background:'var(--bg)',display:'flex',flexDirection:'column'}}>
+                      <div style={{flex:1,minHeight:0,position:'relative'}}>
+                        <button onClick={()=>setChartFullscreen(false)}
+                          style={{position:'absolute',top:6,left:8,zIndex:12,
+                            background:'rgba(255,77,109,0.12)',border:'1px solid #ff4d6d',
+                            color:'#ff4d6d',fontFamily:MONO,fontSize:10,padding:'2px 7px',
+                            borderRadius:3,cursor:'pointer',lineHeight:1}}>
+                          ⊠ Salir
+                        </button>
+                        <CandleChart
+                          data={result.chartData} emaRPeriod={emaR} emaLPeriod={emaL} definition={null}
+                          visuals={result.visuals??null}
+                          trades={result.isBareChart?[]:result.trades||[]}
+                          maxDD={result.isBareChart?0:metrics?.ddSimple||0}
+                          isBareChart={result.isBareChart??false}
+                          fillHeight={true}
+                          labelMode={labelMode} rulerActive={rulerOn}
+                          savedRangeRef={savedRangeRef}
+                          syncRef={chartSyncRef}
+                          priceAlarms={alarms.filter(a=>a.condition==='price_level'&&(a.symbol||'').toUpperCase()===(simbolo||'').toUpperCase())}
+                          tlOpenTrades={tlTrades.filter(t=>t.status==='open'&&t.fill_type!=='sell'&&(t.symbol||'').toUpperCase()===(simbolo||'').toUpperCase())}
+                        />
+                      </div>
+                    </div>
+                  )}
 
                   {/* Métricas en cuadrícula (si layout=grid) — oculto en Risk y bare chart */}
                   {!result.isBareChart&&sidePanel!=='risk'&&metricsLayout==='grid'&&metrics&&(
