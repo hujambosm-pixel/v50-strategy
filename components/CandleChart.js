@@ -381,13 +381,18 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
 
       // ── Marcadores: flechas entrada/salida + círculos cruces EMA ──
       const allMarkers=[]
+      const oblMarkers=[]  // emoji ↗/↘ dibujados en SVG overlay, sin shape nativo
       if(visuals?.arrows!==false){
         tradeMAEs.forEach(t=>{
           const _as=visuals?.arrowsShape||'arrowUp'
           const _asExit=_as==='arrowUp'?'arrowDown':_as==='arrowDown'?'arrowUp':_as
-          const _obl=_as==='oblicua'
-          if(t.entryDate) allMarkers.push({time:t.entryDate,position:'belowBar',color:visuals?.arrowsColor||'#00d4ff',shape:_obl?'circle':_as,   text:_obl?'↗':''})
-          if(t.exitDate)  allMarkers.push({time:t.exitDate, position:'aboveBar',color:t.pnlPct>=0?'#00e5a0':'#ff4d6d',shape:_obl?'circle':_asExit,text:_obl?'↘':''})
+          if(_as==='oblicua'){
+            if(t.entryDate) oblMarkers.push({date:t.entryDate,anchor:'low', text:'↗',color:visuals?.arrowsColor||'#00d4ff'})
+            if(t.exitDate)  oblMarkers.push({date:t.exitDate, anchor:'high',text:'↘',color:t.pnlPct>=0?'#00e5a0':'#ff4d6d'})
+          } else {
+            if(t.entryDate) allMarkers.push({time:t.entryDate,position:'belowBar',color:visuals?.arrowsColor||'#00d4ff',shape:_as,text:''})
+            if(t.exitDate)  allMarkers.push({time:t.exitDate, position:'aboveBar',color:t.pnlPct>=0?'#00e5a0':'#ff4d6d',shape:_asExit,text:''})
+          }
         })
       }
       for(let j=1;j<data.length;j++){
@@ -395,10 +400,12 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         if(er==null||el==null||erP==null||elP==null) continue
         if(visuals?.emaCrossUp===true&&erP<elP&&er>=el){
           const _su=visuals?.emaCrossUpShape||'circle'
-          allMarkers.push({time:data[j].date,position:'belowBar',color:visuals?.emaCrossUpColor||'#00e5a0',shape:_su==='oblicua'?'circle':_su,text:_su==='oblicua'?'↗':''})}
+          if(_su==='oblicua') oblMarkers.push({date:data[j].date,anchor:'low', text:'↗',color:visuals?.emaCrossUpColor||'#00e5a0'})
+          else allMarkers.push({time:data[j].date,position:'belowBar',color:visuals?.emaCrossUpColor||'#00e5a0',shape:_su,text:''})}
         if(visuals?.emaCrossDown===true&&erP>elP&&er<=el){
           const _sd=visuals?.emaCrossDownShape||'circle'
-          allMarkers.push({time:data[j].date,position:'aboveBar',color:visuals?.emaCrossDownColor||'#ff4d6d',shape:_sd==='oblicua'?'circle':_sd,text:_sd==='oblicua'?'↘':''})}
+          if(_sd==='oblicua') oblMarkers.push({date:data[j].date,anchor:'high',text:'↘',color:visuals?.emaCrossDownColor||'#ff4d6d'})
+          else allMarkers.push({time:data[j].date,position:'aboveBar',color:visuals?.emaCrossDownColor||'#ff4d6d',shape:_sd,text:''})}
       }
       if(allMarkers.length) candles.setMarkers(allMarkers.sort((a,b)=>a.time.localeCompare(b.time)))
 
@@ -549,9 +556,28 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       window.addEventListener('keyup',onKeyUp)
       const drawTradeLabels=()=>{
         const svg=svgRef.current; if(!svg||!candlesRef.current||!chartRef.current) return
-        svg.querySelectorAll('.trade-label').forEach(el=>el.remove())
-        if(visuals?.labels===false) return
         const NS='http://www.w3.org/2000/svg'
+        svg.querySelectorAll('.trade-label').forEach(el=>el.remove())
+        svg.querySelectorAll('.obl-marker').forEach(el=>el.remove())
+        // Dibujar marcadores oblicuos (independiente del toggle labels)
+        if(oblMarkers.length){
+          const ts=chartRef.current.timeScale()
+          oblMarkers.forEach(m=>{
+            try{
+              const x=ts.timeToCoordinate(m.date); if(x==null) return
+              const bar=data.find(d=>d.date===m.date); if(!bar) return
+              const anchorPx=m.anchor==='low'?bar.low:bar.high
+              const y0=candlesRef.current.priceToCoordinate(anchorPx); if(y0==null) return
+              const y=m.anchor==='low'?y0+18:y0-4
+              const el=document.createElementNS(NS,'text')
+              Object.entries({x,y,'font-size':'14','font-family':'sans-serif',
+                'text-anchor':'middle',fill:m.color,class:'obl-marker','pointer-events':'none'
+              }).forEach(([k,v])=>el.setAttribute(k,v))
+              el.textContent=m.text; svg.appendChild(el)
+            }catch(_){}
+          })
+        }
+        if(visuals?.labels===false) return
         tradeMAEs.forEach((t,idx)=>{
           if(!t.entryDate||!t.exitDate) return
           try {
