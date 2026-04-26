@@ -385,17 +385,20 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         tradeMAEs.forEach(t=>{
           const _as=visuals?.arrowsShape||'arrowUp'
           const _asExit=_as==='arrowUp'?'arrowDown':_as==='arrowDown'?'arrowUp':_as
-          if(t.entryDate) allMarkers.push({time:t.entryDate,position:'belowBar',color:visuals?.arrowsColor||'#00d4ff',shape:_as,text:''})
-          if(t.exitDate)  allMarkers.push({time:t.exitDate, position:'aboveBar',color:t.pnlPct>=0?'#00e5a0':'#ff4d6d',shape:_asExit,text:''})
+          const _obl=_as==='oblicua'
+          if(t.entryDate) allMarkers.push({time:t.entryDate,position:'belowBar',color:visuals?.arrowsColor||'#00d4ff',shape:_obl?'circle':_as,   text:_obl?'↗':''})
+          if(t.exitDate)  allMarkers.push({time:t.exitDate, position:'aboveBar',color:t.pnlPct>=0?'#00e5a0':'#ff4d6d',shape:_obl?'circle':_asExit,text:_obl?'↘':''})
         })
       }
       for(let j=1;j<data.length;j++){
         const er=data[j].emaR,el=data[j].emaL,erP=data[j-1].emaR,elP=data[j-1].emaL
         if(er==null||el==null||erP==null||elP==null) continue
-        if(visuals?.emaCrossUp===true&&erP<elP&&er>=el)
-          allMarkers.push({time:data[j].date,position:'belowBar',color:visuals?.emaCrossUpColor||'#00e5a0',shape:visuals?.emaCrossUpShape||'circle',text:'↗'})
-        if(visuals?.emaCrossDown===true&&erP>elP&&er<=el)
-          allMarkers.push({time:data[j].date,position:'aboveBar',color:visuals?.emaCrossDownColor||'#ff4d6d',shape:visuals?.emaCrossDownShape||'circle',text:'↘'})
+        if(visuals?.emaCrossUp===true&&erP<elP&&er>=el){
+          const _su=visuals?.emaCrossUpShape||'circle'
+          allMarkers.push({time:data[j].date,position:'belowBar',color:visuals?.emaCrossUpColor||'#00e5a0',shape:_su==='oblicua'?'circle':_su,text:_su==='oblicua'?'↗':''})}
+        if(visuals?.emaCrossDown===true&&erP>elP&&er<=el){
+          const _sd=visuals?.emaCrossDownShape||'circle'
+          allMarkers.push({time:data[j].date,position:'aboveBar',color:visuals?.emaCrossDownColor||'#ff4d6d',shape:_sd==='oblicua'?'circle':_sd,text:_sd==='oblicua'?'↘':''})}
       }
       if(allMarkers.length) candles.setMarkers(allMarkers.sort((a,b)=>a.time.localeCompare(b.time)))
 
@@ -1267,7 +1270,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
     <div style={{display:'flex',flexDirection:'column',...(fillHeight?{flex:1,minHeight:0}:{})}}>
     <div style={{position:'relative',...(fillHeight?{flex:1,minHeight:0}:{})}}>
       <div ref={legendRef} style={{position:'absolute',top:8,left:8,zIndex:10,fontFamily:MONO,fontSize:12,color:'#7a9bc0',background:'rgba(8,12,20,0.82)',padding:'4px 10px',borderRadius:4,pointerEvents:'none',whiteSpace:'nowrap',display:externalLegendRef?'none':'block'}}/>
-      <div ref={containerRef} style={{minHeight:0}}/>
+      <div ref={containerRef} style={{minHeight:0,...(fillHeight?{height:'100%'}:{})}}/>
       <svg ref={svgRef} style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',pointerEvents:'none',zIndex:5}}/>
       <div ref={tooltipRef} style={{position:'absolute',display:'none',pointerEvents:'none',background:'rgba(8,12,20,0.96)',border:'1px solid #00e5a0',borderRadius:6,padding:'8px 12px',fontFamily:MONO,fontSize:12,color:'#e2eaf5',zIndex:15,minWidth:200,boxShadow:'0 4px 20px rgba(0,0,0,0.5)'}}/>
       {/* ── Overlay de captura de clics en modo risk ── */}

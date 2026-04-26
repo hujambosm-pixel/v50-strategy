@@ -148,7 +148,7 @@ export default function StrategyEditorPanel({ strForm, setStrForm, strategy, onS
           const COLOR_KEY={lines:'linesColor',arrows:'arrowsColor',
             entryLine:'entryLineColor',labels:'labelsColor',
             emaCrossUp:'emaCrossUpColor',emaCrossDown:'emaCrossDownColor'}
-          const SHAPES=['arrowUp','arrowDown','circle','square']
+          const SHAPES=['arrowUp','arrowDown','circle','square','oblicua']
           return(
             <div style={{display:'flex',flexWrap:'wrap',gap:8,marginTop:4}}>
               {[
