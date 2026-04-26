@@ -210,7 +210,12 @@ export default async function handler(req, res) {
     const ganBH = capital_ini * (pN / p0 - 1)
 
     // ── Equity curves ──
-    const curves = calcEquityCurves(trades, data, capital_ini, data[0].date, null)
+    let sp500Data = null
+    try {
+      const sp500Raw = await fetchAV('^GSPC', years + 1)
+      sp500Data = sp500Raw.filter(d => d.date >= data[0].date)
+    } catch (_) { sp500Data = null }
+    const curves = calcEquityCurves(trades, data, capital_ini, data[0].date, sp500Data)
 
     return res.status(200).json({
       chartData,
