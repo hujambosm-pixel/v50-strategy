@@ -580,7 +580,9 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
           const x2=ts?.timeToCoordinate(t.exitDate)
           return x1!=null||x2!=null
         })
-        if(tradeMAEs.length>0&&!hasValidCoords) return
+        // Guard solo cuando labelMode>0: si es transitorio, conservar labels existentes
+        // Cuando labelMode===0, SIEMPRE limpiar (nunca dejar residuos de modos anteriores)
+        if(labelMode>0&&tradeMAEs.length>0&&!hasValidCoords) return
         svg.querySelectorAll('.trade-label').forEach(el=>el.remove())
         svg.querySelectorAll('.obl-marker').forEach(el=>el.remove())
         // Dibujar marcadores oblicuos (independiente del toggle labels)
