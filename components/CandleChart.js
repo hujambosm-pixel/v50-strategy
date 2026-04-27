@@ -261,6 +261,8 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
   const onRiskLevelChangeRef=useRef(onRiskLevelChange)
   const fillHeightRef=useRef(fillHeight)
   useEffect(()=>{ fillHeightRef.current=fillHeight },[fillHeight])
+  const labelModeRef=useRef(labelMode)
+  useEffect(()=>{ labelModeRef.current=labelMode },[labelMode])
   useEffect(()=>{
     if(!fillHeight||!containerRef.current) return
     const forceResize=()=>{
@@ -285,6 +287,10 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
   },[rulerActive])
 
   useEffect(()=>{
+    // Limpiar SVG inmediatamente si labelMode=0 para no dejar residuos de modos anteriores
+    if(labelMode===0&&svgRef.current){
+      svgRef.current.querySelectorAll('.trade-label,.obl-marker').forEach(el=>el.remove())
+    }
     if(typeof window==='undefined'||!containerRef.current) return
     import('lightweight-charts').then(({createChart,CrosshairMode,LineStyle})=>{
       if(chartRef.current){chartRef.current.remove();chartRef.current=null}
@@ -1102,12 +1108,18 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       })
 
       const ro=new ResizeObserver(()=>{
+        if(!chartAliveRef.current) return  // callback zombie post-disconnect — ignorar
         if(!containerRef.current||!chartRef.current) return
         try{
           const opts={width:containerRef.current.clientWidth}
           if(fillHeightRef.current){const h=containerRef.current.clientHeight;if(h>0)opts.height=h}
           chart.applyOptions(opts)
         }catch(_){}
+        // labelMode=0: solo limpiar SVG, nunca redibujar
+        if(labelModeRef.current===0){
+          svgRef.current?.querySelectorAll('.trade-label,.obl-marker').forEach(el=>el.remove())
+          return
+        }
         setTimeout(drawTradeLabels,50)
       })
       ro.observe(containerRef.current)
