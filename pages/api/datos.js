@@ -229,6 +229,8 @@ export default async function handler(req, res) {
       chartData,
       trades,
       filterZones: Array.isArray(rawFilterZones) ? rawFilterZones : [],
+      _debug_filterZones_length: rawFilterZones?.length ?? 'NOT_ARRAY',
+      _debug_filterZones_type: typeof rawFilterZones,
       gananciaSimple,
       capitalReinv,
       ganBH,
