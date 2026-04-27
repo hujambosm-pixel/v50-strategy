@@ -243,7 +243,7 @@ function createRiskPrimitive(configRef) {
   }
 }
 
-export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null, isBareChart=false, visuals=null }) {
+export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null, isBareChart=false, visuals=null, filterZones=[] }) {
   const containerRef=useRef(null), svgRef=useRef(null), legendRef=useRef(null), tooltipRef=useRef(null)
   const activeLegendRef = externalLegendRef || legendRef
   const chartRef=useRef(null), candlesRef=useRef(null)
@@ -263,6 +263,8 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
   useEffect(()=>{ fillHeightRef.current=fillHeight },[fillHeight])
   const labelModeRef=useRef(labelMode)
   useEffect(()=>{ labelModeRef.current=labelMode },[labelMode])
+  const filterZonesRef=useRef(filterZones)
+  useEffect(()=>{ filterZonesRef.current=filterZones },[filterZones])
   useEffect(()=>{
     if(!fillHeight||!containerRef.current) return
     const forceResize=()=>{
@@ -687,9 +689,36 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         })
       }
 
+      // ── Zonas de filtro SP500 — bandas de fondo rojas ──
+      const drawFilterZones=()=>{
+        const svg=svgRef.current; if(!svg||!chartRef.current) return
+        svg.querySelectorAll('.filter-zone').forEach(el=>el.remove())
+        const zones=filterZonesRef.current; if(!zones?.length) return
+        const ts=chartRef.current.timeScale()
+        const chartW=containerRef.current?.clientWidth||800
+        const chartH=containerRef.current?.clientHeight||480
+        const NS2='http://www.w3.org/2000/svg'
+        zones.forEach(zone=>{
+          try{
+            const rawX1=ts.timeToCoordinate(zone.from)
+            const rawX2=ts.timeToCoordinate(zone.to)
+            if(rawX1==null&&rawX2==null) return
+            const left=rawX1!=null?Math.max(0,rawX1):0
+            const right=rawX2!=null?Math.min(chartW,rawX2):chartW
+            if(right<=left) return
+            const rect=document.createElementNS(NS2,'rect')
+            Object.entries({x:String(left),y:'0',width:String(right-left),
+              height:String(chartH),fill:'rgba(255,80,80,0.12)',
+              class:'filter-zone','pointer-events':'none'
+            }).forEach(([k,v])=>rect.setAttribute(k,v))
+            svg.insertBefore(rect,svg.firstChild)  // detrás de labels/markers
+          }catch(_){}
+        })
+      }
+
       // Redibujar etiquetas al hacer zoom/scroll — guardamos unsub para cleanup
       chartAliveRef.current=true
-      const unsubLabels=chart.timeScale().subscribeVisibleTimeRangeChange(()=>{ if(chartAliveRef.current) setTimeout(()=>{ if(chartAliveRef.current) drawTradeLabels() },30) })
+      const unsubLabels=chart.timeScale().subscribeVisibleTimeRangeChange(()=>{ if(chartAliveRef.current) setTimeout(()=>{ if(chartAliveRef.current){drawTradeLabels();drawFilterZones()} },30) })
 
       // ── Regla SVG ──
       const svg=svgRef.current, NS='http://www.w3.org/2000/svg'
@@ -1118,12 +1147,13 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         // labelMode=0: solo limpiar SVG, nunca redibujar
         if(labelModeRef.current===0){
           svgRef.current?.querySelectorAll('.trade-label,.obl-marker').forEach(el=>el.remove())
+          drawFilterZones()
           return
         }
-        setTimeout(drawTradeLabels,50)
+        setTimeout(()=>{drawTradeLabels();drawFilterZones()},50)
       })
       ro.observe(containerRef.current)
-      setTimeout(drawTradeLabels,200)
+      setTimeout(()=>{drawTradeLabels();drawFilterZones()},200)
 
       // FIX 2: si el chart se crea en modo fillHeight, forzar resize a window.innerHeight
       if(fillHeightRef.current){
