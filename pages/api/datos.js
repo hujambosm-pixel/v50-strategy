@@ -196,7 +196,8 @@ export default async function handler(req, res) {
     const getRunFn = new Function('calcEMA','calcSMA','calcRSI','calcATR','calcMACD', wrappedCode)
     const runFn    = getRunFn(calcEMA, calcSMA, calcRSI, calcATR, calcMACD)
     const userParams = stratParams ? JSON.parse(stratParams) : {}
-    const { trades: rawTrades = [], indicators = {} } = runFn(data, { capital_ini, years, allocation_pct, ...userParams })
+    const { trades: rawTrades = [], indicators = {}, filterZones: rawFilterZones = [] } = runFn(data, { capital_ini, years, allocation_pct, ...userParams })
+    console.log('[SERVER filterZones]', Array.isArray(rawFilterZones), rawFilterZones?.length, rawFilterZones?.[0])
 
     // ── Enrich trades ──
     const trades = buildTrades(rawTrades, capital_ini, allocation_pct)
@@ -227,6 +228,7 @@ export default async function handler(req, res) {
     return res.status(200).json({
       chartData,
       trades,
+      filterZones: Array.isArray(rawFilterZones) ? rawFilterZones : [],
       gananciaSimple,
       capitalReinv,
       ganBH,
