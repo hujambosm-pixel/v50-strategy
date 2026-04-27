@@ -1,19 +1,17 @@
 import { useState } from 'react'
 import { MONO } from '../lib/utils'
 
-const SUMMARY_SYSTEM_PROMPT = `You are a professional quantitative trading analyst. Analyze the following JavaScript backtesting strategy code and its JSON parameters. Generate a structured summary in Spanish with these sections:
+const SUMMARY_SYSTEM_PROMPT = `You are a professional quantitative trading analyst. Analyze the following JavaScript backtesting strategy code and its JSON parameters. Generate a concise summary in Spanish (max 300 words) with these sections. Use only bullet points and plain text — no markdown bold (**text**), no ### headers:
 
-INDICADORES: List all technical indicators used with their periods/parameters from the JSON.
+INDICADORES: Technical indicators used. Periods and parameters taken from the JSON (JSON values always override code defaults).
 
-CONDICIONES DE ENTRADA: Describe precisely each entry condition, the trigger mechanism, and any pending order logic.
+CONDICIONES DE ENTRADA: Each entry condition and trigger mechanism.
 
-GESTIÓN DE LA POSICIÓN: Describe stop loss placement, trailing mechanisms, and position management rules.
+GESTIÓN Y SALIDA: Stop loss placement, trailing mechanisms, and all exit conditions combined in one section.
 
-CONDICIONES DE SALIDA: Describe each exit condition precisely.
+FILTROS: Any market filters or trade restrictions. Omit this section if none.
 
-FILTROS Y RESTRICCIONES: Any market filters or trade restrictions.
-
-Use professional trading terminology. Be precise with parameter values from the JSON. Use bullet points. Be concise but complete.`
+Use exact parameter values from the JSON. Be concise.`
 
 function getGroqKey() {
   try { return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.integrations?.groqKey||'' }
@@ -21,20 +19,16 @@ function getGroqKey() {
 }
 
 const S = {
-  wrap:     { display:'flex', flexDirection:'column', gap:16, padding:'20px 24px', fontFamily:MONO, color:'#c8d8e8', maxWidth:760, margin:'0 auto' },
-  label:    { fontSize:11, color:'#7a9bc0', marginBottom:4, display:'block' },
-  input:    { width:'100%', background:'#0d1520', border:'1px solid #1a2d45', borderRadius:4, color:'#c8d8e8', fontFamily:MONO, fontSize:13, padding:'7px 10px', outline:'none', boxSizing:'border-box' },
-  textarea: { width:'100%', background:'#0d1520', border:'1px solid #1a2d45', borderRadius:4, color:'#c8d8e8', fontFamily:MONO, fontSize:12, padding:'8px 10px', outline:'none', resize:'vertical', boxSizing:'border-box', lineHeight:1.5 },
-  row:      { display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 },
-  row3:     { display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12 },
+  wrap:     { display:'flex', flexDirection:'column', gap:8, padding:'10px 16px', fontFamily:MONO, color:'#c8d8e8', height:'calc(100vh - 60px)', boxSizing:'border-box', overflow:'hidden' },
+  label:    { fontSize:11, color:'#7a9bc0', marginBottom:3, display:'block', flexShrink:0 },
+  input:    { background:'#0d1520', border:'1px solid #1a2d45', borderRadius:4, color:'#c8d8e8', fontFamily:MONO, fontSize:12, padding:'6px 8px', outline:'none', boxSizing:'border-box' },
+  textarea: { background:'#0d1520', border:'1px solid #1a2d45', borderRadius:4, color:'#c8d8e8', fontFamily:MONO, fontSize:12, padding:'8px 10px', outline:'none', boxSizing:'border-box', lineHeight:1.5, width:'100%' },
   field:    { display:'flex', flexDirection:'column' },
   btn:      (accent='#00d4ff', disabled=false) => ({
-    padding:'9px 18px', borderRadius:4, fontFamily:MONO, fontSize:12, fontWeight:600, cursor:disabled?'not-allowed':'pointer',
+    padding:'7px 14px', borderRadius:4, fontFamily:MONO, fontSize:12, fontWeight:600, cursor:disabled?'not-allowed':'pointer',
     background:`rgba(${hexRgb(accent)},0.12)`, border:`1px solid ${disabled?'#2a3d55':accent}`,
-    color:disabled?'#3a5070':accent, opacity:disabled?0.5:1, transition:'opacity 0.15s',
+    color:disabled?'#3a5070':accent, opacity:disabled?0.5:1, transition:'opacity 0.15s', flexShrink:0,
   }),
-  separator:{ borderTop:'1px solid #1a2d45', marginTop:4 },
-  title:    { fontSize:14, fontWeight:700, color:'#00d4ff', marginBottom:4 },
 }
 
 function hexRgb(hex) {
@@ -74,7 +68,7 @@ export default function StrategyEditorPanel({ strForm, setStrForm, strategy, onS
             { role: 'system', content: SUMMARY_SYSTEM_PROMPT },
             { role: 'user',   content: `CODE:\n${code}\n\nPARAMS:\n${strForm.params || '{}'}` },
           ],
-          max_tokens: 1024,
+          max_tokens: 600,
           temperature: 0.2,
         }),
       })
@@ -86,195 +80,176 @@ export default function StrategyEditorPanel({ strForm, setStrForm, strategy, onS
     finally { setSummaryLoading(false) }
   }
 
+  // Marcadores visuales — inline IIFE para mantener lógica compacta
+  const renderVisuals = () => {
+    const DEF = {
+      lines:true,         linesColor:'#00e5a0',
+      arrows:true,        arrowsColor:'#00d4ff',      arrowsShape:'arrowUp',
+      entryLine:true,     entryLineColor:'#ffffff',
+      labels:true,        labelsColor:'#00d4ff',
+      emaCrossUp:false,   emaCrossUpColor:'#00e5a0',  emaCrossUpShape:'circle',
+      emaCrossDown:false, emaCrossDownColor:'#ff4d6d', emaCrossDownShape:'circle',
+      chartBg:'#080c14',
+    }
+    let vis; try { vis = {...DEF, ...JSON.parse(strForm.visuals||'{}')} } catch { vis = {...DEF} }
+    const toggle  = (key) => upd('visuals', JSON.stringify({...vis, [key]:!vis[key]}))
+    const setColor = (ck, val) => upd('visuals', JSON.stringify({...vis, [ck]:val}))
+    const COLOR_KEY = { lines:'linesColor', arrows:'arrowsColor', entryLine:'entryLineColor',
+      labels:'labelsColor', emaCrossUp:'emaCrossUpColor', emaCrossDown:'emaCrossDownColor' }
+    const SHAPES = ['arrowUp','arrowDown','circle','square','oblicua']
+    return (
+      <div style={{display:'flex', flexWrap:'wrap', gap:6}}>
+        {[
+          {key:'lines',       label:'Líneas',    icon:'/',  hasShape:false},
+          {key:'arrows',      label:'Flechas',   icon:'↑',  hasShape:true, shapeKey:'arrowsShape',      shapeDefault:'arrowUp'},
+          {key:'entryLine',   label:'Entrada',   icon:'—',  hasShape:false},
+          {key:'labels',      label:'Etiquetas', icon:'#',  hasShape:false},
+          {key:'emaCrossUp',  label:'↗ Cruce',   icon:'↗',  hasShape:true, shapeKey:'emaCrossUpShape',  shapeDefault:'circle'},
+          {key:'emaCrossDown',label:'↘ Cruce',   icon:'↘',  hasShape:true, shapeKey:'emaCrossDownShape',shapeDefault:'circle'},
+        ].map(({key,label,icon,hasShape,shapeKey,shapeDefault}) => {
+          const on = vis[key], ck = COLOR_KEY[key]
+          return (
+            <div key={key} style={{display:'flex', alignItems:'center', gap:3}}>
+              <button onClick={()=>toggle(key)} style={{
+                display:'flex', alignItems:'center', gap:4, padding:'4px 10px',
+                borderRadius:4, cursor:'pointer', fontFamily:MONO, fontSize:11, fontWeight:600,
+                background:on?'rgba(0,212,255,0.12)':'rgba(0,0,0,0.2)',
+                border:`1px solid ${on?'#00d4ff':'#1a2d45'}`,
+                color:on?'#00d4ff':'#3a5070', transition:'all 0.15s',
+              }}>
+                <span style={{fontSize:9, opacity:0.7}}>{icon}</span>{label}
+                <span style={{width:6, height:6, borderRadius:'50%',
+                  background:on?'#00d4ff':'#1a2d45', transition:'background 0.15s'}}/>
+              </button>
+              {on && (
+                <input type="color" value={vis[ck]||DEF[ck]}
+                  onChange={e=>setColor(ck,e.target.value)} onClick={e=>e.stopPropagation()}
+                  style={{width:24,height:24,border:'1px solid #1a2d45',borderRadius:3,background:'transparent',cursor:'pointer',padding:1}}/>
+              )}
+              {on && hasShape && (
+                <select value={vis[shapeKey]||shapeDefault}
+                  onChange={e=>upd('visuals',JSON.stringify({...vis,[shapeKey]:e.target.value}))}
+                  onClick={e=>e.stopPropagation()}
+                  style={{...S.input,width:'auto',padding:'3px 6px',fontSize:10,cursor:'pointer'}}>
+                  {SHAPES.map(sh=><option key={sh} value={sh}>{sh}</option>)}
+                </select>
+              )}
+            </div>
+          )
+        })}
+        {/* Fondo gráfico */}
+        <div style={{display:'flex', alignItems:'center', gap:4}}>
+          <span style={{fontSize:11, color:'#7a9bc0'}}>Fondo</span>
+          <input type="color" value={vis.chartBg||'#080c14'}
+            onChange={e=>upd('visuals',JSON.stringify({...vis,chartBg:e.target.value}))}
+            style={{width:24,height:24,border:'1px solid #1a2d45',borderRadius:3,background:'transparent',cursor:'pointer',padding:1}}/>
+          <input style={{...S.input, width:76, padding:'3px 6px', fontSize:10}}
+            value={vis.chartBg||'#080c14'}
+            onChange={e=>upd('visuals',JSON.stringify({...vis,chartBg:e.target.value}))}/>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div style={S.wrap}>
-      <div style={S.title}>{isNew ? 'Nueva estrategia' : `Editar: ${strategy.name || '—'}`}</div>
 
-      {/* ── Acciones ── */}
-      <div style={{display:'flex',gap:8,justifyContent:'space-between'}}>
-        <div style={{display:'flex',gap:8}}>
+      {/* ── FILA 1: Botones de acción ── */}
+      <div style={{display:'flex', gap:8, justifyContent:'space-between', alignItems:'center', flexShrink:0}}>
+        <div style={{display:'flex', gap:8}}>
           <button style={S.btn('#00e5a0', saving)} onClick={handleSave} disabled={saving}>
             {saving ? 'Guardando…' : '💾 Guardar'}
           </button>
           {!isNew && onClone && (
-            <button style={S.btn('#ffd166', saving)} onClick={onClone} disabled={saving} title="Duplicar esta estrategia con otro nombre">
+            <button style={S.btn('#ffd166', saving)} onClick={onClone} disabled={saving} title="Duplicar esta estrategia">
               📋 Clonar
             </button>
           )}
-          <button style={S.btn('#7a9bc0', false)} onClick={onCancel}>
-            Cancelar
-          </button>
+          <button style={S.btn('#7a9bc0', false)} onClick={onCancel}>Cancelar</button>
         </div>
         {!isNew && onDelete && (
-          <button style={S.btn('#ff4d6d', false)} onClick={onDelete}>
-            🗑 Eliminar
-          </button>
+          <button style={S.btn('#ff4d6d', false)} onClick={onDelete}>🗑 Eliminar</button>
         )}
       </div>
 
-      {/* ── Nombre + Color ── */}
-      <div style={S.row}>
-        <div style={S.field}>
-          <label style={S.label}>Nombre</label>
-          <input style={S.input} value={strForm.name||''} onChange={e=>upd('name',e.target.value)} placeholder="Ej: EMA Crossover 10/20" />
-        </div>
-        <div style={S.field}>
-          <label style={S.label}>Color</label>
-          <div style={{display:'flex',gap:8,alignItems:'center'}}>
-            <input type="color" value={strForm.color||'#00d4ff'} onChange={e=>upd('color',e.target.value)}
-              style={{width:36,height:32,border:'1px solid #1a2d45',borderRadius:4,background:'#0d1520',cursor:'pointer',padding:2}} />
-            <input style={{...S.input,flex:1}} value={strForm.color||'#00d4ff'} onChange={e=>upd('color',e.target.value)} />
-          </div>
-        </div>
+      {/* ── FILA 2: Campos básicos en una línea ── */}
+      <div style={{display:'flex', gap:8, alignItems:'center', flexShrink:0}}>
+        {/* Nombre */}
+        <input
+          style={{...S.input, flex:1}}
+          value={strForm.name||''} onChange={e=>upd('name',e.target.value)}
+          placeholder="Nombre de la estrategia"
+        />
+        {/* Color */}
+        <input type="color" value={strForm.color||'#00d4ff'} onChange={e=>upd('color',e.target.value)}
+          style={{width:30, height:30, border:'1px solid #1a2d45', borderRadius:4, background:'#0d1520', cursor:'pointer', padding:2, flexShrink:0}} />
+        <input style={{...S.input, width:80}} value={strForm.color||'#00d4ff'} onChange={e=>upd('color',e.target.value)} placeholder="#hex" />
+        {/* Numéricos */}
+        <input style={{...S.input, width:100}} type="number" value={strForm.capital_ini||''} onChange={e=>upd('capital_ini',e.target.value)} placeholder="Capital €" />
+        <input style={{...S.input, width:76}}  type="number" value={strForm.allocation_pct||''} onChange={e=>upd('allocation_pct',e.target.value)} placeholder="Asig. %" />
+        <input style={{...S.input, width:64}}  type="number" value={strForm.years||''} onChange={e=>upd('years',e.target.value)} placeholder="Años" />
       </div>
 
-      {/* ── Capital / Asignación / Años ── */}
-      <div style={S.row3}>
-        <div style={S.field}>
-          <label style={S.label}>Capital (€)</label>
-          <input style={S.input} type="number" value={strForm.capital_ini||''} onChange={e=>upd('capital_ini',e.target.value)} placeholder="10000" />
-        </div>
-        <div style={S.field}>
-          <label style={S.label}>Asignación (%)</label>
-          <input style={S.input} type="number" value={strForm.allocation_pct||''} onChange={e=>upd('allocation_pct',e.target.value)} placeholder="100" />
-        </div>
-        <div style={S.field}>
-          <label style={S.label}>Años backtest</label>
-          <input style={S.input} type="number" value={strForm.years||''} onChange={e=>upd('years',e.target.value)} placeholder="5" />
-        </div>
-      </div>
+      {/* ── FILA 3: Dos columnas que llenan el resto ── */}
+      <div style={{flex:1, display:'grid', gridTemplateColumns:'45% 55%', gap:12, minHeight:0}}>
 
-      <div style={S.separator} />
+        {/* ── COLUMNA IZQUIERDA ── */}
+        <div style={{display:'flex', flexDirection:'column', gap:8, minHeight:0}}>
 
-      {/* ── Descripción (60%) + Parámetros (40%) lado a lado ── */}
-      <div style={{display:'grid', gridTemplateColumns:'3fr 2fr', gap:12, alignItems:'start'}}>
-
-        {/* Descripción / Resumen */}
-        <div style={S.field}>
-          <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4}}>
-            <label style={{...S.label, marginBottom:0}}>Descripción / Resumen</label>
-            <button
-              onClick={handleSummary}
-              disabled={summaryLoading || !strForm.code_js}
-              style={{...S.btn('#a78bfa', summaryLoading || !strForm.code_js), padding:'5px 10px', fontSize:11}}
-            >
-              {summaryLoading ? '⟳ Generando…' : '🔄 Actualizar resumen'}
-            </button>
+          {/* Descripción / Resumen — crece */}
+          <div style={{display:'flex', flexDirection:'column', flex:1, minHeight:120}}>
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:3, flexShrink:0}}>
+              <label style={{...S.label, marginBottom:0}}>Descripción / Resumen</label>
+              <button
+                onClick={handleSummary}
+                disabled={summaryLoading || !strForm.code_js}
+                style={{...S.btn('#a78bfa', summaryLoading || !strForm.code_js), padding:'4px 9px', fontSize:11}}
+              >
+                {summaryLoading ? '⟳ Generando…' : '🔄 Actualizar resumen'}
+              </button>
+            </div>
+            <textarea
+              style={{...S.textarea, flex:1, resize:'none', minHeight:0}}
+              value={strForm.description||''}
+              onChange={e=>upd('description',e.target.value)}
+              placeholder="Descripción o resumen de la lógica de la estrategia"
+            />
           </div>
-          <textarea
-            style={{...S.textarea, minHeight:160}}
-            value={strForm.description||''}
-            onChange={e=>upd('description',e.target.value)}
-            placeholder="Descripción o resumen de la lógica de la estrategia"
-          />
+
+          {/* Parámetros (JSON) — altura fija */}
+          <div style={{display:'flex', flexDirection:'column', flexShrink:0}}>
+            <label style={S.label}>Parámetros (JSON)</label>
+            <textarea
+              style={{...S.textarea, height:110, resize:'none'}}
+              value={strForm.params||''}
+              onChange={e=>{ upd('params',e.target.value); setParamsError(null) }}
+              placeholder={'{\n  "emaR": 10,\n  "emaL": 11\n}'}
+              spellCheck={false}
+            />
+            {paramsError && <span style={{fontSize:11, color:'#ff4d6d', marginTop:3}}>⚠ {paramsError}</span>}
+          </div>
+
+          {/* Marcadores Visuales — compacto */}
+          <div style={{flexShrink:0}}>
+            <label style={S.label}>Marcadores Visuales</label>
+            {renderVisuals()}
+          </div>
+
         </div>
 
-        {/* Parámetros (JSON) */}
-        <div style={S.field}>
-          <label style={S.label}>Parámetros (JSON)</label>
+        {/* ── COLUMNA DERECHA: Código JS llena todo ── */}
+        <div style={{display:'flex', flexDirection:'column', minHeight:0}}>
+          <label style={S.label}>Código JS</label>
           <textarea
-            style={{...S.textarea, minHeight:160}}
-            value={strForm.params||''}
-            onChange={e=>{ upd('params',e.target.value); setParamsError(null) }}
-            placeholder={'{\n  "emaR": 10,\n  "emaL": 11\n}'}
+            style={{...S.textarea, flex:1, resize:'none', minHeight:0, fontFamily:MONO}}
+            value={strForm.code_js||''}
+            onChange={e=>upd('code_js',e.target.value)}
+            placeholder="function run(bars, params) { ... }"
             spellCheck={false}
           />
-          {paramsError && <span style={{fontSize:11,color:'#ff4d6d',marginTop:3}}>⚠ {paramsError}</span>}
         </div>
 
       </div>
-
-      {/* ── Marcadores Visuales ── */}
-      <div style={S.field}>
-        <label style={S.label}>Marcadores Visuales</label>
-        {(()=>{
-          const DEF={
-            lines:true,         linesColor:'#00e5a0',
-            arrows:true,        arrowsColor:'#00d4ff',      arrowsShape:'arrowUp',
-            entryLine:true,     entryLineColor:'#ffffff',
-            labels:true,        labelsColor:'#00d4ff',
-            emaCrossUp:false,   emaCrossUpColor:'#00e5a0',  emaCrossUpShape:'circle',
-            emaCrossDown:false, emaCrossDownColor:'#ff4d6d', emaCrossDownShape:'circle',
-            chartBg:'#080c14',
-          }
-          let vis; try{vis={...DEF,...JSON.parse(strForm.visuals||'{}')}}catch{vis={...DEF}}
-          const toggle=(key)=>upd('visuals',JSON.stringify({...vis,[key]:!vis[key]}))
-          const setColor=(ck,val)=>upd('visuals',JSON.stringify({...vis,[ck]:val}))
-          const COLOR_KEY={lines:'linesColor',arrows:'arrowsColor',
-            entryLine:'entryLineColor',labels:'labelsColor',
-            emaCrossUp:'emaCrossUpColor',emaCrossDown:'emaCrossDownColor'}
-          const SHAPES=['arrowUp','arrowDown','circle','square','oblicua']
-          return(
-            <div style={{display:'flex',flexWrap:'wrap',gap:8,marginTop:4}}>
-              {[
-                {key:'lines',     label:'Líneas P&L',   icon:'/', hasShape:false},
-                {key:'arrows',    label:'Flechas ↑↓',   icon:'↑', hasShape:true,  shapeKey:'arrowsShape',     shapeDefault:'arrowUp'},
-                {key:'entryLine', label:'Línea entrada', icon:'—', hasShape:false},
-                {key:'labels',    label:'Etiquetas #N',  icon:'#', hasShape:false},
-                {key:'emaCrossUp',  label:'Cruces alcistas ↗', icon:'↗', hasShape:true, shapeKey:'emaCrossUpShape',   shapeDefault:'circle'},
-                {key:'emaCrossDown',label:'Cruces bajistas ↘', icon:'↘', hasShape:true, shapeKey:'emaCrossDownShape', shapeDefault:'circle'},
-              ].map(({key,label,icon,hasShape,shapeKey,shapeDefault})=>{
-                const on=vis[key]
-                const ck=COLOR_KEY[key]
-                return(
-                  <div key={key} style={{display:'flex',alignItems:'center',gap:4}}>
-                    <button onClick={()=>toggle(key)} style={{
-                      display:'flex',alignItems:'center',gap:6,padding:'6px 14px',
-                      borderRadius:4,cursor:'pointer',fontFamily:MONO,fontSize:12,fontWeight:600,
-                      background:on?'rgba(0,212,255,0.12)':'rgba(0,0,0,0.2)',
-                      border:`1px solid ${on?'#00d4ff':'#1a2d45'}`,
-                      color:on?'#00d4ff':'#3a5070',transition:'all 0.15s',
-                    }}>
-                      <span style={{fontSize:10,opacity:0.7}}>{icon}</span>
-                      {label}
-                      <span style={{width:8,height:8,borderRadius:'50%',
-                        background:on?'#00d4ff':'#1a2d45',transition:'background 0.15s'}}/>
-                    </button>
-                    {on&&(
-                      <input type="color" value={vis[ck]||DEF[ck]}
-                        onChange={e=>setColor(ck,e.target.value)}
-                        onClick={e=>e.stopPropagation()}
-                        title={ck}
-                        style={{width:28,height:28,border:'1px solid #1a2d45',
-                          borderRadius:4,background:'transparent',cursor:'pointer',padding:2}}
-                      />
-                    )}
-                    {on&&hasShape&&(
-                      <select value={vis[shapeKey]||shapeDefault}
-                        onChange={e=>upd('visuals',JSON.stringify({...vis,[shapeKey]:e.target.value}))}
-                        onClick={e=>e.stopPropagation()}
-                        style={{...S.input,width:'auto',padding:'4px 8px',fontSize:11,cursor:'pointer'}}>
-                        {SHAPES.map(sh=><option key={sh} value={sh}>{sh}</option>)}
-                      </select>
-                    )}
-                  </div>
-                )
-              })}
-              <div style={{display:'flex',alignItems:'center',gap:6,marginTop:2}}>
-                <span style={{fontSize:11,color:'#7a9bc0',whiteSpace:'nowrap'}}>Fondo gráfico</span>
-                <input type="color" value={vis.chartBg||'#080c14'}
-                  onChange={e=>upd('visuals',JSON.stringify({...vis,chartBg:e.target.value}))}
-                  style={{width:28,height:28,border:'1px solid #1a2d45',borderRadius:4,background:'transparent',cursor:'pointer',padding:2}}/>
-                <input style={{...S.input,width:90,padding:'4px 8px',fontSize:11}}
-                  value={vis.chartBg||'#080c14'}
-                  onChange={e=>upd('visuals',JSON.stringify({...vis,chartBg:e.target.value}))}/>
-              </div>
-            </div>
-          )
-        })()}
-      </div>
-
-      {/* ── Código JS ── */}
-      <div style={S.field}>
-        <label style={S.label}>Código JS</label>
-        <textarea style={{...S.textarea, minHeight:200}}
-          value={strForm.code_js||''}
-          onChange={e=>upd('code_js',e.target.value)}
-          placeholder="function run(bars, params) { ... }"
-          spellCheck={false}
-        />
-      </div>
-
     </div>
   )
 }
