@@ -89,13 +89,15 @@ export default function StrategyEditorPanel({ strForm, setStrForm, strategy, onS
       labels:true,        labelsColor:'#00d4ff',
       emaCrossUp:false,   emaCrossUpColor:'#00e5a0',  emaCrossUpShape:'circle',
       emaCrossDown:false, emaCrossDownColor:'#ff4d6d', emaCrossDownShape:'circle',
+      filterZones:true,   filterZonesColor:'#ff5050',
       chartBg:'#080c14',
     }
     let vis; try { vis = {...DEF, ...JSON.parse(strForm.visuals||'{}')} } catch { vis = {...DEF} }
     const toggle  = (key) => upd('visuals', JSON.stringify({...vis, [key]:!vis[key]}))
     const setColor = (ck, val) => upd('visuals', JSON.stringify({...vis, [ck]:val}))
     const COLOR_KEY = { lines:'linesColor', arrows:'arrowsColor', entryLine:'entryLineColor',
-      labels:'labelsColor', emaCrossUp:'emaCrossUpColor', emaCrossDown:'emaCrossDownColor' }
+      labels:'labelsColor', emaCrossUp:'emaCrossUpColor', emaCrossDown:'emaCrossDownColor',
+      filterZones:'filterZonesColor' }
     const SHAPES = ['arrowUp','arrowDown','circle','square','oblicua']
     return (
       <div style={{display:'flex', flexWrap:'wrap', gap:6}}>
@@ -104,8 +106,9 @@ export default function StrategyEditorPanel({ strForm, setStrForm, strategy, onS
           {key:'arrows',      label:'Flechas',   icon:'↑',  hasShape:true, shapeKey:'arrowsShape',      shapeDefault:'arrowUp'},
           {key:'entryLine',   label:'Entrada',   icon:'—',  hasShape:false},
           {key:'labels',      label:'Etiquetas', icon:'#',  hasShape:false},
-          {key:'emaCrossUp',  label:'↗ Cruce',   icon:'↗',  hasShape:true, shapeKey:'emaCrossUpShape',  shapeDefault:'circle'},
-          {key:'emaCrossDown',label:'↘ Cruce',   icon:'↘',  hasShape:true, shapeKey:'emaCrossDownShape',shapeDefault:'circle'},
+          {key:'emaCrossUp',  label:'↗ Cruce',      icon:'↗',  hasShape:true, shapeKey:'emaCrossUpShape',  shapeDefault:'circle'},
+          {key:'emaCrossDown',label:'↘ Cruce',      icon:'↘',  hasShape:true, shapeKey:'emaCrossDownShape',shapeDefault:'circle'},
+          {key:'filterZones', label:'Zonas filtro', icon:'▨',  hasShape:false},
         ].map(({key,label,icon,hasShape,shapeKey,shapeDefault}) => {
           const on = vis[key], ck = COLOR_KEY[key]
           return (

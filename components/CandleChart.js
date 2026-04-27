@@ -692,12 +692,18 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       // ── Zonas de filtro SP500 — bandas de fondo rojas ──
       const drawFilterZones=()=>{
         const svg=svgRef.current; if(!svg||!chartRef.current) return
+        if(visuals?.filterZones===false) { svg.querySelectorAll('.filter-zone').forEach(el=>el.remove()); return }
         svg.querySelectorAll('.filter-zone').forEach(el=>el.remove())
         const zones=filterZonesRef.current; if(!zones?.length) return
         const ts=chartRef.current.timeScale()
         const chartW=containerRef.current?.clientWidth||800
         const chartH=containerRef.current?.clientHeight||480
         const NS2='http://www.w3.org/2000/svg'
+        const zoneFill=(()=>{
+          const hex=(visuals?.filterZonesColor||'#ff5050').replace('#','')
+          const r=parseInt(hex.slice(0,2),16),g=parseInt(hex.slice(2,4),16),b=parseInt(hex.slice(4,6),16)
+          return `rgba(${r},${g},${b},0.13)`
+        })()
         zones.forEach(zone=>{
           try{
             const rawX1=ts.timeToCoordinate(zone.from)
@@ -708,7 +714,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
             if(right<=left) return
             const rect=document.createElementNS(NS2,'rect')
             Object.entries({x:String(left),y:'0',width:String(right-left),
-              height:String(chartH),fill:'rgba(255,80,80,0.12)',
+              height:String(chartH),fill:zoneFill,
               class:'filter-zone','pointer-events':'none'
             }).forEach(([k,v])=>rect.setAttribute(k,v))
             svg.insertBefore(rect,svg.firstChild)  // detrás de labels/markers
