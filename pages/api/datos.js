@@ -179,6 +179,18 @@ export default async function handler(req, res) {
     const data    = allData.filter(d => new Date(d.date) >= cutoff)
     if (!data.length) throw new Error('Sin datos para ' + simbolo)
 
+    // ── Fetch SP500 (shared: filtro code_js + equity curves — un solo fetch) ──
+    let sp500Data = null
+    const sp500Map = {}
+    try {
+      const sp500Raw = await fetchAV('^GSPC', years + 1)
+      sp500Data = sp500Raw.filter(d => d.date >= data[0].date)
+      sp500Data.forEach(d => { sp500Map[d.date] = d.close })
+    } catch (_) { sp500Data = null }
+
+    // ── Inyectar sp500Close en cada barra para que code_js pueda usarlo ──
+    data.forEach(d => { d.sp500Close = sp500Map[d.date] ?? null })
+
     // ── Execute strategy in sandbox ──
     const wrappedCode = `"use strict";\n${codeJs}\nreturn run;`
     const getRunFn = new Function('calcEMA','calcSMA','calcRSI','calcATR','calcMACD', wrappedCode)
@@ -209,12 +221,7 @@ export default async function handler(req, res) {
     const p0 = data[0].close, pN = data[data.length - 1].close
     const ganBH = capital_ini * (pN / p0 - 1)
 
-    // ── Equity curves ──
-    let sp500Data = null
-    try {
-      const sp500Raw = await fetchAV('^GSPC', years + 1)
-      sp500Data = sp500Raw.filter(d => d.date >= data[0].date)
-    } catch (_) { sp500Data = null }
+    // ── Equity curves (reutiliza sp500Data ya fetchado arriba) ──
     const curves = calcEquityCurves(trades, data, capital_ini, data[0].date, sp500Data)
 
     return res.status(200).json({
