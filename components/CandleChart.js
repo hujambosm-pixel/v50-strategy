@@ -571,6 +571,16 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       const drawTradeLabels=()=>{
         const svg=svgRef.current; if(!svg||!candlesRef.current||!chartRef.current) return
         const NS='http://www.w3.org/2000/svg'
+        // BUG 1 FIX: si ningún trade tiene coordenadas válidas, es un estado transitorio
+        // (chart en resize/applyOptions) — no limpiar para evitar que queden vacías
+        const hasValidCoords=tradeMAEs.some(t=>{
+          if(!t.entryDate&&!t.exitDate) return false
+          const ts=chartRef.current?.timeScale()
+          const x1=ts?.timeToCoordinate(t.entryDate)
+          const x2=ts?.timeToCoordinate(t.exitDate)
+          return x1!=null||x2!=null
+        })
+        if(tradeMAEs.length>0&&!hasValidCoords) return
         svg.querySelectorAll('.trade-label').forEach(el=>el.remove())
         svg.querySelectorAll('.obl-marker').forEach(el=>el.remove())
         // Dibujar marcadores oblicuos (independiente del toggle labels)

@@ -2964,7 +2964,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.98</title>
+        <title>Trading Simulator V9.99</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3041,7 +3041,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.98
+            <span className="dot"/>Trading Simulator V9.99
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -3415,12 +3415,16 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       return a.name.localeCompare(b.name)
                     })
                     const totalWl=watchlist.length
-                    if(!all.length) return <div style={{padding:'12px',fontFamily:MONO,fontSize:11,color:'#8aadcc'}}>Sin activos para los filtros activos</div>
+                    // BUG 2 FIX: calcular openSymbols/allFiltered ANTES del badge
+                    // para que el contador refleje exactamente lo que se muestra
+                    const openSymbols=new Set((tlFifo.openPositions||[]).map(p=>(p.symbol||'').toUpperCase()))
+                    const allFiltered=onlyOpen?all.filter(w=>openSymbols.has((w.symbol||'').toUpperCase())):all
+                    if(!allFiltered.length) return <div style={{padding:'12px',fontFamily:MONO,fontSize:11,color:'#8aadcc'}}>Sin activos para los filtros activos</div>
                     // Count badge + ranking button above list
                     const hasRanking=Object.keys(rankingData).length>0
                     const countBadge=(
                       <div style={{padding:'3px 8px',fontFamily:MONO,fontSize:11,color:'#a8ccdf',background:'var(--bg2)',borderBottom:'1px solid var(--border)',display:'flex',gap:5,alignItems:'center',flexWrap:'wrap'}}>
-                        <span style={{color:'#a8c8e8',fontWeight:600}}>{all.length}</span>
+                        <span style={{color:'#a8c8e8',fontWeight:600}}>{allFiltered.length}</span>
                         <span style={{color:'#8abcd4'}}>activos</span>
                         {rankingRunning&&<span style={{color:'#ffd166',fontSize:10}}>⟳ {rankingProgress.done}/{rankingProgress.total}</span>}
                         {hasRanking&&!rankingRunning&&<span style={{color:'#00e5a0',fontSize:9}} title={rankingStratName?`Calculado con: ${rankingStratName}`:''}>🏆 {rankingStratName||'Ranking'}</span>}
@@ -3432,9 +3436,6 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                           style={{background:'transparent',border:'1px solid #1a2d45',color:'#5a7a95',fontFamily:MONO,fontSize:9,padding:'2px 5px',borderRadius:3,cursor:'pointer'}}>✕</button>}
                       </div>
                     )
-                    // Símbolos con posición abierta en Tradelog
-                    const openSymbols=new Set((tlFifo.openPositions||[]).map(p=>(p.symbol||'').toUpperCase()))
-                    const allFiltered=onlyOpen?all.filter(w=>openSymbols.has((w.symbol||'').toUpperCase())):all
                     return (<>{countBadge}{allFiltered.map(w=>{
                       const wListNames=(w.list_ids||[]).map(lid=>wlLists.find(l=>l.id===lid)?.name).filter(Boolean)
                       return(
