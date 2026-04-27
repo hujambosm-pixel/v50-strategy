@@ -1,6 +1,25 @@
 import { useState } from 'react'
 import { MONO } from '../lib/utils'
 
+const SUMMARY_SYSTEM_PROMPT = `You are a professional quantitative trading analyst. Analyze the following JavaScript backtesting strategy code and its JSON parameters. Generate a structured summary in Spanish with these sections:
+
+INDICADORES: List all technical indicators used with their periods/parameters from the JSON.
+
+CONDICIONES DE ENTRADA: Describe precisely each entry condition, the trigger mechanism, and any pending order logic.
+
+GESTIÓN DE LA POSICIÓN: Describe stop loss placement, trailing mechanisms, and position management rules.
+
+CONDICIONES DE SALIDA: Describe each exit condition precisely.
+
+FILTROS Y RESTRICCIONES: Any market filters or trade restrictions.
+
+Use professional trading terminology. Be precise with parameter values from the JSON. Use bullet points. Be concise but complete.`
+
+function getGroqKey() {
+  try { return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.integrations?.groqKey||'' }
+  catch(_) { return '' }
+}
+
 const S = {
   wrap:     { display:'flex', flexDirection:'column', gap:16, padding:'20px 24px', fontFamily:MONO, color:'#c8d8e8', maxWidth:760, margin:'0 auto' },
   label:    { fontSize:11, color:'#7a9bc0', marginBottom:4, display:'block' },
@@ -25,6 +44,7 @@ function hexRgb(hex) {
 
 export default function StrategyEditorPanel({ strForm, setStrForm, strategy, onSave, onCancel, onDelete, onClone, saving }) {
   const [paramsError, setParamsError] = useState(null)
+  const [summaryLoading, setSummaryLoading] = useState(false)
 
   const upd = (k, v) => setStrForm(f => ({ ...f, [k]: v }))
   const isNew = !strategy?.id
@@ -38,6 +58,33 @@ export default function StrategyEditorPanel({ strForm, setStrForm, strategy, onS
     onSave()
   }
 
+  const handleSummary = async () => {
+    const code = (strForm.code_js || '').trim()
+    if (!code) return
+    const key = getGroqKey()
+    if (!key) { alert('Configura tu Groq API key en Ajustes → Integraciones'); return }
+    setSummaryLoading(true)
+    try {
+      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+        body: JSON.stringify({
+          model: 'llama-3.3-70b-versatile',
+          messages: [
+            { role: 'system', content: SUMMARY_SYSTEM_PROMPT },
+            { role: 'user',   content: `CODE:\n${code}\n\nPARAMS:\n${strForm.params || '{}'}` },
+          ],
+          max_tokens: 1024,
+          temperature: 0.2,
+        }),
+      })
+      const data = await res.json()
+      const text = data?.choices?.[0]?.message?.content
+      if (text) upd('description', text.trim())
+      else alert('Groq no devolvió respuesta: ' + JSON.stringify(data).slice(0, 200))
+    } catch(e) { alert('Error Groq: ' + e.message) }
+    finally { setSummaryLoading(false) }
+  }
 
   return (
     <div style={S.wrap}>
@@ -99,26 +146,42 @@ export default function StrategyEditorPanel({ strForm, setStrForm, strategy, onS
 
       <div style={S.separator} />
 
-      {/* ── Descripción / Resumen ── */}
-      <div style={S.field}>
-        <label style={S.label}>Descripción / Resumen</label>
-        <textarea style={{...S.textarea, minHeight:100}}
-          value={strForm.description||''}
-          onChange={e=>upd('description',e.target.value)}
-          placeholder="Descripción o resumen de la lógica de la estrategia"
-        />
-      </div>
+      {/* ── Descripción (60%) + Parámetros (40%) lado a lado ── */}
+      <div style={{display:'grid', gridTemplateColumns:'3fr 2fr', gap:12, alignItems:'start'}}>
 
-      {/* ── Parámetros (JSON) ── */}
-      <div style={S.field}>
-        <label style={S.label}>Parámetros (JSON)</label>
-        <textarea style={{...S.textarea, minHeight:120}}
-          value={strForm.params||''}
-          onChange={e=>{ upd('params',e.target.value); setParamsError(null) }}
-          placeholder={'{\n  "emaR": 10,\n  "emaL": 11\n}'}
-          spellCheck={false}
-        />
-        {paramsError && <span style={{fontSize:11,color:'#ff4d6d',marginTop:3}}>⚠ {paramsError}</span>}
+        {/* Descripción / Resumen */}
+        <div style={S.field}>
+          <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4}}>
+            <label style={{...S.label, marginBottom:0}}>Descripción / Resumen</label>
+            <button
+              onClick={handleSummary}
+              disabled={summaryLoading || !strForm.code_js}
+              style={{...S.btn('#a78bfa', summaryLoading || !strForm.code_js), padding:'5px 10px', fontSize:11}}
+            >
+              {summaryLoading ? '⟳ Generando…' : '🔄 Actualizar resumen'}
+            </button>
+          </div>
+          <textarea
+            style={{...S.textarea, minHeight:160}}
+            value={strForm.description||''}
+            onChange={e=>upd('description',e.target.value)}
+            placeholder="Descripción o resumen de la lógica de la estrategia"
+          />
+        </div>
+
+        {/* Parámetros (JSON) */}
+        <div style={S.field}>
+          <label style={S.label}>Parámetros (JSON)</label>
+          <textarea
+            style={{...S.textarea, minHeight:160}}
+            value={strForm.params||''}
+            onChange={e=>{ upd('params',e.target.value); setParamsError(null) }}
+            placeholder={'{\n  "emaR": 10,\n  "emaL": 11\n}'}
+            spellCheck={false}
+          />
+          {paramsError && <span style={{fontSize:11,color:'#ff4d6d',marginTop:3}}>⚠ {paramsError}</span>}
+        </div>
+
       </div>
 
       {/* ── Marcadores Visuales ── */}
@@ -211,7 +274,6 @@ export default function StrategyEditorPanel({ strForm, setStrForm, strategy, onS
           spellCheck={false}
         />
       </div>
-
 
     </div>
   )
