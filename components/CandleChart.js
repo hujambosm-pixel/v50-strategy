@@ -250,6 +250,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
   const rsiChartRef=useRef(null), macdChartRef=useRef(null)
   const rsiContainerRef=useRef(null), macdContainerRef=useRef(null)
   const chartAliveRef=useRef(true)
+  const innerCleanupRef=useRef(null)
   const rulerStart=useRef(null), rulerActiveR=useRef(rulerActive)
   const priceAlarmLinesRef=useRef([])    // [{alarmId, priceLine, price}]
   const dragRef=useRef(null)             // {lineObj} while dragging
@@ -295,6 +296,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
     }
     if(typeof window==='undefined'||!containerRef.current) return
     import('lightweight-charts').then(({createChart,CrosshairMode,LineStyle})=>{
+      let disposed=false
       if(chartRef.current){chartRef.current.remove();chartRef.current=null}
       console.log('[v50] chart created height',chartHeight)
       const chart=createChart(containerRef.current,{
@@ -724,7 +726,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
 
       // Redibujar etiquetas al hacer zoom/scroll — guardamos unsub para cleanup
       chartAliveRef.current=true
-      const unsubLabels=chart.timeScale().subscribeVisibleTimeRangeChange(()=>{ if(chartAliveRef.current) setTimeout(()=>{ if(chartAliveRef.current){drawTradeLabels();drawFilterZones()} },30) })
+      const unsubLabels=chart.timeScale().subscribeVisibleTimeRangeChange(()=>{ if(!disposed&&chartAliveRef.current) setTimeout(()=>{ if(!disposed&&chartAliveRef.current){drawTradeLabels();drawFilterZones()} },30) })
 
       // ── Regla SVG ──
       const svg=svgRef.current, NS='http://www.w3.org/2000/svg'
@@ -1143,7 +1145,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       })
 
       const ro=new ResizeObserver(()=>{
-        if(!chartAliveRef.current) return  // callback zombie post-disconnect — ignorar
+        if(disposed||!chartAliveRef.current) return  // callback zombie post-dispose/disconnect — ignorar
         if(!containerRef.current||!chartRef.current) return
         try{
           const opts={width:containerRef.current.clientWidth}
@@ -1159,20 +1161,21 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         setTimeout(()=>{drawTradeLabels();drawFilterZones()},50)
       })
       ro.observe(containerRef.current)
-      setTimeout(()=>{drawTradeLabels();drawFilterZones()},200)
+      setTimeout(()=>{if(disposed)return;drawTradeLabels();drawFilterZones()},200)
 
       // FIX 2: si el chart se crea en modo fillHeight, forzar resize a window.innerHeight
       if(fillHeightRef.current){
         setTimeout(()=>{
+          if(disposed) return
           const w=containerRef.current?.clientWidth||window.innerWidth
           const h=window.innerHeight-30
           if(w>0&&h>0) chartRef.current?.resize(w,h)
         },50)
       }
 
-      return()=>{chartAliveRef.current=false;try{unsubLabels()}catch(_){};cnt.removeEventListener('mousemove',onMove);cnt.removeEventListener('mousedown',onMouseDown);window.removeEventListener('mouseup',onMouseUp);window.removeEventListener('keydown',onKeyDown);window.removeEventListener('keyup',onKeyUp);ro.disconnect()}
+      innerCleanupRef.current=()=>{disposed=true;chartAliveRef.current=false;try{unsubLabels()}catch(_){};cnt.removeEventListener('mousemove',onMove);cnt.removeEventListener('mousedown',onMouseDown);window.removeEventListener('mouseup',onMouseUp);window.removeEventListener('keydown',onKeyDown);window.removeEventListener('keyup',onKeyUp);ro.disconnect()}
     })
-    return()=>{chartAliveRef.current=false;if(rsiChartRef.current){if(rsiChartRef.current._isOverlay){try{const c=chartRef.current;if(c){for(const s of rsiChartRef.current._series){c.removeSeries(s)};c.priceScale('rsi').applyOptions({visible:false});c.priceScale('right').applyOptions({scaleMargins:{top:0.02,bottom:0.02}})}}catch(_){}}else{try{rsiChartRef.current.remove()}catch(_){}};rsiChartRef.current=null};if(macdChartRef.current){try{macdChartRef.current.remove()}catch(_){};macdChartRef.current=null};if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null}}
+    return()=>{innerCleanupRef.current?.();innerCleanupRef.current=null;chartAliveRef.current=false;if(rsiChartRef.current){if(rsiChartRef.current._isOverlay){try{const c=chartRef.current;if(c){for(const s of rsiChartRef.current._series){c.removeSeries(s)};c.priceScale('rsi').applyOptions({visible:false});c.priceScale('right').applyOptions({scaleMargins:{top:0.02,bottom:0.02}})}}catch(_){}}else{try{rsiChartRef.current.remove()}catch(_){}};rsiChartRef.current=null};if(macdChartRef.current){try{macdChartRef.current.remove()}catch(_){};macdChartRef.current=null};if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null}}
   },[data,emaRPeriod,emaLPeriod,trades,maxDD,labelMode,definition,isBareChart])
 
   // ── isBareChart: ajustar altura al resize de ventana ──
