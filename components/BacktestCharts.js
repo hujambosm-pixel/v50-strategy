@@ -142,11 +142,12 @@ export function OccupancyBarChart({trades, chartData, capitalIni, syncRef, showM
   return <div ref={ref} style={{minHeight:100}}/>
 }
 
-// ── McOccupancyChart — MC capital invertido chart (same style as OccupancyBarChart) ──
-export function McOccupancyChart({occupancyCurve, compoundCurve, capitalIni, occMode='compound', syncRef}) {
+// ── McOccupancyChart — MC capital empleado, multi-series ──
+export function McOccupancyChart({series=[], capitalIni, syncRef}) {
   const ref=useRef(null), chartRef=useRef(null)
   useEffect(()=>{
-    if(!ref.current||!occupancyCurve?.length) return
+    const validSeries=series.filter(s=>s.occupancyCurve?.length)
+    if(!ref.current||!validSeries.length) return
     import('lightweight-charts').then(({createChart,CrosshairMode})=>{
       if(chartRef.current){chartRef.current.__syncCleanup?.();chartRef.current.remove();chartRef.current=null}
       const chart=createChart(ref.current,{
@@ -158,20 +159,21 @@ export function McOccupancyChart({occupancyCurve, compoundCurve, capitalIni, occ
         timeScale:{borderColor:'#1a2d45',timeVisible:false},
       })
       chartRef.current=chart
-      const isComp=occMode==='compound'
-      const color=isComp?'#00e5a0':'#00d4ff'
-      const area=chart.addAreaSeries({
-        lineColor:color,topColor:`${color}55`,bottomColor:`${color}08`,
-        lineWidth:2,lastValueVisible:true,priceLineVisible:false,
-        priceFormat:{type:'price',precision:0,minMove:1},
+      // One area series per strategy entry
+      validSeries.forEach(s=>{
+        const compMap=new Map((s.compoundCurve||[]).map(c=>[c.date,c.value]))
+        const color=s.color
+        const area=chart.addAreaSeries({
+          lineColor:color,topColor:`${color}55`,bottomColor:`${color}08`,
+          lineWidth:2,lastValueVisible:true,priceLineVisible:false,
+          priceFormat:{type:'price',precision:0,minMove:1},
+        })
+        area.setData(s.occupancyCurve.map(p=>{
+          const pct=p.value/100
+          const total=compMap.get(p.date)??capitalIni
+          return{time:p.date,value:pct*total}
+        }))
       })
-      // Convert % occupancy → € amount invested
-      const lastCompound=compoundCurve?.slice(-1)[0]?.value||capitalIni
-      area.setData(occupancyCurve.map(p=>{
-        const pct=p.value/100
-        const total=isComp?lastCompound:capitalIni
-        return{time:p.date,value:pct*total}
-      }))
       // Sync
       if(syncRef?.current){
         const syncId=Symbol()
@@ -191,7 +193,7 @@ export function McOccupancyChart({occupancyCurve, compoundCurve, capitalIni, occ
       return()=>ro.disconnect()
     })
     return()=>{if(chartRef.current){chartRef.current.__syncCleanup?.();chartRef.current.remove();chartRef.current=null}}
-  },[occupancyCurve,compoundCurve,capitalIni,occMode,syncRef])
+  },[series,capitalIni,syncRef])
   return <div ref={ref} style={{minHeight:100}}/>
 }
 
