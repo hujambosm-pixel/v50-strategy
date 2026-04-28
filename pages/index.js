@@ -2965,7 +2965,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.110</title>
+        <title>Trading Simulator V9.111</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3042,7 +3042,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.110
+            <span className="dot"/>Trading Simulator V9.111
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5382,25 +5382,59 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                     <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:11}}>
                       <thead>
                         <tr style={{borderBottom:'1px solid var(--border)'}}>
-                          {['Activo','Trades','Win%','G.Simple','G.Comp','Días inv.'].map(h=>(
+                          {['Activo','Trades','Win%','G.Simple','G.Comp','Días inv.','CAGR','Max DD','F.Bº','Ganancia(%)'].map(h=>(
                             <th key={h} style={{padding:'4px 10px',textAlign:'left',color:'var(--text3)',fontWeight:400,fontSize:9}}>{h}</th>
                           ))}
                         </tr>
                       </thead>
                       <tbody>
-                        {mcResult.assetStats.map(a=>(
-                          <tr key={a.symbol} style={{borderBottom:'1px solid rgba(255,255,255,0.03)',cursor:'pointer'}}
-                            onClick={()=>{setSimbolo(a.symbol);setSidePanel('watchlist')}}
-                            onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.05)'}
-                            onMouseOut={e=>e.currentTarget.style.background='transparent'}>
-                            <td style={{padding:'5px 10px',color:'var(--accent)',fontWeight:700}}>{a.symbol}</td>
-                            <td style={{padding:'5px 10px',color:'var(--text)'}}>{a.trades}</td>
-                            <td style={{padding:'5px 10px',color:a.winRate>=50?'#00e5a0':'#ff4d6d'}}>{fmt(a.winRate,1,'%')}</td>
-                            <td style={{padding:'5px 10px',color:a.ganSimple>=0?'#00e5a0':'#ff4d6d'}}>{a.ganSimple>=0?'+':''}{fmt(a.ganSimple,0,'€')}</td>
-                            <td style={{padding:'5px 10px',color:a.ganComp>=0?'#00e5a0':'#ff4d6d'}}>{a.ganComp>=0?'+':''}{fmt(a.ganComp,0,'€')}</td>
-                            <td style={{padding:'5px 10px',color:'#00d4ff'}}>{a.totalDias}d</td>
-                          </tr>
-                        ))}
+                        {mcResult.assetStats.map(a=>{
+                          // Ganancia(%) — simple
+                          const ganPct = mcResult.slotCapital > 0 ? (a.ganComp / mcResult.slotCapital) * 100 : 0
+                          // Años transcurridos para CAGR
+                          const startMs = mcResult.startDate ? new Date(mcResult.startDate).getTime() : 0
+                          const endMs = Date.now()
+                          const years = startMs > 0 ? (endMs - startMs) / (365.25 * 24 * 3600 * 1000) : 5
+                          // CAGR
+                          const cagr = mcResult.slotCapital > 0 && years > 0
+                            ? (Math.pow((mcResult.slotCapital + a.ganComp) / mcResult.slotCapital, 1/years) - 1) * 100
+                            : 0
+                          // Trades de este activo
+                          const assetTrades = (mcResult.allTrades || []).filter(t => t.symbol === a.symbol)
+                          // Factor de Beneficio
+                          const sumWin  = assetTrades.filter(t => t.pnlSimple > 0).reduce((s,t) => s + t.pnlSimple, 0)
+                          const sumLoss = assetTrades.filter(t => t.pnlSimple < 0).reduce((s,t) => s + Math.abs(t.pnlSimple), 0)
+                          const fBenef  = sumLoss > 0 ? sumWin / sumLoss : (sumWin > 0 ? 999 : 0)
+                          // Max Drawdown — solo en modo slots (capitalTras es per-activo)
+                          let maxDD = 0
+                          if (mcResult.modoAsig === 'slots' && assetTrades.length > 0) {
+                            let peak = mcResult.slotCapital
+                            assetTrades.forEach(t => {
+                              const val = t.capitalTras
+                              if (val > peak) peak = val
+                              const dd = peak > 0 ? (peak - val) / peak * 100 : 0
+                              if (dd > maxDD) maxDD = dd
+                            })
+                          }
+                          const ddDisplay = mcResult.modoAsig === 'slots' ? fmt(-maxDD, 2, '%') : '—'
+                          return (
+                            <tr key={a.symbol} style={{borderBottom:'1px solid rgba(255,255,255,0.03)',cursor:'pointer'}}
+                              onClick={()=>{setSimbolo(a.symbol);setSidePanel('watchlist')}}
+                              onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.05)'}
+                              onMouseOut={e=>e.currentTarget.style.background='transparent'}>
+                              <td style={{padding:'5px 10px',color:'var(--accent)',fontWeight:700}}>{a.symbol}</td>
+                              <td style={{padding:'5px 10px',color:'var(--text)'}}>{a.trades}</td>
+                              <td style={{padding:'5px 10px',color:a.winRate>=50?'#00e5a0':'#ff4d6d'}}>{fmt(a.winRate,1,'%')}</td>
+                              <td style={{padding:'5px 10px',color:a.ganSimple>=0?'#00e5a0':'#ff4d6d'}}>{a.ganSimple>=0?'+':''}{fmt(a.ganSimple,0,'€')}</td>
+                              <td style={{padding:'5px 10px',color:a.ganComp>=0?'#00e5a0':'#ff4d6d'}}>{a.ganComp>=0?'+':''}{fmt(a.ganComp,0,'€')}</td>
+                              <td style={{padding:'5px 10px',color:'#00d4ff'}}>{a.totalDias}d</td>
+                              <td style={{padding:'5px 10px',color:isFinite(cagr)&&!isNaN(cagr)?cagr>=0?'#00e5a0':'#ff4d6d':'#4a6a88'}}>{isFinite(cagr)&&!isNaN(cagr)?(cagr>=0?'+':'')+fmt(cagr,2,'%'):'—'}</td>
+                              <td style={{padding:'5px 10px',color:mcResult.modoAsig==='slots'?'#ff4d6d':'#4a6a88'}}>{ddDisplay}</td>
+                              <td style={{padding:'5px 10px',color:isFinite(fBenef)&&!isNaN(fBenef)?fBenef>=1?'#00e5a0':'#ff4d6d':'#4a6a88'}}>{isFinite(fBenef)&&!isNaN(fBenef)?fmt(fBenef,2,'x'):'—'}</td>
+                              <td style={{padding:'5px 10px',color:isFinite(ganPct)&&!isNaN(ganPct)?ganPct>=0?'#00e5a0':'#ff4d6d':'#4a6a88'}}>{isFinite(ganPct)&&!isNaN(ganPct)?(ganPct>=0?'+':'')+fmt(ganPct,2,'%'):'—'}</td>
+                            </tr>
+                          )
+                        })}
                       </tbody>
                     </table>
                   </div>
