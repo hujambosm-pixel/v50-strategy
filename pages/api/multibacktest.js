@@ -171,7 +171,7 @@ function buildSlotsCurves(assetResults, capitalIni) {
         for (let i = filtData.length-1; i>=0; i--) { if (filtData[i].date <= date) { bar=filtData[i]; break } }
         if (bar) { bh = slotCapital * (bar.close / p0); closePx = bar.close }
       }
-      const openPnl = openTrades.reduce((s,t) => closePx!=null ? s+(closePx-t.entryPx)/t.entryPx*slotCapital : s, 0)
+      const openPnl = openTrades.reduce((s,t) => { if(closePx==null) return s; const ep=t.entryPx??t.entryPrice; return ep!=null ? s+(closePx-ep)/ep*slotCapital : s }, 0)
       byDate[date] = { simple, compound, open, bh, openPnl }
     })
     return byDate
@@ -351,7 +351,7 @@ function buildCustomCurves(assetResults, capitalIni, weights) {
         for (let i = filtData.length-1; i>=0; i--) { if (filtData[i].date <= date) { bar=filtData[i]; break } }
         if (bar) { bh = slotCapital * (bar.close / p0); closePx = bar.close }
       }
-      const openPnl = openTrades.reduce((s,t) => closePx!=null ? s+(closePx-t.entryPx)/t.entryPx*slotCapital : s, 0)
+      const openPnl = openTrades.reduce((s,t) => { if(closePx==null) return s; const ep=t.entryPx??t.entryPrice; return ep!=null ? s+(closePx-ep)/ep*slotCapital : s }, 0)
       byDate[date] = { simple, compound, open, bh, openPnl }
     })
     return { byDate, slotCapital }
