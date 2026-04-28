@@ -581,6 +581,10 @@ export default async function handler(req, res) {
       const totalDias = ar.trades.reduce((s,t)=>s+t.dias,0)
       const pct = weights?.[ar.symbol] ?? (100 / n)
       const { maxDD: assetMaxDD, maxDDDate: assetMaxDDDate } = _calcAssetMaxDD(ar.trades, ar.data, slotCapital)
+      const filtData = ar.data?.filter(d => d.date >= curves.startDate) ?? []
+      const p0 = filtData[0]?.close
+      const pN = filtData[filtData.length - 1]?.close
+      const ganBH = (p0 && pN && p0 > 0) ? slotCapital * (pN / p0 - 1) : 0
       return {
         symbol: ar.symbol,
         trades: ar.trades.length,
@@ -593,6 +597,7 @@ export default async function handler(req, res) {
         weight: pct,
         maxDD: assetMaxDD,
         maxDDDate: assetMaxDDDate,
+        ganBH,
       }
     })
 
