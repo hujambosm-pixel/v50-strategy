@@ -2967,7 +2967,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.113</title>
+        <title>Trading Simulator V9.114</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3044,7 +3044,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.113
+            <span className="dot"/>Trading Simulator V9.114
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5176,80 +5176,202 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                   </div>
                 </div>
 
-                {/* ── Tabla comparativa de estrategias (multi-estrategia) ── */}
-                {mcMultiResults.length>1&&(()=>{
-                  // B&H reference row from active strategy result
-                  const bhLast=mcResult.bhCurve?.slice(-1)[0]?.value||Number(capitalIni)
-                  const bhCapIni=Number(capitalIni)
+                {/* ── Tabla unificada: Comparativa + Resumen por activo ── */}
+                {(()=>{
+                  const isMulti=mcMultiResults.length>1
+                  const capIni=Number(capitalIni)
+                  // Lista de estrategias: multi → mcMultiResults; single → wrapper sintético
+                  const stratList=isMulti
+                    ? mcMultiResults
+                    : [{id:currentStratId||'__single__',name:strategies.find(s=>s.id===currentStratId)?.name||'Estrategia activa',color:'#00d4ff',result:mcResult}]
+                  // B&H globals (del result activo)
+                  const bhLast=mcResult.bhCurve?.slice(-1)[0]?.value||capIni
                   const bhFd=mcResult.startDate?new Date(mcResult.startDate):null
                   const bhLd=mcResult.bhCurve?.slice(-1)[0]?.date?new Date(mcResult.bhCurve.slice(-1)[0].date):new Date()
                   const bhAnios=bhFd&&bhLd?(bhLd-bhFd)/86400000/365.25:1
-                  const bhCagr=(Math.pow(Math.max(bhLast,0.01)/bhCapIni,1/Math.max(bhAnios,0.01))-1)*100
-                  const bhProfit=bhLast-bhCapIni
+                  const bhCagr=(Math.pow(Math.max(bhLast,0.01)/Math.max(capIni,0.01),1/Math.max(bhAnios,0.01))-1)*100
+                  const bhProfit=bhLast-capIni
+                  const bhProfitPct=capIni>0?bhProfit/capIni*100:0
+                  const allOpenKeys=isMulti?[...stratList.map(r=>r.id),'__bh__']:[]
+                  const allOpen=isMulti&&allOpenKeys.length>0&&allOpenKeys.every(k=>mcAssetOpen[k]!==false)
                   return(
                     <div style={{padding:'10px 16px',borderBottom:'1px solid var(--border)'}}>
-                      <div style={{fontFamily:MONO,fontSize:10,color:'var(--text3)',marginBottom:8,letterSpacing:'0.05em'}}>COMPARATIVA DE ESTRATEGIAS</div>
-                      <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:11}}>
-                        <thead>
-                          <tr style={{borderBottom:'1px solid var(--border)'}}>
-                            {['Estrategia','Ops','Win %','CAGR','Max DD','P.Fac','Profit €'].map(h=>(
-                              <th key={h} style={{padding:'3px 6px',textAlign:'left',color:'var(--text3)',fontWeight:400,fontSize:9}}>{h}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {mcMultiResults.map((r)=>{
-                            const allT=r.result.allTrades||[]
-                            const wins=allT.filter(t=>t.pnlPct>=0),losses=allT.filter(t=>t.pnlPct<0)
-                            const winRate=allT.length?wins.length/allT.length*100:0
-                            const lastC=r.result.compoundCurve?.slice(-1)[0]?.value||Number(capitalIni)
-                            const capIni=Number(capitalIni)
-                            const fd=r.result.startDate?new Date(r.result.startDate):null
-                            const ld=r.result.compoundCurve?.slice(-1)[0]?.date?new Date(r.result.compoundCurve.slice(-1)[0].date):new Date()
-                            const anios=fd&&ld?(ld-fd)/86400000/365.25:1
-                            const cagrC=(Math.pow(Math.max(lastC,0.01)/capIni,1/Math.max(anios,0.01))-1)*100
-                            const grossWin=wins.reduce((s,t)=>s+(t.pnlSimple||0),0)
-                            const grossLoss=Math.abs(losses.reduce((s,t)=>s+(t.pnlSimple||0),0))
-                            const pf=grossLoss>0?grossWin/grossLoss:grossWin>0?99:0
-                            const profit=lastC-capIni
-                            const isActive=r.id===currentStratId
-                            return(
-                              <tr key={r.id} style={{borderBottom:'1px solid rgba(255,255,255,0.03)'}}>
-                                <td style={{padding:'4px 6px'}}>
-                                  <div style={{display:'flex',alignItems:'center',gap:4}}>
-                                    <div style={{width:7,height:7,borderRadius:'50%',background:r.color,flexShrink:0}}/>
-                                    <span style={{color:r.color,fontWeight:isActive?700:400}}>{r.name}</span>
-                                    {isActive&&<span style={{fontSize:7,color:'#00d4ff',background:'rgba(0,212,255,0.1)',border:'1px solid rgba(0,212,255,0.25)',borderRadius:2,padding:'0 3px',flexShrink:0}}>✓</span>}
-                                  </div>
-                                </td>
-                                <td style={{padding:'4px 6px',color:'#ffd166'}}>{allT.length}</td>
-                                <td style={{padding:'4px 6px',color:winRate>=50?'#00e5a0':'#ff4d6d'}}>{winRate.toFixed(1)}%</td>
-                                <td style={{padding:'4px 6px',color:cagrC>=0?'#00e5a0':'#ff4d6d'}}>{cagrC>=0?'+':''}{cagrC.toFixed(2)}%</td>
-                                <td style={{padding:'4px 6px',color:'#ff4d6d'}}>-{(r.result.maxDDCompound||0).toFixed(1)}%</td>
-                                <td style={{padding:'4px 6px',color:pf>=1.5?'#00e5a0':pf>=1?'#ffd166':'#ff4d6d'}}>{pf.toFixed(2)}x</td>
-                                <td style={{padding:'4px 6px',color:profit>=0?'#00e5a0':'#ff4d6d'}}>{profit>=0?'+':''}{fmt(profit,0,'€')}</td>
-                              </tr>
-                            )
-                          })}
-                          {/* B&H reference row */}
-                          {mcResult.bhCurve?.length>0&&(
-                            <tr style={{borderTop:'1px solid rgba(255,209,102,0.2)',background:'rgba(255,209,102,0.03)'}}>
-                              <td style={{padding:'4px 6px'}}>
-                                <div style={{display:'flex',alignItems:'center',gap:4}}>
-                                  <div style={{width:7,height:7,borderRadius:2,background:'#ffd166',flexShrink:0}}/>
-                                  <span style={{color:'#ffd166',fontStyle:'italic'}}>B&H Diversif.</span>
-                                </div>
-                              </td>
-                              <td style={{padding:'4px 6px',color:'#ffd166'}}>1</td>
-                              <td style={{padding:'4px 6px',color:'#4a6a88'}}>—</td>
-                              <td style={{padding:'4px 6px',color:bhCagr>=0?'#ffd166':'#ff4d6d'}}>{bhCagr>=0?'+':''}{bhCagr.toFixed(2)}%</td>
-                              <td style={{padding:'4px 6px',color:'#ff9a3c'}}>-{(mcResult.maxDDBH||0).toFixed(1)}%</td>
-                              <td style={{padding:'4px 6px',color:'#4a6a88'}}>—</td>
-                              <td style={{padding:'4px 6px',color:bhProfit>=0?'#ffd166':'#ff4d6d'}}>{bhProfit>=0?'+':''}{fmt(bhProfit,0,'€')}</td>
+                      {/* Título + botón contraer/expandir */}
+                      <div style={{display:'flex',alignItems:'center',marginBottom:8}}>
+                        <div style={{fontFamily:MONO,fontSize:10,color:'var(--text3)',letterSpacing:'0.05em'}}>COMPARATIVA DE ESTRATEGIAS</div>
+                        {isMulti&&(
+                          <button
+                            onClick={()=>setMcAssetOpen(prev=>{const next={};allOpenKeys.forEach(k=>{next[k]=!allOpen});return next})}
+                            style={{marginLeft:'auto',fontFamily:MONO,fontSize:9,padding:'2px 7px',borderRadius:3,cursor:'pointer',
+                              border:'1px solid #3d5a7a',background:'transparent',color:'#7aabcc'}}>
+                            {allOpen?'Contraer todo':'Expandir todo'}
+                          </button>
+                        )}
+                      </div>
+                      <div style={{overflowX:'auto'}}>
+                        <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:11}}>
+                          <thead>
+                            <tr style={{borderBottom:'1px solid var(--border)'}}>
+                              {[
+                                {h:'Estrategia / Activo',t:''},
+                                {h:'Ops',t:'Número total de operaciones cerradas en el período'},
+                                {h:'Win%',t:'Porcentaje de operaciones cerradas con ganancia sobre el total'},
+                                {h:'CAGR',t:'Tasa de crecimiento anual compuesta. Fórmula: (capital_final / capital_inicial)^(1/años) − 1'},
+                                {h:'Max DD',t:'Máxima caída desde un pico hasta el valle siguiente, incluyendo pérdidas no realizadas dentro de cada trade'},
+                                {h:'F.Bº',t:'Factor de Beneficio: suma de ganancias / suma de pérdidas. Por encima de 1 la estrategia es rentable'},
+                                {h:'G.Comp€',t:'Ganancia compuesta en euros. Las ganancias de cada trade se reinvierten en el siguiente'},
+                                {h:'G.Comp%',t:'Ganancia compuesta en porcentaje sobre el capital inicial asignado a este slot'},
+                                {h:'Cap.inv%',t:'Media diaria del capital en posición abierta sobre el capital del slot. Ejemplo: slot 5.000€, posición media 1.400€ → 28%'},
+                                {h:'T.inv%',t:'Porcentaje de días del período total en que había al menos una posición abierta en este activo'},
+                              ].map(({h,t})=>(
+                                <th key={h} title={t||undefined}
+                                  style={{padding:'3px 6px',textAlign:'left',color:'var(--text3)',fontWeight:400,fontSize:9,
+                                    cursor:t?'help':undefined,whiteSpace:'nowrap'}}>{h}</th>
+                              ))}
                             </tr>
-                          )}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody>
+                            {stratList.map(r=>{
+                              const isOpen=!isMulti||mcAssetOpen[r.id]!==false
+                              const isActive=r.id===currentStratId
+                              const allT=r.result.allTrades||[]
+                              const wins=allT.filter(t=>t.pnlPct>=0),losses=allT.filter(t=>t.pnlPct<0)
+                              const winRate=allT.length?wins.length/allT.length*100:0
+                              const lastC=r.result.compoundCurve?.slice(-1)[0]?.value||capIni
+                              const fd=r.result.startDate?new Date(r.result.startDate):null
+                              const ld=r.result.compoundCurve?.slice(-1)[0]?.date?new Date(r.result.compoundCurve.slice(-1)[0].date):new Date()
+                              const anios=fd&&ld?(ld-fd)/86400000/365.25:1
+                              const cagrC=(Math.pow(Math.max(lastC,0.01)/Math.max(capIni,0.01),1/Math.max(anios,0.01))-1)*100
+                              const grossWin=wins.reduce((s,t)=>s+(t.pnlSimple||0),0)
+                              const grossLoss=Math.abs(losses.reduce((s,t)=>s+(t.pnlSimple||0),0))
+                              const pf=grossLoss>0?grossWin/grossLoss:grossWin>0?99:0
+                              const profit=lastC-capIni
+                              const profitPct=capIni>0?profit/capIni*100:0
+                              const sc=r.result.slotCapital||capIni
+                              const rStats=r.result.assetStats||[]
+                              const avgCapInv=rStats.length?rStats.reduce((s,a)=>s+(a.capInvMedio||0),0)/rStats.length:0
+                              const avgTInv=rStats.length?rStats.reduce((s,a)=>s+(a.tInvertido||0),0)/rStats.length:0
+                              return(
+                                <Fragment key={r.id}>
+                                  {/* ── Fila madre (estrategia) ── */}
+                                  <tr
+                                    onClick={()=>isMulti&&setMcAssetOpen(v=>({...v,[r.id]:!isOpen}))}
+                                    style={{borderBottom:'1px solid rgba(255,255,255,0.04)',
+                                      background:r.color+'14',
+                                      cursor:isMulti?'pointer':undefined}}>
+                                    <td style={{padding:'5px 6px'}}>
+                                      <div style={{display:'flex',alignItems:'center',gap:5}}>
+                                        {isMulti&&<span style={{fontFamily:MONO,fontSize:9,color:'#4a7a9a',width:8,flexShrink:0}}>{isOpen?'▼':'▶'}</span>}
+                                        <div style={{width:7,height:7,borderRadius:'50%',background:r.color,flexShrink:0}}/>
+                                        <span style={{color:r.color,fontWeight:600}}>{r.name}</span>
+                                        {isActive&&isMulti&&<span style={{fontSize:7,color:'#00d4ff',background:'rgba(0,212,255,0.1)',border:'1px solid rgba(0,212,255,0.25)',borderRadius:2,padding:'0 3px',flexShrink:0}}>✓</span>}
+                                      </div>
+                                    </td>
+                                    <td style={{padding:'5px 6px',color:'#ffd166',fontWeight:600}}>{allT.length}</td>
+                                    <td style={{padding:'5px 6px',color:winRate>=50?'#00e5a0':'#ff4d6d',fontWeight:600}}>{fmt(winRate,1,'%')}</td>
+                                    <td style={{padding:'5px 6px',color:cagrC>=0?'#00e5a0':'#ff4d6d',fontWeight:600}}>{cagrC>=0?'+':''}{fmt(cagrC,2,'%')}</td>
+                                    <td style={{padding:'5px 6px',color:'#ff4d6d',fontWeight:600}}>-{fmt(r.result.maxDDCompound||0,1,'%')}</td>
+                                    <td style={{padding:'5px 6px',color:pf>=1.5?'#00e5a0':pf>=1?'#ffd166':'#ff4d6d',fontWeight:600}}>{fmt(pf,2,'x')}</td>
+                                    <td style={{padding:'5px 6px',color:profit>=0?'#00e5a0':'#ff4d6d',fontWeight:600}}>{profit>=0?'+':''}{fmt(profit,0,'€')}</td>
+                                    <td style={{padding:'5px 6px',color:profitPct>=0?'#00e5a0':'#ff4d6d',fontWeight:600}}>{profitPct>=0?'+':''}{fmt(profitPct,1,'%')}</td>
+                                    <td style={{padding:'5px 6px',color:'#00d4ff',fontWeight:600}}>{fmt(avgCapInv,1,'%')}</td>
+                                    <td style={{padding:'5px 6px',color:'#00d4ff',fontWeight:600}}>{fmt(avgTInv,1,'%')}</td>
+                                  </tr>
+                                  {/* ── Subfilas (activos) ── */}
+                                  {isOpen&&rStats.map(a=>{
+                                    const ganPct=sc>0?(a.ganComp/sc)*100:0
+                                    const startMs=r.result.startDate?new Date(r.result.startDate).getTime():0
+                                    const endMs=Date.now()
+                                    const yrs=startMs>0?(endMs-startMs)/(365.25*24*3600*1000):5
+                                    const cagr=sc>0&&yrs>0?(Math.pow(Math.max((sc+a.ganComp)/sc,0.001),1/yrs)-1)*100:0
+                                    const assetTrades=allT.filter(t=>t.symbol===a.symbol)
+                                    const sumWin=assetTrades.filter(t=>t.pnlSimple>0).reduce((s,t)=>s+t.pnlSimple,0)
+                                    const sumLoss=assetTrades.filter(t=>t.pnlSimple<0).reduce((s,t)=>s+Math.abs(t.pnlSimple),0)
+                                    const fBenef=sumLoss>0?sumWin/sumLoss:(sumWin>0?999:0)
+                                    const maxDD=a.maxDD||0
+                                    return(
+                                      <tr key={a.symbol}
+                                        style={{borderBottom:'1px solid rgba(255,255,255,0.02)',cursor:'pointer',
+                                          background:'rgba(0,0,0,0.12)'}}
+                                        onClick={()=>{setSimbolo(a.symbol);setSidePanel('watchlist')}}
+                                        onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.04)'}
+                                        onMouseOut={e=>e.currentTarget.style.background='rgba(0,0,0,0.12)'}>
+                                        <td style={{padding:'4px 6px 4px 22px',color:'var(--accent)'}}>{a.symbol}</td>
+                                        <td style={{padding:'4px 6px',color:'var(--text)'}}>{a.trades}</td>
+                                        <td style={{padding:'4px 6px',color:a.winRate>=50?'#00e5a0':'#ff4d6d'}}>{fmt(a.winRate,1,'%')}</td>
+                                        <td style={{padding:'4px 6px',color:isFinite(cagr)?cagr>=0?'#00e5a0':'#ff4d6d':'#4a6a88'}}>{isFinite(cagr)?(cagr>=0?'+':'')+fmt(cagr,2,'%'):'—'}</td>
+                                        <td style={{padding:'4px 6px',color:'#ff4d6d'}}>{maxDD>0?'-'+fmt(maxDD,2,'%'):'0,00%'}</td>
+                                        <td style={{padding:'4px 6px',color:fBenef>=1.5?'#00e5a0':fBenef>=1?'#ffd166':'#ff4d6d'}}>{fmt(fBenef,2,'x')}</td>
+                                        <td style={{padding:'4px 6px',color:a.ganComp>=0?'#00e5a0':'#ff4d6d'}}>{a.ganComp>=0?'+':''}{fmt(a.ganComp,0,'€')}</td>
+                                        <td style={{padding:'4px 6px',color:ganPct>=0?'#00e5a0':'#ff4d6d'}}>{ganPct>=0?'+':''}{fmt(ganPct,1,'%')}</td>
+                                        <td style={{padding:'4px 6px',color:'#9acce0'}}>{fmt(a.capInvMedio??0,1,'%')}</td>
+                                        <td style={{padding:'4px 6px',color:'#9acce0'}}>{fmt(a.tInvertido??0,1,'%')}</td>
+                                      </tr>
+                                    )
+                                  })}
+                                </Fragment>
+                              )
+                            })}
+                            {/* ── Fila B&H (solo en modo multi) ── */}
+                            {isMulti&&mcResult.bhCurve?.length>0&&(()=>{
+                              const bhOpen=mcAssetOpen['__bh__']!==false
+                              const bhStats=mcResult.assetStats||[]
+                              return(
+                                <Fragment key='__bh__'>
+                                  {/* Fila madre B&H */}
+                                  <tr
+                                    onClick={()=>setMcAssetOpen(v=>({...v,'__bh__':!bhOpen}))}
+                                    style={{borderTop:'1px solid rgba(255,209,102,0.2)',
+                                      background:'rgba(255,209,102,0.06)',cursor:'pointer'}}>
+                                    <td style={{padding:'5px 6px'}}>
+                                      <div style={{display:'flex',alignItems:'center',gap:5}}>
+                                        <span style={{fontFamily:MONO,fontSize:9,color:'#7a6a3a',width:8,flexShrink:0}}>{bhOpen?'▼':'▶'}</span>
+                                        <div style={{width:7,height:7,borderRadius:2,background:'#ffd166',flexShrink:0}}/>
+                                        <span style={{color:'#ffd166',fontWeight:600,fontStyle:'italic'}}>B&H Diversif.</span>
+                                        <span style={{fontFamily:MONO,fontSize:9,color:'#4a6a88',marginLeft:2}}>{bhStats.length} activos</span>
+                                      </div>
+                                    </td>
+                                    <td style={{padding:'5px 6px',color:'#4a6a88'}}>—</td>
+                                    <td style={{padding:'5px 6px',color:'#4a6a88'}}>—</td>
+                                    <td style={{padding:'5px 6px',color:bhCagr>=0?'#ffd166':'#ff4d6d',fontWeight:600}}>{bhCagr>=0?'+':''}{fmt(bhCagr,2,'%')}</td>
+                                    <td style={{padding:'5px 6px',color:'#ff9a3c',fontWeight:600}}>-{fmt(mcResult.maxDDBH||0,1,'%')}</td>
+                                    <td style={{padding:'5px 6px',color:'#4a6a88'}}>—</td>
+                                    <td style={{padding:'5px 6px',color:bhProfit>=0?'#ffd166':'#ff4d6d',fontWeight:600}}>{bhProfit>=0?'+':''}{fmt(bhProfit,0,'€')}</td>
+                                    <td style={{padding:'5px 6px',color:bhProfitPct>=0?'#ffd166':'#ff4d6d',fontWeight:600}}>{bhProfitPct>=0?'+':''}{fmt(bhProfitPct,1,'%')}</td>
+                                    <td style={{padding:'5px 6px',color:'#4a6a88'}}>—</td>
+                                    <td style={{padding:'5px 6px',color:'#4a6a88'}}>—</td>
+                                  </tr>
+                                  {/* Subfilas B&H por activo */}
+                                  {bhOpen&&bhStats.map(a=>{
+                                    const ganBH=a.ganBH??0
+                                    const sc=mcResult.slotCapital||capIni
+                                    const ganBHPct=sc>0?(ganBH/sc)*100:0
+                                    return(
+                                      <tr key={a.symbol}
+                                        style={{borderBottom:'1px solid rgba(255,255,255,0.02)',cursor:'pointer',
+                                          background:'rgba(255,209,102,0.02)'}}
+                                        onClick={()=>{setSimbolo(a.symbol);setSidePanel('watchlist')}}
+                                        onMouseOver={e=>e.currentTarget.style.background='rgba(255,209,102,0.06)'}
+                                        onMouseOut={e=>e.currentTarget.style.background='rgba(255,209,102,0.02)'}>
+                                        <td style={{padding:'4px 6px 4px 22px',color:'#ffd166'}}>{a.symbol}</td>
+                                        <td style={{padding:'4px 6px',color:'#4a6a88'}}>—</td>
+                                        <td style={{padding:'4px 6px',color:'#4a6a88'}}>—</td>
+                                        <td style={{padding:'4px 6px',color:'#4a6a88'}}>—</td>
+                                        <td style={{padding:'4px 6px',color:'#4a6a88'}}>—</td>
+                                        <td style={{padding:'4px 6px',color:'#4a6a88'}}>—</td>
+                                        <td style={{padding:'4px 6px',color:ganBH>=0?'#ffd166':'#ff4d6d'}}>{ganBH>=0?'+':''}{fmt(ganBH,0,'€')}</td>
+                                        <td style={{padding:'4px 6px',color:ganBHPct>=0?'#ffd166':'#ff4d6d'}}>{ganBHPct>=0?'+':''}{fmt(ganBHPct,1,'%')}</td>
+                                        <td style={{padding:'4px 6px',color:'#4a6a88'}}>—</td>
+                                        <td style={{padding:'4px 6px',color:'#4a6a88'}}>—</td>
+                                      </tr>
+                                    )
+                                  })}
+                                </Fragment>
+                              )
+                            })()}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                   )
                 })()}
@@ -5377,210 +5499,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                   </div>
                 )}
 
-                {/* Tabla por activo */}
-                <div style={{padding:'12px 16px',borderBottom:'1px solid var(--border)'}}>
-                  {/* ── Título + botón expandir/colapsar (solo en modo multi) ── */}
-                  <div style={{display:'flex',alignItems:'center',marginBottom:8}}>
-                    <div style={{fontFamily:MONO,fontSize:10,color:'var(--text3)',letterSpacing:'0.05em'}}>RESUMEN POR ACTIVO</div>
-                    {mcMultiResults.length>1&&(()=>{
-                      const allOpen=Object.values(mcAssetOpen).length>0&&Object.values(mcAssetOpen).every(v=>v)
-                      return(
-                        <button
-                          onClick={()=>setMcAssetOpen(prev=>{const next={};Object.keys(prev).forEach(k=>{next[k]=!allOpen});return next})}
-                          style={{marginLeft:'auto',fontFamily:MONO,fontSize:9,padding:'2px 7px',borderRadius:3,cursor:'pointer',
-                            border:'1px solid #3d5a7a',background:'transparent',color:'#7aabcc'}}>
-                          {allOpen?'Contraer todo':'Expandir todo'}
-                        </button>
-                      )
-                    })()}
-                  </div>
-                  {/* ── CASO A: 1 estrategia — tabla plana sin cambios ── */}
-                  {mcMultiResults.length<=1&&(
-                    <div style={{overflowX:'auto'}}>
-                      <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:11}}>
-                        <thead>
-                          <tr style={{borderBottom:'1px solid var(--border)'}}>
-                            {['Activo','Trades','Win%','G.Simple','G.Comp','Días inv.','CAGR','Max DD','F.Bº','Ganancia(%)'].map(h=>(
-                              <th key={h} style={{padding:'4px 10px',textAlign:'left',color:'var(--text3)',fontWeight:400,fontSize:9}}>{h}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {mcResult.assetStats.map(a=>{
-                            const ganPct=mcResult.slotCapital>0?(a.ganComp/mcResult.slotCapital)*100:0
-                            const startMs=mcResult.startDate?new Date(mcResult.startDate).getTime():0
-                            const endMs=Date.now()
-                            const years=startMs>0?(endMs-startMs)/(365.25*24*3600*1000):5
-                            const cagr=mcResult.slotCapital>0&&years>0?(Math.pow((mcResult.slotCapital+a.ganComp)/mcResult.slotCapital,1/years)-1)*100:0
-                            const assetTrades=(mcResult.allTrades||[]).filter(t=>t.symbol===a.symbol)
-                            const sumWin=assetTrades.filter(t=>t.pnlSimple>0).reduce((s,t)=>s+t.pnlSimple,0)
-                            const sumLoss=assetTrades.filter(t=>t.pnlSimple<0).reduce((s,t)=>s+Math.abs(t.pnlSimple),0)
-                            const fBenef=sumLoss>0?sumWin/sumLoss:(sumWin>0?999:0)
-                            const maxDD=a.maxDD||0
-                            const ddDisplay=maxDD>0?'-'+fmt(maxDD,2,'%'):(maxDD===0?'0,00%':'—')
-                            return(
-                              <tr key={a.symbol} style={{borderBottom:'1px solid rgba(255,255,255,0.03)',cursor:'pointer'}}
-                                onClick={()=>{setSimbolo(a.symbol);setSidePanel('watchlist')}}
-                                onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.05)'}
-                                onMouseOut={e=>e.currentTarget.style.background='transparent'}>
-                                <td style={{padding:'5px 10px',color:'var(--accent)',fontWeight:700}}>{a.symbol}</td>
-                                <td style={{padding:'5px 10px',color:'var(--text)'}}>{a.trades}</td>
-                                <td style={{padding:'5px 10px',color:a.winRate>=50?'#00e5a0':'#ff4d6d'}}>{fmt(a.winRate,1,'%')}</td>
-                                <td style={{padding:'5px 10px',color:a.ganSimple>=0?'#00e5a0':'#ff4d6d'}}>{a.ganSimple>=0?'+':''}{fmt(a.ganSimple,0,'€')}</td>
-                                <td style={{padding:'5px 10px',color:a.ganComp>=0?'#00e5a0':'#ff4d6d'}}>{a.ganComp>=0?'+':''}{fmt(a.ganComp,0,'€')}</td>
-                                <td style={{padding:'5px 10px',color:'#00d4ff'}}>{a.totalDias}d</td>
-                                <td style={{padding:'5px 10px',color:isFinite(cagr)&&!isNaN(cagr)?cagr>=0?'#00e5a0':'#ff4d6d':'#4a6a88'}}>{isFinite(cagr)&&!isNaN(cagr)?(cagr>=0?'+':'')+fmt(cagr,2,'%'):'—'}</td>
-                                <td style={{padding:'5px 10px',color:'#ff4d6d'}}>{ddDisplay}</td>
-                                <td style={{padding:'5px 10px',color:isFinite(fBenef)&&!isNaN(fBenef)?fBenef>=1?'#00e5a0':'#ff4d6d':'#4a6a88'}}>{isFinite(fBenef)&&!isNaN(fBenef)?fmt(fBenef,2,'x'):'—'}</td>
-                                <td style={{padding:'5px 10px',color:isFinite(ganPct)&&!isNaN(ganPct)?ganPct>=0?'#00e5a0':'#ff4d6d':'#4a6a88'}}>{isFinite(ganPct)&&!isNaN(ganPct)?(ganPct>=0?'+':'')+fmt(ganPct,2,'%'):'—'}</td>
-                              </tr>
-                            )
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                  {/* ── CASO B: N estrategias — acordeón ── */}
-                  {mcMultiResults.length>1&&(
-                    <>
-                      {mcMultiResults.map(r=>{
-                        const isOpen=mcAssetOpen[r.id]!==false
-                        const rStats=r.result.assetStats||[]
-                        const lastC=r.result.compoundCurve?.slice(-1)[0]?.value||Number(capitalIni)
-                        const capIni=Number(capitalIni)
-                        const fd=r.result.startDate?new Date(r.result.startDate):null
-                        const ld=r.result.compoundCurve?.slice(-1)[0]?.date?new Date(r.result.compoundCurve.slice(-1)[0].date):new Date()
-                        const anios=fd&&ld?(ld-fd)/86400000/365.25:1
-                        const cagrStrat=(Math.pow(Math.max(lastC,0.01)/Math.max(capIni,0.01),1/Math.max(anios,0.01))-1)*100
-                        return(
-                          <div key={r.id} style={{marginBottom:2}}>
-                            {/* ── Header acordeón estrategia ── */}
-                            <div
-                              onClick={()=>setMcAssetOpen(v=>({...v,[r.id]:!isOpen}))}
-                              style={{display:'flex',alignItems:'center',gap:6,padding:'5px 8px',cursor:'pointer',
-                                background:'rgba(0,212,255,0.04)',borderRadius:3,userSelect:'none'}}
-                              onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.08)'}
-                              onMouseOut={e=>e.currentTarget.style.background='rgba(0,212,255,0.04)'}>
-                              <div style={{width:7,height:7,borderRadius:'50%',background:r.color,flexShrink:0}}/>
-                              <span style={{fontFamily:MONO,fontSize:10,color:r.color,fontWeight:600}}>{r.name}</span>
-                              <span style={{fontFamily:MONO,fontSize:9,color:'#4a6a88'}}>{rStats.length} activos</span>
-                              <span style={{fontFamily:MONO,fontSize:9,color:cagrStrat>=0?'#00e5a0':'#ff4d6d',marginLeft:2}}>
-                                CAGR {cagrStrat>=0?'+':''}{cagrStrat.toFixed(1)}%
-                              </span>
-                              <span style={{marginLeft:'auto',fontFamily:MONO,fontSize:9,color:'#4a7a9a'}}>{isOpen?'▼':'▶'}</span>
-                            </div>
-                            {/* ── Body acordeón estrategia ── */}
-                            {isOpen&&(
-                              <div style={{overflowX:'auto',marginTop:2}}>
-                                <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:11}}>
-                                  <thead>
-                                    <tr style={{borderBottom:'1px solid var(--border)'}}>
-                                      {['Activo','Trades','Win%','G.Simple','G.Comp','Días inv.','CAGR','Max DD','F.Bº','Ganancia(%)'].map(h=>(
-                                        <th key={h} style={{padding:'4px 10px',textAlign:'left',color:'var(--text3)',fontWeight:400,fontSize:9}}>{h}</th>
-                                      ))}
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {rStats.map(a=>{
-                                      const sc=r.result.slotCapital||capIni
-                                      const ganPct=sc>0?(a.ganComp/sc)*100:0
-                                      const startMs=r.result.startDate?new Date(r.result.startDate).getTime():0
-                                      const endMs=Date.now()
-                                      const yrs=startMs>0?(endMs-startMs)/(365.25*24*3600*1000):5
-                                      const cagr=sc>0&&yrs>0?(Math.pow((sc+a.ganComp)/sc,1/yrs)-1)*100:0
-                                      const assetTrades=(r.result.allTrades||[]).filter(t=>t.symbol===a.symbol)
-                                      const sumWin=assetTrades.filter(t=>t.pnlSimple>0).reduce((s,t)=>s+t.pnlSimple,0)
-                                      const sumLoss=assetTrades.filter(t=>t.pnlSimple<0).reduce((s,t)=>s+Math.abs(t.pnlSimple),0)
-                                      const fBenef=sumLoss>0?sumWin/sumLoss:(sumWin>0?999:0)
-                                      const maxDD=a.maxDD||0
-                                      const ddDisplay=maxDD>0?'-'+fmt(maxDD,2,'%'):(maxDD===0?'0,00%':'—')
-                                      return(
-                                        <tr key={a.symbol} style={{borderBottom:'1px solid rgba(255,255,255,0.03)',cursor:'pointer'}}
-                                          onClick={()=>{setSimbolo(a.symbol);setSidePanel('watchlist')}}
-                                          onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.05)'}
-                                          onMouseOut={e=>e.currentTarget.style.background='transparent'}>
-                                          <td style={{padding:'5px 10px',color:'var(--accent)',fontWeight:700}}>{a.symbol}</td>
-                                          <td style={{padding:'5px 10px',color:'var(--text)'}}>{a.trades}</td>
-                                          <td style={{padding:'5px 10px',color:a.winRate>=50?'#00e5a0':'#ff4d6d'}}>{fmt(a.winRate,1,'%')}</td>
-                                          <td style={{padding:'5px 10px',color:a.ganSimple>=0?'#00e5a0':'#ff4d6d'}}>{a.ganSimple>=0?'+':''}{fmt(a.ganSimple,0,'€')}</td>
-                                          <td style={{padding:'5px 10px',color:a.ganComp>=0?'#00e5a0':'#ff4d6d'}}>{a.ganComp>=0?'+':''}{fmt(a.ganComp,0,'€')}</td>
-                                          <td style={{padding:'5px 10px',color:'#00d4ff'}}>{a.totalDias}d</td>
-                                          <td style={{padding:'5px 10px',color:isFinite(cagr)&&!isNaN(cagr)?cagr>=0?'#00e5a0':'#ff4d6d':'#4a6a88'}}>{isFinite(cagr)&&!isNaN(cagr)?(cagr>=0?'+':'')+fmt(cagr,2,'%'):'—'}</td>
-                                          <td style={{padding:'5px 10px',color:'#ff4d6d'}}>{ddDisplay}</td>
-                                          <td style={{padding:'5px 10px',color:isFinite(fBenef)&&!isNaN(fBenef)?fBenef>=1?'#00e5a0':'#ff4d6d':'#4a6a88'}}>{isFinite(fBenef)&&!isNaN(fBenef)?fmt(fBenef,2,'x'):'—'}</td>
-                                          <td style={{padding:'5px 10px',color:isFinite(ganPct)&&!isNaN(ganPct)?ganPct>=0?'#00e5a0':'#ff4d6d':'#4a6a88'}}>{isFinite(ganPct)&&!isNaN(ganPct)?(ganPct>=0?'+':'')+fmt(ganPct,2,'%'):'—'}</td>
-                                        </tr>
-                                      )
-                                    })}
-                                  </tbody>
-                                </table>
-                              </div>
-                            )}
-                          </div>
-                        )
-                      })}
-                      {/* ── Sección B&H ── */}
-                      {(()=>{
-                        const bhOpen=mcAssetOpen['__bh__']!==false
-                        const bhStats=mcResult.assetStats||[]
-                        return(
-                          <div style={{marginTop:4}}>
-                            {/* ── Header B&H ── */}
-                            <div
-                              onClick={()=>setMcAssetOpen(v=>({...v,'__bh__':!bhOpen}))}
-                              style={{display:'flex',alignItems:'center',gap:6,padding:'5px 8px',cursor:'pointer',
-                                background:'rgba(255,209,102,0.04)',borderRadius:3,userSelect:'none'}}
-                              onMouseOver={e=>e.currentTarget.style.background='rgba(255,209,102,0.08)'}
-                              onMouseOut={e=>e.currentTarget.style.background='rgba(255,209,102,0.04)'}>
-                              <div style={{width:7,height:7,borderRadius:2,background:'#ffd166',flexShrink:0}}/>
-                              <span style={{fontFamily:MONO,fontSize:10,color:'#ffd166',fontWeight:600,fontStyle:'italic'}}>B&H Diversif.</span>
-                              <span style={{fontFamily:MONO,fontSize:9,color:'#4a6a88'}}>{bhStats.length} activos</span>
-                              <span style={{marginLeft:'auto',fontFamily:MONO,fontSize:9,color:'#7a6a3a'}}>{bhOpen?'▼':'▶'}</span>
-                            </div>
-                            {/* ── Body B&H ── */}
-                            {bhOpen&&(
-                              <div style={{overflowX:'auto',marginTop:2}}>
-                                <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:11}}>
-                                  <thead>
-                                    <tr style={{borderBottom:'1px solid var(--border)'}}>
-                                      {['Activo','Trades','Win%','G.Simple','G.Comp','Días inv.','CAGR','Max DD','F.Bº','Ganancia(%)'].map(h=>(
-                                        <th key={h} style={{padding:'4px 10px',textAlign:'left',color:'var(--text3)',fontWeight:400,fontSize:9}}>{h}</th>
-                                      ))}
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {bhStats.map(a=>{
-                                      const sc=mcResult.slotCapital||Number(capitalIni)
-                                      const ganBH=a.ganBH??0
-                                      const ganPct=sc>0?(ganBH/sc)*100:0
-                                      return(
-                                        <tr key={a.symbol} style={{borderBottom:'1px solid rgba(255,255,255,0.03)',cursor:'pointer'}}
-                                          onClick={()=>{setSimbolo(a.symbol);setSidePanel('watchlist')}}
-                                          onMouseOver={e=>e.currentTarget.style.background='rgba(255,209,102,0.04)'}
-                                          onMouseOut={e=>e.currentTarget.style.background='transparent'}>
-                                          <td style={{padding:'5px 10px',color:'#ffd166',fontWeight:700}}>{a.symbol}</td>
-                                          <td style={{padding:'5px 10px',color:'#4a6a88'}}>—</td>
-                                          <td style={{padding:'5px 10px',color:'#4a6a88'}}>—</td>
-                                          <td style={{padding:'5px 10px',color:ganBH>=0?'#ffd166':'#ff4d6d'}}>{ganBH>=0?'+':''}{fmt(ganBH,0,'€')}</td>
-                                          <td style={{padding:'5px 10px',color:'#4a6a88'}}>—</td>
-                                          <td style={{padding:'5px 10px',color:'#4a6a88'}}>—</td>
-                                          <td style={{padding:'5px 10px',color:'#4a6a88'}}>—</td>
-                                          <td style={{padding:'5px 10px',color:'#4a6a88'}}>—</td>
-                                          <td style={{padding:'5px 10px',color:'#4a6a88'}}>—</td>
-                                          <td style={{padding:'5px 10px',color:ganPct>=0?'#ffd166':'#ff4d6d'}}>{ganPct>=0?'+':''}{fmt(ganPct,2,'%')}</td>
-                                        </tr>
-                                      )
-                                    })}
-                                  </tbody>
-                                </table>
-                              </div>
-                            )}
-                          </div>
-                        )
-                      })()}
-                    </>
-                  )}
-                </div>
+                {/* Tabla por activo — fusionada en COMPARATIVA DE ESTRATEGIAS */}
 
                 {/* Barras de resultados multicartera — same style as individual */}
                 {mcResult.allTrades?.length>0&&(

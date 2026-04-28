@@ -460,11 +460,14 @@ function runCodeJsAsset(data, sp500Data, codeJs, slotCapital, years) {
 
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 
-// ── Max Drawdown real con curva de precio diaria ─────────────
-function _calcAssetMaxDD(trades, data, slotCapital) {
-  if (!data || data.length === 0) return { maxDD: 0, maxDDDate: null }
+// ── Max Drawdown real + T.invertido + Cap.inv.medio con curva de precio diaria ──
+function _calcAssetMaxDD(trades, data, slotCapital, startDate) {
+  if (!data || data.length === 0) return { maxDD: 0, maxDDDate: null, tInvertido: 0, capInvMedio: 0 }
+  const filteredData = startDate ? data.filter(d => d.date >= startDate) : data
+  if (!filteredData.length) return { maxDD: 0, maxDDDate: null, tInvertido: 0, capInvMedio: 0 }
   let peak = slotCapital, maxDD = 0, maxDDDate = null, lastCapital = slotCapital
-  data.forEach(bar => {
+  let daysOpen = 0, sumCapInvRatio = 0, totalBars = 0
+  filteredData.forEach(bar => {
     const date = bar.date, close = bar.close
     const closed = trades.filter(t => t.exitDate && t.exitDate <= date)
     if (closed.length > 0) { lastCapital = closed[closed.length - 1].capitalTras }
@@ -477,8 +480,19 @@ function _calcAssetMaxDD(trades, data, slotCapital) {
     const floatEquity = lastCapital + openPnl
     if (floatEquity > peak) peak = floatEquity
     if (peak > 0) { const dd = (peak - floatEquity) / peak * 100; if (dd > maxDD) { maxDD = dd; maxDDDate = date } }
+    totalBars++
+    if (open.length > 0) {
+      daysOpen++
+      const capInv = open.reduce((s, t) => s + (t.shares || 0) * close, 0)
+      sumCapInvRatio += slotCapital > 0 ? capInv / slotCapital : 0
+    }
   })
-  return { maxDD, maxDDDate }
+  return {
+    maxDD,
+    maxDDDate,
+    tInvertido: totalBars > 0 ? (daysOpen / totalBars) * 100 : 0,
+    capInvMedio: totalBars > 0 ? (sumCapInvRatio / totalBars) * 100 : 0,
+  }
 }
 
 export default async function handler(req, res) {
@@ -580,7 +594,7 @@ export default async function handler(req, res) {
       const losses = ar.trades.filter(t=>t.pnlPct<0)
       const totalDias = ar.trades.reduce((s,t)=>s+t.dias,0)
       const pct = weights?.[ar.symbol] ?? (100 / n)
-      const { maxDD: assetMaxDD, maxDDDate: assetMaxDDDate } = _calcAssetMaxDD(ar.trades, ar.data, slotCapital)
+      const { maxDD: assetMaxDD, maxDDDate: assetMaxDDDate, tInvertido, capInvMedio } = _calcAssetMaxDD(ar.trades, ar.data, slotCapital, curves.startDate)
       const filtData = ar.data?.filter(d => d.date >= curves.startDate) ?? []
       const p0 = filtData[0]?.close
       const pN = filtData[filtData.length - 1]?.close
@@ -597,6 +611,8 @@ export default async function handler(req, res) {
         weight: pct,
         maxDD: assetMaxDD,
         maxDDDate: assetMaxDDDate,
+        tInvertido,
+        capInvMedio,
         ganBH,
       }
     })
