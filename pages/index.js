@@ -2967,7 +2967,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.114</title>
+        <title>Trading Simulator V9.115</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3044,7 +3044,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.114
+            <span className="dot"/>Trading Simulator V9.115
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5474,20 +5474,9 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                 {mcResult.occupancyCurve?.length>0&&(
                   <div style={{borderTop:'1px solid var(--border)'}}>
                     <div style={{padding:'3px 12px 2px',display:'flex',alignItems:'center',gap:6,fontFamily:MONO,fontSize:11}}>
-                      <span style={{color:mcOccMode==='compound'?'#00e5a0':'#00d4ff',fontWeight:600}}>
-                        € Capital {mcOccMode==='compound'?'Compuesto':'Simple'} invertido
+                      <span style={{color:'#00e5a0',fontWeight:600}}>
+                        € Capital Compuesto invertido
                       </span>
-                      <div style={{display:'flex',gap:3,marginLeft:'auto'}}>
-                        {[{id:'compound',label:'Compuesto',c:'#00e5a0'},{id:'simple',label:'Simple',c:'#00d4ff'}].map(m=>(
-                          <button key={m.id} onClick={()=>setMcOccMode(m.id)}
-                            style={{fontFamily:MONO,fontSize:10,padding:'1px 6px',borderRadius:3,cursor:'pointer',
-                              border:`1px solid ${mcOccMode===m.id?m.c:'#2a3f55'}`,
-                              background:mcOccMode===m.id?`${m.c}18`:'transparent',
-                              color:mcOccMode===m.id?m.c:'#4a6a88'}}>
-                            {m.label}
-                          </button>
-                        ))}
-                      </div>
                     </div>
                     <McOccupancyChart
                       occupancyCurve={mcResult.occupancyCurve}
