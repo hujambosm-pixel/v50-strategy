@@ -2965,7 +2965,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.111</title>
+        <title>Trading Simulator V9.112</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3042,7 +3042,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.111
+            <span className="dot"/>Trading Simulator V9.112
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5405,18 +5405,9 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           const sumWin  = assetTrades.filter(t => t.pnlSimple > 0).reduce((s,t) => s + t.pnlSimple, 0)
                           const sumLoss = assetTrades.filter(t => t.pnlSimple < 0).reduce((s,t) => s + Math.abs(t.pnlSimple), 0)
                           const fBenef  = sumLoss > 0 ? sumWin / sumLoss : (sumWin > 0 ? 999 : 0)
-                          // Max Drawdown — solo en modo slots (capitalTras es per-activo)
-                          let maxDD = 0
-                          if (mcResult.modoAsig === 'slots' && assetTrades.length > 0) {
-                            let peak = mcResult.slotCapital
-                            assetTrades.forEach(t => {
-                              const val = t.capitalTras
-                              if (val > peak) peak = val
-                              const dd = peak > 0 ? (peak - val) / peak * 100 : 0
-                              if (dd > maxDD) maxDD = dd
-                            })
-                          }
-                          const ddDisplay = mcResult.modoAsig === 'slots' ? fmt(-maxDD, 2, '%') : '—'
+                          // Max Drawdown — calculado server-side con curva de precio diaria
+                          const maxDD = a.maxDD || 0
+                          const ddDisplay = maxDD > 0 ? '-' + fmt(maxDD, 2, '%') : (maxDD === 0 ? '0,00%' : '—')
                           return (
                             <tr key={a.symbol} style={{borderBottom:'1px solid rgba(255,255,255,0.03)',cursor:'pointer'}}
                               onClick={()=>{setSimbolo(a.symbol);setSidePanel('watchlist')}}
@@ -5429,7 +5420,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               <td style={{padding:'5px 10px',color:a.ganComp>=0?'#00e5a0':'#ff4d6d'}}>{a.ganComp>=0?'+':''}{fmt(a.ganComp,0,'€')}</td>
                               <td style={{padding:'5px 10px',color:'#00d4ff'}}>{a.totalDias}d</td>
                               <td style={{padding:'5px 10px',color:isFinite(cagr)&&!isNaN(cagr)?cagr>=0?'#00e5a0':'#ff4d6d':'#4a6a88'}}>{isFinite(cagr)&&!isNaN(cagr)?(cagr>=0?'+':'')+fmt(cagr,2,'%'):'—'}</td>
-                              <td style={{padding:'5px 10px',color:mcResult.modoAsig==='slots'?'#ff4d6d':'#4a6a88'}}>{ddDisplay}</td>
+                              <td style={{padding:'5px 10px',color:'#ff4d6d'}}>{ddDisplay}</td>
                               <td style={{padding:'5px 10px',color:isFinite(fBenef)&&!isNaN(fBenef)?fBenef>=1?'#00e5a0':'#ff4d6d':'#4a6a88'}}>{isFinite(fBenef)&&!isNaN(fBenef)?fmt(fBenef,2,'x'):'—'}</td>
                               <td style={{padding:'5px 10px',color:isFinite(ganPct)&&!isNaN(ganPct)?ganPct>=0?'#00e5a0':'#ff4d6d':'#4a6a88'}}>{isFinite(ganPct)&&!isNaN(ganPct)?(ganPct>=0?'+':'')+fmt(ganPct,2,'%'):'—'}</td>
                             </tr>

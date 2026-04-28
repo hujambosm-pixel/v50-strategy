@@ -460,6 +460,27 @@ function runCodeJsAsset(data, sp500Data, codeJs, slotCapital, years) {
 
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 
+// ── Max Drawdown real con curva de precio diaria ─────────────
+function _calcAssetMaxDD(trades, data, slotCapital) {
+  if (!data || data.length === 0) return { maxDD: 0, maxDDDate: null }
+  let peak = slotCapital, maxDD = 0, maxDDDate = null, lastCapital = slotCapital
+  data.forEach(bar => {
+    const date = bar.date, close = bar.close
+    const closed = trades.filter(t => t.exitDate && t.exitDate <= date)
+    if (closed.length > 0) { lastCapital = closed[closed.length - 1].capitalTras }
+    const open = trades.filter(t => t.entryDate <= date && (!t.exitDate || t.exitDate > date))
+    const openPnl = open.reduce((s, t) => {
+      const ep = t.entryPrice || t.entryPx
+      if (!ep || ep <= 0) return s
+      return s + ((close - ep) / ep) * (t.shares * ep)
+    }, 0)
+    const floatEquity = lastCapital + openPnl
+    if (floatEquity > peak) peak = floatEquity
+    if (peak > 0) { const dd = (peak - floatEquity) / peak * 100; if (dd > maxDD) { maxDD = dd; maxDDDate = date } }
+  })
+  return { maxDD, maxDDDate }
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
   const { symbols, cfg: cfgInput, definition, modoAsig = 'slots', weights = {}, rankMap = {}, strategyId = null } = req.body
@@ -559,6 +580,7 @@ export default async function handler(req, res) {
       const losses = ar.trades.filter(t=>t.pnlPct<0)
       const totalDias = ar.trades.reduce((s,t)=>s+t.dias,0)
       const pct = weights?.[ar.symbol] ?? (100 / n)
+      const { maxDD: assetMaxDD, maxDDDate: assetMaxDDDate } = _calcAssetMaxDD(ar.trades, ar.data, slotCapital)
       return {
         symbol: ar.symbol,
         trades: ar.trades.length,
@@ -569,6 +591,8 @@ export default async function handler(req, res) {
         ganComp: ar.capitalReinv - slotCapital,
         totalDias,
         weight: pct,
+        maxDD: assetMaxDD,
+        maxDDDate: assetMaxDDDate,
       }
     })
 
