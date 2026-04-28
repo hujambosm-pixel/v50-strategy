@@ -1,6 +1,11 @@
 // pages/api/multibacktest.js
 // Backtest de cartera multi-activo — Slots iguales | Capital rotativo | Pesos personalizados
 
+import { calcEMA as _libEMA, calcSMA, calcRSI, calcATR as _libATR, calcMACD } from '../../lib/backtester'
+
+const SUPA_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
+const SUPA_KEY = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
 function calcEMA(values, period) {
   const k = 2 / (period + 1)
   const result = new Array(values.length).fill(null)
@@ -413,11 +418,51 @@ function _calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni) {
   return { maxDDFloatSimple, maxDDFloatSimpleDate, maxDDFloatCompound, maxDDFloatCompoundDate }
 }
 
+// ── buildTrades: convierte rawTrades {entryDate,exitDate,entryPrice,exitPrice} a trades enriquecidos ──
+// Copia exacta de datos.js para mantener formato compatible con curvas de equity
+function buildTrades(rawTrades, capitalIni, allocationPct = 100) {
+  const fixedAlloc = capitalIni * (allocationPct / 100)
+  let compoundCapital = capitalIni
+  return rawTrades
+    .filter(t => t.entryDate && t.exitDate && t.entryPrice > 0 && t.exitPrice > 0)
+    .map(t => {
+      const sharesSimple   = fixedAlloc / t.entryPrice
+      const pnlSimple      = (t.exitPrice - t.entryPrice) * sharesSimple
+      const pnlPct         = (t.exitPrice / t.entryPrice - 1) * 100
+      const compAlloc      = compoundCapital * (allocationPct / 100)
+      const sharesCompound = compAlloc / t.entryPrice
+      const pnlCompound    = (t.exitPrice - t.entryPrice) * sharesCompound
+      compoundCapital     += pnlCompound
+      const dias = Math.max(1, Math.round((new Date(t.exitDate) - new Date(t.entryDate)) / 86400000))
+      return { ...t, shares: sharesSimple, pnlSimple, pnlPct, capitalTras: compoundCapital, dias }
+    })
+}
+
+// ── runCodeJsAsset: ejecuta code_js de una estrategia sobre un activo ──
+// Sandbox idéntica a datos.js. Si falla → { trades:[], indicators:{}, filterZones:[] }
+function runCodeJsAsset(data, sp500Data, codeJs, slotCapital, years) {
+  try {
+    const sp500Map = {}
+    if (sp500Data) sp500Data.forEach(d => { sp500Map[d.date] = d.close })
+    const enrichedData = data.map(d => ({ ...d, sp500Close: sp500Map[d.date] ?? null }))
+    const wrappedCode = `"use strict";\n${codeJs}\nreturn run;`
+    const getRunFn = new Function('calcEMA','calcSMA','calcRSI','calcATR','calcMACD', wrappedCode)
+    const runFn = getRunFn(_libEMA, calcSMA, calcRSI, _libATR, calcMACD)
+    const { trades: rawTrades = [], indicators = {}, filterZones = [] } =
+      runFn(enrichedData, { capital_ini: slotCapital, years, allocation_pct: 100 })
+    const trades = buildTrades(rawTrades, slotCapital)
+    return { trades, indicators, filterZones }
+  } catch(e) {
+    console.error('[runCodeJsAsset] error:', e.message)
+    return { trades: [], indicators: {}, filterZones: [] }
+  }
+}
+
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
-  const { symbols, cfg: cfgInput, definition, modoAsig = 'slots', weights = {}, rankMap = {} } = req.body
+  const { symbols, cfg: cfgInput, definition, modoAsig = 'slots', weights = {}, rankMap = {}, strategyId = null } = req.body
   if (!Array.isArray(symbols) || !symbols.length) return res.status(400).json({ error: 'symbols requerido' })
   let cfg = cfgInput
   if (!cfg && definition) {
@@ -443,6 +488,21 @@ export default async function handler(req, res) {
   }
   if (!cfg) return res.status(400).json({ error: 'Se requiere cfg o definition' })
 
+  // Fetch code_js desde Supabase si se proporcionó strategyId
+  let codeJs = null
+  if (strategyId && SUPA_URL && SUPA_KEY) {
+    try {
+      const sr = await fetch(
+        `${SUPA_URL}/rest/v1/strategies?id=eq.${strategyId}&select=code_js`,
+        { headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` } }
+      )
+      if (sr.ok) {
+        const row = (await sr.json())?.[0] || {}
+        codeJs = row.code_js || null
+      }
+    } catch(_) { codeJs = null }
+  }
+
   try {
     // Descargar datos en batches para no saturar Stooq
     const BATCH = 4
@@ -462,10 +522,21 @@ export default async function handler(req, res) {
     if (!n) return res.status(400).json({ error: 'No se pudieron cargar datos de ningún símbolo' })
     const slotCapital = cfg.capitalIni / n
 
-    // Ejecutar backtest individual por activo (siempre con slotCapital como base para pnlPct)
+    // Ejecutar backtest individual por activo
     const assetResults = symbols.map(sym => {
       const data = allData[sym]
       if (!data?.length) return null
+      if (codeJs) {
+        // Motor code_js: sandbox por activo con slotCapital = capital total / nº activos
+        const { trades } = runCodeJsAsset(data, sp500Data, codeJs, slotCapital, cfg.years ?? 5)
+        const capitalReinv = trades.length ? trades[trades.length-1].capitalTras : slotCapital
+        const gananciaSimple = trades.reduce((s,t) => s + t.pnlSimple, 0)
+        const cutoff = new Date(data[data.length-1].date)
+        cutoff.setFullYear(cutoff.getFullYear() - (cfg.years ?? 5))
+        const startDate = cutoff.toISOString().split('T')[0]
+        return { symbol: sym, data, trades, capitalReinv, gananciaSimple, startDate, blockEvents: {} }
+      }
+      // Fallback: motor EMA hardcoded (runSingleBacktest intacto)
       const slotCfg = { ...cfg, capitalIni: slotCapital }
       const { trades, capitalReinv, gananciaSimple, startDate, blockEvents } = runSingleBacktest(data, sp500Data, slotCfg)
       return { symbol: sym, data, trades, capitalReinv, gananciaSimple, startDate, blockEvents }

@@ -2579,7 +2579,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
     if(stratIds.length<=1){
       try{
         const res=await apiFetch('/api/multibacktest',{method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({symbols:mcSelected,modoAsig:mcMode,weights:weightsNorm,rankMap,cfg:baseCfg})})
+          body:JSON.stringify({symbols:mcSelected,modoAsig:mcMode,weights:weightsNorm,rankMap,cfg:baseCfg,strategyId:stratIds[0]||null})})
         const json=await res.json()
         if(!res.ok) throw new Error(json.error||'Error')
         setMcResult(json)
@@ -2597,7 +2597,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
       try{
         const cfg=buildCfgFromStrat(strat)
         const res=await apiFetch('/api/multibacktest',{method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({symbols:mcSelected,modoAsig:mcMode,weights:weightsNorm,rankMap,cfg})})
+          body:JSON.stringify({symbols:mcSelected,modoAsig:mcMode,weights:weightsNorm,rankMap,cfg,strategyId:sid})})
         const json=await res.json()
         if(!res.ok) throw new Error(json.error||'Error en '+name)
         results.push({id:sid,name,color,result:json})
@@ -2965,7 +2965,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.109</title>
+        <title>Trading Simulator V9.110</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3042,7 +3042,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.109
+            <span className="dot"/>Trading Simulator V9.110
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
