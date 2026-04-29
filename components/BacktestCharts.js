@@ -361,7 +361,9 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
         const ts=chartRef.current.timeScale()
         const chartH=chartDivRef.current?.clientHeight||height
         let winIdx=0,lossIdx=0
-        stratSignals.forEach(s=>{
+        const ROWS=4
+        stratSignals.forEach((s,stratIdx)=>{
+          winIdx=0;lossIdx=0
           ;(s.trades||[]).forEach(t=>{
             if(!t.entryDate||!t.exitDate) return
             try{
@@ -371,12 +373,13 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
               const isWin=t.pnlPct>=0
               const bc=isWin?'#00e5a0':'#ff4d6d'
               const iidx=isWin?winIdx++:lossIdx++
+              const row=(iidx%ROWS)+(stratIdx*ROWS)
               const line1=`#${t.n} · €${Math.round(t.capital??0)}`
               const profit=t.pnlSimple??0
               const line2=`${t.pnlPct>=0?'+':''}${(t.pnlPct||0).toFixed(1)}% · €${profit>=0?'+':''}${Math.round(profit)}`
-              const BOX_H=34,BOX_STEP=BOX_H+4,MARGIN=6
+              const BOX_H=28,BOX_STEP=BOX_H+4,MARGIN=6
               const w=Math.max(line1.length,line2.length)*7.5+20
-              const labelY=isWin?MARGIN+BOX_H/2+(iidx%4)*BOX_STEP:chartH-MARGIN-BOX_H/2-(iidx%4)*BOX_STEP
+              const labelY=isWin?MARGIN+BOX_H/2+row*BOX_STEP:chartH-MARGIN-BOX_H/2-row*BOX_STEP
               const g=document.createElementNS(NS,'g')
               g.setAttribute('class','trade-label'); g.setAttribute('pointer-events','none')
               const rect=document.createElementNS(NS,'rect')
@@ -396,8 +399,8 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
                 }
               }
               const mkT=(txt,y,sz,fill,fw)=>{const el=document.createElementNS(NS,'text');Object.entries({x:midX,y,'font-size':sz,'font-family':_MONO,'text-anchor':'middle',fill,'font-weight':fw}).forEach(([k,v])=>el.setAttribute(k,v));el.textContent=txt;return el}
-              g.appendChild(mkT(line1,labelY-4,'11','#cde8ff','700'))
-              g.appendChild(mkT(line2,labelY+11,'10',bc,'600'))
+              g.appendChild(mkT(line1,labelY-4,'9','#cde8ff','700'))
+              g.appendChild(mkT(line2,labelY+8,'9',bc,'600'))
               svg.appendChild(g)
             }catch(_){}
           })
