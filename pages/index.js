@@ -2967,7 +2967,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.123</title>
+        <title>Trading Simulator V9.124</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3044,7 +3044,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.123
+            <span className="dot"/>Trading Simulator V9.124
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5296,7 +5296,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                         onClick={()=>{setSimbolo(a.symbol);setSidePanel('watchlist')}}
                                         onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.04)'}
                                         onMouseOut={e=>e.currentTarget.style.background='rgba(0,0,0,0.12)'}>
-                                        <td style={{padding:'4px 6px 4px 22px',color:'var(--accent)'}}>{a.symbol}</td>
+                                        <td style={{padding:'4px 6px 4px 22px',color:'var(--accent)',borderLeft:`2px solid ${r.color}`}}>{a.symbol}</td>
                                         <td style={{padding:'4px 6px',color:'var(--text)'}}>{a.trades}</td>
                                         <td style={{padding:'4px 6px',color:a.winRate>=50?'#00e5a0':'#ff4d6d'}}>{fmt(a.winRate,1,'%')}</td>
                                         <td style={{padding:'4px 6px',color:isFinite(cagr)?cagr>=0?'#00e5a0':'#ff4d6d':'#4a6a88'}}>{isFinite(cagr)?(cagr>=0?'+':'')+fmt(cagr,2,'%'):'—'}</td>
@@ -5358,7 +5358,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                         onClick={()=>{setSimbolo(a.symbol);setSidePanel('watchlist')}}
                                         onMouseOver={e=>e.currentTarget.style.background='rgba(255,209,102,0.06)'}
                                         onMouseOut={e=>e.currentTarget.style.background='rgba(255,209,102,0.02)'}>
-                                        <td style={{padding:'4px 6px 4px 22px',color:'#ffd166'}}>{a.symbol}</td>
+                                        <td style={{padding:'4px 6px 4px 22px',color:'#ffd166',borderLeft:'2px solid #ffd16688'}}>{a.symbol}</td>
                                         <td style={{padding:'4px 6px',color:'#ffd166'}}>1</td>
                                         <td style={{padding:'4px 6px',color:'#4a6a88'}}>—</td>
                                         <td style={{padding:'4px 6px',color:bhCagr>=0?'#ffd166':'#ff4d6d'}}>{(bhCagr>=0?'+':'')+fmt(bhCagr,2,'%')}</td>
