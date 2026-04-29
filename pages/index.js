@@ -2970,7 +2970,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.126</title>
+        <title>Trading Simulator V9.127</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3047,7 +3047,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.126
+            <span className="dot"/>Trading Simulator V9.127
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5574,17 +5574,31 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         <span style={{fontWeight:400,fontSize:11,color:'#9acce0'}}> · clic activo → ver gráfico</span>
                       </span>
                       <div style={{display:'flex',gap:4,marginLeft:'auto',alignItems:'center',flexWrap:'wrap'}}>
-                        {mcTradeStratFilter&&isMulti&&(()=>{
-                          const r=mcMultiResults.find(r=>r.id===mcTradeStratFilter)
-                          return r?(
-                            <span style={{fontSize:9,padding:'1px 6px',borderRadius:10,
-                              border:`1px solid ${r.color}`,color:r.color,
-                              background:r.color+'18',cursor:'pointer'}}
-                              onClick={()=>setMcTradeStratFilter(null)}>
-                              {r.name} · ✕
-                            </span>
-                          ):null
-                        })()}
+                        {isMulti&&(
+                          <div style={{display:'flex',gap:4,alignItems:'center'}}>
+                            <button onClick={()=>setMcTradeStratFilter(null)}
+                              style={{fontFamily:MONO,fontSize:9,padding:'2px 8px',borderRadius:3,cursor:'pointer',
+                                border:`1px solid ${!mcTradeStratFilter?'#9acce0':'#3d5a7a'}`,
+                                background:!mcTradeStratFilter?'rgba(154,204,224,0.12)':'transparent',
+                                color:!mcTradeStratFilter?'#9acce0':'#4a6a88'}}>
+                              Todas
+                            </button>
+                            {mcMultiResults.map(r=>{
+                              const isActive=mcTradeStratFilter===r.id
+                              return(
+                                <button key={r.id} onClick={()=>setMcTradeStratFilter(isActive?null:r.id)}
+                                  style={{fontFamily:MONO,fontSize:9,padding:'2px 8px',borderRadius:3,cursor:'pointer',
+                                    border:`1px solid ${isActive?r.color:'#3d5a7a'}`,
+                                    background:isActive?r.color+'18':'transparent',
+                                    color:isActive?r.color:'#4a6a88'}}>
+                                  <span style={{display:'inline-block',width:6,height:6,borderRadius:'50%',
+                                    background:r.color,marginRight:4,verticalAlign:'middle'}}/>
+                                  {r.name}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        )}
                         <input value={mcTradeFilter} onChange={e=>setMcTradeFilter(e.target.value)}
                           placeholder="Filtrar activo…"
                           style={{fontFamily:MONO,fontSize:11,padding:'2px 7px',borderRadius:3,
@@ -5603,7 +5617,6 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                     <div style={{overflowX:'auto'}}>
                       <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:11}}>
                         <thead><tr style={{borderBottom:'1px solid var(--border)',position:'sticky',top:0,background:'var(--bg)'}}>
-                          {isMulti&&<th style={{padding:'4px 8px',color:'#9acce0',fontWeight:400,fontSize:9}}>Strat</th>}
                           {['#','Activo','Entrada','Salida','Capital inv.','Capital final','P&L %','P&L €','Días'].map((h,hi)=>(
                             <th key={h} style={{padding:'4px 8px',textAlign:'left',
                               color:hi===4?'#9b72ff':hi===5?'#00d4ff':'#9acce0',
@@ -5633,6 +5646,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                             const peaksS2=fwdS.map(v=>{pkS=Math.max(pkS,v);return pkS})
                             const peaksC2=fwdC.map(v=>{pkC=Math.max(pkC,v);return pkC})
                             return displayTrades.map((t,idx)=>{
+                              const tradeNum=displayTrades.length-idx
                               let capInv,capFinal,capFinalColor,pnlEur
                               if(isMulti){
                                 capInv=slotCap
@@ -5673,21 +5687,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                   }}
                                   onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.05)'}
                                   onMouseOut={e=>e.currentTarget.style.background='transparent'}>
-                                  {isMulti&&(
-                                    <td style={{padding:'4px 8px',textAlign:'center'}}>
-                                      {t._stratColor?(
-                                        <div
-                                          onClick={e=>{e.stopPropagation();setMcTradeStratFilter(mcTradeStratFilter===t._stratId?null:t._stratId)}}
-                                          title={t._stratName}
-                                          style={{width:8,height:8,borderRadius:'50%',
-                                            background:mcTradeStratFilter&&mcTradeStratFilter!==t._stratId?t._stratColor+'44':t._stratColor,
-                                            cursor:'pointer',margin:'0 auto',
-                                            boxShadow:mcTradeStratFilter===t._stratId?`0 0 4px ${t._stratColor}`:'none'}}/>
-                                      ):'—'}
-                                    </td>
-                                  )}
-                                  <td style={{padding:'4px 8px',color:'#7a9bc0',fontSize:11}}>{idx+1}</td>
-                                  <td style={{padding:'4px 8px',color:'var(--accent)',fontWeight:700}}>{t.symbol}</td>
+                                  <td style={{padding:'4px 8px',color:'#7a9bc0',fontSize:11}}>{tradeNum}</td>
+                                  <td style={{padding:'4px 8px',color:isMulti&&t._stratColor?t._stratColor:'var(--accent)',fontWeight:700}}>{t.symbol}</td>
                                   <td style={{padding:'4px 8px',color:'#d8ecff',whiteSpace:'nowrap'}}>{fmtDate(t.entryDate)}</td>
                                   <td style={{padding:'4px 8px',color:'#d8ecff',whiteSpace:'nowrap'}}>{fmtDate(t.exitDate)}</td>
                                   <td style={{padding:'4px 8px',color:'#e8f4ff',fontWeight:600,whiteSpace:'nowrap'}}>€{fmt(capInv,0)}</td>
