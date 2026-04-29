@@ -2967,7 +2967,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.120</title>
+        <title>Trading Simulator V9.121</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3044,7 +3044,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.120
+            <span className="dot"/>Trading Simulator V9.121
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5346,6 +5346,9 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                     const ganBH=a.ganBH??0
                                     const sc=mcResult.slotCapital||capIni
                                     const ganBHPct=sc>0?(ganBH/sc)*100:0
+                                    const bhWin=a.ganBH>0?100:0
+                                    const bhCagrYears=mcResult.startDate?(Date.now()-new Date(mcResult.startDate).getTime())/(365.25*24*3600*1000):5
+                                    const bhCagr=sc>0&&bhCagrYears>0?(Math.pow((sc+ganBH)/sc,1/bhCagrYears)-1)*100:0
                                     return(
                                       <tr key={a.symbol}
                                         style={{borderBottom:'1px solid rgba(255,255,255,0.02)',cursor:'pointer',
@@ -5354,15 +5357,15 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                         onMouseOver={e=>e.currentTarget.style.background='rgba(255,209,102,0.06)'}
                                         onMouseOut={e=>e.currentTarget.style.background='rgba(255,209,102,0.02)'}>
                                         <td style={{padding:'4px 6px 4px 22px',color:'#ffd166'}}>{a.symbol}</td>
-                                        <td style={{padding:'4px 6px',color:'#4a6a88'}}>—</td>
-                                        <td style={{padding:'4px 6px',color:'#4a6a88'}}>—</td>
-                                        <td style={{padding:'4px 6px',color:'#4a6a88'}}>—</td>
+                                        <td style={{padding:'4px 6px',color:'#ffd166'}}>1</td>
+                                        <td style={{padding:'4px 6px',color:bhWin===100?'#00e5a0':'#ff4d6d'}}>{bhWin}%</td>
+                                        <td style={{padding:'4px 6px',color:bhCagr>=0?'#ffd166':'#ff4d6d'}}>{(bhCagr>=0?'+':'')+fmt(bhCagr,2,'%')}</td>
                                         <td style={{padding:'4px 6px',color:'#4a6a88'}}>—</td>
                                         <td style={{padding:'4px 6px',color:'#4a6a88'}}>—</td>
                                         <td style={{padding:'4px 6px',color:ganBH>=0?'#ffd166':'#ff4d6d'}}>{ganBH>=0?'+':''}{fmt(ganBH,0,'€')}</td>
                                         <td style={{padding:'4px 6px',color:ganBHPct>=0?'#ffd166':'#ff4d6d'}}>{ganBHPct>=0?'+':''}{fmt(ganBHPct,1,'%')}</td>
-                                        <td style={{padding:'4px 6px',color:'#4a6a88'}}>—</td>
-                                        <td style={{padding:'4px 6px',color:'#4a6a88'}}>—</td>
+                                        <td style={{padding:'4px 6px',color:'#9acce0'}}>100%</td>
+                                        <td style={{padding:'4px 6px',color:'#9acce0'}}>100%</td>
                                       </tr>
                                     )
                                   })}
