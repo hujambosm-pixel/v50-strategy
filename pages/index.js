@@ -691,6 +691,7 @@ export default function Home() {
   const [mcShowBH,setMcShowBH]=useState(true)
   const [mcShowSP500,setMcShowSP500]=useState(false)
   const [showMultiFloat,setShowMultiFloat]=useState(true)
+  const [mcChartsStratVisible,setMcChartsStratVisible]=useState({})
   const [mcShowOccupancy,setMcShowOccupancy]=useState(true)
   const [mcOccMode,setMcOccMode]=useState('compound')  // own filter for MC capital chart
   const mcChartRef=useRef(null)
@@ -2609,6 +2610,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
     setMcMultiResults(results)
     const vis={};results.forEach(r=>{vis[r.id]=true});setMcStratVisible(vis)
     const initialOpen={};results.forEach(r=>{initialOpen[r.id]=true});initialOpen['__bh__']=true;setMcAssetOpen(initialOpen)
+    const chartsVis={};results.forEach(r=>{chartsVis[r.id]=true});setMcChartsStratVisible(chartsVis)
     setMcLoading(false);setMcProgress(null)
   },[mcSelected,mcMode,mcWeights,mcCapital,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL,rankingData,mcStratSelected,strategies,currentStratId])
 
@@ -2967,7 +2969,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.124</title>
+        <title>Trading Simulator V9.125</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3044,7 +3046,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.124
+            <span className="dot"/>Trading Simulator V9.125
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5323,23 +5325,23 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                   {/* Fila madre B&H */}
                                   <tr
                                     onClick={()=>setMcAssetOpen(v=>({...v,'__bh__':!bhOpen}))}
-                                    style={{borderTop:'1px solid rgba(255,209,102,0.2)',
-                                      background:'rgba(255,209,102,0.06)',cursor:'pointer'}}>
+                                    style={{borderTop:'1px solid rgba(160,180,200,0.2)',
+                                      background:'rgba(160,180,200,0.06)',cursor:'pointer'}}>
                                     <td style={{padding:'5px 6px'}}>
                                       <div style={{display:'flex',alignItems:'center',gap:5}}>
-                                        <span style={{fontFamily:MONO,fontSize:9,color:'#7a6a3a',width:8,flexShrink:0}}>{bhOpen?'▼':'▶'}</span>
-                                        <div style={{width:7,height:7,borderRadius:2,background:'#ffd166',flexShrink:0}}/>
-                                        <span style={{color:'#ffd166',fontWeight:600,fontStyle:'italic'}}>B&H Diversif.</span>
+                                        <span style={{fontFamily:MONO,fontSize:9,color:'#7a8a9a',width:8,flexShrink:0}}>{bhOpen?'▼':'▶'}</span>
+                                        <div style={{width:7,height:7,borderRadius:2,background:'#a0b4c8',flexShrink:0}}/>
+                                        <span style={{color:'#a0b4c8',fontWeight:600,fontStyle:'italic'}}>B&H Diversif.</span>
                                         <span style={{fontFamily:MONO,fontSize:9,color:'#4a6a88',marginLeft:2}}>{bhStats.length} activos</span>
                                       </div>
                                     </td>
-                                    <td style={{padding:'5px 6px',color:'#ffd166'}}>{bhStats.length}</td>
-                                    <td style={{padding:'5px 6px',color:bhWinPct===100?'#00e5a0':bhWinPct===0?'#ff4d6d':'#ffd166'}}>{fmt(bhWinPct,0,'%')}</td>
-                                    <td style={{padding:'5px 6px',color:bhCagr>=0?'#ffd166':'#ff4d6d',fontWeight:600}}>{bhCagr>=0?'+':''}{fmt(bhCagr,2,'%')}</td>
+                                    <td style={{padding:'5px 6px',color:'#a0b4c8'}}>{bhStats.length}</td>
+                                    <td style={{padding:'5px 6px',color:bhWinPct===100?'#00e5a0':bhWinPct===0?'#ff4d6d':'#a0b4c8'}}>{fmt(bhWinPct,0,'%')}</td>
+                                    <td style={{padding:'5px 6px',color:bhCagr>=0?'#a0b4c8':'#ff4d6d',fontWeight:600}}>{bhCagr>=0?'+':''}{fmt(bhCagr,2,'%')}</td>
                                     <td style={{padding:'5px 6px',color:'#ff9a3c',fontWeight:600}}>-{fmt(mcResult.maxDDBH||0,1,'%')}</td>
                                     <td style={{padding:'5px 6px',color:'#4a6a88'}}>—</td>
-                                    <td style={{padding:'5px 6px',color:bhProfit>=0?'#ffd166':'#ff4d6d',fontWeight:600}}>{bhProfit>=0?'+':''}{fmt(bhProfit,0,'€')}</td>
-                                    <td style={{padding:'5px 6px',color:bhProfitPct>=0?'#ffd166':'#ff4d6d',fontWeight:600}}>{bhProfitPct>=0?'+':''}{fmt(bhProfitPct,1,'%')}</td>
+                                    <td style={{padding:'5px 6px',color:bhProfit>=0?'#a0b4c8':'#ff4d6d',fontWeight:600}}>{bhProfit>=0?'+':''}{fmt(bhProfit,0,'€')}</td>
+                                    <td style={{padding:'5px 6px',color:bhProfitPct>=0?'#a0b4c8':'#ff4d6d',fontWeight:600}}>{bhProfitPct>=0?'+':''}{fmt(bhProfitPct,1,'%')}</td>
                                     <td style={{padding:'5px 6px',color:'#9acce0'}}>100%</td>
                                     <td style={{padding:'5px 6px',color:'#9acce0'}}>100%</td>
                                   </tr>
@@ -5354,18 +5356,18 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                     return(
                                       <tr key={a.symbol}
                                         style={{borderBottom:'1px solid rgba(255,255,255,0.02)',cursor:'pointer',
-                                          background:'rgba(255,209,102,0.02)'}}
+                                          background:'rgba(160,180,200,0.02)'}}
                                         onClick={()=>{setSimbolo(a.symbol);setSidePanel('watchlist')}}
-                                        onMouseOver={e=>e.currentTarget.style.background='rgba(255,209,102,0.06)'}
-                                        onMouseOut={e=>e.currentTarget.style.background='rgba(255,209,102,0.02)'}>
-                                        <td style={{padding:'4px 6px 4px 22px',color:'#ffd166',borderLeft:'2px solid #ffd16688'}}>{a.symbol}</td>
-                                        <td style={{padding:'4px 6px',color:'#ffd166'}}>1</td>
+                                        onMouseOver={e=>e.currentTarget.style.background='rgba(160,180,200,0.06)'}
+                                        onMouseOut={e=>e.currentTarget.style.background='rgba(160,180,200,0.02)'}>
+                                        <td style={{padding:'4px 6px 4px 22px',color:'#a0b4c8',borderLeft:'2px solid #a0b4c888'}}>{a.symbol}</td>
+                                        <td style={{padding:'4px 6px',color:'#a0b4c8'}}>1</td>
                                         <td style={{padding:'4px 6px',color:'#4a6a88'}}>—</td>
-                                        <td style={{padding:'4px 6px',color:bhCagr>=0?'#ffd166':'#ff4d6d'}}>{(bhCagr>=0?'+':'')+fmt(bhCagr,2,'%')}</td>
+                                        <td style={{padding:'4px 6px',color:bhCagr>=0?'#a0b4c8':'#ff4d6d'}}>{(bhCagr>=0?'+':'')+fmt(bhCagr,2,'%')}</td>
                                         <td style={{padding:'4px 6px',color:'#ff9a3c'}}>{a.priceMaxDD>0?'-'+fmt(a.priceMaxDD,2,'%'):'—'}</td>
                                         <td style={{padding:'4px 6px',color:'#4a6a88'}}>—</td>
-                                        <td style={{padding:'4px 6px',color:ganBH>=0?'#ffd166':'#ff4d6d'}}>{ganBH>=0?'+':''}{fmt(ganBH,0,'€')}</td>
-                                        <td style={{padding:'4px 6px',color:ganBHPct>=0?'#ffd166':'#ff4d6d'}}>{ganBHPct>=0?'+':''}{fmt(ganBHPct,1,'%')}</td>
+                                        <td style={{padding:'4px 6px',color:ganBH>=0?'#a0b4c8':'#ff4d6d'}}>{ganBH>=0?'+':''}{fmt(ganBH,0,'€')}</td>
+                                        <td style={{padding:'4px 6px',color:ganBHPct>=0?'#a0b4c8':'#ff4d6d'}}>{ganBHPct>=0?'+':''}{fmt(ganBHPct,1,'%')}</td>
                                         <td style={{padding:'4px 6px',color:'#9acce0'}}>100%</td>
                                         <td style={{padding:'4px 6px',color:'#9acce0'}}>100%</td>
                                       </tr>
@@ -5400,9 +5402,9 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         {mcResult.bhCurve?.length>0&&(
                           <button onClick={()=>setMcShowBHCompare(s=>!s)}
                             style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',
-                              border:`1px solid ${mcShowBHCompare?'#ffd166':'#3d5a7a'}`,
-                              background:mcShowBHCompare?'rgba(255,209,102,0.12)':'transparent',
-                              color:mcShowBHCompare?'#ffd166':'#3d5a7a'}}>
+                              border:`1px solid ${mcShowBHCompare?'#a0b4c8':'#3d5a7a'}`,
+                              background:mcShowBHCompare?'rgba(160,180,200,0.12)':'transparent',
+                              color:mcShowBHCompare?'#a0b4c8':'#3d5a7a'}}>
                             B&H Diversif.
                           </button>
                         )}
@@ -5411,7 +5413,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       [
                         {key:'simple',  label:'Simple',           color:'#00d4ff',state:mcShowSimple,  set:setMcShowSimple},
                         {key:'compound',label:'Compuesto',        color:'#00e5a0',state:mcShowCompound,set:setMcShowCompound},
-                        {key:'bh',      label:'B&H Diversificado',color:'#ffd166',state:mcShowBH,      set:setMcShowBH},
+                        {key:'bh',      label:'B&H Diversificado',color:'#a0b4c8',state:mcShowBH,      set:setMcShowBH},
                         {key:'sp500',   label:'B&H SP500',        color:'#9b72ff',state:mcShowSP500,   set:setMcShowSP500},
                         {key:'fl',      label:'Flotante',         color:'#ff9a3c',state:showMultiFloat, set:setShowMultiFloat},
                       ].map(({key,label,color,state,set})=>(
@@ -5432,7 +5434,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           show:mcStratVisible[r.id]!==false
                         })),
                         ...(mcResult.bhCurve?.length>0?[{
-                          id:'__bh__',name:'B&H Diversificado',color:'#ffd166',
+                          id:'__bh__',name:'B&H Diversificado',color:'#a0b4c8',
                           data:mcResult.bhCurve,
                           show:mcShowBHCompare,
                           dashed:true
@@ -5669,7 +5671,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                   const isMulti=mcMultiResults.length>1
                   // Estrategias efectivas: multi-run o estrategia activa única
                   const strats=isMulti
-                    ? mcMultiResults.slice(0,MAX_STRATS)
+                    ? mcMultiResults.slice(0,MAX_STRATS).filter(r=>mcChartsStratVisible[r.id]!==false)
                     : [{
                         id:currentStratId||'__single__',
                         name:stratName||'Estrategia',
@@ -5700,11 +5702,20 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           )}
                           {/* Leyenda */}
                           <div style={{padding:'4px 16px',borderBottom:'1px solid var(--border)',display:'flex',gap:10,flexWrap:'wrap',background:'var(--bg2)'}}>
-                            {strats.map(r=>(
-                              <span key={r.id} style={{fontFamily:MONO,fontSize:10,color:r.color,display:'flex',alignItems:'center',gap:4}}>
-                                <span>▲▼</span><span>{r.name}</span>
-                              </span>
-                            ))}
+                            {(isMulti?mcMultiResults.slice(0,MAX_STRATS):[{id:currentStratId||'__single__',name:stratName||'Estrategia',color:STRAT_COMPARE_COLORS[0]}]).map(r=>{
+                              const on=mcChartsStratVisible[r.id]!==false
+                              return(
+                                <button key={r.id}
+                                  onClick={()=>isMulti&&setMcChartsStratVisible(v=>({...v,[r.id]:!on}))}
+                                  style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:isMulti?'pointer':'default',
+                                    border:`1px solid ${on?r.color:'#3d5a7a'}`,
+                                    background:on?`${r.color}18`:'transparent',
+                                    color:on?r.color:'#3d5a7a',
+                                    display:'flex',alignItems:'center',gap:4}}>
+                                  <span>▲▼</span><span>{r.name}</span>
+                                </button>
+                              )
+                            })}
                           </div>
                           {/* Gráficos por activo */}
                           {syms.map(sym=>{

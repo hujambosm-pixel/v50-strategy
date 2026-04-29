@@ -33,7 +33,7 @@ export function MultiCartChart({simpleCurve,compoundCurve,bhCurve,sp500BHCurve,c
         .setData([{time:base[0].date,value:capitalIni},{time:base[base.length-1].date,value:capitalIni}])
       if(showSimple&&stCurve?.length) chart.addLineSeries({color:'#00d4ff',lineWidth:2,lastValueVisible:true,priceLineVisible:false}).setData(stCurve.map(p=>({time:p.date,value:p.value})))
       if(showCompound&&coCurve?.length) chart.addLineSeries({color:'#00e5a0',lineWidth:2,lastValueVisible:true,priceLineVisible:false}).setData(coCurve.map(p=>({time:p.date,value:p.value})))
-      if(showBH&&bhCurve?.length) chart.addLineSeries({color:'#ffd166',lineWidth:2,lineStyle:LineStyle.Dashed,lastValueVisible:true,priceLineVisible:false}).setData(bhCurve.map(p=>({time:p.date,value:p.value})))
+      if(showBH&&bhCurve?.length) chart.addLineSeries({color:'#a0b4c8',lineWidth:2,lineStyle:LineStyle.Dashed,lastValueVisible:true,priceLineVisible:false}).setData(bhCurve.map(p=>({time:p.date,value:p.value})))
       if(showSP500&&sp500BHCurve?.length) chart.addLineSeries({color:'#9b72ff',lineWidth:2,lineStyle:LineStyle.Dotted,lastValueVisible:true,priceLineVisible:false}).setData(sp500BHCurve.map(p=>({time:p.date,value:p.value})))
       const addDD=(curve,date,dd,color)=>{
         if(!date||!dd||!curve?.length||!curve[0]) return
@@ -375,10 +375,10 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
               const bc=isWin?stratColor:'#ff4d6d'
               const iidx=isWin?winIdx++:lossIdx++
               const row=(iidx%ROWS)+(stratIdx*ROWS)
-              const line1=`#${t.n} · €${Math.round(t.capital??0)}`
+              const line1=`#${t.n} · ${t.pnlPct>=0?'+':''}${(t.pnlPct||0).toFixed(1)}%`
               const profit=t.pnlSimple??0
-              const line2=`${t.pnlPct>=0?'+':''}${(t.pnlPct||0).toFixed(1)}% · €${profit>=0?'+':''}${Math.round(profit)}`
-              const BOX_H=28,BOX_STEP=BOX_H+4,MARGIN=6
+              const line2=`${profit>=0?'+':''}€${Math.round(Math.abs(profit))}`
+              const BOX_H=24,BOX_STEP=BOX_H+3,MARGIN=6
               const w=Math.max(line1.length,line2.length)*7.5+20
               const labelY=isWin?MARGIN+BOX_H/2+row*BOX_STEP:chartH-MARGIN-BOX_H/2-row*BOX_STEP
               const g=document.createElementNS(NS,'g')
@@ -402,7 +402,7 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
               }
               const mkT=(txt,y,sz,fill,fw)=>{const el=document.createElementNS(NS,'text');Object.entries({x:midX,y,'font-size':sz,'font-family':_MONO,'text-anchor':'middle',fill,'font-weight':fw}).forEach(([k,v])=>el.setAttribute(k,v));el.textContent=txt;return el}
               g.appendChild(mkT(line1,labelY-4,'9','#cde8ff','700'))
-              g.appendChild(mkT(line2,labelY+8,'9',bc,'600'))
+              g.appendChild(mkT(line2,labelY+7,'9',bc,'600'))
               svg.appendChild(g)
             }catch(_){}
           })
