@@ -593,6 +593,7 @@ export default function Home() {
   // Búsqueda async de nombre
   const symSearchRef=useRef(null)
   const [mcTradeFilter,setMcTradeFilter]=useState('')
+  const [mcTradeStratFilter,setMcTradeStratFilter]=useState(null)
   const [tradeHistMode,setTradeHistMode]=useState('compound')   // 'compound'|'simple' for trade history capital column
   const [mcTradeHistMode,setMcTradeHistMode]=useState('compound')
   const chartSyncRef=useRef({syncing:false,listeners:[]})  // cross-chart time sync
@@ -2969,7 +2970,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.125</title>
+        <title>Trading Simulator V9.126</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3046,7 +3047,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.125
+            <span className="dot"/>Trading Simulator V9.126
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5563,13 +5564,27 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                 }
 
                 {/* Historial combinado — same style as individual */}
-                {mcResult.allTrades?.length>0&&(
+                {(mcMultiResults.length>1?mcMultiResults.some(r=>r.result.allTrades?.length>0):mcResult.allTrades?.length>0)&&(()=>{
+                  const isMulti=mcMultiResults.length>1
+                  const totalCount=isMulti?mcMultiResults.reduce((s,r)=>s+(r.result.allTrades?.length||0),0):mcResult.allTrades.length
+                  return(
                   <div className="trades-section">
                     <div className="section-title" style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',fontSize:14}}>
-                      <span>Historial Multicartera — {mcResult.allTrades.length} operaciones
+                      <span>Historial Multicartera — {totalCount} operaciones
                         <span style={{fontWeight:400,fontSize:11,color:'#9acce0'}}> · clic activo → ver gráfico</span>
                       </span>
-                      <div style={{display:'flex',gap:4,marginLeft:'auto',alignItems:'center'}}>
+                      <div style={{display:'flex',gap:4,marginLeft:'auto',alignItems:'center',flexWrap:'wrap'}}>
+                        {mcTradeStratFilter&&isMulti&&(()=>{
+                          const r=mcMultiResults.find(r=>r.id===mcTradeStratFilter)
+                          return r?(
+                            <span style={{fontSize:9,padding:'1px 6px',borderRadius:10,
+                              border:`1px solid ${r.color}`,color:r.color,
+                              background:r.color+'18',cursor:'pointer'}}
+                              onClick={()=>setMcTradeStratFilter(null)}>
+                              {r.name} · ✕
+                            </span>
+                          ):null
+                        })()}
                         <input value={mcTradeFilter} onChange={e=>setMcTradeFilter(e.target.value)}
                           placeholder="Filtrar activo…"
                           style={{fontFamily:MONO,fontSize:11,padding:'2px 7px',borderRadius:3,
@@ -5588,7 +5603,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                     <div style={{overflowX:'auto'}}>
                       <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:11}}>
                         <thead><tr style={{borderBottom:'1px solid var(--border)',position:'sticky',top:0,background:'var(--bg)'}}>
-                          {['#','Activo','Entrada','Salida','Capital inv.','Capital final','P&L %','P&L €','Días','Tipo'].map((h,hi)=>(
+                          {isMulti&&<th style={{padding:'4px 8px',color:'#9acce0',fontWeight:400,fontSize:9}}>Strat</th>}
+                          {['#','Activo','Entrada','Salida','Capital inv.','Capital final','P&L %','P&L €','Días'].map((h,hi)=>(
                             <th key={h} style={{padding:'4px 8px',textAlign:'left',
                               color:hi===4?'#9b72ff':hi===5?'#00d4ff':'#9acce0',
                               fontWeight:400,fontSize:11,whiteSpace:'nowrap'}}>{h}</th>
@@ -5597,27 +5613,44 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         <tbody>
                           {(()=>{
                             const capIni2=Number(capitalIni)
-                            const allT2=(mcTradeFilter
-                              ?mcResult.allTrades.filter(t=>(t.symbol||'').toUpperCase().includes(mcTradeFilter.toUpperCase()))
-                              :mcResult.allTrades)
-                            const fwdS=mcResult.allTrades.map((_,i)=>capIni2+mcResult.allTrades.slice(0,i+1).reduce((s,x)=>s+x.pnlSimple,0))
-                            const fwdC=mcResult.allTrades.map(t=>t.capitalTras)
+                            const slotCap=mcResult.slotCapital??capIni2
+                            const isC=mcTradeHistMode==='compound'
+                            // Build combined trades with _stratId/_stratName/_stratColor + _origIdx
+                            const allTradesCombined=isMulti
+                              ?mcMultiResults
+                                .flatMap(r=>(r.result.allTrades||[]).map((t,i)=>({...t,_stratId:r.id,_stratName:r.name,_stratColor:r.color,_origIdx:i})))
+                                .sort((a,b)=>a.exitDate<b.exitDate?1:-1)
+                              :[...(mcResult.allTrades||[])].map((t,i)=>({...t,_stratId:null,_stratName:null,_stratColor:null,_origIdx:i})).reverse()
+                            // Apply filters
+                            let displayTrades=allTradesCombined
+                            if(mcTradeFilter) displayTrades=displayTrades.filter(t=>(t.symbol||'').toLowerCase().includes(mcTradeFilter.toLowerCase()))
+                            if(mcTradeStratFilter) displayTrades=displayTrades.filter(t=>t._stratId===mcTradeStratFilter)
+                            // For single-mode capital calculation
+                            const baseArr=mcResult.allTrades||[]
+                            const fwdS=baseArr.map((_,i)=>capIni2+baseArr.slice(0,i+1).reduce((s,x)=>s+x.pnlSimple,0))
+                            const fwdC=baseArr.map(t=>t.capitalTras)
                             let pkS=capIni2,pkC=capIni2
                             const peaksS2=fwdS.map(v=>{pkS=Math.max(pkS,v);return pkS})
                             const peaksC2=fwdC.map(v=>{pkC=Math.max(pkC,v);return pkC})
-                            return [...allT2].reverse().map((t,i)=>{
-                              const origIdx=mcResult.allTrades.indexOf(t)
-                              const isC=mcTradeHistMode==='compound'
-                              const slotCap=mcResult.slotCapital??capIni2
-                              const capInv=isC?(origIdx>0?mcResult.allTrades[origIdx-1].capitalTras:slotCap):slotCap
-                              const capFinalS=fwdS[origIdx],capFinalC=fwdC[origIdx]
-                              const capFinal=isC?capFinalC:capFinalS
-                              const peak=isC?peaksC2[origIdx]:peaksS2[origIdx]
-                              const capFinalColor=capFinal>=peak?'#00d4ff':'#ff9a3c'
-                              const pnlEur=isC?(capInv*(t.pnlPct/100)):t.pnlSimple
+                            return displayTrades.map((t,idx)=>{
+                              let capInv,capFinal,capFinalColor,pnlEur
+                              if(isMulti){
+                                capInv=slotCap
+                                capFinal=t.capitalTras
+                                capFinalColor='#00d4ff'
+                                pnlEur=isC?capInv*(t.pnlPct/100):t.pnlSimple
+                              }else{
+                                const oi=t._origIdx
+                                capInv=isC?(oi>0?baseArr[oi-1]?.capitalTras??slotCap:slotCap):slotCap
+                                const capFinalS=fwdS[oi]??capIni2,capFinalC=fwdC[oi]??capIni2
+                                capFinal=isC?capFinalC:capFinalS
+                                const peak=isC?peaksC2[oi]??capIni2:peaksS2[oi]??capIni2
+                                capFinalColor=capFinal>=peak?'#00d4ff':'#ff9a3c'
+                                pnlEur=isC?capInv*(t.pnlPct/100):t.pnlSimple
+                              }
                               const pnlColor=pnlEur>=0?'var(--green)':'var(--red)'
                               return(
-                                <tr key={i}
+                                <tr key={idx}
                                   style={{borderBottom:'1px solid rgba(255,255,255,0.03)',cursor:'pointer'}}
                                   onClick={()=>{
                                     setMcChartsOpen(true)
@@ -5632,14 +5665,28 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                           const td2=new Date(t.exitDate||t.entryDate); td2.setDate(td2.getDate()+30)
                                           try{chart.timeScale().setVisibleRange({from:fd.toISOString().slice(0,10),to:td2.toISOString().slice(0,10)})}catch(_){}
                                         }
-                                        const symN=mcResult.allTrades.filter(x=>x.symbol===t.symbol).indexOf(t)+1
+                                        const srcArr=isMulti?(mcMultiResults.find(r=>r.id===t._stratId)?.result.allTrades||[]):baseArr
+                                        const symN=srcArr.filter(x=>x.symbol===t.symbol).findIndex(x=>x.entryDate===t.entryDate&&x.exitDate===t.exitDate)+1
                                         highlightTrade?.(symN)
                                       }
                                     },300)
                                   }}
                                   onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.05)'}
                                   onMouseOut={e=>e.currentTarget.style.background='transparent'}>
-                                  <td style={{padding:'4px 8px',color:'#7a9bc0',fontSize:11}}>{allT2.length-i}</td>
+                                  {isMulti&&(
+                                    <td style={{padding:'4px 8px',textAlign:'center'}}>
+                                      {t._stratColor?(
+                                        <div
+                                          onClick={e=>{e.stopPropagation();setMcTradeStratFilter(mcTradeStratFilter===t._stratId?null:t._stratId)}}
+                                          title={t._stratName}
+                                          style={{width:8,height:8,borderRadius:'50%',
+                                            background:mcTradeStratFilter&&mcTradeStratFilter!==t._stratId?t._stratColor+'44':t._stratColor,
+                                            cursor:'pointer',margin:'0 auto',
+                                            boxShadow:mcTradeStratFilter===t._stratId?`0 0 4px ${t._stratColor}`:'none'}}/>
+                                      ):'—'}
+                                    </td>
+                                  )}
+                                  <td style={{padding:'4px 8px',color:'#7a9bc0',fontSize:11}}>{idx+1}</td>
                                   <td style={{padding:'4px 8px',color:'var(--accent)',fontWeight:700}}>{t.symbol}</td>
                                   <td style={{padding:'4px 8px',color:'#d8ecff',whiteSpace:'nowrap'}}>{fmtDate(t.entryDate)}</td>
                                   <td style={{padding:'4px 8px',color:'#d8ecff',whiteSpace:'nowrap'}}>{fmtDate(t.exitDate)}</td>
@@ -5648,14 +5695,6 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                   <td style={{padding:'4px 8px',color:pnlColor,fontWeight:600}}>{t.pnlPct>=0?'+':''}{fmt(t.pnlPct,2)}%</td>
                                   <td style={{padding:'4px 8px',color:pnlColor}}>{pnlEur>=0?'+':''}{fmt(pnlEur,2)}€</td>
                                   <td style={{padding:'4px 8px',color:'#a8c4dc'}}>{t.dias}</td>
-                                  <td style={{padding:'4px 8px'}}>
-                                    <span style={{fontSize:9,padding:'1px 5px',borderRadius:2,
-                                      background:t.pnlPct>=0?'rgba(0,229,160,0.1)':'rgba(255,77,109,0.1)',
-                                      color:t.pnlPct>=0?'#00e5a0':'#ff4d6d',
-                                      border:`1px solid ${t.pnlPct>=0?'rgba(0,229,160,0.3)':'rgba(255,77,109,0.3)'}`}}>
-                                      {t.tipo}
-                                    </span>
-                                  </td>
                                 </tr>
                               )
                             })
@@ -5664,7 +5703,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       </table>
                     </div>
                   </div>
-                )}
+                  )
+                })()}
                 {/* ── Vista de gráficos — una o varias estrategias ── */}
                 {mcResult&&(()=>{
                   const MAX_SYMS=10,MAX_STRATS=3
