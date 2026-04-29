@@ -460,6 +460,19 @@ function runCodeJsAsset(data, sp500Data, codeJs, slotCapital, years) {
 
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 
+// ── Max Drawdown del precio de cierre (para B&H por activo) ──
+function _calcPriceMaxDD(data, startDate) {
+  const filtered = startDate ? data.filter(d => d.date >= startDate) : data
+  if (!filtered.length) return 0
+  let peak = filtered[0].close, maxDD = 0
+  filtered.forEach(d => {
+    if (d.close > peak) peak = d.close
+    const dd = (peak - d.close) / peak * 100
+    if (dd > maxDD) maxDD = dd
+  })
+  return maxDD
+}
+
 // ── Max Drawdown real + T.invertido + Cap.inv.medio con curva de precio diaria ──
 function _calcAssetMaxDD(trades, data, slotCapital, startDate) {
   if (!data || data.length === 0) return { maxDD: 0, maxDDDate: null, tInvertido: 0, capInvMedio: 0 }
@@ -599,6 +612,7 @@ export default async function handler(req, res) {
       const p0 = filtData[0]?.close
       const pN = filtData[filtData.length - 1]?.close
       const ganBH = (p0 && pN && p0 > 0) ? slotCapital * (pN / p0 - 1) : 0
+      const priceMaxDD = _calcPriceMaxDD(ar.data, curves.startDate)
       return {
         symbol: ar.symbol,
         trades: ar.trades.length,
@@ -614,6 +628,7 @@ export default async function handler(req, res) {
         tInvertido,
         capInvMedio,
         ganBH,
+        priceMaxDD,
       }
     })
 

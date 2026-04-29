@@ -371,7 +371,8 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
               if(x1==null||x2==null) return
               const midX=(x1+x2)/2
               const isWin=t.pnlPct>=0
-              const bc=isWin?'#00e5a0':'#ff4d6d'
+              const stratColor=s.color||'#00e5a0'
+              const bc=isWin?stratColor:'#ff4d6d'
               const iidx=isWin?winIdx++:lossIdx++
               const row=(iidx%ROWS)+(stratIdx*ROWS)
               const line1=`#${t.n} · €${Math.round(t.capital??0)}`
@@ -383,8 +384,9 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
               const g=document.createElementNS(NS,'g')
               g.setAttribute('class','trade-label'); g.setAttribute('pointer-events','none')
               const rect=document.createElementNS(NS,'rect')
+              const fillWin=(stratColor.length===7&&stratColor.startsWith('#'))?stratColor+'22':'rgba(0,229,160,0.14)'
               Object.entries({x:midX-w/2,y:labelY-BOX_H/2,width:w,height:BOX_H,
-                fill:isWin?'rgba(0,229,160,0.14)':'rgba(255,77,109,0.14)',
+                fill:isWin?fillWin:'rgba(255,77,109,0.14)',
                 rx:'4',stroke:bc,'stroke-width':'1'}).forEach(([k,v])=>rect.setAttribute(k,v))
               g.appendChild(rect)
               const midPrice=(t.entryPx+t.exitPx)/2
