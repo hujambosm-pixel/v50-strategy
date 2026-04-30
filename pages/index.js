@@ -2979,7 +2979,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.135</title>
+        <title>Trading Simulator V9.136</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3056,7 +3056,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.135
+            <span className="dot"/>Trading Simulator V9.136
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5237,7 +5237,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                 {/* ── Tabla unificada: Comparativa + Resumen por activo ── */}
                 {(()=>{
                   const isMulti=mcMultiResults.length>1
-                  const capIni=Number(capitalIni)
+                  const capIni=Number(mcCapitalIni||capitalIni)
                   // Lista de estrategias: multi → mcMultiResults; single → wrapper sintético
                   const stratList=isMulti
                     ? mcMultiResults
@@ -5296,10 +5296,11 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               const wins=allT.filter(t=>t.pnlPct>=0),losses=allT.filter(t=>t.pnlPct<0)
                               const winRate=allT.length?wins.length/allT.length*100:0
                               const lastC=r.result.compoundCurve?.slice(-1)[0]?.value||capIni
+                              const firstC=r.result.compoundCurve?.[0]?.value||capIni
                               const fd=r.result.startDate?new Date(r.result.startDate):null
                               const ld=r.result.compoundCurve?.slice(-1)[0]?.date?new Date(r.result.compoundCurve.slice(-1)[0].date):new Date()
                               const anios=fd&&ld?(ld-fd)/86400000/365.25:1
-                              const cagrC=(Math.pow(Math.max(lastC,0.01)/Math.max(capIni,0.01),1/Math.max(anios,0.01))-1)*100
+                              const cagrC=(Math.pow(Math.max(lastC,0.01)/Math.max(firstC,0.01),1/Math.max(anios,0.01))-1)*100
                               const grossWin=wins.reduce((s,t)=>s+(t.pnlSimple||0),0)
                               const grossLoss=Math.abs(losses.reduce((s,t)=>s+(t.pnlSimple||0),0))
                               const pf=grossLoss>0?grossWin/grossLoss:grossWin>0?99:0
@@ -5339,7 +5340,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                   {isOpen&&rStats.map(a=>{
                                     const ganPct=sc>0?(a.ganComp/sc)*100:0
                                     const startMs=r.result.startDate?new Date(r.result.startDate).getTime():0
-                                    const endMs=Date.now()
+                                    const lastCurveDate=r.result.compoundCurve?.slice(-1)[0]?.date
+                                    const endMs=lastCurveDate?new Date(lastCurveDate).getTime():Date.now()
                                     const yrs=startMs>0?(endMs-startMs)/(365.25*24*3600*1000):5
                                     const cagr=sc>0&&yrs>0?(Math.pow(Math.max((sc+a.ganComp)/sc,0.001),1/yrs)-1)*100:0
                                     const assetTrades=allT.filter(t=>t.symbol===a.symbol)
@@ -5407,7 +5409,9 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                     const sc=mcResult.slotCapital||capIni
                                     const ganBHPct=sc>0?(ganBH/sc)*100:0
                                     const bhWin=a.ganBH>0?100:0
-                                    const bhCagrYears=mcResult.startDate?(Date.now()-new Date(mcResult.startDate).getTime())/(365.25*24*3600*1000):5
+                                    const bhLastDate=mcResult.compoundCurve?.slice(-1)[0]?.date||mcResult.bhCurve?.slice(-1)[0]?.date
+                                    const bhEndMs=bhLastDate?new Date(bhLastDate).getTime():Date.now()
+                                    const bhCagrYears=mcResult.startDate?(bhEndMs-new Date(mcResult.startDate).getTime())/(365.25*24*3600*1000):5
                                     const bhCagr=sc>0&&bhCagrYears>0?(Math.pow((sc+ganBH)/sc,1/bhCagrYears)-1)*100:0
                                     return(
                                       <tr key={a.symbol}
@@ -5496,7 +5500,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           dashed:true
                         }]:[])
                       ]}
-                      capitalIni={Number(capitalIni)}
+                      capitalIni={Number(mcCapitalIni||capitalIni)}
                       onReady={api=>{mcChartApiRef.current=api}}
                       syncRef={chartSyncRef}
                       chartHeight={mcEquityH}
@@ -5507,7 +5511,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       compoundCurve={mcResult.compoundCurve}
                       bhCurve={mcResult.bhCurve}
                       sp500BHCurve={mcResult.sp500BHCurve||[]}
-                      capitalIni={Number(capitalIni)}
+                      capitalIni={Number(mcCapitalIni||capitalIni)}
                       maxDDSimple={mcResult.maxDDSimple}   maxDDSimpleDate={mcResult.maxDDSimpleDate}
                       maxDDCompound={mcResult.maxDDCompound} maxDDCompoundDate={mcResult.maxDDCompoundDate}
                       maxDDBH={mcResult.maxDDBH}           maxDDBHDate={mcResult.maxDDBHDate}
@@ -5548,7 +5552,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         occupancyCurve:r.result.occupancyCurve,
                         compoundCurve:r.result.compoundCurve,
                       }))}
-                      capitalIni={Number(capitalIni)}
+                      capitalIni={Number(mcCapitalIni||capitalIni)}
                       syncRef={chartSyncRef}
                     />
                   </div>
