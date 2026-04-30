@@ -316,6 +316,145 @@ function buildRotativoCurves(assetResults, capitalIni, rankMap) {
   }
 }
 
+// ── MODO CAPITAL COMPARTIDO: pool libre repartido entre slots activos ──
+function buildCompartidoCurves(assetResults, capitalIni) {
+  const n = assetResults.length
+  if (!n) return _emptyCurves()
+  const { startDate, filteredDates } = _commonDates(assetResults)
+  if (!filteredDates.length) return _emptyCurves(startDate)
+
+  // Recopilar todos los trades de todos los activos con pnlPct pre-calculado
+  const allCandidates = assetResults.flatMap(ar =>
+    (ar.trades || []).map(t => ({
+      symbol:    ar.symbol,
+      entryDate: t.entryDate,
+      exitDate:  t.exitDate,
+      pnlPct:    t.pnlPct,
+      entryPx:   t.entryPrice ?? t.entryPx,
+      dias:      t.dias,
+    }))
+  ).sort((a, b) => a.entryDate < b.entryDate ? -1 : 1)
+
+  if (!allCandidates.length) return buildSlotsCurves(assetResults, capitalIni)
+
+  // Pool de capital libre y slots abiertos
+  let poolLibre = capitalIni
+  const openSlots = {}          // { symbol: { trade, capAsignado } }
+  const executedTrades = []
+  const capitalAtEntryMap = {}  // `${symbol}:${entryDate}` → capAsignado
+
+  // Agrupar entradas por fecha
+  const entriesByDate = {}
+  allCandidates.forEach(t => {
+    if (!entriesByDate[t.entryDate]) entriesByDate[t.entryDate] = []
+    entriesByDate[t.entryDate].push(t)
+  })
+
+  // Timeline: todas las fechas de entrada y salida relevantes
+  const eventDates = [...new Set([
+    ...allCandidates.map(t => t.entryDate),
+    ...allCandidates.map(t => t.exitDate),
+  ])].sort()
+
+  eventDates.forEach(date => {
+    // 1. Cerrar primero (libera capital para nuevas entradas del mismo día)
+    const toClose = Object.keys(openSlots).filter(sym => openSlots[sym].trade.exitDate === date)
+    toClose.forEach(symbol => {
+      const { trade, capAsignado } = openSlots[symbol]
+      const capFinal = capAsignado * (1 + trade.pnlPct / 100)
+      poolLibre += capFinal
+      executedTrades.push({
+        ...trade,
+        _capitalAtEntry: capAsignado,
+        capitalTras: capFinal,
+        pnlSimple: capFinal - capAsignado,
+      })
+      delete openSlots[symbol]
+    })
+
+    // 2. Abrir entradas del día (solo activos sin posición abierta)
+    const entries = (entriesByDate[date] || []).filter(t => !openSlots[t.symbol])
+    if (entries.length > 0 && poolLibre > 0) {
+      const capPorSlot = poolLibre / entries.length
+      entries.forEach(t => {
+        poolLibre -= capPorSlot
+        openSlots[t.symbol] = { trade: t, capAsignado: capPorSlot }
+        capitalAtEntryMap[`${t.symbol}:${t.entryDate}`] = capPorSlot
+      })
+    }
+  })
+
+  // Build symbol → filtered OHLCV map para curva flotante
+  const symbolDataMap = {}
+  assetResults.forEach(ar => { symbolDataMap[ar.symbol] = ar.data ? ar.data.filter(d => d.date >= startDate) : [] })
+
+  // Construir curvas fecha a fecha (mismo patrón que buildRotativoCurves)
+  const step = Math.max(1, Math.floor(filteredDates.length / 400))
+  const sampledDates = filteredDates.filter((_, i) => i % step === 0 || i === filteredDates.length - 1)
+
+  const simpleCurve = [], compoundCurve = [], floatSimpleCurve = [], floatCompoundCurve = []
+
+  sampledDates.forEach(date => {
+    const closedSoFar = executedTrades.filter(t => t.exitDate <= date)
+    // Compound: capitalIni + suma de pnlSimple de trades cerrados
+    // (= pool_libre + capital locked in open slots, sin flotar)
+    const val = capitalIni + closedSoFar.reduce((s, t) => s + t.pnlSimple, 0)
+    compoundCurve.push({ date, value: val })
+    // Simple: base fija = capitalIni (mismo patrón que buildRotativoCurves)
+    const simpleVal = capitalIni + closedSoFar.reduce((s, t) => s + capitalIni * (t.pnlPct / 100), 0)
+    simpleCurve.push({ date, value: simpleVal })
+
+    // Float: P&L no realizado de todos los trades activos
+    const activeNow = allCandidates.filter(t => t.entryDate <= date && t.exitDate > date)
+    let openPnlSimple = 0, openPnlCompound = 0
+    activeNow.forEach(t => {
+      const capEntry = capitalAtEntryMap[`${t.symbol}:${t.entryDate}`]
+      if (capEntry == null) return
+      const fData = symbolDataMap[t.symbol] || []
+      let closePx = null
+      for (let i = fData.length - 1; i >= 0; i--) { if (fData[i].date <= date) { closePx = fData[i].close; break } }
+      if (closePx != null && t.entryPx) {
+        const ret = (closePx - t.entryPx) / t.entryPx
+        openPnlSimple += ret * capitalIni
+        openPnlCompound += ret * capEntry
+      }
+    })
+    floatSimpleCurve.push({ date, value: simpleVal + openPnlSimple })
+    floatCompoundCurve.push({ date, value: val + openPnlCompound })
+  })
+
+  // Ocupación: % de slots con posición abierta
+  const occupancyCurve = sampledDates.map(date => {
+    const busy = allCandidates.filter(t =>
+      capitalAtEntryMap[`${t.symbol}:${t.entryDate}`] != null &&
+      t.entryDate <= date && t.exitDate > date
+    ).length
+    return { date, value: n > 0 ? (busy / n) * 100 : 0 }
+  })
+
+  // B&H combinado: mismo patrón que buildRotativoCurves
+  const slotBH = capitalIni / n
+  const bhCurve = sampledDates.map(date => {
+    let total = 0
+    assetResults.forEach(ar => {
+      const filtData = ar.data ? ar.data.filter(d => d.date >= startDate) : []
+      const p0 = filtData.length ? filtData[0].close : null
+      if (!p0) { total += slotBH; return }
+      let bar = null
+      for (let i = filtData.length - 1; i >= 0; i--) { if (filtData[i].date <= date) { bar = filtData[i]; break } }
+      total += bar ? slotBH * (bar.close / p0) : slotBH
+    })
+    return { date, value: total }
+  })
+
+  return {
+    simpleCurve, compoundCurve, bhCurve, occupancyCurve, startDate,
+    executedTrades, floatSimpleCurve, floatCompoundCurve,
+    ..._calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni),
+    ..._calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni)
+  }
+}
+
 // ── MODO PESOS PERSONALIZADOS: cada activo con su % fijo ─────
 // weights: {symbol: pct}  (pct en 0–100, suma = 100)
 function buildCustomCurves(assetResults, capitalIni, weights) {
@@ -594,10 +733,10 @@ export default async function handler(req, res) {
     let curves
     if (modoAsig === 'rotativo') {
       curves = buildRotativoCurves(assetResults, cfg.capitalIni, rankMap)
-    } else if (modoAsig === 'custom') {
-      curves = buildCustomCurves(assetResults, cfg.capitalIni, weights)
+    } else if (modoAsig === 'compartido') {
+      curves = buildCompartidoCurves(assetResults, cfg.capitalIni)
     } else {
-      // 'slots' (por defecto)
+      // 'slots' por defecto — también maneja legacy 'custom'
       curves = buildSlotsCurves(assetResults, cfg.capitalIni)
     }
 
@@ -639,7 +778,7 @@ export default async function handler(req, res) {
 
     // Historial combinado ordenado por fecha salida
     // En modo rotativo usamos los trades efectivamente ejecutados (reescalados)
-    const sourceTrades = modoAsig === 'rotativo'
+    const sourceTrades = (modoAsig === 'rotativo' || modoAsig === 'compartido')
       ? (curves.executedTrades || [])
       : assetResults.flatMap(ar => ar.trades.map(t => ({ ...t, symbol: ar.symbol })))
             .sort((a,b) => a.exitDate.localeCompare(b.exitDate))

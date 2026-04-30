@@ -2969,7 +2969,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.128</title>
+        <title>Trading Simulator V9.129</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3046,7 +3046,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.128
+            <span className="dot"/>Trading Simulator V9.129
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -3876,18 +3876,18 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     <span style={{fontFamily:MONO,fontSize:9,color:'#4a7a9a',width:10}}>{mcSectionOpen.mode?'▼':'▶'}</span>
                     <span style={{fontFamily:MONO,fontSize:12,color:'#c8dff5',fontWeight:600,letterSpacing:'0.05em'}}>MODO DE ASIGNACIÓN</span>
                     <span style={{marginLeft:'auto',fontFamily:MONO,fontSize:10,color:'#4a6a88'}}>
-                      {mcMode==='slots'?'Slots iguales':mcMode==='rotativo'?'Capital rotativo':'Pesos personalizados'}
+                      {mcMode==='slots'?'Slots iguales':mcMode==='rotativo'?'Capital rotativo':mcMode==='compartido'?'Capital compartido':'Slots iguales'}
                     </span>
                   </div>
                   {mcSectionOpen.mode&&(
                     <div style={{padding:'10px 12px',borderBottom:'1px solid var(--border)'}}>
                       {[
                         {id:'slots',label:'Slots iguales',ready:true,
-                          desc:'El capital se divide en N partes iguales, una por activo. Cada slot opera de forma independiente con su fracción fija.'},
+                          desc:'El capital se divide en partes iguales y cada slot crece de forma independiente con interés compuesto. Ejemplo: 1000€ con 4 activos → 250€ por slot. Si NVDA gana +42%, su slot pasa a 355€ y el siguiente trade de NVDA parte de esos 355€. Los slots nunca se redistribuyen entre activos.'},
                         {id:'rotativo',label:'Capital rotativo',ready:true,
-                          desc:'Un único pool de capital se asigna a los activos según van generando señales. Al cerrar una posición, el capital liberado vuelve al pool para la siguiente señal.'},
-                        {id:'custom',label:'Pesos personalizados',ready:true,
-                          desc:'Define manualmente qué porcentaje del capital va a cada activo. La suma debe ser 100%.'},
+                          desc:'Un único pool de capital. El primer activo con señal usa el 100% del capital disponible. Mientras está abierto, ningún otro activo puede entrar. Cuando cierra, el capital vuelve al pool. Ejemplo: 1000€, TSLA entra con 1000€. Mientras TSLA está abierto, NVDA no puede entrar aunque dé señal. TSLA cierra +10% → pool = 1100€ → siguiente señal entra con 1100€.'},
+                        {id:'compartido',label:'Capital compartido',ready:true,
+                          desc:'El capital libre se reparte a partes iguales entre los activos que van a entrar. Justo antes de cada entrada: capital_por_slot = pool_libre / slots_libres. Cuando un trade cierra, su capital (con ganancias o pérdidas) vuelve al pool. Ejemplo: 1000€ con 4 activos. Los 4 entran → 250€ cada uno. NVDA cierra +42% → devuelve 355€ al pool. Solo TSLA sigue abierto → pool = 355€ + restantes. Próxima entrada de NVDA: 355€ / slots_libres en ese momento.'},
                       ].map(m=>(
                         <div key={m.id} style={{marginBottom:3}}>
                           <div onClick={()=>m.ready&&setMcMode(m.id)}
@@ -5169,7 +5169,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                 {/* Header resumen */}
                 <div style={{padding:'7px 16px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
                   <span style={{fontFamily:MONO,fontSize:13,color:'var(--accent)',fontWeight:700}}>📊 Multicartera</span>
-                  <span style={{fontFamily:MONO,fontSize:11,color:'#8ab8d4'}}>{mcResult.n} activos · <span style={{color:mcResult.modoAsig==='rotativo'?'#ffd166':mcResult.modoAsig==='custom'?'#9b72ff':'#00d4ff'}}>{mcResult.modoAsig==='rotativo'?'Capital rotativo':mcResult.modoAsig==='custom'?'Pesos personalizados':'Slots iguales'}</span></span>
+                  <span style={{fontFamily:MONO,fontSize:11,color:'#8ab8d4'}}>{mcResult.n} activos · <span style={{color:mcResult.modoAsig==='rotativo'?'#ffd166':mcResult.modoAsig==='custom'?'#9b72ff':'#00d4ff'}}>{mcResult.modoAsig==='rotativo'?'Capital rotativo':mcResult.modoAsig==='compartido'?'Capital compartido':'Slots iguales'}</span></span>
                   <span style={{fontFamily:MONO,fontSize:11,color:'#8ab8d4'}}>Desde {fmtDate(mcResult.startDate)}</span>
                   <div style={{marginLeft:'auto',display:'flex',gap:6,alignItems:'center'}}>
                     <button onClick={()=>mcChartApiRef.current?.fitAll()}
