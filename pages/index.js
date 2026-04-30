@@ -2978,7 +2978,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.131</title>
+        <title>Trading Simulator V9.132</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3055,7 +3055,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.131
+            <span className="dot"/>Trading Simulator V9.132
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5651,7 +5651,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         </tr></thead>
                         <tbody>
                           {(()=>{
-                            const capIni2=Number(capitalIni)
+                            const capIni2=Number(mcCapitalIni||capitalIni)
                             const allT2=(mcTradeFilter
                               ?mcResult.allTrades.filter(t=>(t.symbol||'').toUpperCase().includes(mcTradeFilter.toUpperCase()))
                               :mcResult.allTrades)
@@ -5664,7 +5664,11 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               const origIdx=mcResult.allTrades.indexOf(t)
                               const isC=mcTradeHistMode==='compound'
                               const slotCap=mcResult.slotCapital??capIni2
-                              const capInv=isC?(origIdx>0?mcResult.allTrades[origIdx-1].capitalTras:slotCap):slotCap
+                              const capInv=t._capitalAtEntry!=null
+                                ?t._capitalAtEntry
+                                :isC
+                                  ?(origIdx>0?mcResult.allTrades[origIdx-1].capitalTras:slotCap)
+                                  :slotCap
                               const capFinalS=fwdS[origIdx],capFinalC=fwdC[origIdx]
                               const capFinal=isC?capFinalC:capFinalS
                               const peak=isC?peaksC2[origIdx]:peaksS2[origIdx]
