@@ -688,6 +688,7 @@ export default function Home() {
   const [mcYears,setMcYears]=useState(5)
   const [mcFromDate,setMcFromDate]=useState(()=>{const d=new Date();d.setFullYear(d.getFullYear()-5);return d.toISOString().slice(0,10)})
   const [mcToDate,setMcToDate]=useState(()=>new Date().toISOString().slice(0,10))
+  const [mcHistStratId,setMcHistStratId]=useState(null) // null=estrategia activa, string=id específico
   const [mcResult,setMcResult]=useState(null)
   const [mcLoading,setMcLoading]=useState(false)
   const [mcError,setMcError]=useState(null)
@@ -2978,7 +2979,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.133</title>
+        <title>Trading Simulator V9.134</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3055,7 +3056,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.133
+            <span className="dot"/>Trading Simulator V9.134
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5618,27 +5619,65 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                 }
 
                 {/* Historial combinado — same style as individual */}
-                {mcResult.allTrades?.length>0&&(
+                {(()=>{
+                  const isMultiHist=mcMultiResults.length>1
+                  const histResult=isMultiHist&&mcHistStratId
+                    ?(mcMultiResults.find(r=>r.id===mcHistStratId)?.result??mcResult)
+                    :mcResult
+                  const histTitle=isMultiHist&&mcHistStratId
+                    ?(mcMultiResults.find(r=>r.id===mcHistStratId)?.name??'Historial')
+                    :'Historial Multicartera'
+                  const csDisabled=isMultiHist&&!mcHistStratId
+                  if(!histResult?.allTrades?.length) return null
+                  return(
                   <div className="trades-section">
-                    <div className="section-title" style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',fontSize:14}}>
-                      <span>Historial Multicartera — {mcResult.allTrades.length} operaciones
-                        <span style={{fontWeight:400,fontSize:11,color:'#9acce0'}}> · clic activo → ver gráfico</span>
-                      </span>
-                      <div style={{display:'flex',gap:4,marginLeft:'auto',alignItems:'center'}}>
-                        <input value={mcTradeFilter} onChange={e=>setMcTradeFilter(e.target.value)}
-                          placeholder="Filtrar activo…"
-                          style={{fontFamily:MONO,fontSize:11,padding:'2px 7px',borderRadius:3,
-                            background:'#0d1828',border:'1px solid #274462',color:'#e8f4ff',width:110}}/>
-                        {[{id:'compound',label:'Compuesto'},{id:'simple',label:'Simple'}].map(m=>(
-                          <button key={m.id} onClick={()=>setMcTradeHistMode(m.id)}
-                            style={{fontFamily:MONO,fontSize:10,padding:'2px 6px',borderRadius:3,cursor:'pointer',
-                              border:`1px solid ${mcTradeHistMode===m.id?'var(--accent)':'#2a3f55'}`,
-                              background:mcTradeHistMode===m.id?'rgba(0,212,255,0.1)':'transparent',
-                              color:mcTradeHistMode===m.id?'var(--accent)':'#4a6a88'}}>
-                            {m.label}
-                          </button>
-                        ))}
+                    <div className="section-title" style={{display:'flex',flexDirection:'column',gap:6,fontSize:14}}>
+                      <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+                        <span>{histTitle} — {histResult.allTrades.length} operaciones
+                          <span style={{fontWeight:400,fontSize:11,color:'#9acce0'}}> · clic activo → ver gráfico</span>
+                        </span>
+                        <div style={{display:'flex',gap:4,marginLeft:'auto',alignItems:'center'}}>
+                          <input value={mcTradeFilter} onChange={e=>setMcTradeFilter(e.target.value)}
+                            placeholder="Filtrar activo…"
+                            style={{fontFamily:MONO,fontSize:11,padding:'2px 7px',borderRadius:3,
+                              background:'#0d1828',border:'1px solid #274462',color:'#e8f4ff',width:110}}/>
+                          {[{id:'compound',label:'Compuesto'},{id:'simple',label:'Simple'}].map(m=>(
+                            <button key={m.id} onClick={()=>!csDisabled&&setMcTradeHistMode(m.id)} disabled={csDisabled}
+                              style={{fontFamily:MONO,fontSize:10,padding:'2px 6px',borderRadius:3,
+                                cursor:csDisabled?'default':'pointer',opacity:csDisabled?0.4:1,
+                                border:`1px solid ${mcTradeHistMode===m.id?'var(--accent)':'#2a3f55'}`,
+                                background:mcTradeHistMode===m.id?'rgba(0,212,255,0.1)':'transparent',
+                                color:mcTradeHistMode===m.id?'var(--accent)':'#4a6a88'}}>
+                              {m.label}
+                            </button>
+                          ))}
+                        </div>
                       </div>
+                      {isMultiHist&&(
+                        <div style={{display:'flex',gap:3,alignItems:'center',flexWrap:'wrap'}}>
+                          <button onClick={()=>setMcHistStratId(null)}
+                            style={{fontSize:9,padding:'2px 8px',borderRadius:3,cursor:'pointer',
+                              border:`1px solid ${!mcHistStratId?'#9acce0':'#3d5a7a'}`,
+                              background:!mcHistStratId?'rgba(154,204,224,0.12)':'transparent',
+                              color:!mcHistStratId?'#9acce0':'#4a6a88'}}>
+                            Activa
+                          </button>
+                          {mcMultiResults.map(r=>{
+                            const isAct=mcHistStratId===r.id
+                            return(
+                              <button key={r.id} onClick={()=>setMcHistStratId(isAct?null:r.id)}
+                                style={{fontSize:9,padding:'2px 8px',borderRadius:3,cursor:'pointer',
+                                  border:`1px solid ${isAct?r.color:'#3d5a7a'}`,
+                                  background:isAct?r.color+'18':'transparent',
+                                  color:isAct?r.color:'#4a6a88',
+                                  display:'flex',alignItems:'center',gap:3}}>
+                                <div style={{width:6,height:6,borderRadius:'50%',background:r.color,flexShrink:0}}/>
+                                {r.name}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )}
                     </div>
                     <div style={{overflowX:'auto'}}>
                       <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:11}}>
@@ -5653,19 +5692,19 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           {(()=>{
                             const capIni2=Number(mcCapitalIni||capitalIni)
                             const allT2=(mcTradeFilter
-                              ?mcResult.allTrades.filter(t=>(t.symbol||'').toUpperCase().includes(mcTradeFilter.toUpperCase()))
-                              :mcResult.allTrades)
-                            const fwdS=mcResult.allTrades.map((_,i)=>capIni2+mcResult.allTrades.slice(0,i+1).reduce((s,x)=>s+x.pnlSimple,0))
-                            const fwdC=mcResult.allTrades.map(t=>t.capitalTras)
+                              ?histResult.allTrades.filter(t=>(t.symbol||'').toUpperCase().includes(mcTradeFilter.toUpperCase()))
+                              :histResult.allTrades)
+                            const fwdS=histResult.allTrades.map((_,i)=>capIni2+histResult.allTrades.slice(0,i+1).reduce((s,x)=>s+x.pnlSimple,0))
+                            const fwdC=histResult.allTrades.map(t=>t.capitalTras)
                             let pkS=capIni2,pkC=capIni2
                             const peaksS2=fwdS.map(v=>{pkS=Math.max(pkS,v);return pkS})
                             const peaksC2=fwdC.map(v=>{pkC=Math.max(pkC,v);return pkC})
                             const prevByIdx={},lastBySymbol={}
-                            mcResult.allTrades.forEach((t,i)=>{prevByIdx[i]=lastBySymbol[t.symbol]??null;lastBySymbol[t.symbol]=t})
+                            histResult.allTrades.forEach((t,i)=>{prevByIdx[i]=lastBySymbol[t.symbol]??null;lastBySymbol[t.symbol]=t})
                             return [...allT2].reverse().map((t,i)=>{
-                              const origIdx=mcResult.allTrades.indexOf(t)
+                              const origIdx=histResult.allTrades.indexOf(t)
                               const isC=mcTradeHistMode==='compound'
-                              const slotCap=mcResult.slotCapital??capIni2
+                              const slotCap=histResult.slotCapital??capIni2
                               const capInv=t._capitalAtEntry!=null
                                 ?t._capitalAtEntry
                                 :isC
@@ -5693,7 +5732,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                           const td2=new Date(t.exitDate||t.entryDate); td2.setDate(td2.getDate()+30)
                                           try{chart.timeScale().setVisibleRange({from:fd.toISOString().slice(0,10),to:td2.toISOString().slice(0,10)})}catch(_){}
                                         }
-                                        const symN=mcResult.allTrades.filter(x=>x.symbol===t.symbol).indexOf(t)+1
+                                        const symN=histResult.allTrades.filter(x=>x.symbol===t.symbol).indexOf(t)+1
                                         highlightTrade?.(symN)
                                       }
                                     },300)
@@ -5717,7 +5756,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       </table>
                     </div>
                   </div>
-                )}
+                  )
+                })()}
                 {/* ── Vista de gráficos — una o varias estrategias ── */}
                 {mcResult&&(()=>{
                   const MAX_SYMS=10,MAX_STRATS=3
