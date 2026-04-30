@@ -2979,7 +2979,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.138</title>
+        <title>Trading Simulator V9.139</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3056,7 +3056,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.138
+            <span className="dot"/>Trading Simulator V9.139
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5394,12 +5394,12 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                       </div>
                                     </td>
                                     <td style={{padding:'5px 6px',color:'#a0b4c8'}}>{bhStats.length}</td>
-                                    <td style={{padding:'5px 6px',color:bhWinPct===100?'#00e5a0':bhWinPct===0?'#ff4d6d':'#a0b4c8'}}>{fmt(bhWinPct,0,'%')}</td>
                                     <td style={{padding:'5px 6px',color:bhCagr>=0?'#a0b4c8':'#ff4d6d',fontWeight:600}}>{bhCagr>=0?'+':''}{fmt(bhCagr,2,'%')}</td>
-                                    <td style={{padding:'5px 6px',color:'#ff9a3c',fontWeight:600}}>-{fmt(mcResult.maxDDBH||0,1,'%')}</td>
-                                    <td style={{padding:'5px 6px',color:'#4a6a88'}}>—</td>
                                     <td style={{padding:'5px 6px',color:bhProfit>=0?'#a0b4c8':'#ff4d6d',fontWeight:600}}>{bhProfit>=0?'+':''}{fmt(bhProfit,0,'€')}</td>
                                     <td style={{padding:'5px 6px',color:bhProfitPct>=0?'#a0b4c8':'#ff4d6d',fontWeight:600}}>{bhProfitPct>=0?'+':''}{fmt(bhProfitPct,1,'%')}</td>
+                                    <td style={{padding:'5px 6px',color:bhWinPct===100?'#00e5a0':bhWinPct===0?'#ff4d6d':'#a0b4c8'}}>{fmt(bhWinPct,0,'%')}</td>
+                                    <td style={{padding:'5px 6px',color:'#4a6a88'}}>—</td>
+                                    <td style={{padding:'5px 6px',color:'#ff9a3c',fontWeight:600}}>-{fmt(mcResult.maxDDBH||0,1,'%')}</td>
                                     <td style={{padding:'5px 6px',color:'#9acce0'}}>100%</td>
                                     <td style={{padding:'5px 6px',color:'#9acce0'}}>100%</td>
                                   </tr>
