@@ -382,7 +382,8 @@ function buildCompartidoCurves(assetResults, capitalIni) {
     // 2. Abrir entradas del día (solo activos sin posición abierta)
     const entries = (entriesByDate[date] || []).filter(t => !openSlots[t.symbol])
     if (entries.length > 0 && poolLibre > 0) {
-      const capPorSlot = poolLibre / entries.length
+      const nLibres = n - Object.keys(openSlots).length
+      const capPorSlot = nLibres > 0 ? poolLibre / nLibres : 0
       entries.forEach(t => {
         poolLibre -= capPorSlot
         openSlots[t.symbol] = { trade: t, capAsignado: capPorSlot }
