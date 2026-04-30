@@ -683,6 +683,11 @@ export default function Home() {
   const [mcMode,setMcMode]=useState('slots')             // 'slots' | 'rotativo' | 'custom'
   const [mcWeights,setMcWeights]=useState({})             // {symbol: pct} para modo custom
   const [mcCapital,setMcCapital]=useState('compound')    // 'simple' | 'compound'
+  const [mcCapitalIni,setMcCapitalIni]=useState(1000)
+  const [mcPeriodMode,setMcPeriodMode]=useState('years') // 'years' | 'range'
+  const [mcYears,setMcYears]=useState(5)
+  const [mcFromDate,setMcFromDate]=useState(()=>{const d=new Date();d.setFullYear(d.getFullYear()-5);return d.toISOString().slice(0,10)})
+  const [mcToDate,setMcToDate]=useState(()=>new Date().toISOString().slice(0,10))
   const [mcResult,setMcResult]=useState(null)
   const [mcLoading,setMcLoading]=useState(false)
   const [mcError,setMcError]=useState(null)
@@ -2563,14 +2568,18 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
       const total=mcSelected.reduce((s,sym)=>s+(Number(mcWeights[sym])||0),0)
       mcSelected.forEach(sym=>{weightsNorm[sym]=total>0?(Number(mcWeights[sym])||0)/total*100:100/mcSelected.length})
     }
-    const baseCfg={emaR:Number(emaR),emaL:Number(emaL),years:Number(years),capitalIni:Number(capitalIni),
+    const _mcYears=mcPeriodMode==='years'?mcYears:null
+    const _mcFrom=mcPeriodMode==='range'?mcFromDate:null
+    const _mcTo=mcPeriodMode==='range'?mcToDate:null
+    const baseCfg={emaR:Number(emaR),emaL:Number(emaL),years:_mcYears,capitalIni:mcCapitalIni,
+      fromDate:_mcFrom,toDate:_mcTo,
       tipoStop,atrPeriod:Number(atrP),atrMult:Number(atrM),sinPerdidas,reentry,
       tipoFiltro,sp500EmaR:Number(sp500EmaR),sp500EmaL:Number(sp500EmaL),tipoCapital:mcCapital}
     const buildCfgFromStrat=(strat)=>{
       if(!strat?.definition||!Object.keys(strat.definition).length) return baseCfg
       const def=strat.definition,entry=def.entry||{},stop=def.stop||{},mgmt=def.management||{},filt=def.filters?.market?.[0]||{}
       return{emaR:entry.ma_fast||entry.ma_period||Number(emaR),emaL:entry.ma_slow||Number(emaL),
-        years:strat.years||Number(years),capitalIni:strat.capital_ini||Number(capitalIni),
+        years:_mcYears,capitalIni:mcCapitalIni,fromDate:_mcFrom,toDate:_mcTo,
         tipoStop:stop.type==='atr_based'?'atr':stop.type==='none'?'none':'tecnico',
         atrPeriod:stop.atr_period||Number(atrP),atrMult:stop.atr_mult||Number(atrM),
         sinPerdidas:mgmt.sin_perdidas!==false,reentry:mgmt.reentry!==false,
@@ -2612,7 +2621,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
     const initialOpen={};results.forEach(r=>{initialOpen[r.id]=true});initialOpen['__bh__']=true;setMcAssetOpen(initialOpen)
     const chartsVis={};results.forEach(r=>{chartsVis[r.id]=true});setMcChartsStratVisible(chartsVis)
     setMcLoading(false);setMcProgress(null)
-  },[mcSelected,mcMode,mcWeights,mcCapital,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL,rankingData,mcStratSelected,strategies,currentStratId])
+  },[mcSelected,mcMode,mcWeights,mcCapital,mcCapitalIni,mcYears,mcPeriodMode,mcFromDate,mcToDate,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL,rankingData,mcStratSelected,strategies,currentStratId])
 
   // Auto-inicializar pesos iguales cuando cambian activos seleccionados (modo custom)
   useEffect(()=>{
@@ -2969,7 +2978,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.129</title>
+        <title>Trading Simulator V9.130</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3046,7 +3055,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.129
+            <span className="dot"/>Trading Simulator V9.130
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -3865,6 +3874,52 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     </button>
                   )}
                   {mcError&&<div style={{fontFamily:MONO,fontSize:12,color:'#ff4d6d',marginTop:5}}>⚠ {mcError}</div>}
+                </div>
+
+                {/* CAPITAL Y PERÍODO */}
+                <div style={{flexShrink:0,borderBottom:'1px solid var(--border)',padding:'10px 12px',display:'flex',flexDirection:'column',gap:8}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8}}>
+                    <span style={{fontFamily:MONO,fontSize:11,color:'#7aabc8',whiteSpace:'nowrap'}}>Capital inicial</span>
+                    <input type="number" min={100} max={1000000} step={100} value={mcCapitalIni}
+                      onChange={e=>setMcCapitalIni(Number(e.target.value))}
+                      style={{flex:1,fontFamily:MONO,fontSize:11,background:'var(--bg2)',border:'1px solid var(--border)',borderRadius:3,padding:'3px 6px',color:'var(--fg)',textAlign:'right'}}/>
+                    <span style={{fontFamily:MONO,fontSize:11,color:'#4a6a88'}}>€</span>
+                  </div>
+                  <div style={{display:'flex',alignItems:'center',gap:6}}>
+                    <span style={{fontFamily:MONO,fontSize:11,color:'#7aabc8',whiteSpace:'nowrap'}}>Período</span>
+                    <div style={{display:'flex',gap:4,marginLeft:'auto'}}>
+                      {[{id:'years',label:'Años'},{id:'range',label:'Fechas'}].map(opt=>(
+                        <button key={opt.id} onClick={()=>setMcPeriodMode(opt.id)}
+                          style={{fontFamily:MONO,fontSize:10,padding:'2px 8px',borderRadius:3,cursor:'pointer',
+                            border:`1px solid ${mcPeriodMode===opt.id?'var(--accent)':'var(--border)'}`,
+                            background:mcPeriodMode===opt.id?'rgba(0,212,255,0.12)':'transparent',
+                            color:mcPeriodMode===opt.id?'var(--accent)':'#7aabc8'}}>
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {mcPeriodMode==='years'?(
+                    <div style={{display:'flex',alignItems:'center',gap:8}}>
+                      <span style={{fontFamily:MONO,fontSize:11,color:'#4a6a88',whiteSpace:'nowrap'}}>Años</span>
+                      <input type="number" min={1} max={20} step={1} value={mcYears}
+                        onChange={e=>setMcYears(Number(e.target.value))}
+                        style={{flex:1,fontFamily:MONO,fontSize:11,background:'var(--bg2)',border:'1px solid var(--border)',borderRadius:3,padding:'3px 6px',color:'var(--fg)',textAlign:'right'}}/>
+                    </div>
+                  ):(
+                    <div style={{display:'flex',flexDirection:'column',gap:5}}>
+                      <div style={{display:'flex',alignItems:'center',gap:8}}>
+                        <span style={{fontFamily:MONO,fontSize:11,color:'#4a6a88',whiteSpace:'nowrap',width:32}}>Desde</span>
+                        <input type="date" value={mcFromDate} onChange={e=>setMcFromDate(e.target.value)}
+                          style={{flex:1,fontFamily:MONO,fontSize:11,background:'var(--bg2)',border:'1px solid var(--border)',borderRadius:3,padding:'3px 6px',color:'var(--fg)'}}/>
+                      </div>
+                      <div style={{display:'flex',alignItems:'center',gap:8}}>
+                        <span style={{fontFamily:MONO,fontSize:11,color:'#4a6a88',whiteSpace:'nowrap',width:32}}>Hasta</span>
+                        <input type="date" value={mcToDate} onChange={e=>setMcToDate(e.target.value)}
+                          style={{flex:1,fontFamily:MONO,fontSize:11,background:'var(--bg2)',border:'1px solid var(--border)',borderRadius:3,padding:'3px 6px',color:'var(--fg)'}}/>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* MODO DE ASIGNACIÓN — colapsable */}

@@ -26,10 +26,17 @@ function calcATR(highs, lows, closes, period) {
   return calcEMA(tr, period)
 }
 
-async function fetchData(symbol, years=5) {
+async function fetchData(symbol, years=5, fromDate=null, toDate=null) {
   try {
     const encoded = encodeURIComponent(symbol)
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encoded}?interval=1d&range=${Math.min(years,10)}y`
+    let url
+    if (fromDate && toDate) {
+      const p1 = Math.floor(new Date(fromDate).getTime() / 1000)
+      const p2 = Math.floor(new Date(toDate).getTime() / 1000)
+      url = `https://query1.finance.yahoo.com/v8/finance/chart/${encoded}?interval=1d&period1=${p1}&period2=${p2}`
+    } else {
+      url = `https://query1.finance.yahoo.com/v8/finance/chart/${encoded}?interval=1d&range=${Math.min(years,10)}y`
+    }
     const res = await fetch(url, { headers: { 'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36','Accept':'application/json' } })
     if (!res.ok) return null
     const json = await res.json()
@@ -696,13 +703,13 @@ export default async function handler(req, res) {
     const allData = {}
     for (let i = 0; i < symbols.length; i += BATCH) {
       const chunk = symbols.slice(i, i+BATCH)
-      await Promise.all(chunk.map(async sym => { allData[sym] = await fetchData(sym, cfg.years ?? 5) }))
+      await Promise.all(chunk.map(async sym => { allData[sym] = await fetchData(sym, cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null) }))
       if (i+BATCH < symbols.length) await sleep(400)
     }
 
     // SP500 para el filtro
     let sp500Data = null
-    try { sp500Data = await fetchData('^GSPC', cfg.years ?? 5) } catch(_) {}
+    try { sp500Data = await fetchData('^GSPC', cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null) } catch(_) {}
 
     // Capital por slot (base para pnlPct; reescalado en modos rotativo/custom)
     const n = symbols.filter(s => allData[s]?.length).length
