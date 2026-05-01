@@ -2979,7 +2979,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.144</title>
+        <title>Trading Simulator V9.145</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3056,7 +3056,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.144
+            <span className="dot"/>Trading Simulator V9.145
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5332,7 +5332,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                     <td style={{padding:'5px 6px',color:profitPct>=0?'#00e5a0':'#ff4d6d',fontWeight:600}}>{profitPct>=0?'+':''}{fmt(profitPct,1,'%')}</td>
                                     <td style={{padding:'5px 6px',color:winRate>=50?'#00e5a0':'#ff4d6d',fontWeight:600}}>{fmt(winRate,1,'%')}</td>
                                     <td style={{padding:'5px 6px',color:pf>=1.5?'#00e5a0':pf>=1?'#ffd166':'#ff4d6d',fontWeight:600}}>{fmt(pf,2,'x')}</td>
-                                    <td style={{padding:'5px 6px',color:'#ff4d6d',fontWeight:600}}>-{fmt(r.result.maxDDCompound||0,1,'%')}</td>
+                                    <td style={{padding:'5px 6px',color:'#ff4d6d',fontWeight:600}}>-{fmt(showMultiFloat&&r.result.maxDDFloatCompound?r.result.maxDDFloatCompound:r.result.maxDDCompound||0,1,'%')}</td>
                                     <td style={{padding:'5px 6px',color:'#00d4ff',fontWeight:600}}>{fmt(avgCapInv,1,'%')}</td>
                                     <td style={{padding:'5px 6px',color:'#00d4ff',fontWeight:600}}>{fmt(avgTInv,1,'%')}</td>
                                   </tr>
@@ -5372,8 +5372,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                 </Fragment>
                               )
                             })}
-                            {/* ── Fila B&H (solo en modo multi) ── */}
-                            {isMulti&&mcResult.bhCurve?.length>0&&(()=>{
+                            {/* ── Fila B&H ── */}
+                            {mcResult.bhCurve?.length>0&&(()=>{
                               const bhOpen=mcAssetOpen['__bh__']!==false
                               const bhStats=mcResult.assetStats||[]
                               const bhWinCount=bhStats.filter(a=>a.ganBH>0).length
@@ -5846,72 +5846,6 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                   )
                 })()}
               </div>
-              {/* Right: metrics summary panel — hidden when multi-strategy comparison */}
-              {mcMultiResults.length<=1&&<div style={{width:rightPanelW,flexShrink:0,borderLeft:'1px solid var(--border)',background:'var(--bg2)',overflowY:'auto',position:'relative'}}>
-                {/* Resize handle */}
-                <div onMouseDown={e=>{rightResizing.current=true;rightStartX.current=e.clientX;rightStartW.current=rightPanelW;document.body.style.cursor='col-resize';document.body.style.userSelect='none'}}
-                  style={{position:'absolute',top:0,left:0,width:4,height:'100%',cursor:'col-resize',zIndex:20,background:'transparent'}}
-                  onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.25)'}
-                  onMouseOut={e=>e.currentTarget.style.background='transparent'}/>
-                <div style={{padding:'7px 12px',borderBottom:'1px solid var(--border)',fontFamily:MONO,fontSize:10,color:'#8ab8d4',letterSpacing:'0.1em',fontWeight:600}}>RESUMEN MULTICARTERA</div>
-                {(()=>{
-                  const capIni=Number(capitalIni)
-                  const lastS=(showMultiFloat&&mcResult.floatSimpleCurve?.length?mcResult.floatSimpleCurve.slice(-1)[0]?.value:mcResult.simpleCurve.slice(-1)[0]?.value)||capIni
-                  const lastC=(showMultiFloat&&mcResult.floatCompoundCurve?.length?mcResult.floatCompoundCurve.slice(-1)[0]?.value:mcResult.compoundCurve.slice(-1)[0]?.value)||capIni
-                  const lastBH=mcResult.bhCurve.slice(-1)[0]?.value||capIni
-                  const totalDiasNat=mcResult.startDate?(new Date(mcResult.simpleCurve.slice(-1)[0]?.date)-new Date(mcResult.startDate))/86400000:365
-                  const anios=Math.max(totalDiasNat/365.25,0.01)
-                  const cagrS=(Math.pow(Math.max(lastS,0.01)/capIni,1/anios)-1)*100
-                  const cagrC=(Math.pow(Math.max(lastC,0.01)/capIni,1/anios)-1)*100
-                  const cagrBH=(Math.pow(Math.max(lastBH,0.01)/capIni,1/anios)-1)*100
-                  const allT=mcResult.allTrades||[]
-                  const wins=allT.filter(t=>t.pnlPct>=0), losses=allT.filter(t=>t.pnlPct<0)
-                  const winRate=allT.length?wins.length/allT.length*100:0
-                  const avgWin=wins.length?wins.reduce((s,t)=>s+t.pnlPct,0)/wins.length:0
-                  const avgLoss=losses.length?losses.reduce((s,t)=>s+Math.abs(t.pnlPct),0)/losses.length:0
-                  const totalDias=allT.reduce((s,t)=>s+t.dias,0)
-                  const tiempoInvPct=totalDiasNat>0?(totalDias/totalDiasNat)*100:0
-                  const aniosInv=totalDias/365.25
-                  const gBrute=wins.reduce((s,t)=>s+t.pnlSimple,0)
-                  const lBrute=losses.reduce((s,t)=>s+Math.abs(t.pnlSimple),0)
-                  const factorBen=lBrute>0?gBrute/lBrute:999
-                  const diasProm=allT.length?totalDias/allT.length:0
-                  const v2=(val,color)=>({val,color})
-                  const wr2=winRate>=50?'#00e5a0':'#ff4d6d'
-                  const fb2=factorBen>=1?'#00e5a0':'#ff4d6d'
-                  const cS2=lastS>=capIni?'#00e5a0':'#ff4d6d'
-                  const cC2=lastC>=capIni?'#00e5a0':'#ff4d6d'
-                  const cBH2=lastBH>=capIni?'#00e5a0':'#ff4d6d'
-                  const mcRows=[
-                    {label:'Total Operaciones',     compound:v2(allT.length,'#ffd166'),  bh:null, simple:v2(allT.length,'#ffd166')},
-                    {label:'Total Días Invertido',  compound:v2(totalDias,'#00d4ff'),    bh:null, simple:v2(totalDias,'#00d4ff')},
-                    {label:'Días Promedio',         compound:v2(fmt(diasProm,1,' días'),'#00d4ff'), bh:null, simple:v2(fmt(diasProm,1,' días'),'#00d4ff')},
-                    {label:`Tiempo Invertido (${fmt(aniosInv,2)}a)`, compound:v2(fmt(tiempoInvPct,0,'%'),'#ffd166'), bh:null, simple:v2(fmt(tiempoInvPct,0,'%'),'#ffd166')},
-                    {label:'Capital inv. medio',    compound:v2(fmt(mcResult.avgOccupancy,1,'%'),'#9b72ff'), bh:null, simple:v2(fmt(mcResult.avgOccupancy,1,'%'),'#9b72ff')},
-                    {label:'Ganadoras',             compound:v2(wins.length,'#00e5a0'), bh:null, simple:v2(wins.length,'#00e5a0')},
-                    {label:'Perdedoras',            compound:v2(losses.length,'#ff4d6d'), bh:null, simple:v2(losses.length,'#ff4d6d')},
-                    {label:'Win Rate',              compound:v2(fmt(winRate,1,'%'),wr2), bh:null, simple:v2(fmt(winRate,1,'%'),wr2)},
-                    {label:'Factor de Beneficio',   compound:v2(fmt(factorBen,2),fb2), bh:null, simple:v2(fmt(factorBen,2),fb2)},
-                    {label:'Ganancia Media (%)',    compound:v2(fmt(avgWin,2,'%'),'#00e5a0'), bh:null, simple:v2(fmt(avgWin,2,'%'),'#00e5a0')},
-                    {label:'Pérdida Media (%)',     compound:v2(fmt(avgLoss,2,'%'),'#ff4d6d'), bh:null, simple:v2(fmt(avgLoss,2,'%'),'#ff4d6d')},
-                    {label:'Ganancia (€)',          compound:v2(fmt(lastC-capIni,2,'€'),cC2), bh:v2(fmt(lastBH-capIni,2,'€'),cBH2), simple:v2(fmt(lastS-capIni,2,'€'),cS2)},
-                    {label:'Ganancia (%)',          compound:v2(fmt((lastC-capIni)/capIni*100,2,'%'),cC2), bh:v2(fmt((lastBH-capIni)/capIni*100,2,'%'),cBH2), simple:v2(fmt((lastS-capIni)/capIni*100,2,'%'),cS2)},
-                    {label:`CAGR (${fmt(anios,2)}a)`, compound:v2(fmt(cagrC,2,'%'),cagrC>=0?'#00e5a0':'#ff4d6d'), bh:v2(fmt(cagrBH,2,'%'),cagrBH>=0?'#00e5a0':'#ff4d6d'), simple:v2(fmt(cagrS,2,'%'),cagrS>=0?'#00e5a0':'#ff4d6d')},
-                    {label:'Max Drawdown (%)',      compound:v2(fmt(showMultiFloat&&mcResult.maxDDFloatCompound?mcResult.maxDDFloatCompound:mcResult.maxDDCompound,2,'%'),'#ff4d6d'), bh:v2(fmt(mcResult.maxDDBH,2,'%'),'#ff4d6d'), simple:v2(fmt(showMultiFloat&&mcResult.maxDDFloatSimple?mcResult.maxDDFloatSimple:mcResult.maxDDSimple,2,'%'),'#ff4d6d')},
-                  ]
-                  return(
-                    <div style={{display:'flex',flexDirection:'column',height:'100%'}}>
-                      <div style={{display:'flex',alignItems:'center',padding:'4px 12px',borderBottom:'1px solid var(--border)'}}>
-                        <span style={{fontFamily:MONO,fontSize:10,color:'#9acce0',flex:1}}>MULTICARTERA</span>
-                      </div>
-                      <StratSelector strats={metricsStrats} setStrats={setMetricsStrats}/>
-                      <div style={{overflowY:'auto',flex:1}}>
-                        <SingleColumnTable rows={mcRows} strats={metricsStrats}/>
-                      </div>
-                    </div>
-                  )
-                })()}
-              </div>}
               </div>
             )}
 
