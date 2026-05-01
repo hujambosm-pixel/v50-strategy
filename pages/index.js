@@ -680,8 +680,11 @@ export default function Home() {
   const [mcSearch,setMcSearch]=useState('')
   const [mcOnlyFavs,setMcOnlyFavs]=useState(false)
   const [mcListFilter,setMcListFilter]=useState('')
-  const [mcMode,setMcMode]=useState('slots')             // 'slots' | 'rotativo' | 'custom'
+  const [mcMode,setMcMode]=useState('slots')             // 'slots' | 'rotativo' | 'custom' | 'positionsizing'
   const [mcWeights,setMcWeights]=useState({})             // {symbol: pct} para modo custom
+  const [mcRiskPerTrade,setMcRiskPerTrade]=useState(2)
+  const [mcMaxPortfolioPct,setMcMaxPortfolioPct]=useState(5)
+  const [mcMaxAccumRisk,setMcMaxAccumRisk]=useState(10)
   const [mcCapital,setMcCapital]=useState('compound')    // 'simple' | 'compound'
   const [mcCapitalIni,setMcCapitalIni]=useState(1000)
   const [mcPeriodMode,setMcPeriodMode]=useState('years') // 'years' | 'range'
@@ -2575,7 +2578,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
     const baseCfg={emaR:Number(emaR),emaL:Number(emaL),years:_mcYears,capitalIni:mcCapitalIni,
       fromDate:_mcFrom,toDate:_mcTo,
       tipoStop,atrPeriod:Number(atrP),atrMult:Number(atrM),sinPerdidas,reentry,
-      tipoFiltro,sp500EmaR:Number(sp500EmaR),sp500EmaL:Number(sp500EmaL),tipoCapital:mcCapital}
+      tipoFiltro,sp500EmaR:Number(sp500EmaR),sp500EmaL:Number(sp500EmaL),tipoCapital:mcCapital,
+      sizeRules:mcMode==='positionsizing'?{riskPerTrade:mcRiskPerTrade,maxPortfolioPct:mcMaxPortfolioPct,maxAccumRisk:mcMaxAccumRisk}:undefined}
     const buildCfgFromStrat=(strat)=>{
       if(!strat?.definition||!Object.keys(strat.definition).length) return baseCfg
       const def=strat.definition,entry=def.entry||{},stop=def.stop||{},mgmt=def.management||{},filt=def.filters?.market?.[0]||{}
@@ -2585,7 +2589,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         atrPeriod:stop.atr_period||Number(atrP),atrMult:stop.atr_mult||Number(atrM),
         sinPerdidas:mgmt.sin_perdidas!==false,reentry:mgmt.reentry!==false,
         tipoFiltro:filt.condition||'none',sp500EmaR:filt.ma_fast||Number(sp500EmaR),sp500EmaL:filt.ma_slow||Number(sp500EmaL),
-        tipoCapital:mcCapital}
+        tipoCapital:mcCapital,
+        sizeRules:mcMode==='positionsizing'?{riskPerTrade:mcRiskPerTrade,maxPortfolioPct:mcMaxPortfolioPct,maxAccumRisk:mcMaxAccumRisk}:undefined}
     }
     const stratIds=mcStratSelected.filter(Boolean)
     if(stratIds.length<=1){
@@ -2622,7 +2627,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
     const initialOpen={};results.forEach(r=>{initialOpen[r.id]=true});initialOpen['__bh__']=true;setMcAssetOpen(initialOpen)
     const chartsVis={};results.forEach(r=>{chartsVis[r.id]=true});setMcChartsStratVisible(chartsVis)
     setMcLoading(false);setMcProgress(null)
-  },[mcSelected,mcMode,mcWeights,mcCapital,mcCapitalIni,mcYears,mcPeriodMode,mcFromDate,mcToDate,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL,rankingData,mcStratSelected,strategies,currentStratId])
+  },[mcSelected,mcMode,mcWeights,mcCapital,mcCapitalIni,mcYears,mcPeriodMode,mcFromDate,mcToDate,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL,rankingData,mcStratSelected,strategies,currentStratId,mcRiskPerTrade,mcMaxPortfolioPct,mcMaxAccumRisk])
 
   // Auto-inicializar pesos iguales cuando cambian activos seleccionados (modo custom)
   useEffect(()=>{
@@ -2979,7 +2984,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.146</title>
+        <title>Trading Simulator V9.147</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3056,7 +3061,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.146
+            <span className="dot"/>Trading Simulator V9.147
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -3932,7 +3937,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     <span style={{fontFamily:MONO,fontSize:9,color:'#4a7a9a',width:10}}>{mcSectionOpen.mode?'▼':'▶'}</span>
                     <span style={{fontFamily:MONO,fontSize:12,color:'#c8dff5',fontWeight:600,letterSpacing:'0.05em'}}>MODO DE ASIGNACIÓN</span>
                     <span style={{marginLeft:'auto',fontFamily:MONO,fontSize:10,color:'#4a6a88'}}>
-                      {mcMode==='slots'?'Slots iguales':mcMode==='rotativo'?'Capital rotativo':mcMode==='compartido'?'Capital compartido':'Slots iguales'}
+                      {mcMode==='slots'?'Slots iguales':mcMode==='rotativo'?'Capital rotativo':mcMode==='compartido'?'Capital compartido':mcMode==='positionsizing'?'Position Sizing':'Slots iguales'}
                     </span>
                   </div>
                   {mcSectionOpen.mode&&(
@@ -3944,6 +3949,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                           desc:'Un único pool de capital. El primer activo con señal usa el 100% del capital disponible. Mientras está abierto, ningún otro activo puede entrar. Cuando cierra, el capital vuelve al pool. Ejemplo: 1000€, TSLA entra con 1000€. Mientras TSLA está abierto, NVDA no puede entrar aunque dé señal. TSLA cierra +10% → pool = 1100€ → siguiente señal entra con 1100€.'},
                         {id:'compartido',label:'Capital compartido',ready:true,
                           desc:'El capital libre se reparte a partes iguales entre los activos que van a entrar. Justo antes de cada entrada: capital_por_slot = pool_libre / slots_libres. Cuando un trade cierra, su capital (con ganancias o pérdidas) vuelve al pool. Ejemplo: 1000€ con 4 activos. Los 4 entran → 250€ cada uno. NVDA cierra +42% → devuelve 355€ al pool. Solo TSLA sigue abierto → pool = 355€ + restantes. Próxima entrada de NVDA: 355€ / slots_libres en ese momento.'},
+                        {id:'positionsizing',label:'Position Sizing',ready:true,
+                          desc:'Calcula dinámicamente el tamaño de cada posición según el stop loss. Permite posiciones simultáneas con tamaños variables.'},
                       ].map(m=>(
                         <div key={m.id} style={{marginBottom:3}}>
                           <div onClick={()=>m.ready&&setMcMode(m.id)}
@@ -3957,6 +3964,37 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                             <span title={m.desc}
                               style={{width:16,height:16,borderRadius:'50%',border:'1px solid #3d5a7a',color:'#3d5a7a',fontSize:10,
                                 display:'flex',alignItems:'center',justifyContent:'center',cursor:'help',flexShrink:0,fontWeight:700,lineHeight:1}}>?</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {mcMode==='positionsizing'&&(
+                    <div style={{padding:'8px 10px',borderTop:'1px solid #1a2a3a'}}>
+                      {[
+                        {label:'Riesgo por trade',value:mcRiskPerTrade,set:setMcRiskPerTrade,
+                          tooltip:'Porcentaje del capital total que arriesgas en cada operación. Fórmula: capital × riesgo% / distancia_al_stop. Si no hay stop definido, se usa el % máximo de cartera por trade como fallback.'},
+                        {label:'Máx. cartera/trade',value:mcMaxPortfolioPct,set:setMcMaxPortfolioPct,
+                          tooltip:'Límite máximo del capital total que puedes invertir en una sola operación, independientemente del stop. Actúa como techo de seguridad cuando el stop está muy ajustado o no está definido.'},
+                        {label:'Máx. riesgo acumulado',value:mcMaxAccumRisk,set:setMcMaxAccumRisk,
+                          tooltip:'Porcentaje máximo del capital total que puede estar en riesgo simultáneamente entre todas las posiciones abiertas. Cuando se alcanza este límite, no se permiten nuevas entradas hasta que alguna posición cierre y libere riesgo.'},
+                      ].map(p=>(
+                        <div key={p.label} style={{display:'flex',alignItems:'center',
+                          justifyContent:'space-between',marginBottom:6}}>
+                          <span title={p.tooltip} style={{fontSize:9,color:'#4a6a88',
+                            cursor:'help',textDecoration:'underline dotted'}}>
+                            {p.label}
+                          </span>
+                          <div style={{display:'flex',alignItems:'center',gap:3}}>
+                            <input type="number" min="0.1" max="100" step="0.1"
+                              value={p.value}
+                              onChange={e=>p.set(Number(e.target.value))}
+                              style={{width:45,padding:'2px 4px',borderRadius:3,
+                                background:'#0d1929',border:'1px solid #1a2a3a',
+                                color:'#e0e8f0',fontSize:11,fontFamily:MONO,
+                                textAlign:'right'}}
+                            />
+                            <span style={{color:'#4a6a88',fontSize:11}}>%</span>
                           </div>
                         </div>
                       ))}
