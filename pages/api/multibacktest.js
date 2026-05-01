@@ -661,7 +661,21 @@ function buildPositionSizingCurves(assetResults, capitalIni, sizeRules) {
     simpleCurve, compoundCurve, bhCurve, occupancyCurve, startDate,
     executedTrades, floatSimpleCurve, floatCompoundCurve,
     ..._calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni),
-    ..._calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni)
+    ..._calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni),
+    _dbg_ps: {
+      totalCandidates: allCandidates.length,
+      stopPxSample: allCandidates.slice(0,10).map(t=>({
+        symbol: t.symbol,
+        entryDate: t.entryDate,
+        entryPrice: t.entryPrice,
+        stopPx: t.stopPx,
+        distancia: t.stopPx && t.entryPrice && t.entryPrice > t.stopPx
+          ? ((t.entryPrice - t.stopPx) / t.entryPrice * 100).toFixed(2) + '%'
+          : 'NO_STOP'
+      })),
+      tradesWithStop: allCandidates.filter(t => t.stopPx != null && t.stopPx > 0).length,
+      tradesWithoutStop: allCandidates.filter(t => !t.stopPx).length
+    }
   }
 }
 
