@@ -234,6 +234,7 @@ function buildRotativoCurves(assetResults, capitalIni, rankMap) {
   for (const trade of allCandidates) {
     // Saltamos si se solapan con el trade activo
     if (activeUntil && trade.entryDate < activeUntil) continue
+    if (!isFinite(trade.pnlPct)) continue  // skip trades con pnlPct NaN/Infinity
     // Ejecutar este trade con el pool actual
     const pnlAbs = pool * (trade.pnlPct / 100)
     pool += pnlAbs
@@ -368,6 +369,7 @@ function buildCompartidoCurves(assetResults, capitalIni) {
     const toClose = Object.keys(openSlots).filter(sym => openSlots[sym].trade.exitDate === date)
     toClose.forEach(symbol => {
       const { trade, capAsignado } = openSlots[symbol]
+      if (!isFinite(trade.pnlPct)) { poolLibre += capAsignado; delete openSlots[symbol]; return }  // skip NaN/Infinity
       const capFinal = capAsignado * (1 + trade.pnlPct / 100)
       poolLibre += capFinal
       executedTrades.push({
