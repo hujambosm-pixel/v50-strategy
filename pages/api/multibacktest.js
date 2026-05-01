@@ -388,8 +388,26 @@ function buildCompartidoCurves(assetResults, capitalIni) {
       const capPorSlot = nLibres > 0 ? poolLibre / nLibres : 0
       entries.forEach(t => {
         poolLibre -= capPorSlot
-        openSlots[t.symbol] = { trade: t, capAsignado: capPorSlot }
-        capitalAtEntryMap[`${t.symbol}:${t.entryDate}`] = capPorSlot
+        // Same-day trade (entryDate === exitDate): abrir y cerrar atómicamente
+        // para evitar que quede bloqueado en openSlots sin salida
+        if (t.exitDate === date) {
+          if (isFinite(t.pnlPct)) {
+            const capFinal = capPorSlot * (1 + t.pnlPct / 100)
+            poolLibre += capFinal
+            executedTrades.push({
+              ...t,
+              _capitalAtEntry: capPorSlot,
+              capitalTras: capFinal,
+              pnlSimple: capFinal - capPorSlot
+            })
+          } else {
+            poolLibre += capPorSlot  // NaN: devolver capital sin P&L
+          }
+          // NO añadir a openSlots — se resuelve inmediatamente
+        } else {
+          openSlots[t.symbol] = { trade: t, capAsignado: capPorSlot }
+          capitalAtEntryMap[`${t.symbol}:${t.entryDate}`] = capPorSlot
+        }
       })
     }
   })
