@@ -617,6 +617,19 @@ function runCodeJsAsset(data, sp500Data, codeJs, slotCapital, years) {
     const runFn = getRunFn(_libEMA, calcSMA, calcRSI, _libATR, calcMACD)
     const { trades: rawTrades = [], indicators = {}, filterZones = [] } =
       runFn(enrichedData, { capital_ini: slotCapital, years, allocation_pct: 100 })
+    // Flush virtual de posición abierta al último precio
+    const lastBar = data[data.length - 1]
+    if (rawTrades.length > 0) {
+      const lastRaw = rawTrades[rawTrades.length - 1]
+      if (lastRaw && !lastRaw.exitDate && lastRaw.entryPrice > 0) {
+        rawTrades[rawTrades.length - 1] = {
+          ...lastRaw,
+          exitDate:  lastBar.date,
+          exitPrice: lastBar.close,
+          _virtualClose: true
+        }
+      }
+    }
     const trades = buildTrades(rawTrades, slotCapital)
     return { trades, indicators, filterZones }
   } catch(e) {

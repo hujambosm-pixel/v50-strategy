@@ -199,6 +199,20 @@ export default async function handler(req, res) {
     const { trades: rawTrades = [], indicators = {}, filterZones: rawFilterZones = [] } = runFn(data, { capital_ini, years, allocation_pct, ...userParams })
     console.log('[SERVER filterZones]', Array.isArray(rawFilterZones), rawFilterZones?.length, rawFilterZones?.[0])
 
+    // ── Flush virtual de posición abierta al último precio ──
+    const lastBar = data[data.length - 1]
+    if (rawTrades.length > 0) {
+      const lastRaw = rawTrades[rawTrades.length - 1]
+      if (lastRaw && !lastRaw.exitDate && lastRaw.entryPrice > 0) {
+        rawTrades[rawTrades.length - 1] = {
+          ...lastRaw,
+          exitDate:  lastBar.date,
+          exitPrice: lastBar.close,
+          _virtualClose: true
+        }
+      }
+    }
+
     // ── Enrich trades ──
     const trades = buildTrades(rawTrades, capital_ini, allocation_pct)
     console.log('[TRADES]', JSON.stringify(trades.slice(0,3).map(t=>({
