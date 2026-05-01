@@ -2979,7 +2979,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.145</title>
+        <title>Trading Simulator V9.146</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3056,7 +3056,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.145
+            <span className="dot"/>Trading Simulator V9.146
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5278,7 +5278,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                 {h:'G.Comp%',t:'Ganancia compuesta en porcentaje sobre el capital inicial asignado a este slot'},
                                 {h:'Win%',t:'Porcentaje de operaciones cerradas con ganancia sobre el total'},
                                 {h:'Profit Factor',t:'Factor de Beneficio: suma de ganancias / suma de pérdidas. Por encima de 1 la estrategia es rentable'},
-                                {h:'Max DD',t:'Máxima caída desde un pico hasta el valle siguiente, incluyendo pérdidas no realizadas dentro de cada trade'},
+                                {h:'Max DD',t:'Máxima caída desde un pico hasta el valle siguiente, incluyendo pérdidas no realizadas dentro de cada trade (calculado siempre con P&L flotante)'},
                                 {h:'Cap.inv%',t:'Media diaria del capital en posición abierta sobre el capital del slot. Ejemplo: slot 5.000€, posición media 1.400€ → 28%'},
                                 {h:'T.inv%',t:'Porcentaje de días del período total en que había al menos una posición abierta en este activo'},
                               ].map(({h,t})=>(
@@ -5332,7 +5332,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                     <td style={{padding:'5px 6px',color:profitPct>=0?'#00e5a0':'#ff4d6d',fontWeight:600}}>{profitPct>=0?'+':''}{fmt(profitPct,1,'%')}</td>
                                     <td style={{padding:'5px 6px',color:winRate>=50?'#00e5a0':'#ff4d6d',fontWeight:600}}>{fmt(winRate,1,'%')}</td>
                                     <td style={{padding:'5px 6px',color:pf>=1.5?'#00e5a0':pf>=1?'#ffd166':'#ff4d6d',fontWeight:600}}>{fmt(pf,2,'x')}</td>
-                                    <td style={{padding:'5px 6px',color:'#ff4d6d',fontWeight:600}}>-{fmt(showMultiFloat&&r.result.maxDDFloatCompound?r.result.maxDDFloatCompound:r.result.maxDDCompound||0,1,'%')}</td>
+                                    <td style={{padding:'5px 6px',color:'#ff4d6d',fontWeight:600}}>-{fmt(r.result.maxDDFloatCompound||r.result.maxDDCompound||0,1,'%')}</td>
                                     <td style={{padding:'5px 6px',color:'#00d4ff',fontWeight:600}}>{fmt(avgCapInv,1,'%')}</td>
                                     <td style={{padding:'5px 6px',color:'#00d4ff',fontWeight:600}}>{fmt(avgTInv,1,'%')}</td>
                                   </tr>
