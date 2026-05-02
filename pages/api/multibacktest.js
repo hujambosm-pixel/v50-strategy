@@ -501,7 +501,7 @@ function buildPositionSizingCurves(assetResults, capitalIni, sizeRules) {
       exitDate:   t.exitDate,
       pnlPct:     t.pnlPct,
       entryPrice: t.entryPrice ?? t.entryPx,
-      stopPx:     t.stopPx ?? null,
+      stopPx:     t.stopHistory?.[0]?.stopPx ?? null,
     }))
   ).sort((a, b) => a.entryDate < b.entryDate ? -1 : 1)
 
