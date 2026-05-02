@@ -594,7 +594,6 @@ export default function Home() {
   const symSearchRef=useRef(null)
   const [mcTradeFilter,setMcTradeFilter]=useState('')
   const [tradeHistMode,setTradeHistMode]=useState('compound')   // 'compound'|'simple' for trade history capital column
-  const [mcTradeHistMode,setMcTradeHistMode]=useState('compound')
   const chartSyncRef=useRef({syncing:false,listeners:[]})  // cross-chart time sync
 
   // Reset sync listeners when symbol/result changes to prevent stale refs
@@ -2984,7 +2983,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.151</title>
+        <title>Trading Simulator V9.152</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3061,7 +3060,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.151
+            <span className="dot"/>Trading Simulator V9.152
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5673,7 +5672,6 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                   const histTitle=isMultiHist&&mcHistStratId
                     ?(mcMultiResults.find(r=>r.id===mcHistStratId)?.name??'Historial')
                     :'Historial Multicartera'
-                  const csDisabled=isMultiHist&&!mcHistStratId
                   if(!histResult?.allTrades?.length) return null
                   return(
                   <div className="trades-section">
@@ -5687,16 +5685,6 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                             placeholder="Filtrar activo…"
                             style={{fontFamily:MONO,fontSize:11,padding:'2px 7px',borderRadius:3,
                               background:'#0d1828',border:'1px solid #274462',color:'#e8f4ff',width:110}}/>
-                          {[{id:'compound',label:'Compuesto'},{id:'simple',label:'Simple'}].map(m=>(
-                            <button key={m.id} onClick={()=>!csDisabled&&setMcTradeHistMode(m.id)} disabled={csDisabled}
-                              style={{fontFamily:MONO,fontSize:10,padding:'2px 6px',borderRadius:3,
-                                cursor:csDisabled?'default':'pointer',opacity:csDisabled?0.4:1,
-                                border:`1px solid ${mcTradeHistMode===m.id?'var(--accent)':'#2a3f55'}`,
-                                background:mcTradeHistMode===m.id?'rgba(0,212,255,0.1)':'transparent',
-                                color:mcTradeHistMode===m.id?'var(--accent)':'#4a6a88'}}>
-                              {m.label}
-                            </button>
-                          ))}
                         </div>
                       </div>
                       {isMultiHist&&(
@@ -5721,7 +5709,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                     <div style={{overflowX:'auto'}}>
                       <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:11}}>
                         <thead><tr style={{borderBottom:'1px solid var(--border)',position:'sticky',top:0,background:'var(--bg)'}}>
-                          {['#','Activo','Entrada','Salida','Capital inv.','Capital final'].map((h,hi)=>(
+                          {['#','Activo','Entrada','Salida','Inversión','Resultado'].map((h,hi)=>(
                             <th key={h} style={{padding:'4px 8px',textAlign:'left',
                               color:hi===4?'#9b72ff':hi===5?'#00d4ff':'#9acce0',
                               fontWeight:400,fontSize:11,whiteSpace:'nowrap'}}>{h}</th>
@@ -5740,27 +5728,21 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                             const allT2=(mcTradeFilter
                               ?histResult.allTrades.filter(t=>(t.symbol||'').toUpperCase().includes(mcTradeFilter.toUpperCase()))
                               :histResult.allTrades)
-                            const fwdS=histResult.allTrades.map((_,i)=>capIni2+histResult.allTrades.slice(0,i+1).reduce((s,x)=>s+x.pnlSimple,0))
                             const fwdC=histResult.allTrades.map(t=>t.capitalTras)
-                            let pkS=capIni2,pkC=capIni2
-                            const peaksS2=fwdS.map(v=>{pkS=Math.max(pkS,v);return pkS})
+                            let pkC=capIni2
                             const peaksC2=fwdC.map(v=>{pkC=Math.max(pkC,v);return pkC})
                             const prevByIdx={},lastBySymbol={}
                             histResult.allTrades.forEach((t,i)=>{prevByIdx[i]=lastBySymbol[t.symbol]??null;lastBySymbol[t.symbol]=t})
                             return [...allT2].reverse().map((t,i)=>{
                               const origIdx=histResult.allTrades.indexOf(t)
-                              const isC=mcTradeHistMode==='compound'
                               const slotCap=histResult.slotCapital??capIni2
                               const capInv=t._capitalAtEntry!=null
                                 ?t._capitalAtEntry
-                                :isC
-                                  ?(prevByIdx[origIdx]!=null?prevByIdx[origIdx].capitalTras:slotCap)
-                                  :slotCap
-                              const capFinalS=fwdS[origIdx],capFinalC=fwdC[origIdx]
-                              const capFinal=isC?capFinalC:capFinalS
-                              const peak=isC?peaksC2[origIdx]:peaksS2[origIdx]
-                              const capFinalColor=capFinal>=peak?'#00d4ff':'#ff9a3c'
-                              const pnlEur=isC?(capInv*(t.pnlPct/100)):t.pnlSimple
+                                :(prevByIdx[origIdx]!=null?prevByIdx[origIdx].capitalTras:slotCap)
+                              const equity=fwdC[origIdx]
+                              const resultado=capInv*(1+t.pnlPct/100)
+                              const equityColor=equity>=peaksC2[origIdx]?'#00d4ff':'#ff9a3c'
+                              const pnlEur=capInv*(t.pnlPct/100)
                               const pnlColor=pnlEur>=0?'var(--green)':'var(--red)'
                               return(
                                 <tr key={i}
@@ -5790,9 +5772,9 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                   <td style={{padding:'4px 8px',color:'#d8ecff',whiteSpace:'nowrap'}}>{fmtDate(t.entryDate)}</td>
                                   <td style={{padding:'4px 8px',color:'#d8ecff',whiteSpace:'nowrap'}}>{fmtDate(t.exitDate)}</td>
                                   <td style={{padding:'4px 8px',color:'#e8f4ff',fontWeight:600,whiteSpace:'nowrap'}}>€{fmt(capInv,0)}</td>
-                                  <td style={{padding:'4px 8px',color:capFinalColor,fontWeight:600,whiteSpace:'nowrap'}}>€{fmt(capFinal,0)}</td>
-                                  <td style={{padding:'4px 8px',color:t.capitalTras>(histResult.slotCapital??capIni2)?'#00e5a0':'#ff4d6d',fontWeight:600,whiteSpace:'nowrap'}}>€{fmt(t.capitalTras,0)}</td>
-                                  <td style={{padding:'4px 8px',color:'#ff9a3c'}}>{t.riesgoAcum!=null&&t.riesgoAcum>0?'€'+fmt(t.riesgoAcum,0):'—'}</td>
+                                  <td style={{padding:'4px 8px',color:t.pnlPct>=0?'#00d4ff':'#ff4d6d',fontWeight:600,whiteSpace:'nowrap',textAlign:'right'}}>€{fmt(resultado,0)}</td>
+                                  <td style={{padding:'4px 8px',color:equityColor,fontWeight:600,whiteSpace:'nowrap',textAlign:'right'}}>€{fmt(equity,0)}</td>
+                                  <td style={{padding:'4px 8px',color:'#ff9a3c',textAlign:'right'}}>{t.riesgoAcum!=null&&t.riesgoAcum>0?'€'+fmt(t.riesgoAcum,0):'—'}</td>
                                   <td style={{padding:'4px 8px',color:pnlColor,fontWeight:600}}>{t.pnlPct>=0?'+':''}{fmt(t.pnlPct,2)}%</td>
                                   <td style={{padding:'4px 8px',color:pnlColor}}>{pnlEur>=0?'+':''}{fmt(pnlEur,2)}€</td>
                                   <td style={{padding:'4px 8px',color:'#a8c4dc'}}>{t.dias}</td>
