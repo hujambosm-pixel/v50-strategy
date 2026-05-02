@@ -538,12 +538,14 @@ function buildPositionSizingCurves(assetResults, capitalIni, sizeRules) {
       }
       const capFinal = capAsignado * (1 + trade.pnlPct / 100)
       poolLibre += capFinal
+      const riesgoAntes = riesgoAcumulado
       riesgoAcumulado -= riesgoAsignado
       executedTrades.push({
         ...trade,
         _capitalAtEntry: capAsignado,
         capitalTras: capFinal,
         pnlSimple: capFinal - capAsignado,
+        riesgoAcum: riesgoAntes,
       })
       delete openSlots[symbol]
     })
@@ -557,6 +559,9 @@ function buildPositionSizingCurves(assetResults, capitalIni, sizeRules) {
       const ep = t.entryPrice
       if (!ep || ep <= 0) return
 
+      // Capital dinámico: capitalIni + ganancias realizadas hasta ahora
+      const capitalActual = capitalIni + executedTrades.reduce((s, x) => s + x.pnlSimple, 0)
+
       let distancia = null
       if (t.stopPx != null && t.stopPx > 0 && ep > t.stopPx) {
         distancia = (ep - t.stopPx) / ep
@@ -565,19 +570,19 @@ function buildPositionSizingCurves(assetResults, capitalIni, sizeRules) {
       let capAsignado
       if (distancia && distancia > 0) {
         capAsignado = Math.min(
-          capitalIni * riskPct / distancia,
-          capitalIni * maxPctCap
+          capitalActual * riskPct / distancia,
+          capitalActual * maxPctCap
         )
       } else {
-        capAsignado = capitalIni * maxPctCap
+        capAsignado = capitalActual * maxPctCap
       }
 
       const riesgoEsteTrade = distancia
         ? capAsignado * distancia
-        : capitalIni * maxPctCap
+        : capitalActual * maxPctCap
 
-      if (riesgoAcumulado + riesgoEsteTrade > capitalIni * maxAccum) return
-      if (capAsignado > poolLibre) return
+      if (riesgoAcumulado + riesgoEsteTrade > capitalActual * maxAccum) return
+      if (capAsignado > poolLibre) capAsignado = poolLibre
       if (capAsignado <= 0) return
 
       if (t.exitDate === date) {
@@ -589,6 +594,7 @@ function buildPositionSizingCurves(assetResults, capitalIni, sizeRules) {
           _capitalAtEntry: capAsignado,
           capitalTras: capFinal,
           pnlSimple: capFinal - capAsignado,
+          riesgoAcum: riesgoAcumulado,
         })
         return
       }
@@ -1005,9 +1011,20 @@ export default async function handler(req, res) {
     // Historial combinado ordenado por fecha salida
     // En modo rotativo usamos los trades efectivamente ejecutados (reescalados)
     const sourceTrades = (modoAsig === 'rotativo' || modoAsig === 'compartido' || modoAsig === 'positionsizing')
-      ? (curves.executedTrades || [])
-      : assetResults.flatMap(ar => ar.trades.map(t => ({ ...t, symbol: ar.symbol })))
-            .sort((a,b) => a.exitDate.localeCompare(b.exitDate))
+      ? (curves.executedTrades || []).map(t => {
+          if (t.riesgoAcum !== undefined) return t  // positionsizing ya lo tiene
+          const ep = t.entryPrice ?? t.entryPx
+          const stopIni = t.stopHistory?.[0]?.stopPx
+          const dist = (ep && stopIni && ep > stopIni) ? (ep - stopIni) / ep : null
+          const cap = t._capitalAtEntry ?? slotCapital
+          return { ...t, riesgoAcum: dist != null ? dist * cap : null }
+        })
+      : assetResults.flatMap(ar => ar.trades.map(t => {
+          const ep = t.entryPrice ?? t.entryPx
+          const stopIni = t.stopHistory?.[0]?.stopPx
+          const dist = (ep && stopIni && ep > stopIni) ? (ep - stopIni) / ep : null
+          return { ...t, symbol: ar.symbol, riesgoAcum: dist != null ? dist * slotCapital : null }
+        })).sort((a,b) => a.exitDate.localeCompare(b.exitDate))
 
     // SP500 B&H benchmark
     let sp500BHCurve = []
