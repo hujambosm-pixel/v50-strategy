@@ -805,7 +805,7 @@ function buildTrades(rawTrades, capitalIni, allocationPct = 100) {
 
 // ── runCodeJsAsset: ejecuta code_js de una estrategia sobre un activo ──
 // Sandbox idéntica a datos.js. Si falla → { trades:[], indicators:{}, filterZones:[] }
-function runCodeJsAsset(data, sp500Data, codeJs, slotCapital, years) {
+function runCodeJsAsset(data, sp500Data, codeJs, slotCapital, years, cfg) {
   try {
     const sp500Map = {}
     if (sp500Data) sp500Data.forEach(d => { sp500Map[d.date] = d.close })
@@ -814,7 +814,16 @@ function runCodeJsAsset(data, sp500Data, codeJs, slotCapital, years) {
     const getRunFn = new Function('calcEMA','calcSMA','calcRSI','calcATR','calcMACD', wrappedCode)
     const runFn = getRunFn(_libEMA, calcSMA, calcRSI, _libATR, calcMACD)
     const { trades: rawTrades = [], indicators = {}, filterZones = [] } =
-      runFn(enrichedData, { capital_ini: slotCapital, years, allocation_pct: 100 })
+      runFn(enrichedData, {
+        capital_ini:    slotCapital,
+        years,
+        allocation_pct: 100,
+        emaR:           cfg?.emaR,
+        emaL:           cfg?.emaL,
+        sinPerdidas:    cfg?.sinPerdidas,
+        reentry:        cfg?.reentry,
+        stopLoss:       cfg?.stopLoss,
+      })
     // Flush virtual de posición abierta al último precio
     const lastBar = data[data.length - 1]
     if (rawTrades.length > 0) {
@@ -955,7 +964,7 @@ export default async function handler(req, res) {
       if (!data?.length) return null
       if (codeJs) {
         // Motor code_js: sandbox por activo con slotCapital = capital total / nº activos
-        const { trades } = runCodeJsAsset(data, sp500Data, codeJs, slotCapital, cfg.years ?? 5)
+        const { trades } = runCodeJsAsset(data, sp500Data, codeJs, slotCapital, cfg.years ?? 5, cfg)
         const capitalReinv = trades.length ? trades[trades.length-1].capitalTras : slotCapital
         const gananciaSimple = trades.reduce((s,t) => s + t.pnlSimple, 0)
         const cutoff = new Date(data[data.length-1].date)
