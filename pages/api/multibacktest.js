@@ -815,14 +815,10 @@ function runCodeJsAsset(data, sp500Data, codeJs, slotCapital, years, cfg) {
     const runFn = getRunFn(_libEMA, calcSMA, calcRSI, _libATR, calcMACD)
     const { trades: rawTrades = [], indicators = {}, filterZones = [] } =
       runFn(enrichedData, {
+        ...(cfg || {}),
         capital_ini:    slotCapital,
-        years,
+        years:          cfg?.years ?? 5,
         allocation_pct: 100,
-        emaR:           cfg?.emaR,
-        emaL:           cfg?.emaL,
-        sinPerdidas:    cfg?.sinPerdidas,
-        reentry:        cfg?.reentry,
-        stopLoss:       cfg?.stopLoss,
       })
     // Flush virtual de posición abierta al último precio
     const lastBar = data[data.length - 1]
