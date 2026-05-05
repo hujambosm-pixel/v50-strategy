@@ -339,6 +339,7 @@ function buildCompartidoCurves(assetResults, capitalIni) {
       exitDate:  t.exitDate,
       pnlPct:    t.pnlPct,
       entryPx:   t.entryPrice ?? t.entryPx,
+      stopPx:    t.stopHistory?.[0]?.stopPx ?? null,
       dias:      t.dias,
     }))
   ).sort((a, b) => a.entryDate < b.entryDate ? -1 : 1)
@@ -372,11 +373,15 @@ function buildCompartidoCurves(assetResults, capitalIni) {
       if (!isFinite(trade.pnlPct)) { poolLibre += capAsignado; delete openSlots[symbol]; return }  // skip NaN/Infinity
       const capFinal = capAsignado * (1 + trade.pnlPct / 100)
       poolLibre += capFinal
+      const _distC = (trade.stopPx && trade.entryPx && trade.entryPx > trade.stopPx)
+        ? (trade.entryPx - trade.stopPx) / trade.entryPx : null
+      const _riesgoC = _distC ? capAsignado * _distC : capAsignado * 0.05
       executedTrades.push({
         ...trade,
         _capitalAtEntry: capAsignado,
         capitalTras: capFinal,
         pnlSimple: capFinal - capAsignado,
+        riesgoAcum: _riesgoC,
       })
       delete openSlots[symbol]
     })
@@ -394,11 +399,15 @@ function buildCompartidoCurves(assetResults, capitalIni) {
           if (isFinite(t.pnlPct)) {
             const capFinal = capPorSlot * (1 + t.pnlPct / 100)
             poolLibre += capFinal
+            const _distSD = (t.stopPx && t.entryPx && t.entryPx > t.stopPx)
+              ? (t.entryPx - t.stopPx) / t.entryPx : null
+            const _riesgoSD = _distSD ? capPorSlot * _distSD : capPorSlot * 0.05
             executedTrades.push({
               ...t,
               _capitalAtEntry: capPorSlot,
               capitalTras: capFinal,
-              pnlSimple: capFinal - capPorSlot
+              pnlSimple: capFinal - capPorSlot,
+              riesgoAcum: _riesgoSD,
             })
           } else {
             poolLibre += capPorSlot  // NaN: devolver capital sin P&L
@@ -502,6 +511,7 @@ function buildPositionSizingCurves(assetResults, capitalIni, sizeRules) {
       pnlPct:     t.pnlPct,
       entryPrice: t.entryPrice ?? t.entryPx,
       stopPx:     t.stopHistory?.[0]?.stopPx ?? null,
+      dias:       Math.round((new Date(t.exitDate) - new Date(t.entryDate)) / 86400000),
     }))
   ).sort((a, b) => a.entryDate < b.entryDate ? -1 : 1)
 

@@ -2983,7 +2983,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.153</title>
+        <title>Trading Simulator V9.154</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3060,7 +3060,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.153
+            <span className="dot"/>Trading Simulator V9.154
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5714,9 +5714,9 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               color:hi===4?'#9b72ff':hi===5?'#00d4ff':'#9acce0',
                               fontWeight:400,fontSize:11,whiteSpace:'nowrap'}}>{h}</th>
                           ))}
-                          <th style={{padding:'4px 8px',color:'#00e5a0',fontWeight:400,fontSize:11,whiteSpace:'nowrap',cursor:'help'}}
+                          <th style={{padding:'4px 8px',color:'#00e5a0',fontWeight:400,fontSize:11,whiteSpace:'nowrap',textAlign:'right',cursor:'help'}}
                             title="Capital acumulado del slot tras este trade (incluye todas las ganancias y pérdidas anteriores del mismo activo)">Equity</th>
-                          <th style={{padding:'4px 8px',color:'#ff9a3c',fontWeight:400,fontSize:11,whiteSpace:'nowrap',cursor:'help'}}
+                          <th style={{padding:'4px 8px',color:'#ff9a3c',fontWeight:400,fontSize:11,whiteSpace:'nowrap',textAlign:'right',cursor:'help'}}
                             title="Suma del riesgo potencial de todas las posiciones abiertas simultáneamente en el momento de este trade. Calculado como Σ(distancia_al_stop × capital_invertido) de cada posición abierta.">Riesgo acum.</th>
                           {['P&L %','P&L €','Días'].map(h=>(
                             <th key={h} style={{padding:'4px 8px',textAlign:'right',color:'#9acce0',fontWeight:400,fontSize:11,whiteSpace:'nowrap'}}>{h}</th>
@@ -5728,7 +5728,18 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                             const allT2=(mcTradeFilter
                               ?histResult.allTrades.filter(t=>(t.symbol||'').toUpperCase().includes(mcTradeFilter.toUpperCase()))
                               :histResult.allTrades)
-                            const fwdC=histResult.allTrades.map((_,i)=>capIni2+histResult.allTrades.slice(0,i+1).reduce((s,x)=>s+(x.pnlSimple??0),0))
+                            const fwdC=histResult.allTrades.map((_,i)=>{
+                              const tradesUpToI=histResult.allTrades.slice(0,i+1)
+                              const bySymbol={}
+                              tradesUpToI.forEach(t=>{if(t.capitalTras!=null)bySymbol[t.symbol]=t.capitalTras})
+                              const symbolCount=Object.keys(bySymbol).length
+                              if(symbolCount===0)return capIni2
+                              const sumActive=Object.values(bySymbol).reduce((s,v)=>s+v,0)
+                              const nSlots=histResult.assetStats?.length||symbolCount
+                              const slotCap2=histResult.slotCapital||capIni2/nSlots
+                              const slotsWithoutTrades=nSlots-symbolCount
+                              return sumActive+(slotsWithoutTrades*slotCap2)
+                            })
                             let pkC=capIni2
                             const peaksC2=fwdC.map(v=>{pkC=Math.max(pkC,v);return pkC})
                             const prevByIdx={},lastBySymbol={}
