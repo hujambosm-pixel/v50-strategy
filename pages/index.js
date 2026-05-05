@@ -1541,11 +1541,6 @@ export default function Home() {
     reloadConditions()
   },[])
 
-  // Auto-include active strategy in comparison selection
-  useEffect(()=>{
-    if(currentStratId) setMcStratSelected(prev=>prev.includes(currentStratId)?prev:[currentStratId,...prev.filter(id=>id!==currentStratId)])
-  },[currentStratId])
-
   // Abrir editor watchlist
   const openEditItem=(item)=>{
     setEditingItem(item)
@@ -2603,6 +2598,11 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
       }
     }
     const stratIds=mcStratSelected.filter(Boolean)
+    if(stratIds.length===0){
+      setMcError('Selecciona al menos una estrategia para ejecutar')
+      setMcLoading(false)
+      return
+    }
     if(stratIds.length<=1){
       try{
         const res=await apiFetch('/api/multibacktest',{method:'POST',headers:{'Content-Type':'application/json'},
@@ -2994,7 +2994,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.161</title>
+        <title>Trading Simulator V9.162</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3071,7 +3071,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.161
+            <span className="dot"/>Trading Simulator V9.162
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4038,13 +4038,12 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                             return(
                               <div key={s.id}
                                 onClick={()=>{
-                                  if(isActive) return
                                   setMcStratSelected(prev=>prev.includes(s.id)?prev.filter(id=>id!==s.id):[...prev,s.id])
                                 }}
                                 style={{display:'flex',alignItems:'center',gap:7,padding:'5px 7px',borderRadius:4,
                                   background:isSel?'rgba(0,212,255,0.06)':'transparent',
                                   border:`1px solid ${isSel?'rgba(0,212,255,0.2)':'transparent'}`,
-                                  cursor:isActive?'default':'pointer'}}
+                                  cursor:'pointer'}}
                                 onMouseOver={e=>{if(!isActive)e.currentTarget.style.background=isSel?'rgba(0,212,255,0.09)':'rgba(255,255,255,0.03)'}}
                                 onMouseOut={e=>e.currentTarget.style.background=isSel?'rgba(0,212,255,0.06)':'transparent'}>
                                 <div style={{width:14,height:14,borderRadius:3,border:`1.5px solid ${isSel?'var(--accent)':'#3d5a7a'}`,
