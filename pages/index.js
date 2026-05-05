@@ -2580,16 +2580,27 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
       tipoFiltro,sp500EmaR:Number(sp500EmaR),sp500EmaL:Number(sp500EmaL),tipoCapital:mcCapital,
       sizeRules:mcMode==='positionsizing'?{riskPerTrade:mcRiskPerTrade,maxPortfolioPct:mcMaxPortfolioPct,maxAccumRisk:mcMaxAccumRisk}:undefined}
     const buildCfgFromStrat=(strat)=>{
-      if(!strat?.definition||!Object.keys(strat.definition).length) return baseCfg
-      const def=strat.definition,entry=def.entry||{},stop=def.stop||{},mgmt=def.management||{},filt=def.filters?.market?.[0]||{}
-      return{emaR:entry.ma_fast||entry.ma_period||Number(emaR),emaL:entry.ma_slow||Number(emaL),
-        years:_mcYears,capitalIni:mcCapitalIni,fromDate:_mcFrom,toDate:_mcTo,
-        tipoStop:stop.type==='atr_based'?'atr':stop.type==='none'?'none':'tecnico',
-        atrPeriod:stop.atr_period||Number(atrP),atrMult:stop.atr_mult||Number(atrM),
-        sinPerdidas:mgmt.sin_perdidas!==false,reentry:mgmt.reentry!==false,
-        tipoFiltro:filt.condition||'none',sp500EmaR:filt.ma_fast||Number(sp500EmaR),sp500EmaL:filt.ma_slow||Number(sp500EmaL),
-        tipoCapital:mcCapital,
-        sizeRules:mcMode==='positionsizing'?{riskPerTrade:mcRiskPerTrade,maxPortfolioPct:mcMaxPortfolioPct,maxAccumRisk:mcMaxAccumRisk}:undefined}
+      // Parsear params del code_js (campo principal para estrategias modernas)
+      let stratParams={}
+      if(strat?.params){
+        try{stratParams=typeof strat.params==='string'?JSON.parse(strat.params):strat.params}catch(e){}
+      }
+      // Fallback a definition.entry para estrategias legacy
+      const def=strat?.definition||{}
+      const entry=def.entry||{},stop=def.stop||{},mgmt=def.management||{},filt=def.filters?.market?.[0]||{}
+      const legacyParams=Object.keys(def).length>0?{
+        emaR:entry.ma_fast||entry.ma_period||Number(emaR),
+        emaL:entry.ma_slow||Number(emaL),
+        sinPerdidas:mgmt.sin_perdidas!==false,
+        reentry:mgmt.reentry!==false,
+        stopLoss:def.stopLoss||'tecnico_ema',
+      }:{}
+      // baseCfg < legacyParams < stratParams (stratParams tiene máxima prioridad)
+      return{
+        ...baseCfg,
+        ...legacyParams,
+        ...stratParams,
+      }
     }
     const stratIds=mcStratSelected.filter(Boolean)
     if(stratIds.length<=1){
@@ -2983,7 +2994,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.160</title>
+        <title>Trading Simulator V9.161</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3060,7 +3071,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.160
+            <span className="dot"/>Trading Simulator V9.161
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}

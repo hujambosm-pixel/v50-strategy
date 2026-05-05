@@ -920,17 +920,26 @@ export default async function handler(req, res) {
   }
   if (!cfg) return res.status(400).json({ error: 'Se requiere cfg o definition' })
 
-  // Fetch code_js desde Supabase si se proporcionó strategyId
+  // Fetch code_js y params desde Supabase si se proporcionó strategyId
   let codeJs = null
+  let effectiveCfg = cfg
   if (strategyId && SUPA_URL && SUPA_KEY) {
     try {
       const sr = await fetch(
-        `${SUPA_URL}/rest/v1/strategies?id=eq.${strategyId}&select=code_js`,
+        `${SUPA_URL}/rest/v1/strategies?id=eq.${strategyId}&select=code_js,params`,
         { headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` } }
       )
       if (sr.ok) {
         const row = (await sr.json())?.[0] || {}
         codeJs = row.code_js || null
+        let stratParams = {}
+        try {
+          stratParams = row.params
+            ? (typeof row.params === 'string' ? JSON.parse(row.params) : row.params)
+            : {}
+        } catch(_) {}
+        // cfg del frontend + params de Supabase (stratParams tiene prioridad)
+        effectiveCfg = { ...cfg, ...stratParams }
       }
     } catch(_) { codeJs = null }
   }
@@ -960,7 +969,7 @@ export default async function handler(req, res) {
       if (!data?.length) return null
       if (codeJs) {
         // Motor code_js: sandbox por activo con slotCapital = capital total / nº activos
-        const { trades } = runCodeJsAsset(data, sp500Data, codeJs, slotCapital, cfg.years ?? 5, cfg)
+        const { trades } = runCodeJsAsset(data, sp500Data, codeJs, slotCapital, cfg.years ?? 5, effectiveCfg)
         const capitalReinv = trades.length ? trades[trades.length-1].capitalTras : slotCapital
         const gananciaSimple = trades.reduce((s,t) => s + t.pnlSimple, 0)
         const cutoff = new Date(data[data.length-1].date)
