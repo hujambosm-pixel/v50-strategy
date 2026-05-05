@@ -2983,7 +2983,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.157</title>
+        <title>Trading Simulator V9.158</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3060,7 +3060,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.157
+            <span className="dot"/>Trading Simulator V9.158
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5739,7 +5739,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                             const peakByDate=new Map();curveArr.forEach(p=>{pkC=Math.max(pkC,p.value);peakByDate.set(p.date,pkC)})
                             const prevByIdx={},lastBySymbol={}
                             histResult.allTrades.forEach((t,i)=>{prevByIdx[i]=lastBySymbol[t.symbol]??null;lastBySymbol[t.symbol]=t})
-                            return [...allT2].reverse().map((t,i)=>{
+                            const displayTrades=[...allT2].reverse()
+                            return displayTrades.map((t,i)=>{
                               const origIdx=histResult.allTrades.indexOf(t)
                               const slotCap=histResult.slotCapital??capIni2
                               const capInv=t._capitalAtEntry!=null
@@ -5747,7 +5748,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                 :(prevByIdx[origIdx]!=null?prevByIdx[origIdx].capitalTras:slotCap)
                               const equity=getEquityAt(t.exitDate)
                               const resultado=capInv*(1+t.pnlPct/100)
-                              const equityColor=equity>=(peakByDate.get(t.exitDate)??capIni2)?'#00d4ff':'#ff9a3c'
+                              const prevEquity=i<displayTrades.length-1?getEquityAt(displayTrades[i+1].exitDate):capIni2
+                              const equityColor=equity>=prevEquity?'#00d4ff':'#ff9a3c'
                               const pnlEur=capInv*(t.pnlPct/100)
                               const pnlColor=pnlEur>=0?'var(--green)':'var(--red)'
                               return(
@@ -5778,7 +5780,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                   <td style={{padding:'4px 8px',color:'#d8ecff',whiteSpace:'nowrap'}}>{fmtDate(t.entryDate)}</td>
                                   <td style={{padding:'4px 8px',color:'#d8ecff',whiteSpace:'nowrap'}}>{fmtDate(t.exitDate)}</td>
                                   <td style={{padding:'4px 8px',color:'#e8f4ff',fontWeight:600,whiteSpace:'nowrap',textAlign:'right'}}>€{fmt(capInv,0)}</td>
-                                  <td style={{padding:'4px 8px',color:t.pnlPct>=0?'#00d4ff':'#ff4d6d',fontWeight:600,whiteSpace:'nowrap',textAlign:'right'}}>€{fmt(resultado,0)}</td>
+                                  <td style={{padding:'4px 8px',color:t.pnlPct>=0?'#00d4ff':'#ff9a3c',fontWeight:600,whiteSpace:'nowrap',textAlign:'right'}}>€{fmt(resultado,0)}</td>
                                   <td style={{padding:'4px 8px',color:equityColor,fontWeight:600,whiteSpace:'nowrap',textAlign:'right'}}>€{fmt(equity,0)}</td>
                                   <td style={{padding:'4px 8px',color:'#ff9a3c',textAlign:'right'}}>{t.riesgoAcum!=null&&t.riesgoAcum>0?'€'+fmt(t.riesgoAcum,0):'—'}</td>
                                   <td style={{padding:'4px 8px',color:pnlColor,fontWeight:600,textAlign:'right'}}>{t.pnlPct>=0?'+':''}{fmt(t.pnlPct,2)}%</td>
