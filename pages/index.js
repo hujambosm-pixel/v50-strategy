@@ -2983,7 +2983,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.154</title>
+        <title>Trading Simulator V9.155</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3060,7 +3060,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.154
+            <span className="dot"/>Trading Simulator V9.155
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5728,20 +5728,9 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                             const allT2=(mcTradeFilter
                               ?histResult.allTrades.filter(t=>(t.symbol||'').toUpperCase().includes(mcTradeFilter.toUpperCase()))
                               :histResult.allTrades)
-                            const fwdC=histResult.allTrades.map((_,i)=>{
-                              const tradesUpToI=histResult.allTrades.slice(0,i+1)
-                              const bySymbol={}
-                              tradesUpToI.forEach(t=>{if(t.capitalTras!=null)bySymbol[t.symbol]=t.capitalTras})
-                              const symbolCount=Object.keys(bySymbol).length
-                              if(symbolCount===0)return capIni2
-                              const sumActive=Object.values(bySymbol).reduce((s,v)=>s+v,0)
-                              const nSlots=histResult.assetStats?.length||symbolCount
-                              const slotCap2=histResult.slotCapital||capIni2/nSlots
-                              const slotsWithoutTrades=nSlots-symbolCount
-                              return sumActive+(slotsWithoutTrades*slotCap2)
-                            })
+                            const curveMap=new Map((histResult.compoundCurve||[]).map(p=>[p.date,p.value]))
                             let pkC=capIni2
-                            const peaksC2=fwdC.map(v=>{pkC=Math.max(pkC,v);return pkC})
+                            const peakByDate=new Map();(histResult.compoundCurve||[]).slice().sort((a,b)=>a.date<b.date?-1:1).forEach(p=>{pkC=Math.max(pkC,p.value);peakByDate.set(p.date,pkC)})
                             const prevByIdx={},lastBySymbol={}
                             histResult.allTrades.forEach((t,i)=>{prevByIdx[i]=lastBySymbol[t.symbol]??null;lastBySymbol[t.symbol]=t})
                             return [...allT2].reverse().map((t,i)=>{
@@ -5750,9 +5739,9 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               const capInv=t._capitalAtEntry!=null
                                 ?t._capitalAtEntry
                                 :(prevByIdx[origIdx]!=null?prevByIdx[origIdx].capitalTras:slotCap)
-                              const equity=fwdC[origIdx]
+                              const equity=curveMap.get(t.exitDate)??capIni2
                               const resultado=capInv*(1+t.pnlPct/100)
-                              const equityColor=equity>=peaksC2[origIdx]?'#00d4ff':'#ff9a3c'
+                              const equityColor=equity>=(peakByDate.get(t.exitDate)??capIni2)?'#00d4ff':'#ff9a3c'
                               const pnlEur=capInv*(t.pnlPct/100)
                               const pnlColor=pnlEur>=0?'var(--green)':'var(--red)'
                               return(
