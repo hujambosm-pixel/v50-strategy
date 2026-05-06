@@ -329,19 +329,20 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       if(_showEma){
         if(!definition){
           // Ruta legacy: sin definition, usar emaR/emaL precomputados del chartData
-          const fs=chart.addLineSeries({color:'#00d4ff',lineWidth:1,lastValueVisible:false,priceLineVisible:false})
+          const fs=chart.addLineSeries({color:'#ffd166',lineWidth:1,lastValueVisible:false,priceLineVisible:false})
           fs.setData(data.map(d=>({time:d.date,value:d.emaR})).filter(x=>x.value!=null))
-          const ss=chart.addLineSeries({color:'#f59e0b',lineWidth:1,lastValueVisible:false,priceLineVisible:false})
+          const ss=chart.addLineSeries({color:'#ff4d6d',lineWidth:1,lastValueVisible:false,priceLineVisible:false})
           ss.setData(data.map(d=>({time:d.date,value:d.emaL})).filter(x=>x.value!=null))
         } else {
-          _emaIndicators.forEach(ind=>{
+          _emaIndicators.forEach((ind,idx)=>{
             const mtype=(ind.type||'ema').toUpperCase()
             const p=ind.period
             // Reutilizar arrays precomputados si el período coincide
             const vals=(p===emaRPeriod&&data[0]?.emaR!=null)?data.map(d=>d.emaR):
                        (p===emaLPeriod&&data[0]?.emaL!=null)?data.map(d=>d.emaL):
                        (mtype==='SMA'?calcSMA(_closes,p):calcEMA(_closes,p))
-            const series=chart.addLineSeries({color:ind.color||'#00d4ff',lineWidth:ind.lineWidth||1,lastValueVisible:false,priceLineVisible:false})
+            const defColor=idx===0?'#ffd166':'#ff4d6d'
+            const series=chart.addLineSeries({color:ind.color||defColor,lineWidth:ind.lineWidth||1,lastValueVisible:false,priceLineVisible:false})
             series.setData(data.map((d,j)=>({time:d.date,value:vals[j]})).filter(x=>x.value!=null))
           })
         }
