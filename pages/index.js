@@ -504,7 +504,7 @@ export default function Home() {
   const [sinPerdidas,setSinPerdidas]=useState(true),[reentry,setReentry]=useState(true)
   const [tipoFiltro,setTipoFiltro]=useState('none'),[sp500EmaR,setSp500EmaR]=useState(10),[sp500EmaL,setSp500EmaL]=useState(11)
   const [result,setResult]=useState(null),[loading,setLoading]=useState(false),[error,setError]=useState(null)
-  const [labelMode,setLabelMode]=useState(0),[rulerOn,setRulerOn]=useState(false)
+  const [labelMode,setLabelMode]=useState(1),[rulerOn,setRulerOn]=useState(false)
   const [chartViewFull,setChartViewFull]=useState(false)
   const [settingsOpen,setSettingsOpen]=useState(false)
   const [settingsInitTab,setSettingsInitTab]=useState('integraciones')
@@ -1448,26 +1448,27 @@ export default function Home() {
   const stratLoadedRef=useRef(false)
   const reloadStrategies=(applyDefault=false)=>{
     setStrLoading(true)
-    fetchStrategies()
-      .then(data=>{
+    const uid=getUidFromJwt()
+    const supaFetch=uid
+      ?fetch(`${getSupaUrl()}/rest/v1/user_settings?user_id=eq.${uid}&select=settings`,{headers:getSupaH()}).then(r=>r.json()).catch(()=>null)
+      :Promise.resolve(null)
+    Promise.all([fetchStrategies(),supaFetch])
+      .then(([data,settRows])=>{
         setStrategies(data)
         // On first load only: apply default strategy from settings (if any)
         if(applyDefault&&!stratLoadedRef.current&&data.length>0){
           stratLoadedRef.current=true
           try{
-            const sett=JSON.parse(localStorage.getItem('v50_settings')||'{}')
-            const defId=sett.defaultStrategyId
+            // Supabase tiene prioridad sobre localStorage
+            const supaDefId=settRows?.[0]?.settings?.defaultStrategyId
+            const lsDefId=JSON.parse(localStorage.getItem('v50_settings')||'{}').defaultStrategyId
+            const defId=supaDefId||lsDefId
             if(defId){
-              // Robust comparison: stringify both sides in case of number/string mismatch
               const match=data.find(s=>String(s.id)===String(defId))
               if(match){
                 loadStrategyLegacy(match,{navigateToConfig:false})
               } else {
-                try{
-                  const _s=JSON.parse(localStorage.getItem('v50_settings')||'{}')
-                  delete _s.defaultStrategyId
-                  localStorage.setItem('v50_settings',JSON.stringify(_s))
-                }catch(_){}
+                try{const _s=JSON.parse(localStorage.getItem('v50_settings')||'{}');delete _s.defaultStrategyId;localStorage.setItem('v50_settings',JSON.stringify(_s))}catch(_){}
                 stopStrategy({skipDebounce:false})
               }
             } else {
@@ -1977,10 +1978,24 @@ export default function Home() {
     }
   },[])
 
-  // ── Persistir estrategia activa en localStorage al cambiar ──
+  // ── Persistir estrategia activa en localStorage + Supabase al cambiar ──
   useEffect(()=>{
     if(!currentStratId) return
     try{const _s=JSON.parse(localStorage.getItem('v50_settings')||'{}');_s.defaultStrategyId=currentStratId;localStorage.setItem('v50_settings',JSON.stringify(_s))}catch(_){}
+    const uid=getUidFromJwt()
+    if(!uid) return
+    ;(async()=>{
+      try{
+        const r=await fetch(`${getSupaUrl()}/rest/v1/user_settings?user_id=eq.${uid}&select=settings`,{headers:getSupaH()})
+        const rows=await r.json()
+        const prev=rows?.[0]?.settings||{}
+        await fetch(`${getSupaUrl()}/rest/v1/user_settings?user_id=eq.${uid}`,{
+          method:'PATCH',
+          headers:{...getSupaH(),'Content-Type':'application/json','Prefer':'return=minimal'},
+          body:JSON.stringify({settings:{...prev,defaultStrategyId:currentStratId}})
+        })
+      }catch(_){}
+    })()
   },[currentStratId])
 
   // ── Eliminar estrategia ──
@@ -2994,7 +3009,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.162</title>
+        <title>Trading Simulator V9.163</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3071,7 +3086,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.162
+            <span className="dot"/>Trading Simulator V9.163
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
