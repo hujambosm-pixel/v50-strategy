@@ -150,6 +150,23 @@ function runSingleBacktest(data, sp500Data, cfg) {
     }
     if(cierreBaj&&entradaPend&&!reentryMode){entradaPend=false;breakout=null}
   }
+  // Trade abierto al final de los datos: añadir como virtual para que occupancyCurve lo cuente
+  if (enPosicion && idxEntrada !== null && precioEntrada) {
+    const lastBar = data[data.length - 1]
+    trades.push({
+      entryDate:   data[idxEntrada].date,
+      exitDate:    null,
+      entryPx:     precioEntrada,
+      exitPx:      null,
+      pnlPct:      0,
+      pnlSimple:   0,
+      capitalTras: capitalReinv,
+      dias:        Math.round((new Date(lastBar.date) - new Date(data[idxEntrada].date)) / 86400000),
+      stopPx:      stopNivel ?? null,
+      tipo:        'Open',
+      _virtualClose: true,
+    })
+  }
   return { trades, capitalReinv, gananciaSimple, startDate, blockEvents }
 }
 
