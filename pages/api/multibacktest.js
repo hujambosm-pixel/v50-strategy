@@ -170,7 +170,7 @@ function buildSlotsCurves(assetResults, capitalIni) {
       const exitsBefore = trades.filter(t => t.exitDate <= date)
       const simple = slotCapital + exitsBefore.reduce((s,t) => s + t.pnlSimple, 0)
       const compound = exitsBefore.length ? exitsBefore[exitsBefore.length-1].capitalTras : slotCapital
-      const openTrades = trades.filter(t => t.entryDate <= date && t.exitDate > date)
+      const openTrades = trades.filter(t => t.entryDate <= date && (!t.exitDate || t.exitDate > date))
       const open = openTrades.length > 0
       let bh = slotCapital, closePx = null
       if (p0 && filtData.length) {
@@ -297,7 +297,7 @@ function buildRotativoCurves(assetResults, capitalIni, rankMap) {
 
   // Ocupación: ¿hay trade abierto en esa fecha?
   const occupancyCurve = sampledDates.map(date => {
-    const busy = executedTrades.some(t => t.entryDate <= date && t.exitDate > date)
+    const busy = executedTrades.some(t => t.entryDate <= date && (!t.exitDate || t.exitDate > date))
     return { date, value: busy ? 100 : 0 }
   })
 
@@ -464,7 +464,7 @@ function buildCompartidoCurves(assetResults, capitalIni) {
   const occupancyCurve = sampledDates.map(date => {
     const busy = allCandidates.filter(t =>
       capitalAtEntryMap[`${t.symbol}:${t.entryDate}`] != null &&
-      t.entryDate <= date && t.exitDate > date
+      t.entryDate <= date && (!t.exitDate || t.exitDate > date)
     ).length
     return { date, value: n > 0 ? (busy / n) * 100 : 0 }
   })
@@ -654,7 +654,7 @@ function buildPositionSizingCurves(assetResults, capitalIni, sizeRules) {
   const occupancyCurve = sampledDates.map(date => {
     const busy = allCandidates.filter(t =>
       capitalAtEntryMap[`${t.symbol}:${t.entryDate}`] != null &&
-      t.entryDate <= date && t.exitDate > date
+      t.entryDate <= date && (!t.exitDate || t.exitDate > date)
     ).length
     return { date, value: n > 0 ? (busy / n) * 100 : 0 }
   })
@@ -708,7 +708,7 @@ function buildCustomCurves(assetResults, capitalIni, weights) {
       const compound = exitsBefore.length
         ? slotCapital + (exitsBefore[exitsBefore.length-1].capitalTras - origSlot) * scale
         : slotCapital
-      const openTrades = trades.filter(t => t.entryDate <= date && t.exitDate > date)
+      const openTrades = trades.filter(t => t.entryDate <= date && (!t.exitDate || t.exitDate > date))
       const open = openTrades.length > 0
       let bh = slotCapital, closePx = null
       if (p0 && filtData.length) {
