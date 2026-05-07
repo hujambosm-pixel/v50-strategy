@@ -201,9 +201,6 @@ function buildSlotsCurves(assetResults, capitalIni) {
     return byDate
   })
 
-  console.log('[OCC-SLOTS] last 3 dates:', filteredDates.slice(-3))
-  console.log('[OCC-SLOTS] trades sample:', assetResults[0]?.trades?.slice(-2).map(t => ({ entryDate: t.entryDate, exitDate: t.exitDate, _virtualClose: t._virtualClose })))
-
   const simpleCurve=[], compoundCurve=[], bhCurve=[], occupancyCurve=[], floatSimpleCurve=[], floatCompoundCurve=[]
   const step = Math.max(1, Math.floor(filteredDates.length / 400))
   filteredDates.filter((_,i)=>i%step===0||i===filteredDates.length-1).forEach(date => {
@@ -314,9 +311,6 @@ function buildRotativoCurves(assetResults, capitalIni, rankMap) {
     floatSimpleCurve.push({date, value:simpleVal+openPnlSimple})
     floatCompoundCurve.push({date, value:val+openPnlCompound})
   })
-
-  console.log('[OCC-ROT] last 3 dates:', sampledDates.slice(-3))
-  console.log('[OCC-ROT] executedTrades last 2:', executedTrades.slice(-2).map(t => ({ entryDate: t.entryDate, exitDate: t.exitDate, _virtualClose: t._virtualClose })))
 
   // Ocupación: ¿hay trade abierto en esa fecha?
   const occupancyCurve = sampledDates.map(date => {
@@ -1119,11 +1113,6 @@ export default async function handler(req, res) {
       modoAsig,
       startDate: curves.startDate,
       blockEventsBySymbol: Object.fromEntries(assetResults.map(ar => [ar.symbol, ar.blockEvents])),
-      _debug: {
-        slotsLastTrades: assetResults[0]?.trades?.slice(-2).map(t => ({ entryDate: t.entryDate, exitDate: t.exitDate, _virtualClose: t._virtualClose, pnlPct: t.pnlPct })),
-        occupancyLast3: curves.occupancyCurve?.slice(-3),
-        totalTrades: assetResults[0]?.trades?.length,
-      },
     })
   } catch(err) {
     console.error(err)

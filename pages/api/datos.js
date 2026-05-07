@@ -94,9 +94,6 @@ export function calcEquityCurves(trades, data, capitalIni, startDate, sp500Data)
       if (spBar) sp500BHCurve.push({date:d.date,value:capitalIni*(spBar.close/sp0Close)})
     }
   })
-  console.log('[DATOS-EQUITY] last 2 strategyCurve:', strategyCurve.slice(-2))
-  console.log('[DATOS-EQUITY] last 2 compoundCurve:', compoundCurve.slice(-2))
-  console.log('[DATOS-EQUITY] trades last 2:', trades.slice(-2).map(t => ({ entryDate: t.entryDate, exitDate: t.exitDate, pnlSimple: t.pnlSimple, capitalTras: t.capitalTras, _virtualClose: t._virtualClose })))
   const calcDD = (curve) => {
     let peak=curve[0]?.value||capitalIni, maxDD=0, maxDDDate=null
     curve.forEach(p=>{
@@ -203,8 +200,6 @@ export default async function handler(req, res) {
     const rawTrades      = _result.trades      ?? []
     const indicators     = _result.indicators  ?? {}
     const rawFilterZones = _result.filterZones ?? []
-    console.log('[SERVER filterZones]', Array.isArray(rawFilterZones), rawFilterZones?.length, rawFilterZones?.[0])
-
     // ── Flush virtual: posición abierta al final del periodo ──
     const lastBar = data[data.length - 1]
     const openPos = _result.openPosition ?? null
@@ -231,15 +226,8 @@ export default async function handler(req, res) {
         }
       }
     }
-    console.log('[DATOS-VIRTUAL] lastBar:', lastBar?.date, 'openPos:', JSON.stringify(openPos), 'lastRaw:', JSON.stringify(rawTrades[rawTrades.length-1] ? { entryDate: rawTrades[rawTrades.length-1].entryDate, exitDate: rawTrades[rawTrades.length-1].exitDate, _virtualClose: rawTrades[rawTrades.length-1]._virtualClose } : null))
-
     // ── Enrich trades ──
     const trades = buildTrades(rawTrades, capital_ini, allocation_pct)
-    console.log('[TRADES]', JSON.stringify(trades.slice(0,3).map(t=>({
-      entryDate: t.entryDate, exitDate: t.exitDate,
-      entryPrice: t.entryPrice, exitPrice: t.exitPrice,
-      pnlPct: t.pnlPct
-    })), null, 2))
 
     // ── Inject indicators into chartData bars ──
     const emaRArr = indicators.emaR || indicators.emaFast || null
@@ -263,8 +251,6 @@ export default async function handler(req, res) {
       chartData,
       trades,
       filterZones: Array.isArray(rawFilterZones) ? rawFilterZones : [],
-      _debug_filterZones_length: rawFilterZones?.length ?? 'NOT_ARRAY',
-      _debug_filterZones_type: typeof rawFilterZones,
       gananciaSimple,
       capitalReinv,
       ganBH,
@@ -272,12 +258,6 @@ export default async function handler(req, res) {
       ...curves,
       visuals: stratVisuals ? JSON.parse(stratVisuals) : null,
       meta: { ultimaFecha: data[data.length - 1].date, ultimoPrecio: data[data.length - 1].close, simbolo },
-      _debug: {
-        lastRawTrade: rawTrades.length ? { entryDate: rawTrades[rawTrades.length-1].entryDate, exitDate: rawTrades[rawTrades.length-1].exitDate, entryPrice: rawTrades[rawTrades.length-1].entryPrice, exitPrice: rawTrades[rawTrades.length-1].exitPrice, _virtualClose: rawTrades[rawTrades.length-1]._virtualClose } : null,
-        tradesLast2: trades.slice(-2).map(t => ({ entryDate: t.entryDate, exitDate: t.exitDate, pnlSimple: t.pnlSimple, capitalTras: t.capitalTras, _virtualClose: t._virtualClose })),
-        equityLast2: curves.strategyCurve?.slice(-2),
-        compoundLast2: curves.compoundCurve?.slice(-2),
-      },
     })
   } catch (e) {
     return res.status(500).json({ error: e.message })
