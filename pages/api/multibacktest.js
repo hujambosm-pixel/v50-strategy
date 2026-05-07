@@ -1105,8 +1105,9 @@ export default async function handler(req, res) {
       startDate: curves.startDate,
       blockEventsBySymbol: Object.fromEntries(assetResults.map(ar => [ar.symbol, ar.blockEvents])),
       _debug: {
-        slotsLastTrades: assetResults[0]?.trades?.slice(-2).map(t => ({ entryDate: t.entryDate, exitDate: t.exitDate, _virtualClose: t._virtualClose })),
+        slotsLastTrades: assetResults[0]?.trades?.slice(-2).map(t => ({ entryDate: t.entryDate, exitDate: t.exitDate, _virtualClose: t._virtualClose, pnlPct: t.pnlPct })),
         occupancyLast3: curves.occupancyCurve?.slice(-3),
+        totalTrades: assetResults[0]?.trades?.length,
       },
     })
   } catch(err) {
