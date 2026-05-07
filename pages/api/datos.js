@@ -199,23 +199,39 @@ export default async function handler(req, res) {
     const getRunFn = new Function('calcEMA','calcSMA','calcRSI','calcATR','calcMACD', wrappedCode)
     const runFn    = getRunFn(calcEMA, calcSMA, calcRSI, calcATR, calcMACD)
     const userParams = stratParams ? JSON.parse(stratParams) : {}
-    const { trades: rawTrades = [], indicators = {}, filterZones: rawFilterZones = [] } = runFn(data, { capital_ini, years, allocation_pct, ...userParams })
+    const _result = runFn(data, { capital_ini, years, allocation_pct, ...userParams })
+    const rawTrades      = _result.trades      ?? []
+    const indicators     = _result.indicators  ?? {}
+    const rawFilterZones = _result.filterZones ?? []
     console.log('[SERVER filterZones]', Array.isArray(rawFilterZones), rawFilterZones?.length, rawFilterZones?.[0])
 
-    // ── Flush virtual de posición abierta al último precio ──
+    // ── Flush virtual: posición abierta al final del periodo ──
     const lastBar = data[data.length - 1]
-    if (rawTrades.length > 0) {
+    const openPos = _result.openPosition ?? null
+    if (openPos && openPos.entryDate && openPos.entryPrice > 0) {
+      // Convención nueva: la estrategia expone openPosition explícitamente
+      rawTrades.push({
+        entryDate:     openPos.entryDate,
+        exitDate:      lastBar.date,
+        entryPrice:    openPos.entryPrice,
+        exitPrice:     lastBar.close,
+        stopPx:        openPos.stopPx ?? null,
+        exitReason:    'virtual_close',
+        _virtualClose: true,
+      })
+    } else if (rawTrades.length > 0) {
+      // Fallback: convención antigua (push sin exitDate en entrada)
       const lastRaw = rawTrades[rawTrades.length - 1]
       if (lastRaw && !lastRaw.exitDate && lastRaw.entryPrice > 0) {
         rawTrades[rawTrades.length - 1] = {
           ...lastRaw,
-          exitDate:  lastBar.date,
-          exitPrice: lastBar.close,
-          _virtualClose: true
+          exitDate:      lastBar.date,
+          exitPrice:     lastBar.close,
+          _virtualClose: true,
         }
       }
     }
-    console.log('[DATOS-VIRTUAL] lastBar:', lastBar?.date, 'lastRaw before enrich:', JSON.stringify(rawTrades[rawTrades.length-1] ? { entryDate: rawTrades[rawTrades.length-1].entryDate, exitDate: rawTrades[rawTrades.length-1].exitDate, entryPrice: rawTrades[rawTrades.length-1].entryPrice, exitPrice: rawTrades[rawTrades.length-1].exitPrice, _virtualClose: rawTrades[rawTrades.length-1]._virtualClose } : null))
+    console.log('[DATOS-VIRTUAL] lastBar:', lastBar?.date, 'openPos:', JSON.stringify(openPos), 'lastRaw:', JSON.stringify(rawTrades[rawTrades.length-1] ? { entryDate: rawTrades[rawTrades.length-1].entryDate, exitDate: rawTrades[rawTrades.length-1].exitDate, _virtualClose: rawTrades[rawTrades.length-1]._virtualClose } : null))
 
     // ── Enrich trades ──
     const trades = buildTrades(rawTrades, capital_ini, allocation_pct)

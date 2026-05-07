@@ -838,23 +838,38 @@ function runCodeJsAsset(data, sp500Data, codeJs, slotCapital, years, cfg) {
     const wrappedCode = `"use strict";\n${codeJs}\nreturn run;`
     const getRunFn = new Function('calcEMA','calcSMA','calcRSI','calcATR','calcMACD', wrappedCode)
     const runFn = getRunFn(_libEMA, calcSMA, calcRSI, _libATR, calcMACD)
-    const { trades: rawTrades = [], indicators = {}, filterZones = [] } =
-      runFn(enrichedData, {
-        ...(cfg || {}),
-        capital_ini:    slotCapital,
-        years:          cfg?.years ?? 5,
-        allocation_pct: 100,
-      })
-    // Flush virtual de posición abierta al último precio
+    const result = runFn(enrichedData, {
+      ...(cfg || {}),
+      capital_ini:    slotCapital,
+      years:          cfg?.years ?? 5,
+      allocation_pct: 100,
+    })
+    const rawTrades   = result.trades      ?? []
+    const indicators  = result.indicators  ?? {}
+    const filterZones = result.filterZones ?? []
+    // Flush virtual: posición abierta al final del periodo
     const lastBar = data[data.length - 1]
-    if (rawTrades.length > 0) {
+    const openPos = result.openPosition ?? null
+    if (openPos && openPos.entryDate && openPos.entryPrice > 0) {
+      // Convención nueva: la estrategia expone openPosition explícitamente
+      rawTrades.push({
+        entryDate:     openPos.entryDate,
+        exitDate:      lastBar.date,
+        entryPrice:    openPos.entryPrice,
+        exitPrice:     lastBar.close,
+        stopPx:        openPos.stopPx ?? null,
+        exitReason:    'virtual_close',
+        _virtualClose: true,
+      })
+    } else if (rawTrades.length > 0) {
+      // Fallback: convención antigua (push sin exitDate en entrada)
       const lastRaw = rawTrades[rawTrades.length - 1]
       if (lastRaw && !lastRaw.exitDate && lastRaw.entryPrice > 0) {
         rawTrades[rawTrades.length - 1] = {
           ...lastRaw,
-          exitDate:  lastBar.date,
-          exitPrice: lastBar.close,
-          _virtualClose: true
+          exitDate:      lastBar.date,
+          exitPrice:     lastBar.close,
+          _virtualClose: true,
         }
       }
     }
