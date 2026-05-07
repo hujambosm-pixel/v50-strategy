@@ -256,6 +256,12 @@ export default async function handler(req, res) {
       ...curves,
       visuals: stratVisuals ? JSON.parse(stratVisuals) : null,
       meta: { ultimaFecha: data[data.length - 1].date, ultimoPrecio: data[data.length - 1].close, simbolo },
+      _debug: {
+        lastRawTrade: rawTrades.length ? { entryDate: rawTrades[rawTrades.length-1].entryDate, exitDate: rawTrades[rawTrades.length-1].exitDate, entryPrice: rawTrades[rawTrades.length-1].entryPrice, exitPrice: rawTrades[rawTrades.length-1].exitPrice, _virtualClose: rawTrades[rawTrades.length-1]._virtualClose } : null,
+        tradesLast2: trades.slice(-2).map(t => ({ entryDate: t.entryDate, exitDate: t.exitDate, pnlSimple: t.pnlSimple, capitalTras: t.capitalTras, _virtualClose: t._virtualClose })),
+        equityLast2: curves.strategyCurve?.slice(-2),
+        compoundLast2: curves.compoundCurve?.slice(-2),
+      },
     })
   } catch (e) {
     return res.status(500).json({ error: e.message })

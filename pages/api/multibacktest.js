@@ -1104,6 +1104,10 @@ export default async function handler(req, res) {
       modoAsig,
       startDate: curves.startDate,
       blockEventsBySymbol: Object.fromEntries(assetResults.map(ar => [ar.symbol, ar.blockEvents])),
+      _debug: {
+        slotsLastTrades: assetResults[0]?.trades?.slice(-2).map(t => ({ entryDate: t.entryDate, exitDate: t.exitDate, _virtualClose: t._virtualClose })),
+        occupancyLast3: curves.occupancyCurve?.slice(-3),
+      },
     })
   } catch(err) {
     console.error(err)
