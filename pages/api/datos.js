@@ -94,6 +94,9 @@ export function calcEquityCurves(trades, data, capitalIni, startDate, sp500Data)
       if (spBar) sp500BHCurve.push({date:d.date,value:capitalIni*(spBar.close/sp0Close)})
     }
   })
+  console.log('[DATOS-EQUITY] last 2 strategyCurve:', strategyCurve.slice(-2))
+  console.log('[DATOS-EQUITY] last 2 compoundCurve:', compoundCurve.slice(-2))
+  console.log('[DATOS-EQUITY] trades last 2:', trades.slice(-2).map(t => ({ entryDate: t.entryDate, exitDate: t.exitDate, pnlSimple: t.pnlSimple, capitalTras: t.capitalTras, _virtualClose: t._virtualClose })))
   const calcDD = (curve) => {
     let peak=curve[0]?.value||capitalIni, maxDD=0, maxDDDate=null
     curve.forEach(p=>{
@@ -212,6 +215,7 @@ export default async function handler(req, res) {
         }
       }
     }
+    console.log('[DATOS-VIRTUAL] lastBar:', lastBar?.date, 'lastRaw before enrich:', JSON.stringify(rawTrades[rawTrades.length-1] ? { entryDate: rawTrades[rawTrades.length-1].entryDate, exitDate: rawTrades[rawTrades.length-1].exitDate, entryPrice: rawTrades[rawTrades.length-1].entryPrice, exitPrice: rawTrades[rawTrades.length-1].exitPrice, _virtualClose: rawTrades[rawTrades.length-1]._virtualClose } : null))
 
     // ── Enrich trades ──
     const trades = buildTrades(rawTrades, capital_ini, allocation_pct)
