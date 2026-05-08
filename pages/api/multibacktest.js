@@ -302,8 +302,9 @@ function buildRotativoCurves(assetResults, capitalIni, rankMap) {
       const fData = symbolDataMap[activeTrade.symbol]||[]
       let closePx = null
       for(let i=fData.length-1;i>=0;i--){if(fData[i].date<=date){closePx=fData[i].close;break}}
-      if(closePx!=null){
-        const ret = (closePx-activeTrade.entryPx)/activeTrade.entryPx
+      const ep = activeTrade.entryPrice ?? activeTrade.entryPx
+      if(closePx!=null && ep){
+        const ret = (closePx - ep) / ep
         openPnlSimple  = ret * capitalIni
         openPnlCompound = ret * activeTrade._capitalAtEntry
       }
