@@ -951,8 +951,15 @@ export default async function handler(req, res) {
         const totalDias = execTrades.reduce((s,t) => s + (t.dias||0), 0)
         const ganSimple = execTrades.reduce((s,t) => s + (t.pnlSimple||0), 0)
         const pct = weights?.[ar.symbol] ?? (100 / n)
-        const { maxDD: assetMaxDD, maxDDDate: assetMaxDDDate, tInvertido, capInvMedio } =
-          _calcAssetMaxDD(execTrades, ar.data, cfg.capitalIni, curves.startDate)
+        const nonZeroTrades = execTrades.filter(t => t.pnlPct !== 0)
+        const avgCapAsignado = nonZeroTrades.length
+          ? nonZeroTrades.reduce((s,t) => s + Math.abs(t.pnlSimple / (t.pnlPct / 100)), 0) / nonZeroTrades.length
+          : cfg.capitalIni / n
+        const { maxDD: assetMaxDD, maxDDDate: assetMaxDDDate, tInvertido } =
+          _calcAssetMaxDD(execTrades, ar.data, avgCapAsignado, curves.startDate)
+        const capInvMedio = nonZeroTrades.length
+          ? nonZeroTrades.reduce((s,t) => s + Math.abs(t.pnlSimple / (t.pnlPct / 100)), 0) / nonZeroTrades.length
+          : 0
         const filtData = ar.data?.filter(d => d.date >= curves.startDate) ?? []
         const p0 = filtData[0]?.close
         const pN = filtData[filtData.length - 1]?.close
