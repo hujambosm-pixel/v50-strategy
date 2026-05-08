@@ -1032,7 +1032,7 @@ export default async function handler(req, res) {
     }
 
     // Métricas por activo (tabla resumen)
-    const assetStats = assetResults.map(ar => {
+    let assetStats = assetResults.map(ar => {
       const wins = ar.trades.filter(t=>t.pnlPct>=0)
       const losses = ar.trades.filter(t=>t.pnlPct<0)
       const totalDias = ar.trades.reduce((s,t)=>s+t.dias,0)
@@ -1061,6 +1061,50 @@ export default async function handler(req, res) {
         priceMaxDD,
       }
     })
+
+    // En modo rotativo: recalcular assetStats desde los trades realmente ejecutados
+    if (modoAsig === 'rotativo' && curves.executedTrades?.length) {
+      const execBySymbol = {}
+      curves.executedTrades.forEach(t => {
+        if (!execBySymbol[t.symbol]) execBySymbol[t.symbol] = []
+        execBySymbol[t.symbol].push(t)
+      })
+      assetStats = assetResults.map(ar => {
+        const execTrades = execBySymbol[ar.symbol] || []
+        const wins   = execTrades.filter(t => t.pnlPct >= 0)
+        const losses = execTrades.filter(t => t.pnlPct < 0)
+        const totalDias = execTrades.reduce((s,t) => s + (t.dias||0), 0)
+        const ganSimple = execTrades.reduce((s,t) => s + (t.pnlSimple||0), 0)
+        const capitalReinv = execTrades.length
+          ? execTrades[execTrades.length-1].capitalTras
+          : cfg.capitalIni
+        const pct = weights?.[ar.symbol] ?? (100 / n)
+        const { maxDD: assetMaxDD, maxDDDate: assetMaxDDDate, tInvertido, capInvMedio } =
+          _calcAssetMaxDD(execTrades, ar.data, cfg.capitalIni, curves.startDate)
+        const filtData = ar.data?.filter(d => d.date >= curves.startDate) ?? []
+        const p0 = filtData[0]?.close
+        const pN = filtData[filtData.length - 1]?.close
+        const ganBH = (p0 && pN && p0 > 0) ? cfg.capitalIni * (pN / p0 - 1) : 0
+        const priceMaxDD = _calcPriceMaxDD(ar.data, curves.startDate)
+        return {
+          symbol:    ar.symbol,
+          trades:    execTrades.length,
+          wins:      wins.length,
+          losses:    losses.length,
+          winRate:   execTrades.length ? (wins.length / execTrades.length) * 100 : 0,
+          ganSimple,
+          ganComp:   capitalReinv - cfg.capitalIni,
+          totalDias,
+          weight:    pct,
+          maxDD:     assetMaxDD,
+          maxDDDate: assetMaxDDDate,
+          tInvertido,
+          capInvMedio,
+          ganBH,
+          priceMaxDD,
+        }
+      })
+    }
 
     // % medio de capital invertido
     const avgOccupancy = curves.occupancyCurve.length
