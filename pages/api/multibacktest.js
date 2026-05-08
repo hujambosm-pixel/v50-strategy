@@ -195,7 +195,7 @@ function buildSlotsCurves(assetResults, capitalIni) {
         for (let i = filtData.length-1; i>=0; i--) { if (filtData[i].date <= date) { bar=filtData[i]; break } }
         if (bar) { bh = slotCapital * (bar.close / p0); closePx = bar.close }
       }
-      const openPnl = openTrades.reduce((s,t) => { if(closePx==null) return s; const ep=t.entryPx??t.entryPrice; const capAtEntry=t.capitalTras-t.pnlSimple; return ep!=null ? s+(closePx-ep)/ep*capAtEntry : s }, 0)
+      const openPnl = openTrades.reduce((s,t) => { if(closePx==null) return s; const ep=t.entryPx??t.entryPrice; const capAtEntry=t.capitalTras/(1+t.pnlPct/100); return ep!=null ? s+(closePx-ep)/ep*capAtEntry : s }, 0)
       byDate[date] = { simple, compound, open, bh, openPnl }
     })
     return byDate
@@ -286,7 +286,7 @@ function buildCompartidoCurves(assetResults, capitalIni) {
     // 2. Abrir entradas del día (solo activos sin posición abierta)
     const entries = (entriesByDate[date] || []).filter(t => !openSlots[t.symbol])
     if (entries.length > 0 && poolLibre > 0) {
-      const capPorSlot = poolLibre / entries.length
+      const capPorSlot = Math.min(poolLibre / entries.length, poolLibre / n)
       entries.forEach(t => {
         poolLibre -= capPorSlot
         // Same-day trade (entryDate === exitDate): abrir y cerrar atómicamente
