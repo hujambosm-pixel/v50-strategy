@@ -195,7 +195,7 @@ function buildSlotsCurves(assetResults, capitalIni) {
         for (let i = filtData.length-1; i>=0; i--) { if (filtData[i].date <= date) { bar=filtData[i]; break } }
         if (bar) { bh = slotCapital * (bar.close / p0); closePx = bar.close }
       }
-      const openPnl = openTrades.reduce((s,t) => { if(closePx==null) return s; const ep=t.entryPx??t.entryPrice; return ep!=null ? s+(closePx-ep)/ep*slotCapital : s }, 0)
+      const openPnl = openTrades.reduce((s,t) => { if(closePx==null) return s; const ep=t.entryPx??t.entryPrice; const capAtEntry=t.capitalTras-t.pnlSimple; return ep!=null ? s+(closePx-ep)/ep*capAtEntry : s }, 0)
       byDate[date] = { simple, compound, open, bh, openPnl }
     })
     return byDate
@@ -286,8 +286,7 @@ function buildCompartidoCurves(assetResults, capitalIni) {
     // 2. Abrir entradas del día (solo activos sin posición abierta)
     const entries = (entriesByDate[date] || []).filter(t => !openSlots[t.symbol])
     if (entries.length > 0 && poolLibre > 0) {
-      const nLibres = n - Object.keys(openSlots).length
-      const capPorSlot = nLibres > 0 ? poolLibre / nLibres : 0
+      const capPorSlot = poolLibre / entries.length
       entries.forEach(t => {
         poolLibre -= capPorSlot
         // Same-day trade (entryDate === exitDate): abrir y cerrar atómicamente
@@ -349,7 +348,7 @@ function buildCompartidoCurves(assetResults, capitalIni) {
       for (let i = fData.length - 1; i >= 0; i--) { if (fData[i].date <= date) { closePx = fData[i].close; break } }
       if (closePx != null && t.entryPx) {
         const ret = (closePx - t.entryPx) / t.entryPx
-        openPnlSimple += ret * capitalIni
+        openPnlSimple += ret * capEntry
         openPnlCompound += ret * capEntry
       }
     })
@@ -541,7 +540,7 @@ function buildPositionSizingCurves(assetResults, capitalIni, sizeRules) {
       for (let i = fData.length - 1; i >= 0; i--) { if (fData[i].date <= date) { closePx = fData[i].close; break } }
       if (closePx != null && t.entryPrice) {
         const ret = (closePx - t.entryPrice) / t.entryPrice
-        openPnlSimple += ret * capitalIni
+        openPnlSimple += ret * capEntry
         openPnlCompound += ret * capEntry
       }
     })
@@ -937,6 +936,47 @@ export default async function handler(req, res) {
         priceMaxDD,
       }
     })
+
+    // En modos compartido/positionsizing: recalcular assetStats desde los trades realmente ejecutados
+    if ((modoAsig === 'compartido' || modoAsig === 'positionsizing') && curves.executedTrades?.length) {
+      const execBySymbol = {}
+      curves.executedTrades.forEach(t => {
+        if (!execBySymbol[t.symbol]) execBySymbol[t.symbol] = []
+        execBySymbol[t.symbol].push(t)
+      })
+      assetStats = assetResults.map(ar => {
+        const execTrades = execBySymbol[ar.symbol] || []
+        const wins   = execTrades.filter(t => t.pnlPct >= 0)
+        const losses = execTrades.filter(t => t.pnlPct < 0)
+        const totalDias = execTrades.reduce((s,t) => s + (t.dias||0), 0)
+        const ganSimple = execTrades.reduce((s,t) => s + (t.pnlSimple||0), 0)
+        const pct = weights?.[ar.symbol] ?? (100 / n)
+        const { maxDD: assetMaxDD, maxDDDate: assetMaxDDDate, tInvertido, capInvMedio } =
+          _calcAssetMaxDD(execTrades, ar.data, cfg.capitalIni, curves.startDate)
+        const filtData = ar.data?.filter(d => d.date >= curves.startDate) ?? []
+        const p0 = filtData[0]?.close
+        const pN = filtData[filtData.length - 1]?.close
+        const ganBH = (p0 && pN && p0 > 0) ? cfg.capitalIni * (pN / p0 - 1) : 0
+        const priceMaxDD = _calcPriceMaxDD(ar.data, curves.startDate)
+        return {
+          symbol:    ar.symbol,
+          trades:    execTrades.length,
+          wins:      wins.length,
+          losses:    losses.length,
+          winRate:   execTrades.length ? (wins.length / execTrades.length) * 100 : 0,
+          ganSimple,
+          ganComp:   ganSimple,
+          totalDias,
+          weight:    pct,
+          maxDD:     assetMaxDD,
+          maxDDDate: assetMaxDDDate,
+          tInvertido,
+          capInvMedio,
+          ganBH,
+          priceMaxDD,
+        }
+      })
+    }
 
     // % medio de capital invertido
     const avgOccupancy = curves.occupancyCurve.length
