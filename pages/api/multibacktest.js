@@ -286,7 +286,9 @@ function buildCompartidoCurves(assetResults, capitalIni) {
     // 2. Abrir entradas del día (solo activos sin posición abierta)
     const entries = (entriesByDate[date] || []).filter(t => !openSlots[t.symbol])
     if (entries.length > 0 && poolLibre > 0) {
-      const capPorSlot = poolLibre / n
+      const openCapsTotal = Object.values(openSlots).reduce((s, slot) => s + (slot.capAsignado || 0), 0)
+      const totalPortfolio = poolLibre + openCapsTotal
+      const capPorSlot = Math.min(totalPortfolio / n, poolLibre)
       entries.forEach(t => {
         poolLibre -= capPorSlot
         // Same-day trade (entryDate === exitDate): abrir y cerrar atómicamente
