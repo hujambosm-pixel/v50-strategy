@@ -3007,7 +3007,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.184</title>
+        <title>Trading Simulator V9.185</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3084,7 +3084,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.184
+            <span className="dot"/>Trading Simulator V9.185
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5337,8 +5337,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                 {h:'Win%',t:'Porcentaje de operaciones cerradas con ganancia sobre el total'},
                                 {h:'Profit Factor',t:'Factor de Beneficio: suma de ganancias / suma de pérdidas. Por encima de 1 la estrategia es rentable'},
                                 {h:'Max DD',t:'Máxima caída desde un pico hasta el valle siguiente, incluyendo pérdidas no realizadas dentro de cada trade (calculado siempre con P&L flotante)'},
-                                {h:'Cap.inv%',t:'Media diaria del capital en posición abierta sobre el capital del slot. Ejemplo: slot 5.000€, posición media 1.400€ → 28%'},
-                                {h:'T.inv%',t:'Porcentaje de días del período total en que había al menos una posición abierta en este activo'},
+                                {h:'Cap.inv%',t:'Ocupación media del capital: porcentaje medio diario del capital total desplegado en posiciones abiertas. 100% = todo el capital invertido todos los días.'},
+                                {h:'T.inv%',t:'Tiempo en mercado: porcentaje de días del período con al menos una posición abierta (estrategia) o con ese activo en cartera (por activo).'},
                               ].map(({h,t})=>(
                                 <th key={h} title={t||undefined}
                                   style={{padding:'3px 6px',textAlign:'left',color:'var(--text3)',fontWeight:400,fontSize:9,
@@ -5366,8 +5366,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               const profitPct=capIni>0?profit/capIni*100:0
                               const sc=r.result.slotCapital||capIni
                               const rStats=r.result.assetStats||[]
-                              const avgCapInv=rStats.length?rStats.reduce((s,a)=>s+(a.capInvMedio||0),0)/rStats.length:0
-                              const avgTInv=rStats.length?rStats.reduce((s,a)=>s+(a.tInvertido||0),0)/rStats.length:0
+                              const avgCapInv=r.result.avgCapOccupancy??(rStats.length?rStats.reduce((s,a)=>s+(a.capInvMedio||0),0)/rStats.length:0)
+                              const avgTInv=r.result.tInvEstrategia??(rStats.length?rStats.reduce((s,a)=>s+(a.tInvertido||0),0)/rStats.length:0)
                               return(
                                 <Fragment key={r.id}>
                                   {/* ── Fila madre (estrategia) ── */}

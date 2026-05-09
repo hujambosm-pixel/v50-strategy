@@ -217,7 +217,13 @@ function buildSlotsCurves(assetResults, capitalIni) {
     floatCompoundCurve.push({ date, value: totCompound+totOpenPnl })
   })
 
-  return { simpleCurve, compoundCurve, bhCurve, occupancyCurve, startDate, floatSimpleCurve, floatCompoundCurve, ..._calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni), ..._calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni) }
+  const tInvEstrategia = occupancyCurve.length
+    ? (occupancyCurve.filter(p => p.value > 0).length / occupancyCurve.length) * 100
+    : 0
+  const avgCapOccupancy = occupancyCurve.length
+    ? occupancyCurve.reduce((s, p) => s + p.value, 0) / occupancyCurve.length
+    : 0
+  return { simpleCurve, compoundCurve, bhCurve, occupancyCurve, startDate, floatSimpleCurve, floatCompoundCurve, tInvEstrategia, avgCapOccupancy, ..._calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni), ..._calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni) }
 }
 
 // ── MODO CAPITAL COMPARTIDO: pool libre repartido entre slots activos ──
@@ -266,7 +272,7 @@ function buildCompartidoCurves(assetResults, capitalIni) {
     // 1. Cerrar primero (libera capital para nuevas entradas del mismo día)
     const toClose = Object.keys(openSlots).filter(sym => openSlots[sym].trade.exitDate === date)
     toClose.forEach(symbol => {
-      const { trade, capAsignado } = openSlots[symbol]
+      const { trade, capAsignado, totalPortfolioAtEntry: _tpAtEntry } = openSlots[symbol]
       if (!isFinite(trade.pnlPct)) { poolLibre += capAsignado; delete openSlots[symbol]; return }  // skip NaN/Infinity
       const capFinal = capAsignado * (1 + trade.pnlPct / 100)
       poolLibre += capFinal
@@ -276,6 +282,7 @@ function buildCompartidoCurves(assetResults, capitalIni) {
       executedTrades.push({
         ...trade,
         _capitalAtEntry: capAsignado,
+        _totalPortfolioAtEntry: _tpAtEntry || capitalIni,
         capitalTras: capFinal,
         pnlSimple: capFinal - capAsignado,
         riesgoAcum: _riesgoC,
@@ -305,6 +312,7 @@ function buildCompartidoCurves(assetResults, capitalIni) {
             executedTrades.push({
               ...t,
               _capitalAtEntry: capPorSlot,
+              _totalPortfolioAtEntry: totalPortfolio,
               capitalTras: capFinal,
               pnlSimple: capFinal - capPorSlot,
               riesgoAcum: _riesgoSD,
@@ -314,7 +322,7 @@ function buildCompartidoCurves(assetResults, capitalIni) {
           }
           // NO añadir a openSlots — se resuelve inmediatamente
         } else {
-          openSlots[t.symbol] = { trade: t, capAsignado: capPorSlot }
+          openSlots[t.symbol] = { trade: t, capAsignado: capPorSlot, totalPortfolioAtEntry: totalPortfolio }
           capitalAtEntryMap[`${t.symbol}:${t.entryDate}`] = capPorSlot
         }
       })
@@ -367,14 +375,22 @@ function buildCompartidoCurves(assetResults, capitalIni) {
     floatCompoundCurve.push({ date, value: val + openPnlCompound })
   })
 
-  // Ocupación: % de slots con posición abierta
-  const occupancyCurve = sampledDates.map(date => {
-    const busy = allCandidates.filter(t =>
+  // Ocupación: % del capital total desplegado en posiciones abiertas (capital-weighted)
+  let _tInvDays = 0
+  const occupancyCurve = sampledDates.map((date, i) => {
+    const openTrades = allCandidates.filter(t =>
       capitalAtEntryMap[`${t.symbol}:${t.entryDate}`] != null &&
       t.entryDate <= date && (!t.exitDate || t.exitDate > date || (t._virtualClose && t.exitDate >= date))
-    ).length
-    return { date, value: n > 0 ? (busy / n) * 100 : 0 }
+    )
+    const openCapTotal = openTrades.reduce((s, t) => s + (capitalAtEntryMap[`${t.symbol}:${t.entryDate}`] || 0), 0)
+    const totalPortfolio = compoundCurve[i]?.value || capitalIni
+    if (openTrades.length > 0) _tInvDays++
+    return { date, value: totalPortfolio > 0 ? (openCapTotal / totalPortfolio) * 100 : 0 }
   })
+  const tInvEstrategia = sampledDates.length > 0 ? (_tInvDays / sampledDates.length) * 100 : 0
+  const avgCapOccupancy = occupancyCurve.length
+    ? occupancyCurve.reduce((s, p) => s + p.value, 0) / occupancyCurve.length
+    : 0
 
   // B&H combinado
   const slotBH = capitalIni / n
@@ -394,6 +410,7 @@ function buildCompartidoCurves(assetResults, capitalIni) {
   return {
     simpleCurve, compoundCurve, bhCurve, occupancyCurve, startDate,
     executedTrades, floatSimpleCurve, floatCompoundCurve,
+    tInvEstrategia, avgCapOccupancy,
     ..._calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni),
     ..._calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni)
   }
@@ -447,7 +464,7 @@ function buildPositionSizingCurves(assetResults, capitalIni, sizeRules) {
     const toClose = Object.keys(openSlots)
       .filter(sym => openSlots[sym].trade.exitDate === date)
     toClose.forEach(symbol => {
-      const { trade, capAsignado, riesgoAsignado } = openSlots[symbol]
+      const { trade, capAsignado, riesgoAsignado, totalPortfolioAtEntry: _tpAtEntryPS } = openSlots[symbol]
       if (!isFinite(trade.pnlPct)) {
         poolLibre += capAsignado
         riesgoAcumulado -= riesgoAsignado
@@ -461,6 +478,7 @@ function buildPositionSizingCurves(assetResults, capitalIni, sizeRules) {
       executedTrades.push({
         ...trade,
         _capitalAtEntry: capAsignado,
+        _totalPortfolioAtEntry: _tpAtEntryPS || capitalIni,
         capitalTras: capFinal,
         pnlSimple: capFinal - capAsignado,
         riesgoAcum: riesgoAntes,
@@ -479,6 +497,8 @@ function buildPositionSizingCurves(assetResults, capitalIni, sizeRules) {
 
       // Capital dinámico: capitalIni + ganancias realizadas hasta ahora
       const capitalActual = capitalIni + executedTrades.reduce((s, x) => s + x.pnlSimple, 0)
+      const _openCapsPS = Object.values(openSlots).reduce((s, slot) => s + (slot.capAsignado || 0), 0)
+      const _totalPortfolioPS = poolLibre + _openCapsPS
 
       let distancia = null
       if (t.stopPx != null && t.stopPx > 0 && ep > t.stopPx) {
@@ -510,6 +530,7 @@ function buildPositionSizingCurves(assetResults, capitalIni, sizeRules) {
         executedTrades.push({
           ...t,
           _capitalAtEntry: capAsignado,
+          _totalPortfolioAtEntry: _totalPortfolioPS,
           capitalTras: capFinal,
           pnlSimple: capFinal - capAsignado,
           riesgoAcum: riesgoAcumulado,
@@ -519,7 +540,7 @@ function buildPositionSizingCurves(assetResults, capitalIni, sizeRules) {
 
       poolLibre -= capAsignado
       riesgoAcumulado += riesgoEsteTrade
-      openSlots[t.symbol] = { trade: t, capAsignado, riesgoAsignado: riesgoEsteTrade }
+      openSlots[t.symbol] = { trade: t, capAsignado, riesgoAsignado: riesgoEsteTrade, totalPortfolioAtEntry: _totalPortfolioPS }
       capitalAtEntryMap[`${t.symbol}:${t.entryDate}`] = capAsignado
     })
   })
@@ -559,13 +580,21 @@ function buildPositionSizingCurves(assetResults, capitalIni, sizeRules) {
     floatCompoundCurve.push({ date, value: val + openPnlCompound })
   })
 
-  const occupancyCurve = sampledDates.map(date => {
-    const busy = allCandidates.filter(t =>
+  let _tInvDaysPS = 0
+  const occupancyCurve = sampledDates.map((date, i) => {
+    const openTrades = allCandidates.filter(t =>
       capitalAtEntryMap[`${t.symbol}:${t.entryDate}`] != null &&
       t.entryDate <= date && (!t.exitDate || t.exitDate > date || (t._virtualClose && t.exitDate >= date))
-    ).length
-    return { date, value: n > 0 ? (busy / n) * 100 : 0 }
+    )
+    const openCapTotal = openTrades.reduce((s, t) => s + (capitalAtEntryMap[`${t.symbol}:${t.entryDate}`] || 0), 0)
+    const totalPortfolio = compoundCurve[i]?.value || capitalIni
+    if (openTrades.length > 0) _tInvDaysPS++
+    return { date, value: totalPortfolio > 0 ? (openCapTotal / totalPortfolio) * 100 : 0 }
   })
+  const tInvEstrategia = sampledDates.length > 0 ? (_tInvDaysPS / sampledDates.length) * 100 : 0
+  const avgCapOccupancy = occupancyCurve.length
+    ? occupancyCurve.reduce((s, p) => s + p.value, 0) / occupancyCurve.length
+    : 0
 
   const slotBH = capitalIni / n
   const bhCurve = sampledDates.map(date => {
@@ -584,6 +613,7 @@ function buildPositionSizingCurves(assetResults, capitalIni, sizeRules) {
   return {
     simpleCurve, compoundCurve, bhCurve, occupancyCurve, startDate,
     executedTrades, floatSimpleCurve, floatCompoundCurve,
+    tInvEstrategia, avgCapOccupancy,
     ..._calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni),
     ..._calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni)
   }
@@ -811,6 +841,7 @@ function _calcAssetMaxDD(trades, data, slotCapital, startDate) {
     maxDDDate,
     tInvertido: totalBars > 0 ? (daysOpen / totalBars) * 100 : 0,
     capInvMedio: totalBars > 0 ? (sumCapInvRatio / totalBars) * 100 : 0,
+    totalBars,
   }
 }
 
@@ -967,7 +998,13 @@ export default async function handler(req, res) {
           : cfg.capitalIni / n
         const { maxDD: assetMaxDD, maxDDDate: assetMaxDDDate, tInvertido } =
           _calcAssetMaxDD(execTrades, ar.data, avgCapAsignado, curves.startDate)
-        const capInvMedio = (avgCapAsignado / cfg.capitalIni) * 100
+        // Cap.Inv% per-asset: avg of (capAtEntry / totalPortfolioAtEntry) × 100
+        const capInvMedio = execTrades.length
+          ? execTrades.reduce((s, t) => {
+              const tp = t._totalPortfolioAtEntry || cfg.capitalIni
+              return s + (t._capitalAtEntry ?? 0) / tp * 100
+            }, 0) / execTrades.length
+          : 0
         const filtData = ar.data?.filter(d => d.date >= curves.startDate) ?? []
         const p0 = filtData[0]?.close
         const pN = filtData[filtData.length - 1]?.close
@@ -993,10 +1030,12 @@ export default async function handler(req, res) {
       })
     }
 
-    // % medio de capital invertido
-    const avgOccupancy = curves.occupancyCurve.length
-      ? curves.occupancyCurve.reduce((s,p)=>s+p.value,0)/curves.occupancyCurve.length
-      : 0
+    // % medio de capital invertido (usa avgCapOccupancy capital-weighted si está disponible)
+    const avgOccupancy = curves.avgCapOccupancy ?? (
+      curves.occupancyCurve.length
+        ? curves.occupancyCurve.reduce((s,p)=>s+p.value,0)/curves.occupancyCurve.length
+        : 0
+    )
 
     // Historial combinado ordenado por fecha salida
     const sourceTrades = (modoAsig === 'compartido' || modoAsig === 'positionsizing')
@@ -1039,6 +1078,8 @@ export default async function handler(req, res) {
       assetStats,
       allTrades: sourceTrades,
       avgOccupancy,
+      tInvEstrategia: curves.tInvEstrategia ?? 0,
+      avgCapOccupancy: curves.avgCapOccupancy ?? avgOccupancy,
       n,
       slotCapital,
       modoAsig,
