@@ -680,6 +680,8 @@ export default function Home() {
   const [mcOnlyFavs,setMcOnlyFavs]=useState(false)
   const [mcListFilter,setMcListFilter]=useState('')
   const [mcMode,setMcMode]=useState('slots')             // 'slots' | 'custom' | 'positionsizing'
+  const [selectedModos,setSelectedModos]=useState(['slots']) // multi-mode when 1 strategy selected
+  const [mcIsModoCompare,setMcIsModoCompare]=useState(false) // true when comparing modes (vs strategies)
   const [mcWeights,setMcWeights]=useState({})             // {symbol: pct} para modo custom
   const [mcRiskPerTrade,setMcRiskPerTrade]=useState(1)
   const [mcMaxPortfolioPct,setMcMaxPortfolioPct]=useState(5)
@@ -2586,7 +2588,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
       fromDate:_mcFrom,toDate:_mcTo,
       tipoStop,atrPeriod:Number(atrP),atrMult:Number(atrM),sinPerdidas,reentry,
       tipoFiltro,sp500EmaR:Number(sp500EmaR),sp500EmaL:Number(sp500EmaL),tipoCapital:mcCapital,
-      sizeRules:mcMode==='positionsizing'?{riskPerTrade:mcRiskPerTrade,maxPortfolioPct:mcMaxPortfolioPct,maxAccumRisk:mcMaxAccumRisk}:undefined}
+      sizeRules:{riskPerTrade:mcRiskPerTrade,maxPortfolioPct:mcMaxPortfolioPct,maxAccumRisk:mcMaxAccumRisk}}
     const buildCfgFromStrat=(strat)=>{
       // Parsear params del code_js (campo principal para estrategias modernas)
       let stratParams={}
@@ -2617,12 +2619,39 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
       return
     }
     if(stratIds.length<=1){
+      const modesToRun=selectedModos.length>0?selectedModos:['slots']
+      if(modesToRun.length===1){
+        // Single mode run
+        try{
+          const res=await apiFetch('/api/multibacktest',{method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({symbols:mcSelected,modoAsig:modesToRun[0],weights:weightsNorm,cfg:baseCfg,strategyId:stratIds[0]||null})})
+          const json=await res.json()
+          if(!res.ok) throw new Error(json.error||'Error')
+          setMcResult(json);setMcMultiResults([]);setMcIsModoCompare(false)
+        }catch(e){setMcError(e.message)}finally{setMcLoading(false);setMcProgress(null)}
+        return
+      }
+      // Multi-mode run (same strategy, different allocation modes)
+      const MODE_LABELS={slots:'Slots',compartido:'Compartido',positionsizing:'Pos.Sizing'}
+      const sid=stratIds[0]||null
+      const strat=strategies.find(s=>s.id===sid)||strategies.find(s=>s.id===currentStratId)
+      const stratName=strat?.name||'Estrategia activa'
+      const modeResults=[]
       try{
-        const res=await apiFetch('/api/multibacktest',{method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({symbols:mcSelected,modoAsig:mcMode,weights:weightsNorm,cfg:baseCfg,strategyId:stratIds[0]||null})})
-        const json=await res.json()
-        if(!res.ok) throw new Error(json.error||'Error')
-        setMcResult(json)
+        for(let i=0;i<modesToRun.length;i++){
+          const modo=modesToRun[i]
+          setMcProgress({current:i+1,total:modesToRun.length,name:MODE_LABELS[modo]||modo})
+          const color=STRAT_COMPARE_COLORS[i%STRAT_COMPARE_COLORS.length]
+          const res=await apiFetch('/api/multibacktest',{method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({symbols:mcSelected,modoAsig:modo,weights:weightsNorm,cfg:baseCfg,strategyId:sid})})
+          const json=await res.json()
+          if(!res.ok) throw new Error(json.error||'Error en '+MODE_LABELS[modo])
+          modeResults.push({id:`${sid||'__single__'}__${modo}`,name:`${stratName} · ${MODE_LABELS[modo]}`,color,result:json,modo})
+        }
+        const vis={};modeResults.forEach(r=>{vis[r.id]=true});setMcStratVisible(vis)
+        const initialOpen={};modeResults.forEach(r=>{initialOpen[r.id]=true});initialOpen['__bh__']=true;setMcAssetOpen(initialOpen)
+        const chartsVis={};modeResults.forEach(r=>{chartsVis[r.id]=true});setMcChartsStratVisible(chartsVis)
+        setMcResult(modeResults[0].result);setMcMultiResults(modeResults);setMcIsModoCompare(true)
       }catch(e){setMcError(e.message)}finally{setMcLoading(false);setMcProgress(null)}
       return
     }
@@ -2644,13 +2673,12 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
       }catch(e){setMcError(e.message);setMcLoading(false);setMcProgress(null);return}
     }
     const activeResult=results.find(r=>r.id===currentStratId)||results[0]
-    setMcResult(activeResult.result)
-    setMcMultiResults(results)
+    setMcResult(activeResult.result);setMcMultiResults(results);setMcIsModoCompare(false)
     const vis={};results.forEach(r=>{vis[r.id]=true});setMcStratVisible(vis)
     const initialOpen={};results.forEach(r=>{initialOpen[r.id]=true});initialOpen['__bh__']=true;setMcAssetOpen(initialOpen)
     const chartsVis={};results.forEach(r=>{chartsVis[r.id]=true});setMcChartsStratVisible(chartsVis)
     setMcLoading(false);setMcProgress(null)
-  },[mcSelected,mcMode,mcWeights,mcCapital,mcCapitalIni,mcYears,mcPeriodMode,mcFromDate,mcToDate,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL,rankingData,mcStratSelected,strategies,currentStratId,mcRiskPerTrade,mcMaxPortfolioPct,mcMaxAccumRisk])
+  },[mcSelected,mcMode,selectedModos,mcWeights,mcCapital,mcCapitalIni,mcYears,mcPeriodMode,mcFromDate,mcToDate,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL,rankingData,mcStratSelected,strategies,currentStratId,mcRiskPerTrade,mcMaxPortfolioPct,mcMaxAccumRisk])
 
   // Auto-inicializar pesos iguales cuando cambian activos seleccionados (modo custom)
   useEffect(()=>{
@@ -3007,7 +3035,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.185</title>
+        <title>Trading Simulator V9.186</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3084,7 +3112,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.185
+            <span className="dot"/>Trading Simulator V9.186
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -3894,7 +3922,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       style={{width:'100%',fontFamily:MONO,fontSize:11,padding:'7px 10px',borderRadius:4,cursor:mcLoading?'wait':'pointer',
                         background:mcLoading?'rgba(0,212,255,0.05)':'rgba(0,212,255,0.15)',
                         border:'1px solid var(--accent)',color:'var(--accent)',fontWeight:700,letterSpacing:'0.05em'}}>
-                      {mcLoading?'⟳ Calculando...':mcStratSelected.length>1?`▶ EJECUTAR (${mcStratSelected.length} ESTRATEGIAS)`:'▶ EJECUTAR BACKTESTING'}
+                      {mcLoading?'⟳ Calculando...':mcStratSelected.length>1?`▶ EJECUTAR (${mcStratSelected.length} ESTRATEGIAS)`:selectedModos.length>1?`▶ EJECUTAR (${selectedModos.length} MODOS)`:'▶ EJECUTAR BACKTESTING'}
                     </button>
                   ):(
                     <button disabled style={{width:'100%',fontFamily:MONO,fontSize:12,padding:'7px 10px',borderRadius:4,cursor:'not-allowed',
@@ -3960,11 +3988,20 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     <span style={{fontFamily:MONO,fontSize:9,color:'#4a7a9a',width:10}}>{mcSectionOpen.mode?'▼':'▶'}</span>
                     <span style={{fontFamily:MONO,fontSize:12,color:'#c8dff5',fontWeight:600,letterSpacing:'0.05em'}}>MODO DE ASIGNACIÓN</span>
                     <span style={{marginLeft:'auto',fontFamily:MONO,fontSize:10,color:'#4a6a88'}}>
-                      {mcMode==='slots'?'Slots iguales':mcMode==='compartido'?'Capital compartido':mcMode==='positionsizing'?'Position Sizing':'Slots iguales'}
+                      {mcStratSelected.length<=1
+                        ?(selectedModos.length===1
+                          ?(selectedModos[0]==='slots'?'Slots iguales':selectedModos[0]==='compartido'?'Capital compartido':'Position Sizing')
+                          :selectedModos.map(m=>m==='slots'?'Slots':m==='compartido'?'Compartido':'Pos.Sizing').join(' + '))
+                        :(mcMode==='slots'?'Slots iguales':mcMode==='compartido'?'Capital compartido':mcMode==='positionsizing'?'Position Sizing':'Slots iguales')}
                     </span>
                   </div>
                   {mcSectionOpen.mode&&(
                     <div style={{padding:'10px 12px',borderBottom:'1px solid var(--border)'}}>
+                      {mcStratSelected.length<=1&&(
+                        <div style={{fontFamily:MONO,fontSize:9,color:'#4a7a9a',marginBottom:6,letterSpacing:'0.05em'}}>
+                          SELECCIÓN MÚLTIPLE — compara modos en el mismo gráfico
+                        </div>
+                      )}
                       {[
                         {id:'slots',label:'Slots iguales',ready:true,
                           desc:'El capital se divide en partes iguales y cada slot crece de forma independiente con interés compuesto. Ejemplo: 1000€ con 4 activos → 250€ por slot. Si NVDA gana +42%, su slot pasa a 355€ y el siguiente trade de NVDA parte de esos 355€. Los slots nunca se redistribuyen entre activos.'},
@@ -3972,25 +4009,48 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                           desc:'El capital libre se reparte a partes iguales entre los activos que van a entrar. Justo antes de cada entrada: capital_por_slot = pool_libre / slots_libres. Cuando un trade cierra, su capital (con ganancias o pérdidas) vuelve al pool. Ejemplo: 1000€ con 4 activos. Los 4 entran → 250€ cada uno. NVDA cierra +42% → devuelve 355€ al pool. Solo TSLA sigue abierto → pool = 355€ + restantes. Próxima entrada de NVDA: 355€ / slots_libres en ese momento.'},
                         {id:'positionsizing',label:'Position Sizing',ready:true,
                           desc:'Calcula dinámicamente el tamaño de cada posición según el stop loss. Permite posiciones simultáneas con tamaños variables.'},
-                      ].map(m=>(
-                        <div key={m.id} style={{marginBottom:3}}>
-                          <div onClick={()=>m.ready&&setMcMode(m.id)}
-                            style={{display:'flex',alignItems:'center',gap:8,padding:'6px 8px',borderRadius:4,
-                              background:mcMode===m.id?'rgba(0,212,255,0.08)':'transparent',
-                              border:`1px solid ${mcMode===m.id?'var(--accent)':'var(--border)'}`,
-                              cursor:m.ready?'pointer':'not-allowed',opacity:m.ready?1:0.45}}>
-                            <div style={{width:14,height:14,borderRadius:'50%',border:`2px solid ${mcMode===m.id?'var(--accent)':'#3d5a7a'}`,
-                              background:mcMode===m.id?'var(--accent)':'transparent',flexShrink:0}}/>
-                            <span style={{fontFamily:MONO,fontSize:12,color:mcMode===m.id?'var(--accent)':'#c8dff5',fontWeight:600,flex:1}}>{m.label}</span>
-                            <span title={m.desc}
-                              style={{width:16,height:16,borderRadius:'50%',border:'1px solid #3d5a7a',color:'#3d5a7a',fontSize:10,
-                                display:'flex',alignItems:'center',justifyContent:'center',cursor:'help',flexShrink:0,fontWeight:700,lineHeight:1}}>?</span>
+                      ].map(m=>{
+                        const isCheckbox=mcStratSelected.length<=1
+                        const isActive=isCheckbox?selectedModos.includes(m.id):mcMode===m.id
+                        const handleClick=()=>{
+                          if(!m.ready) return
+                          if(isCheckbox){
+                            setSelectedModos(prev=>
+                              prev.includes(m.id)
+                                ?(prev.length>1?prev.filter(x=>x!==m.id):prev) // don't deselect last
+                                :[...prev,m.id]
+                            )
+                          } else {
+                            setMcMode(m.id)
+                          }
+                        }
+                        return(
+                          <div key={m.id} style={{marginBottom:3}}>
+                            <div onClick={handleClick}
+                              style={{display:'flex',alignItems:'center',gap:8,padding:'6px 8px',borderRadius:4,
+                                background:isActive?'rgba(0,212,255,0.08)':'transparent',
+                                border:`1px solid ${isActive?'var(--accent)':'var(--border)'}`,
+                                cursor:m.ready?'pointer':'not-allowed',opacity:m.ready?1:0.45}}>
+                              {isCheckbox
+                                ?<div style={{width:14,height:14,borderRadius:3,border:`2px solid ${isActive?'var(--accent)':'#3d5a7a'}`,
+                                    background:isActive?'var(--accent)':'transparent',flexShrink:0,
+                                    display:'flex',alignItems:'center',justifyContent:'center'}}>
+                                    {isActive&&<span style={{color:'#000b18',fontSize:9,fontWeight:900,lineHeight:1}}>✓</span>}
+                                  </div>
+                                :<div style={{width:14,height:14,borderRadius:'50%',border:`2px solid ${isActive?'var(--accent)':'#3d5a7a'}`,
+                                    background:isActive?'var(--accent)':'transparent',flexShrink:0}}/>
+                              }
+                              <span style={{fontFamily:MONO,fontSize:12,color:isActive?'var(--accent)':'#c8dff5',fontWeight:600,flex:1}}>{m.label}</span>
+                              <span title={m.desc}
+                                style={{width:16,height:16,borderRadius:'50%',border:'1px solid #3d5a7a',color:'#3d5a7a',fontSize:10,
+                                  display:'flex',alignItems:'center',justifyContent:'center',cursor:'help',flexShrink:0,fontWeight:700,lineHeight:1}}>?</span>
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        )
+                      })}
                     </div>
                   )}
-                  {mcMode==='positionsizing'&&(
+                  {(mcStratSelected.length<=1?selectedModos.includes('positionsizing'):mcMode==='positionsizing')&&(
                     <div style={{padding:'8px 10px',borderTop:'1px solid #1a2a3a'}}>
                       {[
                         {label:'Riesgo por trade',value:mcRiskPerTrade,set:setMcRiskPerTrade,
@@ -5314,7 +5374,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                     <div style={{padding:'10px 16px',borderBottom:'1px solid var(--border)'}}>
                       {/* Título + botón contraer/expandir */}
                       <div style={{display:'flex',alignItems:'center',marginBottom:8}}>
-                        <div style={{fontFamily:MONO,fontSize:10,color:'var(--text3)',letterSpacing:'0.05em'}}>COMPARATIVA DE ESTRATEGIAS</div>
+                        <div style={{fontFamily:MONO,fontSize:10,color:'var(--text3)',letterSpacing:'0.05em'}}>{mcIsModoCompare?'COMPARATIVA DE MODOS':'COMPARATIVA DE ESTRATEGIAS'}</div>
                         {isMulti&&(
                           <button
                             onClick={()=>setMcAssetOpen(prev=>{const next={};allOpenKeys.forEach(k=>{next[k]=!allOpen});return next})}
