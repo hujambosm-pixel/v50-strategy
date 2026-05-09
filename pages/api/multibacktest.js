@@ -239,7 +239,7 @@ function buildCompartidoCurves(assetResults, capitalIni) {
       dias:         t.dias,
       _virtualClose: !!t._virtualClose,
     }))
-  ).sort((a, b) => a.entryDate < b.entryDate ? -1 : 1)
+  ).sort((a, b) => a.entryDate < b.entryDate ? -1 : a.entryDate > b.entryDate ? 1 : a.symbol < b.symbol ? -1 : 1)
 
   if (!allCandidates.length) return buildSlotsCurves(assetResults, capitalIni)
 
@@ -259,7 +259,7 @@ function buildCompartidoCurves(assetResults, capitalIni) {
   // Timeline: todas las fechas de entrada y salida relevantes
   const eventDates = [...new Set([
     ...allCandidates.map(t => t.entryDate),
-    ...allCandidates.map(t => t.exitDate),
+    ...allCandidates.map(t => t.exitDate).filter(d => d != null),
   ])].sort()
 
   eventDates.forEach(date => {
@@ -286,10 +286,12 @@ function buildCompartidoCurves(assetResults, capitalIni) {
     // 2. Abrir entradas del día (solo activos sin posición abierta)
     const entries = (entriesByDate[date] || []).filter(t => !openSlots[t.symbol])
     if (entries.length > 0 && poolLibre > 0) {
-      const openCapsTotal = Object.values(openSlots).reduce((s, slot) => s + (slot.capAsignado || 0), 0)
-      const totalPortfolio = poolLibre + openCapsTotal
-      const capPorSlot = Math.min(totalPortfolio / n, poolLibre)
       entries.forEach(t => {
+        // Recalculate per entrant: poolLibre and openSlots change with each iteration
+        const openCapsTotal = Object.values(openSlots).reduce((s, slot) => s + (slot.capAsignado || 0), 0)
+        const totalPortfolio = poolLibre + openCapsTotal
+        const capPorSlot = Math.min(totalPortfolio / n, poolLibre)
+        if (capPorSlot < 0.01) return
         poolLibre -= capPorSlot
         // Same-day trade (entryDate === exitDate): abrir y cerrar atómicamente
         // para evitar que quede bloqueado en openSlots sin salida
@@ -317,6 +319,13 @@ function buildCompartidoCurves(assetResults, capitalIni) {
         }
       })
     }
+  })
+
+  // Cerrar posiciones que quedaron abiertas al final (exitDate: null — trade abierto al cierre del periodo)
+  Object.entries(openSlots).forEach(([sym, slot]) => {
+    const capFinal = slot.capAsignado * (1 + (slot.trade.pnlPct || 0) / 100)
+    poolLibre += capFinal
+    delete openSlots[sym]
   })
 
   // Build symbol → filtered OHLCV map para curva flotante
