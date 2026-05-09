@@ -198,7 +198,7 @@ export function McOccupancyChart({series=[], capitalIni, syncRef}) {
 }
 
 // ── StratCompareChart — multiple strategy equity curves ──────────────────────
-export function StratCompareChart({curves,capitalIni,chartHeight=300,syncRef,onReady}) {
+export function StratCompareChart({curves,capitalIni,showMaxDD=true,chartHeight=300,syncRef,onReady}) {
   const ref=useRef(null),chartRef=useRef(null)
   useEffect(()=>{
     if(!ref.current||!curves?.length) return
@@ -222,6 +222,22 @@ export function StratCompareChart({curves,capitalIni,chartHeight=300,syncRef,onR
           lineStyle:c.dashed?LineStyle.Dashed:LineStyle.Solid})
           .setData(c.data.map(p=>({time:p.date,value:p.value})))
       })
+      if(showMaxDD){
+        const addDD=(curve,date,dd,color)=>{
+          if(!date||!dd||!curve?.length||!curve[0]) return
+          let peak={date:curve[0].date,value:curve[0].value}
+          for(const p of curve){if(!p)continue;if(p.date>date)break;if(p.value>peak.value)peak=p}
+          const trough=curve.find(p=>p.date===date)
+          if(!trough||peak.date===trough.date) return
+          const s=chart.addLineSeries({color,lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:false,priceLineVisible:false})
+          s.setData([{time:peak.date,value:peak.value},{time:trough.date,value:trough.value}])
+          s.setMarkers([{time:trough.date,position:'belowBar',color,shape:'circle',size:0,text:`↓ -${dd.toFixed(1)}%`}])
+        }
+        curves.forEach(c=>{
+          if(!c.show||!c.data?.length||!c.maxDD||!c.maxDDDate) return
+          addDD(c.data,c.maxDDDate,c.maxDD,c.color)
+        })
+      }
       if(syncRef?.current){
         const syncId=Symbol()
         const unsub=chart.timeScale().subscribeVisibleTimeRangeChange(range=>{

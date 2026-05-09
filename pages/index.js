@@ -721,6 +721,7 @@ export default function Home() {
   const [mcStratVisible,setMcStratVisible]=useState({})     // {id:bool}
   const [mcAssetOpen,setMcAssetOpen]=useState({})           // {stratId:bool} acordeón resumen por activo
   const [mcShowBHCompare,setMcShowBHCompare]=useState(true) // B&H curve toggle in multi-strategy chart
+  const [mcShowMaxDD,setMcShowMaxDD]=useState(true)         // Max DD lines in multi-strategy chart
   const [mcChartsOpen,setMcChartsOpen]=useState(false)     // Vista de gráficos collapsible
   const mcChartsSyncRef=useRef({isSyncing:false,charts:[],lastRange:null}) // sync group for signal charts
   const mcChartRefsMap=useRef({}) // symbol → chart instance for trade navigation
@@ -3035,7 +3036,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.188</title>
+        <title>Trading Simulator V9.189</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3112,7 +3113,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.188
+            <span className="dot"/>Trading Simulator V9.189
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5445,9 +5446,9 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                       </div>
                                     </td>
                                     <td style={{padding:'5px 6px',color:'#ffd166',fontWeight:600}}>{allT.length}</td>
-                                    <td style={{padding:'5px 6px',color:cagrC>=0?'#00e5a0':'#ff4d6d',fontWeight:600}}>{cagrC>=0?'+':''}{fmt(cagrC,2,'%')}</td>
-                                    <td style={{padding:'5px 6px',color:profit>=0?'#00e5a0':'#ff4d6d',fontWeight:600}}>{profit>=0?'+':''}{fmt(profit,0,'€')}</td>
-                                    <td style={{padding:'5px 6px',color:profitPct>=0?'#00e5a0':'#ff4d6d',fontWeight:600}}>{profitPct>=0?'+':''}{fmt(profitPct,1,'%')}</td>
+                                    <td style={{padding:'5px 6px',color:cagrC>=0?'#00e5a0':'#ff4d6d',fontWeight:600}}>{fmt(cagrC,2,'%')}</td>
+                                    <td style={{padding:'5px 6px',color:profit>=0?'#00e5a0':'#ff4d6d',fontWeight:600}}>{fmt(profit,0,'€')}</td>
+                                    <td style={{padding:'5px 6px',color:profitPct>=0?'#00e5a0':'#ff4d6d',fontWeight:600}}>{fmt(profitPct,1,'%')}</td>
                                     <td style={{padding:'5px 6px',color:winRate>=50?'#00e5a0':'#ff4d6d',fontWeight:600}}>{fmt(winRate,1,'%')}</td>
                                     <td style={{padding:'5px 6px',color:pf>=1.5?'#00e5a0':pf>=1?'#ffd166':'#ff4d6d',fontWeight:600}}>{fmt(pf,2,'x')}</td>
                                     <td style={{padding:'5px 6px',color:'#ff4d6d',fontWeight:600}}>-{fmt(r.result.maxDDFloatCompound||r.result.maxDDCompound||0,1,'%')}</td>
@@ -5476,9 +5477,9 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                         onMouseOut={e=>e.currentTarget.style.background='rgba(0,0,0,0.12)'}>
                                         <td style={{padding:'4px 6px 4px 22px',color:'var(--accent)',borderLeft:`2px solid ${r.color}`}}>{a.symbol}</td>
                                         <td style={{padding:'4px 6px',color:'var(--text)'}}>{a.trades}</td>
-                                        <td style={{padding:'4px 6px',color:isFinite(cagr)?cagr>=0?'#00e5a0':'#ff4d6d':'#4a6a88'}}>{isFinite(cagr)?(cagr>=0?'+':'')+fmt(cagr,2,'%'):'—'}</td>
-                                        <td style={{padding:'4px 6px',color:a.ganComp>=0?'#00e5a0':'#ff4d6d'}}>{a.ganComp>=0?'+':''}{fmt(a.ganComp,0,'€')}</td>
-                                        <td style={{padding:'4px 6px',color:ganPct>=0?'#00e5a0':'#ff4d6d'}}>{ganPct>=0?'+':''}{fmt(ganPct,1,'%')}</td>
+                                        <td style={{padding:'4px 6px',color:isFinite(cagr)?cagr>=0?'#00e5a0':'#ff4d6d':'#4a6a88'}}>{isFinite(cagr)?fmt(cagr,2,'%'):'—'}</td>
+                                        <td style={{padding:'4px 6px',color:a.ganComp>=0?'#00e5a0':'#ff4d6d'}}>{fmt(a.ganComp,0,'€')}</td>
+                                        <td style={{padding:'4px 6px',color:ganPct>=0?'#00e5a0':'#ff4d6d'}}>{fmt(ganPct,1,'%')}</td>
                                         <td style={{padding:'4px 6px',color:a.winRate>=50?'#00e5a0':'#ff4d6d'}}>{fmt(a.winRate,1,'%')}</td>
                                         <td style={{padding:'4px 6px',color:fBenef>=1.5?'#00e5a0':fBenef>=1?'#ffd166':'#ff4d6d'}}>{fmt(fBenef,2,'x')}</td>
                                         <td style={{padding:'4px 6px',color:'#ff4d6d'}}>{maxDD>0?'-'+fmt(maxDD,2,'%'):'0,00%'}</td>
@@ -5586,6 +5587,13 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                             B&H Diversif.
                           </button>
                         )}
+                        <button onClick={()=>setMcShowMaxDD(s=>!s)}
+                          style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',
+                            border:`1px solid ${mcShowMaxDD?'#ff4d6d':'#3d5a7a'}`,
+                            background:mcShowMaxDD?'rgba(255,77,109,0.12)':'transparent',
+                            color:mcShowMaxDD?'#ff4d6d':'#3d5a7a'}}>
+                          Max DD
+                        </button>
                       </>
                     ):(
                       [
@@ -5609,16 +5617,21 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         ...mcMultiResults.map(r=>({
                           id:r.id,name:r.name,color:r.color,
                           data:(showMultiFloat&&r.result.floatCompoundCurve?.length)?r.result.floatCompoundCurve:r.result.compoundCurve,
-                          show:mcStratVisible[r.id]!==false
+                          show:mcStratVisible[r.id]!==false,
+                          maxDD:showMultiFloat?(r.result.maxDDFloatCompound||0):(r.result.maxDDCompound||0),
+                          maxDDDate:showMultiFloat?r.result.maxDDFloatCompoundDate:r.result.maxDDCompoundDate,
                         })),
                         ...(mcResult.bhCurve?.length>0?[{
                           id:'__bh__',name:'B&H Diversificado',color:'#a0b4c8',
                           data:mcResult.bhCurve,
                           show:mcShowBHCompare,
-                          dashed:true
+                          dashed:true,
+                          maxDD:mcResult.maxDDBH||0,
+                          maxDDDate:mcResult.maxDDBHDate||null,
                         }]:[])
                       ]}
                       capitalIni={Number(mcCapitalIni||capitalIni)}
+                      showMaxDD={mcShowMaxDD}
                       onReady={api=>{mcChartApiRef.current=api}}
                       syncRef={chartSyncRef}
                       chartHeight={mcEquityH}
