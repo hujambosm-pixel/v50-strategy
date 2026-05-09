@@ -3035,7 +3035,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.187</title>
+        <title>Trading Simulator V9.188</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3112,7 +3112,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.187
+            <span className="dot"/>Trading Simulator V9.188
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5692,25 +5692,28 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           .map(r=>{
                             const trades=r.result.allTrades||[]
                             if(!trades.length) return null
-                            const mx=Math.max(...trades.map(x=>Math.abs(x.pnlPct)),1)
+                            const mx=Math.max(...trades.map(x=>Math.abs(x.pnlSimple??0)),1)
                             return(
                               <div key={r.id} style={{marginBottom:8}}>
                                 <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:4}}>
                                   <div style={{width:7,height:7,borderRadius:'50%',background:r.color}}/>
                                   <span style={{fontSize:9,fontWeight:600,letterSpacing:'0.08em',color:r.color,textTransform:'uppercase'}}>
-                                    Resultados por Operación · {r.name}
+                                    Resultados por Operación · {mcIsModoCompare?r.name.split(' · ').pop():r.name}
                                   </span>
-                                  <span style={{fontSize:9,color:'#4a6a88'}}>· clic = ir al trade</span>
+                                  <span style={{fontSize:9,color:'#4a6a88'}}>· P&L en € · clic = ir al trade</span>
                                 </div>
                                 <div className="equity-bars">
-                                  {trades.map((t,i)=>(
+                                  {trades.map((t,i)=>{
+                                    const pnlS=t.pnlSimple??0
+                                    return(
                                     <div key={i} className="equity-bar"
-                                      style={{height:Math.max(4,Math.abs(t.pnlPct)/mx*56),background:t.pnlPct>=0?'var(--green)':'var(--red)',cursor:'pointer'}}
+                                      style={{height:Math.max(4,Math.abs(pnlS)/mx*56),background:pnlS>=0?'var(--green)':'var(--red)',cursor:'pointer'}}
                                       onClick={()=>{const mcDivRef=document.querySelector('.mc-scroll');if(mcDivRef)mcDivRef.scrollTo({top:0,behavior:'smooth'})}}
                                       onMouseOver={e=>e.currentTarget.style.opacity='0.7'}
                                       onMouseOut={e=>e.currentTarget.style.opacity='1'}
-                                      title={`${t.symbol||''} · ${fmtDate(t.exitDate)}: ${fmt(t.pnlPct,2)}%`}/>
-                                  ))}
+                                      title={`${t.symbol||''} · ${fmtDate(t.exitDate)}: ${pnlS>=0?'+':''}${fmt(pnlS,0)}€ (${t.pnlPct>=0?'+':''}${fmt(t.pnlPct,2)}%)`}/>
+                                    )
+                                  })}
                                 </div>
                               </div>
                             )

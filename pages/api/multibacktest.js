@@ -1008,7 +1008,7 @@ export default async function handler(req, res) {
         const filtData = ar.data?.filter(d => d.date >= curves.startDate) ?? []
         const p0 = filtData[0]?.close
         const pN = filtData[filtData.length - 1]?.close
-        const ganBH = (p0 && pN && p0 > 0) ? cfg.capitalIni * (pN / p0 - 1) : 0
+        const ganBH = (p0 && pN && p0 > 0) ? (cfg.capitalIni / n) * (pN / p0 - 1) : 0
         const priceMaxDD = _calcPriceMaxDD(ar.data, curves.startDate)
         return {
           symbol:    ar.symbol,
