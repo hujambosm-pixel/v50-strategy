@@ -944,15 +944,6 @@ export default async function handler(req, res) {
         if (!execBySymbol[t.symbol]) execBySymbol[t.symbol] = []
         execBySymbol[t.symbol].push(t)
       })
-      if (modoAsig === 'compartido') {
-        const sample = Object.entries(execBySymbol).map(([sym, trades]) => ({
-          symbol: sym,
-          trades: trades.length,
-          avgCapAtEntry: trades.reduce((s,t) => s + (t._capitalAtEntry ?? 0), 0) / trades.length,
-          sampleCapAtEntry: trades.slice(0,2).map(t => t._capitalAtEntry)
-        }))
-        console.log('[DEBUG capInv]', JSON.stringify(sample))
-      }
       assetStats = assetResults.map(ar => {
         const execTrades = execBySymbol[ar.symbol] || []
         const wins   = execTrades.filter(t => t.pnlPct >= 0)
@@ -965,7 +956,7 @@ export default async function handler(req, res) {
           : cfg.capitalIni / n
         const { maxDD: assetMaxDD, maxDDDate: assetMaxDDDate, tInvertido } =
           _calcAssetMaxDD(execTrades, ar.data, avgCapAsignado, curves.startDate)
-        const capInvMedio = avgCapAsignado
+        const capInvMedio = (avgCapAsignado / cfg.capitalIni) * 100
         const filtData = ar.data?.filter(d => d.date >= curves.startDate) ?? []
         const p0 = filtData[0]?.close
         const pN = filtData[filtData.length - 1]?.close
