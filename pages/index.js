@@ -3035,7 +3035,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.186</title>
+        <title>Trading Simulator V9.187</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3112,7 +3112,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.186
+            <span className="dot"/>Trading Simulator V9.187
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5572,9 +5572,9 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                             style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',
                               border:`1px solid ${mcStratVisible[r.id]!==false?r.color:'#3d5a7a'}`,
                               background:mcStratVisible[r.id]!==false?`${r.color}18`:'transparent',
-                              color:mcStratVisible[r.id]!==false?r.color:'#3d5a7a',maxWidth:120,
-                              overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-                            {r.name}
+                              color:mcStratVisible[r.id]!==false?r.color:'#3d5a7a',
+                              ...(mcIsModoCompare?{}:{maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'})}}>
+                            {mcIsModoCompare?r.name.split(' · ').pop():r.name}
                           </button>
                         ))}
                         {mcResult.bhCurve?.length>0&&(
@@ -5721,23 +5721,26 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                   : (mcResult.allTrades?.length>0&&(
                       <div className="equity-section">
                         <div className="section-title" style={{fontSize:14}}>
-                          Resultados por Operación <span style={{fontWeight:400,fontSize:11,color:'#9acce0'}}>· clic = ir al trade</span>
+                          Resultados por Operación <span style={{fontWeight:400,fontSize:11,color:'#9acce0'}}>· P&L en € · clic = ir al trade</span>
                         </div>
                         <div className="equity-bars">
                           {(()=>{
                             const allT=mcResult.allTrades||[]
-                            const mx=Math.max(...allT.map(x=>Math.abs(x.pnlPct)),1)
-                            return allT.map((t,i)=>(
-                              <div key={i} className="equity-bar"
-                                style={{height:Math.max(4,Math.abs(t.pnlPct)/mx*56),background:t.pnlPct>=0?'var(--green)':'var(--red)',cursor:'pointer'}}
-                                onClick={()=>{
-                                  const mcDivRef=document.querySelector('.mc-scroll')
-                                  if(mcDivRef)mcDivRef.scrollTo({top:0,behavior:'smooth'})
-                                }}
-                                onMouseOver={e=>e.currentTarget.style.opacity='0.7'}
-                                onMouseOut={e=>e.currentTarget.style.opacity='1'}
-                                title={`${t.symbol||''} · ${fmtDate(t.exitDate)}: ${fmt(t.pnlPct,2)}%`}/>
-                            ))
+                            const mx=Math.max(...allT.map(x=>Math.abs(x.pnlSimple??0)),1)
+                            return allT.map((t,i)=>{
+                              const pnlS=t.pnlSimple??0
+                              return(
+                                <div key={i} className="equity-bar"
+                                  style={{height:Math.max(4,Math.abs(pnlS)/mx*56),background:pnlS>=0?'var(--green)':'var(--red)',cursor:'pointer'}}
+                                  onClick={()=>{
+                                    const mcDivRef=document.querySelector('.mc-scroll')
+                                    if(mcDivRef)mcDivRef.scrollTo({top:0,behavior:'smooth'})
+                                  }}
+                                  onMouseOver={e=>e.currentTarget.style.opacity='0.7'}
+                                  onMouseOut={e=>e.currentTarget.style.opacity='1'}
+                                  title={`${t.symbol||''} · ${fmtDate(t.exitDate)}: ${pnlS>=0?'+':''}${fmt(pnlS,0)}€ (${t.pnlPct>=0?'+':''}${fmt(t.pnlPct,2)}%)`}/>
+                              )
+                            })
                           })()}
                         </div>
                       </div>
