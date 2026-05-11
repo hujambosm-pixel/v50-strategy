@@ -137,6 +137,7 @@ function buildTrades(rawTrades, capitalIni, allocationPct = 100) {
 
 // ── Handler ──────────────────────────────────────────────────
 export default async function handler(req, res) {
+  try {
   if (req.method !== 'POST') return res.status(405).end()
 
   const { simbolo, strategyId, capital_ini = 10000, years = 5, allocation_pct = 100, priceOnly } = req.body || {}
@@ -148,7 +149,10 @@ export default async function handler(req, res) {
       const data = await fetchAV(simbolo, 1)
       const last = data[data.length - 1]
       return res.status(200).json({ meta: { ultimaFecha: last.date, ultimoPrecio: last.close, simbolo } })
-    } catch(e) { return res.status(200).json({ error: true, errorMessage: `Sin precio para ${simbolo}: ${e.message}` }) }
+    } catch(e) {
+      console.error(`[datos] priceOnly fetch failed for ${simbolo}:`, e.message)
+      return res.status(200).json({ error: true, errorMessage: `Sin precio para ${simbolo}: ${e.message}` })
+    }
   }
 
   // ── Fetch code_js from Supabase ──
@@ -260,6 +264,12 @@ export default async function handler(req, res) {
       meta: { ultimaFecha: data[data.length - 1].date, ultimoPrecio: data[data.length - 1].close, simbolo },
     })
   } catch (e) {
+    console.error(`[datos] strategy execution error for ${req.body?.simbolo}:`, e.message, e.stack)
     return res.status(500).json({ error: e.message })
+  }
+
+  } catch (e) {
+    console.error('[datos] unhandled crash:', e.message, e.stack)
+    return res.status(500).json({ error: 'Internal error: ' + e.message })
   }
 }
