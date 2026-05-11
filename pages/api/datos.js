@@ -23,22 +23,38 @@ function stooqSym(symbol) {
 export async function fetchAV(symbol, years=5) {
   const sym = stooqSym(symbol)
   const url = `https://stooq.com/q/d/l/?s=${sym}&i=d`
-  const res = await fetch(url)
-  const text = await res.text()
   let rawData = null
-  if (text && !text.includes('No data') && text.trim().length >= 50) {
-    rawData = text.trim().split('\n').slice(1).filter(l=>l.trim()).map(l=>{
-      const [date,open,high,low,close,volume] = l.split(',')
-      return { date, open:parseFloat(open), high:parseFloat(high), low:parseFloat(low), close:parseFloat(close), volume:parseFloat(volume)||0 }
-    }).filter(d=>d.close&&!isNaN(d.close)).sort((a,b)=>a.date.localeCompare(b.date))
+
+  // ── Stooq fetch with 3-second timeout ──
+  // Stooq hangs 10-12s from Vercel IPs; abort early so Yahoo fallback runs immediately
+  const stooqCtrl = new AbortController()
+  const stooqTimer = setTimeout(() => stooqCtrl.abort(), 3000)
+  try {
+    const res = await fetch(url, { signal: stooqCtrl.signal })
+    const text = await res.text()
+    if (text && !text.includes('No data') && text.trim().length >= 50) {
+      rawData = text.trim().split('\n').slice(1).filter(l=>l.trim()).map(l=>{
+        const [date,open,high,low,close,volume] = l.split(',')
+        return { date, open:parseFloat(open), high:parseFloat(high), low:parseFloat(low), close:parseFloat(close), volume:parseFloat(volume)||0 }
+      }).filter(d=>d.close&&!isNaN(d.close)).sort((a,b)=>a.date.localeCompare(b.date))
+    }
+  } catch(_) {
+    // timeout or network error → fall through to Yahoo Finance
+  } finally {
+    clearTimeout(stooqTimer)
   }
+
+  // ── Yahoo Finance fallback with 4-second timeout ──
   if (!rawData || rawData.length === 0) {
+    const yfYears = Math.min(Math.max(Math.ceil(years), 1), 10)
+    const yfUrl = yfYears <= 10
+      ? `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=${yfYears}y`
+      : (() => { const p1=Math.floor(Date.now()/1000)-Math.ceil(years)*365*24*3600; return `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&period1=${p1}&period2=${Math.floor(Date.now()/1000)}` })()
+    const yfCtrl = new AbortController()
+    const yfTimer = setTimeout(() => yfCtrl.abort(), 4000)
     try {
-      const yfYears = Math.min(Math.max(Math.ceil(years), 1), 10)
-      const yfUrl = yfYears <= 10
-        ? `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=${yfYears}y`
-        : (() => { const p1=Math.floor(Date.now()/1000)-Math.ceil(years)*365*24*3600; return `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&period1=${p1}&period2=${Math.floor(Date.now()/1000)}` })()
       const yfR = await fetch(yfUrl, {
+        signal: yfCtrl.signal,
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
           'Accept': 'application/json'
@@ -59,8 +75,13 @@ export async function fetchAV(symbol, years=5) {
           })).filter(d=>d.close&&!isNaN(d.close))
         }
       }
-    } catch(_) {}
+    } catch(_) {
+      // timeout or network error → rawData stays null
+    } finally {
+      clearTimeout(yfTimer)
+    }
   }
+
   if (!rawData || rawData.length === 0) throw new Error(`Sin datos para ${symbol}`)
   return rawData
 }
