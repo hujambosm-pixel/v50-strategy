@@ -1,14 +1,17 @@
 import { useState } from 'react'
 import { MONO } from '../lib/utils'
 
-export default function MetricRow({label,value,color,tip}){
+export default function MetricRow({label,value,color,tip,warn}){
   const [hov,setHov]=useState(false)
   return(
     <tr style={{borderBottom:'1px solid rgba(26,45,69,0.5)',position:'relative',background:hov?'rgba(0,212,255,0.03)':'transparent'}}
       onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}>
       <td style={{padding:'4px 6px 4px 10px',fontFamily:MONO,fontSize:10,color:'#4a7a95',whiteSpace:'nowrap'}}>
-        {label}
-        {tip&&<span style={{marginLeft:3,color:hov?'#3a6a8a':'#2a4060',cursor:'help',fontSize:9}}>ⓘ</span>}
+        <span style={{display:'inline-flex',alignItems:'center',gap:4}}>
+          {label}
+          {warn&&<span title={warn} style={{display:'inline-flex',alignItems:'center',gap:3,background:'#ff9800',color:'#000',fontWeight:700,fontSize:9,padding:'2px 6px',borderRadius:3,animation:'warnPulse 1.5s infinite',cursor:'help',lineHeight:1.3}}>⚠ INCOMPLETO</span>}
+          {tip&&<span style={{color:hov?'#3a6a8a':'#2a4060',cursor:'help',fontSize:9}}>ⓘ</span>}
+        </span>
       </td>
       <td style={{padding:'4px 10px 4px 4px',textAlign:'right',fontFamily:MONO,fontSize:10,fontWeight:700,color:color,whiteSpace:'nowrap'}}>{value}</td>
       <td style={{padding:0,border:'none',position:'relative'}}>
