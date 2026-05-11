@@ -523,6 +523,29 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         }
       }
 
+      // ── MACD subpanel from strategy bar data (code_js strategies returning indicators.macdLine) ──
+      // Triggered when bars carry macdLine/signalLine/histogram injected by datos.js.
+      // Only fires when definition-based _indType is absent (avoids double-render).
+      const _hasMacdBars=!_indType&&data.some(d=>d.macdLine!=null)
+      if(_hasMacdBars&&macdContainerRef.current){
+        if(macdChartRef.current){try{macdChartRef.current.remove()}catch(_){};macdChartRef.current=null}
+        const macdChart=createChart(macdContainerRef.current,_panelOpts(120))
+        macdChartRef.current=macdChart
+        // Histogram — green #26a69a positive, red #ef5350 negative
+        const histS=macdChart.addHistogramSeries({lastValueVisible:false,priceLineVisible:false})
+        histS.setData(data.map(d=>({time:d.date,value:d.histogram,color:(d.histogram??0)>=0?'#26a69a':'#ef5350'})).filter(x=>x.value!=null))
+        // MACD line — blue
+        const macdS=macdChart.addLineSeries({color:'#2962ff',lineWidth:1,lastValueVisible:false,priceLineVisible:false})
+        macdS.setData(data.map(d=>({time:d.date,value:d.macdLine})).filter(x=>x.value!=null))
+        // Signal line — orange
+        const sigS=macdChart.addLineSeries({color:'#ff6d00',lineWidth:1,lastValueVisible:false,priceLineVisible:false})
+        sigS.setData(data.map(d=>({time:d.date,value:d.signalLine})).filter(x=>x.value!=null))
+        // Zero line — subtle gray reference
+        const zeroS=macdChart.addLineSeries({color:'rgba(120,140,160,0.25)',lineWidth:1,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
+        zeroS.setData([{time:data[0].date,value:0},{time:data[data.length-1].date,value:0}])
+        _syncPanels(macdChart)
+      }
+
       // ── Línea amarilla de entrada para posiciones abiertas (Tradelog) ──
       // tlOpenTrades usa campos de Supabase: entry_price, entry_date (distinto al backtest)
       tlOpenTrades.forEach(t=>{
@@ -1377,6 +1400,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
   }, [data])
 
   const activeIndType = definition ? getActiveIndicator(definition) : null
+  const hasMacdBars = !activeIndType && data?.some(d => d.macdLine != null)
   return (
     <div style={{display:'flex',flexDirection:'column',...(fillHeight?{flex:1,minHeight:0}:{})}}>
     <div style={{position:'relative',...(fillHeight?{flex:1,minHeight:0}:{})}}>
@@ -1417,8 +1441,8 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       )}
     </div>
     {/* ── Paneles de indicadores secundarios ── */}
-    {(activeIndType==='MACD'||activeIndType==='VOLUME')&&(
-      <div ref={macdContainerRef} style={{width:'100%',height:activeIndType==='VOLUME'?80:100,background:'#080c14',borderTop:'1px solid #1a2d45'}}/>
+    {(activeIndType==='MACD'||activeIndType==='VOLUME'||hasMacdBars)&&(
+      <div ref={macdContainerRef} style={{width:'100%',height:hasMacdBars?120:activeIndType==='VOLUME'?80:100,background:'#080c14',borderTop:'1px solid #1a2d45'}}/>
     )}
     </div>
   )
