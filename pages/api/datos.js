@@ -278,13 +278,26 @@ export default async function handler(req, res) {
     const trades = buildTrades(rawTrades, capital_ini, allocation_pct)
 
     // ── Inject indicators into chartData bars ──
-    const emaRArr = indicators.emaR || indicators.emaFast || null
-    const emaLArr = indicators.emaL || indicators.emaSlow || null
+    const emaRArr      = indicators.emaR       || indicators.emaFast  || null
+    const emaLArr      = indicators.emaL       || indicators.emaSlow  || null
+    const macdLineArr  = indicators.macdLine   || null
+    const signalLineArr= indicators.signalLine || null
+    const histogramArr = indicators.histogram  || null
     const chartData = data.map((d, i) => ({
       ...d,
-      emaR: emaRArr?.[i] ?? null,
-      emaL: emaLArr?.[i] ?? null,
+      emaR:       emaRArr?.[i]       ?? null,
+      emaL:       emaLArr?.[i]       ?? null,
+      macdLine:   macdLineArr?.[i]   ?? null,
+      signalLine: signalLineArr?.[i] ?? null,
+      histogram:  histogramArr?.[i]  ?? null,
     }))
+    if (indicators?.macdLine) {
+      console.log('[MACD-INJECT]', {
+        macdLineLength: indicators.macdLine.length,
+        barsLength: chartData.length,
+        sampleBar: chartData[100]
+      })
+    }
 
     // ── Summary metrics ──
     const gananciaSimple = trades.reduce((s, t) => s + t.pnlSimple, 0)
