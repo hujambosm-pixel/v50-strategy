@@ -495,6 +495,7 @@ function buildFloatCurve(allTrades, historicalCloses, capitalBase, contributions
 
 export default function Home() {
   const [simbolo,setSimbolo]=useState('^GSPC')
+  const [displayedSimbolo,setDisplayedSimbolo]=useState('^GSPC') // lags behind simbolo — updates only when chart data is ready
   const [symSearchOpen,setSymSearchOpen]=useState(false)
   const [symSearchQ,setSymSearchQ]=useState('')
   const symSearchInputRef=useRef(null)
@@ -1677,6 +1678,7 @@ export default function Home() {
       .then(data => {
         if (Array.isArray(data) && data.length) {
           setResult({ chartData: data, trades: [], isBareChart: true })
+          setDisplayedSimbolo(simbolo) // sync display name once bare chart data is ready
         }
       })
       .catch(() => {})
@@ -1949,6 +1951,7 @@ export default function Home() {
       if(!res.ok)throw new Error(json.error||'Error')
       console.log('[filterZones]', json?.filterZones?.length, json?.filterZones?.[0])
       setResult(json)
+      setDisplayedSimbolo(sym) // sync display name only once chart data is ready
     }catch(e){setError(e.message)}finally{setLoading(false)}
   },[])
 
@@ -3066,7 +3069,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.196</title>
+        <title>Trading Simulator V9.197</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3144,7 +3147,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.196
+            <span className="dot"/>Trading Simulator V9.197
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4866,7 +4869,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                           title={`Abrir ${simbolo} en TradingView ↗`}
                           style={{cursor:'pointer',fontWeight:700,color:'#e2eaf5',fontSize:13,
                             flexShrink:0,pointerEvents:'all',userSelect:'none'}}>
-                          {simbolo}
+                          {displayedSimbolo||simbolo}
                         </span>
                         {/* + añadir a watchlist */}
                         <button onClick={newItem} title="Añadir a watchlist"
@@ -5030,7 +5033,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         <span onClick={()=>{setSymSearchQ('');setSymSearchOpen(true)}}
                           title="Cambiar símbolo"
                           style={{cursor:'pointer',fontWeight:700,color:'#e2eaf5',fontSize:13,flexShrink:0,pointerEvents:'all',userSelect:'none'}}>
-                          {simbolo}
+                          {displayedSimbolo||simbolo}
                         </span>
                         <span ref={chartLegendRef} style={{flex:1,minWidth:0,overflow:'hidden',whiteSpace:'nowrap',textOverflow:'ellipsis'}}/>
                         {stratName&&(
@@ -5337,7 +5340,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.25)'}
                       onMouseOut={e=>e.currentTarget.style.background='transparent'}/>
                     <div style={{padding:'6px 12px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:6}}>
-                      <span style={{fontFamily:MONO,fontSize:10,color:'#b8d8f0',letterSpacing:'0.08em',fontWeight:600,flex:1}}>RESUMEN · {simbolo}</span>
+                      <span style={{fontFamily:MONO,fontSize:10,color:'#b8d8f0',letterSpacing:'0.08em',fontWeight:600,flex:1}}>RESUMEN · {displayedSimbolo||simbolo}</span>
                     </div>
                     <StratSelector strats={metricsStrats} setStrats={setMetricsStrats}/>
                     {(()=>{
