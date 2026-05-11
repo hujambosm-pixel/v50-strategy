@@ -916,7 +916,11 @@ export default function Home() {
   useEffect(()=>{
     if(tlTab!=='dashboard') return
     const {openPositions} = computeFifo(tlTrades, {})
-    const syms = [...new Set(openPositions.map(p=>p.symbol).filter(Boolean))]
+    const openSymbols = [...new Set(openPositions.map(p=>p.symbol).filter(Boolean))]
+    // Fill remaining slots (up to 50) with watchlist symbols not already in open positions
+    const otherSymbols = watchlist.map(w=>w.symbol).filter(s=>s&&!openSymbols.includes(s))
+    // MAX 50 symbols preloaded — increase limit cautiously (Yahoo Finance rate limiting)
+    const syms = [...openSymbols, ...otherSymbols].slice(0, 50)
     if(!syms.length) return
     ;(async()=>{
       for(let i=0;i<syms.length;i+=3){
@@ -3062,7 +3066,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.195</title>
+        <title>Trading Simulator V9.196</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3140,7 +3144,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.195
+            <span className="dot"/>Trading Simulator V9.196
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
