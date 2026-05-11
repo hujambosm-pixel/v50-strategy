@@ -911,6 +911,24 @@ export default function Home() {
   const [tlLiveFx,setTlLiveFx]=useState({})
   const tlFifo = useMemo(()=>computeFifo(tlTrades, tlLivePrices), [tlTrades, tlLivePrices])
 
+  // ── Background cache warm: fire priceOnly requests in parallel batches when Dashboard opens ──
+  // Warms the server-side 60s cache so the subsequent sequential fetch hits cache (near-instant).
+  useEffect(()=>{
+    if(tlTab!=='dashboard') return
+    const {openPositions} = computeFifo(tlTrades, {})
+    const syms = [...new Set(openPositions.map(p=>p.symbol).filter(Boolean))]
+    if(!syms.length) return
+    ;(async()=>{
+      for(let i=0;i<syms.length;i+=3){
+        const batch=syms.slice(i,i+3)
+        await Promise.all(batch.map(sym=>
+          fetch('/api/datos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({simbolo:sym,priceOnly:true})}).catch(()=>{})
+        ))
+        if(i+3<syms.length) await new Promise(r=>setTimeout(r,200))
+      }
+    })()
+  },[tlTab,tlTrades]) // eslint-disable-line
+
   // ── Fetch live prices for open positions ──
   useEffect(()=>{
     const {openPositions} = computeFifo(tlTrades, {})
@@ -3044,7 +3062,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.194</title>
+        <title>Trading Simulator V9.195</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3122,7 +3140,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.194
+            <span className="dot"/>Trading Simulator V9.195
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}

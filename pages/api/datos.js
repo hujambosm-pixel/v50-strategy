@@ -5,6 +5,23 @@ import { calcEMA, calcSMA, calcRSI, calcATR, calcMACD } from '../../lib/backtest
 const SUPA_URL = process.env.SUPABASE_URL || 'https://uqjngxxbdlquiuhywiuc.supabase.co'
 const SUPA_KEY = process.env.SUPABASE_ANON_KEY || 'sb_publishable_st9QJ3zcQbY5ec-JhxwqXQ_joy3udz3'
 
+// ── In-memory price cache (priceOnly mode) — 60s TTL ──────────
+// Shared across requests within the same Vercel function instance.
+// Avoids redundant Stooq/Yahoo fetches when multiple open positions
+// are fetched sequentially within the same refresh cycle.
+const priceCache = new Map() // key: symbol → { price, date, timestamp }
+const CACHE_TTL  = 60 * 1000 // 60 seconds
+
+function getCachedPrice(symbol) {
+  const entry = priceCache.get(symbol)
+  if (!entry) return null
+  if (Date.now() - entry.timestamp > CACHE_TTL) { priceCache.delete(symbol); return null }
+  return entry
+}
+function setCachedPrice(symbol, price, date) {
+  priceCache.set(symbol, { price, date, timestamp: Date.now() })
+}
+
 function stooqSym(symbol) {
   const MAP={
     '^GSPC':'spy.us','^NDX':'ndx.us','^IBEX':'ibex.es','^GDAXI':'dax.de',
@@ -166,9 +183,15 @@ export default async function handler(req, res) {
 
   // ── Price-only mode: last close, no strategy execution ──
   if (priceOnly) {
+    // Check in-memory cache first (60s TTL) — avoids repeated Stooq/Yahoo hits
+    const cached = getCachedPrice(simbolo)
+    if (cached !== null) {
+      return res.status(200).json({ meta: { ultimaFecha: cached.date, ultimoPrecio: cached.price, simbolo }, fromCache: true })
+    }
     try {
       const data = await fetchAV(simbolo, 1)
       const last = data[data.length - 1]
+      setCachedPrice(simbolo, last.close, last.date)
       return res.status(200).json({ meta: { ultimaFecha: last.date, ultimoPrecio: last.close, simbolo } })
     } catch(e) {
       console.error(`[datos] priceOnly fetch failed for ${simbolo}:`, e.message)
