@@ -922,12 +922,13 @@ export default function Home() {
       try{
         const r=await apiFetch('/api/datos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({simbolo:sym,priceOnly:true})})
         const j=await r.json()
-        if(j.meta?.ultimoPrecio) return {sym,price:j.meta.ultimoPrecio}
+        if(j.error===true) return {sym,price:null,unavailable:true}
+        if(j.meta?.ultimoPrecio) return {sym,price:j.meta.ultimoPrecio,unavailable:false}
       }catch(_){}
-      return null
+      return {sym,price:null,unavailable:true}
     })).then(results=>{
       const prices={}
-      results.filter(Boolean).forEach(({sym,price})=>{ prices[sym]={price} })
+      results.filter(Boolean).forEach(({sym,price,unavailable})=>{ prices[sym]={price,unavailable:!!unavailable} })
       setTlLivePrices(prices)
     })
     // Live FX for each unique non-EUR currency among open positions
@@ -3036,7 +3037,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.190</title>
+        <title>Trading Simulator V9.191</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3113,7 +3114,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.190
+            <span className="dot"/>Trading Simulator V9.191
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6856,9 +6857,11 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                             return true
                           })
                         : investDataRaw
-                      const liveFloatEur_=(t)=>{const px=tlLivePrices[t.symbol]?.price!=null?parseFloat(tlLivePrices[t.symbol].price):null;if(px!==null){const fxE=t.fx_entry||1;return(px-t.entry_price)*t.shares/fxE};return typeof t._pnl_float_eur==='number'?t._pnl_float_eur:0}
+                      const liveFloatEur_=(t)=>{const lp=tlLivePrices[t.symbol];if(lp?.unavailable)return null;const px=lp?.price!=null?parseFloat(lp.price):null;if(px!==null){const fxE=t.fx_entry||1;return(px-t.entry_price)*t.shares/fxE};return typeof t._pnl_float_eur==='number'?t._pnl_float_eur:0}
                       const pnlReal=closed.reduce((s,t)=>s+parseFloat(t.pnl_eur||0),0)
-                      const pnlFloat_=openTrades.reduce((s,t)=>s+liveFloatEur_(t),0)
+                      const pnlFloat_=openTrades.reduce((s,t)=>{const v=liveFloatEur_(t);return s+(v!=null?v:0)},0)
+                      const hasUnavailablePrices_=Object.values(tlLivePrices).some(v=>v?.unavailable)
+                      const unavailableSymbols_=Object.entries(tlLivePrices).filter(([,v])=>v?.unavailable).map(([k])=>k)
                       const _dividendosAcum_=contributions.filter(c=>c.type==='dividendo').reduce((s,c)=>s+parseFloat(c.amount||0),0)
                       const pnlTotal=pnlReal+pnlFloat_+_dividendosAcum_
                       const commTotal=[...closed,...openTrades].reduce((s,t)=>s+parseFloat(t.commission||0),0)
@@ -6886,7 +6889,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       const _allOpen_=tlFifo.openPositions||[]
                       const capitalEmpAll=_allOpen_.reduce((s,t)=>{const fxE=t.fx_entry>0?(t.fx_entry<1?1/t.fx_entry:t.fx_entry):1;return s+(parseFloat(t.shares||0)*parseFloat(t.entry_price||0))/fxE},0)
                       const pnlRealAll=(tlFifo.trades||[]).filter(t=>t.status==='closed').reduce((s,t)=>s+parseFloat(t.pnl_eur||0),0)
-                      const pnlFloatAll=_allOpen_.reduce((s,t)=>{const px=tlLivePrices[t.symbol]?.price!=null?parseFloat(tlLivePrices[t.symbol].price):null;const fxE=t.fx_entry||1;return s+(px!==null?(px-t.entry_price)*t.shares/fxE:(typeof t._pnl_float_eur==='number'?t._pnl_float_eur:0))},0)
+                      const pnlFloatAll=_allOpen_.reduce((s,t)=>{const lp=tlLivePrices[t.symbol];if(lp?.unavailable)return s;const px=lp?.price!=null?parseFloat(lp.price):null;const fxE=t.fx_entry||1;return s+(px!==null?(px-t.entry_price)*t.shares/fxE:(typeof t._pnl_float_eur==='number'?t._pnl_float_eur:0))},0)
                       const pnlTotalAll=pnlRealAll+pnlFloatAll
                       const capEvts=[];[...closed,...openTrades].forEach(t=>{const fxE2=t.fx_entry>0?(t.fx_entry<1?1/t.fx_entry:t.fx_entry):1;const cap=(parseFloat(t.shares||0)*parseFloat(t.entry_price||0))/fxE2;const ch=parseFloat(t.commission||0)/2;capEvts.push({date:t.entry_date||today,delta:+cap+ch});if(t.status==='closed')capEvts.push({date:t.exit_date||today,delta:-cap})})
                       capEvts.sort((a,b)=>(a.date||'').localeCompare(b.date||''))
@@ -6968,13 +6971,13 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               {l:'Balance inicial',v:hasContribs?fmtAbs_(capitalNeto):'—',c:'#a8ccdf'},
                               {l:'Capital emp.',v:capitalEmpAll>0?fmtAbs_(capitalEmpAll):'—',c:'#00d4ff'},
                               {l:'P&L realizado',v:fmtEur_(pnlReal),c:pnlReal>=0?'#00e5a0':'#ff4d6d'},
-                              {l:'P&L flotante',v:fmtEur_(pnlFloat_),c:pnlFloat_>=0?'#00e5a0':'#ff4d6d'},
+                              {l:'P&L flotante',v:fmtEur_(pnlFloat_),c:pnlFloat_>=0?'#00e5a0':'#ff4d6d',warn:hasUnavailablePrices_?`⚠ Incompleto — falta precio de: ${unavailableSymbols_.join(', ')}`:null},
                               {l:'Nº Operaciones',v:`${closed.length} cer. / ${openTrades.length} ab.`,c:'#f59e0b'},
                               {l:'Comisiones',v:commTotal>0?'-€'+Math.round(commTotal).toLocaleString('es-ES'):'€0',c:'#ff4d6d'},
                               {l:'Dividendos',v:dividendosAcum>0?'+€'+Math.round(dividendosAcum).toLocaleString('es-ES'):'—',c:'#00e5a0'},
-                            ].map(({l,v,c,hl,sub},i)=>(
+                            ].map(({l,v,c,hl,sub,warn},i)=>(
                               <div key={i} style={{flex:'1 0 9%',padding:'7px 8px',borderRight:'1px solid var(--border)',borderLeft:hl?'3px solid #ff4d6d':'none',background:hl?'rgba(255,77,109,0.04)':'transparent',display:'flex',flexDirection:'column',gap:1,minWidth:80}}>
-                                <div style={{fontFamily:MONO,fontSize:9,color:'#e2e8f0',letterSpacing:'0.08em',textTransform:'uppercase',whiteSpace:'nowrap'}}>{l}</div>
+                                <div style={{fontFamily:MONO,fontSize:9,color:'#e2e8f0',letterSpacing:'0.08em',textTransform:'uppercase',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:4}}>{l}{warn&&<span title={warn} style={{fontSize:9,color:'#f59e0b',cursor:'help',lineHeight:1}}>⚠</span>}</div>
                                 <div style={{fontFamily:MONO,fontSize:15,fontWeight:700,color:c,lineHeight:1.1,whiteSpace:'nowrap'}}>{v}</div>
                                 {sub&&<div style={{fontFamily:MONO,fontSize:7,color:'#3d5a7a'}}>{sub}</div>}
                               </div>
@@ -7487,12 +7490,16 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                   {/* ── MÉTRICAS SIEMPRE VISIBLES — incluye flotantes ── */}
                   {(()=>{
                     const liveFloatEur=(t)=>{
-                      const px=tlLivePrices[t.symbol]?.price!=null?parseFloat(tlLivePrices[t.symbol].price):null
+                      const lp=tlLivePrices[t.symbol]
+                      if(lp?.unavailable) return null
+                      const px=lp?.price!=null?parseFloat(lp.price):null
                       if(px!==null){const fxE=t.fx_entry||1;return(px-t.entry_price)*t.shares/fxE}
                       return typeof t._pnl_float_eur==='number'?t._pnl_float_eur:0
                     }
                     const liveFloatPct=(t)=>{
-                      const px=tlLivePrices[t.symbol]?.price!=null?parseFloat(tlLivePrices[t.symbol].price):null
+                      const lp=tlLivePrices[t.symbol]
+                      if(lp?.unavailable) return null
+                      const px=lp?.price!=null?parseFloat(lp.price):null
                       if(px!==null&&t.entry_price>0)return(px/t.entry_price-1)*100
                       return typeof t._pnl_float_pct==='number'?t._pnl_float_pct:0
                     }
@@ -7501,7 +7508,9 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                     const today=new Date().toISOString().split('T')[0]
                     // P&L
                     const pnlReal=closed.reduce((s,t)=>s+parseFloat(t.pnl_eur||0),0)
-                    const pnlFloat=open.reduce((s,t)=>s+liveFloatEur(t),0)
+                    const pnlFloat=open.reduce((s,t)=>{const v=liveFloatEur(t);return s+(v!=null?v:0)},0)
+                    const hasUnavailablePrices=Object.values(tlLivePrices).some(v=>v?.unavailable)
+                    const unavailableSymbols=Object.entries(tlLivePrices).filter(([,v])=>v?.unavailable).map(([k])=>k)
                     const pnlTotal=pnlReal+pnlFloat+contributions.filter(c=>c.type==='dividendo').reduce((s,c)=>s+parseFloat(c.amount||0),0)
                     const commTotal=[...closed,...open].reduce((s,t)=>s+parseFloat(t.commission||0),0)
                     // Combinamos cerradas + abiertas con su P&L flotante para Win Rate, medias, días
@@ -7548,7 +7557,9 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                     },0)
                     const pnlRealAll=(tlFifo.trades||[]).filter(t=>t.status==='closed').reduce((s,t)=>s+parseFloat(t.pnl_eur||0),0)
                     const pnlFloatAll=_allOpen.reduce((s,t)=>{
-                      const px=tlLivePrices[t.symbol]?.price!=null?parseFloat(tlLivePrices[t.symbol].price):null
+                      const lp=tlLivePrices[t.symbol]
+                      if(lp?.unavailable) return s // skip — price fetch failed
+                      const px=lp?.price!=null?parseFloat(lp.price):null
                       const fxE=t.fx_entry||1
                       return s+(px!==null?(px-t.entry_price)*t.shares/fxE:(typeof t._pnl_float_eur==='number'?t._pnl_float_eur:0))
                     },0)
@@ -7637,10 +7648,10 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                        v:fmtEur(pnlReal),
                        c:pnlReal>=0?'#00e5a0':'#ff4d6d',
                        tip:'Suma del P&L neto de todas las operaciones cerradas (ya descontadas comisiones si están en pnl_eur).'},
-                      {l:'P&L flotante',
+                      {l:hasUnavailablePrices?`P&L flotante ⚠`:'P&L flotante',
                        v:fmtEur(pnlFloat),
                        c:pnlFloat>=0?'#00e5a0':'#ffd166',
-                       tip:'P&L no realizado de las posiciones abiertas. Calculado como (precio actual − precio entrada) × acciones ÷ FX.'},
+                       tip:hasUnavailablePrices?`P&L flotante parcial — no se pudo obtener precio de: ${unavailableSymbols.join(', ')}. Esos activos se excluyen del cálculo.`:'P&L no realizado de las posiciones abiertas. Calculado como (precio actual − precio entrada) × acciones ÷ FX.'},
                       {l:'P&L total',
                        v:fmtEur(pnlTotal),
                        c:pnlTotal>=0?'#00e5a0':'#ff4d6d',
