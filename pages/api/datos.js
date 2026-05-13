@@ -282,13 +282,21 @@ export default async function handler(req, res) {
     // ── Inject indicators into chartData bars ──
     const emaRArr      = indicators.emaR       || indicators.emaFast  || null
     const emaLArr      = indicators.emaL       || indicators.emaSlow  || null
+    const ema3Arr      = indicators.ema3       || null
     const macdLineArr  = indicators.macdLine   || null
     const signalLineArr= indicators.signalLine || null
     const histogramArr = indicators.histogram  || null
+    if (indicators?.ema3) {
+      console.log('[EMA3-DEBUG]', {
+        ema3Length: indicators.ema3.length,
+        sampleValues: indicators.ema3.slice(50, 53)
+      })
+    }
     const chartData = data.map((d, i) => ({
       ...d,
       emaR:       emaRArr?.[i]       ?? null,
       emaL:       emaLArr?.[i]       ?? null,
+      ema3:       ema3Arr?.[i]       ?? null,
       macdLine:   macdLineArr?.[i]   ?? null,
       signalLine: signalLineArr?.[i] ?? null,
       histogram:  histogramArr?.[i]  ?? null,
