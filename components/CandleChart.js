@@ -531,15 +531,16 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         if(macdChartRef.current){try{macdChartRef.current.remove()}catch(_){};macdChartRef.current=null}
         const macdChart=createChart(macdContainerRef.current,_panelOpts(120))
         macdChartRef.current=macdChart
+        const validMacdData=data.filter(d=>d.macdLine!=null&&d.signalLine!=null&&d.histogram!=null)
         // Histogram — green #26a69a positive, red #ef5350 negative
         const histS=macdChart.addHistogramSeries({lastValueVisible:false,priceLineVisible:false})
-        histS.setData(data.map(d=>({time:d.date,value:d.histogram,color:(d.histogram??0)>=0?'#26a69a':'#ef5350'})).filter(x=>x.value!=null))
+        histS.setData(validMacdData.map(d=>({time:d.date,value:d.histogram,color:d.histogram>=0?'#26a69a':'#ef5350'})))
         // MACD line — blue
         const macdS=macdChart.addLineSeries({color:'#2962ff',lineWidth:1,lastValueVisible:false,priceLineVisible:false})
-        macdS.setData(data.map(d=>({time:d.date,value:d.macdLine})).filter(x=>x.value!=null))
+        macdS.setData(validMacdData.map(d=>({time:d.date,value:d.macdLine})))
         // Signal line — orange
         const sigS=macdChart.addLineSeries({color:'#ff6d00',lineWidth:1,lastValueVisible:false,priceLineVisible:false})
-        sigS.setData(data.map(d=>({time:d.date,value:d.signalLine})).filter(x=>x.value!=null))
+        sigS.setData(validMacdData.map(d=>({time:d.date,value:d.signalLine})))
         // Zero line — subtle gray reference
         const zeroS=macdChart.addLineSeries({color:'rgba(120,140,160,0.25)',lineWidth:1,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
         zeroS.setData([{time:data[0].date,value:0},{time:data[data.length-1].date,value:0}])
