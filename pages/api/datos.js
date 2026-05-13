@@ -1,4 +1,4 @@
-// pages/api/datos.js — Motor V50 v3.0
+// pages/api/datos.js — Motor V50 v3.0 (V9.207)
 
 import { calcEMA, calcSMA, calcRSI, calcATR, calcMACD } from '../../lib/backtester'
 
