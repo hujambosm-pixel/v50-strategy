@@ -7,16 +7,18 @@ const SUPA_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_UR
 const SUPA_KEY = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
 function calcEMA(values, period) {
+  if (!values?.length || period < 1) return []
   const k = 2 / (period + 1)
-  const result = new Array(values.length).fill(null)
-  let ema = null
+  const out = new Array(values.length).fill(null)
+  let sum = 0, valid = 0
   for (let i = 0; i < values.length; i++) {
     if (values[i] == null) continue
-    if (ema === null) { ema = values[i]; result[i] = ema; continue }
-    ema = values[i] * k + ema * (1 - k)
-    result[i] = ema
+    sum += values[i]; valid++
+    if (valid < period) continue
+    if (valid === period) { out[i] = sum / period; continue }
+    out[i] = values[i] * k + out[i - 1] * (1 - k)
   }
-  return result
+  return out
 }
 function calcATR(highs, lows, closes, period) {
   const tr = closes.map((_, i) => {
