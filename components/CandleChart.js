@@ -445,11 +445,11 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         handleScroll:false,handleScale:false,
       })
       const _syncPanels=(panelChart)=>{
-        chart.timeScale().subscribeVisibleLogicalRangeChange(range=>{
-          if(range)try{panelChart.timeScale().setVisibleLogicalRange(range)}catch(_){}
+        chart.timeScale().subscribeVisibleTimeRangeChange(range=>{
+          if(range)try{panelChart.timeScale().setVisibleRange(range)}catch(_){}
         })
-        panelChart.timeScale().subscribeVisibleLogicalRangeChange(range=>{
-          if(range)try{chart.timeScale().setVisibleLogicalRange(range)}catch(_){}
+        panelChart.timeScale().subscribeVisibleTimeRangeChange(range=>{
+          if(range)try{chart.timeScale().setVisibleRange(range)}catch(_){}
         })
       }
 
