@@ -169,7 +169,8 @@ function buildTrades(rawTrades, capitalIni, allocationPct = 100) {
 
       const dias = Math.max(1, Math.round((new Date(t.exitDate) - new Date(t.entryDate)) / 86400000))
 
-      return { ...t, shares: sharesSimple, pnlSimple, pnlPct, capitalTras: compoundCapital, dias }
+      return { ...t, shares: sharesSimple, pnlSimple, pnlPct, capitalTras: compoundCapital, dias,
+        entryPx: t.entryPrice, exitPx: t.exitPrice, tipo: t.exitReason ?? null }
     })
 }
 
