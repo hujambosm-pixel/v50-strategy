@@ -292,10 +292,13 @@ export default async function handler(req, res) {
       histogram:  histogramArr?.[i]  ?? null,
     }))
     if (indicators?.macdLine) {
+      const first3 = chartData.filter(b => b.macdLine != null).slice(0, 3)
+        .map(b => ({ date: b.date, macdLine: b.macdLine, signalLine: b.signalLine, histogram: b.histogram }))
       console.log('[MACD-INJECT]', {
         macdLineLength: indicators.macdLine.length,
         barsLength: chartData.length,
-        sampleBar: chartData[100]
+        aligned: indicators.macdLine.length === chartData.length,
+        first3WithData: first3,
       })
     }
 
