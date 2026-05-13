@@ -246,9 +246,10 @@ export default async function handler(req, res) {
     const runFn    = getRunFn(calcEMA, calcSMA, calcRSI, calcATR, calcMACD)
     const userParams = stratParams ? JSON.parse(stratParams) : {}
     const _result = runFn(data, { capital_ini, years, allocation_pct, ...userParams })
-    const rawTrades      = _result.trades      ?? []
-    const indicators     = _result.indicators  ?? {}
-    const rawFilterZones = _result.filterZones ?? []
+    const rawTrades      = _result.trades       ?? []
+    const indicators     = _result.indicators   ?? {}
+    const rawFilterZones = _result.filterZones  ?? []
+    const slopeChanges   = _result.slopeChanges ?? []
     // ── Flush virtual: posición abierta al final del periodo ──
     const lastBar = data[data.length - 1]
     const openPos = _result.openPosition ?? null
@@ -316,6 +317,7 @@ export default async function handler(req, res) {
       chartData,
       trades,
       filterZones: Array.isArray(rawFilterZones) ? rawFilterZones : [],
+      slopeChanges: Array.isArray(slopeChanges) ? slopeChanges : [],
       gananciaSimple,
       capitalReinv,
       ganBH,

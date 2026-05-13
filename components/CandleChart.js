@@ -243,7 +243,7 @@ function createRiskPrimitive(configRef) {
   }
 }
 
-export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null, isBareChart=false, visuals=null, filterZones=[] }) {
+export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null, isBareChart=false, visuals=null, filterZones=[], slopeChanges=[] }) {
   const containerRef=useRef(null), svgRef=useRef(null), legendRef=useRef(null), tooltipRef=useRef(null)
   const activeLegendRef = externalLegendRef || legendRef
   const chartRef=useRef(null), candlesRef=useRef(null)
@@ -541,6 +541,17 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         // Signal line — orange
         const sigS=macdChart.addLineSeries({color:'#ff6d00',lineWidth:1,lastValueVisible:false,priceLineVisible:false})
         sigS.setData(validMacdData.map(d=>({time:d.date,value:d.signalLine})))
+        // Slope change markers
+        if(slopeChanges?.length){
+          const markers=slopeChanges.map(sc=>({
+            time:sc.date,
+            position:'inBar',
+            color:sc.direction==='up'?'#26a69a':'#ef5350',
+            shape:sc.direction==='up'?'arrowUp':'arrowDown',
+            text:sc.direction==='up'?'↑':'↓',
+          }))
+          macdS.setMarkers(markers)
+        }
         // Zero line — subtle gray reference
         const zeroS=macdChart.addLineSeries({color:'rgba(120,140,160,0.25)',lineWidth:1,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
         zeroS.setData([{time:data[0].date,value:0},{time:data[data.length-1].date,value:0}])
