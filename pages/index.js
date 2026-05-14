@@ -687,6 +687,7 @@ export default function Home() {
   const [mcRiskPerTrade,setMcRiskPerTrade]=useState(1)
   const [mcMaxPortfolioPct,setMcMaxPortfolioPct]=useState(5)
   const [mcMaxAccumRisk,setMcMaxAccumRisk]=useState(10)
+  const [mcMaxPosiciones,setMcMaxPosiciones]=useState(4)  // para modo concentrado
   const [mcCapital,setMcCapital]=useState('compound')    // 'simple' | 'compound'
   const [mcCapitalIni,setMcCapitalIni]=useState(1000)
   const [mcPeriodMode,setMcPeriodMode]=useState('years') // 'years' | 'range'
@@ -2619,7 +2620,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
       fromDate:_mcFrom,toDate:_mcTo,
       tipoStop,atrPeriod:Number(atrP),atrMult:Number(atrM),sinPerdidas,reentry,
       tipoFiltro,sp500EmaR:Number(sp500EmaR),sp500EmaL:Number(sp500EmaL),tipoCapital:mcCapital,
-      sizeRules:{riskPerTrade:mcRiskPerTrade,maxPortfolioPct:mcMaxPortfolioPct,maxAccumRisk:mcMaxAccumRisk}}
+      sizeRules:{riskPerTrade:mcRiskPerTrade,maxPortfolioPct:mcMaxPortfolioPct,maxAccumRisk:mcMaxAccumRisk,maxPosiciones:mcMaxPosiciones}}
     const buildCfgFromStrat=(strat)=>{
       // Parsear params del code_js (campo principal para estrategias modernas)
       let stratParams={}
@@ -2663,7 +2664,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         return
       }
       // Multi-mode run (same strategy, different allocation modes)
-      const MODE_LABELS={slots:'Slots',compartido:'Compartido',ranking:'Ranking',positionsizing:'Pos.Sizing'}
+      const MODE_LABELS={slots:'Slots',compartido:'Compartido',concentrado:'Concentrado',positionsizing:'Pos.Sizing'}
       const sid=stratIds[0]||null
       const strat=strategies.find(s=>s.id===sid)||strategies.find(s=>s.id===currentStratId)
       const stratName=strat?.name||'Estrategia activa'
@@ -2709,7 +2710,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
     const initialOpen={};results.forEach(r=>{initialOpen[r.id]=true});initialOpen['__bh__']=true;setMcAssetOpen(initialOpen)
     const chartsVis={};results.forEach(r=>{chartsVis[r.id]=true});setMcChartsStratVisible(chartsVis)
     setMcLoading(false);setMcProgress(null)
-  },[mcSelected,mcMode,selectedModos,mcWeights,mcCapital,mcCapitalIni,mcYears,mcPeriodMode,mcFromDate,mcToDate,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL,rankingData,mcStratSelected,strategies,currentStratId,mcRiskPerTrade,mcMaxPortfolioPct,mcMaxAccumRisk])
+  },[mcSelected,mcMode,selectedModos,mcWeights,mcCapital,mcCapitalIni,mcYears,mcPeriodMode,mcFromDate,mcToDate,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL,rankingData,mcStratSelected,strategies,currentStratId,mcRiskPerTrade,mcMaxPortfolioPct,mcMaxAccumRisk,mcMaxPosiciones])
 
   // Auto-inicializar pesos iguales cuando cambian activos seleccionados (modo custom)
   useEffect(()=>{
@@ -3066,7 +3067,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.210</title>
+        <title>Trading Simulator V9.211</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3144,7 +3145,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.210
+            <span className="dot"/>Trading Simulator V9.211
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4022,9 +4023,9 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     <span style={{marginLeft:'auto',fontFamily:MONO,fontSize:10,color:'#4a6a88'}}>
                       {mcStratSelected.length<=1
                         ?(selectedModos.length===1
-                          ?(selectedModos[0]==='slots'?'Slots iguales':selectedModos[0]==='compartido'?'Capital compartido':selectedModos[0]==='ranking'?'Capital + Ranking':'Position Sizing')
-                          :selectedModos.map(m=>m==='slots'?'Slots':m==='compartido'?'Compartido':m==='ranking'?'Ranking':'Pos.Sizing').join(' + '))
-                        :(mcMode==='slots'?'Slots iguales':mcMode==='compartido'?'Capital compartido':mcMode==='ranking'?'Capital + Ranking':mcMode==='positionsizing'?'Position Sizing':'Slots iguales')}
+                          ?(selectedModos[0]==='slots'?'Slots iguales':selectedModos[0]==='compartido'?'Capital compartido':selectedModos[0]==='concentrado'?'Capital concentrado':'Position Sizing')
+                          :selectedModos.map(m=>m==='slots'?'Slots':m==='compartido'?'Compartido':m==='concentrado'?'Concentrado':'Pos.Sizing').join(' + '))
+                        :(mcMode==='slots'?'Slots iguales':mcMode==='compartido'?'Capital compartido':mcMode==='concentrado'?'Capital concentrado':mcMode==='positionsizing'?'Position Sizing':'Slots iguales')}
                     </span>
                   </div>
                   {mcSectionOpen.mode&&(
@@ -4039,8 +4040,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                           desc:'El capital se divide en partes iguales y cada slot crece de forma independiente con interés compuesto. Ejemplo: 1000€ con 4 activos → 250€ por slot. Si NVDA gana +42%, su slot pasa a 355€ y el siguiente trade de NVDA parte de esos 355€. Los slots nunca se redistribuyen entre activos.'},
                         {id:'compartido',label:'Capital compartido',ready:true,
                           desc:'El capital libre se reparte a partes iguales entre los activos que van a entrar. Justo antes de cada entrada: capital_por_slot = pool_libre / slots_libres. Cuando un trade cierra, su capital (con ganancias o pérdidas) vuelve al pool. Ejemplo: 1000€ con 4 activos. Los 4 entran → 250€ cada uno. NVDA cierra +42% → devuelve 355€ al pool. Solo TSLA sigue abierto → pool = 355€ + restantes. Próxima entrada de NVDA: 355€ / slots_libres en ese momento.'},
-                        {id:'ranking',label:'Capital + Ranking',ready:true,
-                          desc:'Igual que Capital compartido, pero cuando hay más señales simultáneas que capital disponible, prioriza los activos según su posición en la lista (el #1 entra primero). Las señales descartadas se pierden. Reordena tu lista según preferencia antes de ejecutar.'},
+                        {id:'concentrado',label:'Capital concentrado',ready:true,
+                          desc:'Usa un pool de capital compartido, pero concentra el capital disponible en los activos con señal activa. El tamaño de cada posición se calcula sobre el capital libre real, con un máximo de 1/N del capital total por posición. Cuantas menos posiciones abiertas, mayor tamaño por entrada.'},
                         {id:'positionsizing',label:'Position Sizing',ready:true,
                           desc:'Calcula dinámicamente el tamaño de cada posición según el stop loss. Permite posiciones simultáneas con tamaños variables.'},
                       ].map(m=>{
@@ -4082,6 +4083,23 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                           </div>
                         )
                       })}
+                    </div>
+                  )}
+                  {(mcStratSelected.length<=1?selectedModos.includes('concentrado'):mcMode==='concentrado')&&(
+                    <div style={{padding:'8px 10px',borderTop:'1px solid #1a2a3a'}}>
+                      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:2}}>
+                        <span title="Número máximo de posiciones simultáneas abiertas. Determina el techo de capital por posición (capitalTotal / maxPosiciones)."
+                          style={{fontSize:9,color:'#4a6a88',cursor:'help',textDecoration:'underline dotted'}}>
+                          Máx. posiciones simultáneas
+                        </span>
+                        <input type="number" min="1" max="20" step="1"
+                          value={mcMaxPosiciones}
+                          onChange={e=>setMcMaxPosiciones(Math.max(1,Math.min(20,Number(e.target.value))))}
+                          style={{width:65,padding:'2px 4px',borderRadius:3,
+                            background:'#0d1929',border:'1px solid #1a2a3a',
+                            color:'#e0e8f0',fontSize:11,fontFamily:MONO,textAlign:'right'}}
+                        />
+                      </div>
                     </div>
                   )}
                   {(mcStratSelected.length<=1?selectedModos.includes('positionsizing'):mcMode==='positionsizing')&&(
@@ -5379,7 +5397,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                 {/* Header resumen */}
                 <div style={{padding:'7px 16px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
                   <span style={{fontFamily:MONO,fontSize:13,color:'var(--accent)',fontWeight:700}}>📊 Multicartera</span>
-                  <span style={{fontFamily:MONO,fontSize:11,color:'#8ab8d4'}}>{mcResult.n} activos · <span style={{color:mcResult.modoAsig==='custom'?'#9b72ff':'#00d4ff'}}>{mcResult.modoAsig==='compartido'?'Capital compartido':mcResult.modoAsig==='ranking'?'Capital + Ranking':'Slots iguales'}</span></span>
+                  <span style={{fontFamily:MONO,fontSize:11,color:'#8ab8d4'}}>{mcResult.n} activos · <span style={{color:mcResult.modoAsig==='custom'?'#9b72ff':'#00d4ff'}}>{mcResult.modoAsig==='compartido'?'Capital compartido':mcResult.modoAsig==='concentrado'?'Capital concentrado':'Slots iguales'}</span></span>
                   <span style={{fontFamily:MONO,fontSize:11,color:'#8ab8d4'}}>Desde {fmtDate(mcResult.startDate)}</span>
                   <div style={{marginLeft:'auto',display:'flex',gap:6,alignItems:'center'}}>
                     <button onClick={()=>mcChartApiRef.current?.fitAll()}
