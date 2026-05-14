@@ -1179,13 +1179,23 @@ export default function Home() {
       // Closure detection: any SELL fill (isolated or _orphanSell) → find open positions
       const isSellFill = r.fill_type === 'sell' || r._orphanSell
       if (isSellFill && !r._grouped) {
-        const openPositions = [...tlTrades]
+        // Build FIFO-aware set of truly open BUY fills for this symbol
+        const symFills = tlTrades.filter(t => t.symbol === r.symbol)
+        // Normalize field names: Supabase fills use 'date'/'price'; legacy LS may use 'entry_date'/'entry_price'
+        const normFills = symFills.map(t => ({
+          ...t,
+          date: t.date || t.entry_date || '',
+          price: parseFloat(t.price ?? t.entry_price ?? 0),
+          fill_type: t.fill_type || 'buy',
+          fx: (()=>{ let fx=parseFloat(t.fx??t.fx_entry??1); if(fx>0&&fx<1)fx=1/fx; return(!fx||isNaN(fx))?1:fx })(),
+        }))
+        const { fillStatus: fifoStatus } = computeFifo(normFills, {})
+        const openPositions = normFills
           .filter(t =>
-            t.symbol === r.symbol &&
-            (!t.status || t.status === 'open') &&
-            !t.exit_date
+            (t.fill_type || 'buy') === 'buy' &&
+            (fifoStatus[t.id] === 'open' || fifoStatus[t.id] === 'partial')
           )
-          .sort((a,b) => { const da=a.entry_date||'',db=b.entry_date||''; return da<db?-1:da>db?1:0 })  // oldest first
+          .sort((a,b)=>{ const da=a.date||'',db=b.date||''; return da<db?-1:da>db?1:0 }) // oldest first
 
         if (openPositions.length === 1) {
           // Single open position → auto-assign
@@ -1194,7 +1204,7 @@ export default function Home() {
           const sellShares = parseFloat(r.shares||0)
           enriched._closesTradeId  = openPos.id
           enriched._closesSymbol   = openPos.symbol
-          enriched._openEntryDate  = openPos.entry_date
+          enriched._openEntryDate  = openPos.date
           enriched._openShares     = openShares
           enriched._sellShares     = sellShares
           enriched._isPartialClose = sellShares < openShares - 0.001
@@ -1204,19 +1214,20 @@ export default function Home() {
         } else if (openPositions.length > 1) {
           // Multiple open positions → flag for user selection
           enriched._multipleOpen   = true
-          enriched._openOptions    = openPositions.map(t=>({
-            id: t.id,
-            entry_date: t.entry_date,
-            shares: parseFloat(t.shares||0),
-            entry_price: t.entry_price,
-          }))
+          enriched._openOptions    = openPositions.map(t=>{
+            const sh = parseFloat(t.shares||0)
+            const px = parseFloat(t.price||0)
+            const fx = t.fx  // already normalized above
+            const capital_eur = Math.round(sh * px / fx)
+            return { id: t.id, entry_date: t.date, shares: sh, entry_price: px, capital_eur }
+          })
           // Pre-select oldest (FIFO) but user can change
           const presel = openPositions[0]
           const openShares = parseFloat(presel.shares||0)
           const sellShares = parseFloat(r.shares||0)
           enriched._closesTradeId  = presel.id
           enriched._closesSymbol   = presel.symbol
-          enriched._openEntryDate  = presel.entry_date
+          enriched._openEntryDate  = presel.date
           enriched._openShares     = openShares
           enriched._sellShares     = sellShares
           enriched._isPartialClose = sellShares < openShares - 0.001
@@ -3067,7 +3078,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.211</title>
+        <title>Trading Simulator V9.212</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3145,7 +3156,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.211
+            <span className="dot"/>Trading Simulator V9.212
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6612,7 +6623,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                           borderRadius:3,padding:'2px 4px',cursor:'pointer',width:'100%'}}>
                                         {t._openOptions?.map(o=>(
                                           <option key={o.id} value={o.id}>
-                                            {o.entry_date} · {o.shares} acc · ${o.entry_price}
+                                            {o.shares} acc · ${o.entry_price} · {o.entry_date} · €{o.capital_eur}
                                           </option>
                                         ))}
                                       </select>
