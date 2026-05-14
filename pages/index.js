@@ -1871,9 +1871,6 @@ export default function Home() {
 
   // ── Ranking: ejecuta backtest en paralelo sobre toda la watchlist ──
   const calcRanking = useCallback(async (rankSymbols=null) => {
-    const cfg = { emaR:Number(emaR), emaL:Number(emaL), years:Number(years),
-      capitalIni:Number(capitalIni), tipoStop, atrPeriod:Number(atrP), atrMult:Number(atrM),
-      sinPerdidas, reentry, tipoFiltro, sp500EmaR:Number(sp500EmaR), sp500EmaL:Number(sp500EmaL) }
     // Use the currently visible/filtered watchlist items
     // (passed as argument, falls back to full watchlist)
     const syms = (rankSymbols || watchlist).map(w=>w.symbol)
@@ -1897,7 +1894,7 @@ export default function Home() {
         try {
           const res = await apiFetch('/api/datos', {
             method:'POST', headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({ simbolo:sym, cfg })
+            body: JSON.stringify({ simbolo:sym, strategyId:currentStratId, capital_ini:Number(capitalIni), years:Number(years), allocation_pct:100 })
           })
           const json = await res.json()
           if (!res.ok || !json.trades?.length) return
@@ -1925,7 +1922,7 @@ export default function Home() {
             norm(maxDD,0,60)*W.dd
           ))
           results[sym]={score,metrics:{winRate,factorBen,cagr,cagrRobust,maxDD,trades:trades.length}}
-        } catch(_){}
+        } catch(e){ console.error('[calcRanking]', sym, e) }
       }))
       setRankingProgress({done:Math.min(i+BATCH,syms.length),total:syms.length})
     }
@@ -3069,7 +3066,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.208</title>
+        <title>Trading Simulator V9.209</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3147,7 +3144,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.208
+            <span className="dot"/>Trading Simulator V9.209
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
