@@ -488,14 +488,21 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 4) {
     // 2. Abrir entradas: cada una calcula su tamaño dinámicamente
     const entries = (entriesByDate[date] || []).filter(t => !openSlots[t.symbol])
     if (entries.length > 0 && poolLibre > 0.01) {
+      // BUG B fix: contador de same-day trades abiertos en este batch
+      // (no añaden a openSlots, así que slotsLibres debe compensarlo manualmente)
+      let sameDayOpen = 0
       entries.forEach(t => {
         const posicionesAbiertas = Object.keys(openSlots).length
-        const slotsLibres = maxPosiciones - posicionesAbiertas
-        if (slotsLibres <= 0) return  // al límite: señal descartada
+        // BUG B fix: descontar same-day trades del mismo batch para no superar maxPosiciones
+        const slotsLibresEfectivos = maxPosiciones - posicionesAbiertas - sameDayOpen
+        if (slotsLibresEfectivos <= 0) return  // al límite: señal descartada
         const openCapsTotal = Object.values(openSlots).reduce((s, sl) => s + (sl.capAsignado || 0), 0)
         const capitalTotal = poolLibre + openCapsTotal
         const capMaxPorPosicion = capitalTotal / maxPosiciones
-        const capPorEntrada = Math.min(poolLibre / slotsLibres, capMaxPorPosicion)
+        // BUG A fix: usar Math.min(poolLibre, capMaxPorPosicion) en lugar de
+        // Math.min(poolLibre/slotsLibres, capMaxPorPosicion) — la división causaba
+        // sub-despliegue sistemático cuando había pocos candidatos simultáneos
+        const capPorEntrada = Math.min(poolLibre, capMaxPorPosicion)
         if (capPorEntrada < 0.01) return  // sin capital: señal descartada
         poolLibre -= capPorEntrada
         const totalPortfolio = capitalTotal
@@ -514,6 +521,7 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 4) {
               riesgoAcum: _dist ? capPorEntrada * _dist : capPorEntrada * 0.05,
             })
           } else { poolLibre += capPorEntrada }
+          sameDayOpen++  // BUG B fix: contabilizar slot consumido aunque no esté en openSlots
         } else {
           openSlots[t.symbol] = { trade: t, capAsignado: capPorEntrada, totalPortfolioAtEntry: totalPortfolio }
           capitalAtEntryMap[`${t.symbol}:${t.entryDate}`] = capPorEntrada
@@ -522,11 +530,25 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 4) {
     }
   })
 
-  // Cerrar posiciones abiertas al final del periodo
-  Object.entries(openSlots).forEach(([sym, slot]) => {
-    poolLibre += slot.capAsignado * (1 + (slot.trade.pnlPct || 0) / 100)
-    delete openSlots[sym]
+  // Cerrar posiciones abiertas al final del periodo (exitDate null o futuro)
+  // BUG C fix: también registrar en executedTrades para que la compoundCurve
+  // y assetStats los contabilicen correctamente
+  Object.entries(openSlots).forEach(([, slot]) => {
+    const { trade, capAsignado, totalPortfolioAtEntry } = slot
+    const capFinal = capAsignado * (1 + (trade.pnlPct || 0) / 100)
+    poolLibre += capFinal
+    const _dist = (trade.stopPx && trade.entryPx && trade.entryPx > trade.stopPx)
+      ? (trade.entryPx - trade.stopPx) / trade.entryPx : null
+    executedTrades.push({
+      ...trade,
+      _capitalAtEntry: capAsignado,
+      _totalPortfolioAtEntry: totalPortfolioAtEntry || capitalIni,
+      capitalTras: capFinal,
+      pnlSimple: capFinal - capAsignado,
+      riesgoAcum: _dist ? capAsignado * _dist : capAsignado * 0.05,
+    })
   })
+  Object.keys(openSlots).forEach(sym => { delete openSlots[sym] })
 
   const symbolDataMap = {}
   assetResults.forEach(ar => { symbolDataMap[ar.symbol] = ar.data ? ar.data.filter(d => d.date >= startDate) : [] })
