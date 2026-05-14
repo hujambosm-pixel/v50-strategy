@@ -229,7 +229,10 @@ function buildSlotsCurves(assetResults, capitalIni) {
 }
 
 // ── MODO CAPITAL COMPARTIDO: pool libre repartido entre slots activos ──
-function buildCompartidoCurves(assetResults, capitalIni) {
+// symbolOrder: array opcional de símbolos para desempate en entradas simultáneas
+//   null → desempate alfabético (modo compartido estándar)
+//   array → desempate por posición en la lista (modo ranking)
+function buildCompartidoCurves(assetResults, capitalIni, symbolOrder = null) {
   const n = assetResults.length
   if (!n) return _emptyCurves()
   const { startDate, filteredDates } = _commonDates(assetResults)
@@ -247,7 +250,12 @@ function buildCompartidoCurves(assetResults, capitalIni) {
       dias:         t.dias,
       _virtualClose: !!t._virtualClose,
     }))
-  ).sort((a, b) => a.entryDate < b.entryDate ? -1 : a.entryDate > b.entryDate ? 1 : a.symbol < b.symbol ? -1 : 1)
+  ).sort((a, b) => {
+    if (a.entryDate < b.entryDate) return -1
+    if (a.entryDate > b.entryDate) return 1
+    if (symbolOrder) return symbolOrder.indexOf(a.symbol) - symbolOrder.indexOf(b.symbol)
+    return a.symbol < b.symbol ? -1 : 1
+  })
 
   if (!allCandidates.length) return buildSlotsCurves(assetResults, capitalIni)
 
@@ -943,6 +951,8 @@ export default async function handler(req, res) {
     let curves
     if (modoAsig === 'compartido') {
       curves = buildCompartidoCurves(assetResults, cfg.capitalIni)
+    } else if (modoAsig === 'ranking') {
+      curves = buildCompartidoCurves(assetResults, cfg.capitalIni, symbols)
     } else if (modoAsig === 'positionsizing') {
       curves = buildPositionSizingCurves(assetResults, cfg.capitalIni, sizeRules)
     } else {
@@ -981,8 +991,8 @@ export default async function handler(req, res) {
       }
     })
 
-    // En modos compartido/positionsizing: recalcular assetStats desde los trades realmente ejecutados
-    if ((modoAsig === 'compartido' || modoAsig === 'positionsizing') && curves.executedTrades?.length) {
+    // En modos compartido/ranking/positionsizing: recalcular assetStats desde los trades realmente ejecutados
+    if ((modoAsig === 'compartido' || modoAsig === 'ranking' || modoAsig === 'positionsizing') && curves.executedTrades?.length) {
       const execBySymbol = {}
       curves.executedTrades.forEach(t => {
         if (!execBySymbol[t.symbol]) execBySymbol[t.symbol] = []
@@ -1040,7 +1050,7 @@ export default async function handler(req, res) {
     )
 
     // Historial combinado ordenado por fecha salida
-    const sourceTrades = (modoAsig === 'compartido' || modoAsig === 'positionsizing')
+    const sourceTrades = (modoAsig === 'compartido' || modoAsig === 'ranking' || modoAsig === 'positionsizing')
       ? (curves.executedTrades || []).map(t => {
           if (t.riesgoAcum !== undefined) return t  // positionsizing ya lo tiene
           const ep = t.entryPrice ?? t.entryPx
