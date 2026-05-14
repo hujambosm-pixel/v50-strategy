@@ -1231,6 +1231,7 @@ export default async function handler(req, res) {
           capInvMedio,
           ganBH,
           priceMaxDD,
+          avgCapAsignado,  // capital medio real por trade — usado por frontend para CAGR en modo concentrado
         }
       })
     }
