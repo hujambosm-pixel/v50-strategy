@@ -1181,6 +1181,7 @@ export default async function handler(req, res) {
         capInvMedio,
         ganBH,
         priceMaxDD,
+        capInvertidoTotal: ar.trades.length * slotCapital,  // slots: capital fijo por trade
       }
     })
 
@@ -1215,6 +1216,7 @@ export default async function handler(req, res) {
         const pN = filtData[filtData.length - 1]?.close
         const ganBH = (p0 && pN && p0 > 0) ? (cfg.capitalIni / n) * (pN / p0 - 1) : 0
         const priceMaxDD = _calcPriceMaxDD(ar.data, curves.startDate)
+        const capInvertidoTotal = execTrades.reduce((s, t) => s + (t._capitalAtEntry || 0), 0)
         return {
           symbol:    ar.symbol,
           trades:    execTrades.length,
@@ -1231,7 +1233,8 @@ export default async function handler(req, res) {
           capInvMedio,
           ganBH,
           priceMaxDD,
-          avgCapAsignado,  // capital medio real por trade — usado por frontend para CAGR en modo concentrado
+          avgCapAsignado,     // capital medio real por trade — usado por frontend para CAGR en modo concentrado
+          capInvertidoTotal,  // suma del capital de entrada de todos los trades ejecutados
         }
       })
     }
