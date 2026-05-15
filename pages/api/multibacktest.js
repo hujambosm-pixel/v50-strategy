@@ -498,10 +498,10 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 4) {
         if (slotsLibresEfectivos <= 0) return  // al límite: señal descartada
         const openCapsTotal = Object.values(openSlots).reduce((s, sl) => s + (sl.capAsignado || 0), 0)
         const capitalTotal = poolLibre + openCapsTotal
-        const capMaxPorPosicion = capitalTotal / maxPosiciones
-        // BUG A fix: usar Math.min(poolLibre, capMaxPorPosicion) en lugar de
-        // Math.min(poolLibre/slotsLibres, capMaxPorPosicion) — la división causaba
-        // sub-despliegue sistemático cuando había pocos candidatos simultáneos
+        // Techo por posición: dividir entre el mínimo real de slots disponibles
+        // (si hay menos activos que maxPosiciones, cada activo recibe mayor fracción)
+        const slotsEfectivos = Math.min(maxPosiciones, n)
+        const capMaxPorPosicion = capitalTotal / slotsEfectivos
         const capPorEntrada = Math.min(poolLibre, capMaxPorPosicion)
         if (capPorEntrada < 0.01) return  // sin capital: señal descartada
         poolLibre -= capPorEntrada
