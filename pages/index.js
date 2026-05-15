@@ -3078,7 +3078,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.216</title>
+        <title>Trading Simulator V9.217</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3156,7 +3156,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.216
+            <span className="dot"/>Trading Simulator V9.217
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5521,14 +5521,14 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                   </tr>
                                   {/* ── Subfilas (activos) ── */}
                                   {isOpen&&rStats.map(a=>{
-                                    const ganPct=sc>0?(a.ganComp/sc)*100:0
                                     const startMs=r.result.startDate?new Date(r.result.startDate).getTime():0
                                     const lastCurveDate=r.result.compoundCurve?.slice(-1)[0]?.date
                                     const endMs=lastCurveDate?new Date(lastCurveDate).getTime():Date.now()
                                     const yrs=startMs>0?(endMs-startMs)/(365.25*24*3600*1000):5
                                     // En concentrado, usar capital medio real por trade (no slotCapital=capitalIni/n)
-                                    // para evitar denominador incorrecto que producía -74.89% fijo al hacer clamp
+                                    // para evitar denominador incorrecto en G.Comp% y CAGR
                                     const capBase=(r.result.modoAsig==='concentrado'&&a.avgCapAsignado)?a.avgCapAsignado:sc
+                                    const ganPct=capBase>0?(a.ganComp/capBase)*100:0
                                     const cagr=capBase>0&&yrs>0?(Math.pow(Math.max((capBase+a.ganComp)/capBase,0.001),1/yrs)-1)*100:0
                                     const assetTrades=allT.filter(t=>t.symbol===a.symbol)
                                     const sumWin=assetTrades.filter(t=>t.pnlSimple>0).reduce((s,t)=>s+t.pnlSimple,0)
