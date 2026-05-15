@@ -3078,7 +3078,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.215</title>
+        <title>Trading Simulator V9.216</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3156,7 +3156,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.215
+            <span className="dot"/>Trading Simulator V9.216
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4052,7 +4052,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         {id:'compartido',label:'Capital compartido',ready:true,
                           desc:'El capital libre se reparte a partes iguales entre los activos que van a entrar. Justo antes de cada entrada: capital_por_slot = pool_libre / slots_libres. Cuando un trade cierra, su capital (con ganancias o pérdidas) vuelve al pool. Ejemplo: 1000€ con 4 activos. Los 4 entran → 250€ cada uno. NVDA cierra +42% → devuelve 355€ al pool. Solo TSLA sigue abierto → pool = 355€ + restantes. Próxima entrada de NVDA: 355€ / slots_libres en ese momento.'},
                         {id:'concentrado',label:'Capital concentrado',ready:true,
-                          desc:'Usa un pool de capital compartido, pero concentra el capital disponible en los activos con señal activa. El tamaño de cada posición se calcula sobre el capital libre real, con un máximo de 1/N del capital total por posición. Cuantas menos posiciones abiertas, mayor tamaño por entrada.'},
+                          desc:'Usa un pool de capital compartido, pero concentra el capital disponible en los activos con señal activa. Nunca habrá más de N activos abiertos simultáneamente — cuando todos los slots están ocupados, las nuevas señales se descartan hasta que cierre alguno. Al cerrar una operación, el capital con sus ganancias o pérdidas vuelve al pool y queda disponible para el siguiente activo con señal. Cuantos menos activos simultáneos configures, mayor será el capital por operación.'},
                         {id:'positionsizing',label:'Position Sizing',ready:true,
                           desc:'Calcula dinámicamente el tamaño de cada posición según el stop loss. Permite posiciones simultáneas con tamaños variables.'},
                       ].map(m=>{
@@ -4099,9 +4099,9 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   {(mcStratSelected.length<=1?selectedModos.includes('concentrado'):mcMode==='concentrado')&&(
                     <div style={{padding:'8px 10px',borderTop:'1px solid #1a2a3a'}}>
                       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:2}}>
-                        <span title="Número máximo de posiciones simultáneas abiertas. Determina el techo de capital por posición (capitalTotal / maxPosiciones)."
+                        <span title="Número máximo de activos abiertos simultáneamente. Cuantos menos configures, mayor será el capital asignado por operación."
                           style={{fontSize:9,color:'#4a6a88',cursor:'help',textDecoration:'underline dotted'}}>
-                          Máx. posiciones simultáneas
+                          Máx. activos simultáneos
                         </span>
                         <input type="number" min="1" max="20" step="1"
                           value={mcMaxPosiciones}
