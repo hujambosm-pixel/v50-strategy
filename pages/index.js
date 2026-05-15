@@ -3078,7 +3078,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.218</title>
+        <title>Trading Simulator V9.219</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3156,7 +3156,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.218
+            <span className="dot"/>Trading Simulator V9.219
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5526,7 +5526,11 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                     const startMs=r.result.startDate?new Date(r.result.startDate).getTime():0
                                     const lastCurveDate=r.result.compoundCurve?.slice(-1)[0]?.date
                                     const endMs=lastCurveDate?new Date(lastCurveDate).getTime():Date.now()
-                                    const yrs=startMs>0?(endMs-startMs)/(365.25*24*3600*1000):5
+                                    const yrs=startMs>0
+                                      ?(endMs-startMs)/(365.25*24*3600*1000)
+                                      :mcPeriodMode==='range'&&mcFromDate&&mcToDate
+                                        ?(new Date(mcToDate)-new Date(mcFromDate))/(365.25*24*3600*1000)
+                                        :mcYears
                                     // En concentrado, usar capital medio real por trade (no slotCapital=capitalIni/n)
                                     // para evitar denominador incorrecto en G.Comp% y CAGR
                                     const capBase=(r.result.modoAsig==='concentrado'&&a.avgCapAsignado)?a.avgCapAsignado:sc
@@ -5589,6 +5593,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                     <td style={{padding:'5px 6px',color:'#4a6a88'}}>—</td>
                                     <td style={{padding:'5px 6px',color:'#4a6a88'}}>—</td>
                                     <td style={{padding:'5px 6px',color:'#ff9a3c',fontWeight:600}}>-{fmt(mcResult.maxDDBH||0,1,'%')}</td>
+                                    <td style={{padding:'5px 6px',color:'#4a6a88'}}>—</td>
                                     <td style={{padding:'5px 6px',color:'#9acce0'}}>100%</td>
                                     <td style={{padding:'5px 6px',color:'#9acce0'}}>100%</td>
                                   </tr>
@@ -5617,6 +5622,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                         <td style={{padding:'4px 6px',color:'#4a6a88'}}>—</td>
                                         <td style={{padding:'4px 6px',color:'#4a6a88'}}>—</td>
                                         <td style={{padding:'4px 6px',color:'#ff9a3c'}}>{a.priceMaxDD>0?'-'+fmt(a.priceMaxDD,2,'%'):'—'}</td>
+                                        <td style={{padding:'4px 6px',color:'#7ab3cc'}}>{fmt(sc,0,'€')}</td>
                                         <td style={{padding:'4px 6px',color:'#9acce0'}}>100%</td>
                                         <td style={{padding:'4px 6px',color:'#9acce0'}}>100%</td>
                                       </tr>
