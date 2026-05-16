@@ -3083,7 +3083,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.226</title>
+        <title>Trading Simulator V9.227</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3161,7 +3161,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.226
+            <span className="dot"/>Trading Simulator V9.227
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5428,11 +5428,6 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       ?<>Desde {fmtDate(mcFromDate)} hasta {fmtDate(mcToDate)}</>
                       :<>Desde {fmtDate(mcResult.startDate)}</>}
                   </span>
-                  <div style={{marginLeft:'auto',display:'flex',gap:6,alignItems:'center'}}>
-                    <button onClick={()=>mcChartApiRef.current?.fitAll()}
-                      style={{fontFamily:MONO,fontSize:10,padding:'3px 8px',borderRadius:3,cursor:'pointer',border:'1px solid #1a2d45',background:'rgba(0,212,255,0.07)',color:'#7a9bc0'}}
-                      title="Ver periodo completo">⊠ Periodo completo</button>
-                  </div>
                 </div>
 
                 {/* ── Tabla unificada: Comparativa + Resumen por activo ── */}
@@ -5708,6 +5703,9 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         </button>
                       ))
                     )}
+                    <button onClick={()=>mcChartApiRef.current?.fitAll()}
+                      style={{marginLeft:'auto',fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',border:'1px solid #1a2d45',background:'rgba(0,212,255,0.07)',color:'#7a9bc0',flexShrink:0}}
+                      title="Ver periodo completo">⊠ Periodo completo</button>
                   </div>
                   {mcMultiResults.length>1?(
                     <StratCompareChart
@@ -5780,7 +5778,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                   else if(mcMultiResults.length===0&&mcShowBH&&mcResult.bhCurve?.length)
                     mSeries=[...mSeries,{id:'__bh__',name:'B&H Diversif.',color:'#a0b4c8',compoundCurve:mcResult.bhCurve}]
                   if(!mSeries.some(s=>s.compoundCurve?.length)) return null
-                  return <McMonthlyGainsChart series={mSeries} capitalIni={capIniNum}/>
+                  return <McMonthlyGainsChart series={mSeries} capitalIni={capIniNum} syncRef={chartSyncRef}/>
                 })()}
 
                 {/* ── Capital empleado MC — multi-series por estrategia ── */}

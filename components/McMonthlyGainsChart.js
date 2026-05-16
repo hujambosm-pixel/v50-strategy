@@ -1,12 +1,19 @@
 // McMonthlyGainsChart — Ganancias mensuales por estrategia (recharts)
 // Importado con ssr:false desde pages/index.js para evitar problemas de SSR
-import { useMemo } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip,
   ReferenceLine, ResponsiveContainer
 } from 'recharts'
 
 const MONO = '"JetBrains Mono","Fira Code","IBM Plex Mono",monospace'
+
+// LW visible range values can be date strings ('YYYY-MM-DD') or Unix timestamps (seconds)
+function rangeValToMonth(v) {
+  if (!v && v !== 0) return null
+  if (typeof v === 'number') return new Date(v * 1000).toISOString().slice(0, 7)
+  return String(v).slice(0, 7)
+}
 
 function computeMonthlyGains(curve, capitalIni) {
   if (!curve?.length) return {}
@@ -29,7 +36,27 @@ function fmtMonth(m) {
   return `${m.slice(5, 7)}/${m.slice(2, 4)}`
 }
 
-export default function McMonthlyGainsChart({ series = [], capitalIni }) {
+export default function McMonthlyGainsChart({ series = [], capitalIni, syncRef }) {
+  // FIX 1: track the visible time range published by the LW sync bus
+  const [visibleRange, setVisibleRange] = useState(null)
+
+  useEffect(() => {
+    if (!syncRef?.current) return
+    const id = Symbol()
+    const handler = (range) => {
+      if (!range) return
+      setVisibleRange({
+        from: rangeValToMonth(range.from),
+        to:   rangeValToMonth(range.to),
+      })
+    }
+    syncRef.current.listeners.push({ id, handler })
+    return () => {
+      if (syncRef.current)
+        syncRef.current.listeners = syncRef.current.listeners.filter(e => e.id !== id)
+    }
+  }, [syncRef])
+
   const validSeries = useMemo(
     () => series.filter(s => s.compoundCurve?.length),
     [series]
@@ -57,12 +84,20 @@ export default function McMonthlyGainsChart({ series = [], capitalIni }) {
 
   if (!validSeries.length || !data.length) return null
 
-  // Show at most one tick label every N months to avoid crowding
-  const tickEvery = data.length > 48 ? 6 : data.length > 24 ? 3 : data.length > 12 ? 2 : 1
-  const xTicks = allMonths.filter((_, i) => i % tickEvery === 0)
+  // FIX 1: filter to visible range when sync provides one
+  const displayData = visibleRange?.from && visibleRange?.to
+    ? data.filter(d => d.month >= visibleRange.from && d.month <= visibleRange.to)
+    : data
 
-  // FIX 1: right-axis width mirrors lightweight-charts rightPriceScale width (~58px)
-  const yAxisWidth = 58
+  const months = displayData.map(d => d.month)
+
+  // Show at most one tick label every N months to avoid crowding
+  const tickEvery = months.length > 48 ? 6 : months.length > 24 ? 3 : months.length > 12 ? 2 : 1
+  const xTicks = months.filter((_, i) => i % tickEvery === 0)
+
+  // FIX 2: right-axis width — LW rightPriceScale auto-sizes; 56px matches typical
+  // auto-width for financial values (no explicit width set in LW chart options)
+  const yAxisWidth = 56
 
   const CustomTooltip = ({ active, payload, label }) => {
     if (!active || !payload?.length) return null
@@ -98,8 +133,8 @@ export default function McMonthlyGainsChart({ series = [], capitalIni }) {
       <div style={{ height: 110 }}>
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
-            data={data}
-            margin={{ top: 4, right: 0, left: 4, bottom: 2 }}
+            data={displayData}
+            margin={{ top: 4, right: 0, left: 0, bottom: 2 }}
             barCategoryGap="20%"
             barGap={1}
           >
@@ -111,7 +146,7 @@ export default function McMonthlyGainsChart({ series = [], capitalIni }) {
               axisLine={{ stroke: '#1a2d45' }}
               tickLine={false}
             />
-            {/* FIX 2: YAxis a la derecha, alineado con rightPriceScale de lightweight-charts */}
+            {/* FIX 2: orientation=right, width matches LW rightPriceScale auto-width */}
             <YAxis
               orientation="right"
               tickFormatter={v => {
@@ -127,7 +162,6 @@ export default function McMonthlyGainsChart({ series = [], capitalIni }) {
             />
             <ReferenceLine y={0} stroke="rgba(255,255,255,0.12)" />
             <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(0,212,255,0.06)' }} />
-            {/* FIX 3: color fijo por estrategia, sin Cell verde/rojo */}
             {validSeries.map(s => (
               <Bar
                 key={s.id}
