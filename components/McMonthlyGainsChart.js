@@ -8,8 +8,10 @@ import {
 
 const MONO = '"JetBrains Mono","Fira Code","IBM Plex Mono",monospace'
 
-// YAxis width inside recharts SVG; outer div has paddingRight:75 to align plot area with LW charts
-const Y_AXIS_W_DEFAULT = 58
+// FIXED right-gutter width shared with ALL LW charts (rightPriceScale.width in
+// BacktestCharts.js). Must stay identical so every chart's plot area ends at the
+// same x. Single number to tune for alignment.
+const Y_AXIS_W_DEFAULT = 64
 
 // LW visible range values can be date strings ('YYYY-MM-DD') or Unix timestamps (seconds)
 function rangeValToMonth(v) {
@@ -162,7 +164,7 @@ export default function McMonthlyGainsChart({ series = [], capitalIni, syncRef }
         <button style={btnStyle(showPct)}  onClick={() => setShowPct(true)}
           title="Rentabilidad mensual en porcentaje. Calculada como la variación relativa entre el último valor de la equity al cierre de cada mes y el último valor del mes anterior. El primer mes se calcula sobre el capital inicial.">%</button>
       </div>
-      <div style={{ height: 180, paddingRight: 75 }}>
+      <div style={{ height: 180 }}>
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={displayData}
