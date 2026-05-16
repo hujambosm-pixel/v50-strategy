@@ -696,6 +696,9 @@ export default function Home() {
   const [mcYears,setMcYears]=useState(5)
   const [mcFromDate,setMcFromDate]=useState(()=>{const d=new Date();d.setFullYear(d.getFullYear()-5);return d.toISOString().slice(0,10)})
   const [mcToDate,setMcToDate]=useState(()=>new Date().toISOString().slice(0,10))
+  const isoToDisplay=s=>s&&/^\d{4}-\d{2}-\d{2}$/.test(s)?s.split('-').reverse().join('/'):s||''
+  const [fromDisplay,setFromDisplay]=useState(()=>{const d=new Date();d.setFullYear(d.getFullYear()-5);return d.toISOString().slice(0,10).split('-').reverse().join('/')})
+  const [toDisplay,setToDisplay]=useState(()=>new Date().toISOString().slice(0,10).split('-').reverse().join('/'))
   const [mcHistStratId,setMcHistStratId]=useState(null) // null=estrategia activa, string=id específico
   const [mcResult,setMcResult]=useState(null)
   const [mcLoading,setMcLoading]=useState(false)
@@ -3080,7 +3083,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.224</title>
+        <title>Trading Simulator V9.225</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3158,7 +3161,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.224
+            <span className="dot"/>Trading Simulator V9.225
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4010,29 +4013,28 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         style={{flex:1,fontFamily:MONO,fontSize:11,background:'var(--bg2)',border:'1px solid var(--border)',borderRadius:3,padding:'3px 6px',color:'var(--fg)',textAlign:'right'}}/>
                     </div>
                   ):(
-                    <div style={{display:'flex',flexDirection:'column',gap:5}}>
-                      {(()=>{
-                        const toDisplay=s=>s&&/^\d{4}-\d{2}-\d{2}$/.test(s)?s.split('-').reverse().join('/'):s||''
-                        const toInternal=s=>s&&/^\d{2}\/\d{2}\/\d{4}$/.test(s)?s.split('/').reverse().join('-'):null
-                        const inputStyle={width:'100%',fontFamily:MONO,fontSize:11,background:'var(--bg2)',border:'1px solid var(--border)',borderRadius:3,padding:'3px 6px',color:'var(--fg)'}
-                        return(<>
+                    {(()=>{
+                      const disp2int=s=>{if(s&&/^\d{2}\/\d{2}\/\d{4}$/.test(s)){const[d,m,y]=s.split('/');const iso=`${y}-${m}-${d}`;if(!isNaN(new Date(iso)))return iso}return null}
+                      const inputStyle={width:'100%',fontFamily:MONO,fontSize:11,background:'var(--bg2)',border:'1px solid var(--border)',borderRadius:3,padding:'3px 6px',color:'var(--fg)'}
+                      return(
+                        <div style={{display:'flex',flexDirection:'column',gap:5}}>
                           <div style={{display:'flex',alignItems:'center',gap:8}}>
                             <span style={{fontFamily:MONO,fontSize:11,color:'#4a6a88',whiteSpace:'nowrap',width:32}}>Desde</span>
-                            <input type="text" placeholder="dd/mm/yyyy" value={toDisplay(mcFromDate)}
-                              onChange={e=>{const v=toInternal(e.target.value);if(v)setMcFromDate(v)}}
-                              onBlur={e=>{const v=toInternal(e.target.value);if(!v)e.target.value=toDisplay(mcFromDate)}}
+                            <input type="text" placeholder="dd/mm/yyyy" value={fromDisplay}
+                              onChange={e=>setFromDisplay(e.target.value)}
+                              onBlur={e=>{const v=disp2int(e.target.value);if(v){setMcFromDate(v)}else{setFromDisplay(isoToDisplay(mcFromDate))}}}
                               style={inputStyle}/>
                           </div>
                           <div style={{display:'flex',alignItems:'center',gap:8}}>
                             <span style={{fontFamily:MONO,fontSize:11,color:'#4a6a88',whiteSpace:'nowrap',width:32}}>Hasta</span>
-                            <input type="text" placeholder="dd/mm/yyyy" value={toDisplay(mcToDate)}
-                              onChange={e=>{const v=toInternal(e.target.value);if(v)setMcToDate(v)}}
-                              onBlur={e=>{const v=toInternal(e.target.value);if(!v)e.target.value=toDisplay(mcToDate)}}
+                            <input type="text" placeholder="dd/mm/yyyy" value={toDisplay}
+                              onChange={e=>setToDisplay(e.target.value)}
+                              onBlur={e=>{const v=disp2int(e.target.value);if(v){setMcToDate(v)}else{setToDisplay(isoToDisplay(mcToDate))}}}
                               style={inputStyle}/>
                           </div>
-                        </>)
-                      })()}
-                    </div>
+                        </div>
+                      )
+                    })()}
                   )}
                 </div>
 
