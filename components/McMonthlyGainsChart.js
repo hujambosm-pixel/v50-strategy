@@ -166,7 +166,7 @@ export default function McMonthlyGainsChart({ series = [], capitalIni, syncRef }
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={displayData}
-            margin={{ top: 4, right: 75, left: 0, bottom: 2 }}
+            margin={{ top: 4, right: 58, left: 0, bottom: 2 }}
             barCategoryGap="20%"
             barGap={1}
           >
