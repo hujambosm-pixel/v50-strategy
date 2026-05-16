@@ -3078,7 +3078,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.220</title>
+        <title>Trading Simulator V9.221</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3156,7 +3156,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.220
+            <span className="dot"/>Trading Simulator V9.221
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5409,7 +5409,11 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                 <div style={{padding:'7px 16px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
                   <span style={{fontFamily:MONO,fontSize:13,color:'var(--accent)',fontWeight:700}}>📊 Multicartera</span>
                   <span style={{fontFamily:MONO,fontSize:11,color:'#8ab8d4'}}>{mcResult.n} activos · <span style={{color:mcResult.modoAsig==='custom'?'#9b72ff':'#00d4ff'}}>{mcResult.modoAsig==='compartido'?'Capital compartido':mcResult.modoAsig==='concentrado'?'Capital concentrado':'Slots iguales'}</span></span>
-                  <span style={{fontFamily:MONO,fontSize:11,color:'#8ab8d4'}}>Desde {fmtDate(mcPeriodMode==='range'&&mcFromDate?mcFromDate:mcResult.startDate)}</span>
+                  <span style={{fontFamily:MONO,fontSize:11,color:'#8ab8d4'}}>
+                    {mcPeriodMode==='range'&&mcFromDate&&mcToDate
+                      ?<>Desde {fmtDate(mcFromDate)} hasta {fmtDate(mcToDate)}</>
+                      :<>Desde {fmtDate(mcResult.startDate)}</>}
+                  </span>
                   <div style={{marginLeft:'auto',display:'flex',gap:6,alignItems:'center'}}>
                     <button onClick={()=>mcChartApiRef.current?.fitAll()}
                       style={{fontFamily:MONO,fontSize:10,padding:'3px 8px',borderRadius:3,cursor:'pointer',border:'1px solid #1a2d45',background:'rgba(0,212,255,0.07)',color:'#7a9bc0'}}
@@ -5483,10 +5487,11 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               const firstC=r.result.compoundCurve?.[0]?.value||capIni
                               const fd=r.result.startDate?new Date(r.result.startDate):null
                               const ld=r.result.compoundCurve?.slice(-1)[0]?.date?new Date(r.result.compoundCurve.slice(-1)[0].date):new Date()
-                              const anios=fd&&ld?(ld-fd)/86400000/365.25
-                                :mcPeriodMode==='range'&&mcFromDate&&mcToDate
-                                  ?(new Date(mcToDate)-new Date(mcFromDate))/(365.25*24*3600*1000)
-                                  :mcYears
+                              // Modo rango: usar siempre las fechas del usuario (fd/ld son del span completo de datos)
+                              const anios=mcPeriodMode==='range'&&mcFromDate&&mcToDate
+                                ?(new Date(mcToDate)-new Date(mcFromDate))/(365.25*24*3600*1000)
+                                :fd&&ld?(ld-fd)/86400000/365.25
+                                :mcYears
                               const cagrC=(Math.pow(Math.max(lastC,0.01)/Math.max(firstC,0.01),1/Math.max(anios,0.01))-1)*100
                               const grossWin=wins.reduce((s,t)=>s+(t.pnlSimple||0),0)
                               const grossLoss=Math.abs(losses.reduce((s,t)=>s+(t.pnlSimple||0),0))
