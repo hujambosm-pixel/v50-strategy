@@ -2,13 +2,11 @@
 // Importado con ssr:false desde pages/index.js para evitar problemas de SSR
 import { useMemo } from 'react'
 import {
-  BarChart, Bar, Cell, XAxis, YAxis, Tooltip,
+  BarChart, Bar, XAxis, YAxis, Tooltip,
   ReferenceLine, ResponsiveContainer
 } from 'recharts'
 
 const MONO = '"JetBrains Mono","Fira Code","IBM Plex Mono",monospace'
-const GREEN = '#00e5a0'
-const RED   = '#ff4d6d'
 
 function computeMonthlyGains(curve, capitalIni) {
   if (!curve?.length) return {}
@@ -29,11 +27,6 @@ function fmtMonth(m) {
   // 'YYYY-MM' → 'MM/YY'
   if (!m || m.length < 7) return m
   return `${m.slice(5, 7)}/${m.slice(2, 4)}`
-}
-
-function fmtEur(v) {
-  const n = Math.round(v || 0)
-  return (n >= 0 ? '+' : '') + n.toLocaleString('es-ES') + '€'
 }
 
 export default function McMonthlyGainsChart({ series = [], capitalIni }) {
@@ -68,6 +61,9 @@ export default function McMonthlyGainsChart({ series = [], capitalIni }) {
   const tickEvery = data.length > 48 ? 6 : data.length > 24 ? 3 : data.length > 12 ? 2 : 1
   const xTicks = allMonths.filter((_, i) => i % tickEvery === 0)
 
+  // FIX 1: right-axis width mirrors lightweight-charts rightPriceScale width (~58px)
+  const yAxisWidth = 58
+
   const CustomTooltip = ({ active, payload, label }) => {
     if (!active || !payload?.length) return null
     return (
@@ -79,10 +75,11 @@ export default function McMonthlyGainsChart({ series = [], capitalIni }) {
         {payload.map(p => {
           const s = validSeries.find(x => x.id === p.dataKey)
           const v = Math.round(p.value || 0)
+          const color = s?.color || '#7aabcc'
           return (
-            <div key={p.dataKey} style={{ color: v >= 0 ? GREEN : RED, display: 'flex', gap: 6 }}>
+            <div key={p.dataKey} style={{ display: 'flex', gap: 6 }}>
               <span style={{ color: '#4a6a88' }}>{s?.name || p.dataKey}:</span>
-              <span>{v >= 0 ? '+' : ''}{v.toLocaleString('es-ES')}€</span>
+              <span style={{ color }}>{v >= 0 ? '+' : ''}{v.toLocaleString('es-ES')}€</span>
             </div>
           )
         })}
@@ -102,7 +99,7 @@ export default function McMonthlyGainsChart({ series = [], capitalIni }) {
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={data}
-            margin={{ top: 6, right: 12, left: 0, bottom: 4 }}
+            margin={{ top: 4, right: 0, left: 4, bottom: 2 }}
             barCategoryGap="20%"
             barGap={1}
           >
@@ -114,7 +111,9 @@ export default function McMonthlyGainsChart({ series = [], capitalIni }) {
               axisLine={{ stroke: '#1a2d45' }}
               tickLine={false}
             />
+            {/* FIX 2: YAxis a la derecha, alineado con rightPriceScale de lightweight-charts */}
             <YAxis
+              orientation="right"
               tickFormatter={v => {
                 const n = Math.abs(Math.round(v))
                 if (n >= 1000000) return (v >= 0 ? '+' : '-') + (n / 1000000).toFixed(1) + 'M€'
@@ -124,20 +123,20 @@ export default function McMonthlyGainsChart({ series = [], capitalIni }) {
               tick={{ fill: '#4a6a88', fontSize: 8, fontFamily: MONO }}
               axisLine={false}
               tickLine={false}
-              width={52}
+              width={yAxisWidth}
             />
             <ReferenceLine y={0} stroke="rgba(255,255,255,0.12)" />
             <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(0,212,255,0.06)' }} />
+            {/* FIX 3: color fijo por estrategia, sin Cell verde/rojo */}
             {validSeries.map(s => (
-              <Bar key={s.id} dataKey={s.id} maxBarSize={20} isAnimationActive={false}>
-                {data.map((entry, i) => (
-                  <Cell
-                    key={i}
-                    fill={(entry[s.id] ?? 0) >= 0 ? GREEN : RED}
-                    fillOpacity={0.85}
-                  />
-                ))}
-              </Bar>
+              <Bar
+                key={s.id}
+                dataKey={s.id}
+                fill={s.color}
+                fillOpacity={0.85}
+                maxBarSize={20}
+                isAnimationActive={false}
+              />
             ))}
           </BarChart>
         </ResponsiveContainer>
