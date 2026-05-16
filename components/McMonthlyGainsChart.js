@@ -3,10 +3,13 @@
 import { useMemo, useState, useEffect } from 'react'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip,
-  ReferenceLine, ResponsiveContainer
+  ReferenceLine, ResponsiveContainer, CartesianGrid
 } from 'recharts'
 
 const MONO = '"JetBrains Mono","Fira Code","IBM Plex Mono",monospace'
+
+// FIX 2: explicit width matching McOccupancyChart's rightPriceScale width:58
+const Y_AXIS_W = 58
 
 // LW visible range values can be date strings ('YYYY-MM-DD') or Unix timestamps (seconds)
 function rangeValToMonth(v) {
@@ -25,30 +28,49 @@ function computeMonthlyGains(curve, capitalIni) {
   const months = Object.keys(byMonth).sort()
   const result = {}
   months.forEach((m, i) => {
-    result[m] = byMonth[m] - (i === 0 ? capitalIni : byMonth[months[i - 1]])
+    const curr = byMonth[m]
+    const prev = i === 0 ? capitalIni : byMonth[months[i - 1]]
+    result[m] = {
+      eur: curr - prev,
+      pct: prev > 0 ? (curr - prev) / prev * 100 : 0,
+    }
   })
   return result
 }
 
 function fmtMonth(m) {
-  // 'YYYY-MM' → 'MM/YY'
   if (!m || m.length < 7) return m
   return `${m.slice(5, 7)}/${m.slice(2, 4)}`
 }
 
-export default function McMonthlyGainsChart({ series = [], capitalIni, syncRef }) {
-  // FIX 1: track the visible time range published by the LW sync bus
-  const [visibleRange, setVisibleRange] = useState(null)
+function fmtEur(v) {
+  const n = Math.round(v || 0)
+  const abs = Math.abs(n)
+  if (abs >= 1000000) return (n >= 0 ? '+' : '-') + (abs / 1000000).toFixed(1) + 'M€'
+  if (abs >= 1000)    return (n >= 0 ? '+' : '-') + (abs / 1000).toFixed(0) + 'k€'
+  return (n >= 0 ? '+' : '') + n.toLocaleString('es-ES') + '€'
+}
 
+function fmtPct(v) {
+  const n = v || 0
+  return (n >= 0 ? '+' : '') + n.toLocaleString('es-ES', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%'
+}
+
+const TICK_COLOR = '#8899aa'
+const TICK_SIZE  = 11
+const GRID_COLOR = '#1a2a3a'
+
+export default function McMonthlyGainsChart({ series = [], capitalIni, syncRef }) {
+  const [showPct, setShowPct] = useState(false)
+
+  // FIX (sync): track the visible time range published by the LW sync bus
+  const [visibleRange, setVisibleRange] = useState(null)
   useEffect(() => {
     if (!syncRef?.current) return
     const id = Symbol()
     const handler = (range) => {
       if (!range) return
-      setVisibleRange({
-        from: rangeValToMonth(range.from),
-        to:   rangeValToMonth(range.to),
-      })
+      setVisibleRange({ from: rangeValToMonth(range.from), to: rangeValToMonth(range.to) })
     }
     syncRef.current.listeners.push({ id, handler })
     return () => {
@@ -57,10 +79,7 @@ export default function McMonthlyGainsChart({ series = [], capitalIni, syncRef }
     }
   }, [syncRef])
 
-  const validSeries = useMemo(
-    () => series.filter(s => s.compoundCurve?.length),
-    [series]
-  )
+  const validSeries = useMemo(() => series.filter(s => s.compoundCurve?.length), [series])
 
   const { data, allMonths } = useMemo(() => {
     if (!validSeries.length) return { data: [], allMonths: [] }
@@ -75,7 +94,9 @@ export default function McMonthlyGainsChart({ series = [], capitalIni, syncRef }
     const data = allMonths.map(month => {
       const row = { month }
       validSeries.forEach(s => {
-        row[s.id] = monthlyBySeries[s.id][month] ?? null
+        const g = monthlyBySeries[s.id][month]
+        row[s.id + '_eur'] = g?.eur ?? null
+        row[s.id + '_pct'] = g?.pct ?? null
       })
       return row
     })
@@ -84,20 +105,20 @@ export default function McMonthlyGainsChart({ series = [], capitalIni, syncRef }
 
   if (!validSeries.length || !data.length) return null
 
-  // FIX 1: filter to visible range when sync provides one
+  // Filter to visible range when sync provides one
   const displayData = visibleRange?.from && visibleRange?.to
     ? data.filter(d => d.month >= visibleRange.from && d.month <= visibleRange.to)
     : data
 
   const months = displayData.map(d => d.month)
-
-  // Show at most one tick label every N months to avoid crowding
   const tickEvery = months.length > 48 ? 6 : months.length > 24 ? 3 : months.length > 12 ? 2 : 1
   const xTicks = months.filter((_, i) => i % tickEvery === 0)
 
-  // FIX 2: right-axis width — LW rightPriceScale auto-sizes; 56px matches typical
-  // auto-width for financial values (no explicit width set in LW chart options)
-  const yAxisWidth = 56
+  const suffix = showPct ? '_pct' : '_eur'
+  const fmtVal = showPct ? fmtPct : fmtEur
+  const fmtAxis = showPct
+    ? v => (v >= 0 ? '+' : '') + v.toFixed(1) + '%'
+    : fmtEur
 
   const CustomTooltip = ({ active, payload, label }) => {
     if (!active || !payload?.length) return null
@@ -108,19 +129,26 @@ export default function McMonthlyGainsChart({ series = [], capitalIni, syncRef }
       }}>
         <div style={{ color: '#7aabcc', marginBottom: 3 }}>{fmtMonth(label)}</div>
         {payload.map(p => {
-          const s = validSeries.find(x => x.id === p.dataKey)
-          const v = Math.round(p.value || 0)
-          const color = s?.color || '#7aabcc'
+          const s = validSeries.find(x => x.id + suffix === p.dataKey)
+          if (!s) return null
+          const v = p.value ?? 0
           return (
             <div key={p.dataKey} style={{ display: 'flex', gap: 6 }}>
-              <span style={{ color: '#4a6a88' }}>{s?.name || p.dataKey}:</span>
-              <span style={{ color }}>{v >= 0 ? '+' : ''}{v.toLocaleString('es-ES')}€</span>
+              <span style={{ color: '#4a6a88' }}>{s.name}:</span>
+              <span style={{ color: s.color }}>{fmtVal(v)}</span>
             </div>
           )
         })}
       </div>
     )
   }
+
+  const btnStyle = (active) => ({
+    fontFamily: MONO, fontSize: 9, padding: '1px 6px', borderRadius: 3,
+    cursor: 'pointer', border: `1px solid ${active ? '#00e5a0' : '#3d5a7a'}`,
+    background: active ? 'rgba(0,229,160,0.12)' : 'transparent',
+    color: active ? '#00e5a0' : '#4a6a88',
+  })
 
   return (
     <div style={{ borderTop: '1px solid var(--border)' }}>
@@ -129,6 +157,8 @@ export default function McMonthlyGainsChart({ series = [], capitalIni, syncRef }
         gap: 6, fontFamily: MONO, fontSize: 11
       }}>
         <span style={{ color: '#00e5a0', fontWeight: 600 }}>Ganancias mensuales</span>
+        <button style={btnStyle(!showPct)} onClick={() => setShowPct(false)}>€</button>
+        <button style={btnStyle(showPct)}  onClick={() => setShowPct(true)}>%</button>
       </div>
       <div style={{ height: 110 }}>
         <ResponsiveContainer width="100%" height="100%">
@@ -138,34 +168,31 @@ export default function McMonthlyGainsChart({ series = [], capitalIni, syncRef }
             barCategoryGap="20%"
             barGap={1}
           >
+            <CartesianGrid vertical={false} horizontal={true} stroke={GRID_COLOR} strokeOpacity={0.7} />
             <XAxis
               dataKey="month"
               ticks={xTicks}
               tickFormatter={fmtMonth}
-              tick={{ fill: '#4a6a88', fontSize: 8, fontFamily: MONO }}
+              tick={{ fill: TICK_COLOR, fontSize: TICK_SIZE, fontFamily: MONO }}
               axisLine={{ stroke: '#1a2d45' }}
               tickLine={false}
             />
-            {/* FIX 2: orientation=right, width matches LW rightPriceScale auto-width */}
+            {/* FIX 2: width=58 matches McOccupancyChart rightPriceScale width:58 */}
             <YAxis
               orientation="right"
-              tickFormatter={v => {
-                const n = Math.abs(Math.round(v))
-                if (n >= 1000000) return (v >= 0 ? '+' : '-') + (n / 1000000).toFixed(1) + 'M€'
-                if (n >= 1000) return (v >= 0 ? '+' : '-') + (n / 1000).toFixed(0) + 'k€'
-                return (v >= 0 ? '+' : '') + Math.round(v) + '€'
-              }}
-              tick={{ fill: '#4a6a88', fontSize: 8, fontFamily: MONO }}
+              tickFormatter={fmtAxis}
+              tickCount={5}
+              tick={{ fill: TICK_COLOR, fontSize: TICK_SIZE, fontFamily: MONO }}
               axisLine={false}
               tickLine={false}
-              width={yAxisWidth}
+              width={Y_AXIS_W}
             />
-            <ReferenceLine y={0} stroke="rgba(255,255,255,0.12)" />
+            <ReferenceLine y={0} stroke="rgba(255,255,255,0.18)" strokeWidth={1} />
             <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(0,212,255,0.06)' }} />
             {validSeries.map(s => (
               <Bar
                 key={s.id}
-                dataKey={s.id}
+                dataKey={s.id + suffix}
                 fill={s.color}
                 fillOpacity={0.85}
                 maxBarSize={20}

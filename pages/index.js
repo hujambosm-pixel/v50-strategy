@@ -3083,7 +3083,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.227</title>
+        <title>Trading Simulator V9.228</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3161,7 +3161,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.227
+            <span className="dot"/>Trading Simulator V9.228
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5487,7 +5487,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           </thead>
                           <tbody>
                             {stratList.map(r=>{
-                              const isOpen=!isMulti||mcAssetOpen[r.id]===true
+                              const isOpen=mcAssetOpen[r.id]===true
                               const isActive=r.id===currentStratId
                               const allT=r.result.allTrades||[]
                               const wins=allT.filter(t=>t.pnlPct>=0),losses=allT.filter(t=>t.pnlPct<0)
@@ -5515,13 +5515,13 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                 <Fragment key={r.id}>
                                   {/* ── Fila madre (estrategia) ── */}
                                   <tr
-                                    onClick={()=>isMulti&&setMcAssetOpen(v=>({...v,[r.id]:!isOpen}))}
+                                    onClick={()=>setMcAssetOpen(v=>({...v,[r.id]:!isOpen}))}
                                     style={{borderBottom:'1px solid rgba(255,255,255,0.04)',
                                       background:r.color+'14',
-                                      cursor:isMulti?'pointer':undefined}}>
+                                      cursor:'pointer'}}>
                                     <td style={{padding:'5px 6px'}}>
                                       <div style={{display:'flex',alignItems:'center',gap:5}}>
-                                        {isMulti&&<span style={{fontFamily:MONO,fontSize:9,color:'#4a7a9a',width:8,flexShrink:0}}>{isOpen?'▼':'▶'}</span>}
+                                        <span style={{fontFamily:MONO,fontSize:9,color:'#4a7a9a',width:8,flexShrink:0}}>{isOpen?'▼':'▶'}</span>
                                         <div style={{width:7,height:7,borderRadius:'50%',background:r.color,flexShrink:0}}/>
                                         <span style={{color:r.color,fontWeight:600}}>{r.name}</span>
                                         {isActive&&isMulti&&<span style={{fontSize:7,color:'#00d4ff',background:'rgba(0,212,255,0.1)',border:'1px solid rgba(0,212,255,0.25)',borderRadius:2,padding:'0 3px',flexShrink:0}}>✓</span>}
