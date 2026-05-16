@@ -721,7 +721,6 @@ export default function Home() {
   const chartLegendRef=useRef(null)   // external legend ref for integrated chart info bar
 
   const mcChartApiRef=useRef(null)
-  const [mcPriceScaleWidth,setMcPriceScaleWidth]=useState(58)  // ancho real del rightPriceScale del equity LW
   const [mcStratSelected,setMcStratSelected]=useState([])   // strategy IDs selected for comparison
   const [mcMultiResults,setMcMultiResults]=useState([])     // [{id,name,color,result}]
   const [mcProgress,setMcProgress]=useState(null)           // null|{current,total,name}
@@ -2729,16 +2728,6 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
     setMcLoading(false);setMcProgress(null)
   },[mcSelected,mcMode,selectedModos,mcWeights,mcCapital,mcCapitalIni,mcYears,mcPeriodMode,mcFromDate,mcToDate,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL,rankingData,mcStratSelected,strategies,currentStratId,mcRiskPerTrade,mcMaxPortfolioPct,mcMaxAccumRisk,mcMaxPosiciones])
 
-  // Medir el ancho real del rightPriceScale del equity chart tras cada resultado
-  useEffect(()=>{
-    if(!mcResult) return
-    const id=setTimeout(()=>{
-      const w=mcChartApiRef.current?.getPriceScaleWidth?.()
-      if(w>0) setMcPriceScaleWidth(w)
-    },120)  // defer para que LW haya pintado y calculado el ancho
-    return()=>clearTimeout(id)
-  },[mcResult])
-
   // Auto-inicializar pesos iguales cuando cambian activos seleccionados (modo custom)
   useEffect(()=>{
     if(mcMode!=='custom'||mcSelected.length===0) return
@@ -3094,7 +3083,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.230</title>
+        <title>Trading Simulator V9.231</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3172,7 +3161,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.230
+            <span className="dot"/>Trading Simulator V9.231
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5787,7 +5776,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                   else if(mcMultiResults.length===0&&mcShowBH&&mcResult.bhCurve?.length)
                     mSeries=[...mSeries,{id:'__bh__',name:'B&H Diversif.',color:'#a0b4c8',compoundCurve:mcResult.bhCurve}]
                   if(!mSeries.some(s=>s.compoundCurve?.length)) return null
-                  return <McMonthlyGainsChart series={mSeries} capitalIni={capIniNum} syncRef={chartSyncRef} axisWidth={mcPriceScaleWidth}/>
+                  return <McMonthlyGainsChart series={mSeries} capitalIni={capIniNum} syncRef={chartSyncRef}/>
                 })()}
 
                 {/* ── Capital empleado MC — multi-series por estrategia ── */}
@@ -5811,7 +5800,6 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       }
                       capitalIni={Number(mcCapitalIni||capitalIni)}
                       syncRef={chartSyncRef}
-                      axisWidth={mcPriceScaleWidth}
                     />
                   </div>
                 )}

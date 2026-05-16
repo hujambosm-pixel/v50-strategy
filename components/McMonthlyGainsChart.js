@@ -60,7 +60,7 @@ const TICK_COLOR = '#8899aa'
 const TICK_SIZE  = 11
 const GRID_COLOR = '#1a2a3a'
 
-export default function McMonthlyGainsChart({ series = [], capitalIni, syncRef, axisWidth = Y_AXIS_W_DEFAULT }) {
+export default function McMonthlyGainsChart({ series = [], capitalIni, syncRef }) {
   const [showPct, setShowPct] = useState(false)
 
   // FIX (sync): track the visible time range published by the LW sync bus
@@ -166,7 +166,7 @@ export default function McMonthlyGainsChart({ series = [], capitalIni, syncRef, 
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={displayData}
-            margin={{ top: 4, right: 0, left: 0, bottom: 2 }}
+            margin={{ top: 4, right: Y_AXIS_W_DEFAULT, left: 0, bottom: 2 }}
             barCategoryGap="20%"
             barGap={1}
           >
@@ -187,7 +187,7 @@ export default function McMonthlyGainsChart({ series = [], capitalIni, syncRef, 
               tick={{ fill: TICK_COLOR, fontSize: TICK_SIZE, fontFamily: MONO }}
               axisLine={false}
               tickLine={false}
-              width={axisWidth}
+              width={Y_AXIS_W_DEFAULT}
             />
             <ReferenceLine y={0} stroke="rgba(255,255,255,0.18)" strokeWidth={1} />
             <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(0,212,255,0.06)' }} />

@@ -63,7 +63,7 @@ export function MultiCartChart({simpleCurve,compoundCurve,bhCurve,sp500BHCurve,c
         chart.__syncCleanup=()=>{try{unsub()}catch(_){};if(syncRef.current)syncRef.current.listeners=syncRef.current.listeners.filter(e=>e.id!==syncId)}
       }
       chart.timeScale().fitContent()
-      if(onReady) onReady({fitAll:()=>{try{chart.timeScale().fitContent()}catch(_){}},getPriceScaleWidth:()=>{try{return chart.priceScale('right').width()}catch(_){return 0}}})
+      if(onReady) onReady({fitAll:()=>{try{chart.timeScale().fitContent()}catch(_){}}})
       const ro=new ResizeObserver(()=>{if(ref.current&&chartRef.current){try{chart.applyOptions({width:ref.current.clientWidth})}catch(_){}}})
       ro.observe(ref.current)
       return()=>ro.disconnect()
@@ -143,7 +143,7 @@ export function OccupancyBarChart({trades, chartData, capitalIni, syncRef, showM
 }
 
 // ── McOccupancyChart — MC capital empleado, multi-series ──
-export function McOccupancyChart({series=[], capitalIni, syncRef, axisWidth=58}) {
+export function McOccupancyChart({series=[], capitalIni, syncRef}) {
   const ref=useRef(null), chartRef=useRef(null)
   useEffect(()=>{
     const validSeries=series.filter(s=>s.occupancyCurve?.length)
@@ -155,7 +155,7 @@ export function McOccupancyChart({series=[], capitalIni, syncRef, axisWidth=58})
         layout:{background:{color:'#080c14'},textColor:'#7a9bc0'},
         grid:{vertLines:{color:'transparent'},horzLines:{color:'rgba(26,45,69,0.4)'}},
         crosshair:{mode:CrosshairMode.Normal},
-        rightPriceScale:{borderColor:'#1a2d45',width:axisWidth,scaleMargins:{top:0.08,bottom:0.0}},
+        rightPriceScale:{borderColor:'#1a2d45',width:58,scaleMargins:{top:0.08,bottom:0.0}},
         timeScale:{borderColor:'#1a2d45',timeVisible:false},
       })
       chartRef.current=chart
@@ -251,7 +251,7 @@ export function StratCompareChart({curves,capitalIni,showMaxDD=true,chartHeight=
         chart.__syncCleanup=()=>{try{unsub()}catch(_){};if(syncRef.current)syncRef.current.listeners=syncRef.current.listeners.filter(e=>e.id!==syncId)}
       }
       chart.timeScale().fitContent()
-      if(onReady) onReady({fitAll:()=>{try{chart.timeScale().fitContent()}catch(_){}},getPriceScaleWidth:()=>{try{return chart.priceScale('right').width()}catch(_){return 0}}})
+      if(onReady) onReady({fitAll:()=>{try{chart.timeScale().fitContent()}catch(_){}}})
       const ro=new ResizeObserver(()=>{if(ref.current&&chartRef.current){try{chart.applyOptions({width:ref.current.clientWidth})}catch(_){}}})
       ro.observe(ref.current)
       return()=>ro.disconnect()
