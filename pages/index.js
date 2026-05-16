@@ -2692,7 +2692,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
           modeResults.push({id:`${sid||'__single__'}__${modo}`,name:`${stratName} · ${MODE_LABELS[modo]}`,color,result:json,modo})
         }
         const vis={};modeResults.forEach(r=>{vis[r.id]=true});setMcStratVisible(vis)
-        const initialOpen={};modeResults.forEach(r=>{initialOpen[r.id]=true});initialOpen['__bh__']=true;setMcAssetOpen(initialOpen)
+        setMcAssetOpen({})
         const chartsVis={};modeResults.forEach(r=>{chartsVis[r.id]=true});setMcChartsStratVisible(chartsVis)
         setMcResult(modeResults[0].result);setMcMultiResults(modeResults);setMcIsModoCompare(true)
       }catch(e){setMcError(e.message)}finally{setMcLoading(false);setMcProgress(null)}
@@ -2718,7 +2718,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
     const activeResult=results.find(r=>r.id===currentStratId)||results[0]
     setMcResult(activeResult.result);setMcMultiResults(results);setMcIsModoCompare(false)
     const vis={};results.forEach(r=>{vis[r.id]=true});setMcStratVisible(vis)
-    const initialOpen={};results.forEach(r=>{initialOpen[r.id]=true});initialOpen['__bh__']=true;setMcAssetOpen(initialOpen)
+    setMcAssetOpen({})
     const chartsVis={};results.forEach(r=>{chartsVis[r.id]=true});setMcChartsStratVisible(chartsVis)
     setMcLoading(false);setMcProgress(null)
   },[mcSelected,mcMode,selectedModos,mcWeights,mcCapital,mcCapitalIni,mcYears,mcPeriodMode,mcFromDate,mcToDate,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL,rankingData,mcStratSelected,strategies,currentStratId,mcRiskPerTrade,mcMaxPortfolioPct,mcMaxAccumRisk,mcMaxPosiciones])
@@ -3078,7 +3078,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.221</title>
+        <title>Trading Simulator V9.222</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3156,7 +3156,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.221
+            <span className="dot"/>Trading Simulator V9.222
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4011,13 +4011,19 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     <div style={{display:'flex',flexDirection:'column',gap:5}}>
                       <div style={{display:'flex',alignItems:'center',gap:8}}>
                         <span style={{fontFamily:MONO,fontSize:11,color:'#4a6a88',whiteSpace:'nowrap',width:32}}>Desde</span>
-                        <input type="date" value={mcFromDate} onChange={e=>setMcFromDate(e.target.value)}
-                          style={{flex:1,fontFamily:MONO,fontSize:11,background:'var(--bg2)',border:'1px solid var(--border)',borderRadius:3,padding:'3px 6px',color:'var(--fg)'}}/>
+                        <div style={{flex:1}}>
+                          <input type="date" value={mcFromDate} onChange={e=>setMcFromDate(e.target.value)}
+                            style={{width:'100%',fontFamily:MONO,fontSize:11,background:'var(--bg2)',border:'1px solid var(--border)',borderRadius:3,padding:'3px 6px',color:'var(--fg)'}}/>
+                          <div style={{fontFamily:MONO,fontSize:9,color:'#4a6a88',marginTop:1,textAlign:'right'}}>{fmtDate(mcFromDate)}</div>
+                        </div>
                       </div>
                       <div style={{display:'flex',alignItems:'center',gap:8}}>
                         <span style={{fontFamily:MONO,fontSize:11,color:'#4a6a88',whiteSpace:'nowrap',width:32}}>Hasta</span>
-                        <input type="date" value={mcToDate} onChange={e=>setMcToDate(e.target.value)}
-                          style={{flex:1,fontFamily:MONO,fontSize:11,background:'var(--bg2)',border:'1px solid var(--border)',borderRadius:3,padding:'3px 6px',color:'var(--fg)'}}/>
+                        <div style={{flex:1}}>
+                          <input type="date" value={mcToDate} onChange={e=>setMcToDate(e.target.value)}
+                            style={{width:'100%',fontFamily:MONO,fontSize:11,background:'var(--bg2)',border:'1px solid var(--border)',borderRadius:3,padding:'3px 6px',color:'var(--fg)'}}/>
+                          <div style={{fontFamily:MONO,fontSize:9,color:'#4a6a88',marginTop:1,textAlign:'right'}}>{fmtDate(mcToDate)}</div>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -5438,7 +5444,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                   const bhProfit=bhLast-capIni
                   const bhProfitPct=capIni>0?bhProfit/capIni*100:0
                   const allOpenKeys=isMulti?[...stratList.map(r=>r.id),'__bh__']:[]
-                  const allOpen=isMulti&&allOpenKeys.length>0&&allOpenKeys.every(k=>mcAssetOpen[k]!==false)
+                  const allOpen=isMulti&&allOpenKeys.length>0&&allOpenKeys.every(k=>mcAssetOpen[k]===true)
                   return(
                     <div style={{padding:'10px 16px',borderBottom:'1px solid var(--border)'}}>
                       {/* Título + botón contraer/expandir */}
@@ -5478,7 +5484,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           </thead>
                           <tbody>
                             {stratList.map(r=>{
-                              const isOpen=!isMulti||mcAssetOpen[r.id]!==false
+                              const isOpen=!isMulti||mcAssetOpen[r.id]===true
                               const isActive=r.id===currentStratId
                               const allT=r.result.allTrades||[]
                               const wins=allT.filter(t=>t.pnlPct>=0),losses=allT.filter(t=>t.pnlPct<0)
@@ -5575,7 +5581,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                             })}
                             {/* ── Fila B&H ── */}
                             {mcResult.bhCurve?.length>0&&(()=>{
-                              const bhOpen=mcAssetOpen['__bh__']!==false
+                              const bhOpen=mcAssetOpen['__bh__']===true
                               const bhStats=mcResult.assetStats||[]
                               const bhWinCount=bhStats.filter(a=>a.ganBH>0).length
                               const bhWinPct=bhStats.length>0?bhWinCount/bhStats.length*100:0
