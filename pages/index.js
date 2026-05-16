@@ -3083,7 +3083,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.228</title>
+        <title>Trading Simulator V9.229</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3161,7 +3161,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.228
+            <span className="dot"/>Trading Simulator V9.229
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5446,21 +5446,19 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                   const bhCagr=(Math.pow(Math.max(bhLast,0.01)/Math.max(capIni,0.01),1/Math.max(bhAnios,0.01))-1)*100
                   const bhProfit=bhLast-capIni
                   const bhProfitPct=capIni>0?bhProfit/capIni*100:0
-                  const allOpenKeys=isMulti?[...stratList.map(r=>r.id),'__bh__']:[]
-                  const allOpen=isMulti&&allOpenKeys.length>0&&allOpenKeys.every(k=>mcAssetOpen[k]===true)
+                  const allOpenKeys=[...stratList.map(r=>r.id),...(mcResult.bhCurve?.length>0?['__bh__']:[]) ]
+                  const allOpen=allOpenKeys.length>0&&allOpenKeys.every(k=>mcAssetOpen[k]===true)
                   return(
                     <div style={{padding:'10px 16px',borderBottom:'1px solid var(--border)'}}>
                       {/* Título + botón contraer/expandir */}
                       <div style={{display:'flex',alignItems:'center',marginBottom:8}}>
                         <div style={{fontFamily:MONO,fontSize:10,color:'var(--text3)',letterSpacing:'0.05em'}}>{mcIsModoCompare?'COMPARATIVA DE MODOS':'COMPARATIVA DE ESTRATEGIAS'}</div>
-                        {isMulti&&(
-                          <button
-                            onClick={()=>setMcAssetOpen(prev=>{const next={};allOpenKeys.forEach(k=>{next[k]=!allOpen});return next})}
-                            style={{marginLeft:'auto',fontFamily:MONO,fontSize:9,padding:'2px 7px',borderRadius:3,cursor:'pointer',
-                              border:'1px solid #3d5a7a',background:'transparent',color:'#7aabcc'}}>
-                            {allOpen?'Contraer todo':'Expandir todo'}
-                          </button>
-                        )}
+                        <button
+                          onClick={()=>setMcAssetOpen(prev=>{const next={};allOpenKeys.forEach(k=>{next[k]=!allOpen});return next})}
+                          style={{marginLeft:'auto',fontFamily:MONO,fontSize:9,padding:'2px 7px',borderRadius:3,cursor:'pointer',
+                            border:'1px solid #3d5a7a',background:'transparent',color:'#7aabcc'}}>
+                          {allOpen?'Contraer todo':'Expandir todo'}
+                        </button>
                       </div>
                       <div style={{overflowX:'auto'}}>
                         <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:11}}>
