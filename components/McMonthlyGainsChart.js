@@ -8,10 +8,12 @@ import {
 
 const MONO = '"JetBrains Mono","Fira Code","IBM Plex Mono",monospace'
 
-// FIXED right-gutter width shared with ALL LW charts (rightPriceScale.width in
-// BacktestCharts.js). Must stay identical so every chart's plot area ends at the
-// same x. Single number to tune for alignment.
-const Y_AXIS_W_DEFAULT = 64
+// FIXED right-gutter width shared with ALL LW charts (rightPriceScale.minimumWidth
+// in BacktestCharts.js — note: LW v4 uses `minimumWidth`, NOT `width`). Must stay
+// identical to that value so every chart's plot area ends at the same x. It must
+// also be >= the natural width of the widest price label so LW clamps to it.
+// Single number to tune for alignment.
+const Y_AXIS_W_DEFAULT = 72
 
 // LW visible range values can be date strings ('YYYY-MM-DD') or Unix timestamps (seconds)
 function rangeValToMonth(v) {
