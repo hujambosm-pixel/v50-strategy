@@ -8,12 +8,10 @@ import {
 
 const MONO = '"JetBrains Mono","Fira Code","IBM Plex Mono",monospace'
 
-// FIXED right-gutter width shared with ALL LW charts (rightPriceScale.minimumWidth
-// in BacktestCharts.js — note: LW v4 uses `minimumWidth`, NOT `width`). Must stay
-// identical to that value so every chart's plot area ends at the same x. It must
-// also be >= the natural width of the widest price label so LW clamps to it.
-// Single number to tune for alignment.
-const Y_AXIS_W_DEFAULT = 90
+// Fallback right-gutter width. The real value is the equity LW chart's measured
+// rightPriceScale width, passed in via the `axisWidth` prop so this chart's plot
+// area ends at exactly the same x as the equity chart.
+const Y_AXIS_W_DEFAULT = 72
 
 // LW visible range values can be date strings ('YYYY-MM-DD') or Unix timestamps (seconds)
 function rangeValToMonth(v) {
@@ -64,7 +62,7 @@ const TICK_COLOR = '#8899aa'
 const TICK_SIZE  = 11
 const GRID_COLOR = '#1a2a3a'
 
-export default function McMonthlyGainsChart({ series = [], capitalIni, syncRef }) {
+export default function McMonthlyGainsChart({ series = [], capitalIni, syncRef, axisWidth = Y_AXIS_W_DEFAULT }) {
   const [showPct, setShowPct] = useState(false)
 
   // FIX (sync): track the visible time range published by the LW sync bus
@@ -190,7 +188,7 @@ export default function McMonthlyGainsChart({ series = [], capitalIni, syncRef }
               tick={{ fill: TICK_COLOR, fontSize: TICK_SIZE, fontFamily: MONO }}
               axisLine={false}
               tickLine={false}
-              width={Y_AXIS_W_DEFAULT}
+              width={axisWidth}
             />
             <ReferenceLine y={0} stroke="rgba(255,255,255,0.18)" strokeWidth={1} />
             <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(0,212,255,0.06)' }} />
