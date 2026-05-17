@@ -3087,7 +3087,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.242</title>
+        <title>Trading Simulator V9.243</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3165,7 +3165,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.242
+            <span className="dot"/>Trading Simulator V9.243
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5782,17 +5782,18 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                   else if(mcMultiResults.length===0&&mcShowBH&&mcResult.bhCurve?.length)
                     mSeries=[...mSeries,{id:'__bh__',name:'B&H Diversif.',color:'#a0b4c8',compoundCurve:mcResult.bhCurve}]
                   if(!mSeries.some(s=>s.compoundCurve?.length)) return null
-                  return <div data-chart="monthly" style={{paddingLeft:20}}><McMonthlyGainsChart series={mSeries} capitalIni={capIniNum} syncRef={chartSyncRef} axisWidth={mcAxisW}/></div>
+                  return <div data-chart="monthly"><div style={{width:'calc(100% - 21px)',marginLeft:0}}><McMonthlyGainsChart series={mSeries} capitalIni={capIniNum} syncRef={chartSyncRef} axisWidth={mcAxisW}/></div></div>
                 })()}
 
                 {/* ── Capital empleado MC — multi-series por estrategia ── */}
                 {mcResult.occupancyCurve?.length>0&&(
-                  <div data-chart="occupancy" style={{borderTop:'1px solid var(--border)',paddingLeft:20}}>
+                  <div data-chart="occupancy" style={{borderTop:'1px solid var(--border)'}}>
                     <div style={{padding:'3px 12px 2px',display:'flex',alignItems:'center',gap:6,fontFamily:MONO,fontSize:11}}>
                       <span style={{color:'#00e5a0',fontWeight:600}}>
                         Capital empleado
                       </span>
                     </div>
+                    <div style={{width:'calc(100% - 21px)',marginLeft:0}}>
                     <McOccupancyChart
                       series={mcMultiResults.length>0
                         ?mcMultiResults.filter(r=>mcStratVisible[r.id]!==false).map(r=>({
@@ -5808,6 +5809,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       syncRef={chartSyncRef}
                       axisWidth={mcAxisW}
                     />
+                    </div>
                   </div>
                 )}
 
