@@ -729,15 +729,9 @@ export default function Home() {
   const [mcStratVisible,setMcStratVisible]=useState({})     // {id:bool}
   const [mcAssetOpen,setMcAssetOpen]=useState({})           // {stratId:bool} acordeón resumen por activo
   const [mcShowBHCompare,setMcShowBHCompare]=useState(true) // B&H curve toggle in multi-strategy chart
-  // Measure equity LW rightPriceScale width after render and propagate it to
-  // the occupancy / monthly charts so all plot areas end at the same x.
-  useEffect(()=>{
-    const t=setTimeout(()=>{
-      const w=mcChartApiRef.current?.getPriceScaleWidth?.()
-      if(w&&w>0) setMcAxisW(prev=>Math.abs(prev-w)>0.5?w:prev)
-    },150)
-    return ()=>clearTimeout(t)
-  },[mcResult,mcMultiResults,mcStratVisible])
+  // mcAxisW is fed by the equity chart's onAxisWidth callback (measured after
+  // layout via double rAF + on resize) so the occupancy / monthly charts end
+  // their plot area at exactly the same x as the equity chart.
   const [mcShowMaxDD,setMcShowMaxDD]=useState(true)         // Max DD lines in multi-strategy chart
   const [mcChartsOpen,setMcChartsOpen]=useState(false)     // Vista de gráficos collapsible
   const mcChartsSyncRef=useRef({isSyncing:false,charts:[],lastRange:null}) // sync group for signal charts
@@ -3093,7 +3087,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.238</title>
+        <title>Trading Simulator V9.239</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3171,7 +3165,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.238
+            <span className="dot"/>Trading Simulator V9.239
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5736,7 +5730,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       ]}
                       capitalIni={Number(mcCapitalIni||capitalIni)}
                       showMaxDD={mcShowMaxDD}
-                      onReady={api=>{mcChartApiRef.current=api;try{const w=api.getPriceScaleWidth?.();if(w&&w>0)setMcAxisW(prev=>Math.abs(prev-w)>0.5?w:prev)}catch(_){}}}
+                      onReady={api=>{mcChartApiRef.current=api}}
+                      onAxisWidth={w=>setMcAxisW(prev=>Math.abs(prev-w)>0.5?w:prev)}
                       syncRef={chartSyncRef}
                       chartHeight={mcEquityH}
                     />
@@ -5758,7 +5753,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       maxDDFloatCompound={mcResult.maxDDFloatCompound||0}  maxDDFloatCompoundDate={mcResult.maxDDFloatCompoundDate||null}
                       showSimple={mcShowSimple} showCompound={mcShowCompound}
                       showBH={mcShowBH} showSP500={mcShowSP500}
-                      onReady={api=>{mcChartApiRef.current=api;try{const w=api.getPriceScaleWidth?.();if(w&&w>0)setMcAxisW(prev=>Math.abs(prev-w)>0.5?w:prev)}catch(_){}}}
+                      onReady={api=>{mcChartApiRef.current=api}}
+                      onAxisWidth={w=>setMcAxisW(prev=>Math.abs(prev-w)>0.5?w:prev)}
                       syncRef={chartSyncRef}
                       chartHeight={mcEquityH}
                     />

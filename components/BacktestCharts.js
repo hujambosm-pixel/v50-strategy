@@ -5,7 +5,7 @@ export function MultiCartChart({simpleCurve,compoundCurve,bhCurve,sp500BHCurve,c
   maxDDSP500,maxDDSP500Date,
   floatSimpleCurve,floatCompoundCurve,showFloat,
   maxDDFloatSimple,maxDDFloatSimpleDate,maxDDFloatCompound,maxDDFloatCompoundDate,
-  showSimple,showCompound,showBH,showSP500,onReady,syncRef,chartHeight=300}) {
+  showSimple,showCompound,showBH,showSP500,onReady,onAxisWidth,syncRef,chartHeight=300}) {
   const ref=useRef(null),chartRef=useRef(null)
 
   useEffect(()=>{
@@ -64,7 +64,9 @@ export function MultiCartChart({simpleCurve,compoundCurve,bhCurve,sp500BHCurve,c
       }
       chart.timeScale().fitContent()
       if(onReady) onReady({fitAll:()=>{try{chart.timeScale().fitContent()}catch(_){}},getPriceScaleWidth:()=>{try{return chart.priceScale('right').width()}catch(_){return 0}}})
-      const ro=new ResizeObserver(()=>{if(ref.current&&chartRef.current){try{chart.applyOptions({width:ref.current.clientWidth})}catch(_){}}})
+      const reportW=()=>{try{const w=chart.priceScale('right').width();if(w>0)onAxisWidth?.(w)}catch(_){}}
+      requestAnimationFrame(()=>requestAnimationFrame(reportW))
+      const ro=new ResizeObserver(()=>{if(ref.current&&chartRef.current){try{chart.applyOptions({width:ref.current.clientWidth})}catch(_){};requestAnimationFrame(reportW)}})
       ro.observe(ref.current)
       return()=>ro.disconnect()
     })
@@ -198,7 +200,7 @@ export function McOccupancyChart({series=[], capitalIni, syncRef, axisWidth=72})
 }
 
 // ── StratCompareChart — multiple strategy equity curves ──────────────────────
-export function StratCompareChart({curves,capitalIni,showMaxDD=true,chartHeight=300,syncRef,onReady}) {
+export function StratCompareChart({curves,capitalIni,showMaxDD=true,chartHeight=300,syncRef,onReady,onAxisWidth}) {
   const ref=useRef(null),chartRef=useRef(null)
   useEffect(()=>{
     if(!ref.current||!curves?.length) return
@@ -252,7 +254,9 @@ export function StratCompareChart({curves,capitalIni,showMaxDD=true,chartHeight=
       }
       chart.timeScale().fitContent()
       if(onReady) onReady({fitAll:()=>{try{chart.timeScale().fitContent()}catch(_){}},getPriceScaleWidth:()=>{try{return chart.priceScale('right').width()}catch(_){return 0}}})
-      const ro=new ResizeObserver(()=>{if(ref.current&&chartRef.current){try{chart.applyOptions({width:ref.current.clientWidth})}catch(_){}}})
+      const reportW=()=>{try{const w=chart.priceScale('right').width();if(w>0)onAxisWidth?.(w)}catch(_){}}
+      requestAnimationFrame(()=>requestAnimationFrame(reportW))
+      const ro=new ResizeObserver(()=>{if(ref.current&&chartRef.current){try{chart.applyOptions({width:ref.current.clientWidth})}catch(_){};requestAnimationFrame(reportW)}})
       ro.observe(ref.current)
       return()=>ro.disconnect()
     })
