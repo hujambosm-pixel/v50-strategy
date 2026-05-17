@@ -13,7 +13,7 @@ const MONO = '"JetBrains Mono","Fira Code","IBM Plex Mono",monospace'
 // identical to that value so every chart's plot area ends at the same x. It must
 // also be >= the natural width of the widest price label so LW clamps to it.
 // Single number to tune for alignment.
-const Y_AXIS_W_DEFAULT = 72
+const Y_AXIS_W_DEFAULT = 90
 
 // LW visible range values can be date strings ('YYYY-MM-DD') or Unix timestamps (seconds)
 function rangeValToMonth(v) {

@@ -17,7 +17,7 @@ export function MultiCartChart({simpleCurve,compoundCurve,bhCurve,sp500BHCurve,c
         layout:{background:{color:'#080c14'},textColor:'#7a9bc0'},
         grid:{vertLines:{color:'#0d1520'},horzLines:{color:'#0d1520'}},
         crosshair:{mode:CrosshairMode.Normal},
-        rightPriceScale:{borderColor:'#1a2d45',minimumWidth:72},
+        rightPriceScale:{borderColor:'#1a2d45',minimumWidth:90},
         timeScale:{borderColor:'#1a2d45',timeVisible:false},
       })
       chartRef.current=chart
@@ -93,7 +93,7 @@ export function OccupancyBarChart({trades, chartData, capitalIni, syncRef, showM
         layout:{background:{color:'#080c14'},textColor:'#7a9bc0'},
         grid:{vertLines:{color:'transparent'},horzLines:{color:'rgba(26,45,69,0.4)'}},
         crosshair:{mode:CrosshairMode.Normal},
-        rightPriceScale:{borderColor:'#1a2d45',minimumWidth:72,scaleMargins:{top:0.08,bottom:0.0}},
+        rightPriceScale:{borderColor:'#1a2d45',minimumWidth:90,scaleMargins:{top:0.08,bottom:0.0}},
         timeScale:{borderColor:'#1a2d45',timeVisible:false},
         leftPriceScale:{visible:false},
       })
@@ -155,7 +155,7 @@ export function McOccupancyChart({series=[], capitalIni, syncRef}) {
         layout:{background:{color:'#080c14'},textColor:'#7a9bc0'},
         grid:{vertLines:{color:'transparent'},horzLines:{color:'rgba(26,45,69,0.4)'}},
         crosshair:{mode:CrosshairMode.Normal},
-        rightPriceScale:{borderColor:'#1a2d45',minimumWidth:72,scaleMargins:{top:0.08,bottom:0.0}},
+        rightPriceScale:{borderColor:'#1a2d45',minimumWidth:90,scaleMargins:{top:0.08,bottom:0.0}},
         timeScale:{borderColor:'#1a2d45',timeVisible:false},
       })
       chartRef.current=chart
@@ -209,7 +209,7 @@ export function StratCompareChart({curves,capitalIni,showMaxDD=true,chartHeight=
         layout:{background:{color:'#080c14'},textColor:'#7a9bc0'},
         grid:{vertLines:{color:'#0d1520'},horzLines:{color:'#0d1520'}},
         crosshair:{mode:CrosshairMode.Normal},
-        rightPriceScale:{borderColor:'#1a2d45',minimumWidth:72},
+        rightPriceScale:{borderColor:'#1a2d45',minimumWidth:90},
         timeScale:{borderColor:'#1a2d45',timeVisible:false},
       })
       chartRef.current=chart
