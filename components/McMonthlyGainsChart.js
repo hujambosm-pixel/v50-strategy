@@ -22,16 +22,23 @@ function rangeValToMonth(v) {
 
 function computeMonthlyGains(curve, capitalIni) {
   if (!curve?.length) return {}
-  const byMonth = {}
+  const firstByMonth = {}
+  const lastByMonth = {}
   curve.forEach(p => {
     const date = p.date || (p.time ? String(p.time) : null)
-    if (date) byMonth[date.slice(0, 7)] = p.value
+    if (!date) return
+    const m = date.slice(0, 7)
+    if (firstByMonth[m] === undefined) firstByMonth[m] = p.value
+    lastByMonth[m] = p.value
   })
-  const months = Object.keys(byMonth).sort()
+  const months = Object.keys(lastByMonth).sort()
   const result = {}
   months.forEach((m, i) => {
-    const curr = byMonth[m]
-    const prev = i === 0 ? capitalIni : byMonth[months[i - 1]]
+    // curr = first point of next month (cross-month gaps go into the earlier month),
+    // or last point of this month if it's the terminal month.
+    const nextM = months[i + 1]
+    const curr = nextM !== undefined ? firstByMonth[nextM] : lastByMonth[m]
+    const prev = i === 0 ? capitalIni : firstByMonth[m]
     result[m] = {
       eur: curr - prev,
       pct: prev > 0 ? (curr - prev) / prev * 100 : 0,
