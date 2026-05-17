@@ -3087,7 +3087,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.239</title>
+        <title>Trading Simulator V9.240-diag</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3165,7 +3165,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.239
+            <span className="dot"/>Trading Simulator V9.240-diag
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5731,7 +5731,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       capitalIni={Number(mcCapitalIni||capitalIni)}
                       showMaxDD={mcShowMaxDD}
                       onReady={api=>{mcChartApiRef.current=api}}
-                      onAxisWidth={w=>setMcAxisW(prev=>Math.abs(prev-w)>0.5?w:prev)}
+                      onAxisWidth={w=>{console.log('[axisWidth] setMcAxisW recibió:',w);setMcAxisW(prev=>Math.abs(prev-w)>0.5?w:prev)}}
                       syncRef={chartSyncRef}
                       chartHeight={mcEquityH}
                     />
@@ -5754,7 +5754,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       showSimple={mcShowSimple} showCompound={mcShowCompound}
                       showBH={mcShowBH} showSP500={mcShowSP500}
                       onReady={api=>{mcChartApiRef.current=api}}
-                      onAxisWidth={w=>setMcAxisW(prev=>Math.abs(prev-w)>0.5?w:prev)}
+                      onAxisWidth={w=>{console.log('[axisWidth] setMcAxisW recibió:',w);setMcAxisW(prev=>Math.abs(prev-w)>0.5?w:prev)}}
                       syncRef={chartSyncRef}
                       chartHeight={mcEquityH}
                     />
