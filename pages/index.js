@@ -3087,7 +3087,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.243</title>
+        <title>Trading Simulator V9.244</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3165,7 +3165,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.243
+            <span className="dot"/>Trading Simulator V9.244
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5444,9 +5444,12 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                     : [{id:currentStratId||'__single__',name:strategies.find(s=>s.id===currentStratId)?.name||'Estrategia activa',color:'#00d4ff',result:mcResult}]
                   // B&H globals (del result activo)
                   const bhLast=mcResult.bhCurve?.slice(-1)[0]?.value||capIni
-                  const bhFd=mcResult.startDate?new Date(mcResult.startDate):null
+                  const bhFd=mcResult.bhCurve?.[0]?.date?new Date(mcResult.bhCurve[0].date):mcResult.startDate?new Date(mcResult.startDate):null
                   const bhLd=mcResult.bhCurve?.slice(-1)[0]?.date?new Date(mcResult.bhCurve.slice(-1)[0].date):new Date()
-                  const bhAnios=bhFd&&bhLd?(bhLd-bhFd)/86400000/365.25:1
+                  const bhAnios=mcPeriodMode==='range'&&mcFromDate&&mcToDate
+                    ?(new Date(mcToDate)-new Date(mcFromDate))/(365.25*24*3600*1000)
+                    :bhFd&&bhLd?(bhLd-bhFd)/86400000/365.25
+                    :1
                   const bhCagr=(Math.pow(Math.max(bhLast,0.01)/Math.max(capIni,0.01),1/Math.max(bhAnios,0.01))-1)*100
                   const bhProfit=bhLast-capIni
                   const bhProfitPct=capIni>0?bhProfit/capIni*100:0
@@ -5624,7 +5627,10 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                     const bhWin=a.ganBH>0?100:0
                                     const bhLastDate=mcResult.compoundCurve?.slice(-1)[0]?.date||mcResult.bhCurve?.slice(-1)[0]?.date
                                     const bhEndMs=bhLastDate?new Date(bhLastDate).getTime():Date.now()
-                                    const bhCagrYears=mcResult.startDate?(bhEndMs-new Date(mcResult.startDate).getTime())/(365.25*24*3600*1000):5
+                                    const bhCagrYears=mcPeriodMode==='range'&&mcFromDate&&mcToDate
+                                      ?(new Date(mcToDate)-new Date(mcFromDate))/(365.25*24*3600*1000)
+                                      :mcResult.startDate?(bhEndMs-new Date(mcResult.startDate).getTime())/(365.25*24*3600*1000)
+                                      :5
                                     const bhCagr=sc>0&&bhCagrYears>0?(Math.pow((sc+ganBH)/sc,1/bhCagrYears)-1)*100:0
                                     return(
                                       <tr key={a.symbol}
