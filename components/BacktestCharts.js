@@ -64,7 +64,7 @@ export function MultiCartChart({simpleCurve,compoundCurve,bhCurve,sp500BHCurve,c
       }
       chart.timeScale().fitContent()
       if(onReady) onReady({fitAll:()=>{try{chart.timeScale().fitContent()}catch(_){}},getPriceScaleWidth:()=>{try{return chart.priceScale('right').width()}catch(_){return 0}}})
-      const reportW=()=>{try{const w=chart.priceScale('right').width();console.log('[axisWidth] equity midió:',w,'tipo:',typeof w);if(w>0)onAxisWidth?.(w)}catch(_){}}
+      const reportW=()=>{try{const w=chart.priceScale('right').width();if(w>0)onAxisWidth?.(w)}catch(_){}}
       requestAnimationFrame(()=>requestAnimationFrame(reportW))
       const ro=new ResizeObserver(()=>{if(ref.current&&chartRef.current){try{chart.applyOptions({width:ref.current.clientWidth})}catch(_){};requestAnimationFrame(reportW)}})
       ro.observe(ref.current)
@@ -146,7 +146,6 @@ export function OccupancyBarChart({trades, chartData, capitalIni, syncRef, showM
 
 // ── McOccupancyChart — MC capital empleado, multi-series ──
 export function McOccupancyChart({series=[], capitalIni, syncRef, axisWidth=72}) {
-  console.log('[axisWidth] McOccupancyChart axisWidth:', axisWidth)
   const ref=useRef(null), chartRef=useRef(null)
   useEffect(()=>{
     const validSeries=series.filter(s=>s.occupancyCurve?.length)
@@ -255,7 +254,7 @@ export function StratCompareChart({curves,capitalIni,showMaxDD=true,chartHeight=
       }
       chart.timeScale().fitContent()
       if(onReady) onReady({fitAll:()=>{try{chart.timeScale().fitContent()}catch(_){}},getPriceScaleWidth:()=>{try{return chart.priceScale('right').width()}catch(_){return 0}}})
-      const reportW=()=>{try{const w=chart.priceScale('right').width();console.log('[axisWidth] equity midió:',w,'tipo:',typeof w);if(w>0)onAxisWidth?.(w)}catch(_){}}
+      const reportW=()=>{try{const w=chart.priceScale('right').width();if(w>0)onAxisWidth?.(w)}catch(_){}}
       requestAnimationFrame(()=>requestAnimationFrame(reportW))
       const ro=new ResizeObserver(()=>{if(ref.current&&chartRef.current){try{chart.applyOptions({width:ref.current.clientWidth})}catch(_){};requestAnimationFrame(reportW)}})
       ro.observe(ref.current)

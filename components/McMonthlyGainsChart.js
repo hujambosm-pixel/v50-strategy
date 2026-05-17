@@ -65,7 +65,6 @@ const GRID_COLOR = '#1a2a3a'
 export default function McMonthlyGainsChart({ series = [], capitalIni, syncRef, axisWidth = Y_AXIS_W_DEFAULT }) {
   const [showPct, setShowPct] = useState(false)
 
-  console.log('[axisWidth] McMonthlyGainsChart axisWidth:', axisWidth)
   // FIX (sync): track the visible time range published by the LW sync bus
   const [visibleRange, setVisibleRange] = useState(null)
   useEffect(() => {
