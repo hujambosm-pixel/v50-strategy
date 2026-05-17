@@ -167,9 +167,9 @@ export default function McMonthlyGainsChart({ series = [], capitalIni, syncRef, 
       }}>
         <span style={{ color: '#00e5a0', fontWeight: 600 }}>Ganancias mensuales</span>
         <button style={btnStyle(!showPct)} onClick={() => setShowPct(false)}
-          title="Ganancia absoluta mensual en euros. Calculada como la diferencia entre el último valor de la equity al cierre de cada mes y el último valor del mes anterior.">€</button>
+          title="Ganancia del mes en euros: diferencia entre el primer día hábil del mes siguiente y el primer día hábil del mes actual">€</button>
         <button style={btnStyle(showPct)}  onClick={() => setShowPct(true)}
-          title="Rentabilidad mensual en porcentaje. Calculada como la variación relativa entre el último valor de la equity al cierre de cada mes y el último valor del mes anterior. El primer mes se calcula sobre el capital inicial.">%</button>
+          title="Ganancia del mes en porcentaje: diferencia entre el primer día hábil del mes siguiente y el primer día hábil del mes actual, dividida entre el valor del primer día hábil del mes actual">%</button>
       </div>
       <div style={{ height: 180 }}>
         <ResponsiveContainer width="100%" height="100%">
