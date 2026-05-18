@@ -225,7 +225,18 @@ function buildSlotsCurves(assetResults, capitalIni) {
   const avgCapOccupancy = occupancyCurve.length
     ? occupancyCurve.reduce((s, p) => s + p.value, 0) / occupancyCurve.length
     : 0
-  return { simpleCurve, compoundCurve, bhCurve, occupancyCurve, startDate, floatSimpleCurve, floatCompoundCurve, tInvEstrategia, avgCapOccupancy, ..._calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni), ..._calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni) }
+  const _totalSenalesSlots = assetResults.reduce((s, ar) => s + (ar.trades?.length || 0), 0)
+  const senalStatsSlots = {
+    generadas:             _totalSenalesSlots,
+    ejecutadas:            _totalSenalesSlots,
+    descartadasPorSlots:   0,
+    descartadasPorCapital: 0,
+    descartadasPorRiesgo:  0,
+    winRateDescartadas:    null,
+    pfDescartadas:         null,
+    pnlHipoteticoDescartadas: 0,
+  }
+  return { simpleCurve, compoundCurve, bhCurve, occupancyCurve, startDate, floatSimpleCurve, floatCompoundCurve, tInvEstrategia, avgCapOccupancy, senalStats: senalStatsSlots, ..._calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni), ..._calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni) }
 }
 
 // ── MODO CAPITAL COMPARTIDO: pool libre repartido entre slots activos ──
@@ -261,6 +272,7 @@ function buildCompartidoCurves(assetResults, capitalIni, symbolOrder = null) {
 
   const senalesGeneradasC = allCandidates.length
   let cntEjecutadasC = 0, cntDescCapitalC = 0
+  let pnlHipEurC = 0
   const pnlDescartadosC = []
 
   // Pool de capital libre y slots abiertos
@@ -306,13 +318,21 @@ function buildCompartidoCurves(assetResults, capitalIni, symbolOrder = null) {
 
     // 2. Abrir entradas del día (solo activos sin posición abierta)
     const entries = (entriesByDate[date] || []).filter(t => !openSlots[t.symbol])
+    if (entries.length > 0 && poolLibre <= 0) {
+      const _openCapsBlkC = Object.values(openSlots).reduce((s, slot) => s + (slot.capAsignado || 0), 0)
+      const _capMaxBlkC = (poolLibre + _openCapsBlkC) / n
+      entries.forEach(t => {
+        cntDescCapitalC++
+        if (isFinite(t.pnlPct)) { pnlDescartadosC.push(t.pnlPct); pnlHipEurC += _capMaxBlkC * t.pnlPct / 100 }
+      })
+    }
     if (entries.length > 0 && poolLibre > 0) {
       entries.forEach(t => {
         // Recalculate per entrant: poolLibre and openSlots change with each iteration
         const openCapsTotal = Object.values(openSlots).reduce((s, slot) => s + (slot.capAsignado || 0), 0)
         const totalPortfolio = poolLibre + openCapsTotal
         const capPorSlot = Math.min(totalPortfolio / n, poolLibre)
-        if (capPorSlot < 0.01) { cntDescCapitalC++; if (isFinite(t.pnlPct)) pnlDescartadosC.push(t.pnlPct); return }
+        if (capPorSlot < 0.01) { cntDescCapitalC++; if (isFinite(t.pnlPct)) { pnlDescartadosC.push(t.pnlPct); pnlHipEurC += (totalPortfolio / n) * t.pnlPct / 100 } return }
         cntEjecutadasC++
         poolLibre -= capPorSlot
         // Same-day trade (entryDate === exitDate): abrir y cerrar atómicamente
@@ -432,6 +452,7 @@ function buildCompartidoCurves(assetResults, capitalIni, symbolOrder = null) {
     descartadasPorCapital: cntDescCapitalC,
     winRateDescartadas:    pnlDescartadosC.length ? _descWinsCC.length / pnlDescartadosC.length * 100 : null,
     pfDescartadas:         _descGrossLossCC > 0 ? _descGrossWinCC / _descGrossLossCC : _descGrossWinCC > 0 ? 99 : null,
+    pnlHipoteticoDescartadas: pnlHipEurC,
   }
 
   return {
@@ -467,6 +488,7 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 4) {
 
   const senalesGeneradas = allCandidates.length
   let cntEjecutadas = 0, cntDescSlots = 0, cntDescCapital = 0
+  let pnlHipEur = 0
   const pnlDescartados = []
 
   let poolLibre = capitalIni
@@ -509,7 +531,12 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 4) {
     // 2. Abrir entradas: cada una calcula su tamaño dinámicamente
     const entries = (entriesByDate[date] || []).filter(t => !openSlots[t.symbol])
     if (entries.length > 0 && poolLibre <= 0.01) {
-      entries.forEach(t => { cntDescCapital++; if (isFinite(t.pnlPct)) pnlDescartados.push(t.pnlPct) })
+      const _openCapsBlk = Object.values(openSlots).reduce((s, sl) => s + (sl.capAsignado || 0), 0)
+      const _capMaxBlk = (poolLibre + _openCapsBlk) / Math.min(maxPosiciones, n)
+      entries.forEach(t => {
+        cntDescCapital++
+        if (isFinite(t.pnlPct)) { pnlDescartados.push(t.pnlPct); pnlHipEur += _capMaxBlk * t.pnlPct / 100 }
+      })
     }
     if (entries.length > 0 && poolLibre > 0.01) {
       // BUG B fix: contador de same-day trades abiertos en este batch
@@ -519,15 +546,15 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 4) {
         const posicionesAbiertas = Object.keys(openSlots).length
         // BUG B fix: descontar same-day trades del mismo batch para no superar maxPosiciones
         const slotsLibresEfectivos = maxPosiciones - posicionesAbiertas - sameDayOpen
-        if (slotsLibresEfectivos <= 0) { cntDescSlots++; if (isFinite(t.pnlPct)) pnlDescartados.push(t.pnlPct); return }
         const openCapsTotal = Object.values(openSlots).reduce((s, sl) => s + (sl.capAsignado || 0), 0)
         const capitalTotal = poolLibre + openCapsTotal
         // Techo por posición: dividir entre el mínimo real de slots disponibles
         // (si hay menos activos que maxPosiciones, cada activo recibe mayor fracción)
         const slotsEfectivos = Math.min(maxPosiciones, n)
         const capMaxPorPosicion = capitalTotal / slotsEfectivos
+        if (slotsLibresEfectivos <= 0) { cntDescSlots++; if (isFinite(t.pnlPct)) { pnlDescartados.push(t.pnlPct); pnlHipEur += capMaxPorPosicion * t.pnlPct / 100 } return }
         const capPorEntrada = Math.min(poolLibre, capMaxPorPosicion)
-        if (capPorEntrada < 0.01) { cntDescCapital++; if (isFinite(t.pnlPct)) pnlDescartados.push(t.pnlPct); return }
+        if (capPorEntrada < 0.01) { cntDescCapital++; if (isFinite(t.pnlPct)) { pnlDescartados.push(t.pnlPct); pnlHipEur += capMaxPorPosicion * t.pnlPct / 100 } return }
         cntEjecutadas++
         poolLibre -= capPorEntrada
         const totalPortfolio = capitalTotal
@@ -645,6 +672,7 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 4) {
     descartadasPorCapital: cntDescCapital,
     winRateDescartadas:   pnlDescartados.length ? _descWinsC.length / pnlDescartados.length * 100 : null,
     pfDescartadas:        _descGrossLossC > 0 ? _descGrossWinC / _descGrossLossC : _descGrossWinC > 0 ? 99 : null,
+    pnlHipoteticoDescartadas: pnlHipEur,
   }
 
   return {
@@ -684,6 +712,7 @@ function buildPositionSizingCurves(assetResults, capitalIni, sizeRules) {
 
   const senalesGeneradasPS = allCandidates.length
   let cntEjecutadasPS = 0, cntDescRiesgoPS = 0, cntDescCapitalPS = 0
+  let pnlHipEurPS = 0
   const pnlDescartadosPS = []
 
   let poolLibre = capitalIni
@@ -763,9 +792,10 @@ function buildPositionSizingCurves(assetResults, capitalIni, sizeRules) {
         ? capAsignado * distancia
         : capitalActual * maxPctCap
 
-      if (riesgoAcumulado + riesgoEsteTrade > capitalActual * maxAccum) { cntDescRiesgoPS++; if (isFinite(t.pnlPct)) pnlDescartadosPS.push(t.pnlPct); return }
+      const _capSizedPS = capAsignado  // tamaño dimensionado antes del clamp a poolLibre
+      if (riesgoAcumulado + riesgoEsteTrade > capitalActual * maxAccum) { cntDescRiesgoPS++; if (isFinite(t.pnlPct)) { pnlDescartadosPS.push(t.pnlPct); pnlHipEurPS += _capSizedPS * t.pnlPct / 100 } return }
       if (capAsignado > poolLibre) capAsignado = poolLibre
-      if (capAsignado <= 0) { cntDescCapitalPS++; if (isFinite(t.pnlPct)) pnlDescartadosPS.push(t.pnlPct); return }
+      if (capAsignado <= 0) { cntDescCapitalPS++; if (isFinite(t.pnlPct)) { pnlDescartadosPS.push(t.pnlPct); pnlHipEurPS += _capSizedPS * t.pnlPct / 100 } return }
       cntEjecutadasPS++
 
       if (t.exitDate === date) {
@@ -866,6 +896,7 @@ function buildPositionSizingCurves(assetResults, capitalIni, sizeRules) {
     descartadasPorCapital: cntDescCapitalPS,
     winRateDescartadas:    pnlDescartadosPS.length ? _descWinsPS.length / pnlDescartadosPS.length * 100 : null,
     pfDescartadas:         _descGrossLossPS > 0 ? _descGrossWinPS / _descGrossLossPS : _descGrossWinPS > 0 ? 99 : null,
+    pnlHipoteticoDescartadas: pnlHipEurPS,
   }
 
   return {
