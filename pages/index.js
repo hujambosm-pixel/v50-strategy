@@ -686,10 +686,10 @@ export default function Home() {
   const [selectedModos,setSelectedModos]=useState(['slots']) // multi-mode when 1 strategy selected
   const [mcIsModoCompare,setMcIsModoCompare]=useState(false) // true when comparing modes (vs strategies)
   const [mcWeights,setMcWeights]=useState({})             // {symbol: pct} para modo custom
-  const [mcRiskPerTrade,setMcRiskPerTrade]=useState(1)
-  const [mcMaxPortfolioPct,setMcMaxPortfolioPct]=useState(5)
-  const [mcMaxAccumRisk,setMcMaxAccumRisk]=useState(10)
-  const [mcMaxPosiciones,setMcMaxPosiciones]=useState(4)  // para modo concentrado
+  const [mcRiskPerTrade,setMcRiskPerTrade]=useState(5)
+  const [mcMaxPortfolioPct,setMcMaxPortfolioPct]=useState(20)
+  const [mcMaxAccumRisk,setMcMaxAccumRisk]=useState(20)
+  const [mcMaxPosiciones,setMcMaxPosiciones]=useState(5)  // para modo concentrado
   const [mcCapital,setMcCapital]=useState('compound')    // 'simple' | 'compound'
   const [mcCapitalIni,setMcCapitalIni]=useState(1000)
   const [mcPeriodMode,setMcPeriodMode]=useState('years') // 'years' | 'range'
@@ -3087,7 +3087,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.249</title>
+        <title>Trading Simulator V9.250</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3165,7 +3165,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.249
+            <span className="dot"/>Trading Simulator V9.250
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}

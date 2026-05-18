@@ -465,7 +465,7 @@ function buildCompartidoCurves(assetResults, capitalIni, symbolOrder = null) {
 }
 
 // ── MODO CAPITAL CONCENTRADO: pool compartido con techo por posición según maxPosiciones ──
-function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 4) {
+function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5) {
   const n = assetResults.length
   if (!n) return _emptyCurves()
   const { startDate, filteredDates } = _commonDates(assetResults)
@@ -686,7 +686,7 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 4) {
 
 // ── MODO POSITION SIZING: tamaño variable basado en stop loss ──
 function buildPositionSizingCurves(assetResults, capitalIni, sizeRules) {
-  const { riskPerTrade=2, maxPortfolioPct=5, maxAccumRisk=10 } = sizeRules || {}
+  const { riskPerTrade=5, maxPortfolioPct=20, maxAccumRisk=20 } = sizeRules || {}
   const riskPct   = riskPerTrade / 100
   const maxPctCap = maxPortfolioPct / 100
   const maxAccum  = maxAccumRisk / 100
@@ -1234,7 +1234,7 @@ export default async function handler(req, res) {
     if (modoAsig === 'compartido') {
       curves = buildCompartidoCurves(assetResults, cfg.capitalIni)
     } else if (modoAsig === 'concentrado') {
-      curves = buildConcentradoCurves(assetResults, cfg.capitalIni, sizeRules.maxPosiciones ?? 4)
+      curves = buildConcentradoCurves(assetResults, cfg.capitalIni, sizeRules.maxPosiciones ?? 5)
     } else if (modoAsig === 'positionsizing') {
       curves = buildPositionSizingCurves(assetResults, cfg.capitalIni, sizeRules)
     } else {
