@@ -706,7 +706,7 @@ function buildPositionSizingCurves(assetResults, capitalIni, sizeRules) {
       dias:          Math.round((new Date(t.exitDate) - new Date(t.entryDate)) / 86400000),
       _virtualClose: !!t._virtualClose,
     }))
-  ).sort((a, b) => a.entryDate < b.entryDate ? -1 : 1)
+  ).sort((a, b) => a.entryDate < b.entryDate ? -1 : a.entryDate > b.entryDate ? 1 : a.symbol < b.symbol ? -1 : 1)
 
   if (!allCandidates.length) return buildSlotsCurves(assetResults, capitalIni)
 
@@ -989,25 +989,25 @@ function _commonDates(assetResults) {
 }
 function _calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni) {
   const calcDD = curve => {
-    let peak=curve[0]?.value||capitalIni, maxDD=0, maxDDDate=null
-    curve.forEach(p=>{ if(p.value>peak)peak=p.value; const dd=(peak-p.value)/peak*100; if(dd>maxDD){maxDD=dd;maxDDDate=p.date} })
-    return { maxDD, maxDDDate }
+    let peak=curve[0]?.value||capitalIni, maxDD=0, maxDDDate=null, ddPeak=peak, ddValley=peak
+    curve.forEach(p=>{ if(p.value>peak)peak=p.value; const dd=(peak-p.value)/peak*100; if(dd>maxDD){maxDD=dd;maxDDDate=p.date;ddPeak=peak;ddValley=p.value} })
+    return { maxDD, maxDDDate, maxDDEur: ddValley - ddPeak }
   }
-  const { maxDD:maxDDSimple, maxDDDate:maxDDSimpleDate } = calcDD(simpleCurve)
-  const { maxDD:maxDDCompound, maxDDDate:maxDDCompoundDate } = calcDD(compoundCurve)
-  const { maxDD:maxDDBH, maxDDDate:maxDDBHDate } = calcDD(bhCurve)
-  return { maxDDSimple, maxDDSimpleDate, maxDDCompound, maxDDCompoundDate, maxDDBH, maxDDBHDate }
+  const { maxDD:maxDDSimple, maxDDDate:maxDDSimpleDate, maxDDEur:maxDDSimpleEur } = calcDD(simpleCurve)
+  const { maxDD:maxDDCompound, maxDDDate:maxDDCompoundDate, maxDDEur:maxDDCompoundEur } = calcDD(compoundCurve)
+  const { maxDD:maxDDBH, maxDDDate:maxDDBHDate, maxDDEur:maxDDBHEur } = calcDD(bhCurve)
+  return { maxDDSimple, maxDDSimpleDate, maxDDCompound, maxDDCompoundDate, maxDDBH, maxDDBHDate, maxDDSimpleEur, maxDDCompoundEur, maxDDBHEur }
 }
 function _calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni) {
   const calcDD = curve => {
-    if(!curve?.length) return { maxDD:0, maxDDDate:null }
-    let peak=curve[0]?.value||capitalIni, maxDD=0, maxDDDate=null
-    curve.forEach(p=>{ if(!p)return; if(p.value>peak)peak=p.value; const dd=(peak-p.value)/peak*100; if(dd>maxDD){maxDD=dd;maxDDDate=p.date} })
-    return { maxDD, maxDDDate }
+    if(!curve?.length) return { maxDD:0, maxDDDate:null, maxDDEur:0 }
+    let peak=curve[0]?.value||capitalIni, maxDD=0, maxDDDate=null, ddPeak=peak, ddValley=peak
+    curve.forEach(p=>{ if(!p)return; if(p.value>peak)peak=p.value; const dd=(peak-p.value)/peak*100; if(dd>maxDD){maxDD=dd;maxDDDate=p.date;ddPeak=peak;ddValley=p.value} })
+    return { maxDD, maxDDDate, maxDDEur: ddValley - ddPeak }
   }
-  const { maxDD:maxDDFloatSimple, maxDDDate:maxDDFloatSimpleDate } = calcDD(floatSimpleCurve)
-  const { maxDD:maxDDFloatCompound, maxDDDate:maxDDFloatCompoundDate } = calcDD(floatCompoundCurve)
-  return { maxDDFloatSimple, maxDDFloatSimpleDate, maxDDFloatCompound, maxDDFloatCompoundDate }
+  const { maxDD:maxDDFloatSimple, maxDDDate:maxDDFloatSimpleDate, maxDDEur:maxDDFloatSimpleEur } = calcDD(floatSimpleCurve)
+  const { maxDD:maxDDFloatCompound, maxDDDate:maxDDFloatCompoundDate, maxDDEur:maxDDFloatCompoundEur } = calcDD(floatCompoundCurve)
+  return { maxDDFloatSimple, maxDDFloatSimpleDate, maxDDFloatCompound, maxDDFloatCompoundDate, maxDDFloatSimpleEur, maxDDFloatCompoundEur }
 }
 
 // ── buildTrades: convierte rawTrades {entryDate,exitDate,entryPrice,exitPrice} a trades enriquecidos ──
@@ -1088,14 +1088,15 @@ const sleep = ms => new Promise(r => setTimeout(r, ms))
 // ── Max Drawdown del precio de cierre (para B&H por activo) ──
 function _calcPriceMaxDD(data, startDate) {
   const filtered = startDate ? data.filter(d => d.date >= startDate) : data
-  if (!filtered.length) return 0
-  let peak = filtered[0].close, maxDD = 0
+  if (!filtered.length) return { pct: 0, factor: 0 }
+  const p0 = filtered[0].close
+  let peak = filtered[0].close, maxDD = 0, ddPeak = peak, ddValley = peak
   filtered.forEach(d => {
     if (d.close > peak) peak = d.close
     const dd = (peak - d.close) / peak * 100
-    if (dd > maxDD) maxDD = dd
+    if (dd > maxDD) { maxDD = dd; ddPeak = peak; ddValley = d.close }
   })
-  return maxDD
+  return { pct: maxDD, factor: p0 > 0 ? (ddValley - ddPeak) / p0 : 0 }
 }
 
 // ── Max Drawdown real + T.invertido + Cap.inv.medio con curva de precio diaria ──
@@ -1104,6 +1105,7 @@ function _calcAssetMaxDD(trades, data, slotCapital, startDate) {
   const filteredData = startDate ? data.filter(d => d.date >= startDate) : data
   if (!filteredData.length) return { maxDD: 0, maxDDDate: null, tInvertido: 0, capInvMedio: 0 }
   let peak = slotCapital, maxDD = 0, maxDDDate = null, lastCapital = slotCapital
+  let ddPeak = slotCapital, ddValley = slotCapital
   let daysOpen = 0, sumCapInvRatio = 0, totalBars = 0
   filteredData.forEach(bar => {
     const date = bar.date, close = bar.close
@@ -1117,7 +1119,7 @@ function _calcAssetMaxDD(trades, data, slotCapital, startDate) {
     }, 0)
     const floatEquity = lastCapital + openPnl
     if (floatEquity > peak) peak = floatEquity
-    if (peak > 0) { const dd = (peak - floatEquity) / peak * 100; if (dd > maxDD) { maxDD = dd; maxDDDate = date } }
+    if (peak > 0) { const dd = (peak - floatEquity) / peak * 100; if (dd > maxDD) { maxDD = dd; maxDDDate = date; ddPeak = peak; ddValley = floatEquity } }
     totalBars++
     if (open.length > 0) {
       daysOpen++
@@ -1128,6 +1130,7 @@ function _calcAssetMaxDD(trades, data, slotCapital, startDate) {
   return {
     maxDD,
     maxDDDate,
+    maxDDEur: ddValley - ddPeak,
     tInvertido: totalBars > 0 ? (daysOpen / totalBars) * 100 : 0,
     capInvMedio: totalBars > 0 ? (sumCapInvRatio / totalBars) * 100 : 0,
     totalBars,
@@ -1245,12 +1248,12 @@ export default async function handler(req, res) {
       const losses = ar.trades.filter(t=>t.pnlPct<0)
       const totalDias = ar.trades.reduce((s,t)=>s+t.dias,0)
       const pct = weights?.[ar.symbol] ?? (100 / n)
-      const { maxDD: assetMaxDD, maxDDDate: assetMaxDDDate, tInvertido, capInvMedio } = _calcAssetMaxDD(ar.trades, ar.data, slotCapital, curves.startDate)
+      const { maxDD: assetMaxDD, maxDDDate: assetMaxDDDate, maxDDEur: assetMaxDDEur, tInvertido, capInvMedio } = _calcAssetMaxDD(ar.trades, ar.data, slotCapital, curves.startDate)
       const filtData = ar.data?.filter(d => d.date >= curves.startDate) ?? []
       const p0 = filtData[0]?.close
       const pN = filtData[filtData.length - 1]?.close
       const ganBH = (p0 && pN && p0 > 0) ? slotCapital * (pN / p0 - 1) : 0
-      const priceMaxDD = _calcPriceMaxDD(ar.data, curves.startDate)
+      const { pct: priceMaxDD, factor: priceMaxDDFactor } = _calcPriceMaxDD(ar.data, curves.startDate)
       return {
         symbol: ar.symbol,
         trades: ar.trades.length,
@@ -1263,10 +1266,12 @@ export default async function handler(req, res) {
         weight: pct,
         maxDD: assetMaxDD,
         maxDDDate: assetMaxDDDate,
+        maxDDEur: assetMaxDDEur,
         tInvertido,
         capInvMedio,
         ganBH,
         priceMaxDD,
+        priceMaxDDEur: slotCapital * priceMaxDDFactor,
         capInvertidoTotal: ar.trades.length * slotCapital,  // slots: capital fijo por trade
       }
     })
@@ -1288,7 +1293,7 @@ export default async function handler(req, res) {
         const avgCapAsignado = execTrades.length
           ? execTrades.reduce((s,t) => s + (t._capitalAtEntry ?? 0), 0) / execTrades.length
           : cfg.capitalIni / n
-        const { maxDD: assetMaxDD, maxDDDate: assetMaxDDDate, tInvertido } =
+        const { maxDD: assetMaxDD, maxDDDate: assetMaxDDDate, maxDDEur: assetMaxDDEur, tInvertido } =
           _calcAssetMaxDD(execTrades, ar.data, avgCapAsignado, curves.startDate)
         // Cap.Inv% per-asset: avg of (capAtEntry / totalPortfolioAtEntry) × 100
         const capInvMedio = execTrades.length
@@ -1301,7 +1306,7 @@ export default async function handler(req, res) {
         const p0 = filtData[0]?.close
         const pN = filtData[filtData.length - 1]?.close
         const ganBH = (p0 && pN && p0 > 0) ? (cfg.capitalIni / n) * (pN / p0 - 1) : 0
-        const priceMaxDD = _calcPriceMaxDD(ar.data, curves.startDate)
+        const { pct: priceMaxDD, factor: priceMaxDDFactor } = _calcPriceMaxDD(ar.data, curves.startDate)
         const capInvertidoTotal = execTrades.reduce((s, t) => s + (t._capitalAtEntry || 0), 0)
         return {
           symbol:    ar.symbol,
@@ -1315,10 +1320,12 @@ export default async function handler(req, res) {
           weight:    pct,
           maxDD:     assetMaxDD,
           maxDDDate: assetMaxDDDate,
+          maxDDEur:  assetMaxDDEur,
           tInvertido,
           capInvMedio,
           ganBH,
           priceMaxDD,
+          priceMaxDDEur: (cfg.capitalIni / n) * priceMaxDDFactor,
           avgCapAsignado,     // capital medio real por trade — usado por frontend para CAGR en modo concentrado
           capInvertidoTotal,  // suma del capital de entrada de todos los trades ejecutados
         }

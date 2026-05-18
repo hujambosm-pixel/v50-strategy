@@ -3087,7 +3087,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.248</title>
+        <title>Trading Simulator V9.249</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3165,7 +3165,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.248
+            <span className="dot"/>Trading Simulator V9.249
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4068,11 +4068,11 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         {id:'slots',label:'Slots iguales',ready:true,
                           desc:'El capital se divide en partes iguales y cada slot crece de forma independiente con interés compuesto. Ejemplo: 1000€ con 4 activos → 250€ por slot. Si NVDA gana +42%, su slot pasa a 355€ y el siguiente trade de NVDA parte de esos 355€. Los slots nunca se redistribuyen entre activos.'},
                         {id:'compartido',label:'Capital compartido',ready:true,
-                          desc:'El capital libre se reparte a partes iguales entre los activos que van a entrar. Justo antes de cada entrada: capital_por_slot = pool_libre / slots_libres. Cuando un trade cierra, su capital (con ganancias o pérdidas) vuelve al pool. Ejemplo: 1000€ con 4 activos. Los 4 entran → 250€ cada uno. NVDA cierra +42% → devuelve 355€ al pool. Solo TSLA sigue abierto → pool = 355€ + restantes. Próxima entrada de NVDA: 355€ / slots_libres en ese momento.'},
+                          desc:'Pool de capital único compartido entre todos los activos, sin límite de posiciones simultáneas. Justo antes de cada entrada: capital_por_slot = pool_libre / slots_libres. Cuando un trade cierra, su capital (con ganancias o pérdidas) vuelve al pool. Aunque no hay tope de slots, el pool puede agotarse si muchas señales coinciden en el tiempo: las que no encuentran capital disponible se descartan. Las señales se procesan por fecha de entrada (más antigua primero) y, en empate de fecha, por orden alfabético del símbolo.'},
                         {id:'concentrado',label:'Capital concentrado',ready:true,
-                          desc:'Usa un pool de capital compartido, pero concentra el capital disponible en los activos con señal activa. Nunca habrá más de N activos abiertos simultáneamente — cuando todos los slots están ocupados, las nuevas señales se descartan hasta que cierre alguno. Al cerrar una operación, el capital con sus ganancias o pérdidas vuelve al pool y queda disponible para el siguiente activo con señal. Cuantos menos activos simultáneos configures, mayor será el capital por operación.'},
+                          desc:'Pool de capital compartido entre todos los activos, con un máximo de N posiciones simultáneas (configurable). Al cerrar una operación, el capital con sus ganancias o pérdidas vuelve al pool. Cuantos menos activos simultáneos configures, mayor será el capital por operación. Cuando hay más señales de entrada que slots disponibles, se priorizan por fecha de entrada (más antigua primero) y, en empate de fecha, por orden alfabético del símbolo. Las señales que no caben se descartan.'},
                         {id:'positionsizing',label:'Position Sizing',ready:true,
-                          desc:'Calcula dinámicamente el tamaño de cada posición según el stop loss. Permite posiciones simultáneas con tamaños variables.'},
+                          desc:'Pool de capital compartido con sizing por riesgo: el tamaño de cada posición se calcula dinámicamente según el stop loss (riesgo/trade × distancia al stop). Permite posiciones simultáneas con tamaños variables. Cuando una señal nueva supera el riesgo acumulado máximo o agota el pool disponible, se descarta. Las señales se procesan por fecha de entrada (más antigua primero) y, en empate de fecha, por orden alfabético del símbolo.'},
                       ].map(m=>{
                         const isCheckbox=mcStratSelected.length<=1
                         const isActive=isCheckbox?selectedModos.includes(m.id):mcMode===m.id
@@ -5480,6 +5480,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                 {h:'Win%',t:'Porcentaje de operaciones cerradas con ganancia sobre el total'},
                                 {h:'Profit Factor',t:'Factor de Beneficio: suma de ganancias / suma de pérdidas. Por encima de 1 la estrategia es rentable'},
                                 {h:'Max DD',t:'Máxima caída desde un pico hasta el valle siguiente, incluyendo pérdidas no realizadas dentro de cada trade (calculado siempre con P&L flotante)'},
+                                {h:'Max DD €',t:'Importe en euros de la máxima caída: equity en el valle − equity en el pico (mismos dos puntos que el Max DD %). Siempre negativo.'},
                                 {h:'Cap.inv€',t:'Capital total invertido en este activo a lo largo del backtest: suma del capital de entrada de todas sus operaciones ejecutadas.'},
                                 {h:'Cap.inv%',t:'Ocupación media del capital: porcentaje medio diario del capital total desplegado en posiciones abiertas. 100% = todo el capital invertido todos los días.'},
                                 {h:'T.inv%',t:'Tiempo en mercado: porcentaje de días del período con al menos una posición abierta (estrategia) o con ese activo en cartera (por activo).'},
@@ -5569,6 +5570,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                     <td style={{padding:'5px 6px',color:winRate>=50?'#00e5a0':'#ff4d6d',fontWeight:600}}>{fmt(winRate,1,'%')}</td>
                                     <td style={{padding:'5px 6px',color:pf>=1.5?'#00e5a0':pf>=1?'#ffd166':'#ff4d6d',fontWeight:600}}>{fmt(pf,2,'x')}</td>
                                     <td style={{padding:'5px 6px',color:'#ff4d6d',fontWeight:600}}>-{fmt(r.result.maxDDFloatCompound||r.result.maxDDCompound||0,1,'%')}</td>
+                                    <td style={{padding:'5px 6px',color:'#ff4d6d',fontWeight:600}}>{(()=>{const e=r.result.maxDDFloatCompound?r.result.maxDDFloatCompoundEur:r.result.maxDDCompound?r.result.maxDDCompoundEur:0;return e?'-€'+Math.round(Math.abs(e)).toLocaleString('es-ES'):'€0'})()}</td>
                                     <td style={{padding:'5px 6px',color:'#4a6a88'}}>—</td>
                                     <td style={{padding:'5px 6px',color:'#00d4ff',fontWeight:600}}>{fmt(avgCapInv,1,'%')}</td>
                                     <td style={{padding:'5px 6px',color:'#00d4ff',fontWeight:600}}>{fmt(avgTInv,1,'%')}</td>
@@ -5608,6 +5610,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                         <td style={{padding:'4px 6px',color:a.winRate>=50?'#00e5a0':'#ff4d6d'}}>{fmt(a.winRate,1,'%')}</td>
                                         <td style={{padding:'4px 6px',color:fBenef>=1.5?'#00e5a0':fBenef>=1?'#ffd166':'#ff4d6d'}}>{fmt(fBenef,2,'x')}</td>
                                         <td style={{padding:'4px 6px',color:'#ff4d6d'}}>{maxDD>0?'-'+fmt(maxDD,2,'%'):'0,00%'}</td>
+                                        <td style={{padding:'4px 6px',color:'#ff4d6d'}}>{a.maxDDEur<0?'-€'+Math.round(Math.abs(a.maxDDEur)).toLocaleString('es-ES'):'€0'}</td>
                                         <td style={{padding:'4px 6px',color:'#7ab3cc'}}>{a.capInvertidoTotal!=null?fmt(a.capInvertidoTotal,0,'€'):'—'}</td>
                                         <td style={{padding:'4px 6px',color:'#9acce0'}}>{fmt(a.capInvMedio??0,1,'%')}</td>
                                         <td style={{padding:'4px 6px',color:'#9acce0'}}>{fmt(a.tInvertido??0,1,'%')}</td>
@@ -5645,6 +5648,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                     <td style={{padding:'5px 6px',color:'#4a6a88'}}>—</td>
                                     <td style={{padding:'5px 6px',color:'#4a6a88'}}>—</td>
                                     <td style={{padding:'5px 6px',color:'#ff9a3c',fontWeight:600}}>-{fmt(mcResult.maxDDBH||0,1,'%')}</td>
+                                    <td style={{padding:'5px 6px',color:'#ff9a3c',fontWeight:600}}>{mcResult.maxDDBHEur<0?'-€'+Math.round(Math.abs(mcResult.maxDDBHEur)).toLocaleString('es-ES'):'€0'}</td>
                                     <td style={{padding:'5px 6px',color:'#4a6a88'}}>—</td>
                                     <td style={{padding:'5px 6px',color:'#9acce0'}}>100%</td>
                                     <td style={{padding:'5px 6px',color:'#9acce0'}}>100%</td>
@@ -5677,6 +5681,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                         <td style={{padding:'4px 6px',color:'#4a6a88'}}>—</td>
                                         <td style={{padding:'4px 6px',color:'#4a6a88'}}>—</td>
                                         <td style={{padding:'4px 6px',color:'#ff9a3c'}}>{a.priceMaxDD>0?'-'+fmt(a.priceMaxDD,2,'%'):'—'}</td>
+                                        <td style={{padding:'4px 6px',color:'#ff9a3c'}}>{a.priceMaxDDEur<0?'-€'+Math.round(Math.abs(a.priceMaxDDEur)).toLocaleString('es-ES'):'—'}</td>
                                         <td style={{padding:'4px 6px',color:'#7ab3cc'}}>{fmt(sc,0,'€')}</td>
                                         <td style={{padding:'4px 6px',color:'#9acce0'}}>100%</td>
                                         <td style={{padding:'4px 6px',color:'#9acce0'}}>100%</td>
