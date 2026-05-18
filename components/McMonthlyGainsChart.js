@@ -88,7 +88,12 @@ export default function McMonthlyGainsChart({ series = [], capitalIni, syncRef, 
     }
   }, [syncRef])
 
+  // validSeries: todas las series con datos → define el dominio de meses (eje X
+  // estable aunque se oculten barras). visibleSeries: las que se pintan/tooltip.
+  // visible !== false ⇒ retrocompat: si no se pasa `visible`, la serie es visible
+  // (el multibacktest no pasa este campo y sigue mostrando todas las series).
   const validSeries = useMemo(() => series.filter(s => s.compoundCurve?.length), [series])
+  const visibleSeries = useMemo(() => validSeries.filter(s => s.visible !== false), [validSeries])
 
   const { data, allMonths } = useMemo(() => {
     if (!validSeries.length) return { data: [], allMonths: [] }
@@ -138,7 +143,7 @@ export default function McMonthlyGainsChart({ series = [], capitalIni, syncRef, 
       }}>
         <div style={{ color: '#7aabcc', marginBottom: 3 }}>{fmtMonth(label)}</div>
         {payload.map(p => {
-          const s = validSeries.find(x => x.id + suffix === p.dataKey)
+          const s = visibleSeries.find(x => x.id + suffix === p.dataKey)
           if (!s) return null
           const v = p.value ?? 0
           return (
@@ -199,7 +204,7 @@ export default function McMonthlyGainsChart({ series = [], capitalIni, syncRef, 
             />
             <ReferenceLine y={0} stroke="rgba(255,255,255,0.18)" strokeWidth={1} />
             <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(0,212,255,0.06)' }} />
-            {validSeries.map(s => (
+            {visibleSeries.map(s => (
               <Bar
                 key={s.id}
                 dataKey={s.id + suffix}

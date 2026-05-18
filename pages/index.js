@@ -722,6 +722,7 @@ export default function Home() {
 
   const mcChartApiRef=useRef(null)
   const [mcAxisW,setMcAxisW]=useState(72)   // measured equity rightPriceScale width, shared with occupancy & monthly charts
+  const [indivAxisW,setIndivAxisW]=useState(72)   // measured individual EquityChart rightPriceScale width, shared with its monthly chart
   const [mcStratSelected,setMcStratSelected]=useState([])   // strategy IDs selected for comparison
   const [mcMultiResults,setMcMultiResults]=useState([])     // [{id,name,color,result}]
   const [mcProgress,setMcProgress]=useState(null)           // null|{current,total,name}
@@ -3087,7 +3088,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.251</title>
+        <title>Trading Simulator V9.252</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3165,7 +3166,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.251
+            <span className="dot"/>Trading Simulator V9.252
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5237,6 +5238,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       maxDDFloatCompoundDate={maxDDFloatCompoundDate}
                       syncRef={chartSyncRef}
                       chartHeight={equityH}
+                      onAxisWidth={w=>setIndivAxisW(prev=>Math.abs(prev-w)>0.5?w:prev)}
                     />
                     {/* Drag handle — resize equity chart height */}
                     <div onMouseDown={e=>{equityResizing.current=true;equityStartY.current=e.clientY;equityStartH.current=equityH;document.body.style.cursor='row-resize';document.body.style.userSelect='none'}}
@@ -5250,10 +5252,10 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                     {(()=>{
                       const capIniNum=Number(capitalIni)
                       const mSeries=[]
-                      if(result.compoundCurve?.length) mSeries.push({id:'__strat__',name:'Estrategia',color:'#00e5a0',compoundCurve:result.compoundCurve})
-                      if(result.bhCurve?.length) mSeries.push({id:'__bh__',name:'B&H Activo',color:'#ffd166',compoundCurve:result.bhCurve})
+                      if(result.compoundCurve?.length) mSeries.push({id:'__strat__',name:'Estrategia',color:'#00e5a0',compoundCurve:result.compoundCurve,visible:showCompound})
+                      if(result.bhCurve?.length) mSeries.push({id:'__bh__',name:'B&H Activo',color:'#ffd166',compoundCurve:result.bhCurve,visible:showBH})
                       if(!mSeries.some(s=>s.compoundCurve?.length)) return null
-                      return <div data-chart="monthly"><div style={{width:'calc(100% - 21px)',marginLeft:0}}><McMonthlyGainsChart series={mSeries} capitalIni={capIniNum} syncRef={chartSyncRef}/></div></div>
+                      return <div data-chart="monthly"><div style={{width:'calc(100% - 21px)',marginLeft:0}}><McMonthlyGainsChart series={mSeries} capitalIni={capIniNum} syncRef={chartSyncRef} axisWidth={indivAxisW}/></div></div>
                     })()}
                     {/* Capital invertido — filtro propio independiente */}
                     {result.trades?.length>0&&(

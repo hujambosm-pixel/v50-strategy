@@ -7,7 +7,7 @@ export default function EquityChart({
   maxDDStrategyDate,maxDDBHDate,maxDDSP500Date,maxDDCompoundDate,
   capitalIni,showStrategy,showBH,showSP500,showCompound,
   floatCurve,floatCompoundCurve,showFloat,maxDDFloat,maxDDFloatDate,maxDDFloatCompound,maxDDFloatCompoundDate,
-  syncRef,chartHeight=260
+  syncRef,chartHeight=260,onAxisWidth
 }) {
   const ref=useRef(null),chartRef=useRef(null),equityTooltipRef=useRef(null)
   useEffect(()=>{
@@ -118,7 +118,9 @@ export default function EquityChart({
       })
 
       chart.timeScale().fitContent()
-      const ro=new ResizeObserver(()=>{if(ref.current&&chartRef.current){try{chart.applyOptions({width:ref.current.clientWidth})}catch(_){}}})
+      const reportW=()=>{try{const w=chart.priceScale('right').width();if(w>0)onAxisWidth?.(w)}catch(_){}}
+      requestAnimationFrame(()=>requestAnimationFrame(reportW))
+      const ro=new ResizeObserver(()=>{if(ref.current&&chartRef.current){try{chart.applyOptions({width:ref.current.clientWidth})}catch(_){};requestAnimationFrame(reportW)}})
       ro.observe(ref.current)
       return()=>ro.disconnect()
     })
