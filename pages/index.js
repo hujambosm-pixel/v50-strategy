@@ -3087,7 +3087,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.246</title>
+        <title>Trading Simulator V9.247</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3165,7 +3165,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.246
+            <span className="dot"/>Trading Simulator V9.247
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5532,7 +5532,25 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                         {isActive&&isMulti&&<span style={{fontSize:7,color:'#00d4ff',background:'rgba(0,212,255,0.1)',border:'1px solid rgba(0,212,255,0.25)',borderRadius:2,padding:'0 3px',flexShrink:0}}>✓</span>}
                                       </div>
                                     </td>
-                                    <td style={{padding:'5px 6px',color:'#ffd166',fontWeight:600}}>{allT.length}</td>
+                                    <td style={{padding:'5px 6px',color:'#ffd166',fontWeight:600}}>{(()=>{
+                                      const ss=r.result.senalStats
+                                      if(!ss||!ss.generadas) return allT.length
+                                      const pct=Math.round(ss.ejecutadas/ss.generadas*100)
+                                      const is100=pct>=100
+                                      const tip=[
+                                        `Señales generadas: ${ss.generadas}`,
+                                        `Ejecutadas: ${ss.ejecutadas} (${pct}%)`,
+                                        ss.descartadasPorSlots>0?`Descartadas — slots llenos: ${ss.descartadasPorSlots}`:null,
+                                        ss.descartadasPorRiesgo>0?`Descartadas — riesgo acum.: ${ss.descartadasPorRiesgo}`:null,
+                                        ss.descartadasPorCapital>0?`Descartadas — sin capital: ${ss.descartadasPorCapital}`:null,
+                                        ss.winRateDescartadas!=null?`WR descartadas: ${ss.winRateDescartadas.toFixed(1)}%`:null,
+                                        ss.pfDescartadas!=null?`PF descartadas: ${ss.pfDescartadas.toFixed(2)}x`:null,
+                                      ].filter(Boolean).join('\n')
+                                      return(<span style={{display:'flex',alignItems:'center',gap:4}}>
+                                        <span>{allT.length}</span>
+                                        <span title={tip} style={{fontSize:9,color:is100?'#00e5a0':'#ff9f43',cursor:'help',fontWeight:400,background:is100?'rgba(0,229,160,0.08)':'rgba(255,159,67,0.12)',borderRadius:2,padding:'1px 4px'}}>{pct}%</span>
+                                      </span>)
+                                    })()}</td>
                                     <td style={{padding:'5px 6px',color:cagrC>=0?'#00e5a0':'#ff4d6d',fontWeight:600}}>{fmt(cagrC,2,'%')}</td>
                                     <td style={{padding:'5px 6px',color:profit>=0?'#00e5a0':'#ff4d6d',fontWeight:600}}>{fmt(profit,0,'€')}</td>
                                     <td style={{padding:'5px 6px',color:profitPct>=0?'#00e5a0':'#ff4d6d',fontWeight:600}}>{fmt(profitPct,1,'%')}</td>

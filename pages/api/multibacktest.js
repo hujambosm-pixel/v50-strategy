@@ -259,6 +259,10 @@ function buildCompartidoCurves(assetResults, capitalIni, symbolOrder = null) {
 
   if (!allCandidates.length) return buildSlotsCurves(assetResults, capitalIni)
 
+  const senalesGeneradasC = allCandidates.length
+  let cntEjecutadasC = 0, cntDescCapitalC = 0
+  const pnlDescartadosC = []
+
   // Pool de capital libre y slots abiertos
   let poolLibre = capitalIni
   const openSlots = {}          // { symbol: { trade, capAsignado } }
@@ -308,7 +312,8 @@ function buildCompartidoCurves(assetResults, capitalIni, symbolOrder = null) {
         const openCapsTotal = Object.values(openSlots).reduce((s, slot) => s + (slot.capAsignado || 0), 0)
         const totalPortfolio = poolLibre + openCapsTotal
         const capPorSlot = Math.min(totalPortfolio / n, poolLibre)
-        if (capPorSlot < 0.01) return
+        if (capPorSlot < 0.01) { cntDescCapitalC++; if (isFinite(t.pnlPct)) pnlDescartadosC.push(t.pnlPct); return }
+        cntEjecutadasC++
         poolLibre -= capPorSlot
         // Same-day trade (entryDate === exitDate): abrir y cerrar atómicamente
         // para evitar que quede bloqueado en openSlots sin salida
@@ -417,10 +422,22 @@ function buildCompartidoCurves(assetResults, capitalIni, symbolOrder = null) {
     return { date, value: total }
   })
 
+  const _descWinsCC = pnlDescartadosC.filter(p => p >= 0)
+  const _descGrossWinCC = _descWinsCC.reduce((s, p) => s + p, 0)
+  const _descGrossLossCC = Math.abs(pnlDescartadosC.filter(p => p < 0).reduce((s, p) => s + p, 0))
+  const senalStatsC = {
+    generadas:             senalesGeneradasC,
+    ejecutadas:            cntEjecutadasC,
+    descartadasPorSlots:   0,
+    descartadasPorCapital: cntDescCapitalC,
+    winRateDescartadas:    pnlDescartadosC.length ? _descWinsCC.length / pnlDescartadosC.length * 100 : null,
+    pfDescartadas:         _descGrossLossCC > 0 ? _descGrossWinCC / _descGrossLossCC : _descGrossWinCC > 0 ? 99 : null,
+  }
+
   return {
     simpleCurve, compoundCurve, bhCurve, occupancyCurve, startDate,
     executedTrades, floatSimpleCurve, floatCompoundCurve,
-    tInvEstrategia, avgCapOccupancy,
+    tInvEstrategia, avgCapOccupancy, senalStats: senalStatsC,
     ..._calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni),
     ..._calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni)
   }
@@ -447,6 +464,10 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 4) {
   ).sort((a, b) => a.entryDate < b.entryDate ? -1 : a.entryDate > b.entryDate ? 1 : a.symbol < b.symbol ? -1 : 1)
 
   if (!allCandidates.length) return buildSlotsCurves(assetResults, capitalIni)
+
+  const senalesGeneradas = allCandidates.length
+  let cntEjecutadas = 0, cntDescSlots = 0, cntDescCapital = 0
+  const pnlDescartados = []
 
   let poolLibre = capitalIni
   const openSlots = {}
@@ -487,6 +508,9 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 4) {
 
     // 2. Abrir entradas: cada una calcula su tamaño dinámicamente
     const entries = (entriesByDate[date] || []).filter(t => !openSlots[t.symbol])
+    if (entries.length > 0 && poolLibre <= 0.01) {
+      entries.forEach(t => { cntDescCapital++; if (isFinite(t.pnlPct)) pnlDescartados.push(t.pnlPct) })
+    }
     if (entries.length > 0 && poolLibre > 0.01) {
       // BUG B fix: contador de same-day trades abiertos en este batch
       // (no añaden a openSlots, así que slotsLibres debe compensarlo manualmente)
@@ -495,7 +519,7 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 4) {
         const posicionesAbiertas = Object.keys(openSlots).length
         // BUG B fix: descontar same-day trades del mismo batch para no superar maxPosiciones
         const slotsLibresEfectivos = maxPosiciones - posicionesAbiertas - sameDayOpen
-        if (slotsLibresEfectivos <= 0) return  // al límite: señal descartada
+        if (slotsLibresEfectivos <= 0) { cntDescSlots++; if (isFinite(t.pnlPct)) pnlDescartados.push(t.pnlPct); return }
         const openCapsTotal = Object.values(openSlots).reduce((s, sl) => s + (sl.capAsignado || 0), 0)
         const capitalTotal = poolLibre + openCapsTotal
         // Techo por posición: dividir entre el mínimo real de slots disponibles
@@ -503,7 +527,8 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 4) {
         const slotsEfectivos = Math.min(maxPosiciones, n)
         const capMaxPorPosicion = capitalTotal / slotsEfectivos
         const capPorEntrada = Math.min(poolLibre, capMaxPorPosicion)
-        if (capPorEntrada < 0.01) return  // sin capital: señal descartada
+        if (capPorEntrada < 0.01) { cntDescCapital++; if (isFinite(t.pnlPct)) pnlDescartados.push(t.pnlPct); return }
+        cntEjecutadas++
         poolLibre -= capPorEntrada
         const totalPortfolio = capitalTotal
         if (t.exitDate === date) {
@@ -610,10 +635,22 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 4) {
     return { date, value: total }
   })
 
+  const _descWinsC = pnlDescartados.filter(p => p >= 0)
+  const _descGrossWinC = _descWinsC.reduce((s, p) => s + p, 0)
+  const _descGrossLossC = Math.abs(pnlDescartados.filter(p => p < 0).reduce((s, p) => s + p, 0))
+  const senalStats = {
+    generadas:            senalesGeneradas,
+    ejecutadas:           cntEjecutadas,
+    descartadasPorSlots:  cntDescSlots,
+    descartadasPorCapital: cntDescCapital,
+    winRateDescartadas:   pnlDescartados.length ? _descWinsC.length / pnlDescartados.length * 100 : null,
+    pfDescartadas:        _descGrossLossC > 0 ? _descGrossWinC / _descGrossLossC : _descGrossWinC > 0 ? 99 : null,
+  }
+
   return {
     simpleCurve, compoundCurve, bhCurve, occupancyCurve, startDate,
     executedTrades, floatSimpleCurve, floatCompoundCurve,
-    tInvEstrategia, avgCapOccupancy,
+    tInvEstrategia, avgCapOccupancy, senalStats,
     ..._calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni),
     ..._calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni)
   }
@@ -644,6 +681,10 @@ function buildPositionSizingCurves(assetResults, capitalIni, sizeRules) {
   ).sort((a, b) => a.entryDate < b.entryDate ? -1 : 1)
 
   if (!allCandidates.length) return buildSlotsCurves(assetResults, capitalIni)
+
+  const senalesGeneradasPS = allCandidates.length
+  let cntEjecutadasPS = 0, cntDescRiesgoPS = 0, cntDescCapitalPS = 0
+  const pnlDescartadosPS = []
 
   let poolLibre = capitalIni
   let riesgoAcumulado = 0
@@ -722,9 +763,10 @@ function buildPositionSizingCurves(assetResults, capitalIni, sizeRules) {
         ? capAsignado * distancia
         : capitalActual * maxPctCap
 
-      if (riesgoAcumulado + riesgoEsteTrade > capitalActual * maxAccum) return
+      if (riesgoAcumulado + riesgoEsteTrade > capitalActual * maxAccum) { cntDescRiesgoPS++; if (isFinite(t.pnlPct)) pnlDescartadosPS.push(t.pnlPct); return }
       if (capAsignado > poolLibre) capAsignado = poolLibre
-      if (capAsignado <= 0) return
+      if (capAsignado <= 0) { cntDescCapitalPS++; if (isFinite(t.pnlPct)) pnlDescartadosPS.push(t.pnlPct); return }
+      cntEjecutadasPS++
 
       if (t.exitDate === date) {
         const capFinal = capAsignado * (1 + t.pnlPct / 100)
@@ -813,10 +855,23 @@ function buildPositionSizingCurves(assetResults, capitalIni, sizeRules) {
     return { date, value: total }
   })
 
+  const _descWinsPS = pnlDescartadosPS.filter(p => p >= 0)
+  const _descGrossWinPS = _descWinsPS.reduce((s, p) => s + p, 0)
+  const _descGrossLossPS = Math.abs(pnlDescartadosPS.filter(p => p < 0).reduce((s, p) => s + p, 0))
+  const senalStatsPS = {
+    generadas:             senalesGeneradasPS,
+    ejecutadas:            cntEjecutadasPS,
+    descartadasPorSlots:   0,
+    descartadasPorRiesgo:  cntDescRiesgoPS,
+    descartadasPorCapital: cntDescCapitalPS,
+    winRateDescartadas:    pnlDescartadosPS.length ? _descWinsPS.length / pnlDescartadosPS.length * 100 : null,
+    pfDescartadas:         _descGrossLossPS > 0 ? _descGrossWinPS / _descGrossLossPS : _descGrossWinPS > 0 ? 99 : null,
+  }
+
   return {
     simpleCurve, compoundCurve, bhCurve, occupancyCurve, startDate,
     executedTrades, floatSimpleCurve, floatCompoundCurve,
-    tInvEstrategia, avgCapOccupancy,
+    tInvEstrategia, avgCapOccupancy, senalStats: senalStatsPS,
     ..._calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni),
     ..._calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni)
   }
@@ -1294,6 +1349,7 @@ export default async function handler(req, res) {
       modoAsig,
       startDate: curves.startDate,
       blockEventsBySymbol: Object.fromEntries(assetResults.map(ar => [ar.symbol, ar.blockEvents])),
+      senalStats: curves.senalStats ?? null,
     })
   } catch(err) {
     console.error(err)
