@@ -1,4 +1,4 @@
-// pages/api/datos.js — Motor V50 v3.0 (V9.254)
+// pages/api/datos.js — Motor V50 v3.0 (V9.256)
 
 import { calcEMA, calcSMA, calcRSI, calcATR, calcMACD } from '../../lib/backtester'
 
@@ -244,9 +244,10 @@ export default async function handler(req, res) {
 
     // ── Fetch SP500 + filtro auxiliares en paralelo ──
     const filtrosCfg = filtros || {}
-    const anyFiltroOn = !!(filtrosCfg.vix?.activo || filtrosCfg.indiceEma?.activo || filtrosCfg.sectorEma?.activo)
-    let sp500Data = null, vixRawData = null, indiceAuxData = null, sectorAuxData = null
+    const anyFiltroOn = !!(filtrosCfg.vix?.activo || filtrosCfg.indiceEma?.activo || filtrosCfg.sectorEma?.activo || filtrosCfg.cruceEma?.activo)
+    let sp500Data = null, vixRawData = null
     const sp500Map = {}
+    const auxDataMap = {} // ticker -> data (para todos los filtros no-GSPC, dedupado)
 
     const fetchJobs = [
       fetchAV('^GSPC', years + 1)
@@ -256,12 +257,14 @@ export default async function handler(req, res) {
     if (anyFiltroOn) {
       if (filtrosCfg.vix?.activo)
         fetchJobs.push(fetchAV('^VIX', years + 1).then(r => { vixRawData = r.filter(d => d.date >= data[0].date) }).catch(() => {}))
-      if (filtrosCfg.indiceEma?.activo && filtrosCfg.indiceEma.ticker && filtrosCfg.indiceEma.ticker !== '^GSPC')
-        fetchJobs.push(fetchAV(filtrosCfg.indiceEma.ticker, years + 1).then(r => { indiceAuxData = r.filter(d => d.date >= data[0].date) }).catch(() => {}))
-      if (filtrosCfg.sectorEma?.activo && filtrosCfg.sectorEma.ticker &&
-          filtrosCfg.sectorEma.ticker !== '^GSPC' &&
-          filtrosCfg.sectorEma.ticker !== (filtrosCfg.indiceEma?.ticker || ''))
-        fetchJobs.push(fetchAV(filtrosCfg.sectorEma.ticker, years + 1).then(r => { sectorAuxData = r.filter(d => d.date >= data[0].date) }).catch(() => {}))
+      // Colectar tickers no-GSPC únicos de todos los filtros activos
+      const auxTickers = new Set()
+      for (const key of ['indiceEma','sectorEma','cruceEma']) {
+        const f = filtrosCfg[key]
+        if (f?.activo && f.ticker && f.ticker !== '^GSPC') auxTickers.add(f.ticker)
+      }
+      for (const ticker of auxTickers)
+        fetchJobs.push(fetchAV(ticker, years + 1).then(r => { auxDataMap[ticker] = r.filter(d => d.date >= data[0].date) }).catch(() => {}))
     }
     await Promise.all(fetchJobs)
 
@@ -271,28 +274,28 @@ export default async function handler(req, res) {
     let filterZonesFromFiltros = []
 
     if (anyFiltroOn) {
-      // Resuelve el dataset para cada filtro
-      const resolveData = (ticker, auxData) =>
-        ticker === '^GSPC' ? sp500Data : (auxData ?? sp500Data)
+      // Resuelve el dataset para un ticker (^GSPC → sp500Data, resto → auxDataMap)
+      const resolveData = (ticker) =>
+        ticker === '^GSPC' ? sp500Data : (auxDataMap[ticker] ?? sp500Data)
 
       // VIX
       const vixCloses = filtrosCfg.vix?.activo ? buildAlignedCloses(vixRawData, assetDates) : null
 
       // Índice EMA
-      const indiceDataRes = filtrosCfg.indiceEma?.activo
-        ? resolveData(filtrosCfg.indiceEma.ticker, indiceAuxData)
-        : null
+      const indiceDataRes = filtrosCfg.indiceEma?.activo ? resolveData(filtrosCfg.indiceEma.ticker) : null
       const indiceCloses  = indiceDataRes ? buildAlignedCloses(indiceDataRes, assetDates) : null
       const indiceEmaArr  = indiceCloses  ? calcEMA(indiceCloses, Math.max(1, filtrosCfg.indiceEma?.periodo ?? 200)) : null
 
       // Sector EMA
-      const sectorDataRes = filtrosCfg.sectorEma?.activo
-        ? (filtrosCfg.sectorEma.ticker === (filtrosCfg.indiceEma?.ticker || '')
-            ? indiceDataRes
-            : resolveData(filtrosCfg.sectorEma.ticker, sectorAuxData))
-        : null
+      const sectorDataRes = filtrosCfg.sectorEma?.activo ? resolveData(filtrosCfg.sectorEma.ticker) : null
       const sectorCloses  = sectorDataRes ? buildAlignedCloses(sectorDataRes, assetDates) : null
       const sectorEmaArr  = sectorCloses  ? calcEMA(sectorCloses, Math.max(1, filtrosCfg.sectorEma?.periodo ?? 50)) : null
+
+      // Cruce EMA (EMA rápida > EMA lenta del ticker de referencia)
+      const cruceDataRes  = filtrosCfg.cruceEma?.activo ? resolveData(filtrosCfg.cruceEma.ticker) : null
+      const cruceCloses   = cruceDataRes ? buildAlignedCloses(cruceDataRes, assetDates) : null
+      const cruceEmaRArr  = cruceCloses  ? calcEMA(cruceCloses, Math.max(1, filtrosCfg.cruceEma?.periodoR ?? 10)) : null
+      const cruceEmaLArr  = cruceCloses  ? calcEMA(cruceCloses, Math.max(1, filtrosCfg.cruceEma?.periodoL ?? 11)) : null
 
       // Mapas de visualización
       const vixMap = {}, indiceMap = {}
@@ -301,7 +304,7 @@ export default async function handler(req, res) {
 
       for (let i = 0; i < data.length; i++) {
         const date = data[i].date
-        let vixOk = true, indiceOk = true, sectorOk = true
+        let vixOk = true, indiceOk = true, sectorOk = true, cruceOk = true
 
         if (filtrosCfg.vix?.activo) {
           const vc = vixCloses?.[i]
@@ -315,7 +318,11 @@ export default async function handler(req, res) {
           const sc = sectorCloses?.[i], se = sectorEmaArr?.[i]
           sectorOk = sc == null || se == null ? true : sc >= se
         }
-        filtroActivoMap[date] = vixOk && indiceOk && sectorOk
+        if (filtrosCfg.cruceEma?.activo) {
+          const er = cruceEmaRArr?.[i], el = cruceEmaLArr?.[i]
+          cruceOk = er == null || el == null ? true : er > el
+        }
+        filtroActivoMap[date] = vixOk && indiceOk && sectorOk && cruceOk
 
         // Inyectar en barra para visualización
         data[i].vixClose    = vixMap[date]    ?? null

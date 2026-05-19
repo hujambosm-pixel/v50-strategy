@@ -506,7 +506,7 @@ export default function Home() {
   const [tipoStop,setTipoStop]=useState('tecnico'),[atrP,setAtrP]=useState(14),[atrM,setAtrM]=useState(1.0)
   const [sinPerdidas,setSinPerdidas]=useState(true),[reentry,setReentry]=useState(true)
   const [tipoFiltro,setTipoFiltro]=useState('none'),[sp500EmaR,setSp500EmaR]=useState(10),[sp500EmaL,setSp500EmaL]=useState(11)
-  const [filtros,setFiltros]=useState({vix:{activo:false,umbral:25},indiceEma:{activo:false,ticker:'^GSPC',periodo:200},sectorEma:{activo:false,ticker:'XLK',periodo:50}})
+  const [filtros,setFiltros]=useState({vix:{activo:false,umbral:25},indiceEma:{activo:false,ticker:'^GSPC',periodo:200},sectorEma:{activo:false,ticker:'XLK',periodo:50},cruceEma:{activo:false,ticker:'^GSPC',periodoR:10,periodoL:11}})
   const [filtrosOpen,setFiltrosOpen]=useState(false)
   const [result,setResult]=useState(null),[loading,setLoading]=useState(false),[error,setError]=useState(null)
   const [labelMode,setLabelMode]=useState(1),[rulerOn,setRulerOn]=useState(false)
@@ -3090,7 +3090,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.255</title>
+        <title>Trading Simulator V9.256</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3168,7 +3168,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.255
+            <span className="dot"/>Trading Simulator V9.256
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -3298,35 +3298,37 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
 
                 {/* ── Filtros de mercado ── */}
                 {(()=>{
-                  const anyOn=filtros.vix.activo||filtros.indiceEma.activo||filtros.sectorEma.activo
-                  const onCnt=[filtros.vix.activo,filtros.indiceEma.activo,filtros.sectorEma.activo].filter(Boolean).length
+                  const anyOn=filtros.vix.activo||filtros.indiceEma.activo||filtros.sectorEma.activo||filtros.cruceEma.activo
+                  const onCnt=[filtros.vix.activo,filtros.indiceEma.activo,filtros.sectorEma.activo,filtros.cruceEma.activo].filter(Boolean).length
                   const fInp={background:'#0a1520',border:'1px solid #1a3d5a',borderRadius:3,color:'var(--text)',fontFamily:MONO,fontSize:10,padding:'1px 4px',boxSizing:'border-box',outline:'none',width:'100%'}
                   const fToggle=(key)=>setFiltros(p=>({...p,[key]:{...p[key],activo:!p[key].activo}}))
                   const fSet=(key,field,val)=>setFiltros(p=>({...p,[key]:{...p[key],[field]:val}}))
                   const toggleBtn=(active)=>({
                     display:'inline-flex',alignItems:'center',justifyContent:'center',
                     width:28,height:14,borderRadius:7,flexShrink:0,cursor:'pointer',transition:'background 0.15s',
-                    background:active?'#00e5a0':'#1a2d45',position:'relative',
+                    background:active?'#00e5a0':'#1a2d45',position:'relative',flexShrink:0,
                   })
                   const toggleKnob=(active)=>({
                     position:'absolute',width:10,height:10,borderRadius:'50%',
-                    background:active?'#fff':'#4a6a88',
+                    background:active?'#fff':'#7a9bc0',
                     left:active?16:2,transition:'left 0.15s',
                   })
+                  const lbl=(active)=>({fontFamily:MONO,fontSize:11,color:active?'var(--text)':'var(--text2)',flex:1})
+                  const plbl={fontFamily:MONO,fontSize:9,color:'var(--text2)',whiteSpace:'nowrap'}
                   return(
                   <div style={{borderBottom:'1px solid var(--border)',flexShrink:0}}>
                     {/* Cabecera colapsable */}
                     <div onClick={()=>setFiltrosOpen(v=>!v)}
                       style={{padding:'5px 10px',display:'flex',alignItems:'center',gap:5,cursor:'pointer',
                         userSelect:'none',background:anyOn?'rgba(0,229,160,0.05)':'transparent'}}>
-                      <span style={{fontFamily:MONO,fontSize:11,color:anyOn?'#00e5a0':'#5a7a95',fontWeight:anyOn?700:500}}>
+                      <span style={{fontFamily:MONO,fontSize:11,color:anyOn?'#00e5a0':'var(--text2)',fontWeight:anyOn?700:500}}>
                         Filtros de mercado
                       </span>
                       {anyOn&&<span style={{fontFamily:MONO,fontSize:9,background:'rgba(0,229,160,0.18)',color:'#00e5a0',
                         borderRadius:3,padding:'0 4px',lineHeight:'14px',flexShrink:0}}>
                         {onCnt} activo{onCnt>1?'s':''}
                       </span>}
-                      <span style={{marginLeft:'auto',color:'#3d5a7a',fontSize:10,lineHeight:1}}>{filtrosOpen?'▾':'▸'}</span>
+                      <span style={{marginLeft:'auto',color:'var(--text2)',fontSize:10,lineHeight:1}}>{filtrosOpen?'▾':'▸'}</span>
                     </div>
 
                     {filtrosOpen&&(
@@ -3338,11 +3340,11 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                             <div style={toggleBtn(filtros.vix.activo)} onClick={()=>fToggle('vix')}>
                               <div style={toggleKnob(filtros.vix.activo)}/>
                             </div>
-                            <span style={{fontFamily:MONO,fontSize:11,color:filtros.vix.activo?'#e2eaf5':'#5a7a95',flex:1}}>VIX &lt; umbral</span>
+                            <span style={lbl(filtros.vix.activo)}>VIX &lt; umbral</span>
                           </div>
                           {filtros.vix.activo&&(
                             <div style={{display:'flex',alignItems:'center',gap:5,paddingLeft:34}}>
-                              <span style={{fontFamily:MONO,fontSize:9,color:'#4a6a88',whiteSpace:'nowrap'}}>Umbral</span>
+                              <span style={plbl}>Umbral</span>
                               <input type="number" min={5} max={80} step={1}
                                 value={filtros.vix.umbral}
                                 onChange={e=>fSet('vix','umbral',Number(e.target.value)||25)}
@@ -3357,15 +3359,15 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                             <div style={toggleBtn(filtros.indiceEma.activo)} onClick={()=>fToggle('indiceEma')}>
                               <div style={toggleKnob(filtros.indiceEma.activo)}/>
                             </div>
-                            <span style={{fontFamily:MONO,fontSize:11,color:filtros.indiceEma.activo?'#e2eaf5':'#5a7a95',flex:1}}>Índice &gt; EMA</span>
+                            <span style={lbl(filtros.indiceEma.activo)}>Índice &gt; EMA</span>
                           </div>
                           {filtros.indiceEma.activo&&(
                             <div style={{display:'flex',alignItems:'center',gap:5,paddingLeft:34}}>
-                              <span style={{fontFamily:MONO,fontSize:9,color:'#4a6a88',whiteSpace:'nowrap'}}>Ticker</span>
+                              <span style={plbl}>Ticker</span>
                               <input type="text" value={filtros.indiceEma.ticker}
                                 onChange={e=>fSet('indiceEma','ticker',e.target.value.toUpperCase())}
                                 style={{...fInp,width:60}}/>
-                              <span style={{fontFamily:MONO,fontSize:9,color:'#4a6a88',whiteSpace:'nowrap'}}>EMA</span>
+                              <span style={plbl}>EMA</span>
                               <input type="number" min={2} max={500} step={1}
                                 value={filtros.indiceEma.periodo}
                                 onChange={e=>fSet('indiceEma','periodo',Number(e.target.value)||200)}
@@ -3380,15 +3382,15 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                             <div style={toggleBtn(filtros.sectorEma.activo)} onClick={()=>fToggle('sectorEma')}>
                               <div style={toggleKnob(filtros.sectorEma.activo)}/>
                             </div>
-                            <span style={{fontFamily:MONO,fontSize:11,color:filtros.sectorEma.activo?'#e2eaf5':'#5a7a95',flex:1}}>Sector ETF &gt; EMA</span>
+                            <span style={lbl(filtros.sectorEma.activo)}>Sector ETF &gt; EMA</span>
                           </div>
                           {filtros.sectorEma.activo&&(
                             <div style={{display:'flex',alignItems:'center',gap:5,paddingLeft:34}}>
-                              <span style={{fontFamily:MONO,fontSize:9,color:'#4a6a88',whiteSpace:'nowrap'}}>ETF</span>
+                              <span style={plbl}>ETF</span>
                               <input type="text" value={filtros.sectorEma.ticker}
                                 onChange={e=>fSet('sectorEma','ticker',e.target.value.toUpperCase())}
                                 style={{...fInp,width:60}}/>
-                              <span style={{fontFamily:MONO,fontSize:9,color:'#4a6a88',whiteSpace:'nowrap'}}>EMA</span>
+                              <span style={plbl}>EMA</span>
                               <input type="number" min={2} max={500} step={1}
                                 value={filtros.sectorEma.periodo}
                                 onChange={e=>fSet('sectorEma','periodo',Number(e.target.value)||50)}
@@ -3397,8 +3399,36 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                           )}
                         </div>
 
-                        {anyOn&&<div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',lineHeight:1.4,marginTop:1}}>
-                          Lógica AND — todos los filtros activos deben estar en verde para permitir entradas. Las zonas bloqueadas aparecen en rojo en el gráfico.
+                        {/* ── Filtro Cruce EMA ── */}
+                        <div>
+                          <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:filtros.cruceEma.activo?4:0}}>
+                            <div style={toggleBtn(filtros.cruceEma.activo)} onClick={()=>fToggle('cruceEma')}>
+                              <div style={toggleKnob(filtros.cruceEma.activo)}/>
+                            </div>
+                            <span style={lbl(filtros.cruceEma.activo)}>Cruce EMA (R&gt;L)</span>
+                          </div>
+                          {filtros.cruceEma.activo&&(
+                            <div style={{display:'flex',alignItems:'center',gap:5,paddingLeft:34,flexWrap:'wrap'}}>
+                              <span style={plbl}>Ticker</span>
+                              <input type="text" value={filtros.cruceEma.ticker}
+                                onChange={e=>fSet('cruceEma','ticker',e.target.value.toUpperCase())}
+                                style={{...fInp,width:60}}/>
+                              <span style={plbl}>R</span>
+                              <input type="number" min={2} max={500} step={1}
+                                value={filtros.cruceEma.periodoR}
+                                onChange={e=>fSet('cruceEma','periodoR',Number(e.target.value)||10)}
+                                style={{...fInp,width:42}}/>
+                              <span style={plbl}>L</span>
+                              <input type="number" min={2} max={500} step={1}
+                                value={filtros.cruceEma.periodoL}
+                                onChange={e=>fSet('cruceEma','periodoL',Number(e.target.value)||11)}
+                                style={{...fInp,width:42}}/>
+                            </div>
+                          )}
+                        </div>
+
+                        {anyOn&&<div style={{fontFamily:MONO,fontSize:9,color:'var(--text2)',lineHeight:1.4,marginTop:1}}>
+                          AND — todos los filtros activos en verde para permitir entrada. Zonas bloqueadas en rojo en el gráfico.
                         </div>}
                       </div>
                     )}
