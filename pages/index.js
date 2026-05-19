@@ -3090,7 +3090,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.254</title>
+        <title>Trading Simulator V9.255</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3168,7 +3168,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.254
+            <span className="dot"/>Trading Simulator V9.255
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -3296,76 +3296,6 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   </div>
                 </div>
 
-                {/* ── Lista ── */}
-                <div style={{overflowY:'auto',flex:1}}>
-                  {strLoading&&<div style={{padding:'10px 12px',fontFamily:MONO,fontSize:12,color:'#a8ccdf'}}>⟳ Cargando…</div>}
-                  {!strLoading&&strategies.length===0&&(
-                    <div style={{padding:'14px 12px',fontFamily:MONO,fontSize:11,color:'var(--text3)',lineHeight:1.8}}>
-                      Sin estrategias guardadas.
-                      <br/>
-                      <button onClick={newStrategy}
-                        style={{marginTop:8,background:'rgba(0,212,255,0.08)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:11,padding:'4px 10px',borderRadius:4,cursor:'pointer'}}>
-                        + Crear estrategia
-                      </button>
-                    </div>
-                  )}
-                  {!strLoading&&(()=>{
-                    const q=(strForm._search||'').toLowerCase()
-                    const list=q?strategies.filter(s=>(s.name||'').toLowerCase().includes(q)||(s.description||'').toLowerCase().includes(q)):strategies
-                    if(!list.length&&q) return <div style={{padding:'10px 12px',fontFamily:MONO,fontSize:11,color:'var(--text3)'}}>Sin resultados.</div>
-                    return list.map(s=>{
-                      const isActive=currentStratId===s.id
-                      const col=s.color||'#00d4ff'
-                      return (
-                        <div key={s.id}
-                          style={{padding:'7px 10px',display:'flex',alignItems:'center',gap:6,
-                            borderBottom:'1px solid var(--border)',
-                            background:isActive?'rgba(0,212,255,0.07)':'transparent',
-                            borderLeft:`2px solid ${isActive?col:'transparent'}`,
-                            transition:'background 0.1s'}}
-                          onMouseOver={e=>{if(!isActive)e.currentTarget.style.background='rgba(255,255,255,0.03)'}}
-                          onMouseOut={e=>{if(!isActive)e.currentTarget.style.background='transparent'}}>
-                          {/* Color dot */}
-                          <span style={{width:8,height:8,borderRadius:'50%',background:col,
-                            flexShrink:0,display:'inline-block',boxShadow:isActive?`0 0 5px ${col}88`:'none'}}/>
-                          {/* Name + meta */}
-                          <div style={{flex:1,minWidth:0,cursor:'default'}}>
-                            <div style={{fontFamily:MONO,fontSize:11,color:isActive?'var(--accent)':'#d0e8fa',
-                              fontWeight:isActive?700:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-                              {s.name}
-                            </div>
-                            <div style={{fontFamily:MONO,fontSize:9,color:'#5a7a95',marginTop:1}}>
-                              {s.years||'?'}a · {s.definition?.setup?.ma_fast||s.ema_r||'?'}/{s.definition?.setup?.ma_slow||s.ema_l||'?'}
-                            </div>
-                          </div>
-                          {/* Edit button */}
-                          <button onClick={e=>{e.stopPropagation();openEditStr(s)}}
-                            title="Editar"
-                            style={{background:'transparent',border:'1px solid var(--border)',color:'var(--text3)',
-                              fontFamily:MONO,fontSize:11,padding:'2px 6px',borderRadius:3,cursor:'pointer',
-                              flexShrink:0,transition:'color 0.1s,border-color 0.1s'}}
-                            onMouseOver={e=>{e.currentTarget.style.color='#a8ccdf';e.currentTarget.style.borderColor='#a8ccdf'}}
-                            onMouseOut={e=>{e.currentTarget.style.color='var(--text3)';e.currentTarget.style.borderColor='var(--border)'}}>
-                            ✎
-                          </button>
-                          {/* Play/Stop button */}
-                          <button onClick={e=>{e.stopPropagation();isActive?stopStrategy():loadStrategyLegacy(s)}}
-                            title={isActive?`Detener: ${s.name}`:`Ejecutar: ${s.name}`}
-                            style={{background:isActive?'rgba(255,77,109,0.15)':'rgba(0,212,255,0.08)',
-                              border:`1px solid ${isActive?'#ff4d6d':'var(--accent)'}`,
-                              color:isActive?'#ff4d6d':'var(--accent)',
-                              fontFamily:MONO,fontSize:12,padding:'2px 7px',borderRadius:3,cursor:'pointer',
-                              flexShrink:0,transition:'all 0.1s'}}
-                            onMouseOver={e=>{e.currentTarget.style.background=isActive?'rgba(255,77,109,0.25)':`${col}33`}}
-                            onMouseOut={e=>{e.currentTarget.style.background=isActive?'rgba(255,77,109,0.15)':'rgba(0,212,255,0.08)'}}>
-                            {isActive?'■':'▶'}
-                          </button>
-                        </div>
-                      )
-                    })
-                  })()}
-                </div>
-
                 {/* ── Filtros de mercado ── */}
                 {(()=>{
                   const anyOn=filtros.vix.activo||filtros.indiceEma.activo||filtros.sectorEma.activo
@@ -3384,7 +3314,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     left:active?16:2,transition:'left 0.15s',
                   })
                   return(
-                  <div style={{borderTop:'1px solid var(--border)',flexShrink:0}}>
+                  <div style={{borderBottom:'1px solid var(--border)',flexShrink:0}}>
                     {/* Cabecera colapsable */}
                     <div onClick={()=>setFiltrosOpen(v=>!v)}
                       style={{padding:'5px 10px',display:'flex',alignItems:'center',gap:5,cursor:'pointer',
@@ -3475,6 +3405,76 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   </div>
                   )
                 })()}
+
+                {/* ── Lista ── */}
+                <div style={{overflowY:'auto',flex:1}}>
+                  {strLoading&&<div style={{padding:'10px 12px',fontFamily:MONO,fontSize:12,color:'#a8ccdf'}}>⟳ Cargando…</div>}
+                  {!strLoading&&strategies.length===0&&(
+                    <div style={{padding:'14px 12px',fontFamily:MONO,fontSize:11,color:'var(--text3)',lineHeight:1.8}}>
+                      Sin estrategias guardadas.
+                      <br/>
+                      <button onClick={newStrategy}
+                        style={{marginTop:8,background:'rgba(0,212,255,0.08)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:11,padding:'4px 10px',borderRadius:4,cursor:'pointer'}}>
+                        + Crear estrategia
+                      </button>
+                    </div>
+                  )}
+                  {!strLoading&&(()=>{
+                    const q=(strForm._search||'').toLowerCase()
+                    const list=q?strategies.filter(s=>(s.name||'').toLowerCase().includes(q)||(s.description||'').toLowerCase().includes(q)):strategies
+                    if(!list.length&&q) return <div style={{padding:'10px 12px',fontFamily:MONO,fontSize:11,color:'var(--text3)'}}>Sin resultados.</div>
+                    return list.map(s=>{
+                      const isActive=currentStratId===s.id
+                      const col=s.color||'#00d4ff'
+                      return (
+                        <div key={s.id}
+                          style={{padding:'7px 10px',display:'flex',alignItems:'center',gap:6,
+                            borderBottom:'1px solid var(--border)',
+                            background:isActive?'rgba(0,212,255,0.07)':'transparent',
+                            borderLeft:`2px solid ${isActive?col:'transparent'}`,
+                            transition:'background 0.1s'}}
+                          onMouseOver={e=>{if(!isActive)e.currentTarget.style.background='rgba(255,255,255,0.03)'}}
+                          onMouseOut={e=>{if(!isActive)e.currentTarget.style.background='transparent'}}>
+                          {/* Color dot */}
+                          <span style={{width:8,height:8,borderRadius:'50%',background:col,
+                            flexShrink:0,display:'inline-block',boxShadow:isActive?`0 0 5px ${col}88`:'none'}}/>
+                          {/* Name + meta */}
+                          <div style={{flex:1,minWidth:0,cursor:'default'}}>
+                            <div style={{fontFamily:MONO,fontSize:11,color:isActive?'var(--accent)':'#d0e8fa',
+                              fontWeight:isActive?700:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                              {s.name}
+                            </div>
+                            <div style={{fontFamily:MONO,fontSize:9,color:'#5a7a95',marginTop:1}}>
+                              {s.years||'?'}a · {s.definition?.setup?.ma_fast||s.ema_r||'?'}/{s.definition?.setup?.ma_slow||s.ema_l||'?'}
+                            </div>
+                          </div>
+                          {/* Edit button */}
+                          <button onClick={e=>{e.stopPropagation();openEditStr(s)}}
+                            title="Editar"
+                            style={{background:'transparent',border:'1px solid var(--border)',color:'var(--text3)',
+                              fontFamily:MONO,fontSize:11,padding:'2px 6px',borderRadius:3,cursor:'pointer',
+                              flexShrink:0,transition:'color 0.1s,border-color 0.1s'}}
+                            onMouseOver={e=>{e.currentTarget.style.color='#a8ccdf';e.currentTarget.style.borderColor='#a8ccdf'}}
+                            onMouseOut={e=>{e.currentTarget.style.color='var(--text3)';e.currentTarget.style.borderColor='var(--border)'}}>
+                            ✎
+                          </button>
+                          {/* Play/Stop button */}
+                          <button onClick={e=>{e.stopPropagation();isActive?stopStrategy():loadStrategyLegacy(s)}}
+                            title={isActive?`Detener: ${s.name}`:`Ejecutar: ${s.name}`}
+                            style={{background:isActive?'rgba(255,77,109,0.15)':'rgba(0,212,255,0.08)',
+                              border:`1px solid ${isActive?'#ff4d6d':'var(--accent)'}`,
+                              color:isActive?'#ff4d6d':'var(--accent)',
+                              fontFamily:MONO,fontSize:12,padding:'2px 7px',borderRadius:3,cursor:'pointer',
+                              flexShrink:0,transition:'all 0.1s'}}
+                            onMouseOver={e=>{e.currentTarget.style.background=isActive?'rgba(255,77,109,0.25)':`${col}33`}}
+                            onMouseOut={e=>{e.currentTarget.style.background=isActive?'rgba(255,77,109,0.15)':'rgba(0,212,255,0.08)'}}>
+                            {isActive?'■':'▶'}
+                          </button>
+                        </div>
+                      )
+                    })
+                  })()}
+                </div>
 
                 {/* ── Footer: estado de carga ── */}
                 {loading&&<div style={{padding:'4px 10px',fontFamily:MONO,fontSize:11,color:'var(--accent)',borderTop:'1px solid var(--border)',flexShrink:0}}>⟳ Actualizando…</div>}
