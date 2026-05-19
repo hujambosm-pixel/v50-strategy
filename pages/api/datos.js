@@ -1,4 +1,4 @@
-// pages/api/datos.js — Motor V50 v3.0 (V9.207)
+// pages/api/datos.js — Motor V50 v3.0 (V9.254)
 
 import { calcEMA, calcSMA, calcRSI, calcATR, calcMACD } from '../../lib/backtester'
 
@@ -151,6 +151,20 @@ export function calcEquityCurves(trades, data, capitalIni, startDate, sp500Data)
   }
 }
 
+// ── Align external close series to asset dates with forward-fill ──
+function buildAlignedCloses(externalData, assetDates) {
+  if (!externalData?.length) return assetDates.map(() => null)
+  const closeMap = {}
+  externalData.forEach(d => { closeMap[d.date] = d.close })
+  const aligned = []
+  let last = null
+  for (const date of assetDates) {
+    if (closeMap[date] != null) last = closeMap[date]
+    aligned.push(last)
+  }
+  return aligned
+}
+
 // ── Build full trade objects from raw { entryDate, exitDate, entryPrice, exitPrice } ──
 function buildTrades(rawTrades, capitalIni, allocationPct = 100) {
   const fixedAlloc = capitalIni * (allocationPct / 100)
@@ -179,7 +193,7 @@ export default async function handler(req, res) {
   try {
   if (req.method !== 'POST') return res.status(405).end()
 
-  const { simbolo, strategyId, capital_ini = 10000, years = 5, allocation_pct = 100, priceOnly } = req.body || {}
+  const { simbolo, strategyId, capital_ini = 10000, years = 5, allocation_pct = 100, priceOnly, filtros } = req.body || {}
   if (!simbolo) return res.status(400).json({ error: 'simbolo requerido' })
 
   // ── Price-only mode: last close, no strategy execution ──
@@ -228,17 +242,101 @@ export default async function handler(req, res) {
     const data    = allData.filter(d => new Date(d.date) >= cutoff)
     if (!data.length) throw new Error('Sin datos para ' + simbolo)
 
-    // ── Fetch SP500 (shared: filtro code_js + equity curves — un solo fetch) ──
-    let sp500Data = null
+    // ── Fetch SP500 + filtro auxiliares en paralelo ──
+    const filtrosCfg = filtros || {}
+    const anyFiltroOn = !!(filtrosCfg.vix?.activo || filtrosCfg.indiceEma?.activo || filtrosCfg.sectorEma?.activo)
+    let sp500Data = null, vixRawData = null, indiceAuxData = null, sectorAuxData = null
     const sp500Map = {}
-    try {
-      const sp500Raw = await fetchAV('^GSPC', years + 1)
-      sp500Data = sp500Raw.filter(d => d.date >= data[0].date)
-      sp500Data.forEach(d => { sp500Map[d.date] = d.close })
-    } catch (_) { sp500Data = null }
 
-    // ── Inyectar sp500Close en cada barra para que code_js pueda usarlo ──
-    data.forEach(d => { d.sp500Close = sp500Map[d.date] ?? null })
+    const fetchJobs = [
+      fetchAV('^GSPC', years + 1)
+        .then(r => { sp500Data = r.filter(d => d.date >= data[0].date); sp500Data.forEach(d => { sp500Map[d.date] = d.close }) })
+        .catch(() => {}),
+    ]
+    if (anyFiltroOn) {
+      if (filtrosCfg.vix?.activo)
+        fetchJobs.push(fetchAV('^VIX', years + 1).then(r => { vixRawData = r.filter(d => d.date >= data[0].date) }).catch(() => {}))
+      if (filtrosCfg.indiceEma?.activo && filtrosCfg.indiceEma.ticker && filtrosCfg.indiceEma.ticker !== '^GSPC')
+        fetchJobs.push(fetchAV(filtrosCfg.indiceEma.ticker, years + 1).then(r => { indiceAuxData = r.filter(d => d.date >= data[0].date) }).catch(() => {}))
+      if (filtrosCfg.sectorEma?.activo && filtrosCfg.sectorEma.ticker &&
+          filtrosCfg.sectorEma.ticker !== '^GSPC' &&
+          filtrosCfg.sectorEma.ticker !== (filtrosCfg.indiceEma?.ticker || ''))
+        fetchJobs.push(fetchAV(filtrosCfg.sectorEma.ticker, years + 1).then(r => { sectorAuxData = r.filter(d => d.date >= data[0].date) }).catch(() => {}))
+    }
+    await Promise.all(fetchJobs)
+
+    // ── Compute filtroActivo per date ──
+    const assetDates = data.map(d => d.date)
+    const filtroActivoMap = {} // date -> boolean (true = entrada permitida)
+    let filterZonesFromFiltros = []
+
+    if (anyFiltroOn) {
+      // Resuelve el dataset para cada filtro
+      const resolveData = (ticker, auxData) =>
+        ticker === '^GSPC' ? sp500Data : (auxData ?? sp500Data)
+
+      // VIX
+      const vixCloses = filtrosCfg.vix?.activo ? buildAlignedCloses(vixRawData, assetDates) : null
+
+      // Índice EMA
+      const indiceDataRes = filtrosCfg.indiceEma?.activo
+        ? resolveData(filtrosCfg.indiceEma.ticker, indiceAuxData)
+        : null
+      const indiceCloses  = indiceDataRes ? buildAlignedCloses(indiceDataRes, assetDates) : null
+      const indiceEmaArr  = indiceCloses  ? calcEMA(indiceCloses, Math.max(1, filtrosCfg.indiceEma?.periodo ?? 200)) : null
+
+      // Sector EMA
+      const sectorDataRes = filtrosCfg.sectorEma?.activo
+        ? (filtrosCfg.sectorEma.ticker === (filtrosCfg.indiceEma?.ticker || '')
+            ? indiceDataRes
+            : resolveData(filtrosCfg.sectorEma.ticker, sectorAuxData))
+        : null
+      const sectorCloses  = sectorDataRes ? buildAlignedCloses(sectorDataRes, assetDates) : null
+      const sectorEmaArr  = sectorCloses  ? calcEMA(sectorCloses, Math.max(1, filtrosCfg.sectorEma?.periodo ?? 50)) : null
+
+      // Mapas de visualización
+      const vixMap = {}, indiceMap = {}
+      if (vixRawData) vixRawData.forEach(d => { vixMap[d.date] = d.close })
+      if (indiceDataRes) indiceDataRes.forEach(d => { indiceMap[d.date] = d.close })
+
+      for (let i = 0; i < data.length; i++) {
+        const date = data[i].date
+        let vixOk = true, indiceOk = true, sectorOk = true
+
+        if (filtrosCfg.vix?.activo) {
+          const vc = vixCloses?.[i]
+          vixOk = vc == null ? true : vc < (filtrosCfg.vix.umbral ?? 25)
+        }
+        if (filtrosCfg.indiceEma?.activo) {
+          const ic = indiceCloses?.[i], ie = indiceEmaArr?.[i]
+          indiceOk = ic == null || ie == null ? true : ic >= ie
+        }
+        if (filtrosCfg.sectorEma?.activo) {
+          const sc = sectorCloses?.[i], se = sectorEmaArr?.[i]
+          sectorOk = sc == null || se == null ? true : sc >= se
+        }
+        filtroActivoMap[date] = vixOk && indiceOk && sectorOk
+
+        // Inyectar en barra para visualización
+        data[i].vixClose    = vixMap[date]    ?? null
+        data[i].indiceClose = indiceMap[date] ?? null
+      }
+
+      // Build filterZones (franjas donde filtroActivo = false)
+      let zoneStart = null
+      for (const bar of data) {
+        const blocked = !filtroActivoMap[bar.date]
+        if (blocked && zoneStart === null)        zoneStart = bar.date
+        else if (!blocked && zoneStart !== null) { filterZonesFromFiltros.push({ from: zoneStart, to: bar.date }); zoneStart = null }
+      }
+      if (zoneStart !== null) filterZonesFromFiltros.push({ from: zoneStart, to: data[data.length - 1].date })
+    }
+
+    // ── Inyectar sp500Close + filtroActivo en cada barra ──
+    data.forEach(d => {
+      d.sp500Close    = sp500Map[d.date] ?? null
+      d.filtroActivo  = anyFiltroOn ? (filtroActivoMap[d.date] ?? true) : true
+    })
 
     // ── Execute strategy in sandbox ──
     const wrappedCode = `"use strict";\n${codeJs}\nreturn run;`
@@ -246,10 +344,11 @@ export default async function handler(req, res) {
     const runFn    = getRunFn(calcEMA, calcSMA, calcRSI, calcATR, calcMACD)
     const userParams = stratParams ? JSON.parse(stratParams) : {}
     const _result = runFn(data, { capital_ini, years, allocation_pct, ...userParams })
-    const rawTrades      = _result.trades       ?? []
+    let rawTrades        = _result.trades       ?? []
     const indicators     = _result.indicators   ?? {}
     const rawFilterZones = _result.filterZones  ?? []
     const slopeChanges   = _result.slopeChanges ?? []
+
     // ── Flush virtual: posición abierta al final del periodo ──
     const lastBar = data[data.length - 1]
     const openPos = _result.openPosition ?? null
@@ -276,6 +375,55 @@ export default async function handler(req, res) {
         }
       }
     }
+
+    // ── Aplicar filtros de mercado ──
+    if (anyFiltroOn) {
+      const isZeroStrategy = rawTrades.length === 0 && !openPos
+
+      if (isZeroStrategy) {
+        // "0 No Strategy": generar trades a partir de transiciones del filtro
+        // Señal al cierre de bar[i] → entrada al open de bar[i+1]
+        // Salida al cierre de bar[i] cuando el filtro se pone en rojo
+        let inPosition = false, entryIdx = -1
+        for (let i = 0; i < data.length; i++) {
+          const curr = filtroActivoMap[data[i].date] ?? true
+          const prev = i === 0 ? false : (filtroActivoMap[data[i - 1].date] ?? true)
+
+          // Transición false→true: entrada al open del día SIGUIENTE
+          if (!prev && curr && !inPosition && i + 1 < data.length) {
+            inPosition = true
+            entryIdx   = i + 1
+          }
+          // Transición true→false: salida al cierre de este día
+          if (prev && !curr && inPosition && entryIdx >= 0) {
+            rawTrades.push({
+              entryDate:  data[entryIdx].date,
+              exitDate:   data[i].date,
+              entryPrice: data[entryIdx].open,
+              exitPrice:  data[i].close,
+              exitReason: 'filter_exit',
+            })
+            inPosition = false
+            entryIdx   = -1
+          }
+        }
+        // Cierre virtual si el periodo termina con filtro verde
+        if (inPosition && entryIdx >= 0 && entryIdx < data.length) {
+          rawTrades.push({
+            entryDate:  data[entryIdx].date,
+            exitDate:   lastBar.date,
+            entryPrice: data[entryIdx].open,
+            exitPrice:  lastBar.close,
+            exitReason: 'virtual_close',
+            _virtualClose: true,
+          })
+        }
+      } else {
+        // Estrategia normal: descartar trades cuya entrada fue bloqueada por el filtro
+        rawTrades = rawTrades.filter(t => filtroActivoMap[t.entryDate] !== false)
+      }
+    }
+
     // ── Enrich trades ──
     const trades = buildTrades(rawTrades, capital_ini, allocation_pct)
 
@@ -324,7 +472,7 @@ export default async function handler(req, res) {
     return res.status(200).json({
       chartData,
       trades,
-      filterZones: Array.isArray(rawFilterZones) ? rawFilterZones : [],
+      filterZones: anyFiltroOn ? filterZonesFromFiltros : (Array.isArray(rawFilterZones) ? rawFilterZones : []),
       slopeChanges: Array.isArray(slopeChanges) ? slopeChanges : [],
       gananciaSimple,
       capitalReinv,
