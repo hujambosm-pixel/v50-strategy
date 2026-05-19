@@ -506,7 +506,7 @@ export default function Home() {
   const [tipoStop,setTipoStop]=useState('tecnico'),[atrP,setAtrP]=useState(14),[atrM,setAtrM]=useState(1.0)
   const [sinPerdidas,setSinPerdidas]=useState(true),[reentry,setReentry]=useState(true)
   const [tipoFiltro,setTipoFiltro]=useState('none'),[sp500EmaR,setSp500EmaR]=useState(10),[sp500EmaL,setSp500EmaL]=useState(11)
-  const [filtros,setFiltros]=useState({vix:{activo:false,umbral:25},indiceEma:{activo:false,ticker:'^GSPC',periodo:200},sectorEma:{activo:false,ticker:'XLK',periodo:50},cruceEma:{activo:false,ticker:'^GSPC',periodoR:10,periodoL:11}})
+  const [filtros,setFiltros]=useState({vix:{activo:false,umbral:25,intervalo:'diario'},indiceEma:{activo:false,ticker:'^GSPC',periodo:200,intervalo:'diario'},sectorEma:{activo:false,ticker:'XLK',periodo:50,intervalo:'diario'},cruceEma:{activo:false,ticker:'^GSPC',periodoR:10,periodoL:11,intervalo:'diario'}})
   const [filtrosOpen,setFiltrosOpen]=useState(false)
   const [result,setResult]=useState(null),[loading,setLoading]=useState(false),[error,setError]=useState(null)
   const [labelMode,setLabelMode]=useState(1),[rulerOn,setRulerOn]=useState(false)
@@ -713,6 +713,7 @@ export default function Home() {
   const [mcChartsStratVisible,setMcChartsStratVisible]=useState({})
   const [mcShowOccupancy,setMcShowOccupancy]=useState(true)
   const [mcOccMode,setMcOccMode]=useState('compound')  // own filter for MC capital chart
+  const [mcIntervalo,setMcIntervalo]=useState('diario')  // 'diario' | 'semanal' — intervalo de datos MC
   const mcChartRef=useRef(null)
   const savedRangeRef=useRef(null)   // preserve zoom when changing asset
   const [metricsStrats,setMetricsStrats]=useState(['simple','compound','bh'])  // which strat panels to show
@@ -2679,7 +2680,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         // Single mode run
         try{
           const res=await apiFetch('/api/multibacktest',{method:'POST',headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({symbols:mcSelected,modoAsig:modesToRun[0],weights:weightsNorm,cfg:baseCfg,strategyId:stratIds[0]||null})})
+            body:JSON.stringify({symbols:mcSelected,modoAsig:modesToRun[0],weights:weightsNorm,cfg:baseCfg,strategyId:stratIds[0]||null,filtros,intervalo:mcIntervalo})})
           const json=await res.json()
           if(!res.ok) throw new Error(json.error||'Error')
           setMcResult(json);setMcMultiResults([]);setMcIsModoCompare(false)
@@ -2698,7 +2699,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
           setMcProgress({current:i+1,total:modesToRun.length,name:MODE_LABELS[modo]||modo})
           const color=STRAT_COMPARE_COLORS[i%STRAT_COMPARE_COLORS.length]
           const res=await apiFetch('/api/multibacktest',{method:'POST',headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({symbols:mcSelected,modoAsig:modo,weights:weightsNorm,cfg:baseCfg,strategyId:sid})})
+            body:JSON.stringify({symbols:mcSelected,modoAsig:modo,weights:weightsNorm,cfg:baseCfg,strategyId:sid,filtros,intervalo:mcIntervalo})})
           const json=await res.json()
           if(!res.ok) throw new Error(json.error||'Error en '+MODE_LABELS[modo])
           modeResults.push({id:`${sid||'__single__'}__${modo}`,name:`${stratName} · ${MODE_LABELS[modo]}`,color,result:json,modo})
@@ -2721,7 +2722,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
       try{
         const cfg=buildCfgFromStrat(strat)
         const res=await apiFetch('/api/multibacktest',{method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({symbols:mcSelected,modoAsig:mcMode,weights:weightsNorm,cfg,strategyId:sid})})
+          body:JSON.stringify({symbols:mcSelected,modoAsig:mcMode,weights:weightsNorm,cfg,strategyId:sid,filtros,intervalo:mcIntervalo})})
         const json=await res.json()
         if(!res.ok) throw new Error(json.error||'Error en '+name)
         results.push({id:sid,name,color,result:json})
@@ -2733,7 +2734,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
     setMcAssetOpen({})
     const chartsVis={};results.forEach(r=>{chartsVis[r.id]=true});setMcChartsStratVisible(chartsVis)
     setMcLoading(false);setMcProgress(null)
-  },[mcSelected,mcMode,selectedModos,mcWeights,mcCapital,mcCapitalIni,mcYears,mcPeriodMode,mcFromDate,mcToDate,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL,rankingData,mcStratSelected,strategies,currentStratId,mcRiskPerTrade,mcMaxPortfolioPct,mcMaxAccumRisk,mcMaxPosiciones])
+  },[mcSelected,mcMode,selectedModos,mcWeights,mcCapital,mcCapitalIni,mcYears,mcPeriodMode,mcFromDate,mcToDate,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL,rankingData,mcStratSelected,strategies,currentStratId,mcRiskPerTrade,mcMaxPortfolioPct,mcMaxAccumRisk,mcMaxPosiciones,filtros,mcIntervalo])
 
   // Auto-inicializar pesos iguales cuando cambian activos seleccionados (modo custom)
   useEffect(()=>{
@@ -3090,7 +3091,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.256</title>
+        <title>Trading Simulator V9.257</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3168,7 +3169,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.256
+            <span className="dot"/>Trading Simulator V9.257
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -3315,6 +3316,9 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   })
                   const lbl=(active)=>({fontFamily:MONO,fontSize:11,color:active?'var(--text)':'var(--text2)',flex:1})
                   const plbl={fontFamily:MONO,fontSize:9,color:'var(--text2)',whiteSpace:'nowrap'}
+                  const ivBtn=(on)=>({fontFamily:MONO,fontSize:9,padding:'1px 5px',borderRadius:3,cursor:'pointer',
+                    border:`1px solid ${on?'#7a9bc0':'#1a3d5a'}`,background:on?'rgba(122,155,192,0.18)':'transparent',
+                    color:on?'var(--text)':'var(--text2)'})
                   return(
                   <div style={{borderBottom:'1px solid var(--border)',flexShrink:0}}>
                     {/* Cabecera colapsable */}
@@ -3349,6 +3353,9 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                 value={filtros.vix.umbral}
                                 onChange={e=>fSet('vix','umbral',Number(e.target.value)||25)}
                                 style={{...fInp,width:54}}/>
+                              <span style={{...plbl,marginLeft:4}}>Int</span>
+                              <button style={ivBtn(filtros.vix.intervalo!=='semanal')} onClick={()=>fSet('vix','intervalo','diario')}>D</button>
+                              <button style={ivBtn(filtros.vix.intervalo==='semanal')} onClick={()=>fSet('vix','intervalo','semanal')}>S</button>
                             </div>
                           )}
                         </div>
@@ -3372,6 +3379,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                 value={filtros.indiceEma.periodo}
                                 onChange={e=>fSet('indiceEma','periodo',Number(e.target.value)||200)}
                                 style={{...fInp,width:50}}/>
+                              <button style={ivBtn(filtros.indiceEma.intervalo!=='semanal')} onClick={()=>fSet('indiceEma','intervalo','diario')}>D</button>
+                              <button style={ivBtn(filtros.indiceEma.intervalo==='semanal')} onClick={()=>fSet('indiceEma','intervalo','semanal')}>S</button>
                             </div>
                           )}
                         </div>
@@ -3395,6 +3404,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                 value={filtros.sectorEma.periodo}
                                 onChange={e=>fSet('sectorEma','periodo',Number(e.target.value)||50)}
                                 style={{...fInp,width:50}}/>
+                              <button style={ivBtn(filtros.sectorEma.intervalo!=='semanal')} onClick={()=>fSet('sectorEma','intervalo','diario')}>D</button>
+                              <button style={ivBtn(filtros.sectorEma.intervalo==='semanal')} onClick={()=>fSet('sectorEma','intervalo','semanal')}>S</button>
                             </div>
                           )}
                         </div>
@@ -3423,6 +3434,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                 value={filtros.cruceEma.periodoL}
                                 onChange={e=>fSet('cruceEma','periodoL',Number(e.target.value)||11)}
                                 style={{...fInp,width:42}}/>
+                              <button style={ivBtn(filtros.cruceEma.intervalo!=='semanal')} onClick={()=>fSet('cruceEma','intervalo','diario')}>D</button>
+                              <button style={ivBtn(filtros.cruceEma.intervalo==='semanal')} onClick={()=>fSet('cruceEma','intervalo','semanal')}>S</button>
                             </div>
                           )}
                         </div>
@@ -4182,6 +4195,24 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       )
                     })()
                   }
+                </div>
+
+                {/* INTERVALO */}
+                <div style={{flexShrink:0,borderBottom:'1px solid var(--border)',padding:'8px 12px'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8}}>
+                    <span style={{fontFamily:MONO,fontSize:11,color:'#7aabc8',whiteSpace:'nowrap'}}>Intervalo</span>
+                    <div style={{display:'flex',gap:4,marginLeft:'auto'}}>
+                      {[{id:'diario',label:'Diario'},{id:'semanal',label:'Semanal'}].map(opt=>(
+                        <button key={opt.id} onClick={()=>setMcIntervalo(opt.id)}
+                          style={{fontFamily:MONO,fontSize:10,padding:'2px 8px',borderRadius:3,cursor:'pointer',
+                            border:`1px solid ${mcIntervalo===opt.id?'var(--accent)':'var(--border)'}`,
+                            background:mcIntervalo===opt.id?'rgba(0,212,255,0.12)':'transparent',
+                            color:mcIntervalo===opt.id?'var(--accent)':'#7aabc8'}}>
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
 
                 {/* MODO DE ASIGNACIÓN — colapsable */}

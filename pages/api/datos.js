@@ -1,4 +1,4 @@
-// pages/api/datos.js — Motor V50 v3.0 (V9.256)
+// pages/api/datos.js — Motor V50 v3.0 (V9.257)
 
 import { calcEMA, calcSMA, calcRSI, calcATR, calcMACD } from '../../lib/backtester'
 
@@ -37,9 +37,10 @@ function stooqSym(symbol) {
   return symbol.toLowerCase()+'.us'
 }
 
-export async function fetchAV(symbol, years=5) {
+export async function fetchAV(symbol, years=5, interval='d') {
   const sym = stooqSym(symbol)
-  const url = `https://stooq.com/q/d/l/?s=${sym}&i=d`
+  const stooqInterval = interval === 'w' ? 'w' : 'd'
+  const url = `https://stooq.com/q/d/l/?s=${sym}&i=${stooqInterval}`
   let rawData = null
 
   // ── Stooq fetch with 3-second timeout ──
@@ -63,10 +64,11 @@ export async function fetchAV(symbol, years=5) {
 
   // ── Yahoo Finance fallback with 4-second timeout ──
   if (!rawData || rawData.length === 0) {
+    const yfInterval = interval === 'w' ? '1wk' : '1d'
     const yfYears = Math.min(Math.max(Math.ceil(years), 1), 10)
     const yfUrl = yfYears <= 10
-      ? `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=${yfYears}y`
-      : (() => { const p1=Math.floor(Date.now()/1000)-Math.ceil(years)*365*24*3600; return `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&period1=${p1}&period2=${Math.floor(Date.now()/1000)}` })()
+      ? `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=${yfInterval}&range=${yfYears}y`
+      : (() => { const p1=Math.floor(Date.now()/1000)-Math.ceil(years)*365*24*3600; return `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=${yfInterval}&period1=${p1}&period2=${Math.floor(Date.now()/1000)}` })()
     const yfCtrl = new AbortController()
     const yfTimer = setTimeout(() => yfCtrl.abort(), 4000)
     try {
@@ -165,6 +167,26 @@ function buildAlignedCloses(externalData, assetDates) {
   return aligned
 }
 
+// ── Compute EMA on native weekly series then forward-fill both closes+EMA to daily dates ──
+// Use this when a filter has intervalo:'semanal' — EMA is computed on the weekly series
+// so periods like 200 refer to 200 weeks, not 200 daily bars.
+function buildAlignedWeekly(weeklyData, assetDates, emaPeriod) {
+  if (!weeklyData?.length || !assetDates?.length)
+    return { closes: assetDates.map(()=>null), ema: assetDates.map(()=>null) }
+  const sorted = [...weeklyData].sort((a,b)=>a.date.localeCompare(b.date))
+  const wCloses = sorted.map(d=>d.close)
+  const wEma = calcEMA(wCloses, Math.max(1, emaPeriod))
+  const closes = [], ema = []
+  let ptr = 0, lastClose = null, lastEma = null
+  for (const date of assetDates) {
+    // Advance pointer to last weekly bar on or before this daily date
+    while (ptr < sorted.length-1 && sorted[ptr+1].date <= date) ptr++
+    if (sorted[ptr].date <= date) { lastClose = sorted[ptr].close; lastEma = wEma[ptr] }
+    closes.push(lastClose); ema.push(lastEma)
+  }
+  return { closes, ema }
+}
+
 // ── Build full trade objects from raw { entryDate, exitDate, entryPrice, exitPrice } ──
 function buildTrades(rawTrades, capitalIni, allocationPct = 100) {
   const fixedAlloc = capitalIni * (allocationPct / 100)
@@ -255,16 +277,25 @@ export default async function handler(req, res) {
         .catch(() => {}),
     ]
     if (anyFiltroOn) {
+      const vixIv = filtrosCfg.vix?.intervalo === 'semanal' ? 'w' : 'd'
       if (filtrosCfg.vix?.activo)
-        fetchJobs.push(fetchAV('^VIX', years + 1).then(r => { vixRawData = r.filter(d => d.date >= data[0].date) }).catch(() => {}))
-      // Colectar tickers no-GSPC únicos de todos los filtros activos
-      const auxTickers = new Set()
+        fetchJobs.push(fetchAV('^VIX', years + 1, vixIv).then(r => { vixRawData = r.filter(d => d.date >= data[0].date) }).catch(() => {}))
+      // Colectar (ticker:interval) únicos de todos los filtros activos con EMA
+      // ^GSPC diario ya está en sp500Data; solo añadir si ticker distinto o intervalo semanal
+      const auxKeys = new Set()
       for (const key of ['indiceEma','sectorEma','cruceEma']) {
         const f = filtrosCfg[key]
-        if (f?.activo && f.ticker && f.ticker !== '^GSPC') auxTickers.add(f.ticker)
+        if (f?.activo && f.ticker) {
+          const iv = f.intervalo === 'semanal' ? 'w' : 'd'
+          const akey = `${f.ticker}:${iv}`
+          if (f.ticker !== '^GSPC' || iv === 'w') auxKeys.add(akey)
+        }
       }
-      for (const ticker of auxTickers)
-        fetchJobs.push(fetchAV(ticker, years + 1).then(r => { auxDataMap[ticker] = r.filter(d => d.date >= data[0].date) }).catch(() => {}))
+      for (const akey of auxKeys) {
+        const colonIdx = akey.lastIndexOf(':')
+        const ticker = akey.slice(0, colonIdx), iv = akey.slice(colonIdx + 1)
+        fetchJobs.push(fetchAV(ticker, years + 1, iv).then(r => { auxDataMap[akey] = r.filter(d => d.date >= data[0].date) }).catch(() => {}))
+      }
     }
     await Promise.all(fetchJobs)
 
@@ -274,28 +305,56 @@ export default async function handler(req, res) {
     let filterZonesFromFiltros = []
 
     if (anyFiltroOn) {
-      // Resuelve el dataset para un ticker (^GSPC → sp500Data, resto → auxDataMap)
-      const resolveData = (ticker) =>
-        ticker === '^GSPC' ? sp500Data : (auxDataMap[ticker] ?? sp500Data)
+      // Resuelve el dataset para un ticker+interval (^GSPC diario → sp500Data, resto → auxDataMap)
+      const resolveData = (ticker, iv) =>
+        (ticker === '^GSPC' && iv !== 'w') ? sp500Data : (auxDataMap[`${ticker}:${iv}`] ?? sp500Data)
 
-      // VIX
+      // VIX (forward-fill funciona igual sea semanal o diario)
       const vixCloses = filtrosCfg.vix?.activo ? buildAlignedCloses(vixRawData, assetDates) : null
 
       // Índice EMA
-      const indiceDataRes = filtrosCfg.indiceEma?.activo ? resolveData(filtrosCfg.indiceEma.ticker) : null
-      const indiceCloses  = indiceDataRes ? buildAlignedCloses(indiceDataRes, assetDates) : null
-      const indiceEmaArr  = indiceCloses  ? calcEMA(indiceCloses, Math.max(1, filtrosCfg.indiceEma?.periodo ?? 200)) : null
+      const indiceIv = filtrosCfg.indiceEma?.intervalo === 'semanal' ? 'w' : 'd'
+      const indiceDataRes = filtrosCfg.indiceEma?.activo ? resolveData(filtrosCfg.indiceEma.ticker, indiceIv) : null
+      let indiceCloses = null, indiceEmaArr = null
+      if (indiceDataRes) {
+        if (indiceIv === 'w') {
+          const r = buildAlignedWeekly(indiceDataRes, assetDates, Math.max(1, filtrosCfg.indiceEma?.periodo ?? 200))
+          indiceCloses = r.closes; indiceEmaArr = r.ema
+        } else {
+          indiceCloses = buildAlignedCloses(indiceDataRes, assetDates)
+          indiceEmaArr = calcEMA(indiceCloses, Math.max(1, filtrosCfg.indiceEma?.periodo ?? 200))
+        }
+      }
 
       // Sector EMA
-      const sectorDataRes = filtrosCfg.sectorEma?.activo ? resolveData(filtrosCfg.sectorEma.ticker) : null
-      const sectorCloses  = sectorDataRes ? buildAlignedCloses(sectorDataRes, assetDates) : null
-      const sectorEmaArr  = sectorCloses  ? calcEMA(sectorCloses, Math.max(1, filtrosCfg.sectorEma?.periodo ?? 50)) : null
+      const sectorIv = filtrosCfg.sectorEma?.intervalo === 'semanal' ? 'w' : 'd'
+      const sectorDataRes = filtrosCfg.sectorEma?.activo ? resolveData(filtrosCfg.sectorEma.ticker, sectorIv) : null
+      let sectorCloses = null, sectorEmaArr = null
+      if (sectorDataRes) {
+        if (sectorIv === 'w') {
+          const r = buildAlignedWeekly(sectorDataRes, assetDates, Math.max(1, filtrosCfg.sectorEma?.periodo ?? 50))
+          sectorCloses = r.closes; sectorEmaArr = r.ema
+        } else {
+          sectorCloses = buildAlignedCloses(sectorDataRes, assetDates)
+          sectorEmaArr = calcEMA(sectorCloses, Math.max(1, filtrosCfg.sectorEma?.periodo ?? 50))
+        }
+      }
 
       // Cruce EMA (EMA rápida > EMA lenta del ticker de referencia)
-      const cruceDataRes  = filtrosCfg.cruceEma?.activo ? resolveData(filtrosCfg.cruceEma.ticker) : null
-      const cruceCloses   = cruceDataRes ? buildAlignedCloses(cruceDataRes, assetDates) : null
-      const cruceEmaRArr  = cruceCloses  ? calcEMA(cruceCloses, Math.max(1, filtrosCfg.cruceEma?.periodoR ?? 10)) : null
-      const cruceEmaLArr  = cruceCloses  ? calcEMA(cruceCloses, Math.max(1, filtrosCfg.cruceEma?.periodoL ?? 11)) : null
+      const cruceIv = filtrosCfg.cruceEma?.intervalo === 'semanal' ? 'w' : 'd'
+      const cruceDataRes = filtrosCfg.cruceEma?.activo ? resolveData(filtrosCfg.cruceEma.ticker, cruceIv) : null
+      let cruceCloses = null, cruceEmaRArr = null, cruceEmaLArr = null
+      if (cruceDataRes) {
+        if (cruceIv === 'w') {
+          const rR = buildAlignedWeekly(cruceDataRes, assetDates, Math.max(1, filtrosCfg.cruceEma?.periodoR ?? 10))
+          const rL = buildAlignedWeekly(cruceDataRes, assetDates, Math.max(1, filtrosCfg.cruceEma?.periodoL ?? 11))
+          cruceCloses = rR.closes; cruceEmaRArr = rR.ema; cruceEmaLArr = rL.ema
+        } else {
+          cruceCloses = buildAlignedCloses(cruceDataRes, assetDates)
+          cruceEmaRArr = calcEMA(cruceCloses, Math.max(1, filtrosCfg.cruceEma?.periodoR ?? 10))
+          cruceEmaLArr = calcEMA(cruceCloses, Math.max(1, filtrosCfg.cruceEma?.periodoL ?? 11))
+        }
+      }
 
       // Mapas de visualización
       const vixMap = {}, indiceMap = {}
