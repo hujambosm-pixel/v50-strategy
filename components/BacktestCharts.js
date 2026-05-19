@@ -84,7 +84,7 @@ export function MultiCartChart({simpleCurve,compoundCurve,bhCurve,sp500BHCurve,c
 
 // ── OccupancyBarChart — individual asset capital invested chart ────
 // showMode: 'compound'|'simple' — independent filter, own toggle
-export function OccupancyBarChart({trades, chartData, capitalIni, syncRef, showMode='compound'}) {
+export function OccupancyBarChart({trades, chartData, capitalIni, syncRef, showMode='compound', axisWidth=90}) {
   const ref=useRef(null), chartRef=useRef(null)
   useEffect(()=>{
     if(!ref.current||!trades?.length||!chartData?.length) return
@@ -95,7 +95,7 @@ export function OccupancyBarChart({trades, chartData, capitalIni, syncRef, showM
         layout:{background:{color:'#080c14'},textColor:'#7a9bc0'},
         grid:{vertLines:{color:'transparent'},horzLines:{color:'rgba(26,45,69,0.4)'}},
         crosshair:{mode:CrosshairMode.Normal},
-        rightPriceScale:{borderColor:'#1a2d45',minimumWidth:90,scaleMargins:{top:0.08,bottom:0.0}},
+        rightPriceScale:{borderColor:'#1a2d45',minimumWidth:axisWidth,scaleMargins:{top:0.08,bottom:0.0}},
         timeScale:{borderColor:'#1a2d45',timeVisible:false},
         leftPriceScale:{visible:false},
       })
@@ -140,7 +140,7 @@ export function OccupancyBarChart({trades, chartData, capitalIni, syncRef, showM
       return()=>ro.disconnect()
     })
     return()=>{if(chartRef.current){chartRef.current.__syncCleanup?.();chartRef.current.remove();chartRef.current=null}}
-  },[trades,chartData,showMode,capitalIni])
+  },[trades,chartData,showMode,capitalIni,axisWidth])
   return <div ref={ref} style={{minHeight:100}}/>
 }
 
