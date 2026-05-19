@@ -28,16 +28,58 @@ function calcATR(highs, lows, closes, period) {
   return calcEMA(tr, period)
 }
 
-async function fetchData(symbol, years=5, fromDate=null, toDate=null) {
+// ── Align external close series to asset dates with forward-fill (for market filters) ──
+function buildAlignedCloses(externalData, assetDates) {
+  if (!externalData?.length) return assetDates.map(()=>null)
+  const closeMap = {}
+  externalData.forEach(d => { closeMap[d.date] = d.close })
+  const aligned = []
+  let last = null
+  for (const date of assetDates) {
+    if (closeMap[date] != null) last = closeMap[date]
+    aligned.push(last)
+  }
+  return aligned
+}
+
+// ── Compute EMA on native weekly series then forward-fill to daily asset dates ──
+function buildAlignedWeekly(weeklyData, assetDates, emaPeriod) {
+  if (!weeklyData?.length || !assetDates?.length)
+    return { closes: assetDates.map(()=>null), ema: assetDates.map(()=>null) }
+  const sorted = [...weeklyData].sort((a,b)=>a.date.localeCompare(b.date))
+  const wCloses = sorted.map(d=>d.close)
+  const wEma = calcEMA(wCloses, Math.max(1, emaPeriod))
+  const closes = [], ema = []
+  let ptr = 0, lastClose = null, lastEma = null
+  for (const date of assetDates) {
+    while (ptr < sorted.length-1 && sorted[ptr+1].date <= date) ptr++
+    if (sorted[ptr].date <= date) { lastClose = sorted[ptr].close; lastEma = wEma[ptr] }
+    closes.push(lastClose); ema.push(lastEma)
+  }
+  return { closes, ema }
+}
+
+// ── Rebuild compound capitalTras after filtering trades ──
+function rebuildCapitalTras(trades, initCapital) {
+  let capital = initCapital
+  return trades.map(t => {
+    if (!t.exitPrice || !t.entryPrice || t._virtualClose) return t
+    const pnlComp = capital * ((t.exitPrice - t.entryPrice) / t.entryPrice)
+    capital += pnlComp
+    return { ...t, capitalTras: capital }
+  })
+}
+
+async function fetchData(symbol, years=5, fromDate=null, toDate=null, interval='1d') {
   try {
     const encoded = encodeURIComponent(symbol)
     let url
     if (fromDate && toDate) {
       const p1 = Math.floor(new Date(fromDate).getTime() / 1000)
       const p2 = Math.floor(new Date(toDate).getTime() / 1000)
-      url = `https://query1.finance.yahoo.com/v8/finance/chart/${encoded}?interval=1d&period1=${p1}&period2=${p2}`
+      url = `https://query1.finance.yahoo.com/v8/finance/chart/${encoded}?interval=${interval}&period1=${p1}&period2=${p2}`
     } else {
-      url = `https://query1.finance.yahoo.com/v8/finance/chart/${encoded}?interval=1d&range=${Math.min(years,10)}y`
+      url = `https://query1.finance.yahoo.com/v8/finance/chart/${encoded}?interval=${interval}&range=${Math.min(years,10)}y`
     }
     const res = await fetch(url, { headers: { 'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36','Accept':'application/json' } })
     if (!res.ok) return null
@@ -1139,7 +1181,7 @@ function _calcAssetMaxDD(trades, data, slotCapital, startDate) {
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
-  const { symbols, cfg: cfgInput, definition, modoAsig = 'slots', weights = {}, sizeRules: sizeRulesBody = null, strategyId = null } = req.body
+  const { symbols, cfg: cfgInput, definition, modoAsig = 'slots', weights = {}, sizeRules: sizeRulesBody = null, strategyId = null, filtros: filtrosCfg, intervalo } = req.body
   const sizeRules = sizeRulesBody || cfgInput?.sizeRules || {}
   if (!Array.isArray(symbols) || !symbols.length) return res.status(400).json({ error: 'symbols requerido' })
   let cfg = cfgInput
@@ -1191,18 +1233,51 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Descargar datos en batches para no saturar Stooq
+    // Descargar datos en batches para no saturar el proveedor
+    const assetInterval = intervalo === 'semanal' ? '1wk' : '1d'
     const BATCH = 4
     const allData = {}
     for (let i = 0; i < symbols.length; i += BATCH) {
       const chunk = symbols.slice(i, i+BATCH)
-      await Promise.all(chunk.map(async sym => { allData[sym] = await fetchData(sym, cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null) }))
+      await Promise.all(chunk.map(async sym => { allData[sym] = await fetchData(sym, cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, assetInterval) }))
       if (i+BATCH < symbols.length) await sleep(400)
     }
 
-    // SP500 para el filtro
+    // SP500 para el filtro (siempre diario)
     let sp500Data = null
     try { sp500Data = await fetchData('^GSPC', cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null) } catch(_) {}
+
+    // ── Fetch datos auxiliares para filtros de mercado ──
+    const anyFiltroOn = !!(filtrosCfg?.vix?.activo || filtrosCfg?.indiceEma?.activo || filtrosCfg?.sectorEma?.activo || filtrosCfg?.cruceEma?.activo)
+    let vixRawData = null
+    const filterAuxData = {} // key: `${ticker}:${iv}` → data
+    if (anyFiltroOn && filtrosCfg) {
+      const filterFetchJobs = []
+      const vixIv = filtrosCfg.vix?.intervalo === 'semanal' ? '1wk' : '1d'
+      if (filtrosCfg.vix?.activo)
+        filterFetchJobs.push(
+          fetchData('^VIX', cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, vixIv)
+            .then(r => { vixRawData = r }).catch(() => {})
+        )
+      const auxKeys = new Set()
+      for (const key of ['indiceEma','sectorEma','cruceEma']) {
+        const f = filtrosCfg[key]
+        if (f?.activo && f.ticker) {
+          const iv = f.intervalo === 'semanal' ? '1wk' : '1d'
+          const akey = `${f.ticker}:${iv}`
+          if (f.ticker !== '^GSPC' || iv === '1wk') auxKeys.add(akey)
+        }
+      }
+      for (const akey of auxKeys) {
+        const colonIdx = akey.lastIndexOf(':')
+        const ticker = akey.slice(0, colonIdx), iv = akey.slice(colonIdx + 1)
+        filterFetchJobs.push(
+          fetchData(ticker, cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, iv)
+            .then(r => { filterAuxData[akey] = r }).catch(() => {})
+        )
+      }
+      if (filterFetchJobs.length) await Promise.all(filterFetchJobs)
+    }
 
     // Capital por slot (base para pnlPct; reescalado en modos con pool compartido)
     const n = symbols.filter(s => allData[s]?.length).length
@@ -1228,6 +1303,138 @@ export default async function handler(req, res) {
       const { trades, capitalReinv, gananciaSimple, startDate, blockEvents } = runSingleBacktest(data, sp500Data, slotCfg)
       return { symbol: sym, data, trades, capitalReinv, gananciaSimple, startDate, blockEvents }
     }).filter(Boolean)
+
+    // ── Aplicar filtros de mercado a trades por activo ──
+    let filterZones = []
+    if (anyFiltroOn && filtrosCfg) {
+      for (const ar of assetResults) {
+        const assetDates = ar.data.map(d => d.date)
+        const filtroActivoMap = {}
+
+        // Resuelve dataset para ticker+interval (^GSPC diario → sp500Data)
+        const resolveFilterData = (ticker, iv) =>
+          (ticker === '^GSPC' && iv !== '1wk') ? sp500Data : (filterAuxData[`${ticker}:${iv}`] ?? sp500Data)
+
+        // VIX
+        const vixCloses = filtrosCfg.vix?.activo ? buildAlignedCloses(vixRawData, assetDates) : null
+
+        // Índice EMA
+        const indiceIv = filtrosCfg.indiceEma?.intervalo === 'semanal' ? '1wk' : '1d'
+        const indiceDataRes = filtrosCfg.indiceEma?.activo ? resolveFilterData(filtrosCfg.indiceEma.ticker, indiceIv) : null
+        let indiceCloses = null, indiceEmaArr = null
+        if (indiceDataRes) {
+          if (indiceIv === '1wk') {
+            const r = buildAlignedWeekly(indiceDataRes, assetDates, Math.max(1, filtrosCfg.indiceEma?.periodo ?? 200))
+            indiceCloses = r.closes; indiceEmaArr = r.ema
+          } else {
+            indiceCloses = buildAlignedCloses(indiceDataRes, assetDates)
+            indiceEmaArr = calcEMA(indiceCloses, Math.max(1, filtrosCfg.indiceEma?.periodo ?? 200))
+          }
+        }
+
+        // Sector EMA
+        const sectorIv = filtrosCfg.sectorEma?.intervalo === 'semanal' ? '1wk' : '1d'
+        const sectorDataRes = filtrosCfg.sectorEma?.activo ? resolveFilterData(filtrosCfg.sectorEma.ticker, sectorIv) : null
+        let sectorCloses = null, sectorEmaArr = null
+        if (sectorDataRes) {
+          if (sectorIv === '1wk') {
+            const r = buildAlignedWeekly(sectorDataRes, assetDates, Math.max(1, filtrosCfg.sectorEma?.periodo ?? 50))
+            sectorCloses = r.closes; sectorEmaArr = r.ema
+          } else {
+            sectorCloses = buildAlignedCloses(sectorDataRes, assetDates)
+            sectorEmaArr = calcEMA(sectorCloses, Math.max(1, filtrosCfg.sectorEma?.periodo ?? 50))
+          }
+        }
+
+        // Cruce EMA
+        const cruceIv = filtrosCfg.cruceEma?.intervalo === 'semanal' ? '1wk' : '1d'
+        const cruceDataRes = filtrosCfg.cruceEma?.activo ? resolveFilterData(filtrosCfg.cruceEma.ticker, cruceIv) : null
+        let cruceCloses = null, cruceEmaRArr = null, cruceEmaLArr = null
+        if (cruceDataRes) {
+          if (cruceIv === '1wk') {
+            const rR = buildAlignedWeekly(cruceDataRes, assetDates, Math.max(1, filtrosCfg.cruceEma?.periodoR ?? 10))
+            const rL = buildAlignedWeekly(cruceDataRes, assetDates, Math.max(1, filtrosCfg.cruceEma?.periodoL ?? 11))
+            cruceCloses = rR.closes; cruceEmaRArr = rR.ema; cruceEmaLArr = rL.ema
+          } else {
+            cruceCloses = buildAlignedCloses(cruceDataRes, assetDates)
+            cruceEmaRArr = calcEMA(cruceCloses, Math.max(1, filtrosCfg.cruceEma?.periodoR ?? 10))
+            cruceEmaLArr = calcEMA(cruceCloses, Math.max(1, filtrosCfg.cruceEma?.periodoL ?? 11))
+          }
+        }
+
+        // Calcular filtroActivoMap para este activo
+        for (let i = 0; i < ar.data.length; i++) {
+          const date = ar.data[i].date
+          let vixOk = true, indiceOk = true, sectorOk = true, cruceOk = true
+          if (filtrosCfg.vix?.activo) {
+            const vc = vixCloses?.[i]
+            vixOk = vc == null ? true : vc < (filtrosCfg.vix.umbral ?? 25)
+          }
+          if (filtrosCfg.indiceEma?.activo) {
+            const ic = indiceCloses?.[i], ie = indiceEmaArr?.[i]
+            indiceOk = ic == null || ie == null ? true : ic >= ie
+          }
+          if (filtrosCfg.sectorEma?.activo) {
+            const sc = sectorCloses?.[i], se = sectorEmaArr?.[i]
+            sectorOk = sc == null || se == null ? true : sc >= se
+          }
+          if (filtrosCfg.cruceEma?.activo) {
+            const er = cruceEmaRArr?.[i], el = cruceEmaLArr?.[i]
+            cruceOk = er == null || el == null ? true : er > el
+          }
+          filtroActivoMap[date] = vixOk && indiceOk && sectorOk && cruceOk
+        }
+
+        // Guardar filterZones del primer activo para incluirlas en la respuesta
+        if (!filterZones.length) {
+          let zoneStart = null
+          for (const bar of ar.data) {
+            const blocked = !filtroActivoMap[bar.date]
+            if (blocked && zoneStart === null) zoneStart = bar.date
+            else if (!blocked && zoneStart !== null) { filterZones.push({ from: zoneStart, to: bar.date }); zoneStart = null }
+          }
+          if (zoneStart !== null) filterZones.push({ from: zoneStart, to: ar.data[ar.data.length-1].date })
+        }
+
+        // "0 No Strategy": generar trades desde transiciones del filtro
+        if (ar.trades.length === 0) {
+          const genRaw = []
+          let entryPx = null, entryDate = null
+          const startDateStr = ar.startDate
+          for (let i = 0; i < ar.data.length; i++) {
+            const bar = ar.data[i]
+            if (bar.date < startDateStr) continue
+            const active = filtroActivoMap[bar.date] !== false
+            const prevActive = i > 0 ? filtroActivoMap[ar.data[i-1].date] !== false : false
+            if (!prevActive && active && i + 1 < ar.data.length) {
+              entryPx = ar.data[i+1].open; entryDate = bar.date
+            }
+            if (prevActive && !active && entryPx != null) {
+              genRaw.push({ entryDate, exitDate: bar.date, entryPrice: entryPx, exitPrice: bar.close })
+              entryPx = null; entryDate = null
+            }
+          }
+          if (entryPx != null) {
+            const lastBar = ar.data[ar.data.length-1]
+            genRaw.push({ entryDate, exitDate: lastBar.date, entryPrice: entryPx, exitPrice: lastBar.close, _virtualClose: true })
+          }
+          if (genRaw.length) {
+            ar.trades = buildTrades(genRaw, slotCapital)
+            ar.capitalReinv = ar.trades[ar.trades.length-1].capitalTras
+            ar.gananciaSimple = ar.trades.reduce((s,t) => s + t.pnlSimple, 0)
+          }
+        } else {
+          // Filtrar trades existentes por filtroActivoMap
+          const filtered = ar.trades.filter(t => filtroActivoMap[t.entryDate] !== false)
+          if (filtered.length !== ar.trades.length) {
+            const rebuilt = rebuildCapitalTras(filtered, slotCapital)
+            ar.trades = rebuilt
+            ar.capitalReinv = rebuilt.length ? rebuilt[rebuilt.length-1].capitalTras : slotCapital
+            ar.gananciaSimple = rebuilt.reduce((s,t) => s + t.pnlSimple, 0)
+          }
+        }
+      }
+    }
 
     // Calcular curvas según modo de asignación
     let curves
@@ -1388,6 +1595,7 @@ export default async function handler(req, res) {
       startDate: curves.startDate,
       blockEventsBySymbol: Object.fromEntries(assetResults.map(ar => [ar.symbol, ar.blockEvents])),
       senalStats: curves.senalStats ?? null,
+      filterZones: filterZones.length ? filterZones : undefined,
     })
   } catch(err) {
     console.error(err)
