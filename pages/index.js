@@ -3091,7 +3091,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.258</title>
+        <title>Trading Simulator V9.259</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3169,7 +3169,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.258
+            <span className="dot"/>Trading Simulator V9.259
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -3347,15 +3347,17 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                             <span style={lbl(filtros.vix.activo)}>VIX &lt; umbral</span>
                           </div>
                           {filtros.vix.activo&&(
-                            <div style={{display:'flex',alignItems:'center',gap:5,paddingLeft:34}}>
+                            <div style={{display:'flex',alignItems:'center',flexWrap:'wrap',gap:5,rowGap:4,paddingLeft:34}}>
                               <span style={plbl}>Umbral</span>
                               <input type="number" min={5} max={80} step={1}
                                 value={filtros.vix.umbral}
                                 onChange={e=>fSet('vix','umbral',Number(e.target.value)||25)}
                                 style={{...fInp,width:54}}/>
-                              <span style={{...plbl,marginLeft:4}}>Int</span>
-                              <button style={ivBtn(filtros.vix.intervalo!=='semanal')} onClick={()=>fSet('vix','intervalo','diario')}>D</button>
-                              <button style={ivBtn(filtros.vix.intervalo==='semanal')} onClick={()=>fSet('vix','intervalo','semanal')}>S</button>
+                              <span style={{display:'inline-flex',alignItems:'center',gap:3,flexShrink:0}}>
+                                <span style={plbl}>Int</span>
+                                <button style={ivBtn(filtros.vix.intervalo!=='semanal')} onClick={()=>fSet('vix','intervalo','diario')}>D</button>
+                                <button style={ivBtn(filtros.vix.intervalo==='semanal')} onClick={()=>fSet('vix','intervalo','semanal')}>S</button>
+                              </span>
                             </div>
                           )}
                         </div>
@@ -3369,7 +3371,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                             <span style={lbl(filtros.indiceEma.activo)}>Índice &gt; EMA</span>
                           </div>
                           {filtros.indiceEma.activo&&(
-                            <div style={{display:'flex',alignItems:'center',gap:5,paddingLeft:34}}>
+                            <div style={{display:'flex',alignItems:'center',flexWrap:'wrap',gap:5,rowGap:4,paddingLeft:34}}>
                               <span style={plbl}>Ticker</span>
                               <input type="text" value={filtros.indiceEma.ticker}
                                 onChange={e=>fSet('indiceEma','ticker',e.target.value.toUpperCase())}
@@ -3379,8 +3381,10 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                 value={filtros.indiceEma.periodo}
                                 onChange={e=>fSet('indiceEma','periodo',Number(e.target.value)||200)}
                                 style={{...fInp,width:50}}/>
-                              <button style={ivBtn(filtros.indiceEma.intervalo!=='semanal')} onClick={()=>fSet('indiceEma','intervalo','diario')}>D</button>
-                              <button style={ivBtn(filtros.indiceEma.intervalo==='semanal')} onClick={()=>fSet('indiceEma','intervalo','semanal')}>S</button>
+                              <span style={{display:'inline-flex',alignItems:'center',gap:3,flexShrink:0}}>
+                                <button style={ivBtn(filtros.indiceEma.intervalo!=='semanal')} onClick={()=>fSet('indiceEma','intervalo','diario')}>D</button>
+                                <button style={ivBtn(filtros.indiceEma.intervalo==='semanal')} onClick={()=>fSet('indiceEma','intervalo','semanal')}>S</button>
+                              </span>
                             </div>
                           )}
                         </div>
@@ -3394,7 +3398,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                             <span style={lbl(filtros.sectorEma.activo)}>Sector ETF &gt; EMA</span>
                           </div>
                           {filtros.sectorEma.activo&&(
-                            <div style={{display:'flex',alignItems:'center',gap:5,paddingLeft:34}}>
+                            <div style={{display:'flex',alignItems:'center',flexWrap:'wrap',gap:5,rowGap:4,paddingLeft:34}}>
                               <span style={plbl}>ETF</span>
                               <input type="text" value={filtros.sectorEma.ticker}
                                 onChange={e=>fSet('sectorEma','ticker',e.target.value.toUpperCase())}
@@ -3404,8 +3408,10 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                 value={filtros.sectorEma.periodo}
                                 onChange={e=>fSet('sectorEma','periodo',Number(e.target.value)||50)}
                                 style={{...fInp,width:50}}/>
-                              <button style={ivBtn(filtros.sectorEma.intervalo!=='semanal')} onClick={()=>fSet('sectorEma','intervalo','diario')}>D</button>
-                              <button style={ivBtn(filtros.sectorEma.intervalo==='semanal')} onClick={()=>fSet('sectorEma','intervalo','semanal')}>S</button>
+                              <span style={{display:'inline-flex',alignItems:'center',gap:3,flexShrink:0}}>
+                                <button style={ivBtn(filtros.sectorEma.intervalo!=='semanal')} onClick={()=>fSet('sectorEma','intervalo','diario')}>D</button>
+                                <button style={ivBtn(filtros.sectorEma.intervalo==='semanal')} onClick={()=>fSet('sectorEma','intervalo','semanal')}>S</button>
+                              </span>
                             </div>
                           )}
                         </div>
@@ -3419,7 +3425,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                             <span style={lbl(filtros.cruceEma.activo)}>Cruce EMA (R&gt;L)</span>
                           </div>
                           {filtros.cruceEma.activo&&(
-                            <div style={{display:'flex',alignItems:'center',gap:5,paddingLeft:34,flexWrap:'wrap'}}>
+                            <div style={{display:'flex',alignItems:'center',flexWrap:'wrap',gap:5,rowGap:4,paddingLeft:34}}>
                               <span style={plbl}>Ticker</span>
                               <input type="text" value={filtros.cruceEma.ticker}
                                 onChange={e=>fSet('cruceEma','ticker',e.target.value.toUpperCase())}
@@ -3434,8 +3440,10 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                 value={filtros.cruceEma.periodoL}
                                 onChange={e=>fSet('cruceEma','periodoL',Number(e.target.value)||11)}
                                 style={{...fInp,width:42}}/>
-                              <button style={ivBtn(filtros.cruceEma.intervalo!=='semanal')} onClick={()=>fSet('cruceEma','intervalo','diario')}>D</button>
-                              <button style={ivBtn(filtros.cruceEma.intervalo==='semanal')} onClick={()=>fSet('cruceEma','intervalo','semanal')}>S</button>
+                              <span style={{display:'inline-flex',alignItems:'center',gap:3,flexShrink:0}}>
+                                <button style={ivBtn(filtros.cruceEma.intervalo!=='semanal')} onClick={()=>fSet('cruceEma','intervalo','diario')}>D</button>
+                                <button style={ivBtn(filtros.cruceEma.intervalo==='semanal')} onClick={()=>fSet('cruceEma','intervalo','semanal')}>S</button>
+                              </span>
                             </div>
                           )}
                         </div>
@@ -3487,8 +3495,11 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                               fontWeight:isActive?700:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
                               {s.name}
                             </div>
-                            <div style={{fontFamily:MONO,fontSize:9,color:'#5a7a95',marginTop:1}}>
-                              {s.years||'?'}a · {s.definition?.setup?.ma_fast||s.ema_r||'?'}/{s.definition?.setup?.ma_slow||s.ema_l||'?'}
+                            <div style={{fontFamily:MONO,fontSize:9,color:'#5a7a95',marginTop:1,display:'flex',alignItems:'center',gap:4}}>
+                              <span>{s.years||'?'}a · {s.definition?.setup?.ma_fast||s.ema_r||'?'}/{s.definition?.setup?.ma_slow||s.ema_l||'?'}</span>
+                              <span style={{fontFamily:MONO,fontSize:9,padding:'0 4px',borderRadius:3,
+                                border:'1px solid #1a3050',background:'rgba(90,120,160,0.12)',
+                                color:'#5a7a95',lineHeight:'14px',flexShrink:0}}>D</span>
                             </div>
                           </div>
                           {/* Edit button */}
