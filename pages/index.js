@@ -3104,7 +3104,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.261</title>
+        <title>Trading Simulator V9.262</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3182,7 +3182,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.261
+            <span className="dot"/>Trading Simulator V9.262
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -3329,9 +3329,10 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   })
                   const lbl=(active)=>({fontFamily:MONO,fontSize:11,color:active?'var(--text)':'var(--text2)',flex:1})
                   const plbl={fontFamily:MONO,fontSize:9,color:'var(--text2)',whiteSpace:'nowrap'}
-                  const ivBtn=(on)=>({fontFamily:MONO,fontSize:9,padding:'1px 5px',borderRadius:3,cursor:'pointer',
-                    border:`1px solid ${on?'#7a9bc0':'#1a3d5a'}`,background:on?'rgba(122,155,192,0.18)':'transparent',
-                    color:on?'var(--text)':'var(--text2)'})
+                  const ivBtn=(on,semanal=false)=>({fontFamily:MONO,fontSize:9,padding:'1px 5px',borderRadius:3,cursor:'pointer',
+                    border:`1px solid ${on?(semanal?'#a07820':'#2d6e4e'):'#1a3d5a'}`,
+                    background:on?(semanal?'rgba(240,192,64,0.12)':'rgba(76,175,130,0.12)'):'transparent',
+                    color:on?(semanal?'#f0c040':'#4caf82'):'var(--text2)'})
                   return(
                   <div style={{borderBottom:'1px solid var(--border)',flexShrink:0}}>
                     {/* Cabecera colapsable */}
@@ -3368,8 +3369,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                 style={{...fInp,width:54}}/>
                               <span style={{display:'inline-flex',alignItems:'center',gap:3,flexShrink:0}}>
                                 <span style={plbl}>Int</span>
-                                <button style={ivBtn(filtros.vix.intervalo!=='semanal')} onClick={()=>fSet('vix','intervalo','diario')}>D</button>
-                                <button style={ivBtn(filtros.vix.intervalo==='semanal')} onClick={()=>fSet('vix','intervalo','semanal')}>S</button>
+                                <button style={ivBtn(filtros.vix.intervalo!=='semanal',false)} onClick={()=>fSet('vix','intervalo','diario')}>D</button>
+                                <button style={ivBtn(filtros.vix.intervalo==='semanal',true)} onClick={()=>fSet('vix','intervalo','semanal')}>S</button>
                               </span>
                             </div>
                           )}
@@ -3395,8 +3396,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                 onChange={e=>fSet('indiceEma','periodo',Number(e.target.value)||200)}
                                 style={{...fInp,width:50}}/>
                               <span style={{display:'inline-flex',alignItems:'center',gap:3,flexShrink:0}}>
-                                <button style={ivBtn(filtros.indiceEma.intervalo!=='semanal')} onClick={()=>fSet('indiceEma','intervalo','diario')}>D</button>
-                                <button style={ivBtn(filtros.indiceEma.intervalo==='semanal')} onClick={()=>fSet('indiceEma','intervalo','semanal')}>S</button>
+                                <button style={ivBtn(filtros.indiceEma.intervalo!=='semanal',false)} onClick={()=>fSet('indiceEma','intervalo','diario')}>D</button>
+                                <button style={ivBtn(filtros.indiceEma.intervalo==='semanal',true)} onClick={()=>fSet('indiceEma','intervalo','semanal')}>S</button>
                               </span>
                             </div>
                           )}
@@ -3422,8 +3423,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                 onChange={e=>fSet('sectorEma','periodo',Number(e.target.value)||50)}
                                 style={{...fInp,width:50}}/>
                               <span style={{display:'inline-flex',alignItems:'center',gap:3,flexShrink:0}}>
-                                <button style={ivBtn(filtros.sectorEma.intervalo!=='semanal')} onClick={()=>fSet('sectorEma','intervalo','diario')}>D</button>
-                                <button style={ivBtn(filtros.sectorEma.intervalo==='semanal')} onClick={()=>fSet('sectorEma','intervalo','semanal')}>S</button>
+                                <button style={ivBtn(filtros.sectorEma.intervalo!=='semanal',false)} onClick={()=>fSet('sectorEma','intervalo','diario')}>D</button>
+                                <button style={ivBtn(filtros.sectorEma.intervalo==='semanal',true)} onClick={()=>fSet('sectorEma','intervalo','semanal')}>S</button>
                               </span>
                             </div>
                           )}
@@ -3454,8 +3455,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                 onChange={e=>fSet('cruceEma','periodoL',Number(e.target.value)||11)}
                                 style={{...fInp,width:42}}/>
                               <span style={{display:'inline-flex',alignItems:'center',gap:3,flexShrink:0}}>
-                                <button style={ivBtn(filtros.cruceEma.intervalo!=='semanal')} onClick={()=>fSet('cruceEma','intervalo','diario')}>D</button>
-                                <button style={ivBtn(filtros.cruceEma.intervalo==='semanal')} onClick={()=>fSet('cruceEma','intervalo','semanal')}>S</button>
+                                <button style={ivBtn(filtros.cruceEma.intervalo!=='semanal',false)} onClick={()=>fSet('cruceEma','intervalo','diario')}>D</button>
+                                <button style={ivBtn(filtros.cruceEma.intervalo==='semanal',true)} onClick={()=>fSet('cruceEma','intervalo','semanal')}>S</button>
                               </span>
                             </div>
                           )}
@@ -3533,9 +3534,9 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                               <span onClick={toggleSIv}
                                 title={sIsSemanal?'Semanal — pulsar para cambiar a diario':'Diario — pulsar para cambiar a semanal'}
                                 style={{fontFamily:MONO,fontSize:9,padding:'0 4px',borderRadius:3,
-                                  border:`1px solid ${sIsSemanal?'#7a9bc0':'#1a3050'}`,
-                                  background:sIsSemanal?'rgba(122,155,192,0.18)':'rgba(90,120,160,0.12)',
-                                  color:sIsSemanal?'#7a9bc0':'#5a7a95',
+                                  border:`1px solid ${sIsSemanal?'#a07820':'#2d6e4e'}`,
+                                  background:sIsSemanal?'rgba(240,192,64,0.12)':'rgba(76,175,130,0.12)',
+                                  color:sIsSemanal?'#f0c040':'#4caf82',
                                   lineHeight:'14px',flexShrink:0,cursor:'pointer',userSelect:'none',
                                   transition:'background 0.15s,border-color 0.15s,color 0.15s'}}>
                                 {sIsSemanal?'S':'D'}
@@ -4253,12 +4254,12 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   <div style={{display:'flex',alignItems:'center',gap:8}}>
                     <span style={{fontFamily:MONO,fontSize:11,color:'#7aabc8',whiteSpace:'nowrap'}}>Intervalo</span>
                     <div style={{display:'flex',gap:4,marginLeft:'auto'}}>
-                      {[{id:'diario',label:'Diario'},{id:'semanal',label:'Semanal'}].map(opt=>(
+                      {[{id:'diario',label:'Diario',activeColor:'#4caf82',activeBorder:'#2d6e4e',activeBg:'rgba(76,175,130,0.12)'},{id:'semanal',label:'Semanal',activeColor:'#f0c040',activeBorder:'#a07820',activeBg:'rgba(240,192,64,0.12)'}].map(opt=>(
                         <button key={opt.id} onClick={()=>setMcIntervalo(opt.id)}
                           style={{fontFamily:MONO,fontSize:10,padding:'2px 8px',borderRadius:3,cursor:'pointer',
-                            border:`1px solid ${mcIntervalo===opt.id?'var(--accent)':'var(--border)'}`,
-                            background:mcIntervalo===opt.id?'rgba(0,212,255,0.12)':'transparent',
-                            color:mcIntervalo===opt.id?'var(--accent)':'#7aabc8'}}>
+                            border:`1px solid ${mcIntervalo===opt.id?opt.activeBorder:'var(--border)'}`,
+                            background:mcIntervalo===opt.id?opt.activeBg:'transparent',
+                            color:mcIntervalo===opt.id?opt.activeColor:'#7aabc8'}}>
                           {opt.label}
                         </button>
                       ))}
