@@ -1635,6 +1635,13 @@ export default function Home() {
   // Abrir editor estrategia
   const openEditStr=(s)=>{
     setEditingStr(s)
+    // Ocultar meta-params (intervalo) del textarea — se gestionan por badge D/S
+    let paramsDisplay=s.params||''
+    try{
+      const p=typeof s.params==='string'?JSON.parse(s.params||'{}'):(s.params||{})
+      const {intervalo:_iv,...rest}=p
+      paramsDisplay=Object.keys(rest).length?JSON.stringify(rest,null,2):''
+    }catch(_){}
     setStrForm({
       name:s.name||'',
       years:s.years||5,
@@ -1643,7 +1650,7 @@ export default function Home() {
       color:s.color||'#00d4ff',
       observations:s.observations||'',
       description:s.description||'',
-      params:s.params||'',
+      params:paramsDisplay,
       code_js:s.code_js||'',
       code_pine:s.code_pine||'',
       summary:s.summary||'',
@@ -1654,8 +1661,17 @@ export default function Home() {
   const saveEditStr=async()=>{
     setStrSaving(true)
     try{
+      // Restaurar meta-params (intervalo) desde editingStr antes de guardar
+      let mergedParams=strForm.params||''
+      try{
+        const newP=strForm.params?.trim()?JSON.parse(strForm.params):{}
+        const oldP=typeof editingStr?.params==='string'?JSON.parse(editingStr.params||'{}'):(editingStr?.params||{})
+        if(oldP.intervalo!=null) newP.intervalo=oldP.intervalo
+        mergedParams=JSON.stringify(newP)
+      }catch(_){}
       const payload={
         ...strForm,
+        params:mergedParams,
         id:editingStr?.id||undefined,
         years:Number(strForm.years||5),
         capital_ini:Number(strForm.capital_ini||(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.defaultCapital||1000}catch(_){return 1000}})()),
@@ -3104,7 +3120,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.262</title>
+        <title>Trading Simulator V9.263</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3182,7 +3198,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.262
+            <span className="dot"/>Trading Simulator V9.263
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
