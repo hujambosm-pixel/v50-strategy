@@ -731,6 +731,7 @@ export default function Home() {
   const [mcMultiResults,setMcMultiResults]=useState([])     // [{id,name,color,result}]
   const [mcProgress,setMcProgress]=useState(null)           // null|{current,total,name}
   const [mcSectionOpen,setMcSectionOpen]=useState({mode:false,strats:false})
+  const [mcFiltrosOpen,setMcFiltrosOpen]=useState(false)
   const [mcStratVisible,setMcStratVisible]=useState({})     // {id:bool}
   const [mcAssetOpen,setMcAssetOpen]=useState({})           // {stratId:bool} acordeón resumen por activo
   const [mcShowBHCompare,setMcShowBHCompare]=useState(true) // B&H curve toggle in multi-strategy chart
@@ -3120,7 +3121,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.264</title>
+        <title>Trading Simulator V9.265</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3198,7 +3199,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.264
+            <span className="dot"/>Trading Simulator V9.265
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -3353,16 +3354,15 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   <div style={{borderBottom:'1px solid var(--border)',flexShrink:0}}>
                     {/* Cabecera colapsable */}
                     <div onClick={()=>setFiltrosOpen(v=>!v)}
-                      style={{padding:'5px 10px',display:'flex',alignItems:'center',gap:5,cursor:'pointer',
-                        userSelect:'none',background:anyOn?'rgba(0,229,160,0.05)':'transparent'}}>
-                      <span style={{fontFamily:MONO,fontSize:11,color:anyOn?'#00e5a0':'var(--text2)',fontWeight:anyOn?700:500}}>
-                        Filtros de mercado
-                      </span>
+                      style={{padding:'8px 10px',borderBottom:filtrosOpen?'1px solid var(--border)':'none',display:'flex',alignItems:'center',gap:6,cursor:'pointer',background:'var(--bg2)',userSelect:'none'}}
+                      onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.04)'}
+                      onMouseOut={e=>e.currentTarget.style.background='var(--bg2)'}>
+                      <span style={{fontFamily:MONO,fontSize:9,color:'#4a7a9a',width:10}}>{filtrosOpen?'▼':'▶'}</span>
+                      <span style={{fontFamily:MONO,fontSize:12,color:anyOn?'#00e5a0':'#c8dff5',fontWeight:600,letterSpacing:'0.05em'}}>FILTROS DE MERCADO</span>
                       {anyOn&&<span style={{fontFamily:MONO,fontSize:9,background:'rgba(0,229,160,0.18)',color:'#00e5a0',
                         borderRadius:3,padding:'0 4px',lineHeight:'14px',flexShrink:0}}>
                         {onCnt} activo{onCnt>1?'s':''}
                       </span>}
-                      <span style={{marginLeft:'auto',color:'var(--text2)',fontSize:10,lineHeight:1}}>{filtrosOpen?'▾':'▸'}</span>
                     </div>
 
                     {filtrosOpen&&(
@@ -4283,6 +4283,117 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   </div>
                 </div>
 
+                {/* FILTROS DE MERCADO — colapsable (MC) */}
+                {(()=>{
+                  const anyOn=filtros.vix.activo||filtros.indiceEma.activo||filtros.sectorEma.activo||filtros.cruceEma.activo
+                  const onCnt=[filtros.vix.activo,filtros.indiceEma.activo,filtros.sectorEma.activo,filtros.cruceEma.activo].filter(Boolean).length
+                  const fInp={background:'#0a1520',border:'1px solid #1a3d5a',borderRadius:3,color:'var(--text)',fontFamily:MONO,fontSize:10,padding:'1px 4px',boxSizing:'border-box',outline:'none',width:'100%'}
+                  const fToggle=(key)=>setFiltros(p=>({...p,[key]:{...p[key],activo:!p[key].activo}}))
+                  const fSet=(key,field,val)=>setFiltros(p=>({...p,[key]:{...p[key],[field]:val}}))
+                  const toggleBtn=(active)=>({display:'inline-flex',alignItems:'center',justifyContent:'center',width:28,height:14,borderRadius:7,flexShrink:0,cursor:'pointer',transition:'background 0.15s',background:active?'#00e5a0':'#1a2d45',position:'relative'})
+                  const toggleKnob=(active)=>({position:'absolute',width:10,height:10,borderRadius:'50%',background:active?'#fff':'#7a9bc0',left:active?16:2,transition:'left 0.15s'})
+                  const lbl=(active)=>({fontFamily:MONO,fontSize:11,color:active?'var(--text)':'var(--text2)',flex:1})
+                  const plbl={fontFamily:MONO,fontSize:9,color:'var(--text2)',whiteSpace:'nowrap'}
+                  const ivBtn=(on,semanal=false)=>({fontFamily:MONO,fontSize:9,padding:'1px 5px',borderRadius:3,cursor:'pointer',
+                    border:`1px solid ${on?(semanal?'#a07820':'#2d6e4e'):'#1a3d5a'}`,
+                    background:on?(semanal?'rgba(240,192,64,0.12)':'rgba(76,175,130,0.12)'):'transparent',
+                    color:on?(semanal?'#f0c040':'#4caf82'):'var(--text2)'})
+                  return(
+                  <div style={{flexShrink:0}}>
+                    <div onClick={()=>setMcFiltrosOpen(v=>!v)}
+                      style={{padding:'8px 12px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:6,cursor:'pointer',background:'var(--bg2)',userSelect:'none'}}
+                      onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.04)'}
+                      onMouseOut={e=>e.currentTarget.style.background='var(--bg2)'}>
+                      <span style={{fontFamily:MONO,fontSize:9,color:'#4a7a9a',width:10}}>{mcFiltrosOpen?'▼':'▶'}</span>
+                      <span style={{fontFamily:MONO,fontSize:12,color:anyOn?'#00e5a0':'#c8dff5',fontWeight:600,letterSpacing:'0.05em'}}>FILTROS DE MERCADO</span>
+                      {anyOn&&<span style={{fontFamily:MONO,fontSize:9,background:'rgba(0,229,160,0.18)',color:'#00e5a0',borderRadius:3,padding:'0 4px',lineHeight:'14px',flexShrink:0}}>{onCnt} activo{onCnt>1?'s':''}</span>}
+                    </div>
+                    {mcFiltrosOpen&&(
+                      <div style={{padding:'2px 12px 8px',display:'flex',flexDirection:'column',gap:7,borderBottom:'1px solid var(--border)'}}>
+                        {/* VIX */}
+                        <div>
+                          <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:filtros.vix.activo?4:0}}>
+                            <div style={toggleBtn(filtros.vix.activo)} onClick={()=>fToggle('vix')}><div style={toggleKnob(filtros.vix.activo)}/></div>
+                            <span style={lbl(filtros.vix.activo)}>VIX &lt; umbral</span>
+                          </div>
+                          {filtros.vix.activo&&(
+                            <div style={{display:'flex',alignItems:'center',flexWrap:'wrap',gap:5,rowGap:4,paddingLeft:34}}>
+                              <span style={plbl}>Umbral</span>
+                              <input type="number" min={5} max={80} step={1} value={filtros.vix.umbral} onChange={e=>fSet('vix','umbral',Number(e.target.value)||25)} style={{...fInp,width:54}}/>
+                              <span style={{display:'inline-flex',alignItems:'center',gap:3,flexShrink:0}}>
+                                <span style={plbl}>Int</span>
+                                <button style={ivBtn(filtros.vix.intervalo!=='semanal',false)} onClick={()=>fSet('vix','intervalo','diario')}>D</button>
+                                <button style={ivBtn(filtros.vix.intervalo==='semanal',true)} onClick={()=>fSet('vix','intervalo','semanal')}>S</button>
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                        {/* Índice EMA */}
+                        <div>
+                          <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:filtros.indiceEma.activo?4:0}}>
+                            <div style={toggleBtn(filtros.indiceEma.activo)} onClick={()=>fToggle('indiceEma')}><div style={toggleKnob(filtros.indiceEma.activo)}/></div>
+                            <span style={lbl(filtros.indiceEma.activo)}>Índice &gt; EMA</span>
+                          </div>
+                          {filtros.indiceEma.activo&&(
+                            <div style={{display:'flex',alignItems:'center',flexWrap:'wrap',gap:5,rowGap:4,paddingLeft:34}}>
+                              <span style={plbl}>Ticker</span>
+                              <input type="text" value={filtros.indiceEma.ticker} onChange={e=>fSet('indiceEma','ticker',e.target.value.toUpperCase())} style={{...fInp,width:60}}/>
+                              <span style={plbl}>EMA</span>
+                              <input type="number" min={2} max={500} step={1} value={filtros.indiceEma.periodo} onChange={e=>fSet('indiceEma','periodo',Number(e.target.value)||200)} style={{...fInp,width:50}}/>
+                              <span style={{display:'inline-flex',alignItems:'center',gap:3,flexShrink:0}}>
+                                <button style={ivBtn(filtros.indiceEma.intervalo!=='semanal',false)} onClick={()=>fSet('indiceEma','intervalo','diario')}>D</button>
+                                <button style={ivBtn(filtros.indiceEma.intervalo==='semanal',true)} onClick={()=>fSet('indiceEma','intervalo','semanal')}>S</button>
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                        {/* Sector EMA */}
+                        <div>
+                          <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:filtros.sectorEma.activo?4:0}}>
+                            <div style={toggleBtn(filtros.sectorEma.activo)} onClick={()=>fToggle('sectorEma')}><div style={toggleKnob(filtros.sectorEma.activo)}/></div>
+                            <span style={lbl(filtros.sectorEma.activo)}>Sector ETF &gt; EMA</span>
+                          </div>
+                          {filtros.sectorEma.activo&&(
+                            <div style={{display:'flex',alignItems:'center',flexWrap:'wrap',gap:5,rowGap:4,paddingLeft:34}}>
+                              <span style={plbl}>ETF</span>
+                              <input type="text" value={filtros.sectorEma.ticker} onChange={e=>fSet('sectorEma','ticker',e.target.value.toUpperCase())} style={{...fInp,width:60}}/>
+                              <span style={plbl}>EMA</span>
+                              <input type="number" min={2} max={500} step={1} value={filtros.sectorEma.periodo} onChange={e=>fSet('sectorEma','periodo',Number(e.target.value)||50)} style={{...fInp,width:50}}/>
+                              <span style={{display:'inline-flex',alignItems:'center',gap:3,flexShrink:0}}>
+                                <button style={ivBtn(filtros.sectorEma.intervalo!=='semanal',false)} onClick={()=>fSet('sectorEma','intervalo','diario')}>D</button>
+                                <button style={ivBtn(filtros.sectorEma.intervalo==='semanal',true)} onClick={()=>fSet('sectorEma','intervalo','semanal')}>S</button>
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                        {/* Cruce EMA */}
+                        <div>
+                          <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:filtros.cruceEma.activo?4:0}}>
+                            <div style={toggleBtn(filtros.cruceEma.activo)} onClick={()=>fToggle('cruceEma')}><div style={toggleKnob(filtros.cruceEma.activo)}/></div>
+                            <span style={lbl(filtros.cruceEma.activo)}>Cruce EMA (R&gt;L)</span>
+                          </div>
+                          {filtros.cruceEma.activo&&(
+                            <div style={{display:'flex',alignItems:'center',flexWrap:'wrap',gap:5,rowGap:4,paddingLeft:34}}>
+                              <span style={plbl}>Ticker</span>
+                              <input type="text" value={filtros.cruceEma.ticker} onChange={e=>fSet('cruceEma','ticker',e.target.value.toUpperCase())} style={{...fInp,width:60}}/>
+                              <span style={plbl}>R</span>
+                              <input type="number" min={2} max={500} step={1} value={filtros.cruceEma.periodoR} onChange={e=>fSet('cruceEma','periodoR',Number(e.target.value)||10)} style={{...fInp,width:42}}/>
+                              <span style={plbl}>L</span>
+                              <input type="number" min={2} max={500} step={1} value={filtros.cruceEma.periodoL} onChange={e=>fSet('cruceEma','periodoL',Number(e.target.value)||11)} style={{...fInp,width:42}}/>
+                              <span style={{display:'inline-flex',alignItems:'center',gap:3,flexShrink:0}}>
+                                <button style={ivBtn(filtros.cruceEma.intervalo!=='semanal',false)} onClick={()=>fSet('cruceEma','intervalo','diario')}>D</button>
+                                <button style={ivBtn(filtros.cruceEma.intervalo==='semanal',true)} onClick={()=>fSet('cruceEma','intervalo','semanal')}>S</button>
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                        {anyOn&&<div style={{fontFamily:MONO,fontSize:9,color:'var(--text2)',lineHeight:1.4,marginTop:1}}>AND — todos activos en verde para permitir entrada.</div>}
+                      </div>
+                    )}
+                  </div>
+                  )
+                })()}
+
                 {/* MODO DE ASIGNACIÓN — colapsable */}
                 <div style={{flexShrink:0}}>
                   <div onClick={()=>setMcSectionOpen(s=>({...s,mode:!s.mode}))}
@@ -4375,6 +4486,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   )}
                   {(mcStratSelected.length<=1?selectedModos.includes('positionsizing'):mcMode==='positionsizing')&&(
                     <div style={{padding:'8px 10px',borderTop:'1px solid #1a2a3a'}}>
+                      <div style={{fontFamily:MONO,fontSize:9,color:'#4a7a9a',letterSpacing:'0.07em',marginBottom:7,textTransform:'uppercase',fontWeight:600}}>Risk management</div>
                       {[
                         {label:'Riesgo por trade',value:mcRiskPerTrade,set:setMcRiskPerTrade,
                           tooltip:'Porcentaje del capital total que arriesgas en cada operación. Fórmula: capital × riesgo% / distancia_al_stop. Si no hay stop definido, se usa el % máximo de cartera por trade como fallback.'},
