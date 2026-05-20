@@ -2689,8 +2689,10 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
       if(modesToRun.length===1){
         // Single mode run
         try{
+          const _strat1=strategies.find(s=>s.id===stratIds[0])
+          const isNoStrategy=(_strat1?.name||'').includes('No Strategy')
           const res=await apiFetch('/api/multibacktest',{method:'POST',headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({symbols:mcSelected,modoAsig:modesToRun[0],weights:weightsNorm,cfg:baseCfg,strategyId:stratIds[0]||null,filtros,intervalo:mcIntervalo})})
+            body:JSON.stringify({symbols:mcSelected,modoAsig:modesToRun[0],weights:weightsNorm,cfg:baseCfg,strategyId:stratIds[0]||null,isNoStrategy,filtros,intervalo:mcIntervalo})})
           const json=await res.json()
           if(!res.ok) throw new Error(json.error||'Error')
           setMcResult(json);setMcMultiResults([]);setMcIsModoCompare(false)
@@ -2702,6 +2704,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
       const sid=stratIds[0]||null
       const strat=strategies.find(s=>s.id===sid)||strategies.find(s=>s.id===currentStratId)
       const stratName=strat?.name||'Estrategia activa'
+      const isNoStrategyMode=(strat?.name||'').includes('No Strategy')
       const modeResults=[]
       try{
         for(let i=0;i<modesToRun.length;i++){
@@ -2709,7 +2712,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
           setMcProgress({current:i+1,total:modesToRun.length,name:MODE_LABELS[modo]||modo})
           const color=STRAT_COMPARE_COLORS[i%STRAT_COMPARE_COLORS.length]
           const res=await apiFetch('/api/multibacktest',{method:'POST',headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({symbols:mcSelected,modoAsig:modo,weights:weightsNorm,cfg:baseCfg,strategyId:sid,filtros,intervalo:mcIntervalo})})
+            body:JSON.stringify({symbols:mcSelected,modoAsig:modo,weights:weightsNorm,cfg:baseCfg,strategyId:sid,isNoStrategy:isNoStrategyMode,filtros,intervalo:mcIntervalo})})
           const json=await res.json()
           if(!res.ok) throw new Error(json.error||'Error en '+MODE_LABELS[modo])
           modeResults.push({id:`${sid||'__single__'}__${modo}`,name:`${stratName} · ${MODE_LABELS[modo]}`,color,result:json,modo})
@@ -2732,7 +2735,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
       try{
         const cfg=buildCfgFromStrat(strat)
         const res=await apiFetch('/api/multibacktest',{method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({symbols:mcSelected,modoAsig:mcMode,weights:weightsNorm,cfg,strategyId:sid,filtros,intervalo:mcIntervalo})})
+          body:JSON.stringify({symbols:mcSelected,modoAsig:mcMode,weights:weightsNorm,cfg,strategyId:sid,isNoStrategy:(strat?.name||'').includes('No Strategy'),filtros,intervalo:mcIntervalo})})
         const json=await res.json()
         if(!res.ok) throw new Error(json.error||'Error en '+name)
         results.push({id:sid,name,color,result:json})
@@ -3101,7 +3104,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.260</title>
+        <title>Trading Simulator V9.261</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3179,7 +3182,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.260
+            <span className="dot"/>Trading Simulator V9.261
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}

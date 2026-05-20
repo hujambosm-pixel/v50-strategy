@@ -1181,7 +1181,7 @@ function _calcAssetMaxDD(trades, data, slotCapital, startDate) {
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
-  const { symbols, cfg: cfgInput, definition, modoAsig = 'slots', weights = {}, sizeRules: sizeRulesBody = null, strategyId = null, filtros: filtrosCfg, intervalo } = req.body
+  const { symbols, cfg: cfgInput, definition, modoAsig = 'slots', weights = {}, sizeRules: sizeRulesBody = null, strategyId = null, isNoStrategy = false, filtros: filtrosCfg, intervalo } = req.body
   const sizeRules = sizeRulesBody || cfgInput?.sizeRules || {}
   if (!Array.isArray(symbols) || !symbols.length) return res.status(400).json({ error: 'symbols requerido' })
   let cfg = cfgInput
@@ -1230,6 +1230,10 @@ export default async function handler(req, res) {
         effectiveCfg = { ...cfg, ...stratParams }
       }
     } catch(_) { codeJs = null }
+  }
+  // Guard: sin code_js y no es "0 No Strategy" → error claro, nunca ejecutar estrategia hardcoded
+  if (!codeJs && !isNoStrategy) {
+    return res.status(400).json({ error: 'La estrategia no tiene código ejecutable (code_js). Comprueba que la estrategia esté guardada correctamente en Supabase.' })
   }
 
   try {
@@ -1298,10 +1302,11 @@ export default async function handler(req, res) {
         const startDate = cutoff.toISOString().split('T')[0]
         return { symbol: sym, data, trades, capitalReinv, gananciaSimple, startDate, blockEvents: {} }
       }
-      // Fallback: motor EMA hardcoded (runSingleBacktest intacto)
-      const slotCfg = { ...cfg, capitalIni: slotCapital }
-      const { trades, capitalReinv, gananciaSimple, startDate, blockEvents } = runSingleBacktest(data, sp500Data, slotCfg)
-      return { symbol: sym, data, trades, capitalReinv, gananciaSimple, startDate, blockEvents }
+      // isNoStrategy: sin código → trades vacíos; los filtros los poblarán si están activos
+      const cutoff = new Date(data[data.length-1].date)
+      cutoff.setFullYear(cutoff.getFullYear() - (cfg.years ?? 5))
+      const startDate = cutoff.toISOString().split('T')[0]
+      return { symbol: sym, data, trades: [], capitalReinv: slotCapital, gananciaSimple: 0, startDate, blockEvents: {} }
     }).filter(Boolean)
 
     // ── Aplicar filtros de mercado a trades por activo ──
@@ -1396,8 +1401,8 @@ export default async function handler(req, res) {
           if (zoneStart !== null) filterZones.push({ from: zoneStart, to: ar.data[ar.data.length-1].date })
         }
 
-        // "0 No Strategy": generar trades desde transiciones del filtro
-        if (ar.trades.length === 0) {
+        // "0 No Strategy": generar trades desde transiciones del filtro (solo si isNoStrategy)
+        if (isNoStrategy && ar.trades.length === 0) {
           const genRaw = []
           let entryPx = null, entryDate = null
           const startDateStr = ar.startDate
