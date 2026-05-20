@@ -538,6 +538,7 @@ export default function Home() {
   const [stratDesc, setStratDesc]     = useState('')
   const [stratColor, setStratColor]   = useState('#00d4ff')
   const [currentStratId, setCurrentStratId] = useState(null)
+  const [estrategiaIntervalo, setEstrategiaIntervalo] = useState('diario') // 'diario'|'semanal' — intervalo del activo en backtest individual
   const [stratSaving, setStratSaving] = useState(false)
   const [stratMsg, setStratMsg]       = useState(null)
   const [stratTab, setStratTab]       = useState('build')
@@ -1686,11 +1687,18 @@ export default function Home() {
     if(!confirm('¿Eliminar esta estrategia?')) return
     await deleteStrategy(id); reloadStrategies()
   }
+  // Lee intervalo guardado en stratParams de una estrategia; default 'diario'
+  const readStratIntervalo=(s)=>{
+    try{const p=typeof s?.params==='string'?JSON.parse(s.params||'{}'):(s?.params||{});return p.intervalo||'diario'}
+    catch{return 'diario'}
+  }
+
   function stopStrategy({skipDebounce=true}={}) {
     if(skipDebounce) skipNextRunRef.current = true
     setResult(null)
     setError(null)
     setCurrentStratId(null)
+    setEstrategiaIntervalo('diario')
     setStratName('')
     try {
       const s = JSON.parse(localStorage.getItem('v50_settings') || '{}')
@@ -1731,6 +1739,7 @@ export default function Home() {
     setStrForm(f=>({...f,_loadedName:s.name}))
     setStratName(s.name||'')
     setCurrentStratId(s.id||null)
+    setEstrategiaIntervalo(readStratIntervalo(s))
     if(navigateToConfig) setSidePanel('config')
     setRankingData({});setRankingStratId(null);setRankingStratName('')
     if(s.id){
@@ -1966,7 +1975,7 @@ export default function Home() {
     setLoading(true);setError(null)
     try{
       const body = payload.strategyId
-        ? { simbolo:sym, strategyId:payload.strategyId, capital_ini:payload.capital_ini, years:payload.years, allocation_pct:payload.allocation_pct, filtros:payload.filtros||{} }
+        ? { simbolo:sym, strategyId:payload.strategyId, capital_ini:payload.capital_ini, years:payload.years, allocation_pct:payload.allocation_pct, filtros:payload.filtros||{}, intervalo:payload.intervalo||'diario' }
         : { simbolo:sym, cfg:payload.cfg||payload }
       const res=await apiFetch('/api/datos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
       const json=await res.json()
@@ -2022,6 +2031,7 @@ export default function Home() {
     setStratDesc(strat.description||'')
     setStratColor(strat.color||'#00d4ff')
     setCurrentStratId(strat.id)
+    setEstrategiaIntervalo(readStratIntervalo(strat))
     // symbol intentionally not stored in strategy (apply to any asset separately)
     setStratTab('build')
     setStratMsg({type:'ok',text:`Cargada: ${strat.name}`})
@@ -2070,14 +2080,14 @@ export default function Home() {
     if(!currentStratId&&sidePanel!=='strats')return
     if(debounceRef.current)clearTimeout(debounceRef.current)
     const payload = currentStratId
-      ? { strategyId:currentStratId, capital_ini:Number(capitalIni), years:Number(years), allocation_pct:100, filtros }
+      ? { strategyId:currentStratId, capital_ini:Number(capitalIni), years:Number(years), allocation_pct:100, filtros, intervalo:estrategiaIntervalo }
       : { cfg:{emaR:Number(emaR),emaL:Number(emaL),years:Number(years),capitalIni:Number(capitalIni),
               tipoStop,atrPeriod:Number(atrP),atrMult:Number(atrM),sinPerdidas,reentry,
               tipoFiltro,sp500EmaR:Number(sp500EmaR),sp500EmaL:Number(sp500EmaL)} }
     debounceRef.current=setTimeout(()=>run(simbolo, payload),800)
     return()=>clearTimeout(debounceRef.current)
   },[simbolo,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,
-     sp500EmaR,sp500EmaL,sidePanel,currentStratId,filtros,run])
+     sp500EmaR,sp500EmaL,sidePanel,currentStratId,filtros,estrategiaIntervalo,run])
 
   // ── TradeLog helpers ────────────────────────────────────────
   // ── TradeLog: storage mode (local vs supabase) ──────────────
@@ -3091,7 +3101,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.259</title>
+        <title>Trading Simulator V9.260</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3169,7 +3179,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.259
+            <span className="dot"/>Trading Simulator V9.260
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -3477,6 +3487,26 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     return list.map(s=>{
                       const isActive=currentStratId===s.id
                       const col=s.color||'#00d4ff'
+                      const sIv=readStratIntervalo(s)
+                      const sIsSemanal=sIv==='semanal'
+                      const toggleSIv=async(e)=>{
+                        e.stopPropagation()
+                        const newIv=sIsSemanal?'diario':'semanal'
+                        // Optimistic update local state
+                        setStrategies(prev=>prev.map(st=>{
+                          if(st.id!==s.id)return st
+                          try{const p=typeof st.params==='string'?JSON.parse(st.params||'{}'):(st.params||{});return{...st,params:JSON.stringify({...p,intervalo:newIv})}}
+                          catch{return{...st,params:JSON.stringify({intervalo:newIv})}}
+                        }))
+                        // Save to Supabase
+                        try{
+                          const p=typeof s.params==='string'?JSON.parse(s.params||'{}'):(s.params||{})
+                          await apiFetch('/api/strategies',{method:'PUT',headers:{'Content-Type':'application/json'},
+                            body:JSON.stringify({id:s.id,params:JSON.stringify({...p,intervalo:newIv})})})
+                        }catch(_){}
+                        // Re-ejecutar si es la estrategia activa
+                        if(isActive)setEstrategiaIntervalo(newIv)
+                      }
                       return (
                         <div key={s.id}
                           style={{padding:'7px 10px',display:'flex',alignItems:'center',gap:6,
@@ -3497,9 +3527,16 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                             </div>
                             <div style={{fontFamily:MONO,fontSize:9,color:'#5a7a95',marginTop:1,display:'flex',alignItems:'center',gap:4}}>
                               <span>{s.years||'?'}a · {s.definition?.setup?.ma_fast||s.ema_r||'?'}/{s.definition?.setup?.ma_slow||s.ema_l||'?'}</span>
-                              <span style={{fontFamily:MONO,fontSize:9,padding:'0 4px',borderRadius:3,
-                                border:'1px solid #1a3050',background:'rgba(90,120,160,0.12)',
-                                color:'#5a7a95',lineHeight:'14px',flexShrink:0}}>D</span>
+                              <span onClick={toggleSIv}
+                                title={sIsSemanal?'Semanal — pulsar para cambiar a diario':'Diario — pulsar para cambiar a semanal'}
+                                style={{fontFamily:MONO,fontSize:9,padding:'0 4px',borderRadius:3,
+                                  border:`1px solid ${sIsSemanal?'#7a9bc0':'#1a3050'}`,
+                                  background:sIsSemanal?'rgba(122,155,192,0.18)':'rgba(90,120,160,0.12)',
+                                  color:sIsSemanal?'#7a9bc0':'#5a7a95',
+                                  lineHeight:'14px',flexShrink:0,cursor:'pointer',userSelect:'none',
+                                  transition:'background 0.15s,border-color 0.15s,color 0.15s'}}>
+                                {sIsSemanal?'S':'D'}
+                              </span>
                             </div>
                           </div>
                           {/* Edit button */}

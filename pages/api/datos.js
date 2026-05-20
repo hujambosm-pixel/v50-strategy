@@ -1,4 +1,4 @@
-// pages/api/datos.js — Motor V50 v3.0 (V9.257)
+// pages/api/datos.js — Motor V50 v3.0 (V9.260)
 
 import { calcEMA, calcSMA, calcRSI, calcATR, calcMACD } from '../../lib/backtester'
 
@@ -215,7 +215,7 @@ export default async function handler(req, res) {
   try {
   if (req.method !== 'POST') return res.status(405).end()
 
-  const { simbolo, strategyId, capital_ini = 10000, years = 5, allocation_pct = 100, priceOnly, filtros } = req.body || {}
+  const { simbolo, strategyId, capital_ini = 10000, years = 5, allocation_pct = 100, priceOnly, filtros, intervalo } = req.body || {}
   if (!simbolo) return res.status(400).json({ error: 'simbolo requerido' })
 
   // ── Price-only mode: last close, no strategy execution ──
@@ -259,7 +259,8 @@ export default async function handler(req, res) {
 
   try {
     // ── Fetch market data ──
-    const allData = await fetchAV(simbolo, years + 1)
+    const assetInterval = intervalo === 'semanal' ? 'w' : 'd'
+    const allData = await fetchAV(simbolo, years + 1, assetInterval)
     const cutoff  = new Date(); cutoff.setFullYear(cutoff.getFullYear() - years)
     const data    = allData.filter(d => new Date(d.date) >= cutoff)
     if (!data.length) throw new Error('Sin datos para ' + simbolo)
