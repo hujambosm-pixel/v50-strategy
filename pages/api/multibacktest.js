@@ -20,14 +20,6 @@ function calcEMA(values, period) {
   }
   return out
 }
-function calcATR(highs, lows, closes, period) {
-  const tr = closes.map((_, i) => {
-    if (i === 0) return highs[i] - lows[i]
-    return Math.max(highs[i]-lows[i], Math.abs(highs[i]-closes[i-1]), Math.abs(lows[i]-closes[i-1]))
-  })
-  return calcEMA(tr, period)
-}
-
 // ── Align external close series to asset dates with forward-fill (for market filters) ──
 function buildAlignedCloses(externalData, assetDates) {
   if (!externalData?.length) return assetDates.map(()=>null)
@@ -99,119 +91,6 @@ async function fetchData(symbol, years=5, fromDate=null, toDate=null, interval='
     })).filter(d => d.close && !isNaN(d.close))
       .sort((a,b) => a.date.localeCompare(b.date))
   } catch { return null }
-}
-
-function runSingleBacktest(data, sp500Data, cfg) {
-  const { emaR, emaL, capitalIni, tipoStop, atrPeriod, atrMult, sinPerdidas, reentry, tipoFiltro, sp500EmaR, sp500EmaL, years } = cfg
-  const closes = data.map(d=>d.close), highs = data.map(d=>d.high), lows = data.map(d=>d.low)
-  const emaRArr = calcEMA(closes, emaR), emaLArr = calcEMA(closes, emaL)
-  const atrArr = tipoStop === 'atr' ? calcATR(highs, lows, closes, atrPeriod) : null
-  let filtroArr = new Array(data.length).fill(false)
-  let _sp500C = [], _spEmaRArr = []  // DEBUG — hoisted para console.log
-  if (sp500Data && tipoFiltro !== 'none') {
-    const sp500Closes = data.map(d=>{ const m=sp500Data.find(s=>s.date===d.date); return m?m.close:null })
-    let last=null; for(let i=0;i<sp500Closes.length;i++){if(sp500Closes[i]!=null)last=sp500Closes[i];else sp500Closes[i]=last}
-    const spEmaR=calcEMA(sp500Closes,sp500EmaR), spEmaL=calcEMA(sp500Closes,sp500EmaL)
-    _sp500C=sp500Closes; _spEmaRArr=spEmaR  // DEBUG
-    filtroArr=data.map((_,i)=>{
-      if(sp500Closes[i]==null||spEmaR[i]==null) return false
-      if(tipoFiltro==='sp500_above_ema'||tipoFiltro==='precio_ema'||tipoFiltro==='price_above_ema') return sp500Closes[i]<spEmaR[i]
-      if(tipoFiltro==='sp500_ema_fast_above_slow'||tipoFiltro==='ema_ema') return spEmaR[i]<spEmaL[i]
-      return false
-    })
-  }
-  const lastDate=new Date(data[data.length-1].date), startDate=new Date(lastDate)
-  startDate.setFullYear(startDate.getFullYear()-years)
-  let enPosicion=false, precioEntrada=null, idxEntrada=null, stopNivel=null
-  let entradaPend=false, breakout=null, salidaPend=false, bkSalida=null
-  let sinPerdAct=false, reentryMode=false, reentryPend=false
-  let capitalReinv=capitalIni, gananciaSimple=0
-  const trades=[]
-  const blockEvents={filter:[],setup_in:[],setup_out:[],abort:[],trigger_in:[],trigger_out:[],stop_loss:[]}
-  const inWindow=(i)=>new Date(data[i].date)>=startDate
-  for (let i=1;i<data.length;i++) {
-    const d=data[i],dp=data[i-1],er=emaRArr[i],el=emaLArr[i],erp=emaRArr[i-1],elp=emaLArr[i-1]
-    if(!er||!el||!erp||!elp) continue
-    const filt=filtroArr[i],inW=inWindow(i)
-    if(filt&&inW) blockEvents.filter.push(d.date)
-    const cruceAlc=erp<elp&&er>=el, cruceBaj=erp>elp&&er<=el
-    const cierreBaj=dp.close>=erp&&d.close<er, cierreAlc=dp.close<=erp&&d.close>er
-    if(cruceBaj){reentryMode=reentryPend=false}
-    if(enPosicion&&cruceBaj&&sinPerdidas){
-      const pxSal=d.open,pnl=(pxSal-precioEntrada)/precioEntrada
-      gananciaSimple+=pnl*capitalIni;capitalReinv+=pnl*capitalReinv
-      trades.push({entryDate:data[idxEntrada].date,exitDate:d.date,entryPx:precioEntrada,exitPx:pxSal,pnlPct:pnl*100,pnlSimple:pnl*capitalIni,capitalTras:capitalReinv,dias:Math.round((new Date(d.date)-new Date(data[idxEntrada].date))/86400000),tipo:'Stop Emergencia'})
-      enPosicion=false;precioEntrada=stopNivel=null;salidaPend=sinPerdAct=false
-      if(reentry&&er>el)reentryMode=true;continue
-    }
-    if(enPosicion&&stopNivel&&d.low<=stopNivel){
-      const pnl=(stopNivel-precioEntrada)/precioEntrada
-      gananciaSimple+=pnl*capitalIni;capitalReinv+=pnl*capitalReinv
-      blockEvents.stop_loss.push(d.date)
-      trades.push({entryDate:data[idxEntrada].date,exitDate:d.date,entryPx:precioEntrada,exitPx:stopNivel,pnlPct:pnl*100,pnlSimple:pnl*capitalIni,capitalTras:capitalReinv,dias:Math.round((new Date(d.date)-new Date(data[idxEntrada].date))/86400000),tipo:'Stop'})
-      enPosicion=false;precioEntrada=stopNivel=null;salidaPend=sinPerdAct=false
-      if(reentry&&er>el)reentryMode=true;continue
-    }
-    if(enPosicion&&salidaPend&&bkSalida){
-      if(sinPerdidas){sinPerdAct=d.low>precioEntrada}else{sinPerdAct=true}
-      if(sinPerdAct&&d.low<=bkSalida){
-        const pnl=(bkSalida-precioEntrada)/precioEntrada
-        gananciaSimple+=pnl*capitalIni;capitalReinv+=pnl*capitalReinv
-        blockEvents.trigger_out.push(d.date)
-        trades.push({entryDate:data[idxEntrada].date,exitDate:d.date,entryPx:precioEntrada,exitPx:bkSalida,pnlPct:pnl*100,pnlSimple:pnl*capitalIni,capitalTras:capitalReinv,dias:Math.round((new Date(d.date)-new Date(data[idxEntrada].date))/86400000),tipo:'Exit'})
-        enPosicion=false;precioEntrada=stopNivel=null;salidaPend=sinPerdAct=false;bkSalida=null
-        if(reentry&&er>el)reentryMode=true;continue
-      }
-    }
-    if(enPosicion&&cierreBaj&&precioEntrada){blockEvents.setup_out.push(d.date);stopNivel=null;bkSalida=d.low;salidaPend=true;sinPerdAct=sinPerdidas?d.low>precioEntrada:true}
-    if(cruceAlc&&!enPosicion&&inW&&!reentryMode&&!filt){blockEvents.setup_in.push(d.date);entradaPend=true;breakout=d.high;reentryPend=false;if(tipoStop==='tecnico')stopNivel=Math.min(er,d.low)}
-    if(entradaPend&&!enPosicion&&filt&&!reentryPend){blockEvents.abort.push(d.date);entradaPend=false;breakout=null}
-    if(entradaPend&&!enPosicion&&inW&&!cruceAlc&&!reentryPend){
-      if(d.high<breakout){breakout=d.high;if(tipoStop==='tecnico')stopNivel=Math.min(er,d.low)}
-      if(d.high>=breakout){
-        blockEvents.trigger_in.push(d.date)
-        console.log(`[TRIGGER_IN] fecha=${d.date} sp500C=${_sp500C[i]?.toFixed(2)} spEmaR=${_spEmaRArr[i]?.toFixed(2)} filt=${filtroArr[i]} tipoFiltro=${tipoFiltro} px=${breakout}`)
-        precioEntrada=breakout;idxEntrada=i;enPosicion=true;entradaPend=false;salidaPend=false
-        if(tipoStop==='atr'&&atrArr?.[i])stopNivel=precioEntrada-atrArr[i]*atrMult
-        else if(tipoStop!=='tecnico')stopNivel=null
-      }
-    }
-    if(reentry&&reentryMode&&!enPosicion&&inW&&er>el&&!filt&&cierreAlc&&!entradaPend){
-      entradaPend=true;reentryPend=true;breakout=d.high
-      if(tipoStop==='tecnico')stopNivel=Math.min(er,d.low)
-    }
-    if(reentryPend&&!enPosicion&&filt){entradaPend=reentryPend=false;breakout=null}
-    if(entradaPend&&reentryPend&&!enPosicion&&inW&&!cierreAlc){
-      if(d.high<breakout){breakout=d.high;if(tipoStop==='tecnico')stopNivel=Math.min(er,d.low)}
-      if(d.high>=breakout){
-        blockEvents.trigger_in.push(d.date)
-        console.log(`[TRIGGER_IN reentry] fecha=${d.date} sp500C=${_sp500C[i]?.toFixed(2)} spEmaR=${_spEmaRArr[i]?.toFixed(2)} filt=${filtroArr[i]} tipoFiltro=${tipoFiltro} px=${breakout}`)
-        precioEntrada=breakout;idxEntrada=i;enPosicion=true
-        entradaPend=reentryPend=reentryMode=false;salidaPend=false
-        if(tipoStop==='atr'&&atrArr?.[i])stopNivel=precioEntrada-atrArr[i]*atrMult
-        else if(tipoStop!=='tecnico')stopNivel=null
-      }
-    }
-    if(cierreBaj&&entradaPend&&!reentryMode){entradaPend=false;breakout=null}
-  }
-  // Trade abierto al final de los datos: añadir como virtual para que occupancyCurve lo cuente
-  if (enPosicion && idxEntrada !== null && precioEntrada) {
-    const lastBar = data[data.length - 1]
-    trades.push({
-      entryDate:   data[idxEntrada].date,
-      exitDate:    null,
-      entryPx:     precioEntrada,
-      exitPx:      null,
-      pnlPct:      0,
-      pnlSimple:   0,
-      capitalTras: capitalReinv,
-      dias:        Math.round((new Date(lastBar.date) - new Date(data[idxEntrada].date)) / 86400000),
-      stopPx:      stopNivel ?? null,
-      tipo:        'Open',
-      _virtualClose: true,
-    })
-  }
-  return { trades, capitalReinv, gananciaSimple, startDate, blockEvents }
 }
 
 // ── MODO SLOTS: capital dividido en N partes iguales ─────────
