@@ -3123,7 +3123,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.266</title>
+        <title>Trading Simulator V9.267</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3201,7 +3201,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.266
+            <span className="dot"/>Trading Simulator V9.267
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4957,6 +4957,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     const _rr=_tN>0&&_dS>0?Math.abs(_tN-_eN)/_dS:0
                     const _postPct=_eq>0?((_riskEur+_trReur)/_eq)*100:0
                     const _semC=_postPct>=_maxR?'#ff4d6d':_postPct>=(_maxR*0.8)?'#ffd166':'#00e5a0'
+                    const _semT=_postPct>=_maxR?'Límite alcanzado':_postPct>=(_maxR*0.8)?'Límite próximo':'Riesgo OK'
                     // Slots mode calcs
                     const _ns=nSlots>0?nSlots:_maxS
                     const _slotCap=_eq>0&&_ns>0?_eq/_ns:0
@@ -4964,19 +4965,23 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     const _slotImporte=_slotShs*_eN
                     const _slotPct=_eq>0?(_slotImporte/_eq)*100:0
                     const _slotsLibres=Math.max(0,_ns-_openCnt)
-                    const _slotSemC=_slotsLibres===0?'#ff4d6d':_slotsLibres===1?'#ffd166':'#00e5a0'
-                    const _slotSemT=_slotsLibres===0?'Sin slots libres':_slotsLibres===1?'1 slot libre':`${_slotsLibres} slots libres`
+                    const _barPct=Math.min(100,_ns>0?(_openCnt/_ns)*100:0)
+                    const _barC=_slotsLibres===0?'#ff4d6d':_slotsLibres<=2?'#ffd166':'#00e5a0'
+                    // Mode accent colors
+                    const _cSlots='#1d9e75',_bgSlots='rgba(29,158,117,0.12)',_bdSlots='rgba(29,158,117,0.35)'
+                    const _cPS='#378add',_bgPS='rgba(55,138,221,0.12)',_bdPS='rgba(55,138,221,0.35)'
+                    const _mC=riskMode==='slots'?_cSlots:_cPS
                     // Helpers
                     const _fe=(v,d=0)=>{ if(!isFinite(v)) return '—'; return (v<0?'-':'')+'€'+Math.abs(v).toLocaleString('es-ES',{minimumFractionDigits:d,maximumFractionDigits:d}) }
                     const _fp=(v,d=1)=>isFinite(v)?v.toFixed(d)+'%':'—'
-                    // Style vars
-                    const _C={background:'var(--bg3)',border:'1px solid var(--border)',borderRadius:6,padding:'8px 10px'}
-                    const _L={fontFamily:MONO,fontSize:10,color:'var(--text2)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:2}
-                    const _V={fontFamily:MONO,fontSize:18,fontWeight:700,color:'var(--text)',lineHeight:1.1}
-                    const _S={fontFamily:MONO,fontSize:9,color:'var(--text3)',marginTop:2}
-                    const _I={background:'#0a1520',border:'1px solid var(--border)',borderRadius:4,color:'var(--text)',fontFamily:MONO,fontSize:12,padding:'4px 7px',boxSizing:'border-box',outline:'none'}
-                    const _SH={fontFamily:MONO,fontSize:12,fontWeight:500,color:'var(--text)',marginBottom:6}
-                    const _btnIcon={width:22,height:22,borderRadius:3,fontFamily:MONO,fontSize:11,cursor:'pointer',padding:0,textAlign:'center',lineHeight:'20px',flexShrink:0,display:'inline-flex',alignItems:'center',justifyContent:'center'}
+                    // Style tokens
+                    const _card={background:'var(--bg3)',border:'1px solid var(--border)',borderRadius:6,padding:'10px 12px'}
+                    const _lbl={fontFamily:MONO,fontSize:11,fontWeight:500,color:'var(--text2)',textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:3}
+                    const _sub={fontFamily:MONO,fontSize:11,color:'var(--text2)',marginTop:3}
+                    const _fLbl={fontFamily:MONO,fontSize:11,fontWeight:500,color:'var(--text2)',marginBottom:4}
+                    const _inp={background:'#0a1520',border:'1px solid var(--border)',borderRadius:4,color:'var(--text)',fontFamily:MONO,fontSize:14,padding:'8px 10px',boxSizing:'border-box',outline:'none'}
+                    const _mkCapBtn=(ac,ab)=>({width:28,height:28,borderRadius:4,fontFamily:MONO,fontSize:14,cursor:'pointer',padding:0,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0,border:`1px solid ${ac}66`,background:ab||`${ac}0d`,color:ac})
+                    const _xBtn={width:22,height:22,borderRadius:3,fontFamily:MONO,fontSize:10,cursor:'pointer',padding:0,display:'inline-flex',alignItems:'center',justifyContent:'center',background:'transparent',border:'1px solid var(--border)',color:'var(--text2)',flexShrink:0}
                     // Gauge
                     const _gRv=16,_gcx=20,_gcy=18
                     const _gR=_eq>0?Math.min(_riskPct/(_maxR*1.5),1):0
@@ -4988,36 +4993,36 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     return(
                     <div style={{background:'var(--bg2)',borderBottom:'2px solid var(--border)',flexShrink:0}}>
 
-                      {/* ── Fila 1: 4 tarjetas métricas ── */}
-                      <div style={{display:'flex',gap:5,padding:'6px 8px 5px',alignItems:'stretch',flexWrap:'wrap'}}>
+                      {/* ── ROW 1: 4 metric cards ── */}
+                      <div style={{display:'flex',gap:6,padding:'8px 8px 0',flexWrap:'wrap'}}>
 
-                        <div style={{..._C,flex:'1 1 0',minWidth:90}}>
-                          <div style={_L}>Equity actual</div>
-                          <div style={{..._V,color:_eq>=0?'#00e5a0':'#ff4d6d'}}>{_fe(_eq)}</div>
-                          <div style={_S}>Capital neto + P&amp;L</div>
+                        <div style={{..._card,flex:'1 1 0',minWidth:100}}>
+                          <div style={_lbl}>Equity actual</div>
+                          <div style={{fontFamily:MONO,fontSize:20,fontWeight:500,lineHeight:1.1,color:_eq>=0?'#00e5a0':'#ff4d6d'}}>{_fe(_eq)}</div>
+                          <div style={_sub}>Capital neto + P&amp;L</div>
                         </div>
 
-                        <div style={{..._C,flex:'1 1 0',minWidth:90}}>
-                          <div style={_L}>Balance inicial</div>
-                          <div style={_V}>{_fe(_bal)}</div>
-                          <div style={_S}>Aportaciones − retiradas</div>
+                        <div style={{..._card,flex:'1 1 0',minWidth:100}}>
+                          <div style={_lbl}>Balance inicial</div>
+                          <div style={{fontFamily:MONO,fontSize:20,fontWeight:500,lineHeight:1.1,color:'var(--text)'}}>{_fe(_bal)}</div>
+                          <div style={_sub}>Aportaciones − retiradas</div>
                         </div>
 
-                        <div style={{..._C,flex:'1 1 0',minWidth:110}}>
-                          <div style={_L}>P&amp;L actual</div>
-                          <div style={{..._V,color:_pnl>=0?'#00e5a0':'#ff4d6d'}}>
+                        <div style={{..._card,flex:'1 1 0',minWidth:100}}>
+                          <div style={_lbl}>P&amp;L actual</div>
+                          <div style={{fontFamily:MONO,fontSize:20,fontWeight:500,lineHeight:1.1,color:_pnl>=0?'#00e5a0':'#ff4d6d'}}>
                             {_fe(_pnl)}&nbsp;<span style={{fontSize:11,fontWeight:500,opacity:0.8}}>{_fp(_pnlPct)}</span>
                           </div>
-                          <div style={_S}>Realizado + flotante</div>
+                          <div style={_sub}>Realizado + flotante</div>
                         </div>
 
-                        <div style={{..._C,flex:'1 1 0',minWidth:110,display:'flex',alignItems:'center',gap:8,padding:'7px 10px'}}>
+                        <div style={{..._card,flex:'1 1 0',minWidth:120,display:'flex',alignItems:'center',gap:8}}>
                           <div style={{flex:1,minWidth:0}}>
-                            <div style={_L}>Riesgo en cartera</div>
-                            <div style={{fontFamily:MONO,fontSize:18,fontWeight:700,color:_gC,lineHeight:1.1}}>
-                              {_fp(_riskPct)}&nbsp;<span style={{fontSize:10,color:'var(--text3)',fontWeight:400}}>/{_maxR}%</span>
+                            <div style={_lbl}>Riesgo en cartera</div>
+                            <div style={{fontFamily:MONO,fontSize:20,fontWeight:500,lineHeight:1.1,color:_gC}}>
+                              {_fp(_riskPct)}<span style={{fontSize:11,color:'var(--text3)',fontWeight:400}}>/{_maxR}%</span>
                             </div>
-                            <div style={_S}>{_fe(_riskEur)} estimado</div>
+                            <div style={_sub}>{_fe(_riskEur)} estimado</div>
                           </div>
                           <svg width={40} height={30} style={{overflow:'visible',flexShrink:0,display:'block'}}>
                             <path d={_trkD} fill="none" stroke="#1a2d45" strokeWidth={3.5} strokeLinecap="round"/>
@@ -5029,49 +5034,21 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
 
                       </div>
 
-                      {/* Profile edit form (expandible) */}
-                      {riskEditing&&(
-                        <div style={{margin:'0 8px 4px',padding:'6px 8px',background:'var(--bg3)',border:'1px solid rgba(255,77,109,0.3)',borderRadius:5}}>
-                          <div style={{fontFamily:MONO,fontSize:9,color:'#ff4d6d',textTransform:'uppercase',letterSpacing:'0.08em',fontWeight:700,marginBottom:5}}>
-                            {riskEditing==='new'?'Nuevo perfil':'Editar perfil'}
-                          </div>
-                          <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'flex-end'}}>
-                            <input value={riskForm.name} onChange={e=>setRiskForm(f=>({...f,name:e.target.value}))} placeholder="Nombre" style={{..._I,width:130}}/>
-                            <div style={{display:'flex',gap:3,alignItems:'center'}}><span style={{fontFamily:MONO,fontSize:9,color:'var(--text3)'}}>Riesgo/trade</span>
-                              <select value={riskForm.risk_per_trade_type} onChange={e=>setRiskForm(f=>({...f,risk_per_trade_type:e.target.value}))} style={{..._I,width:40}}><option>%</option><option>€</option></select>
-                              <input type="number" min={0} step={0.1} value={riskForm.risk_per_trade_value} onChange={e=>setRiskForm(f=>({...f,risk_per_trade_value:e.target.value}))} style={{..._I,width:54}}/></div>
-                            <div style={{display:'flex',gap:3,alignItems:'center'}}><span style={{fontFamily:MONO,fontSize:9,color:'var(--text3)'}}>Máx%</span>
-                              <input type="number" min={0} max={100} step={0.5} value={riskForm.max_total_risk} onChange={e=>setRiskForm(f=>({...f,max_total_risk:e.target.value}))} style={{..._I,width:48}}/></div>
-                            <div style={{display:'flex',gap:3,alignItems:'center'}}><span style={{fontFamily:MONO,fontSize:9,color:'var(--text3)'}}>Pos</span>
-                              <input type="number" min={1} max={50} step={1} value={riskForm.max_simultaneous_positions} onChange={e=>setRiskForm(f=>({...f,max_simultaneous_positions:e.target.value}))} style={{..._I,width:44}}/></div>
-                            <button onClick={riskSaveProfile} disabled={riskSaving||!riskForm.name.trim()} style={{background:'#ff4d6d',border:'none',color:'#fff',fontFamily:MONO,fontSize:10,fontWeight:700,padding:'4px 10px',borderRadius:4,cursor:'pointer',opacity:riskSaving||!riskForm.name.trim()?0.4:1}}>{riskSaving?'…':'Guardar'}</button>
-                            <button onClick={()=>setRiskEditing(null)} style={{padding:'4px 7px',background:'transparent',border:'1px solid var(--border)',color:'var(--text3)',fontFamily:MONO,fontSize:10,borderRadius:4,cursor:'pointer'}}>✕</button>
-                          </div>
-                        </div>
-                      )}
+                      {/* ── ROW 2: Parámetros de riesgo ── */}
+                      <div style={{padding:'6px 8px 0'}}>
+                        <div style={{..._card,position:'relative'}}>
 
-                      {/* ── Fila 2: Config + Modo + Calculadora ── */}
-                      <div style={{display:'flex',gap:5,padding:'0 8px 6px',alignItems:'stretch',flexWrap:'wrap'}}>
-
-                        {/* Config block con dropdown integrado */}
-                        <div style={{..._C,flex:'0 0 auto',position:'relative'}}>
-                          <div style={{display:'flex',alignItems:'center',gap:5,marginBottom:6,position:'relative'}}>
-                            <div
-                              onClick={()=>setRiskProfileDropOpen(v=>!v)}
-                              style={{fontFamily:MONO,fontSize:8,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'0.07em',cursor:'pointer',display:'flex',alignItems:'center',gap:3,userSelect:'none'}}>
-                              Config —&nbsp;<span style={{color:'#ff4d6d'}}>{riskActiveProfile?.name||'Sin perfil'}</span>&nbsp;<span style={{opacity:0.5,fontSize:9}}>▾</span>
+                          {/* Header: title + profile dropdown + mode pills */}
+                          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10,position:'relative',flexWrap:'wrap'}}>
+                            <span style={{fontFamily:MONO,fontSize:12,fontWeight:600,color:'var(--text)'}}>⚡ Parámetros de riesgo</span>
+                            <div onClick={()=>setRiskProfileDropOpen(v=>!v)}
+                              style={{fontFamily:MONO,fontSize:10,color:'#ff4d6d',cursor:'pointer',display:'flex',alignItems:'center',gap:2,userSelect:'none',marginLeft:4}}>
+                              {riskActiveProfile?.name||'Sin perfil'}<span style={{opacity:0.5,fontSize:9,marginLeft:1}}>▾</span>
                             </div>
-                            <div style={{flex:1}}/>
-                            {riskActiveProfile&&<button title="Editar perfil"
-                              onClick={()=>{setRiskForm({name:riskActiveProfile.name,risk_per_trade_type:riskActiveProfile.risk_per_trade_type,risk_per_trade_value:riskActiveProfile.risk_per_trade_value,max_total_risk:riskActiveProfile.max_total_risk,max_simultaneous_positions:riskActiveProfile.max_simultaneous_positions});setRiskEditing(riskActiveProfile.id);setRiskProfileDropOpen(false)}}
-                              style={{background:'transparent',border:'1px solid var(--border)',color:'var(--text3)',fontFamily:MONO,fontSize:10,padding:'2px 5px',borderRadius:3,cursor:'pointer',flexShrink:0}}>✎</button>}
-                            <button title="Nuevo perfil"
-                              onClick={()=>{setRiskForm({name:'',risk_per_trade_type:'%',risk_per_trade_value:1,max_total_risk:5,max_simultaneous_positions:5});setRiskEditing('new');setRiskProfileDropOpen(false)}}
-                              style={{background:'rgba(0,212,255,0.08)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:9,padding:'2px 7px',borderRadius:3,cursor:'pointer',flexShrink:0}}>+</button>
                             {riskProfileDropOpen&&(
                               <div style={{position:'absolute',top:'calc(100% + 4px)',left:0,zIndex:200,background:'#0d1b2a',border:'1px solid var(--border)',borderRadius:5,minWidth:220,boxShadow:'0 6px 20px rgba(0,0,0,0.6)',overflow:'hidden'}}>
                                 {riskProfiles.length===0
-                                  ?<div style={{padding:'8px 12px',fontFamily:MONO,fontSize:10,color:'var(--text3)'}}>Sin perfiles — crea uno con +</div>
+                                  ?<div style={{padding:'8px 12px',fontFamily:MONO,fontSize:10,color:'var(--text3)'}}>Sin perfiles</div>
                                   :riskProfiles.map(p=>(
                                     <div key={p.id}
                                       onClick={()=>{setRiskActiveId(p.id);try{localStorage.setItem('v50_risk_active_id',p.id)}catch{};setRiskProfileDropOpen(false)}}
@@ -5087,296 +5064,225 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                 }
                               </div>
                             )}
-                          </div>
-                          <div style={{display:'flex',gap:12,alignItems:'flex-start'}}>
-                            <div><div style={_L}>Riesgo/op.</div><div style={{..._V,fontSize:14}}>{riskActiveProfile?.risk_per_trade_value}{riskActiveProfile?.risk_per_trade_type}</div><div style={_S}>{_fe(_capPos)}/trade</div></div>
-                            <div style={{width:1,alignSelf:'stretch',background:'var(--border)',flexShrink:0}}/>
-                            <div><div style={_L}>Máx. total</div><div style={{..._V,fontSize:14}}>{riskActiveProfile?.max_total_risk}%</div><div style={_S}>{_fe(_eq*(_maxR/100))}</div></div>
-                            <div style={{width:1,alignSelf:'stretch',background:'var(--border)',flexShrink:0}}/>
-                            <div><div style={_L}>Posiciones</div><div style={{..._V,fontSize:14,color:_openCnt>=_maxS?'#ff4d6d':'var(--text)'}}>{_openCnt}/{_maxS}</div><div style={_S}>{_openCnt>=_maxS?'⚠ Límite':`${_maxS-_openCnt} libres`}</div></div>
-                            <div style={{width:1,alignSelf:'stretch',background:'var(--border)',flexShrink:0}}/>
-                            <div><div style={_L}>Exposición</div><div style={{..._V,fontSize:14,color:_expPct>80?'#ffd166':'var(--text)'}}>{_fp(_expPct)}</div><div style={_S}>{_fe(_invt)}</div></div>
-                          </div>
-                        </div>
-
-                        {/* Selector de modo + Calculadora */}
-                        <div style={{..._C,flex:1,minWidth:340,display:'flex',flexDirection:'column',gap:0}}>
-
-                          {/* ── Selector Slots / Position Sizing ── */}
-                          <div style={{display:'flex',gap:4,marginBottom:10,alignItems:'center'}}>
-                            <span style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',marginRight:2,letterSpacing:'0.05em',textTransform:'uppercase'}}>Modo:</span>
-                            {[{id:'slots',label:'Slots iguales'},{id:'positionsizing',label:'Position Sizing'}].map(m=>{
-                              const on=riskMode===m.id
-                              return <button key={m.id} onClick={()=>{setRiskMode(m.id);try{localStorage.setItem('v50_risk_mode',m.id)}catch{}}}
-                                style={{fontFamily:MONO,fontSize:10,padding:'3px 11px',borderRadius:4,cursor:'pointer',
-                                  border:`1px solid ${on?'#00d4ff':'#1a3d5a'}`,
-                                  background:on?'rgba(0,212,255,0.12)':'transparent',
-                                  color:on?'#00d4ff':'var(--text3)',fontWeight:on?600:400}}>
-                                {m.label}
-                              </button>
-                            })}
-                          </div>
-
-                          {/* ── MODO SLOTS IGUALES ── */}
-                          {riskMode==='slots'&&(()=>{
-                            return(
-                            <div style={{display:'flex',gap:14,alignItems:'flex-start',flexWrap:'wrap'}}>
-
-                              {/* Config slots */}
-                              <div style={{display:'flex',flexDirection:'column',gap:8,minWidth:150}}>
-                                <div style={_SH}>Configuración slots</div>
-                                <div style={{display:'flex',gap:10,alignItems:'flex-end'}}>
-                                  <div style={{display:'flex',flexDirection:'column',gap:2}}>
-                                    <div style={_L}>Nº de slots</div>
-                                    <input type="number" min={1} max={50} step={1} value={nSlots}
-                                      onChange={e=>{const v=Math.max(1,parseInt(e.target.value)||1);setNSlots(v);try{localStorage.setItem('v50_risk_nslots',v)}catch{}}}
-                                      style={{..._I,width:60,fontSize:14,padding:'4px 7px'}}/>
-                                  </div>
-                                  <div style={{display:'flex',flexDirection:'column',gap:2}}>
-                                    <div style={_L}>Capital / slot</div>
-                                    <div style={{fontFamily:MONO,fontSize:14,fontWeight:700,color:'#00d4ff',lineHeight:'30px'}}>{_slotCap>0?_fe(_slotCap):'—'}</div>
-                                  </div>
-                                </div>
-                                {/* Barra de progreso slots */}
-                                <div>
-                                  <div style={{display:'flex',justifyContent:'space-between',marginBottom:3}}>
-                                    <span style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'0.05em'}}>Slots ocupados</span>
-                                    <span style={{fontFamily:MONO,fontSize:9,color:_slotSemC,fontWeight:700}}>{_openCnt}/{_ns}</span>
-                                  </div>
-                                  <div style={{height:7,borderRadius:4,background:'#0a1520',overflow:'hidden',border:'1px solid #1a2d45'}}>
-                                    <div style={{height:'100%',borderRadius:4,
-                                      width:`${Math.min(100,_ns>0?(_openCnt/_ns)*100:0)}%`,
-                                      background:_slotSemC,
-                                      boxShadow:`0 0 6px ${_slotSemC}88`}}/>
-                                  </div>
-                                  <div style={{display:'flex',alignItems:'center',gap:5,marginTop:5}}>
-                                    <span style={{width:8,height:8,borderRadius:'50%',background:_slotSemC,flexShrink:0,boxShadow:`0 0 5px ${_slotSemC}`}}/>
-                                    <span style={{fontFamily:MONO,fontSize:10,color:_slotSemC,fontWeight:600}}>{_slotSemT}</span>
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div style={{width:1,alignSelf:'stretch',background:'var(--border)',flexShrink:0}}/>
-
-                              {/* Calculadora slots */}
-                              <div style={{display:'flex',flexDirection:'column',gap:8,flex:1,minWidth:180}}>
-                                <div style={_SH}>Calculadora</div>
-                                <div style={{display:'flex',gap:8,alignItems:'flex-end',flexWrap:'wrap'}}>
-
-                                  {/* Entrada */}
-                                  {(()=>{
-                                    const isCapturing=riskCaptureMode==='capture_entry'
-                                    const isActive=riskLineActive.entry
-                                    return(
-                                    <div style={{display:'flex',flexDirection:'column',gap:3}}>
-                                      <div style={_L}>Precio entrada</div>
-                                      <div style={{display:'flex',alignItems:'center',gap:3}}>
-                                        <input type="number" min={0} step="any" placeholder="clic ⊕" value={riskCalc.entry}
-                                          onChange={e=>{
-                                            const v=parseFloat(e.target.value)
-                                            setRiskCalc(c=>({...c,entry:e.target.value}))
-                                            setRiskLineActive(p=>({...p,entry:v>0}))
-                                            if(v>0&&riskCaptureMode==='capture_entry') setRiskCaptureMode(null)
-                                          }}
-                                          style={{..._I,width:88,fontSize:13,borderColor:isActive?'#4488cc':isCapturing?'rgba(68,136,204,0.6)':'var(--border)'}}/>
-                                        <button title={isCapturing?'Cancelar captura':'Clic en gráfico para definir entrada'}
-                                          onClick={()=>setRiskCaptureMode(c=>c==='capture_entry'?null:'capture_entry')}
-                                          style={{..._btnIcon,
-                                            border:`1px solid ${isCapturing?'#4488cc':isActive?'#4488cc88':'#4488cc44'}`,
-                                            background:isCapturing?'rgba(68,136,204,0.35)':isActive?'rgba(68,136,204,0.2)':'rgba(68,136,204,0.05)',
-                                            color:'#6ab0ff',animation:isCapturing?'pulse-ring 1s infinite':''}}>⊕</button>
-                                        <button title="Eliminar línea"
-                                          onClick={()=>{setRiskCalc(c=>({...c,entry:''}));setRiskLineActive(p=>({...p,entry:false}));if(riskCaptureMode==='capture_entry')setRiskCaptureMode(null)}}
-                                          style={{..._btnIcon,border:'1px solid var(--border)',background:'transparent',color:'var(--text3)'}}>✕</button>
-                                      </div>
-                                    </div>
-                                    )
-                                  })()}
-
-                                  {/* Resultado sizing slots */}
-                                  {_eN>0&&_slotCap>0&&(
-                                    <div style={{padding:'6px 12px',borderRadius:5,
-                                      background:_slotsLibres>0?'rgba(0,229,160,0.07)':'rgba(255,77,109,0.07)',
-                                      border:`1px solid ${_slotsLibres>0?'rgba(0,229,160,0.2)':'rgba(255,77,109,0.2)'}`,
-                                      display:'flex',gap:14,alignItems:'center'}}>
-                                      <div>
-                                        <div style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:2}}>Acciones</div>
-                                        <div style={{fontFamily:MONO,fontSize:26,fontWeight:700,lineHeight:1,
-                                          color:_slotShs>0?'#ffd166':'var(--text3)',
-                                          textShadow:_slotShs>0?'0 0 14px rgba(255,209,102,0.35)':''}}>{_slotShs>0?_slotShs:'—'}</div>
-                                      </div>
-                                      {_slotShs>0&&<div style={{display:'flex',flexDirection:'column',gap:3}}>
-                                        <div>
-                                          <div style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:1}}>Importe</div>
-                                          <div style={{fontFamily:MONO,fontSize:14,fontWeight:700,color:'var(--text)'}}>{_fe(_slotImporte)}</div>
-                                        </div>
-                                        <div style={{fontFamily:MONO,fontSize:11,color:'var(--text3)'}}>{_fp(_slotPct)} del equity</div>
-                                      </div>}
-                                    </div>
-                                  )}
-
-                                </div>
-                              </div>
-
+                            <div style={{marginLeft:'auto',display:'flex',gap:4}}>
+                              {[{id:'slots',label:'Slots'},{id:'positionsizing',label:'Pos. Sizing'}].map(m=>{
+                                const on=riskMode===m.id
+                                const mc=m.id==='slots'?_cSlots:_cPS
+                                const bg=m.id==='slots'?_bgSlots:_bgPS
+                                const bd=m.id==='slots'?_bdSlots:_bdPS
+                                return <button key={m.id} onClick={()=>{setRiskMode(m.id);try{localStorage.setItem('v50_risk_mode',m.id)}catch{}}}
+                                  style={{fontFamily:MONO,fontSize:10,padding:'3px 10px',borderRadius:4,cursor:'pointer',
+                                    border:`1px solid ${on?bd:'var(--border)'}`,
+                                    background:on?bg:'transparent',
+                                    color:on?mc:'var(--text3)',fontWeight:on?600:400}}>
+                                  {m.label}
+                                </button>
+                              })}
                             </div>
-                            )
-                          })()}
+                          </div>
 
-                          {/* ── MODO POSITION SIZING ── */}
-                          {riskMode==='positionsizing'&&(()=>{
-                            return(
-                            <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                              <div style={_SH}>Calculadora</div>
-                              <div style={{display:'flex',gap:10,alignItems:'flex-end',flexWrap:'wrap'}}>
-
-                                {/* Entrada */}
-                                {(()=>{
-                                  const isCapturing=riskCaptureMode==='capture_entry'
-                                  const isActive=riskLineActive.entry
-                                  return(
-                                  <div style={{display:'flex',flexDirection:'column',gap:3}}>
-                                    <div style={_L}>Entrada</div>
-                                    <div style={{display:'flex',alignItems:'center',gap:2}}>
-                                      <input type="number" min={0} step="any" placeholder="clic ⊕" value={riskCalc.entry}
-                                        onChange={e=>{
-                                          const v=parseFloat(e.target.value)
-                                          setRiskCalc(c=>({...c,entry:e.target.value}))
-                                          setRiskLineActive(p=>({...p,entry:v>0}))
-                                          if(v>0&&riskCaptureMode==='capture_entry') setRiskCaptureMode(null)
-                                        }}
-                                        style={{..._I,width:82,fontSize:13,borderColor:isActive?'#4488cc':isCapturing?'rgba(68,136,204,0.6)':'var(--border)'}}/>
-                                      <button title={isCapturing?'Cancelar captura':'Clic en gráfico para definir entrada'}
-                                        onClick={()=>setRiskCaptureMode(c=>c==='capture_entry'?null:'capture_entry')}
-                                        style={{..._btnIcon,
-                                          border:`1px solid ${isCapturing?'#4488cc':isActive?'#4488cc88':'#4488cc44'}`,
-                                          background:isCapturing?'rgba(68,136,204,0.35)':isActive?'rgba(68,136,204,0.2)':'rgba(68,136,204,0.05)',
-                                          color:'#6ab0ff',animation:isCapturing?'pulse-ring 1s infinite':''}}>⊕</button>
-                                      <button title="Eliminar línea"
-                                        onClick={()=>{setRiskCalc(c=>({...c,entry:''}));setRiskLineActive(p=>({...p,entry:false}));if(riskCaptureMode==='capture_entry')setRiskCaptureMode(null)}}
-                                        style={{..._btnIcon,border:'1px solid var(--border)',background:'transparent',color:'var(--text3)'}}>✕</button>
-                                    </div>
-                                  </div>
-                                  )
-                                })()}
-
-                                {/* Stop */}
-                                {(()=>{
-                                  const isCapturing=riskCaptureMode==='capture_stop'
-                                  const isActive=riskLineActive.stop
-                                  return(
-                                  <div style={{display:'flex',flexDirection:'column',gap:3}}>
-                                    <div style={_L}>Stop</div>
-                                    <div style={{display:'flex',alignItems:'center',gap:2}}>
-                                      <input type="number" min={0} step="any" placeholder="clic ⊕" value={riskCalc.stop}
-                                        onChange={e=>{
-                                          const v=parseFloat(e.target.value)
-                                          setRiskCalc(c=>({...c,stop:e.target.value}))
-                                          setRiskLineActive(p=>({...p,stop:v>0}))
-                                          if(v>0&&riskCaptureMode==='capture_stop') setRiskCaptureMode(null)
-                                        }}
-                                        style={{..._I,width:82,fontSize:13,borderColor:isActive?'#cc4444':isCapturing?'rgba(204,68,68,0.6)':'var(--border)'}}/>
-                                      <button title={isCapturing?'Cancelar captura':'Clic en gráfico para definir stop'}
-                                        onClick={()=>setRiskCaptureMode(c=>c==='capture_stop'?null:'capture_stop')}
-                                        style={{..._btnIcon,
-                                          border:`1px solid ${isCapturing?'#cc4444':isActive?'#cc444488':'#cc444444'}`,
-                                          background:isCapturing?'rgba(204,68,68,0.35)':isActive?'rgba(204,68,68,0.2)':'rgba(204,68,68,0.05)',
-                                          color:'#ff7070'}}>⊕</button>
-                                      <button title="Eliminar línea"
-                                        onClick={()=>{setRiskCalc(c=>({...c,stop:''}));setRiskLineActive(p=>({...p,stop:false}));if(riskCaptureMode==='capture_stop')setRiskCaptureMode(null)}}
-                                        style={{..._btnIcon,border:'1px solid var(--border)',background:'transparent',color:'var(--text3)'}}>✕</button>
-                                    </div>
-                                  </div>
-                                  )
-                                })()}
-
-                                {/* TP */}
-                                {(()=>{
-                                  const isCapturing=riskCaptureMode==='capture_tp'
-                                  const isActive=riskLineActive.tp
-                                  return(
-                                  <div style={{display:'flex',flexDirection:'column',gap:3}}>
-                                    <div style={_L}>TP (opc.)</div>
-                                    <div style={{display:'flex',alignItems:'center',gap:2}}>
-                                      <input type="number" min={0} step="any" placeholder="clic ⊕" value={riskCalc.tp}
-                                        onChange={e=>{
-                                          const v=parseFloat(e.target.value)
-                                          setRiskCalc(c=>({...c,tp:e.target.value}))
-                                          setRiskLineActive(p=>({...p,tp:v>0}))
-                                          if(v>0&&riskCaptureMode==='capture_tp') setRiskCaptureMode(null)
-                                        }}
-                                        style={{..._I,width:82,fontSize:13,borderColor:isActive?'#44cc88':isCapturing?'rgba(68,204,136,0.6)':'var(--border)'}}/>
-                                      <button title={isCapturing?'Cancelar captura':'Clic en gráfico para definir TP'}
-                                        onClick={()=>setRiskCaptureMode(c=>c==='capture_tp'?null:'capture_tp')}
-                                        style={{..._btnIcon,
-                                          border:`1px solid ${isCapturing?'#44cc88':isActive?'#44cc8888':'#44cc8844'}`,
-                                          background:isCapturing?'rgba(68,204,136,0.35)':isActive?'rgba(68,204,136,0.2)':'rgba(68,204,136,0.05)',
-                                          color:'#00e5a0'}}>⊕</button>
-                                      <button title="Eliminar línea"
-                                        onClick={()=>{setRiskCalc(c=>({...c,tp:''}));setRiskLineActive(p=>({...p,tp:false}));if(riskCaptureMode==='capture_tp')setRiskCaptureMode(null)}}
-                                        style={{..._btnIcon,border:'1px solid var(--border)',background:'transparent',color:'var(--text3)'}}>✕</button>
-                                    </div>
-                                  </div>
-                                  )
-                                })()}
-
-                                {/* Separador vertical */}
-                                <div style={{width:1,alignSelf:'stretch',background:'var(--border)',flexShrink:0,marginBottom:1}}/>
-
-                                {/* Resultado sizing — caja destacada */}
-                                {(_eN>0||_sN>0)&&(
-                                  <div style={{padding:'6px 12px',borderRadius:5,
-                                    background:_shs>0?'rgba(255,209,102,0.07)':'transparent',
-                                    border:_shs>0?'1px solid rgba(255,209,102,0.18)':'1px solid transparent',
-                                    display:'flex',gap:12,alignItems:'center'}}>
-                                    <div>
-                                      <div style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:2}}>Acciones</div>
-                                      <div style={{fontFamily:MONO,fontSize:26,fontWeight:700,lineHeight:1,
-                                        color:_shs>0?'#ffd166':'var(--text3)',
-                                        textShadow:_shs>0?'0 0 14px rgba(255,209,102,0.35)':''}}>{_shs>0?_shs:'—'}</div>
-                                    </div>
-                                    {_shs>0&&<div style={{display:'flex',flexDirection:'column',gap:4}}>
-                                      <div>
-                                        <div style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:1}}>Riesgo trade</div>
-                                        <div style={{fontFamily:MONO,fontSize:13,fontWeight:700,color:'#ff4d6d'}}>{_fe(_trReur)}&nbsp;<span style={{fontSize:9,fontWeight:500,opacity:0.75}}>{_fp(_trRpct)}</span></div>
-                                      </div>
-                                      <div>
-                                        <div style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:1}}>Dist. stop</div>
-                                        <div style={{fontFamily:MONO,fontSize:12,fontWeight:600,color:'var(--text)'}}>{_dS>0?<>{_fe(_dS,2)}&nbsp;<span style={{fontSize:9,opacity:0.7}}>{_fp(_dSPct)}</span></>:'—'}</div>
-                                      </div>
-                                    </div>}
-                                    {_tN>0&&_eN>0&&_sN>0&&<div>
-                                      <div style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:2}}>R:R</div>
-                                      <div style={{fontFamily:MONO,fontSize:18,fontWeight:700,color:_rr>=2?'#00e5a0':_rr>=1?'#ffd166':'#ff4d6d'}}>{_rr>0?`1:${_rr.toFixed(2)}`:'—'}</div>
-                                    </div>}
-                                  </div>
-                                )}
-
-                                {/* Semáforo */}
-                                {_eN>0&&_sN>0&&(
-                                  <div style={{display:'flex',alignItems:'center',gap:7,padding:'5px 11px',borderRadius:5,
-                                    background:`${_semC}13`,border:`1px solid ${_semC}44`,alignSelf:'flex-end',marginBottom:1}}>
-                                    <span style={{width:9,height:9,borderRadius:'50%',background:_semC,flexShrink:0,boxShadow:`0 0 6px ${_semC}`}}/>
-                                    <div style={{display:'flex',flexDirection:'column',gap:1}}>
-                                      <span style={{fontFamily:MONO,fontSize:10,color:_semC,fontWeight:700,whiteSpace:'nowrap'}}>
-                                        {_postPct>=_maxR?'Límite alcanzado':_postPct>=(_maxR*0.8)?'Límite próximo':'Riesgo OK'}
-                                      </span>
-                                      <span style={{fontFamily:MONO,fontSize:9,color:_semC,opacity:0.8}}>{_fp(_postPct)} riesgo total</span>
-                                    </div>
-                                  </div>
-                                )}
-                                {_openCnt>=_maxS&&(
-                                  <div style={{display:'flex',alignItems:'center',gap:5,padding:'5px 9px',borderRadius:4,background:'rgba(255,77,109,0.1)',border:'1px solid rgba(255,77,109,0.35)',alignSelf:'flex-end',marginBottom:1}}>
-                                    <span style={{fontFamily:MONO,fontSize:10,color:'#ff4d6d',fontWeight:700}}>⚠ Posiciones llenas {_openCnt}/{_maxS}</span>
-                                  </div>
-                                )}
-
-                              </div>
+                          {/* 4 param boxes */}
+                          <div style={{display:'flex',gap:8,alignItems:'flex-start',flexWrap:'wrap',marginBottom:10}}>
+                            {/* Riesgo/op — highlighted blue when PS mode */}
+                            <div style={{flex:'1 1 0',minWidth:80,padding:'6px 8px',borderRadius:4,
+                              background:riskMode==='positionsizing'?_bgPS:'transparent',
+                              border:`1px solid ${riskMode==='positionsizing'?_bdPS:'var(--border)'}`,
+                              transition:'all 0.2s'}}>
+                              <div style={_lbl}>Riesgo/op.</div>
+                              <div style={{fontFamily:MONO,fontSize:14,fontWeight:500,color:riskMode==='positionsizing'?_cPS:'var(--text)'}}>{riskActiveProfile?.risk_per_trade_value}{riskActiveProfile?.risk_per_trade_type}</div>
+                              <div style={_sub}>{_fe(_capPos)}/trade</div>
                             </div>
-                            )
-                          })()}
+                            {/* Máx. riesgo total — highlighted green when Slots mode */}
+                            <div style={{flex:'1 1 0',minWidth:80,padding:'6px 8px',borderRadius:4,
+                              background:riskMode==='slots'?_bgSlots:'transparent',
+                              border:`1px solid ${riskMode==='slots'?_bdSlots:'var(--border)'}`,
+                              transition:'all 0.2s'}}>
+                              <div style={_lbl}>Máx. riesgo total</div>
+                              <div style={{fontFamily:MONO,fontSize:14,fontWeight:500,color:riskMode==='slots'?_cSlots:'var(--text)'}}>{_maxR}%</div>
+                              <div style={_sub}>{_fe(_eq*(_maxR/100))}</div>
+                            </div>
+                            {/* Slots + Capital/slot */}
+                            <div style={{flex:'1 1 0',minWidth:90,padding:'6px 8px',borderRadius:4,border:'1px solid var(--border)'}}>
+                              <div style={_lbl}>Slots</div>
+                              <div style={{display:'flex',alignItems:'center',gap:4,marginBottom:2}}>
+                                <input type="number" min={1} max={50} step={1} value={nSlots}
+                                  onChange={e=>{const v=Math.max(1,parseInt(e.target.value)||1);setNSlots(v);try{localStorage.setItem('v50_risk_nslots',v)}catch{}}}
+                                  style={{..._inp,width:50,fontSize:13,padding:'3px 6px'}}/>
+                                <span style={{fontFamily:MONO,fontSize:11,color:'var(--text2)'}}>slots</span>
+                              </div>
+                              <div style={_sub}>{_slotCap>0?_fe(_slotCap)+'/slot':''}</div>
+                            </div>
+                            {/* Exposición */}
+                            <div style={{flex:'1 1 0',minWidth:80,padding:'6px 8px',borderRadius:4,border:'1px solid var(--border)'}}>
+                              <div style={_lbl}>Exposición</div>
+                              <div style={{fontFamily:MONO,fontSize:14,fontWeight:500,color:_expPct>80?'#ffd166':'var(--text)'}}>{_fp(_expPct)}</div>
+                              <div style={_sub}>{_fe(_invt)}</div>
+                            </div>
+                          </div>
+
+                          {/* Slots bar — always visible */}
+                          <div>
+                            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
+                              <span style={{fontFamily:MONO,fontSize:11,color:'var(--text2)'}}>
+                                {_openCnt} posiciones abiertas · {_slotsLibres} slots libres / {_ns} total
+                              </span>
+                              <span style={{fontFamily:MONO,fontSize:11,color:_barC,fontWeight:600}}>{_openCnt}/{_ns}</span>
+                            </div>
+                            <div style={{height:6,borderRadius:3,background:'#0a1520',overflow:'hidden',border:'1px solid #1a2d45'}}>
+                              <div style={{height:'100%',borderRadius:3,width:`${_barPct}%`,background:_barC,transition:'width 0.3s'}}/>
+                            </div>
+                          </div>
 
                         </div>
+                      </div>
 
+                      {/* ── ROW 3: Calculadora ── */}
+                      <div style={{padding:'6px 8px 8px'}}>
+                        <div style={_card}>
+
+                          {/* Header */}
+                          <div style={{fontFamily:MONO,fontSize:12,fontWeight:600,color:'var(--text)',marginBottom:10}}>
+                            🧮 Calculadora — <span style={{color:_mC}}>{riskMode==='slots'?'Slots iguales':'Position Sizing'}</span>
+                          </div>
+
+                          {/* Inputs row */}
+                          <div style={{display:'flex',gap:8,alignItems:'flex-end',flexWrap:'wrap',marginBottom:10}}>
+
+                            {/* Entry — always visible */}
+                            {(()=>{
+                              const isCapturing=riskCaptureMode==='capture_entry'
+                              const isActive=riskLineActive.entry
+                              const ac='#4488cc'
+                              return(
+                              <div>
+                                <div style={_fLbl}>Entrada</div>
+                                <div style={{display:'flex',alignItems:'center',gap:3}}>
+                                  <input type="number" min={0} step="any" placeholder="precio" value={riskCalc.entry}
+                                    onChange={e=>{
+                                      const v=parseFloat(e.target.value)
+                                      setRiskCalc(c=>({...c,entry:e.target.value}))
+                                      setRiskLineActive(p=>({...p,entry:v>0}))
+                                      if(v>0&&riskCaptureMode==='capture_entry') setRiskCaptureMode(null)
+                                    }}
+                                    style={{..._inp,width:90,borderColor:isActive?ac:isCapturing?`${ac}99`:'var(--border)'}}/>
+                                  <button title={isCapturing?'Cancelar':'Capturar del gráfico'}
+                                    onClick={()=>setRiskCaptureMode(c=>c==='capture_entry'?null:'capture_entry')}
+                                    style={{..._mkCapBtn(ac,isCapturing?'rgba(68,136,204,0.35)':isActive?'rgba(68,136,204,0.2)':undefined),animation:isCapturing?'pulse-ring 1s infinite':''}}>⊕</button>
+                                  <button title="Limpiar"
+                                    onClick={()=>{setRiskCalc(c=>({...c,entry:''}));setRiskLineActive(p=>({...p,entry:false}));if(riskCaptureMode==='capture_entry')setRiskCaptureMode(null)}}
+                                    style={_xBtn}>✕</button>
+                                </div>
+                              </div>
+                              )
+                            })()}
+
+                            {/* Stop — only PS mode */}
+                            {riskMode==='positionsizing'&&(()=>{
+                              const isCapturing=riskCaptureMode==='capture_stop'
+                              const isActive=riskLineActive.stop
+                              const ac='#cc4444'
+                              return(
+                              <div>
+                                <div style={_fLbl}>Stop</div>
+                                <div style={{display:'flex',alignItems:'center',gap:3}}>
+                                  <input type="number" min={0} step="any" placeholder="precio" value={riskCalc.stop}
+                                    onChange={e=>{
+                                      const v=parseFloat(e.target.value)
+                                      setRiskCalc(c=>({...c,stop:e.target.value}))
+                                      setRiskLineActive(p=>({...p,stop:v>0}))
+                                      if(v>0&&riskCaptureMode==='capture_stop') setRiskCaptureMode(null)
+                                    }}
+                                    style={{..._inp,width:90,borderColor:isActive?ac:isCapturing?`${ac}99`:'var(--border)'}}/>
+                                  <button title={isCapturing?'Cancelar':'Capturar del gráfico'}
+                                    onClick={()=>setRiskCaptureMode(c=>c==='capture_stop'?null:'capture_stop')}
+                                    style={_mkCapBtn(ac,isCapturing?'rgba(204,68,68,0.35)':isActive?'rgba(204,68,68,0.2)':undefined)}>⊕</button>
+                                  <button title="Limpiar"
+                                    onClick={()=>{setRiskCalc(c=>({...c,stop:''}));setRiskLineActive(p=>({...p,stop:false}));if(riskCaptureMode==='capture_stop')setRiskCaptureMode(null)}}
+                                    style={_xBtn}>✕</button>
+                                </div>
+                              </div>
+                              )
+                            })()}
+
+                            {/* TP — only PS mode */}
+                            {riskMode==='positionsizing'&&(()=>{
+                              const isCapturing=riskCaptureMode==='capture_tp'
+                              const isActive=riskLineActive.tp
+                              const ac='#44cc88'
+                              return(
+                              <div>
+                                <div style={_fLbl}>TP (opc.)</div>
+                                <div style={{display:'flex',alignItems:'center',gap:3}}>
+                                  <input type="number" min={0} step="any" placeholder="precio" value={riskCalc.tp}
+                                    onChange={e=>{
+                                      const v=parseFloat(e.target.value)
+                                      setRiskCalc(c=>({...c,tp:e.target.value}))
+                                      setRiskLineActive(p=>({...p,tp:v>0}))
+                                      if(v>0&&riskCaptureMode==='capture_tp') setRiskCaptureMode(null)
+                                    }}
+                                    style={{..._inp,width:90,borderColor:isActive?ac:isCapturing?`${ac}99`:'var(--border)'}}/>
+                                  <button title={isCapturing?'Cancelar':'Capturar del gráfico'}
+                                    onClick={()=>setRiskCaptureMode(c=>c==='capture_tp'?null:'capture_tp')}
+                                    style={_mkCapBtn(ac,isCapturing?'rgba(68,204,136,0.35)':isActive?'rgba(68,204,136,0.2)':undefined)}>⊕</button>
+                                  <button title="Limpiar"
+                                    onClick={()=>{setRiskCalc(c=>({...c,tp:''}));setRiskLineActive(p=>({...p,tp:false}));if(riskCaptureMode==='capture_tp')setRiskCaptureMode(null)}}
+                                    style={_xBtn}>✕</button>
+                                </div>
+                              </div>
+                              )
+                            })()}
+
+                          </div>
+
+                          {/* Results grid — Slots mode */}
+                          {riskMode==='slots'&&_eN>0&&_slotCap>0&&(
+                            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:10}}>
+                              <div style={{..._card,textAlign:'center'}}>
+                                <div style={_lbl}>Acciones</div>
+                                <div style={{fontFamily:MONO,fontSize:22,fontWeight:700,color:_slotShs>0?'#ffd166':'var(--text3)'}}>{_slotShs>0?_slotShs:'—'}</div>
+                              </div>
+                              <div style={{..._card,textAlign:'center'}}>
+                                <div style={_lbl}>Importe</div>
+                                <div style={{fontFamily:MONO,fontSize:16,fontWeight:600,color:'var(--text)'}}>{_slotImporte>0?_fe(_slotImporte):'—'}</div>
+                                <div style={_sub}>{_slotImporte>0?_fp(_slotPct)+' del equity':''}</div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Results grid — PS mode */}
+                          {riskMode==='positionsizing'&&(_eN>0||_sN>0)&&(
+                            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:6,marginBottom:10}}>
+                              <div style={{..._card,textAlign:'center'}}>
+                                <div style={_lbl}>Acciones</div>
+                                <div style={{fontFamily:MONO,fontSize:22,fontWeight:700,color:_shs>0?'#ffd166':'var(--text3)'}}>{_shs>0?_shs:'—'}</div>
+                              </div>
+                              <div style={{..._card,textAlign:'center'}}>
+                                <div style={_lbl}>Riesgo trade</div>
+                                <div style={{fontFamily:MONO,fontSize:14,fontWeight:600,color:'#ff4d6d'}}>{_shs>0?_fe(_trReur):'—'}</div>
+                                <div style={_sub}>{_shs>0?_fp(_trRpct):''}</div>
+                              </div>
+                              <div style={{..._card,textAlign:'center'}}>
+                                <div style={_lbl}>Dist. stop</div>
+                                <div style={{fontFamily:MONO,fontSize:14,fontWeight:600,color:'var(--text)'}}>{_dS>0?_fe(_dS,2):'—'}</div>
+                                <div style={_sub}>{_dS>0?_fp(_dSPct):''}</div>
+                              </div>
+                              <div style={{..._card,textAlign:'center'}}>
+                                <div style={_lbl}>R:R</div>
+                                <div style={{fontFamily:MONO,fontSize:18,fontWeight:700,color:_rr>=2?'#00e5a0':_rr>=1?'#ffd166':'#ff4d6d'}}>{_rr>0?`1:${_rr.toFixed(2)}`:'—'}</div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Semáforo — single compact line */}
+                          {_eN>0&&(_sN>0||riskMode==='slots')&&(
+                            <div style={{display:'flex',alignItems:'center',gap:6}}>
+                              <span style={{width:8,height:8,borderRadius:'50%',background:_semC,flexShrink:0,boxShadow:`0 0 5px ${_semC}`,display:'inline-block'}}/>
+                              <span style={{fontFamily:MONO,fontSize:11,color:_semC,fontWeight:600}}>{_semT}</span>
+                              <span style={{fontFamily:MONO,fontSize:11,color:'var(--text2)',marginLeft:'auto'}}>{_fp(_postPct)}</span>
+                            </div>
+                          )}
+
+                        </div>
                       </div>
 
                     </div>
