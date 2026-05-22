@@ -3124,7 +3124,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.272</title>
+        <title>Trading Simulator V9.273</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3202,7 +3202,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.272
+            <span className="dot"/>Trading Simulator V9.273
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4945,21 +4945,16 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     const _maxS=riskActiveProfile?.max_simultaneous_positions||5
                     const _invt=_ops.reduce((s,p)=>s+((p.shares||p.open_shares||0)*(p.entry_price||p.avg_buy_price||0)/(p.fx_entry||1)),0)
                     const _expPct=_eq>0?(_invt/_eq)*100:0
-                    // Position Sizing calcs
+                    // ── Inputs ──
                     const _eN=parseFloat(riskCalc.entry)||0
                     const _sN=parseFloat(riskCalc.stop)||0
                     const _tN=parseFloat(riskCalc.tp)||0
+                    // ── PS (Position Sizing) ──
                     const _capC=_rptT==='%'?(_eq*(_rpt/100)):_rpt
                     const _dS=_eN>0&&_sN>0?Math.abs(_eN-_sN):0
                     const _dSPct=_eN>0&&_dS>0?(_dS/_eN)*100:0
                     const _shs=_eN>0&&_dS>0?Math.floor(_capC/_dS):0
-                    const _trReur=_shs*_dS
-                    const _trRpct=_eq>0?(_trReur/_eq)*100:0
-                    const _rr=_tN>0&&_dS>0?Math.abs(_tN-_eN)/_dS:0
-                    const _postPct=_eq>0?((_riskEur+_trReur)/_eq)*100:0
-                    const _semC=_postPct>=_maxR?'#ff4d6d':_postPct>=(_maxR*0.8)?'#ffd166':'#00e5a0'
-                    const _semT=_postPct>=_maxR?'Límite alcanzado':_postPct>=(_maxR*0.8)?'Límite próximo':'Riesgo OK'
-                    // Slots mode calcs
+                    // ── Slots ──
                     const _ns=nSlots>0?nSlots:_maxS
                     const _slotCap=_eq>0&&_ns>0?_eq/_ns:0
                     const _slotShs=_eN>0&&_slotCap>0?Math.floor(_slotCap/_eN):0
@@ -4968,13 +4963,24 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     const _slotsLibres=Math.max(0,_ns-_openCnt)
                     const _barPct=Math.min(100,_ns>0?(_openCnt/_ns)*100:0)
                     const _barC=_slotsLibres===0?'#ff4d6d':_slotsLibres<=2?'#ffd166':'#00e5a0'
+                    // ── Resultados unificados según modo ──
+                    const _resAcc=riskMode==='slots'?_slotShs:_shs
+                    const _resImp=riskMode==='slots'?_slotImporte:_shs*_eN
+                    const _resPct=riskMode==='slots'?_slotPct:(_eq>0&&_shs>0?(_shs*_eN/_eq)*100:0)
+                    // ── Riesgo operación (mode-aware) ──
+                    const _trReur=_resAcc>0&&_dS>0?_resAcc*_dS:0
+                    const _trRpct=_eq>0&&_trReur>0?(_trReur/_eq)*100:0
+                    const _rr=_tN>0&&_dS>0?Math.abs(_tN-_eN)/_dS:0
+                    const _postPct=_eq>0?((_riskEur+_trReur)/_eq)*100:0
+                    const _semC=_postPct>=_maxR?'#ff4d6d':_postPct>=(_maxR*0.8)?'#ffd166':'#00e5a0'
+                    const _semT=_postPct>=_maxR?'Límite alcanzado':_postPct>=(_maxR*0.8)?'Límite próximo':'Riesgo OK'
                     // Mode accent colors
                     const _cSlots='#1d9e75',_bgSlots='rgba(29,158,117,0.12)',_bdSlots='rgba(29,158,117,0.35)'
                     const _cPS='#378add',_bgPS='rgba(55,138,221,0.12)',_bdPS='rgba(55,138,221,0.35)'
                     const _mC=riskMode==='slots'?_cSlots:_cPS
                     // Helpers
                     const _fe=(v,d=0)=>{ if(!isFinite(v)) return '—'; return (v<0?'-':'')+'€'+Math.abs(v).toLocaleString('es-ES',{minimumFractionDigits:d,maximumFractionDigits:d}) }
-                    const _fp=(v,d=1)=>isFinite(v)?v.toFixed(d)+'%':'—'
+                    const _fp=(v,d=1)=>isFinite(v)?v.toLocaleString('es-ES',{minimumFractionDigits:d,maximumFractionDigits:d})+'%':'—'
                     // Style tokens
                     const _card={background:'var(--bg3)',border:'1px solid var(--border)',borderRadius:6,padding:'10px 12px'}
                     const _lbl={fontFamily:MONO,fontSize:11,fontWeight:500,color:'var(--text2)',textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:3}
@@ -4997,10 +5003,6 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       style={{width:20,height:20,borderRadius:3,border:'1px solid var(--border)',background:'transparent',cursor:'pointer',padding:0,display:'inline-flex',alignItems:'center',justifyContent:'center',color:riskCopied===key?'#00e5a0':'var(--text2)',fontSize:11,flexShrink:0,transition:'color 0.2s'}}>
                       {riskCopied===key?'✓':'⧉'}
                     </button>):null
-                    // Unified result vars (both modes)
-                    const _resAcc=riskMode==='slots'?_slotShs:_shs
-                    const _resImp=riskMode==='slots'?_slotImporte:_shs*_eN
-                    const _resPct=riskMode==='slots'?_slotPct:(_eq>0&&_shs>0?(_shs*_eN/_eq)*100:0)
                     // compact btn sizes for row3
                     const _capBtnSm=(ac,ab,anim)=>({..._mkCapBtn(ac,ab),width:22,height:22,fontSize:12,animation:anim||''})
                     const _xBtnSm={..._xBtn,width:18,height:18,fontSize:9}
@@ -5012,7 +5014,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         {[
                           {lbl:'Equity',   val:_fe(_eq),   c:_eq>=0?'#00e5a0':'#ff4d6d'},
                           {lbl:'Balance',  val:_fe(_bal),  c:'var(--text)'},
-                          {lbl:'P&L',      val:<>{_fe(_pnl)}&nbsp;<span style={{fontSize:10,opacity:0.7}}>{_fp(_pnlPct)}</span></>, c:_pnl>=0?'#00e5a0':'#ff4d6d'},
+                          {lbl:'P&L',      val:<>{_fe(_pnl)}&nbsp;<span style={{fontSize:10,color:'var(--text2)'}}>{_fp(_pnlPct)}</span></>, c:_pnl>=0?'#00e5a0':'#ff4d6d'},
                           {lbl:'Riesgo',   val:<>{_fp(_riskPct)}<span style={{fontSize:10,color:'var(--text3)',fontWeight:400}}>/{_maxR}%</span></>, c:_gC},
                           {lbl:'Exposición',val:<>{_fp(_expPct)}<span style={{fontSize:10,color:'var(--text3)',fontWeight:400}}> {_fe(_invt)}</span></>, c:_expPct>80?'#ffd166':'var(--text)'},
                         ].map((m,i)=>(
@@ -5196,17 +5198,17 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                   {_resPct>0&&<div style={{fontFamily:MONO,fontSize:10,color:'var(--text2)',marginTop:2,lineHeight:1}}>{_fp(_resPct)}</div>}
                                 </div>
                                 <div style={{width:1,height:32,background:'var(--border)',flexShrink:0}}/>
-                                {/* Dist. stop */}
+                                {/* Riesgo operación */}
                                 <div style={{padding:'0 10px',display:'flex',flexDirection:'column',alignItems:'center',flexShrink:0}}>
-                                  <div style={{fontFamily:MONO,fontSize:10,color:'var(--text2)',textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:2,lineHeight:1}}>Dist.SL</div>
-                                  <div style={{fontFamily:MONO,fontSize:16,fontWeight:500,lineHeight:1,color:'var(--text)'}}>{_dS>0?_fe(_dS,2):'—'}</div>
-                                  {_dS>0&&<div style={{fontFamily:MONO,fontSize:10,color:'var(--text2)',marginTop:2,lineHeight:1}}>{_fp(_dSPct)}</div>}
+                                  <div style={{fontFamily:MONO,fontSize:10,color:'var(--text2)',textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:2,lineHeight:1}}>Riesgo op.</div>
+                                  <div style={{fontFamily:MONO,fontSize:16,fontWeight:500,lineHeight:1,color:'var(--text)'}}>{_trReur>0?_fe(_trReur):'—'}</div>
+                                  {_dSPct>0&&<div style={{fontFamily:MONO,fontSize:10,color:'var(--text2)',marginTop:2,lineHeight:1}}>{_fp(_dSPct)}</div>}
                                 </div>
                                 <div style={{width:1,height:32,background:'var(--border)',flexShrink:0}}/>
                                 {/* R:R */}
                                 <div style={{padding:'0 10px',display:'flex',flexDirection:'column',alignItems:'center',flexShrink:0}}>
                                   <div style={{fontFamily:MONO,fontSize:10,color:'var(--text2)',textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:2,lineHeight:1}}>R:R</div>
-                                  <div style={{fontFamily:MONO,fontSize:16,fontWeight:500,lineHeight:1,color:_rr>=2?'#00e5a0':_rr>=1?'#ffd166':'#ff4d6d'}}>{_rr>0?`1:${_rr.toFixed(1)}`:'—'}</div>
+                                  <div style={{fontFamily:MONO,fontSize:16,fontWeight:500,lineHeight:1,color:_rr>=2?'#00e5a0':_rr>=1?'#ffd166':'#ff4d6d'}}>{_rr>0?`1:${_rr.toLocaleString('es-ES',{minimumFractionDigits:1,maximumFractionDigits:1})}`:'—'}</div>
                                 </div>
                                 {/* Semáforo */}
                                 <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:5,paddingLeft:10,paddingRight:6,flexShrink:0}}>
