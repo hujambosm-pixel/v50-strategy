@@ -35,16 +35,19 @@ export default async function handler(req, res) {
 
     // ── POST action=create ──
     if (req.method === 'POST' && action === 'create') {
-      const { name, risk_per_trade_type, risk_per_trade_value, max_total_risk, max_simultaneous_positions } = req.body
+      const { name, risk_per_trade_type, risk_per_trade_value, max_total_risk, max_simultaneous_positions, active_riesgo_op, active_capital_op, active_slots } = req.body
       if (!name?.trim()) return res.status(400).json({ error: 'name requerido' })
       const data = await sb('/risk_profiles', {
         method: 'POST',
         body: JSON.stringify({
           name: name.trim(),
           risk_per_trade_type: risk_per_trade_type || '%',
-          risk_per_trade_value: Number(risk_per_trade_value) || 1,
-          max_total_risk: Number(max_total_risk) || 5,
-          max_simultaneous_positions: Number(max_simultaneous_positions) || 5,
+          risk_per_trade_value: risk_per_trade_value != null ? Number(risk_per_trade_value) : 1,
+          max_total_risk: max_total_risk != null ? Number(max_total_risk) : null,
+          max_simultaneous_positions: max_simultaneous_positions != null ? Number(max_simultaneous_positions) : null,
+          active_riesgo_op: active_riesgo_op !== undefined ? Boolean(active_riesgo_op) : true,
+          active_capital_op: active_capital_op !== undefined ? Boolean(active_capital_op) : false,
+          active_slots: active_slots !== undefined ? Boolean(active_slots) : false,
         }),
       })
       return res.json(Array.isArray(data) ? data[0] : data)
@@ -53,13 +56,16 @@ export default async function handler(req, res) {
     // ── PATCH action=update&id=... ──
     if (req.method === 'POST' && action === 'update') {
       if (!id) return res.status(400).json({ error: 'id requerido' })
-      const { name, risk_per_trade_type, risk_per_trade_value, max_total_risk, max_simultaneous_positions } = req.body
+      const { name, risk_per_trade_type, risk_per_trade_value, max_total_risk, max_simultaneous_positions, active_riesgo_op, active_capital_op, active_slots } = req.body
       const updates = {}
       if (name !== undefined) updates.name = name.trim()
       if (risk_per_trade_type !== undefined) updates.risk_per_trade_type = risk_per_trade_type
-      if (risk_per_trade_value !== undefined) updates.risk_per_trade_value = Number(risk_per_trade_value)
-      if (max_total_risk !== undefined) updates.max_total_risk = Number(max_total_risk)
-      if (max_simultaneous_positions !== undefined) updates.max_simultaneous_positions = Number(max_simultaneous_positions)
+      if (risk_per_trade_value !== undefined) updates.risk_per_trade_value = risk_per_trade_value===null?null:Number(risk_per_trade_value)
+      if (max_total_risk !== undefined) updates.max_total_risk = max_total_risk===null?null:Number(max_total_risk)
+      if (max_simultaneous_positions !== undefined) updates.max_simultaneous_positions = max_simultaneous_positions===null?null:Number(max_simultaneous_positions)
+      if (active_riesgo_op !== undefined) updates.active_riesgo_op = Boolean(active_riesgo_op)
+      if (active_capital_op !== undefined) updates.active_capital_op = Boolean(active_capital_op)
+      if (active_slots !== undefined) updates.active_slots = Boolean(active_slots)
       await sb(`/risk_profiles?id=eq.${id}`, {
         method: 'PATCH',
         prefer: 'return=minimal',
