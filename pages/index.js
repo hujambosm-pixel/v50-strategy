@@ -790,6 +790,9 @@ export default function Home() {
   const [riskMode,setRiskMode]=useState(()=>{try{return localStorage.getItem('v50_risk_mode')||'slots'}catch{return 'slots'}})
   const [nSlots,setNSlots]=useState(()=>{try{return parseInt(localStorage.getItem('v50_risk_nslots')||'5')}catch{return 5}})
   const [riskCopied,setRiskCopied]=useState(null)
+  const [riskFieldEdit,setRiskFieldEdit]=useState(null) // null | {field,val}
+  // Parsea números en formato español (1.234,56) o inglés (1234.56)
+  const parseES=useCallback((s)=>parseFloat(String(s).replace(/\./g,'').replace(',','.'))||0,[])
   const [tlFilterBroker,setTlFilterBroker]=useState('')
   const [tlFilterYear,setTlFilterYear]=useState('')
   const [tlFilterMonth,setTlFilterMonth]=useState('')  // '01'..'12'
@@ -1036,6 +1039,17 @@ export default function Home() {
       }
       setRiskEditing(null)
     }finally{setRiskSaving(false)}
+  }
+
+  const riskSaveField=async(field,val)=>{
+    if(!riskActiveProfile?.id) return
+    const numVal=(val===''||val===null)?null:(parseFloat(String(val).replace(/\./g,'').replace(',','.'))||null)
+    const body={...riskActiveProfile,[field]:numVal}
+    try{
+      await apiFetch(`/api/risk?action=update&id=${riskActiveProfile.id}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+      setRiskProfiles(prev=>prev.map(p=>p.id===riskActiveProfile.id?{...p,[field]:numVal}:p))
+    }catch{}
+    setRiskFieldEdit(null)
   }
 
   const riskDeleteProfile=async(id)=>{
@@ -2382,11 +2396,12 @@ export default function Home() {
 
   // ── onRiskPrice: captura clic en gráfico durante capture mode ──
   const onRiskPrice = useCallback((rawPrice)=>{
-    const p = parseFloat(rawPrice.toFixed(4))
+    const p = parseFloat(rawPrice.toFixed(6))
+    const fmt = p.toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:4})
     setRiskCaptureMode(cur=>{
       if(!cur) return null
       const key = cur==='capture_entry'?'entry':cur==='capture_stop'?'stop':'tp'
-      setRiskCalc(c=>({...c,[key]:String(p)}))
+      setRiskCalc(c=>({...c,[key]:fmt}))
       setRiskLineActive(v=>({...v,[key]:true}))
       return null // sale de capture mode
     })
@@ -2394,9 +2409,10 @@ export default function Home() {
 
   // ── onRiskLevelChange: drag de líneas en gráfico actualiza campos en tiempo real ──
   const onRiskLevelChange = useCallback((type, price)=>{
-    const p = parseFloat(price.toFixed(4))
+    const p = parseFloat(price.toFixed(6))
+    const fmt = p.toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:4})
     const key = type==='entry'?'entry':type==='stop'?'stop':'tp'
-    setRiskCalc(c=>({...c,[key]:String(p)}))
+    setRiskCalc(c=>({...c,[key]:fmt}))
     setRiskLineActive(v=>({...v,[key]:true}))
   },[])
 
@@ -3124,7 +3140,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.273</title>
+        <title>Trading Simulator V9.274</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3202,7 +3218,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.273
+            <span className="dot"/>Trading Simulator V9.274
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4936,28 +4952,28 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     const _pnlPct=_bal>0?(_pnl/_bal)*100:0
                     const _ops=tlFifo.openPositions||[]
                     const _openCnt=_ops.length
-                    const _rpt=riskActiveProfile?.risk_per_trade_value||1
+                    const _rpt=riskActiveProfile?.risk_per_trade_value??null
                     const _rptT=riskActiveProfile?.risk_per_trade_type||'%'
-                    const _capPos=_rptT==='%'?(_eq*(_rpt/100)):_rpt
+                    const _capPos=_rpt!=null?(_rptT==='%'?(_eq*(_rpt/100)):_rpt):0
                     const _riskEur=_openCnt*_capPos
                     const _riskPct=_eq>0?(_riskEur/_eq)*100:0
-                    const _maxR=riskActiveProfile?.max_total_risk||5
-                    const _maxS=riskActiveProfile?.max_simultaneous_positions||5
+                    const _maxR=riskActiveProfile?.max_total_risk??null
+                    const _maxS=riskActiveProfile?.max_simultaneous_positions??null
                     const _invt=_ops.reduce((s,p)=>s+((p.shares||p.open_shares||0)*(p.entry_price||p.avg_buy_price||0)/(p.fx_entry||1)),0)
                     const _expPct=_eq>0?(_invt/_eq)*100:0
-                    // ── Inputs ──
-                    const _eN=parseFloat(riskCalc.entry)||0
-                    const _sN=parseFloat(riskCalc.stop)||0
-                    const _tN=parseFloat(riskCalc.tp)||0
+                    // ── Inputs (parseES acepta formato español 1.234,56) ──
+                    const _eN=parseES(riskCalc.entry)
+                    const _sN=parseES(riskCalc.stop)
+                    const _tN=parseES(riskCalc.tp)
                     // ── PS (Position Sizing) ──
-                    const _capC=_rptT==='%'?(_eq*(_rpt/100)):_rpt
+                    const _capC=_rpt!=null?(_rptT==='%'?(_eq*(_rpt/100)):_rpt):0
                     const _dS=_eN>0&&_sN>0?Math.abs(_eN-_sN):0
                     const _dSPct=_eN>0&&_dS>0?(_dS/_eN)*100:0
-                    const _shs=_eN>0&&_dS>0?Math.floor(_capC/_dS):0
+                    const _shs=_rpt!=null&&_eN>0&&_dS>0?Math.floor(_capC/_dS):0
                     // ── Slots ──
-                    const _ns=nSlots>0?nSlots:_maxS
+                    const _ns=nSlots>0?nSlots:(_maxS??0)
                     const _slotCap=_eq>0&&_ns>0?_eq/_ns:0
-                    const _slotShs=_eN>0&&_slotCap>0?Math.floor(_slotCap/_eN):0
+                    const _slotShs=_maxS!=null&&_eN>0&&_slotCap>0?Math.floor(_slotCap/_eN):0
                     const _slotImporte=_slotShs*_eN
                     const _slotPct=_eq>0?(_slotImporte/_eq)*100:0
                     const _slotsLibres=Math.max(0,_ns-_openCnt)
@@ -4972,8 +4988,12 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     const _trRpct=_eq>0&&_trReur>0?(_trReur/_eq)*100:0
                     const _rr=_tN>0&&_dS>0?Math.abs(_tN-_eN)/_dS:0
                     const _postPct=_eq>0?((_riskEur+_trReur)/_eq)*100:0
-                    const _semC=_postPct>=_maxR?'#ff4d6d':_postPct>=(_maxR*0.8)?'#ffd166':'#00e5a0'
-                    const _semT=_postPct>=_maxR?'Límite alcanzado':_postPct>=(_maxR*0.8)?'Límite próximo':'Riesgo OK'
+                    const _maxRv=_maxR??5
+                    const _semC=_postPct>=_maxRv?'#ff4d6d':_postPct>=(_maxRv*0.8)?'#ffd166':'#00e5a0'
+                    const _semT=_postPct>=_maxRv?'Límite alcanzado':_postPct>=(_maxRv*0.8)?'Límite próximo':'Riesgo OK'
+                    // Riesgo/equity = capital en riesgo / equity (coloreado por umbrales)
+                    const _reqPct=_trRpct
+                    const _reqC=_reqPct<=0?'var(--text3)':_maxR!=null&&_reqPct>=_maxR?'#ff4d6d':_rpt!=null&&_reqPct>=_rpt?'#ffd166':'#00e5a0'
                     // Mode accent colors
                     const _cSlots='#1d9e75',_bgSlots='rgba(29,158,117,0.12)',_bdSlots='rgba(29,158,117,0.35)'
                     const _cPS='#378add',_bgPS='rgba(55,138,221,0.12)',_bdPS='rgba(55,138,221,0.35)'
@@ -5058,9 +5078,9 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                             </div>
                           )}
                         </div>
-                        {/* 3 clickable cards + 1 slots-bar card */}
+                        {/* 3 clickable+editable cards + 1 slots-bar card */}
                         <div style={{display:'flex',gap:4}}>
-                          {/* Riesgo/op — click → PS mode */}
+                          {/* Máx. riesgo / op. — click → PS mode, double-click → editar valor */}
                           <div
                             onClick={()=>{setRiskMode('positionsizing');try{localStorage.setItem('v50_risk_mode','positionsizing')}catch{}}}
                             onMouseOver={e=>{if(riskMode!=='positionsizing')e.currentTarget.style.borderColor='rgba(55,138,221,0.4)'}}
@@ -5069,11 +5089,24 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                               background:riskMode==='positionsizing'?'rgba(55,138,221,0.10)':'var(--bg3)',
                               border:`1px solid ${riskMode==='positionsizing'?'#378add':'var(--border)'}`,transition:'all 0.2s'}}>
                             {riskMode==='positionsizing'&&<span style={{position:'absolute',top:3,right:3,width:5,height:5,borderRadius:'50%',background:'#378add'}}/>}
-                            <div style={{fontFamily:MONO,fontSize:10,color:'var(--text2)',textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:1,lineHeight:1}}>Riesgo/op.</div>
-                            <div style={{fontFamily:MONO,fontSize:14,fontWeight:500,lineHeight:1,color:riskMode==='positionsizing'?'#378add':'var(--text)'}}>{riskActiveProfile?.risk_per_trade_value}{riskActiveProfile?.risk_per_trade_type}</div>
-                            <div style={{fontFamily:MONO,fontSize:11,color:'var(--text2)',marginTop:1,lineHeight:1}}>{_fe(_capPos)}</div>
+                            <div style={{fontFamily:MONO,fontSize:10,color:'var(--text2)',textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:1,lineHeight:1}}>Máx. riesgo / op.</div>
+                            {riskFieldEdit?.field==='risk_per_trade_value'?(
+                              <input autoFocus type="text" value={riskFieldEdit.val}
+                                onChange={e=>setRiskFieldEdit(v=>({...v,val:e.target.value}))}
+                                onBlur={()=>riskSaveField('risk_per_trade_value',riskFieldEdit.val)}
+                                onKeyDown={e=>{if(e.key==='Enter')riskSaveField('risk_per_trade_value',riskFieldEdit.val);if(e.key==='Escape')setRiskFieldEdit(null);e.stopPropagation()}}
+                                onClick={e=>e.stopPropagation()}
+                                style={{..._inp,width:'100%',fontSize:13,padding:'1px 4px'}}/>
+                            ):(
+                              <div onDoubleClick={e=>{e.stopPropagation();setRiskFieldEdit({field:'risk_per_trade_value',val:String(_rpt??'')})}}
+                                title="Doble clic para editar"
+                                style={{fontFamily:MONO,fontSize:14,fontWeight:500,lineHeight:1,color:riskMode==='positionsizing'?'#378add':'var(--text)',cursor:'text'}}>
+                                {_rpt!=null?`${_rpt}${_rptT}`:'—'}
+                              </div>
+                            )}
+                            <div style={{fontFamily:MONO,fontSize:11,color:'var(--text2)',marginTop:1,lineHeight:1}}>{_capPos>0?_fe(_capPos):''}</div>
                           </div>
-                          {/* Máx. riesgo — click → Slots mode */}
+                          {/* Máx. capital / op. — click → Slots mode, double-click → editar */}
                           <div
                             onClick={()=>{setRiskMode('slots');try{localStorage.setItem('v50_risk_mode','slots')}catch{}}}
                             onMouseOver={e=>{if(riskMode!=='slots')e.currentTarget.style.borderColor='rgba(29,158,117,0.4)'}}
@@ -5082,19 +5115,40 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                               background:riskMode==='slots'?'rgba(29,158,117,0.10)':'var(--bg3)',
                               border:`1px solid ${riskMode==='slots'?'#1d9e75':'var(--border)'}`,transition:'all 0.2s'}}>
                             {riskMode==='slots'&&<span style={{position:'absolute',top:3,right:3,width:5,height:5,borderRadius:'50%',background:'#1d9e75'}}/>}
-                            <div style={{fontFamily:MONO,fontSize:10,color:'var(--text2)',textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:1,lineHeight:1}}>Máx. riesgo</div>
-                            <div style={{fontFamily:MONO,fontSize:14,fontWeight:500,lineHeight:1,color:riskMode==='slots'?'#1d9e75':'var(--text)'}}>{_maxR}%</div>
-                            <div style={{fontFamily:MONO,fontSize:11,color:'var(--text2)',marginTop:1,lineHeight:1}}>{_fe(_eq*(_maxR/100))}</div>
+                            <div style={{fontFamily:MONO,fontSize:10,color:'var(--text2)',textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:1,lineHeight:1}}>Máx. capital / op.</div>
+                            {riskFieldEdit?.field==='max_total_risk'?(
+                              <input autoFocus type="text" value={riskFieldEdit.val}
+                                onChange={e=>setRiskFieldEdit(v=>({...v,val:e.target.value}))}
+                                onBlur={()=>riskSaveField('max_total_risk',riskFieldEdit.val)}
+                                onKeyDown={e=>{if(e.key==='Enter')riskSaveField('max_total_risk',riskFieldEdit.val);if(e.key==='Escape')setRiskFieldEdit(null);e.stopPropagation()}}
+                                onClick={e=>e.stopPropagation()}
+                                style={{..._inp,width:'100%',fontSize:13,padding:'1px 4px'}}/>
+                            ):(
+                              <div onDoubleClick={e=>{e.stopPropagation();setRiskFieldEdit({field:'max_total_risk',val:String(_maxR??'')})}}
+                                title="Doble clic para editar"
+                                style={{fontFamily:MONO,fontSize:14,fontWeight:500,lineHeight:1,color:riskMode==='slots'?'#1d9e75':'var(--text)',cursor:'text'}}>
+                                {_maxR!=null?`${_maxR}%`:'—'}
+                              </div>
+                            )}
+                            <div style={{fontFamily:MONO,fontSize:11,color:'var(--text2)',marginTop:1,lineHeight:1}}>{_maxR!=null?_fe(_eq*(_maxR/100)):''}</div>
                           </div>
-                          {/* Slots input */}
+                          {/* Máx. slots simult. — double-click → editar */}
                           <div style={{flex:1,padding:'4px 6px',borderRadius:4,background:'var(--bg3)',border:'1px solid var(--border)'}}>
-                            <div style={{fontFamily:MONO,fontSize:10,color:'var(--text2)',textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:1,lineHeight:1}}>Slots</div>
-                            <div style={{display:'flex',alignItems:'center',gap:3}}>
-                              <input type="number" min={1} max={50} step={1} value={nSlots}
-                                onChange={e=>{const v=Math.max(1,parseInt(e.target.value)||1);setNSlots(v);try{localStorage.setItem('v50_risk_nslots',v)}catch{}}}
-                                style={{..._inp,width:40,fontSize:13,padding:'2px 4px'}}/>
-                              <span style={{fontFamily:MONO,fontSize:10,color:'var(--text2)',lineHeight:1}}>{_slotCap>0?_fe(_slotCap)+'/sl':''}</span>
-                            </div>
+                            <div style={{fontFamily:MONO,fontSize:10,color:'var(--text2)',textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:1,lineHeight:1}}>Máx. slots simult.</div>
+                            {riskFieldEdit?.field==='max_simultaneous_positions'?(
+                              <input autoFocus type="text" value={riskFieldEdit.val}
+                                onChange={e=>setRiskFieldEdit(v=>({...v,val:e.target.value}))}
+                                onBlur={()=>{riskSaveField('max_simultaneous_positions',riskFieldEdit.val);const v=parseInt(riskFieldEdit.val)||0;if(v>0){setNSlots(v);try{localStorage.setItem('v50_risk_nslots',v)}catch{}}}}
+                                onKeyDown={e=>{if(e.key==='Enter'){riskSaveField('max_simultaneous_positions',riskFieldEdit.val);const v=parseInt(riskFieldEdit.val)||0;if(v>0){setNSlots(v);try{localStorage.setItem('v50_risk_nslots',v)}catch{}}};if(e.key==='Escape')setRiskFieldEdit(null)}}
+                                style={{..._inp,width:'100%',fontSize:13,padding:'1px 4px'}}/>
+                            ):(
+                              <div onDoubleClick={()=>setRiskFieldEdit({field:'max_simultaneous_positions',val:String(_maxS??nSlots??'')})}
+                                title="Doble clic para editar"
+                                style={{fontFamily:MONO,fontSize:14,fontWeight:500,lineHeight:1,color:'var(--text)',cursor:'text'}}>
+                                {_maxS!=null?_maxS:(nSlots||'—')}
+                              </div>
+                            )}
+                            <div style={{fontFamily:MONO,fontSize:10,color:'var(--text2)',marginTop:1,lineHeight:1}}>{_slotCap>0?_fe(_slotCap)+'/sl':''}</div>
                           </div>
                           {/* Slots bar card (reemplaza Exposición) */}
                           <div style={{flex:1,padding:'4px 6px',borderRadius:4,background:'var(--bg3)',border:'1px solid var(--border)',display:'flex',flexDirection:'column',justifyContent:'center'}}>
@@ -5124,9 +5178,9 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                               <div>
                                 <div style={{fontFamily:MONO,fontSize:10,fontWeight:500,color:'var(--text2)',marginBottom:2,lineHeight:1}}>Entrada</div>
                                 <div style={{display:'flex',alignItems:'center',gap:2}}>
-                                  <input type="number" min={0} step="any" placeholder="0.00" value={riskCalc.entry}
-                                    onChange={e=>{const v=parseFloat(e.target.value);setRiskCalc(c=>({...c,entry:e.target.value}));setRiskLineActive(p=>({...p,entry:v>0}));if(v>0&&riskCaptureMode==='capture_entry')setRiskCaptureMode(null)}}
-                                    style={{..._inp,width:72,fontSize:12,borderColor:isActive?ac:isCapturing?`${ac}99`:'var(--border)'}}/>
+                                  <input type="text" inputMode="decimal" placeholder="0,00" value={riskCalc.entry}
+                                    onChange={e=>{const v=parseES(e.target.value);setRiskCalc(c=>({...c,entry:e.target.value}));setRiskLineActive(p=>({...p,entry:v>0}));if(v>0&&riskCaptureMode==='capture_entry')setRiskCaptureMode(null)}}
+                                    style={{..._inp,width:90,fontSize:12,borderColor:isActive?ac:isCapturing?`${ac}99`:'var(--border)'}}/>
                                   <button title={isCapturing?'Cancelar':'Capturar del gráfico'} onClick={()=>setRiskCaptureMode(c=>c==='capture_entry'?null:'capture_entry')}
                                     style={_capBtnSm(ac,isCapturing?'rgba(68,136,204,0.35)':isActive?'rgba(68,136,204,0.2)':undefined,isCapturing?'pulse-ring 1s infinite':'')}>⊕</button>
                                   {_cpBtn('entry',riskCalc.entry)}
@@ -5144,9 +5198,9 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                               <div>
                                 <div style={{fontFamily:MONO,fontSize:10,fontWeight:500,color:'var(--text2)',marginBottom:2,lineHeight:1}}>Stop</div>
                                 <div style={{display:'flex',alignItems:'center',gap:2}}>
-                                  <input type="number" min={0} step="any" placeholder="0.00" value={riskCalc.stop}
-                                    onChange={e=>{const v=parseFloat(e.target.value);setRiskCalc(c=>({...c,stop:e.target.value}));setRiskLineActive(p=>({...p,stop:v>0}));if(v>0&&riskCaptureMode==='capture_stop')setRiskCaptureMode(null)}}
-                                    style={{..._inp,width:72,fontSize:12,borderColor:isActive?ac:isCapturing?`${ac}99`:'var(--border)'}}/>
+                                  <input type="text" inputMode="decimal" placeholder="0,00" value={riskCalc.stop}
+                                    onChange={e=>{const v=parseES(e.target.value);setRiskCalc(c=>({...c,stop:e.target.value}));setRiskLineActive(p=>({...p,stop:v>0}));if(v>0&&riskCaptureMode==='capture_stop')setRiskCaptureMode(null)}}
+                                    style={{..._inp,width:90,fontSize:12,borderColor:isActive?ac:isCapturing?`${ac}99`:'var(--border)'}}/>
                                   <button title={isCapturing?'Cancelar':'Capturar del gráfico'} onClick={()=>setRiskCaptureMode(c=>c==='capture_stop'?null:'capture_stop')}
                                     style={_capBtnSm(ac,isCapturing?'rgba(204,68,68,0.35)':isActive?'rgba(204,68,68,0.2)':undefined)}>⊕</button>
                                   {_cpBtn('stop',riskCalc.stop)}
@@ -5164,9 +5218,9 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                               <div>
                                 <div style={{fontFamily:MONO,fontSize:10,fontWeight:500,color:'var(--text2)',marginBottom:2,lineHeight:1}}>TP</div>
                                 <div style={{display:'flex',alignItems:'center',gap:2}}>
-                                  <input type="number" min={0} step="any" placeholder="0.00" value={riskCalc.tp}
-                                    onChange={e=>{const v=parseFloat(e.target.value);setRiskCalc(c=>({...c,tp:e.target.value}));setRiskLineActive(p=>({...p,tp:v>0}));if(v>0&&riskCaptureMode==='capture_tp')setRiskCaptureMode(null)}}
-                                    style={{..._inp,width:72,fontSize:12,borderColor:isActive?ac:isCapturing?`${ac}99`:'var(--border)'}}/>
+                                  <input type="text" inputMode="decimal" placeholder="0,00" value={riskCalc.tp}
+                                    onChange={e=>{const v=parseES(e.target.value);setRiskCalc(c=>({...c,tp:e.target.value}));setRiskLineActive(p=>({...p,tp:v>0}));if(v>0&&riskCaptureMode==='capture_tp')setRiskCaptureMode(null)}}
+                                    style={{..._inp,width:90,fontSize:12,borderColor:isActive?ac:isCapturing?`${ac}99`:'var(--border)'}}/>
                                   <button title={isCapturing?'Cancelar':'Capturar del gráfico'} onClick={()=>setRiskCaptureMode(c=>c==='capture_tp'?null:'capture_tp')}
                                     style={_capBtnSm(ac,isCapturing?'rgba(68,204,136,0.35)':isActive?'rgba(68,204,136,0.2)':undefined)}>⊕</button>
                                   {_cpBtn('tp',riskCalc.tp)}
@@ -5210,11 +5264,11 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                   <div style={{fontFamily:MONO,fontSize:10,color:'var(--text2)',textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:2,lineHeight:1}}>R:R</div>
                                   <div style={{fontFamily:MONO,fontSize:16,fontWeight:500,lineHeight:1,color:_rr>=2?'#00e5a0':_rr>=1?'#ffd166':'#ff4d6d'}}>{_rr>0?`1:${_rr.toLocaleString('es-ES',{minimumFractionDigits:1,maximumFractionDigits:1})}`:'—'}</div>
                                 </div>
-                                {/* Semáforo */}
-                                <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:5,paddingLeft:10,paddingRight:6,flexShrink:0}}>
-                                  <span style={{width:10,height:10,borderRadius:'50%',background:_semC,flexShrink:0,boxShadow:`0 0 6px ${_semC}`,display:'inline-block'}}/>
-                                  <span style={{fontFamily:MONO,fontSize:13,color:_semC,fontWeight:600,whiteSpace:'nowrap'}}>{_semT}</span>
-                                  <span style={{fontFamily:MONO,fontSize:11,color:'var(--text2)',whiteSpace:'nowrap'}}>{_fp(_postPct)}</span>
+                                {/* Riesgo/equity */}
+                                <div style={{marginLeft:'auto',padding:'0 10px',display:'flex',flexDirection:'column',alignItems:'center',flexShrink:0}}
+                                  title="Capital en riesgo si salta el stop, expresado como % del equity total">
+                                  <div style={{fontFamily:MONO,fontSize:10,color:'var(--text2)',textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:2,lineHeight:1}}>Riesgo/eq.</div>
+                                  <div style={{fontFamily:MONO,fontSize:16,fontWeight:500,lineHeight:1,color:_reqC}}>{_reqPct>0?_fp(_reqPct,2):'—'}</div>
                                 </div>
                               </>
                             ):(
@@ -5367,9 +5421,9 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                           if(sidePanel!=='risk') return null
                           const _eA=riskLineActive.entry, _sA=riskLineActive.stop, _tA=riskLineActive.tp
                           if(!_eA&&!_sA&&!_tA) return null
-                          const _e=_eA?(parseFloat(riskCalc.entry)||null):null
-                          const _s=_sA?(parseFloat(riskCalc.stop)||null):null
-                          const _t=_tA?(parseFloat(riskCalc.tp)||null):null
+                          const _e=_eA?(parseES(riskCalc.entry)||null):null
+                          const _s=_sA?(parseES(riskCalc.stop)||null):null
+                          const _t=_tA?(parseES(riskCalc.tp)||null):null
 const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>s+Number(c.amount||0),0)
                           const _ret=(contributions||[]).filter(c=>c.type==='retirada').reduce((s,c)=>s+Number(c.amount||0),0)
                           const _bal=_aport-_ret
