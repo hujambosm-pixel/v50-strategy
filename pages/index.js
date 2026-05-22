@@ -3124,7 +3124,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.270</title>
+        <title>Trading Simulator V9.271</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3202,7 +3202,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.270
+            <span className="dot"/>Trading Simulator V9.271
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5016,13 +5016,13 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                           {lbl:'Riesgo',   val:<>{_fp(_riskPct)}<span style={{fontSize:10,color:'var(--text3)',fontWeight:400}}>/{_maxR}%</span></>, c:_gC},
                           {lbl:'Exposición',val:<>{_fp(_expPct)}<span style={{fontSize:10,color:'var(--text3)',fontWeight:400}}> {_fe(_invt)}</span></>, c:_expPct>80?'#ffd166':'var(--text)'},
                         ].map((m,i)=>(
-                          <React.Fragment key={i}>
+                          <Fragment key={i}>
                             {i>0&&<div style={{width:1,background:'var(--border)',margin:'8px 0',flexShrink:0}}/>}
                             <div style={{flex:1,padding:'0 8px',display:'flex',flexDirection:'column',justifyContent:'center',minWidth:0}}>
                               <div style={{fontFamily:MONO,fontSize:9,color:'var(--text2)',textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:2,lineHeight:1}}>{m.lbl}</div>
                               <div style={{fontFamily:MONO,fontSize:14,fontWeight:500,lineHeight:1.1,color:m.c,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{m.val}</div>
                             </div>
-                          </React.Fragment>
+                          </Fragment>
                         ))}
                       </div>
 
