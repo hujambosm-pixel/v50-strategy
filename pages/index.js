@@ -3124,7 +3124,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.271</title>
+        <title>Trading Simulator V9.272</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3202,7 +3202,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.271
+            <span className="dot"/>Trading Simulator V9.272
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5019,8 +5019,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                           <Fragment key={i}>
                             {i>0&&<div style={{width:1,background:'var(--border)',margin:'8px 0',flexShrink:0}}/>}
                             <div style={{flex:1,padding:'0 8px',display:'flex',flexDirection:'column',justifyContent:'center',minWidth:0}}>
-                              <div style={{fontFamily:MONO,fontSize:9,color:'var(--text2)',textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:2,lineHeight:1}}>{m.lbl}</div>
-                              <div style={{fontFamily:MONO,fontSize:14,fontWeight:500,lineHeight:1.1,color:m.c,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{m.val}</div>
+                              <div style={{fontFamily:MONO,fontSize:10,color:'var(--text2)',textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:2,lineHeight:1}}>{m.lbl}</div>
+                              <div style={{fontFamily:MONO,fontSize:16,fontWeight:500,lineHeight:1.1,color:m.c,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{m.val}</div>
                             </div>
                           </Fragment>
                         ))}
@@ -5067,9 +5067,9 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                               background:riskMode==='positionsizing'?'rgba(55,138,221,0.10)':'var(--bg3)',
                               border:`1px solid ${riskMode==='positionsizing'?'#378add':'var(--border)'}`,transition:'all 0.2s'}}>
                             {riskMode==='positionsizing'&&<span style={{position:'absolute',top:3,right:3,width:5,height:5,borderRadius:'50%',background:'#378add'}}/>}
-                            <div style={{fontFamily:MONO,fontSize:9,color:'var(--text2)',textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:1,lineHeight:1}}>Riesgo/op.</div>
+                            <div style={{fontFamily:MONO,fontSize:10,color:'var(--text2)',textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:1,lineHeight:1}}>Riesgo/op.</div>
                             <div style={{fontFamily:MONO,fontSize:14,fontWeight:500,lineHeight:1,color:riskMode==='positionsizing'?'#378add':'var(--text)'}}>{riskActiveProfile?.risk_per_trade_value}{riskActiveProfile?.risk_per_trade_type}</div>
-                            <div style={{fontFamily:MONO,fontSize:10,color:'var(--text2)',marginTop:1,lineHeight:1}}>{_fe(_capPos)}</div>
+                            <div style={{fontFamily:MONO,fontSize:11,color:'var(--text2)',marginTop:1,lineHeight:1}}>{_fe(_capPos)}</div>
                           </div>
                           {/* Máx. riesgo — click → Slots mode */}
                           <div
@@ -5080,13 +5080,13 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                               background:riskMode==='slots'?'rgba(29,158,117,0.10)':'var(--bg3)',
                               border:`1px solid ${riskMode==='slots'?'#1d9e75':'var(--border)'}`,transition:'all 0.2s'}}>
                             {riskMode==='slots'&&<span style={{position:'absolute',top:3,right:3,width:5,height:5,borderRadius:'50%',background:'#1d9e75'}}/>}
-                            <div style={{fontFamily:MONO,fontSize:9,color:'var(--text2)',textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:1,lineHeight:1}}>Máx. riesgo</div>
+                            <div style={{fontFamily:MONO,fontSize:10,color:'var(--text2)',textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:1,lineHeight:1}}>Máx. riesgo</div>
                             <div style={{fontFamily:MONO,fontSize:14,fontWeight:500,lineHeight:1,color:riskMode==='slots'?'#1d9e75':'var(--text)'}}>{_maxR}%</div>
-                            <div style={{fontFamily:MONO,fontSize:10,color:'var(--text2)',marginTop:1,lineHeight:1}}>{_fe(_eq*(_maxR/100))}</div>
+                            <div style={{fontFamily:MONO,fontSize:11,color:'var(--text2)',marginTop:1,lineHeight:1}}>{_fe(_eq*(_maxR/100))}</div>
                           </div>
                           {/* Slots input */}
                           <div style={{flex:1,padding:'4px 6px',borderRadius:4,background:'var(--bg3)',border:'1px solid var(--border)'}}>
-                            <div style={{fontFamily:MONO,fontSize:9,color:'var(--text2)',textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:1,lineHeight:1}}>Slots</div>
+                            <div style={{fontFamily:MONO,fontSize:10,color:'var(--text2)',textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:1,lineHeight:1}}>Slots</div>
                             <div style={{display:'flex',alignItems:'center',gap:3}}>
                               <input type="number" min={1} max={50} step={1} value={nSlots}
                                 onChange={e=>{const v=Math.max(1,parseInt(e.target.value)||1);setNSlots(v);try{localStorage.setItem('v50_risk_nslots',v)}catch{}}}
@@ -5107,9 +5107,9 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         </div>
                       </div>
 
-                      {/* ── FILA 3: inputs + resultados en una sola línea horizontal (≤70px) ── */}
-                      <div style={{padding:'4px 8px 5px'}}>
-                        <div style={{display:'flex',alignItems:'stretch',background:'var(--bg3)',border:'1px solid var(--border)',borderRadius:6,overflow:'visible'}}>
+                      {/* ── FILA 3: inputs + resultados en una sola línea horizontal ── */}
+                      <div style={{padding:'4px 8px 6px'}}>
+                        <div style={{display:'flex',alignItems:'stretch',background:'var(--bg3)',border:'1px solid var(--border)',borderRadius:6,overflow:'visible',minHeight:60}}>
 
                           {/* Inputs side (3 campos) */}
                           <div style={{display:'flex',gap:5,padding:'5px 8px',alignItems:'flex-end',flexShrink:0}}>
@@ -5120,7 +5120,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                               const ac='#4488cc'
                               return(
                               <div>
-                                <div style={{fontFamily:MONO,fontSize:9,fontWeight:500,color:'var(--text2)',marginBottom:2,lineHeight:1}}>Entrada</div>
+                                <div style={{fontFamily:MONO,fontSize:10,fontWeight:500,color:'var(--text2)',marginBottom:2,lineHeight:1}}>Entrada</div>
                                 <div style={{display:'flex',alignItems:'center',gap:2}}>
                                   <input type="number" min={0} step="any" placeholder="0.00" value={riskCalc.entry}
                                     onChange={e=>{const v=parseFloat(e.target.value);setRiskCalc(c=>({...c,entry:e.target.value}));setRiskLineActive(p=>({...p,entry:v>0}));if(v>0&&riskCaptureMode==='capture_entry')setRiskCaptureMode(null)}}
@@ -5140,7 +5140,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                               const ac='#cc4444'
                               return(
                               <div>
-                                <div style={{fontFamily:MONO,fontSize:9,fontWeight:500,color:'var(--text2)',marginBottom:2,lineHeight:1}}>Stop</div>
+                                <div style={{fontFamily:MONO,fontSize:10,fontWeight:500,color:'var(--text2)',marginBottom:2,lineHeight:1}}>Stop</div>
                                 <div style={{display:'flex',alignItems:'center',gap:2}}>
                                   <input type="number" min={0} step="any" placeholder="0.00" value={riskCalc.stop}
                                     onChange={e=>{const v=parseFloat(e.target.value);setRiskCalc(c=>({...c,stop:e.target.value}));setRiskLineActive(p=>({...p,stop:v>0}));if(v>0&&riskCaptureMode==='capture_stop')setRiskCaptureMode(null)}}
@@ -5160,7 +5160,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                               const ac='#44cc88'
                               return(
                               <div>
-                                <div style={{fontFamily:MONO,fontSize:9,fontWeight:500,color:'var(--text2)',marginBottom:2,lineHeight:1}}>TP</div>
+                                <div style={{fontFamily:MONO,fontSize:10,fontWeight:500,color:'var(--text2)',marginBottom:2,lineHeight:1}}>TP</div>
                                 <div style={{display:'flex',alignItems:'center',gap:2}}>
                                   <input type="number" min={0} step="any" placeholder="0.00" value={riskCalc.tp}
                                     onChange={e=>{const v=parseFloat(e.target.value);setRiskCalc(c=>({...c,tp:e.target.value}));setRiskLineActive(p=>({...p,tp:v>0}));if(v>0&&riskCaptureMode==='capture_tp')setRiskCaptureMode(null)}}
@@ -5184,39 +5184,39 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                             {_eN>0?(
                               <>
                                 {/* Acciones */}
-                                <div style={{padding:'0 8px',display:'flex',flexDirection:'column',alignItems:'center',flexShrink:0}}>
-                                  <div style={{fontFamily:MONO,fontSize:8,color:'var(--text2)',textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:1,lineHeight:1}}>Acc.</div>
-                                  <div style={{fontFamily:MONO,fontSize:18,fontWeight:700,lineHeight:1,color:_resAcc>0?'#ffd166':'var(--text3)'}}>{_resAcc>0?_resAcc:'—'}</div>
+                                <div style={{padding:'0 10px',display:'flex',flexDirection:'column',alignItems:'center',flexShrink:0}}>
+                                  <div style={{fontFamily:MONO,fontSize:10,color:'var(--text2)',textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:2,lineHeight:1}}>Acc.</div>
+                                  <div style={{fontFamily:MONO,fontSize:16,fontWeight:500,lineHeight:1,color:_resAcc>0?'#ffd166':'var(--text3)'}}>{_resAcc>0?_resAcc:'—'}</div>
                                 </div>
-                                <div style={{width:1,height:28,background:'var(--border)',flexShrink:0}}/>
+                                <div style={{width:1,height:32,background:'var(--border)',flexShrink:0}}/>
                                 {/* Importe */}
-                                <div style={{padding:'0 8px',display:'flex',flexDirection:'column',alignItems:'center',flexShrink:0}}>
-                                  <div style={{fontFamily:MONO,fontSize:8,color:'var(--text2)',textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:1,lineHeight:1}}>Importe</div>
-                                  <div style={{fontFamily:MONO,fontSize:11,fontWeight:600,lineHeight:1,color:'var(--text)'}}>{_resImp>0?_fe(_resImp):'—'}</div>
-                                  {_resPct>0&&<div style={{fontFamily:MONO,fontSize:8,color:'var(--text2)',marginTop:1,lineHeight:1}}>{_fp(_resPct)}</div>}
+                                <div style={{padding:'0 10px',display:'flex',flexDirection:'column',alignItems:'center',flexShrink:0}}>
+                                  <div style={{fontFamily:MONO,fontSize:10,color:'var(--text2)',textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:2,lineHeight:1}}>Importe</div>
+                                  <div style={{fontFamily:MONO,fontSize:16,fontWeight:500,lineHeight:1,color:'var(--text)'}}>{_resImp>0?_fe(_resImp):'—'}</div>
+                                  {_resPct>0&&<div style={{fontFamily:MONO,fontSize:10,color:'var(--text2)',marginTop:2,lineHeight:1}}>{_fp(_resPct)}</div>}
                                 </div>
-                                <div style={{width:1,height:28,background:'var(--border)',flexShrink:0}}/>
+                                <div style={{width:1,height:32,background:'var(--border)',flexShrink:0}}/>
                                 {/* Dist. stop */}
-                                <div style={{padding:'0 8px',display:'flex',flexDirection:'column',alignItems:'center',flexShrink:0}}>
-                                  <div style={{fontFamily:MONO,fontSize:8,color:'var(--text2)',textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:1,lineHeight:1}}>Dist.SL</div>
-                                  <div style={{fontFamily:MONO,fontSize:11,fontWeight:600,lineHeight:1,color:'var(--text)'}}>{_dS>0?_fe(_dS,2):'—'}</div>
-                                  {_dS>0&&<div style={{fontFamily:MONO,fontSize:8,color:'var(--text2)',marginTop:1,lineHeight:1}}>{_fp(_dSPct)}</div>}
+                                <div style={{padding:'0 10px',display:'flex',flexDirection:'column',alignItems:'center',flexShrink:0}}>
+                                  <div style={{fontFamily:MONO,fontSize:10,color:'var(--text2)',textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:2,lineHeight:1}}>Dist.SL</div>
+                                  <div style={{fontFamily:MONO,fontSize:16,fontWeight:500,lineHeight:1,color:'var(--text)'}}>{_dS>0?_fe(_dS,2):'—'}</div>
+                                  {_dS>0&&<div style={{fontFamily:MONO,fontSize:10,color:'var(--text2)',marginTop:2,lineHeight:1}}>{_fp(_dSPct)}</div>}
                                 </div>
-                                <div style={{width:1,height:28,background:'var(--border)',flexShrink:0}}/>
+                                <div style={{width:1,height:32,background:'var(--border)',flexShrink:0}}/>
                                 {/* R:R */}
-                                <div style={{padding:'0 8px',display:'flex',flexDirection:'column',alignItems:'center',flexShrink:0}}>
-                                  <div style={{fontFamily:MONO,fontSize:8,color:'var(--text2)',textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:1,lineHeight:1}}>R:R</div>
-                                  <div style={{fontFamily:MONO,fontSize:14,fontWeight:700,lineHeight:1,color:_rr>=2?'#00e5a0':_rr>=1?'#ffd166':'#ff4d6d'}}>{_rr>0?`1:${_rr.toFixed(1)}`:'—'}</div>
+                                <div style={{padding:'0 10px',display:'flex',flexDirection:'column',alignItems:'center',flexShrink:0}}>
+                                  <div style={{fontFamily:MONO,fontSize:10,color:'var(--text2)',textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:2,lineHeight:1}}>R:R</div>
+                                  <div style={{fontFamily:MONO,fontSize:16,fontWeight:500,lineHeight:1,color:_rr>=2?'#00e5a0':_rr>=1?'#ffd166':'#ff4d6d'}}>{_rr>0?`1:${_rr.toFixed(1)}`:'—'}</div>
                                 </div>
                                 {/* Semáforo */}
-                                <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:4,paddingLeft:8,flexShrink:0}}>
-                                  <span style={{width:7,height:7,borderRadius:'50%',background:_semC,flexShrink:0,boxShadow:`0 0 4px ${_semC}`,display:'inline-block'}}/>
-                                  <span style={{fontFamily:MONO,fontSize:10,color:_semC,fontWeight:600,whiteSpace:'nowrap'}}>{_semT}</span>
-                                  <span style={{fontFamily:MONO,fontSize:10,color:'var(--text2)',whiteSpace:'nowrap'}}>{_fp(_postPct)}</span>
+                                <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:5,paddingLeft:10,paddingRight:6,flexShrink:0}}>
+                                  <span style={{width:10,height:10,borderRadius:'50%',background:_semC,flexShrink:0,boxShadow:`0 0 6px ${_semC}`,display:'inline-block'}}/>
+                                  <span style={{fontFamily:MONO,fontSize:13,color:_semC,fontWeight:600,whiteSpace:'nowrap'}}>{_semT}</span>
+                                  <span style={{fontFamily:MONO,fontSize:11,color:'var(--text2)',whiteSpace:'nowrap'}}>{_fp(_postPct)}</span>
                                 </div>
                               </>
                             ):(
-                              <span style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',padding:'0 8px'}}>Define entrada para calcular</span>
+                              <span style={{fontFamily:MONO,fontSize:10,color:'var(--text3)',padding:'0 10px'}}>Define entrada para calcular</span>
                             )}
                           </div>
 
