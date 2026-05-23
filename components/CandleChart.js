@@ -413,7 +413,8 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       // ── Marcadores: flechas entrada/salida + círculos cruces EMA ──
       const allMarkers=[]
       const oblMarkers=[]  // emoji ↗/↘ dibujados en SVG overlay, sin shape nativo
-      if(visuals?.arrows!==false){
+      const _isRsiMode=!_indType&&data.some(d=>d.rsiLine!=null)
+      if(visuals?.arrows!==false&&!_isRsiMode){
         tradeMAEs.forEach(t=>{
           const _as=visuals?.arrowsShape||'arrowUp'
           const _asExit=_as==='arrowUp'?'arrowDown':_as==='arrowDown'?'arrowUp':_as
