@@ -243,7 +243,7 @@ function createRiskPrimitive(configRef) {
   }
 }
 
-export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null, isBareChart=false, visuals=null, filterZones=[], slopeChanges=[] }) {
+export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null, isBareChart=false, visuals=null, filterZones=[], slopeChanges=[], customMarkers=[] }) {
   const containerRef=useRef(null), svgRef=useRef(null), legendRef=useRef(null), tooltipRef=useRef(null)
   const activeLegendRef = externalLegendRef || legendRef
   const chartRef=useRef(null), candlesRef=useRef(null)
@@ -446,6 +446,13 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         slopeChanges.forEach(sc=>{
           const _dir=sc.direction||sc.type  // support both 'direction' and 'type' fields
           oblMarkers.push({date:sc.date,anchor:_dir==='up'?'low':'high',text:_dir==='up'?'↗':'↘',color:_dir==='up'?'#00e5a0':'#ff4d6d'})
+        })
+      }
+      // ── Marcadores de texto personalizados desde code_js → customMarkers ──
+      if(customMarkers?.length){
+        customMarkers.forEach(m=>{
+          if(!m?.date||!m?.text) return
+          oblMarkers.push({date:m.date,anchor:m.anchor??'low',text:m.text,color:m.color??'#ffffff'})
         })
       }
 

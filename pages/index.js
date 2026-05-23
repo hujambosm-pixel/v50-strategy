@@ -3185,7 +3185,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.279</title>
+        <title>Trading Simulator V9.280</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3263,7 +3263,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.279
+            <span className="dot"/>Trading Simulator V9.280
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5506,6 +5506,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         data={result.chartData} emaRPeriod={emaR} emaLPeriod={emaL} definition={null}
                         visuals={result.visuals??null}
                         slopeChanges={result.slopeChanges??[]}
+                        customMarkers={result.customMarkers??[]}
                         trades={result.isBareChart?[]:result.trades||[]} maxDD={result.isBareChart?0:metrics?.ddSimple||0}
                         isBareChart={result.isBareChart??false}
                         chartHeight={result.isBareChart?bareChartHeight:candleH}
@@ -5663,6 +5664,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           data={result.chartData} emaRPeriod={emaR} emaLPeriod={emaL} definition={null}
                           visuals={result.visuals??null}
                           slopeChanges={result.slopeChanges??[]}
+                          customMarkers={result.customMarkers??[]}
                           trades={result.isBareChart?[]:result.trades||[]}
                           maxDD={result.isBareChart?0:metrics?.ddSimple||0}
                           isBareChart={result.isBareChart??false}

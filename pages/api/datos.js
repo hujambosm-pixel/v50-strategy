@@ -414,7 +414,8 @@ export default async function handler(req, res) {
     let rawTrades        = _result.trades       ?? []
     const indicators     = _result.indicators   ?? {}
     const rawFilterZones = _result.filterZones  ?? []
-    const slopeChanges   = _result.slopeChanges ?? []
+    const slopeChanges   = _result.slopeChanges   ?? []
+    const customMarkers  = _result.customMarkers  ?? []
 
     // ── Flush virtual: posición abierta al final del periodo ──
     const lastBar = data[data.length - 1]
@@ -548,7 +549,8 @@ export default async function handler(req, res) {
       chartData,
       trades,
       filterZones: anyFiltroOn ? filterZonesFromFiltros : (Array.isArray(rawFilterZones) ? rawFilterZones : []),
-      slopeChanges: Array.isArray(slopeChanges) ? slopeChanges : [],
+      slopeChanges:   Array.isArray(slopeChanges)   ? slopeChanges   : [],
+      customMarkers:  Array.isArray(customMarkers)  ? customMarkers  : [],
       gananciaSimple,
       capitalReinv,
       ganBH,
