@@ -443,7 +443,8 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       // Activas cuando hay panel RSI de barras (code_js strategy); reemplazan las de entrada/salida
       if(!_indType&&data.some(d=>d.rsiLine!=null)&&slopeChanges?.length){
         slopeChanges.forEach(sc=>{
-          oblMarkers.push({date:sc.date,anchor:sc.direction==='up'?'low':'high',text:sc.direction==='up'?'↗':'↘',color:sc.direction==='up'?'#00e5a0':'#ff4d6d'})
+          const _dir=sc.direction||sc.type  // support both 'direction' and 'type' fields
+          oblMarkers.push({date:sc.date,anchor:_dir==='up'?'low':'high',text:_dir==='up'?'↗':'↘',color:_dir==='up'?'#00e5a0':'#ff4d6d'})
         })
       }
 
@@ -604,35 +605,21 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         const validRsiData=data.filter(d=>d.rsiLine!=null)
         const obLevel=validRsiData[0]?.rsiOB??75
         const osLevel=validRsiData[0]?.rsiOS??25
-        const d0=data[0].date,dN=data[data.length-1].date
-        // Anchor series: force scale 0-100
-        const rsiAnchorMin=rsiChart.addLineSeries({color:'rgba(0,0,0,0.004)',lineWidth:1,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
-        rsiAnchorMin.setData([{time:d0,value:0},{time:dN,value:0}])
-        const rsiAnchorMax=rsiChart.addLineSeries({color:'rgba(0,0,0,0.004)',lineWidth:1,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
-        rsiAnchorMax.setData([{time:d0,value:100},{time:dN,value:100}])
-        // OB zone fill (above obLevel) — BaselineSeries fills above baseValue with topFillColor2
-        const obArea=rsiChart.addBaselineSeries({baseValue:{type:'price',price:obLevel},topFillColor1:'rgba(255,80,80,0.0)',topFillColor2:'rgba(255,80,80,0.14)',bottomFillColor1:'rgba(0,0,0,0)',bottomFillColor2:'rgba(0,0,0,0)',topLineColor:'transparent',bottomLineColor:'transparent',lineWidth:1,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
-        obArea.setData(validRsiData.map(d=>({time:d.date,value:d.rsiLine})))
-        // OS zone fill (below osLevel) — BaselineSeries fills below baseValue with bottomFillColor2
-        const osArea=rsiChart.addBaselineSeries({baseValue:{type:'price',price:osLevel},topFillColor1:'rgba(0,0,0,0)',topFillColor2:'rgba(0,0,0,0)',bottomFillColor1:'rgba(80,200,80,0.0)',bottomFillColor2:'rgba(80,200,80,0.14)',topLineColor:'transparent',bottomLineColor:'transparent',lineWidth:1,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
-        osArea.setData(validRsiData.map(d=>({time:d.date,value:d.rsiLine})))
-        // OB reference line — dashed red
-        const obS=rsiChart.addLineSeries({color:'rgba(255,80,80,0.4)',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
-        obS.setData([{time:d0,value:obLevel},{time:dN,value:obLevel}])
-        // OS reference line — dashed green
-        const osS=rsiChart.addLineSeries({color:'rgba(80,200,80,0.4)',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
-        osS.setData([{time:d0,value:osLevel},{time:dN,value:osLevel}])
-        // Center 50 line — subtle gray
-        const midS=rsiChart.addLineSeries({color:'rgba(120,140,160,0.25)',lineWidth:1,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
-        midS.setData([{time:d0,value:50},{time:dN,value:50}])
-        // RSI MA — yellow (optional)
+        // RSI MA — yellow (optional, rendered before RSI so RSI is on top)
         if(validRsiData.some(d=>d.rsiMA!=null)){
-          const maS=rsiChart.addLineSeries({color:'#f0c040',lineWidth:1,lastValueVisible:false,priceLineVisible:false})
+          const maS=rsiChart.addLineSeries({color:'#f0c040',lineWidth:1,lastValueVisible:false,priceLineVisible:false,
+            autoscaleInfoProvider:()=>({priceRange:{minValue:0,maxValue:100},margins:{above:0.05,below:0.05}})})
           maS.setData(validRsiData.filter(d=>d.rsiMA!=null).map(d=>({time:d.date,value:d.rsiMA})))
         }
-        // RSI main line — purple #7E57C2 (rendered last = on top)
-        const rsiS=rsiChart.addLineSeries({color:'#7E57C2',lineWidth:2,lastValueVisible:false,priceLineVisible:false})
+        // RSI main line — purple #7E57C2
+        // autoscaleInfoProvider forces fixed 0-100 scale (prevents BaselineSeries/distortion issues)
+        const rsiS=rsiChart.addLineSeries({color:'#7E57C2',lineWidth:2,lastValueVisible:false,priceLineVisible:false,
+          autoscaleInfoProvider:()=>({priceRange:{minValue:0,maxValue:100},margins:{above:0.05,below:0.05}})})
         rsiS.setData(validRsiData.map(d=>({time:d.date,value:d.rsiLine})))
+        // Reference lines via createPriceLine — don't distort auto-scale
+        rsiS.createPriceLine({price:obLevel,color:'rgba(255,80,80,0.55)',lineWidth:1,lineStyle:LineStyle.Dashed,axisLabelVisible:false})
+        rsiS.createPriceLine({price:osLevel,color:'rgba(80,200,80,0.55)',lineWidth:1,lineStyle:LineStyle.Dashed,axisLabelVisible:false})
+        rsiS.createPriceLine({price:50,color:'rgba(120,140,160,0.3)',lineWidth:1,lineStyle:LineStyle.Solid,axisLabelVisible:false})
         // Cross markers ▲/▼ en el panel RSI (calculados desde los datos de barras)
         const _rsiCrossMarkers=[]
         for(let i=1;i<validRsiData.length;i++){
