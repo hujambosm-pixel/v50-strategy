@@ -564,6 +564,55 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         _syncPanels(macdChart)
       }
 
+      // ── RSI subpanel from strategy bar data (code_js strategies returning indicators.rsi) ──
+      // Triggered when bars carry rsiLine injected by datos.js.
+      // Only fires when definition-based _indType is absent (avoids double-render).
+      const _hasRsiBars=!_indType&&data.some(d=>d.rsiLine!=null)
+      if(_hasRsiBars&&rsiContainerRef.current){
+        // Cleanup previous chart (overlay or standalone)
+        if(rsiChartRef.current){
+          if(rsiChartRef.current._isOverlay){
+            try{const c=chartRef.current;if(c){for(const s of rsiChartRef.current._series){c.removeSeries(s)};c.priceScale('rsi').applyOptions({visible:false});c.priceScale('right').applyOptions({scaleMargins:{top:0.02,bottom:0.02}})}}catch(_){}
+          }else{try{rsiChartRef.current.remove()}catch(_){}}
+          rsiChartRef.current=null
+        }
+        const rsiChart=createChart(rsiContainerRef.current,_panelOpts(120))
+        rsiChartRef.current=rsiChart
+        const validRsiData=data.filter(d=>d.rsiLine!=null)
+        const obLevel=validRsiData[0]?.rsiOB??75
+        const osLevel=validRsiData[0]?.rsiOS??25
+        const d0=data[0].date,dN=data[data.length-1].date
+        // Anchor series: force scale 0-100
+        const rsiAnchorMin=rsiChart.addLineSeries({color:'rgba(0,0,0,0.004)',lineWidth:1,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
+        rsiAnchorMin.setData([{time:d0,value:0},{time:dN,value:0}])
+        const rsiAnchorMax=rsiChart.addLineSeries({color:'rgba(0,0,0,0.004)',lineWidth:1,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
+        rsiAnchorMax.setData([{time:d0,value:100},{time:dN,value:100}])
+        // OB zone fill (above obLevel) — BaselineSeries fills above baseValue with topFillColor2
+        const obArea=rsiChart.addBaselineSeries({baseValue:{type:'price',price:obLevel},topFillColor1:'rgba(255,80,80,0.0)',topFillColor2:'rgba(255,80,80,0.14)',bottomFillColor1:'rgba(0,0,0,0)',bottomFillColor2:'rgba(0,0,0,0)',topLineColor:'transparent',bottomLineColor:'transparent',lineWidth:1,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
+        obArea.setData(validRsiData.map(d=>({time:d.date,value:d.rsiLine})))
+        // OS zone fill (below osLevel) — BaselineSeries fills below baseValue with bottomFillColor2
+        const osArea=rsiChart.addBaselineSeries({baseValue:{type:'price',price:osLevel},topFillColor1:'rgba(0,0,0,0)',topFillColor2:'rgba(0,0,0,0)',bottomFillColor1:'rgba(80,200,80,0.0)',bottomFillColor2:'rgba(80,200,80,0.14)',topLineColor:'transparent',bottomLineColor:'transparent',lineWidth:1,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
+        osArea.setData(validRsiData.map(d=>({time:d.date,value:d.rsiLine})))
+        // OB reference line — dashed red
+        const obS=rsiChart.addLineSeries({color:'rgba(255,80,80,0.4)',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
+        obS.setData([{time:d0,value:obLevel},{time:dN,value:obLevel}])
+        // OS reference line — dashed green
+        const osS=rsiChart.addLineSeries({color:'rgba(80,200,80,0.4)',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
+        osS.setData([{time:d0,value:osLevel},{time:dN,value:osLevel}])
+        // Center 50 line — subtle gray
+        const midS=rsiChart.addLineSeries({color:'rgba(120,140,160,0.25)',lineWidth:1,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
+        midS.setData([{time:d0,value:50},{time:dN,value:50}])
+        // RSI MA — yellow (optional)
+        if(validRsiData.some(d=>d.rsiMA!=null)){
+          const maS=rsiChart.addLineSeries({color:'#f0c040',lineWidth:1,lastValueVisible:false,priceLineVisible:false})
+          maS.setData(validRsiData.filter(d=>d.rsiMA!=null).map(d=>({time:d.date,value:d.rsiMA})))
+        }
+        // RSI main line — purple #7E57C2 (rendered last = on top)
+        const rsiS=rsiChart.addLineSeries({color:'#7E57C2',lineWidth:2,lastValueVisible:false,priceLineVisible:false})
+        rsiS.setData(validRsiData.map(d=>({time:d.date,value:d.rsiLine})))
+        _syncPanels(rsiChart)
+      }
+
       // ── Línea amarilla de entrada para posiciones abiertas (Tradelog) ──
       // tlOpenTrades usa campos de Supabase: entry_price, entry_date (distinto al backtest)
       tlOpenTrades.forEach(t=>{
@@ -1419,6 +1468,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
 
   const activeIndType = definition ? getActiveIndicator(definition) : null
   const hasMacdBars = !activeIndType && data?.some(d => d.macdLine != null)
+  const hasRsiBars  = !activeIndType && data?.some(d => d.rsiLine  != null)
   console.log('[MACD-DEBUG]', {
     activeIndType,
     dataLength: data?.length,
@@ -1467,6 +1517,12 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
     {/* ── Paneles de indicadores secundarios ── */}
     {(activeIndType==='MACD'||activeIndType==='VOLUME'||hasMacdBars)&&(
       <div ref={macdContainerRef} style={{width:'100%',height:hasMacdBars?120:activeIndType==='VOLUME'?80:100,background:'#080c14',borderTop:'1px solid #1a2d45'}}/>
+    )}
+    {hasRsiBars&&(
+      <div style={{position:'relative',width:'100%',background:'#080c14',borderTop:'1px solid #1a2d45'}}>
+        <div ref={rsiContainerRef} style={{width:'100%',height:120}}/>
+        <span style={{position:'absolute',top:4,left:8,fontFamily:MONO,fontSize:9,color:'#7a9bc0',pointerEvents:'none',zIndex:10,letterSpacing:'0.06em',userSelect:'none'}}>RSI</span>
+      </div>
     )}
     </div>
   )
