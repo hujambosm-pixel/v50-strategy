@@ -439,6 +439,13 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
           else allMarkers.push({time:data[j].date,position:'aboveBar',color:visuals?.emaCrossDownColor||'#ff4d6d',shape:_sd,text:''})}
       }
       if(allMarkers.length) candles.setMarkers(allMarkers.sort((a,b)=>a.time.localeCompare(b.time)))
+      // ── Flechas oblicuas RSI: cruces RSI/MA → ↗/↘ en gráfico principal ──
+      // Activas cuando hay panel RSI de barras (code_js strategy); reemplazan las de entrada/salida
+      if(!_indType&&data.some(d=>d.rsiLine!=null)&&slopeChanges?.length){
+        slopeChanges.forEach(sc=>{
+          oblMarkers.push({date:sc.date,anchor:sc.direction==='up'?'low':'high',text:sc.direction==='up'?'↗':'↘',color:sc.direction==='up'?'#00e5a0':'#ff4d6d'})
+        })
+      }
 
       // ── Paneles secundarios (RSI / MACD / VOLUME) ─────────────────────
       const _panelOpts=(h)=>({
@@ -450,13 +457,29 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         crosshair:{mode:CrosshairMode.Normal},
         handleScroll:false,handleScale:false,
       })
-      const _syncPanels=(panelChart)=>{
+      const _syncPanels=(panelChart,panelSeries)=>{
+        // Sync visible range (zoom / scroll)
         chart.timeScale().subscribeVisibleTimeRangeChange(range=>{
           if(range)try{panelChart.timeScale().setVisibleRange(range)}catch(_){}
         })
         panelChart.timeScale().subscribeVisibleTimeRangeChange(range=>{
           if(range)try{chart.timeScale().setVisibleRange(range)}catch(_){}
         })
+        // Sync crosshair vertical line (optional — only when panelSeries provided)
+        if(panelSeries){
+          let _syncing=false
+          chart.subscribeCrosshairMove(param=>{
+            if(_syncing)return
+            if(param.time){_syncing=true;try{panelChart.setCrosshairPosition(50,param.time,panelSeries)}catch(_){};_syncing=false}
+            else try{panelChart.clearCrosshairPosition()}catch(_){}
+          })
+          panelChart.subscribeCrosshairMove(param=>{
+            if(_syncing)return
+            const cs=candlesRef.current
+            if(param.time&&cs){_syncing=true;try{chart.setCrosshairPosition(0,param.time,cs)}catch(_){};_syncing=false}
+            else try{chart.clearCrosshairPosition()}catch(_){}
+          })
+        }
       }
 
       if(_indType==='RSI'){
@@ -610,7 +633,17 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         // RSI main line — purple #7E57C2 (rendered last = on top)
         const rsiS=rsiChart.addLineSeries({color:'#7E57C2',lineWidth:2,lastValueVisible:false,priceLineVisible:false})
         rsiS.setData(validRsiData.map(d=>({time:d.date,value:d.rsiLine})))
-        _syncPanels(rsiChart)
+        // Cross markers ▲/▼ en el panel RSI (calculados desde los datos de barras)
+        const _rsiCrossMarkers=[]
+        for(let i=1;i<validRsiData.length;i++){
+          const rP=validRsiData[i-1].rsiLine,mP=validRsiData[i-1].rsiMA
+          const rC=validRsiData[i].rsiLine,mC=validRsiData[i].rsiMA
+          if(rP==null||mP==null||rC==null||mC==null) continue
+          if(rP<=mP&&rC>mC) _rsiCrossMarkers.push({time:validRsiData[i].date,position:'belowBar',color:'#00e5a0',shape:'arrowUp',text:''})
+          if(rP>=mP&&rC<mC) _rsiCrossMarkers.push({time:validRsiData[i].date,position:'aboveBar',color:'#ff4d6d',shape:'arrowDown',text:''})
+        }
+        if(_rsiCrossMarkers.length) rsiS.setMarkers(_rsiCrossMarkers)
+        _syncPanels(rsiChart,rsiS)
       }
 
       // ── Línea amarilla de entrada para posiciones abiertas (Tradelog) ──
