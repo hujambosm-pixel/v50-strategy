@@ -1021,29 +1021,34 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       // addDays: extend 'to' past last bar → permanent right gap, immune to resets
       const GAP_DAYS = 12  // calendar days of right margin
       const addDays=(dateStr,n)=>{ const d=new Date(dateStr); d.setDate(d.getDate()+n); return d.toISOString().split('T')[0] }
-      // Restore saved range OR default to last N months (from settings slider)
+      // Read recentMonths once (used later in applyInitialRange)
       const _recentM=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.chart?.recentMonths??3}catch(_){return 3}})()
-      try {
-        if(savedRangeRef?.current){
-          const r=savedRangeRef.current
-          const lastBar=data[data.length-1]
-          const minTo=lastBar?addDays(lastBar.date,GAP_DAYS):r.to
-          const finalTo=r.to>=minTo?r.to:minTo
-          chart.timeScale().setVisibleRange({from:r.from, to:finalTo})
-        } else {
-          const lastBar = data[data.length-1]
-          if(lastBar){
-            const from = new Date(lastBar.date)
-            from.setMonth(from.getMonth()-_recentM)
-            chart.timeScale().setVisibleRange({
-              from: from.toISOString().split('T')[0],
-              to:   addDays(lastBar.date, GAP_DAYS)
-            })
+      // applyInitialRange: called after ResizeObserver settles so it's the last range op
+      const applyInitialRange=()=>{
+        if(disposed) return
+        try{
+          if(savedRangeRef?.current){
+            const r=savedRangeRef.current
+            const lastBar=data[data.length-1]
+            const minTo=lastBar?addDays(lastBar.date,GAP_DAYS):r.to
+            const finalTo=r.to>=minTo?r.to:minTo
+            chart.timeScale().setVisibleRange({from:r.from, to:finalTo})
+          } else {
+            const lastBar=data[data.length-1]
+            if(lastBar){
+              const from=new Date(lastBar.date)
+              from.setMonth(from.getMonth()-_recentM)
+              chart.timeScale().setVisibleRange({
+                from:from.toISOString().split('T')[0],
+                to:addDays(lastBar.date,GAP_DAYS)
+              })
+            }
           }
-        }
-      } catch(_){ chart.timeScale().fitContent() }
+        }catch(_){ try{chart.timeScale().fitContent()}catch(__){} }
+      }
       // Save range whenever user zooms/scrolls — always bake in GAP_DAYS on 'to'
       chart.timeScale().subscribeVisibleTimeRangeChange(range=>{
+        if(disposed) return  // guard: skip if chart being torn down
         if(range && savedRangeRef){
           const lastBar=data[data.length-1]
           const toStr = typeof range.to==='object'
@@ -1281,6 +1286,9 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         setTimeout(()=>{drawTradeLabels();drawFilterZones()},50)
       })
       ro.observe(containerRef.current)
+      // Apply initial range AFTER ResizeObserver (setTimeout 0 = next task, after any RO callback)
+      // This guarantees setVisibleRange wins over any applyOptions/fitContent from RO
+      setTimeout(()=>applyInitialRange(), 0)
       setTimeout(()=>{if(disposed)return;drawTradeLabels();drawFilterZones()},200)
 
       // FIX 2: si el chart se crea en modo fillHeight, forzar resize a window.innerHeight
