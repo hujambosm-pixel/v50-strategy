@@ -243,7 +243,7 @@ function createRiskPrimitive(configRef) {
   }
 }
 
-export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null, isBareChart=false, visuals=null, filterZones=[], slopeChanges=[], customMarkers=[] }) {
+export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, isNewResultRef=null, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null, isBareChart=false, visuals=null, filterZones=[], slopeChanges=[], customMarkers=[] }) {
   const containerRef=useRef(null), svgRef=useRef(null), legendRef=useRef(null), tooltipRef=useRef(null)
   const activeLegendRef = externalLegendRef || legendRef
   const chartRef=useRef(null), candlesRef=useRef(null)
@@ -1025,15 +1025,16 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       const _recentM=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.chart?.recentMonths??3}catch(_){return 3}})()
       // applyInitialRange: called after ResizeObserver settles so it's the last range op
       const applyInitialRange=()=>{
-        console.log('[range] applyInitialRange — disposed:',disposed,' savedRange:',savedRangeRef?.current,' _recentM:',_recentM)
         if(disposed) return
         try{
-          if(savedRangeRef?.current){
+          // isNewResultRef.current=true → new strategy/asset loaded; ignore saved zoom, apply recentMonths
+          const forceRecent = isNewResultRef?.current === true
+          if(forceRecent && isNewResultRef) isNewResultRef.current=false
+          if(!forceRecent && savedRangeRef?.current){
             const r=savedRangeRef.current
             const lastBar=data[data.length-1]
             const minTo=lastBar?addDays(lastBar.date,GAP_DAYS):r.to
             const finalTo=r.to>=minTo?r.to:minTo
-            console.log('[range] restoring saved range',r.from,'→',finalTo)
             chart.timeScale().setVisibleRange({from:r.from, to:finalTo})
           } else {
             const lastBar=data[data.length-1]
@@ -1041,7 +1042,6 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
               const from=new Date(lastBar.date)
               from.setMonth(from.getMonth()-_recentM)
               const fromStr=from.toISOString().split('T')[0]
-              console.log('[range] applying recentMonths='+_recentM+' → from:'+fromStr)
               chart.timeScale().setVisibleRange({
                 from:fromStr,
                 to:addDays(lastBar.date,GAP_DAYS)

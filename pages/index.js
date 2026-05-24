@@ -717,6 +717,7 @@ export default function Home() {
   const [mcIntervalo,setMcIntervalo]=useState('diario')  // 'diario' | 'semanal' — intervalo de datos MC
   const mcChartRef=useRef(null)
   const savedRangeRef=useRef(null)   // preserve zoom when changing asset
+  const isNewResultRef=useRef(false) // signals applyInitialRange to skip savedRange → apply recentMonths
   const [metricsStrats,setMetricsStrats]=useState(['simple','compound','bh'])  // which strat panels to show
   const [showIndivOccupancy,setShowIndivOccupancy]=useState(true)  // % capital invertido chart for individual
   const [indivOccMode,setIndivOccMode]=useState('compound')  // independent filter for indiv occupancy chart
@@ -1790,6 +1791,7 @@ export default function Home() {
       .then(data => {
         if (Array.isArray(data) && data.length) {
           savedRangeRef.current=null   // reset zoom so recentMonths is applied on new load
+          isNewResultRef.current=true  // tell CandleChart to ignore savedRange on first mount
           setChartViewFull(false)
           setResult({ chartData: data, trades: [], isBareChart: true })
           setDisplayedSimbolo(simbolo) // sync display name once bare chart data is ready
@@ -2063,6 +2065,7 @@ export default function Home() {
       if(!res.ok)throw new Error(json.error||'Error')
       console.log('[filterZones]', json?.filterZones?.length, json?.filterZones?.[0])
       savedRangeRef.current=null   // reset zoom so recentMonths is applied on new load
+      isNewResultRef.current=true  // tell CandleChart to ignore savedRange on first mount
       setChartViewFull(false)
       setResult(json)
       setDisplayedSimbolo(sym) // sync display name only once chart data is ready
@@ -2858,11 +2861,9 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
     if(!result) return
     const s=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')}catch(_){return{}}})()
     const m=s?.chart?.recentMonths??3
-    console.log('[range] index useEffect result changed — recentMonths:',m,' chartViewFull:',chartViewFull)
     // Esperar a que el chart esté montado y el ResizeObserver haya terminado
     const t=setTimeout(()=>{
       if(chartViewFull) return  // user está en modo full-period, no sobrescribir
-      console.log('[range] calling showRecent(',m,')')
       chartApiRef.current?.showRecent(m)
       chartApiFullscreenRef.current?.showRecent(m)
     },300)
@@ -3206,7 +3207,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.283</title>
+        <title>Trading Simulator V9.284</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3284,7 +3285,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.283
+            <span className="dot"/>Trading Simulator V9.284
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5538,6 +5539,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         onAlarmPriceDrag={onAlarmPriceDrag}
                         ackedAlarms={ackedAlarms}
                         savedRangeRef={savedRangeRef}
+                        isNewResultRef={isNewResultRef}
                         syncRef={chartSyncRef}
                         externalLegendRef={chartLegendRef}
                         priceAlarms={alarms.filter(a=>a.condition==='price_level'&&(a.symbol||'').toUpperCase()===(simbolo||'').toUpperCase())}
@@ -5694,6 +5696,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           fillHeight={true}
                           labelMode={labelMode} rulerActive={rulerOn}
                           savedRangeRef={savedRangeRef}
+                          isNewResultRef={isNewResultRef}
                           syncRef={chartSyncRef}
                           externalLegendRef={chartLegendRef}
                           onChartReady={api=>{chartApiFullscreenRef.current=api}}
