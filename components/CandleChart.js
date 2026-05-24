@@ -1025,6 +1025,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       const _recentM=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.chart?.recentMonths??3}catch(_){return 3}})()
       // applyInitialRange: called after ResizeObserver settles so it's the last range op
       const applyInitialRange=()=>{
+        console.log('[range] applyInitialRange — disposed:',disposed,' savedRange:',savedRangeRef?.current,' _recentM:',_recentM)
         if(disposed) return
         try{
           if(savedRangeRef?.current){
@@ -1032,14 +1033,17 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
             const lastBar=data[data.length-1]
             const minTo=lastBar?addDays(lastBar.date,GAP_DAYS):r.to
             const finalTo=r.to>=minTo?r.to:minTo
+            console.log('[range] restoring saved range',r.from,'→',finalTo)
             chart.timeScale().setVisibleRange({from:r.from, to:finalTo})
           } else {
             const lastBar=data[data.length-1]
             if(lastBar){
               const from=new Date(lastBar.date)
               from.setMonth(from.getMonth()-_recentM)
+              const fromStr=from.toISOString().split('T')[0]
+              console.log('[range] applying recentMonths='+_recentM+' → from:'+fromStr)
               chart.timeScale().setVisibleRange({
-                from:from.toISOString().split('T')[0],
+                from:fromStr,
                 to:addDays(lastBar.date,GAP_DAYS)
               })
             }
