@@ -1789,6 +1789,8 @@ export default function Home() {
       .then(r => r.json())
       .then(data => {
         if (Array.isArray(data) && data.length) {
+          savedRangeRef.current=null   // reset zoom so recentMonths is applied on new load
+          setChartViewFull(false)
           setResult({ chartData: data, trades: [], isBareChart: true })
           setDisplayedSimbolo(simbolo) // sync display name once bare chart data is ready
         }
@@ -2060,6 +2062,8 @@ export default function Home() {
       const json=await res.json()
       if(!res.ok)throw new Error(json.error||'Error')
       console.log('[filterZones]', json?.filterZones?.length, json?.filterZones?.[0])
+      savedRangeRef.current=null   // reset zoom so recentMonths is applied on new load
+      setChartViewFull(false)
       setResult(json)
       setDisplayedSimbolo(sym) // sync display name only once chart data is ready
     }catch(e){setError(e.message)}finally{setLoading(false)}
@@ -3185,7 +3189,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.280</title>
+        <title>Trading Simulator V9.281</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3263,7 +3267,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.280
+            <span className="dot"/>Trading Simulator V9.281
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5442,10 +5446,11 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         {/* Fit/Recent */}
                         <button onClick={()=>{
                             const s=JSON.parse(localStorage.getItem('v50_settings')||'{}')
-                            if(chartViewFull){chartApiRef.current?.showRecent(s?.chart?.recentMonths??3,0);setChartViewFull(false)}
+                            const _m=s?.chart?.recentMonths??3
+                            if(chartViewFull){chartApiRef.current?.showRecent(_m,0);setChartViewFull(false)}
                             else{chartApiRef.current?.fitAll();setChartViewFull(true)}
                           }}
-                          title={chartViewFull?'Ver últimos 3 meses':'Ver período completo'}
+                          title={chartViewFull?`Ver últimos ${(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.chart?.recentMonths??3}catch(_){return 3}})()}m`:'Ver período completo'}
                           style={{pointerEvents:'all',background:'rgba(8,12,20,0.7)',border:'1px solid #1e3a52',
                             color:chartViewFull?'#00d4ff':'#00e5a0',
                             fontFamily:MONO,fontSize:9,padding:'2px 5px',borderRadius:3,cursor:'pointer',
@@ -5598,10 +5603,11 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         {/* Fit/Recent */}
                         <button onClick={()=>{
                             const s=JSON.parse(localStorage.getItem('v50_settings')||'{}')
-                            if(chartViewFull){chartApiFullscreenRef.current?.showRecent(s?.chart?.recentMonths??3,0);setChartViewFull(false)}
+                            const _m=s?.chart?.recentMonths??3
+                            if(chartViewFull){chartApiFullscreenRef.current?.showRecent(_m,0);setChartViewFull(false)}
                             else{chartApiFullscreenRef.current?.fitAll();setChartViewFull(true)}
                           }}
-                          title={chartViewFull?'Ver últimos 3 meses':'Ver período completo'}
+                          title={chartViewFull?`Ver últimos ${(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.chart?.recentMonths??3}catch(_){return 3}})()}m`:'Ver período completo'}
                           style={{pointerEvents:'all',background:'rgba(8,12,20,0.7)',border:'1px solid #1e3a52',
                             color:chartViewFull?'#00d4ff':'#00e5a0',
                             fontFamily:MONO,fontSize:9,padding:'2px 5px',borderRadius:3,cursor:'pointer',

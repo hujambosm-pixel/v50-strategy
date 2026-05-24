@@ -1021,7 +1021,8 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       // addDays: extend 'to' past last bar → permanent right gap, immune to resets
       const GAP_DAYS = 12  // calendar days of right margin
       const addDays=(dateStr,n)=>{ const d=new Date(dateStr); d.setDate(d.getDate()+n); return d.toISOString().split('T')[0] }
-      // Restore saved range OR default to last 3 months
+      // Restore saved range OR default to last N months (from settings slider)
+      const _recentM=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.chart?.recentMonths??3}catch(_){return 3}})()
       try {
         if(savedRangeRef?.current){
           const r=savedRangeRef.current
@@ -1033,7 +1034,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
           const lastBar = data[data.length-1]
           if(lastBar){
             const from = new Date(lastBar.date)
-            from.setMonth(from.getMonth()-3)
+            from.setMonth(from.getMonth()-_recentM)
             chart.timeScale().setVisibleRange({
               from: from.toISOString().split('T')[0],
               to:   addDays(lastBar.date, GAP_DAYS)
