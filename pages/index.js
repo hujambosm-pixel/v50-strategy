@@ -3214,7 +3214,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.289</title>
+        <title>Trading Simulator V9.290</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3292,7 +3292,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.289
+            <span className="dot"/>Trading Simulator V9.290
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5981,103 +5981,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       ?<>Desde {fmtDate(mcFromDate)} hasta {fmtDate(mcToDate)}</>
                       :<>Desde {fmtDate(mcResult.startDate)}</>}
                   </span>
-                  <button
-                    disabled={mcExporting}
-                    title="Exportar timeline mensual a Excel (.xlsx)"
-                    onClick={async()=>{
-                      setMcExporting(true)
-                      try{
-                        const _mcYears=mcPeriodMode==='years'?mcYears:null
-                        const _mcFrom=mcPeriodMode==='range'?mcFromDate:null
-                        const _mcTo=mcPeriodMode==='range'?mcToDate:null
-                        const baseCfg={emaR:Number(emaR),emaL:Number(emaL),years:_mcYears,capitalIni:mcCapitalIni,
-                          fromDate:_mcFrom,toDate:_mcTo,tipoStop,atrPeriod:Number(atrP),atrMult:Number(atrM),
-                          sinPerdidas,reentry,tipoFiltro,sp500EmaR:Number(sp500EmaR),sp500EmaL:Number(sp500EmaL),
-                          tipoCapital:mcCapital,
-                          sizeRules:{riskPerTrade:mcRiskPerTrade,maxPortfolioPct:mcMaxPortfolioPct,maxAccumRisk:mcMaxAccumRisk,maxPosiciones:mcMaxPosiciones}}
-                        const weightsNorm={}
-                        if(mcMode==='custom'){
-                          const total=mcSelected.reduce((s,sym)=>s+(Number(mcWeights[sym])||0),0)
-                          mcSelected.forEach(sym=>{weightsNorm[sym]=total>0?(Number(mcWeights[sym])||0)/total*100:100/mcSelected.length})
-                        }
-                        const sid=(mcStratSelected.filter(Boolean)[0])||currentStratId||null
-                        const strat=strategies.find(s=>s.id===sid)
-                        const isNoStrategy=(strat?.name||'').includes('No Strategy')
-                        const stratName=strat?.name||'estrategia'
-                        await exportTimeline({mcResult,mcSelected,baseCfg,strategyId:sid,
-                          isNoStrategy,filtros,mcIntervalo,weightsNorm,apiFetch,stratName})
-                      }catch(e){alert('Error al exportar: '+e.message)}
-                      finally{setMcExporting(false)}
-                    }}
-                    style={{marginLeft:'auto',padding:'3px 10px',fontFamily:MONO,fontSize:10,
-                      background:mcExporting?'#1a2d45':'#0a1628',
-                      color:mcExporting?'#3d5a7a':'#00d4ff',
-                      border:'1px solid #1a3a5c',borderRadius:3,cursor:mcExporting?'wait':'pointer',
-                      opacity:mcExporting?0.6:1,transition:'opacity 0.2s',flexShrink:0}}
-                  >{mcExporting?'⏳ Exportando...':'📊 Exportar Timeline'}</button>
-                  <button
-                    onClick={()=>{setMcShowGantt(s=>!s)}}
-                    title={mcShowGantt?'Volver a la tabla de resultados':'Mostrar diagrama de Gantt de operaciones'}
-                    style={{padding:'3px 10px',fontFamily:MONO,fontSize:10,
-                      background:mcShowGantt?'rgba(0,212,255,0.1)':'#0a1628',
-                      color:mcShowGantt?'#00d4ff':'#7a9bc0',
-                      border:`1px solid ${mcShowGantt?'#00d4ff':'#1a3a5c'}`,
-                      borderRadius:3,cursor:'pointer',flexShrink:0}}
-                  >{mcShowGantt?'← Tabla':'📅 Gantt'}</button>
                 </div>
 
-                {/* ── Gantt view (reemplaza la tabla cuando está activo) ── */}
-                {mcShowGantt&&(()=>{
-                  const allT=mcResult.allTrades||[]
-                  const endD=mcResult.compoundCurve?.slice(-1)[0]?.date||mcResult.bhCurve?.slice(-1)[0]?.date||new Date().toISOString().split('T')[0]
-                  const handleRequestDiscarded=async()=>{
-                    setGanttLoadingDisc(true)
-                    try{
-                      const _mcYears=mcPeriodMode==='years'?mcYears:null
-                      const _mcFrom=mcPeriodMode==='range'?mcFromDate:null
-                      const _mcTo=mcPeriodMode==='range'?mcToDate:null
-                      const unlimCfg={emaR:Number(emaR),emaL:Number(emaL),years:_mcYears,capitalIni:mcCapitalIni,
-                        fromDate:_mcFrom,toDate:_mcTo,tipoStop,atrPeriod:Number(atrP),atrMult:Number(atrM),
-                        sinPerdidas,reentry,tipoFiltro,sp500EmaR:Number(sp500EmaR),sp500EmaL:Number(sp500EmaL),
-                        tipoCapital:mcCapital,
-                        sizeRules:{riskPerTrade:mcRiskPerTrade,maxPortfolioPct:mcMaxPortfolioPct,maxAccumRisk:mcMaxAccumRisk,maxPosiciones:9999}}
-                      const sid=(mcStratSelected.filter(Boolean)[0])||currentStratId||null
-                      const strat=strategies.find(s=>s.id===sid)
-                      const isNoStrategyG=(strat?.name||'').includes('No Strategy')
-                      const weightsNorm={}
-                      if(mcMode==='custom'){
-                        const total=mcSelected.reduce((s,sym)=>s+(Number(mcWeights[sym])||0),0)
-                        mcSelected.forEach(sym=>{weightsNorm[sym]=total>0?(Number(mcWeights[sym])||0)/total*100:100/mcSelected.length})
-                      }
-                      const res=await apiFetch('/api/multibacktest',{method:'POST',headers:{'Content-Type':'application/json'},
-                        body:JSON.stringify({symbols:mcSelected,modoAsig:mcResult.modoAsig==='concentrado'?'concentrado':'compartido',
-                          weights:weightsNorm,cfg:unlimCfg,strategyId:sid,isNoStrategy:isNoStrategyG,filtros,intervalo:mcIntervalo})})
-                      if(res.ok){
-                        const json=await res.json()
-                        const unlimTrades=json.allTrades||[]
-                        const realKeys=new Set(allT.map(t=>`${t.symbol}:${t.entryDate}`))
-                        setGanttDiscarded(unlimTrades.filter(t=>!realKeys.has(`${t.symbol}:${t.entryDate}`)))
-                      }
-                    }catch(e){console.warn('Gantt discarded fetch failed:',e.message)}
-                    finally{setGanttLoadingDisc(false)}
-                  }
-                  return(
-                    <div style={{height:'calc(100vh - 160px)',minHeight:300,borderBottom:'1px solid var(--border)'}}>
-                      <GanttChart
-                        trades={allT}
-                        startDate={mcResult.startDate}
-                        endDate={endD}
-                        slotCapital={mcResult.slotCapital}
-                        onRequestDiscarded={handleRequestDiscarded}
-                        discardedTrades={ganttDiscarded}
-                        loadingDiscarded={ganttLoadingDisc}
-                      />
-                    </div>
-                  )
-                })()}
-
-                {/* ── Contenido tabla (oculto cuando Gantt está activo) ── */}
-                <div style={{display:mcShowGantt?'none':'block'}}>
                 {/* ── Tabla unificada: Comparativa + Resumen por activo ── */}
                 {(()=>{
                   const isMulti=mcMultiResults.length>1
@@ -6578,6 +6483,69 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                     ?(mcMultiResults.find(r=>r.id===mcHistStratId)?.name??'Historial')
                     :'Historial Multicartera'
                   if(!histResult?.allTrades?.length) return null
+                  // Botones Exportar/Gantt — deshabilitados si modo multi sin estrategia seleccionada
+                  const histBtnsDisabled=isMultiHist&&!mcHistStratId
+                  const histBtnTitle=histBtnsDisabled?'Selecciona una estrategia en el historial':''
+                  // handleRequestDiscarded para el Gantt de este historial
+                  const handleGanttDiscarded=async()=>{
+                    setGanttLoadingDisc(true)
+                    try{
+                      const allTH=histResult.allTrades||[]
+                      const _mcYears=mcPeriodMode==='years'?mcYears:null
+                      const _mcFrom=mcPeriodMode==='range'?mcFromDate:null
+                      const _mcTo=mcPeriodMode==='range'?mcToDate:null
+                      const unlimCfg={emaR:Number(emaR),emaL:Number(emaL),years:_mcYears,capitalIni:mcCapitalIni,
+                        fromDate:_mcFrom,toDate:_mcTo,tipoStop,atrPeriod:Number(atrP),atrMult:Number(atrM),
+                        sinPerdidas,reentry,tipoFiltro,sp500EmaR:Number(sp500EmaR),sp500EmaL:Number(sp500EmaL),
+                        tipoCapital:mcCapital,
+                        sizeRules:{riskPerTrade:mcRiskPerTrade,maxPortfolioPct:mcMaxPortfolioPct,maxAccumRisk:mcMaxAccumRisk,maxPosiciones:9999}}
+                      const sid=(mcStratSelected.filter(Boolean)[0])||currentStratId||null
+                      const strat=strategies.find(s=>s.id===sid)
+                      const isNoStrategyG=(strat?.name||'').includes('No Strategy')
+                      const weightsNorm={}
+                      if(mcMode==='custom'){
+                        const total=mcSelected.reduce((s,sym)=>s+(Number(mcWeights[sym])||0),0)
+                        mcSelected.forEach(sym=>{weightsNorm[sym]=total>0?(Number(mcWeights[sym])||0)/total*100:100/mcSelected.length})
+                      }
+                      const res=await apiFetch('/api/multibacktest',{method:'POST',headers:{'Content-Type':'application/json'},
+                        body:JSON.stringify({symbols:mcSelected,modoAsig:histResult.modoAsig==='concentrado'?'concentrado':'compartido',
+                          weights:weightsNorm,cfg:unlimCfg,strategyId:sid,isNoStrategy:isNoStrategyG,filtros,intervalo:mcIntervalo})})
+                      if(res.ok){
+                        const json=await res.json()
+                        const unlimTrades=json.allTrades||[]
+                        const realKeys=new Set(allTH.map(t=>`${t.symbol}:${t.entryDate}`))
+                        setGanttDiscarded(unlimTrades.filter(t=>!realKeys.has(`${t.symbol}:${t.entryDate}`)))
+                      }
+                    }catch(e){console.warn('Gantt discarded fetch failed:',e.message)}
+                    finally{setGanttLoadingDisc(false)}
+                  }
+                  // handleExport para este historial
+                  const handleExport=async()=>{
+                    setMcExporting(true)
+                    try{
+                      const _mcYears=mcPeriodMode==='years'?mcYears:null
+                      const _mcFrom=mcPeriodMode==='range'?mcFromDate:null
+                      const _mcTo=mcPeriodMode==='range'?mcToDate:null
+                      const baseCfg={emaR:Number(emaR),emaL:Number(emaL),years:_mcYears,capitalIni:mcCapitalIni,
+                        fromDate:_mcFrom,toDate:_mcTo,tipoStop,atrPeriod:Number(atrP),atrMult:Number(atrM),
+                        sinPerdidas,reentry,tipoFiltro,sp500EmaR:Number(sp500EmaR),sp500EmaL:Number(sp500EmaL),
+                        tipoCapital:mcCapital,
+                        sizeRules:{riskPerTrade:mcRiskPerTrade,maxPortfolioPct:mcMaxPortfolioPct,maxAccumRisk:mcMaxAccumRisk,maxPosiciones:mcMaxPosiciones}}
+                      const weightsNorm={}
+                      if(mcMode==='custom'){
+                        const total=mcSelected.reduce((s,sym)=>s+(Number(mcWeights[sym])||0),0)
+                        mcSelected.forEach(sym=>{weightsNorm[sym]=total>0?(Number(mcWeights[sym])||0)/total*100:100/mcSelected.length})
+                      }
+                      const sid=(mcStratSelected.filter(Boolean)[0])||currentStratId||null
+                      const strat=strategies.find(s=>s.id===sid)
+                      const isNoStrategy=(strat?.name||'').includes('No Strategy')
+                      const stratName=strat?.name||'estrategia'
+                      await exportTimeline({mcResult:histResult,mcSelected,baseCfg,strategyId:sid,
+                        isNoStrategy,filtros,mcIntervalo,weightsNorm,apiFetch,stratName})
+                    }catch(e){alert('Error al exportar: '+e.message)}
+                    finally{setMcExporting(false)}
+                  }
+                  const ganttEndD=histResult.compoundCurve?.slice(-1)[0]?.date||histResult.bhCurve?.slice(-1)[0]?.date||new Date().toISOString().split('T')[0]
                   return(
                   <div className="trades-section">
                     <div className="section-title" style={{display:'flex',flexDirection:'column',gap:6,fontSize:14}}>
@@ -6585,11 +6553,33 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         <span>{histTitle} — {histResult.allTrades.length} operaciones
                           <span style={{fontWeight:400,fontSize:11,color:'#9acce0'}}> · clic activo → ver gráfico</span>
                         </span>
-                        <div style={{display:'flex',gap:4,marginLeft:'auto',alignItems:'center'}}>
-                          <input value={mcTradeFilter} onChange={e=>setMcTradeFilter(e.target.value)}
+                        <div style={{display:'flex',gap:4,marginLeft:'auto',alignItems:'center',flexWrap:'wrap'}}>
+                          {!mcShowGantt&&<input value={mcTradeFilter} onChange={e=>setMcTradeFilter(e.target.value)}
                             placeholder="Filtrar activo…"
                             style={{fontFamily:MONO,fontSize:11,padding:'2px 7px',borderRadius:3,
-                              background:'#0d1828',border:'1px solid #274462',color:'#e8f4ff',width:110}}/>
+                              background:'#0d1828',border:'1px solid #274462',color:'#e8f4ff',width:110}}/>}
+                          <button
+                            disabled={histBtnsDisabled||mcExporting}
+                            title={histBtnTitle||'Exportar timeline mensual a Excel (.xlsx)'}
+                            onClick={handleExport}
+                            style={{padding:'2px 8px',fontFamily:MONO,fontSize:10,
+                              background:mcExporting?'#1a2d45':'transparent',
+                              color:(histBtnsDisabled||mcExporting)?'#3d5a7a':'#00d4ff',
+                              border:'1px solid #1a3a5c',borderRadius:3,
+                              cursor:(histBtnsDisabled||mcExporting)?'not-allowed':'pointer',
+                              opacity:(histBtnsDisabled||mcExporting)?0.5:1,flexShrink:0}}
+                          >{mcExporting?'⏳':'📊'} Exportar</button>
+                          <button
+                            disabled={histBtnsDisabled}
+                            title={histBtnTitle||(mcShowGantt?'Volver a la tabla':'Mostrar Gantt de operaciones')}
+                            onClick={()=>{if(!histBtnsDisabled){setMcShowGantt(s=>!s)}}}
+                            style={{padding:'2px 8px',fontFamily:MONO,fontSize:10,
+                              background:mcShowGantt?'rgba(0,212,255,0.1)':'transparent',
+                              color:histBtnsDisabled?'#3d5a7a':mcShowGantt?'#00d4ff':'#7a9bc0',
+                              border:`1px solid ${mcShowGantt?'#00d4ff':'#1a3a5c'}`,
+                              borderRadius:3,cursor:histBtnsDisabled?'not-allowed':'pointer',
+                              opacity:histBtnsDisabled?0.5:1,flexShrink:0}}
+                          >{mcShowGantt?'← Tabla':'📅 Gantt'}</button>
                         </div>
                       </div>
                       {isMultiHist&&(
@@ -6611,6 +6601,20 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         </div>
                       )}
                     </div>
+                    {/* Gantt o Tabla */}
+                    {mcShowGantt?(
+                      <div style={{height:'min(520px,55vh)',minHeight:280}}>
+                        <GanttChart
+                          trades={histResult.allTrades||[]}
+                          startDate={histResult.startDate}
+                          endDate={ganttEndD}
+                          slotCapital={histResult.slotCapital}
+                          onRequestDiscarded={handleGanttDiscarded}
+                          discardedTrades={ganttDiscarded}
+                          loadingDiscarded={ganttLoadingDisc}
+                        />
+                      </div>
+                    ):(
                     <div style={{overflowX:'auto'}}>
                       <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:11}}>
                         <thead><tr style={{borderBottom:'1px solid var(--border)',position:'sticky',top:0,background:'var(--bg)'}}>
@@ -6698,6 +6702,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         </tbody>
                       </table>
                     </div>
+                    )}
                   </div>
                   )
                 })()}
@@ -6787,7 +6792,6 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                     </div>
                   )
                 })()}
-                </div>{/* fin wrapper contenido tabla (oculto en Gantt) */}
               </div>
               </div>
             )}

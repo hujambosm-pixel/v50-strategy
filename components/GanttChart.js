@@ -5,11 +5,12 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 
 const MONO = "'JetBrains Mono', 'Fira Mono', 'Cascadia Code', monospace"
 
-const LABEL_W  = 90   // ancho columna activos (px)
-const HEADER_H = 48   // altura cabecera meses/años (px)
-const ROW_H    = 26   // altura de fila por activo (px)
-const BAR_PAD  = 3    // padding vertical dentro de la fila
-const MIN_TEXT_W = 40 // ancho mínimo de barra para mostrar texto
+const LABEL_W     = 90   // ancho columna activos (px)
+const HEADER_H    = 48   // altura cabecera meses/años (px)
+const ROW_H       = 26   // altura de fila por activo (px)
+const BAR_PAD     = 3    // padding vertical dentro de la fila
+const MIN_TEXT_W  = 28   // umbral mínimo para mostrar texto (px)
+const FULL_TEXT_W = 55   // umbral para mostrar formato completo (px)
 
 const MONTHS_ES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
 
@@ -46,6 +47,12 @@ function dateToMs(s) {
   return new Date(s + 'T00:00:00').getTime()
 }
 
+// ── Texto compacto para barra estrecha (sin signo ni %) ────────────────────────
+function barTextCompact(pct) {
+  if (pct == null || isNaN(pct)) return ''
+  return Math.round(Math.abs(pct)).toString()
+}
+
 // ── Markers de meses en el rango visible ─────────────────────────────────────
 function genMonthMarkers(startMs, endMs) {
   const markers = []
@@ -72,16 +79,19 @@ function clampRange(start, end, minMs, maxMs) {
 // ══════════════════════════════════════════════════════════════════════════════
 function GanttTooltip({ trade, mouseX, mouseY, isDiscarded, slotCapital }) {
   const t = trade
+  // P&L en euros — se usa pnlSimple si disponible, o estimación por capital
+  const capInv = t._capitalAtEntry != null ? t._capitalAtEntry : slotCapital
   const pnlEur = t.pnlSimple != null
     ? t.pnlSimple
-    : slotCapital != null ? slotCapital * (t.pnlPct || 0) / 100 : null
+    : capInv != null ? capInv * (t.pnlPct || 0) / 100 : null
   const dias = t.dias != null
     ? t.dias
     : (t.entryDate && t.exitDate
         ? Math.round((dateToMs(t.exitDate) - dateToMs(t.entryDate)) / 86400000)
         : null)
 
-  const W = 230, H = isDiscarded ? 175 : 155
+  const W = 235
+  const H = (capInv != null ? 195 : 175) + (isDiscarded ? 30 : 0)
   const left = mouseX + 14 + W > (typeof window !== 'undefined' ? window.innerWidth  : 1200) ? mouseX - W - 10 : mouseX + 14
   const top  = mouseY + 14 + H > (typeof window !== 'undefined' ? window.innerHeight : 800)  ? mouseY - H - 10 : mouseY + 14
 
@@ -116,12 +126,17 @@ function GanttTooltip({ trade, mouseX, mouseY, isDiscarded, slotCapital }) {
           <span style={{color:'#a8c4dc'}}>{dias}</span>
         </>}
 
+        {capInv != null && <>
+          <span style={{color:'#4a6a8a'}}>Capital inv.:</span>
+          <span style={{color:'#c8dff5'}}>{fmtEur(capInv)}</span>
+        </>}
+
         <span style={{color:'#4a6a8a'}}>P&amp;L%:</span>
         <span style={{color:posColor, fontWeight:600}}>{fmtPct(pct)}</span>
 
         {pnlEur != null && <>
           <span style={{color:'#4a6a8a'}}>P&amp;L€:</span>
-          <span style={{color:posColor, fontWeight:600}}>{fmtEur(isDiscarded ? pnlEur : t.pnlSimple ?? pnlEur)}</span>
+          <span style={{color:posColor, fontWeight:600}}>{fmtEur(pnlEur)}</span>
         </>}
       </div>
       {isDiscarded && (
@@ -130,6 +145,28 @@ function GanttTooltip({ trade, mouseX, mouseY, isDiscarded, slotCapital }) {
         </div>
       )}
     </div>
+  )
+}
+
+// ── Texto de barra en SVG (con clipPath para no salirse) ──────────────────────
+function BarText({ bx, bw, y, h, pct, fill = '#ffffff' }) {
+  if (bw < MIN_TEXT_W) return null
+  const clipId = `bc-${bx.toFixed(0)}-${y}`
+  const label  = bw >= FULL_TEXT_W ? fmtPct(pct) : barTextCompact(pct)
+  const fs     = bw >= FULL_TEXT_W ? 9 : 8
+  return (
+    <g>
+      <clipPath id={clipId}>
+        <rect x={bx} y={y} width={bw} height={h} />
+      </clipPath>
+      <text
+        x={bx + 4} y={y + h / 2 + fs / 2 - 0.5}
+        fontSize={fs} fontWeight="bold" fill={fill}
+        fontFamily="monospace" clipPath={`url(#${clipId})`}
+      >
+        {label}
+      </text>
+    </g>
   )
 }
 
@@ -163,7 +200,6 @@ export default function GanttChart({
   const [vStart, setVStart] = useState(overallStart)
   const [vEnd,   setVEnd]   = useState(overallEnd)
 
-  // Re-initialise when data changes (new mcResult)
   useEffect(() => {
     setVStart(overallStart)
     setVEnd(overallEnd)
@@ -197,11 +233,9 @@ export default function GanttChart({
 
   // ── Today ─────────────────────────────────────────────────────────────────
   const todayMs = useMemo(() => {
-    const d = new Date()
-    d.setHours(0, 0, 0, 0)
-    return d.getTime()
+    const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime()
   }, [])
-  const todayX   = todayMs >= vStart && todayMs <= vEnd ? msToX(todayMs) : null
+  const todayX = todayMs >= vStart && todayMs <= vEnd ? msToX(todayMs) : null
 
   // ── Toggle descartados ────────────────────────────────────────────────────
   const [showDiscarded, setShowDiscarded] = useState(false)
@@ -216,7 +250,7 @@ export default function GanttChart({
   }
 
   // ── Tooltip state ─────────────────────────────────────────────────────────
-  const [tooltip, setTooltip] = useState(null) // {trade, mouseX, mouseY, isDiscarded}
+  const [tooltip, setTooltip] = useState(null)
 
   // ── Wheel handler (zoom + scroll) ─────────────────────────────────────────
   const scrollRef = useRef(null)
@@ -224,17 +258,15 @@ export default function GanttChart({
   const handleWheel = useCallback(e => {
     e.preventDefault()
     if (e.ctrlKey || e.metaKey) {
-      // Zoom centrado en la posición del ratón horizontalmente
       const rect = barsContainerRef.current?.getBoundingClientRect()
       const mouseX = rect ? e.clientX - rect.left : containerW / 2
       const mouseMs = vStart + (mouseX / containerW) * vRange
       const factor  = e.deltaY > 0 ? 1.25 : 0.8
-      const newRange = Math.max(vRange * factor, 3 * 86400000) // mínimo 3 días
+      const newRange = Math.max(vRange * factor, 3 * 86400000)
       const newStart = mouseMs - (mouseX / containerW) * newRange
       const { start, end } = clampRange(newStart, newStart + newRange, overallStart, overallEnd)
       setVStart(start); setVEnd(end)
     } else {
-      // Scroll horizontal
       const delta = e.shiftKey ? e.deltaY : (e.deltaX || e.deltaY)
       const shift = (delta / containerW) * vRange
       const { start, end } = clampRange(vStart + shift, vEnd + shift, overallStart, overallEnd)
@@ -268,11 +300,9 @@ export default function GanttChart({
   const totalBarsH = symbols.length * ROW_H
 
   // ── BtnStyle helper ───────────────────────────────────────────────────────
-  const btnSt = (active) => ({
+  const btnSt = () => ({
     padding:'2px 9px', fontFamily:MONO, fontSize:10, borderRadius:3, cursor:'pointer',
-    border:`1px solid ${active?'#1a3a5c':'#1a2d45'}`,
-    background:active?'rgba(0,212,255,0.08)':'transparent',
-    color:active?'#00d4ff':'#4a7a9a',
+    border:'1px solid #1a2d45', background:'transparent', color:'#4a7a9a',
   })
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -280,12 +310,12 @@ export default function GanttChart({
     <div style={{display:'flex', flexDirection:'column', height:'100%', fontFamily:MONO, userSelect:'none'}}>
 
       {/* ── TOOLBAR ─────────────────────────────────────────────────────── */}
-      <div style={{flexShrink:0, padding:'5px 12px', borderBottom:'1px solid #1a2d45',
-        display:'flex', gap:6, alignItems:'center', background:'#060d18'}}>
-        <button style={btnSt(false)} onClick={zoomIn}  title="Zoom in (Ctrl+rueda)">＋</button>
-        <button style={btnSt(false)} onClick={zoomOut} title="Zoom out (Ctrl+rueda)">－</button>
-        <button style={btnSt(false)} onClick={resetZoom} title="Ver período completo">↺ Reset</button>
-        <div style={{width:1, height:14, background:'#1a2d45', margin:'0 4px'}} />
+      <div style={{flexShrink:0, padding:'4px 10px', borderBottom:'1px solid #1a2d45',
+        display:'flex', gap:5, alignItems:'center', background:'#060d18'}}>
+        <button style={btnSt()} onClick={zoomIn}  title="Zoom in (Ctrl+rueda)">＋</button>
+        <button style={btnSt()} onClick={zoomOut} title="Zoom out (Ctrl+rueda)">－</button>
+        <button style={btnSt()} onClick={resetZoom} title="Ver período completo">↺ Reset</button>
+        <div style={{width:1, height:14, background:'#1a2d45', margin:'0 3px'}} />
         <label style={{display:'flex', alignItems:'center', gap:5, cursor:'pointer', color:'#6b7280', fontSize:10}}>
           <input
             type="checkbox"
@@ -295,82 +325,67 @@ export default function GanttChart({
           />
           Mostrar descartados
         </label>
-        {loadingDiscarded && (
-          <span style={{color:'#4a7a9a', fontSize:9}}>⏳ cargando…</span>
-        )}
+        {loadingDiscarded && <span style={{color:'#4a7a9a', fontSize:9}}>⏳ cargando…</span>}
         {showDiscarded && discardedTrades && (
-          <span style={{color:'#6b7280', fontSize:9}}>
-            ({discardedTrades.length} señales descartadas)
-          </span>
+          <span style={{color:'#6b7280', fontSize:9}}>({discardedTrades.length} descartadas)</span>
         )}
-        <div style={{marginLeft:'auto', color:'#2a3a50', fontSize:9}}>
-          Ctrl+rueda: zoom · rueda: scroll · Shift+rueda: scroll rápido
+        <div style={{marginLeft:'auto', color:'#1e2d3d', fontSize:9}}>
+          Ctrl+rueda: zoom · rueda: scroll
         </div>
       </div>
 
       {/* ── HEADER: mes/año labels ───────────────────────────────────────── */}
-      <div style={{flexShrink:0, display:'flex', background:'#080e1a', borderBottom:'1px solid #1a2d45'}}>
-        {/* Placeholder para la columna de etiquetas */}
-        <div style={{width:LABEL_W, flexShrink:0, borderRight:'1px solid #1a2d45'}} />
-        {/* Meses */}
+      <div style={{flexShrink:0, display:'flex', background:'#080e1a', borderBottom:'1px solid #2a3a5a'}}>
+        <div style={{width:LABEL_W, flexShrink:0, borderRight:'1px solid #2a3a5a'}} />
         <div style={{flex:1, position:'relative', height:HEADER_H, overflow:'hidden'}}>
-          {monthMarkers.map((m, i) => {
+          {monthMarkers.map((m) => {
             const x = msToX(m.ms)
             if (x < -80 || x > containerW + 20) return null
             const isJan = m.month === 0
             return (
               <div key={`${m.year}-${m.month}`} style={{position:'absolute', left:x, top:0, pointerEvents:'none'}}>
-                <div style={{position:'absolute', left:0, top:0, bottom:0, width:1, background:isJan?'#1a3a5c':'#111d2e'}} />
+                <div style={{position:'absolute', left:0, top:0, bottom:0, width:1,
+                  background:isJan ? '#2a3a5a' : '#182030'}} />
                 {isJan && (
-                  <div style={{position:'absolute', left:4, top:4, fontSize:11, fontWeight:700, color:'#00d4ff', whiteSpace:'nowrap'}}>
-                    {m.year}
-                  </div>
+                  <div style={{position:'absolute', left:4, top:4, fontSize:11, fontWeight:700,
+                    color:'#00d4ff', whiteSpace:'nowrap'}}>{m.year}</div>
                 )}
-                <div style={{position:'absolute', left:4, top:isJan?22:10, fontSize:9, color:isJan?'#3d7a9a':'#2a4a5a', whiteSpace:'nowrap'}}>
-                  {MONTHS_ES[m.month]}
-                </div>
+                <div style={{position:'absolute', left:4, top:isJan?22:10, fontSize:9,
+                  color:isJan?'#3d7a9a':'#2a4a5a', whiteSpace:'nowrap'}}>{MONTHS_ES[m.month]}</div>
               </div>
             )
           })}
-          {/* Label "Hoy" en header */}
           {todayX != null && (
-            <div style={{position:'absolute', left:todayX + 3, top:6, fontSize:8, color:'#fbbf24', pointerEvents:'none', whiteSpace:'nowrap'}}>
-              Hoy
-            </div>
+            <div style={{position:'absolute', left:todayX + 3, top:6, fontSize:8, color:'#fbbf24',
+              pointerEvents:'none', whiteSpace:'nowrap'}}>Hoy</div>
           )}
         </div>
       </div>
 
       {/* ── CONTENT: etiquetas + barras ─────────────────────────────────── */}
-      <div
-        ref={scrollRef}
-        style={{flex:1, minHeight:0, overflowY:'auto', overflowX:'hidden', display:'flex', position:'relative'}}
-      >
+      <div ref={scrollRef}
+        style={{flex:1, minHeight:0, overflowY:'auto', overflowX:'hidden', display:'flex', position:'relative'}}>
+
         {/* Columna de etiquetas (fija horizontalmente) */}
-        <div style={{width:LABEL_W, flexShrink:0, borderRight:'1px solid #1a2d45', background:'#060d18'}}>
+        <div style={{width:LABEL_W, flexShrink:0, borderRight:'1px solid #2a3a5a', background:'#060d18'}}>
           {symbols.map((sym, i) => (
             <div key={sym} style={{
               height:ROW_H, padding:'0 6px', display:'flex', alignItems:'center',
-              borderBottom:'1px solid #111d2e',
-              background:i % 2 === 0 ? '#080e1a' : '#060c16',
+              borderBottom:'1px solid #2a3a5a',
+              background: i % 2 === 0 ? '#090f1c' : '#060c18',
               fontSize:9, color:'#7aa0be', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
-            }} title={sym}>
-              {sym}
-            </div>
+            }} title={sym}>{sym}</div>
           ))}
         </div>
 
         {/* Área de barras */}
         <div ref={barsContainerRef} style={{flex:1, position:'relative', minWidth:0}}>
-          <svg
-            width={containerW}
-            height={Math.max(totalBarsH, 1)}
-            style={{display:'block', overflow:'visible'}}
-          >
+          <svg width={containerW} height={Math.max(totalBarsH, 1)} style={{display:'block', overflow:'visible'}}>
+
             {/* ── Fondo alternado de filas ── */}
             {symbols.map((_, i) => (
-              <rect key={i} x={0} y={i * ROW_H} width={containerW} height={ROW_H}
-                fill={i % 2 === 0 ? '#080e1a' : '#060c16'} />
+              <rect key={`bg-${i}`} x={0} y={i*ROW_H} width={containerW} height={ROW_H}
+                fill={i % 2 === 0 ? '#090f1c' : '#060c18'} />
             ))}
 
             {/* ── Grid vertical: líneas de mes ── */}
@@ -380,7 +395,7 @@ export default function GanttChart({
               return (
                 <line key={`${m.year}-${m.month}`}
                   x1={x} y1={0} x2={x} y2={totalBarsH}
-                  stroke={m.month === 0 ? '#1a3a5c' : '#111d2e'}
+                  stroke={m.month === 0 ? '#2a3a5a' : '#182030'}
                   strokeWidth={m.month === 0 ? 1 : 0.5} />
               )
             })}
@@ -403,20 +418,14 @@ export default function GanttChart({
                 const y = si * ROW_H + BAR_PAD
                 const h = ROW_H - BAR_PAD * 2
                 return (
-                  <g key={`disc-${sym}-${t.entryDate}-${ti}`}
-                    style={{cursor:'pointer'}}
+                  <g key={`disc-${sym}-${t.entryDate}-${ti}`} style={{cursor:'pointer'}}
                     onMouseEnter={ev => setTooltip({trade:t, mouseX:ev.clientX, mouseY:ev.clientY, isDiscarded:true})}
                     onMouseMove={ev  => setTooltip(p => p ? {...p, mouseX:ev.clientX, mouseY:ev.clientY} : null)}
                     onMouseLeave={() => setTooltip(null)}>
                     <rect x={bx} y={y} width={bw} height={h}
                       fill="rgba(107,114,128,0.22)" rx={2}
                       stroke="#6b7280" strokeWidth={0.8} strokeDasharray="3 2" />
-                    {bw >= MIN_TEXT_W && (
-                      <text x={bx + 4} y={y + h / 2 + 3.5} fontSize={7.5}
-                        fill="#6b7280" fontFamily="monospace">
-                        {fmtPct(t.pnlPct)}
-                      </text>
-                    )}
+                    <BarText bx={bx} bw={bw} y={y} h={h} pct={t.pnlPct} fill="#9ca3af" />
                   </g>
                 )
               })
@@ -437,8 +446,7 @@ export default function GanttChart({
                 const h = ROW_H - BAR_PAD * 2
                 const color = barColor(t.pnlPct)
                 return (
-                  <g key={`exec-${sym}-${t.entryDate}-${ti}`}
-                    style={{cursor:'pointer'}}
+                  <g key={`exec-${sym}-${t.entryDate}-${ti}`} style={{cursor:'pointer'}}
                     onMouseEnter={ev => setTooltip({trade:t, mouseX:ev.clientX, mouseY:ev.clientY, isDiscarded:false})}
                     onMouseMove={ev  => setTooltip(p => p ? {...p, mouseX:ev.clientX, mouseY:ev.clientY} : null)}
                     onMouseLeave={() => setTooltip(null)}>
@@ -447,21 +455,16 @@ export default function GanttChart({
                       stroke={t._virtualClose ? '#fbbf24' : 'transparent'}
                       strokeWidth={t._virtualClose ? 1 : 0}
                       strokeDasharray={t._virtualClose ? '3 2' : null} />
-                    {bw >= MIN_TEXT_W && (
-                      <text x={bx + 4} y={y + h / 2 + 3.5} fontSize={7.5}
-                        fill="rgba(255,255,255,0.88)" fontFamily="monospace">
-                        {fmtPct(t.pnlPct)}
-                      </text>
-                    )}
+                    <BarText bx={bx} bw={bw} y={y} h={h} pct={t.pnlPct} fill="#ffffff" />
                   </g>
                 )
               })
             })}
 
-            {/* ── Líneas horizontales separadoras de fila ── */}
+            {/* ── Líneas horizontales separadoras de fila (más visibles) ── */}
             {symbols.map((_, i) => (
-              <line key={`hl-${i}`} x1={0} y1={(i + 1) * ROW_H} x2={containerW} y2={(i + 1) * ROW_H}
-                stroke="#111d2e" strokeWidth={0.5} />
+              <line key={`hl-${i}`} x1={0} y1={(i+1)*ROW_H} x2={containerW} y2={(i+1)*ROW_H}
+                stroke="#2a3a5a" strokeWidth={1} />
             ))}
           </svg>
         </div>
