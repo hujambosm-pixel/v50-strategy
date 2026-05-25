@@ -16,6 +16,7 @@ import dynamic from 'next/dynamic'
 const McMonthlyGainsChart = dynamic(() => import('../components/McMonthlyGainsChart'), { ssr: false })
 import { TlEquityChart, TlInvestChart } from '../components/TlCharts'
 import ContextThemeMenu, { applyTema } from '../components/ContextThemeMenu'
+import { exportTimeline } from '../lib/exportTimeline'
 import MetricRow from '../components/MetricRow'
 import PriceAlarmQuickForm from '../components/PriceAlarmQuickForm'
 import StrategiesManager from '../components/StrategiesManager'
@@ -741,6 +742,7 @@ export default function Home() {
   // their plot area at exactly the same x as the equity chart.
   const [mcShowMaxDD,setMcShowMaxDD]=useState(true)         // Max DD lines in multi-strategy chart
   const [mcChartsOpen,setMcChartsOpen]=useState(false)     // Vista de gráficos collapsible
+  const [mcExporting,setMcExporting]=useState(false)       // exportTimeline in progress
   const mcChartsSyncRef=useRef({isSyncing:false,charts:[],lastRange:null}) // sync group for signal charts
   const mcChartRefsMap=useRef({}) // symbol → chart instance for trade navigation
 
@@ -3207,7 +3209,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.287</title>
+        <title>Trading Simulator V9.288</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3285,7 +3287,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.287
+            <span className="dot"/>Trading Simulator V9.288
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5974,6 +5976,40 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       ?<>Desde {fmtDate(mcFromDate)} hasta {fmtDate(mcToDate)}</>
                       :<>Desde {fmtDate(mcResult.startDate)}</>}
                   </span>
+                  <button
+                    disabled={mcExporting}
+                    title="Exportar timeline mensual a Excel (.xlsx)"
+                    onClick={async()=>{
+                      setMcExporting(true)
+                      try{
+                        const _mcYears=mcPeriodMode==='years'?mcYears:null
+                        const _mcFrom=mcPeriodMode==='range'?mcFromDate:null
+                        const _mcTo=mcPeriodMode==='range'?mcToDate:null
+                        const baseCfg={emaR:Number(emaR),emaL:Number(emaL),years:_mcYears,capitalIni:mcCapitalIni,
+                          fromDate:_mcFrom,toDate:_mcTo,tipoStop,atrPeriod:Number(atrP),atrMult:Number(atrM),
+                          sinPerdidas,reentry,tipoFiltro,sp500EmaR:Number(sp500EmaR),sp500EmaL:Number(sp500EmaL),
+                          tipoCapital:mcCapital,
+                          sizeRules:{riskPerTrade:mcRiskPerTrade,maxPortfolioPct:mcMaxPortfolioPct,maxAccumRisk:mcMaxAccumRisk,maxPosiciones:mcMaxPosiciones}}
+                        const weightsNorm={}
+                        if(mcMode==='custom'){
+                          const total=mcSelected.reduce((s,sym)=>s+(Number(mcWeights[sym])||0),0)
+                          mcSelected.forEach(sym=>{weightsNorm[sym]=total>0?(Number(mcWeights[sym])||0)/total*100:100/mcSelected.length})
+                        }
+                        const sid=(mcStratSelected.filter(Boolean)[0])||currentStratId||null
+                        const strat=strategies.find(s=>s.id===sid)
+                        const isNoStrategy=(strat?.name||'').includes('No Strategy')
+                        const stratName=strat?.name||'estrategia'
+                        await exportTimeline({mcResult,mcSelected,baseCfg,strategyId:sid,
+                          isNoStrategy,filtros,mcIntervalo,weightsNorm,apiFetch,stratName})
+                      }catch(e){alert('Error al exportar: '+e.message)}
+                      finally{setMcExporting(false)}
+                    }}
+                    style={{marginLeft:'auto',padding:'3px 10px',fontFamily:MONO,fontSize:10,
+                      background:mcExporting?'#1a2d45':'#0a1628',
+                      color:mcExporting?'#3d5a7a':'#00d4ff',
+                      border:'1px solid #1a3a5c',borderRadius:3,cursor:mcExporting?'wait':'pointer',
+                      opacity:mcExporting?0.6:1,transition:'opacity 0.2s',flexShrink:0}}
+                  >{mcExporting?'⏳ Exportando...':'📊 Exportar Timeline'}</button>
                 </div>
 
                 {/* ── Tabla unificada: Comparativa + Resumen por activo ── */}
