@@ -260,11 +260,14 @@ export default function GanttChart({
   const btnSt = () => ({ padding:'2px 9px', fontFamily:MONO, fontSize:10, borderRadius:3, cursor:'pointer', border:'1px solid #1a2d45', background:'transparent', color:'#4a7a9a' })
 
   // ── Bar text helper (inline, no clipPath) ─────────────────────────────────
-  // textAnchor="end" pins text to the right edge of the bar — never overflows right.
+  // bw = ancho REAL de la barra en px (pre-clamp, puede superar containerW).
+  // La comparación con los umbrales usa el ancho completo para que barras
+  // parcialmente fuera del viewport muestren texto en la porción visible.
+  // textAnchor="end" pins text to the right edge — never overflows right.
   function barLabel(bw, pct) {
     if (pct == null) return null
-    const r = Math.round(pct)
-    if (bw >= TEXT_FULL) return (r >= 0 ? '+' : '') + r + '%'
+    const r = Math.round(Math.abs(pct))   // siempre positivo; el color ya indica ganancia/pérdida
+    if (bw >= TEXT_FULL) return r + '%'
     if (bw >= TEXT_NONE) return String(r)
     return null
   }
@@ -421,10 +424,12 @@ export default function GanttChart({
               discardedTrades.filter(t => t.symbol === sym && t.entryDate && t.exitDate).map((t, ti) => {
                 const x1 = msToX(dateToMs(t.entryDate))
                 const x2 = msToX(dateToMs(t.exitDate))
-                const bx = Math.max(0, x1), bw = Math.max(2, Math.min(containerW, x2) - bx)
                 if (x2 < -2 || x1 > containerW + 2) return null
+                const rawBw = x2 - x1                                         // ancho real pre-clamp
+                const bx   = Math.max(0, x1)
+                const bw   = Math.max(2, Math.min(containerW, x2) - bx)       // ancho visible renderizado
                 const y = si * ROW_H + BAR_PAD, h = ROW_H - BAR_PAD * 2
-                const label = barLabel(bw, t.pnlPct)
+                const label = barLabel(rawBw, t.pnlPct)
                 return (
                   <g key={`disc-${sym}-${t.entryDate}-${ti}`} style={{cursor:'pointer'}}
                     onMouseEnter={ev => setTooltip({trade:t, mouseX:ev.clientX, mouseY:ev.clientY, isDiscarded:true})}
@@ -433,9 +438,9 @@ export default function GanttChart({
                     <rect x={bx} y={y} width={bw} height={h}
                       fill="rgba(107,114,128,0.22)" rx={2}
                       stroke="#6b7280" strokeWidth={0.8} strokeDasharray="3 2" />
-                    {label && (
+                    {label && bw >= 6 && (
                       <text x={bx + bw - 3} y={y + h/2 + 3.5}
-                        fontSize={bw >= TEXT_FULL ? 9 : 8} fontWeight="bold"
+                        fontSize={rawBw >= TEXT_FULL ? 9 : 8} fontWeight="bold"
                         fill="#9ca3af" fontFamily="monospace" textAnchor="end">
                         {label}
                       </text>
@@ -452,11 +457,13 @@ export default function GanttChart({
                   const exitDate = t.exitDate || endDate || new Date().toISOString().split('T')[0]
                   const x1 = msToX(dateToMs(t.entryDate))
                   const x2 = msToX(dateToMs(exitDate))
-                  const bx = Math.max(0, x1), bw = Math.max(2, Math.min(containerW, x2) - bx)
                   if (x2 < -2 || x1 > containerW + 2) return null
+                  const rawBw = x2 - x1                                        // ancho real pre-clamp
+                  const bx   = Math.max(0, x1)
+                  const bw   = Math.max(2, Math.min(containerW, x2) - bx)      // ancho visible renderizado
                   const y = si * ROW_H + BAR_PAD, h = ROW_H - BAR_PAD * 2
                   const color = barColor(t.pnlPct)
-                  const label = barLabel(bw, t.pnlPct)
+                  const label = barLabel(rawBw, t.pnlPct)
                   return (
                     <g key={`exec-${sym}-${t.entryDate}-${ti}`} style={{cursor:'pointer'}}
                       onMouseEnter={ev => setTooltip({trade:t, mouseX:ev.clientX, mouseY:ev.clientY, isDiscarded:false})}
@@ -467,9 +474,9 @@ export default function GanttChart({
                         stroke={t._virtualClose ? '#fbbf24' : 'transparent'}
                         strokeWidth={t._virtualClose ? 1 : 0}
                         strokeDasharray={t._virtualClose ? '3 2' : null} />
-                      {label && (
+                      {label && bw >= 6 && (
                         <text x={bx + bw - 3} y={y + h/2 + 3.5}
-                          fontSize={bw >= TEXT_FULL ? 9 : 8} fontWeight="bold"
+                          fontSize={rawBw >= TEXT_FULL ? 9 : 8} fontWeight="bold"
                           fill="#ffffff" fontFamily="monospace" textAnchor="end">
                           {label}
                         </text>
