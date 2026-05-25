@@ -3207,7 +3207,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.286</title>
+        <title>Trading Simulator V9.287</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3285,7 +3285,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.286
+            <span className="dot"/>Trading Simulator V9.287
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4509,7 +4509,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         {id:'compartido',label:'Capital compartido',ready:true,
                           desc:'Pool de capital único compartido entre todos los activos, sin límite de posiciones simultáneas. Justo antes de cada entrada: capital_por_slot = pool_libre / slots_libres. Cuando un trade cierra, su capital (con ganancias o pérdidas) vuelve al pool. Aunque no hay tope de slots, el pool puede agotarse si muchas señales coinciden en el tiempo: las que no encuentran capital disponible se descartan. Las señales se procesan por fecha de entrada (más antigua primero) y, en empate de fecha, por orden alfabético del símbolo.'},
                         {id:'concentrado',label:'Capital concentrado',ready:true,
-                          desc:'Pool de capital compartido entre todos los activos, con un máximo de N posiciones simultáneas (configurable). Al cerrar una operación, el capital con sus ganancias o pérdidas vuelve al pool. Cuantos menos activos simultáneos configures, mayor será el capital por operación. Cuando hay más señales de entrada que slots disponibles, se priorizan por fecha de entrada (más antigua primero) y, en empate de fecha, por orden alfabético del símbolo. Las señales que no caben se descartan.'},
+                          desc:'Pool de capital único con un máximo de N posiciones simultáneas (configurable). Capital por operación = equity_total / N_slots, donde equity_total = capital libre + capital comprometido en posiciones abiertas. Así, aunque el capital esté casi todo invertido, cada nueva operación recibe siempre su fracción justa del portafolio. Al cerrar, capital ± P&L vuelve al pool. Cuando hay más señales de entrada el mismo día que slots libres disponibles, se procesan por orden alfabético del símbolo (A antes que Z). Las señales que no caben ese día se descartan: no hay cola — el activo solo entrará cuando genere una nueva señal en el futuro.'},
                         {id:'positionsizing',label:'Position Sizing',ready:true,
                           desc:'Pool de capital compartido con sizing por riesgo: el tamaño de cada posición se calcula dinámicamente según el stop loss (riesgo/trade × distancia al stop). Permite posiciones simultáneas con tamaños variables. Cuando una señal nueva supera el riesgo acumulado máximo o agota el pool disponible, se descarta. Las señales se procesan por fecha de entrada (más antigua primero) y, en empate de fecha, por orden alfabético del símbolo.'},
                       ].map(m=>{
