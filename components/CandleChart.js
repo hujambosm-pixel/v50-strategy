@@ -466,6 +466,12 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         crosshair:{mode:CrosshairMode.Normal},
         handleScroll:false,handleScale:false,
       })
+      // 4-color TradingView-style histogram coloring
+      const _histColor=(val,prev)=>{
+        if(val==null) return '#26a69a'
+        if(val>=0) return (prev==null||val>prev)?'#26a69a':'#b2dfdb'
+        return (prev==null||val<prev)?'#ef5350':'#ffcdd2'
+      }
       const _syncPanels=(panelChart,panelSeries)=>{
         // Sync visible range (zoom / scroll)
         chart.timeScale().subscribeVisibleTimeRangeChange(range=>{
@@ -541,12 +547,12 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         const macdChart=createChart(macdContainerRef.current,_panelOpts(100))
         macdChartRef.current=macdChart
         const histS=macdChart.addHistogramSeries({lastValueVisible:false,priceLineVisible:false})
-        histS.setData(data.map((d,i)=>({time:d.date,value:histogram[i],color:histogram[i]>=0?'rgba(0,229,160,0.7)':'rgba(255,77,109,0.7)'})).filter(x=>x.value!=null))
+        histS.setData(data.map((d,i)=>({time:d.date,value:histogram[i],color:_histColor(histogram[i],histogram[i-1])})).filter(x=>x.value!=null))
         const macdS=macdChart.addLineSeries({color:'#06b6d4',lineWidth:1,lastValueVisible:false,priceLineVisible:false,title:`MACD ${mp.fast}/${mp.slow}`})
         macdS.setData(data.map((d,i)=>({time:d.date,value:macdLine[i]})).filter(x=>x.value!=null))
         const sigS=macdChart.addLineSeries({color:'#ff8c00',lineWidth:1,lastValueVisible:false,priceLineVisible:false,title:`Signal ${mp.signal}`})
         sigS.setData(data.map((d,i)=>({time:d.date,value:signalLine[i]})).filter(x=>x.value!=null))
-        _syncPanels(macdChart)
+        _syncPanels(macdChart,macdS)
       }
 
       if(_indType==='VOLUME'&&macdContainerRef.current){
@@ -570,9 +576,9 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         const macdChart=createChart(macdContainerRef.current,_panelOpts(120))
         macdChartRef.current=macdChart
         const validMacdData=data.filter(d=>d.macdLine!=null&&d.signalLine!=null&&d.histogram!=null)
-        // Histogram — green #26a69a positive, red #ef5350 negative
+        // Histogram — 4-color TradingView style; honour d.histColor from strategy if set
         const histS=macdChart.addHistogramSeries({lastValueVisible:false,priceLineVisible:false})
-        histS.setData(validMacdData.map(d=>({time:d.date,value:d.histogram,color:d.histogram>=0?'#26a69a':'#ef5350'})))
+        histS.setData(validMacdData.map((d,i)=>({time:d.date,value:d.histogram,color:d.histColor||_histColor(d.histogram,validMacdData[i-1]?.histogram)})))
         // MACD line — blue
         const macdS=macdChart.addLineSeries({color:'#2962ff',lineWidth:1,lastValueVisible:false,priceLineVisible:false})
         macdS.setData(validMacdData.map(d=>({time:d.date,value:d.macdLine})))
@@ -593,7 +599,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         // Zero line — subtle gray reference
         const zeroS=macdChart.addLineSeries({color:'rgba(120,140,160,0.25)',lineWidth:1,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
         zeroS.setData([{time:data[0].date,value:0},{time:data[data.length-1].date,value:0}])
-        _syncPanels(macdChart)
+        _syncPanels(macdChart,macdS)
       }
 
       // ── RSI subpanel from strategy bar data (code_js strategies returning indicators.rsi) ──
