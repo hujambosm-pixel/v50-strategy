@@ -1291,7 +1291,9 @@ export default async function handler(req, res) {
             const active = filtroActivoMap[bar.date] !== false
             const prevActive = i > 0 ? filtroActivoMap[ar.data[i-1].date] !== false : false
             if (!prevActive && active && i + 1 < ar.data.length) {
-              entryPx = ar.data[i+1].open; entryDate = bar.date
+              // Entry at next bar's open (no look-ahead): price AND date from bar[i+1]
+              // Consistent with datos.js filter path (entryIdx = i+1, date = data[i+1].date)
+              entryPx = ar.data[i+1].open; entryDate = ar.data[i+1].date
             }
             if (prevActive && !active && entryPx != null) {
               genRaw.push({ entryDate, exitDate: bar.date, entryPrice: entryPx, exitPrice: bar.close })
