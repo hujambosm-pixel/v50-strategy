@@ -17,6 +17,7 @@ const McMonthlyGainsChart = dynamic(() => import('../components/McMonthlyGainsCh
 import { TlEquityChart, TlInvestChart } from '../components/TlCharts'
 import ContextThemeMenu, { applyTema } from '../components/ContextThemeMenu'
 import { exportTimeline } from '../lib/exportTimeline'
+import GanttChart from '../components/GanttChart'
 import MetricRow from '../components/MetricRow'
 import PriceAlarmQuickForm from '../components/PriceAlarmQuickForm'
 import StrategiesManager from '../components/StrategiesManager'
@@ -743,6 +744,9 @@ export default function Home() {
   const [mcShowMaxDD,setMcShowMaxDD]=useState(true)         // Max DD lines in multi-strategy chart
   const [mcChartsOpen,setMcChartsOpen]=useState(false)     // Vista de gráficos collapsible
   const [mcExporting,setMcExporting]=useState(false)       // exportTimeline in progress
+  const [mcShowGantt,setMcShowGantt]=useState(false)       // toggle Gantt / Tabla
+  const [ganttDiscarded,setGanttDiscarded]=useState(null)  // cached discarded trades for Gantt
+  const [ganttLoadingDisc,setGanttLoadingDisc]=useState(false) // loading discarded for Gantt
   const mcChartsSyncRef=useRef({isSyncing:false,charts:[],lastRange:null}) // sync group for signal charts
   const mcChartRefsMap=useRef({}) // symbol → chart instance for trade navigation
 
@@ -2730,6 +2734,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
       if(Math.abs(total-100)>0.5){setMcError(`Los pesos suman ${total.toFixed(1)}% — deben sumar 100%`);return}
     }
     setMcLoading(true);setMcError(null);setMcResult(null);setMcMultiResults([]);setMcProgress(null)
+    setMcShowGantt(false);setGanttDiscarded(null)
     mcChartsSyncRef.current={isSyncing:false,charts:[],lastRange:null}  // reset sync group for new run
     mcChartRefsMap.current={}  // reset chart refs for new run
     const weightsNorm={}
@@ -3209,7 +3214,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.288</title>
+        <title>Trading Simulator V9.289</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3287,7 +3292,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.288
+            <span className="dot"/>Trading Simulator V9.289
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6010,8 +6015,69 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       border:'1px solid #1a3a5c',borderRadius:3,cursor:mcExporting?'wait':'pointer',
                       opacity:mcExporting?0.6:1,transition:'opacity 0.2s',flexShrink:0}}
                   >{mcExporting?'⏳ Exportando...':'📊 Exportar Timeline'}</button>
+                  <button
+                    onClick={()=>{setMcShowGantt(s=>!s)}}
+                    title={mcShowGantt?'Volver a la tabla de resultados':'Mostrar diagrama de Gantt de operaciones'}
+                    style={{padding:'3px 10px',fontFamily:MONO,fontSize:10,
+                      background:mcShowGantt?'rgba(0,212,255,0.1)':'#0a1628',
+                      color:mcShowGantt?'#00d4ff':'#7a9bc0',
+                      border:`1px solid ${mcShowGantt?'#00d4ff':'#1a3a5c'}`,
+                      borderRadius:3,cursor:'pointer',flexShrink:0}}
+                  >{mcShowGantt?'← Tabla':'📅 Gantt'}</button>
                 </div>
 
+                {/* ── Gantt view (reemplaza la tabla cuando está activo) ── */}
+                {mcShowGantt&&(()=>{
+                  const allT=mcResult.allTrades||[]
+                  const endD=mcResult.compoundCurve?.slice(-1)[0]?.date||mcResult.bhCurve?.slice(-1)[0]?.date||new Date().toISOString().split('T')[0]
+                  const handleRequestDiscarded=async()=>{
+                    setGanttLoadingDisc(true)
+                    try{
+                      const _mcYears=mcPeriodMode==='years'?mcYears:null
+                      const _mcFrom=mcPeriodMode==='range'?mcFromDate:null
+                      const _mcTo=mcPeriodMode==='range'?mcToDate:null
+                      const unlimCfg={emaR:Number(emaR),emaL:Number(emaL),years:_mcYears,capitalIni:mcCapitalIni,
+                        fromDate:_mcFrom,toDate:_mcTo,tipoStop,atrPeriod:Number(atrP),atrMult:Number(atrM),
+                        sinPerdidas,reentry,tipoFiltro,sp500EmaR:Number(sp500EmaR),sp500EmaL:Number(sp500EmaL),
+                        tipoCapital:mcCapital,
+                        sizeRules:{riskPerTrade:mcRiskPerTrade,maxPortfolioPct:mcMaxPortfolioPct,maxAccumRisk:mcMaxAccumRisk,maxPosiciones:9999}}
+                      const sid=(mcStratSelected.filter(Boolean)[0])||currentStratId||null
+                      const strat=strategies.find(s=>s.id===sid)
+                      const isNoStrategyG=(strat?.name||'').includes('No Strategy')
+                      const weightsNorm={}
+                      if(mcMode==='custom'){
+                        const total=mcSelected.reduce((s,sym)=>s+(Number(mcWeights[sym])||0),0)
+                        mcSelected.forEach(sym=>{weightsNorm[sym]=total>0?(Number(mcWeights[sym])||0)/total*100:100/mcSelected.length})
+                      }
+                      const res=await apiFetch('/api/multibacktest',{method:'POST',headers:{'Content-Type':'application/json'},
+                        body:JSON.stringify({symbols:mcSelected,modoAsig:mcResult.modoAsig==='concentrado'?'concentrado':'compartido',
+                          weights:weightsNorm,cfg:unlimCfg,strategyId:sid,isNoStrategy:isNoStrategyG,filtros,intervalo:mcIntervalo})})
+                      if(res.ok){
+                        const json=await res.json()
+                        const unlimTrades=json.allTrades||[]
+                        const realKeys=new Set(allT.map(t=>`${t.symbol}:${t.entryDate}`))
+                        setGanttDiscarded(unlimTrades.filter(t=>!realKeys.has(`${t.symbol}:${t.entryDate}`)))
+                      }
+                    }catch(e){console.warn('Gantt discarded fetch failed:',e.message)}
+                    finally{setGanttLoadingDisc(false)}
+                  }
+                  return(
+                    <div style={{height:'calc(100vh - 160px)',minHeight:300,borderBottom:'1px solid var(--border)'}}>
+                      <GanttChart
+                        trades={allT}
+                        startDate={mcResult.startDate}
+                        endDate={endD}
+                        slotCapital={mcResult.slotCapital}
+                        onRequestDiscarded={handleRequestDiscarded}
+                        discardedTrades={ganttDiscarded}
+                        loadingDiscarded={ganttLoadingDisc}
+                      />
+                    </div>
+                  )
+                })()}
+
+                {/* ── Contenido tabla (oculto cuando Gantt está activo) ── */}
+                <div style={{display:mcShowGantt?'none':'block'}}>
                 {/* ── Tabla unificada: Comparativa + Resumen por activo ── */}
                 {(()=>{
                   const isMulti=mcMultiResults.length>1
@@ -6721,6 +6787,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                     </div>
                   )
                 })()}
+                </div>{/* fin wrapper contenido tabla (oculto en Gantt) */}
               </div>
               </div>
             )}
