@@ -129,8 +129,8 @@ export default function WatchlistCondPanel({ conditions, onToggle, onReload, con
       {/* ── Header ── */}
       <div style={{display:'flex',alignItems:'center',gap:6,padding:'5px 8px 4px',cursor:'pointer'}}
         onClick={()=>{setOpen(o=>!o);setEditing(null)}}>
-        <span style={{fontFamily:MONO,fontSize:8,color:'#e2e8f0',fontWeight:600,letterSpacing:'0.09em',textTransform:'uppercase',flex:1}}>
-          ● Notificaciones
+        <span style={{fontFamily:MONO,fontSize:11,color:'#a8ccdf',fontWeight:500,flex:1}}>
+          🔔 Notificaciones
         </span>
         <button onClick={openNew} title="Nueva condición"
           style={{background:'rgba(0,212,255,0.1)',border:'1px solid var(--accent)',color:'var(--accent)',

@@ -2054,7 +2054,8 @@ export default function Home() {
           const ganRobust=sorted3.reduce((s,t)=>s+t.pnlSimple,0)
           const capRob=Number(capitalIni)+ganRobust
           const cagrRobust=capRob>0?(Math.pow(capRob/Number(capitalIni),1/anios)-1)*100:-99
-          const maxDD=json.maxDDStrategy||0
+          // Usar MaxDD con flotante si disponible (campo nuevo maxDDStrategyFloat)
+          const maxDD=json.maxDDStrategyFloat??json.maxDDStrategy??0
           const norm=(v,min,max)=>Math.max(0,Math.min(100,(v-min)/(max-min)*100))
           const score=Math.max(0,Math.min(100,
             norm(winRate,20,80)*W.winrate +
@@ -2126,7 +2127,9 @@ export default function Home() {
         const cap=Number(capitalIni)
         const finalCap=cap+(json.gananciaSimple||0)
         const cagr=finalCap>0?(Math.pow(finalCap/cap,1/anios)-1)*100:-99
-        return{symbol:sym,cagr,winRate,pf,maxDD:json.maxDDStrategy||0,ops:trades.length,error:false}
+        // Usar MaxDD con flotante si disponible (campo nuevo maxDDStrategyFloat)
+        const maxDD=json.maxDDStrategyFloat??json.maxDDStrategy??0
+        return{symbol:sym,cagr,winRate,pf,maxDD,ops:trades.length,error:false}
       }catch{return{symbol:sym,error:true}}
     }
     for(let i=0;i<rawTickers.length;i+=CONC){
@@ -3290,7 +3293,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.303</title>
+        <title>Trading Simulator V9.304</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3368,7 +3371,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.303
+            <span className="dot"/>Trading Simulator V9.304
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}

@@ -153,6 +153,36 @@ export function calcEquityCurves(trades, data, capitalIni, startDate, sp500Data)
   }
 }
 
+// ── MaxDD con flotante: curva que incluye P&L no realizado de posiciones abiertas ──
+// Equivalente al "toggle flotante" del gráfico de equity en el backtesting individual.
+function calcMaxDDFloat(trades, data, capitalIni) {
+  if (!trades.length || !data.length) return 0
+  // Acumular PnL cerrado de forma incremental para evitar O(n×m)
+  const exitMap = {}  // exitDate → cumulative pnlSimple increment
+  for (const t of trades) {
+    if (t.exitDate) exitMap[t.exitDate] = (exitMap[t.exitDate] || 0) + (t.pnlSimple || 0)
+  }
+  // Trades abiertos en un momento dado: los que entryDate <= date < exitDate
+  // Ordenamos por entryDate para poder hacer un barrido eficiente
+  const byEntry = [...trades].sort((a, b) => (a.entryDate || '').localeCompare(b.entryDate || ''))
+  let peak = capitalIni, maxDD = 0, cumulClosed = 0
+  for (const bar of data) {
+    const { date, close } = bar
+    if (exitMap[date]) cumulClosed += exitMap[date]
+    let openPnl = 0
+    for (const t of byEntry) {
+      if (!t.entryDate || t.entryDate > date) break   // ordenados: podemos parar
+      if (t.exitDate && t.exitDate <= date) continue  // ya cerrado
+      if (close && t.entryPrice && t.shares) openPnl += (close - t.entryPrice) * t.shares
+    }
+    const val = capitalIni + cumulClosed + openPnl
+    if (val > peak) peak = val
+    const dd = peak > 0 ? (peak - val) / peak * 100 : 0
+    if (dd > maxDD) maxDD = dd
+  }
+  return maxDD
+}
+
 // ── Align external close series to asset dates with forward-fill ──
 function buildAlignedCloses(externalData, assetDates) {
   if (!externalData?.length) return assetDates.map(() => null)
@@ -545,6 +575,9 @@ export default async function handler(req, res) {
     // ── Equity curves (reutiliza sp500Data ya fetchado arriba) ──
     const curves = calcEquityCurves(trades, data, capital_ini, data[0].date, sp500Data)
 
+    // ── MaxDD con flotante (P&L no realizado incluido) ── igual que toggle "Flotante" del gráfico
+    const maxDDStrategyFloat = calcMaxDDFloat(trades, data, capital_ini)
+
     return res.status(200).json({
       chartData,
       trades,
@@ -555,6 +588,7 @@ export default async function handler(req, res) {
       capitalReinv,
       ganBH,
       startDate: data[0].date,
+      maxDDStrategyFloat,
       ...curves,
       visuals: stratVisuals ? JSON.parse(stratVisuals) : null,
       meta: { ultimaFecha: data[data.length - 1].date, ultimoPrecio: data[data.length - 1].close, simbolo },
