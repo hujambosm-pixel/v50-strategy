@@ -2084,6 +2084,7 @@ export default function Home() {
   // Usa gananciaSimple (CAGR Simple) — mismo método y fórmulas que calcRanking
   const clearCandidates=useCallback(()=>{
     setCandidatesResults([])
+    setCandidatesText('')
     if(candidatesOrigWidthRef.current!==null){
       setSidebarW(candidatesOrigWidthRef.current)
       candidatesOrigWidthRef.current=null
@@ -3293,7 +3294,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.304</title>
+        <title>Trading Simulator V9.305</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3371,7 +3372,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.304
+            <span className="dot"/>Trading Simulator V9.305
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -3791,69 +3792,114 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                             cursor:'pointer',color:'#a8ccdf',fontSize:10,lineHeight:1}}>✕</span>}
                       </div>
 
-                      {/* ListFilter — selector de lista */}
-                      <div style={{position:'relative'}}>
-                        <button onClick={e=>{const r=e.currentTarget.getBoundingClientRect();setListDropOpen(prev=>prev?null:{x:r.left,y:r.bottom+4})}}
-                          title={selectedLists.length?`Lista: ${selectedLists[0]}`:'Todas las listas'}
-                          style={iBtn(selectedLists.length>0,'#00d4ff')}
-                          onMouseOver={e=>{if(!selectedLists.length)e.currentTarget.style.color='#00d4ff'}}
-                          onMouseOut={e=>{if(!selectedLists.length)e.currentTarget.style.color='#4a6a88'}}>
-                          <ListFilter size={16}/>
-                        </button>
-                        {listDropOpen&&(()=>{
-                          return(
-                            <div style={{position:'fixed',top:listDropOpen.y,left:listDropOpen.x,background:'var(--bg3)',
-                              border:'1px solid var(--border)',borderRadius:4,zIndex:9990,
-                              boxShadow:'0 4px 16px rgba(0,0,0,0.7)',width:'max-content',minWidth:160,maxWidth:280}}>
-                              <div onClick={()=>{setSelectedLists([]);setListDropOpen(null)}}
-                                style={{padding:'6px 10px',fontFamily:MONO,fontSize:11,cursor:'pointer',
-                                  color:selectedLists.length===0?'var(--accent)':'var(--text)',
-                                  borderBottom:'1px solid var(--border)'}}>
-                                Todas las listas
-                              </div>
-                              {wlLists.map(l=>(
-                                <div key={l.id}
-                                  style={{padding:'4px 6px 4px 10px',fontFamily:MONO,fontSize:11,cursor:'pointer',
-                                    display:'flex',alignItems:'center',gap:4,color:'var(--text)',whiteSpace:'nowrap'}}>
-                                  <span onClick={()=>{setSelectedLists([l.name]);setListDropOpen(null)}}
-                                    style={{display:'flex',alignItems:'center',gap:6,flex:1,padding:'2px 0'}}>
-                                    <span style={{color:selectedLists.includes(l.name)?'var(--accent)':'var(--text3)',fontSize:10}}>
-                                      {selectedLists.includes(l.name)?'●':'○'}
-                                    </span>{l.name}
-                                  </span>
-                                  <span onClick={async e=>{
-                                      e.stopPropagation()
-                                      const n=window.prompt(`Renombrar lista "${l.name}":`,l.name)
-                                      if(!n||!n.trim()||n.trim()===l.name) return
-                                      try{
-                                        await renameWatchlistList(l.id,n.trim())
-                                        if(selectedLists.includes(l.name)) setSelectedLists([n.trim()])
-                                        reloadWatchlist(); setListDropOpen(null)
-                                      }catch(err){alert('Error: '+err.message)}
-                                    }}
-                                    title="Renombrar lista"
-                                    style={{color:'#3d5a7a',fontSize:11,cursor:'pointer',padding:'2px 4px',borderRadius:2,flexShrink:0,lineHeight:1}}
-                                    onMouseOver={e=>e.currentTarget.style.color='#ffd166'}
-                                    onMouseOut={e=>e.currentTarget.style.color='#3d5a7a'}>✏</span>
-                                  <span onClick={async e=>{
-                                      e.stopPropagation()
-                                      if(!window.confirm(`¿Eliminar lista "${l.name}"?\nLos activos no se eliminarán.`)) return
-                                      try{
-                                        await deleteWatchlistList(l.id)
-                                        if(selectedLists.includes(l.name)) setSelectedLists([])
-                                        reloadWatchlist(); setListDropOpen(null)
-                                      }catch(err){alert('Error: '+err.message)}
-                                    }}
-                                    title="Eliminar lista"
-                                    style={{color:'#3d3a3a',fontSize:11,cursor:'pointer',padding:'2px 4px',borderRadius:2,flexShrink:0,lineHeight:1}}
-                                    onMouseOver={e=>e.currentTarget.style.color='#ff4d6d'}
-                                    onMouseOut={e=>e.currentTarget.style.color='#3d3a3a'}>✕</span>
+                      {/* ListFilter — selector de lista (multiselección) */}
+                      {(()=>{
+                        const namedSel=selectedLists.filter(s=>s!=='__unassigned__')
+                        const unassignedSel=selectedLists.includes('__unassigned__')
+                        const allOrNone=selectedLists.length===0
+                        const listBtnTitle=allOrNone
+                          ?'Todas las listas'
+                          :selectedLists.length===1&&!unassignedSel
+                            ?namedSel[0]
+                            :selectedLists.length===1&&unassignedSel
+                              ?'Sin lista asignada'
+                              :`${selectedLists.length} listas`
+                        const toggleList=name=>setSelectedLists(prev=>
+                          prev.includes(name)?prev.filter(x=>x!==name):[...prev,name])
+                        return(
+                          <div style={{position:'relative'}}>
+                            <button onClick={e=>{const r=e.currentTarget.getBoundingClientRect();setListDropOpen(prev=>prev?null:{x:r.left,y:r.bottom+4})}}
+                              title={listBtnTitle}
+                              style={iBtn(selectedLists.length>0,'#00d4ff')}
+                              onMouseOver={e=>{if(!selectedLists.length)e.currentTarget.style.color='#00d4ff'}}
+                              onMouseOut={e=>{if(!selectedLists.length)e.currentTarget.style.color='#4a6a88'}}>
+                              <ListFilter size={16}/>
+                            </button>
+                            {listDropOpen&&(
+                              <>
+                                {/* overlay para cerrar al hacer click fuera */}
+                                <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,zIndex:9989}}
+                                  onClick={()=>setListDropOpen(null)}/>
+                                <div style={{position:'fixed',top:listDropOpen.y,left:listDropOpen.x,background:'var(--bg3)',
+                                  border:'1px solid var(--border)',borderRadius:4,zIndex:9990,
+                                  boxShadow:'0 4px 16px rgba(0,0,0,0.7)',width:'max-content',minWidth:170,maxWidth:290}}>
+                                  {/* Todas las listas */}
+                                  <div onClick={()=>{setSelectedLists([]);setListDropOpen(null)}}
+                                    style={{padding:'6px 10px',fontFamily:MONO,fontSize:11,cursor:'pointer',
+                                      color:allOrNone?'var(--accent)':'var(--text)',
+                                      borderBottom:'1px solid var(--border)',userSelect:'none'}}>
+                                    Todas las listas
+                                  </div>
+                                  {/* Listas individuales con checkbox */}
+                                  {wlLists.map(l=>{
+                                    const checked=selectedLists.includes(l.name)
+                                    return(
+                                      <div key={l.id}
+                                        style={{padding:'4px 6px 4px 10px',fontFamily:MONO,fontSize:11,
+                                          display:'flex',alignItems:'center',gap:4,color:'var(--text)',whiteSpace:'nowrap'}}>
+                                        <span onClick={()=>toggleList(l.name)}
+                                          style={{display:'flex',alignItems:'center',gap:6,flex:1,padding:'3px 0',cursor:'pointer',userSelect:'none'}}>
+                                          <span style={{
+                                            width:11,height:11,border:`1px solid ${checked?'var(--accent)':'#3a5a78'}`,
+                                            borderRadius:2,background:checked?'var(--accent)':'transparent',
+                                            display:'inline-flex',alignItems:'center',justifyContent:'center',
+                                            flexShrink:0,transition:'all 0.1s'}}>
+                                            {checked&&<span style={{color:'#0d1520',fontSize:8,lineHeight:1,fontWeight:700}}>✓</span>}
+                                          </span>
+                                          <span style={{color:checked?'var(--accent)':'var(--text)'}}>{l.name}</span>
+                                        </span>
+                                        <span onClick={async e=>{
+                                            e.stopPropagation()
+                                            const n=window.prompt(`Renombrar lista "${l.name}":`,l.name)
+                                            if(!n||!n.trim()||n.trim()===l.name) return
+                                            try{
+                                              await renameWatchlistList(l.id,n.trim())
+                                              if(selectedLists.includes(l.name)) setSelectedLists(prev=>prev.map(x=>x===l.name?n.trim():x))
+                                              reloadWatchlist(); setListDropOpen(null)
+                                            }catch(err){alert('Error: '+err.message)}
+                                          }}
+                                          title="Renombrar lista"
+                                          style={{color:'#3d5a7a',fontSize:11,cursor:'pointer',padding:'2px 4px',borderRadius:2,flexShrink:0,lineHeight:1}}
+                                          onMouseOver={e=>e.currentTarget.style.color='#ffd166'}
+                                          onMouseOut={e=>e.currentTarget.style.color='#3d5a7a'}>✏</span>
+                                        <span onClick={async e=>{
+                                            e.stopPropagation()
+                                            if(!window.confirm(`¿Eliminar lista "${l.name}"?\nLos activos no se eliminarán.`)) return
+                                            try{
+                                              await deleteWatchlistList(l.id)
+                                              if(selectedLists.includes(l.name)) setSelectedLists(prev=>prev.filter(x=>x!==l.name))
+                                              reloadWatchlist(); setListDropOpen(null)
+                                            }catch(err){alert('Error: '+err.message)}
+                                          }}
+                                          title="Eliminar lista"
+                                          style={{color:'#3d3a3a',fontSize:11,cursor:'pointer',padding:'2px 4px',borderRadius:2,flexShrink:0,lineHeight:1}}
+                                          onMouseOver={e=>e.currentTarget.style.color='#ff4d6d'}
+                                          onMouseOut={e=>e.currentTarget.style.color='#3d3a3a'}>✕</span>
+                                      </div>
+                                    )
+                                  })}
+                                  {/* Sin lista asignada — separada con divisor */}
+                                  <div style={{borderTop:'1px solid var(--border)',marginTop:2}}>
+                                    <div onClick={()=>toggleList('__unassigned__')}
+                                      style={{padding:'4px 10px 6px',fontFamily:MONO,fontSize:11,cursor:'pointer',
+                                        display:'flex',alignItems:'center',gap:6,userSelect:'none',
+                                        color:unassignedSel?'var(--accent)':'var(--text3)'}}>
+                                      <span style={{
+                                        width:11,height:11,border:`1px solid ${unassignedSel?'var(--accent)':'#3a5a78'}`,
+                                        borderRadius:2,background:unassignedSel?'var(--accent)':'transparent',
+                                        display:'inline-flex',alignItems:'center',justifyContent:'center',
+                                        flexShrink:0,transition:'all 0.1s'}}>
+                                        {unassignedSel&&<span style={{color:'#0d1520',fontSize:8,lineHeight:1,fontWeight:700}}>✓</span>}
+                                      </span>
+                                      Sin lista asignada
+                                    </div>
+                                  </div>
                                 </div>
-                              ))}
-                            </div>
-                          )
-                        })()}
-                      </div>
+                              </>
+                            )}
+                          </div>
+                        )
+                      })()}
 
                       {/* Briefcase — en cartera */}
                       <button onClick={()=>setOnlyOpen(f=>!f)}
@@ -4068,7 +4114,15 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     const searchLower=wlSearch.toLowerCase()
                     const fCondId=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.watchlist?.filterConditionId||null}catch(_){return null}})()
                     const filtered=watchlist.filter(w=>{
-                      const matchList=selectedLists.length===0||(w.list_ids||[]).some(lid=>{const l=wlLists.find(x=>x.id===lid);return l&&selectedLists.includes(l.name)})
+                      const matchList=(()=>{
+                        if(selectedLists.length===0) return true
+                        const namedSel=selectedLists.filter(s=>s!=='__unassigned__')
+                        const hasUnassigned=selectedLists.includes('__unassigned__')
+                        const listIds=w.list_ids||[]
+                        if(hasUnassigned&&listIds.length===0) return true
+                        if(namedSel.length>0&&listIds.some(lid=>{const l=wlLists.find(x=>x.id===lid);return l&&namedSel.includes(l.name)})) return true
+                        return false
+                      })()
                       const matchSearch=!wlSearch||(w.symbol||'').toLowerCase().includes(searchLower)||(w.name||'').toLowerCase().includes(searchLower)
                       const matchFav=!onlyFavs||w.favorite
                       const symAlarms=alarmStatus[w.symbol]||{}
