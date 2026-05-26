@@ -2010,6 +2010,8 @@ export default function Home() {
   },[alarms,conditions.length,watchlist.length]) // eslint-disable-line
 
   // ── Ranking: ejecuta backtest en paralelo sobre toda la watchlist ──
+  // Usa gananciaSimple (CAGR Simple) para puntuar. Score ponderado:
+  // CAGR Simple (25%) + Win Rate (25%) + Profit Factor (25%) + CAGR Robusto (20%) − MaxDD (5%)
   const calcRanking = useCallback(async (rankSymbols=null) => {
     // Use the currently visible/filtered watchlist items
     // (passed as argument, falls back to full watchlist)
@@ -2034,7 +2036,7 @@ export default function Home() {
         try {
           const res = await apiFetch('/api/datos', {
             method:'POST', headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({ simbolo:sym, strategyId:currentStratId, capital_ini:Number(capitalIni), years:Number(years), allocation_pct:100 })
+            body: JSON.stringify({ simbolo:sym, strategyId:currentStratId, capital_ini:Number(capitalIni), years:Number(years), allocation_pct:100, filtros, intervalo:estrategiaIntervalo })
           })
           const json = await res.json()
           if (!res.ok || !json.trades?.length) return
@@ -2075,9 +2077,10 @@ export default function Home() {
     setRankingStratId(currentStratId)
     setRankingStratName(stratName||'')
     saveRankingRemote(results, currentStratId||null).catch(()=>{})
-  }, [watchlist,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL,currentStratId,stratName])
+  }, [watchlist,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL,currentStratId,stratName,filtros,estrategiaIntervalo])
 
   // ── Analizar candidatos: extrae tickers, corre backtest en paralelo ──
+  // Usa gananciaSimple (CAGR Simple) — mismo método y fórmulas que calcRanking
   const clearCandidates=useCallback(()=>{
     setCandidatesResults([])
     if(candidatesOrigWidthRef.current!==null){
@@ -2111,16 +2114,18 @@ export default function Home() {
         if(!res.ok) return {symbol:sym,error:true}
         const json=await res.json()
         const trades=json.trades||[]
+        if(!trades.length) return {symbol:sym,error:true}
+        // Fórmulas idénticas a calcRanking para garantizar coherencia
+        const wins=trades.filter(t=>t.pnlPct>=0), losses=trades.filter(t=>t.pnlPct<0)
+        const winRate=(wins.length/trades.length)*100
+        const gBrut=wins.reduce((s,t)=>s+t.pnlSimple,0)
+        const lBrut=losses.reduce((s,t)=>s+Math.abs(t.pnlSimple),0)
+        const pf=lBrut>0?Math.min(gBrut/lBrut,9.99):9.99
+        const totalDiasNat=json.startDate?(new Date(json.meta?.ultimaFecha)-new Date(json.startDate))/86400000:365*Number(years)
+        const anios=Math.max(totalDiasNat/365.25,0.01)
         const cap=Number(capitalIni)
-        const startD=json.startDate, endD=json.meta?.ultimaFecha
-        const yrs=(startD&&endD)?(new Date(endD)-new Date(startD))/(365.25*86400000):Number(years)
         const finalCap=cap+(json.gananciaSimple||0)
-        const cagr=yrs>0?((finalCap/cap)**(1/yrs)-1)*100:0
-        const wins=trades.filter(t=>t.pnlPct>=0)
-        const winRate=trades.length?wins.length/trades.length*100:0
-        const grossWin=wins.reduce((s,t)=>s+t.pnlSimple,0)
-        const grossLoss=Math.abs(trades.filter(t=>t.pnlPct<0).reduce((s,t)=>s+t.pnlSimple,0))
-        const pf=grossLoss>0?grossWin/grossLoss:(grossWin>0?Infinity:0)
+        const cagr=finalCap>0?(Math.pow(finalCap/cap,1/anios)-1)*100:-99
         return{symbol:sym,cagr,winRate,pf,maxDD:json.maxDDStrategy||0,ops:trades.length,error:false}
       }catch{return{symbol:sym,error:true}}
     }
@@ -3285,7 +3290,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.302</title>
+        <title>Trading Simulator V9.303</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3363,7 +3368,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.302
+            <span className="dot"/>Trading Simulator V9.303
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -3953,10 +3958,24 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                               <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:10}}>
                                 <thead>
                                   <tr style={{borderBottom:'1px solid var(--border)'}}>
-                                    {['Ticker','CAGR','WR%','PF','MaxDD','Ops',''].map(h=>(
-                                      <th key={h} style={{padding:'3px 5px',color:'#5a7a95',fontWeight:600,
-                                        textAlign:h===''?'center':'left',whiteSpace:'nowrap'}}>{h}</th>
-                                    ))}
+                                    {(()=>{
+                                      const activeF=Object.entries(filtros).filter(([,v])=>v.activo).map(([k,v])=>
+                                        k==='vix'?`VIX<${v.umbral}`:
+                                        k==='indiceEma'?`EMA(${v.ticker} p${v.periodo})`:
+                                        k==='sectorEma'?`SectorEMA(${v.ticker} p${v.periodo})`:
+                                        k==='cruceEma'?`CruceEMA(${v.ticker})`:k
+                                      ).join(', ')
+                                      const cagrTip=`Método: CAGR Simple\nIntervalo: ${estrategiaIntervalo}\nPeríodo: ${years} años\nFiltros: ${activeF||'ninguno'}`
+                                      return [
+                                        ['Ticker',null],['CAGR',cagrTip],['WR%',null],
+                                        ['PF',null],['MaxDD',null],['Ops',null],['',null]
+                                      ].map(([h,tip])=>(
+                                        <th key={h} style={{padding:'3px 5px',color:'#5a7a95',fontWeight:600,
+                                          textAlign:h===''?'center':'left',whiteSpace:'nowrap'}}>
+                                          {h}{tip&&<span title={tip} style={{marginLeft:3,cursor:'help',color:'#3a5a78',fontSize:8}}>?</span>}
+                                        </th>
+                                      ))
+                                    })()}
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -4087,6 +4106,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                           style={{marginLeft:'auto',background:rankingRunning?'rgba(13,21,32,0.5)':'rgba(255,209,102,0.1)',border:`1px solid ${rankingRunning?'#1a2d45':'rgba(255,209,102,0.4)'}`,color:rankingRunning?'#3d5a7a':'#ffd166',fontFamily:MONO,fontSize:9,padding:'2px 6px',borderRadius:3,cursor:rankingRunning?'not-allowed':'pointer',letterSpacing:'0.05em'}}>
                           {rankingRunning?'calculando…':'🏆 Ranking'}
                         </button>
+                        <span title={`Activos ordenados por score ponderado (CAGR Simple):\n• CAGR Simple     25%\n• Win Rate        25%\n• Profit Factor   25%\n• CAGR Robusto    20%\n• MaxDD           −5%\n\nUsa los mismos filtros e intervalo que el backtest individual.`}
+                          style={{color:'#3d5a7a',fontFamily:MONO,fontSize:9,cursor:'help',userSelect:'none',lineHeight:1,padding:'0 1px'}}>?</span>
                         {hasRanking&&<button onClick={()=>setRankingData({})} title="Limpiar ranking"
                           style={{background:'transparent',border:'1px solid #1a2d45',color:'#5a7a95',fontFamily:MONO,fontSize:9,padding:'2px 5px',borderRadius:3,cursor:'pointer'}}>✕</button>}
                       </div>
