@@ -695,6 +695,8 @@ export default function Home() {
   const [mcMaxPortfolioPct,setMcMaxPortfolioPct]=useState(20)
   const [mcMaxAccumRisk,setMcMaxAccumRisk]=useState(20)
   const [mcMaxPosiciones,setMcMaxPosiciones]=useState(4)  // para modo concentrado
+  const [mcPrioridad,setMcPrioridad]=useState('alfabetico') // criterio desempate concentrado
+  const [mcMomentumN,setMcMomentumN]=useState(20)           // lookback días para criterio momentum
   const [mcCapital,setMcCapital]=useState('compound')    // 'simple' | 'compound'
   const [mcCapitalIni,setMcCapitalIni]=useState(1000)
   const [mcPeriodMode,setMcPeriodMode]=useState('years') // 'years' | 'range'
@@ -2749,7 +2751,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
       fromDate:_mcFrom,toDate:_mcTo,
       tipoStop,atrPeriod:Number(atrP),atrMult:Number(atrM),sinPerdidas,reentry,
       tipoFiltro,sp500EmaR:Number(sp500EmaR),sp500EmaL:Number(sp500EmaL),tipoCapital:mcCapital,
-      sizeRules:{riskPerTrade:mcRiskPerTrade,maxPortfolioPct:mcMaxPortfolioPct,maxAccumRisk:mcMaxAccumRisk,maxPosiciones:mcMaxPosiciones}}
+      sizeRules:{riskPerTrade:mcRiskPerTrade,maxPortfolioPct:mcMaxPortfolioPct,maxAccumRisk:mcMaxAccumRisk,maxPosiciones:mcMaxPosiciones,prioridad:mcPrioridad,momentumN:Number(mcMomentumN)}}
     const buildCfgFromStrat=(strat)=>{
       // Parsear params del code_js (campo principal para estrategias modernas)
       let stratParams={}
@@ -2842,7 +2844,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
     setMcAssetOpen({})
     const chartsVis={};results.forEach(r=>{chartsVis[r.id]=true});setMcChartsStratVisible(chartsVis)
     setMcLoading(false);setMcProgress(null)
-  },[mcSelected,mcMode,selectedModos,mcWeights,mcCapital,mcCapitalIni,mcYears,mcPeriodMode,mcFromDate,mcToDate,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL,rankingData,mcStratSelected,strategies,currentStratId,mcRiskPerTrade,mcMaxPortfolioPct,mcMaxAccumRisk,mcMaxPosiciones,filtros,mcIntervalo])
+  },[mcSelected,mcMode,selectedModos,mcWeights,mcCapital,mcCapitalIni,mcYears,mcPeriodMode,mcFromDate,mcToDate,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL,rankingData,mcStratSelected,strategies,currentStratId,mcRiskPerTrade,mcMaxPortfolioPct,mcMaxAccumRisk,mcMaxPosiciones,mcPrioridad,mcMomentumN,filtros,mcIntervalo])
 
   // Auto-inicializar pesos iguales cuando cambian activos seleccionados (modo custom)
   useEffect(()=>{
@@ -3214,7 +3216,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.296</title>
+        <title>Trading Simulator V9.297</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3292,7 +3294,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.296
+            <span className="dot"/>Trading Simulator V9.297
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4516,7 +4518,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         {id:'compartido',label:'Capital compartido',ready:true,
                           desc:'Pool de capital único compartido entre todos los activos, sin límite de posiciones simultáneas. Justo antes de cada entrada: capital_por_slot = pool_libre / slots_libres. Cuando un trade cierra, su capital (con ganancias o pérdidas) vuelve al pool. Aunque no hay tope de slots, el pool puede agotarse si muchas señales coinciden en el tiempo: las que no encuentran capital disponible se descartan. Las señales se procesan por fecha de entrada (más antigua primero) y, en empate de fecha, por orden alfabético del símbolo.'},
                         {id:'concentrado',label:'Capital concentrado',ready:true,
-                          desc:'Pool de capital único con un máximo de N posiciones simultáneas (configurable). Capital por operación = equity_total / N_slots, donde equity_total = capital libre + capital comprometido en posiciones abiertas. Así, aunque el capital esté casi todo invertido, cada nueva operación recibe siempre su fracción justa del portafolio. Al cerrar, capital ± P&L vuelve al pool. Cuando hay más señales de entrada el mismo día que slots libres disponibles, se procesan por orden alfabético del símbolo (A antes que Z). Las señales que no caben ese día se descartan: no hay cola — el activo solo entrará cuando genere una nueva señal en el futuro.'},
+                          desc:'Pool de capital único con un máximo de N posiciones simultáneas (configurable). Capital por operación = equity_total / N_slots, donde equity_total = capital libre + capital comprometido en posiciones abiertas. Así, aunque el capital esté casi todo invertido, cada nueva operación recibe siempre su fracción justa del portafolio. Al cerrar, capital ± P&L vuelve al pool. Cuando hay más señales de entrada el mismo día que slots libres disponibles, el criterio de prioridad (configurable) decide cuáles entran: alfabético, ranking del watchlist, momentum, fuerza relativa vs SP500, o proximidad al máximo de 52 semanas. Las señales que no caben ese día se descartan: no hay cola — el activo solo entrará cuando genere una nueva señal en el futuro.'},
                         {id:'positionsizing',label:'Position Sizing',ready:true,
                           desc:'Pool de capital compartido con sizing por riesgo: el tamaño de cada posición se calcula dinámicamente según el stop loss (riesgo/trade × distancia al stop). Permite posiciones simultáneas con tamaños variables. Cuando una señal nueva supera el riesgo acumulado máximo o agota el pool disponible, se descarta. Las señales se procesan por fecha de entrada (más antigua primero) y, en empate de fecha, por orden alfabético del símbolo.'},
                       ].map(m=>{
@@ -4562,7 +4564,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   )}
                   {(mcStratSelected.length<=1?selectedModos.includes('concentrado'):mcMode==='concentrado')&&(
                     <div style={{padding:'8px 10px',borderTop:'1px solid #1a2a3a'}}>
-                      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:2}}>
+                      {/* Máx. activos simultáneos */}
+                      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
                         <span title="Número máximo de activos abiertos simultáneamente. Cuantos menos configures, mayor será el capital asignado por operación."
                           style={{fontSize:9,color:'#4a6a88',cursor:'help',textDecoration:'underline dotted'}}>
                           Máx. activos simultáneos
@@ -4575,6 +4578,37 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                             color:'#e0e8f0',fontSize:11,fontFamily:MONO,textAlign:'right'}}
                         />
                       </div>
+                      {/* Prioridad de entrada */}
+                      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:mcPrioridad==='momentum'?4:0}}>
+                        <span title="Cuando hay más señales de entrada que slots libres el mismo día, este criterio decide qué activos entran primero y cuáles se descartan."
+                          style={{fontSize:9,color:'#4a6a88',cursor:'help',textDecoration:'underline dotted'}}>
+                          Prioridad de entrada
+                        </span>
+                        <select value={mcPrioridad} onChange={e=>setMcPrioridad(e.target.value)}
+                          style={{padding:'2px 4px',borderRadius:3,background:'#0d1929',border:'1px solid #1a2a3a',
+                            color:'#e0e8f0',fontSize:10,fontFamily:MONO,cursor:'pointer',maxWidth:130}}>
+                          <option value="ranking"       title="Orden del watchlist: primero los activos con ranking asignado (por posición en lista), luego el resto por orden alfabético">Ranking de lista</option>
+                          <option value="alfabetico"    title="Orden A→Z por ticker. Cuando hay más señales que slots disponibles, entran primero los tickers que van antes en el alfabeto">Alfabético</option>
+                          <option value="momentum"      title="Prioriza el activo que más ha subido en los últimos N días antes de la señal. Favorece activos con mayor impulso reciente">Momentum (N días)</option>
+                          <option value="fuerza_relativa" title="Prioriza el activo que más ha superado al SP500 en los últimos 63 días (3 meses). Detecta activos con alfa positivo respecto al mercado general">Fuerza relativa vs SP500</option>
+                          <option value="max52"         title="Prioriza el activo cuyo precio actual está más cerca de su máximo de los últimos 252 días. Favorece breakouts y activos en territorio de price discovery">Proximidad máximo 52s</option>
+                        </select>
+                      </div>
+                      {mcPrioridad==='momentum'&&(
+                        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                          <span title="Número de días de lookback para calcular el retorno de momentum en el momento de la señal."
+                            style={{fontSize:9,color:'#4a6a88',cursor:'help',textDecoration:'underline dotted',paddingLeft:10}}>
+                            N días lookback
+                          </span>
+                          <input type="number" min="5" max="120" step="1"
+                            value={mcMomentumN}
+                            onChange={e=>setMcMomentumN(Math.max(5,Math.min(120,Number(e.target.value))))}
+                            style={{width:65,padding:'2px 4px',borderRadius:3,
+                              background:'#0d1929',border:'1px solid #1a2a3a',
+                              color:'#e0e8f0',fontSize:11,fontFamily:MONO,textAlign:'right'}}
+                          />
+                        </div>
+                      )}
                     </div>
                   )}
                   {(mcStratSelected.length<=1?selectedModos.includes('positionsizing'):mcMode==='positionsizing')&&(

@@ -386,24 +386,94 @@ function buildCompartidoCurves(assetResults, capitalIni, symbolOrder = null) {
 }
 
 // ── MODO CAPITAL CONCENTRADO: pool compartido con techo por posición según maxPosiciones ──
-function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5) {
+// prioridad: 'alfabetico' | 'ranking' | 'momentum' | 'fuerza_relativa' | 'max52'
+// momentumN: lookback en días para criterio 'momentum' (default 20)
+// sp500Data: array de barras del SP500 (para fuerza_relativa)
+// symbolsList: array ordenado de símbolos del watchlist (para ranking)
+function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, prioridad = 'alfabetico', momentumN = 20, sp500Data = null, symbolsList = null) {
   const n = assetResults.length
   if (!n) return _emptyCurves()
   const { startDate, filteredDates } = _commonDates(assetResults)
   if (!filteredDates.length) return _emptyCurves(startDate)
 
+  // ── Índices de fecha por activo (para cálculo de scores de prioridad) ─────
+  const _dataMap = {}
+  const _dateIdxMap = {}
+  assetResults.forEach(ar => {
+    _dataMap[ar.symbol] = ar.data || []
+    const m = {}
+    ;(ar.data || []).forEach((d, i) => { m[d.date] = i })
+    _dateIdxMap[ar.symbol] = m
+  })
+
+  // ── Función de score: menor score = mayor prioridad (entra antes) ──────────
+  function _priorityScore(t) {
+    if (prioridad === 'alfabetico') return null  // handled inline in sort
+    if (prioridad === 'ranking') {
+      const ri = symbolsList ? symbolsList.indexOf(t.symbol) : -1
+      return ri >= 0 ? ri : (symbolsList ? symbolsList.length : 999)
+    }
+    const data = _dataMap[t.symbol] || []
+    const idx  = _dateIdxMap[t.symbol]?.[t.entryDate]
+    if (idx == null || data.length === 0) return 0
+
+    if (prioridad === 'momentum') {
+      const N = Math.max(1, momentumN || 20)
+      if (idx < N) return 0
+      const ret = (data[idx].close - data[idx - N].close) / data[idx - N].close
+      return -ret  // mayor retorno → score más bajo → entra antes
+    }
+    if (prioridad === 'fuerza_relativa') {
+      const LB = 63
+      if (idx < LB) return 0
+      const retAsset = (data[idx].close - data[idx - LB].close) / data[idx - LB].close
+      if (!sp500Data || !sp500Data.length) {
+        console.warn('[concentrado] fuerza_relativa: sp500Data no disponible, usando momentum N=63')
+        return -retAsset
+      }
+      let spIdx = -1
+      for (let i = sp500Data.length - 1; i >= 0; i--) {
+        if (sp500Data[i].date <= t.entryDate) { spIdx = i; break }
+      }
+      if (spIdx < LB) return -retAsset
+      const retSP = (sp500Data[spIdx].close - sp500Data[spIdx - LB].close) / sp500Data[spIdx - LB].close
+      return -(retAsset - retSP)  // mayor alfa vs SP500 → entra antes
+    }
+    if (prioridad === 'max52') {
+      const LB = Math.min(idx, 251)
+      let max252 = -Infinity
+      for (let i = idx - LB; i <= idx; i++) {
+        const h = (data[i].high != null ? data[i].high : data[i].close)
+        if (h > max252) max252 = h
+      }
+      if (max252 <= 0 || max252 === -Infinity) return 0
+      return -(data[idx].close / max252)  // más cercano al máximo → entra antes
+    }
+    return 0
+  }
+
   const allCandidates = assetResults.flatMap(ar =>
-    (ar.trades || []).map(t => ({
-      symbol:       ar.symbol,
-      entryDate:    t.entryDate,
-      exitDate:     t.exitDate,
-      pnlPct:       t.pnlPct,
-      entryPx:      t.entryPrice ?? t.entryPx,
-      stopPx:       t.stopHistory?.[0]?.stopPx ?? null,
-      dias:         t.dias,
-      _virtualClose: !!t._virtualClose,
-    }))
-  ).sort((a, b) => a.entryDate < b.entryDate ? -1 : a.entryDate > b.entryDate ? 1 : a.symbol < b.symbol ? -1 : 1)
+    (ar.trades || []).map(t => {
+      const c = {
+        symbol:        ar.symbol,
+        entryDate:     t.entryDate,
+        exitDate:      t.exitDate,
+        pnlPct:        t.pnlPct,
+        entryPx:       t.entryPrice ?? t.entryPx,
+        stopPx:        t.stopHistory?.[0]?.stopPx ?? null,
+        dias:          t.dias,
+        _virtualClose: !!t._virtualClose,
+      }
+      c._ps = _priorityScore(c)
+      return c
+    })
+  )
+  allCandidates.sort((a, b) => {
+    if (a.entryDate < b.entryDate) return -1
+    if (a.entryDate > b.entryDate) return 1
+    if (prioridad === 'alfabetico') return a.symbol < b.symbol ? -1 : a.symbol > b.symbol ? 1 : 0
+    return (a._ps ?? 0) - (b._ps ?? 0)
+  })
 
   if (!allCandidates.length) return buildSlotsCurves(assetResults, capitalIni)
 
@@ -1327,7 +1397,9 @@ export default async function handler(req, res) {
     if (modoAsig === 'compartido') {
       curves = buildCompartidoCurves(assetResults, cfg.capitalIni)
     } else if (modoAsig === 'concentrado') {
-      curves = buildConcentradoCurves(assetResults, cfg.capitalIni, sizeRules.maxPosiciones ?? 5)
+      const _prior    = sizeRules.prioridad  ?? 'alfabetico'
+      const _momentN  = sizeRules.momentumN  ?? 20
+      curves = buildConcentradoCurves(assetResults, cfg.capitalIni, sizeRules.maxPosiciones ?? 5, _prior, _momentN, sp500Data, symbols)
     } else if (modoAsig === 'positionsizing') {
       curves = buildPositionSizingCurves(assetResults, cfg.capitalIni, sizeRules)
     } else {
