@@ -621,7 +621,6 @@ export default function Home() {
   const [rightPanelW,setRightPanelW]=useState(275)
   const [candleH,setCandleH]=useState(480)     // resizable candle chart height
   const [chartFullscreen,setChartFullscreen]=useState(false)
-  useEffect(()=>{ if(chartFullscreen) console.log('[fullscreen] chartFullscreen=true activado') },[chartFullscreen])
   const [equityH,setEquityH]=useState(260)     // resizable equity chart height
   const [mcEquityH,setMcEquityH]=useState(300) // resizable MC equity chart height
   const candleResizing=useRef(false),candleStartY=useRef(0),candleStartH=useRef(0)
@@ -1578,6 +1577,7 @@ export default function Home() {
       .finally(()=>setWlLoading(false))
   }
   const stratLoadedRef=useRef(false)
+  const mcStratInitRef=useRef(false)  // true once auto-preselection of active strategy has run
   const reloadStrategies=(applyDefault=false)=>{
     setStrLoading(true)
     const uid=getUidFromJwt()
@@ -1616,6 +1616,14 @@ export default function Home() {
     setCondLoading(true)
     return fetchConditions().then(d=>setConditions(d||[])).catch(()=>{}).finally(()=>setCondLoading(false))
   }
+
+  // Auto-preseleccionar estrategia activa en multiactivo al cargar por primera vez
+  useEffect(()=>{
+    if(mcStratInitRef.current||!currentStratId||!strategies.length) return
+    if(!strategies.some(s=>s.id===currentStratId)) return
+    mcStratInitRef.current=true
+    setMcStratSelected(prev=>prev.length===0?[currentStratId]:prev)
+  },[currentStratId,strategies])
 
   // Sync colors from params.color (JSONB) into local condColors state
   useEffect(()=>{
@@ -2071,7 +2079,6 @@ export default function Home() {
       const res=await apiFetch('/api/datos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
       const json=await res.json()
       if(!res.ok)throw new Error(json.error||'Error')
-      console.log('[filterZones]', json?.filterZones?.length, json?.filterZones?.[0])
       savedRangeRef.current=null   // reset zoom so recentMonths is applied on new load
       isNewResultRef.current=true  // tell CandleChart to ignore savedRange on first mount
       setChartViewFull(false)
@@ -2752,7 +2759,6 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
       tipoStop,atrPeriod:Number(atrP),atrMult:Number(atrM),sinPerdidas,reentry,
       tipoFiltro,sp500EmaR:Number(sp500EmaR),sp500EmaL:Number(sp500EmaL),tipoCapital:mcCapital,
       sizeRules:{riskPerTrade:mcRiskPerTrade,maxPortfolioPct:mcMaxPortfolioPct,maxAccumRisk:mcMaxAccumRisk,maxPosiciones:mcMaxPosiciones,prioridad:mcPrioridad,momentumN:Number(mcMomentumN)}}
-    console.log('[PRIORIDAD]', {prioridad: mcPrioridad, momentumN: mcMomentumN})
     const buildCfgFromStrat=(strat)=>{
       // Parsear params del code_js (campo principal para estrategias modernas)
       let stratParams={}
@@ -3151,12 +3157,9 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
 
   // Altura de los tabs = 33px aprox. (padding 8px top+bottom + 17px línea)
   const TAB_H=33
-  // Diagnóstico: altura calculada para el gráfico bare
   const bareChartHeight=useMemo(()=>{
     if(typeof window==='undefined') return 480
-    const h=window.innerHeight-TAB_H
-    console.log('[v50] bareChartHeight calc',{innerHeight:window.innerHeight,TAB_H,result:h,isBareChart:result?.isBareChart})
-    return h
+    return window.innerHeight-TAB_H
   },[result?.isBareChart])
 
   // ── Auth handlers ────────────────────────────────────────────
@@ -3217,7 +3220,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.298</title>
+        <title>Trading Simulator V9.299</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3295,7 +3298,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.298
+            <span className="dot"/>Trading Simulator V9.299
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
