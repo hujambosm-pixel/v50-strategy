@@ -88,7 +88,7 @@ function groupByYear(monthMarkers) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// TOOLTIP
+// TOOLTIP — trade individual
 // ══════════════════════════════════════════════════════════════════════════════
 function GanttTooltip({ trade, mouseX, mouseY, isDiscarded, slotCapital }) {
   const t = trade
@@ -150,6 +150,43 @@ function GanttTooltip({ trade, mouseX, mouseY, isDiscarded, slotCapital }) {
           ⚠ Señal descartada (sin slot disponible)
         </div>
       )}
+    </div>
+  )
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// TOOLTIP — resumen por activo (hover sobre el ticker en el eje Y)
+// ══════════════════════════════════════════════════════════════════════════════
+function SymTooltip({ sym, stats, mouseX, mouseY }) {
+  const { ops, capInv, pnlEur, pnlPct, dias } = stats
+  const W = 215
+  const H = 140
+  const left = mouseX + 14 + W > (typeof window !== 'undefined' ? window.innerWidth  : 1200) ? mouseX - W - 10 : mouseX + 14
+  const top  = mouseY + 14 + H > (typeof window !== 'undefined' ? window.innerHeight : 800)  ? mouseY - H - 10 : mouseY + 14
+  const pnlColor = pnlEur >= 0 ? '#4ade80' : '#f87171'
+
+  return (
+    <div style={{
+      position:'fixed', left, top, zIndex:99999,
+      background:'#060d18', border:'1px solid #1a3a5c',
+      borderRadius:6, padding:'9px 13px', minWidth:W,
+      fontFamily:MONO, fontSize:10, color:'#e2e8f0',
+      pointerEvents:'none', boxShadow:'0 6px 24px rgba(0,0,0,0.7)',
+      lineHeight:'1.65',
+    }}>
+      <div style={{fontWeight:700, fontSize:12, color:'#00d4ff', marginBottom:6}}>{sym}</div>
+      <div style={{display:'grid', gridTemplateColumns:'auto 1fr', gap:'1px 10px'}}>
+        <span style={{color:'#4a6a8a'}}>Ops:</span>
+        <span style={{color:'#a8c4dc'}}>{ops}</span>
+        <span style={{color:'#4a6a8a'}}>Capital inv.:</span>
+        <span style={{color:'#c8dff5'}}>{fmtEur(capInv)}</span>
+        <span style={{color:'#4a6a8a'}}>P&amp;L€:</span>
+        <span style={{color:pnlColor, fontWeight:600}}>{fmtEur(pnlEur)}</span>
+        <span style={{color:'#4a6a8a'}}>P&amp;L% cap.:</span>
+        <span style={{color:pnlColor, fontWeight:600}}>{fmtPct(pnlPct)}</span>
+        <span style={{color:'#4a6a8a'}}>Días total:</span>
+        <span style={{color:'#a8c4dc'}}>{dias}</span>
+      </div>
     </div>
   )
 }
@@ -222,8 +259,9 @@ export default function GanttChart({
     if (checked && !discardedRequested.current) { discardedRequested.current = true; onRequestDiscarded?.() }
   }
 
-  // ── Tooltip ───────────────────────────────────────────────────────────────
-  const [tooltip, setTooltip] = useState(null)
+  // ── Tooltips ──────────────────────────────────────────────────────────────
+  const [tooltip,    setTooltip]    = useState(null)  // trade hover
+  const [symTooltip, setSymTooltip] = useState(null)  // ticker label hover
 
   // ── Wheel handler ─────────────────────────────────────────────────────────
   const scrollRef = useRef(null)
@@ -260,9 +298,7 @@ export default function GanttChart({
   const btnSt = () => ({ padding:'2px 9px', fontFamily:MONO, fontSize:10, borderRadius:3, cursor:'pointer', border:'1px solid #1a2d45', background:'transparent', color:'#4a7a9a' })
 
   // ── Bar text helper (inline, no clipPath) ─────────────────────────────────
-  // bw = ancho REAL de la barra en px (pre-clamp, puede superar containerW).
-  // La comparación con los umbrales usa el ancho completo para que barras
-  // parcialmente fuera del viewport muestren texto en la porción visible.
+  // bw = ancho REAL de la barra en px (pre-clamp).
   // textAnchor="end" pins text to the right edge — never overflows right.
   function barLabel(bw, pct) {
     if (pct == null) return null
@@ -270,6 +306,23 @@ export default function GanttChart({
     if (bw >= TEXT_FULL) return r + '%'
     if (bw >= TEXT_NONE) return String(r)
     return null
+  }
+
+  // ── Compute symbol stats for label tooltip ────────────────────────────────
+  function getSymStats(sym) {
+    const closed = trades.filter(t => t.symbol === sym && !t._virtualClose && t.exitDate)
+    const totalCapInv = closed.reduce((s, t) => s + (t._capitalAtEntry != null ? t._capitalAtEntry : (slotCapital || 0)), 0)
+    const totalPnlEur = closed.reduce((s, t) => {
+      const cap = t._capitalAtEntry != null ? t._capitalAtEntry : (slotCapital || 0)
+      return s + (t.pnlSimple != null ? t.pnlSimple : cap * (t.pnlPct || 0) / 100)
+    }, 0)
+    return {
+      ops:    closed.length,
+      capInv: totalCapInv,
+      pnlEur: totalPnlEur,
+      pnlPct: totalCapInv > 0 ? (totalPnlEur / totalCapInv) * 100 : 0,
+      dias:   closed.reduce((s, t) => s + (t.dias || 0), 0),
+    }
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -309,13 +362,10 @@ export default function GanttChart({
           <div style={{height:YEAR_ROW_H, position:'relative', overflow:'hidden',
             background:'#071929', borderBottom:'1px solid #1a3050'}}>
             {yearGroups.map(g => {
-              // x del inicio del año (primer mes del grupo)
               const xStart = msToX(monthMarkers[g.firstIdx].ms)
-              // x del inicio del año siguiente (o fin del container)
               const xEnd = g.lastIdx < monthMarkers.length - 1
                 ? msToX(monthMarkers[g.lastIdx + 1].ms)
                 : containerW
-              // Solo renderizar si hay intersección con el área visible
               if (xEnd < 0 || xStart > containerW) return null
               const visStart = Math.max(0, xStart)
               const visEnd   = Math.min(containerW, xEnd)
@@ -334,7 +384,6 @@ export default function GanttChart({
                 </div>
               )
             })}
-            {/* Label "Hoy" en la fila años */}
             {todayX != null && (
               <div style={{position:'absolute', left:todayX+3, top:2, fontSize:8,
                 color:'#fbbf24', whiteSpace:'nowrap', pointerEvents:'none'}}>Hoy</div>
@@ -365,7 +414,6 @@ export default function GanttChart({
                 </div>
               )
             })}
-            {/* Línea "Hoy" en meses */}
             {todayX != null && (
               <div style={{position:'absolute', left:todayX, top:0, bottom:0, width:1,
                 background:'#fbbf2488', pointerEvents:'none'}} />
@@ -379,15 +427,21 @@ export default function GanttChart({
       <div ref={scrollRef}
         style={{flex:1, minHeight:0, overflowY:'auto', overflowX:'hidden', display:'flex'}}>
 
-        {/* Columna de etiquetas */}
+        {/* Columna de etiquetas — hover muestra resumen del activo */}
         <div style={{width:LABEL_W, flexShrink:0, borderRight:'1px solid #2a3a5a', background:'#060d18'}}>
           {symbols.map((sym, i) => (
             <div key={sym} style={{
               height:ROW_H, padding:'0 6px', display:'flex', alignItems:'center',
               borderBottom:'1px solid #2a3a5a',
               background: i % 2 === 0 ? '#090f1c' : '#060c18',
-              fontSize:9, color:'#7aa0be', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
-            }} title={sym}>{sym}</div>
+              fontSize:9, color:'#7aa0be',
+              overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
+              cursor:'default',
+            }}
+              onMouseEnter={ev => setSymTooltip({ sym, mouseX: ev.clientX, mouseY: ev.clientY, stats: getSymStats(sym) })}
+              onMouseMove={ev  => setSymTooltip(p => p ? { ...p, mouseX: ev.clientX, mouseY: ev.clientY } : null)}
+              onMouseLeave={() => setSymTooltip(null)}
+            >{sym}</div>
           ))}
         </div>
 
@@ -419,7 +473,7 @@ export default function GanttChart({
                 stroke="#fbbf24" strokeWidth={1} strokeDasharray="4 3" />
             )}
 
-            {/* Barras DESCARTADAS — mismo color que ejecutadas pero al 50% de opacidad */}
+            {/* Barras DESCARTADAS — fondo gris oscuro, borde punteado, texto en verde/rojo */}
             {showDiscarded && discardedTrades && symbols.map((sym, si) =>
               discardedTrades.filter(t => t.symbol === sym && t.entryDate && t.exitDate).map((t, ti) => {
                 const x1 = msToX(dateToMs(t.entryDate))
@@ -429,20 +483,20 @@ export default function GanttChart({
                 const bx   = Math.max(0, x1)
                 const bw   = Math.max(2, Math.min(containerW, x2) - bx)
                 const y = si * ROW_H + BAR_PAD, h = ROW_H - BAR_PAD * 2
-                const color = barColor(t.pnlPct)
                 const label = barLabel(rawBw, t.pnlPct)
+                const textColor = (t.pnlPct != null && t.pnlPct >= 0) ? '#22c55e' : '#ef4444'
                 return (
-                  <g key={`disc-${sym}-${t.entryDate}-${ti}`} opacity="0.5" style={{cursor:'pointer'}}
+                  <g key={`disc-${sym}-${t.entryDate}-${ti}`} style={{cursor:'pointer'}}
                     onMouseEnter={ev => setTooltip({trade:t, mouseX:ev.clientX, mouseY:ev.clientY, isDiscarded:true})}
                     onMouseMove={ev  => setTooltip(p => p ? {...p, mouseX:ev.clientX, mouseY:ev.clientY} : null)}
                     onMouseLeave={() => setTooltip(null)}>
                     <rect x={bx} y={y} width={bw} height={h}
-                      fill={color} rx={2}
-                      stroke={color} strokeWidth={0.8} strokeDasharray="3 2" />
+                      fill="#4b5563" rx={2}
+                      stroke="#6b7280" strokeWidth={0.8} strokeDasharray="3 2" />
                     {label && bw >= 6 && (
                       <text x={bx + bw - 3} y={y + h/2 + 3.5}
                         fontSize={rawBw >= TEXT_FULL ? 9 : 8} fontWeight="bold"
-                        fill="#ffffff" fontFamily="monospace" textAnchor="end">
+                        fill={textColor} fontFamily="monospace" textAnchor="end">
                         {label}
                       </text>
                     )}
@@ -459,9 +513,9 @@ export default function GanttChart({
                   const x1 = msToX(dateToMs(t.entryDate))
                   const x2 = msToX(dateToMs(exitDate))
                   if (x2 < -2 || x1 > containerW + 2) return null
-                  const rawBw = x2 - x1                                        // ancho real pre-clamp
+                  const rawBw = x2 - x1
                   const bx   = Math.max(0, x1)
-                  const bw   = Math.max(2, Math.min(containerW, x2) - bx)      // ancho visible renderizado
+                  const bw   = Math.max(2, Math.min(containerW, x2) - bx)
                   const y = si * ROW_H + BAR_PAD, h = ROW_H - BAR_PAD * 2
                   const color = barColor(t.pnlPct)
                   const label = barLabel(rawBw, t.pnlPct)
@@ -496,10 +550,14 @@ export default function GanttChart({
         </div>
       </div>
 
-      {/* TOOLTIP */}
+      {/* TOOLTIPS */}
       {tooltip && (
         <GanttTooltip trade={tooltip.trade} mouseX={tooltip.mouseX} mouseY={tooltip.mouseY}
           isDiscarded={tooltip.isDiscarded} slotCapital={slotCapital} />
+      )}
+      {symTooltip && !tooltip && (
+        <SymTooltip sym={symTooltip.sym} stats={symTooltip.stats}
+          mouseX={symTooltip.mouseX} mouseY={symTooltip.mouseY} />
       )}
     </div>
   )

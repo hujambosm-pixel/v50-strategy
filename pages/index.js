@@ -16,7 +16,7 @@ import dynamic from 'next/dynamic'
 const McMonthlyGainsChart = dynamic(() => import('../components/McMonthlyGainsChart'), { ssr: false })
 import { TlEquityChart, TlInvestChart } from '../components/TlCharts'
 import ContextThemeMenu, { applyTema } from '../components/ContextThemeMenu'
-import { exportTimeline, exportGantt } from '../lib/exportTimeline'
+import { exportTimeline, exportGantt, exportHistorial } from '../lib/exportTimeline'
 import GanttChart from '../components/GanttChart'
 import MetricRow from '../components/MetricRow'
 import PriceAlarmQuickForm from '../components/PriceAlarmQuickForm'
@@ -3214,7 +3214,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.293</title>
+        <title>Trading Simulator V9.294</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3292,7 +3292,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.293
+            <span className="dot"/>Trading Simulator V9.294
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6538,15 +6538,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         // Vista Gantt → exportar diagrama semanal
                         exportGantt({mcResult:histResult,mcSelected,baseCfg,stratName,discardedTrades:ganttDiscarded})
                       }else{
-                        // Vista tabla → exportar Timeline mensual
-                        const weightsNorm={}
-                        if(mcMode==='custom'){
-                          const total=mcSelected.reduce((s,sym)=>s+(Number(mcWeights[sym])||0),0)
-                          mcSelected.forEach(sym=>{weightsNorm[sym]=total>0?(Number(mcWeights[sym])||0)/total*100:100/mcSelected.length})
-                        }
-                        const isNoStrategy=(strat?.name||'').includes('No Strategy')
-                        await exportTimeline({mcResult:histResult,mcSelected,baseCfg,strategyId:sid,
-                          isNoStrategy,filtros,mcIntervalo,weightsNorm,apiFetch,stratName})
+                        // Vista tabla → exportar historial de trades
+                        exportHistorial({mcResult:histResult,mcSelected,baseCfg,stratName})
                       }
                     }catch(e){alert('Error al exportar: '+e.message)}
                     finally{setMcExporting(false)}
@@ -6566,7 +6559,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               background:'#0d1828',border:'1px solid #274462',color:'#e8f4ff',width:110}}/>}
                           <button
                             disabled={histBtnsDisabled||mcExporting}
-                            title={histBtnTitle||(mcShowGantt?'Exportar Gantt semanal a Excel (.xlsx)':'Exportar timeline mensual a Excel (.xlsx)')}
+                            title={histBtnTitle||(mcShowGantt?'Exportar Gantt semanal a Excel (.xlsx)':'Exportar historial de trades a Excel (.xlsx)')}
                             onClick={handleExport}
                             style={{padding:'2px 8px',fontFamily:MONO,fontSize:10,
                               background:mcExporting?'#1a2d45':'transparent',
