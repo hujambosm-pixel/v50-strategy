@@ -391,6 +391,7 @@ function buildCompartidoCurves(assetResults, capitalIni, symbolOrder = null) {
 // sp500Data: array de barras del SP500 (para fuerza_relativa)
 // symbolsList: array ordenado de símbolos del watchlist (para ranking)
 function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, prioridad = 'alfabetico', momentumN = 20, sp500Data = null, symbolsList = null) {
+  console.log('[BUILD prioridad]', prioridad, momentumN)
   const n = assetResults.length
   if (!n) return _emptyCurves()
   const { startDate, filteredDates } = _commonDates(assetResults)
@@ -468,6 +469,7 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
       return c
     })
   )
+  console.log('[SCORES muestra]', allCandidates.slice(0,3).map(c => ({symbol: c.symbol, date: c.entryDate, ps: c._ps})))
   allCandidates.sort((a, b) => {
     if (a.entryDate < b.entryDate) return -1
     if (a.entryDate > b.entryDate) return 1
@@ -1132,6 +1134,7 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
   const { symbols, cfg: cfgInput, definition, modoAsig = 'slots', weights = {}, sizeRules: sizeRulesBody = null, strategyId = null, isNoStrategy = false, filtros: filtrosCfg, intervalo } = req.body
   const sizeRules = sizeRulesBody || cfgInput?.sizeRules || {}
+  if (modoAsig === 'concentrado') console.log('[SIZERRULES]', JSON.stringify(sizeRules))
   if (!Array.isArray(symbols) || !symbols.length) return res.status(400).json({ error: 'symbols requerido' })
   let cfg = cfgInput
   if (!cfg && definition) {
@@ -1399,6 +1402,7 @@ export default async function handler(req, res) {
     } else if (modoAsig === 'concentrado') {
       const _prior    = sizeRules.prioridad  ?? 'alfabetico'
       const _momentN  = sizeRules.momentumN  ?? 20
+      console.log('[API prioridad]', _prior, _momentN)
       curves = buildConcentradoCurves(assetResults, cfg.capitalIni, sizeRules.maxPosiciones ?? 5, _prior, _momentN, sp500Data, symbols)
     } else if (modoAsig === 'positionsizing') {
       curves = buildPositionSizingCurves(assetResults, cfg.capitalIni, sizeRules)
