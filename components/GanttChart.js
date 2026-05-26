@@ -5,7 +5,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 
 const MONO = "'JetBrains Mono', 'Fira Mono', 'Cascadia Code', monospace"
 
-const LABEL_W   = 90  // ancho columna activos (px)
+const LABEL_W   = 50  // ancho columna activos (px)
 const YEAR_ROW_H  = 20 // altura fila "años" (px)
 const MONTH_ROW_H = 18 // altura fila "meses" (px)
 const HEADER_H  = YEAR_ROW_H + MONTH_ROW_H  // 38 px total
@@ -419,29 +419,30 @@ export default function GanttChart({
                 stroke="#fbbf24" strokeWidth={1} strokeDasharray="4 3" />
             )}
 
-            {/* Barras DESCARTADAS */}
+            {/* Barras DESCARTADAS — mismo color que ejecutadas pero al 50% de opacidad */}
             {showDiscarded && discardedTrades && symbols.map((sym, si) =>
               discardedTrades.filter(t => t.symbol === sym && t.entryDate && t.exitDate).map((t, ti) => {
                 const x1 = msToX(dateToMs(t.entryDate))
                 const x2 = msToX(dateToMs(t.exitDate))
                 if (x2 < -2 || x1 > containerW + 2) return null
-                const rawBw = x2 - x1                                         // ancho real pre-clamp
+                const rawBw = x2 - x1
                 const bx   = Math.max(0, x1)
-                const bw   = Math.max(2, Math.min(containerW, x2) - bx)       // ancho visible renderizado
+                const bw   = Math.max(2, Math.min(containerW, x2) - bx)
                 const y = si * ROW_H + BAR_PAD, h = ROW_H - BAR_PAD * 2
+                const color = barColor(t.pnlPct)
                 const label = barLabel(rawBw, t.pnlPct)
                 return (
-                  <g key={`disc-${sym}-${t.entryDate}-${ti}`} style={{cursor:'pointer'}}
+                  <g key={`disc-${sym}-${t.entryDate}-${ti}`} opacity="0.5" style={{cursor:'pointer'}}
                     onMouseEnter={ev => setTooltip({trade:t, mouseX:ev.clientX, mouseY:ev.clientY, isDiscarded:true})}
                     onMouseMove={ev  => setTooltip(p => p ? {...p, mouseX:ev.clientX, mouseY:ev.clientY} : null)}
                     onMouseLeave={() => setTooltip(null)}>
                     <rect x={bx} y={y} width={bw} height={h}
-                      fill="rgba(107,114,128,0.22)" rx={2}
-                      stroke="#6b7280" strokeWidth={0.8} strokeDasharray="3 2" />
+                      fill={color} rx={2}
+                      stroke={color} strokeWidth={0.8} strokeDasharray="3 2" />
                     {label && bw >= 6 && (
                       <text x={bx + bw - 3} y={y + h/2 + 3.5}
                         fontSize={rawBw >= TEXT_FULL ? 9 : 8} fontWeight="bold"
-                        fill="#9ca3af" fontFamily="monospace" textAnchor="end">
+                        fill="#ffffff" fontFamily="monospace" textAnchor="end">
                         {label}
                       </text>
                     )}

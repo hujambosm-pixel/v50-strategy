@@ -16,7 +16,7 @@ import dynamic from 'next/dynamic'
 const McMonthlyGainsChart = dynamic(() => import('../components/McMonthlyGainsChart'), { ssr: false })
 import { TlEquityChart, TlInvestChart } from '../components/TlCharts'
 import ContextThemeMenu, { applyTema } from '../components/ContextThemeMenu'
-import { exportTimeline } from '../lib/exportTimeline'
+import { exportTimeline, exportGantt } from '../lib/exportTimeline'
 import GanttChart from '../components/GanttChart'
 import MetricRow from '../components/MetricRow'
 import PriceAlarmQuickForm from '../components/PriceAlarmQuickForm'
@@ -508,7 +508,7 @@ export default function Home() {
   const [tipoStop,setTipoStop]=useState('tecnico'),[atrP,setAtrP]=useState(14),[atrM,setAtrM]=useState(1.0)
   const [sinPerdidas,setSinPerdidas]=useState(true),[reentry,setReentry]=useState(true)
   const [tipoFiltro,setTipoFiltro]=useState('none'),[sp500EmaR,setSp500EmaR]=useState(10),[sp500EmaL,setSp500EmaL]=useState(11)
-  const [filtros,setFiltros]=useState({vix:{activo:false,umbral:25,intervalo:'diario'},indiceEma:{activo:false,ticker:'^GSPC',periodo:200,intervalo:'diario'},sectorEma:{activo:false,ticker:'XLK',periodo:50,intervalo:'diario'},cruceEma:{activo:false,ticker:'^GSPC',periodoR:10,periodoL:11,intervalo:'diario'}})
+  const [filtros,setFiltros]=useState({vix:{activo:false,umbral:25,intervalo:'diario'},indiceEma:{activo:true,ticker:'^GSPC',periodo:10,intervalo:'diario'},sectorEma:{activo:false,ticker:'XLK',periodo:50,intervalo:'diario'},cruceEma:{activo:false,ticker:'^GSPC',periodoR:10,periodoL:11,intervalo:'diario'}})
   const [filtrosOpen,setFiltrosOpen]=useState(false)
   const [result,setResult]=useState(null),[loading,setLoading]=useState(false),[error,setError]=useState(null)
   const [labelMode,setLabelMode]=useState(1),[rulerOn,setRulerOn]=useState(false)
@@ -687,14 +687,14 @@ export default function Home() {
   const [mcSearch,setMcSearch]=useState('')
   const [mcOnlyFavs,setMcOnlyFavs]=useState(false)
   const [mcListFilter,setMcListFilter]=useState('')
-  const [mcMode,setMcMode]=useState('slots')             // 'slots' | 'custom' | 'positionsizing'
-  const [selectedModos,setSelectedModos]=useState(['slots']) // multi-mode when 1 strategy selected
+  const [mcMode,setMcMode]=useState('concentrado')       // 'slots' | 'concentrado' | 'compartido' | 'custom' | 'positionsizing'
+  const [selectedModos,setSelectedModos]=useState(['concentrado']) // multi-mode when 1 strategy selected
   const [mcIsModoCompare,setMcIsModoCompare]=useState(false) // true when comparing modes (vs strategies)
   const [mcWeights,setMcWeights]=useState({})             // {symbol: pct} para modo custom
   const [mcRiskPerTrade,setMcRiskPerTrade]=useState(5)
   const [mcMaxPortfolioPct,setMcMaxPortfolioPct]=useState(20)
   const [mcMaxAccumRisk,setMcMaxAccumRisk]=useState(20)
-  const [mcMaxPosiciones,setMcMaxPosiciones]=useState(5)  // para modo concentrado
+  const [mcMaxPosiciones,setMcMaxPosiciones]=useState(4)  // para modo concentrado
   const [mcCapital,setMcCapital]=useState('compound')    // 'simple' | 'compound'
   const [mcCapitalIni,setMcCapitalIni]=useState(1000)
   const [mcPeriodMode,setMcPeriodMode]=useState('years') // 'years' | 'range'
@@ -3214,7 +3214,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.292</title>
+        <title>Trading Simulator V9.293</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3292,7 +3292,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.292
+            <span className="dot"/>Trading Simulator V9.293
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6519,7 +6519,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                     }catch(e){console.warn('Gantt discarded fetch failed:',e.message)}
                     finally{setGanttLoadingDisc(false)}
                   }
-                  // handleExport para este historial
+                  // handleExport para este historial — despacha exportGantt o exportTimeline según la vista activa
                   const handleExport=async()=>{
                     setMcExporting(true)
                     try{
@@ -6531,17 +6531,23 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         sinPerdidas,reentry,tipoFiltro,sp500EmaR:Number(sp500EmaR),sp500EmaL:Number(sp500EmaL),
                         tipoCapital:mcCapital,
                         sizeRules:{riskPerTrade:mcRiskPerTrade,maxPortfolioPct:mcMaxPortfolioPct,maxAccumRisk:mcMaxAccumRisk,maxPosiciones:mcMaxPosiciones}}
-                      const weightsNorm={}
-                      if(mcMode==='custom'){
-                        const total=mcSelected.reduce((s,sym)=>s+(Number(mcWeights[sym])||0),0)
-                        mcSelected.forEach(sym=>{weightsNorm[sym]=total>0?(Number(mcWeights[sym])||0)/total*100:100/mcSelected.length})
-                      }
                       const sid=(mcStratSelected.filter(Boolean)[0])||currentStratId||null
                       const strat=strategies.find(s=>s.id===sid)
-                      const isNoStrategy=(strat?.name||'').includes('No Strategy')
                       const stratName=strat?.name||'estrategia'
-                      await exportTimeline({mcResult:histResult,mcSelected,baseCfg,strategyId:sid,
-                        isNoStrategy,filtros,mcIntervalo,weightsNorm,apiFetch,stratName})
+                      if(mcShowGantt){
+                        // Vista Gantt → exportar diagrama semanal
+                        exportGantt({mcResult:histResult,mcSelected,baseCfg,stratName,discardedTrades:ganttDiscarded})
+                      }else{
+                        // Vista tabla → exportar Timeline mensual
+                        const weightsNorm={}
+                        if(mcMode==='custom'){
+                          const total=mcSelected.reduce((s,sym)=>s+(Number(mcWeights[sym])||0),0)
+                          mcSelected.forEach(sym=>{weightsNorm[sym]=total>0?(Number(mcWeights[sym])||0)/total*100:100/mcSelected.length})
+                        }
+                        const isNoStrategy=(strat?.name||'').includes('No Strategy')
+                        await exportTimeline({mcResult:histResult,mcSelected,baseCfg,strategyId:sid,
+                          isNoStrategy,filtros,mcIntervalo,weightsNorm,apiFetch,stratName})
+                      }
                     }catch(e){alert('Error al exportar: '+e.message)}
                     finally{setMcExporting(false)}
                   }
@@ -6560,7 +6566,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               background:'#0d1828',border:'1px solid #274462',color:'#e8f4ff',width:110}}/>}
                           <button
                             disabled={histBtnsDisabled||mcExporting}
-                            title={histBtnTitle||'Exportar timeline mensual a Excel (.xlsx)'}
+                            title={histBtnTitle||(mcShowGantt?'Exportar Gantt semanal a Excel (.xlsx)':'Exportar timeline mensual a Excel (.xlsx)')}
                             onClick={handleExport}
                             style={{padding:'2px 8px',fontFamily:MONO,fontSize:10,
                               background:mcExporting?'#1a2d45':'transparent',
