@@ -727,6 +727,7 @@ export default function Home() {
 
   const debounceRef=useRef(null),chartApiRef=useRef(null),chartApiFullscreenRef=useRef(null),contentRef=useRef(null),skipNextRunRef=useRef(false)
   const chartLegendRef=useRef(null)   // external legend ref for integrated chart info bar
+  const candidatesOrigWidthRef=useRef(null)  // sidebar width saved before expanding for candidates panel
 
   const mcChartApiRef=useRef(null)
   const [mcAxisW,setMcAxisW]=useState(72)   // measured equity rightPriceScale width, shared with occupancy & monthly charts
@@ -2077,9 +2078,25 @@ export default function Home() {
   }, [watchlist,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL,currentStratId,stratName])
 
   // ── Analizar candidatos: extrae tickers, corre backtest en paralelo ──
+  const clearCandidates=useCallback(()=>{
+    setCandidatesResults([])
+    if(candidatesOrigWidthRef.current!==null){
+      setSidebarW(candidatesOrigWidthRef.current)
+      candidatesOrigWidthRef.current=null
+    }
+  },[setSidebarW])
+
   const analyzeCandidates=useCallback(async()=>{
     const rawTickers=[...(new Set((candidatesText.match(/\b[A-Z]{1,5}\b/g)||[])))]
     if(!rawTickers.length) return
+    // Expandir sidebar al doble si aún no está expandido
+    setSidebarW(prev=>{
+      if(candidatesOrigWidthRef.current===null){
+        candidatesOrigWidthRef.current=prev
+        return Math.min(prev*2,700)
+      }
+      return prev
+    })
     setCandidatesLoading(true)
     setCandidatesResults([])
     setCandidatesProgress({done:0,total:rawTickers.length})
@@ -3267,7 +3284,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.300</title>
+        <title>Trading Simulator V9.301</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3345,7 +3362,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.300
+            <span className="dot"/>Trading Simulator V9.301
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -3440,7 +3457,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
           </nav>
 
           {/* ── SIDEBAR ── */}
-          <aside className="sidebar" style={{padding:0,gap:0,position:'relative',width:sidePanel==='tradelog'&&tlTab==='dashboard'?0:sidebarW,overflow:'hidden',flexShrink:0,flexGrow:0,transition:'width 0.15s ease'}} onContextMenu={e=>openCtx(e,'sidebar')}
+          <aside className="sidebar" style={{padding:0,gap:0,position:'relative',width:sidePanel==='tradelog'&&tlTab==='dashboard'?0:sidebarW,overflow:'hidden',flexShrink:0,flexGrow:0,transition:'width 0.3s ease'}} onContextMenu={e=>openCtx(e,'sidebar')}
             onWheel={e=>{if(e.ctrlKey){e.preventDefault();handlePanelScaleWheel(sidePanel,e)}}}>
             {/* Resize handle — right edge */}
             <div onMouseDown={e=>{sidebarResizing.current=true;sidebarStartX.current=e.clientX;sidebarStartW.current=sidebarW;document.body.style.cursor='col-resize';document.body.style.userSelect='none'}}
@@ -3921,7 +3938,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                 :'⚡ Analizar'}
                             </button>
                             {candidatesResults.length>0&&!candidatesLoading&&(
-                              <button onClick={()=>setCandidatesResults([])}
+                              <button onClick={clearCandidates}
                                 title="Limpiar resultados"
                                 style={{background:'transparent',border:'1px solid #1a2d45',color:'#5a7a95',
                                   fontFamily:MONO,fontSize:11,padding:'4px 8px',borderRadius:3,cursor:'pointer'}}
@@ -3946,6 +3963,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                     const inWl=wlSymSet.has((r.symbol||'').toUpperCase())
                                     return(
                                       <tr key={r.symbol}
+                                        onClick={()=>setSimbolo(r.symbol)}
                                         style={{borderBottom:'1px solid rgba(20,40,65,0.5)',cursor:'pointer'}}
                                         onMouseOver={e=>e.currentTarget.style.background='rgba(255,255,255,0.02)'}
                                         onMouseOut={e=>e.currentTarget.style.background='transparent'}>
