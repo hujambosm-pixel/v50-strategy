@@ -728,6 +728,7 @@ export default function Home() {
   const debounceRef=useRef(null),chartApiRef=useRef(null),chartApiFullscreenRef=useRef(null),contentRef=useRef(null),skipNextRunRef=useRef(false)
   const chartLegendRef=useRef(null)   // external legend ref for integrated chart info bar
   const candidatesOrigWidthRef=useRef(null)  // sidebar width saved before expanding for candidates panel
+  const closesCache=useRef({})  // { SYM: { data:[...], ts:Date.now() } } — TTL 20 min para refreshAlarmStatus
 
   const mcChartApiRef=useRef(null)
   const [mcAxisW,setMcAxisW]=useState(72)   // measured equity rightPriceScale width, shared with occupancy & monthly charts
@@ -1575,6 +1576,8 @@ export default function Home() {
   // alarmStatus[symbol][alarmId] = true|false|null
   const [alarmStatus,setAlarmStatus]=useState({})
   const [alarmStatusLoading,setAlarmStatusLoading]=useState(false)
+  const [alarmCheckProgress,setAlarmCheckProgress]=useState(null)  // {done,total} durante comprobación
+  const [alarmCheckDone,setAlarmCheckDone]=useState(false)          // "✓ Actualizado" durante 2s
 
   const reloadWatchlist=()=>{
     setWlLoading(true)
@@ -1937,77 +1940,109 @@ export default function Home() {
     && !ackedAlarms.has(`${a.symbol}::${a.id}`)
   ).length
 
-  const refreshAlarmStatus=useCallback(async(wl,al)=>{
+  const refreshAlarmStatus=useCallback(async(wl,al,forceRefresh=false)=>{
     const wlList=wl||watchlist
     const alarmList=al||alarms
     const symbols=wlList.map(w=>w.symbol)
     const libCondsCheck=lsGetConds().filter(c=>c.active!==false)
     if(!symbols.length||(!alarmList.length&&!libCondsCheck.length)) return
     setAlarmStatusLoading(true)
+    setAlarmCheckDone(false)
+    setAlarmCheckProgress({done:0,total:symbols.length})
     try{
       // Merge real alarms + library conditions for watchlist dots
-      // Read from localStorage (always current) and filter by active !== false
-      const libConds = lsGetConds().filter(c=>c.active!==false)
-      const pseudoAlarms = libConds.map(c=>({
-        id: c.id,
-        condition: c.type,
-        ema_r: c.params?.ma_fast || c.params?.ma_period || 10,
-        ema_l: c.params?.ma_slow || 11,
-        params: c.params,
+      const libConds=lsGetConds().filter(c=>c.active!==false)
+      const pseudoAlarms=libConds.map(c=>({
+        id:c.id,condition:c.type,
+        ema_r:c.params?.ma_fast||c.params?.ma_period||10,
+        ema_l:c.params?.ma_slow||11,params:c.params,
       }))
-      // Avoid duplicates: real alarms take priority
-      const realAlarmIds = new Set(alarmList.map(a=>a.id))
-      const extraConds = pseudoAlarms.filter(p=>!realAlarmIds.has(p.id))
-      const allEvalAlarms = [...alarmList.map(a=>({id:a.id,symbol:a.symbol,condition:a.condition,condition_detail:a.condition_detail,price_level:a.price_level,ema_r:a.ema_r,ema_l:a.ema_l,params:a.params})), ...extraConds]
+      const realAlarmIds=new Set(alarmList.map(a=>a.id))
+      const extraConds=pseudoAlarms.filter(p=>!realAlarmIds.has(p.id))
+      const allEvalAlarms=[...alarmList.map(a=>({id:a.id,symbol:a.symbol,condition:a.condition,condition_detail:a.condition_detail,price_level:a.price_level,ema_r:a.ema_r,ema_l:a.ema_l,params:a.params})),...extraConds]
 
-      // Pre-fetch closes via /api/chartdata en batches (evita rate limit Stooq)
+      // Pre-fetch closes con caché en memoria (TTL 20 min). forceRefresh=true lo ignora.
       const closes={}
+      const TTL=1200000 // 20 minutos
       const _bs=4
       for(let _i=0;_i<symbols.length;_i+=_bs){
         const _batch=symbols.slice(_i,_i+_bs)
         await Promise.all(_batch.map(async sym=>{
           try{
-            const r=await apiFetch(`/api/closes?symbol=${sym}&days=300`)
-            const data=await r.json()
-            if(Array.isArray(data)&&data.length>=30) closes[sym]=data
+            const cached=closesCache.current[sym]
+            if(!forceRefresh&&cached&&(Date.now()-cached.ts)<TTL){
+              closes[sym]=cached.data  // hit de caché
+            } else {
+              const r=await apiFetch(`/api/closes?symbol=${sym}&days=300`)
+              const data=await r.json()
+              if(Array.isArray(data)&&data.length>=30){
+                closes[sym]=data
+                closesCache.current[sym]={data,ts:Date.now()}
+              }
+            }
           }catch{}
         }))
+        setAlarmCheckProgress({done:Math.min(_i+_bs,symbols.length),total:symbols.length})
         if(_i+_bs<symbols.length) await new Promise(r=>setTimeout(r,400))
       }
       const res=await apiFetch('/api/status',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
+        method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({symbols,alarms:allEvalAlarms,closes})
       })
       const data=await res.json()
       const prev=alarmStatus||{}
-    const newStatus=data||{}
-    setAlarmStatus(newStatus)
-    // Check if setting enabled: show popup on new active alarms
-    try{
-      const sett=JSON.parse(localStorage.getItem('v50_settings')||'{}')
-      if(sett?.alarmas?.popupOnTrigger!==false){
-        // Find newly triggered alarms (active in new but not in prev)
-        const triggered=[]
-        for(const sym of Object.keys(newStatus||{})){
-          for(const aid of Object.keys(newStatus[sym]||{})){
-            if(newStatus[sym]?.[aid]?.active===true && !prev[sym]?.[aid]?.active){
-              const al=alarms.find(a=>a.id===aid)
-              if(al) triggered.push({symbol:sym, name:al.name, condition:al.condition})
+      const newStatus=data||{}
+      setAlarmStatus(newStatus)
+      // Popup en alarmas nuevas
+      try{
+        const sett=JSON.parse(localStorage.getItem('v50_settings')||'{}')
+        if(sett?.alarmas?.popupOnTrigger!==false){
+          const triggered=[]
+          for(const sym of Object.keys(newStatus||{})){
+            for(const aid of Object.keys(newStatus[sym]||{})){
+              if(newStatus[sym]?.[aid]?.active===true&&!prev[sym]?.[aid]?.active){
+                const al=alarms.find(a=>a.id===aid)
+                if(al) triggered.push({symbol:sym,name:al.name,condition:al.condition})
+              }
             }
           }
+          if(triggered.length>0) setAlarmPopup(triggered)
         }
-        if(triggered.length>0) setAlarmPopup(triggered)
-      }
-    }catch(_){}
+      }catch(_){}
+      // Flash "✓ Actualizado" durante 2s
+      setAlarmCheckDone(true)
+      setTimeout(()=>setAlarmCheckDone(false),2000)
     }catch(e){console.error('refreshAlarmStatus error',e)}
-    finally{setAlarmStatusLoading(false)}
+    finally{setAlarmStatusLoading(false);setAlarmCheckProgress(null)}
   },[watchlist,alarms])
 
-  // Recalcular cuando cargan alarmas/condiciones O watchlist (basta con que haya algo que evaluar)
+  // ── Watchlist filtrado por listas seleccionadas (para umbral auto-refresh y botón ↻) ──
+  const filteredWlItems=useMemo(()=>{
+    if(selectedLists.length===0) return watchlist
+    const namedSel=selectedLists.filter(s=>s!=='__unassigned__')
+    const hasUnassigned=selectedLists.includes('__unassigned__')
+    return watchlist.filter(w=>{
+      const listIds=w.list_ids||[]
+      if(hasUnassigned&&listIds.length===0) return true
+      if(namedSel.length>0&&listIds.some(lid=>{const l=wlLists.find(x=>x.id===lid);return l&&namedSel.includes(l.name)})) return true
+      return false
+    })
+  },[watchlist,selectedLists,wlLists])
+
+  // CAMBIO 1 — Persistir selección de listas en localStorage
   useEffect(()=>{
-    if(watchlist.length>0&&(alarms.length>0||conditions.length>0)) refreshAlarmStatus(watchlist,alarms)
-  },[alarms,conditions.length,watchlist.length]) // eslint-disable-line
+    try{const v=localStorage.getItem('watchlist_selected_lists');if(v){const p=JSON.parse(v);if(Array.isArray(p))setSelectedLists(p)}}catch(_){}
+  },[]) // solo al montar
+  useEffect(()=>{
+    try{localStorage.setItem('watchlist_selected_lists',JSON.stringify(selectedLists))}catch(_){}
+  },[selectedLists])
+
+  // CAMBIO 2 — Auto-refresh solo si ≤50 activos visibles (filteredWlItems)
+  useEffect(()=>{
+    const count=filteredWlItems.length
+    if(count>0&&(alarms.length>0||conditions.length>0)&&count<=50)
+      refreshAlarmStatus(filteredWlItems,alarms)
+  },[alarms,conditions.length,filteredWlItems.length,selectedLists.length]) // eslint-disable-line
 
   // ── Ranking: ejecuta backtest en paralelo sobre toda la watchlist ──
   // Usa gananciaSimple (CAGR Simple) para puntuar. Score ponderado:
@@ -3294,7 +3329,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.305</title>
+        <title>Trading Simulator V9.306</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3372,7 +3407,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.305
+            <span className="dot"/>Trading Simulator V9.306
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4410,9 +4445,23 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
             {sidePanel==='alarms'&&(
               <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
                 {/* Header */}
-                <div style={{padding:'6px 8px',borderBottom:'1px solid var(--border)',display:'flex',gap:4,alignItems:'center',flexShrink:0}}>
+                <div style={{padding:'6px 8px',borderBottom:'1px solid var(--border)',display:'flex',gap:4,alignItems:'center',flexShrink:0,flexWrap:'wrap'}}>
                   <span style={{fontFamily:MONO,fontSize:12,color:'#a8ccdf',flex:1}}>Alertas</span>
-                  <button onClick={()=>refreshAlarmStatus()} title="Actualizar estado" style={{background:'transparent',border:'none',color:'#5a7a95',fontFamily:MONO,fontSize:13,padding:'2px 5px',cursor:'pointer'}} disabled={alarmStatusLoading}>{alarmStatusLoading?'⟳':'↻'}</button>
+                  {/* Estado inline: progreso / confirmación / aviso >50 */}
+                  {alarmStatusLoading&&alarmCheckProgress&&(
+                    <span style={{fontFamily:MONO,fontSize:9,color:'#a8ccdf',whiteSpace:'nowrap'}}>
+                      {alarmCheckProgress.done}/{alarmCheckProgress.total}…
+                    </span>
+                  )}
+                  {alarmCheckDone&&!alarmStatusLoading&&(
+                    <span style={{fontFamily:MONO,fontSize:9,color:'#00e5a0',whiteSpace:'nowrap'}}>✓ Actualizado</span>
+                  )}
+                  {!alarmStatusLoading&&!alarmCheckDone&&filteredWlItems.length>50&&(
+                    <span style={{fontFamily:MONO,fontSize:9,color:'#ffd166',whiteSpace:'nowrap'}} title={`${filteredWlItems.length} activos — actualización automática desactivada`}>
+                      ⚠ {filteredWlItems.length} activos
+                    </span>
+                  )}
+                  <button onClick={()=>refreshAlarmStatus(filteredWlItems,alarms,true)} title="Actualizar estado (fuerza recarga de datos)" style={{background:'transparent',border:'none',color:'#5a7a95',fontFamily:MONO,fontSize:13,padding:'2px 5px',cursor:'pointer'}} disabled={alarmStatusLoading}>{alarmStatusLoading?'⟳':'↻'}</button>
                   <button onClick={newAlarm} title="Nueva alarma" style={{background:'rgba(0,212,255,0.1)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:13,padding:'3px 8px',borderRadius:3,cursor:'pointer'}}>+</button>
                 </div>
                 <div style={{overflowY:'auto',flex:1}}>
