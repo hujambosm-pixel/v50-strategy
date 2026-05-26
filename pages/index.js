@@ -748,6 +748,12 @@ export default function Home() {
   const [mcShowGantt,setMcShowGantt]=useState(false)       // toggle Gantt / Tabla
   const [ganttDiscarded,setGanttDiscarded]=useState(null)  // cached discarded trades for Gantt
   const [ganttLoadingDisc,setGanttLoadingDisc]=useState(false) // loading discarded for Gantt
+  // ── Analizar candidatos state ──────────────────────────────────
+  const [candidatesOpen,setCandidatesOpen]=useState(false)
+  const [candidatesText,setCandidatesText]=useState('')
+  const [candidatesLoading,setCandidatesLoading]=useState(false)
+  const [candidatesResults,setCandidatesResults]=useState([])  // sorted by CAGR desc
+  const [candidatesProgress,setCandidatesProgress]=useState(null) // {done,total}
   const mcChartsSyncRef=useRef({isSyncing:false,charts:[],lastRange:null}) // sync group for signal charts
   const mcChartRefsMap=useRef({}) // symbol → chart instance for trade navigation
 
@@ -2070,6 +2076,47 @@ export default function Home() {
     saveRankingRemote(results, currentStratId||null).catch(()=>{})
   }, [watchlist,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL,currentStratId,stratName])
 
+  // ── Analizar candidatos: extrae tickers, corre backtest en paralelo ──
+  const analyzeCandidates=useCallback(async()=>{
+    const rawTickers=[...(new Set((candidatesText.match(/\b[A-Z]{1,5}\b/g)||[])))]
+    if(!rawTickers.length) return
+    setCandidatesLoading(true)
+    setCandidatesResults([])
+    setCandidatesProgress({done:0,total:rawTickers.length})
+    const CONC=5
+    const partials=[]
+    const runOne=async(sym)=>{
+      try{
+        const res=await apiFetch('/api/datos',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({simbolo:sym,strategyId:currentStratId,
+            capital_ini:Number(capitalIni),years:Number(years),allocation_pct:100})})
+        if(!res.ok) return {symbol:sym,error:true}
+        const json=await res.json()
+        const trades=json.trades||[]
+        const cap=Number(capitalIni)
+        const startD=json.startDate, endD=json.meta?.ultimaFecha
+        const yrs=(startD&&endD)?(new Date(endD)-new Date(startD))/(365.25*86400000):Number(years)
+        const finalCap=cap+(json.gananciaSimple||0)
+        const cagr=yrs>0?((finalCap/cap)**(1/yrs)-1)*100:0
+        const wins=trades.filter(t=>t.pnlPct>=0)
+        const winRate=trades.length?wins.length/trades.length*100:0
+        const grossWin=wins.reduce((s,t)=>s+t.pnlSimple,0)
+        const grossLoss=Math.abs(trades.filter(t=>t.pnlPct<0).reduce((s,t)=>s+t.pnlSimple,0))
+        const pf=grossLoss>0?grossWin/grossLoss:(grossWin>0?Infinity:0)
+        return{symbol:sym,cagr,winRate,pf,maxDD:json.maxDDStrategy||0,ops:trades.length,error:false}
+      }catch{return{symbol:sym,error:true}}
+    }
+    for(let i=0;i<rawTickers.length;i+=CONC){
+      const batch=rawTickers.slice(i,i+CONC)
+      const res=await Promise.all(batch.map(runOne))
+      partials.push(...res)
+      setCandidatesProgress({done:Math.min(i+CONC,rawTickers.length),total:rawTickers.length})
+      setCandidatesResults(partials.slice().sort((a,b)=>(b.error?-999:(b.cagr??-999))-(a.error?-999:(a.cagr??-999))))
+    }
+    setCandidatesLoading(false)
+    setCandidatesProgress(null)
+  },[candidatesText,currentStratId,capitalIni,years])
+
   const run=useCallback(async(sym,payload)=>{
     setLoading(true);setError(null)
     try{
@@ -3220,7 +3267,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.299</title>
+        <title>Trading Simulator V9.300</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3298,7 +3345,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.299
+            <span className="dot"/>Trading Simulator V9.300
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -3832,6 +3879,147 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   onColorChange={setCondColor}
                 />
 
+                {/* ── Analizar candidatos ── */}
+                {(()=>{
+                  const wlSymSet=new Set(watchlist.map(w=>(w.symbol||'').toUpperCase()))
+                  return(
+                    <div style={{borderBottom:'1px solid var(--border)',flexShrink:0}}>
+                      {/* Header colapsable */}
+                      <div onClick={()=>setCandidatesOpen(o=>!o)}
+                        style={{display:'flex',alignItems:'center',gap:6,padding:'6px 10px',
+                          cursor:'pointer',userSelect:'none',
+                          background:candidatesOpen?'rgba(255,255,255,0.02)':'transparent'}}
+                        onMouseOver={e=>e.currentTarget.style.background='rgba(255,255,255,0.04)'}
+                        onMouseOut={e=>e.currentTarget.style.background=candidatesOpen?'rgba(255,255,255,0.02)':'transparent'}>
+                        <span style={{fontFamily:MONO,fontSize:11,color:'#a8ccdf',flex:1,fontWeight:500}}>🔍 Analizar candidatos</span>
+                        <span style={{fontFamily:MONO,fontSize:9,color:'#4a6a88'}}>{candidatesOpen?'▲':'▼'}</span>
+                      </div>
+                      {candidatesOpen&&(
+                        <div style={{padding:'8px 10px 10px',display:'flex',flexDirection:'column',gap:7}}>
+                          {/* Textarea para pegar tickers */}
+                          <textarea
+                            value={candidatesText}
+                            onChange={e=>setCandidatesText(e.target.value)}
+                            placeholder={'Pega aquí tickers o cualquier texto\n(AMD, NVDA, TSLA...)'}
+                            style={{background:'var(--bg3)',border:'1px solid var(--border)',
+                              color:'var(--text)',fontFamily:MONO,fontSize:11,
+                              padding:'6px 8px',borderRadius:4,resize:'vertical',
+                              width:'100%',boxSizing:'border-box',minHeight:80,lineHeight:1.5}}
+                          />
+                          {/* Botón analizar + progreso */}
+                          <div style={{display:'flex',alignItems:'center',gap:6}}>
+                            <button
+                              onClick={analyzeCandidates}
+                              disabled={candidatesLoading||!candidatesText.trim()}
+                              style={{flex:1,background:candidatesLoading?'rgba(0,212,255,0.04)':'rgba(0,212,255,0.12)',
+                                border:'1px solid var(--accent)',
+                                color:candidatesLoading?'#4a7a98':'var(--accent)',
+                                fontFamily:MONO,fontSize:11,padding:'5px 10px',borderRadius:3,
+                                cursor:candidatesLoading||!candidatesText.trim()?'not-allowed':'pointer',fontWeight:600}}>
+                              {candidatesLoading
+                                ?`⟳ Analizando ${candidatesProgress?.done||0}/${candidatesProgress?.total||0}…`
+                                :'⚡ Analizar'}
+                            </button>
+                            {candidatesResults.length>0&&!candidatesLoading&&(
+                              <button onClick={()=>setCandidatesResults([])}
+                                title="Limpiar resultados"
+                                style={{background:'transparent',border:'1px solid #1a2d45',color:'#5a7a95',
+                                  fontFamily:MONO,fontSize:11,padding:'4px 8px',borderRadius:3,cursor:'pointer'}}
+                                onMouseOver={e=>e.currentTarget.style.color='#ff4d6d'}
+                                onMouseOut={e=>e.currentTarget.style.color='#5a7a95'}>✕</button>
+                            )}
+                          </div>
+                          {/* Tabla de resultados */}
+                          {candidatesResults.length>0&&(
+                            <div style={{overflowX:'auto',marginTop:2}}>
+                              <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:10}}>
+                                <thead>
+                                  <tr style={{borderBottom:'1px solid var(--border)'}}>
+                                    {['Ticker','CAGR','WR%','PF','MaxDD','Ops',''].map(h=>(
+                                      <th key={h} style={{padding:'3px 5px',color:'#5a7a95',fontWeight:600,
+                                        textAlign:h===''?'center':'left',whiteSpace:'nowrap'}}>{h}</th>
+                                    ))}
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {candidatesResults.map(r=>{
+                                    const inWl=wlSymSet.has((r.symbol||'').toUpperCase())
+                                    return(
+                                      <tr key={r.symbol}
+                                        style={{borderBottom:'1px solid rgba(20,40,65,0.5)',cursor:'pointer'}}
+                                        onMouseOver={e=>e.currentTarget.style.background='rgba(255,255,255,0.02)'}
+                                        onMouseOut={e=>e.currentTarget.style.background='transparent'}>
+                                        <td style={{padding:'4px 5px',whiteSpace:'nowrap'}}>
+                                          <span style={{color:'#d0e8fa',fontWeight:600}}>{r.symbol}</span>
+                                          {inWl&&<span style={{marginLeft:4,fontSize:8,color:'#00e5a0',
+                                            background:'rgba(0,229,160,0.1)',border:'1px solid rgba(0,229,160,0.25)',
+                                            borderRadius:3,padding:'1px 3px'}}>WL</span>}
+                                        </td>
+                                        {r.error?(
+                                          <td colSpan={5} style={{padding:'4px 5px',color:'#ff4d6d',fontSize:10}}>⚠ Sin datos</td>
+                                        ):(
+                                          <>
+                                            <td style={{padding:'4px 5px',
+                                              color:r.cagr>=0?'#00e5a0':'#ff4d6d',fontWeight:500}}>
+                                              {isFinite(r.cagr)?(r.cagr>=0?'+':'')+r.cagr.toFixed(1)+'%':'—'}
+                                            </td>
+                                            <td style={{padding:'4px 5px',color:'#c8def2'}}>
+                                              {r.ops>0?r.winRate.toFixed(0)+'%':'—'}
+                                            </td>
+                                            <td style={{padding:'4px 5px',
+                                              color:r.pf>=1?'#00e5a0':'#ff7eb3'}}>
+                                              {r.ops>0?(isFinite(r.pf)?r.pf.toFixed(2):'∞'):'—'}
+                                            </td>
+                                            <td style={{padding:'4px 5px',color:'#ff7eb3'}}>
+                                              {r.ops>0?'-'+r.maxDD.toFixed(1)+'%':'—'}
+                                            </td>
+                                            <td style={{padding:'4px 5px',color:'#a8ccdf'}}>{r.ops||'—'}</td>
+                                          </>
+                                        )}
+                                        <td style={{padding:'4px 5px',textAlign:'center'}}>
+                                          {inWl?(
+                                            <span style={{fontSize:10,color:'#2a5a3a'}}>✓</span>
+                                          ):r.error?(
+                                            <span style={{fontSize:9,color:'#4a2a2a'}}>—</span>
+                                          ):(
+                                            <button
+                                              onClick={async e=>{
+                                                e.stopPropagation()
+                                                try{
+                                                  await upsertWatchlistItem({
+                                                    symbol:r.symbol,
+                                                    name:lookupName(r.symbol)||r.symbol,
+                                                    group_name:'Acciones',
+                                                    favorite:false,
+                                                    observations:''
+                                                  })
+                                                  reloadWatchlist()
+                                                }catch{}
+                                              }}
+                                              style={{background:'rgba(0,212,255,0.1)',
+                                                border:'1px solid rgba(0,212,255,0.35)',
+                                                color:'var(--accent)',fontFamily:MONO,fontSize:10,
+                                                padding:'2px 6px',borderRadius:3,cursor:'pointer',
+                                                lineHeight:1}}
+                                              onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.2)'}
+                                              onMouseOut={e=>e.currentTarget.style.background='rgba(0,212,255,0.1)'}>
+                                              ＋
+                                            </button>
+                                          )}
+                                        </td>
+                                      </tr>
+                                    )
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
+
                 {/* ── Lista de activos ── */}
                 <div style={{overflowY:'auto',flex:1}}>
                   {wlLoading&&<div style={{padding:'10px 12px',fontFamily:MONO,fontSize:12,color:'#a8ccdf'}}>⟳ Cargando…</div>}
@@ -4187,10 +4375,10 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                   <span style={{fontSize:14,color:col,flexShrink:0,lineHeight:1,
                                     animation:shouldBlink?'alarmPulse 1s ease-in-out infinite':undefined}}>{isAbove?'▲':'▼'}</span>
                                   <div style={{flex:1,minWidth:0,cursor:'pointer'}} onClick={openChart} title="Ver gráfico">
-                                    <div style={{fontFamily:MONO,fontSize:12,color:'#e8f4ff',fontWeight:700,
+                                    <div style={{fontFamily:MONO,fontSize:12,color:'#f0f7ff',fontWeight:700,
                                       animation:shouldBlink?'alarmPulse 1s ease-in-out infinite':undefined}}>
-                                      {a.symbol}{' '}<span style={{color:'#5a7a95',fontWeight:400}}>@</span>{' '}
-                                      <span style={{color:col}}>{Number(a.price_level)?.toFixed(2)??'—'}</span>
+                                      {a.symbol}{' '}<span style={{color:'#8aadcc',fontWeight:500}}>@</span>{' '}
+                                      <span style={{color:col,fontWeight:700}}>{Number(a.price_level)?.toFixed(2)??'—'}</span>
                                     </div>
                                   </div>
                                   {triggered&&(
@@ -4238,15 +4426,15 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                     animation:rowBlink?'alarmPulse 1s ease-in-out infinite':undefined}}/>
                                   <div style={{flex:1,minWidth:0,cursor:'pointer'}} onClick={openChart} title="Ver gráfico">
                                     <div style={{display:'flex',alignItems:'baseline',gap:5}}>
-                                      <span style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:active?col:'#cce0f5',
+                                      <span style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:active?col:'#e2e8f0',
                                         animation:rowBlink?'alarmPulse 1s ease-in-out infinite':undefined}}>{sym}</span>
-                                      <span style={{fontFamily:MONO,fontSize:10,color:'#5a7a95',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.name}</span>
+                                      <span style={{fontFamily:MONO,fontSize:10,color:'#c0d8f0',fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.name}</span>
                                     </div>
-                                    <div style={{fontFamily:MONO,fontSize:10,color:'#4a6a80',marginTop:1}}>
+                                    <div style={{fontFamily:MONO,fontSize:10,color:'#8ab8d8',fontWeight:500,marginTop:1}}>
                                       {COND_LABELS[a.condition]||a.condition}
-                                      {active&&bars!=null&&<span style={{color:isAcked?'#4a6a80':col}}> · {bars}v</span>}
-                                      {!active&&<span style={{color:'#3d5a7a'}}> · inactiva</span>}
-                                      {active&&isAcked&&<span style={{color:'#3d5a7a'}}> · vista</span>}
+                                      {active&&bars!=null&&<span style={{color:isAcked?'#8ab8d8':col,fontWeight:600}}> · {bars}v</span>}
+                                      {!active&&<span style={{color:'#6a8aa8'}}> · inactiva</span>}
+                                      {active&&isAcked&&<span style={{color:'#6a8aa8'}}> · vista</span>}
                                     </div>
                                   </div>
                                   {active&&!isAcked&&(
