@@ -282,7 +282,16 @@ async function deleteWatchlistList(listId) {
 
 // ── Ranking results API ───────────────────────────────────────
 async function saveRankingRemote(rankingData, stratId) {
-  // Upsert one row per symbol in backtest_results, keyed by symbol+strategy_id
+  // 1 — Borrar filas anteriores del cálculo para esta estrategia
+  //     Evita rangos duplicados de runs anteriores con distintos subconjuntos
+  const deleteFilter = stratId
+    ? `strategy_id=eq.${stratId}`
+    : `strategy_id=is.null`
+  await fetch(`${getSupaUrl()}/rest/v1/ranking_results?${deleteFilter}`, {
+    method: 'DELETE', headers: getSupaH()
+  }).catch(()=>{}) // ignorar errores de borrado (tabla vacía, sin permisos, etc.)
+
+  // 2 — Insertar los nuevos resultados
   const rows = Object.entries(rankingData).map(([symbol, rd]) => ({
     symbol,
     strategy_id: stratId || null,
@@ -294,7 +303,6 @@ async function saveRankingRemote(rankingData, stratId) {
     rank_position: rd.rank              ?? null,
     updated_at:  new Date().toISOString(),
   }))
-  // Upsert in batches of 20
   for (let i=0; i<rows.length; i+=20) {
     const batch = rows.slice(i, i+20)
     await fetch(`${getSupaUrl()}/rest/v1/ranking_results`, {
@@ -2161,7 +2169,6 @@ export default function Home() {
       }))
       setRankingProgress({done:Math.min(i+BATCH,syms.length),total:syms.length})
     }
-    console.log('[RANKING] símbolos calculados:', Object.keys(results))
     const sortedEntries=Object.entries(results).sort((a,b)=>b[1].score-a[1].score)
     sortedEntries.forEach(([sym],i)=>{results[sym].rank=i+1})
     setRankingData(results)
@@ -3397,7 +3404,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.310</title>
+        <title>Trading Simulator V9.311</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3475,7 +3482,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.310
+            <span className="dot"/>Trading Simulator V9.311
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4279,7 +4286,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         <span style={{color:'#8abcd4'}}>activos</span>
                         {rankingRunning&&<span style={{color:'#ffd166',fontSize:10}}>⟳ {rankingProgress.done}/{rankingProgress.total}</span>}
                         {hasRanking&&!rankingRunning&&<span style={{color:'#00e5a0',fontSize:9}} title={rankingStratName?`Calculado con: ${rankingStratName}`:''}>🏆 {rankingStratName||'Ranking'}</span>}
-                        <button onClick={()=>calcRanking(filtered)} disabled={rankingRunning}
+                        <button onClick={()=>calcRanking()} disabled={rankingRunning}
                           title={`Calcular ranking de activos con la estrategia activa.\nScore ponderado (CAGR Simple):\n• CAGR Simple     25%\n• Win Rate        25%\n• Profit Factor   25%\n• CAGR Robusto    20%\n• MaxDD           −5%\n\nUsa los mismos filtros e intervalo que el backtest individual.`}
                           style={{marginLeft:'auto',background:rankingRunning?'rgba(13,21,32,0.5)':'rgba(255,209,102,0.1)',border:`1px solid ${rankingRunning?'#1a2d45':'rgba(255,209,102,0.4)'}`,color:rankingRunning?'#3d5a7a':'#ffd166',fontFamily:MONO,fontSize:9,padding:'2px 6px',borderRadius:3,cursor:rankingRunning?'not-allowed':'pointer',letterSpacing:'0.05em'}}>
                           {rankingRunning?'calculando…':'🏆 Ranking'}
@@ -9344,7 +9351,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
           {hasMeta&&(
             <div style={{borderTop:'1px solid #1a2d40',paddingTop:7,fontSize:10,color:'#4a7a95'}}>
               <span>Favorita: </span>
-              <span style={{color:'#ffd166',fontWeight:600}}>{rankingStratName} ★</span>
+              <span style={{color:'#ffd166',fontWeight:600}}>{rankingStratName} · {estrategiaIntervalo==='semanal'?'Semanal':'Diario'} ★</span>
               <span style={{color:'#2d4a60'}}> (1 estrategia evaluada)</span>
             </div>
           )}
