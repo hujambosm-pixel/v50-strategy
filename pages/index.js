@@ -23,6 +23,7 @@ import PriceAlarmQuickForm from '../components/PriceAlarmQuickForm'
 import StrategiesManager from '../components/StrategiesManager'
 import StrategyEditorPanel from '../components/StrategyEditorPanel'
 import WatchlistCondPanel from '../components/WatchlistCondPanel'
+import WatchlistManager from '../components/WatchlistManager'
 
 
 // ── FIFO computation for TradeLog ─────────────────────────────
@@ -332,6 +333,8 @@ async function loadRankingRemote(stratId) {
 }
 
 async function loadAllRankingsRemote() {
+  // Carga TODOS los resultados de ranking (todas las estrategias) para computar
+  // la mejor estrategia por símbolo de forma independiente a la activa
   const url = `${getSupaUrl()}/rest/v1/ranking_results?select=symbol,strategy_id,score&order=score.desc&limit=5000`
   const res = await fetch(url, { headers: getSupaH() })
   if (!res.ok) return null
@@ -619,7 +622,10 @@ export default function Home() {
   const [rankingProgress,setRankingProgress]=useState({done:0,total:0})
   const [rankingError,setRankingError]=useState(null)
   // Mejor estrategia por símbolo entre TODAS las estrategias calculadas en Supabase
+  // { SYMBOL: { stratName, stratId, score, intervalo, stratCount } }
   const [bestStratBySymbol,setBestStratBySymbol]=useState({})
+  // Panel de gestión de Watchlist (reemplaza el área de gráfico)
+  const [showWlManager,setShowWlManager]=useState(false)
   // Tooltip flotante del Watchlist — {x, y, symbol} | null
   const [wlTooltip,setWlTooltip]=useState(null)
   // Búsqueda async de nombre
@@ -1823,14 +1829,16 @@ export default function Home() {
     catch{return 'diario'}
   }
 
+  // Carga todos los rankings de Supabase y calcula la mejor estrategia por símbolo
   const refreshBestStratPerSymbol=useCallback(async()=>{
     if(!getSupaUrl()) return
     try{
       const rows=await loadAllRankingsRemote()
       if(!rows?.length) return
+      // Agrupar por símbolo
       const grouped={}
       rows.forEach(r=>{
-        const sym=(r.symbol||''). toUpperCase()
+        const sym=(r.symbol||'').toUpperCase()
         if(!grouped[sym]) grouped[sym]=[]
         grouped[sym].push(r)
       })
@@ -1841,14 +1849,14 @@ export default function Home() {
         if(!best) return
         const strat=strategies.find(s=>s.id===best.strategy_id)
         let stratIntervalo='diario'
-        try{const p=typeof strat?.params==='string'?JSON.parse(strat.params||'{}'): (strat?.params||{});stratIntervalo=p.intervalo||'diario'}catch(_){}
-        bySymbol[sym]={stratName:strat?.name||''  ,stratId:best.strategy_id,score:best.score,intervalo:stratIntervalo,stratCount:stratIds.size}
+        try{const p=typeof strat?.params==='string'?JSON.parse(strat.params||'{}'):(strat?.params||{});stratIntervalo=p.intervalo||'diario'}catch(_){}
+        bySymbol[sym]={stratName:strat?.name||'',stratId:best.strategy_id,score:best.score,intervalo:stratIntervalo,stratCount:stratIds.size}
       })
       setBestStratBySymbol(bySymbol)
     }catch(e){console.warn('[refreshBestStrat]',e.message)}
   },[strategies])
 
-  // useEffect aqui, DESPUES de la declaracion de refreshBestStratPerSymbol para evitar TDZ
+  // useEffect aquí, DESPUÉS de la declaración de refreshBestStratPerSymbol para evitar TDZ
   useEffect(()=>{ refreshBestStratPerSymbol() },[refreshBestStratPerSymbol])
 
   function stopStrategy({skipDebounce=true}={}) {
@@ -3442,7 +3450,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.313</title>
+        <title>Trading Simulator V9.311</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3520,7 +3528,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.313
+            <span className="dot"/>Trading Simulator V9.311
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4327,17 +4335,16 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         {rankingRunning&&<span style={{color:'#ffd166',fontSize:10}}>⟳ {rankingProgress.done}/{rankingProgress.total}</span>}
                         {hasRanking&&!rankingRunning&&<span style={{color:'#00e5a0',fontSize:9}} title={rankingStratName?`Calculado con: ${rankingStratName}`:''}>🏆 {rankingStratName||'Ranking'}</span>}
                         <button onClick={()=>calcRanking()} disabled={rankingRunning}
-                          title={`Ordena los activos por score ponderado combinando:
-
-Métricas históricas: Win Rate · CAGR · CAGR sin top 3 · Max DD
-Métricas de mercado: Momentum · Fuerza relativa vs SP500 · Proximidad máximo 52s
-
-Configura los pesos en Ajustes → Ranking`}
+                          title={`Ordena los activos por score ponderado combinando:\n\nMétricas históricas: Win Rate · CAGR · CAGR sin top 3 · Max DD\nMétricas de mercado: Momentum · Fuerza relativa vs SP500 · Proximidad máximo 52s\n\nConfigura los pesos en Ajustes → Ranking`}
                           style={{marginLeft:'auto',background:rankingRunning?'rgba(13,21,32,0.5)':'rgba(255,209,102,0.1)',border:`1px solid ${rankingRunning?'#1a2d45':'rgba(255,209,102,0.4)'}`,color:rankingRunning?'#3d5a7a':'#ffd166',fontFamily:MONO,fontSize:9,padding:'2px 6px',borderRadius:3,cursor:rankingRunning?'not-allowed':'pointer',letterSpacing:'0.05em'}}>
                           {rankingRunning?'calculando…':'🏆 Ranking'}
                         </button>
                         {hasRanking&&<button onClick={()=>setRankingData({})} title="Limpiar ranking"
                           style={{background:'transparent',border:'1px solid #1a2d45',color:'#5a7a95',fontFamily:MONO,fontSize:9,padding:'2px 5px',borderRadius:3,cursor:'pointer'}}>✕</button>}
+                        <button onClick={()=>setShowWlManager(true)} title="Abrir panel de gestión de Watchlist"
+                          style={{background:'rgba(0,212,255,0.08)',border:'1px solid rgba(0,212,255,0.25)',color:'#00d4ff',fontFamily:MONO,fontSize:9,padding:'2px 6px',borderRadius:3,cursor:'pointer',letterSpacing:'0.04em'}}>
+                          ⊞ Gestionar
+                        </button>
                       </div>
                     )
                     return (<>{countBadge}{allFiltered.map((w,wIdx)=>{
@@ -5504,7 +5511,20 @@ Configura los pesos en Ajustes → Ranking`}
           </aside>
 
           {/* ── CONTENT ── */}
-          <div className="content" style={result?.isBareChart?{overflowY:'hidden'}:undefined}>
+          <div className="content" style={{...(result?.isBareChart?{overflowY:'hidden'}:undefined),position:'relative'}}>
+
+            {/* ══ WATCHLIST MANAGER (overlay) ══ */}
+            {showWlManager&&(
+              <WatchlistManager
+                watchlist={watchlist}
+                rankingData={rankingData}
+                bestStratBySymbol={bestStratBySymbol}
+                strategies={strategies}
+                wlLists={wlLists}
+                onReload={reloadWatchlist}
+                onClose={()=>setShowWlManager(false)}
+              />
+            )}
 
             {/* ══ STRATEGY EDITOR PANEL ══ */}
             {editingStr!==null&&sidePanel==='config'&&(
