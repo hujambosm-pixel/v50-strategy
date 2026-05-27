@@ -315,7 +315,7 @@ async function loadRankingRemote(stratId) {
   if (!rows?.length) return null
   const out = {}
   rows.forEach(r => {
-    out[r.symbol] = {
+    out[(r.symbol||'').toUpperCase()] = {
       score: r.score, rank: r.rank_position,
       metrics: { winRate: r.win_rate, cagr: r.cagr_simple, maxDD: r.max_drawdown, trades: r.total_trades }
     }
@@ -595,12 +595,14 @@ export default function Home() {
   })
   const [priceAlarmDlg,setPriceAlarmDlg]=useState(null) // {price, symbol} o null
   // ── Ranking ─────────────────────────────────────────────────
-  const [rankingData,setRankingData]=useState({})      // { symbol: { score, rank, metrics } }
+  const [rankingData,setRankingData]=useState({})      // { SYMBOL: { score, rank, metrics } } — keys uppercase
   const [rankingStratId,setRankingStratId]=useState(null)    // strategy id the ranking was calculated with
   const [rankingStratName,setRankingStratName]=useState('')  // display name
   const [rankingRunning,setRankingRunning]=useState(false)
   const [rankingProgress,setRankingProgress]=useState({done:0,total:0})
   const [rankingError,setRankingError]=useState(null)
+  // Tooltip flotante del Watchlist — {x, y, symbol} | null
+  const [wlTooltip,setWlTooltip]=useState(null)
   // Búsqueda async de nombre
   const symSearchRef=useRef(null)
   const [mcTradeFilter,setMcTradeFilter]=useState('')
@@ -2154,11 +2156,12 @@ export default function Home() {
           const score=Math.max(0,Math.min(100,
             scoreHistorico*wHistorico + scoreMercado*wMercado
           ))
-          results[sym]={score,metrics:{winRate,factorBen,cagr,cagrRobust,maxDD,trades:trades.length}}
+          results[sym.toUpperCase()]={score,metrics:{winRate,factorBen,cagr,cagrRobust,maxDD,trades:trades.length}}
         } catch(e){ console.error('[calcRanking]', sym, e) }
       }))
       setRankingProgress({done:Math.min(i+BATCH,syms.length),total:syms.length})
     }
+    console.log('[RANKING] símbolos calculados:', Object.keys(results))
     const sortedEntries=Object.entries(results).sort((a,b)=>b[1].score-a[1].score)
     sortedEntries.forEach(([sym],i)=>{results[sym].rank=i+1})
     setRankingData(results)
@@ -3394,7 +3397,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.309</title>
+        <title>Trading Simulator V9.310</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3472,7 +3475,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.309
+            <span className="dot"/>Trading Simulator V9.310
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4253,7 +4256,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     })
                     // Sort: 1st by ranking, 2nd by favorite, 3rd alphabetical
                     const all=filtered.slice().sort((a,b)=>{
-                      const ra=rankingData[a.symbol]?.rank, rb=rankingData[b.symbol]?.rank
+                      const ra=rankingData[(a.symbol||'').toUpperCase()]?.rank, rb=rankingData[(b.symbol||'').toUpperCase()]?.rank
                       if(ra!=null&&rb!=null) return ra-rb
                       if(ra!=null) return -1
                       if(rb!=null) return 1
@@ -4289,16 +4292,17 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       const wListNames=(w.list_ids||[]).map(lid=>wlLists.find(l=>l.id===lid)?.name).filter(Boolean)
                       return(
                       <div key={w.id||`${w.symbol}-${wIdx}`}
-                        title={wListNames.length?`Listas: ${wListNames.join(', ')}`:undefined}
                         style={{padding:'6px 10px',display:'flex',alignItems:'center',gap:6,borderBottom:'1px solid var(--border)',
                           background:simbolo===w.symbol?'rgba(0,212,255,0.07)':'transparent',
                           borderLeft:`3px solid ${openSymbols.has((w.symbol||'').toUpperCase())?'#ffd166':'transparent'}`,
                           transition:'border-color 0.2s'}}
                         onMouseOver={e=>e.currentTarget.style.background='rgba(255,255,255,0.03)'}
-                        onMouseOut={e=>e.currentTarget.style.background=simbolo===w.symbol?'rgba(0,212,255,0.07)':'transparent'}>
+                        onMouseOut={e=>e.currentTarget.style.background=simbolo===w.symbol?'rgba(0,212,255,0.07)':'transparent'}
+                        onMouseEnter={e=>{const r=e.currentTarget.getBoundingClientRect();const x=r.right+8;setWlTooltip({x:x+220>window.innerWidth?r.left-228:x,y:r.top,symbol:w.symbol})}}
+                        onMouseLeave={()=>setWlTooltip(null)}>
                         {/* Ranking badge */}
                         {wlShowRankBadge&&(()=>{
-                          const rd=rankingData[w.symbol]
+                          const rd=rankingData[(w.symbol||'').toUpperCase()]
                           if(!rd) return <span style={{width:16,flexShrink:0}}/>
                           const r=rd.rank
                           const col=r===1?'#ffd700':r===2?'#c0c0c0':r===3?'#cd7f32':r<=10?'#00d4ff':'#3d5a7a'
@@ -4327,19 +4331,23 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                           return(
                             <div onClick={()=>setSimbolo(w.symbol)} style={{flex:1,cursor:'pointer',minWidth:0}}>
                               <div style={{fontFamily:MONO,fontSize:11,color:simbolo===w.symbol?'var(--accent)':'#d0e8fa',fontWeight:600}}>{w.symbol}</div>
-                              {openPos&&hasLive
-                                ? <div title={`P&L flotante: ${eurStr} / ${pctStr}`}
-                                    style={{fontFamily:MONO,fontSize:11,color:pnlColor,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>
+                              {(()=>{
+                                const rdSym=rankingData[(w.symbol||'').toUpperCase()]
+                                if(openPos&&hasLive) return(
+                                  <div title={`P&L flotante: ${eurStr} / ${pctStr}`}
+                                    style={{fontFamily:MONO,fontSize:10,color:pnlColor,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>
                                     {eurStr} / {pctStr}
                                   </div>
-                                : rankingData[w.symbol]?.metrics
-                  ? <div style={{fontFamily:MONO,fontSize:11,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>
-                      <span style={{color:(rankingData[w.symbol].metrics.cagr??0)>=0?'#00e5a0':'#ff4d6d'}}>CAGR: {(rankingData[w.symbol].metrics.cagr??0).toFixed(1)}%</span>
-                      <span style={{color:'#3d5a7a'}}> | </span>
-                      <span style={{color:'#ff4d6d'}}>DD: -{Math.abs(rankingData[w.symbol].metrics.maxDD??0).toFixed(1)}%</span>
-                    </div>
-                  : <div style={{fontFamily:MONO,fontSize:11,color:'#8aadcc',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{w.name}</div>
-                              }
+                                )
+                                if(rdSym?.metrics?.cagr!=null) return(
+                                  <div style={{fontFamily:MONO,fontSize:10,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>
+                                    <span style={{color:rdSym.metrics.cagr>=0?'#00e5a0':'#ff4d6d'}}>CAGR: {rdSym.metrics.cagr.toFixed(1)}%</span>
+                                    <span style={{color:'#3d5a7a'}}> | </span>
+                                    <span style={{color:'#ff4d6d'}}>DD: -{Math.abs(rdSym.metrics.maxDD??0).toFixed(1)}%</span>
+                                  </div>
+                                )
+                                return <div style={{fontFamily:MONO,fontSize:10,color:'#8aadcc',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{w.name}</div>
+                              })()}
                             </div>
                           )
                         })()}
@@ -5241,14 +5249,14 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     const matchList=!mcListFilter||(w.list_ids||[]).some(lid=>{const l=wlLists.find(x=>x.id===lid);return l&&l.name===mcListFilter})
                     return matchSearch&&matchFav&&matchList
                   }).sort((a,b)=>{
-                    const ra=rankingData[a.symbol]?.rank, rb=rankingData[b.symbol]?.rank
+                    const ra=rankingData[(a.symbol||'').toUpperCase()]?.rank, rb=rankingData[(b.symbol||'').toUpperCase()]?.rank
                     if(ra!=null&&rb!=null) return ra-rb
                     if(ra!=null) return -1
                     if(rb!=null) return 1
                     return a.name.localeCompare(b.name)
                   }).map(w=>{
                     const sel=mcSelected.includes(w.symbol)
-                    const rd=rankingData[w.symbol]
+                    const rd=rankingData[(w.symbol||'').toUpperCase()]
                     return(
                       <div key={w.symbol} onClick={()=>setMcSelected(prev=>sel?prev.filter(s=>s!==w.symbol):[...prev,w.symbol])}
                         style={{display:'flex',alignItems:'center',gap:7,padding:'5px 6px',borderRadius:3,marginBottom:2,cursor:'pointer',
@@ -9298,6 +9306,51 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
           </div>
         )
       })()}
+
+    {/* ── Tooltip flotante Watchlist ── */}
+    {wlTooltip&&(()=>{
+      const tSym=(wlTooltip.symbol||'').toUpperCase()
+      const tItem=watchlist.find(w=>(w.symbol||'').toUpperCase()===tSym)
+      const tRd=rankingData[tSym]
+      const m=tRd?.metrics
+      const hasMeta=tRd&&rankingStratName
+      return(
+        <div style={{position:'fixed',left:wlTooltip.x,top:wlTooltip.y,zIndex:9999,
+          background:'#090f18',border:'1px solid #1e3048',borderRadius:7,
+          padding:'10px 13px',maxWidth:220,minWidth:160,
+          boxShadow:'0 6px 24px rgba(0,0,0,0.65)',
+          fontFamily:MONO,fontSize:12,color:'#c8dff5',pointerEvents:'none',lineHeight:1.4}}>
+          {/* Encabezado */}
+          <div style={{fontWeight:700,fontSize:13,color:'#e8f4ff',marginBottom:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{tItem?.name||wlTooltip.symbol}</div>
+          <div style={{fontSize:10,color:'#4a7a95',marginBottom:m?.cagr!=null?8:0}}>{wlTooltip.symbol}</div>
+          {/* Métricas */}
+          {m?.cagr!=null&&(
+            <div style={{borderTop:'1px solid #1a2d40',paddingTop:8,marginBottom:hasMeta?8:0}}>
+              {[
+                ['CAGR',          m.cagr,       v=>`${v.toFixed(1)}%`,      v=>v>=0?'#00e5a0':'#ff4d6d'],
+                ['Max DD',        m.maxDD,       v=>`-${Math.abs(v).toFixed(1)}%`, ()=>'#ff4d6d'],
+                ['Win Rate',      m.winRate,     v=>`${v.toFixed(0)}%`,      v=>v>=50?'#00e5a0':'#ffd166'],
+                ['Factor Ben.',   m.factorBen,   v=>v?.toFixed(2),           v=>v!=null&&v>=1?'#00e5a0':'#ff4d6d'],
+                ['Ops',           m.trades,      v=>String(v),               ()=>'#8aadcc'],
+              ].map(([label,val,fmt,colorFn])=>val!=null?(
+                <div key={label} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12,marginBottom:3}}>
+                  <span style={{color:'#4a7a95',fontSize:11}}>{label}</span>
+                  <span style={{color:colorFn(val),fontWeight:600,fontSize:11}}>{fmt(val)}</span>
+                </div>
+              ):null)}
+            </div>
+          )}
+          {/* Estrategia */}
+          {hasMeta&&(
+            <div style={{borderTop:'1px solid #1a2d40',paddingTop:7,fontSize:10,color:'#4a7a95'}}>
+              <span>Favorita: </span>
+              <span style={{color:'#ffd166',fontWeight:600}}>{rankingStratName} ★</span>
+              <span style={{color:'#2d4a60'}}> (1 estrategia evaluada)</span>
+            </div>
+          )}
+        </div>
+      )
+    })()}
 
     {/* ── Modal de configuración global ── */}
     {settingsOpen&&<SettingsModal onClose={()=>{
