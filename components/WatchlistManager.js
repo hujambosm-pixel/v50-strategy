@@ -85,6 +85,8 @@ export default function WatchlistManager({
   onClose,
   // Ranking
   onCalcRanking,
+  onClearRanking,
+  hasRanking,
   rankingRunning,
   rankingProgress,
   rankingStratName,
@@ -403,6 +405,23 @@ export default function WatchlistManager({
             ? `⟳ ${rankingProgress?.done ?? 0}/${rankingProgress?.total ?? 0}`
             : '🏆 Ranking'}
         </button>
+        {hasRanking && !rankingRunning && (
+          <button
+            onClick={() => onClearRanking && onClearRanking()}
+            title="Limpiar ranking"
+            style={{
+              background: 'transparent',
+              border: `1px solid ${P.borderStrong}`,
+              color: P.textMuted,
+              fontFamily: MONO, fontSize: 11,
+              padding: '4px 7px', borderRadius: 5,
+              cursor: 'pointer', flexShrink: 0,
+            }}
+            onMouseOver={e => { e.currentTarget.style.color = '#8b3030'; e.currentTarget.style.borderColor = '#8b3030' }}
+            onMouseOut={e  => { e.currentTarget.style.color = P.textMuted;  e.currentTarget.style.borderColor = P.borderStrong }}>
+            ✕
+          </button>
+        )}
         {rankingStratName && !rankingRunning && (
           <span style={{ fontSize: 10, color: '#2d6a4f', flexShrink: 0, whiteSpace: 'nowrap' }}>
             ✓ {rankingStratName}

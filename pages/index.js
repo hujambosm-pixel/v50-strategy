@@ -757,7 +757,6 @@ export default function Home() {
 
   const debounceRef=useRef(null),chartApiRef=useRef(null),chartApiFullscreenRef=useRef(null),contentRef=useRef(null),skipNextRunRef=useRef(false)
   const chartLegendRef=useRef(null)   // external legend ref for integrated chart info bar
-  const candidatesOrigWidthRef=useRef(null)  // sidebar width saved before expanding for candidates panel
   const closesCache=useRef({})  // { SYM: { data:[...], ts:Date.now() } } — TTL 20 min para refreshAlarmStatus
 
   const mcChartApiRef=useRef(null)
@@ -781,7 +780,6 @@ export default function Home() {
   const [ganttDiscarded,setGanttDiscarded]=useState(null)  // cached discarded trades for Gantt
   const [ganttLoadingDisc,setGanttLoadingDisc]=useState(false) // loading discarded for Gantt
   // ── Analizar candidatos state ──────────────────────────────────
-  const [candidatesOpen,setCandidatesOpen]=useState(false)
   const [candidatesText,setCandidatesText]=useState('')
   const [candidatesLoading,setCandidatesLoading]=useState(false)
   const [candidatesResults,setCandidatesResults]=useState([])  // sorted by CAGR desc
@@ -2231,23 +2229,11 @@ export default function Home() {
   const clearCandidates=useCallback(()=>{
     setCandidatesResults([])
     setCandidatesText('')
-    if(candidatesOrigWidthRef.current!==null){
-      setSidebarW(candidatesOrigWidthRef.current)
-      candidatesOrigWidthRef.current=null
-    }
   },[setSidebarW])
 
   const analyzeCandidates=useCallback(async()=>{
     const rawTickers=[...(new Set((candidatesText.match(/\b[A-Z]{1,5}\b/g)||[])))]
     if(!rawTickers.length) return
-    // Expandir sidebar al doble si aún no está expandido
-    setSidebarW(prev=>{
-      if(candidatesOrigWidthRef.current===null){
-        candidatesOrigWidthRef.current=prev
-        return Math.min(prev*2,700)
-      }
-      return prev
-    })
     setCandidatesLoading(true)
     setCandidatesResults([])
     setCandidatesProgress({done:0,total:rawTickers.length})
@@ -3450,7 +3436,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.316</title>
+        <title>Trading Simulator V9.317</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3528,7 +3514,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.316
+            <span className="dot"/>Trading Simulator V9.317
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4168,8 +4154,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         <span style={{color:'#8abcd4'}}>activos</span>
                         {rankingRunning&&<span style={{color:'#ffd166',fontSize:10}}>⟳ {rankingProgress.done}/{rankingProgress.total}</span>}
                         {hasRanking&&!rankingRunning&&<span style={{color:'#00e5a0',fontSize:9}} title={rankingStratName?`Calculado con: ${rankingStratName}`:''}>🏆 {rankingStratName||'Ranking'}</span>}
-                        {hasRanking&&<button onClick={()=>setRankingData({})} title="Limpiar ranking"
-                          style={{background:'transparent',border:'1px solid #1a2d45',color:'#5a7a95',fontFamily:MONO,fontSize:9,padding:'2px 5px',borderRadius:3,cursor:'pointer'}}>✕</button>}
+
                         <button onClick={()=>setShowWlManager(true)} title="Abrir panel de gestión de Watchlist"
                           style={{background:'rgba(0,212,255,0.08)',border:'1px solid rgba(0,212,255,0.25)',color:'#00d4ff',fontFamily:MONO,fontSize:9,padding:'2px 6px',borderRadius:3,cursor:'pointer',letterSpacing:'0.04em'}}>
                           ⊞ Gestionar
@@ -5373,6 +5358,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 onClearCandidates={clearCandidates}
                 onCandidateClick={sym=>setSimbolo(sym)}
                 onCandidateAdd={(sym)=>{upsertWatchlistItem({symbol:sym,name:lookupName(sym)||sym,group_name:'Acciones',favorite:false,observations:''}).then(reloadWatchlist).catch(()=>{})}}
+                hasRanking={Object.keys(rankingData).length>0}
+                onClearRanking={()=>{setRankingData({});setRankingStratId(null);setRankingStratName('')}}
               />
             )}
 
