@@ -100,7 +100,7 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
 
   const TABS = [
     { id:'integraciones', label:'🔌 Integraciones' },
-    { id:'alarmas',       label:'🔔 Estrategias' },
+    { id:'alarmas',       label:'🔔 Señales' },
     { id:'grafico',       label:'📈 Gráfico' },
     { id:'ranking',       label:'🏆 Ranking' },
     { id:'watchlist',     label:'📋 Watchlist' },

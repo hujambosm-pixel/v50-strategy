@@ -1580,7 +1580,7 @@ export default function Home() {
   const [alarmStatus,setAlarmStatus]=useState({})
   const [alarmStatusLoading,setAlarmStatusLoading]=useState(false)
   const [alarmCheckProgress,setAlarmCheckProgress]=useState(null)  // {done,total} durante comprobación
-  const [alarmCheckDone,setAlarmCheckDone]=useState(false)          // "✓ Actualizado" durante 2s
+  const [alertsLastUpdated,setAlertsLastUpdated]=useState(null)     // timestamp de última actualización correcta
 
   const reloadWatchlist=()=>{
     setWlLoading(true)
@@ -1950,7 +1950,6 @@ export default function Home() {
     const libCondsCheck=lsGetConds().filter(c=>c.active!==false)
     if(!symbols.length||(!alarmList.length&&!libCondsCheck.length)) return
     setAlarmStatusLoading(true)
-    setAlarmCheckDone(false)
     setAlarmCheckProgress({done:0,total:symbols.length})
     try{
       // Merge real alarms + library conditions for watchlist dots
@@ -2012,9 +2011,7 @@ export default function Home() {
           if(triggered.length>0) setAlarmPopup(triggered)
         }
       }catch(_){}
-      // Flash "✓ Actualizado" durante 2s
-      setAlarmCheckDone(true)
-      setTimeout(()=>setAlarmCheckDone(false),2000)
+      setAlertsLastUpdated(Date.now())
     }catch(e){console.error('refreshAlarmStatus error',e)}
     finally{setAlarmStatusLoading(false);setAlarmCheckProgress(null)}
   },[watchlist,alarms])
@@ -3329,10 +3326,20 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
     </div>
   )
 
+  // ── Formatea timestamp de última actualización de alertas ────
+  const fmtLastUpdated=(ts)=>{
+    if(ts===null||ts===undefined) return 'nunca'
+    const mins=Math.floor((Date.now()-ts)/60000)
+    if(mins<1) return 'hace menos de 1 min'
+    if(mins<60) return `hace ${mins} min`
+    const h=Math.floor(mins/60), m=mins%60
+    return `hace ${h} h${m>0?` ${m} min`:''}`
+  }
+
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.307</title>
+        <title>Trading Simulator V9.308</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3410,7 +3417,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.307
+            <span className="dot"/>Trading Simulator V9.308
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4146,6 +4153,22 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   )
                 })()}
 
+                {/* Banner alertas desactualizadas (solo cuando lista supera umbral) */}
+                {filteredWlItems.length>alertThreshold&&(alertsLastUpdated===null||Date.now()-alertsLastUpdated>1200000)&&(
+                  <div style={{padding:'7px 10px',background:'#1a2a3a',borderLeft:'3px solid #f59e0b',display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+                    {alarmStatusLoading&&alarmCheckProgress
+                      ? <span style={{fontFamily:MONO,fontSize:11,color:'#94a3b8',flex:1}}>⟳ Comprobando {alarmCheckProgress.done}/{alarmCheckProgress.total}…</span>
+                      : <>
+                          <span style={{fontFamily:MONO,fontSize:11,color:'#94a3b8',flex:1}}>⚠ Alertas desactualizadas · última actualización: {fmtLastUpdated(alertsLastUpdated)}</span>
+                          <button onClick={()=>refreshAlarmStatus(filteredWlItems,alarms,true)} disabled={alarmStatusLoading}
+                            style={{background:'rgba(245,158,11,0.1)',border:'1px solid rgba(245,158,11,0.4)',color:'#f59e0b',fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',flexShrink:0,whiteSpace:'nowrap'}}>
+                            ↻ Actualizar ahora
+                          </button>
+                        </>
+                    }
+                  </div>
+                )}
+
                 {/* ── Lista de activos ── */}
                 <div style={{overflowY:'auto',flex:1}}>
                   {wlLoading&&<div style={{padding:'10px 12px',fontFamily:MONO,fontSize:12,color:'#a8ccdf'}}>⟳ Cargando…</div>}
@@ -4448,25 +4471,25 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
             {sidePanel==='alarms'&&(
               <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
                 {/* Header */}
-                <div style={{padding:'6px 8px',borderBottom:'1px solid var(--border)',display:'flex',gap:4,alignItems:'center',flexShrink:0,flexWrap:'wrap'}}>
+                <div style={{padding:'6px 8px',borderBottom:'1px solid var(--border)',display:'flex',gap:4,alignItems:'center',flexShrink:0}}>
                   <span style={{fontFamily:MONO,fontSize:12,color:'#a8ccdf',flex:1}}>Alertas</span>
-                  {/* Estado inline: progreso / confirmación / aviso >50 */}
-                  {alarmStatusLoading&&alarmCheckProgress&&(
-                    <span style={{fontFamily:MONO,fontSize:9,color:'#a8ccdf',whiteSpace:'nowrap'}}>
-                      {alarmCheckProgress.done}/{alarmCheckProgress.total}…
-                    </span>
-                  )}
-                  {alarmCheckDone&&!alarmStatusLoading&&(
-                    <span style={{fontFamily:MONO,fontSize:9,color:'#00e5a0',whiteSpace:'nowrap'}}>✓ Actualizado</span>
-                  )}
-                  {!alarmStatusLoading&&!alarmCheckDone&&filteredWlItems.length>alertThreshold&&(
-                    <span style={{fontFamily:MONO,fontSize:9,color:'#ffd166',whiteSpace:'nowrap'}} title={`${filteredWlItems.length} activos — actualización automática desactivada (umbral: ${alertThreshold})`}>
-                      ⚠ {filteredWlItems.length} activos
-                    </span>
-                  )}
-                  <button onClick={()=>refreshAlarmStatus(filteredWlItems,alarms,true)} title="Actualizar estado (fuerza recarga de datos)" style={{background:'transparent',border:'none',color:'#5a7a95',fontFamily:MONO,fontSize:13,padding:'2px 5px',cursor:'pointer'}} disabled={alarmStatusLoading}>{alarmStatusLoading?'⟳':'↻'}</button>
                   <button onClick={newAlarm} title="Nueva alarma" style={{background:'rgba(0,212,255,0.1)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:13,padding:'3px 8px',borderRadius:3,cursor:'pointer'}}>+</button>
                 </div>
+                {/* Banner alertas desactualizadas */}
+                {(alertsLastUpdated===null||Date.now()-alertsLastUpdated>1200000)&&(
+                  <div style={{padding:'7px 10px',background:'#1a2a3a',borderLeft:'3px solid #f59e0b',display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+                    {alarmStatusLoading&&alarmCheckProgress
+                      ? <span style={{fontFamily:MONO,fontSize:11,color:'#94a3b8',flex:1}}>⟳ Comprobando {alarmCheckProgress.done}/{alarmCheckProgress.total}…</span>
+                      : <>
+                          <span style={{fontFamily:MONO,fontSize:11,color:'#94a3b8',flex:1}}>⚠ Alertas desactualizadas · última actualización: {fmtLastUpdated(alertsLastUpdated)}</span>
+                          <button onClick={()=>refreshAlarmStatus(filteredWlItems,alarms,true)} disabled={alarmStatusLoading}
+                            style={{background:'rgba(245,158,11,0.1)',border:'1px solid rgba(245,158,11,0.4)',color:'#f59e0b',fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',flexShrink:0,whiteSpace:'nowrap'}}>
+                            ↻ Actualizar ahora
+                          </button>
+                        </>
+                    }
+                  </div>
+                )}
                 <div style={{overflowY:'auto',flex:1}}>
                   {alarmLoading&&<div style={{padding:'10px 12px',fontFamily:MONO,fontSize:12,color:'#a8ccdf'}}>⟳ Cargando…</div>}
                   {!alarmLoading&&(()=>{
