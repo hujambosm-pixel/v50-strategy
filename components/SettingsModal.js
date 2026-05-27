@@ -738,10 +738,9 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                 <div style={{background:'rgba(34,211,238,0.05)',border:'0.5px solid rgba(34,211,238,0.18)',borderRadius:8,padding:14}}>
                   <div style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:'#22d3ee',marginBottom:12,letterSpacing:'0.04em'}}>Métricas históricas de estrategia</div>
                   {[
-                    ['ranking.rankingWinRatePct',     'Win rate',                    settings.ranking?.rankingWinRatePct??25,     '% de trades ganadores. Mide la consistencia'],
-                    ['ranking.rankingPFPct',          'Factor de beneficio',          settings.ranking?.rankingPFPct??25,          'Ratio ganancia bruta / pérdida bruta. >1 = estrategia rentable'],
-                    ['ranking.rankingCAGRPct',        'CAGR',                         settings.ranking?.rankingCAGRPct??25,        'Tasa de crecimiento anual anualizada'],
-                    ['ranking.rankingCAGRRobustoPct', 'CAGR sin top 3 trades',        settings.ranking?.rankingCAGRRobustoPct??25, 'CAGR excluyendo los 3 mejores. Mide la robustez real'],
+                    ['ranking.rankingWinRatePct',     'Win rate',                    settings.ranking?.rankingWinRatePct??33,     '% de trades ganadores. Mide la consistencia'],
+                    ['ranking.rankingCAGRPct',        'CAGR',                         settings.ranking?.rankingCAGRPct??33,        'Tasa de crecimiento anual anualizada'],
+                    ['ranking.rankingCAGRRobustoPct', 'CAGR sin top 3 trades',        settings.ranking?.rankingCAGRRobustoPct??34, 'CAGR excluyendo los 3 mejores. Mide la robustez real'],
                     ['ranking.rankingMaxDDPct',       'Max drawdown (penalización)', settings.ranking?.rankingMaxDDPct??0,        'Penaliza el riesgo. Reduce el score'],
                   ].map(([key,label,val,hint])=>(
                     <div key={key} style={{marginBottom:12}}>
@@ -757,7 +756,7 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                   ))}
                   {/* Total bloque histórico */}
                   {(()=>{
-                    const total=(settings.ranking?.rankingWinRatePct??25)+(settings.ranking?.rankingPFPct??25)+(settings.ranking?.rankingCAGRPct??25)+(settings.ranking?.rankingCAGRRobustoPct??25)+(settings.ranking?.rankingMaxDDPct??0)
+                    const total=(settings.ranking?.rankingWinRatePct??33)+(settings.ranking?.rankingCAGRPct??33)+(settings.ranking?.rankingCAGRRobustoPct??34)+(settings.ranking?.rankingMaxDDPct??0)
                     const ok=total===100
                     return(
                       <div style={{display:'flex',alignItems:'center',gap:6,padding:'5px 10px',borderRadius:4,
@@ -766,7 +765,7 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                         <span style={{fontFamily:MONO,fontSize:10,fontWeight:700,color:ok?'#22d3ee':'#ffd166'}}>
                           {ok?`✓ Total: ${total}%`:`⚠ Total: ${total}%`}
                         </span>
-                        {!ok&&<button onClick={()=>upd('ranking',{...(settings.ranking||{}),rankingWinRatePct:25,rankingPFPct:25,rankingCAGRPct:25,rankingCAGRRobustoPct:25,rankingMaxDDPct:0})}
+                        {!ok&&<button onClick={()=>upd('ranking',{...(settings.ranking||{}),rankingWinRatePct:33,rankingCAGRPct:33,rankingCAGRRobustoPct:34,rankingMaxDDPct:0})}
                           style={{marginLeft:'auto',fontFamily:MONO,fontSize:9,padding:'2px 7px',borderRadius:3,
                             border:'1px solid rgba(255,209,102,0.5)',background:'transparent',color:'#ffd166',cursor:'pointer'}}>
                           Restaurar

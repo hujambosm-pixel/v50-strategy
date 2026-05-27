@@ -331,6 +331,15 @@ async function loadRankingRemote(stratId) {
   return out
 }
 
+async function loadAllRankingsRemote() {
+  const url = `${getSupaUrl()}/rest/v1/ranking_results?select=symbol,strategy_id,score&order=score.desc&limit=5000`
+  const res = await fetch(url, { headers: getSupaH() })
+  if (!res.ok) return null
+  const rows = await res.json()
+  if (!rows?.length) return null
+  return rows
+}
+
 // ── Strategies API ────────────────────────────────────────────
 async function fetchStrategies() {
   const res=await fetch(`${getSupaUrl()}/rest/v1/strategies?active=eq.true&order=name.asc`,{headers:getSupaH()})
@@ -609,6 +618,8 @@ export default function Home() {
   const [rankingRunning,setRankingRunning]=useState(false)
   const [rankingProgress,setRankingProgress]=useState({done:0,total:0})
   const [rankingError,setRankingError]=useState(null)
+  // Mejor estrategia por símbolo entre TODAS las estrategias calculadas en Supabase
+  const [bestStratBySymbol,setBestStratBySymbol]=useState({})
   // Tooltip flotante del Watchlist — {x, y, symbol} | null
   const [wlTooltip,setWlTooltip]=useState(null)
   // Búsqueda async de nombre
@@ -1705,6 +1716,9 @@ export default function Home() {
     reloadConditions()
   },[])
 
+  // Cargar mejor estrategia por símbolo desde Supabase al montar y cuando cambian strategies
+  useEffect(()=>{ refreshBestStratPerSymbol() },[refreshBestStratPerSymbol])
+
   // Abrir editor watchlist
   const openEditItem=(item)=>{
     setEditingItem(item)
@@ -1811,6 +1825,31 @@ export default function Home() {
     try{const p=typeof s?.params==='string'?JSON.parse(s.params||'{}'):(s?.params||{});return p.intervalo||'diario'}
     catch{return 'diario'}
   }
+
+  const refreshBestStratPerSymbol=useCallback(async()=>{
+    if(!getSupaUrl()) return
+    try{
+      const rows=await loadAllRankingsRemote()
+      if(!rows?.length) return
+      const grouped={}
+      rows.forEach(r=>{
+        const sym=(r.symbol||''). toUpperCase()
+        if(!grouped[sym]) grouped[sym]=[]
+        grouped[sym].push(r)
+      })
+      const bySymbol={}
+      Object.entries(grouped).forEach(([sym,symRows])=>{
+        const stratIds=new Set(symRows.map(r=>r.strategy_id).filter(Boolean))
+        const best=symRows.reduce((acc,r)=>(r.score??0)>(acc?.score??0)?r:acc,null)
+        if(!best) return
+        const strat=strategies.find(s=>s.id===best.strategy_id)
+        let stratIntervalo='diario'
+        try{const p=typeof strat?.params==='string'?JSON.parse(strat.params||'{}'): (strat?.params||{});stratIntervalo=p.intervalo||'diario'}catch(_){}
+        bySymbol[sym]={stratName:strat?.name||''  ,stratId:best.strategy_id,score:best.score,intervalo:stratIntervalo,stratCount:stratIds.size}
+      })
+      setBestStratBySymbol(bySymbol)
+    }catch(e){console.warn('[refreshBestStrat]',e.message)}
+  },[strategies])
 
   function stopStrategy({skipDebounce=true}={}) {
     if(skipDebounce) skipNextRunRef.current = true
@@ -2074,10 +2113,9 @@ export default function Home() {
     const max52Pct    = (sett.ranking?.rankingMax52Pct     ?? 34) / 100
     const momN        = Math.max(5, sett.ranking?.rankingMomentumN ?? 20)
     // ── Pesos métricas históricas ──
-    const wrPct       = (sett.ranking?.rankingWinRatePct      ?? 25) / 100
-    const pfPct       = (sett.ranking?.rankingPFPct           ?? 25) / 100
-    const cagrPct     = (sett.ranking?.rankingCAGRPct         ?? 25) / 100
-    const cagrRobPct  = (sett.ranking?.rankingCAGRRobustoPct  ?? 25) / 100
+    const wrPct       = (sett.ranking?.rankingWinRatePct      ?? 33) / 100
+    const cagrPct     = (sett.ranking?.rankingCAGRPct         ?? 33) / 100
+    const cagrRobPct  = (sett.ranking?.rankingCAGRRobustoPct  ?? 34) / 100
     const ddPct       = (sett.ranking?.rankingMaxDDPct        ?? 0)  / 100
     const minTrades   = sett.ranking?.minTrades ?? 3
 
@@ -2123,7 +2161,6 @@ export default function Home() {
           const maxDD=json.maxDDStrategyFloat??json.maxDDStrategy??0
           const scoreHistorico=Math.max(0,Math.min(100,
             norm(winRate,20,80)*wrPct +
-            norm(factorBen,0.5,5)*pfPct +
             norm(cagr,-20,60)*cagrPct +
             norm(cagrRobust,-20,50)*cagrRobPct -
             norm(maxDD,0,60)*ddPct
@@ -2178,7 +2215,8 @@ export default function Home() {
     setRankingStratId(currentStratId)
     setRankingStratName(stratName||'')
     saveRankingRemote(results, currentStratId||null).catch(()=>{})
-  }, [watchlist,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL,currentStratId,stratName,filtros,estrategiaIntervalo])
+    refreshBestStratPerSymbol().catch(()=>{})
+  }, [watchlist,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL,currentStratId,stratName,filtros,estrategiaIntervalo,refreshBestStratPerSymbol])
 
   // ── Analizar candidatos: extrae tickers, corre backtest en paralelo ──
   // Usa gananciaSimple (CAGR Simple) — mismo método y fórmulas que calcRanking
@@ -3404,7 +3442,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.311</title>
+        <title>Trading Simulator V9.312</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3482,7 +3520,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.311
+            <span className="dot"/>Trading Simulator V9.312
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4261,15 +4299,17 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       })
                       return matchList&&matchSearch&&matchFav&&matchActive
                     })
-                    // Sort: 1st by ranking, 2nd by favorite, 3rd alphabetical
+                    // Sort: con ranking → por rank asc; sin ranking → A→Z por símbolo
+                    const hasRankingActive=Object.keys(rankingData).length>0
                     const all=filtered.slice().sort((a,b)=>{
-                      const ra=rankingData[(a.symbol||'').toUpperCase()]?.rank, rb=rankingData[(b.symbol||'').toUpperCase()]?.rank
-                      if(ra!=null&&rb!=null) return ra-rb
-                      if(ra!=null) return -1
-                      if(rb!=null) return 1
-                      if(a.favorite&&!b.favorite) return -1
-                      if(!a.favorite&&b.favorite) return 1
-                      return a.name.localeCompare(b.name)
+                      if(hasRankingActive){
+                        const ra=rankingData[(a.symbol||'').toUpperCase()]?.rank
+                        const rb=rankingData[(b.symbol||'').toUpperCase()]?.rank
+                        if(ra!=null&&rb!=null) return ra-rb
+                        if(ra!=null) return -1
+                        if(rb!=null) return 1
+                      }
+                      return (a.symbol||'').localeCompare(b.symbol||'')
                     })
                     const totalWl=watchlist.length
                     // BUG 2 FIX: calcular openSymbols/allFiltered ANTES del badge
@@ -4287,7 +4327,12 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         {rankingRunning&&<span style={{color:'#ffd166',fontSize:10}}>⟳ {rankingProgress.done}/{rankingProgress.total}</span>}
                         {hasRanking&&!rankingRunning&&<span style={{color:'#00e5a0',fontSize:9}} title={rankingStratName?`Calculado con: ${rankingStratName}`:''}>🏆 {rankingStratName||'Ranking'}</span>}
                         <button onClick={()=>calcRanking()} disabled={rankingRunning}
-                          title={`Calcular ranking de activos con la estrategia activa.\nScore ponderado (CAGR Simple):\n• CAGR Simple     25%\n• Win Rate        25%\n• Profit Factor   25%\n• CAGR Robusto    20%\n• MaxDD           −5%\n\nUsa los mismos filtros e intervalo que el backtest individual.`}
+                          title={`Ordena los activos por score ponderado combinando:
+
+Métricas históricas: Win Rate · CAGR · CAGR sin top 3 · Max DD
+Métricas de mercado: Momentum · Fuerza relativa vs SP500 · Proximidad máximo 52s
+
+Configura los pesos en Ajustes → Ranking`}
                           style={{marginLeft:'auto',background:rankingRunning?'rgba(13,21,32,0.5)':'rgba(255,209,102,0.1)',border:`1px solid ${rankingRunning?'#1a2d45':'rgba(255,209,102,0.4)'}`,color:rankingRunning?'#3d5a7a':'#ffd166',fontFamily:MONO,fontSize:9,padding:'2px 6px',borderRadius:3,cursor:rankingRunning?'not-allowed':'pointer',letterSpacing:'0.05em'}}>
                           {rankingRunning?'calculando…':'🏆 Ranking'}
                         </button>
@@ -9320,7 +9365,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
       const tItem=watchlist.find(w=>(w.symbol||'').toUpperCase()===tSym)
       const tRd=rankingData[tSym]
       const m=tRd?.metrics
-      const hasMeta=tRd&&rankingStratName
+      const tBest=bestStratBySymbol[tSym]
       return(
         <div style={{position:'fixed',left:wlTooltip.x,top:wlTooltip.y,zIndex:9999,
           background:'#090f18',border:'1px solid #1e3048',borderRadius:7,
@@ -9332,7 +9377,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
           <div style={{fontSize:10,color:'#4a7a95',marginBottom:m?.cagr!=null?8:0}}>{wlTooltip.symbol}</div>
           {/* Métricas */}
           {m?.cagr!=null&&(
-            <div style={{borderTop:'1px solid #1a2d40',paddingTop:8,marginBottom:hasMeta?8:0}}>
+            <div style={{borderTop:'1px solid #1a2d40',paddingTop:8,marginBottom:tBest?.stratName?8:0}}>
               {[
                 ['CAGR',          m.cagr,       v=>`${v.toFixed(1)}%`,      v=>v>=0?'#00e5a0':'#ff4d6d'],
                 ['Max DD',        m.maxDD,       v=>`-${Math.abs(v).toFixed(1)}%`, ()=>'#ff4d6d'],
@@ -9347,12 +9392,12 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
               ):null)}
             </div>
           )}
-          {/* Estrategia */}
-          {hasMeta&&(
+          {/* Mejor estrategia evaluada entre todas las calculadas en Supabase */}
+          {tBest?.stratName&&(
             <div style={{borderTop:'1px solid #1a2d40',paddingTop:7,fontSize:10,color:'#4a7a95'}}>
-              <span>Favorita: </span>
-              <span style={{color:'#ffd166',fontWeight:600}}>{rankingStratName} · {estrategiaIntervalo==='semanal'?'Semanal':'Diario'} ★</span>
-              <span style={{color:'#2d4a60'}}> (1 estrategia evaluada)</span>
+              <span>Favorita entre evaluadas: </span>
+              <span style={{color:'#ffd166',fontWeight:600}}>{tBest.stratName} · {tBest.intervalo==='semanal'?'Semanal':'Diario'} ★</span>
+              <span style={{color:'#2d4a60'}}> ({tBest.stratCount} {tBest.stratCount===1?'estrategia evaluada':'estrategias evaluadas'})</span>
             </div>
           )}
         </div>
