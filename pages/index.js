@@ -2055,16 +2055,35 @@ export default function Home() {
     setRankingProgress({done:0, total:syms.length})
 
     const sett = (()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')}catch(_){return {}}})()
-    const W = {
-      winrate:   (sett.ranking?.w_winrate   ?? 25) / 100,
-      factorben: (sett.ranking?.w_factorben ?? 25) / 100,
-      cagr:      (sett.ranking?.w_cagr      ?? 25) / 100,
-      robustez:  (sett.ranking?.w_robustez  ?? 20) / 100,
-      dd:        (sett.ranking?.w_dd        ?? 5)  / 100,
+    // ── Pesos de bloque ──
+    const wMercado    = (sett.ranking?.rankingWeightMercado   ?? 20) / 100
+    const wHistorico  = (sett.ranking?.rankingWeightHistorico ?? 80) / 100
+    // ── Pesos métricas de mercado ──
+    const momPct      = (sett.ranking?.rankingMomentumPct  ?? 33) / 100
+    const frPct       = (sett.ranking?.rankingFRPct        ?? 33) / 100
+    const max52Pct    = (sett.ranking?.rankingMax52Pct     ?? 34) / 100
+    const momN        = Math.max(5, sett.ranking?.rankingMomentumN ?? 20)
+    // ── Pesos métricas históricas ──
+    const wrPct       = (sett.ranking?.rankingWinRatePct      ?? 25) / 100
+    const pfPct       = (sett.ranking?.rankingPFPct           ?? 25) / 100
+    const cagrPct     = (sett.ranking?.rankingCAGRPct         ?? 25) / 100
+    const cagrRobPct  = (sett.ranking?.rankingCAGRRobustoPct  ?? 25) / 100
+    const ddPct       = (sett.ranking?.rankingMaxDDPct        ?? 0)  / 100
+    const minTrades   = sett.ranking?.minTrades ?? 3
+
+    // ── Fetch SP500 closes una vez si las métricas de mercado están activas ──
+    let sp500Closes = null
+    if (wMercado > 0 && frPct > 0) {
+      try {
+        const r = await apiFetch('/api/closes?symbol=%5EGSPC&days=300')
+        if (r.ok) sp500Closes = await r.json()
+      } catch(e) { console.warn('[calcRanking] SP500 fetch failed:', e.message) }
     }
-    const minTrades = sett.ranking?.minTrades ?? 3
+
     const BATCH = 4
     const results = {}
+    const norm=(v,mn,mx)=>Math.max(0,Math.min(100,(v-mn)/(mx-mn)*100))
+
     for (let i=0; i<syms.length; i+=BATCH) {
       const batch = syms.slice(i, i+BATCH)
       await Promise.allSettled(batch.map(async sym => {
@@ -2077,6 +2096,8 @@ export default function Home() {
           if (!res.ok || !json.trades?.length) return
           const trades = json.trades
           if (trades.length < minTrades) return
+
+          // ── Métricas históricas ──
           const wins=trades.filter(t=>t.pnlPct>=0), losses=trades.filter(t=>t.pnlPct<0)
           const winRate=(wins.length/trades.length)*100
           const gBrut=wins.reduce((s,t)=>s+t.pnlSimple,0), lBrut=losses.reduce((s,t)=>s+Math.abs(t.pnlSimple),0)
@@ -2089,15 +2110,49 @@ export default function Home() {
           const ganRobust=sorted3.reduce((s,t)=>s+t.pnlSimple,0)
           const capRob=Number(capitalIni)+ganRobust
           const cagrRobust=capRob>0?(Math.pow(capRob/Number(capitalIni),1/anios)-1)*100:-99
-          // Usar MaxDD con flotante si disponible (campo nuevo maxDDStrategyFloat)
           const maxDD=json.maxDDStrategyFloat??json.maxDDStrategy??0
-          const norm=(v,min,max)=>Math.max(0,Math.min(100,(v-min)/(max-min)*100))
+          const scoreHistorico=Math.max(0,Math.min(100,
+            norm(winRate,20,80)*wrPct +
+            norm(factorBen,0.5,5)*pfPct +
+            norm(cagr,-20,60)*cagrPct +
+            norm(cagrRobust,-20,50)*cagrRobPct -
+            norm(maxDD,0,60)*ddPct
+          ))
+
+          // ── Métricas de mercado (desde chartData) ──
+          let scoreMercado=0
+          if (wMercado > 0) {
+            const priceArr=(json.chartData||[]).map(d=>d.close).filter(v=>v!=null&&!isNaN(v))
+            if (priceArr.length >= momN+1) {
+              const lastP=priceArr[priceArr.length-1]
+              const momP=priceArr[Math.max(0,priceArr.length-1-momN)]
+              const momentum=momP>0?(lastP/momP-1)*100:0
+              const hist252=priceArr.slice(-252)
+              const high52=Math.max(...hist252)
+              const proximity52=high52>0?(lastP/high52)*100:50  // 50 = neutral if no data
+              let relStrength=0
+              if (sp500Closes?.length>=64&&frPct>0) {
+                const spLast=sp500Closes[sp500Closes.length-1]
+                const sp63=sp500Closes[sp500Closes.length-64]
+                const spRet=sp63>0?(spLast/sp63-1)*100:0
+                const asset63=priceArr.length>=64?priceArr[priceArr.length-64]:priceArr[0]
+                const assetRet=asset63>0?(lastP/asset63-1)*100:0
+                relStrength=assetRet-spRet
+              } else if (sp500Closes===null&&frPct>0) {
+                console.warn(`[calcRanking] ${sym}: sin datos SP500, fuerza relativa omitida`)
+              }
+              scoreMercado=Math.max(0,Math.min(100,
+                norm(momentum,-20,40)*momPct +
+                norm(relStrength,-30,30)*frPct +
+                norm(proximity52,50,100)*max52Pct
+              ))
+            } else {
+              console.warn(`[calcRanking] ${sym}: datos de precio insuficientes para métricas de mercado`)
+            }
+          }
+
           const score=Math.max(0,Math.min(100,
-            norm(winRate,20,80)*W.winrate +
-            norm(factorBen,0.5,5)*W.factorben +
-            norm(cagr,-20,60)*W.cagr +
-            norm(cagrRobust,-20,50)*W.robustez -
-            norm(maxDD,0,60)*W.dd
+            scoreHistorico*wHistorico + scoreMercado*wMercado
           ))
           results[sym]={score,metrics:{winRate,factorBen,cagr,cagrRobust,maxDD,trades:trades.length}}
         } catch(e){ console.error('[calcRanking]', sym, e) }
@@ -3339,7 +3394,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.308</title>
+        <title>Trading Simulator V9.309</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3417,7 +3472,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.308
+            <span className="dot"/>Trading Simulator V9.309
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4277,7 +4332,13 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                     style={{fontFamily:MONO,fontSize:11,color:pnlColor,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>
                                     {eurStr} / {pctStr}
                                   </div>
-                                : <div style={{fontFamily:MONO,fontSize:11,color:'#8aadcc',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{w.name}</div>
+                                : rankingData[w.symbol]?.metrics
+                  ? <div style={{fontFamily:MONO,fontSize:11,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>
+                      <span style={{color:(rankingData[w.symbol].metrics.cagr??0)>=0?'#00e5a0':'#ff4d6d'}}>CAGR: {(rankingData[w.symbol].metrics.cagr??0).toFixed(1)}%</span>
+                      <span style={{color:'#3d5a7a'}}> | </span>
+                      <span style={{color:'#ff4d6d'}}>DD: -{Math.abs(rankingData[w.symbol].metrics.maxDD??0).toFixed(1)}%</span>
+                    </div>
+                  : <div style={{fontFamily:MONO,fontSize:11,color:'#8aadcc',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{w.name}</div>
                               }
                             </div>
                           )

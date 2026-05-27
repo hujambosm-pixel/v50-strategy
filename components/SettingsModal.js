@@ -652,63 +652,140 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
           {/* ── RANKING ── */}
           {tab==='ranking'&&(
             <div>
-              {sep('Pesos de la fórmula de scoring (total = 100%)')}
-              <div style={{fontSize:10,color:'#5a7a95',lineHeight:1.6,marginBottom:14}}>
-                El score 0–100 de cada activo se calcula combinando estas 5 métricas.
-                Ajusta los pesos según lo que más valoras en una estrategia.
-                La penalización del Max DD reduce el score (resta).
-              </div>
+              {/* ── Pesos globales por bloque ── */}
+              {sep('Pesos globales por bloque')}
               {[
-                ['ranking.w_winrate',    'Win Rate',                    settings.ranking?.w_winrate    ?? 25, 'Porcentaje de trades ganadores. Mide la consistencia de la estrategia.'],
-                ['ranking.w_factorben',  'Factor de Beneficio',         settings.ranking?.w_factorben  ?? 25, 'Ratio ganancia bruta / pérdida bruta. >1 = estrategia rentable.'],
-                ['ranking.w_cagr',       'CAGR',                        settings.ranking?.w_cagr       ?? 25, 'Tasa de crecimiento anual compuesto. Mide la rentabilidad real anualizada.'],
-                ['ranking.w_robustez',   'CAGR sin top 3 trades',       settings.ranking?.w_robustez   ?? 20, 'CAGR excluyendo las 3 mejores operaciones. Mide la robustez real de la estrategia.'],
-                ['ranking.w_dd',         'Max Drawdown (penalización)', settings.ranking?.w_dd         ?? 5,  'Penaliza el riesgo. Reduce el score según el máximo drawdown histórico.'],
-              ].map(([key, label, val, hint])=>(
-                <div key={key} style={{marginBottom:12}}>
-                  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
-                    <span style={{fontFamily:MONO,fontSize:10,color:'#cce0f5',flex:1}}>{label}</span>
-                    <span style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:'#00d4ff',minWidth:32,textAlign:'right'}}>{val}%</span>
-                    <input type="range" min={0} max={50} value={val}
-                      onChange={e=>upd(key,Number(e.target.value))}
-                      style={{width:100,accentColor:'#00d4ff'}}/>
-                  </div>
-                  <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',lineHeight:1.5,marginLeft:0}}>{hint}</div>
-                </div>
-              ))}
-              {(()=>{
-                const total=(settings.ranking?.w_winrate??25)+(settings.ranking?.w_factorben??25)+(settings.ranking?.w_cagr??25)+(settings.ranking?.w_robustez??20)+(settings.ranking?.w_dd??5)
-                const ok=total===100
-                return(
-                  <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',borderRadius:5,
-                    background:ok?'rgba(0,229,160,0.08)':'rgba(255,209,102,0.08)',
-                    border:`1px solid ${ok?'rgba(0,229,160,0.3)':'rgba(255,209,102,0.4)'}`,marginTop:4}}>
-                    <span style={{fontFamily:MONO,fontSize:11,fontWeight:700,color:ok?'#00e5a0':'#ffd166'}}>
-                      {ok?'✓ Total: 100%':`⚠ Total: ${total}% (debe ser 100%)`}
-                    </span>
-                    {!ok&&<button onClick={()=>{
-                      // auto-normalize
-                      const base={w_winrate:25,w_factorben:25,w_cagr:25,w_robustez:20,w_dd:5}
-                      upd('ranking',{...settings.ranking,...base})
-                    }} style={{marginLeft:'auto',fontFamily:MONO,fontSize:9,padding:'3px 8px',borderRadius:3,
-                      border:'1px solid #ffd166',background:'transparent',color:'#ffd166',cursor:'pointer'}}>
-                      Restaurar por defecto
-                    </button>}
-                  </div>
-                )
-              })()}
-              {sep('Otras opciones de ranking')}
-              {[
-                ['ranking.minTrades', 'Mínimo de trades para incluir en ranking', settings.ranking?.minTrades ?? 3],
-              ].map(([key,label,val])=>(
-                <div key={key} style={{display:'flex',alignItems:'center',gap:10,marginBottom:8}}>
-                  <span style={{fontFamily:MONO,fontSize:10,color:'#cce0f5',flex:1}}>{label}</span>
-                  <input type="number" value={val} min={1} max={50}
+                ['ranking.rankingWeightMercado',   'Peso bloque métricas de mercado',  settings.ranking?.rankingWeightMercado??20,  '#3b82f6'],
+                ['ranking.rankingWeightHistorico', 'Peso bloque métricas históricas',  settings.ranking?.rankingWeightHistorico??80,'#22d3ee'],
+              ].map(([key,label,val,color])=>(
+                <div key={key} style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>
+                  <span style={{width:9,height:9,borderRadius:'50%',background:color,flexShrink:0,display:'inline-block'}}/>
+                  <span style={{fontFamily:MONO,fontSize:12,color:'#cce0f5',flex:1}}>{label}</span>
+                  <span style={{fontFamily:MONO,fontSize:12,fontWeight:700,color,minWidth:36,textAlign:'right'}}>{val}%</span>
+                  <input type="range" min={0} max={100} step={5} value={val}
                     onChange={e=>upd(key,Number(e.target.value))}
-                    style={{width:60,background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,
-                      color:'#e2eaf5',fontFamily:MONO,fontSize:12,padding:'4px 8px',textAlign:'center'}}/>
+                    style={{width:120,accentColor:color}}/>
                 </div>
               ))}
+
+              {/* ── Dos columnas ── */}
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginTop:10}}>
+
+                {/* Columna izquierda — Métricas de mercado */}
+                <div style={{background:'rgba(59,130,246,0.06)',border:'0.5px solid rgba(59,130,246,0.22)',borderRadius:8,padding:14}}>
+                  <div style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:'#3b82f6',marginBottom:12,letterSpacing:'0.04em'}}>Métricas de mercado actuales</div>
+
+                  {/* Momentum */}
+                  <div style={{marginBottom:14}}>
+                    <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:3}}>
+                      <span style={{fontSize:13,fontWeight:500,color:'#d0e8fa',flex:1}}>Momentum</span>
+                      <span style={{fontFamily:MONO,fontSize:11,fontWeight:700,color:'#3b82f6',minWidth:30,textAlign:'right'}}>{settings.ranking?.rankingMomentumPct??33}%</span>
+                      <input type="range" min={0} max={100} step={5} value={settings.ranking?.rankingMomentumPct??33}
+                        onChange={e=>upd('ranking.rankingMomentumPct',Number(e.target.value))}
+                        style={{width:80,accentColor:'#3b82f6'}}/>
+                    </div>
+                    <div style={{fontSize:12,color:'#7a9bc0',lineHeight:1.5,marginBottom:7}}>% de subida del activo en los últimos N días</div>
+                    <div style={{display:'flex',alignItems:'center',gap:8}}>
+                      <span style={{fontFamily:MONO,fontSize:11,color:'#5a7a95'}}>N días:</span>
+                      <input type="number" min={5} max={120} value={settings.ranking?.rankingMomentumN??20}
+                        onChange={e=>upd('ranking.rankingMomentumN',Math.max(5,Math.min(120,Number(e.target.value)||20)))}
+                        style={{width:60,background:'#080c14',border:'1px solid #1a2d45',borderRadius:3,
+                          color:'#cce0f5',fontFamily:MONO,fontSize:11,padding:'3px 6px',textAlign:'center'}}/>
+                    </div>
+                  </div>
+
+                  {/* Fuerza relativa vs SP500 */}
+                  <div style={{marginBottom:14}}>
+                    <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:3}}>
+                      <span style={{fontSize:13,fontWeight:500,color:'#d0e8fa',flex:1}}>Fuerza relativa vs SP500</span>
+                      <span style={{fontFamily:MONO,fontSize:11,fontWeight:700,color:'#3b82f6',minWidth:30,textAlign:'right'}}>{settings.ranking?.rankingFRPct??33}%</span>
+                      <input type="range" min={0} max={100} step={5} value={settings.ranking?.rankingFRPct??33}
+                        onChange={e=>upd('ranking.rankingFRPct',Number(e.target.value))}
+                        style={{width:80,accentColor:'#3b82f6'}}/>
+                    </div>
+                    <div style={{fontSize:12,color:'#7a9bc0',lineHeight:1.5}}>Rendimiento del activo menos el del SP500 en los últimos 63 días</div>
+                  </div>
+
+                  {/* Proximidad máximo 52 semanas */}
+                  <div style={{marginBottom:14}}>
+                    <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:3}}>
+                      <span style={{fontSize:13,fontWeight:500,color:'#d0e8fa',flex:1}}>Proximidad máximo 52s</span>
+                      <span style={{fontFamily:MONO,fontSize:11,fontWeight:700,color:'#3b82f6',minWidth:30,textAlign:'right'}}>{settings.ranking?.rankingMax52Pct??34}%</span>
+                      <input type="range" min={0} max={100} step={5} value={settings.ranking?.rankingMax52Pct??34}
+                        onChange={e=>upd('ranking.rankingMax52Pct',Number(e.target.value))}
+                        style={{width:80,accentColor:'#3b82f6'}}/>
+                    </div>
+                    <div style={{fontSize:12,color:'#7a9bc0',lineHeight:1.5}}>Precio actual respecto al máximo de los últimos 252 días</div>
+                  </div>
+
+                  {/* Total bloque mercado */}
+                  {(()=>{
+                    const total=(settings.ranking?.rankingMomentumPct??33)+(settings.ranking?.rankingFRPct??33)+(settings.ranking?.rankingMax52Pct??34)
+                    const ok=total===100
+                    return(
+                      <div style={{display:'flex',alignItems:'center',gap:6,padding:'5px 10px',borderRadius:4,
+                        background:ok?'rgba(59,130,246,0.08)':'rgba(255,209,102,0.08)',
+                        border:`1px solid ${ok?'rgba(59,130,246,0.25)':'rgba(255,209,102,0.4)'}`}}>
+                        <span style={{fontFamily:MONO,fontSize:10,fontWeight:700,color:ok?'#3b82f6':'#ffd166'}}>
+                          {ok?`✓ Total: ${total}%`:`⚠ Total: ${total}%`}
+                        </span>
+                      </div>
+                    )
+                  })()}
+                </div>
+
+                {/* Columna derecha — Métricas históricas */}
+                <div style={{background:'rgba(34,211,238,0.05)',border:'0.5px solid rgba(34,211,238,0.18)',borderRadius:8,padding:14}}>
+                  <div style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:'#22d3ee',marginBottom:12,letterSpacing:'0.04em'}}>Métricas históricas de estrategia</div>
+                  {[
+                    ['ranking.rankingWinRatePct',     'Win rate',                    settings.ranking?.rankingWinRatePct??25,     '% de trades ganadores. Mide la consistencia'],
+                    ['ranking.rankingPFPct',          'Factor de beneficio',          settings.ranking?.rankingPFPct??25,          'Ratio ganancia bruta / pérdida bruta. >1 = estrategia rentable'],
+                    ['ranking.rankingCAGRPct',        'CAGR',                         settings.ranking?.rankingCAGRPct??25,        'Tasa de crecimiento anual anualizada'],
+                    ['ranking.rankingCAGRRobustoPct', 'CAGR sin top 3 trades',        settings.ranking?.rankingCAGRRobustoPct??25, 'CAGR excluyendo los 3 mejores. Mide la robustez real'],
+                    ['ranking.rankingMaxDDPct',       'Max drawdown (penalización)', settings.ranking?.rankingMaxDDPct??0,        'Penaliza el riesgo. Reduce el score'],
+                  ].map(([key,label,val,hint])=>(
+                    <div key={key} style={{marginBottom:12}}>
+                      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:3}}>
+                        <span style={{fontSize:13,fontWeight:500,color:'#d0e8fa',flex:1}}>{label}</span>
+                        <span style={{fontFamily:MONO,fontSize:11,fontWeight:700,color:'#22d3ee',minWidth:30,textAlign:'right'}}>{val}%</span>
+                        <input type="range" min={0} max={100} step={5} value={val}
+                          onChange={e=>upd(key,Number(e.target.value))}
+                          style={{width:80,accentColor:'#22d3ee'}}/>
+                      </div>
+                      <div style={{fontSize:12,color:'#7a9bc0',lineHeight:1.5}}>{hint}</div>
+                    </div>
+                  ))}
+                  {/* Total bloque histórico */}
+                  {(()=>{
+                    const total=(settings.ranking?.rankingWinRatePct??25)+(settings.ranking?.rankingPFPct??25)+(settings.ranking?.rankingCAGRPct??25)+(settings.ranking?.rankingCAGRRobustoPct??25)+(settings.ranking?.rankingMaxDDPct??0)
+                    const ok=total===100
+                    return(
+                      <div style={{display:'flex',alignItems:'center',gap:6,padding:'5px 10px',borderRadius:4,
+                        background:ok?'rgba(34,211,238,0.07)':'rgba(255,209,102,0.08)',
+                        border:`1px solid ${ok?'rgba(34,211,238,0.2)':'rgba(255,209,102,0.4)'}`}}>
+                        <span style={{fontFamily:MONO,fontSize:10,fontWeight:700,color:ok?'#22d3ee':'#ffd166'}}>
+                          {ok?`✓ Total: ${total}%`:`⚠ Total: ${total}%`}
+                        </span>
+                        {!ok&&<button onClick={()=>upd('ranking',{...(settings.ranking||{}),rankingWinRatePct:25,rankingPFPct:25,rankingCAGRPct:25,rankingCAGRRobustoPct:25,rankingMaxDDPct:0})}
+                          style={{marginLeft:'auto',fontFamily:MONO,fontSize:9,padding:'2px 7px',borderRadius:3,
+                            border:'1px solid rgba(255,209,102,0.5)',background:'transparent',color:'#ffd166',cursor:'pointer'}}>
+                          Restaurar
+                        </button>}
+                      </div>
+                    )
+                  })()}
+                </div>
+              </div>
+
+              {/* ── Otras opciones ── */}
+              {sep('Otras opciones')}
+              <div style={{display:'flex',alignItems:'center',gap:10}}>
+                <span style={{fontFamily:MONO,fontSize:12,color:'#cce0f5',flex:1}}>Mínimo de trades para incluir en ranking</span>
+                <input type="number" value={settings.ranking?.minTrades??3} min={1} max={50}
+                  onChange={e=>upd('ranking.minTrades',Number(e.target.value))}
+                  style={{width:60,background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,
+                    color:'#e2eaf5',fontFamily:MONO,fontSize:12,padding:'4px 8px',textAlign:'center'}}/>
+              </div>
             </div>
           )}
 
