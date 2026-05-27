@@ -222,6 +222,26 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                 ℹ️ Estas opciones aplican únicamente a las <b style={{color:'#7ec8e3'}}>alertas de estrategias</b>.<br/>
                 El parpadeo y el método de envío de las <b style={{color:'#7ec8e3'}}>notificaciones del Watchlist</b> se configuran individualmente en cada notificación (panel Watchlist → ✎).
               </div>
+              {sep('Actualización automática')}
+              <div style={{marginBottom:16}}>
+                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
+                  <span style={{fontFamily:MONO,fontSize:11,color:'#cce0f5',flex:1}}>Umbral auto-actualización de alertas</span>
+                  <input type="number" min={10} max={200}
+                    value={settings.alarmas?.autoRefreshThreshold??50}
+                    onChange={e=>{
+                      const v=Math.max(10,Math.min(200,Number(e.target.value)||50))
+                      upd('alarmas.autoRefreshThreshold',v)
+                    }}
+                    style={{width:58,background:'var(--bg2,#0d1520)',border:'1px solid #1a2d45',color:'#cce0f5',
+                      fontFamily:MONO,fontSize:11,padding:'3px 6px',borderRadius:3,textAlign:'right'}}/>
+                  <span style={{fontFamily:MONO,fontSize:11,color:'#5a7a95'}}>activos</span>
+                </div>
+                <div style={{fontFamily:MONO,fontSize:9,color:'#4a6a80',lineHeight:1.6}}>
+                  Si la lista activa del Watchlist tiene más de N activos, las alertas no se actualizarán
+                  automáticamente — aparecerá un botón ↻ para hacerlo manualmente.
+                  Con listas pequeñas (≤ N) la actualización es automática al cargar o cambiar el Watchlist.
+                </div>
+              </div>
               {sep('Opciones de estrategia')}
               <label style={{display:'flex',alignItems:'center',gap:8,marginBottom:8,cursor:'pointer'}}>
                 <input type="checkbox"

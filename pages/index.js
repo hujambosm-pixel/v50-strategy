@@ -515,6 +515,9 @@ export default function Home() {
   const [chartViewFull,setChartViewFull]=useState(false)
   const [settingsOpen,setSettingsOpen]=useState(false)
   const [settingsInitTab,setSettingsInitTab]=useState('integraciones')
+  const [alertThreshold,setAlertThreshold]=useState(()=>{
+    try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.alarmas?.autoRefreshThreshold??50}catch{return 50}
+  })
   const [sidePanel,setSidePanel]=useState('watchlist')
   const [navExpanded,setNavExpanded]=useState(false)
   const [metricsLayout,setMetricsLayout]=useState('panel')
@@ -2037,12 +2040,12 @@ export default function Home() {
     try{localStorage.setItem('watchlist_selected_lists',JSON.stringify(selectedLists))}catch(_){}
   },[selectedLists])
 
-  // CAMBIO 2 — Auto-refresh solo si ≤50 activos visibles (filteredWlItems)
+  // CAMBIO 2 — Auto-refresh solo si filteredWlItems.length <= alertThreshold (configurable en Settings)
   useEffect(()=>{
     const count=filteredWlItems.length
-    if(count>0&&(alarms.length>0||conditions.length>0)&&count<=50)
+    if(count>0&&(alarms.length>0||conditions.length>0)&&count<=alertThreshold)
       refreshAlarmStatus(filteredWlItems,alarms)
-  },[alarms,conditions.length,filteredWlItems.length,selectedLists.length]) // eslint-disable-line
+  },[alarms,conditions.length,filteredWlItems.length,selectedLists.length,alertThreshold]) // eslint-disable-line
 
   // ── Ranking: ejecuta backtest en paralelo sobre toda la watchlist ──
   // Usa gananciaSimple (CAGR Simple) para puntuar. Score ponderado:
@@ -3329,7 +3332,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.306</title>
+        <title>Trading Simulator V9.307</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3407,7 +3410,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.306
+            <span className="dot"/>Trading Simulator V9.307
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4054,9 +4057,10 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                         ['Ticker',null],['CAGR',cagrTip],['WR%',null],
                                         ['PF',null],['MaxDD',null],['Ops',null],['',null]
                                       ].map(([h,tip])=>(
-                                        <th key={h} style={{padding:'3px 5px',color:'#5a7a95',fontWeight:600,
-                                          textAlign:h===''?'center':'left',whiteSpace:'nowrap'}}>
-                                          {h}{tip&&<span title={tip} style={{marginLeft:3,cursor:'help',color:'#3a5a78',fontSize:8}}>?</span>}
+                                        <th key={h} title={tip||undefined} style={{padding:'3px 5px',color:'#5a7a95',fontWeight:600,
+                                          textAlign:h===''?'center':'left',whiteSpace:'nowrap',
+                                          cursor:tip?'help':'default'}}>
+                                          {h}
                                         </th>
                                       ))
                                     })()}
@@ -4194,12 +4198,11 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         <span style={{color:'#8abcd4'}}>activos</span>
                         {rankingRunning&&<span style={{color:'#ffd166',fontSize:10}}>⟳ {rankingProgress.done}/{rankingProgress.total}</span>}
                         {hasRanking&&!rankingRunning&&<span style={{color:'#00e5a0',fontSize:9}} title={rankingStratName?`Calculado con: ${rankingStratName}`:''}>🏆 {rankingStratName||'Ranking'}</span>}
-                        <button onClick={()=>calcRanking(filtered)} disabled={rankingRunning} title="Calcular ranking de activos con la estrategia activa"
+                        <button onClick={()=>calcRanking(filtered)} disabled={rankingRunning}
+                          title={`Calcular ranking de activos con la estrategia activa.\nScore ponderado (CAGR Simple):\n• CAGR Simple     25%\n• Win Rate        25%\n• Profit Factor   25%\n• CAGR Robusto    20%\n• MaxDD           −5%\n\nUsa los mismos filtros e intervalo que el backtest individual.`}
                           style={{marginLeft:'auto',background:rankingRunning?'rgba(13,21,32,0.5)':'rgba(255,209,102,0.1)',border:`1px solid ${rankingRunning?'#1a2d45':'rgba(255,209,102,0.4)'}`,color:rankingRunning?'#3d5a7a':'#ffd166',fontFamily:MONO,fontSize:9,padding:'2px 6px',borderRadius:3,cursor:rankingRunning?'not-allowed':'pointer',letterSpacing:'0.05em'}}>
                           {rankingRunning?'calculando…':'🏆 Ranking'}
                         </button>
-                        <span title={`Activos ordenados por score ponderado (CAGR Simple):\n• CAGR Simple     25%\n• Win Rate        25%\n• Profit Factor   25%\n• CAGR Robusto    20%\n• MaxDD           −5%\n\nUsa los mismos filtros e intervalo que el backtest individual.`}
-                          style={{color:'#3d5a7a',fontFamily:MONO,fontSize:9,cursor:'help',userSelect:'none',lineHeight:1,padding:'0 1px'}}>?</span>
                         {hasRanking&&<button onClick={()=>setRankingData({})} title="Limpiar ranking"
                           style={{background:'transparent',border:'1px solid #1a2d45',color:'#5a7a95',fontFamily:MONO,fontSize:9,padding:'2px 5px',borderRadius:3,cursor:'pointer'}}>✕</button>}
                       </div>
@@ -4456,8 +4459,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   {alarmCheckDone&&!alarmStatusLoading&&(
                     <span style={{fontFamily:MONO,fontSize:9,color:'#00e5a0',whiteSpace:'nowrap'}}>✓ Actualizado</span>
                   )}
-                  {!alarmStatusLoading&&!alarmCheckDone&&filteredWlItems.length>50&&(
-                    <span style={{fontFamily:MONO,fontSize:9,color:'#ffd166',whiteSpace:'nowrap'}} title={`${filteredWlItems.length} activos — actualización automática desactivada`}>
+                  {!alarmStatusLoading&&!alarmCheckDone&&filteredWlItems.length>alertThreshold&&(
+                    <span style={{fontFamily:MONO,fontSize:9,color:'#ffd166',whiteSpace:'nowrap'}} title={`${filteredWlItems.length} activos — actualización automática desactivada (umbral: ${alertThreshold})`}>
                       ⚠ {filteredWlItems.length} activos
                     </span>
                   )}
@@ -9213,7 +9216,10 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
       })()}
 
     {/* ── Modal de configuración global ── */}
-    {settingsOpen&&<SettingsModal onClose={()=>{setSettingsOpen(false);setTemaKey(k=>k+1)}} strategies={strategies} initialTab={settingsInitTab}/>}
+    {settingsOpen&&<SettingsModal onClose={()=>{
+      setSettingsOpen(false);setTemaKey(k=>k+1);
+      try{const t=JSON.parse(localStorage.getItem('v50_settings')||'{}')?.alarmas?.autoRefreshThreshold;if(t!=null)setAlertThreshold(Number(t))}catch(_){}
+    }} strategies={strategies} initialTab={settingsInitTab}/>}
 
     {/* ── Modal de alarma de precio (doble-clic en gráfico) ── */}
     {priceAlarmDlg&&(
