@@ -23,36 +23,57 @@ async function loadAllRankingsWithMetrics() {
   return (await res.json()) || []
 }
 
-// ── Light-theme color helpers ────────────────────────────────
+// ── Warm-notebook color helpers ──────────────────────────────
 const cagrBg = v => {
   if (v == null) return 'transparent'
-  if (v > 15) return '#dcfce7'
-  if (v > 5)  return '#d1fae5'
-  if (v > 0)  return '#f0fdf4'
-  return '#fee2e2'
+  if (v > 15) return '#d4edda'
+  if (v > 5)  return '#dff0d8'
+  if (v > 0)  return '#eaf6ec'
+  return '#fde8e8'
 }
 const cagrFg = v => {
-  if (v == null) return '#94a3b8'
-  if (v > 15) return '#166534'
-  if (v > 5)  return '#065f46'
-  if (v > 0)  return '#15803d'
-  return '#991b1b'
+  if (v == null) return '#9a9590'
+  if (v > 15) return '#1a5c30'
+  if (v > 5)  return '#2d6a4f'
+  if (v > 0)  return '#386641'
+  return '#8b1a1a'
 }
 const ddBg = v => {
   if (v == null) return 'transparent'
   const abs = Math.abs(v)
-  if (abs > 30) return '#fecaca'
-  if (abs > 15) return '#fed7d7'
+  if (abs > 30) return '#f9cccc'
+  if (abs > 15) return '#fad7d7'
   return 'transparent'
 }
 const ddFg = v => {
-  if (v == null) return '#94a3b8'
+  if (v == null) return '#9a9590'
   const abs = Math.abs(v)
-  if (abs > 30) return '#991b1b'
-  if (abs > 15) return '#b91c1c'
-  return '#475569'
+  if (abs > 30) return '#8b1a1a'
+  if (abs > 15) return '#9b2c2c'
+  return '#4a4540'
 }
-const wrFg = v => v == null ? '#94a3b8' : v >= 50 ? '#166534' : '#991b1b'
+const wrFg = v => v == null ? '#9a9590' : v >= 50 ? '#1a5c30' : '#8b1a1a'
+
+// ── Palette ───────────────────────────────────────────────────
+const P = {
+  bg:          '#f5f0e8',
+  bgAlt:       '#ede8df',
+  bgHeader:    '#ede8df',
+  bgPanel:     '#ede8df',
+  border:      '#ccc8bf',
+  borderStrong:'#b8b3ab',
+  thBg:        '#ddd8cf',
+  thFg:        '#4a4540',
+  text:        '#2c2820',
+  textSec:     '#6b6560',
+  textMuted:   '#9a9590',
+  selected:    '#e8e0d4',
+  hover:       '#e8e3da',
+  accentBg:    '#2c2820',
+  accentFg:    '#f5f0e8',
+  badgeDiario:  { bg: '#e8e0d0', border: '#c8c0b0', color: '#4a3c28' },
+  badgeSemanal: { bg: '#e0d8ec', border: '#c0b4d8', color: '#3c2860' },
+}
 
 // ── Main component ───────────────────────────────────────────
 export default function WatchlistManager({
@@ -63,7 +84,7 @@ export default function WatchlistManager({
   onReload,
   onClose,
 }) {
-  const [allRankings, setAllRankings]   = useState({}) // {stratId: {SYM: metrics}}
+  const [allRankings, setAllRankings]   = useState({})
   const [loadingRank, setLoadingRank]   = useState(true)
   const [selected, setSelected]         = useState(new Set())
   const [sortState, setSortState]       = useState({ metric: 'cagr', dir: 'desc' })
@@ -73,7 +94,9 @@ export default function WatchlistManager({
   const [bulkAddList, setBulkAddList]   = useState('')
   const [saving, setSaving]             = useState(new Set())
   const [addDropOpen, setAddDropOpen]   = useState(null)
-  const addDropRef = useRef(null)
+  const [listFilterOpen, setListFilterOpen] = useState(false)
+  const addDropRef   = useRef(null)
+  const listFilterRef= useRef(null)
 
   // ── Load all ranking data on mount ────────────────────────
   useEffect(() => {
@@ -90,28 +113,25 @@ export default function WatchlistManager({
           maxDD:   r.max_drawdown,
           trades:  r.total_trades,
           score:   r.score,
-          rank:    r.rank_position,
         }
       })
       setAllRankings(map)
     }).catch(() => {}).finally(() => setLoadingRank(false))
   }, [])
 
-  // ── Close + dropdown on outside click ────────────────────
+  // ── Outside-click handlers ─────────────────────────────────
   useEffect(() => {
-    const handler = e => {
-      if (addDropRef.current && !addDropRef.current.contains(e.target))
-        setAddDropOpen(null)
+    const h = e => {
+      if (addDropRef.current && !addDropRef.current.contains(e.target)) setAddDropOpen(null)
+      if (listFilterRef.current && !listFilterRef.current.contains(e.target)) setListFilterOpen(false)
     }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
   }, [])
 
-  // ── Favorita para un símbolo ──────────────────────────────
-  // Devuelve la entrada de allRankings de la mejor estrategia para ese símbolo
+  // ── Best strategy for a symbol ────────────────────────────
   const bestForSymbol = useCallback(sym => {
     const symUp = sym.toUpperCase()
-    // Recorrer todas las estrategias con datos y quedarse con la de mayor CAGR
     let best = null
     Object.entries(allRankings).forEach(([sid, data]) => {
       const m = data[symUp]
@@ -138,9 +158,10 @@ export default function WatchlistManager({
 
   // ── Filter ─────────────────────────────────────────────────
   const filtered = watchlist.filter(w => {
-    const matchSearch = !filterSearch ||
-      (w.symbol || '').toLowerCase().includes(filterSearch.toLowerCase()) ||
-      (w.name   || '').toLowerCase().includes(filterSearch.toLowerCase())
+    const sl = filterSearch.toLowerCase()
+    const matchSearch = !sl ||
+      (w.symbol || '').toLowerCase().includes(sl) ||
+      (w.name   || '').toLowerCase().includes(sl)
     const matchList = filterLists.length === 0 ||
       filterLists.some(lid => (w.list_ids || []).includes(lid))
     return matchSearch && matchList
@@ -149,19 +170,15 @@ export default function WatchlistManager({
   // ── Sort ───────────────────────────────────────────────────
   const sorted = [...filtered].sort((a, b) => {
     const { metric, dir } = sortState
-    if (metric === 'symbol') {
-      const r = (a.symbol || '').localeCompare(b.symbol || '')
-      return dir === 'asc' ? r : -r
-    }
-    if (metric === 'name') {
-      const r = (a.name || '').localeCompare(b.name || '')
-      return dir === 'asc' ? r : -r
-    }
+    const cmp = (va, vb) => dir === 'asc' ? va - vb : vb - va
+    const cmpStr = (sa, sb) => dir === 'asc' ? sa.localeCompare(sb) : sb.localeCompare(sa)
+    if (metric === 'symbol') return cmpStr(a.symbol || '', b.symbol || '')
+    if (metric === 'name')   return cmpStr(a.name   || '', b.name   || '')
     const ba = bestForSymbol(a.symbol || '')
     const bb = bestForSymbol(b.symbol || '')
     const va = ba?.metrics?.[metric] ?? (dir === 'asc' ? Infinity : -Infinity)
     const vb = bb?.metrics?.[metric] ?? (dir === 'asc' ? Infinity : -Infinity)
-    return dir === 'asc' ? va - vb : vb - va
+    return cmp(va, vb)
   })
 
   // ── Selection ─────────────────────────────────────────────
@@ -173,15 +190,15 @@ export default function WatchlistManager({
     const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n
   })
 
-  // ── Sort click ─────────────────────────────────────────────
+  // ── Sort helpers ──────────────────────────────────────────
   const handleSort = metric => setSortState(prev =>
     prev.metric === metric
       ? { metric, dir: prev.dir === 'desc' ? 'asc' : 'desc' }
       : { metric, dir: 'desc' }
   )
   const sortIcon = metric => {
-    if (sortState.metric !== metric) return <span style={{ color: '#cbd5e1', marginLeft: 3 }}>↕</span>
-    return <span style={{ color: '#3b82f6', marginLeft: 3 }}>{sortState.dir === 'desc' ? '↓' : '↑'}</span>
+    if (sortState.metric !== metric) return <span style={{ color: P.textMuted, marginLeft: 2, fontSize: 10 }}>↕</span>
+    return <span style={{ color: P.text, marginLeft: 2, fontSize: 10 }}>{sortState.dir === 'desc' ? '↓' : '↑'}</span>
   }
 
   // ── List mutations ─────────────────────────────────────────
@@ -207,143 +224,157 @@ export default function WatchlistManager({
     if (!bulkMoveList || selected.size === 0) return
     const items = watchlist.filter(w => selected.has(w.id))
     setSaving(new Set(items.map(w => w.id)))
-    try {
-      await Promise.all(items.map(item => _setItemLists(item.id, [bulkMoveList])))
-      onReload(); setSelected(new Set())
-    } catch (e) { console.error(e) }
+    try { await Promise.all(items.map(item => _setItemLists(item.id, [bulkMoveList]))); onReload(); setSelected(new Set()) }
+    catch (e) { console.error(e) }
     finally { setSaving(new Set()) }
   }
   const bulkAdd = async () => {
     if (!bulkAddList || selected.size === 0) return
     const items = watchlist.filter(w => selected.has(w.id))
     setSaving(new Set(items.map(w => w.id)))
-    try {
-      await Promise.all(items.map(item =>
-        _setItemLists(item.id, [...new Set([...(item.list_ids || []), bulkAddList])])
-      ))
-      onReload()
-    } catch (e) { console.error(e) }
+    try { await Promise.all(items.map(item => _setItemLists(item.id, [...new Set([...(item.list_ids || []), bulkAddList])]))); onReload() }
+    catch (e) { console.error(e) }
     finally { setSaving(new Set()) }
   }
 
   // ── Style helpers ──────────────────────────────────────────
-  const TH_BASE = {
-    padding: '8px 12px',
-    background: '#f1f5f9',
-    color: '#475569',
+  const TH = (extra = {}) => ({
+    padding: '7px 12px',
+    background: P.thBg,
+    color: P.thFg,
     fontFamily: MONO,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: 600,
     letterSpacing: '0.04em',
     textTransform: 'uppercase',
-    borderBottom: '2px solid #e2e8f0',
-    borderRight: '1px solid #e2e8f0',
+    borderBottom: `2px solid ${P.borderStrong}`,
+    borderRight: `1px solid ${P.border}`,
     position: 'sticky',
     top: 0,
     zIndex: 5,
     whiteSpace: 'nowrap',
     userSelect: 'none',
-  }
-  const TH = (extra = {}) => ({ ...TH_BASE, ...extra })
+    ...extra,
+  })
   const TD = (extra = {}) => ({
-    padding: '8px 12px',
-    borderBottom: '1px solid #e2e8f0',
-    borderRight: '1px solid #e2e8f0',
+    padding: '7px 12px',
+    borderBottom: `1px solid ${P.border}`,
+    borderRight: `1px solid ${P.border}`,
     fontFamily: MONO,
     fontSize: 13,
-    color: '#1e293b',
+    color: P.text,
     verticalAlign: 'middle',
     height: 36,
     ...extra,
   })
 
   const rowBg = (w, isSelected, isOdd) => {
-    if (isSelected) return '#eff6ff'
-    const sym = (w.symbol || '').toUpperCase()
-    const best = bestForSymbol(sym)
-    const cagr = best?.metrics?.cagr
-    if (cagr > 10) return isOdd ? '#f0fdf4' : '#f7fef9'
-    if (cagr < 0)  return isOdd ? '#fff5f5' : '#fffafa'
-    return isOdd ? '#f8fafc' : '#ffffff'
+    if (isSelected) return P.selected
+    const m = bestForSymbol((w.symbol||'').toUpperCase())?.metrics
+    const cagr = m?.cagr
+    if (cagr > 10) return isOdd ? '#eaf5ec' : '#f0f8f2'
+    if (cagr != null && cagr < 0) return isOdd ? '#f8eaea' : '#faf0f0'
+    return isOdd ? P.bgAlt : P.bg
   }
 
-  // ── Selector component de listas (filtro) ──────────────────
-  const [listFilterOpen, setListFilterOpen] = useState(false)
-  const listFilterRef = useRef(null)
-  useEffect(() => {
-    const h = e => { if (listFilterRef.current && !listFilterRef.current.contains(e.target)) setListFilterOpen(false) }
-    document.addEventListener('mousedown', h)
-    return () => document.removeEventListener('mousedown', h)
-  }, [])
-
+  // ── List filter display ────────────────────────────────────
   const selListNames = filterLists.map(lid => wlLists.find(l => l.id === lid)?.name).filter(Boolean)
+
+  // ── Compact select style for bulk actions ──────────────────
+  const bulkSelStyle = {
+    background: '#f5f0e8',
+    border: `1px solid ${P.borderStrong}`,
+    color: P.text,
+    fontFamily: MONO,
+    fontSize: 11,
+    borderRadius: 4,
+    padding: '0 6px',
+    height: 28,
+    width: 150,
+    cursor: 'pointer',
+  }
+  const bulkBtnStyle = ok => ({
+    background: ok ? P.text : P.border,
+    border: 'none',
+    color: ok ? P.accentFg : P.textMuted,
+    fontFamily: MONO,
+    fontSize: 11,
+    padding: '0 10px',
+    height: 28,
+    borderRadius: 4,
+    cursor: ok ? 'pointer' : 'not-allowed',
+    flexShrink: 0,
+  })
 
   return (
     <div style={{
       position: 'absolute', inset: 0, zIndex: 20,
-      background: '#f8fafc',
+      background: P.bg,
       display: 'flex', flexDirection: 'column',
       fontFamily: MONO,
     }}>
-      {/* ── Cabecera única ── */}
+
+      {/* ── Cabecera ── */}
       <div style={{
         flexShrink: 0,
-        background: '#f8fafc',
-        borderBottom: '1px solid #e2e8f0',
+        background: P.bgPanel,
+        borderBottom: `1px solid ${P.borderStrong}`,
         padding: '8px 14px',
         display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
       }}>
+
         {/* Título */}
-        <span style={{ fontFamily: MONO, fontSize: 13, fontWeight: 700, color: '#1e293b', flexShrink: 0 }}>
+        <span style={{ fontFamily: MONO, fontSize: 13, fontWeight: 700, color: P.text, flexShrink: 0 }}>
           ⊞ Gestionar Watchlist
         </span>
 
         {/* Buscador */}
-        <div style={{ position: 'relative', width: 180 }}>
+        <div style={{ position: 'relative', width: 180, flexShrink: 0 }}>
           <input type="text" placeholder="Buscar ticker o nombre…"
             value={filterSearch} onChange={e => setFilterSearch(e.target.value)}
-            style={{ width: '100%', background: '#fff', border: '1px solid #e2e8f0', color: '#1e293b',
-              fontFamily: MONO, fontSize: 12, padding: '5px 24px 5px 9px',
-              borderRadius: 5, boxSizing: 'border-box', outline: 'none' }} />
+            style={{ width: '100%', background: P.bg, border: `1px solid ${P.border}`,
+              color: P.text, fontFamily: MONO, fontSize: 12,
+              padding: '5px 24px 5px 9px', borderRadius: 5, boxSizing: 'border-box', outline: 'none' }} />
           {filterSearch
             ? <span onClick={() => setFilterSearch('')}
                 style={{ position: 'absolute', right: 7, top: '50%', transform: 'translateY(-50%)',
-                  cursor: 'pointer', color: '#94a3b8', fontSize: 12 }}>✕</span>
+                  cursor: 'pointer', color: P.textMuted, fontSize: 12 }}>✕</span>
             : <span style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
-                color: '#cbd5e1', fontSize: 11, pointerEvents: 'none' }}>🔍</span>
-          }
+                color: P.textMuted, fontSize: 11, pointerEvents: 'none' }}>⌕</span>}
         </div>
 
-        {/* Filtro por listas — dropdown personalizado */}
-        <div style={{ position: 'relative' }} ref={listFilterRef}>
+        {/* Filtro por listas */}
+        <div style={{ position: 'relative', flexShrink: 0 }} ref={listFilterRef}>
           <button onClick={() => setListFilterOpen(v => !v)}
-            style={{ background: filterLists.length ? '#eff6ff' : '#fff',
-              border: `1px solid ${filterLists.length ? '#93c5fd' : '#e2e8f0'}`,
-              color: filterLists.length ? '#1d4ed8' : '#475569',
-              fontFamily: MONO, fontSize: 12, padding: '5px 10px', borderRadius: 5,
+            style={{ background: filterLists.length ? P.accentBg : P.bg,
+              border: `1px solid ${P.borderStrong}`,
+              color: filterLists.length ? P.accentFg : P.textSec,
+              fontFamily: MONO, fontSize: 11, padding: '5px 10px', borderRadius: 5,
               cursor: 'pointer', whiteSpace: 'nowrap' }}>
-            {filterLists.length ? `${selListNames.slice(0,2).join(', ')}${selListNames.length > 2 ? ` +${selListNames.length-2}` : ''}` : 'Todas las listas'} ▾
+            {filterLists.length
+              ? `${selListNames.slice(0,2).join(', ')}${selListNames.length > 2 ? ` +${selListNames.length-2}` : ''}`
+              : 'Todas las listas'} ▾
           </button>
           {listFilterOpen && (
             <div style={{ position: 'absolute', top: '100%', left: 0, zIndex: 200, marginTop: 4,
-              background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6,
-              boxShadow: '0 4px 12px rgba(0,0,0,0.1)', minWidth: 160, padding: '4px 0' }}>
+              background: P.bg, border: `1px solid ${P.borderStrong}`, borderRadius: 6,
+              boxShadow: '0 4px 12px rgba(0,0,0,0.12)', minWidth: 160, padding: '4px 0' }}>
               {filterLists.length > 0 && (
                 <div onClick={() => setFilterLists([])}
-                  style={{ padding: '6px 12px', fontSize: 11, color: '#3b82f6', cursor: 'pointer', fontWeight: 600 }}>
+                  style={{ padding: '6px 12px', fontSize: 11, color: P.text, cursor: 'pointer', fontWeight: 600 }}>
                   Mostrar todas
                 </div>
               )}
               {wlLists.map(l => (
-                <div key={l.id} onClick={() => setFilterLists(prev =>
-                  prev.includes(l.id) ? prev.filter(x => x !== l.id) : [...prev, l.id]
-                )} style={{ padding: '6px 12px', fontSize: 12, color: '#1e293b', cursor: 'pointer',
-                  background: filterLists.includes(l.id) ? '#eff6ff' : 'transparent',
-                  display: 'flex', alignItems: 'center', gap: 8 }}
-                  onMouseOver={e => e.currentTarget.style.background = filterLists.includes(l.id) ? '#dbeafe' : '#f8fafc'}
-                  onMouseOut={e  => e.currentTarget.style.background = filterLists.includes(l.id) ? '#eff6ff' : 'transparent'}>
-                  <span style={{ fontSize: 11, color: filterLists.includes(l.id) ? '#3b82f6' : '#cbd5e1' }}>
+                <div key={l.id}
+                  onClick={() => setFilterLists(prev =>
+                    prev.includes(l.id) ? prev.filter(x => x !== l.id) : [...prev, l.id])}
+                  style={{ padding: '6px 12px', fontSize: 12, color: P.text, cursor: 'pointer',
+                    background: filterLists.includes(l.id) ? P.selected : 'transparent',
+                    display: 'flex', alignItems: 'center', gap: 8 }}
+                  onMouseOver={e => e.currentTarget.style.background = P.hover}
+                  onMouseOut={e  => e.currentTarget.style.background = filterLists.includes(l.id) ? P.selected : 'transparent'}>
+                  <span style={{ fontSize: 11, color: P.textSec }}>
                     {filterLists.includes(l.id) ? '☑' : '☐'}
                   </span>
                   {l.name}
@@ -354,211 +385,193 @@ export default function WatchlistManager({
         </div>
 
         {/* Contador */}
-        <span style={{ fontSize: 12, color: '#64748b' }}>
+        <span style={{ fontSize: 12, color: P.textSec }}>
           {sorted.length} activo{sorted.length !== 1 ? 's' : ''}
-          {loadingRank && <span style={{ color: '#f59e0b', marginLeft: 8 }}>⟳ cargando ranking…</span>}
+          {loadingRank && <span style={{ color: '#b87a20', marginLeft: 8 }}>⟳ cargando…</span>}
         </span>
 
-        {/* Acciones masivas — inline, solo cuando hay selección */}
+        {/* Acciones masivas — inline compactas, solo cuando hay selección */}
         {selected.size > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
-            background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 6, padding: '4px 10px' }}>
-            <span style={{ fontSize: 12, color: '#1d4ed8', fontWeight: 600 }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8,
+            background: P.accentBg, borderRadius: 6, padding: '4px 12px',
+            color: P.accentFg, flexShrink: 0 }}>
+            <span style={{ fontSize: 12, fontWeight: 600, marginRight: 2 }}>
               {selected.size} sel.
             </span>
-            <span style={{ color: '#bfdbfe' }}>·</span>
-            <span style={{ fontSize: 11, color: '#475569' }}>Mover a:</span>
+            <span style={{ color: '#6b6560', fontSize: 11 }}>Mover a:</span>
             <select value={bulkMoveList} onChange={e => setBulkMoveList(e.target.value)}
-              style={{ background: '#fff', border: '1px solid #e2e8f0', color: '#1e293b',
-                fontFamily: MONO, fontSize: 11, borderRadius: 4, padding: '2px 6px' }}>
+              style={bulkSelStyle}>
               <option value="">— lista —</option>
               {wlLists.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
             </select>
-            <button onClick={bulkMove} disabled={!bulkMoveList}
-              style={{ background: bulkMoveList ? '#3b82f6' : '#e2e8f0',
-                border: 'none', color: bulkMoveList ? '#fff' : '#94a3b8',
-                fontFamily: MONO, fontSize: 11, padding: '3px 9px', borderRadius: 4,
-                cursor: bulkMoveList ? 'pointer' : 'not-allowed' }}>
+            <button onClick={bulkMove} disabled={!bulkMoveList} style={bulkBtnStyle(!!bulkMoveList)}>
               Aplicar
             </button>
-            <span style={{ color: '#bfdbfe' }}>·</span>
-            <span style={{ fontSize: 11, color: '#475569' }}>Añadir a:</span>
+            <span style={{ color: '#6b6560', fontSize: 11 }}>Añadir a:</span>
             <select value={bulkAddList} onChange={e => setBulkAddList(e.target.value)}
-              style={{ background: '#fff', border: '1px solid #e2e8f0', color: '#1e293b',
-                fontFamily: MONO, fontSize: 11, borderRadius: 4, padding: '2px 6px' }}>
+              style={bulkSelStyle}>
               <option value="">— lista —</option>
               {wlLists.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
             </select>
-            <button onClick={bulkAdd} disabled={!bulkAddList}
-              style={{ background: bulkAddList ? '#10b981' : '#e2e8f0',
-                border: 'none', color: bulkAddList ? '#fff' : '#94a3b8',
-                fontFamily: MONO, fontSize: 11, padding: '3px 9px', borderRadius: 4,
-                cursor: bulkAddList ? 'pointer' : 'not-allowed' }}>
+            <button onClick={bulkAdd} disabled={!bulkAddList} style={bulkBtnStyle(!!bulkAddList)}>
               Aplicar
             </button>
             <span onClick={() => setSelected(new Set())}
-              style={{ fontSize: 11, color: '#64748b', cursor: 'pointer', marginLeft: 2 }}>✕</span>
+              style={{ fontSize: 13, color: P.textMuted, cursor: 'pointer', marginLeft: 2 }}>✕</span>
           </div>
         )}
 
         {/* Botón cerrar */}
         <button onClick={onClose}
-          style={{ marginLeft: 'auto', background: '#fff', border: '1px solid #fca5a5',
-            color: '#dc2626', fontFamily: MONO, fontSize: 12, padding: '5px 12px',
+          style={{ marginLeft: 'auto', background: P.bg, border: `1px solid ${P.borderStrong}`,
+            color: '#8b3030', fontFamily: MONO, fontSize: 12, padding: '5px 12px',
             borderRadius: 5, cursor: 'pointer', flexShrink: 0 }}>
           ✕ Cerrar
         </button>
       </div>
 
       {/* ── Tabla ── */}
-      <div style={{ flex: 1, overflow: 'auto', background: '#fff' }}>
+      <div style={{ flex: 1, overflow: 'auto', background: P.bg }}>
         <table style={{ borderCollapse: 'collapse', minWidth: '100%', tableLayout: 'auto' }}>
           <thead>
-            {/* Fila de sub-headers para la sección de métricas favorita */}
+            {/* Sub-header agrupador para métricas */}
             <tr>
-              <th colSpan={4} style={{ ...TH(), background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }} />
+              <th colSpan={4} style={{ ...TH(), background: P.thBg, borderBottom: `1px solid ${P.border}` }} />
               <th colSpan={4} style={{ ...TH(),
-                background: '#f0f9ff',
-                borderLeft: '2px solid #bae6fd',
-                borderRight: '2px solid #bae6fd',
-                color: '#0369a1', textAlign: 'center', fontSize: 11 }}>
-                Estrategia favorita (mejor CAGR)
+                background: '#d8d2c8',
+                borderLeft:  `2px solid ${P.borderStrong}`,
+                borderRight: `2px solid ${P.borderStrong}`,
+                textAlign: 'center', color: P.thFg, fontSize: 10 }}>
+                Estrategia favorita · mejor CAGR
               </th>
-              <th style={{ ...TH(), background: '#fafaf9', borderLeft: '2px solid #e2e8f0' }} />
+              <th colSpan={2} style={{ ...TH(), background: P.thBg, borderLeft: `2px solid ${P.borderStrong}`, borderBottom: `1px solid ${P.border}` }} />
             </tr>
 
-            {/* Fila de columnas */}
+            {/* Headers de columna */}
             <tr>
               {/* Checkbox */}
-              <th style={{ ...TH(), width: 36, textAlign: 'center', padding: '8px 6px' }}>
+              <th style={{ ...TH(), width: 36, textAlign: 'center', padding: '7px 6px' }}>
                 <input type="checkbox" checked={allSelected} onChange={toggleAll}
-                  style={{ cursor: 'pointer', accentColor: '#3b82f6', width: 15, height: 15 }} />
+                  style={{ cursor: 'pointer', width: 14, height: 14 }} />
               </th>
-
               {/* Ticker */}
-              <th style={{ ...TH(), cursor: 'pointer', minWidth: 80 }} onClick={() => handleSort('symbol')}>
-                Ticker {sortIcon('symbol')}
+              <th style={{ ...TH(), cursor: 'pointer', minWidth: 76 }} onClick={() => handleSort('symbol')}>
+                Ticker{sortIcon('symbol')}
               </th>
-
               {/* Nombre */}
-              <th style={{ ...TH(), minWidth: 140, cursor: 'pointer' }} onClick={() => handleSort('name')}>
-                Nombre {sortIcon('name')}
+              <th style={{ ...TH(), minWidth: 130, cursor: 'pointer' }} onClick={() => handleSort('name')}>
+                Nombre{sortIcon('name')}
               </th>
-
               {/* Listas */}
-              <th style={{ ...TH(), minWidth: 120, borderRight: '2px solid #e2e8f0' }}>Listas</th>
+              <th style={{ ...TH(), minWidth: 110, borderRight: `2px solid ${P.borderStrong}` }}>Listas</th>
 
               {/* Métricas de favorita */}
               {[
-                ['cagr',    'CAGR%',  '#0369a1'],
-                ['winRate', 'Win%',   '#0369a1'],
-                ['maxDD',   'MaxDD%', '#0369a1'],
-                ['trades',  'Ops',    '#0369a1'],
-              ].map(([metric, label, col]) => (
-                <th key={metric}
-                  onClick={() => handleSort(metric)}
+                ['cagr',    'CAGR%'],
+                ['winRate', 'Win%'],
+                ['maxDD',   'MaxDD%'],
+                ['trades',  'Ops'],
+              ].map(([metric, label]) => (
+                <th key={metric} onClick={() => handleSort(metric)}
                   style={{ ...TH(),
                     cursor: 'pointer', textAlign: 'right',
-                    background: '#f0f9ff',
-                    color: '#0369a1',
-                    borderLeft: metric === 'cagr' ? '2px solid #bae6fd' : '1px solid #e0f2fe',
-                    borderRight: metric === 'trades' ? '2px solid #bae6fd' : '1px solid #e0f2fe',
-                    minWidth: 70,
+                    background: '#d4cfc5',
+                    borderLeft:  metric === 'cagr'   ? `2px solid ${P.borderStrong}` : `1px solid ${P.border}`,
+                    borderRight: metric === 'trades'  ? `2px solid ${P.borderStrong}` : `1px solid ${P.border}`,
+                    minWidth: 68,
                   }}>
-                  {label} {sortIcon(metric)}
+                  {label}{sortIcon(metric)}
                 </th>
               ))}
 
-              {/* Favorita (nombre + badge) */}
-              <th style={{ ...TH(), minWidth: 160, borderLeft: '2px solid #e2e8f0', background: '#fafaf9' }}>
+              {/* Estrategia (nombre) */}
+              <th style={{ ...TH(), minWidth: 130, borderLeft: `2px solid ${P.borderStrong}` }}>
                 Estrategia
+              </th>
+              {/* Temporalidad */}
+              <th style={{ ...TH(), minWidth: 80, textAlign: 'center' }}>
+                Temporalidad
               </th>
             </tr>
           </thead>
 
           <tbody>
             {sorted.map((w, idx) => {
-              const sym       = (w.symbol || '').toUpperCase()
-              const isSaving  = saving.has(w.id)
-              const isSelected= selected.has(w.id)
-              const isOdd     = idx % 2 === 1
-              const best      = bestForSymbol(sym)
-              const m         = best?.metrics
+              const sym        = (w.symbol || '').toUpperCase()
+              const isSaving   = saving.has(w.id)
+              const isSelected = selected.has(w.id)
+              const isOdd      = idx % 2 === 1
+              const best       = bestForSymbol(sym)
+              const m          = best?.metrics
+              const bg         = rowBg(w, isSelected, isOdd)
 
               return (
                 <tr key={w.id || w.symbol}
-                  style={{
-                    background: rowBg(w, isSelected, isOdd),
-                    opacity: isSaving ? 0.5 : 1,
-                    transition: 'background 0.1s',
-                  }}
-                  onMouseOver={e => { if (!isSelected) e.currentTarget.style.background = '#f1f5f9' }}
-                  onMouseOut={e  => { e.currentTarget.style.background = rowBg(w, isSelected, isOdd) }}>
+                  style={{ background: bg, opacity: isSaving ? 0.5 : 1, transition: 'background 0.1s' }}
+                  onMouseOver={e => { if (!isSelected) e.currentTarget.style.background = P.hover }}
+                  onMouseOut={e  => { e.currentTarget.style.background = bg }}>
 
                   {/* Checkbox */}
-                  <td style={{ ...TD(), textAlign: 'center', padding: '8px 6px', width: 36 }}>
+                  <td style={{ ...TD(), textAlign: 'center', padding: '7px 6px', width: 36 }}>
                     <input type="checkbox" checked={isSelected} onChange={() => toggleOne(w.id)}
-                      style={{ cursor: 'pointer', accentColor: '#3b82f6', width: 15, height: 15 }} />
+                      style={{ cursor: 'pointer', width: 14, height: 14 }} />
                   </td>
 
                   {/* Ticker */}
-                  <td style={{ ...TD(), fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap' }}>
+                  <td style={{ ...TD(), fontWeight: 700, color: P.text, whiteSpace: 'nowrap' }}>
                     {w.symbol}
                   </td>
 
                   {/* Nombre */}
-                  <td style={{ ...TD(), color: '#475569', maxWidth: 200, overflow: 'hidden',
-                    textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                  <td style={{ ...TD(), color: P.textSec, maxWidth: 180,
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                     title={w.name}>
                     {w.name}
                   </td>
 
                   {/* Listas — chips editables */}
-                  <td style={{ ...TD(), borderRight: '2px solid #e2e8f0' }}>
+                  <td style={{ ...TD(), borderRight: `2px solid ${P.borderStrong}` }}>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
                       {(w.list_ids || []).map(lid => {
                         const lname = wlLists.find(l => l.id === lid)?.name
                         if (!lname) return null
                         return (
                           <span key={lid} style={{
-                            background: '#eff6ff', border: '1px solid #bfdbfe',
-                            color: '#1d4ed8', fontFamily: MONO, fontSize: 11,
+                            background: '#e8e0d0', border: `1px solid ${P.border}`,
+                            color: P.text, fontFamily: MONO, fontSize: 11,
                             padding: '2px 7px', borderRadius: 4,
-                            display: 'inline-flex', alignItems: 'center', gap: 4,
-                            whiteSpace: 'nowrap',
+                            display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap',
                           }}>
                             {lname}
                             <span onClick={() => removeFromList(w, lid)}
-                              style={{ cursor: 'pointer', color: '#93c5fd', fontSize: 10, lineHeight: 1,
-                                fontWeight: 700 }}
+                              style={{ cursor: 'pointer', color: P.textMuted, fontSize: 10, fontWeight: 700 }}
                               title={`Quitar de "${lname}"`}>×</span>
                           </span>
                         )
                       })}
-
                       {/* Botón + */}
                       <div style={{ position: 'relative' }} ref={addDropOpen === w.id ? addDropRef : null}>
                         <span onClick={() => setAddDropOpen(prev => prev === w.id ? null : w.id)}
-                          style={{ cursor: 'pointer', color: '#94a3b8', fontSize: 18, lineHeight: 1,
-                            padding: '0 3px', userSelect: 'none', fontWeight: 300 }}
+                          style={{ cursor: 'pointer', color: P.textMuted, fontSize: 18,
+                            lineHeight: 1, padding: '0 3px', userSelect: 'none', fontWeight: 300 }}
                           title="Añadir a lista">+</span>
                         {addDropOpen === w.id && (
                           <div style={{
                             position: 'absolute', left: 0, top: '100%', zIndex: 200, marginTop: 2,
-                            background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6,
-                            boxShadow: '0 4px 12px rgba(0,0,0,0.08)', minWidth: 150, padding: '4px 0',
+                            background: P.bg, border: `1px solid ${P.borderStrong}`, borderRadius: 6,
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.1)', minWidth: 150, padding: '4px 0',
                           }}>
                             {wlLists.filter(l => !(w.list_ids || []).includes(l.id)).map(l => (
                               <div key={l.id} onClick={() => addToList(w, l.id)}
                                 style={{ padding: '6px 12px', fontFamily: MONO, fontSize: 12,
-                                  color: '#1e293b', cursor: 'pointer' }}
-                                onMouseOver={e => e.currentTarget.style.background = '#f1f5f9'}
+                                  color: P.text, cursor: 'pointer' }}
+                                onMouseOver={e => e.currentTarget.style.background = P.hover}
                                 onMouseOut={e  => e.currentTarget.style.background = 'transparent'}>
                                 {l.name}
                               </div>
                             ))}
                             {wlLists.filter(l => !(w.list_ids || []).includes(l.id)).length === 0 && (
-                              <div style={{ padding: '6px 12px', fontFamily: MONO, fontSize: 11, color: '#94a3b8' }}>
+                              <div style={{ padding: '6px 12px', fontFamily: MONO, fontSize: 11, color: P.textMuted }}>
                                 Ya en todas las listas
                               </div>
                             )}
@@ -569,73 +582,66 @@ export default function WatchlistManager({
                   </td>
 
                   {/* CAGR */}
-                  <td style={{ ...TD(),
-                    background: cagrBg(m?.cagr), color: cagrFg(m?.cagr),
+                  <td style={{ ...TD(), background: cagrBg(m?.cagr), color: cagrFg(m?.cagr),
                     textAlign: 'right', fontWeight: 600,
-                    borderLeft: '2px solid #bae6fd', borderRight: '1px solid #e0f2fe',
-                  }}>
-                    {m?.cagr != null ? `${m.cagr.toFixed(1)}%` : <span style={{ color: '#cbd5e1' }}>—</span>}
+                    borderLeft: `2px solid ${P.borderStrong}`, borderRight: `1px solid ${P.border}` }}>
+                    {m?.cagr != null ? `${m.cagr.toFixed(1)}%`
+                      : <span style={{ color: P.textMuted }}>—</span>}
                   </td>
 
                   {/* WinRate */}
-                  <td style={{ ...TD(),
-                    color: wrFg(m?.winRate), textAlign: 'right', fontWeight: 600,
-                    borderRight: '1px solid #e0f2fe',
-                  }}>
-                    {m?.winRate != null ? `${m.winRate.toFixed(0)}%` : <span style={{ color: '#cbd5e1' }}>—</span>}
+                  <td style={{ ...TD(), color: wrFg(m?.winRate),
+                    textAlign: 'right', fontWeight: 600, borderRight: `1px solid ${P.border}` }}>
+                    {m?.winRate != null ? `${m.winRate.toFixed(0)}%`
+                      : <span style={{ color: P.textMuted }}>—</span>}
                   </td>
 
                   {/* MaxDD */}
-                  <td style={{ ...TD(),
-                    background: ddBg(m?.maxDD), color: ddFg(m?.maxDD),
-                    textAlign: 'right', fontWeight: 600,
-                    borderRight: '1px solid #e0f2fe',
-                  }}>
-                    {m?.maxDD != null ? `-${Math.abs(m.maxDD).toFixed(1)}%` : <span style={{ color: '#cbd5e1' }}>—</span>}
+                  <td style={{ ...TD(), background: ddBg(m?.maxDD), color: ddFg(m?.maxDD),
+                    textAlign: 'right', fontWeight: 600, borderRight: `1px solid ${P.border}` }}>
+                    {m?.maxDD != null ? `-${Math.abs(m.maxDD).toFixed(1)}%`
+                      : <span style={{ color: P.textMuted }}>—</span>}
                   </td>
 
                   {/* Ops */}
-                  <td style={{ ...TD(), color: '#64748b', textAlign: 'right',
-                    borderRight: '2px solid #bae6fd' }}>
-                    {m?.trades != null ? Math.round(m.trades) : <span style={{ color: '#cbd5e1' }}>—</span>}
+                  <td style={{ ...TD(), color: P.textSec, textAlign: 'right',
+                    borderRight: `2px solid ${P.borderStrong}` }}>
+                    {m?.trades != null ? Math.round(m.trades)
+                      : <span style={{ color: P.textMuted }}>—</span>}
                   </td>
 
-                  {/* Estrategia favorita */}
-                  <td style={{ ...TD(), borderLeft: '2px solid #e2e8f0', background: isOdd ? '#fafaf9' : '#fffff9' }}>
+                  {/* Estrategia — nombre truncado */}
+                  <td style={{ ...TD(), borderLeft: `2px solid ${P.borderStrong}`,
+                    maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                    title={best?.stratName}>
+                    {best?.stratName
+                      ? <span style={{ color: P.text, fontWeight: 600 }}>{best.stratName}</span>
+                      : <span style={{ color: P.textMuted }}>—</span>}
+                  </td>
+
+                  {/* Temporalidad — badge */}
+                  <td style={{ ...TD(), textAlign: 'center' }}>
                     {best ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                        <span style={{ color: '#1e293b', fontWeight: 600, fontSize: 12,
-                          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 180 }}
-                          title={best.stratName}>
-                          {best.stratName}
-                        </span>
-                        <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
-                          <span style={{
-                            background: best.intervalo === 'semanal' ? '#f3e8ff' : '#eff6ff',
-                            border: `1px solid ${best.intervalo === 'semanal' ? '#d8b4fe' : '#bfdbfe'}`,
-                            color: best.intervalo === 'semanal' ? '#7c3aed' : '#1d4ed8',
-                            fontFamily: MONO, fontSize: 9, padding: '1px 5px', borderRadius: 3,
-                          }}>
-                            {best.intervalo === 'semanal' ? 'Semanal' : 'Diario'}
-                          </span>
-                          {best.stratCount > 0 && (
-                            <span style={{ fontSize: 10, color: '#94a3b8' }}>
-                              {best.stratCount} eval.
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    ) : (
-                      <span style={{ color: '#cbd5e1', fontSize: 12 }}>—</span>
-                    )}
+                      <span style={{
+                        ...( best.intervalo === 'semanal'
+                            ? P.badgeSemanal
+                            : P.badgeDiario),
+                        fontFamily: MONO, fontSize: 10,
+                        padding: '2px 7px', borderRadius: 4,
+                        display: 'inline-block',
+                        border: `1px solid ${best.intervalo === 'semanal' ? P.badgeSemanal.border : P.badgeDiario.border}`,
+                      }}>
+                        {best.intervalo === 'semanal' ? 'Semanal' : 'Diario'}
+                      </span>
+                    ) : <span style={{ color: P.textMuted }}>—</span>}
                   </td>
                 </tr>
               )
             })}
             {sorted.length === 0 && (
               <tr>
-                <td colSpan={9}
-                  style={{ ...TD(), textAlign: 'center', color: '#94a3b8', padding: '32px', background: '#fff' }}>
+                <td colSpan={10}
+                  style={{ ...TD(), textAlign: 'center', color: P.textMuted, padding: '32px' }}>
                   Sin activos para los filtros aplicados
                 </td>
               </tr>
