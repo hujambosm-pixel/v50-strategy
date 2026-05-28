@@ -106,6 +106,10 @@ export default function WatchlistManager({
   onCreateList,
   onRenameList,
   onDeleteList,
+  // Top estrategia
+  onRefreshBestStrat,
+  hasBestStrat,
+  onClearBestStrat,
 }) {
   const [allRankings, setAllRankings]       = useState({})
   const [loadingRank, setLoadingRank]       = useState(true)
@@ -468,51 +472,87 @@ export default function WatchlistManager({
 
         {/* ── Botones de herramientas ── */}
         <button onClick={() => setActiveSubPanel(p => p === 'notif' ? null : 'notif')}
+          title="Ver y gestionar alertas técnicas y de precio para los activos del Watchlist"
           style={subBtnStyle('notif')}>
           🔔 Notificaciones
         </button>
         <button onClick={() => setActiveSubPanel(p => p === 'candidates' ? null : 'candidates')}
+          title="Analizar tickers candidatos externos con la estrategia activa para decidir si añadirlos al Watchlist"
           style={subBtnStyle('candidates')}>
           🔍 Analizar
         </button>
-        <button
-          onClick={() => onCalcRanking && onCalcRanking()}
-          disabled={rankingRunning}
-          title="Ordena los activos por score ponderado (historial + mercado)"
-          style={{
-            background: rankingRunning ? P.bgAlt : P.accentBg,
-            border: `1px solid ${rankingRunning ? P.borderStrong : P.accentBg}`,
-            color: rankingRunning ? P.textSec : P.accentFg,
-            fontFamily: MONO, fontSize: 11,
-            padding: '5px 10px', borderRadius: 5,
-            cursor: rankingRunning ? 'not-allowed' : 'pointer',
-            whiteSpace: 'nowrap', flexShrink: 0,
-          }}>
-          {rankingRunning
-            ? `⟳ ${rankingProgress?.done ?? 0}/${rankingProgress?.total ?? 0}`
-            : '🏆 Ranking'}
-        </button>
-        {hasRanking && !rankingRunning && (
+
+        {/* GROUP 1: Ranking */}
+        <div style={{ display: 'inline-flex', gap: 2, flexShrink: 0 }}>
           <button
-            onClick={() => onClearRanking && onClearRanking()}
-            title="Limpiar ranking"
+            onClick={() => onCalcRanking && onCalcRanking()}
+            disabled={rankingRunning}
+            title="Calcula el score de cada activo con la estrategia activa y reordena la lista según los criterios configurados en Ajustes → Ranking"
             style={{
-              background: 'transparent',
-              border: `1px solid ${P.borderStrong}`,
-              color: P.textMuted,
+              background: rankingRunning ? P.bgAlt : P.accentBg,
+              border: `1px solid ${rankingRunning ? P.borderStrong : P.accentBg}`,
+              color: rankingRunning ? P.textSec : P.accentFg,
               fontFamily: MONO, fontSize: 11,
-              padding: '4px 7px', borderRadius: 5,
-              cursor: 'pointer', flexShrink: 0,
-            }}
-            onMouseOver={e => { e.currentTarget.style.color = '#8b3030'; e.currentTarget.style.borderColor = '#8b3030' }}
-            onMouseOut={e  => { e.currentTarget.style.color = P.textMuted;  e.currentTarget.style.borderColor = P.borderStrong }}>
-            ✕
+              padding: '5px 10px', borderRadius: 5,
+              cursor: rankingRunning ? 'not-allowed' : 'pointer',
+              whiteSpace: 'nowrap',
+            }}>
+            {rankingRunning
+              ? `⟳ ${rankingProgress?.done ?? 0}/${rankingProgress?.total ?? 0}`
+              : '🏆 Ranking'}
           </button>
-        )}
-        {rankingStratName && !rankingRunning && (
-          <span style={{ fontSize: 10, color: '#2d6a4f', flexShrink: 0, whiteSpace: 'nowrap' }}>
-            ✓ {rankingStratName}
-          </span>
+          {hasRanking && !rankingRunning && (
+            <button
+              onClick={() => onClearRanking && onClearRanking()}
+              title="Borrar ranking calculado y volver al orden alfabético"
+              style={{
+                background: 'transparent',
+                border: `1px solid ${P.borderStrong}`,
+                color: P.textMuted,
+                fontFamily: MONO, fontSize: 11,
+                padding: '5px 7px', borderRadius: 5,
+                cursor: 'pointer',
+              }}
+              onMouseOver={e => { e.currentTarget.style.color = '#8b3030'; e.currentTarget.style.borderColor = '#8b3030' }}
+              onMouseOut={e  => { e.currentTarget.style.color = P.textMuted;  e.currentTarget.style.borderColor = P.borderStrong }}>
+              🗑
+            </button>
+          )}
+        </div>
+
+        {/* GROUP 2: Top estrategia */}
+        {hasBestStrat && (
+          <div style={{ display: 'inline-flex', gap: 2, flexShrink: 0 }}>
+            <button
+              onClick={() => onRefreshBestStrat && onRefreshBestStrat()}
+              title="Determina qué estrategia funciona mejor para cada activo comparando todas las que han sido evaluadas. Ejecuta Ranking con distintas estrategias activas para ampliar la comparación"
+              style={{
+                background: P.accentBg,
+                border: `1px solid ${P.accentBg}`,
+                color: P.accentFg,
+                fontFamily: MONO, fontSize: 11,
+                padding: '5px 10px', borderRadius: 5,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+              }}>
+              🎯 Top estrategia
+            </button>
+            <button
+              onClick={() => onClearBestStrat && onClearBestStrat()}
+              title="Borrar los datos de Top estrategia calculados"
+              style={{
+                background: 'transparent',
+                border: `1px solid ${P.borderStrong}`,
+                color: P.textMuted,
+                fontFamily: MONO, fontSize: 11,
+                padding: '5px 7px', borderRadius: 5,
+                cursor: 'pointer',
+              }}
+              onMouseOver={e => { e.currentTarget.style.color = '#8b3030'; e.currentTarget.style.borderColor = '#8b3030' }}
+              onMouseOut={e  => { e.currentTarget.style.color = P.textMuted;  e.currentTarget.style.borderColor = P.borderStrong }}>
+              🗑
+            </button>
+          </div>
         )}
 
         {/* Separador visual */}
@@ -793,6 +833,7 @@ export default function WatchlistManager({
 
         {/* Botón cerrar */}
         <button onClick={onClose}
+          title="Cerrar el panel de gestión y volver a la vista del gráfico"
           style={{
             marginLeft: 'auto', background: P.bg,
             border: `1px solid ${P.borderStrong}`,
