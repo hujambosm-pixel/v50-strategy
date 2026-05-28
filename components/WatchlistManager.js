@@ -182,8 +182,15 @@ export default function WatchlistManager({
     const matchSearch = !sl ||
       (w.symbol || '').toLowerCase().includes(sl) ||
       (w.name   || '').toLowerCase().includes(sl)
-    const matchList = filterLists.length === 0 ||
-      filterLists.some(lid => (w.list_ids || []).includes(lid))
+    const matchList = (() => {
+      if (filterLists.length === 0) return true
+      const namedIds     = filterLists.filter(x => x !== '__unassigned__')
+      const hasUnassigned = filterLists.includes('__unassigned__')
+      const itemIds       = w.list_ids || []
+      if (hasUnassigned && itemIds.length === 0) return true
+      if (namedIds.length > 0 && namedIds.some(lid => itemIds.includes(lid))) return true
+      return false
+    })()
     return matchSearch && matchList
   })
 
@@ -310,7 +317,7 @@ export default function WatchlistManager({
 
   // ── List filter display ────────────────────────────────────
   const selListNames = filterLists
-    .map(lid => wlLists.find(l => l.id === lid)?.name)
+    .map(lid => lid === '__unassigned__' ? 'Sin lista' : wlLists.find(l => l.id === lid)?.name)
     .filter(Boolean)
 
   // ── Bulk-action select style (white bg for OS dropdown) ───
@@ -492,6 +499,25 @@ export default function WatchlistManager({
                   {l.name}
                 </div>
               ))}
+              {/* Divisor + opción Sin lista asignada */}
+              <div style={{ borderTop: `1px solid ${P.border}`, margin: '4px 0' }} />
+              <div
+                onClick={() => setFilterLists(prev =>
+                  prev.includes('__unassigned__')
+                    ? prev.filter(x => x !== '__unassigned__')
+                    : [...prev, '__unassigned__'])}
+                style={{
+                  padding: '6px 12px', fontSize: 12, color: P.text, cursor: 'pointer',
+                  background: filterLists.includes('__unassigned__') ? P.selected : 'transparent',
+                  display: 'flex', alignItems: 'center', gap: 8,
+                }}
+                onMouseOver={e => e.currentTarget.style.background = P.hover}
+                onMouseOut={e  => e.currentTarget.style.background = filterLists.includes('__unassigned__') ? P.selected : 'transparent'}>
+                <span style={{ fontSize: 11, color: P.textSec }}>
+                  {filterLists.includes('__unassigned__') ? '☑' : '☐'}
+                </span>
+                <span style={{ color: P.textMuted, fontStyle: 'italic' }}>Sin lista asignada</span>
+              </div>
             </div>
           )}
         </div>
