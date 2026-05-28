@@ -102,6 +102,10 @@ export default function WatchlistManager({
   onClearCandidates,
   onCandidateClick,
   onCandidateAdd,
+  // List management
+  onCreateList,
+  onRenameList,
+  onDeleteList,
 }) {
   const [allRankings, setAllRankings]       = useState({})
   const [loadingRank, setLoadingRank]       = useState(true)
@@ -115,6 +119,11 @@ export default function WatchlistManager({
   const [addDropOpen, setAddDropOpen]       = useState(null)
   const [listFilterOpen, setListFilterOpen] = useState(false)
   const [activeSubPanel, setActiveSubPanel] = useState(null) // 'notif' | 'candidates' | null
+  // List management inside dropdown
+  const [dropdownMode, setDropdownMode]   = useState(null)  // null | 'create' | 'rename' | 'delete'
+  const [newListName, setNewListName]     = useState('')
+  const [renameValue, setRenameValue]     = useState('')
+  const [listOpLoading, setListOpLoading] = useState(false)
   const addDropRef    = useRef(null)
   const listFilterRef = useRef(null)
 
@@ -143,7 +152,11 @@ export default function WatchlistManager({
   useEffect(() => {
     const h = e => {
       if (addDropRef.current && !addDropRef.current.contains(e.target)) setAddDropOpen(null)
-      if (listFilterRef.current && !listFilterRef.current.contains(e.target)) setListFilterOpen(false)
+      if (listFilterRef.current && !listFilterRef.current.contains(e.target)) {
+        setListFilterOpen(false)
+        setDropdownMode(null)
+        setNewListName('')
+      }
     }
     document.addEventListener('mousedown', h)
     return () => document.removeEventListener('mousedown', h)
@@ -360,6 +373,53 @@ export default function WatchlistManager({
     flexShrink: 0,
   })
 
+  // ── Derived: single named list (for rename/delete actions) ─
+  const singleNamedList = (
+    filterLists.length === 1 && filterLists[0] !== '__unassigned__'
+      ? wlLists.find(l => l.id === filterLists[0]) ?? null
+      : null
+  )
+
+  // ── List management handlers ───────────────────────────────
+  const handleCreateList = async () => {
+    const name = newListName.trim()
+    if (!name || !onCreateList) return
+    setListOpLoading(true)
+    try {
+      const created = await onCreateList(name)
+      setNewListName('')
+      setDropdownMode(null)
+      onReload()
+      // auto-select the new list
+      if (created?.id) setFilterLists(prev => [...prev, created.id])
+    } catch (e) { console.error(e) }
+    finally { setListOpLoading(false) }
+  }
+
+  const handleRenameList = async () => {
+    const name = renameValue.trim()
+    if (!name || !singleNamedList || !onRenameList) return
+    setListOpLoading(true)
+    try {
+      await onRenameList(singleNamedList.id, name)
+      setDropdownMode(null)
+      onReload()
+    } catch (e) { console.error(e) }
+    finally { setListOpLoading(false) }
+  }
+
+  const handleDeleteList = async () => {
+    if (!singleNamedList || !onDeleteList) return
+    setListOpLoading(true)
+    try {
+      await onDeleteList(singleNamedList.id)
+      setFilterLists(prev => prev.filter(x => x !== singleNamedList.id))
+      setDropdownMode(null)
+      onReload()
+    } catch (e) { console.error(e) }
+    finally { setListOpLoading(false) }
+  }
+
   // ── Derived: watchlist symbol set (for candidates WL badge)
   const wlSymSet = new Set(watchlist.map(w => (w.symbol || '').toUpperCase()))
 
@@ -518,6 +578,148 @@ export default function WatchlistManager({
                 </span>
                 <span style={{ color: P.textMuted, fontStyle: 'italic' }}>Sin lista asignada</span>
               </div>
+
+              {/* ── Gestión de listas ── */}
+              <div style={{ borderTop: `1px solid ${P.border}`, margin: '4px 0' }} />
+
+              {/* ＋ Nueva lista */}
+              <div
+                onClick={() => { setDropdownMode(m => m === 'create' ? null : 'create'); setNewListName('') }}
+                style={{
+                  padding: '6px 12px', fontSize: 12, cursor: 'pointer',
+                  color: dropdownMode === 'create' ? P.text : P.textSec,
+                  background: dropdownMode === 'create' ? P.hover : 'transparent',
+                  display: 'flex', alignItems: 'center', gap: 6,
+                }}
+                onMouseOver={e => e.currentTarget.style.background = P.hover}
+                onMouseOut={e  => e.currentTarget.style.background = dropdownMode === 'create' ? P.hover : 'transparent'}>
+                <span style={{ fontSize: 13, fontWeight: 500 }}>＋</span> Nueva lista
+              </div>
+              {dropdownMode === 'create' && (
+                <div style={{ padding: '4px 12px 8px', display: 'flex', gap: 5, alignItems: 'center' }}>
+                  <input
+                    autoFocus
+                    value={newListName}
+                    onChange={e => setNewListName(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') handleCreateList(); if (e.key === 'Escape') { setDropdownMode(null); setNewListName('') } }}
+                    placeholder="Nombre…"
+                    style={{
+                      flex: 1, background: P.bg, border: `1px solid ${P.borderStrong}`,
+                      color: P.text, fontFamily: MONO, fontSize: 11,
+                      padding: '4px 7px', borderRadius: 4, outline: 'none',
+                    }}
+                  />
+                  <button
+                    onClick={handleCreateList}
+                    disabled={!newListName.trim() || listOpLoading}
+                    style={{
+                      background: newListName.trim() && !listOpLoading ? P.accentBg : P.border,
+                      border: 'none', color: newListName.trim() && !listOpLoading ? P.accentFg : P.textMuted,
+                      fontFamily: MONO, fontSize: 11, padding: '4px 9px', borderRadius: 4,
+                      cursor: newListName.trim() && !listOpLoading ? 'pointer' : 'not-allowed', flexShrink: 0,
+                    }}>
+                    {listOpLoading ? '…' : 'Crear'}
+                  </button>
+                  <button
+                    onClick={() => { setDropdownMode(null); setNewListName('') }}
+                    style={{ background: 'transparent', border: 'none', color: P.textMuted, cursor: 'pointer', fontSize: 13, padding: '0 2px' }}>
+                    ✕
+                  </button>
+                </div>
+              )}
+
+              {/* ✏ Renombrar — solo si hay exactamente 1 lista nombrada seleccionada */}
+              {singleNamedList && (
+                <>
+                  <div
+                    onClick={() => { setDropdownMode(m => m === 'rename' ? null : 'rename'); setRenameValue(singleNamedList.name) }}
+                    style={{
+                      padding: '6px 12px', fontSize: 12, cursor: 'pointer',
+                      color: dropdownMode === 'rename' ? P.text : P.textSec,
+                      background: dropdownMode === 'rename' ? P.hover : 'transparent',
+                      display: 'flex', alignItems: 'center', gap: 6,
+                    }}
+                    onMouseOver={e => e.currentTarget.style.background = P.hover}
+                    onMouseOut={e  => e.currentTarget.style.background = dropdownMode === 'rename' ? P.hover : 'transparent'}>
+                    <span>✏</span> Renombrar lista
+                  </div>
+                  {dropdownMode === 'rename' && (
+                    <div style={{ padding: '4px 12px 8px', display: 'flex', gap: 5, alignItems: 'center' }}>
+                      <input
+                        autoFocus
+                        value={renameValue}
+                        onChange={e => setRenameValue(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') handleRenameList(); if (e.key === 'Escape') setDropdownMode(null) }}
+                        style={{
+                          flex: 1, background: P.bg, border: `1px solid ${P.borderStrong}`,
+                          color: P.text, fontFamily: MONO, fontSize: 11,
+                          padding: '4px 7px', borderRadius: 4, outline: 'none',
+                        }}
+                      />
+                      <button
+                        onClick={handleRenameList}
+                        disabled={!renameValue.trim() || listOpLoading}
+                        style={{
+                          background: renameValue.trim() && !listOpLoading ? P.accentBg : P.border,
+                          border: 'none', color: renameValue.trim() && !listOpLoading ? P.accentFg : P.textMuted,
+                          fontFamily: MONO, fontSize: 11, padding: '4px 9px', borderRadius: 4,
+                          cursor: renameValue.trim() && !listOpLoading ? 'pointer' : 'not-allowed', flexShrink: 0,
+                        }}>
+                        {listOpLoading ? '…' : 'Guardar'}
+                      </button>
+                      <button
+                        onClick={() => setDropdownMode(null)}
+                        style={{ background: 'transparent', border: 'none', color: P.textMuted, cursor: 'pointer', fontSize: 13, padding: '0 2px' }}>
+                        ✕
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* 🗑 Eliminar — solo si hay exactamente 1 lista nombrada seleccionada */}
+              {singleNamedList && (
+                <>
+                  <div
+                    onClick={() => setDropdownMode(m => m === 'delete' ? null : 'delete')}
+                    style={{
+                      padding: '6px 12px', fontSize: 12, cursor: 'pointer',
+                      color: dropdownMode === 'delete' ? '#8b3030' : P.textSec,
+                      background: dropdownMode === 'delete' ? '#fde8e8' : 'transparent',
+                      display: 'flex', alignItems: 'center', gap: 6,
+                    }}
+                    onMouseOver={e => { e.currentTarget.style.background = '#fde8e8'; e.currentTarget.style.color = '#8b3030' }}
+                    onMouseOut={e  => { e.currentTarget.style.background = dropdownMode === 'delete' ? '#fde8e8' : 'transparent'; e.currentTarget.style.color = dropdownMode === 'delete' ? '#8b3030' : P.textSec }}>
+                    <span>🗑</span> Eliminar lista
+                  </div>
+                  {dropdownMode === 'delete' && (
+                    <div style={{ padding: '6px 12px 8px', display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 11, color: '#8b3030', flex: '1 1 100%', marginBottom: 4 }}>
+                        ¿Eliminar &ldquo;{singleNamedList.name}&rdquo;?
+                      </span>
+                      <button
+                        onClick={handleDeleteList}
+                        disabled={listOpLoading}
+                        style={{
+                          background: '#8b3030', border: 'none', color: '#fff',
+                          fontFamily: MONO, fontSize: 11, padding: '4px 12px', borderRadius: 4,
+                          cursor: listOpLoading ? 'not-allowed' : 'pointer', flexShrink: 0,
+                        }}>
+                        {listOpLoading ? '…' : 'Sí, eliminar'}
+                      </button>
+                      <button
+                        onClick={() => setDropdownMode(null)}
+                        style={{
+                          background: 'transparent', border: `1px solid ${P.borderStrong}`,
+                          color: P.textSec, fontFamily: MONO, fontSize: 11,
+                          padding: '4px 10px', borderRadius: 4, cursor: 'pointer', flexShrink: 0,
+                        }}>
+                        Cancelar
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           )}
         </div>
