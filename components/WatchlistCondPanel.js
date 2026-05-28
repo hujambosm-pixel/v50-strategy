@@ -44,11 +44,11 @@ function Num({ label, value, onChange, min=1, max=9999 }) {
 const PICKER_COLORS = ['#00e5a0','#ffd166','#00d4ff','#ff7eb3','#9b72ff','#ff4d6d','#ff9a3c','#a78bfa','#7ec8e3','#f472b6']
 
 // onToggle(condId, active) — called when user toggles a pill; parent persists via PATCH
-export default function WatchlistCondPanel({ conditions, onToggle, onReload, condColors={}, onColorChange }) {
+export default function WatchlistCondPanel({ conditions, onToggle, onReload, condColors={}, onColorChange, hideHeader=false }) {
   const [editing, setEditing] = useState(null)
   const [form, setForm]       = useState({})
   const [saving, setSaving]   = useState(false)
-  const [open, setOpen]       = useState(false)
+  const [open, setOpen]       = useState(hideHeader) // si no hay header, siempre expandido
 
   function openEdit(c, e) {
     e?.stopPropagation()
@@ -126,17 +126,19 @@ export default function WatchlistCondPanel({ conditions, onToggle, onReload, con
   return (
     <div style={{borderBottom:'1px solid var(--border)',flexShrink:0,background:'rgba(0,0,0,0.12)'}}>
 
-      {/* ── Header ── */}
-      <div style={{display:'flex',alignItems:'center',gap:6,padding:'5px 8px 4px',cursor:'pointer'}}
-        onClick={()=>{setOpen(o=>!o);setEditing(null)}}>
-        <span style={{fontFamily:MONO,fontSize:11,color:'#a8ccdf',fontWeight:500,flex:1}}>
-          🔔 Notificaciones
-        </span>
-        <button onClick={openNew} title="Nueva condición"
-          style={{background:'rgba(0,212,255,0.1)',border:'1px solid var(--accent)',color:'var(--accent)',
-            fontFamily:MONO,fontSize:11,padding:'1px 7px',borderRadius:3,cursor:'pointer',lineHeight:1.5}}>+</button>
-        <span style={{fontFamily:MONO,fontSize:8,color:'var(--text3)'}}>{open?'▲':'▼'}</span>
-      </div>
+      {/* ── Header — oculto cuando se renderiza dentro del sub-panel de WatchlistManager ── */}
+      {!hideHeader && (
+        <div style={{display:'flex',alignItems:'center',gap:6,padding:'5px 8px 4px',cursor:'pointer'}}
+          onClick={()=>{setOpen(o=>!o);setEditing(null)}}>
+          <span style={{fontFamily:MONO,fontSize:11,color:'#a8ccdf',fontWeight:500,flex:1}}>
+            🔔 Notificaciones
+          </span>
+          <button onClick={openNew} title="Nueva condición"
+            style={{background:'rgba(0,212,255,0.1)',border:'1px solid var(--accent)',color:'var(--accent)',
+              fontFamily:MONO,fontSize:11,padding:'1px 7px',borderRadius:3,cursor:'pointer',lineHeight:1.5}}>+</button>
+          <span style={{fontFamily:MONO,fontSize:8,color:'var(--text3)'}}>{open?'▲':'▼'}</span>
+        </div>
+      )}
 
       {/* ── Pills (visibles solo cuando expandido) ── */}
       {open&&conditions.length>0&&!editing&&(

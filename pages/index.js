@@ -1639,8 +1639,11 @@ export default function Home() {
     if(symSearchOpen) setTimeout(()=>symSearchInputRef.current?.focus(),50)
   },[symSearchOpen])
 
-  // alarmStatus[symbol][alarmId] = true|false|null
-  const [alarmStatus,setAlarmStatus]=useState({})
+  // alarmStatus[symbol][alarmId] = true|false|null — restaurado desde caché localStorage al montar
+  const [alarmStatus,setAlarmStatus]=useState(()=>{
+    try{const c=localStorage.getItem('alarm_status_cache');if(c){const{data}=JSON.parse(c);return data||{}}}catch(_){}
+    return {}
+  })
   const [alarmStatusLoading,setAlarmStatusLoading]=useState(false)
   const [alarmCheckProgress,setAlarmCheckProgress]=useState(null)  // {done,total} durante comprobación
   const [alertsLastUpdated,setAlertsLastUpdated]=useState(null)     // timestamp de última actualización correcta
@@ -2056,9 +2059,10 @@ export default function Home() {
       const extraConds=pseudoAlarms.filter(p=>!realAlarmIds.has(p.id))
       const allEvalAlarms=[...alarmList.map(a=>({id:a.id,symbol:a.symbol,condition:a.condition,condition_detail:a.condition_detail,price_level:a.price_level,ema_r:a.ema_r,ema_l:a.ema_l,params:a.params})),...extraConds]
 
-      // Pre-fetch closes con caché en memoria (TTL 20 min). forceRefresh=true lo ignora.
+      // Pre-fetch closes con caché en memoria (TTL configurable). forceRefresh=true lo ignora.
       const closes={}
-      const TTL=1200000 // 20 minutos
+      const _cacheSett=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')}catch(_){return {}}})()
+      const TTL=(_cacheSett.alarmas?.cacheTTLMinutes??20)*60*1000
       const _bs=4
       for(let _i=0;_i<symbols.length;_i+=_bs){
         const _batch=symbols.slice(_i,_i+_bs)
@@ -2088,6 +2092,7 @@ export default function Home() {
       const prev=alarmStatus||{}
       const newStatus=data||{}
       setAlarmStatus(newStatus)
+      try{localStorage.setItem('alarm_status_cache',JSON.stringify({data:newStatus,ts:Date.now()}))}catch(_){}
       // Popup en alarmas nuevas
       try{
         const sett=JSON.parse(localStorage.getItem('v50_settings')||'{}')
@@ -3588,7 +3593,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.328</title>
+        <title>Trading Simulator V9.329</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3666,7 +3671,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.328
+            <span className="dot"/>Trading Simulator V9.329
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -3764,10 +3769,10 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         {/* ── BANNER: recordatorio actualización ranking cada 24h ── */}
         {!rankingBannerDismissed&&(
           <div style={{display:'flex',alignItems:'center',gap:10,padding:'7px 16px',
-            background:'#1a2a3a',borderBottom:'1px solid #b45309',flexShrink:0,zIndex:100}}>
+            background:'#1a2a3a',borderLeft:'3px solid #f59e0b',flexShrink:0,zIndex:100}}>
             <span style={{fontSize:13}}>📊</span>
-            <span style={{fontFamily:'monospace',fontSize:11,color:'#fcd34d',flex:1}}>
-              El ranking no se ha actualizado en más de 24h — los scores del Watchlist pueden estar desactualizados
+            <span style={{fontFamily:'monospace',fontSize:12,color:'#94a3b8',flex:1}}>
+              El ranking no se ha actualizado en más de 24h · los scores del Watchlist pueden estar desactualizados
             </span>
             <button
               onClick={()=>{calcRanking();setRankingBannerDismissed(true)}}
@@ -5585,6 +5590,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     onReload={reloadConditions}
                     condColors={condColors}
                     onColorChange={setCondColor}
+                    hideHeader={true}
                   />
                 }
                 candidatesText={candidatesText}

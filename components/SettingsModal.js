@@ -242,6 +242,24 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                   Con listas pequeñas (≤ N) la actualización es automática al cargar o cambiar el Watchlist.
                 </div>
               </div>
+              <div style={{marginBottom:16}}>
+                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
+                  <span style={{fontFamily:MONO,fontSize:11,color:'#cce0f5',flex:1}}>Caché de datos de alertas (minutos)</span>
+                  <input type="number" min={5} max={120}
+                    value={settings.alarmas?.cacheTTLMinutes??20}
+                    onChange={e=>{
+                      const v=Math.max(5,Math.min(120,Number(e.target.value)||20))
+                      upd('alarmas.cacheTTLMinutes',v)
+                    }}
+                    style={{width:58,background:'var(--bg2,#0d1520)',border:'1px solid #1a2d45',color:'#cce0f5',
+                      fontFamily:MONO,fontSize:11,padding:'3px 6px',borderRadius:3,textAlign:'right'}}/>
+                  <span style={{fontFamily:MONO,fontSize:11,color:'#5a7a95'}}>min</span>
+                </div>
+                <div style={{fontFamily:MONO,fontSize:9,color:'#4a6a80',lineHeight:1.6}}>
+                  Tiempo en minutos que se conservan los datos descargados de cada activo antes de volver a consultarlos.
+                  Con un valor mayor, las comprobaciones son más rápidas pero los datos pueden estar desactualizados.
+                </div>
+              </div>
               {sep('Opciones de estrategia')}
               <label style={{display:'flex',alignItems:'center',gap:8,marginBottom:8,cursor:'pointer'}}>
                 <input type="checkbox"
