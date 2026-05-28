@@ -192,9 +192,29 @@ export default function WatchlistManager({
   // ── Filter ─────────────────────────────────────────────────
   const filtered = watchlist.filter(w => {
     const sl = filterSearch.toLowerCase()
-    const matchSearch = !sl ||
-      (w.symbol || '').toLowerCase().includes(sl) ||
-      (w.name   || '').toLowerCase().includes(sl)
+    const matchSearch = !sl || (() => {
+      if ((w.symbol || '').toLowerCase().includes(sl)) return true
+      if ((w.name   || '').toLowerCase().includes(sl)) return true
+      // Listas asignadas
+      const listNames = (w.list_ids || [])
+        .map(lid => wlLists.find(l => l.id === lid)?.name || '')
+        .join(' ').toLowerCase()
+      if (listNames.includes(sl)) return true
+      // Estrategia favorita + métricas
+      const best = bestForSymbol(w.symbol || '')
+      if (best) {
+        if ((best.stratName || '').toLowerCase().includes(sl)) return true
+        if ((best.intervalo || '').toLowerCase().includes(sl)) return true
+        const m = best.metrics
+        if (m) {
+          if (m.cagr    != null && m.cagr.toFixed(1).includes(sl))              return true
+          if (m.winRate != null && m.winRate.toFixed(0).includes(sl))            return true
+          if (m.maxDD   != null && Math.abs(m.maxDD).toFixed(1).includes(sl))   return true
+          if (m.trades  != null && String(Math.round(m.trades)).includes(sl))    return true
+        }
+      }
+      return false
+    })()
     const matchList = (() => {
       if (filterLists.length === 0) return true
       const namedIds     = filterLists.filter(x => x !== '__unassigned__')
@@ -500,7 +520,7 @@ export default function WatchlistManager({
 
         {/* Buscador */}
         <div style={{ position: 'relative', width: 180, flexShrink: 0 }}>
-          <input type="text" placeholder="Buscar ticker o nombre…"
+          <input type="text" placeholder="Buscar en todas las columnas…"
             value={filterSearch} onChange={e => setFilterSearch(e.target.value)}
             style={{
               width: '100%', background: P.bg, border: `1px solid ${P.border}`,
