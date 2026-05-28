@@ -116,6 +116,9 @@ export default function WatchlistManager({
   onDeleteList,
   // Top estrategia
   onRefreshBestStrat,
+  onCalcRankingAll,
+  topStratRunning,
+  topStratProgress,
   hasBestStrat,
   onClearBestStrat,
   // Ranking data from parent (for score columns)
@@ -568,22 +571,26 @@ export default function WatchlistManager({
         </div>
 
         {/* GROUP 2: Top estrategia */}
-        {hasBestStrat && (
-          <div style={{ display: 'inline-flex', gap: 2, flexShrink: 0 }}>
-            <button
-              onClick={() => onRefreshBestStrat && onRefreshBestStrat()}
-              title="Determina qué estrategia funciona mejor para cada activo comparando todas las que han sido evaluadas. Ejecuta Ranking con distintas estrategias activas para ampliar la comparación"
-              style={{
-                background: P.accentBg,
-                border: `1px solid ${P.accentBg}`,
-                color: P.accentFg,
-                fontFamily: MONO, fontSize: 11,
-                padding: '5px 10px', borderRadius: 5,
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-              }}>
-              🎯 Top estrategia
-            </button>
+        <div style={{ display: 'inline-flex', gap: 2, flexShrink: 0 }}>
+          <button
+            onClick={() => !topStratRunning && onCalcRankingAll && onCalcRankingAll()}
+            disabled={topStratRunning}
+            title={topStratRunning ? `Calculando ranking para todas las estrategias… ${topStratProgress?.current||0}/${topStratProgress?.total||0}` : 'Calcula el Ranking con TODAS las estrategias disponibles y determina cuál obtiene mejor score histórico para cada activo'}
+            style={{
+              background: topStratRunning ? P.bg : P.accentBg,
+              border: `1px solid ${topStratRunning ? P.borderStrong : P.accentBg}`,
+              color: topStratRunning ? P.textMuted : P.accentFg,
+              fontFamily: MONO, fontSize: 11,
+              padding: '5px 10px', borderRadius: 5,
+              cursor: topStratRunning ? 'default' : 'pointer',
+              whiteSpace: 'nowrap',
+              opacity: topStratRunning ? 0.7 : 1,
+            }}>
+            {topStratRunning
+              ? `⟳ Calculando ${topStratProgress?.current||0}/${topStratProgress?.total||0} estrategias…`
+              : '🎯 Top estrategia'}
+          </button>
+          {hasBestStrat && (
             <button
               onClick={() => onClearBestStrat && onClearBestStrat()}
               title="Borrar los datos de Top estrategia calculados"
@@ -599,8 +606,8 @@ export default function WatchlistManager({
               onMouseOut={e  => { e.currentTarget.style.color = P.textMuted;  e.currentTarget.style.borderColor = P.borderStrong }}>
               🗑
             </button>
-          </div>
-        )}
+          )}
+        </div>
 
         {/* Separador visual */}
         <div style={{ width: 1, height: 20, background: P.border, flexShrink: 0 }} />
@@ -1121,20 +1128,20 @@ export default function WatchlistManager({
                 Listas
               </th>
 
-              {/* Score hist. */}
-              <th style={{ ...TH(), minWidth: 72, cursor: 'pointer', textAlign: 'right',
+              {/* SCORE MÉTRICAS */}
+              <th style={{ ...TH(), minWidth: 80, cursor: 'pointer', textAlign: 'right',
                 background: '#d4d0c8', borderLeft: `2px solid ${P.borderStrong}`, borderRight: `1px solid ${P.border}` }}
                 onClick={() => handleSort('scoreHistorico')}
-                title="Score 0-100 basado únicamente en métricas históricas de la estrategia activa (Win Rate, CAGR, CAGR robusto, MaxDD). Usado para ordenar el Watchlist y determinar la Top Estrategia de cada activo">
-                Score hist.{sortIcon('scoreHistorico')}
+                title="Score 0-100 basado en métricas históricas (Win Rate, CAGR, CAGR robusto, MaxDD). Se guarda en Supabase y está disponible al cargar la app sin necesidad de ejecutar Ranking">
+                SCORE MÉTRICAS{sortIcon('scoreHistorico')}
               </th>
 
-              {/* Score completo */}
-              <th style={{ ...TH(), minWidth: 72, cursor: 'pointer', textAlign: 'right',
+              {/* SCORE MÉT.+SEÑ. */}
+              <th style={{ ...TH(), minWidth: 88, cursor: 'pointer', textAlign: 'right',
                 background: '#d4d0c8', borderLeft: `1px solid ${P.border}`, borderRight: `2px solid ${P.borderStrong}` }}
                 onClick={() => handleSort('scoreCompleto')}
-                title="Score 0-100 que combina métricas históricas + condiciones actuales del mercado (momentum N días, fuerza relativa vs SP500, proximidad a máximo 52 semanas). Usado como criterio de priorización en el modo Capital Concentrado del backtesting multiactivo cuando hay más señales que slots">
-                Score comp.{sortIcon('scoreCompleto')}
+                title="Score 0-100 que combina métricas históricas + condiciones actuales del mercado (momentum, fuerza relativa vs SP500, proximidad a máximo 52 semanas). Solo disponible tras ejecutar Ranking — usa Score métricas como fallback">
+                SCORE MÉT.+SEÑ.{sortIcon('scoreCompleto')}
               </th>
 
               {/* Métricas de favorita */}

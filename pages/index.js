@@ -649,6 +649,12 @@ export default function Home() {
   const [rankingRunning,setRankingRunning]=useState(false)
   const [rankingProgress,setRankingProgress]=useState({done:0,total:0})
   const [rankingError,setRankingError]=useState(null)
+  const [topStratRunning,setTopStratRunning]=useState(false)
+  const [topStratProgress,setTopStratProgress]=useState({current:0,total:0})
+  // Banner de recordatorio 24h — solo se muestra una vez por sesión si han pasado >24h
+  const [rankingBannerDismissed,setRankingBannerDismissed]=useState(()=>{
+    try{const ts=localStorage.getItem('ranking_last_updated');if(!ts)return false;return(Date.now()-Number(ts))<24*60*60*1000}catch(_){return false}
+  })
   // Mejor estrategia por símbolo entre TODAS las estrategias calculadas en Supabase
   // { SYMBOL: { stratName, stratId, score, intervalo, stratCount } }
   const [bestStratBySymbol,setBestStratBySymbol]=useState({})
@@ -2259,7 +2265,116 @@ export default function Home() {
     setRankingStratName(stratName||'')
     saveRankingRemote(results, currentStratId||null).catch(()=>{})
     refreshBestStratPerSymbol().catch(()=>{})
+    try{localStorage.setItem('ranking_last_updated',String(Date.now()))}catch(_){}
+    setRankingBannerDismissed(true)
   }, [watchlist,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL,currentStratId,stratName,filtros,estrategiaIntervalo,refreshBestStratPerSymbol])
+
+  // ── Calcular Ranking para TODAS las estrategias en secuencia → determina Top estrategia ──
+  const calcRankingAllStrategies = useCallback(async () => {
+    if (!strategies || strategies.length === 0) return
+    setTopStratRunning(true)
+    setTopStratProgress({current:0, total:strategies.length})
+
+    const syms = watchlist.map(w => w.symbol)
+    const sett = (()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')}catch(_){return {}}})()
+    const wMercado   = (sett.ranking?.rankingWeightMercado   ?? 20) / 100
+    const wHistorico = (sett.ranking?.rankingWeightHistorico ?? 80) / 100
+    const momPct     = (sett.ranking?.rankingMomentumPct  ?? 33) / 100
+    const frPct      = (sett.ranking?.rankingFRPct        ?? 33) / 100
+    const max52Pct   = (sett.ranking?.rankingMax52Pct     ?? 34) / 100
+    const momN       = Math.max(5, sett.ranking?.rankingMomentumN ?? 20)
+    const wrPct      = (sett.ranking?.rankingWinRatePct      ?? 33) / 100
+    const cagrPct    = (sett.ranking?.rankingCAGRPct         ?? 33) / 100
+    const cagrRobPct = (sett.ranking?.rankingCAGRRobustoPct  ?? 34) / 100
+    const ddPct      = (sett.ranking?.rankingMaxDDPct        ?? 0)  / 100
+    const minTrades  = sett.ranking?.minTrades ?? 3
+    const norm = (v,mn,mx) => Math.max(0, Math.min(100, (v-mn)/(mx-mn)*100))
+
+    let sp500Closes = null
+    if (wMercado > 0 && frPct > 0) {
+      try {
+        const r = await apiFetch('/api/closes?symbol=%5EGSPC&days=300')
+        if (r.ok) sp500Closes = await r.json()
+      } catch(e) { console.warn('[calcRankingAll] SP500 fetch failed:', e.message) }
+    }
+
+    const BATCH = 4
+    for (let si = 0; si < strategies.length; si++) {
+      const strat = strategies[si]
+      setTopStratProgress({current: si + 1, total: strategies.length})
+      const stratId = strat.id
+      const stratYears  = strat.years || Number(years)
+      const stratCap    = strat.capital_ini || Number(capitalIni)
+      const stratIntv   = (()=>{try{const p=typeof strat?.params==='string'?JSON.parse(strat.params||'{}'):(strat?.params||{});return p.intervalo||'diario'}catch(_){return 'diario'}})()
+      const results = {}
+      for (let i = 0; i < syms.length; i += BATCH) {
+        const batch = syms.slice(i, i + BATCH)
+        await Promise.allSettled(batch.map(async sym => {
+          try {
+            const res = await apiFetch('/api/datos', {
+              method:'POST', headers:{'Content-Type':'application/json'},
+              body: JSON.stringify({ simbolo:sym, strategyId:stratId, capital_ini:stratCap, years:stratYears, allocation_pct:100, filtros, intervalo:stratIntv })
+            })
+            const json = await res.json()
+            if (!res.ok || !json.trades?.length) return
+            const trades = json.trades
+            if (trades.length < minTrades) return
+            const wins = trades.filter(t=>t.pnlPct>=0), losses = trades.filter(t=>t.pnlPct<0)
+            const winRate = (wins.length/trades.length)*100
+            const totalDiasNat = json.startDate?(new Date(json.meta?.ultimaFecha)-new Date(json.startDate))/86400000:365*stratYears
+            const anios = Math.max(totalDiasNat/365.25, 0.01)
+            const capFinal = stratCap + json.gananciaSimple
+            const cagr = capFinal>0?(Math.pow(capFinal/stratCap,1/anios)-1)*100:-99
+            const sorted3 = [...trades].sort((a,b)=>b.pnlSimple-a.pnlSimple).slice(3)
+            const ganRobust = sorted3.reduce((s,t)=>s+t.pnlSimple, 0)
+            const capRob = stratCap + ganRobust
+            const cagrRobust = capRob>0?(Math.pow(capRob/stratCap,1/anios)-1)*100:-99
+            const maxDD = json.maxDDStrategyFloat??json.maxDDStrategy??0
+            const scoreHistorico = Math.max(0, Math.min(100,
+              norm(winRate,20,80)*wrPct + norm(cagr,-20,60)*cagrPct +
+              norm(cagrRobust,-20,50)*cagrRobPct - norm(maxDD,0,60)*ddPct
+            ))
+            let scoreMercado = 0
+            if (wMercado > 0) {
+              const priceArr = (json.chartData||[]).map(d=>d.close).filter(v=>v!=null&&!isNaN(v))
+              if (priceArr.length >= momN+1) {
+                const lastP = priceArr[priceArr.length-1]
+                const momP  = priceArr[Math.max(0,priceArr.length-1-momN)]
+                const momentum = momP>0?(lastP/momP-1)*100:0
+                const hist252 = priceArr.slice(-252), high52 = Math.max(...hist252)
+                const proximity52 = high52>0?(lastP/high52)*100:50
+                let relStrength = 0
+                if (sp500Closes?.length>=64&&frPct>0) {
+                  const spLast=sp500Closes[sp500Closes.length-1], sp63=sp500Closes[sp500Closes.length-64]
+                  const spRet=sp63>0?(spLast/sp63-1)*100:0
+                  const asset63=priceArr.length>=64?priceArr[priceArr.length-64]:priceArr[0]
+                  const assetRet=asset63>0?(lastP/asset63-1)*100:0
+                  relStrength=assetRet-spRet
+                }
+                scoreMercado=Math.max(0,Math.min(100,
+                  norm(momentum,-20,40)*momPct + norm(relStrength,-30,30)*frPct + norm(proximity52,50,100)*max52Pct
+                ))
+              }
+            }
+            const scoreCompleto = Math.max(0, Math.min(100, scoreHistorico*wHistorico + scoreMercado*wMercado))
+            results[sym.toUpperCase()] = {
+              score: scoreCompleto, scoreCompleto, scoreHistorico,
+              metrics: { winRate, cagr, cagrRobust, maxDD, trades: trades.length }
+            }
+          } catch(e) { console.error('[calcRankingAll]', sym, e) }
+        }))
+      }
+      const sortedEntries = Object.entries(results).sort((a,b)=>b[1].score-a[1].score)
+      sortedEntries.forEach(([sym],i)=>{ results[sym].rank=i+1 })
+      await saveRankingRemote(results, stratId).catch(()=>{})
+    }
+
+    await refreshBestStratPerSymbol().catch(()=>{})
+    try{localStorage.setItem('ranking_last_updated',String(Date.now()))}catch(_){}
+    setRankingBannerDismissed(true)
+    setTopStratRunning(false)
+    setTopStratProgress({current:0, total:0})
+  }, [strategies, watchlist, years, capitalIni, filtros, refreshBestStratPerSymbol])
 
   // ── Analizar candidatos: extrae tickers, corre backtest en paralelo ──
   // Usa gananciaSimple (CAGR Simple) — mismo método y fórmulas que calcRanking
@@ -3473,7 +3588,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.327</title>
+        <title>Trading Simulator V9.328</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3551,7 +3666,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.327
+            <span className="dot"/>Trading Simulator V9.328
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -3645,6 +3760,32 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
             </button>
           </div>
         </header>
+
+        {/* ── BANNER: recordatorio actualización ranking cada 24h ── */}
+        {!rankingBannerDismissed&&(
+          <div style={{display:'flex',alignItems:'center',gap:10,padding:'7px 16px',
+            background:'#1a2a3a',borderBottom:'1px solid #b45309',flexShrink:0,zIndex:100}}>
+            <span style={{fontSize:13}}>📊</span>
+            <span style={{fontFamily:'monospace',fontSize:11,color:'#fcd34d',flex:1}}>
+              El ranking no se ha actualizado en más de 24h — los scores del Watchlist pueden estar desactualizados
+            </span>
+            <button
+              onClick={()=>{calcRanking();setRankingBannerDismissed(true)}}
+              style={{fontFamily:'monospace',fontSize:11,padding:'3px 10px',borderRadius:4,
+                background:'#b45309',border:'1px solid #d97706',color:'#fff',cursor:'pointer',flexShrink:0,whiteSpace:'nowrap'}}>
+              🏆 Actualizar ahora
+            </button>
+            <button
+              onClick={()=>{
+                try{localStorage.setItem('ranking_last_updated',String(Date.now()))}catch(_){}
+                setRankingBannerDismissed(true)
+              }}
+              style={{fontFamily:'monospace',fontSize:11,padding:'3px 10px',borderRadius:4,
+                background:'transparent',border:'1px solid #4a5568',color:'#94a3b8',cursor:'pointer',flexShrink:0,whiteSpace:'nowrap'}}>
+              Recordar mañana
+            </button>
+          </div>
+        )}
 
         <div className="main">
           {/* ── VERTICAL NAV ── */}
@@ -5463,6 +5604,9 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 rankingData={rankingData}
                 rankingStratId={rankingStratId}
                 onRefreshBestStrat={refreshBestStratPerSymbol}
+                onCalcRankingAll={calcRankingAllStrategies}
+                topStratRunning={topStratRunning}
+                topStratProgress={topStratProgress}
                 hasBestStrat={Object.keys(bestStratBySymbol).length>0}
                 onClearBestStrat={()=>setBestStratBySymbol({})}
               />

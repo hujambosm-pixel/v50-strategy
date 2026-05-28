@@ -652,6 +652,19 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
           {/* ── RANKING ── */}
           {tab==='ranking'&&(
             <div>
+              {/* ── Bloque informativo ── */}
+              <div style={{background:'#0f1f2e',borderLeft:'3px solid #06b6d4',borderRadius:'0 4px 4px 0',
+                padding:'10px 14px',fontSize:12,color:'#94a3b8',marginBottom:16,lineHeight:1.6}}>
+                <div style={{fontWeight:700,color:'#22d3ee',marginBottom:6}}>ℹ️ Cómo se usan estos pesos</div>
+                <div style={{marginBottom:4}}>
+                  <span style={{color:'#e2e8f0',fontWeight:600}}>Score por métricas:</span>{' '}
+                  usa solo el bloque <em>Métricas históricas</em>. Se guarda en Supabase y determina el orden del Watchlist al cargar la app y la Top estrategia de cada activo.
+                </div>
+                <div>
+                  <span style={{color:'#e2e8f0',fontWeight:600}}>Score por métricas + señales:</span>{' '}
+                  combina ambos bloques. Solo se calcula al ejecutar Ranking y se usa para priorizar entradas en el modo <em>Capital Concentrado</em> del backtesting multiactivo.
+                </div>
+              </div>
               {/* ── Pesos globales por bloque ── */}
               {sep('Pesos globales por bloque')}
               {[
