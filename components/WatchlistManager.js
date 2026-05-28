@@ -167,8 +167,25 @@ export default function WatchlistManager({
   }, [])
 
   // ── Best strategy for a symbol ────────────────────────────
+  // Priority: bestStratBySymbol (score-based, same source as sidebar tooltip)
+  // Fallback: allRankings scan by CAGR (when bestStratBySymbol not populated)
   const bestForSymbol = useCallback(sym => {
     const symUp = sym.toUpperCase()
+
+    // ── Primary: use bestStratBySymbol (keeps sidebar & Gestionar in sync) ──
+    const bsb = bestStratBySymbol[symUp]
+    if (bsb?.stratId) {
+      const metrics = allRankings[bsb.stratId]?.[symUp] ?? null
+      return {
+        sid:        bsb.stratId,
+        metrics,
+        stratName:  bsb.stratName || '—',
+        intervalo:  bsb.intervalo || 'diario',
+        stratCount: bsb.stratCount ?? Object.values(allRankings).filter(d => d[symUp]).length,
+      }
+    }
+
+    // ── Fallback: best CAGR scan from allRankings ──
     let best = null
     Object.entries(allRankings).forEach(([sid, data]) => {
       const m = data[symUp]
@@ -183,13 +200,12 @@ export default function WatchlistManager({
       const p = typeof strat?.params === 'string' ? JSON.parse(strat.params || '{}') : (strat?.params || {})
       intervalo = p.intervalo || 'diario'
     } catch (_) {}
-    const bsb = bestStratBySymbol[symUp]
     return {
       sid:        best.sid,
       metrics:    best.metrics,
       stratName:  strat?.name || '—',
       intervalo,
-      stratCount: bsb?.stratCount ?? Object.values(allRankings).filter(d => d[symUp]).length,
+      stratCount: Object.values(allRankings).filter(d => d[symUp]).length,
     }
   }, [allRankings, strategies, bestStratBySymbol])
 
@@ -1078,6 +1094,21 @@ export default function WatchlistManager({
           </thead>
 
           <tbody>
+            {/* ── Nota explicativa sobre las métricas ── */}
+            <tr>
+              <td colSpan={10} style={{
+                padding: '4px 12px',
+                background: P.bgAlt,
+                borderBottom: `1px solid ${P.border}`,
+                fontFamily: MONO,
+                fontSize: 11,
+                color: '#6b6560',
+                fontStyle: 'italic',
+              }}>
+                Las métricas (CAGR, Win%, MaxDD, Ops) corresponden a la estrategia favorita de cada activo, que puede ser diferente a la estrategia activa. El sidebar muestra las métricas de la estrategia activa.
+              </td>
+            </tr>
+
             {sorted.map((w, idx) => {
               const sym        = (w.symbol || '').toUpperCase()
               const isSaving   = saving.has(w.id)
