@@ -293,27 +293,45 @@ async function saveRankingRemote(rankingData, stratId) {
   }).catch(()=>{}) // ignorar errores de borrado (tabla vacía, sin permisos, etc.)
 
   // 2 — Insertar los nuevos resultados
+  // scoreCompleto es efímero (depende de precios actuales), no se persiste
   const rows = Object.entries(rankingData).map(([symbol, rd]) => ({
     symbol,
-    strategy_id:    stratId || null,
-    win_rate:       rd.metrics?.winRate    ?? null,
-    cagr_simple:    rd.metrics?.cagr       ?? null,
-    max_drawdown:   rd.metrics?.maxDD      ?? null,
-    total_trades:   rd.metrics?.trades     ?? null,
-    score:          rd.score               ?? null,
-    score_historico: rd.scoreHistorico     ?? null,
-    score_completo:  rd.scoreCompleto      ?? null,
-    rank_position:  rd.rank               ?? null,
-    updated_at:     new Date().toISOString(),
+    strategy_id:     stratId || null,
+    win_rate:        rd.metrics?.winRate  ?? null,
+    cagr_simple:     rd.metrics?.cagr     ?? null,
+    max_drawdown:    rd.metrics?.maxDD    ?? null,
+    total_trades:    rd.metrics?.trades   ?? null,
+    score:           rd.score             ?? null,
+    score_historico: rd.scoreHistorico    ?? null,
+    rank_position:   rd.rank             ?? null,
+    updated_at:      new Date().toISOString(),
   }))
+  let scoreHistColErr = false
   for (let i=0; i<rows.length; i+=20) {
     const batch = rows.slice(i, i+20)
-    await fetch(`${getSupaUrl()}/rest/v1/ranking_results`, {
+    const batchToSave = scoreHistColErr
+      ? batch.map(({score_historico, ...r}) => r)
+      : batch
+    const res = await fetch(`${getSupaUrl()}/rest/v1/ranking_results`, {
       method: 'POST',
       headers: { ...getSupaH(), 'Prefer': 'resolution=merge-duplicates,return=minimal',
         'Content-Type': 'application/json' },
-      body: JSON.stringify(batch)
+      body: JSON.stringify(batchToSave)
     })
+    if (!res.ok && !scoreHistColErr) {
+      const txt = await res.text().catch(()=>'')
+      if (txt.includes('score_historico')) {
+        console.warn('[Ranking] Columna score_historico no existe. Ejecuta en Supabase SQL:\nALTER TABLE ranking_results ADD COLUMN IF NOT EXISTS score_historico numeric;')
+        scoreHistColErr = true
+        const fallback = batch.map(({score_historico, ...r}) => r)
+        await fetch(`${getSupaUrl()}/rest/v1/ranking_results`, {
+          method: 'POST',
+          headers: { ...getSupaH(), 'Prefer': 'resolution=merge-duplicates,return=minimal',
+            'Content-Type': 'application/json' },
+          body: JSON.stringify(fallback)
+        }).catch(()=>{})
+      }
+    }
   }
 }
 async function loadRankingRemote(stratId) {
@@ -329,7 +347,7 @@ async function loadRankingRemote(stratId) {
     out[(r.symbol||'').toUpperCase()] = {
       score:          r.score,
       scoreHistorico: r.score_historico ?? null,
-      scoreCompleto:  r.score_completo  ?? r.score ?? null,
+      scoreCompleto:  null,  // efímero, no se guarda en DB
       rank:           r.rank_position,
       metrics: { winRate: r.win_rate, cagr: r.cagr_simple, maxDD: r.max_drawdown, trades: r.total_trades }
     }
@@ -339,10 +357,15 @@ async function loadRankingRemote(stratId) {
 
 async function loadAllRankingsRemote() {
   // Carga TODOS los resultados de ranking (todas las estrategias) para computar
-  // la mejor estrategia por símbolo de forma independiente a la activa
-  const url = `${getSupaUrl()}/rest/v1/ranking_results?select=symbol,strategy_id,score,score_historico,score_completo&order=score.desc&limit=5000`
-  const res = await fetch(url, { headers: getSupaH() })
-  if (!res.ok) return null
+  // la mejor estrategia por símbolo. score_historico se persiste; scoreCompleto es efímero.
+  let url = `${getSupaUrl()}/rest/v1/ranking_results?select=symbol,strategy_id,score,score_historico&order=score.desc&limit=5000`
+  let res = await fetch(url, { headers: getSupaH() })
+  if (!res.ok) {
+    // Fallback: columna score_historico puede no existir todavía
+    url = `${getSupaUrl()}/rest/v1/ranking_results?select=symbol,strategy_id,score&order=score.desc&limit=5000`
+    res = await fetch(url, { headers: getSupaH() })
+    if (!res.ok) return null
+  }
   const rows = await res.json()
   if (!rows?.length) return null
   return rows
@@ -1857,7 +1880,7 @@ export default function Home() {
         const strat=strategies.find(s=>s.id===best.strategy_id)
         let stratIntervalo='diario'
         try{const p=typeof strat?.params==='string'?JSON.parse(strat.params||'{}'):(strat?.params||{});stratIntervalo=p.intervalo||'diario'}catch(_){}
-        bySymbol[sym]={stratName:strat?.name||'',stratId:best.strategy_id,score:best.score,scoreHistorico:best.score_historico??null,scoreCompleto:best.score_completo??best.score??null,intervalo:stratIntervalo,stratCount:stratIds.size}
+        bySymbol[sym]={stratName:strat?.name||'',stratId:best.strategy_id,score:best.score,scoreHistorico:best.score_historico??null,intervalo:stratIntervalo,stratCount:stratIds.size}
       })
       setBestStratBySymbol(bySymbol)
     }catch(e){console.warn('[refreshBestStrat]',e.message)}
@@ -3450,7 +3473,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.326</title>
+        <title>Trading Simulator V9.327</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3528,7 +3551,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.326
+            <span className="dot"/>Trading Simulator V9.327
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4183,18 +4206,23 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       return matchList&&matchSearch&&matchFav&&matchActive
                     })
                     // Sort: según wlSortMode
-                    const hasRankingActive=Object.keys(rankingData).length>0
+                    // scoreHistorico persiste en Supabase → disponible desde carga via bestStratBySymbol
+                    // scoreCompleto es efímero → fallback a scoreHistorico si no hay sesión activa
                     const all=filtered.slice().sort((a,b)=>{
                       const symA=(a.symbol||'').toUpperCase(), symB=(b.symbol||'').toUpperCase()
                       const rdA=rankingData[symA], rdB=rankingData[symB]
-                      if(wlSortMode==='scoreHistorico'&&hasRankingActive){
-                        const sa=rdA?.scoreHistorico, sb=rdB?.scoreHistorico
+                      const bsbA=bestStratBySymbol[symA], bsbB=bestStratBySymbol[symB]
+                      if(wlSortMode==='scoreHistorico'){
+                        const sa=rdA?.scoreHistorico??bsbA?.scoreHistorico
+                        const sb=rdB?.scoreHistorico??bsbB?.scoreHistorico
                         if(sa!=null&&sb!=null) return sb-sa
                         if(sa!=null) return -1; if(sb!=null) return 1
                         return symA.localeCompare(symB)
                       }
-                      if(wlSortMode==='scoreCompleto'&&hasRankingActive){
-                        const sa=rdA?.scoreCompleto, sb=rdB?.scoreCompleto
+                      if(wlSortMode==='scoreCompleto'){
+                        // scoreCompleto requiere sesión activa; fallback a scoreHistorico
+                        const sa=rdA?.scoreCompleto??rdA?.scoreHistorico??bsbA?.scoreHistorico
+                        const sb=rdB?.scoreCompleto??rdB?.scoreHistorico??bsbB?.scoreHistorico
                         if(sa!=null&&sb!=null) return sb-sa
                         if(sa!=null) return -1; if(sb!=null) return 1
                         return symA.localeCompare(symB)
@@ -4218,8 +4246,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         {rankingRunning&&<span style={{color:'#ffd166',fontSize:10}}>⟳ {rankingProgress.done}/{rankingProgress.total}</span>}
                         <select value={wlSortMode} onChange={e=>setWlSortMode(e.target.value)}
                           style={{background:'#0d1520',border:'1px solid #1a2d45',color:'#8aadcc',fontFamily:MONO,fontSize:9,padding:'1px 3px',borderRadius:3,cursor:'pointer',marginLeft:2}}>
-                          <option value="scoreHistorico" title="Ordena por score basado en métricas históricas de la estrategia activa (Win Rate, CAGR, CAGR robusto, MaxDD). No tiene en cuenta condiciones actuales del mercado">Score por métricas</option>
-                          <option value="scoreCompleto"  title="Ordena combinando métricas históricas + señales actuales del mercado (momentum, fuerza relativa vs SP500, proximidad a máximo 52s). Recomendado para decidir en qué activos entrar hoy">Score por métricas + señales</option>
+                          <option value="scoreHistorico" title="Ordena por score calculado únicamente con métricas históricas (Win Rate, CAGR, CAGR robusto, MaxDD). Se guarda en Supabase y está disponible desde el momento en que se carga la app">Score por métricas</option>
+                          <option value="scoreCompleto"  title="Ordena combinando métricas históricas + condiciones actuales del mercado (momentum, fuerza relativa, proximidad a máximo 52s). Requiere ejecutar Ranking para actualizarse — usa Score por métricas como fallback hasta entonces">Score por métricas + señales</option>
                           <option value="alfabetico"     title="Orden alfabético por ticker">Alfabético</option>
                         </select>
 

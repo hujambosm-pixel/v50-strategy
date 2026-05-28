@@ -17,8 +17,14 @@ async function _setItemLists(itemId, listIds) {
 }
 
 async function loadAllRankingsWithMetrics() {
-  const url = `${getSupaUrl()}/rest/v1/ranking_results?select=symbol,strategy_id,score,score_historico,score_completo,win_rate,cagr_simple,max_drawdown,total_trades,rank_position&limit=10000`
-  const res = await fetch(url, { headers: getSupaH() })
+  // score_historico persiste; scoreCompleto es efímero (no se guarda en DB)
+  let url = `${getSupaUrl()}/rest/v1/ranking_results?select=symbol,strategy_id,score,score_historico,win_rate,cagr_simple,max_drawdown,total_trades,rank_position&limit=10000`
+  let res = await fetch(url, { headers: getSupaH() })
+  if (!res.ok) {
+    // Fallback: columna score_historico puede no existir todavía en la tabla
+    url = `${getSupaUrl()}/rest/v1/ranking_results?select=symbol,strategy_id,score,win_rate,cagr_simple,max_drawdown,total_trades,rank_position&limit=10000`
+    res = await fetch(url, { headers: getSupaH() })
+  }
   if (!res.ok) return []
   return (await res.json()) || []
 }
@@ -153,7 +159,6 @@ export default function WatchlistManager({
           trades:         r.total_trades,
           score:          r.score,
           scoreHistorico: r.score_historico ?? null,
-          scoreCompleto:  r.score_completo  ?? r.score ?? null,
         }
       })
       setAllRankings(map)
@@ -191,7 +196,6 @@ export default function WatchlistManager({
         intervalo:      bsb.intervalo || 'diario',
         stratCount:     bsb.stratCount ?? Object.values(allRankings).filter(d => d[symUp]).length,
         scoreHistorico: bsb.scoreHistorico ?? metrics?.scoreHistorico ?? null,
-        scoreCompleto:  bsb.scoreCompleto  ?? metrics?.scoreCompleto  ?? null,
       }
     }
 
@@ -217,7 +221,6 @@ export default function WatchlistManager({
       intervalo,
       stratCount:     Object.values(allRankings).filter(d => d[symUp]).length,
       scoreHistorico: best.metrics?.scoreHistorico ?? null,
-      scoreCompleto:  best.metrics?.scoreCompleto  ?? best.metrics?.score ?? null,
     }
   }, [allRankings, strategies, bestStratBySymbol])
 
@@ -1275,11 +1278,9 @@ export default function WatchlistManager({
                     )
                   })()}
 
-                  {/* Score completo */}
+                  {/* Score completo — efímero, solo disponible en sesión activa */}
                   {(()=>{
-                    const sc = metricsView === 'active'
-                      ? rankingData?.[sym]?.scoreCompleto
-                      : (best?.scoreCompleto ?? null)
+                    const sc = metricsView === 'active' ? rankingData?.[sym]?.scoreCompleto : null
                     return (
                       <td style={{
                         ...TD(), textAlign: 'right', fontWeight: 600,
