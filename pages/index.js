@@ -624,7 +624,7 @@ export default function Home() {
   // Mejor estrategia por símbolo entre TODAS las estrategias calculadas en Supabase
   // { SYMBOL: { stratName, stratId, score, intervalo, stratCount } }
   const [bestStratBySymbol,setBestStratBySymbol]=useState({})
-  // Orden del sidebar Watchlist: 'ranking'|'scoreHistorico'|'scoreCompleto'|'alfabetico'
+  // Orden del sidebar Watchlist: 'scoreHistorico'|'scoreCompleto'|'alfabetico'
   const [wlSortMode,setWlSortMode]=useState('scoreHistorico')
   // Dropdown para cambiar estrategia activa desde el header
   const [stratDropOpen,setStratDropOpen]=useState(false)
@@ -3445,7 +3445,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.324</title>
+        <title>Trading Simulator V9.325</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3523,7 +3523,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.324
+            <span className="dot"/>Trading Simulator V9.325
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4195,12 +4195,6 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         return symA.localeCompare(symB)
                       }
                       if(wlSortMode==='alfabetico') return symA.localeCompare(symB)
-                      // 'ranking': rank asc (scoreCompleto order) → fallback A→Z
-                      if(hasRankingActive){
-                        const ra=rdA?.rank, rb=rdB?.rank
-                        if(ra!=null&&rb!=null) return ra-rb
-                        if(ra!=null) return -1; if(rb!=null) return 1
-                      }
                       return symA.localeCompare(symB)
                     })
                     const totalWl=watchlist.length
@@ -4219,7 +4213,6 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         {rankingRunning&&<span style={{color:'#ffd166',fontSize:10}}>⟳ {rankingProgress.done}/{rankingProgress.total}</span>}
                         <select value={wlSortMode} onChange={e=>setWlSortMode(e.target.value)}
                           style={{background:'#0d1520',border:'1px solid #1a2d45',color:'#8aadcc',fontFamily:MONO,fontSize:9,padding:'1px 3px',borderRadius:3,cursor:'pointer',marginLeft:2}}>
-                          <option value="ranking"        title="Orden actual de la lista sin ningún criterio calculado aplicado">Orden de lista</option>
                           <option value="scoreHistorico" title="Ordena por rendimiento histórico de la estrategia activa (Win Rate, CAGR, CAGR robusto, MaxDD). No tiene en cuenta condiciones actuales del mercado. Recomendado para evaluar qué activos funcionan mejor con cada estrategia">Score histórico</option>
                           <option value="scoreCompleto"  title="Ordena combinando rendimiento histórico + condiciones actuales del mercado (momentum, fuerza relativa vs SP500, proximidad a máximo 52s). Recomendado para decidir en qué activos entrar hoy cuando hay varias señales simultáneas">Score completo (+ señales mercado)</option>
                           <option value="alfabetico"     title="Orden alfabético por ticker">Alfabético</option>

@@ -1087,7 +1087,7 @@ export default function WatchlistManager({
                 textAlign: 'center', color: P.thFg, fontSize: 10,
                 cursor: 'default',
               }}
-                title={metricsView === 'active' ? 'Métricas calculadas con la estrategia activa en el último Ranking ejecutado' : 'Métricas de la estrategia con mejor score histórico para cada activo, calculado con los pesos configurados en Ajustes → Ranking (bloque métricas históricas). Puede ser diferente a la estrategia activa.'}>
+                title={metricsView === 'active' ? 'Métricas de la estrategia actualmente activa para cada activo. Ejecuta Ranking para calcularlas o actualizarlas' : 'Métricas de la estrategia con mejor score histórico para cada activo entre todas las evaluadas. Puede ser diferente a la estrategia activa'}>
                 {metricsView === 'active' ? (rankingStratName ? `Métricas · ${rankingStratName}` : 'Métricas estrategia activa') : 'Métricas top estrategia'}
               </th>
               <th colSpan={2} style={{
@@ -1263,28 +1263,32 @@ export default function WatchlistManager({
 
                   {/* Score histórico */}
                   {(()=>{
-                    const sh = rankingData?.[sym]?.scoreHistorico
+                    const sh = metricsView === 'active'
+                      ? rankingData?.[sym]?.scoreHistorico
+                      : (best?.scoreHistorico ?? null)
                     return (
                       <td style={{
                         ...TD(), textAlign: 'right', fontWeight: 600,
                         borderLeft: `2px solid ${P.borderStrong}`, borderRight: `1px solid ${P.border}`,
                         color: scoreFg(sh),
                       }}>
-                        {sh != null ? fmt(sh, 1) : <span style={{ color: P.textMuted }}>—</span>}
+                        {sh != null ? fmt(sh, 1) + '%' : <span style={{ color: P.textMuted }}>—</span>}
                       </td>
                     )
                   })()}
 
                   {/* Score completo */}
                   {(()=>{
-                    const sc = rankingData?.[sym]?.scoreCompleto
+                    const sc = metricsView === 'active'
+                      ? rankingData?.[sym]?.scoreCompleto
+                      : (best?.scoreCompleto ?? null)
                     return (
                       <td style={{
                         ...TD(), textAlign: 'right', fontWeight: 600,
                         borderLeft: `1px solid ${P.border}`, borderRight: `2px solid ${P.borderStrong}`,
                         color: scoreFg(sc),
                       }}>
-                        {sc != null ? fmt(sc, 1) : <span style={{ color: P.textMuted }}>—</span>}
+                        {sc != null ? fmt(sc, 1) + '%' : <span style={{ color: P.textMuted }}>—</span>}
                       </td>
                     )
                   })()}
