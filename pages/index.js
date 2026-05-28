@@ -624,6 +624,8 @@ export default function Home() {
   // Mejor estrategia por símbolo entre TODAS las estrategias calculadas en Supabase
   // { SYMBOL: { stratName, stratId, score, intervalo, stratCount } }
   const [bestStratBySymbol,setBestStratBySymbol]=useState({})
+  // Orden del sidebar Watchlist: 'ranking'|'scoreHistorico'|'scoreCompleto'|'alfabetico'
+  const [wlSortMode,setWlSortMode]=useState('scoreHistorico')
   // Panel de gestión de Watchlist (reemplaza el área de gráfico)
   const [showWlManager,setShowWlManager]=useState(false)
   // Tooltip flotante del Watchlist — {x, y, symbol} | null
@@ -2204,10 +2206,15 @@ export default function Home() {
             }
           }
 
-          const score=Math.max(0,Math.min(100,
+          const scoreCompleto=Math.max(0,Math.min(100,
             scoreHistorico*wHistorico + scoreMercado*wMercado
           ))
-          results[sym.toUpperCase()]={score,metrics:{winRate,factorBen,cagr,cagrRobust,maxDD,trades:trades.length}}
+          results[sym.toUpperCase()]={
+            score:          scoreCompleto,   // backward compat
+            scoreCompleto,
+            scoreHistorico,
+            metrics:{winRate,factorBen,cagr,cagrRobust,maxDD,trades:trades.length}
+          }
         } catch(e){ console.error('[calcRanking]', sym, e) }
       }))
       setRankingProgress({done:Math.min(i+BATCH,syms.length),total:syms.length})
@@ -3436,7 +3443,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.322</title>
+        <title>Trading Simulator V9.323</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3514,7 +3521,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.322
+            <span className="dot"/>Trading Simulator V9.323
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -3537,6 +3544,14 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
 
           {/* Botones derecha */}
           <div style={{display:'flex',alignItems:'center',gap:8,marginLeft:'auto',padding:'0 12px'}}>
+            {stratName&&(
+              <span title="Estrategia activa. Cambia seleccionando otra en el panel de backtesting individual"
+                style={{fontFamily:MONO,fontSize:11,color:'#00e5a0',display:'flex',alignItems:'center',gap:4,
+                  padding:'3px 9px',borderRadius:4,background:'rgba(0,229,160,0.06)',border:'1px solid rgba(0,229,160,0.2)',
+                  maxWidth:200,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flexShrink:0}}>
+                <span style={{color:'#00e5a0',fontSize:8}}>●</span>{stratName}
+              </span>
+            )}
             {tlUseLocal()
               ? <span style={{fontFamily:MONO,fontSize:9,padding:'3px 8px',borderRadius:4,
                   background:'rgba(255,209,102,0.1)',border:'1px solid rgba(255,209,102,0.3)',color:'#ffd166'}}>
@@ -4128,17 +4143,31 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       })
                       return matchList&&matchSearch&&matchFav&&matchActive
                     })
-                    // Sort: con ranking → por rank asc; sin ranking → A→Z por símbolo
+                    // Sort: según wlSortMode
                     const hasRankingActive=Object.keys(rankingData).length>0
                     const all=filtered.slice().sort((a,b)=>{
-                      if(hasRankingActive){
-                        const ra=rankingData[(a.symbol||'').toUpperCase()]?.rank
-                        const rb=rankingData[(b.symbol||'').toUpperCase()]?.rank
-                        if(ra!=null&&rb!=null) return ra-rb
-                        if(ra!=null) return -1
-                        if(rb!=null) return 1
+                      const symA=(a.symbol||'').toUpperCase(), symB=(b.symbol||'').toUpperCase()
+                      const rdA=rankingData[symA], rdB=rankingData[symB]
+                      if(wlSortMode==='scoreHistorico'&&hasRankingActive){
+                        const sa=rdA?.scoreHistorico, sb=rdB?.scoreHistorico
+                        if(sa!=null&&sb!=null) return sb-sa
+                        if(sa!=null) return -1; if(sb!=null) return 1
+                        return symA.localeCompare(symB)
                       }
-                      return (a.symbol||'').localeCompare(b.symbol||'')
+                      if(wlSortMode==='scoreCompleto'&&hasRankingActive){
+                        const sa=rdA?.scoreCompleto, sb=rdB?.scoreCompleto
+                        if(sa!=null&&sb!=null) return sb-sa
+                        if(sa!=null) return -1; if(sb!=null) return 1
+                        return symA.localeCompare(symB)
+                      }
+                      if(wlSortMode==='alfabetico') return symA.localeCompare(symB)
+                      // 'ranking': rank asc (scoreCompleto order) → fallback A→Z
+                      if(hasRankingActive){
+                        const ra=rdA?.rank, rb=rdB?.rank
+                        if(ra!=null&&rb!=null) return ra-rb
+                        if(ra!=null) return -1; if(rb!=null) return 1
+                      }
+                      return symA.localeCompare(symB)
                     })
                     const totalWl=watchlist.length
                     // BUG 2 FIX: calcular openSymbols/allFiltered ANTES del badge
@@ -4155,6 +4184,13 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         <span style={{color:'#8abcd4'}}>activos</span>
                         {rankingRunning&&<span style={{color:'#ffd166',fontSize:10}}>⟳ {rankingProgress.done}/{rankingProgress.total}</span>}
                         {hasRanking&&!rankingRunning&&<span style={{color:'#00e5a0',fontSize:9}} title={rankingStratName?`Calculado con: ${rankingStratName}`:''}>🏆 {rankingStratName||'Ranking'}</span>}
+                        <select value={wlSortMode} onChange={e=>setWlSortMode(e.target.value)}
+                          style={{background:'#0d1520',border:'1px solid #1a2d45',color:'#8aadcc',fontFamily:MONO,fontSize:9,padding:'1px 3px',borderRadius:3,cursor:'pointer',marginLeft:2}}>
+                          <option value="ranking"        title="Orden definido manualmente. Los activos con ranking asignado aparecen primero, el resto por orden alfabético">Ranking de lista</option>
+                          <option value="scoreHistorico" title="Ordena por rendimiento histórico de la estrategia activa (Win Rate, CAGR, CAGR robusto, MaxDD). No tiene en cuenta condiciones actuales del mercado. Recomendado para evaluar qué activos funcionan mejor con cada estrategia">Score histórico</option>
+                          <option value="scoreCompleto"  title="Ordena combinando rendimiento histórico + condiciones actuales del mercado (momentum, fuerza relativa vs SP500, proximidad a máximo 52s). Recomendado para decidir en qué activos entrar hoy cuando hay varias señales simultáneas">Score completo</option>
+                          <option value="alfabetico"     title="Orden alfabético por ticker">Alfabético</option>
+                        </select>
 
                         <button onClick={()=>setShowWlManager(true)} title="Abrir panel de gestión de Watchlist"
                           style={{background:'rgba(0,212,255,0.08)',border:'1px solid rgba(0,212,255,0.25)',color:'#00d4ff',fontFamily:MONO,fontSize:9,padding:'2px 6px',borderRadius:3,cursor:'pointer',letterSpacing:'0.04em'}}>
@@ -4888,18 +4924,18 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       </div>
                       {/* Prioridad de entrada */}
                       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:mcPrioridad==='momentum'?4:0}}>
-                        <span title="Cuando hay más señales de entrada que slots libres el mismo día, este criterio decide qué activos entran primero y cuáles se descartan."
+                        <span title="Criterio para decidir qué activo entra primero cuando hay más señales simultáneas que slots disponibles. 'Score completo' combina rendimiento histórico + condiciones actuales del mercado (configurable en Ajustes → Ranking)"
                           style={{fontSize:9,color:'#4a6a88',cursor:'help',textDecoration:'underline dotted'}}>
                           Prioridad de entrada
                         </span>
                         <select value={mcPrioridad} onChange={e=>setMcPrioridad(e.target.value)}
                           style={{padding:'2px 4px',borderRadius:3,background:'#0d1929',border:'1px solid #1a2a3a',
                             color:'#e0e8f0',fontSize:10,fontFamily:MONO,cursor:'pointer',maxWidth:130}}>
-                          <option value="ranking"       title="Orden del watchlist: primero los activos con ranking asignado (por posición en lista), luego el resto por orden alfabético">Ranking de lista</option>
-                          <option value="alfabetico"    title="Orden A→Z por ticker. Cuando hay más señales que slots disponibles, entran primero los tickers que van antes en el alfabeto">Alfabético</option>
-                          <option value="momentum"      title="Prioriza el activo que más ha subido en los últimos N días antes de la señal. Favorece activos con mayor impulso reciente">Momentum (N días)</option>
-                          <option value="fuerza_relativa" title="Prioriza el activo que más ha superado al SP500 en los últimos 63 días (3 meses). Detecta activos con alfa positivo respecto al mercado general">Fuerza relativa vs SP500</option>
-                          <option value="max52"         title="Prioriza el activo cuyo precio actual está más cerca de su máximo de los últimos 252 días. Favorece breakouts y activos en territorio de price discovery">Proximidad máximo 52s</option>
+                          <option value="ranking"       title="Usa el score COMPLETO (históricas + mercado). Recomendado para operativa real">Score completo (Ranking)</option>
+                          <option value="alfabetico"    title="Orden A→Z por ticker. Sin criterio financiero">Alfabético</option>
+                          <option value="momentum"      title="Prioriza el activo con mayor retorno en los últimos N días">Momentum (N días)</option>
+                          <option value="fuerza_relativa" title="Prioriza el activo que más ha superado al SP500 en los últimos 63 días">Fuerza relativa vs SP500</option>
+                          <option value="max52"         title="Prioriza el activo más cercano a su máximo de 52 semanas (favorece breakouts)">Proximidad máximo 52s</option>
                         </select>
                       </div>
                       {mcPrioridad==='momentum'&&(
@@ -5365,6 +5401,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 onDeleteList={deleteWatchlistList}
                 hasRanking={Object.keys(rankingData).length>0}
                 onClearRanking={()=>{setRankingData({});setRankingStratId(null);setRankingStratName('')}}
+                rankingData={rankingData}
                 onRefreshBestStrat={refreshBestStratPerSymbol}
                 hasBestStrat={Object.keys(bestStratBySymbol).length>0}
                 onClearBestStrat={()=>setBestStratBySymbol({})}

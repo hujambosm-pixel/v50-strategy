@@ -53,6 +53,8 @@ const ddFg = v => {
   return '#4a4540'
 }
 const wrFg = v => v == null ? '#9a9590' : v >= 50 ? '#1a5c30' : '#8b1a1a'
+const scoreFg = v => v == null ? '#9a9590' : v > 70 ? '#1a5c30' : v > 40 ? '#7a5c10' : '#8b1a1a'
+const scoreBar = v => v == null ? null : v > 70 ? '#4a9b6a' : v > 40 ? '#b87a20' : '#c04040'
 
 // ── Palette ───────────────────────────────────────────────────
 const P = {
@@ -110,6 +112,8 @@ export default function WatchlistManager({
   onRefreshBestStrat,
   hasBestStrat,
   onClearBestStrat,
+  // Ranking data from parent (for score columns)
+  rankingData,
 }) {
   const [allRankings, setAllRankings]       = useState({})
   const [loadingRank, setLoadingRank]       = useState(true)
@@ -249,12 +253,19 @@ export default function WatchlistManager({
 
   // ── Sort ───────────────────────────────────────────────────
   const STR_METRICS = ['symbol', 'name', 'stratName', 'intervalo']
+  const SCORE_METRICS = ['scoreHistorico', 'scoreCompleto']
   const sorted = [...filtered].sort((a, b) => {
     const { metric, dir } = sortState
     const cmp    = (va, vb) => dir === 'asc' ? va - vb : vb - va
     const cmpStr = (sa, sb) => dir === 'asc' ? sa.localeCompare(sb) : sb.localeCompare(sa)
     if (metric === 'symbol') return cmpStr(a.symbol || '', b.symbol || '')
     if (metric === 'name')   return cmpStr(a.name   || '', b.name   || '')
+    if (SCORE_METRICS.includes(metric)) {
+      const symA = (a.symbol || '').toUpperCase(), symB = (b.symbol || '').toUpperCase()
+      const va = rankingData?.[symA]?.[metric] ?? (dir === 'asc' ? Infinity : -Infinity)
+      const vb = rankingData?.[symB]?.[metric] ?? (dir === 'asc' ? Infinity : -Infinity)
+      return cmp(va, vb)
+    }
     const ba = bestForSymbol(a.symbol || '')
     const bb = bestForSymbol(b.symbol || '')
     if (metric === 'stratName') return cmpStr(ba?.stratName || '', bb?.stratName || '')
@@ -348,14 +359,14 @@ export default function WatchlistManager({
     ...extra,
   })
   const TD = (extra = {}) => ({
-    padding: '7px 12px',
+    padding: '5px 10px',
     borderBottom: `1px solid ${P.border}`,
     borderRight: `1px solid ${P.border}`,
     fontFamily: MONO,
     fontSize: 13,
     color: P.text,
     verticalAlign: 'middle',
-    height: 36,
+    height: 30,
     ...extra,
   })
 
@@ -1021,14 +1032,26 @@ export default function WatchlistManager({
             {/* Sub-header agrupador de métricas */}
             <tr>
               <th colSpan={4} style={{ ...TH(), background: P.thBg, borderBottom: `1px solid ${P.border}` }} />
+              <th colSpan={2} style={{
+                ...TH(),
+                background: '#d4d0c8',
+                borderLeft:  `2px solid ${P.borderStrong}`,
+                borderRight: `1px solid ${P.border}`,
+                textAlign: 'center', color: P.thFg, fontSize: 10,
+                borderBottom: `1px solid ${P.border}`,
+              }}>
+                Scores
+              </th>
               <th colSpan={4} style={{
                 ...TH(),
                 background: '#d8d2c8',
                 borderLeft:  `2px solid ${P.borderStrong}`,
                 borderRight: `2px solid ${P.borderStrong}`,
                 textAlign: 'center', color: P.thFg, fontSize: 10,
-              }}>
-                Estrategia favorita · mejor CAGR
+                cursor: 'default',
+              }}
+                title="Métricas de la estrategia con mejor score histórico para cada activo, calculado con los pesos configurados en Ajustes → Ranking (bloque métricas históricas). Puede ser diferente a la estrategia activa. El sidebar muestra las métricas de la estrategia activa.">
+                Métricas top estrategia
               </th>
               <th colSpan={2} style={{
                 ...TH(),
@@ -1058,6 +1081,22 @@ export default function WatchlistManager({
               {/* Listas */}
               <th style={{ ...TH(), minWidth: 110, borderRight: `2px solid ${P.borderStrong}` }}>
                 Listas
+              </th>
+
+              {/* Score hist. */}
+              <th style={{ ...TH(), minWidth: 72, cursor: 'pointer', textAlign: 'right',
+                background: '#d4d0c8', borderLeft: `2px solid ${P.borderStrong}`, borderRight: `1px solid ${P.border}` }}
+                onClick={() => handleSort('scoreHistorico')}
+                title="Score 0-100 basado únicamente en métricas históricas de la estrategia activa (Win Rate, CAGR, CAGR robusto, MaxDD). Usado para ordenar el Watchlist y determinar la Top Estrategia de cada activo">
+                Score hist.{sortIcon('scoreHistorico')}
+              </th>
+
+              {/* Score completo */}
+              <th style={{ ...TH(), minWidth: 72, cursor: 'pointer', textAlign: 'right',
+                background: '#d4d0c8', borderLeft: `1px solid ${P.border}`, borderRight: `2px solid ${P.borderStrong}` }}
+                onClick={() => handleSort('scoreCompleto')}
+                title="Score 0-100 que combina métricas históricas + condiciones actuales del mercado (momentum N días, fuerza relativa vs SP500, proximidad a máximo 52 semanas). Usado como criterio de priorización en el modo Capital Concentrado del backtesting multiactivo cuando hay más señales que slots">
+                Score comp.{sortIcon('scoreCompleto')}
               </th>
 
               {/* Métricas de favorita */}
@@ -1094,21 +1133,6 @@ export default function WatchlistManager({
           </thead>
 
           <tbody>
-            {/* ── Nota explicativa sobre las métricas ── */}
-            <tr>
-              <td colSpan={10} style={{
-                padding: '4px 12px',
-                background: P.bgAlt,
-                borderBottom: `1px solid ${P.border}`,
-                fontFamily: MONO,
-                fontSize: 11,
-                color: '#6b6560',
-                fontStyle: 'italic',
-              }}>
-                Las métricas (CAGR, Win%, MaxDD, Ops) corresponden a la estrategia favorita de cada activo, que puede ser diferente a la estrategia activa. El sidebar muestra las métricas de la estrategia activa.
-              </td>
-            </tr>
-
             {sorted.map((w, idx) => {
               const sym        = (w.symbol || '').toUpperCase()
               const isSaving   = saving.has(w.id)
@@ -1125,7 +1149,7 @@ export default function WatchlistManager({
                   onMouseOut={e  => { e.currentTarget.style.background = bg }}>
 
                   {/* Checkbox */}
-                  <td style={{ ...TD(), textAlign: 'center', padding: '7px 6px', width: 36 }}>
+                  <td style={{ ...TD(), textAlign: 'center', padding: '5px 6px', width: 36 }}>
                     <input type="checkbox" checked={isSelected} onChange={() => toggleOne(w.id)}
                       style={{ cursor: 'pointer', width: 14, height: 14 }} />
                   </td>
@@ -1196,6 +1220,50 @@ export default function WatchlistManager({
                     </div>
                   </td>
 
+                  {/* Score histórico */}
+                  {(()=>{
+                    const rd = rankingData?.[sym]
+                    const sh = rd?.scoreHistorico
+                    return (
+                      <td style={{
+                        ...TD(), textAlign: 'right', fontWeight: 600,
+                        borderLeft: `2px solid ${P.borderStrong}`, borderRight: `1px solid ${P.border}`,
+                        color: scoreFg(sh),
+                      }}>
+                        {sh != null ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+                            <span>{sh.toFixed(1)}</span>
+                            <div style={{ width: 44, height: 3, background: P.border, borderRadius: 2 }}>
+                              <div style={{ width: `${sh}%`, height: '100%', background: scoreBar(sh), borderRadius: 2 }} />
+                            </div>
+                          </div>
+                        ) : <span style={{ color: P.textMuted }}>—</span>}
+                      </td>
+                    )
+                  })()}
+
+                  {/* Score completo */}
+                  {(()=>{
+                    const rd = rankingData?.[sym]
+                    const sc = rd?.scoreCompleto
+                    return (
+                      <td style={{
+                        ...TD(), textAlign: 'right', fontWeight: 600,
+                        borderLeft: `1px solid ${P.border}`, borderRight: `2px solid ${P.borderStrong}`,
+                        color: scoreFg(sc),
+                      }}>
+                        {sc != null ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+                            <span>{sc.toFixed(1)}</span>
+                            <div style={{ width: 44, height: 3, background: P.border, borderRadius: 2 }}>
+                              <div style={{ width: `${sc}%`, height: '100%', background: scoreBar(sc), borderRadius: 2 }} />
+                            </div>
+                          </div>
+                        ) : <span style={{ color: P.textMuted }}>—</span>}
+                      </td>
+                    )
+                  })()}
+
                   {/* CAGR */}
                   <td style={{
                     ...TD(), background: cagrBg(m?.cagr), color: cagrFg(m?.cagr),
@@ -1263,7 +1331,7 @@ export default function WatchlistManager({
 
             {sorted.length === 0 && (
               <tr>
-                <td colSpan={10}
+                <td colSpan={12}
                   style={{ ...TD(), textAlign: 'center', color: P.textMuted, padding: '32px' }}>
                   Sin activos para los filtros aplicados
                 </td>

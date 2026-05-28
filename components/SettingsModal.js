@@ -655,12 +655,12 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
               {/* ── Pesos globales por bloque ── */}
               {sep('Pesos globales por bloque')}
               {[
-                ['ranking.rankingWeightMercado',   'Peso bloque métricas de mercado',  settings.ranking?.rankingWeightMercado??20,  '#3b82f6'],
-                ['ranking.rankingWeightHistorico', 'Peso bloque métricas históricas',  settings.ranking?.rankingWeightHistorico??80,'#22d3ee'],
-              ].map(([key,label,val,color])=>(
+                ['ranking.rankingWeightMercado',   'Peso bloque métricas de mercado',  settings.ranking?.rankingWeightMercado??20,  '#3b82f6', 'Porcentaje de peso del bloque de métricas de mercado en el score COMPLETO. Solo afecta a la priorización de slots en Capital Concentrado. Si lo pones a 0%, la priorización usará solo métricas históricas'],
+                ['ranking.rankingWeightHistorico', 'Peso bloque métricas históricas',  settings.ranking?.rankingWeightHistorico??80,'#22d3ee', 'Porcentaje de peso del bloque de métricas históricas en el score COMPLETO y en el score HISTÓRICO puro'],
+              ].map(([key,label,val,color,tip])=>(
                 <div key={key} style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>
                   <span style={{width:9,height:9,borderRadius:'50%',background:color,flexShrink:0,display:'inline-block'}}/>
-                  <span style={{fontFamily:MONO,fontSize:12,color:'#cce0f5',flex:1}}>{label}</span>
+                  <span title={tip} style={{fontFamily:MONO,fontSize:12,color:'#cce0f5',flex:1,cursor:'help',textDecoration:'underline dotted',textDecorationColor:'rgba(200,224,245,0.3)'}}>{label}</span>
                   <span style={{fontFamily:MONO,fontSize:12,fontWeight:700,color,minWidth:36,textAlign:'right'}}>{val}%</span>
                   <input type="range" min={0} max={100} step={5} value={val}
                     onChange={e=>upd(key,Number(e.target.value))}
@@ -673,7 +673,8 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
 
                 {/* Columna izquierda — Métricas de mercado */}
                 <div style={{background:'rgba(59,130,246,0.06)',border:'0.5px solid rgba(59,130,246,0.22)',borderRadius:8,padding:14}}>
-                  <div style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:'#3b82f6',marginBottom:12,letterSpacing:'0.04em'}}>Métricas de mercado actuales</div>
+                  <div title="Estas métricas usan datos de precios actuales. Se usan SOLO para la priorización de slots en el modo Capital Concentrado del backtesting multiactivo. NO se usan para el ranking del Watchlist ni para determinar la Top Estrategia de cada activo"
+                    style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:'#3b82f6',marginBottom:12,letterSpacing:'0.04em',cursor:'help',textDecoration:'underline dotted',textDecorationColor:'rgba(59,130,246,0.4)'}}>Métricas de mercado actuales ℹ</div>
 
                   {/* Momentum */}
                   <div style={{marginBottom:14}}>
@@ -736,7 +737,8 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
 
                 {/* Columna derecha — Métricas históricas */}
                 <div style={{background:'rgba(34,211,238,0.05)',border:'0.5px solid rgba(34,211,238,0.18)',borderRadius:8,padding:14}}>
-                  <div style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:'#22d3ee',marginBottom:12,letterSpacing:'0.04em'}}>Métricas históricas de estrategia</div>
+                  <div title="Estas métricas evalúan el rendimiento pasado de la estrategia con cada activo. Se usan para el ranking del Watchlist, para determinar la Top Estrategia de cada activo, y también (combinadas con las de mercado) para la priorización de slots en Capital Concentrado"
+                    style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:'#22d3ee',marginBottom:12,letterSpacing:'0.04em',cursor:'help',textDecoration:'underline dotted',textDecorationColor:'rgba(34,211,238,0.4)'}}>Métricas históricas de estrategia ℹ</div>
                   {[
                     ['ranking.rankingWinRatePct',     'Win rate',                    settings.ranking?.rankingWinRatePct??33,     '% de trades ganadores. Mide la consistencia'],
                     ['ranking.rankingCAGRPct',        'CAGR',                         settings.ranking?.rankingCAGRPct??33,        'Tasa de crecimiento anual anualizada'],
