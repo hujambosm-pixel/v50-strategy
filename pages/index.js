@@ -626,6 +626,8 @@ export default function Home() {
   const [bestStratBySymbol,setBestStratBySymbol]=useState({})
   // Orden del sidebar Watchlist: 'ranking'|'scoreHistorico'|'scoreCompleto'|'alfabetico'
   const [wlSortMode,setWlSortMode]=useState('scoreHistorico')
+  // Dropdown para cambiar estrategia activa desde el header
+  const [stratDropOpen,setStratDropOpen]=useState(false)
   // Panel de gestión de Watchlist (reemplaza el área de gráfico)
   const [showWlManager,setShowWlManager]=useState(false)
   // Tooltip flotante del Watchlist — {x, y, symbol} | null
@@ -3443,7 +3445,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.323</title>
+        <title>Trading Simulator V9.324</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3521,7 +3523,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.323
+            <span className="dot"/>Trading Simulator V9.324
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -3545,12 +3547,44 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
           {/* Botones derecha */}
           <div style={{display:'flex',alignItems:'center',gap:8,marginLeft:'auto',padding:'0 12px'}}>
             {stratName&&(
-              <span title="Estrategia activa. Cambia seleccionando otra en el panel de backtesting individual"
-                style={{fontFamily:MONO,fontSize:11,color:'#00e5a0',display:'flex',alignItems:'center',gap:4,
-                  padding:'3px 9px',borderRadius:4,background:'rgba(0,229,160,0.06)',border:'1px solid rgba(0,229,160,0.2)',
-                  maxWidth:200,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flexShrink:0}}>
-                <span style={{color:'#00e5a0',fontSize:8}}>●</span>{stratName}
-              </span>
+              <div style={{position:'relative',flexShrink:0}}>
+                {stratDropOpen&&(
+                  <div style={{position:'fixed',inset:0,zIndex:899}} onClick={()=>setStratDropOpen(false)}/>
+                )}
+                <button onClick={()=>setStratDropOpen(v=>!v)}
+                  title="Estrategia activa. Haz clic para cambiar de estrategia"
+                  style={{fontFamily:MONO,fontSize:11,color:'#00e5a0',display:'flex',alignItems:'center',gap:4,
+                    padding:'3px 9px',borderRadius:4,
+                    background:stratDropOpen?'rgba(0,229,160,0.12)':'rgba(0,229,160,0.06)',
+                    border:'1px solid rgba(0,229,160,0.2)',
+                    maxWidth:200,cursor:'pointer',overflow:'hidden',whiteSpace:'nowrap'}}>
+                  <span style={{color:'#00e5a0',fontSize:8}}>●</span>
+                  <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>{stratName}</span>
+                  <span style={{fontSize:8,marginLeft:2,opacity:0.7,flexShrink:0}}>▾</span>
+                </button>
+                {stratDropOpen&&(
+                  <div style={{position:'absolute',top:'100%',right:0,zIndex:900,marginTop:4,
+                    background:'#0d1520',border:'1px solid #1a2d45',borderRadius:6,
+                    boxShadow:'0 4px 16px rgba(0,0,0,0.4)',
+                    minWidth:200,maxWidth:280,maxHeight:300,overflowY:'auto',padding:'4px 0'}}>
+                    {(strategies||[]).map(s=>{
+                      const isAct=s.id===currentStratId
+                      return(
+                        <div key={s.id}
+                          onClick={()=>{loadStrategy(s);setStratDropOpen(false)}}
+                          style={{padding:'6px 12px',cursor:'pointer',display:'flex',alignItems:'center',gap:8,
+                            background:isAct?'rgba(0,229,160,0.08)':'transparent'}}
+                          onMouseOver={e=>{if(!isAct)e.currentTarget.style.background='rgba(255,255,255,0.04)'}}
+                          onMouseOut={e=>{e.currentTarget.style.background=isAct?'rgba(0,229,160,0.08)':'transparent'}}>
+                          <span style={{fontSize:10,color:isAct?'#00e5a0':'transparent',flexShrink:0}}>✓</span>
+                          <span style={{fontFamily:MONO,fontSize:11,color:isAct?'#00e5a0':'#c8def2',
+                            overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>{s.name||'—'}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
             )}
             {tlUseLocal()
               ? <span style={{fontFamily:MONO,fontSize:9,padding:'3px 8px',borderRadius:4,
@@ -4183,12 +4217,11 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         <span style={{color:'#a8c8e8',fontWeight:600}}>{allFiltered.length}</span>
                         <span style={{color:'#8abcd4'}}>activos</span>
                         {rankingRunning&&<span style={{color:'#ffd166',fontSize:10}}>⟳ {rankingProgress.done}/{rankingProgress.total}</span>}
-                        {hasRanking&&!rankingRunning&&<span style={{color:'#00e5a0',fontSize:9}} title={rankingStratName?`Calculado con: ${rankingStratName}`:''}>🏆 {rankingStratName||'Ranking'}</span>}
                         <select value={wlSortMode} onChange={e=>setWlSortMode(e.target.value)}
                           style={{background:'#0d1520',border:'1px solid #1a2d45',color:'#8aadcc',fontFamily:MONO,fontSize:9,padding:'1px 3px',borderRadius:3,cursor:'pointer',marginLeft:2}}>
-                          <option value="ranking"        title="Orden definido manualmente. Los activos con ranking asignado aparecen primero, el resto por orden alfabético">Ranking de lista</option>
+                          <option value="ranking"        title="Orden actual de la lista sin ningún criterio calculado aplicado">Orden de lista</option>
                           <option value="scoreHistorico" title="Ordena por rendimiento histórico de la estrategia activa (Win Rate, CAGR, CAGR robusto, MaxDD). No tiene en cuenta condiciones actuales del mercado. Recomendado para evaluar qué activos funcionan mejor con cada estrategia">Score histórico</option>
-                          <option value="scoreCompleto"  title="Ordena combinando rendimiento histórico + condiciones actuales del mercado (momentum, fuerza relativa vs SP500, proximidad a máximo 52s). Recomendado para decidir en qué activos entrar hoy cuando hay varias señales simultáneas">Score completo</option>
+                          <option value="scoreCompleto"  title="Ordena combinando rendimiento histórico + condiciones actuales del mercado (momentum, fuerza relativa vs SP500, proximidad a máximo 52s). Recomendado para decidir en qué activos entrar hoy cuando hay varias señales simultáneas">Score completo (+ señales mercado)</option>
                           <option value="alfabetico"     title="Orden alfabético por ticker">Alfabético</option>
                         </select>
 
@@ -4217,7 +4250,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                           const r=rd.rank
                           const col=r===1?'#ffd700':r===2?'#c0c0c0':r===3?'#cd7f32':r<=10?'#00d4ff':'#3d5a7a'
                           return(
-                            <span title={`Rank #${r} · Score: ${rd.score?.toFixed(0)??'—'} · WR:${rd.metrics?.winRate?.toFixed(0)??'—'}% · FB:${rd.metrics?.factorBen?.toFixed(1)??'—'} · CAGR:${rd.metrics?.cagr?.toFixed(1)??'—'}%`}
+                            <span title={`Rank #${r} · Score: ${rd.score!=null?fmt(rd.score,0):'—'} · WR:${rd.metrics?.winRate!=null?fmt(rd.metrics.winRate,0):'—'}% · FB:${rd.metrics?.factorBen!=null?fmt(rd.metrics.factorBen,1):'—'} · CAGR:${rd.metrics?.cagr!=null?fmt(rd.metrics.cagr,1):'—'}%`}
                               style={{fontFamily:MONO,fontSize:9,fontWeight:700,color:col,flexShrink:0,minWidth:20,textAlign:'center',lineHeight:1}}>
                               {r<=3?['🥇','🥈','🥉'][r-1]:`#${r}`}
                             </span>
@@ -4251,9 +4284,9 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                 )
                                 if(rdSym?.metrics?.cagr!=null) return(
                                   <div style={{fontFamily:MONO,fontSize:10,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>
-                                    <span style={{color:rdSym.metrics.cagr>=0?'#00e5a0':'#ff4d6d'}}>CAGR: {rdSym.metrics.cagr.toFixed(1)}%</span>
+                                    <span style={{color:rdSym.metrics.cagr>=0?'#00e5a0':'#ff4d6d'}}>CAGR: {fmt(rdSym.metrics.cagr,1)}%</span>
                                     <span style={{color:'#3d5a7a'}}> | </span>
-                                    <span style={{color:'#ff4d6d'}}>DD: -{Math.abs(rdSym.metrics.maxDD??0).toFixed(1)}%</span>
+                                    <span style={{color:'#ff4d6d'}}>DD: -{fmt(Math.abs(rdSym.metrics.maxDD??0),1)}%</span>
                                   </div>
                                 )
                                 return <div style={{fontFamily:MONO,fontSize:10,color:'#8aadcc',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{w.name}</div>
@@ -5402,6 +5435,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 hasRanking={Object.keys(rankingData).length>0}
                 onClearRanking={()=>{setRankingData({});setRankingStratId(null);setRankingStratName('')}}
                 rankingData={rankingData}
+                rankingStratId={rankingStratId}
                 onRefreshBestStrat={refreshBestStratPerSymbol}
                 hasBestStrat={Object.keys(bestStratBySymbol).length>0}
                 onClearBestStrat={()=>setBestStratBySymbol({})}
@@ -9281,15 +9315,15 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
           {m?.cagr!=null&&(
             <div style={{borderTop:'1px solid #1a2d40',paddingTop:8,marginBottom:tBest?.stratName?8:0}}>
               {[
-                ['CAGR',          m.cagr,       v=>`${v.toFixed(1)}%`,      v=>v>=0?'#00e5a0':'#ff4d6d'],
-                ['Max DD',        m.maxDD,       v=>`-${Math.abs(v).toFixed(1)}%`, ()=>'#ff4d6d'],
-                ['Win Rate',      m.winRate,     v=>`${v.toFixed(0)}%`,      v=>v>=50?'#00e5a0':'#ffd166'],
-                ['Factor Ben.',   m.factorBen,   v=>v?.toFixed(2),           v=>v!=null&&v>=1?'#00e5a0':'#ff4d6d'],
-                ['Ops',           m.trades,      v=>String(v),               ()=>'#8aadcc'],
-              ].map(([label,val,fmt,colorFn])=>val!=null?(
+                ['CAGR',          m.cagr,       v=>`${fmt(v,1)}%`,             v=>v>=0?'#00e5a0':'#ff4d6d'],
+                ['Max DD',        m.maxDD,       v=>`-${fmt(Math.abs(v),1)}%`,  ()=>'#ff4d6d'],
+                ['Win Rate',      m.winRate,     v=>`${fmt(v,0)}%`,             v=>v>=50?'#00e5a0':'#ffd166'],
+                ['Factor Ben.',   m.factorBen,   v=>v!=null?fmt(v,2):'—',       v=>v!=null&&v>=1?'#00e5a0':'#ff4d6d'],
+                ['Ops',           m.trades,      v=>String(v),                  ()=>'#8aadcc'],
+              ].map(([label,val,fmtVal,colorFn])=>val!=null?(
                 <div key={label} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12,marginBottom:3}}>
                   <span style={{color:'#4a7a95',fontSize:11}}>{label}</span>
-                  <span style={{color:colorFn(val),fontWeight:600,fontSize:11}}>{fmt(val)}</span>
+                  <span style={{color:colorFn(val),fontWeight:600,fontSize:11}}>{fmtVal(val)}</span>
                 </div>
               ):null)}
             </div>

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { MONO } from '../lib/utils'
+import { MONO, fmt } from '../lib/utils'
 import { getSupaUrl, getSupaH } from '../lib/supabase'
 
 // ── Supabase helpers ─────────────────────────────────────────
@@ -114,6 +114,7 @@ export default function WatchlistManager({
   onClearBestStrat,
   // Ranking data from parent (for score columns)
   rankingData,
+  rankingStratId,
 }) {
   const [allRankings, setAllRankings]       = useState({})
   const [loadingRank, setLoadingRank]       = useState(true)
@@ -132,6 +133,7 @@ export default function WatchlistManager({
   const [newListName, setNewListName]     = useState('')
   const [renameValue, setRenameValue]     = useState('')
   const [listOpLoading, setListOpLoading] = useState(false)
+  const [metricsView, setMetricsView]   = useState('top') // 'active' | 'top'
   const addDropRef    = useRef(null)
   const listFilterRef = useRef(null)
 
@@ -359,14 +361,13 @@ export default function WatchlistManager({
     ...extra,
   })
   const TD = (extra = {}) => ({
-    padding: '5px 10px',
+    padding: '3px 8px',
     borderBottom: `1px solid ${P.border}`,
     borderRight: `1px solid ${P.border}`,
     fontFamily: MONO,
     fontSize: 13,
     color: P.text,
     verticalAlign: 'middle',
-    height: 30,
     ...extra,
   })
 
@@ -470,6 +471,16 @@ export default function WatchlistManager({
     } catch (e) { console.error(e) }
     finally { setListOpLoading(false) }
   }
+
+  // ── Derived: intervalo of the ranking strategy (for active view) ──
+  const rankingIntervalo = (() => {
+    if (!rankingStratId) return 'diario'
+    const strat = strategies.find(s => s.id === rankingStratId)
+    try {
+      const p = typeof strat?.params === 'string' ? JSON.parse(strat?.params || '{}') : (strat?.params || {})
+      return p.intervalo || 'diario'
+    } catch (_) { return 'diario' }
+  })()
 
   // ── Derived: watchlist symbol set (for candidates WL badge)
   const wlSymSet = new Set(watchlist.map(w => (w.symbol || '').toUpperCase()))
@@ -976,16 +987,16 @@ export default function WatchlistManager({
                             ) : (
                               <>
                                 <td style={{ padding: '4px 5px', color: r.cagr >= 0 ? '#00e5a0' : '#ff4d6d', fontWeight: 500 }}>
-                                  {isFinite(r.cagr) ? (r.cagr >= 0 ? '+' : '') + r.cagr.toFixed(1) + '%' : '—'}
+                                  {isFinite(r.cagr) ? (r.cagr >= 0 ? '+' : '') + fmt(r.cagr, 1) + '%' : '—'}
                                 </td>
                                 <td style={{ padding: '4px 5px', color: '#c8def2' }}>
-                                  {r.ops > 0 ? r.winRate.toFixed(0) + '%' : '—'}
+                                  {r.ops > 0 ? fmt(r.winRate, 0) + '%' : '—'}
                                 </td>
                                 <td style={{ padding: '4px 5px', color: r.pf >= 1 ? '#00e5a0' : '#ff7eb3' }}>
-                                  {r.ops > 0 ? (isFinite(r.pf) ? r.pf.toFixed(2) : '∞') : '—'}
+                                  {r.ops > 0 ? (isFinite(r.pf) ? fmt(r.pf, 2) : '∞') : '—'}
                                 </td>
                                 <td style={{ padding: '4px 5px', color: '#ff7eb3' }}>
-                                  {r.ops > 0 ? '-' + r.maxDD.toFixed(1) + '%' : '—'}
+                                  {r.ops > 0 ? '-' + fmt(r.maxDD, 1) + '%' : '—'}
                                 </td>
                                 <td style={{ padding: '4px 5px', color: '#a8ccdf' }}>{r.ops || '—'}</td>
                               </>
@@ -1025,6 +1036,32 @@ export default function WatchlistManager({
         </div>
       )}
 
+      {/* ── Toggle: Estrategia activa / Top estrategia ── */}
+      <div style={{ flexShrink: 0, background: P.bgPanel, borderBottom: `1px solid ${P.border}`, padding: '5px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ display: 'inline-flex', borderRadius: 4, overflow: 'hidden', border: `1px solid ${P.borderStrong}` }}>
+          {[
+            ['active', 'Estrategia activa', 'Muestra los scores y métricas calculados con la estrategia actualmente activa (resultado del último Ranking ejecutado)'],
+            ['top',    'Top estrategia',    'Muestra la estrategia con mejor score histórico para cada activo (puede ser diferente de la activa)'],
+          ].map(([mode, label, tip]) => (
+            <button key={mode} onClick={() => setMetricsView(mode)} title={tip}
+              style={{
+                background: metricsView === mode ? P.accentBg : P.bg,
+                color: metricsView === mode ? P.accentFg : P.textSec,
+                border: 'none', fontFamily: MONO, fontSize: 10,
+                padding: '4px 12px', cursor: 'pointer', whiteSpace: 'nowrap',
+              }}>
+              {label}
+            </button>
+          ))}
+        </div>
+        {metricsView === 'active' && rankingStratName && (
+          <span style={{ fontSize: 10, color: '#2d6a4f', whiteSpace: 'nowrap' }}>✓ {rankingStratName}</span>
+        )}
+        {metricsView === 'active' && !rankingStratName && (
+          <span style={{ fontSize: 10, color: P.textMuted, fontStyle: 'italic' }}>Sin ranking calculado — ejecuta 🏆 Ranking primero</span>
+        )}
+      </div>
+
       {/* ── Tabla ── */}
       <div style={{ flex: 1, overflow: 'auto', background: P.bg }}>
         <table style={{ borderCollapse: 'collapse', minWidth: '100%', tableLayout: 'auto' }}>
@@ -1050,8 +1087,8 @@ export default function WatchlistManager({
                 textAlign: 'center', color: P.thFg, fontSize: 10,
                 cursor: 'default',
               }}
-                title="Métricas de la estrategia con mejor score histórico para cada activo, calculado con los pesos configurados en Ajustes → Ranking (bloque métricas históricas). Puede ser diferente a la estrategia activa. El sidebar muestra las métricas de la estrategia activa.">
-                Métricas top estrategia
+                title={metricsView === 'active' ? 'Métricas calculadas con la estrategia activa en el último Ranking ejecutado' : 'Métricas de la estrategia con mejor score histórico para cada activo, calculado con los pesos configurados en Ajustes → Ranking (bloque métricas históricas). Puede ser diferente a la estrategia activa.'}>
+                {metricsView === 'active' ? (rankingStratName ? `Métricas · ${rankingStratName}` : 'Métricas estrategia activa') : 'Métricas top estrategia'}
               </th>
               <th colSpan={2} style={{
                 ...TH(),
@@ -1141,6 +1178,10 @@ export default function WatchlistManager({
               const best       = bestForSymbol(sym)
               const m          = best?.metrics
               const bg         = rowBg(w, isSelected, isOdd)
+              const activeM    = rankingData?.[sym]?.metrics
+              const displayM   = metricsView === 'active' ? activeM : m
+              const displayStratName = metricsView === 'active' ? (rankingStratName || null) : (best?.stratName || null)
+              const displayIntervalo = metricsView === 'active' ? rankingIntervalo : (best?.intervalo || 'diario')
 
               return (
                 <tr key={w.id || w.symbol}
@@ -1222,73 +1263,57 @@ export default function WatchlistManager({
 
                   {/* Score histórico */}
                   {(()=>{
-                    const rd = rankingData?.[sym]
-                    const sh = rd?.scoreHistorico
+                    const sh = rankingData?.[sym]?.scoreHistorico
                     return (
                       <td style={{
                         ...TD(), textAlign: 'right', fontWeight: 600,
                         borderLeft: `2px solid ${P.borderStrong}`, borderRight: `1px solid ${P.border}`,
                         color: scoreFg(sh),
                       }}>
-                        {sh != null ? (
-                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
-                            <span>{sh.toFixed(1)}</span>
-                            <div style={{ width: 44, height: 3, background: P.border, borderRadius: 2 }}>
-                              <div style={{ width: `${sh}%`, height: '100%', background: scoreBar(sh), borderRadius: 2 }} />
-                            </div>
-                          </div>
-                        ) : <span style={{ color: P.textMuted }}>—</span>}
+                        {sh != null ? fmt(sh, 1) : <span style={{ color: P.textMuted }}>—</span>}
                       </td>
                     )
                   })()}
 
                   {/* Score completo */}
                   {(()=>{
-                    const rd = rankingData?.[sym]
-                    const sc = rd?.scoreCompleto
+                    const sc = rankingData?.[sym]?.scoreCompleto
                     return (
                       <td style={{
                         ...TD(), textAlign: 'right', fontWeight: 600,
                         borderLeft: `1px solid ${P.border}`, borderRight: `2px solid ${P.borderStrong}`,
                         color: scoreFg(sc),
                       }}>
-                        {sc != null ? (
-                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
-                            <span>{sc.toFixed(1)}</span>
-                            <div style={{ width: 44, height: 3, background: P.border, borderRadius: 2 }}>
-                              <div style={{ width: `${sc}%`, height: '100%', background: scoreBar(sc), borderRadius: 2 }} />
-                            </div>
-                          </div>
-                        ) : <span style={{ color: P.textMuted }}>—</span>}
+                        {sc != null ? fmt(sc, 1) : <span style={{ color: P.textMuted }}>—</span>}
                       </td>
                     )
                   })()}
 
                   {/* CAGR */}
                   <td style={{
-                    ...TD(), background: cagrBg(m?.cagr), color: cagrFg(m?.cagr),
+                    ...TD(), background: cagrBg(displayM?.cagr), color: cagrFg(displayM?.cagr),
                     textAlign: 'right', fontWeight: 600,
                     borderLeft: `2px solid ${P.borderStrong}`, borderRight: `1px solid ${P.border}`,
                   }}>
-                    {m?.cagr != null ? `${m.cagr.toFixed(1)}%`
+                    {displayM?.cagr != null ? `${fmt(displayM.cagr, 1)}%`
                       : <span style={{ color: P.textMuted }}>—</span>}
                   </td>
 
                   {/* WinRate */}
                   <td style={{
-                    ...TD(), color: wrFg(m?.winRate),
+                    ...TD(), color: wrFg(displayM?.winRate),
                     textAlign: 'right', fontWeight: 600, borderRight: `1px solid ${P.border}`,
                   }}>
-                    {m?.winRate != null ? `${m.winRate.toFixed(0)}%`
+                    {displayM?.winRate != null ? `${fmt(displayM.winRate, 0)}%`
                       : <span style={{ color: P.textMuted }}>—</span>}
                   </td>
 
                   {/* MaxDD */}
                   <td style={{
-                    ...TD(), background: ddBg(m?.maxDD), color: ddFg(m?.maxDD),
+                    ...TD(), background: ddBg(displayM?.maxDD), color: ddFg(displayM?.maxDD),
                     textAlign: 'right', fontWeight: 600, borderRight: `1px solid ${P.border}`,
                   }}>
-                    {m?.maxDD != null ? `-${Math.abs(m.maxDD).toFixed(1)}%`
+                    {displayM?.maxDD != null ? `-${fmt(Math.abs(displayM.maxDD), 1)}%`
                       : <span style={{ color: P.textMuted }}>—</span>}
                   </td>
 
@@ -1297,7 +1322,7 @@ export default function WatchlistManager({
                     ...TD(), color: P.textSec, textAlign: 'right',
                     borderRight: `2px solid ${P.borderStrong}`,
                   }}>
-                    {m?.trades != null ? Math.round(m.trades)
+                    {displayM?.trades != null ? Math.round(displayM.trades)
                       : <span style={{ color: P.textMuted }}>—</span>}
                   </td>
 
@@ -1305,23 +1330,23 @@ export default function WatchlistManager({
                   <td style={{
                     ...TD(), borderLeft: `2px solid ${P.borderStrong}`,
                     maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                  }} title={best?.stratName}>
-                    {best?.stratName
-                      ? <span style={{ color: P.text, fontWeight: 600 }}>{best.stratName}</span>
+                  }} title={displayStratName || undefined}>
+                    {displayStratName
+                      ? <span style={{ color: P.text, fontWeight: 600 }}>{displayStratName}</span>
                       : <span style={{ color: P.textMuted }}>—</span>}
                   </td>
 
                   {/* Temporalidad — badge coloreado */}
                   <td style={{ ...TD(), textAlign: 'center' }}>
-                    {best ? (
+                    {(displayStratName || displayM) ? (
                       <span style={{
-                        ...(best.intervalo === 'semanal' ? P.badgeSemanal : P.badgeDiario),
+                        ...(displayIntervalo === 'semanal' ? P.badgeSemanal : P.badgeDiario),
                         fontFamily: MONO, fontSize: 10,
                         padding: '2px 7px', borderRadius: 4,
                         display: 'inline-block',
-                        border: `1px solid ${best.intervalo === 'semanal' ? P.badgeSemanal.border : P.badgeDiario.border}`,
+                        border: `1px solid ${displayIntervalo === 'semanal' ? P.badgeSemanal.border : P.badgeDiario.border}`,
                       }}>
-                        {best.intervalo === 'semanal' ? 'Semanal' : 'Diario'}
+                        {displayIntervalo === 'semanal' ? 'Semanal' : 'Diario'}
                       </span>
                     ) : <span style={{ color: P.textMuted }}>—</span>}
                   </td>
