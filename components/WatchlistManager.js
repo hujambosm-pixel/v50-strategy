@@ -17,7 +17,7 @@ async function _setItemLists(itemId, listIds) {
 }
 
 async function loadAllRankingsWithMetrics() {
-  const url = `${getSupaUrl()}/rest/v1/ranking_results?select=symbol,strategy_id,score,win_rate,cagr_simple,max_drawdown,total_trades,rank_position&limit=10000`
+  const url = `${getSupaUrl()}/rest/v1/ranking_results?select=symbol,strategy_id,score,score_historico,score_completo,win_rate,cagr_simple,max_drawdown,total_trades,rank_position&limit=10000`
   const res = await fetch(url, { headers: getSupaH() })
   if (!res.ok) return []
   return (await res.json()) || []
@@ -147,11 +147,13 @@ export default function WatchlistManager({
         const sym = (r.symbol || '').toUpperCase()
         if (!map[sid]) map[sid] = {}
         map[sid][sym] = {
-          cagr:    r.cagr_simple,
-          winRate: r.win_rate,
-          maxDD:   r.max_drawdown,
-          trades:  r.total_trades,
-          score:   r.score,
+          cagr:           r.cagr_simple,
+          winRate:        r.win_rate,
+          maxDD:          r.max_drawdown,
+          trades:         r.total_trades,
+          score:          r.score,
+          scoreHistorico: r.score_historico ?? null,
+          scoreCompleto:  r.score_completo  ?? r.score ?? null,
         }
       })
       setAllRankings(map)
@@ -183,11 +185,13 @@ export default function WatchlistManager({
     if (bsb?.stratId) {
       const metrics = allRankings[bsb.stratId]?.[symUp] ?? null
       return {
-        sid:        bsb.stratId,
+        sid:            bsb.stratId,
         metrics,
-        stratName:  bsb.stratName || '—',
-        intervalo:  bsb.intervalo || 'diario',
-        stratCount: bsb.stratCount ?? Object.values(allRankings).filter(d => d[symUp]).length,
+        stratName:      bsb.stratName || '—',
+        intervalo:      bsb.intervalo || 'diario',
+        stratCount:     bsb.stratCount ?? Object.values(allRankings).filter(d => d[symUp]).length,
+        scoreHistorico: bsb.scoreHistorico ?? metrics?.scoreHistorico ?? null,
+        scoreCompleto:  bsb.scoreCompleto  ?? metrics?.scoreCompleto  ?? null,
       }
     }
 
@@ -207,11 +211,13 @@ export default function WatchlistManager({
       intervalo = p.intervalo || 'diario'
     } catch (_) {}
     return {
-      sid:        best.sid,
-      metrics:    best.metrics,
-      stratName:  strat?.name || '—',
+      sid:            best.sid,
+      metrics:        best.metrics,
+      stratName:      strat?.name || '—',
       intervalo,
-      stratCount: Object.values(allRankings).filter(d => d[symUp]).length,
+      stratCount:     Object.values(allRankings).filter(d => d[symUp]).length,
+      scoreHistorico: best.metrics?.scoreHistorico ?? null,
+      scoreCompleto:  best.metrics?.scoreCompleto  ?? best.metrics?.score ?? null,
     }
   }, [allRankings, strategies, bestStratBySymbol])
 
@@ -822,6 +828,24 @@ export default function WatchlistManager({
           )}
         </div>
 
+        {/* Toggle Estrategia activa / Top estrategia */}
+        <div style={{ display: 'inline-flex', borderRadius: 4, overflow: 'hidden', border: `1px solid ${P.borderStrong}`, flexShrink: 0 }}>
+          {[
+            ['active', 'Estrategia activa', 'Muestra los scores y métricas calculados con la estrategia actualmente activa (resultado del último Ranking ejecutado)'],
+            ['top',    'Top estrategia',    'Muestra la estrategia con mejor score histórico para cada activo (puede ser diferente de la activa)'],
+          ].map(([mode, label, tip]) => (
+            <button key={mode} onClick={() => setMetricsView(mode)} title={tip}
+              style={{
+                background: metricsView === mode ? P.accentBg : P.bg,
+                color: metricsView === mode ? P.accentFg : P.textSec,
+                border: 'none', fontFamily: MONO, fontSize: 10,
+                padding: '4px 10px', cursor: 'pointer', whiteSpace: 'nowrap',
+              }}>
+              {label}
+            </button>
+          ))}
+        </div>
+
         {/* Contador */}
         <span style={{ fontSize: 12, color: P.textSec }}>
           {sorted.length} activo{sorted.length !== 1 ? 's' : ''}
@@ -1035,32 +1059,6 @@ export default function WatchlistManager({
           )}
         </div>
       )}
-
-      {/* ── Toggle: Estrategia activa / Top estrategia ── */}
-      <div style={{ flexShrink: 0, background: P.bgPanel, borderBottom: `1px solid ${P.border}`, padding: '5px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div style={{ display: 'inline-flex', borderRadius: 4, overflow: 'hidden', border: `1px solid ${P.borderStrong}` }}>
-          {[
-            ['active', 'Estrategia activa', 'Muestra los scores y métricas calculados con la estrategia actualmente activa (resultado del último Ranking ejecutado)'],
-            ['top',    'Top estrategia',    'Muestra la estrategia con mejor score histórico para cada activo (puede ser diferente de la activa)'],
-          ].map(([mode, label, tip]) => (
-            <button key={mode} onClick={() => setMetricsView(mode)} title={tip}
-              style={{
-                background: metricsView === mode ? P.accentBg : P.bg,
-                color: metricsView === mode ? P.accentFg : P.textSec,
-                border: 'none', fontFamily: MONO, fontSize: 10,
-                padding: '4px 12px', cursor: 'pointer', whiteSpace: 'nowrap',
-              }}>
-              {label}
-            </button>
-          ))}
-        </div>
-        {metricsView === 'active' && rankingStratName && (
-          <span style={{ fontSize: 10, color: '#2d6a4f', whiteSpace: 'nowrap' }}>✓ {rankingStratName}</span>
-        )}
-        {metricsView === 'active' && !rankingStratName && (
-          <span style={{ fontSize: 10, color: P.textMuted, fontStyle: 'italic' }}>Sin ranking calculado — ejecuta 🏆 Ranking primero</span>
-        )}
-      </div>
 
       {/* ── Tabla ── */}
       <div style={{ flex: 1, overflow: 'auto', background: P.bg }}>
