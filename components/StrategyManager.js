@@ -62,6 +62,24 @@ function readIntervalo(s) {
   } catch { return 'diario' }
 }
 
+function readParamsCompact(s) {
+  try {
+    const p = typeof s?.params === 'string' ? JSON.parse(s.params || '{}') : (s?.params || {})
+    const keys = Object.keys(p)
+    if (!keys.length) return null
+    return JSON.stringify(p)
+  } catch { return s?.params || null }
+}
+
+function readParamsFull(s) {
+  try {
+    const p = typeof s?.params === 'string' ? JSON.parse(s.params || '{}') : (s?.params || {})
+    return JSON.stringify(p, null, 2)
+  } catch { return s?.params || null }
+}
+
+const TOTAL_COLS = 15
+
 export default function StrategyManager({
   strategies = [],
   onClose,
@@ -69,6 +87,7 @@ export default function StrategyManager({
   onDelete,
   onToggleEnabled,
   onNew,
+  onBulkUpdate,
 }) {
   const [metricsMap, setMetricsMap] = useState({})
   const [loadingMetrics, setLoadingMetrics] = useState(true)
@@ -77,6 +96,12 @@ export default function StrategyManager({
   const [search, setSearch]     = useState('')
   const [onlyEnabled, setOnlyEnabled] = useState(false)
   const [selected, setSelected] = useState(new Set())
+
+  // Bulk edit states
+  const [bulkIntervalo, setBulkIntervalo] = useState('diario')
+  const [bulkCapital,   setBulkCapital]   = useState('')
+  const [bulkYears,     setBulkYears]     = useState('')
+  const [bulkApplying,  setBulkApplying]  = useState(false)
 
   useEffect(() => {
     setLoadingMetrics(true)
@@ -123,6 +148,7 @@ export default function StrategyManager({
     if (sortKey === 'intervalo') return dir * readIntervalo(a).localeCompare(readIntervalo(b))
     if (sortKey === 'capital')   return dir * ((a.capital_ini ?? 0) - (b.capital_ini ?? 0))
     if (sortKey === 'years')     return dir * ((a.years ?? 0) - (b.years ?? 0))
+    if (sortKey === 'alloc')     return dir * ((a.allocation_pct ?? 0) - (b.allocation_pct ?? 0))
     if (sortKey === 'enabled')   return dir * ((a.enabled === false ? 0 : 1) - (b.enabled === false ? 0 : 1))
     if (sortKey === 'cagr')      return dir * ((getMetrics(a.id)?.cagrMean ?? -999) - (getMetrics(b.id)?.cagrMean ?? -999))
     if (sortKey === 'win')       return dir * ((getMetrics(a.id)?.winMean  ?? -999) - (getMetrics(b.id)?.winMean  ?? -999))
@@ -133,6 +159,40 @@ export default function StrategyManager({
 
   const allSelected = list.length > 0 && list.every(s => selected.has(s.id))
   const toggleAll = () => setSelected(allSelected ? new Set() : new Set(list.map(s => s.id)))
+  const selectedList = list.filter(s => selected.has(s.id))
+
+  // ── Bulk apply helpers ──
+  const applyBulk = useCallback(async (buildUpdate) => {
+    if (!onBulkUpdate || selectedList.length === 0) return
+    setBulkApplying(true)
+    try {
+      const updates = selectedList.map(s => ({ id: s.id, ...buildUpdate(s) }))
+      await onBulkUpdate(updates)
+    } catch(e) { console.warn('[StrategyManager.applyBulk]', e.message) }
+    finally { setBulkApplying(false) }
+  }, [onBulkUpdate, selectedList])
+
+  const applyIntervalo = () => applyBulk(s => {
+    let p = {}
+    try { p = typeof s?.params === 'string' ? JSON.parse(s.params || '{}') : (s?.params || {}) } catch {}
+    return { params: JSON.stringify({ ...p, intervalo: bulkIntervalo }) }
+  })
+
+  const applyCapital = () => {
+    const v = Number(bulkCapital)
+    if (!v || v <= 0) return
+    applyBulk(() => ({ capital_ini: v }))
+  }
+
+  const applyYears = () => {
+    const v = Number(bulkYears)
+    if (!v || v <= 0) return
+    applyBulk(() => ({ years: v }))
+  }
+
+  const applyEnabled = (val) => applyBulk(() => ({ enabled: val }))
+
+  const hasBulk = selected.size > 0
 
   return (
     <div style={{
@@ -193,9 +253,100 @@ export default function StrategyManager({
         </button>
       </div>
 
+      {/* ── Barra de acciones masivas ── */}
+      {hasBulk && (
+        <div style={{
+          background: '#2c2820', borderBottom: `1px solid #4a3c2e`,
+          padding: '5px 14px',
+          display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, flexWrap: 'wrap',
+        }}>
+          {/* Contador seleccionadas */}
+          <span style={{ fontFamily: MONO, fontSize: 11, color: '#d4c9b8', whiteSpace: 'nowrap', minWidth: 60 }}>
+            {selected.size} sel.
+          </span>
+
+          {/* Intervalo */}
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ fontFamily: MONO, fontSize: 10, color: '#9a8a78' }}>Interv.</span>
+            <select
+              value={bulkIntervalo}
+              onChange={e => setBulkIntervalo(e.target.value)}
+              style={{ fontFamily: MONO, fontSize: 11, background: '#3a3228', border: '1px solid #5a4a3a',
+                color: '#e8ddd0', borderRadius: 3, padding: '2px 4px', cursor: 'pointer', outline: 'none' }}>
+              <option value="diario">Diario</option>
+              <option value="semanal">Semanal</option>
+            </select>
+            <button
+              onClick={applyIntervalo} disabled={bulkApplying}
+              style={{ fontFamily: MONO, fontSize: 10, padding: '2px 7px', borderRadius: 3, cursor: 'pointer',
+                background: '#4a6840', border: '1px solid #5a8050', color: '#c8e0b8' }}>
+              Aplicar
+            </button>
+          </div>
+
+          <span style={{ color: '#4a3c2e', fontSize: 12 }}>│</span>
+
+          {/* Capital */}
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ fontFamily: MONO, fontSize: 10, color: '#9a8a78' }}>Capital</span>
+            <input
+              type="number" min={1} value={bulkCapital}
+              onChange={e => setBulkCapital(e.target.value)}
+              placeholder="€"
+              style={{ width: 80, fontFamily: MONO, fontSize: 11, background: '#3a3228', border: '1px solid #5a4a3a',
+                color: '#e8ddd0', borderRadius: 3, padding: '2px 5px', outline: 'none' }} />
+            <button
+              onClick={applyCapital} disabled={bulkApplying}
+              style={{ fontFamily: MONO, fontSize: 10, padding: '2px 7px', borderRadius: 3, cursor: 'pointer',
+                background: '#4a6840', border: '1px solid #5a8050', color: '#c8e0b8' }}>
+              Aplicar
+            </button>
+          </div>
+
+          <span style={{ color: '#4a3c2e', fontSize: 12 }}>│</span>
+
+          {/* Años */}
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ fontFamily: MONO, fontSize: 10, color: '#9a8a78' }}>Años</span>
+            <input
+              type="number" min={1} max={30} value={bulkYears}
+              onChange={e => setBulkYears(e.target.value)}
+              placeholder="#"
+              style={{ width: 52, fontFamily: MONO, fontSize: 11, background: '#3a3228', border: '1px solid #5a4a3a',
+                color: '#e8ddd0', borderRadius: 3, padding: '2px 5px', outline: 'none' }} />
+            <button
+              onClick={applyYears} disabled={bulkApplying}
+              style={{ fontFamily: MONO, fontSize: 10, padding: '2px 7px', borderRadius: 3, cursor: 'pointer',
+                background: '#4a6840', border: '1px solid #5a8050', color: '#c8e0b8' }}>
+              Aplicar
+            </button>
+          </div>
+
+          <span style={{ color: '#4a3c2e', fontSize: 12 }}>│</span>
+
+          {/* Habilitar / Deshabilitar */}
+          <button
+            onClick={() => applyEnabled(true)} disabled={bulkApplying}
+            style={{ fontFamily: MONO, fontSize: 10, padding: '3px 9px', borderRadius: 3, cursor: 'pointer',
+              background: '#1a5c30', border: '1px solid #2a8c48', color: '#b8f0c8' }}>
+            Habilitar todas
+          </button>
+          <button
+            onClick={() => applyEnabled(false)} disabled={bulkApplying}
+            style={{ fontFamily: MONO, fontSize: 10, padding: '3px 9px', borderRadius: 3, cursor: 'pointer',
+              background: '#5c2020', border: '1px solid #8c3030', color: '#f0b8b8' }}>
+            Deshabilitar todas
+          </button>
+
+          {bulkApplying && (
+            <span style={{ fontFamily: MONO, fontSize: 10, color: '#a8d8b8' }}>⟳ Guardando…</span>
+          )}
+        </div>
+      )}
+
       {/* ── Tabla ── */}
       <div style={{ flex: 1, overflow: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 860 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1060 }}>
           <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
             <tr>
               <th style={TH({ width: 28, textAlign: 'center' })}>
@@ -206,6 +357,9 @@ export default function StrategyManager({
               <th style={TH({ cursor: 'pointer', textAlign: 'left', minWidth: 140 })} onClick={() => handleSort('name')}>
                 Nombre{sortIcon('name')}
               </th>
+              <th style={TH({ textAlign: 'left', minWidth: 120, maxWidth: 180 })} title="Resumen / descripción de la estrategia">
+                Resumen
+              </th>
               <th style={TH({ cursor: 'pointer', textAlign: 'center', width: 60 })} onClick={() => handleSort('intervalo')}>
                 Interv.{sortIcon('intervalo')}
               </th>
@@ -214,6 +368,13 @@ export default function StrategyManager({
               </th>
               <th style={TH({ cursor: 'pointer', textAlign: 'right', width: 52 })} onClick={() => handleSort('years')}>
                 Años{sortIcon('years')}
+              </th>
+              <th style={TH({ cursor: 'pointer', textAlign: 'right', width: 60 })} onClick={() => handleSort('alloc')}
+                title="Asignación de capital por operación (%)">
+                Asig.%{sortIcon('alloc')}
+              </th>
+              <th style={TH({ textAlign: 'left', minWidth: 110, maxWidth: 160 })} title="Parámetros de la estrategia (JSON)">
+                Parámetros
               </th>
               <th style={TH({ cursor: 'pointer', textAlign: 'right', background: '#c8d4b0', width: 88 })} onClick={() => handleSort('cagr')}>
                 CAGR med.{sortIcon('cagr')}
@@ -230,7 +391,7 @@ export default function StrategyManager({
               <th style={TH({ cursor: 'pointer', textAlign: 'center', width: 82 })} onClick={() => handleSort('enabled')}>
                 Habilitada{sortIcon('enabled')}
               </th>
-              <th style={TH({ textAlign: 'center', width: 72 })}>Acciones</th>
+              <th style={TH({ textAlign: 'center', width: 48 })}>Elim.</th>
             </tr>
           </thead>
           <tbody>
@@ -245,14 +406,23 @@ export default function StrategyManager({
               const isSel  = selected.has(s.id)
               const metBg  = isOdd ? '#edf2e6' : '#f3f8ed'
 
+              const paramsCompact = readParamsCompact(s)
+              const paramsFull    = readParamsFull(s)
+              const resumen       = s.description || s.summary || ''
+
               return (
                 <tr key={s.id}
-                  style={{ background: isSel ? 'rgba(26,107,58,0.07)' : bg, opacity: isEna ? 1 : 0.55 }}
+                  onClick={() => onEdit && onEdit(s)}
+                  style={{
+                    background: isSel ? 'rgba(26,107,58,0.07)' : bg,
+                    opacity: isEna ? 1 : 0.55,
+                    cursor: 'pointer',
+                  }}
                   onMouseEnter={e => { if (!isSel) e.currentTarget.style.background = isOdd ? '#e8e3da' : '#ede8df' }}
                   onMouseLeave={e => { e.currentTarget.style.background = isSel ? 'rgba(26,107,58,0.07)' : bg }}>
 
-                  {/* Checkbox */}
-                  <td style={TD({ textAlign: 'center' })}>
+                  {/* Checkbox — stop propagation para no abrir editor */}
+                  <td style={TD({ textAlign: 'center' })} onClick={e => e.stopPropagation()}>
                     <input type="checkbox" checked={isSel}
                       onChange={() => setSelected(prev => {
                         const next = new Set(prev)
@@ -273,10 +443,8 @@ export default function StrategyManager({
                   {/* Nombre */}
                   <td style={TD({ color: P.text, fontWeight: 600, maxWidth: 200 })}>
                     <span
-                      onClick={() => onEdit && onEdit(s)}
-                      title="Abrir editor de estrategia"
-                      style={{ cursor: 'pointer', textDecoration: 'underline', textDecorationStyle: 'dotted',
-                        textDecorationColor: P.textMuted, overflow: 'hidden', textOverflow: 'ellipsis',
+                      title="Clic en cualquier parte de la fila para editar"
+                      style={{ overflow: 'hidden', textOverflow: 'ellipsis',
                         display: 'inline-block', maxWidth: '100%', verticalAlign: 'middle' }}>
                       {s.name || '—'}
                     </span>
@@ -287,6 +455,17 @@ export default function StrategyManager({
                         deshabilitada
                       </span>
                     )}
+                  </td>
+
+                  {/* Resumen */}
+                  <td style={TD({ color: P.textMuted, maxWidth: 180 })}
+                    title={resumen || undefined}>
+                    {resumen
+                      ? <span style={{ display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap', maxWidth: 168, verticalAlign: 'middle' }}>
+                          {resumen.length > 40 ? resumen.slice(0, 40) + '…' : resumen}
+                        </span>
+                      : <span style={{ color: P.textMuted }}>—</span>}
                   </td>
 
                   {/* Intervalo */}
@@ -311,6 +490,25 @@ export default function StrategyManager({
                     {s.years ?? <span style={{ color: P.textMuted }}>—</span>}
                   </td>
 
+                  {/* Asig.% */}
+                  <td style={TD({ textAlign: 'right', color: P.textSec })}>
+                    {s.allocation_pct != null
+                      ? <span>{fmt(s.allocation_pct, 0)}%</span>
+                      : <span style={{ color: P.textMuted }}>—</span>}
+                  </td>
+
+                  {/* Parámetros */}
+                  <td style={TD({ maxWidth: 160 })}
+                    title={paramsFull ? `Parámetros:\n${paramsFull}` : undefined}>
+                    {paramsCompact
+                      ? <span style={{ display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap', maxWidth: 148, verticalAlign: 'middle',
+                          color: '#5a7060', fontSize: 10, fontFamily: MONO }}>
+                          {paramsCompact.length > 30 ? paramsCompact.slice(0, 30) + '…' : paramsCompact}
+                        </span>
+                      : <span style={{ color: P.textMuted }}>—</span>}
+                  </td>
+
                   {/* CAGR medio */}
                   <td style={TD({ textAlign: 'right', fontWeight: 600, background: metBg, color: m ? cagrFg(m.cagrMean) : P.textMuted })}>
                     {m ? `${fmt(m.cagrMean, 1)}%` : <span style={{ color: P.textMuted }}>—</span>}
@@ -331,8 +529,8 @@ export default function StrategyManager({
                     {m ? fmt(m.totalOps, 0) : <span style={{ color: P.textMuted }}>—</span>}
                   </td>
 
-                  {/* Toggle habilitada */}
-                  <td style={TD({ textAlign: 'center' })}>
+                  {/* Toggle habilitada — stop propagation para no abrir editor */}
+                  <td style={TD({ textAlign: 'center' })} onClick={e => e.stopPropagation()}>
                     <div
                       onClick={() => onToggleEnabled && onToggleEnabled(s.id, !isEna)}
                       title={isEna ? 'Deshabilitar — se excluye del Ranking automático y del selector de estrategia activa' : 'Habilitar estrategia'}
@@ -350,36 +548,28 @@ export default function StrategyManager({
                     </div>
                   </td>
 
-                  {/* Acciones */}
-                  <td style={TD({ textAlign: 'center' })}>
-                    <div style={{ display: 'inline-flex', gap: 3 }}>
-                      <button
-                        onClick={() => onEdit && onEdit(s)}
-                        title="Editar estrategia"
-                        style={{ background: 'transparent', border: `1px solid ${P.border}`, color: P.textSec,
-                          fontFamily: MONO, fontSize: 11, padding: '2px 6px', borderRadius: 3, cursor: 'pointer' }}>
-                        ✏
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (confirm(`¿Eliminar "${s.name}"?\nEsta acción no se puede deshacer.`))
-                            onDelete && onDelete(s.id)
-                        }}
-                        title="Eliminar estrategia"
-                        style={{ background: 'transparent', border: `1px solid ${P.border}`, color: P.textSec,
-                          fontFamily: MONO, fontSize: 11, padding: '2px 6px', borderRadius: 3, cursor: 'pointer' }}
-                        onMouseEnter={e => { e.currentTarget.style.color = '#8b1a1a'; e.currentTarget.style.borderColor = '#c44' }}
-                        onMouseLeave={e => { e.currentTarget.style.color = P.textSec;  e.currentTarget.style.borderColor = P.border }}>
-                        🗑
-                      </button>
-                    </div>
+                  {/* Eliminar — stop propagation para no abrir editor */}
+                  <td style={TD({ textAlign: 'center' })} onClick={e => e.stopPropagation()}>
+                    <button
+                      onClick={() => {
+                        if (confirm(`¿Eliminar "${s.name}"?\nEsta acción no se puede deshacer.`))
+                          onDelete && onDelete(s.id)
+                      }}
+                      title="Eliminar estrategia (requiere confirmación)"
+                      style={{ background: 'transparent', border: '1px solid #ef4444', color: '#ef4444',
+                        fontFamily: MONO, fontSize: 13, padding: '2px 7px', borderRadius: 3, cursor: 'pointer',
+                        lineHeight: 1, transition: 'background 0.15s, color 0.15s' }}
+                      onMouseEnter={e => { e.currentTarget.style.background = '#dc2626'; e.currentTarget.style.color = '#fff'; e.currentTarget.style.borderColor = '#dc2626' }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.borderColor = '#ef4444' }}>
+                      🗑
+                    </button>
                   </td>
                 </tr>
               )
             })}
             {!loadingMetrics && list.length === 0 && (
               <tr>
-                <td colSpan={12} style={{ padding: '28px 14px', textAlign: 'center',
+                <td colSpan={TOTAL_COLS} style={{ padding: '28px 14px', textAlign: 'center',
                   fontFamily: MONO, fontSize: 12, color: P.textMuted }}>
                   {search ? `Sin resultados para "${search}".` : 'Sin estrategias.'}
                 </td>
@@ -409,7 +599,7 @@ export default function StrategyManager({
         )}
         <div style={{ flex: 1 }} />
         <span style={{ fontFamily: MONO, fontSize: 9, color: P.textMuted, fontStyle: 'italic' }}>
-          Columnas de métricas: promedio sobre todos los activos con datos de ranking en Supabase
+          Columnas de métricas: promedio sobre todos los activos con datos de ranking en Supabase · Clic en fila para editar
         </span>
       </div>
     </div>

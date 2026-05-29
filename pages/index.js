@@ -683,6 +683,7 @@ export default function Home() {
   // Panel de gestión de Watchlist (reemplaza el área de gráfico)
   const [showWlManager,setShowWlManager]=useState(false)
   const [showStratManager,setShowStratManager]=useState(false)
+  const [stratManagerReturn,setStratManagerReturn]=useState(false) // volver al StrategyManager al cerrar editor
   // Tooltip flotante del Watchlist — {x, y, symbol} | null
   const [wlTooltip,setWlTooltip]=useState(null)
   // Búsqueda async de nombre
@@ -1835,7 +1836,10 @@ export default function Home() {
       visuals:s.visuals||'',
     })
   }
-  const closeEditStr=()=>{setEditingStr(null);setStrForm({})}
+  const closeEditStr=()=>{
+    if(stratManagerReturn){setShowStratManager(true);setStratManagerReturn(false)}
+    setEditingStr(null);setStrForm({})
+  }
   const saveEditStr=async()=>{
     setStrSaving(true)
     try{
@@ -1994,6 +1998,22 @@ export default function Home() {
       console.warn('[toggleStrategyEnabled]',e.message)
       // Revert on error
       setStrategies(prev=>prev.map(s=>s.id===stratId?{...s,enabled:!enabled}:s))
+    }
+  },[setStrategies])
+
+  // ── Actualización masiva de estrategias (desde StrategyManager) ──
+  const bulkUpdateStrategies=useCallback(async(updates)=>{
+    // Actualización optimista inmediata
+    setStrategies(prev=>prev.map(s=>{
+      const u=updates.find(x=>x.id===s.id)
+      if(!u) return s
+      const {id:_,...fields}=u
+      return {...s,...fields}
+    }))
+    // Persistir cada cambio en Supabase
+    for(const u of updates){
+      try{ await upsertStrategy(u) }
+      catch(e){ console.warn('[bulkUpdateStrategies]',u.id,e.message) }
     }
   },[setStrategies])
 
@@ -3638,7 +3658,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.333</title>
+        <title>Trading Simulator V9.334</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3716,7 +3736,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.333
+            <span className="dot"/>Trading Simulator V9.334
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5675,10 +5695,11 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               <StrategyManager
                 strategies={strategies}
                 onClose={()=>setShowStratManager(false)}
-                onEdit={s=>{setShowStratManager(false);openEditStr(s)}}
+                onEdit={s=>{setShowStratManager(false);setStratManagerReturn(true);openEditStr(s)}}
                 onDelete={id=>{deleteStr(id);setShowStratManager(false)}}
                 onToggleEnabled={toggleStrategyEnabled}
-                onNew={()=>{setShowStratManager(false);newStrategy()}}
+                onNew={()=>{setShowStratManager(false);setStratManagerReturn(true);newStrategy()}}
+                onBulkUpdate={bulkUpdateStrategies}
               />
             )}
 
