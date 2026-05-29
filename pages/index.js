@@ -3593,7 +3593,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.329</title>
+        <title>Trading Simulator V9.330</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3671,7 +3671,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.329
+            <span className="dot"/>Trading Simulator V9.330
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4468,26 +4468,26 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         })()}
                         {/* Badges condiciones librería — círculos de color con velas */}
                         {(()=>{
-                          if(!conditions.length) return null
-                          // Only show dots for active conditions (active !== false)
+                          if(!conditions.length){
+                            // Sin condiciones configuradas — placeholder gris
+                            return <span title="Sin alertas de condiciones configuradas" style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:10,height:10,borderRadius:'50%',flexShrink:0,background:'rgba(42,63,85,0.35)',border:'1px solid #1e3a52',cursor:'default'}}/>
+                          }
                           const visibleConds = conditions.filter(c=>c.active!==false)
                           if(!visibleConds.length) return null
                           const symSt=alarmStatus[w.symbol]
+                          // symSt===undefined → nunca verificado; symSt===objeto → verificado
+                          const checked=symSt!=null
                           const COND_COLORS=['#00e5a0','#ffd166','#00d4ff','#ff7eb3','#9b72ff','#ff4d6d']
-                          const CTYPE_LABELS={ema_cross_up:'Cruce alcista EMA',ema_cross_down:'Cruce bajista EMA',price_above_ema:'Precio > EMA',price_below_ema:'Precio < EMA',price_above_ma:'Precio > Media',price_below_ma:'Precio < Media',rsi_above:'RSI sobre nivel',rsi_below:'RSI bajo nivel',rsi_cross_up:'RSI cruza ↑',rsi_cross_down:'RSI cruza ↓',macd_cross_up:'MACD ↑',macd_cross_down:'MACD ↓'}
                           return visibleConds.map((c)=>{
                             const st=symSt?.[c.id]
                             const active=st?.active===true
-                            // Solo mostrar el círculo si la condición está activa
-                            if(!active) return null
                             const bars=st?.bars
                             const globalIdx=conditions.findIndex(x=>x.id===c.id)
                             const col=condColors[c.id]||COND_COLORS[(globalIdx>=0?globalIdx:0)%COND_COLORS.length]
                             const label=bars!=null?String(bars):'·'
                             const blinkN=c.params?.blinkCandles??3
                             const shouldBlink=active&&bars!=null&&bars<=blinkN
-                            const paramStr=c.params?.ma_fast?`EMA ${c.params.ma_fast}/${c.params.ma_slow}`:c.params?.ma_period?`MA(${c.params.ma_period})`:c.params?.period?`RSI(${c.params.period}) niv.${c.params.level}`:''
-                            const tooltip=c.name
+                            const tooltip=`${c.name}${active?` ✓ (${bars} velas atrás)`:(!checked?' · sin verificar':' · inactivo')}`
                             return(
                               <span key={c.id} title={tooltip}
                                 onClick={e=>{e.stopPropagation();const r=e.currentTarget.getBoundingClientRect();setCondColorPicker(prev=>prev?.condId===c.id?null:{condId:c.id,x:r.left,y:r.bottom+4})}}
@@ -4499,6 +4499,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                   color:active?'#080c14':'#3d5a7a',
                                   boxShadow:active?`0 0 6px ${col}55`:undefined,
                                   cursor:'pointer',overflow:'hidden',
+                                  opacity:!checked?0.4:1,
                                   animation:shouldBlink?`alarmPulse 1s ease-in-out infinite`:undefined,
                                 }}>
                                 {active&&<span style={{fontFamily:MONO,fontSize:9,fontWeight:800,lineHeight:1,

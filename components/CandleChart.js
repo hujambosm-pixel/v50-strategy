@@ -1516,12 +1516,6 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
   const activeIndType = definition ? getActiveIndicator(definition) : null
   const hasMacdBars = !activeIndType && data?.some(d => d.macdLine != null)
   const hasRsiBars  = !activeIndType && data?.some(d => d.rsiLine  != null)
-  console.log('[MACD-DEBUG]', {
-    activeIndType,
-    dataLength: data?.length,
-    firstBarWithMacd: data?.find(d => d.macdLine != null),
-    hasMacdBars
-  })
   return (
     <div style={{display:'flex',flexDirection:'column',...(fillHeight?{flex:1,minHeight:0}:{})}}>
     <div style={{position:'relative',...(fillHeight?{flex:1,minHeight:0}:{})}}>
