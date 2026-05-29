@@ -111,6 +111,17 @@ export default function StrategyManager({
       .finally(() => setLoadingMetrics(false))
   }, [])
 
+  // ── FIX 3: Log de diagnóstico — dispara cuando metricsMap carga ──
+  useEffect(() => {
+    if (loadingMetrics) return
+    console.log('[STRAT-METRICS] keys en metricsMap (strategy_ids con datos en ranking_results):', Object.keys(metricsMap))
+    console.log('[STRAT-METRICS]', strategies.map(s => ({
+      id: s.id,
+      name: s.name,
+      hasRanking: (metricsMap[s.id] || []).length
+    })))
+  }, [loadingMetrics, metricsMap, strategies])
+
   const getMetrics = useCallback((stratId) => {
     const rows = metricsMap[stratId || '__null__'] || []
     if (!rows.length) return null
@@ -360,6 +371,9 @@ export default function StrategyManager({
               <th style={TH({ textAlign: 'left', minWidth: 120, maxWidth: 180 })} title="Resumen / descripción de la estrategia">
                 Resumen
               </th>
+              <th style={TH({ textAlign: 'left', minWidth: 110, maxWidth: 160 })} title="Parámetros de la estrategia (JSON)">
+                Parámetros
+              </th>
               <th style={TH({ cursor: 'pointer', textAlign: 'center', width: 60 })} onClick={() => handleSort('intervalo')}>
                 Interv.{sortIcon('intervalo')}
               </th>
@@ -372,9 +386,6 @@ export default function StrategyManager({
               <th style={TH({ cursor: 'pointer', textAlign: 'right', width: 60 })} onClick={() => handleSort('alloc')}
                 title="Asignación de capital por operación (%)">
                 Asig.%{sortIcon('alloc')}
-              </th>
-              <th style={TH({ textAlign: 'left', minWidth: 110, maxWidth: 160 })} title="Parámetros de la estrategia (JSON)">
-                Parámetros
               </th>
               <th style={TH({ cursor: 'pointer', textAlign: 'right', background: '#c8d4b0', width: 88 })} onClick={() => handleSort('cagr')}>
                 CAGR med.{sortIcon('cagr')}
@@ -468,6 +479,18 @@ export default function StrategyManager({
                       : <span style={{ color: P.textMuted }}>—</span>}
                   </td>
 
+                  {/* Parámetros */}
+                  <td style={TD({ maxWidth: 160 })}
+                    title={paramsFull ? `Parámetros:\n${paramsFull}` : undefined}>
+                    {paramsCompact
+                      ? <span style={{ display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap', maxWidth: 148, verticalAlign: 'middle',
+                          color: '#5a7060', fontSize: 10, fontFamily: MONO }}>
+                          {paramsCompact.length > 30 ? paramsCompact.slice(0, 30) + '…' : paramsCompact}
+                        </span>
+                      : <span style={{ color: P.textMuted }}>—</span>}
+                  </td>
+
                   {/* Intervalo */}
                   <td style={TD({ textAlign: 'center' })}>
                     <span style={{
@@ -494,18 +517,6 @@ export default function StrategyManager({
                   <td style={TD({ textAlign: 'right', color: P.textSec })}>
                     {s.allocation_pct != null
                       ? <span>{fmt(s.allocation_pct, 0)}%</span>
-                      : <span style={{ color: P.textMuted }}>—</span>}
-                  </td>
-
-                  {/* Parámetros */}
-                  <td style={TD({ maxWidth: 160 })}
-                    title={paramsFull ? `Parámetros:\n${paramsFull}` : undefined}>
-                    {paramsCompact
-                      ? <span style={{ display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap', maxWidth: 148, verticalAlign: 'middle',
-                          color: '#5a7060', fontSize: 10, fontFamily: MONO }}>
-                          {paramsCompact.length > 30 ? paramsCompact.slice(0, 30) + '…' : paramsCompact}
-                        </span>
                       : <span style={{ color: P.textMuted }}>—</span>}
                   </td>
 
