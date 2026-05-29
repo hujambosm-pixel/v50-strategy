@@ -2336,14 +2336,18 @@ export default function Home() {
     }
 
     const BATCH = 4
+    let _exitosas = 0, _fallidas = 0, _fallidasNombres = []
     for (let si = 0; si < enabledStrats.length; si++) {
       const strat = enabledStrats[si]
+      console.log('[ALL-RANKING] Procesando estrategia:', strat.name, strat.id)
       setTopStratProgress({current: si + 1, total: enabledStrats.length})
       const stratId = strat.id
       const stratYears  = strat.years || Number(years)
       const stratCap    = strat.capital_ini || Number(capitalIni)
       const stratIntv   = (()=>{try{const p=typeof strat?.params==='string'?JSON.parse(strat.params||'{}'):(strat?.params||{});return p.intervalo||'diario'}catch(_){return 'diario'}})()
       const results = {}
+      let _stratError = null
+      try {
       for (let i = 0; i < syms.length; i += BATCH) {
         const batch = syms.slice(i, i + BATCH)
         await Promise.allSettled(batch.map(async sym => {
@@ -2401,11 +2405,20 @@ export default function Home() {
           } catch(e) { console.error('[calcRankingAll]', sym, e) }
         }))
       }
+      } catch(error) {
+        _stratError = error
+        console.error('[ALL-RANKING] Error en estrategia:', strat.name, error)
+        _fallidas++; _fallidasNombres.push(strat.name)
+        continue
+      }
       const sortedEntries = Object.entries(results).sort((a,b)=>b[1].score-a[1].score)
       sortedEntries.forEach(([sym],i)=>{ results[sym].rank=i+1 })
       await saveRankingRemote(results, stratId).catch(()=>{})
+      console.log('[ALL-RANKING] Completada:', strat.name, 'activos procesados:', Object.keys(results).length)
+      _exitosas++
     }
 
+    console.log('[ALL-RANKING] Resumen completo:', {total: enabledStrats.length, exitosas: _exitosas, fallidas: _fallidas, fallidas_nombres: _fallidasNombres})
     await refreshBestStratPerSymbol().catch(()=>{})
     try{localStorage.setItem('ranking_last_updated',String(Date.now()))}catch(_){}
     setRankingBannerDismissed(true)
@@ -3625,7 +3638,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.332</title>
+        <title>Trading Simulator V9.333</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3703,7 +3716,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.332
+            <span className="dot"/>Trading Simulator V9.333
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
