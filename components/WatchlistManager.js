@@ -545,9 +545,9 @@ export default function WatchlistManager({
         {/* GROUP 1: Ranking */}
         <div style={{ display: 'inline-flex', gap: 2, flexShrink: 0 }}>
           <button
-            onClick={() => onCalcRanking && onCalcRanking()}
+            onClick={() => onCalcRanking && onCalcRanking(filtered)}
             disabled={rankingRunning}
-            title="Calcula el score de cada activo con la estrategia activa y reordena la lista según los criterios configurados en Ajustes → Ranking"
+            title={`Calcula SCORE MÉTRICAS y SCORE MÉT.+SEÑ. para los ${filtered.length} activos visibles actualmente con la estrategia activa${rankingStratName ? ` (${rankingStratName})` : ''}.\nActualiza las columnas SCORE MÉTRICAS y SCORE MÉT.+SEÑ. en modo Estrategia activa.\nConfigura los pesos en Ajustes → Ranking`}
             style={{
               background: rankingRunning ? P.bgAlt : P.accentBg,
               border: `1px solid ${rankingRunning ? P.borderStrong : P.accentBg}`,
@@ -583,9 +583,9 @@ export default function WatchlistManager({
         {/* GROUP 2: Top estrategia */}
         <div style={{ display: 'inline-flex', gap: 2, flexShrink: 0 }}>
           <button
-            onClick={() => !topStratRunning && onCalcRankingAll && onCalcRankingAll()}
+            onClick={() => !topStratRunning && onCalcRankingAll && onCalcRankingAll(filtered)}
             disabled={topStratRunning}
-            title={topStratRunning ? `Calculando ranking para todas las estrategias… ${topStratProgress?.current||0}/${topStratProgress?.total||0}` : 'Calcula el Ranking con TODAS las estrategias disponibles y determina cuál obtiene mejor score histórico para cada activo'}
+            title={topStratRunning ? `Calculando... ${topStratProgress?.current||0}/${topStratProgress?.total||0}` : `Ejecuta el Ranking para TODAS las estrategias habilitadas, en secuencia, sobre los ${filtered.length} activos visibles actualmente.\nActualiza las columnas: SCORE MÉTRICAS, SCORE MÉT.+SEÑ., MÉTRICAS TOP ESTRATEGIA y la columna ESTRATEGIA de cada activo.\nMás lento que Ranking — puede tardar varios minutos según el número de estrategias y activos`}
             style={{
               background: topStratRunning ? P.bg : P.accentBg,
               border: `1px solid ${topStratRunning ? P.borderStrong : P.accentBg}`,

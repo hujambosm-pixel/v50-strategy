@@ -24,6 +24,7 @@ import StrategiesManager from '../components/StrategiesManager'
 import StrategyEditorPanel from '../components/StrategyEditorPanel'
 import WatchlistCondPanel from '../components/WatchlistCondPanel'
 import WatchlistManager from '../components/WatchlistManager'
+import StrategyManager from '../components/StrategyManager'
 
 
 // ── FIFO computation for TradeLog ─────────────────────────────
@@ -399,7 +400,7 @@ async function upsertStrategy(item) {
   const url=item.id?`${getSupaUrl()}/rest/v1/strategies?id=eq.${item.id}`:`${getSupaUrl()}/rest/v1/strategies`
   // Only send known DB columns — strip any UI-only keys (prefixed with _)
   const ALLOWED=['name','years','capital_ini','allocation_pct','color','observations','active',
-    'description','summary','code_js','params','visuals']
+    'description','summary','code_js','params','visuals','enabled']
   const body={}; ALLOWED.forEach(k=>{if(item[k]!==undefined)body[k]=item[k]})
   const res=await fetch(url,{method,headers:{...getSupaH(),'Prefer':'return=representation'},body:JSON.stringify(body)})
   if(!res.ok){const t=await res.text();throw new Error(`Error guardando estrategia: ${t}`)}
@@ -681,6 +682,7 @@ export default function Home() {
   const [stratDropOpen,setStratDropOpen]=useState(false)
   // Panel de gestión de Watchlist (reemplaza el área de gráfico)
   const [showWlManager,setShowWlManager]=useState(false)
+  const [showStratManager,setShowStratManager]=useState(false)
   // Tooltip flotante del Watchlist — {x, y, symbol} | null
   const [wlTooltip,setWlTooltip]=useState(null)
   // Búsqueda async de nombre
@@ -1982,6 +1984,18 @@ export default function Home() {
   }
   const newStrategy=()=>openEditStr({id:null})
   const duplicateStr=(s)=>openEditStr({...s,id:null,name:s.name+' (copia)'})
+  const toggleStrategyEnabled=useCallback(async(stratId, enabled)=>{
+    // Optimistic update
+    setStrategies(prev=>prev.map(s=>s.id===stratId?{...s,enabled}:s))
+    try {
+      await apiFetch('/api/strategies',{method:'PUT',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({id:stratId,enabled})})
+    } catch(e) {
+      console.warn('[toggleStrategyEnabled]',e.message)
+      // Revert on error
+      setStrategies(prev=>prev.map(s=>s.id===stratId?{...s,enabled:!enabled}:s))
+    }
+  },[setStrategies])
 
   // ── Panel scale (Ctrl+Scroll por panel) ──
   const handlePanelScaleWheel=useCallback((panel,e)=>{
@@ -2292,12 +2306,13 @@ export default function Home() {
   }, [watchlist,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL,currentStratId,stratName,filtros,estrategiaIntervalo,refreshBestStratPerSymbol])
 
   // ── Calcular Ranking para TODAS las estrategias en secuencia → determina Top estrategia ──
-  const calcRankingAllStrategies = useCallback(async () => {
-    if (!strategies || strategies.length === 0) return
+  const calcRankingAllStrategies = useCallback(async (filteredSymbols=null) => {
+    const enabledStrats = (strategies||[]).filter(s => s.enabled !== false)
+    if (!enabledStrats.length) return
     setTopStratRunning(true)
-    setTopStratProgress({current:0, total:strategies.length})
+    setTopStratProgress({current:0, total:enabledStrats.length})
 
-    const syms = watchlist.map(w => w.symbol)
+    const syms = (filteredSymbols || watchlist).map(w => w.symbol)
     const sett = (()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')}catch(_){return {}}})()
     const wMercado   = (sett.ranking?.rankingWeightMercado   ?? 20) / 100
     const wHistorico = (sett.ranking?.rankingWeightHistorico ?? 80) / 100
@@ -2321,9 +2336,9 @@ export default function Home() {
     }
 
     const BATCH = 4
-    for (let si = 0; si < strategies.length; si++) {
-      const strat = strategies[si]
-      setTopStratProgress({current: si + 1, total: strategies.length})
+    for (let si = 0; si < enabledStrats.length; si++) {
+      const strat = enabledStrats[si]
+      setTopStratProgress({current: si + 1, total: enabledStrats.length})
       const stratId = strat.id
       const stratYears  = strat.years || Number(years)
       const stratCap    = strat.capital_ini || Number(capitalIni)
@@ -3610,7 +3625,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.331</title>
+        <title>Trading Simulator V9.332</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3688,7 +3703,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.331
+            <span className="dot"/>Trading Simulator V9.332
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -3732,7 +3747,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     background:'#0d1520',border:'1px solid #1a2d45',borderRadius:6,
                     boxShadow:'0 4px 16px rgba(0,0,0,0.4)',
                     minWidth:200,maxWidth:280,maxHeight:300,overflowY:'auto',padding:'4px 0'}}>
-                    {(strategies||[]).map(s=>{
+                    {(strategies||[]).filter(s=>s.enabled!==false).map(s=>{
                       const isAct=s.id===currentStratId
                       return(
                         <div key={s.id}
@@ -3866,6 +3881,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 <div style={{padding:'8px 10px',borderBottom:'1px solid var(--border)',flexShrink:0}}>
                   <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:6}}>
                     <span className="sidebar-title" style={{margin:0,flex:1}}>Estrategias</span>
+                    <button onClick={()=>setShowStratManager(true)} title="Gestionar todas las estrategias en vista tabla"
+                      style={{background:'rgba(0,212,255,0.06)',border:'1px solid var(--border)',color:'#8aadcc',fontFamily:MONO,fontSize:10,padding:'2px 6px',borderRadius:3,cursor:'pointer',lineHeight:1.4}}>⊞</button>
                     <button onClick={newStrategy} title="Nueva estrategia"
                       style={{background:'rgba(0,212,255,0.1)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:12,padding:'2px 8px',borderRadius:3,cursor:'pointer',lineHeight:1.4}}>+</button>
                   </div>
@@ -4082,13 +4099,16 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         // Re-ejecutar si es la estrategia activa
                         if(isActive)setEstrategiaIntervalo(newIv)
                       }
+                      const isDisabled = s.enabled === false
                       return (
                         <div key={s.id}
                           style={{padding:'7px 10px',display:'flex',alignItems:'center',gap:6,
                             borderBottom:'1px solid var(--border)',
                             background:isActive?'rgba(0,212,255,0.07)':'transparent',
                             borderLeft:`2px solid ${isActive?col:'transparent'}`,
-                            transition:'background 0.1s'}}
+                            transition:'background 0.1s',
+                            opacity: isDisabled ? 0.45 : 1,
+                          }}
                           onMouseOver={e=>{if(!isActive)e.currentTarget.style.background='rgba(255,255,255,0.03)'}}
                           onMouseOut={e=>{if(!isActive)e.currentTarget.style.background='transparent'}}>
                           {/* Color dot */}
@@ -4097,8 +4117,9 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                           {/* Name + meta */}
                           <div style={{flex:1,minWidth:0,cursor:'default'}}>
                             <div style={{fontFamily:MONO,fontSize:11,color:isActive?'var(--accent)':'#d0e8fa',
-                              fontWeight:isActive?700:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-                              {s.name}
+                              fontWeight:isActive?700:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:4}}>
+                              <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.name}</span>
+                              {isDisabled&&<span style={{fontSize:8,color:'#ff4d6d',background:'rgba(255,77,109,0.12)',border:'1px solid rgba(255,77,109,0.3)',padding:'0 3px',borderRadius:3,flexShrink:0}}>off</span>}
                             </div>
                             <div style={{fontFamily:MONO,fontSize:9,color:'#5a7a95',marginTop:1,display:'flex',alignItems:'center',gap:4}}>
                               <span>{s.years||'?'}a · {s.definition?.setup?.ma_fast||s.ema_r||'?'}/{s.definition?.setup?.ma_slow||s.ema_l||'?'}</span>
@@ -5633,6 +5654,18 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 topStratProgress={topStratProgress}
                 hasBestStrat={Object.keys(bestStratBySymbol).length>0}
                 onClearBestStrat={()=>setBestStratBySymbol({})}
+              />
+            )}
+
+            {/* ══ STRATEGY MANAGER (overlay) ══ */}
+            {showStratManager&&(
+              <StrategyManager
+                strategies={strategies}
+                onClose={()=>setShowStratManager(false)}
+                onEdit={s=>{setShowStratManager(false);openEditStr(s)}}
+                onDelete={id=>{deleteStr(id);setShowStratManager(false)}}
+                onToggleEnabled={toggleStrategyEnabled}
+                onNew={()=>{setShowStratManager(false);newStrategy()}}
               />
             )}
 
