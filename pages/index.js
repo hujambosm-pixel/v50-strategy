@@ -293,7 +293,6 @@ async function saveRankingRemote(rankingData, stratId) {
   }).catch(()=>{}) // ignorar errores de borrado (tabla vacía, sin permisos, etc.)
 
   // 2 — Insertar los nuevos resultados
-  // scoreCompleto es efímero (depende de precios actuales), no se persiste
   const rows = Object.entries(rankingData).map(([symbol, rd]) => ({
     symbol,
     strategy_id:     stratId || null,
@@ -303,42 +302,55 @@ async function saveRankingRemote(rankingData, stratId) {
     total_trades:    rd.metrics?.trades   ?? null,
     score:           rd.score             ?? null,
     score_historico: rd.scoreHistorico    ?? null,
+    score_completo:  rd.scoreCompleto     ?? null,
     rank_position:   rd.rank             ?? null,
     updated_at:      new Date().toISOString(),
   }))
-  let scoreHistColErr = false
+  let missingCols = new Set()   // columnas que la DB no tiene aún
   for (let i=0; i<rows.length; i+=20) {
     const batch = rows.slice(i, i+20)
-    const batchToSave = scoreHistColErr
-      ? batch.map(({score_historico, ...r}) => r)
-      : batch
+    const cleanBatch = (b) => b.map(r => {
+      const out = {...r}
+      if (missingCols.has('score_historico')) delete out.score_historico
+      if (missingCols.has('score_completo'))  delete out.score_completo
+      return out
+    })
     const res = await fetch(`${getSupaUrl()}/rest/v1/ranking_results`, {
       method: 'POST',
       headers: { ...getSupaH(), 'Prefer': 'resolution=merge-duplicates,return=minimal',
         'Content-Type': 'application/json' },
-      body: JSON.stringify(batchToSave)
+      body: JSON.stringify(cleanBatch(batch))
     })
-    if (!res.ok && !scoreHistColErr) {
+    if (!res.ok) {
       const txt = await res.text().catch(()=>'')
+      const wasMissing = missingCols.size
       if (txt.includes('score_historico')) {
-        console.warn('[Ranking] Columna score_historico no existe. Ejecuta en Supabase SQL:\nALTER TABLE ranking_results ADD COLUMN IF NOT EXISTS score_historico numeric;')
-        scoreHistColErr = true
-        const fallback = batch.map(({score_historico, ...r}) => r)
+        console.warn('[Ranking] Columna score_historico no existe. SQL:\nALTER TABLE ranking_results ADD COLUMN IF NOT EXISTS score_historico numeric;')
+        missingCols.add('score_historico')
+      }
+      if (txt.includes('score_completo')) {
+        console.warn('[Ranking] Columna score_completo no existe. SQL:\nALTER TABLE ranking_results ADD COLUMN IF NOT EXISTS score_completo numeric;')
+        missingCols.add('score_completo')
+      }
+      if (missingCols.size > wasMissing) {
+        // retry without the missing columns
         await fetch(`${getSupaUrl()}/rest/v1/ranking_results`, {
           method: 'POST',
           headers: { ...getSupaH(), 'Prefer': 'resolution=merge-duplicates,return=minimal',
             'Content-Type': 'application/json' },
-          body: JSON.stringify(fallback)
+          body: JSON.stringify(cleanBatch(batch))
         }).catch(()=>{})
       }
     }
   }
 }
 async function loadRankingRemote(stratId) {
-  const url = stratId
+  const base = stratId
     ? `${getSupaUrl()}/rest/v1/ranking_results?strategy_id=eq.${stratId}&order=rank_position.asc`
     : `${getSupaUrl()}/rest/v1/ranking_results?order=rank_position.asc`
-  const res = await fetch(url, { headers: getSupaH() })
+  // Intentar con score_completo y updated_at; fallback si no existen
+  let res = await fetch(base + '&select=*', { headers: getSupaH() })
+  if (!res.ok) res = await fetch(base, { headers: getSupaH() })
   if (!res.ok) return null
   const rows = await res.json()
   if (!rows?.length) return null
@@ -347,7 +359,8 @@ async function loadRankingRemote(stratId) {
     out[(r.symbol||'').toUpperCase()] = {
       score:          r.score,
       scoreHistorico: r.score_historico ?? null,
-      scoreCompleto:  null,  // efímero, no se guarda en DB
+      scoreCompleto:  r.score_completo  ?? null,
+      updatedAt:      r.updated_at      ?? null,
       rank:           r.rank_position,
       metrics: { winRate: r.win_rate, cagr: r.cagr_simple, maxDD: r.max_drawdown, trades: r.total_trades }
     }
@@ -357,11 +370,15 @@ async function loadRankingRemote(stratId) {
 
 async function loadAllRankingsRemote() {
   // Carga TODOS los resultados de ranking (todas las estrategias) para computar
-  // la mejor estrategia por símbolo. score_historico se persiste; scoreCompleto es efímero.
-  let url = `${getSupaUrl()}/rest/v1/ranking_results?select=symbol,strategy_id,score,score_historico&order=score.desc&limit=5000`
+  // la mejor estrategia por símbolo.
+  let url = `${getSupaUrl()}/rest/v1/ranking_results?select=symbol,strategy_id,score,score_historico,score_completo,updated_at&order=score.desc&limit=5000`
   let res = await fetch(url, { headers: getSupaH() })
   if (!res.ok) {
-    // Fallback: columna score_historico puede no existir todavía
+    // Fallback: columnas nuevas pueden no existir todavía
+    url = `${getSupaUrl()}/rest/v1/ranking_results?select=symbol,strategy_id,score,score_historico&order=score.desc&limit=5000`
+    res = await fetch(url, { headers: getSupaH() })
+  }
+  if (!res.ok) {
     url = `${getSupaUrl()}/rest/v1/ranking_results?select=symbol,strategy_id,score&order=score.desc&limit=5000`
     res = await fetch(url, { headers: getSupaH() })
     if (!res.ok) return null
@@ -1889,7 +1906,7 @@ export default function Home() {
         const strat=strategies.find(s=>s.id===best.strategy_id)
         let stratIntervalo='diario'
         try{const p=typeof strat?.params==='string'?JSON.parse(strat.params||'{}'):(strat?.params||{});stratIntervalo=p.intervalo||'diario'}catch(_){}
-        bySymbol[sym]={stratName:strat?.name||'',stratId:best.strategy_id,score:best.score,scoreHistorico:best.score_historico??null,intervalo:stratIntervalo,stratCount:stratIds.size}
+        bySymbol[sym]={stratName:strat?.name||'',stratId:best.strategy_id,score:best.score,scoreHistorico:best.score_historico??null,scoreCompleto:best.score_completo??null,updatedAt:best.updated_at??null,intervalo:stratIntervalo,stratCount:stratIds.size}
       })
       setBestStratBySymbol(bySymbol)
     }catch(e){console.warn('[refreshBestStrat]',e.message)}
@@ -3593,7 +3610,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.330</title>
+        <title>Trading Simulator V9.331</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3671,7 +3688,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.330
+            <span className="dot"/>Trading Simulator V9.331
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}

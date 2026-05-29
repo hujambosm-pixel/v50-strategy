@@ -17,11 +17,15 @@ async function _setItemLists(itemId, listIds) {
 }
 
 async function loadAllRankingsWithMetrics() {
-  // score_historico persiste; scoreCompleto es efímero (no se guarda en DB)
-  let url = `${getSupaUrl()}/rest/v1/ranking_results?select=symbol,strategy_id,score,score_historico,win_rate,cagr_simple,max_drawdown,total_trades,rank_position&limit=10000`
+  let url = `${getSupaUrl()}/rest/v1/ranking_results?select=symbol,strategy_id,score,score_historico,score_completo,updated_at,win_rate,cagr_simple,max_drawdown,total_trades,rank_position&limit=10000`
   let res = await fetch(url, { headers: getSupaH() })
   if (!res.ok) {
-    // Fallback: columna score_historico puede no existir todavía en la tabla
+    // Fallback nivel 1: sin score_completo y updated_at
+    url = `${getSupaUrl()}/rest/v1/ranking_results?select=symbol,strategy_id,score,score_historico,win_rate,cagr_simple,max_drawdown,total_trades,rank_position&limit=10000`
+    res = await fetch(url, { headers: getSupaH() })
+  }
+  if (!res.ok) {
+    // Fallback nivel 2: sin score_historico
     url = `${getSupaUrl()}/rest/v1/ranking_results?select=symbol,strategy_id,score,win_rate,cagr_simple,max_drawdown,total_trades,rank_position&limit=10000`
     res = await fetch(url, { headers: getSupaH() })
   }
@@ -162,6 +166,8 @@ export default function WatchlistManager({
           trades:         r.total_trades,
           score:          r.score,
           scoreHistorico: r.score_historico ?? null,
+          scoreCompleto:  r.score_completo  ?? null,
+          updatedAt:      r.updated_at      ?? null,
         }
       })
       setAllRankings(map)
@@ -199,6 +205,8 @@ export default function WatchlistManager({
         intervalo:      bsb.intervalo || 'diario',
         stratCount:     bsb.stratCount ?? Object.values(allRankings).filter(d => d[symUp]).length,
         scoreHistorico: bsb.scoreHistorico ?? metrics?.scoreHistorico ?? null,
+        scoreCompleto:  bsb.scoreCompleto  ?? metrics?.scoreCompleto  ?? null,
+        updatedAt:      bsb.updatedAt      ?? metrics?.updatedAt      ?? null,
       }
     }
 
@@ -224,6 +232,8 @@ export default function WatchlistManager({
       intervalo,
       stratCount:     Object.values(allRankings).filter(d => d[symUp]).length,
       scoreHistorico: best.metrics?.scoreHistorico ?? null,
+      scoreCompleto:  best.metrics?.scoreCompleto  ?? null,
+      updatedAt:      best.metrics?.updatedAt      ?? null,
     }
   }, [allRankings, strategies, bestStratBySymbol])
 
@@ -1285,16 +1295,28 @@ export default function WatchlistManager({
                     )
                   })()}
 
-                  {/* Score completo — efímero, solo disponible en sesión activa */}
+                  {/* Score completo — guardado en DB, con indicador de antigüedad */}
                   {(()=>{
-                    const sc = metricsView === 'active' ? rankingData?.[sym]?.scoreCompleto : null
+                    const sc = metricsView === 'active'
+                      ? rankingData?.[sym]?.scoreCompleto
+                      : (best?.scoreCompleto ?? null)
+                    const scTs = metricsView === 'active'
+                      ? rankingData?.[sym]?.updatedAt
+                      : (best?.updatedAt ?? null)
+                    const daysSince = scTs ? Math.floor((Date.now() - new Date(scTs)) / 86400000) : null
+                    const isStale = sc != null && daysSince != null && daysSince >= 1
+                    const staleTooltip = isStale
+                      ? `Dato de hace ${daysSince} día${daysSince > 1 ? 's' : ''} · Ejecuta Ranking para actualizar`
+                      : undefined
                     return (
-                      <td style={{
+                      <td title={staleTooltip} style={{
                         ...TD(), textAlign: 'right', fontWeight: 600,
                         borderLeft: `1px solid ${P.border}`, borderRight: `2px solid ${P.borderStrong}`,
-                        color: scoreFg(sc),
+                        color: isStale ? '#f59e0b' : scoreFg(sc),
                       }}>
-                        {sc != null ? fmt(sc, 1) + '%' : <span style={{ color: P.textMuted }}>—</span>}
+                        {sc != null
+                          ? <>{fmt(sc, 1)}%{isStale && <span style={{ marginLeft: 2, fontSize: 10 }}>⚠</span>}</>
+                          : <span style={{ color: P.textMuted }}>—</span>}
                       </td>
                     )
                   })()}
