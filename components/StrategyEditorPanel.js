@@ -191,6 +191,23 @@ export default function StrategyEditorPanel({ strForm, setStrForm, strategy, onS
         <input style={{...S.input, width:100}} type="number" value={strForm.capital_ini||''} onChange={e=>upd('capital_ini',e.target.value)} placeholder="Capital €" />
         <input style={{...S.input, width:76}}  type="number" value={strForm.allocation_pct||''} onChange={e=>upd('allocation_pct',e.target.value)} placeholder="Asig. %" />
         <input style={{...S.input, width:64}}  type="number" value={strForm.years||''} onChange={e=>upd('years',e.target.value)} placeholder="Años" />
+        {/* Intervalo D/S — almacenado en params.intervalo, gestionado aquí visualmente */}
+        {(()=>{
+          const iv=strForm._intervalo||'diario'
+          const btnStyle=(val)=>({
+            fontFamily:MONO,fontSize:11,padding:'5px 9px',borderRadius:3,cursor:'pointer',flexShrink:0,
+            background:iv===val?(val==='semanal'?'rgba(240,192,64,0.18)':'rgba(0,212,255,0.18)'):'transparent',
+            border:`1px solid ${iv===val?(val==='semanal'?'#a07820':'#00d4ff'):'#1a2d45'}`,
+            color:iv===val?(val==='semanal'?'#f0c040':'#00d4ff'):'#3a5070',
+            transition:'all 0.15s',
+          })
+          return(
+            <div style={{display:'flex',gap:2,flexShrink:0}} title="Intervalo de datos de la estrategia: Diario (D) o Semanal (S)">
+              <button style={btnStyle('diario')}  onClick={()=>upd('_intervalo','diario')}>D</button>
+              <button style={btnStyle('semanal')} onClick={()=>upd('_intervalo','semanal')}>S</button>
+            </div>
+          )
+        })()}
       </div>
 
       {/* ── FILA 3: Dos columnas que llenan el resto ── */}

@@ -111,16 +111,6 @@ export default function StrategyManager({
       .finally(() => setLoadingMetrics(false))
   }, [])
 
-  // ── FIX 3: Log de diagnóstico — dispara cuando metricsMap carga ──
-  useEffect(() => {
-    if (loadingMetrics) return
-    console.log('[STRAT-METRICS] keys en metricsMap (strategy_ids con datos en ranking_results):', Object.keys(metricsMap))
-    console.log('[STRAT-METRICS]', strategies.map(s => ({
-      id: s.id,
-      name: s.name,
-      hasRanking: (metricsMap[s.id] || []).length
-    })))
-  }, [loadingMetrics, metricsMap, strategies])
 
   const getMetrics = useCallback((stratId) => {
     const rows = metricsMap[stratId || '__null__'] || []

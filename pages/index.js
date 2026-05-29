@@ -1834,6 +1834,8 @@ export default function Home() {
       code_pine:s.code_pine||'',
       summary:s.summary||'',
       visuals:s.visuals||'',
+      // _intervalo: meta-param extraído de params.intervalo — se gestiona con el badge D/S del editor
+      _intervalo:(()=>{try{const p=typeof s.params==='string'?JSON.parse(s.params||'{}'):(s.params||{});return p.intervalo||'diario'}catch(_){return 'diario'}})(),
     })
   }
   const closeEditStr=()=>{
@@ -1848,7 +1850,8 @@ export default function Home() {
       try{
         const newP=strForm.params?.trim()?JSON.parse(strForm.params):{}
         const oldP=typeof editingStr?.params==='string'?JSON.parse(editingStr.params||'{}'):(editingStr?.params||{})
-        if(oldP.intervalo!=null) newP.intervalo=oldP.intervalo
+        const iv=strForm._intervalo||oldP.intervalo
+        if(iv) newP.intervalo=iv
         mergedParams=JSON.stringify(newP)
       }catch(_){}
       const payload={
@@ -1868,8 +1871,17 @@ export default function Home() {
   const cloneEditStr=async()=>{
     setStrSaving(true)
     try{
+      let mergedParams=strForm.params||''
+      try{
+        const newP=strForm.params?.trim()?JSON.parse(strForm.params):{}
+        const oldP=typeof editingStr?.params==='string'?JSON.parse(editingStr.params||'{}'):(editingStr?.params||{})
+        const iv=strForm._intervalo||oldP.intervalo
+        if(iv) newP.intervalo=iv
+        mergedParams=JSON.stringify(newP)
+      }catch(_){}
       const payload={
         ...strForm,
+        params:mergedParams,
         id:undefined,
         name:'Copia de '+(strForm.name||'estrategia'),
         years:Number(strForm.years||5),
@@ -3658,7 +3670,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.335</title>
+        <title>Trading Simulator V9.336</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3736,7 +3748,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.335
+            <span className="dot"/>Trading Simulator V9.336
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4168,16 +4180,6 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                               </span>
                             </div>
                           </div>
-                          {/* Edit button */}
-                          <button onClick={e=>{e.stopPropagation();openEditStr(s)}}
-                            title="Editar"
-                            style={{background:'transparent',border:'1px solid var(--border)',color:'var(--text3)',
-                              fontFamily:MONO,fontSize:11,padding:'2px 6px',borderRadius:3,cursor:'pointer',
-                              flexShrink:0,transition:'color 0.1s,border-color 0.1s'}}
-                            onMouseOver={e=>{e.currentTarget.style.color='#a8ccdf';e.currentTarget.style.borderColor='#a8ccdf'}}
-                            onMouseOut={e=>{e.currentTarget.style.color='var(--text3)';e.currentTarget.style.borderColor='var(--border)'}}>
-                            ✎
-                          </button>
                           {/* Play/Stop button */}
                           <button onClick={e=>{e.stopPropagation();isActive?stopStrategy():loadStrategyLegacy(s)}}
                             title={isActive?`Detener: ${s.name}`:`Ejecutar: ${s.name}`}
