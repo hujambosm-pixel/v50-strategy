@@ -2012,10 +2012,11 @@ export default function Home() {
       const bySymbol={}
       Object.entries(grouped).forEach(([sym,symRows])=>{
         const stratIds=new Set(symRows.map(r=>r.strategy_id).filter(Boolean))
-        // Solo candidatos con métricas completas (cagr, winRate, maxDD no nulos)
+        // Preferir candidatos con métricas completas; si no hay, usar los que tengan score_historico
         const complete=symRows.filter(r=>r.cagr_simple!=null&&r.win_rate!=null&&r.max_drawdown!=null)
-        if(!complete.length) return // sin candidatos válidos
-        const best=complete.reduce((acc,r)=>(r.score_historico??0)>(acc?.score_historico??0)?r:acc,null)
+        const candidates=complete.length>0?complete:symRows.filter(r=>r.score_historico!=null)
+        if(!candidates.length) return // sin candidatos válidos
+        const best=candidates.reduce((acc,r)=>(r.score_historico??0)>(acc?.score_historico??0)?r:acc,null)
         if(!best) return
         const strat=strategies.find(s=>s.id===best.strategy_id)
         let stratIntervalo='diario'
@@ -2103,8 +2104,16 @@ export default function Home() {
     // Optimistic update
     setStrategies(prev=>prev.map(s=>s.id===stratId?{...s,enabled}:s))
     try {
-      await apiFetch('/api/strategies',{method:'PUT',headers:{'Content-Type':'application/json'},
+      const res=await apiFetch('/api/strategies',{method:'PUT',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({id:stratId,enabled})})
+      if(!res.ok){
+        const txt=await res.text().catch(()=>'')
+        // Si la columna enabled no existe, loguear SQL para crearla
+        if(txt.includes('enabled')||txt.includes('column')){
+          console.warn('[toggleStrategyEnabled] Columna enabled ausente. SQL:\nALTER TABLE strategies ADD COLUMN IF NOT EXISTS enabled boolean DEFAULT true;')
+        }
+        throw new Error(txt||`HTTP ${res.status}`)
+      }
     } catch(e) {
       console.warn('[toggleStrategyEnabled]',e.message)
       // Revert on error
@@ -2608,7 +2617,7 @@ export default function Home() {
     await upsertScoreHistoricoRemote(scoreMap,currentStratId||null)
     setRankingData(prev=>{const next={...prev};Object.entries(scoreMap).forEach(([sym,sh])=>{next[sym]={...(next[sym]||{}),scoreHistorico:sh}});return next})
     setRankingStratId(currentStratId); setRankingStratName(stratName||'')
-    refreshBestStratPerSymbol().catch(()=>{})
+    await refreshBestStratPerSymbol().catch(()=>{})   // await para que bestStratBySymbol se actualice antes de rankingRunning=false
     setRankingRunning(false); setRankingProgress({done:0,total:0})
     setRankingBannerDismissed(true)
   },[watchlist,years,capitalIni,currentStratId,stratName,filtros,estrategiaIntervalo,refreshBestStratPerSymbol])
@@ -2676,7 +2685,7 @@ export default function Home() {
     await upsertScoreCompletoRemote(scoreMap,currentStratId||null)
     setRankingData(prev=>{const next={...prev};Object.entries(scoreMap).forEach(([sym,sc])=>{next[sym]={...(next[sym]||{}),scoreCompleto:sc,score:sc}});return next})
     setRankingStratId(currentStratId); setRankingStratName(stratName||'')
-    refreshBestStratPerSymbol().catch(()=>{})
+    await refreshBestStratPerSymbol().catch(()=>{})   // await para que bestStratBySymbol se actualice antes de rankingRunning=false
     setRankingRunning(false); setRankingProgress({done:0,total:0})
     setRankingBannerDismissed(true)
   },[watchlist,years,capitalIni,currentStratId,stratName,filtros,estrategiaIntervalo,refreshBestStratPerSymbol])
@@ -4006,7 +4015,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.343</title>
+        <title>Trading Simulator V9.344</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4084,7 +4093,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.343
+            <span className="dot"/>Trading Simulator V9.344
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}

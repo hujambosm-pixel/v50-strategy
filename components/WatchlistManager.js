@@ -1062,7 +1062,7 @@ export default function WatchlistManager({
       {/* ── Tabla ── */}
       <div style={{ flex: 1, overflow: 'auto', background: P.bg }}>
         <table style={{ borderCollapse: 'collapse', minWidth: '100%', tableLayout: 'auto' }}>
-          <thead>
+          <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
             {/* Sub-header agrupador de métricas */}
             <tr>
               <th colSpan={4} style={{ ...TH(), background: P.thBg, borderBottom: `1px solid ${P.border}` }} />
