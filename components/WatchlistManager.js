@@ -1141,20 +1141,19 @@ export default function WatchlistManager({
                   </div>
                 ) : (
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
-                    {topStratDoneFlash && calcPhase === 0
+                    {topStratDoneFlash
                       ? <span style={{ color: '#1a6b3a' }}>✓ Listo</span>
-                      : calcPhase === 1 || rankingRunning
-                        ? <span style={{ fontSize: 9 }}>Fase 1/2: {rankingProgress?.done ?? 0}/{rankingProgress?.total ?? 0}…</span>
-                        : (calcPhase === 2 || topStratRunning)
-                          ? <span style={{ fontSize: 9 }}>Fase 2/2: estrategia {topStratProgress?.current||0}/{topStratProgress?.total||0}…</span>
-                          : (metricsView === 'active' ? (rankingStratName ? `MÉTRICAS · ${rankingStratName.toUpperCase()}` : 'MÉTRICAS ESTRATEGIA ACTIVA') : 'MÉTRICAS TOP ESTRATEGIA')}
-                    {calcPhase === 0 && !rankingRunning && !topStratRunning && !topStratDoneFlash && selected.size > 0 && (
+                      : topStratRunning
+                        ? <span style={{ fontSize: 9 }}>Estrategia {topStratProgress?.current||0}/{topStratProgress?.total||0}…</span>
+                        : (metricsView === 'active' ? (rankingStratName ? `MÉTRICAS · ${rankingStratName.toUpperCase()}` : 'MÉTRICAS ESTRATEGIA ACTIVA') : 'MÉTRICAS TOP ESTRATEGIA')}
+                    {!topStratRunning && !topStratDoneFlash && selected.size > 0 && (
                       <span
                         onClick={e => {
                           e.stopPropagation()
-                          onCalcFull && onCalcFull(watchlist.filter(w => selected.has(w.id)))
+                          setMetricsView('top')
+                          onCalcRankingAll && onCalcRankingAll(watchlist.filter(w => selected.has(w.id)))
                         }}
-                        title={`Calcula TODOS los datos para los ${selected.size} activos seleccionados:\n· Score métricas y Score mét.+señ. con la estrategia activa${rankingStratName ? ` (${rankingStratName})` : ''}\n· Score métricas y Score mét.+señ. de la mejor estrategia para cada activo\n· Métricas detalladas (CAGR, Profit €, Win%, MaxDD, Ops) para ambas vistas\nEl toggle Estrategia activa/Top estrategia solo cambia qué datos se muestran.\nPuede tardar varios minutos con muchas estrategias.`}
+                        title={`Calcula la mejor estrategia para cada activo entre TODAS las habilitadas.\nActualiza: scoreMetricas_top, scoreMetSeñ_top, métricas y nombre de top estrategia.\nCriterio: mayor Score métricas (histórico) entre estrategias con CAGR, Win% y MaxDD calculados.\nPuede tardar varios minutos con muchas estrategias.`}
                         style={{
                           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                           width: 14, height: 14, borderRadius: 3,
@@ -1213,20 +1212,19 @@ export default function WatchlistManager({
                 onClick={() => handleSort('scoreHistorico')}
                 title="Score 0-100 basado en métricas históricas. Clic para ordenar.">
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
-                  {topStratDoneFlash && calcPhase === 0
+                  {rankingDoneFlash
                     ? <span style={{ color: '#1a6b3a', fontWeight: 700 }}>✓ Listo</span>
-                    : calcPhase === 1 || rankingRunning
-                      ? <span style={{ fontSize: 9 }}>Fase 1/2: {rankingProgress?.done ?? 0}/{rankingProgress?.total ?? 0}…</span>
-                      : calcPhase === 2 || topStratRunning
-                        ? <span style={{ fontSize: 9 }}>Fase 2/2…</span>
-                        : <>SCORE MÉTRICAS{sortIcon('scoreHistorico')}</>}
-                  {calcPhase === 0 && !rankingRunning && !topStratRunning && !topStratDoneFlash && selected.size > 0 && (
+                    : rankingRunning
+                      ? <span style={{ fontSize: 9 }}>Calculando {rankingProgress?.done ?? 0}/{rankingProgress?.total ?? 0}…</span>
+                      : <>SCORE MÉTRICAS{sortIcon('scoreHistorico')}</>}
+                  {!rankingRunning && !rankingDoneFlash && selected.size > 0 && (
                     <span
                       onClick={e => {
                         e.stopPropagation()
-                        onCalcFull && onCalcFull(watchlist.filter(w => selected.has(w.id)))
+                        setMetricsView('active')
+                        onCalcRanking && onCalcRanking(watchlist.filter(w => selected.has(w.id)))
                       }}
-                      title={`Calcula TODOS los datos para los ${selected.size} activos seleccionados:\n· Score métricas y Score mét.+señ. con la estrategia activa${rankingStratName ? ` (${rankingStratName})` : ''}\n· Score métricas y Score mét.+señ. de la mejor estrategia para cada activo\n· Métricas detalladas (CAGR, Profit €, Win%, MaxDD, Ops) para ambas vistas\nEl toggle Estrategia activa/Top estrategia solo cambia qué datos se muestran.\nSelecciona activos primero para activar.`}
+                      title={`Calcula Score métricas (histórico) + métricas detalladas para los ${selected.size} activos seleccionados con la estrategia activa${rankingStratName ? ` (${rankingStratName})` : ''}.\nActualiza: scoreMetricas_activa, CAGR, Profit €, Win%, MaxDD, Ops.\nResultado guardado en Supabase.`}
                       style={{
                         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                         width: 16, height: 16, borderRadius: 3,
@@ -1244,20 +1242,19 @@ export default function WatchlistManager({
                 onClick={() => handleSort('scoreCompleto')}
                 title="Score 0-100 que combina métricas históricas + señales de mercado. Clic para ordenar.">
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
-                  {topStratDoneFlash && calcPhase === 0
+                  {rankingDoneFlash
                     ? <span style={{ color: '#1a6b3a', fontWeight: 700 }}>✓ Listo</span>
-                    : calcPhase === 1 || rankingRunning
-                      ? <span style={{ fontSize: 9 }}>Fase 1/2: {rankingProgress?.done ?? 0}/{rankingProgress?.total ?? 0}…</span>
-                      : calcPhase === 2 || topStratRunning
-                        ? <span style={{ fontSize: 9 }}>Fase 2/2…</span>
-                        : <>SCORE MÉT.+SEÑ.{sortIcon('scoreCompleto')}</>}
-                  {calcPhase === 0 && !rankingRunning && !topStratRunning && !topStratDoneFlash && selected.size > 0 && (
+                    : rankingRunning
+                      ? <span style={{ fontSize: 9 }}>Calculando {rankingProgress?.done ?? 0}/{rankingProgress?.total ?? 0}…</span>
+                      : <>SCORE MÉT.+SEÑ.{sortIcon('scoreCompleto')}</>}
+                  {!rankingRunning && !rankingDoneFlash && selected.size > 0 && (
                     <span
                       onClick={e => {
                         e.stopPropagation()
-                        onCalcFull && onCalcFull(watchlist.filter(w => selected.has(w.id)))
+                        setMetricsView('active')
+                        onCalcRanking && onCalcRanking(watchlist.filter(w => selected.has(w.id)))
                       }}
-                      title={`Calcula TODOS los datos para los ${selected.size} activos seleccionados:\n· Score métricas y Score mét.+señ. con la estrategia activa${rankingStratName ? ` (${rankingStratName})` : ''}\n· Score métricas y Score mét.+señ. de la mejor estrategia para cada activo\n· Métricas detalladas (CAGR, Profit €, Win%, MaxDD, Ops) para ambas vistas\nEl toggle Estrategia activa/Top estrategia solo cambia qué datos se muestran.\nSelecciona activos primero para activar.`}
+                      title={`Calcula Score métricas + señales de mercado para los ${selected.size} activos seleccionados con la estrategia activa${rankingStratName ? ` (${rankingStratName})` : ''}.\nActualiza: scoreMetricas_activa y scoreMetSeñ_activa.\nEste score combina métricas históricas con momentum, fuerza relativa y proximidad a máximo 52 semanas.`}
                       style={{
                         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                         width: 16, height: 16, borderRadius: 3,
@@ -1277,7 +1274,7 @@ export default function WatchlistManager({
                 ['trades',  'Ops',    true],
               ].map(([metric, label, isLast]) => (
                 <th key={metric} onClick={() => handleSort(metric)}
-                  title={metric === 'profit' ? 'Ganancia/pérdida simple acumulada en € con esta estrategia sobre este activo · modo Simple' : undefined}
+                  title={metric === 'profit' ? 'Ganancia/pérdida simple total acumulada en € con esta estrategia sobre este activo.\nCalculado con capital inicial de 10.000€ en modo Simple (sin reinversión).\nUn CAGR alto con Profit bajo puede indicar pocas operaciones o período corto.' : undefined}
                   style={{
                     ...TH(),
                     cursor: 'pointer', textAlign: 'right',
@@ -1477,7 +1474,7 @@ export default function WatchlistManager({
                     const pColor = pv == null ? P.textMuted : pv >= 0 ? '#1a5c30' : '#8b1a1a'
                     const pFmt = pv == null ? null : (pv >= 0 ? '+' : '') + fmt(pv, 0) + ' €'
                     return (
-                      <td title="Ganancia/pérdida simple acumulada en € con esta estrategia sobre este activo · modo Simple"
+                      <td title="Ganancia/pérdida simple total acumulada en € con esta estrategia sobre este activo · modo Simple (sin reinversión)"
                         style={{ ...TD(), textAlign: 'right', fontWeight: 600, borderRight: `1px solid ${P.border}`, color: pColor }}>
                         {pFmt ? pFmt : <span style={{ color: P.textMuted }}>—</span>}
                       </td>
