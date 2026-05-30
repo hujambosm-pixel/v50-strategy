@@ -240,7 +240,7 @@ export default function StrategyManager({
             background: onlyEnabled ? P.accent : P.bg,
             border: `1px solid ${onlyEnabled ? P.accent : P.border}`,
             color: onlyEnabled ? P.accentFg : P.textSec, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-          {onlyEnabled ? '✓ Solo habilitadas' : 'Todas'}
+          {onlyEnabled ? '✓ Habilitadas' : 'Todas'}
         </button>
 
         <button

@@ -149,7 +149,11 @@ export default function WatchlistManager({
   const [newListName, setNewListName]     = useState('')
   const [renameValue, setRenameValue]     = useState('')
   const [listOpLoading, setListOpLoading] = useState(false)
-  const [metricsView, setMetricsView]   = useState('top') // 'active' | 'top'
+  const [metricsView, setMetricsView]         = useState('top') // 'active' | 'top'
+  const [rankingDoneFlash, setRankingDoneFlash]   = useState(false)
+  const [topStratDoneFlash, setTopStratDoneFlash] = useState(false)
+  const prevRankingRunning  = useRef(false)
+  const prevTopStratRunning = useRef(false)
   const addDropRef    = useRef(null)
   const listFilterRef = useRef(null)
 
@@ -190,6 +194,25 @@ export default function WatchlistManager({
     document.addEventListener('mousedown', h)
     return () => document.removeEventListener('mousedown', h)
   }, [])
+
+  // ── Flash "✓ Listo" 2s al terminar cálculo ───────────────
+  useEffect(() => {
+    if (prevRankingRunning.current && !rankingRunning) {
+      setRankingDoneFlash(true)
+      const t = setTimeout(() => setRankingDoneFlash(false), 2000)
+      return () => clearTimeout(t)
+    }
+    prevRankingRunning.current = rankingRunning
+  }, [rankingRunning])
+
+  useEffect(() => {
+    if (prevTopStratRunning.current && !topStratRunning) {
+      setTopStratDoneFlash(true)
+      const t = setTimeout(() => setTopStratDoneFlash(false), 2000)
+      return () => clearTimeout(t)
+    }
+    prevTopStratRunning.current = topStratRunning
+  }, [topStratRunning])
 
   // ── Best strategy for a symbol ────────────────────────────
   // Priority: bestStratBySymbol (score-based, same source as sidebar tooltip)
@@ -1031,7 +1054,28 @@ export default function WatchlistManager({
               }}
                 onClick={() => setMetricsView(v => v === 'active' ? 'top' : 'active')}
                 title={metricsView === 'active' ? 'Métricas de la estrategia actualmente activa para cada activo. Clic para cambiar a Top estrategia' : 'Métricas de la estrategia con mejor score histórico para cada activo entre todas las evaluadas. Clic para cambiar a estrategia activa'}>
-                {metricsView === 'active' ? (rankingStratName ? `MÉTRICAS · ${rankingStratName.toUpperCase()}` : 'MÉTRICAS ESTRATEGIA ACTIVA') : 'MÉTRICAS TOP ESTRATEGIA'}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+                  {topStratDoneFlash
+                    ? <span style={{ color: '#1a6b3a' }}>✓ Listo</span>
+                    : topStratRunning
+                      ? <span>Estrategia {topStratProgress?.current||0}/{topStratProgress?.total||0}…</span>
+                      : (metricsView === 'active' ? (rankingStratName ? `MÉTRICAS · ${rankingStratName.toUpperCase()}` : 'MÉTRICAS ESTRATEGIA ACTIVA') : 'MÉTRICAS TOP ESTRATEGIA')}
+                  {!topStratRunning && !topStratDoneFlash && selected.size > 0 && (
+                    <span
+                      onClick={e => {
+                        e.stopPropagation()
+                        setMetricsView('top')
+                        onCalcRankingAll && onCalcRankingAll(watchlist.filter(w => selected.has(w.id)))
+                      }}
+                      title={`Calcula qué estrategia funciona mejor para cada activo seleccionado, comparando TODAS las estrategias habilitadas.\nCriterio: mayor Score métricas (histórico).\nSolo considera estrategias con CAGR, Win% y MaxDD calculados.\nActualiza: CAGR%, Win%, MaxDD%, Ops y columna Estrategia.\nPuede tardar varios minutos.`}
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        width: 14, height: 14, borderRadius: 3,
+                        background: 'rgba(26,107,58,0.18)', border: `1px solid #1a6b3a`,
+                        color: '#1a6b3a', fontSize: 9, cursor: 'pointer', flexShrink: 0,
+                      }}>↻</span>
+                  )}
+                </div>
               </th>
               <th colSpan={onDeleteItem ? 3 : 2} style={{
                 ...TH(),
@@ -1068,30 +1112,27 @@ export default function WatchlistManager({
                 background: '#d4d0c8', borderLeft: `2px solid ${P.borderStrong}`, borderRight: `1px solid ${P.border}`,
                 cursor: 'pointer' }}
                 onClick={() => handleSort('scoreHistorico')}
-                title="Score 0-100 basado en métricas históricas (Win Rate, CAGR, CAGR robusto, MaxDD). Se guarda en Supabase y está disponible al cargar la app sin necesidad de ejecutar Ranking">
+                title="Score 0-100 basado en métricas históricas. Clic para ordenar.">
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
-                  SCORE MÉTRICAS{sortIcon('scoreHistorico')}
-                  {selected.size > 0 && (
+                  {rankingDoneFlash
+                    ? <span style={{ color: '#1a6b3a', fontWeight: 700 }}>✓ Listo</span>
+                    : rankingRunning
+                      ? <span style={{ fontSize: 9 }}>Calculando {rankingProgress?.done ?? 0}/{rankingProgress?.total ?? 0}…</span>
+                      : <>SCORE MÉTRICAS{sortIcon('scoreHistorico')}</>}
+                  {!rankingRunning && !rankingDoneFlash && selected.size > 0 && (
                     <span
                       onClick={e => {
                         e.stopPropagation()
-                        if (!rankingRunning) {
-                          setMetricsView('active')
-                          onCalcRanking && onCalcRanking(watchlist.filter(w => selected.has(w.id)))
-                        }
+                        setMetricsView('active')
+                        onCalcRanking && onCalcRanking(watchlist.filter(w => selected.has(w.id)))
                       }}
-                      title={`↻ Calcular SCORE MÉTRICAS para los ${selected.size} activos seleccionados con la estrategia activa`}
+                      title={`Calcula el Score métricas para los ${selected.size} activos seleccionados usando la estrategia activa${rankingStratName ? ` (${rankingStratName})` : ''}.\nScore = combinación ponderada de Win Rate, CAGR, CAGR sin top 3 trades y MaxDD, con los pesos configurados en Ajustes → Ranking.\nResultado guardado en Supabase — persiste entre sesiones.\nSelecciona activos primero para activar.`}
                       style={{
                         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                         width: 16, height: 16, borderRadius: 3,
-                        background: rankingRunning ? 'transparent' : 'rgba(26,107,58,0.18)',
-                        border: `1px solid ${rankingRunning ? P.borderStrong : '#1a6b3a'}`,
-                        color: rankingRunning ? P.textMuted : '#1a6b3a',
-                        fontSize: 10, cursor: rankingRunning ? 'default' : 'pointer',
-                        flexShrink: 0,
-                      }}>
-                      {rankingRunning ? '⟳' : '↻'}
-                    </span>
+                        background: 'rgba(26,107,58,0.18)', border: `1px solid #1a6b3a`,
+                        color: '#1a6b3a', fontSize: 10, cursor: 'pointer', flexShrink: 0,
+                      }}>↻</span>
                   )}
                 </div>
               </th>
@@ -1101,30 +1142,27 @@ export default function WatchlistManager({
                 background: '#d4d0c8', borderLeft: `1px solid ${P.border}`, borderRight: `2px solid ${P.borderStrong}`,
                 cursor: 'pointer' }}
                 onClick={() => handleSort('scoreCompleto')}
-                title="Score 0-100 que combina métricas históricas + condiciones actuales del mercado (momentum, fuerza relativa vs SP500, proximidad a máximo 52 semanas). Solo disponible tras ejecutar Ranking — usa Score métricas como fallback">
+                title="Score 0-100 que combina métricas históricas + señales de mercado. Clic para ordenar.">
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
-                  SCORE MÉT.+SEÑ.{sortIcon('scoreCompleto')}
-                  {selected.size > 0 && (
+                  {rankingDoneFlash
+                    ? <span style={{ color: '#1a6b3a', fontWeight: 700 }}>✓ Listo</span>
+                    : rankingRunning
+                      ? <span style={{ fontSize: 9 }}>Calculando {rankingProgress?.done ?? 0}/{rankingProgress?.total ?? 0}…</span>
+                      : <>SCORE MÉT.+SEÑ.{sortIcon('scoreCompleto')}</>}
+                  {!rankingRunning && !rankingDoneFlash && selected.size > 0 && (
                     <span
                       onClick={e => {
                         e.stopPropagation()
-                        if (!topStratRunning) {
-                          setMetricsView('top')
-                          onCalcRankingAll && onCalcRankingAll(watchlist.filter(w => selected.has(w.id)))
-                        }
+                        setMetricsView('active')
+                        onCalcRanking && onCalcRanking(watchlist.filter(w => selected.has(w.id)))
                       }}
-                      title={`↻ Calcular SCORE MÉT.+SEÑ. para los ${selected.size} activos seleccionados con TODAS las estrategias habilitadas`}
+                      title={`Calcula el Score métricas + señales de mercado para los ${selected.size} activos seleccionados usando la estrategia activa${rankingStratName ? ` (${rankingStratName})` : ''}.\n= Score métricas × peso histórico + (Momentum + Fuerza relativa SP500 + Proximidad máx. 52s) × peso mercado\nLos pesos se configuran en Ajustes → Ranking.\nEste score NO se guarda — es válido solo para hoy ya que usa precios actuales.\nSelecciona activos primero para activar.`}
                       style={{
                         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                         width: 16, height: 16, borderRadius: 3,
-                        background: topStratRunning ? 'transparent' : 'rgba(26,107,58,0.18)',
-                        border: `1px solid ${topStratRunning ? P.borderStrong : '#1a6b3a'}`,
-                        color: topStratRunning ? P.textMuted : '#1a6b3a',
-                        fontSize: 10, cursor: topStratRunning ? 'default' : 'pointer',
-                        flexShrink: 0,
-                      }}>
-                      {topStratRunning ? '⟳' : '↻'}
-                    </span>
+                        background: 'rgba(26,107,58,0.18)', border: `1px solid #1a6b3a`,
+                        color: '#1a6b3a', fontSize: 10, cursor: 'pointer', flexShrink: 0,
+                      }}>↻</span>
                   )}
                 </div>
               </th>
@@ -1149,14 +1187,15 @@ export default function WatchlistManager({
                 </th>
               ))}
 
-              {/* Estrategia (nombre) — sortable */}
+              {/* Estrategia (nombre) — sortable, título dinámico según toggle */}
               <th style={{ ...TH(), minWidth: 130, borderLeft: `2px solid ${P.borderStrong}`, cursor: 'pointer' }}
                 onClick={() => handleSort('stratName')}>
-                Estrategia{sortIcon('stratName')}
+                {metricsView === 'active' ? 'ESTRATEGIA ACTIVA' : 'TOP ESTRATEGIA'}{sortIcon('stratName')}
               </th>
               {/* Temporalidad — sortable */}
               <th style={{ ...TH(), minWidth: 80, textAlign: 'center', cursor: 'pointer' }}
-                onClick={() => handleSort('intervalo')}>
+                onClick={() => handleSort('intervalo')}
+                title="Temporalidad con la que se abrieron los gráficos al calcular el ranking para este activo con la estrategia seleccionada. Corresponde a la temporalidad definida en cada estrategia.">
                 Temporalidad{sortIcon('intervalo')}
               </th>
               {/* Eliminar */}
@@ -1259,18 +1298,36 @@ export default function WatchlistManager({
                     </div>
                   </td>
 
-                  {/* Score histórico */}
+                  {/* Score histórico + indicador cobertura de estrategias */}
                   {(()=>{
                     const sh = metricsView === 'active'
                       ? rankingData?.[sym]?.scoreHistorico
                       : (best?.scoreHistorico ?? null)
+                    // Cobertura: cuántas estrategias habilitadas tienen métricas completas para este activo
+                    const enabledStrats = strategies.filter(s => s.enabled !== false)
+                    const stratsWithData = enabledStrats.filter(s => {
+                      const d = allRankings[s.id]?.[sym]
+                      return d != null && d.cagr != null && d.winRate != null && d.maxDD != null
+                    })
+                    const coverageCount = stratsWithData.length
+                    const coverageTotal = enabledStrats.length
+                    const isPartial = metricsView === 'top' && coverageTotal > 0 && coverageCount > 0 && coverageCount < coverageTotal
+                    const missingNames = isPartial
+                      ? enabledStrats.filter(s => !allRankings[s.id]?.[sym] || allRankings[s.id][sym].cagr == null).map(s => s.name).join(', ')
+                      : ''
+                    const coverageTip = isPartial
+                      ? `Score calculado con ${coverageCount} de ${coverageTotal} estrategias habilitadas.\nFaltan: ${missingNames}\nEjecuta el header ↻ para calcular las que faltan`
+                      : undefined
+                    const shColor = isPartial ? '#b87a20' : scoreFg(sh)
                     return (
-                      <td style={{
+                      <td title={coverageTip} style={{
                         ...TD(), textAlign: 'right', fontWeight: 600,
                         borderLeft: `2px solid ${P.borderStrong}`, borderRight: `1px solid ${P.border}`,
-                        color: scoreFg(sh),
+                        color: shColor,
                       }}>
-                        {sh != null ? fmt(sh, 1) + '%' : <span style={{ color: P.textMuted }}>—</span>}
+                        {sh != null
+                          ? <>{fmt(sh, 1)}%{isPartial && <span style={{ marginLeft: 2, fontSize: 9 }}>⚠</span>}</>
+                          : <span style={{ color: P.textMuted }}>—</span>}
                       </td>
                     )
                   })()}

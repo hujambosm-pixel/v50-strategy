@@ -371,11 +371,15 @@ async function loadRankingRemote(stratId) {
 
 async function loadAllRankingsRemote() {
   // Carga TODOS los resultados de ranking (todas las estrategias) para computar
-  // la mejor estrategia por símbolo.
-  let url = `${getSupaUrl()}/rest/v1/ranking_results?select=symbol,strategy_id,score,score_historico,score_completo,updated_at&order=score.desc&limit=5000`
+  // la mejor estrategia por símbolo. Incluye métricas para filtrar candidatos con datos completos.
+  let url = `${getSupaUrl()}/rest/v1/ranking_results?select=symbol,strategy_id,score,score_historico,score_completo,updated_at,cagr_simple,win_rate,max_drawdown&order=score.desc&limit=5000`
   let res = await fetch(url, { headers: getSupaH() })
   if (!res.ok) {
     // Fallback: columnas nuevas pueden no existir todavía
+    url = `${getSupaUrl()}/rest/v1/ranking_results?select=symbol,strategy_id,score,score_historico,cagr_simple,win_rate,max_drawdown&order=score.desc&limit=5000`
+    res = await fetch(url, { headers: getSupaH() })
+  }
+  if (!res.ok) {
     url = `${getSupaUrl()}/rest/v1/ranking_results?select=symbol,strategy_id,score,score_historico&order=score.desc&limit=5000`
     res = await fetch(url, { headers: getSupaH() })
   }
@@ -387,6 +391,16 @@ async function loadAllRankingsRemote() {
   const rows = await res.json()
   if (!rows?.length) return null
   return rows
+}
+
+// Limpia filas corruptas: tienen score_historico pero sin métricas (cagr_simple IS NULL)
+async function cleanCorruptRankingRows() {
+  if (!getSupaUrl()) return
+  try {
+    await fetch(`${getSupaUrl()}/rest/v1/ranking_results?cagr_simple=is.null&score_historico=not.is.null`, {
+      method: 'DELETE', headers: { ...getSupaH(), 'Prefer': 'return=minimal' }
+    })
+  } catch(_) {} // ignorar errores silenciosamente
 }
 
 // ── Strategies API ────────────────────────────────────────────
@@ -1923,7 +1937,10 @@ export default function Home() {
       const bySymbol={}
       Object.entries(grouped).forEach(([sym,symRows])=>{
         const stratIds=new Set(symRows.map(r=>r.strategy_id).filter(Boolean))
-        const best=symRows.reduce((acc,r)=>(r.score_historico??0)>(acc?.score_historico??0)?r:acc,null)
+        // Solo candidatos con métricas completas (cagr, winRate, maxDD no nulos)
+        const complete=symRows.filter(r=>r.cagr_simple!=null&&r.win_rate!=null&&r.max_drawdown!=null)
+        if(!complete.length) return // sin candidatos válidos
+        const best=complete.reduce((acc,r)=>(r.score_historico??0)>(acc?.score_historico??0)?r:acc,null)
         if(!best) return
         const strat=strategies.find(s=>s.id===best.strategy_id)
         let stratIntervalo='diario'
@@ -1936,6 +1953,9 @@ export default function Home() {
 
   // useEffect aquí, DESPUÉS de la declaración de refreshBestStratPerSymbol para evitar TDZ
   useEffect(()=>{ refreshBestStratPerSymbol() },[refreshBestStratPerSymbol])
+
+  // Limpieza única al inicio: eliminar filas corruptas (score sin métricas)
+  useEffect(()=>{ cleanCorruptRankingRows() },[]) // eslint-disable-line
 
   function stopStrategy({skipDebounce=true}={}) {
     if(skipDebounce) skipNextRunRef.current = true
@@ -3674,7 +3694,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.337</title>
+        <title>Trading Simulator V9.338</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3752,7 +3772,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.337
+            <span className="dot"/>Trading Simulator V9.338
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
