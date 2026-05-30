@@ -301,6 +301,7 @@ async function saveRankingRemote(rankingData, stratId) {
     cagr_simple:     rd.metrics?.cagr     ?? null,
     max_drawdown:    rd.metrics?.maxDD    ?? null,
     total_trades:    rd.metrics?.trades   ?? null,
+    profit_simple:   rd.profitSimple      ?? null,
     score:           rd.score             ?? null,
     score_historico: rd.scoreHistorico    ?? null,
     score_completo:  rd.scoreCompleto     ?? null,
@@ -314,6 +315,7 @@ async function saveRankingRemote(rankingData, stratId) {
       const out = {...r}
       if (missingCols.has('score_historico')) delete out.score_historico
       if (missingCols.has('score_completo'))  delete out.score_completo
+      if (missingCols.has('profit_simple'))   delete out.profit_simple
       return out
     })
     const res = await fetch(`${getSupaUrl()}/rest/v1/ranking_results`, {
@@ -332,6 +334,10 @@ async function saveRankingRemote(rankingData, stratId) {
       if (txt.includes('score_completo')) {
         console.warn('[Ranking] Columna score_completo no existe. SQL:\nALTER TABLE ranking_results ADD COLUMN IF NOT EXISTS score_completo numeric;')
         missingCols.add('score_completo')
+      }
+      if (txt.includes('profit_simple')) {
+        console.warn('[Ranking] Columna profit_simple no existe. SQL:\nALTER TABLE ranking_results ADD COLUMN IF NOT EXISTS profit_simple numeric;')
+        missingCols.add('profit_simple')
       }
       if (missingCols.size > wasMissing) {
         // retry without the missing columns
@@ -363,7 +369,7 @@ async function loadRankingRemote(stratId) {
       scoreCompleto:  r.score_completo  ?? null,
       updatedAt:      r.updated_at      ?? null,
       rank:           r.rank_position,
-      metrics: { winRate: r.win_rate, cagr: r.cagr_simple, maxDD: r.max_drawdown, trades: r.total_trades }
+      metrics: { winRate: r.win_rate, cagr: r.cagr_simple, maxDD: r.max_drawdown, trades: r.total_trades, profit: r.profit_simple ?? null }
     }
   })
   return out
@@ -684,6 +690,7 @@ export default function Home() {
   const [rankingError,setRankingError]=useState(null)
   const [topStratRunning,setTopStratRunning]=useState(false)
   const [topStratProgress,setTopStratProgress]=useState({current:0,total:0})
+  const [calcPhase,setCalcPhase]=useState(0)  // 0=idle, 1=fase1 ranking activo, 2=fase2 top estrategia
   // Banner de recordatorio 24h — solo se muestra una vez por sesión si han pasado >24h
   const [rankingBannerDismissed,setRankingBannerDismissed]=useState(()=>{
     try{const ts=localStorage.getItem('ranking_last_updated');if(!ts)return false;return(Date.now()-Number(ts))<24*60*60*1000}catch(_){return false}
@@ -2341,7 +2348,8 @@ export default function Home() {
             score:          scoreCompleto,   // backward compat
             scoreCompleto,
             scoreHistorico,
-            metrics:{winRate,factorBen,cagr,cagrRobust,maxDD,trades:trades.length}
+            profitSimple:   json.gananciaSimple ?? null,
+            metrics:{winRate,factorBen,cagr,cagrRobust,maxDD,trades:trades.length,profit:json.gananciaSimple??null}
           }
         } catch(e){ console.error('[calcRanking]', sym, e) }
       }))
@@ -2456,7 +2464,8 @@ export default function Home() {
             const scoreCompleto = Math.max(0, Math.min(100, scoreHistorico*wHistorico + scoreMercado*wMercado))
             results[sym.toUpperCase()] = {
               score: scoreCompleto, scoreCompleto, scoreHistorico,
-              metrics: { winRate, cagr, cagrRobust, maxDD, trades: trades.length }
+              profitSimple: json.gananciaSimple ?? null,
+              metrics: { winRate, cagr, cagrRobust, maxDD, trades: trades.length, profit: json.gananciaSimple ?? null }
             }
           } catch(e) { console.error('[calcRankingAll]', sym, e) }
         }))
@@ -2481,6 +2490,16 @@ export default function Home() {
     setTopStratRunning(false)
     setTopStratProgress({current:0, total:0})
   }, [strategies, watchlist, years, capitalIni, filtros, refreshBestStratPerSymbol])
+
+  // ── Cálculo COMPLETO: Fase 1 (estrategia activa) + Fase 2 (top estrategia) ──
+  // Todos los headers ↻ del WatchlistManager lanzan esta función.
+  const calcRankingFull = useCallback(async (selectedItems) => {
+    setCalcPhase(1)
+    try { await calcRanking(selectedItems) } catch(_) {}
+    setCalcPhase(2)
+    try { await calcRankingAllStrategies(selectedItems) } catch(_) {}
+    setCalcPhase(0)
+  }, [calcRanking, calcRankingAllStrategies])
 
   // ── Analizar candidatos: extrae tickers, corre backtest en paralelo ──
   // Usa gananciaSimple (CAGR Simple) — mismo método y fórmulas que calcRanking
@@ -3694,7 +3713,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.338</title>
+        <title>Trading Simulator V9.339</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3772,7 +3791,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.338
+            <span className="dot"/>Trading Simulator V9.339
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5678,6 +5697,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 onEditItem={w=>{setShowWlManager(false);setWlManagerReturn(true);openEditItem(w)}}
                 onDeleteItem={async(id)=>{await deleteWatchlistItem(id);reloadWatchlist()}}
                 onCalcRanking={calcRanking}
+                onCalcFull={calcRankingFull}
+                calcPhase={calcPhase}
                 rankingRunning={rankingRunning}
                 rankingProgress={rankingProgress}
                 rankingStratName={rankingStratName}
