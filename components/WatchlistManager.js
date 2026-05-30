@@ -103,6 +103,10 @@ export default function WatchlistManager({
   // Cálculo completo (fase 1 + fase 2)
   onCalcFull,
   calcPhase,    // 0=idle, 1=fase1 ranking activo, 2=fase2 top estrategia
+  // Cálculos específicos por columna
+  onCalcScoreMetricas,   // solo score_historico (activa + top)
+  onCalcScoreMetSen,     // solo score_completo  (activa + top)
+  onCalcMetricas,        // solo métricas: CAGR, Profit, Win%, MaxDD, Ops
   // Ranking
   onCalcRanking,
   onClearRanking,
@@ -1151,9 +1155,10 @@ export default function WatchlistManager({
                         onClick={e => {
                           e.stopPropagation()
                           setMetricsView('top')
-                          onCalcRankingAll && onCalcRankingAll(watchlist.filter(w => selected.has(w.id)))
+                          const sel = watchlist.filter(w => selected.has(w.id))
+                          onCalcMetricas ? onCalcMetricas(sel) : onCalcRankingAll && onCalcRankingAll(sel)
                         }}
-                        title={`Calcula la mejor estrategia para cada activo entre TODAS las habilitadas.\nActualiza: scoreMetricas_top, scoreMetSeñ_top, métricas y nombre de top estrategia.\nCriterio: mayor Score métricas (histórico) entre estrategias con CAGR, Win% y MaxDD calculados.\nPuede tardar varios minutos con muchas estrategias.`}
+                        title={`Calcula SOLO métricas (CAGR, Profit €, Win%, MaxDD, Ops) para los ${selected.size} activos.\nActualiza únicamente las columnas de métricas — NO toca score_historico ni score_completo.\nFase 1: estrategia activa${rankingStratName ? ` (${rankingStratName})` : ''}. Fase 2: todas las estrategias habilitadas → determina top estrategia.\nPuede tardar varios minutos.`}
                         style={{
                           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                           width: 14, height: 14, borderRadius: 3,
@@ -1222,9 +1227,10 @@ export default function WatchlistManager({
                       onClick={e => {
                         e.stopPropagation()
                         setMetricsView('active')
-                        onCalcRanking && onCalcRanking(watchlist.filter(w => selected.has(w.id)))
+                        const sel = watchlist.filter(w => selected.has(w.id))
+                        onCalcScoreMetricas ? onCalcScoreMetricas(sel) : onCalcRanking && onCalcRanking(sel)
                       }}
-                      title={`Calcula Score métricas (histórico) + métricas detalladas para los ${selected.size} activos seleccionados con la estrategia activa${rankingStratName ? ` (${rankingStratName})` : ''}.\nActualiza: scoreMetricas_activa, CAGR, Profit €, Win%, MaxDD, Ops.\nResultado guardado en Supabase.`}
+                      title={`Calcula SOLO scoreHistórico para los ${selected.size} activos con la estrategia activa${rankingStratName ? ` (${rankingStratName})` : ''}.\nActualiza únicamente score_historico en Supabase — NO toca CAGR, Profit, Win%, MaxDD, Ops.\nLa Top estrategia se determina comparando score_historico de todas las estrategias guardadas.`}
                       style={{
                         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                         width: 16, height: 16, borderRadius: 3,
@@ -1252,9 +1258,10 @@ export default function WatchlistManager({
                       onClick={e => {
                         e.stopPropagation()
                         setMetricsView('active')
-                        onCalcRanking && onCalcRanking(watchlist.filter(w => selected.has(w.id)))
+                        const sel = watchlist.filter(w => selected.has(w.id))
+                        onCalcScoreMetSen ? onCalcScoreMetSen(sel) : onCalcRanking && onCalcRanking(sel)
                       }}
-                      title={`Calcula Score métricas + señales de mercado para los ${selected.size} activos seleccionados con la estrategia activa${rankingStratName ? ` (${rankingStratName})` : ''}.\nActualiza: scoreMetricas_activa y scoreMetSeñ_activa.\nEste score combina métricas históricas con momentum, fuerza relativa y proximidad a máximo 52 semanas.`}
+                      title={`Calcula SOLO scoreCompleto (métricas + señales) para los ${selected.size} activos con la estrategia activa${rankingStratName ? ` (${rankingStratName})` : ''}.\nActualiza únicamente score_completo en Supabase — NO toca CAGR, Profit, Win%, MaxDD, Ops.\nCombina score_historico con momentum, fuerza relativa y proximidad a máximo 52 semanas.`}
                       style={{
                         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                         width: 16, height: 16, borderRadius: 3,

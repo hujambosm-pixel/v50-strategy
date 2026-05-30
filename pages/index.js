@@ -429,6 +429,54 @@ async function deleteMetricsRemote(symbols) {
   }).catch(() => {})
 }
 
+// Upsert parcial: actualiza SOLO score_historico (sin tocar métricas ni score_completo)
+async function upsertScoreHistoricoRemote(scoreMap, stratId) {
+  if (!getSupaUrl()) return
+  const rows = Object.entries(scoreMap).map(([symbol, sh]) => ({
+    symbol, strategy_id: stratId||null, score_historico: sh, updated_at: new Date().toISOString()
+  }))
+  for (let i=0; i<rows.length; i+=20) {
+    await fetch(`${getSupaUrl()}/rest/v1/ranking_results`, {
+      method: 'POST',
+      headers: { ...getSupaH(), 'Prefer': 'resolution=merge-duplicates,return=minimal', 'Content-Type': 'application/json' },
+      body: JSON.stringify(rows.slice(i, i+20))
+    }).catch(()=>{})
+  }
+}
+
+// Upsert parcial: actualiza SOLO score_completo (sin tocar métricas ni score_historico)
+async function upsertScoreCompletoRemote(scoreMap, stratId) {
+  if (!getSupaUrl()) return
+  const rows = Object.entries(scoreMap).map(([symbol, sc]) => ({
+    symbol, strategy_id: stratId||null, score_completo: sc, updated_at: new Date().toISOString()
+  }))
+  for (let i=0; i<rows.length; i+=20) {
+    await fetch(`${getSupaUrl()}/rest/v1/ranking_results`, {
+      method: 'POST',
+      headers: { ...getSupaH(), 'Prefer': 'resolution=merge-duplicates,return=minimal', 'Content-Type': 'application/json' },
+      body: JSON.stringify(rows.slice(i, i+20))
+    }).catch(()=>{})
+  }
+}
+
+// Upsert parcial: actualiza SOLO métricas (sin tocar score_historico ni score_completo)
+async function upsertMetricsRemote(metricsMap, stratId) {
+  if (!getSupaUrl()) return
+  const rows = Object.entries(metricsMap).map(([symbol, m]) => ({
+    symbol, strategy_id: stratId||null,
+    win_rate: m.winRate??null, cagr_simple: m.cagr??null,
+    max_drawdown: m.maxDD??null, total_trades: m.trades??null,
+    profit_simple: m.profit??null, updated_at: new Date().toISOString()
+  }))
+  for (let i=0; i<rows.length; i+=20) {
+    await fetch(`${getSupaUrl()}/rest/v1/ranking_results`, {
+      method: 'POST',
+      headers: { ...getSupaH(), 'Prefer': 'resolution=merge-duplicates,return=minimal', 'Content-Type': 'application/json' },
+      body: JSON.stringify(rows.slice(i, i+20))
+    }).catch(()=>{})
+  }
+}
+
 // ── Strategies API ────────────────────────────────────────────
 async function fetchStrategies() {
   const res=await fetch(`${getSupaUrl()}/rest/v1/strategies?active=eq.true&order=name.asc`,{headers:getSupaH()})
@@ -2521,6 +2569,202 @@ export default function Home() {
     setCalcPhase(0)
   }, [calcRanking, calcRankingAllStrategies])
 
+  // ── SCORE MÉTRICAS ↻ — Calcula solo scoreHistorico (activa + top via refresh) ──
+  const calcScoreMetricas = useCallback(async (rankSymbols=null) => {
+    const syms = (rankSymbols || watchlist).map(w=>w.symbol)
+    setRankingRunning(true); setRankingError(null)
+    setRankingProgress({done:0, total:syms.length})
+    const sett=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')}catch(_){return {}}})()
+    const wrPct=(sett.ranking?.rankingWinRatePct??33)/100, cagrPct=(sett.ranking?.rankingCAGRPct??33)/100
+    const cagrRobPct=(sett.ranking?.rankingCAGRRobustoPct??34)/100, ddPct=(sett.ranking?.rankingMaxDDPct??0)/100
+    const minTrades=sett.ranking?.minTrades??3
+    const norm=(v,mn,mx)=>Math.max(0,Math.min(100,(v-mn)/(mx-mn)*100))
+    const BATCH=4, scoreMap={}
+    for(let i=0;i<syms.length;i+=BATCH){
+      const batch=syms.slice(i,i+BATCH)
+      await Promise.allSettled(batch.map(async sym=>{
+        try{
+          const res=await apiFetch('/api/datos',{method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({simbolo:sym,strategyId:currentStratId,capital_ini:Number(capitalIni),years:Number(years),allocation_pct:100,filtros,intervalo:estrategiaIntervalo})})
+          const json=await res.json()
+          if(!res.ok||!json.trades?.length) return
+          const trades=json.trades; if(trades.length<minTrades) return
+          const wins=trades.filter(t=>t.pnlPct>=0), winRate=(wins.length/trades.length)*100
+          const totalDiasNat=json.startDate?(new Date(json.meta?.ultimaFecha)-new Date(json.startDate))/86400000:365*Number(years)
+          const anios=Math.max(totalDiasNat/365.25,0.01)
+          const capFinal=Number(capitalIni)+json.gananciaSimple
+          const cagr=capFinal>0?(Math.pow(capFinal/Number(capitalIni),1/anios)-1)*100:-99
+          const sorted3=[...trades].sort((a,b)=>b.pnlSimple-a.pnlSimple).slice(3)
+          const ganRobust=sorted3.reduce((s,t)=>s+t.pnlSimple,0)
+          const capRob=Number(capitalIni)+ganRobust
+          const cagrRobust=capRob>0?(Math.pow(capRob/Number(capitalIni),1/anios)-1)*100:-99
+          const maxDD=json.maxDDStrategyFloat??json.maxDDStrategy??0
+          scoreMap[sym.toUpperCase()]=Math.max(0,Math.min(100,
+            norm(winRate,20,80)*wrPct+norm(cagr,-20,60)*cagrPct+norm(cagrRobust,-20,50)*cagrRobPct-norm(maxDD,0,60)*ddPct))
+        }catch(e){console.error('[calcScoreMetricas]',sym,e)}
+      }))
+      setRankingProgress({done:Math.min(i+BATCH,syms.length),total:syms.length})
+    }
+    await upsertScoreHistoricoRemote(scoreMap,currentStratId||null)
+    setRankingData(prev=>{const next={...prev};Object.entries(scoreMap).forEach(([sym,sh])=>{next[sym]={...(next[sym]||{}),scoreHistorico:sh}});return next})
+    setRankingStratId(currentStratId); setRankingStratName(stratName||'')
+    refreshBestStratPerSymbol().catch(()=>{})
+    setRankingRunning(false); setRankingProgress({done:0,total:0})
+    setRankingBannerDismissed(true)
+  },[watchlist,years,capitalIni,currentStratId,stratName,filtros,estrategiaIntervalo,refreshBestStratPerSymbol])
+
+  // ── SCORE MÉT.+SEÑ. ↻ — Calcula solo scoreCompleto (activa + top via refresh) ──
+  const calcScoreMetSen = useCallback(async (rankSymbols=null) => {
+    const syms = (rankSymbols || watchlist).map(w=>w.symbol)
+    setRankingRunning(true); setRankingError(null)
+    setRankingProgress({done:0, total:syms.length})
+    const sett=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')}catch(_){return {}}})()
+    const wMercado=(sett.ranking?.rankingWeightMercado??20)/100, wHistorico=(sett.ranking?.rankingWeightHistorico??80)/100
+    const momPct=(sett.ranking?.rankingMomentumPct??33)/100, frPct=(sett.ranking?.rankingFRPct??33)/100
+    const max52Pct=(sett.ranking?.rankingMax52Pct??34)/100, momN=Math.max(5,sett.ranking?.rankingMomentumN??20)
+    const wrPct=(sett.ranking?.rankingWinRatePct??33)/100, cagrPct=(sett.ranking?.rankingCAGRPct??33)/100
+    const cagrRobPct=(sett.ranking?.rankingCAGRRobustoPct??34)/100, ddPct=(sett.ranking?.rankingMaxDDPct??0)/100
+    const minTrades=sett.ranking?.minTrades??3
+    const norm=(v,mn,mx)=>Math.max(0,Math.min(100,(v-mn)/(mx-mn)*100))
+    let sp500Closes=null
+    if(wMercado>0&&frPct>0){try{const r=await apiFetch('/api/closes?symbol=%5EGSPC&days=300');if(r.ok)sp500Closes=await r.json()}catch(e){console.warn('[calcScoreMetSen] SP500:',e.message)}}
+    const BATCH=4, scoreMap={}
+    for(let i=0;i<syms.length;i+=BATCH){
+      const batch=syms.slice(i,i+BATCH)
+      await Promise.allSettled(batch.map(async sym=>{
+        try{
+          const res=await apiFetch('/api/datos',{method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({simbolo:sym,strategyId:currentStratId,capital_ini:Number(capitalIni),years:Number(years),allocation_pct:100,filtros,intervalo:estrategiaIntervalo})})
+          const json=await res.json()
+          if(!res.ok||!json.trades?.length) return
+          const trades=json.trades; if(trades.length<minTrades) return
+          const wins=trades.filter(t=>t.pnlPct>=0), winRate=(wins.length/trades.length)*100
+          const totalDiasNat=json.startDate?(new Date(json.meta?.ultimaFecha)-new Date(json.startDate))/86400000:365*Number(years)
+          const anios=Math.max(totalDiasNat/365.25,0.01)
+          const capFinal=Number(capitalIni)+json.gananciaSimple
+          const cagr=capFinal>0?(Math.pow(capFinal/Number(capitalIni),1/anios)-1)*100:-99
+          const sorted3=[...trades].sort((a,b)=>b.pnlSimple-a.pnlSimple).slice(3)
+          const ganRobust=sorted3.reduce((s,t)=>s+t.pnlSimple,0)
+          const capRob=Number(capitalIni)+ganRobust
+          const cagrRobust=capRob>0?(Math.pow(capRob/Number(capitalIni),1/anios)-1)*100:-99
+          const maxDD=json.maxDDStrategyFloat??json.maxDDStrategy??0
+          const scoreHistorico=Math.max(0,Math.min(100,norm(winRate,20,80)*wrPct+norm(cagr,-20,60)*cagrPct+norm(cagrRobust,-20,50)*cagrRobPct-norm(maxDD,0,60)*ddPct))
+          let scoreMercado=0
+          if(wMercado>0){
+            const priceArr=(json.chartData||[]).map(d=>d.close).filter(v=>v!=null&&!isNaN(v))
+            if(priceArr.length>=momN+1){
+              const lastP=priceArr[priceArr.length-1], momP=priceArr[Math.max(0,priceArr.length-1-momN)]
+              const momentum=momP>0?(lastP/momP-1)*100:0
+              const hist252=priceArr.slice(-252), high52=Math.max(...hist252)
+              const proximity52=high52>0?(lastP/high52)*100:50
+              let relStrength=0
+              if(sp500Closes?.length>=64&&frPct>0){
+                const spLast=sp500Closes[sp500Closes.length-1], sp63=sp500Closes[sp500Closes.length-64]
+                const spRet=sp63>0?(spLast/sp63-1)*100:0
+                const asset63=priceArr.length>=64?priceArr[priceArr.length-64]:priceArr[0]
+                const assetRet=asset63>0?(lastP/asset63-1)*100:0
+                relStrength=assetRet-spRet
+              }
+              scoreMercado=Math.max(0,Math.min(100,norm(momentum,-20,40)*momPct+norm(relStrength,-30,30)*frPct+norm(proximity52,50,100)*max52Pct))
+            }
+          }
+          scoreMap[sym.toUpperCase()]=Math.max(0,Math.min(100,scoreHistorico*wHistorico+scoreMercado*wMercado))
+        }catch(e){console.error('[calcScoreMetSen]',sym,e)}
+      }))
+      setRankingProgress({done:Math.min(i+BATCH,syms.length),total:syms.length})
+    }
+    await upsertScoreCompletoRemote(scoreMap,currentStratId||null)
+    setRankingData(prev=>{const next={...prev};Object.entries(scoreMap).forEach(([sym,sc])=>{next[sym]={...(next[sym]||{}),scoreCompleto:sc,score:sc}});return next})
+    setRankingStratId(currentStratId); setRankingStratName(stratName||'')
+    refreshBestStratPerSymbol().catch(()=>{})
+    setRankingRunning(false); setRankingProgress({done:0,total:0})
+    setRankingBannerDismissed(true)
+  },[watchlist,years,capitalIni,currentStratId,stratName,filtros,estrategiaIntervalo,refreshBestStratPerSymbol])
+
+  // ── MÉTRICAS ↻ — Calcula solo métricas (CAGR, Profit, Win%, MaxDD, Ops) para activa + todas ──
+  const calcMetricas = useCallback(async (rankSymbols=null) => {
+    const syms = (rankSymbols || watchlist).map(w=>w.symbol)
+    const sett=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')}catch(_){return {}}})()
+    const minTrades=sett.ranking?.minTrades??3
+    const BATCH=4
+
+    // ── Fase 1: Métricas de la estrategia activa ──
+    setRankingRunning(true); setRankingError(null)
+    setRankingProgress({done:0, total:syms.length})
+    const activeMetrics={}
+    for(let i=0;i<syms.length;i+=BATCH){
+      const batch=syms.slice(i,i+BATCH)
+      await Promise.allSettled(batch.map(async sym=>{
+        try{
+          const res=await apiFetch('/api/datos',{method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({simbolo:sym,strategyId:currentStratId,capital_ini:Number(capitalIni),years:Number(years),allocation_pct:100,filtros,intervalo:estrategiaIntervalo})})
+          const json=await res.json()
+          if(!res.ok||!json.trades?.length) return
+          const trades=json.trades; if(trades.length<minTrades) return
+          const wins=trades.filter(t=>t.pnlPct>=0), winRate=(wins.length/trades.length)*100
+          const totalDiasNat=json.startDate?(new Date(json.meta?.ultimaFecha)-new Date(json.startDate))/86400000:365*Number(years)
+          const anios=Math.max(totalDiasNat/365.25,0.01)
+          const capFinal=Number(capitalIni)+json.gananciaSimple
+          const cagr=capFinal>0?(Math.pow(capFinal/Number(capitalIni),1/anios)-1)*100:-99
+          const sorted3=[...trades].sort((a,b)=>b.pnlSimple-a.pnlSimple).slice(3)
+          const ganRobust=sorted3.reduce((s,t)=>s+t.pnlSimple,0)
+          const capRob=Number(capitalIni)+ganRobust
+          const cagrRobust=capRob>0?(Math.pow(capRob/Number(capitalIni),1/anios)-1)*100:-99
+          const maxDD=json.maxDDStrategyFloat??json.maxDDStrategy??0
+          activeMetrics[sym.toUpperCase()]={winRate,cagr,cagrRobust,maxDD,trades:trades.length,profit:json.gananciaSimple??null}
+        }catch(e){console.error('[calcMetricas-activa]',sym,e)}
+      }))
+      setRankingProgress({done:Math.min(i+BATCH,syms.length),total:syms.length})
+    }
+    await upsertMetricsRemote(activeMetrics,currentStratId||null)
+    setRankingData(prev=>{const next={...prev};Object.entries(activeMetrics).forEach(([sym,m])=>{next[sym]={...(next[sym]||{}),metrics:m}});return next})
+    setRankingStratId(currentStratId); setRankingStratName(stratName||'')
+    setRankingRunning(false); setRankingProgress({done:0,total:0})
+
+    // ── Fase 2: Métricas de TODAS las estrategias ──
+    const enabledStrats=(strategies||[]).filter(s=>s.enabled!==false)
+    if(enabledStrats.length){
+      setTopStratRunning(true); setTopStratProgress({current:0,total:enabledStrats.length})
+      for(let si=0;si<enabledStrats.length;si++){
+        const strat=enabledStrats[si]
+        setTopStratProgress({current:si+1,total:enabledStrats.length})
+        const stratId=strat.id
+        const stratYears=strat.years||Number(years), stratCap=strat.capital_ini||Number(capitalIni)
+        const stratIntv=(()=>{try{const p=typeof strat?.params==='string'?JSON.parse(strat.params||'{}'):(strat?.params||{});return p.intervalo||'diario'}catch(_){return 'diario'}})()
+        const stratMetrics={}
+        try{
+          for(let i=0;i<syms.length;i+=BATCH){
+            const batch=syms.slice(i,i+BATCH)
+            await Promise.allSettled(batch.map(async sym=>{
+              try{
+                const res=await apiFetch('/api/datos',{method:'POST',headers:{'Content-Type':'application/json'},
+                  body:JSON.stringify({simbolo:sym,strategyId:stratId,capital_ini:stratCap,years:stratYears,allocation_pct:100,filtros,intervalo:stratIntv})})
+                const json=await res.json()
+                if(!res.ok||!json.trades?.length) return
+                const trades=json.trades; if(trades.length<minTrades) return
+                const wins=trades.filter(t=>t.pnlPct>=0), winRate=(wins.length/trades.length)*100
+                const totalDiasNat=json.startDate?(new Date(json.meta?.ultimaFecha)-new Date(json.startDate))/86400000:365*stratYears
+                const anios=Math.max(totalDiasNat/365.25,0.01)
+                const capFinal=stratCap+json.gananciaSimple
+                const cagr=capFinal>0?(Math.pow(capFinal/stratCap,1/anios)-1)*100:-99
+                const sorted3=[...trades].sort((a,b)=>b.pnlSimple-a.pnlSimple).slice(3)
+                const ganRobust=sorted3.reduce((s,t)=>s+t.pnlSimple,0)
+                const capRob=stratCap+ganRobust
+                const cagrRobust=capRob>0?(Math.pow(capRob/stratCap,1/anios)-1)*100:-99
+                const maxDD=json.maxDDStrategyFloat??json.maxDDStrategy??0
+                stratMetrics[sym.toUpperCase()]={winRate,cagr,cagrRobust,maxDD,trades:trades.length,profit:json.gananciaSimple??null}
+              }catch(e){console.error('[calcMetricas-all]',sym,e)}
+            }))
+          }
+          await upsertMetricsRemote(stratMetrics,stratId)
+        }catch(e){console.error('[calcMetricas] Error estrategia:',strat.name,e)}
+      }
+      await refreshBestStratPerSymbol().catch(()=>{})
+      setTopStratRunning(false); setTopStratProgress({current:0,total:0})
+    }
+    setRankingBannerDismissed(true)
+  },[watchlist,years,capitalIni,currentStratId,stratName,filtros,estrategiaIntervalo,strategies,refreshBestStratPerSymbol])
+
   // ── Borrar scores (score_historico + score_completo) de símbolos seleccionados ──
   const deleteScores = useCallback(async (symbols) => {
     if (!symbols?.length) return
@@ -3762,7 +4006,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.342</title>
+        <title>Trading Simulator V9.343</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3840,7 +4084,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.342
+            <span className="dot"/>Trading Simulator V9.343
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5748,6 +5992,9 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 onCalcRanking={calcRanking}
                 onCalcFull={calcRankingFull}
                 calcPhase={calcPhase}
+                onCalcScoreMetricas={calcScoreMetricas}
+                onCalcScoreMetSen={calcScoreMetSen}
+                onCalcMetricas={calcMetricas}
                 rankingRunning={rankingRunning}
                 rankingProgress={rankingProgress}
                 rankingStratName={rankingStratName}
