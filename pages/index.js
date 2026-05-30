@@ -766,6 +766,11 @@ export default function Home() {
   // Mejor estrategia por símbolo entre TODAS las estrategias calculadas en Supabase
   // { SYMBOL: { stratName, stratId, score, intervalo, stratCount } }
   const [bestStratBySymbol,setBestStratBySymbol]=useState({})
+  const [wlData, setWlData] = useState({})
+  // wlData[SYM] = {
+  //   active: { scoreMetricas, scoreMetSeñ, cagr, profit, winRate, maxDD, ops, stratName, stratId, intervalo, updatedAt },
+  //   top:    { scoreMetricas, scoreMetSeñ, cagr, profit, winRate, maxDD, ops, stratName, stratId, intervalo, updatedAt }
+  // }
   // Orden del sidebar Watchlist: 'scoreHistorico'|'scoreCompleto'|'alfabetico'
   const [wlSortMode,setWlSortMode]=useState('scoreHistorico')
   // Dropdown para cambiar estrategia activa desde el header
@@ -2024,11 +2029,49 @@ export default function Home() {
         bySymbol[sym]={stratName:strat?.name||'',stratId:best.strategy_id,score:best.score,scoreHistorico:best.score_historico??null,scoreCompleto:best.score_completo??null,updatedAt:best.updated_at??null,intervalo:stratIntervalo,stratCount:stratIds.size}
       })
       setBestStratBySymbol(bySymbol)
-    }catch(e){console.warn('[refreshBestStrat]',e.message)}
+      return bySymbol
+    }catch(e){console.warn('[refreshBestStrat]',e.message);return null}
   },[strategies])
+
+  // Carga todos los datos desde Supabase y rellena wlData para ambas vistas
+  const refreshWlData = useCallback(async () => {
+    if(!getSupaUrl()) return
+    try {
+      let url=`${getSupaUrl()}/rest/v1/ranking_results?select=symbol,strategy_id,score_historico,score_completo,updated_at,cagr_simple,win_rate,max_drawdown,total_trades,profit_simple&limit=10000`
+      let res=await fetch(url,{headers:getSupaH()})
+      if(!res.ok){
+        url=`${getSupaUrl()}/rest/v1/ranking_results?select=symbol,strategy_id,score_historico,score_completo,updated_at,cagr_simple,win_rate,max_drawdown,total_trades&limit=10000`
+        res=await fetch(url,{headers:getSupaH()})
+      }
+      if(!res.ok) return
+      const rows=(await res.json())||[]
+      const bySym={}
+      rows.forEach(r=>{const sym=(r.symbol||'').toUpperCase();if(!bySym[sym])bySym[sym]=[];bySym[sym].push(r)})
+      const toEntry=(row)=>{
+        if(!row) return undefined
+        const strat=strategies.find(s=>s.id===row.strategy_id)
+        let intervalo='diario'
+        try{const p=typeof strat?.params==='string'?JSON.parse(strat.params||'{}'):(strat?.params||{});intervalo=p.intervalo||'diario'}catch(_){}
+        return{scoreMetricas:row.score_historico??null,scoreMetSeñ:row.score_completo??null,
+          cagr:row.cagr_simple??null,profit:row.profit_simple??null,winRate:row.win_rate??null,
+          maxDD:row.max_drawdown??null,ops:row.total_trades??null,
+          stratName:strat?.name||'',stratId:row.strategy_id,intervalo,updatedAt:row.updated_at??null}
+      }
+      const newWlData={}
+      Object.entries(bySym).forEach(([sym,symRows])=>{
+        const activeRow=currentStratId?symRows.find(r=>r.strategy_id===currentStratId):null
+        const complete=symRows.filter(r=>r.cagr_simple!=null&&r.win_rate!=null&&r.max_drawdown!=null)
+        const candidates=complete.length>0?complete:symRows.filter(r=>r.score_historico!=null)
+        const topRow=candidates.length>0?candidates.reduce((acc,r)=>(r.score_historico??0)>(acc?.score_historico??0)?r:acc,null):null
+        newWlData[sym]={active:toEntry(activeRow),top:toEntry(topRow)}
+      })
+      setWlData(newWlData)
+    }catch(e){console.warn('[refreshWlData]',e.message)}
+  },[currentStratId,strategies])
 
   // useEffect aquí, DESPUÉS de la declaración de refreshBestStratPerSymbol para evitar TDZ
   useEffect(()=>{ refreshBestStratPerSymbol() },[refreshBestStratPerSymbol])
+  useEffect(()=>{ refreshWlData() },[refreshWlData])
 
   // Limpieza única al inicio: eliminar filas corruptas (score sin métricas)
   useEffect(()=>{ cleanCorruptRankingRows() },[]) // eslint-disable-line
@@ -2617,7 +2660,20 @@ export default function Home() {
     await upsertScoreHistoricoRemote(scoreMap,currentStratId||null)
     setRankingData(prev=>{const next={...prev};Object.entries(scoreMap).forEach(([sym,sh])=>{next[sym]={...(next[sym]||{}),scoreHistorico:sh}});return next})
     setRankingStratId(currentStratId); setRankingStratName(stratName||'')
-    await refreshBestStratPerSymbol().catch(()=>{})   // await para que bestStratBySymbol se actualice antes de rankingRunning=false
+    const newBestStrat = await refreshBestStratPerSymbol().catch(()=>null)
+    // Merge computed scores into wlData (active + top)
+    setWlData(prev=>{
+      const next={...prev}
+      Object.entries(scoreMap).forEach(([sym,sh])=>{
+        const bsb=newBestStrat?.[sym]
+        next[sym]={
+          ...(next[sym]||{}),
+          active:{...(next[sym]?.active||{}),scoreMetricas:sh,stratName:stratName||'',stratId:currentStratId,intervalo:estrategiaIntervalo},
+          top:bsb?{...(next[sym]?.top||{}),scoreMetricas:bsb.scoreHistorico,stratName:bsb.stratName,stratId:bsb.stratId,intervalo:bsb.intervalo,updatedAt:bsb.updatedAt}:(next[sym]?.top||{}),
+        }
+      })
+      return next
+    })
     setRankingRunning(false); setRankingProgress({done:0,total:0})
     setRankingBannerDismissed(true)
   },[watchlist,years,capitalIni,currentStratId,stratName,filtros,estrategiaIntervalo,refreshBestStratPerSymbol])
@@ -2685,7 +2741,19 @@ export default function Home() {
     await upsertScoreCompletoRemote(scoreMap,currentStratId||null)
     setRankingData(prev=>{const next={...prev};Object.entries(scoreMap).forEach(([sym,sc])=>{next[sym]={...(next[sym]||{}),scoreCompleto:sc,score:sc}});return next})
     setRankingStratId(currentStratId); setRankingStratName(stratName||'')
-    await refreshBestStratPerSymbol().catch(()=>{})   // await para que bestStratBySymbol se actualice antes de rankingRunning=false
+    const newBestStrat = await refreshBestStratPerSymbol().catch(()=>null)
+    setWlData(prev=>{
+      const next={...prev}
+      Object.entries(scoreMap).forEach(([sym,sc])=>{
+        const bsb=newBestStrat?.[sym]
+        next[sym]={
+          ...(next[sym]||{}),
+          active:{...(next[sym]?.active||{}),scoreMetSeñ:sc,stratName:stratName||'',stratId:currentStratId,intervalo:estrategiaIntervalo},
+          top:bsb?{...(next[sym]?.top||{}),scoreMetSeñ:bsb.scoreCompleto,stratName:bsb.stratName,stratId:bsb.stratId,intervalo:bsb.intervalo,updatedAt:bsb.updatedAt}:(next[sym]?.top||{}),
+        }
+      })
+      return next
+    })
     setRankingRunning(false); setRankingProgress({done:0,total:0})
     setRankingBannerDismissed(true)
   },[watchlist,years,capitalIni,currentStratId,stratName,filtros,estrategiaIntervalo,refreshBestStratPerSymbol])
@@ -2729,11 +2797,21 @@ export default function Home() {
     setRankingData(prev=>{const next={...prev};Object.entries(activeMetrics).forEach(([sym,m])=>{next[sym]={...(next[sym]||{}),metrics:m}});return next})
     setRankingStratId(currentStratId); setRankingStratName(stratName||'')
     setRankingRunning(false); setRankingProgress({done:0,total:0})
+    setWlData(prev=>{
+      const next={...prev}
+      Object.entries(activeMetrics).forEach(([sym,m])=>{
+        next[sym]={...(next[sym]||{}),
+          active:{...(next[sym]?.active||{}),cagr:m.cagr??null,profit:m.profit??null,winRate:m.winRate??null,maxDD:m.maxDD??null,ops:m.trades??null,stratName:stratName||'',stratId:currentStratId,intervalo:estrategiaIntervalo}
+        }
+      })
+      return next
+    })
 
     // ── Fase 2: Métricas de TODAS las estrategias ──
     const enabledStrats=(strategies||[]).filter(s=>s.enabled!==false)
     if(enabledStrats.length){
       setTopStratRunning(true); setTopStratProgress({current:0,total:enabledStrats.length})
+      const allStratMetricsMap={}
       for(let si=0;si<enabledStrats.length;si++){
         const strat=enabledStrats[si]
         setTopStratProgress({current:si+1,total:enabledStrats.length})
@@ -2766,9 +2844,23 @@ export default function Home() {
             }))
           }
           await upsertMetricsRemote(stratMetrics,stratId)
+          allStratMetricsMap[stratId]=stratMetrics
         }catch(e){console.error('[calcMetricas] Error estrategia:',strat.name,e)}
       }
-      await refreshBestStratPerSymbol().catch(()=>{})
+      const newBestStrat2 = await refreshBestStratPerSymbol().catch(()=>null)
+      // Merge top metrics into wlData
+      setWlData(prev=>{
+        const next={...prev}
+        Object.entries(newBestStrat2||{}).forEach(([sym,bsb])=>{
+          const topM=allStratMetricsMap[bsb.stratId]?.[sym]
+          if(topM){
+            next[sym]={...(next[sym]||{}),
+              top:{...(next[sym]?.top||{}),cagr:topM.cagr??null,profit:topM.profit??null,winRate:topM.winRate??null,maxDD:topM.maxDD??null,ops:topM.trades??null,stratName:bsb.stratName,stratId:bsb.stratId,intervalo:bsb.intervalo}
+            }
+          }
+        })
+        return next
+      })
       setTopStratRunning(false); setTopStratProgress({current:0,total:0})
     }
     setRankingBannerDismissed(true)
@@ -4015,7 +4107,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.344</title>
+        <title>Trading Simulator V9.345</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4093,7 +4185,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.344
+            <span className="dot"/>Trading Simulator V9.345
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6041,6 +6133,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 onClearBestStrat={()=>setBestStratBySymbol({})}
                 onDeleteScores={deleteScores}
                 onDeleteMetrics={deleteMetrics}
+                wlData={wlData}
               />
             )}
 

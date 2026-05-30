@@ -146,6 +146,8 @@ export default function WatchlistManager({
   // Borrar scores / métricas de ranking_results
   onDeleteScores,
   onDeleteMetrics,
+  // Unified data state from parent
+  wlData,
 }) {
   const [allRankings, setAllRankings]       = useState({})
   const [loadingRank, setLoadingRank]       = useState(true)
@@ -342,19 +344,17 @@ export default function WatchlistManager({
     const cmpStr = (sa, sb) => dir === 'asc' ? sa.localeCompare(sb) : sb.localeCompare(sa)
     if (metric === 'symbol') return cmpStr(a.symbol || '', b.symbol || '')
     if (metric === 'name')   return cmpStr(a.name   || '', b.name   || '')
-    if (SCORE_METRICS.includes(metric)) {
-      const symA = (a.symbol || '').toUpperCase(), symB = (b.symbol || '').toUpperCase()
-      const va = rankingData?.[symA]?.[metric] ?? (dir === 'asc' ? Infinity : -Infinity)
-      const vb = rankingData?.[symB]?.[metric] ?? (dir === 'asc' ? Infinity : -Infinity)
-      return cmp(va, vb)
-    }
-    const ba = bestForSymbol(a.symbol || '')
-    const bb = bestForSymbol(b.symbol || '')
-    if (metric === 'stratName') return cmpStr(ba?.stratName || '', bb?.stratName || '')
-    if (metric === 'intervalo') return cmpStr(ba?.intervalo || '', bb?.intervalo || '')
-    const va = ba?.metrics?.[metric] ?? (dir === 'asc' ? Infinity : -Infinity)
-    const vb = bb?.metrics?.[metric] ?? (dir === 'asc' ? Infinity : -Infinity)
-    return cmp(va, vb)
+    const symA = (a.symbol || '').toUpperCase()
+    const symB = (b.symbol || '').toUpperCase()
+    const da = wlData?.[symA]?.[metricsView] || {}
+    const db = wlData?.[symB]?.[metricsView] || {}
+    if (metric === 'scoreHistorico') return cmp(da.scoreMetricas ?? (dir==='asc'?Infinity:-Infinity), db.scoreMetricas ?? (dir==='asc'?Infinity:-Infinity))
+    if (metric === 'scoreCompleto')  return cmp(da.scoreMetSeñ   ?? (dir==='asc'?Infinity:-Infinity), db.scoreMetSeñ   ?? (dir==='asc'?Infinity:-Infinity))
+    if (metric === 'stratName') return cmpStr(da.stratName || '', db.stratName || '')
+    if (metric === 'intervalo') return cmpStr(da.intervalo || 'diario', db.intervalo || 'diario')
+    const fieldMap = { cagr:'cagr', profit:'profit', winRate:'winRate', maxDD:'maxDD', trades:'ops' }
+    const field = fieldMap[metric] || metric
+    return cmp(da[field] ?? (dir==='asc'?Infinity:-Infinity), db[field] ?? (dir==='asc'?Infinity:-Infinity))
   })
 
   // ── Selection ─────────────────────────────────────────────
@@ -433,9 +433,6 @@ export default function WatchlistManager({
     textTransform: 'uppercase',
     borderBottom: `2px solid ${P.borderStrong}`,
     borderRight: `1px solid ${P.border}`,
-    position: 'sticky',
-    top: 0,
-    zIndex: 5,
     whiteSpace: 'nowrap',
     userSelect: 'none',
     ...extra,
@@ -1064,7 +1061,7 @@ export default function WatchlistManager({
         <table style={{ borderCollapse: 'collapse', minWidth: '100%', tableLayout: 'auto' }}>
           <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
             {/* Sub-header agrupador de métricas */}
-            <tr>
+            <tr style={{ position: 'sticky', top: 0, zIndex: 7 }}>
               <th colSpan={4} style={{ ...TH(), background: P.thBg, borderBottom: `1px solid ${P.border}` }} />
               <th colSpan={2} style={{
                 ...TH(),
@@ -1189,7 +1186,7 @@ export default function WatchlistManager({
             </tr>
 
             {/* Headers de columna */}
-            <tr>
+            <tr style={{ position: 'sticky', top: 30, zIndex: 6 }}>
               {/* Checkbox */}
               <th style={{ ...TH(), width: 36, textAlign: 'center', padding: '7px 6px' }}>
                 <input type="checkbox" checked={allSelected} onChange={toggleAll}
@@ -1318,13 +1315,11 @@ export default function WatchlistManager({
               const isSaving   = saving.has(w.id)
               const isSelected = selected.has(w.id)
               const isOdd      = idx % 2 === 1
-              const best       = bestForSymbol(sym)
-              const m          = best?.metrics
               const bg         = rowBg(w, isSelected, isOdd)
-              const activeM    = rankingData?.[sym]?.metrics
-              const displayM   = metricsView === 'active' ? activeM : m
-              const displayStratName = metricsView === 'active' ? (rankingStratName || null) : (best?.stratName || null)
-              const displayIntervalo = metricsView === 'active' ? rankingIntervalo : (best?.intervalo || 'diario')
+              const datos      = wlData?.[sym]?.[metricsView] || {}
+              const displayM   = { cagr: datos.cagr, profit: datos.profit, winRate: datos.winRate, maxDD: datos.maxDD, trades: datos.ops }
+              const displayStratName = datos.stratName || null
+              const displayIntervalo = datos.intervalo || 'diario'
 
               return (
                 <tr key={w.id || w.symbol}
@@ -1407,9 +1402,7 @@ export default function WatchlistManager({
 
                   {/* Score histórico + indicador cobertura de estrategias */}
                   {(()=>{
-                    const sh = metricsView === 'active'
-                      ? rankingData?.[sym]?.scoreHistorico
-                      : (best?.scoreHistorico ?? null)
+                    const sh = datos.scoreMetricas ?? null
                     // Cobertura: cuántas estrategias habilitadas tienen métricas completas para este activo
                     const enabledStrats = strategies.filter(s => s.enabled !== false)
                     const stratsWithData = enabledStrats.filter(s => {
@@ -1441,12 +1434,8 @@ export default function WatchlistManager({
 
                   {/* Score completo — guardado en DB, con indicador de antigüedad */}
                   {(()=>{
-                    const sc = metricsView === 'active'
-                      ? rankingData?.[sym]?.scoreCompleto
-                      : (best?.scoreCompleto ?? null)
-                    const scTs = metricsView === 'active'
-                      ? rankingData?.[sym]?.updatedAt
-                      : (best?.updatedAt ?? null)
+                    const sc = datos.scoreMetSeñ ?? null
+                    const scTs = datos.updatedAt ?? null
                     const daysSince = scTs ? Math.floor((Date.now() - new Date(scTs)) / 86400000) : null
                     const isStale = sc != null && daysSince != null && daysSince >= 1
                     const staleTooltip = isStale
