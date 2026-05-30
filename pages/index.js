@@ -409,6 +409,26 @@ async function cleanCorruptRankingRows() {
   } catch(_) {} // ignorar errores silenciosamente
 }
 
+// Nullifica scores (score_historico, score_completo, score) para una lista de símbolos
+async function nullifyScoresRemote(symbols) {
+  if (!getSupaUrl() || !symbols?.length) return
+  const filter = `symbol=in.(${symbols.join(',')})`
+  await fetch(`${getSupaUrl()}/rest/v1/ranking_results?${filter}`, {
+    method: 'PATCH',
+    headers: { ...getSupaH(), 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+    body: JSON.stringify({ score_historico: null, score_completo: null, score: null })
+  }).catch(() => {})
+}
+
+// Borra TODAS las filas de ranking_results para una lista de símbolos (todas las estrategias)
+async function deleteMetricsRemote(symbols) {
+  if (!getSupaUrl() || !symbols?.length) return
+  const filter = `symbol=in.(${symbols.join(',')})`
+  await fetch(`${getSupaUrl()}/rest/v1/ranking_results?${filter}`, {
+    method: 'DELETE', headers: getSupaH()
+  }).catch(() => {})
+}
+
 // ── Strategies API ────────────────────────────────────────────
 async function fetchStrategies() {
   const res=await fetch(`${getSupaUrl()}/rest/v1/strategies?active=eq.true&order=name.asc`,{headers:getSupaH()})
@@ -2501,6 +2521,35 @@ export default function Home() {
     setCalcPhase(0)
   }, [calcRanking, calcRankingAllStrategies])
 
+  // ── Borrar scores (score_historico + score_completo) de símbolos seleccionados ──
+  const deleteScores = useCallback(async (symbols) => {
+    if (!symbols?.length) return
+    await nullifyScoresRemote(symbols)
+    // Actualizar rankingData en memoria
+    const symSet = new Set(symbols.map(s => s.toUpperCase()))
+    setRankingData(prev => {
+      const next = { ...prev }
+      symSet.forEach(sym => { if (next[sym]) next[sym] = { ...next[sym], scoreHistorico: null, scoreCompleto: null, score: null } })
+      return next
+    })
+    // Actualizar bestStratBySymbol en memoria
+    setBestStratBySymbol(prev => {
+      const next = { ...prev }
+      symSet.forEach(sym => { if (next[sym]) next[sym] = { ...next[sym], scoreHistorico: null, scoreCompleto: null, score: null } })
+      return next
+    })
+  }, [])
+
+  // ── Borrar todas las métricas de ranking_results para símbolos seleccionados ──
+  const deleteMetrics = useCallback(async (symbols) => {
+    if (!symbols?.length) return
+    await deleteMetricsRemote(symbols)
+    // Limpiar rankingData y bestStratBySymbol en memoria
+    const symSet = new Set(symbols.map(s => s.toUpperCase()))
+    setRankingData(prev => { const next = { ...prev }; symSet.forEach(sym => delete next[sym]); return next })
+    setBestStratBySymbol(prev => { const next = { ...prev }; symSet.forEach(sym => delete next[sym]); return next })
+  }, [])
+
   // ── Analizar candidatos: extrae tickers, corre backtest en paralelo ──
   // Usa gananciaSimple (CAGR Simple) — mismo método y fórmulas que calcRanking
   const clearCandidates=useCallback(()=>{
@@ -3713,7 +3762,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.339</title>
+        <title>Trading Simulator V9.340</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3791,7 +3840,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.339
+            <span className="dot"/>Trading Simulator V9.340
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5734,6 +5783,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 topStratProgress={topStratProgress}
                 hasBestStrat={Object.keys(bestStratBySymbol).length>0}
                 onClearBestStrat={()=>setBestStratBySymbol({})}
+                onDeleteScores={deleteScores}
+                onDeleteMetrics={deleteMetrics}
               />
             )}
 

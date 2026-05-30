@@ -139,6 +139,9 @@ export default function WatchlistManager({
   // Item edit/delete
   onEditItem,
   onDeleteItem,
+  // Borrar scores / métricas de ranking_results
+  onDeleteScores,
+  onDeleteMetrics,
 }) {
   const [allRankings, setAllRankings]       = useState({})
   const [loadingRank, setLoadingRank]       = useState(true)
@@ -157,9 +160,11 @@ export default function WatchlistManager({
   const [newListName, setNewListName]     = useState('')
   const [renameValue, setRenameValue]     = useState('')
   const [listOpLoading, setListOpLoading] = useState(false)
-  const [metricsView, setMetricsView]         = useState('top') // 'active' | 'top'
+  const [metricsView, setMetricsView]             = useState('top') // 'active' | 'top'
   const [rankingDoneFlash, setRankingDoneFlash]   = useState(false)
   const [topStratDoneFlash, setTopStratDoneFlash] = useState(false)
+  const [confirmScoresDelete, setConfirmScoresDelete]   = useState(false)
+  const [confirmMetricsDelete, setConfirmMetricsDelete] = useState(false)
   const prevRankingRunning  = useRef(false)
   const prevTopStratRunning = useRef(false)
   const addDropRef    = useRef(null)
@@ -1065,7 +1070,43 @@ export default function WatchlistManager({
                 textAlign: 'center', color: P.thFg, fontSize: 10,
                 borderBottom: `1px solid ${P.border}`,
               }}>
-                Scores
+                {confirmScoresDelete ? (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, fontSize: 10 }}>
+                    <span>¿Borrar scores de {selected.size}?</span>
+                    <button
+                      onClick={async () => {
+                        const syms = watchlist.filter(w => selected.has(w.id)).map(w => w.symbol)
+                        await onDeleteScores?.(syms)
+                        loadAllRankingsWithMetrics().then(rows => setAllRankings(buildAllRankingsMap(rows))).catch(() => {})
+                        setConfirmScoresDelete(false)
+                      }}
+                      style={{ fontFamily: MONO, fontSize: 10, padding: '1px 6px', borderRadius: 3, cursor: 'pointer',
+                        background: '#8b1a1a', border: '1px solid #c02020', color: '#ffc8c8' }}>
+                      Sí
+                    </button>
+                    <button
+                      onClick={() => setConfirmScoresDelete(false)}
+                      style={{ fontFamily: MONO, fontSize: 10, padding: '1px 6px', borderRadius: 3, cursor: 'pointer',
+                        background: P.bg, border: `1px solid ${P.borderStrong}`, color: P.textSec }}>
+                      No
+                    </button>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+                    <span>Scores</span>
+                    {selected.size > 0 && onDeleteScores && (
+                      <span
+                        onClick={() => setConfirmScoresDelete(true)}
+                        title={`Borrar score_historico y score_completo de los ${selected.size} activos seleccionados en Supabase (todas las estrategias)`}
+                        style={{ cursor: 'pointer', fontSize: 11, lineHeight: 1, color: P.textMuted,
+                          transition: 'color 0.15s' }}
+                        onMouseEnter={e => e.currentTarget.style.color = '#ef4444'}
+                        onMouseLeave={e => e.currentTarget.style.color = P.textMuted}>
+                        🗑
+                      </span>
+                    )}
+                  </div>
+                )}
               </th>
               <th colSpan={5} style={{
                 ...TH(),
@@ -1075,31 +1116,65 @@ export default function WatchlistManager({
                 textAlign: 'center', color: P.thFg, fontSize: 10,
                 cursor: 'pointer',
               }}
-                onClick={() => setMetricsView(v => v === 'active' ? 'top' : 'active')}
-                title={metricsView === 'active' ? 'Métricas de la estrategia actualmente activa para cada activo. Clic para cambiar a Top estrategia' : 'Métricas de la estrategia con mejor score histórico para cada activo entre todas las evaluadas. Clic para cambiar a estrategia activa'}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
-                  {topStratDoneFlash && calcPhase === 0
-                    ? <span style={{ color: '#1a6b3a' }}>✓ Listo</span>
-                    : calcPhase === 1 || rankingRunning
-                      ? <span style={{ fontSize: 9 }}>Fase 1/2: {rankingProgress?.done ?? 0}/{rankingProgress?.total ?? 0}…</span>
-                      : (calcPhase === 2 || topStratRunning)
-                        ? <span style={{ fontSize: 9 }}>Fase 2/2: estrategia {topStratProgress?.current||0}/{topStratProgress?.total||0}…</span>
-                        : (metricsView === 'active' ? (rankingStratName ? `MÉTRICAS · ${rankingStratName.toUpperCase()}` : 'MÉTRICAS ESTRATEGIA ACTIVA') : 'MÉTRICAS TOP ESTRATEGIA')}
-                  {calcPhase === 0 && !rankingRunning && !topStratRunning && !topStratDoneFlash && selected.size > 0 && (
-                    <span
-                      onClick={e => {
-                        e.stopPropagation()
-                        onCalcFull && onCalcFull(watchlist.filter(w => selected.has(w.id)))
+                onClick={() => { if (!confirmMetricsDelete) setMetricsView(v => v === 'active' ? 'top' : 'active') }}
+                title={confirmMetricsDelete ? undefined : (metricsView === 'active' ? 'Métricas de la estrategia actualmente activa para cada activo. Clic para cambiar a Top estrategia' : 'Métricas de la estrategia con mejor score histórico para cada activo entre todas las evaluadas. Clic para cambiar a estrategia activa')}>
+                {confirmMetricsDelete ? (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, fontSize: 10 }} onClick={e => e.stopPropagation()}>
+                    <span>¿Borrar métricas de {selected.size}?</span>
+                    <button
+                      onClick={async () => {
+                        const syms = watchlist.filter(w => selected.has(w.id)).map(w => w.symbol)
+                        await onDeleteMetrics?.(syms)
+                        loadAllRankingsWithMetrics().then(rows => setAllRankings(buildAllRankingsMap(rows))).catch(() => {})
+                        setConfirmMetricsDelete(false)
                       }}
-                      title={`Calcula TODOS los datos para los ${selected.size} activos seleccionados:\n· Score métricas y Score mét.+señ. con la estrategia activa${rankingStratName ? ` (${rankingStratName})` : ''}\n· Score métricas y Score mét.+señ. de la mejor estrategia para cada activo\n· Métricas detalladas (CAGR, Profit €, Win%, MaxDD, Ops) para ambas vistas\nEl toggle Estrategia activa/Top estrategia solo cambia qué datos se muestran.\nPuede tardar varios minutos con muchas estrategias.`}
-                      style={{
-                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                        width: 14, height: 14, borderRadius: 3,
-                        background: 'rgba(26,107,58,0.18)', border: `1px solid #1a6b3a`,
-                        color: '#1a6b3a', fontSize: 9, cursor: 'pointer', flexShrink: 0,
-                      }}>↻</span>
-                  )}
-                </div>
+                      style={{ fontFamily: MONO, fontSize: 10, padding: '1px 6px', borderRadius: 3, cursor: 'pointer',
+                        background: '#8b1a1a', border: '1px solid #c02020', color: '#ffc8c8' }}>
+                      Sí
+                    </button>
+                    <button
+                      onClick={() => setConfirmMetricsDelete(false)}
+                      style={{ fontFamily: MONO, fontSize: 10, padding: '1px 6px', borderRadius: 3, cursor: 'pointer',
+                        background: P.bg, border: `1px solid ${P.borderStrong}`, color: P.textSec }}>
+                      No
+                    </button>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+                    {topStratDoneFlash && calcPhase === 0
+                      ? <span style={{ color: '#1a6b3a' }}>✓ Listo</span>
+                      : calcPhase === 1 || rankingRunning
+                        ? <span style={{ fontSize: 9 }}>Fase 1/2: {rankingProgress?.done ?? 0}/{rankingProgress?.total ?? 0}…</span>
+                        : (calcPhase === 2 || topStratRunning)
+                          ? <span style={{ fontSize: 9 }}>Fase 2/2: estrategia {topStratProgress?.current||0}/{topStratProgress?.total||0}…</span>
+                          : (metricsView === 'active' ? (rankingStratName ? `MÉTRICAS · ${rankingStratName.toUpperCase()}` : 'MÉTRICAS ESTRATEGIA ACTIVA') : 'MÉTRICAS TOP ESTRATEGIA')}
+                    {calcPhase === 0 && !rankingRunning && !topStratRunning && !topStratDoneFlash && selected.size > 0 && (
+                      <span
+                        onClick={e => {
+                          e.stopPropagation()
+                          onCalcFull && onCalcFull(watchlist.filter(w => selected.has(w.id)))
+                        }}
+                        title={`Calcula TODOS los datos para los ${selected.size} activos seleccionados:\n· Score métricas y Score mét.+señ. con la estrategia activa${rankingStratName ? ` (${rankingStratName})` : ''}\n· Score métricas y Score mét.+señ. de la mejor estrategia para cada activo\n· Métricas detalladas (CAGR, Profit €, Win%, MaxDD, Ops) para ambas vistas\nEl toggle Estrategia activa/Top estrategia solo cambia qué datos se muestran.\nPuede tardar varios minutos con muchas estrategias.`}
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                          width: 14, height: 14, borderRadius: 3,
+                          background: 'rgba(26,107,58,0.18)', border: `1px solid #1a6b3a`,
+                          color: '#1a6b3a', fontSize: 9, cursor: 'pointer', flexShrink: 0,
+                        }}>↻</span>
+                    )}
+                    {calcPhase === 0 && !rankingRunning && !topStratRunning && selected.size > 0 && onDeleteMetrics && (
+                      <span
+                        onClick={e => { e.stopPropagation(); setConfirmMetricsDelete(true) }}
+                        title={`Borrar TODAS las filas de ranking_results de los ${selected.size} activos seleccionados (todas las estrategias). Afecta a CAGR, Profit €, Win%, MaxDD y Ops.`}
+                        style={{ cursor: 'pointer', fontSize: 11, lineHeight: 1, color: P.textMuted,
+                          transition: 'color 0.15s', flexShrink: 0 }}
+                        onMouseEnter={e => e.currentTarget.style.color = '#ef4444'}
+                        onMouseLeave={e => e.currentTarget.style.color = P.textMuted}>
+                        🗑
+                      </span>
+                    )}
+                  </div>
+                )}
               </th>
               <th colSpan={onDeleteItem ? 3 : 2} style={{
                 ...TH(),
