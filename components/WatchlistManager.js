@@ -128,6 +128,9 @@ export default function WatchlistManager({
   // Ranking data from parent (for score columns)
   rankingData,
   rankingStratId,
+  // Item edit/delete
+  onEditItem,
+  onDeleteItem,
 }) {
   const [allRankings, setAllRankings]       = useState({})
   const [loadingRank, setLoadingRank]       = useState(true)
@@ -527,7 +530,7 @@ export default function WatchlistManager({
 
         {/* Título */}
         <span style={{ fontFamily: MONO, fontSize: 13, fontWeight: 700, color: P.text, flexShrink: 0 }}>
-          ⊞ Gestionar
+          ⊞ Mantenimiento Watchlist
         </span>
 
         {/* ── Botones de herramientas ── */}
@@ -542,85 +545,6 @@ export default function WatchlistManager({
           🔍 Analizar
         </button>
 
-        {/* GROUP 1: Ranking */}
-        <div style={{ display: 'inline-flex', gap: 2, flexShrink: 0 }}>
-          <button
-            onClick={() => onCalcRanking && onCalcRanking(filtered)}
-            disabled={rankingRunning}
-            title={`Calcula SCORE MÉTRICAS y SCORE MÉT.+SEÑ. para los ${filtered.length} activos visibles actualmente con la estrategia activa${rankingStratName ? ` (${rankingStratName})` : ''}.\nActualiza las columnas SCORE MÉTRICAS y SCORE MÉT.+SEÑ. en modo Estrategia activa.\nConfigura los pesos en Ajustes → Ranking`}
-            style={{
-              background: rankingRunning ? P.bgAlt : P.accentBg,
-              border: `1px solid ${rankingRunning ? P.borderStrong : P.accentBg}`,
-              color: rankingRunning ? P.textSec : P.accentFg,
-              fontFamily: MONO, fontSize: 11,
-              padding: '5px 10px', borderRadius: 5,
-              cursor: rankingRunning ? 'not-allowed' : 'pointer',
-              whiteSpace: 'nowrap',
-            }}>
-            {rankingRunning
-              ? `⟳ ${rankingProgress?.done ?? 0}/${rankingProgress?.total ?? 0}`
-              : '🏆 Ranking'}
-          </button>
-          {hasRanking && !rankingRunning && (
-            <button
-              onClick={() => onClearRanking && onClearRanking()}
-              title="Borrar ranking calculado y volver al orden alfabético"
-              style={{
-                background: 'transparent',
-                border: `1px solid ${P.borderStrong}`,
-                color: P.textMuted,
-                fontFamily: MONO, fontSize: 11,
-                padding: '5px 7px', borderRadius: 5,
-                cursor: 'pointer',
-              }}
-              onMouseOver={e => { e.currentTarget.style.color = '#8b3030'; e.currentTarget.style.borderColor = '#8b3030' }}
-              onMouseOut={e  => { e.currentTarget.style.color = P.textMuted;  e.currentTarget.style.borderColor = P.borderStrong }}>
-              🗑
-            </button>
-          )}
-        </div>
-
-        {/* GROUP 2: Top estrategia */}
-        <div style={{ display: 'inline-flex', gap: 2, flexShrink: 0 }}>
-          <button
-            onClick={() => !topStratRunning && onCalcRankingAll && onCalcRankingAll(filtered)}
-            disabled={topStratRunning}
-            title={topStratRunning ? `Calculando... ${topStratProgress?.current||0}/${topStratProgress?.total||0}` : `Ejecuta el Ranking para TODAS las estrategias habilitadas, en secuencia, sobre los ${filtered.length} activos visibles actualmente.\nActualiza las columnas: SCORE MÉTRICAS, SCORE MÉT.+SEÑ., MÉTRICAS TOP ESTRATEGIA y la columna ESTRATEGIA de cada activo.\nMás lento que Ranking — puede tardar varios minutos según el número de estrategias y activos`}
-            style={{
-              background: topStratRunning ? P.bg : P.accentBg,
-              border: `1px solid ${topStratRunning ? P.borderStrong : P.accentBg}`,
-              color: topStratRunning ? P.textMuted : P.accentFg,
-              fontFamily: MONO, fontSize: 11,
-              padding: '5px 10px', borderRadius: 5,
-              cursor: topStratRunning ? 'default' : 'pointer',
-              whiteSpace: 'nowrap',
-              opacity: topStratRunning ? 0.7 : 1,
-            }}>
-            {topStratRunning
-              ? `⟳ Calculando ${topStratProgress?.current||0}/${topStratProgress?.total||0} estrategias…`
-              : '🎯 Top estrategia'}
-          </button>
-          {hasBestStrat && (
-            <button
-              onClick={() => onClearBestStrat && onClearBestStrat()}
-              title="Borrar los datos de Top estrategia calculados"
-              style={{
-                background: 'transparent',
-                border: `1px solid ${P.borderStrong}`,
-                color: P.textMuted,
-                fontFamily: MONO, fontSize: 11,
-                padding: '5px 7px', borderRadius: 5,
-                cursor: 'pointer',
-              }}
-              onMouseOver={e => { e.currentTarget.style.color = '#8b3030'; e.currentTarget.style.borderColor = '#8b3030' }}
-              onMouseOut={e  => { e.currentTarget.style.color = P.textMuted;  e.currentTarget.style.borderColor = P.borderStrong }}>
-              🗑
-            </button>
-          )}
-        </div>
-
-        {/* Separador visual */}
-        <div style={{ width: 1, height: 20, background: P.border, flexShrink: 0 }} />
 
         {/* Buscador */}
         <div style={{ position: 'relative', width: 180, flexShrink: 0 }}>
@@ -1103,12 +1027,13 @@ export default function WatchlistManager({
                 borderLeft:  `2px solid ${P.borderStrong}`,
                 borderRight: `2px solid ${P.borderStrong}`,
                 textAlign: 'center', color: P.thFg, fontSize: 10,
-                cursor: 'default',
+                cursor: 'pointer',
               }}
-                title={metricsView === 'active' ? 'Métricas de la estrategia actualmente activa para cada activo. Ejecuta Ranking para calcularlas o actualizarlas' : 'Métricas de la estrategia con mejor score histórico para cada activo entre todas las evaluadas. Puede ser diferente a la estrategia activa'}>
-                {metricsView === 'active' ? (rankingStratName ? `Métricas · ${rankingStratName}` : 'Métricas estrategia activa') : 'Métricas top estrategia'}
+                onClick={() => setMetricsView(v => v === 'active' ? 'top' : 'active')}
+                title={metricsView === 'active' ? 'Métricas de la estrategia actualmente activa para cada activo. Clic para cambiar a Top estrategia' : 'Métricas de la estrategia con mejor score histórico para cada activo entre todas las evaluadas. Clic para cambiar a estrategia activa'}>
+                {metricsView === 'active' ? (rankingStratName ? `MÉTRICAS · ${rankingStratName.toUpperCase()}` : 'MÉTRICAS ESTRATEGIA ACTIVA') : 'MÉTRICAS TOP ESTRATEGIA'}
               </th>
-              <th colSpan={2} style={{
+              <th colSpan={onDeleteItem ? 3 : 2} style={{
                 ...TH(),
                 background: P.thBg,
                 borderLeft: `2px solid ${P.borderStrong}`,
@@ -1139,19 +1064,69 @@ export default function WatchlistManager({
               </th>
 
               {/* SCORE MÉTRICAS */}
-              <th style={{ ...TH(), minWidth: 80, cursor: 'pointer', textAlign: 'right',
-                background: '#d4d0c8', borderLeft: `2px solid ${P.borderStrong}`, borderRight: `1px solid ${P.border}` }}
+              <th style={{ ...TH(), minWidth: 80, textAlign: 'right',
+                background: '#d4d0c8', borderLeft: `2px solid ${P.borderStrong}`, borderRight: `1px solid ${P.border}`,
+                cursor: 'pointer' }}
                 onClick={() => handleSort('scoreHistorico')}
                 title="Score 0-100 basado en métricas históricas (Win Rate, CAGR, CAGR robusto, MaxDD). Se guarda en Supabase y está disponible al cargar la app sin necesidad de ejecutar Ranking">
-                SCORE MÉTRICAS{sortIcon('scoreHistorico')}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
+                  SCORE MÉTRICAS{sortIcon('scoreHistorico')}
+                  {selected.size > 0 && (
+                    <span
+                      onClick={e => {
+                        e.stopPropagation()
+                        if (!rankingRunning) {
+                          setMetricsView('active')
+                          onCalcRanking && onCalcRanking(watchlist.filter(w => selected.has(w.id)))
+                        }
+                      }}
+                      title={`↻ Calcular SCORE MÉTRICAS para los ${selected.size} activos seleccionados con la estrategia activa`}
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        width: 16, height: 16, borderRadius: 3,
+                        background: rankingRunning ? 'transparent' : 'rgba(26,107,58,0.18)',
+                        border: `1px solid ${rankingRunning ? P.borderStrong : '#1a6b3a'}`,
+                        color: rankingRunning ? P.textMuted : '#1a6b3a',
+                        fontSize: 10, cursor: rankingRunning ? 'default' : 'pointer',
+                        flexShrink: 0,
+                      }}>
+                      {rankingRunning ? '⟳' : '↻'}
+                    </span>
+                  )}
+                </div>
               </th>
 
               {/* SCORE MÉT.+SEÑ. */}
-              <th style={{ ...TH(), minWidth: 88, cursor: 'pointer', textAlign: 'right',
-                background: '#d4d0c8', borderLeft: `1px solid ${P.border}`, borderRight: `2px solid ${P.borderStrong}` }}
+              <th style={{ ...TH(), minWidth: 88, textAlign: 'right',
+                background: '#d4d0c8', borderLeft: `1px solid ${P.border}`, borderRight: `2px solid ${P.borderStrong}`,
+                cursor: 'pointer' }}
                 onClick={() => handleSort('scoreCompleto')}
                 title="Score 0-100 que combina métricas históricas + condiciones actuales del mercado (momentum, fuerza relativa vs SP500, proximidad a máximo 52 semanas). Solo disponible tras ejecutar Ranking — usa Score métricas como fallback">
-                SCORE MÉT.+SEÑ.{sortIcon('scoreCompleto')}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
+                  SCORE MÉT.+SEÑ.{sortIcon('scoreCompleto')}
+                  {selected.size > 0 && (
+                    <span
+                      onClick={e => {
+                        e.stopPropagation()
+                        if (!topStratRunning) {
+                          setMetricsView('top')
+                          onCalcRankingAll && onCalcRankingAll(watchlist.filter(w => selected.has(w.id)))
+                        }
+                      }}
+                      title={`↻ Calcular SCORE MÉT.+SEÑ. para los ${selected.size} activos seleccionados con TODAS las estrategias habilitadas`}
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        width: 16, height: 16, borderRadius: 3,
+                        background: topStratRunning ? 'transparent' : 'rgba(26,107,58,0.18)',
+                        border: `1px solid ${topStratRunning ? P.borderStrong : '#1a6b3a'}`,
+                        color: topStratRunning ? P.textMuted : '#1a6b3a',
+                        fontSize: 10, cursor: topStratRunning ? 'default' : 'pointer',
+                        flexShrink: 0,
+                      }}>
+                      {topStratRunning ? '⟳' : '↻'}
+                    </span>
+                  )}
+                </div>
               </th>
 
               {/* Métricas de favorita */}
@@ -1184,6 +1159,10 @@ export default function WatchlistManager({
                 onClick={() => handleSort('intervalo')}>
                 Temporalidad{sortIcon('intervalo')}
               </th>
+              {/* Eliminar */}
+              {onDeleteItem && (
+                <th style={{ ...TH(), width: 42, textAlign: 'center' }}>Elim.</th>
+              )}
             </tr>
           </thead>
 
@@ -1203,12 +1182,13 @@ export default function WatchlistManager({
 
               return (
                 <tr key={w.id || w.symbol}
-                  style={{ background: bg, opacity: isSaving ? 0.5 : 1, transition: 'background 0.1s' }}
+                  style={{ background: bg, opacity: isSaving ? 0.5 : 1, transition: 'background 0.1s', cursor: onEditItem ? 'pointer' : 'default' }}
+                  onClick={() => onEditItem && onEditItem(w)}
                   onMouseOver={e => { if (!isSelected) e.currentTarget.style.background = P.hover }}
                   onMouseOut={e  => { e.currentTarget.style.background = bg }}>
 
                   {/* Checkbox */}
-                  <td style={{ ...TD(), textAlign: 'center', padding: '5px 6px', width: 36 }}>
+                  <td style={{ ...TD(), textAlign: 'center', padding: '5px 6px', width: 36 }} onClick={e => e.stopPropagation()}>
                     <input type="checkbox" checked={isSelected} onChange={() => toggleOne(w.id)}
                       style={{ cursor: 'pointer', width: 14, height: 14 }} />
                   </td>
@@ -1227,7 +1207,7 @@ export default function WatchlistManager({
                   </td>
 
                   {/* Listas — chips editables */}
-                  <td style={{ ...TD(), borderRight: `2px solid ${P.borderStrong}` }}>
+                  <td style={{ ...TD(), borderRight: `2px solid ${P.borderStrong}` }} onClick={e => e.stopPropagation()}>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
                       {(w.list_ids || []).map(lid => {
                         const lname = wlLists.find(l => l.id === lid)?.name
@@ -1382,13 +1362,32 @@ export default function WatchlistManager({
                       </span>
                     ) : <span style={{ color: P.textMuted }}>—</span>}
                   </td>
+
+                  {/* Eliminar — stop propagation para no abrir editor */}
+                  {onDeleteItem && (
+                    <td style={{ ...TD(), textAlign: 'center', width: 42 }} onClick={e => e.stopPropagation()}>
+                      <button
+                        onClick={() => {
+                          if (confirm(`¿Eliminar "${w.symbol}"?\nEsta acción no se puede deshacer.`))
+                            onDeleteItem(w.id)
+                        }}
+                        title="Eliminar activo (requiere confirmación)"
+                        style={{ background: 'transparent', border: '1px solid #ef4444', color: '#ef4444',
+                          fontFamily: MONO, fontSize: 13, padding: '2px 6px', borderRadius: 3, cursor: 'pointer',
+                          lineHeight: 1, transition: 'background 0.15s, color 0.15s' }}
+                        onMouseEnter={e => { e.currentTarget.style.background = '#dc2626'; e.currentTarget.style.color = '#fff'; e.currentTarget.style.borderColor = '#dc2626' }}
+                        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.borderColor = '#ef4444' }}>
+                        🗑
+                      </button>
+                    </td>
+                  )}
                 </tr>
               )
             })}
 
             {sorted.length === 0 && (
               <tr>
-                <td colSpan={12}
+                <td colSpan={onDeleteItem ? 13 : 12}
                   style={{ ...TD(), textAlign: 'center', color: P.textMuted, padding: '32px' }}>
                   Sin activos para los filtros aplicados
                 </td>

@@ -78,7 +78,7 @@ function readParamsFull(s) {
   } catch { return s?.params || null }
 }
 
-const TOTAL_COLS = 15
+const TOTAL_COLS = 16
 
 export default function StrategyManager({
   strategies = [],
@@ -94,7 +94,7 @@ export default function StrategyManager({
   const [sortKey, setSortKey]   = useState('name')
   const [sortDir, setSortDir]   = useState('asc')
   const [search, setSearch]     = useState('')
-  const [onlyEnabled, setOnlyEnabled] = useState(false)
+  const [onlyEnabled, setOnlyEnabled] = useState(true)
   const [selected, setSelected] = useState(new Set())
 
   // Bulk edit states
@@ -121,10 +121,13 @@ export default function StrategyManager({
     const cagrMean = valid.reduce((s, r) => s + (r.cagr_simple ?? 0), 0) / n
     const winMean  = valid.reduce((s, r) => s + (r.win_rate   ?? 0), 0) / n
     const ddMean   = valid.reduce((s, r) => s + (r.max_drawdown ?? 0), 0) / n
-    const totalOps = rows.reduce((s, r) => s + (r.total_trades ?? 0), 0)
     const symbols  = rows.length
-    return { cagrMean, winMean, ddMean, totalOps, symbols }
-  }, [metricsMap])
+    const opsMean  = symbols > 0 ? rows.reduce((s, r) => s + (r.total_trades ?? 0), 0) / symbols : 0
+    // Ganancia simple media anual (€) — CAGR% × capital inicial de la estrategia
+    const capital  = strategies.find(s => s.id === stratId)?.capital_ini ?? null
+    const ganMean  = capital != null ? cagrMean * capital / 100 : null
+    return { cagrMean, winMean, ddMean, opsMean, ganMean, symbols }
+  }, [metricsMap, strategies])
 
   const handleSort = (key) => {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -154,7 +157,8 @@ export default function StrategyManager({
     if (sortKey === 'cagr')      return dir * ((getMetrics(a.id)?.cagrMean ?? -999) - (getMetrics(b.id)?.cagrMean ?? -999))
     if (sortKey === 'win')       return dir * ((getMetrics(a.id)?.winMean  ?? -999) - (getMetrics(b.id)?.winMean  ?? -999))
     if (sortKey === 'dd')        return dir * ((getMetrics(a.id)?.ddMean   ?? -999) - (getMetrics(b.id)?.ddMean   ?? -999))
-    if (sortKey === 'ops')       return dir * ((getMetrics(a.id)?.totalOps ?? 0)    - (getMetrics(b.id)?.totalOps ?? 0))
+    if (sortKey === 'ops')       return dir * ((getMetrics(a.id)?.opsMean  ?? 0)    - (getMetrics(b.id)?.opsMean  ?? 0))
+    if (sortKey === 'ganancia')  return dir * ((getMetrics(a.id)?.ganMean  ?? -999) - (getMetrics(b.id)?.ganMean  ?? -999))
     return 0
   })
 
@@ -209,7 +213,7 @@ export default function StrategyManager({
         display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, flexWrap: 'wrap',
       }}>
         <span style={{ fontFamily: MONO, fontSize: 13, fontWeight: 700, color: P.text, flex: 1, minWidth: 120 }}>
-          ⊞ Gestionar estrategias
+          ⊞ Mantenimiento estrategias
         </span>
 
         {/* Búsqueda */}
@@ -364,7 +368,8 @@ export default function StrategyManager({
               <th style={TH({ textAlign: 'left', minWidth: 110, maxWidth: 160 })} title="Parámetros de la estrategia (JSON)">
                 Parámetros
               </th>
-              <th style={TH({ cursor: 'pointer', textAlign: 'center', width: 60 })} onClick={() => handleSort('intervalo')}>
+              <th style={TH({ cursor: 'pointer', textAlign: 'center', width: 60 })} onClick={() => handleSort('intervalo')}
+                title="Temporalidad de la estrategia. Diario = datos OHLCV diarios, Semanal = datos semanales. Afecta qué histórico se descarga al ejecutar el backtest y el ranking.">
                 Interv.{sortIcon('intervalo')}
               </th>
               <th style={TH({ cursor: 'pointer', textAlign: 'right', width: 90 })} onClick={() => handleSort('capital')}>
@@ -377,17 +382,25 @@ export default function StrategyManager({
                 title="Asignación de capital por operación (%)">
                 Asig.%{sortIcon('alloc')}
               </th>
-              <th style={TH({ cursor: 'pointer', textAlign: 'right', background: '#c8d4b0', width: 88 })} onClick={() => handleSort('cagr')}>
+              <th style={TH({ cursor: 'pointer', textAlign: 'right', background: '#c8d4b0', width: 88 })} onClick={() => handleSort('cagr')}
+                title="CAGR medio (%) sobre todos los activos con datos de ranking · modo Simple">
                 CAGR med.{sortIcon('cagr')}
               </th>
-              <th style={TH({ cursor: 'pointer', textAlign: 'right', background: '#c8d4b0', width: 78 })} onClick={() => handleSort('win')}>
+              <th style={TH({ cursor: 'pointer', textAlign: 'right', background: '#c8d4b0', width: 88 })} onClick={() => handleSort('ganancia')}
+                title="Ganancia anual media estimada en € = CAGR% × capital inicial de la estrategia · modo Simple">
+                Gan. Simple{sortIcon('ganancia')}
+              </th>
+              <th style={TH({ cursor: 'pointer', textAlign: 'right', background: '#c8d4b0', width: 78 })} onClick={() => handleSort('win')}
+                title="Win Rate medio (%) sobre todos los activos con datos de ranking · modo Simple">
                 Win% med.{sortIcon('win')}
               </th>
-              <th style={TH({ cursor: 'pointer', textAlign: 'right', background: '#c8d4b0', width: 84 })} onClick={() => handleSort('dd')}>
+              <th style={TH({ cursor: 'pointer', textAlign: 'right', background: '#c8d4b0', width: 84 })} onClick={() => handleSort('dd')}
+                title="MaxDrawdown medio (%) sobre todos los activos con datos de ranking · modo Simple">
                 MaxDD med.{sortIcon('dd')}
               </th>
-              <th style={TH({ cursor: 'pointer', textAlign: 'right', background: '#c8d4b0', width: 76 })} onClick={() => handleSort('ops')}>
-                Ops tot.{sortIcon('ops')}
+              <th style={TH({ cursor: 'pointer', textAlign: 'right', background: '#c8d4b0', width: 76 })} onClick={() => handleSort('ops')}
+                title="Operaciones medias por activo sobre todos los activos con datos de ranking">
+                Ops med.{sortIcon('ops')}
               </th>
               <th style={TH({ cursor: 'pointer', textAlign: 'center', width: 82 })} onClick={() => handleSort('enabled')}>
                 Habilitada{sortIcon('enabled')}
@@ -515,6 +528,11 @@ export default function StrategyManager({
                     {m ? `${fmt(m.cagrMean, 1)}%` : <span style={{ color: P.textMuted }}>—</span>}
                   </td>
 
+                  {/* Ganancia Simple media */}
+                  <td style={TD({ textAlign: 'right', fontWeight: 600, background: metBg, color: m?.ganMean != null ? cagrFg(m.cagrMean) : P.textMuted })}>
+                    {m?.ganMean != null ? `${fmt(m.ganMean, 0)}€` : <span style={{ color: P.textMuted }}>—</span>}
+                  </td>
+
                   {/* Win% medio */}
                   <td style={TD({ textAlign: 'right', fontWeight: 600, background: metBg, color: m ? winFg(m.winMean) : P.textMuted })}>
                     {m ? `${fmt(m.winMean, 0)}%` : <span style={{ color: P.textMuted }}>—</span>}
@@ -525,9 +543,9 @@ export default function StrategyManager({
                     {m ? `-${fmt(Math.abs(m.ddMean), 1)}%` : <span style={{ color: P.textMuted }}>—</span>}
                   </td>
 
-                  {/* Ops totales */}
+                  {/* Ops medias */}
                   <td style={TD({ textAlign: 'right', background: metBg, color: P.textSec })}>
-                    {m ? fmt(m.totalOps, 0) : <span style={{ color: P.textMuted }}>—</span>}
+                    {m ? fmt(m.opsMean, 0) : <span style={{ color: P.textMuted }}>—</span>}
                   </td>
 
                   {/* Toggle habilitada — stop propagation para no abrir editor */}
@@ -600,7 +618,7 @@ export default function StrategyManager({
         )}
         <div style={{ flex: 1 }} />
         <span style={{ fontFamily: MONO, fontSize: 9, color: P.textMuted, fontStyle: 'italic' }}>
-          Columnas de métricas: promedio sobre todos los activos con datos de ranking en Supabase · Clic en fila para editar
+          Métricas: promedios sobre activos con datos de ranking en Supabase · Gan. Simple = CAGR% × capital ini. · Clic en fila para editar
         </span>
       </div>
     </div>

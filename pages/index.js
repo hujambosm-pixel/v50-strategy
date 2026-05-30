@@ -597,6 +597,7 @@ export default function Home() {
   const [selectedLists,setSelectedLists]=useState([])
   const [listDropOpen,setListDropOpen]=useState(null) // null | {x,y}
   const [editingItem,setEditingItem]=useState(null) // item watchlist en edición
+  const [wlManagerReturn,setWlManagerReturn]=useState(false)
   const [editForm,setEditForm]=useState({})
   const [editSaving,setEditSaving]=useState(false)
   const [strategies,setStrategies]=useState([])
@@ -1790,7 +1791,10 @@ export default function Home() {
       observations:item.observations||''
     })
   }
-  const closeEditItem=()=>{setEditingItem(null);setEditForm({})}
+  const closeEditItem=()=>{
+    if(wlManagerReturn){setShowWlManager(true);setWlManagerReturn(false)}
+    setEditingItem(null);setEditForm({})
+  }
   const saveEditItem=async()=>{
     setEditSaving(true)
     try{
@@ -1919,7 +1923,7 @@ export default function Home() {
       const bySymbol={}
       Object.entries(grouped).forEach(([sym,symRows])=>{
         const stratIds=new Set(symRows.map(r=>r.strategy_id).filter(Boolean))
-        const best=symRows.reduce((acc,r)=>(r.score??0)>(acc?.score??0)?r:acc,null)
+        const best=symRows.reduce((acc,r)=>(r.score_historico??0)>(acc?.score_historico??0)?r:acc,null)
         if(!best) return
         const strat=strategies.find(s=>s.id===best.strategy_id)
         let stratIntervalo='diario'
@@ -3670,7 +3674,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.336</title>
+        <title>Trading Simulator V9.337</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -3748,7 +3752,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.336
+            <span className="dot"/>Trading Simulator V9.337
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4584,8 +4588,6 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                             )
                           })
                         })()}
-                        {/* Editar */}
-                        <span onClick={e=>{e.stopPropagation();openEditItem(w)}} style={{cursor:'pointer',color:'#a8ccdf',fontSize:11,padding:'0 2px',flexShrink:0}} title="Editar">✎</span>
                       </div>
                     )
                     })}
@@ -5653,6 +5655,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 wlLists={wlLists}
                 onReload={reloadWatchlist}
                 onClose={()=>setShowWlManager(false)}
+                onEditItem={w=>{setShowWlManager(false);setWlManagerReturn(true);openEditItem(w)}}
+                onDeleteItem={async(id)=>{await deleteWatchlistItem(id);reloadWatchlist()}}
                 onCalcRanking={calcRanking}
                 rankingRunning={rankingRunning}
                 rankingProgress={rankingProgress}

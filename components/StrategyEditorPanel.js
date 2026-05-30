@@ -176,7 +176,7 @@ export default function StrategyEditorPanel({ strForm, setStrForm, strategy, onS
       </div>
 
       {/* ── FILA 2: Campos básicos en una línea ── */}
-      <div style={{display:'flex', gap:8, alignItems:'center', flexShrink:0}}>
+      <div style={{display:'flex', gap:8, alignItems:'flex-end', flexShrink:0}}>
         {/* Nombre */}
         <input
           style={{...S.input, flex:1}}
@@ -184,14 +184,30 @@ export default function StrategyEditorPanel({ strForm, setStrForm, strategy, onS
           placeholder="Nombre de la estrategia"
         />
         {/* Color */}
-        <input type="color" value={strForm.color||'#00d4ff'} onChange={e=>upd('color',e.target.value)}
-          style={{width:30, height:30, border:'1px solid #1a2d45', borderRadius:4, background:'#0d1520', cursor:'pointer', padding:2, flexShrink:0}} />
-        <input style={{...S.input, width:80}} value={strForm.color||'#00d4ff'} onChange={e=>upd('color',e.target.value)} placeholder="#hex" />
-        {/* Numéricos */}
-        <input style={{...S.input, width:100}} type="number" value={strForm.capital_ini||''} onChange={e=>upd('capital_ini',e.target.value)} placeholder="Capital €" />
-        <input style={{...S.input, width:76}}  type="number" value={strForm.allocation_pct||''} onChange={e=>upd('allocation_pct',e.target.value)} placeholder="Asig. %" />
-        <input style={{...S.input, width:64}}  type="number" value={strForm.years||''} onChange={e=>upd('years',e.target.value)} placeholder="Años" />
-        {/* Intervalo D/S — almacenado en params.intervalo, gestionado aquí visualmente */}
+        <div style={{display:'flex',flexDirection:'column',gap:2,flexShrink:0}}>
+          <span style={{...S.label,marginBottom:0}}>Color</span>
+          <div style={{display:'flex',gap:3,alignItems:'center'}}>
+            <input type="color" value={strForm.color||'#00d4ff'} onChange={e=>upd('color',e.target.value)}
+              style={{width:28,height:26,border:'1px solid #1a2d45',borderRadius:4,background:'#0d1520',cursor:'pointer',padding:2}} />
+            <input style={{...S.input, width:76}} value={strForm.color||'#00d4ff'} onChange={e=>upd('color',e.target.value)} placeholder="#hex" />
+          </div>
+        </div>
+        {/* Capital ini. */}
+        <div style={{display:'flex',flexDirection:'column',gap:2,flexShrink:0}}>
+          <span style={{...S.label,marginBottom:0}}>Capital ini.</span>
+          <input style={{...S.input, width:96}} type="number" value={strForm.capital_ini||''} onChange={e=>upd('capital_ini',e.target.value)} placeholder="€" />
+        </div>
+        {/* % capital/trade */}
+        <div style={{display:'flex',flexDirection:'column',gap:2,flexShrink:0}}>
+          <span style={{...S.label,marginBottom:0}}>% capital/trade</span>
+          <input style={{...S.input, width:72}} type="number" value={strForm.allocation_pct||''} onChange={e=>upd('allocation_pct',e.target.value)} placeholder="%" />
+        </div>
+        {/* Años */}
+        <div style={{display:'flex',flexDirection:'column',gap:2,flexShrink:0}}>
+          <span style={{...S.label,marginBottom:0}}>Años</span>
+          <input style={{...S.input, width:56}} type="number" value={strForm.years||''} onChange={e=>upd('years',e.target.value)} placeholder="#" />
+        </div>
+        {/* Temporalidad D/S — almacenado en params.intervalo, gestionado aquí visualmente */}
         {(()=>{
           const iv=strForm._intervalo||'diario'
           const btnStyle=(val)=>({
@@ -202,9 +218,12 @@ export default function StrategyEditorPanel({ strForm, setStrForm, strategy, onS
             transition:'all 0.15s',
           })
           return(
-            <div style={{display:'flex',gap:2,flexShrink:0}} title="Intervalo de datos de la estrategia: Diario (D) o Semanal (S)">
-              <button style={btnStyle('diario')}  onClick={()=>upd('_intervalo','diario')}>D</button>
-              <button style={btnStyle('semanal')} onClick={()=>upd('_intervalo','semanal')}>S</button>
+            <div style={{display:'flex',flexDirection:'column',gap:2,flexShrink:0}}>
+              <span style={{...S.label,marginBottom:0}}>Temporalidad</span>
+              <div style={{display:'flex',gap:2}} title="Intervalo de datos de la estrategia: Diario (D) o Semanal (S)">
+                <button style={btnStyle('diario')}  onClick={()=>upd('_intervalo','diario')}>D</button>
+                <button style={btnStyle('semanal')} onClick={()=>upd('_intervalo','semanal')}>S</button>
+              </div>
             </div>
           )
         })()}
