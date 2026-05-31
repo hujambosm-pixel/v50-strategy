@@ -353,7 +353,7 @@ export default function StrategyManager({
 
       {/* ── Tabla ── */}
       <div style={{ flex: 1, overflow: 'auto', position: 'relative' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1060 }}>
+        <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, minWidth: 1060 }}>
           <thead>
             <tr>
               <th style={TH({ width: 28, textAlign: 'center' })}>
