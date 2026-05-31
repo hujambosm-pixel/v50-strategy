@@ -1485,8 +1485,8 @@ export default function WatchlistManager({
                   })()}
 
                   {/* Listas — chips editables */}
-                  <td style={{ ...TD(), borderRight: `2px solid ${P.borderStrong}` }} onClick={e => e.stopPropagation()}>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+                  <td style={{ ...TD(), borderRight: `2px solid ${P.borderStrong}`, overflow: 'hidden', whiteSpace: 'nowrap' }} onClick={e => e.stopPropagation()}>
+                    <div style={{ display: 'flex', flexWrap: 'nowrap', gap: 4, alignItems: 'center', overflow: 'hidden' }}>
                       {(w.list_ids || []).map(lid => {
                         const lname = wlLists.find(l => l.id === lid)?.name
                         if (!lname) return null
