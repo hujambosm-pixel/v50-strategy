@@ -1134,7 +1134,8 @@ export default function WatchlistManager({
       {/* ── Tabla (dos tablas sincronizadas: header fijo + body con scroll) ── */}
       {(()=>{
         // Anchos fijos — idénticos en ambas tablas
-        // chk,tick,nom,tipo,listas,smet,smetseg,cagr,profit,wr,dd,ops,strat,temp[,elim]
+        // chk=36 + tick,nom,tipo,listas,smet,smetseg,cagr,profit,wr,dd,ops,strat,temp[,elim]
+        // suma datos = 70+180+70+180+110+110+70+90+60+70+50+160+90 = 1310, +50 elim = 1360
         const COL_WIDTHS = onDeleteItem
           ? [36, 70, 180, 70, 180, 110, 110, 70, 90, 60, 70, 50, 160, 90, 50]
           : [36, 70, 180, 70, 180, 110, 110, 70, 90, 60, 70, 50, 160, 90]
