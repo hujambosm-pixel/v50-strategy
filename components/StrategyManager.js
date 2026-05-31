@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { MONO, fmt } from '../lib/utils'
 import { getSupaUrl, getSupaH } from '../lib/supabase'
 
@@ -103,6 +103,8 @@ export default function StrategyManager({
   const [bulkCapital,   setBulkCapital]   = useState('')
   const [bulkYears,     setBulkYears]     = useState('')
   const [bulkApplying,  setBulkApplying]  = useState(false)
+  const smHeaderRef = useRef(null)
+  const smBodyRef   = useRef(null)
 
   useEffect(() => {
     setLoadingMetrics(true)
@@ -351,27 +353,38 @@ export default function StrategyManager({
         </div>
       )}
 
-      {/* ── Tabla ── */}
-      <div style={{ flex: 1, overflow: 'auto', position: 'relative' }}>
-        <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, minWidth: 1060 }}>
-          <thead>
+      {/* ── Tabla (dos tablas sincronizadas: header fijo + body scrollable) ── */}
+      {(()=>{
+        const CW = { chk:28, col:20, nom:160, res:160, par:140, intv:64, cap:90, yr:52, alloc:64, cagr:88, gan:88, win:78, dd:84, ops:76, hab:82, elim:48 }
+        const tblStyle = { borderCollapse:'separate', borderSpacing:0, tableLayout:'fixed', width:'100%' }
+        const colGroup = (
+          <colgroup>
+            {Object.values(CW).map((w,i) => <col key={i} style={{ width: w }} />)}
+          </colgroup>
+        )
+        return (<>
+        {/* Header fijo */}
+        <div ref={smHeaderRef} style={{ flexShrink:0, overflowX:'hidden', background:'#d4c9b8' }}>
+          <table style={tblStyle}>
+            {colGroup}
+            <thead>
             <tr>
               <th style={TH({ width: 28, textAlign: 'center' })}>
                 <input type="checkbox" checked={allSelected} onChange={toggleAll}
                   style={{ cursor: 'pointer', width: 12, height: 12, accentColor: P.accent }} />
               </th>
               <th style={TH({ width: 20 })} title="Color" />
-              <th style={TH({ cursor: 'pointer', textAlign: 'left', minWidth: 140 })} onClick={() => handleSort('name')}>
+              <th style={TH({ cursor: 'pointer', textAlign: 'left' })} onClick={() => handleSort('name')}>
                 Nombre{sortIcon('name')}
               </th>
-              <th style={TH({ textAlign: 'left', minWidth: 120, maxWidth: 180 })} title="Resumen / descripción de la estrategia">
+              <th style={TH({ textAlign: 'left' })} title="Resumen / descripción de la estrategia">
                 Resumen
               </th>
-              <th style={TH({ textAlign: 'left', minWidth: 110, maxWidth: 160 })} title="Parámetros de la estrategia (JSON)">
+              <th style={TH({ textAlign: 'left' })} title="Parámetros de la estrategia (JSON)">
                 Parámetros
               </th>
-              <th style={TH({ cursor: 'pointer', textAlign: 'center', width: 60 })} onClick={() => handleSort('intervalo')}
-                title="Temporalidad de la estrategia. Diario = datos OHLCV diarios, Semanal = datos semanales. Afecta qué histórico se descarga al ejecutar el backtest y el ranking.">
+              <th style={TH({ cursor: 'pointer', textAlign: 'center', width: 64 })} onClick={() => handleSort('intervalo')}
+                title="Temporalidad de la estrategia. Diario = datos OHLCV diarios, Semanal = datos semanales.">
                 Interv.{sortIcon('intervalo')}
               </th>
               <th style={TH({ cursor: 'pointer', textAlign: 'right', width: 90 })} onClick={() => handleSort('capital')}>
@@ -380,28 +393,28 @@ export default function StrategyManager({
               <th style={TH({ cursor: 'pointer', textAlign: 'right', width: 52 })} onClick={() => handleSort('years')}>
                 Años{sortIcon('years')}
               </th>
-              <th style={TH({ cursor: 'pointer', textAlign: 'right', width: 60 })} onClick={() => handleSort('alloc')}
+              <th style={TH({ cursor: 'pointer', textAlign: 'right', width: 64 })} onClick={() => handleSort('alloc')}
                 title="Asignación de capital por operación (%)">
                 Asig.%{sortIcon('alloc')}
               </th>
               <th style={TH({ cursor: 'pointer', textAlign: 'right', background: '#c8d4b0', width: 88 })} onClick={() => handleSort('cagr')}
-                title="CAGR medio (%) sobre todos los activos con datos de ranking · modo Simple">
+                title="CAGR medio (%) · modo Simple">
                 CAGR med.{sortIcon('cagr')}
               </th>
               <th style={TH({ cursor: 'pointer', textAlign: 'right', background: '#c8d4b0', width: 88 })} onClick={() => handleSort('ganancia')}
-                title="Ganancia anual media estimada en € = CAGR% × capital inicial de la estrategia · modo Simple">
+                title="Ganancia anual media estimada en € = CAGR% × capital inicial · modo Simple">
                 Gan. Simple{sortIcon('ganancia')}
               </th>
               <th style={TH({ cursor: 'pointer', textAlign: 'right', background: '#c8d4b0', width: 78 })} onClick={() => handleSort('win')}
-                title="Win Rate medio (%) sobre todos los activos con datos de ranking · modo Simple">
+                title="Win Rate medio (%) · modo Simple">
                 Win% med.{sortIcon('win')}
               </th>
               <th style={TH({ cursor: 'pointer', textAlign: 'right', background: '#c8d4b0', width: 84 })} onClick={() => handleSort('dd')}
-                title="MaxDrawdown medio (%) sobre todos los activos con datos de ranking · modo Simple">
+                title="MaxDrawdown medio (%) · modo Simple">
                 MaxDD med.{sortIcon('dd')}
               </th>
               <th style={TH({ cursor: 'pointer', textAlign: 'right', background: '#c8d4b0', width: 76 })} onClick={() => handleSort('ops')}
-                title="Operaciones medias por activo sobre todos los activos con datos de ranking">
+                title="Operaciones medias por activo">
                 Ops med.{sortIcon('ops')}
               </th>
               <th style={TH({ cursor: 'pointer', textAlign: 'center', width: 82 })} onClick={() => handleSort('enabled')}>
@@ -409,7 +422,16 @@ export default function StrategyManager({
               </th>
               <th style={TH({ textAlign: 'center', width: 48 })}>Elim.</th>
             </tr>
-          </thead>
+            </thead>
+          </table>
+        </div>
+
+        {/* Body scrollable */}
+        <div ref={smBodyRef}
+          style={{ flex:1, minHeight:0, height:0, overflowY:'auto', overflowX:'auto' }}
+          onScroll={e => { if(smHeaderRef.current) smHeaderRef.current.scrollLeft = e.currentTarget.scrollLeft }}>
+          <table style={tblStyle}>
+            {colGroup}
           <tbody>
             {list.map((s, i) => {
               const isOdd  = i % 2 === 1
@@ -597,14 +619,16 @@ export default function StrategyManager({
               </tr>
             )}
           </tbody>
-        </table>
-        {loadingMetrics && (
-          <div style={{ padding: '18px', textAlign: 'center',
-            fontFamily: MONO, fontSize: 12, color: P.textMuted }}>
-            ⟳ Cargando métricas de ranking…
-          </div>
-        )}
-      </div>
+          </table>
+          {loadingMetrics && (
+            <div style={{ padding: '18px', textAlign: 'center',
+              fontFamily: MONO, fontSize: 12, color: P.textMuted }}>
+              ⟳ Cargando métricas de ranking…
+            </div>
+          )}
+        </div>
+        </>)
+      })()}
 
       {/* ── Footer ── */}
       <div style={{ background: P.bgAlt, borderTop: `1px solid ${P.border}`,

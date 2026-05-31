@@ -194,8 +194,10 @@ export default function WatchlistManager({
   const [confirmMetricsDelete, setConfirmMetricsDelete] = useState(false)
   const prevRankingRunning  = useRef(false)
   const prevTopStratRunning = useRef(false)
-  const addDropRef    = useRef(null)
-  const listFilterRef = useRef(null)
+  const addDropRef      = useRef(null)
+  const listFilterRef   = useRef(null)
+  const headerScrollRef = useRef(null)
+  const bodyScrollRef   = useRef(null)
 
   // ── Helper: convierte filas de Supabase al mapa allRankings ──
   function buildAllRankingsMap(rows) {
@@ -1129,11 +1131,43 @@ export default function WatchlistManager({
         </div>
       )}
 
-      {/* ── Tabla ── */}
-      <div style={{ flex: 1, minHeight: 0, height: 0, overflowY: 'auto', overflowX: 'auto', position: 'relative', background: P.bg }}>
-        <table style={{ borderCollapse: 'separate', borderSpacing: 0, minWidth: '100%', tableLayout: 'auto' }}>
-          <thead>
-            {/* Sub-header agrupador de métricas — cada th tiene position:sticky,top:0 via TH() */}
+      {/* ── Tabla (dos tablas sincronizadas: header fijo + body con scroll) ── */}
+      {(()=>{
+        // Anchos fijos de columna — deben ser idénticos en ambas tablas
+        const CW = {
+          chk: 36, tick: 80, nom: 140, tipo: 80, listas: 150,
+          smet: 90, smetseg: 100,
+          cagr: 72, profit: 90, wr: 72, dd: 72, ops: 60,
+          strat: 160, temp: 90,
+          elim: onDeleteItem ? 44 : 0,
+        }
+        const colGroup = (
+          <colgroup>
+            <col style={{ width: CW.chk }} />
+            <col style={{ width: CW.tick }} />
+            <col style={{ width: CW.nom }} />
+            <col style={{ width: CW.tipo }} />
+            <col style={{ width: CW.listas }} />
+            <col style={{ width: CW.smet }} />
+            <col style={{ width: CW.smetseg }} />
+            <col style={{ width: CW.cagr }} />
+            <col style={{ width: CW.profit }} />
+            <col style={{ width: CW.wr }} />
+            <col style={{ width: CW.dd }} />
+            <col style={{ width: CW.ops }} />
+            <col style={{ width: CW.strat }} />
+            <col style={{ width: CW.temp }} />
+            {onDeleteItem && <col style={{ width: CW.elim }} />}
+          </colgroup>
+        )
+        const tblStyle = { borderCollapse: 'separate', borderSpacing: 0, tableLayout: 'fixed', width: '100%' }
+        return (<>
+        {/* TABLA 1 — Headers fijos (sin scroll vertical, scroll-X sincronizado) */}
+        <div ref={headerScrollRef} style={{ flexShrink: 0, overflowX: 'hidden', background: P.thBg }}>
+          <table style={tblStyle}>
+            {colGroup}
+            <thead>
+            {/* Sub-header agrupador de métricas */}
             <tr>
               <th colSpan={5} style={{ ...TH(), background: P.thBg, borderBottom: `1px solid ${P.border}` }} />
               <th colSpan={2} style={{
@@ -1400,7 +1434,15 @@ export default function WatchlistManager({
               )}
             </tr>
           </thead>
+          </table>
+        </div>
 
+        {/* TABLA 2 — Body con scroll vertical y horizontal */}
+        <div ref={bodyScrollRef}
+          style={{ flex: 1, minHeight: 0, height: 0, overflowY: 'auto', overflowX: 'auto', background: P.bg }}
+          onScroll={e => { if (headerScrollRef.current) headerScrollRef.current.scrollLeft = e.currentTarget.scrollLeft }}>
+          <table style={tblStyle}>
+            {colGroup}
           <tbody>
             {sorted.map((w, idx) => {
               const sym        = (w.symbol || '').toUpperCase()
@@ -1670,8 +1712,10 @@ export default function WatchlistManager({
               </tr>
             )}
           </tbody>
-        </table>
-      </div>
+          </table>
+        </div>
+        </>)
+      })()}
     </div>
   )
 }
