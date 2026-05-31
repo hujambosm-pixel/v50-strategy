@@ -1145,7 +1145,7 @@ export default function WatchlistManager({
             {COL_WIDTHS.map((w, i) => <col key={i} style={{ width: w + 'px', minWidth: w + 'px' }} />)}
           </colgroup>
         )
-        const tblStyle = { borderCollapse: 'separate', borderSpacing: 0, tableLayout: 'fixed', width: totalWidth + 'px' }
+        const tblStyle = { borderCollapse: 'separate', borderSpacing: 0, tableLayout: 'fixed', width: '100%', minWidth: totalWidth + 'px' }
         return (<>
         {/* TABLA 1 — Headers fijos (sin scroll vertical, scroll-X sincronizado) */}
         <div ref={headerScrollRef} style={{ flexShrink: 0, overflowX: 'hidden', background: P.thBg }}>
