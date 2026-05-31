@@ -204,7 +204,7 @@ export default function StrategyManager({
 
   return (
     <div style={{
-      position: 'absolute', inset: 0, zIndex: 50,
+      width: '100%', height: '100%',
       background: P.bg,
       display: 'flex', flexDirection: 'column',
       overflow: 'hidden',
