@@ -4159,7 +4159,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.377</title>
+        <title>Trading Simulator V9.378</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4237,7 +4237,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.377
+            <span className="dot"/>Trading Simulator V9.378
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5001,17 +5001,33 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         onMouseLeave={()=>setWlTooltip(null)}>
                         {/* Ranking badge */}
                         {wlShowRankBadge&&(()=>{
-                          const rd=rankingData[(w.symbol||'').toUpperCase()]
+                          const symUp=(w.symbol||'').toUpperCase()
+                          const rd=rankingData[symUp]
                           const r=rd?.rank
-                          if(!rd||!r) return <span style={{width:16,flexShrink:0}}/>
+                          if(!rd||!r) return <span style={{width:24,flexShrink:0}}/>
                           const col=r===1?'#ffd700':r===2?'#c0c0c0':r===3?'#cd7f32':r<=10?'#00d4ff':'#3d5a7a'
+                          // Score según wlSortMode activo
+                          const bsb=bestStratBySymbol[symUp]
+                          const wd=wlData[symUp]
+                          let score=null
+                          if(wlSortMode==='scoreHistorico'||wlSortMode==='scoreHistoricoActiva'){
+                            score=rd?.scoreHistorico??bsb?.scoreHistorico??null
+                          } else if(wlSortMode==='scoreCompleto'||wlSortMode==='scoreCompletoActiva'){
+                            score=rd?.scoreCompleto??rd?.scoreHistorico??null
+                          } else if(wlSortMode==='scoreHistoricoTop'){
+                            score=wd?.top?.scoreMetricas??null
+                          } else if(wlSortMode==='scoreCompletoTop'){
+                            score=wd?.top?.scoreMetSeñ??wd?.top?.scoreMetricas??null
+                          }
+                          const scoreStr=score!=null?fmt(score,1)+'%':null
                           return(
-                            <span title={`Rank #${r} · Score: ${rd.score!=null?fmt(rd.score,0):'—'} · WR:${rd.metrics?.winRate!=null?fmt(rd.metrics.winRate,0):'—'}% · FB:${rd.metrics?.factorBen!=null?fmt(rd.metrics.factorBen,1):'—'} · CAGR:${rd.metrics?.cagr!=null?fmt(rd.metrics.cagr,1):'—'}%`}
-                              style={{fontFamily:MONO,fontSize:9,fontWeight:700,color:col,flexShrink:0,minWidth:20,textAlign:'center',lineHeight:1}}>
-                              {r<=3?['🥇','🥈','🥉'][r-1]:`#${r}`}
+                            <span title={`Rank #${r} · Score: ${rd.score!=null?fmt(rd.score,0):'—'}`}
+                              style={{fontFamily:MONO,fontSize:9,fontWeight:700,color:col,flexShrink:0,minWidth:24,textAlign:'center',lineHeight:1.2,display:'flex',flexDirection:'column',alignItems:'center'}}>
+                              <span>{r<=3?['🥇','🥈','🥉'][r-1]:`#${r}`}</span>
+                              {scoreStr&&<span style={{fontSize:8,color:'#5a8aaa',fontWeight:400,marginTop:1}}>{scoreStr}</span>}
                             </span>
                           )
-                        })()} 
+                        })()}
                         {/* Estrella favorito */}
                         <span onClick={async(e)=>{e.stopPropagation();await upsertWatchlistItem({...w,favorite:!w.favorite});reloadWatchlist()}}
                           style={{cursor:'pointer',fontSize:12,color:w.favorite?'#ffd166':'var(--text3)',flexShrink:0}} title="Favorito">
