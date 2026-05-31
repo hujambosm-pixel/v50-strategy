@@ -4159,7 +4159,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.375</title>
+        <title>Trading Simulator V9.376</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4237,7 +4237,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.375
+            <span className="dot"/>Trading Simulator V9.376
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5038,14 +5038,13 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                     {eurStr} / {pctStr}
                                   </div>
                                 )
-                                if(rdSym?.metrics?.cagr!=null) return(
-                                  <div style={{fontFamily:MONO,fontSize:10,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>
-                                    <span style={{color:rdSym.metrics.cagr>=0?'#00e5a0':'#ff4d6d'}}>CAGR: {fmt(rdSym.metrics.cagr,1)}%</span>
-                                    <span style={{color:'#3d5a7a'}}> | </span>
-                                    <span style={{color:'#ff4d6d'}}>DD: -{fmt(Math.abs(rdSym.metrics.maxDD??0),1)}%</span>
+                                {/* Línea secundaria: nombre top estrategia */}
+                                const topName=wlData[(w.symbol||'').toUpperCase()]?.top?.stratName
+                                return(
+                                  <div style={{fontFamily:MONO,fontSize:10,color:'#8aadcc',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                                    {topName||'—'}
                                   </div>
                                 )
-                                return <div style={{fontFamily:MONO,fontSize:10,color:'#8aadcc',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{w.name}</div>
                               })()}
                             </div>
                           )
@@ -10088,6 +10087,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
       const tRd=rankingData[tSym]
       const m=tRd?.metrics
       const tBest=bestStratBySymbol[tSym]
+      const tTop=wlData[tSym]?.top
       return(
         <div style={{position:'fixed',left:wlTooltip.x,top:wlTooltip.y,zIndex:9999,
           background:'#090f18',border:'1px solid #1e3048',borderRadius:7,
@@ -10112,6 +10112,18 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                   <span style={{color:colorFn(val),fontWeight:600,fontSize:11}}>{fmtVal(val)}</span>
                 </div>
               ):null)}
+            </div>
+          )}
+          {/* Top estrategia (mayor CAGR entre todas las habilitadas) */}
+          {tTop?.stratName&&(
+            <div style={{borderTop:'1px solid #1a2d40',paddingTop:7,marginBottom:tBest?.stratName?6:0}}>
+              <div style={{fontSize:10,color:'#4a7a95',marginBottom:4}}>Top estrategia</div>
+              <div style={{fontSize:11,color:'#ffd166',fontWeight:600,marginBottom:3,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{tTop.stratName}</div>
+              <div style={{display:'flex',gap:10,fontSize:10}}>
+                {tTop.cagr!=null&&<span style={{color:tTop.cagr>=0?'#00e5a0':'#ff4d6d'}}>CAGR {fmt(tTop.cagr,1)}%</span>}
+                {tTop.winRate!=null&&<span style={{color:'#8aadcc'}}>WR {fmt(tTop.winRate,0)}%</span>}
+                {tTop.maxDD!=null&&<span style={{color:'#ff7eb3'}}>DD -{fmt(Math.abs(tTop.maxDD),1)}%</span>}
+              </div>
             </div>
           )}
           {/* Mejor estrategia evaluada entre todas las calculadas en Supabase */}
