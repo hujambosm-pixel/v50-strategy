@@ -1146,9 +1146,10 @@ export default function WatchlistManager({
           </colgroup>
         )
         const tblStyle = { borderCollapse: 'separate', borderSpacing: 0, tableLayout: 'fixed', width: '100%', minWidth: totalWidth + 'px' }
+        const scrollbarWidth = 17
         return (<>
         {/* TABLA 1 — Headers fijos (sin scroll vertical, scroll-X sincronizado) */}
-        <div ref={headerScrollRef} style={{ flexShrink: 0, overflowX: 'hidden', background: P.thBg }}>
+        <div ref={headerScrollRef} style={{ flexShrink: 0, overflowX: 'hidden', background: P.thBg, paddingRight: scrollbarWidth + 'px' }}>
           <table style={tblStyle}>
             {colGroup}
             <thead>
