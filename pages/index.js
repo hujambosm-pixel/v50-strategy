@@ -2622,142 +2622,161 @@ export default function Home() {
     setCalcPhase(0)
   }, [calcRanking, calcRankingAllStrategies])
 
-  // ── SCORE MÉTRICAS ↻ — Calcula solo scoreHistorico (activa + top via refresh) ──
+  // ── SCORE MÉTRICAS ↻ (Paso 2) — Calcula scoreHistorico desde wlData, sin backtest ──
+  // Requiere: ↻ Métricas ejecutado previamente (cagr/winRate/maxDD en wlData[sym].active)
   const calcScoreMetricas = useCallback(async (rankSymbols=null) => {
-    const syms = (rankSymbols || watchlist).map(w=>w.symbol)
+    const items = rankSymbols || watchlist
+    const syms = items.map(w=>w.symbol)
+
+    // ── Verificación previa: todos los activos deben tener métricas ──
+    const missingMetrics = syms.filter(sym => {
+      const d = wlData[sym.toUpperCase()]?.active
+      return !d || d.cagr==null || d.winRate==null || d.maxDD==null
+    })
+    if (missingMetrics.length > 0) {
+      return { ok: false, error: 'missing_metrics', symbols: missingMetrics }
+    }
+
     setRankingRunning(true); setRankingError(null)
     setRankingProgress({done:0, total:syms.length})
     const sett=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')}catch(_){return {}}})()
     const wrPct=(sett.ranking?.rankingWinRatePct??33)/100, cagrPct=(sett.ranking?.rankingCAGRPct??33)/100
     const cagrRobPct=(sett.ranking?.rankingCAGRRobustoPct??34)/100, ddPct=(sett.ranking?.rankingMaxDDPct??0)/100
-    const minTrades=sett.ranking?.minTrades??3
     const norm=(v,mn,mx)=>Math.max(0,Math.min(100,(v-mn)/(mx-mn)*100))
-    const BATCH=4, scoreMap={}
-    for(let i=0;i<syms.length;i+=BATCH){
-      const batch=syms.slice(i,i+BATCH)
-      await Promise.allSettled(batch.map(async sym=>{
-        try{
-          const res=await apiFetch('/api/datos',{method:'POST',headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({simbolo:sym,strategyId:currentStratId,capital_ini:Number(capitalIni),years:Number(years),allocation_pct:100,filtros,intervalo:estrategiaIntervalo})})
-          const json=await res.json()
-          if(!res.ok||!json.trades?.length) return
-          const trades=json.trades; if(trades.length<minTrades) return
-          const wins=trades.filter(t=>t.pnlPct>=0), winRate=(wins.length/trades.length)*100
-          const totalDiasNat=json.startDate?(new Date(json.meta?.ultimaFecha)-new Date(json.startDate))/86400000:365*Number(years)
-          const anios=Math.max(totalDiasNat/365.25,0.01)
-          const capFinal=Number(capitalIni)+json.gananciaSimple
-          const cagr=capFinal>0?(Math.pow(capFinal/Number(capitalIni),1/anios)-1)*100:-99
-          const sorted3=[...trades].sort((a,b)=>b.pnlSimple-a.pnlSimple).slice(3)
-          const ganRobust=sorted3.reduce((s,t)=>s+t.pnlSimple,0)
-          const capRob=Number(capitalIni)+ganRobust
-          const cagrRobust=capRob>0?(Math.pow(capRob/Number(capitalIni),1/anios)-1)*100:-99
-          const maxDD=json.maxDDStrategyFloat??json.maxDDStrategy??0
-          scoreMap[sym.toUpperCase()]=Math.max(0,Math.min(100,
-            norm(winRate,20,80)*wrPct+norm(cagr,-20,60)*cagrPct+norm(cagrRobust,-20,50)*cagrRobPct-norm(maxDD,0,60)*ddPct))
-        }catch(e){console.error('[calcScoreMetricas]',sym,e)}
-      }))
-      setRankingProgress({done:Math.min(i+BATCH,syms.length),total:syms.length})
-    }
-    await upsertScoreHistoricoRemote(scoreMap,currentStratId||null)
-    setRankingData(prev=>{const next={...prev};Object.entries(scoreMap).forEach(([sym,sh])=>{next[sym]={...(next[sym]||{}),scoreHistorico:sh}});return next})
+
+    // ── Calcular scoreHistorico desde wlData (sin backtest) ──
+    const activeScoreMap={}, topScoreMap={}
+    syms.forEach((sym,idx)=>{
+      const symUp=sym.toUpperCase()
+      const ad=wlData[symUp]?.active, td=wlData[symUp]?.top
+      if(ad?.cagr!=null&&ad?.winRate!=null&&ad?.maxDD!=null){
+        activeScoreMap[symUp]=Math.max(0,Math.min(100,
+          norm(ad.winRate,20,80)*wrPct+norm(ad.cagr,-20,60)*cagrPct+
+          norm(ad.cagrRobust??ad.cagr,-20,50)*cagrRobPct-norm(ad.maxDD,0,60)*ddPct))
+      }
+      if(td?.cagr!=null&&td?.winRate!=null&&td?.maxDD!=null){
+        topScoreMap[symUp]=Math.max(0,Math.min(100,
+          norm(td.winRate,20,80)*wrPct+norm(td.cagr,-20,60)*cagrPct+
+          norm(td.cagrRobust??td.cagr,-20,50)*cagrRobPct-norm(td.maxDD,0,60)*ddPct))
+      }
+      setRankingProgress({done:idx+1,total:syms.length})
+    })
+
+    // ── Guardar en Supabase ──
+    await upsertScoreHistoricoRemote(activeScoreMap, currentStratId||null)
+    // Top scores: agrupar por stratId y guardar
+    const topByStrat={}
+    Object.entries(topScoreMap).forEach(([sym,sh])=>{
+      const sid=wlData[sym]?.top?.stratId; if(sid){if(!topByStrat[sid])topByStrat[sid]={};topByStrat[sid][sym]=sh}
+    })
+    for(const [sid,m] of Object.entries(topByStrat)) await upsertScoreHistoricoRemote(m,sid)
+
+    // ── Actualizar rankingData y wlData ──
+    setRankingData(prev=>{const next={...prev};Object.entries(activeScoreMap).forEach(([sym,sh])=>{next[sym]={...(next[sym]||{}),scoreHistorico:sh}});return next})
     setRankingStratId(currentStratId); setRankingStratName(stratName||'')
-    const newBestStrat = await refreshBestStratPerSymbol().catch(()=>null)
-    // Merge computed scores into wlData (active + top)
     setWlData(prev=>{
       const next={...prev}
-      Object.entries(scoreMap).forEach(([sym,sh])=>{
-        const bsb=newBestStrat?.[sym]
-        next[sym]={
-          ...(next[sym]||{}),
-          active:{...(next[sym]?.active||{}),scoreMetricas:sh,stratName:stratName||'',stratId:currentStratId,intervalo:estrategiaIntervalo},
-          top:bsb?{...(next[sym]?.top||{}),scoreMetricas:bsb.scoreHistorico,scoreMetSeñ:bsb.scoreCompleto,stratName:bsb.stratName,stratId:bsb.stratId,intervalo:bsb.intervalo,updatedAt:bsb.updatedAt}:(next[sym]?.top||{}),
+      Object.keys(activeScoreMap).forEach(sym=>{
+        next[sym]={...(next[sym]||{}),
+          active:{...(next[sym]?.active||{}),scoreMetricas:activeScoreMap[sym],stratName:stratName||'',stratId:currentStratId,intervalo:estrategiaIntervalo},
+          top:topScoreMap[sym]!=null?{...(next[sym]?.top||{}),scoreMetricas:topScoreMap[sym]}:(next[sym]?.top||{}),
         }
       })
       return next
     })
     setRankingRunning(false); setRankingProgress({done:0,total:0})
     setRankingBannerDismissed(true)
-  },[watchlist,years,capitalIni,currentStratId,stratName,filtros,estrategiaIntervalo,refreshBestStratPerSymbol])
+    return { ok: true }
+  },[watchlist,wlData,currentStratId,stratName,estrategiaIntervalo])
 
-  // ── SCORE MÉT.+SEÑ. ↻ — Calcula solo scoreCompleto (activa + top via refresh) ──
+  // ── SCORE MÉT.+SEÑ. ↻ (Paso 3) — Añade señales de mercado al scoreMetricas existente ──
+  // Requiere: ↻ Score métricas ejecutado previamente (scoreMetricas en wlData[sym].active)
   const calcScoreMetSen = useCallback(async (rankSymbols=null) => {
-    const syms = (rankSymbols || watchlist).map(w=>w.symbol)
+    const items = rankSymbols || watchlist
+    const syms = items.map(w=>w.symbol)
+
+    // ── Verificación previa: todos deben tener scoreMetricas ──
+    const missingScore = syms.filter(sym => wlData[sym.toUpperCase()]?.active?.scoreMetricas==null)
+    if (missingScore.length > 0) {
+      return { ok: false, error: 'missing_score_metricas', symbols: missingScore }
+    }
+
     setRankingRunning(true); setRankingError(null)
     setRankingProgress({done:0, total:syms.length})
     const sett=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')}catch(_){return {}}})()
     const wMercado=(sett.ranking?.rankingWeightMercado??20)/100, wHistorico=(sett.ranking?.rankingWeightHistorico??80)/100
     const momPct=(sett.ranking?.rankingMomentumPct??33)/100, frPct=(sett.ranking?.rankingFRPct??33)/100
     const max52Pct=(sett.ranking?.rankingMax52Pct??34)/100, momN=Math.max(5,sett.ranking?.rankingMomentumN??20)
-    const wrPct=(sett.ranking?.rankingWinRatePct??33)/100, cagrPct=(sett.ranking?.rankingCAGRPct??33)/100
-    const cagrRobPct=(sett.ranking?.rankingCAGRRobustoPct??34)/100, ddPct=(sett.ranking?.rankingMaxDDPct??0)/100
-    const minTrades=sett.ranking?.minTrades??3
     const norm=(v,mn,mx)=>Math.max(0,Math.min(100,(v-mn)/(mx-mn)*100))
+
     let sp500Closes=null
     if(wMercado>0&&frPct>0){try{const r=await apiFetch('/api/closes?symbol=%5EGSPC&days=300');if(r.ok)sp500Closes=await r.json()}catch(e){console.warn('[calcScoreMetSen] SP500:',e.message)}}
-    const BATCH=4, scoreMap={}
+
+    const BATCH=4, activeScMap={}, topScMap={}
     for(let i=0;i<syms.length;i+=BATCH){
       const batch=syms.slice(i,i+BATCH)
       await Promise.allSettled(batch.map(async sym=>{
         try{
-          const res=await apiFetch('/api/datos',{method:'POST',headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({simbolo:sym,strategyId:currentStratId,capital_ini:Number(capitalIni),years:Number(years),allocation_pct:100,filtros,intervalo:estrategiaIntervalo})})
-          const json=await res.json()
-          if(!res.ok||!json.trades?.length) return
-          const trades=json.trades; if(trades.length<minTrades) return
-          const wins=trades.filter(t=>t.pnlPct>=0), winRate=(wins.length/trades.length)*100
-          const totalDiasNat=json.startDate?(new Date(json.meta?.ultimaFecha)-new Date(json.startDate))/86400000:365*Number(years)
-          const anios=Math.max(totalDiasNat/365.25,0.01)
-          const capFinal=Number(capitalIni)+json.gananciaSimple
-          const cagr=capFinal>0?(Math.pow(capFinal/Number(capitalIni),1/anios)-1)*100:-99
-          const sorted3=[...trades].sort((a,b)=>b.pnlSimple-a.pnlSimple).slice(3)
-          const ganRobust=sorted3.reduce((s,t)=>s+t.pnlSimple,0)
-          const capRob=Number(capitalIni)+ganRobust
-          const cagrRobust=capRob>0?(Math.pow(capRob/Number(capitalIni),1/anios)-1)*100:-99
-          const maxDD=json.maxDDStrategyFloat??json.maxDDStrategy??0
-          const scoreHistorico=Math.max(0,Math.min(100,norm(winRate,20,80)*wrPct+norm(cagr,-20,60)*cagrPct+norm(cagrRobust,-20,50)*cagrRobPct-norm(maxDD,0,60)*ddPct))
+          const symUp=sym.toUpperCase()
+          const activeShist=wlData[symUp]?.active?.scoreMetricas
+          const topShist=wlData[symUp]?.top?.scoreMetricas
+          if(activeShist==null) return
+          // Descargar precios actuales para señales de mercado
           let scoreMercado=0
           if(wMercado>0){
-            const priceArr=(json.chartData||[]).map(d=>d.close).filter(v=>v!=null&&!isNaN(v))
-            if(priceArr.length>=momN+1){
-              const lastP=priceArr[priceArr.length-1], momP=priceArr[Math.max(0,priceArr.length-1-momN)]
-              const momentum=momP>0?(lastP/momP-1)*100:0
-              const hist252=priceArr.slice(-252), high52=Math.max(...hist252)
-              const proximity52=high52>0?(lastP/high52)*100:50
-              let relStrength=0
-              if(sp500Closes?.length>=64&&frPct>0){
-                const spLast=sp500Closes[sp500Closes.length-1], sp63=sp500Closes[sp500Closes.length-64]
-                const spRet=sp63>0?(spLast/sp63-1)*100:0
-                const asset63=priceArr.length>=64?priceArr[priceArr.length-64]:priceArr[0]
-                const assetRet=asset63>0?(lastP/asset63-1)*100:0
-                relStrength=assetRet-spRet
+            const r=await apiFetch(`/api/closes?symbol=${encodeURIComponent(sym)}&days=300`)
+            if(r.ok){
+              const closes=await r.json()
+              const priceArr=(Array.isArray(closes)?closes:[]).filter(v=>v!=null&&!isNaN(v))
+              if(priceArr.length>=momN+1){
+                const lastP=priceArr[priceArr.length-1], momP=priceArr[Math.max(0,priceArr.length-1-momN)]
+                const momentum=momP>0?(lastP/momP-1)*100:0
+                const hist252=priceArr.slice(-252), high52=Math.max(...hist252)
+                const proximity52=high52>0?(lastP/high52)*100:50
+                let relStrength=0
+                if(sp500Closes?.length>=64&&frPct>0){
+                  const spLast=sp500Closes[sp500Closes.length-1], sp63=sp500Closes[sp500Closes.length-64]
+                  const spRet=sp63>0?(spLast/sp63-1)*100:0
+                  const asset63=priceArr.length>=64?priceArr[priceArr.length-64]:priceArr[0]
+                  const assetRet=asset63>0?(lastP/asset63-1)*100:0
+                  relStrength=assetRet-spRet
+                }
+                scoreMercado=Math.max(0,Math.min(100,norm(momentum,-20,40)*momPct+norm(relStrength,-30,30)*frPct+norm(proximity52,50,100)*max52Pct))
               }
-              scoreMercado=Math.max(0,Math.min(100,norm(momentum,-20,40)*momPct+norm(relStrength,-30,30)*frPct+norm(proximity52,50,100)*max52Pct))
             }
           }
-          scoreMap[sym.toUpperCase()]=Math.max(0,Math.min(100,scoreHistorico*wHistorico+scoreMercado*wMercado))
+          activeScMap[symUp]=Math.max(0,Math.min(100,activeShist*wHistorico+scoreMercado*wMercado))
+          if(topShist!=null) topScMap[symUp]=Math.max(0,Math.min(100,topShist*wHistorico+scoreMercado*wMercado))
         }catch(e){console.error('[calcScoreMetSen]',sym,e)}
       }))
       setRankingProgress({done:Math.min(i+BATCH,syms.length),total:syms.length})
     }
-    await upsertScoreCompletoRemote(scoreMap,currentStratId||null)
-    setRankingData(prev=>{const next={...prev};Object.entries(scoreMap).forEach(([sym,sc])=>{next[sym]={...(next[sym]||{}),scoreCompleto:sc,score:sc}});return next})
+
+    // ── Guardar en Supabase ──
+    await upsertScoreCompletoRemote(activeScMap, currentStratId||null)
+    const topScByStrat={}
+    Object.entries(topScMap).forEach(([sym,sc])=>{
+      const sid=wlData[sym]?.top?.stratId; if(sid){if(!topScByStrat[sid])topScByStrat[sid]={};topScByStrat[sid][sym]=sc}
+    })
+    for(const [sid,m] of Object.entries(topScByStrat)) await upsertScoreCompletoRemote(m,sid)
+
+    // ── Actualizar rankingData y wlData ──
+    setRankingData(prev=>{const next={...prev};Object.entries(activeScMap).forEach(([sym,sc])=>{next[sym]={...(next[sym]||{}),scoreCompleto:sc,score:sc}});return next})
     setRankingStratId(currentStratId); setRankingStratName(stratName||'')
-    const newBestStrat = await refreshBestStratPerSymbol().catch(()=>null)
     setWlData(prev=>{
       const next={...prev}
-      Object.entries(scoreMap).forEach(([sym,sc])=>{
-        const bsb=newBestStrat?.[sym]
-        next[sym]={
-          ...(next[sym]||{}),
-          active:{...(next[sym]?.active||{}),scoreMetSeñ:sc,stratName:stratName||'',stratId:currentStratId,intervalo:estrategiaIntervalo},
-          top:bsb?{...(next[sym]?.top||{}),scoreMetricas:bsb.scoreHistorico,scoreMetSeñ:bsb.scoreCompleto,stratName:bsb.stratName,stratId:bsb.stratId,intervalo:bsb.intervalo,updatedAt:bsb.updatedAt}:(next[sym]?.top||{}),
+      Object.keys(activeScMap).forEach(sym=>{
+        next[sym]={...(next[sym]||{}),
+          active:{...(next[sym]?.active||{}),scoreMetSeñ:activeScMap[sym]},
+          top:topScMap[sym]!=null?{...(next[sym]?.top||{}),scoreMetSeñ:topScMap[sym]}:(next[sym]?.top||{}),
         }
       })
       return next
     })
     setRankingRunning(false); setRankingProgress({done:0,total:0})
     setRankingBannerDismissed(true)
-  },[watchlist,years,capitalIni,currentStratId,stratName,filtros,estrategiaIntervalo,refreshBestStratPerSymbol])
+    return { ok: true }
+  },[watchlist,wlData,currentStratId,stratName])
 
   // ── MÉTRICAS ↻ — Calcula solo métricas (CAGR, Profit, Win%, MaxDD, Ops) para activa + todas ──
   const calcMetricas = useCallback(async (rankSymbols=null) => {
@@ -2802,7 +2821,7 @@ export default function Home() {
       const next={...prev}
       Object.entries(activeMetrics).forEach(([sym,m])=>{
         next[sym]={...(next[sym]||{}),
-          active:{...(next[sym]?.active||{}),cagr:m.cagr??null,profit:m.profit??null,winRate:m.winRate??null,maxDD:m.maxDD??null,ops:m.trades??null,stratName:stratName||'',stratId:currentStratId,intervalo:estrategiaIntervalo}
+          active:{...(next[sym]?.active||{}),cagr:m.cagr??null,cagrRobust:m.cagrRobust??null,profit:m.profit??null,winRate:m.winRate??null,maxDD:m.maxDD??null,ops:m.trades??null,stratName:stratName||'',stratId:currentStratId,intervalo:estrategiaIntervalo}
         }
       })
       return next
@@ -2856,7 +2875,7 @@ export default function Home() {
           const topM=allStratMetricsMap[bsb.stratId]?.[sym]
           if(topM){
             next[sym]={...(next[sym]||{}),
-              top:{...(next[sym]?.top||{}),cagr:topM.cagr??null,profit:topM.profit??null,winRate:topM.winRate??null,maxDD:topM.maxDD??null,ops:topM.trades??null,stratName:bsb.stratName,stratId:bsb.stratId,intervalo:bsb.intervalo}
+              top:{...(next[sym]?.top||{}),cagr:topM.cagr??null,cagrRobust:topM.cagrRobust??null,profit:topM.profit??null,winRate:topM.winRate??null,maxDD:topM.maxDD??null,ops:topM.trades??null,stratName:bsb.stratName,stratId:bsb.stratId,intervalo:bsb.intervalo}
             }
           }
         })
@@ -4108,7 +4127,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.350</title>
+        <title>Trading Simulator V9.351</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4186,7 +4205,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.350
+            <span className="dot"/>Trading Simulator V9.351
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}

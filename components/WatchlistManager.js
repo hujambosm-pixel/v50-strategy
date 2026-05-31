@@ -166,6 +166,7 @@ export default function WatchlistManager({
   const [newListName, setNewListName]     = useState('')
   const [renameValue, setRenameValue]     = useState('')
   const [listOpLoading, setListOpLoading] = useState(false)
+  const [blockingPopup, setBlockingPopup]          = useState(null)  // {message, symbols}
   const [metricsView, setMetricsView]             = useState('top') // 'active' | 'top'
   const [rankingDoneFlash, setRankingDoneFlash]   = useState(false)
   const [topStratDoneFlash, setTopStratDoneFlash] = useState(false)
@@ -1061,6 +1062,51 @@ export default function WatchlistManager({
         </div>
       )}
 
+      {/* ── Popup bloqueante de dependencia ── */}
+      {blockingPopup && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 1000,
+          background: 'rgba(0,0,0,0.65)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <div style={{
+            background: '#1a1614',
+            border: '2px solid #d97706',
+            borderRadius: 8,
+            padding: '24px 28px',
+            maxWidth: 440,
+            width: '90%',
+            fontFamily: MONO,
+            boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+          }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#fbbf24', marginBottom: 12 }}>
+              ⚠ Dependencia no satisfecha
+            </div>
+            <div style={{ fontSize: 12, color: '#e5e0d8', marginBottom: 10, lineHeight: 1.6 }}>
+              {blockingPopup.message}
+            </div>
+            {blockingPopup.symbols?.length > 0 && (
+              <div style={{
+                fontSize: 11, color: '#9a9590', marginBottom: 18,
+                background: 'rgba(255,255,255,0.04)', borderRadius: 4,
+                padding: '6px 10px', lineHeight: 1.7,
+              }}>
+                {blockingPopup.symbols.join(', ')}
+              </div>
+            )}
+            <button
+              onClick={() => setBlockingPopup(null)}
+              style={{
+                background: '#d97706', border: 'none', color: '#fff',
+                fontFamily: MONO, fontSize: 12, fontWeight: 600,
+                padding: '7px 22px', borderRadius: 5, cursor: 'pointer',
+              }}>
+              Entendido
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── Tabla ── */}
       <div style={{ flex: 1, overflow: 'auto', background: P.bg }}>
         <table style={{ borderCollapse: 'collapse', minWidth: '100%', tableLayout: 'auto' }}>
@@ -1160,7 +1206,7 @@ export default function WatchlistManager({
                           const sel = watchlist.filter(w => selected.has(w.id))
                           onCalcMetricas ? onCalcMetricas(sel) : onCalcRankingAll && onCalcRankingAll(sel)
                         }}
-                        title={`Calcula SOLO métricas (CAGR, Profit €, Win%, MaxDD, Ops) para los ${selected.size} activos.\nActualiza únicamente las columnas de métricas — NO toca score_historico ni score_completo.\nFase 1: estrategia activa${rankingStratName ? ` (${rankingStratName})` : ''}. Fase 2: todas las estrategias habilitadas → determina top estrategia.\nPuede tardar varios minutos.`}
+                        title="Paso 1/3 · Calcula CAGR, Profit€, Win%, MaxDD, Ops para los activos seleccionados con la estrategia activa (fase 1) y con todas las estrategias habilitadas para determinar la Top estrategia (fase 2). Debe ejecutarse ANTES que ↻ Score métricas."
                         style={{
                           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                           width: 14, height: 14, borderRadius: 3,
@@ -1226,13 +1272,20 @@ export default function WatchlistManager({
                       : <>SCORE MÉTRICAS{sortIcon('scoreHistorico')}</>}
                   {!rankingRunning && !rankingDoneFlash && selected.size > 0 && (
                     <span
-                      onClick={e => {
+                      onClick={async e => {
                         e.stopPropagation()
                         setMetricsView('active')
                         const sel = watchlist.filter(w => selected.has(w.id))
-                        onCalcScoreMetricas ? onCalcScoreMetricas(sel) : onCalcRanking && onCalcRanking(sel)
+                        if (onCalcScoreMetricas) {
+                          const result = await onCalcScoreMetricas(sel)
+                          if (result?.ok === false && result?.symbols?.length) {
+                            setBlockingPopup({ message: 'Los siguientes activos no tienen métricas calculadas. Ejecuta primero ↻ Métricas.', symbols: result.symbols })
+                          }
+                        } else if (onCalcRanking) {
+                          onCalcRanking(sel)
+                        }
                       }}
-                      title={`Calcula SOLO scoreHistórico para los ${selected.size} activos con la estrategia activa${rankingStratName ? ` (${rankingStratName})` : ''}.\nActualiza únicamente score_historico en Supabase — NO toca CAGR, Profit, Win%, MaxDD, Ops.\nLa Top estrategia se determina comparando score_historico de todas las estrategias guardadas.`}
+                      title="Paso 2/3 · Calcula el Score métricas (0-100%) usando las métricas ya calculadas. NO ejecuta backtesting. Requiere ↻ Métricas previo."
                       style={{
                         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                         width: 16, height: 16, borderRadius: 3,
@@ -1257,13 +1310,20 @@ export default function WatchlistManager({
                       : <>SCORE MÉT.+SEÑ.{sortIcon('scoreCompleto')}</>}
                   {!rankingRunning && !rankingDoneFlash && selected.size > 0 && (
                     <span
-                      onClick={e => {
+                      onClick={async e => {
                         e.stopPropagation()
                         setMetricsView('active')
                         const sel = watchlist.filter(w => selected.has(w.id))
-                        onCalcScoreMetSen ? onCalcScoreMetSen(sel) : onCalcRanking && onCalcRanking(sel)
+                        if (onCalcScoreMetSen) {
+                          const result = await onCalcScoreMetSen(sel)
+                          if (result?.ok === false && result?.symbols?.length) {
+                            setBlockingPopup({ message: 'Los siguientes activos no tienen Score métricas. Ejecuta primero ↻ Score métricas.', symbols: result.symbols })
+                          }
+                        } else if (onCalcRanking) {
+                          onCalcRanking(sel)
+                        }
                       }}
-                      title={`Calcula SOLO scoreCompleto (métricas + señales) para los ${selected.size} activos con la estrategia activa${rankingStratName ? ` (${rankingStratName})` : ''}.\nActualiza únicamente score_completo en Supabase — NO toca CAGR, Profit, Win%, MaxDD, Ops.\nCombina score_historico con momentum, fuerza relativa y proximidad a máximo 52 semanas.`}
+                      title="Paso 3/3 · Añade señales de mercado actuales (momentum, fuerza relativa SP500, proximidad máx. 52s) al Score métricas. Requiere ↻ Score métricas previo."
                       style={{
                         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                         width: 16, height: 16, borderRadius: 3,
