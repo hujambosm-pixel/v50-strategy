@@ -378,23 +378,27 @@ async function loadRankingRemote(stratId) {
 async function loadAllRankingsRemote() {
   // Carga TODOS los resultados de ranking (todas las estrategias) para computar
   // la mejor estrategia por símbolo. Incluye métricas para filtrar candidatos con datos completos.
-  let url = `${getSupaUrl()}/rest/v1/ranking_results?select=symbol,strategy_id,score,score_historico,score_completo,updated_at,cagr_simple,win_rate,max_drawdown&order=score.desc&limit=5000`
+  console.log('[LOAD-ALL-DEBUG] Iniciando query ranking_results...')
+  let url = `${getSupaUrl()}/rest/v1/ranking_results?select=symbol,strategy_id,score,score_historico,score_completo,updated_at,cagr_simple,win_rate,max_drawdown&order=score_historico.desc.nullslast&limit=5000`
   let res = await fetch(url, { headers: getSupaH() })
   if (!res.ok) {
-    // Fallback: columnas nuevas pueden no existir todavía
-    url = `${getSupaUrl()}/rest/v1/ranking_results?select=symbol,strategy_id,score,score_historico,cagr_simple,win_rate,max_drawdown&order=score.desc&limit=5000`
+    console.warn('[LOAD-ALL-DEBUG] Fallback 1 (sin score_completo/updated_at):', res.status)
+    url = `${getSupaUrl()}/rest/v1/ranking_results?select=symbol,strategy_id,score,score_historico,cagr_simple,win_rate,max_drawdown&order=score_historico.desc.nullslast&limit=5000`
     res = await fetch(url, { headers: getSupaH() })
   }
   if (!res.ok) {
-    url = `${getSupaUrl()}/rest/v1/ranking_results?select=symbol,strategy_id,score,score_historico&order=score.desc&limit=5000`
+    console.warn('[LOAD-ALL-DEBUG] Fallback 2 (sin métricas):', res.status)
+    url = `${getSupaUrl()}/rest/v1/ranking_results?select=symbol,strategy_id,score,score_historico&order=score_historico.desc.nullslast&limit=5000`
     res = await fetch(url, { headers: getSupaH() })
   }
   if (!res.ok) {
-    url = `${getSupaUrl()}/rest/v1/ranking_results?select=symbol,strategy_id,score&order=score.desc&limit=5000`
+    console.warn('[LOAD-ALL-DEBUG] Fallback 3 (solo score):', res.status)
+    url = `${getSupaUrl()}/rest/v1/ranking_results?select=symbol,strategy_id,score&limit=5000`
     res = await fetch(url, { headers: getSupaH() })
-    if (!res.ok) return null
+    if (!res.ok) { console.error('[LOAD-ALL-DEBUG] Todos los fallbacks fallaron:', res.status); return null }
   }
   const rows = await res.json()
+  console.log('[LOAD-ALL-DEBUG]',{rowCount:rows?.length,sample:rows?.slice(0,3)})
   if (!rows?.length) return null
   return rows
 }
@@ -2035,15 +2039,17 @@ export default function Home() {
 
   // Carga todos los datos desde Supabase y rellena wlData para ambas vistas
   const refreshWlData = useCallback(async () => {
-    if(!getSupaUrl()) return
+    console.log('[WLDATA-CALLED] refreshWlData invocada, currentStratId=',currentStratId)
+    if(!getSupaUrl()) { console.warn('[WLDATA-CALLED] Sin Supabase URL'); return }
     try {
       let url=`${getSupaUrl()}/rest/v1/ranking_results?select=symbol,strategy_id,score_historico,score_completo,updated_at,cagr_simple,win_rate,max_drawdown,total_trades,profit_simple&limit=10000`
       let res=await fetch(url,{headers:getSupaH()})
       if(!res.ok){
+        console.warn('[WLDATA-CALLED] Fallback (sin profit_simple):', res.status)
         url=`${getSupaUrl()}/rest/v1/ranking_results?select=symbol,strategy_id,score_historico,score_completo,updated_at,cagr_simple,win_rate,max_drawdown,total_trades&limit=10000`
         res=await fetch(url,{headers:getSupaH()})
       }
-      if(!res.ok) return
+      if(!res.ok) { console.error('[WLDATA-CALLED] Ambos fetches fallaron:', res.status); return }
       const rows=(await res.json())||[]
       console.log('[WLDATA-DEBUG]',{totalRows:rows.length,uniqueSyms:[...new Set(rows.map(r=>r.symbol))].length})
       const bySym={}
@@ -4114,7 +4120,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.347</title>
+        <title>Trading Simulator V9.348</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4192,7 +4198,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.347
+            <span className="dot"/>Trading Simulator V9.348
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
