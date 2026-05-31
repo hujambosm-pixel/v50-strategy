@@ -4159,7 +4159,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.373</title>
+        <title>Trading Simulator V9.374</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4237,7 +4237,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.373
+            <span className="dot"/>Trading Simulator V9.374
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4980,8 +4980,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         {/* Ranking badge */}
                         {wlShowRankBadge&&(()=>{
                           const rd=rankingData[(w.symbol||'').toUpperCase()]
-                          if(!rd) return <span style={{width:16,flexShrink:0}}/>
-                          const r=rd.rank
+                          const r=rd?.rank
+                          if(!rd||!r) return <span style={{width:16,flexShrink:0}}/>
                           const col=r===1?'#ffd700':r===2?'#c0c0c0':r===3?'#cd7f32':r<=10?'#00d4ff':'#3d5a7a'
                           return(
                             <span title={`Rank #${r} · Score: ${rd.score!=null?fmt(rd.score,0):'—'} · WR:${rd.metrics?.winRate!=null?fmt(rd.metrics.winRate,0):'—'}% · FB:${rd.metrics?.factorBen!=null?fmt(rd.metrics.factorBen,1):'—'} · CAGR:${rd.metrics?.cagr!=null?fmt(rd.metrics.cagr,1):'—'}%`}
