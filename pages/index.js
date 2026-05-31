@@ -762,10 +762,6 @@ export default function Home() {
   const [topStratRunning,setTopStratRunning]=useState(false)
   const [topStratProgress,setTopStratProgress]=useState({current:0,total:0})
   const [calcPhase,setCalcPhase]=useState(0)  // 0=idle, 1=fase1 ranking activo, 2=fase2 top estrategia
-  // Banner de recordatorio 24h — solo se muestra una vez por sesión si han pasado >24h
-  const [rankingBannerDismissed,setRankingBannerDismissed]=useState(()=>{
-    try{const ts=localStorage.getItem('ranking_last_updated');if(!ts)return false;return(Date.now()-Number(ts))<24*60*60*1000}catch(_){return false}
-  })
   // Mejor estrategia por símbolo entre TODAS las estrategias calculadas en Supabase
   // { SYMBOL: { stratName, stratId, score, intervalo, stratCount } }
   const [bestStratBySymbol,setBestStratBySymbol]=useState({})
@@ -2493,8 +2489,6 @@ export default function Home() {
     setRankingStratName(stratName||'')
     saveRankingRemote(results, currentStratId||null).catch(()=>{})
     refreshBestStratPerSymbol().catch(()=>{})
-    try{localStorage.setItem('ranking_last_updated',String(Date.now()))}catch(_){}
-    setRankingBannerDismissed(true)
   }, [watchlist,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL,currentStratId,stratName,filtros,estrategiaIntervalo,refreshBestStratPerSymbol])
 
   // ── Calcular Ranking para TODAS las estrategias en secuencia → determina Top estrategia ──
@@ -2613,8 +2607,6 @@ export default function Home() {
 
     console.log('[ALL-RANKING] Resumen completo:', {total: enabledStrats.length, exitosas: _exitosas, fallidas: _fallidas, fallidas_nombres: _fallidasNombres})
     await refreshBestStratPerSymbol().catch(()=>{})
-    try{localStorage.setItem('ranking_last_updated',String(Date.now()))}catch(_){}
-    setRankingBannerDismissed(true)
     setTopStratRunning(false)
     setTopStratProgress({current:0, total:0})
   }, [strategies, watchlist, years, capitalIni, filtros, refreshBestStratPerSymbol])
@@ -2692,7 +2684,7 @@ export default function Home() {
       return next
     })
     setRankingRunning(false); setRankingProgress({done:0,total:0})
-    setRankingBannerDismissed(true)
+
     return { ok: true }
   },[watchlist,wlData,currentStratId,stratName,estrategiaIntervalo])
 
@@ -2781,7 +2773,7 @@ export default function Home() {
       return next
     })
     setRankingRunning(false); setRankingProgress({done:0,total:0})
-    setRankingBannerDismissed(true)
+
     return { ok: true }
   },[watchlist,wlData,currentStratId,stratName])
 
@@ -2900,7 +2892,7 @@ export default function Home() {
       await refreshBestStratPerSymbol().catch(()=>{})
       setTopStratRunning(false); setTopStratProgress({current:0,total:0})
     }
-    setRankingBannerDismissed(true)
+
   },[watchlist,years,capitalIni,currentStratId,stratName,filtros,estrategiaIntervalo,strategies,refreshBestStratPerSymbol])
 
   // ── Borrar scores (score_historico + score_completo) de símbolos seleccionados ──
@@ -4159,7 +4151,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.378</title>
+        <title>Trading Simulator V9.379</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4237,7 +4229,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.378
+            <span className="dot"/>Trading Simulator V9.379
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4332,31 +4324,6 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
           </div>
         </header>
 
-        {/* ── BANNER: recordatorio actualización ranking cada 24h ── */}
-        {!rankingBannerDismissed&&(
-          <div style={{display:'flex',alignItems:'center',gap:10,padding:'7px 16px',
-            background:'#1a2a3a',borderLeft:'3px solid #f59e0b',flexShrink:0,zIndex:100}}>
-            <span style={{fontSize:13}}>📊</span>
-            <span style={{fontFamily:'monospace',fontSize:12,color:'#94a3b8',flex:1}}>
-              El ranking no se ha actualizado en más de 24h · los scores del Watchlist pueden estar desactualizados
-            </span>
-            <button
-              onClick={()=>{calcRanking();setRankingBannerDismissed(true)}}
-              style={{fontFamily:'monospace',fontSize:11,padding:'3px 10px',borderRadius:4,
-                background:'#b45309',border:'1px solid #d97706',color:'#fff',cursor:'pointer',flexShrink:0,whiteSpace:'nowrap'}}>
-              🏆 Actualizar ahora
-            </button>
-            <button
-              onClick={()=>{
-                try{localStorage.setItem('ranking_last_updated',String(Date.now()))}catch(_){}
-                setRankingBannerDismissed(true)
-              }}
-              style={{fontFamily:'monospace',fontSize:11,padding:'3px 10px',borderRadius:4,
-                background:'transparent',border:'1px solid #4a5568',color:'#94a3b8',cursor:'pointer',flexShrink:0,whiteSpace:'nowrap'}}>
-              Recordar mañana
-            </button>
-          </div>
-        )}
 
         <div className="main">
           {/* ── VERTICAL NAV ── */}
@@ -4999,16 +4966,13 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         onMouseOut={e=>e.currentTarget.style.background=simbolo===w.symbol?'rgba(0,212,255,0.07)':'transparent'}
                         onMouseEnter={e=>{const r=e.currentTarget.getBoundingClientRect();const x=r.right+8;setWlTooltip({x:x+220>window.innerWidth?r.left-228:x,y:r.top,symbol:w.symbol})}}
                         onMouseLeave={()=>setWlTooltip(null)}>
-                        {/* Ranking badge */}
+                        {/* Ranking badge — posición desde wlData según wlSortMode */}
                         {wlShowRankBadge&&(()=>{
                           const symUp=(w.symbol||'').toUpperCase()
-                          const rd=rankingData[symUp]
-                          const r=rd?.rank
-                          if(!rd||!r) return <span style={{width:24,flexShrink:0}}/>
-                          const col=r===1?'#ffd700':r===2?'#c0c0c0':r===3?'#cd7f32':r<=10?'#00d4ff':'#3d5a7a'
-                          // Score según wlSortMode activo
-                          const bsb=bestStratBySymbol[symUp]
                           const wd=wlData[symUp]
+                          const bsb=bestStratBySymbol[symUp]
+                          const rd=rankingData[symUp]
+                          // Score según wlSortMode activo
                           let score=null
                           if(wlSortMode==='scoreHistorico'||wlSortMode==='scoreHistoricoActiva'){
                             score=rd?.scoreHistorico??bsb?.scoreHistorico??null
@@ -5019,12 +4983,15 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                           } else if(wlSortMode==='scoreCompletoTop'){
                             score=wd?.top?.scoreMetSeñ??wd?.top?.scoreMetricas??null
                           }
-                          const scoreStr=score!=null?fmt(score,1)+'%':null
+                          if(score==null) return <span style={{width:24,flexShrink:0}}/>
+                          const r=wlSortMode==='alfabetico'?null:wIdx+1
+                          const col=!r?'#5a8aaa':r===1?'#ffd700':r===2?'#c0c0c0':r===3?'#cd7f32':r<=10?'#00d4ff':'#3d5a7a'
+                          const scoreStr=fmt(score,1)+'%'
                           return(
-                            <span title={`Rank #${r} · Score: ${rd.score!=null?fmt(rd.score,0):'—'}`}
+                            <span title={`${r?`Rank #${r} · `:''}Score: ${scoreStr}`}
                               style={{fontFamily:MONO,fontSize:9,fontWeight:700,color:col,flexShrink:0,minWidth:24,textAlign:'center',lineHeight:1.2,display:'flex',flexDirection:'column',alignItems:'center'}}>
-                              <span>{r<=3?['🥇','🥈','🥉'][r-1]:`#${r}`}</span>
-                              {scoreStr&&<span style={{fontSize:8,color:'#5a8aaa',fontWeight:400,marginTop:1}}>{scoreStr}</span>}
+                              {r!=null&&<span>{r<=3?['🥇','🥈','🥉'][r-1]:`#${r}`}</span>}
+                              <span style={{fontSize:8,color:'#5a8aaa',fontWeight:400,marginTop:r!=null?1:0}}>{scoreStr}</span>
                             </span>
                           )
                         })()}
