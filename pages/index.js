@@ -2832,10 +2832,7 @@ export default function Home() {
     })
 
     // ── Fase 2: Métricas de TODAS las estrategias ──
-    console.log('[FASE2-INICIO]', 'entrando en fase 2')
-    try {
     const enabledStrats=(strategies||[]).filter(s=>s.enabled!==false)
-    console.log('[FASE2-INICIO]', {enabledStratsCount: enabledStrats.length, strategiesLen: (strategies||[]).length})
     if(enabledStrats.length){
       setTopStratRunning(true); setTopStratProgress({current:0,total:enabledStrats.length})
       const allStratMetricsMap={}
@@ -2870,28 +2867,36 @@ export default function Home() {
               }catch(e){console.error('[calcMetricas-all]',sym,e)}
             }))
           }
-          console.log('[FASE2-LOOP]', {stratId, symCount: Object.keys(stratMetrics).length})
           await upsertMetricsRemote(stratMetrics,stratId)
           allStratMetricsMap[stratId]=stratMetrics
         }catch(e){console.error('[calcMetricas] Error estrategia:',strat.name,e)}
       }
-      const newBestStrat2 = await refreshBestStratPerSymbol().catch(()=>null)
-      // Merge top metrics into wlData
+      // ── Merge top metrics: determinar top estrategia por CAGR desde allStratMetricsMap ──
+      // No depende de refreshBestStratPerSymbol (que usa score_historico, no calculado aquí)
       setWlData(prev=>{
         const next={...prev}
-        Object.entries(newBestStrat2||{}).forEach(([sym,bsb])=>{
-          const topM=allStratMetricsMap[bsb.stratId]?.[sym]
-          if(topM){
-            next[sym]={...(next[sym]||{}),
-              top:{...(next[sym]?.top||{}),cagr:topM.cagr??null,cagrRobust:topM.cagrRobust??null,profit:topM.profit??null,winRate:topM.winRate??null,maxDD:topM.maxDD??null,ops:topM.trades??null,stratName:bsb.stratName,stratId:bsb.stratId,intervalo:bsb.intervalo}
+        syms.forEach(sym=>{
+          const symUp=sym.toUpperCase()
+          let bestStratId=null, bestCagr=-Infinity
+          Object.entries(allStratMetricsMap).forEach(([sid,metricsForStrat])=>{
+            const m=metricsForStrat[symUp]
+            if(m && (m.cagr??-Infinity)>bestCagr){ bestCagr=m.cagr; bestStratId=sid }
+          })
+          if(bestStratId){
+            const topM=allStratMetricsMap[bestStratId][symUp]
+            const topStrat=enabledStrats.find(s=>s.id===bestStratId)
+            const topStratName=topStrat?.name||''
+            const topIntv=(()=>{try{const p=typeof topStrat?.params==='string'?JSON.parse(topStrat.params||'{}'):(topStrat?.params||{});return p.intervalo||'diario'}catch(_){return 'diario'}})()
+            next[symUp]={...(next[symUp]||{}),
+              top:{...(next[symUp]?.top||{}),cagr:topM.cagr??null,cagrRobust:topM.cagrRobust??null,profit:topM.profit??null,winRate:topM.winRate??null,maxDD:topM.maxDD??null,ops:topM.trades??null,stratName:topStratName,stratId:bestStratId,intervalo:topIntv}
             }
           }
         })
         return next
       })
+      await refreshBestStratPerSymbol().catch(()=>{})
       setTopStratRunning(false); setTopStratProgress({current:0,total:0})
     }
-    } catch(error) { console.log('[FASE2-CATCH]', error) }
     setRankingBannerDismissed(true)
   },[watchlist,years,capitalIni,currentStratId,stratName,filtros,estrategiaIntervalo,strategies,refreshBestStratPerSymbol])
 
@@ -4136,7 +4141,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.354</title>
+        <title>Trading Simulator V9.355</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4214,7 +4219,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.354
+            <span className="dot"/>Trading Simulator V9.355
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
