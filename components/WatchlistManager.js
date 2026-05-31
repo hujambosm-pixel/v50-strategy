@@ -192,6 +192,7 @@ export default function WatchlistManager({
   const [topStratDoneFlash, setTopStratDoneFlash] = useState(false)
   const [confirmScoresDelete, setConfirmScoresDelete]   = useState(false)
   const [confirmMetricsDelete, setConfirmMetricsDelete] = useState(false)
+  const [scrollbarWidth, setScrollbarWidth] = useState(0)
   const prevRankingRunning  = useRef(false)
   const prevTopStratRunning = useRef(false)
   const addDropRef      = useRef(null)
@@ -220,6 +221,14 @@ export default function WatchlistManager({
     })
     return map
   }
+
+  // ── Calcular ancho real del scrollbar vertical ────────────
+  useEffect(() => {
+    if (bodyScrollRef.current) {
+      const w = bodyScrollRef.current.offsetWidth - bodyScrollRef.current.clientWidth
+      setScrollbarWidth(w)
+    }
+  }, [])
 
   // ── Load all ranking data on mount ────────────────────────
   useEffect(() => {
@@ -1146,7 +1155,6 @@ export default function WatchlistManager({
           </colgroup>
         )
         const tblStyle = { borderCollapse: 'separate', borderSpacing: 0, tableLayout: 'fixed', width: '100%', minWidth: totalWidth + 'px' }
-        const scrollbarWidth = 17
         return (<>
         {/* TABLA 1 — Headers fijos (sin scroll vertical, scroll-X sincronizado) */}
         <div ref={headerScrollRef} style={{ flexShrink: 0, overflowX: 'hidden', background: P.thBg, paddingRight: scrollbarWidth + 'px' }}>
