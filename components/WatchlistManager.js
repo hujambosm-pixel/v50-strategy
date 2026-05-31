@@ -591,24 +591,6 @@ export default function WatchlistManager({
 
   // ─────────────────────────────────────────────────────────
   return (
-    <>
-    {/* ── PRUEBA STICKY TEMPORAL ── */}
-    <div style={{ height: '200px', overflow: 'auto', border: '2px solid red' }}>
-      <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
-        <thead>
-          <tr>
-            <th style={{ position: 'sticky', top: 0, backgroundColor: 'red', color: 'white', zIndex: 10 }}>
-              TEST STICKY
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {Array.from({length: 30}, (_, i) => (
-            <tr key={i}><td>Fila {i+1}</td></tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
     <div style={{
       position: 'absolute', inset: 0, zIndex: 20,
       background: P.bg,
@@ -1148,7 +1130,7 @@ export default function WatchlistManager({
       )}
 
       {/* ── Tabla ── */}
-      <div style={{ flex: 1, overflow: 'auto', position: 'relative', background: P.bg }}>
+      <div style={{ flex: 1, minHeight: 0, height: 0, overflowY: 'auto', overflowX: 'auto', position: 'relative', background: P.bg }}>
         <table style={{ borderCollapse: 'separate', borderSpacing: 0, minWidth: '100%', tableLayout: 'auto' }}>
           <thead>
             {/* Sub-header agrupador de métricas — cada th tiene position:sticky,top:0 via TH() */}
@@ -1691,6 +1673,5 @@ export default function WatchlistManager({
         </table>
       </div>
     </div>
-    </>
   )
 }
