@@ -2080,6 +2080,23 @@ export default function Home() {
   // Limpieza única al inicio: eliminar filas corruptas (score sin métricas)
   useEffect(()=>{ cleanCorruptRankingRows() },[]) // eslint-disable-line
 
+  // ── Auto-refresh Score mét.+señales al cargar (una sola vez cuando wlData tiene datos) ──
+  const autoRefreshTriggered = useRef(false)
+  useEffect(()=>{
+    if(autoRefreshTriggered.current) return
+    const hasData = Object.keys(wlData).some(sym => wlData[sym]?.active?.scoreMetricas != null)
+    if(!hasData) return
+    autoRefreshTriggered.current = true
+    const sett=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')}catch(_){return {}}})()
+    const hours = sett.ranking?.autoRefreshScoreMetSenHours ?? 24
+    if(hours === 0) return
+    const last = localStorage.getItem('wl_score_metsen_last_updated')
+    const elapsed = last ? (Date.now() - Number(last)) / 3600000 : Infinity
+    if(elapsed >= hours){
+      calcScoreMetricas().then(r => { if(r?.ok !== false) calcScoreMetSen() }).catch(()=>{})
+    }
+  },[wlData]) // eslint-disable-line
+
   function stopStrategy({skipDebounce=true}={}) {
     if(skipDebounce) skipNextRunRef.current = true
     setResult(null)
@@ -2684,7 +2701,7 @@ export default function Home() {
       return next
     })
     setRankingRunning(false); setRankingProgress({done:0,total:0})
-
+    try{localStorage.setItem('wl_score_metricas_last_updated',Date.now().toString())}catch(_){}
     return { ok: true }
   },[watchlist,wlData,currentStratId,stratName,estrategiaIntervalo])
 
@@ -2773,7 +2790,7 @@ export default function Home() {
       return next
     })
     setRankingRunning(false); setRankingProgress({done:0,total:0})
-
+    try{localStorage.setItem('wl_score_metsen_last_updated',Date.now().toString())}catch(_){}
     return { ok: true }
   },[watchlist,wlData,currentStratId,stratName])
 
@@ -4151,7 +4168,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.379</title>
+        <title>Trading Simulator V9.380</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4229,7 +4246,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.379
+            <span className="dot"/>Trading Simulator V9.380
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}

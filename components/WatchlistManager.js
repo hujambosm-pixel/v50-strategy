@@ -71,6 +71,19 @@ const wrFg = v => v == null ? '#9a9590' : v >= 50 ? '#1a5c30' : '#8b1a1a'
 const scoreFg = v => v == null ? '#9a9590' : v > 70 ? '#1a5c30' : v > 40 ? '#7a5c10' : '#8b1a1a'
 const scoreBar = v => v == null ? null : v > 70 ? '#4a9b6a' : v > 40 ? '#b87a20' : '#c04040'
 
+// ── Helper: tiempo desde timestamp en localStorage ────────────
+function timeSinceLS(key) {
+  try {
+    const ts = localStorage.getItem(key)
+    if (!ts) return 'nunca'
+    const diffMs = Date.now() - Number(ts)
+    const diffH  = diffMs / 3600000
+    if (diffH < 1)  return `${Math.round(diffMs / 60000)}min`
+    if (diffH < 24) return `${Math.round(diffH)}h`
+    return `${Math.round(diffH / 24)}d`
+  } catch(_) { return '?' }
+}
+
 // ── Asset type helpers ────────────────────────────────────────
 const COMMODITIES = new Set(['GC=F','CL=F','SI=F','NG=F','HG=F','ZC=F','ZW=F','ZS=F','KC=F','CT=F','PA=F','PL=F'])
 const ETFS = new Set(['SPY','QQQ','IWM','DIA','GLD','SLV','USO','VXX','ARKK','XLF','XLE','XLK','XLV','XLI','XLB','XLP','XLU','XLRE'])
@@ -1324,7 +1337,7 @@ export default function WatchlistManager({
                     ? <span style={{ color: '#1a6b3a', fontWeight: 700 }}>✓ Listo</span>
                     : rankingRunning
                       ? <span style={{ fontSize: 9 }}>Calculando {rankingProgress?.done ?? 0}/{rankingProgress?.total ?? 0}…</span>
-                      : <>SCORE MÉTRICAS{sortIcon('scoreHistorico')}</>}
+                      : <><span>SCORE MÉTRICAS</span><span style={{fontSize:8,color:'#7a9590',fontWeight:400,marginLeft:3}}>· {timeSinceLS('wl_score_metricas_last_updated')}</span>{sortIcon('scoreHistorico')}</>}
                   {!rankingRunning && !rankingDoneFlash && selected.size > 0 && (
                     <span
                       onClick={async e => {
@@ -1362,7 +1375,7 @@ export default function WatchlistManager({
                     ? <span style={{ color: '#1a6b3a', fontWeight: 700 }}>✓ Listo</span>
                     : rankingRunning
                       ? <span style={{ fontSize: 9 }}>Calculando {rankingProgress?.done ?? 0}/{rankingProgress?.total ?? 0}…</span>
-                      : <>SCORE MÉT.+SEÑ.{sortIcon('scoreCompleto')}</>}
+                      : <><span>SCORE MÉT.+SEÑ.</span><span style={{fontSize:8,color:'#7a9590',fontWeight:400,marginLeft:3}}>· {timeSinceLS('wl_score_metsen_last_updated')}</span>{sortIcon('scoreCompleto')}</>}
                   {!rankingRunning && !rankingDoneFlash && selected.size > 0 && (
                     <span
                       onClick={async e => {

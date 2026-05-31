@@ -818,6 +818,34 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                   style={{width:60,background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,
                     color:'#e2eaf5',fontFamily:MONO,fontSize:12,padding:'4px 8px',textAlign:'center'}}/>
               </div>
+              {/* Actualización automática Score mét.+señales */}
+              {(()=>{
+                const hours = settings.ranking?.autoRefreshScoreMetSenHours ?? 24
+                const enabled = hours > 0
+                return(
+                  <div style={{marginTop:14}}>
+                    <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:enabled?8:0}}>
+                      <input type="checkbox" checked={enabled}
+                        onChange={e=>upd('ranking.autoRefreshScoreMetSenHours', e.target.checked ? 24 : 0)}
+                        style={{accentColor:'#22d3ee',cursor:'pointer'}}/>
+                      <span style={{fontFamily:MONO,fontSize:12,color:'#cce0f5',flex:1,cursor:'pointer'}}
+                        onClick={()=>upd('ranking.autoRefreshScoreMetSenHours', enabled ? 0 : 24)}>
+                        Actualización automática Score mét.+señales al cargar
+                      </span>
+                    </div>
+                    {enabled&&(
+                      <div style={{display:'flex',alignItems:'center',gap:8,paddingLeft:22}}>
+                        <span style={{fontFamily:MONO,fontSize:11,color:'#7a9bc0'}}>Actualizar si han pasado más de</span>
+                        <input type="number" value={hours} min={1} max={168}
+                          onChange={e=>upd('ranking.autoRefreshScoreMetSenHours', Math.max(1,Number(e.target.value)))}
+                          style={{width:52,background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,
+                            color:'#e2eaf5',fontFamily:MONO,fontSize:12,padding:'3px 6px',textAlign:'center'}}/>
+                        <span style={{fontFamily:MONO,fontSize:11,color:'#7a9bc0'}}>horas sin actualizar</span>
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
             </div>
           )}
 
