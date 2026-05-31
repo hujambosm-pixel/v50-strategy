@@ -1133,34 +1133,18 @@ export default function WatchlistManager({
 
       {/* ── Tabla (dos tablas sincronizadas: header fijo + body con scroll) ── */}
       {(()=>{
-        // Anchos fijos de columna — deben ser idénticos en ambas tablas
-        const CW = {
-          chk: 36, tick: 70, nom: 180, tipo: 70, listas: 180,
-          smet: 110, smetseg: 110,
-          cagr: 70, profit: 90, wr: 60, dd: 70, ops: 50,
-          strat: 160, temp: 90,
-          elim: onDeleteItem ? 50 : 0,
-        }
+        // Anchos fijos — idénticos en ambas tablas
+        // chk,tick,nom,tipo,listas,smet,smetseg,cagr,profit,wr,dd,ops,strat,temp[,elim]
+        const COL_WIDTHS = onDeleteItem
+          ? [36, 70, 180, 70, 180, 110, 110, 70, 90, 60, 70, 50, 160, 90, 50]
+          : [36, 70, 180, 70, 180, 110, 110, 70, 90, 60, 70, 50, 160, 90]
+        const totalWidth = COL_WIDTHS.reduce((a, b) => a + b, 0)
         const colGroup = (
           <colgroup>
-            <col style={{ width: CW.chk }} />
-            <col style={{ width: CW.tick }} />
-            <col style={{ width: CW.nom }} />
-            <col style={{ width: CW.tipo }} />
-            <col style={{ width: CW.listas }} />
-            <col style={{ width: CW.smet }} />
-            <col style={{ width: CW.smetseg }} />
-            <col style={{ width: CW.cagr }} />
-            <col style={{ width: CW.profit }} />
-            <col style={{ width: CW.wr }} />
-            <col style={{ width: CW.dd }} />
-            <col style={{ width: CW.ops }} />
-            <col style={{ width: CW.strat }} />
-            <col style={{ width: CW.temp }} />
-            {onDeleteItem && <col style={{ width: CW.elim }} />}
+            {COL_WIDTHS.map((w, i) => <col key={i} style={{ width: w + 'px', minWidth: w + 'px' }} />)}
           </colgroup>
         )
-        const tblStyle = { borderCollapse: 'separate', borderSpacing: 0, tableLayout: 'fixed', width: '100%' }
+        const tblStyle = { borderCollapse: 'separate', borderSpacing: 0, tableLayout: 'fixed', width: totalWidth + 'px' }
         return (<>
         {/* TABLA 1 — Headers fijos (sin scroll vertical, scroll-X sincronizado) */}
         <div ref={headerScrollRef} style={{ flexShrink: 0, overflowX: 'hidden', background: P.thBg }}>
