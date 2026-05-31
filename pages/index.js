@@ -4159,7 +4159,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.374</title>
+        <title>Trading Simulator V9.375</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4237,7 +4237,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.374
+            <span className="dot"/>Trading Simulator V9.375
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4935,6 +4935,20 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         if(sa!=null) return -1; if(sb!=null) return 1
                         return symA.localeCompare(symB)
                       }
+                      if(wlSortMode==='scoreHistoricoTop'){
+                        const sa=wlData[symA]?.top?.scoreMetricas??null
+                        const sb=wlData[symB]?.top?.scoreMetricas??null
+                        if(sa!=null&&sb!=null) return sb-sa
+                        if(sa!=null) return -1; if(sb!=null) return 1
+                        return symA.localeCompare(symB)
+                      }
+                      if(wlSortMode==='scoreCompletoTop'){
+                        const sa=wlData[symA]?.top?.scoreMetSeñ??wlData[symA]?.top?.scoreMetricas??null
+                        const sb=wlData[symB]?.top?.scoreMetSeñ??wlData[symB]?.top?.scoreMetricas??null
+                        if(sa!=null&&sb!=null) return sb-sa
+                        if(sa!=null) return -1; if(sb!=null) return 1
+                        return symA.localeCompare(symB)
+                      }
                       if(wlSortMode==='alfabetico') return symA.localeCompare(symB)
                       return symA.localeCompare(symB)
                     })
@@ -4954,9 +4968,17 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         {rankingRunning&&<span style={{color:'#ffd166',fontSize:10}}>⟳ {rankingProgress.done}/{rankingProgress.total}</span>}
                         <select value={wlSortMode} onChange={e=>setWlSortMode(e.target.value)}
                           style={{background:'#0d1520',border:'1px solid #1a2d45',color:'#8aadcc',fontFamily:MONO,fontSize:9,padding:'1px 3px',borderRadius:3,cursor:'pointer',marginLeft:2}}>
-                          <option value="scoreHistorico" title="Ordena por score calculado únicamente con métricas históricas (Win Rate, CAGR, CAGR robusto, MaxDD). Se guarda en Supabase y está disponible desde el momento en que se carga la app">Score por métricas</option>
-                          <option value="scoreCompleto"  title="Ordena combinando métricas históricas + condiciones actuales del mercado (momentum, fuerza relativa, proximidad a máximo 52s). Requiere ejecutar Ranking para actualizarse — usa Score por métricas como fallback hasta entonces">Score por métricas + señales</option>
-                          <option value="alfabetico"     title="Orden alfabético por ticker">Alfabético</option>
+                          <optgroup label="── Estrategia activa ──">
+                            <option value="scoreHistorico"       title="Score métricas de la estrategia activa. Se guarda en Supabase, disponible al cargar la app.">Score métricas (activa)</option>
+                            <option value="scoreCompleto"        title="Score métricas + señales de mercado de la estrategia activa. Requiere ejecutar Ranking — fallback a score métricas.">Score mét.+señales (activa)</option>
+                          </optgroup>
+                          <optgroup label="── Top estrategia ──">
+                            <option value="scoreHistoricoTop"    title="Score métricas de la top estrategia (mejor CAGR entre todas las habilitadas). Usa wlData[sym].top.scoreMetricas.">Score métricas (top)</option>
+                            <option value="scoreCompletoTop"     title="Score métricas + señales de la top estrategia. Usa wlData[sym].top.scoreMetSeñ, fallback a scoreMetricas.">Score mét.+señales (top)</option>
+                          </optgroup>
+                          <optgroup label="────────────────────">
+                            <option value="alfabetico"           title="Orden alfabético por ticker">Alfabético</option>
+                          </optgroup>
                         </select>
 
                         <button onClick={()=>setShowWlManager(true)} title="Abrir panel de gestión de Watchlist"
