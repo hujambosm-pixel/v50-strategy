@@ -357,7 +357,7 @@ export default function WatchlistManager({
   })
 
   // ── Sort ───────────────────────────────────────────────────
-  const STR_METRICS = ['symbol', 'name', 'stratName', 'intervalo']
+  const STR_METRICS = ['symbol', 'name', 'tipo', 'stratName', 'intervalo']
   const SCORE_METRICS = ['scoreHistorico', 'scoreCompleto']
   const sorted = [...filtered].sort((a, b) => {
     const { metric, dir } = sortState
@@ -365,6 +365,7 @@ export default function WatchlistManager({
     const cmpStr = (sa, sb) => dir === 'asc' ? sa.localeCompare(sb) : sb.localeCompare(sa)
     if (metric === 'symbol') return cmpStr(a.symbol || '', b.symbol || '')
     if (metric === 'name')   return cmpStr(a.name   || '', b.name   || '')
+    if (metric === 'tipo')   return cmpStr(getAssetType(a.symbol || ''), getAssetType(b.symbol || ''))
     const symA = (a.symbol || '').toUpperCase()
     const symB = (b.symbol || '').toUpperCase()
     const da = wlData?.[symA]?.[metricsView] || {}
@@ -594,6 +595,7 @@ export default function WatchlistManager({
       position: 'absolute', inset: 0, zIndex: 20,
       background: P.bg,
       display: 'flex', flexDirection: 'column',
+      overflow: 'hidden',
       fontFamily: MONO,
     }}>
 
@@ -1274,8 +1276,9 @@ export default function WatchlistManager({
                 Nombre{sortIcon('name')}
               </th>
               {/* Tipo */}
-              <th style={{ ...TH2(), width: 80, textAlign: 'center' }}>
-                Tipo
+              <th style={{ ...TH2(), width: 80, textAlign: 'center', cursor: 'pointer' }}
+                onClick={() => handleSort('tipo')}>
+                Tipo{sortIcon('tipo')}
               </th>
               {/* Listas */}
               <th style={{ ...TH2(), minWidth: 110, borderRight: `2px solid ${P.borderStrong}` }}>

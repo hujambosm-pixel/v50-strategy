@@ -205,6 +205,7 @@ export default function StrategyManager({
       position: 'absolute', inset: 0, zIndex: 50,
       background: P.bg,
       display: 'flex', flexDirection: 'column',
+      overflow: 'hidden',
     }}>
       {/* ── Header ── */}
       <div style={{

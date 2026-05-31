@@ -2907,17 +2907,28 @@ export default function Home() {
   const deleteScores = useCallback(async (symbols) => {
     if (!symbols?.length) return
     await nullifyScoresRemote(symbols)
-    // Actualizar rankingData en memoria
     const symSet = new Set(symbols.map(s => s.toUpperCase()))
     setRankingData(prev => {
       const next = { ...prev }
       symSet.forEach(sym => { if (next[sym]) next[sym] = { ...next[sym], scoreHistorico: null, scoreCompleto: null, score: null } })
       return next
     })
-    // Actualizar bestStratBySymbol en memoria
     setBestStratBySymbol(prev => {
       const next = { ...prev }
       symSet.forEach(sym => { if (next[sym]) next[sym] = { ...next[sym], scoreHistorico: null, scoreCompleto: null, score: null } })
+      return next
+    })
+    setWlData(prev => {
+      const next = { ...prev }
+      symSet.forEach(sym => {
+        if (next[sym]) {
+          next[sym] = {
+            ...next[sym],
+            active: { ...(next[sym].active || {}), scoreMetricas: null, scoreMetSeñ: null },
+            top:    { ...(next[sym].top    || {}), scoreMetricas: null, scoreMetSeñ: null },
+          }
+        }
+      })
       return next
     })
   }, [])
@@ -2926,10 +2937,14 @@ export default function Home() {
   const deleteMetrics = useCallback(async (symbols) => {
     if (!symbols?.length) return
     await deleteMetricsRemote(symbols)
-    // Limpiar rankingData y bestStratBySymbol en memoria
     const symSet = new Set(symbols.map(s => s.toUpperCase()))
     setRankingData(prev => { const next = { ...prev }; symSet.forEach(sym => delete next[sym]); return next })
     setBestStratBySymbol(prev => { const next = { ...prev }; symSet.forEach(sym => delete next[sym]); return next })
+    setWlData(prev => {
+      const next = { ...prev }
+      symSet.forEach(sym => { delete next[sym] })
+      return next
+    })
   }, [])
 
   // ── Analizar candidatos: extrae tickers, corre backtest en paralelo ──
@@ -4144,7 +4159,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.359</title>
+        <title>Trading Simulator V9.360</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4222,7 +4237,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.359
+            <span className="dot"/>Trading Simulator V9.360
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
