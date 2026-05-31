@@ -435,7 +435,7 @@ async function upsertScoreHistoricoRemote(scoreMap, stratId) {
     symbol, strategy_id: stratId||null, score_historico: sh, updated_at: new Date().toISOString()
   }))
   for (let i=0; i<rows.length; i+=20) {
-    await fetch(`${getSupaUrl()}/rest/v1/ranking_results`, {
+    await fetch(`${getSupaUrl()}/rest/v1/ranking_results?on_conflict=symbol,strategy_id`, {
       method: 'POST',
       headers: { ...getSupaH(), 'Prefer': 'resolution=merge-duplicates,return=minimal', 'Content-Type': 'application/json' },
       body: JSON.stringify(rows.slice(i, i+20))
@@ -450,7 +450,7 @@ async function upsertScoreCompletoRemote(scoreMap, stratId) {
     symbol, strategy_id: stratId||null, score_completo: sc, updated_at: new Date().toISOString()
   }))
   for (let i=0; i<rows.length; i+=20) {
-    await fetch(`${getSupaUrl()}/rest/v1/ranking_results`, {
+    await fetch(`${getSupaUrl()}/rest/v1/ranking_results?on_conflict=symbol,strategy_id`, {
       method: 'POST',
       headers: { ...getSupaH(), 'Prefer': 'resolution=merge-duplicates,return=minimal', 'Content-Type': 'application/json' },
       body: JSON.stringify(rows.slice(i, i+20))
@@ -2071,12 +2071,6 @@ export default function Home() {
           :null
         // Si no hay activeRow pero solo hay una estrategia con datos, usarla como activa también
         const fallbackActive = !activeRow && symRows.length===1 ? symRows[0] : activeRow
-        console.log('[WLDATA-RESTORE]', sym, {
-          activeScore: activeRow?.score_historico,
-          topScore: topRow?.score_historico,
-          activeCagr: activeRow?.cagr_simple,
-          topCagr: topRow?.cagr_simple
-        })
         newWlData[sym]={active:toEntry(fallbackActive),top:toEntry(topRow)}
       })
       setWlData(newWlData)
@@ -2826,6 +2820,7 @@ export default function Home() {
       }))
       setRankingProgress({done:Math.min(i+BATCH,syms.length),total:syms.length})
     }
+    console.log('[UPSERT-ACTIVE]', {stratId: currentStratId, currentStratId, match: true, symbols: Object.keys(activeMetrics).slice(0,3)})
     await upsertMetricsRemote(activeMetrics,currentStratId||null)
     setRankingData(prev=>{const next={...prev};Object.entries(activeMetrics).forEach(([sym,m])=>{next[sym]={...(next[sym]||{}),metrics:m}});return next})
     setRankingStratId(currentStratId); setRankingStratName(stratName||'')
@@ -4150,7 +4145,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.357</title>
+        <title>Trading Simulator V9.358</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4228,7 +4223,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.357
+            <span className="dot"/>Trading Simulator V9.358
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
