@@ -2063,9 +2063,12 @@ export default function Home() {
         const complete=symRows.filter(r=>r.cagr_simple!=null&&r.win_rate!=null&&r.max_drawdown!=null)
         const candidates=complete.length>0?complete:symRows.filter(r=>r.score_historico!=null)
         const topRow=candidates.length>0?candidates.reduce((acc,r)=>(r.score_historico??0)>(acc?.score_historico??0)?r:acc,null):null
-        newWlData[sym]={active:toEntry(activeRow),top:toEntry(topRow)}
+        // Si no hay activeRow pero solo hay una estrategia con datos, usarla como activa también
+        const fallbackActive = !activeRow && symRows.length===1 ? symRows[0] : activeRow
+        newWlData[sym]={active:toEntry(fallbackActive),top:toEntry(topRow)}
       })
       setWlData(newWlData)
+      console.log('[WLDATA-LOAD]',{totalSyms:Object.keys(newWlData).length,sample:Object.entries(newWlData).slice(0,3)})
     }catch(e){console.warn('[refreshWlData]',e.message)}
   },[currentStratId,strategies])
 
@@ -2671,6 +2674,7 @@ export default function Home() {
           active:{...(next[sym]?.active||{}),scoreMetricas:sh,stratName:stratName||'',stratId:currentStratId,intervalo:estrategiaIntervalo},
           top:bsb?{...(next[sym]?.top||{}),scoreMetricas:bsb.scoreHistorico,stratName:bsb.stratName,stratId:bsb.stratId,intervalo:bsb.intervalo,updatedAt:bsb.updatedAt}:(next[sym]?.top||{}),
         }
+        console.log('[WLDATA-AFTER-SCORE]',{sym,active:next[sym]?.active,top:next[sym]?.top})
       })
       return next
     })
@@ -4107,7 +4111,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.345</title>
+        <title>Trading Simulator V9.346</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4185,7 +4189,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.345
+            <span className="dot"/>Trading Simulator V9.346
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}

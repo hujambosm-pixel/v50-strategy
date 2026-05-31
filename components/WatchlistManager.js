@@ -433,10 +433,15 @@ export default function WatchlistManager({
     textTransform: 'uppercase',
     borderBottom: `2px solid ${P.borderStrong}`,
     borderRight: `1px solid ${P.border}`,
+    position: 'sticky',
+    top: 0,
+    zIndex: 5,
     whiteSpace: 'nowrap',
     userSelect: 'none',
     ...extra,
   })
+  // TH para la segunda fila de headers (columnas individuales) — top=32 para quedar bajo la fila de grupos
+  const TH2 = (extra = {}) => TH({ top: 32, zIndex: 4, ...extra })
   const TD = (extra = {}) => ({
     padding: '3px 8px',
     borderBottom: `1px solid ${P.border}`,
@@ -1059,9 +1064,9 @@ export default function WatchlistManager({
       {/* ── Tabla ── */}
       <div style={{ flex: 1, overflow: 'auto', background: P.bg }}>
         <table style={{ borderCollapse: 'collapse', minWidth: '100%', tableLayout: 'auto' }}>
-          <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
-            {/* Sub-header agrupador de métricas */}
-            <tr style={{ position: 'sticky', top: 0, zIndex: 7 }}>
+          <thead>
+            {/* Sub-header agrupador de métricas — cada th tiene position:sticky,top:0 via TH() */}
+            <tr>
               <th colSpan={4} style={{ ...TH(), background: P.thBg, borderBottom: `1px solid ${P.border}` }} />
               <th colSpan={2} style={{
                 ...TH(),
@@ -1185,30 +1190,30 @@ export default function WatchlistManager({
               }} />
             </tr>
 
-            {/* Headers de columna */}
-            <tr style={{ position: 'sticky', top: 30, zIndex: 6 }}>
+            {/* Headers de columna — cada th tiene position:sticky,top:32 via TH2() */}
+            <tr>
               {/* Checkbox */}
-              <th style={{ ...TH(), width: 36, textAlign: 'center', padding: '7px 6px' }}>
+              <th style={{ ...TH2(), width: 36, textAlign: 'center', padding: '7px 6px' }}>
                 <input type="checkbox" checked={allSelected} onChange={toggleAll}
                   style={{ cursor: 'pointer', width: 14, height: 14 }} />
               </th>
               {/* Ticker */}
-              <th style={{ ...TH(), cursor: 'pointer', minWidth: 76 }}
+              <th style={{ ...TH2(), cursor: 'pointer', minWidth: 76 }}
                 onClick={() => handleSort('symbol')}>
                 Ticker{sortIcon('symbol')}
               </th>
               {/* Nombre */}
-              <th style={{ ...TH(), minWidth: 130, cursor: 'pointer' }}
+              <th style={{ ...TH2(), minWidth: 130, cursor: 'pointer' }}
                 onClick={() => handleSort('name')}>
                 Nombre{sortIcon('name')}
               </th>
               {/* Listas */}
-              <th style={{ ...TH(), minWidth: 110, borderRight: `2px solid ${P.borderStrong}` }}>
+              <th style={{ ...TH2(), minWidth: 110, borderRight: `2px solid ${P.borderStrong}` }}>
                 Listas
               </th>
 
               {/* SCORE MÉTRICAS */}
-              <th style={{ ...TH(), minWidth: 80, textAlign: 'right',
+              <th style={{ ...TH2(), minWidth: 80, textAlign: 'right',
                 background: '#d4d0c8', borderLeft: `2px solid ${P.borderStrong}`, borderRight: `1px solid ${P.border}`,
                 cursor: 'pointer' }}
                 onClick={() => handleSort('scoreHistorico')}
@@ -1239,7 +1244,7 @@ export default function WatchlistManager({
               </th>
 
               {/* SCORE MÉT.+SEÑ. */}
-              <th style={{ ...TH(), minWidth: 88, textAlign: 'right',
+              <th style={{ ...TH2(), minWidth: 88, textAlign: 'right',
                 background: '#d4d0c8', borderLeft: `1px solid ${P.border}`, borderRight: `2px solid ${P.borderStrong}`,
                 cursor: 'pointer' }}
                 onClick={() => handleSort('scoreCompleto')}
@@ -1280,7 +1285,7 @@ export default function WatchlistManager({
                 <th key={metric} onClick={() => handleSort(metric)}
                   title={metric === 'profit' ? 'Ganancia/pérdida simple total acumulada en € con esta estrategia sobre este activo.\nCalculado con capital inicial de 10.000€ en modo Simple (sin reinversión).\nUn CAGR alto con Profit bajo puede indicar pocas operaciones o período corto.' : undefined}
                   style={{
-                    ...TH(),
+                    ...TH2(),
                     cursor: 'pointer', textAlign: 'right',
                     background: '#d4cfc5',
                     borderLeft:  metric === 'cagr'   ? `2px solid ${P.borderStrong}` : `1px solid ${P.border}`,
@@ -1292,19 +1297,19 @@ export default function WatchlistManager({
               ))}
 
               {/* Estrategia (nombre) — sortable, título dinámico según toggle */}
-              <th style={{ ...TH(), minWidth: 130, borderLeft: `2px solid ${P.borderStrong}`, cursor: 'pointer' }}
+              <th style={{ ...TH2(), minWidth: 130, borderLeft: `2px solid ${P.borderStrong}`, cursor: 'pointer' }}
                 onClick={() => handleSort('stratName')}>
                 {metricsView === 'active' ? 'ESTRATEGIA ACTIVA' : 'TOP ESTRATEGIA'}{sortIcon('stratName')}
               </th>
               {/* Temporalidad — sortable */}
-              <th style={{ ...TH(), minWidth: 80, textAlign: 'center', cursor: 'pointer' }}
+              <th style={{ ...TH2(), minWidth: 80, textAlign: 'center', cursor: 'pointer' }}
                 onClick={() => handleSort('intervalo')}
                 title="Temporalidad con la que se abrieron los gráficos al calcular el ranking para este activo con la estrategia seleccionada. Corresponde a la temporalidad definida en cada estrategia.">
                 Temporalidad{sortIcon('intervalo')}
               </th>
               {/* Eliminar */}
               {onDeleteItem && (
-                <th style={{ ...TH(), width: 42, textAlign: 'center' }}>Elim.</th>
+                <th style={{ ...TH2(), width: 42, textAlign: 'center' }}>Elim.</th>
               )}
             </tr>
           </thead>
@@ -1317,6 +1322,7 @@ export default function WatchlistManager({
               const isOdd      = idx % 2 === 1
               const bg         = rowBg(w, isSelected, isOdd)
               const datos      = wlData?.[sym]?.[metricsView] || {}
+              if(idx < 3) console.log('[WLDATA-RENDER]',sym,metricsView,wlData?.[sym])
               const displayM   = { cagr: datos.cagr, profit: datos.profit, winRate: datos.winRate, maxDD: datos.maxDD, trades: datos.ops }
               const displayStratName = datos.stratName || null
               const displayIntervalo = datos.intervalo || 'diario'
