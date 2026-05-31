@@ -71,6 +71,26 @@ const wrFg = v => v == null ? '#9a9590' : v >= 50 ? '#1a5c30' : '#8b1a1a'
 const scoreFg = v => v == null ? '#9a9590' : v > 70 ? '#1a5c30' : v > 40 ? '#7a5c10' : '#8b1a1a'
 const scoreBar = v => v == null ? null : v > 70 ? '#4a9b6a' : v > 40 ? '#b87a20' : '#c04040'
 
+// ── Asset type helpers ────────────────────────────────────────
+const COMMODITIES = new Set(['GC=F','CL=F','SI=F','NG=F','HG=F','ZC=F','ZW=F','ZS=F','KC=F','CT=F','PA=F','PL=F'])
+const ETFS = new Set(['SPY','QQQ','IWM','DIA','GLD','SLV','USO','VXX','ARKK','XLF','XLE','XLK','XLV','XLI','XLB','XLP','XLU','XLRE'])
+function getAssetType(symbol) {
+  if (!symbol) return 'Acción'
+  const s = symbol.toUpperCase()
+  if (s.startsWith('^')) return 'Índice'
+  if (s.includes('-USD') || s.includes('-EUR') || s.includes('-BTC')) return 'Crypto'
+  if (COMMODITIES.has(s)) return 'Mat. prima'
+  if (ETFS.has(s)) return 'ETF'
+  return 'Acción'
+}
+const TYPE_STYLE = {
+  'Acción':     { bg: 'rgba(59,130,246,0.14)',  color: '#3b82f6', border: 'rgba(59,130,246,0.28)'  },
+  'Crypto':     { bg: 'rgba(245,158,11,0.14)',  color: '#f59e0b', border: 'rgba(245,158,11,0.28)'  },
+  'Índice':     { bg: 'rgba(139,92,246,0.14)',  color: '#8b5cf6', border: 'rgba(139,92,246,0.28)'  },
+  'Mat. prima': { bg: 'rgba(16,185,129,0.14)',  color: '#10b981', border: 'rgba(16,185,129,0.28)'  },
+  'ETF':        { bg: 'rgba(99,102,241,0.14)',  color: '#6366f1', border: 'rgba(99,102,241,0.28)'  },
+}
+
 // ── Palette ───────────────────────────────────────────────────
 const P = {
   bg:           '#f5f0e8',
@@ -436,13 +456,13 @@ export default function WatchlistManager({
     borderRight: `1px solid ${P.border}`,
     position: 'sticky',
     top: 0,
-    zIndex: 5,
+    zIndex: 10,
     whiteSpace: 'nowrap',
     userSelect: 'none',
     ...extra,
   })
   // TH para la segunda fila de headers (columnas individuales) — top=32 para quedar bajo la fila de grupos
-  const TH2 = (extra = {}) => TH({ top: 32, zIndex: 4, ...extra })
+  const TH2 = (extra = {}) => TH({ top: 32, zIndex: 9, ...extra })
   const TD = (extra = {}) => ({
     padding: '3px 8px',
     borderBottom: `1px solid ${P.border}`,
@@ -1108,12 +1128,12 @@ export default function WatchlistManager({
       )}
 
       {/* ── Tabla ── */}
-      <div style={{ flex: 1, overflow: 'auto', background: P.bg }}>
+      <div style={{ flex: 1, overflow: 'auto', position: 'relative', background: P.bg }}>
         <table style={{ borderCollapse: 'collapse', minWidth: '100%', tableLayout: 'auto' }}>
           <thead>
             {/* Sub-header agrupador de métricas — cada th tiene position:sticky,top:0 via TH() */}
             <tr>
-              <th colSpan={4} style={{ ...TH(), background: P.thBg, borderBottom: `1px solid ${P.border}` }} />
+              <th colSpan={5} style={{ ...TH(), background: P.thBg, borderBottom: `1px solid ${P.border}` }} />
               <th colSpan={2} style={{
                 ...TH(),
                 background: '#d4d0c8',
@@ -1252,6 +1272,10 @@ export default function WatchlistManager({
               <th style={{ ...TH2(), minWidth: 130, cursor: 'pointer' }}
                 onClick={() => handleSort('name')}>
                 Nombre{sortIcon('name')}
+              </th>
+              {/* Tipo */}
+              <th style={{ ...TH2(), width: 80, textAlign: 'center' }}>
+                Tipo
               </th>
               {/* Listas */}
               <th style={{ ...TH2(), minWidth: 110, borderRight: `2px solid ${P.borderStrong}` }}>
@@ -1411,6 +1435,24 @@ export default function WatchlistManager({
                   }} title={w.name}>
                     {w.name}
                   </td>
+
+                  {/* Tipo */}
+                  {(()=>{
+                    const tipo = getAssetType(w.symbol)
+                    const ts   = TYPE_STYLE[tipo] || TYPE_STYLE['Acción']
+                    return (
+                      <td style={{ ...TD(), textAlign: 'center', width: 80 }}>
+                        <span style={{
+                          fontSize: 10, padding: '2px 6px', borderRadius: 4,
+                          background: ts.bg, color: ts.color,
+                          border: `1px solid ${ts.border}`,
+                          whiteSpace: 'nowrap', display: 'inline-block',
+                        }}>
+                          {tipo}
+                        </span>
+                      </td>
+                    )
+                  })()}
 
                   {/* Listas — chips editables */}
                   <td style={{ ...TD(), borderRight: `2px solid ${P.borderStrong}` }} onClick={e => e.stopPropagation()}>
@@ -1618,7 +1660,7 @@ export default function WatchlistManager({
 
             {sorted.length === 0 && (
               <tr>
-                <td colSpan={onDeleteItem ? 14 : 13}
+                <td colSpan={onDeleteItem ? 15 : 14}
                   style={{ ...TD(), textAlign: 'center', color: P.textMuted, padding: '32px' }}>
                   Sin activos para los filtros aplicados
                 </td>

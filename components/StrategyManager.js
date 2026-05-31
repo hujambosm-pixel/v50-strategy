@@ -42,6 +42,7 @@ const TH = (extra = {}) => ({
   background: '#d4c9b8', color: '#4a3c2e',
   borderBottom: `2px solid ${P.borderStrong}`,
   whiteSpace: 'nowrap', userSelect: 'none',
+  position: 'sticky', top: 0, zIndex: 10,
   ...extra,
 })
 
@@ -350,9 +351,9 @@ export default function StrategyManager({
       )}
 
       {/* ── Tabla ── */}
-      <div style={{ flex: 1, overflow: 'auto' }}>
+      <div style={{ flex: 1, overflow: 'auto', position: 'relative' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1060 }}>
-          <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
+          <thead>
             <tr>
               <th style={TH({ width: 28, textAlign: 'center' })}>
                 <input type="checkbox" checked={allSelected} onChange={toggleAll}
