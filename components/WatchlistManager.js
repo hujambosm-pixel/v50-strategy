@@ -1153,6 +1153,12 @@ export default function WatchlistManager({
         </div>
       )}
 
+      {/* ── Línea timestamps de score ── */}
+      <div style={{ flexShrink: 0, textAlign: 'right', padding: '2px 14px', background: P.bgPanel, borderBottom: `1px solid ${P.border}`, fontFamily: MONO, fontSize: 10, color: P.textMuted }}>
+        Score métricas: <span style={{ color: P.textSec }}>{timeSinceLS('wl_score_metricas_last_updated')}</span>
+        {' · '}Score mét.+señales: <span style={{ color: P.textSec }}>{timeSinceLS('wl_score_metsen_last_updated')}</span>
+      </div>
+
       {/* ── Tabla (dos tablas sincronizadas: header fijo + body con scroll) ── */}
       {(()=>{
         // Anchos fijos — idénticos en ambas tablas
@@ -1337,7 +1343,7 @@ export default function WatchlistManager({
                     ? <span style={{ color: '#1a6b3a', fontWeight: 700 }}>✓ Listo</span>
                     : rankingRunning
                       ? <span style={{ fontSize: 9 }}>Calculando {rankingProgress?.done ?? 0}/{rankingProgress?.total ?? 0}…</span>
-                      : <><span>SCORE MÉTRICAS</span><span style={{fontSize:8,color:'#7a9590',fontWeight:400,marginLeft:3}}>· {timeSinceLS('wl_score_metricas_last_updated')}</span>{sortIcon('scoreHistorico')}</>}
+                      : <>SCORE MÉTRICAS{sortIcon('scoreHistorico')}</>}
                   {!rankingRunning && !rankingDoneFlash && selected.size > 0 && (
                     <span
                       onClick={async e => {
@@ -1375,7 +1381,7 @@ export default function WatchlistManager({
                     ? <span style={{ color: '#1a6b3a', fontWeight: 700 }}>✓ Listo</span>
                     : rankingRunning
                       ? <span style={{ fontSize: 9 }}>Calculando {rankingProgress?.done ?? 0}/{rankingProgress?.total ?? 0}…</span>
-                      : <><span>SCORE MÉT.+SEÑ.</span><span style={{fontSize:8,color:'#7a9590',fontWeight:400,marginLeft:3}}>· {timeSinceLS('wl_score_metsen_last_updated')}</span>{sortIcon('scoreCompleto')}</>}
+                      : <>SCORE MÉT.+SEÑ.{sortIcon('scoreCompleto')}</>}
                   {!rankingRunning && !rankingDoneFlash && selected.size > 0 && (
                     <span
                       onClick={async e => {

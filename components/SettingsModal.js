@@ -680,7 +680,7 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                 </div>
                 <div>
                   <span style={{color:'#e2e8f0',fontWeight:600}}>Score por métricas + señales:</span>{' '}
-                  combina ambos bloques. Solo se calcula al ejecutar Ranking y se usa para priorizar entradas en el modo <em>Capital Concentrado</em> del backtesting multiactivo.
+                  combina ambos bloques. Se calcula desde el WatchlistManager (↻ Score mét.+señales) y se usa para priorizar entradas en el modo <em>Capital Concentrado</em> del backtesting multiactivo. Se puede actualizar automáticamente (ver opción abajo).
                 </div>
               </div>
               {/* ── Pesos globales por bloque ── */}
