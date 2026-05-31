@@ -593,7 +593,7 @@ export default function WatchlistManager({
 
   // ─────────────────────────────────────────────────────────
   return (
-    <div style={{
+    <div data-wlm-root style={{
       position: 'absolute', inset: 0, zIndex: 20,
       background: P.bg,
       display: 'flex', flexDirection: 'column',
@@ -602,7 +602,7 @@ export default function WatchlistManager({
     }}>
 
       {/* ── Cabecera ── */}
-      <div style={{
+      <div data-wlm-header style={{
         flexShrink: 0,
         background: P.bgPanel,
         borderBottom: `1px solid ${P.borderStrong}`,
@@ -1438,9 +1438,23 @@ export default function WatchlistManager({
         </div>
 
         {/* TABLA 2 — Body con scroll vertical y horizontal */}
-        <div ref={bodyScrollRef}
-          style={{ flex: 1, minHeight: 0, height: 0, overflowY: 'auto', overflowX: 'auto', background: P.bg }}
-          onScroll={e => { if (headerScrollRef.current) headerScrollRef.current.scrollLeft = e.currentTarget.scrollLeft }}>
+        <div data-wlm-body
+          style={{ flex: 1, minHeight: 0, height: 0, overflowY: 'auto', overflowX: 'auto', background: P.bg, borderTop: '3px solid red' }}
+          onScroll={e => { if (headerScrollRef.current) headerScrollRef.current.scrollLeft = e.currentTarget.scrollLeft }}
+          ref={el => {
+            bodyScrollRef.current = el
+            if (el && typeof window !== 'undefined') {
+              setTimeout(() => {
+                console.log('[HEIGHT-DEBUG]', {
+                  root: document.querySelector('[data-wlm-root]')?.getBoundingClientRect(),
+                  header: document.querySelector('[data-wlm-header]')?.getBoundingClientRect(),
+                  body: el.getBoundingClientRect(),
+                  bodyComputed: getComputedStyle(el).height,
+                  rootComputed: getComputedStyle(document.querySelector('[data-wlm-root]')).height,
+                })
+              }, 300)
+            }
+          }}>
           <table style={tblStyle}>
             {colGroup}
           <tbody>
