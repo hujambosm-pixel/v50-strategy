@@ -4159,7 +4159,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.376</title>
+        <title>Trading Simulator V9.377</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4237,7 +4237,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.376
+            <span className="dot"/>Trading Simulator V9.377
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5038,10 +5038,13 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                     {eurStr} / {pctStr}
                                   </div>
                                 )
-                                {/* Línea secundaria: nombre top estrategia */}
-                                const topName=wlData[(w.symbol||'').toUpperCase()]?.top?.stratName
+                                {/* Línea secundaria: nombre top estrategia, color según si coincide con activa */}
+                                const symUp2=(w.symbol||'').toUpperCase()
+                                const topName=wlData[symUp2]?.top?.stratName
+                                const activeName=wlData[symUp2]?.active?.stratName
+                                const sameStrat=topName&&activeName&&topName===activeName
                                 return(
-                                  <div style={{fontFamily:MONO,fontSize:10,color:'#8aadcc',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                                  <div style={{fontFamily:MONO,fontSize:10,color:topName?(sameStrat?'#00c87a':'#ff9500'):'#4a7a95',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
                                     {topName||'—'}
                                   </div>
                                 )
@@ -10084,54 +10087,58 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
     {wlTooltip&&(()=>{
       const tSym=(wlTooltip.symbol||'').toUpperCase()
       const tItem=watchlist.find(w=>(w.symbol||'').toUpperCase()===tSym)
-      const tRd=rankingData[tSym]
-      const m=tRd?.metrics
-      const tBest=bestStratBySymbol[tSym]
+      const tAct=wlData[tSym]?.active
       const tTop=wlData[tSym]?.top
+      const sameStrat=tAct?.stratName&&tTop?.stratName&&tAct.stratName===tTop.stratName
+      const fv=(v,decimals=1)=>v!=null?fmt(v,decimals):null
+      const cagrColor=v=>v==null?'#4a7a95':v>=0?'#00e5a0':'#ff4d6d'
+      const wrColor=v=>v==null?'#4a7a95':v>=50?'#00e5a0':'#ffd166'
+      // Filas comparativas: [label, fnActiva, fnTop]
+      const rows=[
+        ['Estrategia', tAct?.stratName||null, tTop?.stratName||null, s=>s, ()=>'#ffd166'],
+        ['Temporalidad', tAct?.intervalo||null, tTop?.intervalo||null, s=>s==='semanal'?'Semanal':'Diario', ()=>'#8aadcc'],
+        ['CAGR', tAct?.cagr??null, tTop?.cagr??null, v=>fv(v,1)+'%', cagrColor],
+        ['Max DD', tAct?.maxDD??null, tTop?.maxDD??null, v=>'-'+fv(Math.abs(v),1)+'%', ()=>'#ff7eb3'],
+        ['Win Rate', tAct?.winRate??null, tTop?.winRate??null, v=>fv(v,0)+'%', wrColor],
+        ['Ops', tAct?.ops??null, tTop?.ops??null, v=>v!=null?String(Math.round(v)):null, ()=>'#8aadcc'],
+      ]
       return(
         <div style={{position:'fixed',left:wlTooltip.x,top:wlTooltip.y,zIndex:9999,
           background:'#090f18',border:'1px solid #1e3048',borderRadius:7,
-          padding:'10px 13px',maxWidth:220,minWidth:160,
+          padding:'10px 13px',maxWidth:320,minWidth:180,
           boxShadow:'0 6px 24px rgba(0,0,0,0.65)',
-          fontFamily:MONO,fontSize:12,color:'#c8dff5',pointerEvents:'none',lineHeight:1.4}}>
+          fontFamily:MONO,fontSize:11,color:'#c8dff5',pointerEvents:'none',lineHeight:1.4}}>
           {/* Encabezado */}
-          <div style={{fontWeight:700,fontSize:13,color:'#e8f4ff',marginBottom:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{tItem?.name||wlTooltip.symbol}</div>
-          <div style={{fontSize:10,color:'#4a7a95',marginBottom:m?.cagr!=null?8:0}}>{wlTooltip.symbol}</div>
-          {/* Métricas */}
-          {m?.cagr!=null&&(
-            <div style={{borderTop:'1px solid #1a2d40',paddingTop:8,marginBottom:tBest?.stratName?8:0}}>
-              {[
-                ['CAGR',          m.cagr,       v=>`${fmt(v,1)}%`,             v=>v>=0?'#00e5a0':'#ff4d6d'],
-                ['Max DD',        m.maxDD,       v=>`-${fmt(Math.abs(v),1)}%`,  ()=>'#ff4d6d'],
-                ['Win Rate',      m.winRate,     v=>`${fmt(v,0)}%`,             v=>v>=50?'#00e5a0':'#ffd166'],
-                ['Factor Ben.',   m.factorBen,   v=>v!=null?fmt(v,2):'—',       v=>v!=null&&v>=1?'#00e5a0':'#ff4d6d'],
-                ['Ops',           m.trades,      v=>String(v),                  ()=>'#8aadcc'],
-              ].map(([label,val,fmtVal,colorFn])=>val!=null?(
-                <div key={label} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12,marginBottom:3}}>
-                  <span style={{color:'#4a7a95',fontSize:11}}>{label}</span>
-                  <span style={{color:colorFn(val),fontWeight:600,fontSize:11}}>{fmtVal(val)}</span>
+          <div style={{fontWeight:700,fontSize:13,color:'#e8f4ff',marginBottom:1}}>{tItem?.name||wlTooltip.symbol}</div>
+          <div style={{fontSize:10,color:'#4a7a95',marginBottom:8}}>{wlTooltip.symbol}</div>
+          {/* Tabla comparativa */}
+          {(tAct||tTop)&&(
+            <div style={{borderTop:'1px solid #1a2d40',paddingTop:8}}>
+              {/* Cabeceras de columna cuando hay dos estrategias distintas */}
+              {!sameStrat&&(tAct?.stratName||tTop?.stratName)&&(
+                <div style={{display:'grid',gridTemplateColumns:'70px 1fr 1fr',gap:4,marginBottom:6}}>
+                  <span/>
+                  <span style={{fontSize:9,color:'#4a7a95',textAlign:'right'}}>Activa</span>
+                  <span style={{fontSize:9,color:sameStrat?'#4a7a95':'#ff9500',textAlign:'right'}}>Top</span>
                 </div>
-              ):null)}
-            </div>
-          )}
-          {/* Top estrategia (mayor CAGR entre todas las habilitadas) */}
-          {tTop?.stratName&&(
-            <div style={{borderTop:'1px solid #1a2d40',paddingTop:7,marginBottom:tBest?.stratName?6:0}}>
-              <div style={{fontSize:10,color:'#4a7a95',marginBottom:4}}>Top estrategia</div>
-              <div style={{fontSize:11,color:'#ffd166',fontWeight:600,marginBottom:3,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{tTop.stratName}</div>
-              <div style={{display:'flex',gap:10,fontSize:10}}>
-                {tTop.cagr!=null&&<span style={{color:tTop.cagr>=0?'#00e5a0':'#ff4d6d'}}>CAGR {fmt(tTop.cagr,1)}%</span>}
-                {tTop.winRate!=null&&<span style={{color:'#8aadcc'}}>WR {fmt(tTop.winRate,0)}%</span>}
-                {tTop.maxDD!=null&&<span style={{color:'#ff7eb3'}}>DD -{fmt(Math.abs(tTop.maxDD),1)}%</span>}
-              </div>
-            </div>
-          )}
-          {/* Mejor estrategia evaluada entre todas las calculadas en Supabase */}
-          {tBest?.stratName&&(
-            <div style={{borderTop:'1px solid #1a2d40',paddingTop:7,fontSize:10,color:'#4a7a95'}}>
-              <span>Favorita entre evaluadas: </span>
-              <span style={{color:'#ffd166',fontWeight:600}}>{tBest.stratName} · {tBest.intervalo==='semanal'?'Semanal':'Diario'} ★</span>
-              <span style={{color:'#2d4a60'}}> ({tBest.stratCount} {tBest.stratCount===1?'estrategia evaluada':'estrategias evaluadas'})</span>
+              )}
+              {rows.map(([label,vAct,vTop,fmtFn,colorFn])=>{
+                const aStr=vAct!=null?fmtFn(vAct):null
+                const tStr=vTop!=null?fmtFn(vTop):null
+                if(!aStr&&!tStr) return null
+                return(
+                  <div key={label} style={{display:'grid',gridTemplateColumns:'70px 1fr'+(sameStrat?'':' 1fr'),gap:4,marginBottom:3,alignItems:'start'}}>
+                    <span style={{color:'#3d5a7a',fontSize:10}}>{label}</span>
+                    {sameStrat
+                      ? <span style={{color:colorFn(vAct),fontWeight:600,textAlign:'right',wordBreak:'break-word'}}>{aStr||'—'}</span>
+                      : <>
+                          <span style={{color:colorFn(vAct),fontWeight:600,textAlign:'right',wordBreak:'break-word'}}>{aStr||'—'}</span>
+                          <span style={{color:colorFn(vTop),fontWeight:600,textAlign:'right',wordBreak:'break-word'}}>{tStr||'—'}</span>
+                        </>
+                    }
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>
