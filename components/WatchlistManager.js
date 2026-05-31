@@ -1322,7 +1322,6 @@ export default function WatchlistManager({
               const isOdd      = idx % 2 === 1
               const bg         = rowBg(w, isSelected, isOdd)
               const datos      = wlData?.[sym]?.[metricsView] || {}
-              if(idx < 3) console.log('[WLDATA-RENDER]',sym,metricsView,wlData?.[sym])
               const displayM   = { cagr: datos.cagr, profit: datos.profit, winRate: datos.winRate, maxDD: datos.maxDD, trades: datos.ops }
               const displayStratName = datos.stratName || null
               const displayIntervalo = datos.intervalo || 'diario'
