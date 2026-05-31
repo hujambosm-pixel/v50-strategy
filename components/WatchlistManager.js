@@ -1135,11 +1135,11 @@ export default function WatchlistManager({
       {(()=>{
         // Anchos fijos de columna — deben ser idénticos en ambas tablas
         const CW = {
-          chk: 36, tick: 80, nom: 140, tipo: 80, listas: 150,
-          smet: 90, smetseg: 100,
-          cagr: 72, profit: 90, wr: 72, dd: 72, ops: 60,
+          chk: 36, tick: 70, nom: 180, tipo: 70, listas: 180,
+          smet: 110, smetseg: 110,
+          cagr: 70, profit: 90, wr: 60, dd: 70, ops: 50,
           strat: 160, temp: 90,
-          elim: onDeleteItem ? 44 : 0,
+          elim: onDeleteItem ? 50 : 0,
         }
         const colGroup = (
           <colgroup>
