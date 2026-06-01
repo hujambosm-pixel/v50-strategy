@@ -4197,7 +4197,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.392</title>
+        <title>Trading Simulator V9.393</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4275,7 +4275,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.392
+            <span className="dot"/>Trading Simulator V9.393
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4649,12 +4649,15 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       const isDisabled = s.enabled === false
                       return (
                         <div key={s.id}
+                          onClick={()=>openEditStr(s)}
+                          title="Clic para editar esta estrategia"
                           style={{padding:'7px 10px',display:'flex',alignItems:'center',gap:6,
                             borderBottom:'1px solid var(--border)',
                             background:isActive?'rgba(0,212,255,0.07)':'transparent',
                             borderLeft:`2px solid ${isActive?col:'transparent'}`,
                             transition:'background 0.1s',
                             opacity: isDisabled ? 0.45 : 1,
+                            cursor:'pointer',
                           }}
                           onMouseOver={e=>{if(!isActive)e.currentTarget.style.background='rgba(255,255,255,0.03)'}}
                           onMouseOut={e=>{if(!isActive)e.currentTarget.style.background='transparent'}}>
@@ -4662,7 +4665,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                           <span style={{width:8,height:8,borderRadius:'50%',background:col,
                             flexShrink:0,display:'inline-block',boxShadow:isActive?`0 0 5px ${col}88`:'none'}}/>
                           {/* Name + meta */}
-                          <div style={{flex:1,minWidth:0,cursor:'default'}}>
+                          <div style={{flex:1,minWidth:0}}>
                             <div style={{fontFamily:MONO,fontSize:11,color:isActive?'var(--accent)':'#d0e8fa',
                               fontWeight:isActive?700:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:4}}>
                               <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.name}</span>
