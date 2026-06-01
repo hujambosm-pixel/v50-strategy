@@ -386,11 +386,12 @@ function buildCompartidoCurves(assetResults, capitalIni, symbolOrder = null) {
 }
 
 // ── MODO CAPITAL CONCENTRADO: pool compartido con techo por posición según maxPosiciones ──
-// prioridad: 'alfabetico' | 'ranking' | 'momentum' | 'fuerza_relativa' | 'max52'
+// prioridad: 'alfabetico' | 'score_metricas' | 'momentum' | 'fuerza_relativa' | 'max52'
 // momentumN: lookback en días para criterio 'momentum' (default 20)
 // sp500Data: array de barras del SP500 (para fuerza_relativa)
-// symbolsList: array ordenado de símbolos del watchlist (para ranking)
-function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, prioridad = 'alfabetico', momentumN = 20, sp500Data = null, symbolsList = null) {
+// symbolsList: array ordenado de símbolos del watchlist (para score_metricas legacy)
+// scoreMap: {symbol: scoreMetricas} para prioridad 'score_metricas'
+function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, prioridad = 'alfabetico', momentumN = 20, sp500Data = null, symbolsList = null, scoreMap = null) {
   const n = assetResults.length
   if (!n) return _emptyCurves()
   const { startDate, filteredDates } = _commonDates(assetResults)
@@ -409,7 +410,13 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
   // ── Función de score: menor score = mayor prioridad (entra antes) ──────────
   function _priorityScore(t) {
     if (prioridad === 'alfabetico') return null  // handled inline in sort
-    if (prioridad === 'ranking') {
+    if (prioridad === 'score_metricas' || prioridad === 'ranking') {
+      // 'ranking' mantenido como alias legacy — ambos usan scoreMap si disponible
+      if (scoreMap) {
+        const s = scoreMap[t.symbol] ?? null
+        return s != null ? -s : 999  // mayor score → entra antes
+      }
+      // fallback: orden por symbolsList
       const ri = symbolsList ? symbolsList.indexOf(t.symbol) : -1
       return ri >= 0 ? ri : (symbolsList ? symbolsList.length : 999)
     }
@@ -1399,7 +1406,8 @@ export default async function handler(req, res) {
     } else if (modoAsig === 'concentrado') {
       const _prior    = sizeRules.prioridad  ?? 'alfabetico'
       const _momentN  = sizeRules.momentumN  ?? 20
-      curves = buildConcentradoCurves(assetResults, cfg.capitalIni, sizeRules.maxPosiciones ?? 5, _prior, _momentN, sp500Data, symbols)
+      const _scoreMap = sizeRules.scoreMap   ?? null
+      curves = buildConcentradoCurves(assetResults, cfg.capitalIni, sizeRules.maxPosiciones ?? 5, _prior, _momentN, sp500Data, symbols, _scoreMap)
     } else if (modoAsig === 'positionsizing') {
       curves = buildPositionSizingCurves(assetResults, cfg.capitalIni, sizeRules)
     } else {

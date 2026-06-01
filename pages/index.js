@@ -3724,7 +3724,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
       fromDate:_mcFrom,toDate:_mcTo,
       tipoStop,atrPeriod:Number(atrP),atrMult:Number(atrM),sinPerdidas,reentry,
       tipoFiltro,sp500EmaR:Number(sp500EmaR),sp500EmaL:Number(sp500EmaL),tipoCapital:mcCapital,
-      sizeRules:{riskPerTrade:mcRiskPerTrade,maxPortfolioPct:mcMaxPortfolioPct,maxAccumRisk:mcMaxAccumRisk,maxPosiciones:mcMaxPosiciones,prioridad:mcPrioridad,momentumN:Number(mcMomentumN)}}
+      sizeRules:{riskPerTrade:mcRiskPerTrade,maxPortfolioPct:mcMaxPortfolioPct,maxAccumRisk:mcMaxAccumRisk,maxPosiciones:mcMaxPosiciones,prioridad:mcPrioridad,momentumN:Number(mcMomentumN),
+        scoreMap:Object.fromEntries(mcSelected.map(sym=>[sym,wlData[sym.toUpperCase()]?.active?.scoreMetricas??null]))}}
     const buildCfgFromStrat=(strat)=>{
       // Parsear params del code_js (campo principal para estrategias modernas)
       let stratParams={}
@@ -4196,7 +4197,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.389</title>
+        <title>Trading Simulator V9.390</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4274,7 +4275,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.389
+            <span className="dot"/>Trading Simulator V9.390
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5749,13 +5750,18 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         <select value={mcPrioridad} onChange={e=>setMcPrioridad(e.target.value)}
                           style={{padding:'2px 4px',borderRadius:3,background:'#0d1929',border:'1px solid #1a2a3a',
                             color:'#e0e8f0',fontSize:10,fontFamily:MONO,cursor:'pointer',maxWidth:130}}>
-                          <option value="ranking"       title="Usa el score COMPLETO (históricas + mercado). Recomendado para operativa real">Score completo (Ranking)</option>
+                          <option value="score_metricas" title="Usa el Score métricas actual para priorizar entradas históricas. ⚠️ Sesgo futuro: el ranking actual no refleja el que existía en cada fecha del pasado.">Ranking por métricas (sesgo futuro) ⚠️</option>
                           <option value="alfabetico"    title="Orden A→Z por ticker. Sin criterio financiero">Alfabético</option>
                           <option value="momentum"      title="Prioriza el activo con mayor retorno en los últimos N días">Momentum (N días)</option>
                           <option value="fuerza_relativa" title="Prioriza el activo que más ha superado al SP500 en los últimos 63 días">Fuerza relativa vs SP500</option>
                           <option value="max52"         title="Prioriza el activo más cercano a su máximo de 52 semanas (favorece breakouts)">Proximidad máximo 52s</option>
                         </select>
                       </div>
+                      {mcPrioridad==='score_metricas'&&(
+                        <div style={{fontSize:9,color:'#f59e0b',lineHeight:1.4,paddingLeft:2,marginBottom:4,marginTop:2}}>
+                          ⚠️ Usa el score de métricas actual para priorizar entradas históricas. Los resultados pueden ser optimistas porque el ranking actual no refleja el que existía en cada fecha del pasado.
+                        </div>
+                      )}
                       {mcPrioridad==='momentum'&&(
                         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
                           <span title="Número de días de lookback para calcular el retorno de momentum en el momento de la señal."
