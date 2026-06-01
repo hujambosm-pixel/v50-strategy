@@ -771,10 +771,10 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                   <div title="Estas métricas evalúan el rendimiento pasado de la estrategia con cada activo. Se aplican tanto al score de estrategia activa como al de top estrategia. Se usan para el ranking del Watchlist, para determinar la Top Estrategia de cada activo, y también (combinadas con las de mercado) para la priorización de slots en Capital Concentrado."
                     style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:'#22d3ee',marginBottom:12,letterSpacing:'0.04em',cursor:'help',textDecoration:'underline dotted',textDecorationColor:'rgba(34,211,238,0.4)'}}>Métricas históricas de estrategia ℹ</div>
                   {[
-                    ['ranking.rankingWinRatePct',     'Win rate',                    settings.ranking?.rankingWinRatePct??33,     '% de trades ganadores. Mide la consistencia. Se aplica a estrategia activa y top estrategia.'],
-                    ['ranking.rankingCAGRPct',        'CAGR',                         settings.ranking?.rankingCAGRPct??33,        'Tasa de crecimiento anual anualizada. Se aplica a estrategia activa y top estrategia.'],
-                    ['ranking.rankingCAGRRobustoPct', 'CAGR sin top 3 trades',        settings.ranking?.rankingCAGRRobustoPct??34, 'CAGR excluyendo los 3 mejores trades. Mide la robustez real. Se aplica a estrategia activa y top estrategia.'],
-                    ['ranking.rankingMaxDDPct',       'Max drawdown (penalización)', settings.ranking?.rankingMaxDDPct??0,        'Penaliza el riesgo. Reduce el score. Se aplica a estrategia activa y top estrategia.'],
+                    ['ranking.rankingWinRatePct',     'Win rate',                    settings.ranking?.rankingWinRatePct??33,     '% de trades ganadores. Mide la consistencia. Se aplica a estrategia activa y top estrategia. Se normaliza entre el percentil (100−P)% y P% de tu watchlist actual.'],
+                    ['ranking.rankingCAGRPct',        'CAGR',                         settings.ranking?.rankingCAGRPct??33,        'Tasa de crecimiento anual anualizada. Se aplica a estrategia activa y top estrategia. Se normaliza entre el percentil (100−P)% y P% de tu watchlist actual.'],
+                    ['ranking.rankingCAGRRobustoPct', 'CAGR sin top 3 trades',        settings.ranking?.rankingCAGRRobustoPct??34, 'CAGR excluyendo los 3 mejores trades. Mide la robustez real. Se aplica a estrategia activa y top estrategia. Se normaliza entre el percentil (100−P)% y P% de tu watchlist actual.'],
+                    ['ranking.rankingMaxDDPct',       'Max drawdown (penalización)', settings.ranking?.rankingMaxDDPct??0,        'Penaliza el riesgo. Reduce el score. Se aplica a estrategia activa y top estrategia. Se normaliza entre el percentil (100−P)% y P% de tu watchlist actual.'],
                   ].map(([key,label,val,hint])=>(
                     <div key={key} style={{marginBottom:12}}>
                       <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:3}}>
@@ -817,6 +817,22 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                   onChange={e=>upd('ranking.minTrades',Number(e.target.value))}
                   style={{width:60,background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,
                     color:'#e2eaf5',fontFamily:MONO,fontSize:12,padding:'4px 8px',textAlign:'center'}}/>
+              </div>
+              {/* Percentil de normalización */}
+              <div style={{marginTop:14}}>
+                <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:6}}>
+                  <span style={{fontFamily:MONO,fontSize:12,color:'#cce0f5',flex:1}}>Percentil de normalización (suelo y techo)</span>
+                  <input type="number" value={settings.ranking?.rankingNormPercentile??95} min={50} max={100}
+                    onChange={e=>upd('ranking.rankingNormPercentile',Math.max(50,Math.min(100,Number(e.target.value))))}
+                    style={{width:60,background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,
+                      color:'#e2eaf5',fontFamily:MONO,fontSize:12,padding:'4px 8px',textAlign:'center'}}/>
+                </div>
+                <div style={{fontSize:11,color:'#5a7a95',lineHeight:1.6,padding:'6px 10px',background:'rgba(34,211,238,0.04)',borderRadius:4,border:'0.5px solid rgba(34,211,238,0.1)'}}>
+                  Los valores extremos se recortan simétricamente: el percentil inferior (100−P)% actúa como suelo (score 0) y el superior P% como techo (score 100).
+                  Cualquier valor fuera de ese rango queda fijado en 0 o 100.
+                  {' '}Ejemplo con P=95 y 57 activos: se ignoran los 3 mejores y 3 peores valores de cada métrica. Un CAGR de 200% puntúa igual que el 4º mejor CAGR de tu watchlist.
+                  {' '}<span style={{color:'#7a9bc0'}}>Rango recomendado: 90–99.</span>
+                </div>
               </div>
               {/* Actualización automática Score mét.+señales */}
               {(()=>{

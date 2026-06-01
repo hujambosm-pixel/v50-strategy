@@ -2658,7 +2658,32 @@ export default function Home() {
     const sett=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')}catch(_){return {}}})()
     const wrPct=(sett.ranking?.rankingWinRatePct??33)/100, cagrPct=(sett.ranking?.rankingCAGRPct??33)/100
     const cagrRobPct=(sett.ranking?.rankingCAGRRobustoPct??34)/100, ddPct=(sett.ranking?.rankingMaxDDPct??0)/100
-    const norm=(v,mn,mx)=>Math.max(0,Math.min(100,(v-mn)/(mx-mn)*100))
+
+    // ── Normalización percentil dinámica ──
+    const pct=(sett.ranking?.rankingNormPercentile??95)/100
+    const getPct=(arr,p)=>{const s=[...arr].sort((a,b)=>a-b);return s[Math.max(0,Math.floor(p*(s.length-1)))]??0}
+    const normDyn=(v,floor,ceil)=>Math.max(0,Math.min(100,ceil===floor?50:(v-floor)/(ceil-floor)*100))
+
+    // Recopilar todos los valores válidos (activa y top por separado)
+    const allWR  =syms.map(s=>wlData[s.toUpperCase()]?.active?.winRate).filter(v=>v!=null)
+    const allCagr=syms.map(s=>wlData[s.toUpperCase()]?.active?.cagr).filter(v=>v!=null)
+    const allCRob=syms.map(s=>{const d=wlData[s.toUpperCase()]?.active;return d?.cagrRobust??d?.cagr}).filter(v=>v!=null)
+    const allDD  =syms.map(s=>wlData[s.toUpperCase()]?.active?.maxDD).filter(v=>v!=null)
+    const allWRT =syms.map(s=>wlData[s.toUpperCase()]?.top?.winRate).filter(v=>v!=null)
+    const allCT  =syms.map(s=>wlData[s.toUpperCase()]?.top?.cagr).filter(v=>v!=null)
+    const allCRT =syms.map(s=>{const d=wlData[s.toUpperCase()]?.top;return d?.cagrRobust??d?.cagr}).filter(v=>v!=null)
+    const allDDT =syms.map(s=>wlData[s.toUpperCase()]?.top?.maxDD).filter(v=>v!=null)
+
+    // Suelo y techo percentiles para activa
+    const [wrFl,wrCe]      =[getPct(allWR  ,1-pct),getPct(allWR  ,pct)]
+    const [caFl,caCe]      =[getPct(allCagr,1-pct),getPct(allCagr,pct)]
+    const [crFl,crCe]      =[getPct(allCRob,1-pct),getPct(allCRob,pct)]
+    const [ddFl,ddCe]      =[getPct(allDD  ,1-pct),getPct(allDD  ,pct)]
+    // para top
+    const [wrFlT,wrCeT]    =[getPct(allWRT ,1-pct),getPct(allWRT ,pct)]
+    const [caFlT,caCeT]    =[getPct(allCT  ,1-pct),getPct(allCT  ,pct)]
+    const [crFlT,crCeT]    =[getPct(allCRT ,1-pct),getPct(allCRT ,pct)]
+    const [ddFlT,ddCeT]    =[getPct(allDDT ,1-pct),getPct(allDDT ,pct)]
 
     // ── Calcular scoreHistorico desde wlData (sin backtest) ──
     const activeScoreMap={}, topScoreMap={}
@@ -2667,13 +2692,17 @@ export default function Home() {
       const ad=wlData[symUp]?.active, td=wlData[symUp]?.top
       if(ad?.cagr!=null&&ad?.winRate!=null&&ad?.maxDD!=null){
         activeScoreMap[symUp]=Math.max(0,Math.min(100,
-          norm(ad.winRate,20,80)*wrPct+norm(ad.cagr,-20,60)*cagrPct+
-          norm(ad.cagrRobust??ad.cagr,-20,50)*cagrRobPct-norm(ad.maxDD,0,60)*ddPct))
+          normDyn(ad.winRate,            wrFl,wrCe)*wrPct+
+          normDyn(ad.cagr,               caFl,caCe)*cagrPct+
+          normDyn(ad.cagrRobust??ad.cagr,crFl,crCe)*cagrRobPct-
+          normDyn(ad.maxDD,              ddFl,ddCe)*ddPct))
       }
       if(td?.cagr!=null&&td?.winRate!=null&&td?.maxDD!=null){
         topScoreMap[symUp]=Math.max(0,Math.min(100,
-          norm(td.winRate,20,80)*wrPct+norm(td.cagr,-20,60)*cagrPct+
-          norm(td.cagrRobust??td.cagr,-20,50)*cagrRobPct-norm(td.maxDD,0,60)*ddPct))
+          normDyn(td.winRate,            wrFlT,wrCeT)*wrPct+
+          normDyn(td.cagr,               caFlT,caCeT)*cagrPct+
+          normDyn(td.cagrRobust??td.cagr,crFlT,crCeT)*cagrRobPct-
+          normDyn(td.maxDD,              ddFlT,ddCeT)*ddPct))
       }
       setRankingProgress({done:idx+1,total:syms.length})
     })
@@ -4168,7 +4197,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.381</title>
+        <title>Trading Simulator V9.382</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4246,7 +4275,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.381
+            <span className="dot"/>Trading Simulator V9.382
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
