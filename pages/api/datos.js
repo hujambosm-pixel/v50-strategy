@@ -536,6 +536,9 @@ export default async function handler(req, res) {
     const rsiMAArr     = indicators.rsiMA      || null
     const rsiOBVal     = indicators.obLevel    ?? indicators.rsiOB    ?? null
     const rsiOSVal     = indicators.osLevel    ?? indicators.rsiOS    ?? null
+    const bbUpperArr   = indicators.bbUpper    || null
+    const bbMidArr     = indicators.bbMid      || null
+    const bbLowerArr   = indicators.bbLower    || null
     if (indicators?.ema3) {
       console.log('[EMA3-DEBUG]', {
         ema3Length: indicators.ema3.length,
@@ -554,6 +557,9 @@ export default async function handler(req, res) {
       rsiMA:      rsiMAArr?.[i]      ?? null,
       rsiOB:      rsiLineArr         ? (rsiOBVal ?? 75) : null,
       rsiOS:      rsiLineArr         ? (rsiOSVal ?? 25) : null,
+      bbUpper:    bbUpperArr?.[i]    ?? null,
+      bbMid:      bbMidArr?.[i]      ?? null,
+      bbLower:    bbLowerArr?.[i]    ?? null,
     }))
     if (indicators?.macdLine) {
       const first3 = chartData.filter(b => b.macdLine != null).slice(0, 3)
