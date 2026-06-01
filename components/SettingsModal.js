@@ -687,7 +687,7 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginTop:10}}>
 
                 {/* Columna izquierda — Métricas de mercado */}
-                <div style={{background:'rgba(59,130,246,0.06)',border:'0.5px solid rgba(59,130,246,0.22)',borderRadius:8,padding:14}}>
+                <div style={{background:'rgba(59,130,246,0.06)',border:'0.5px solid rgba(59,130,246,0.22)',borderRadius:8,padding:'10px 14px'}}>
                   <div title="Estas métricas usan datos de precios actuales. Se usan SOLO para la priorización de slots en el modo Capital Concentrado del backtesting multiactivo. NO se usan para el ranking del Watchlist ni para determinar la Top Estrategia de cada activo"
                     style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:'#3b82f6',marginBottom:8,letterSpacing:'0.04em',cursor:'help',textDecoration:'underline dotted',textDecorationColor:'rgba(59,130,246,0.4)'}}>Métricas de mercado actuales ℹ</div>
                   {/* Peso global del bloque */}
@@ -702,7 +702,7 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                   )})()}
 
                   {/* Momentum */}
-                  <div style={{marginBottom:14}}>
+                  <div style={{marginBottom:8}}>
                     <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:3}}>
                       <span style={{fontSize:13,fontWeight:500,color:'#d0e8fa',flex:1}}>Momentum</span>
                       <span style={{fontFamily:MONO,fontSize:11,fontWeight:700,color:'#3b82f6',minWidth:30,textAlign:'right'}}>{settings.ranking?.rankingMomentumPct??33}%</span>
@@ -721,7 +721,7 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                   </div>
 
                   {/* Fuerza relativa vs SP500 */}
-                  <div style={{marginBottom:14}}>
+                  <div style={{marginBottom:8}}>
                     <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:3}}>
                       <span style={{fontSize:13,fontWeight:500,color:'#d0e8fa',flex:1}}>Fuerza relativa vs SP500</span>
                       <span style={{fontFamily:MONO,fontSize:11,fontWeight:700,color:'#3b82f6',minWidth:30,textAlign:'right'}}>{settings.ranking?.rankingFRPct??33}%</span>
@@ -733,7 +733,7 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                   </div>
 
                   {/* Proximidad máximo 52 semanas */}
-                  <div style={{marginBottom:14}}>
+                  <div style={{marginBottom:8}}>
                     <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:3}}>
                       <span style={{fontSize:13,fontWeight:500,color:'#d0e8fa',flex:1}}>Proximidad máximo 52s</span>
                       <span style={{fontFamily:MONO,fontSize:11,fontWeight:700,color:'#3b82f6',minWidth:30,textAlign:'right'}}>{settings.ranking?.rankingMax52Pct??34}%</span>
@@ -761,7 +761,7 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                 </div>
 
                 {/* Columna derecha — Métricas históricas */}
-                <div style={{background:'rgba(34,211,238,0.05)',border:'0.5px solid rgba(34,211,238,0.18)',borderRadius:8,padding:14}}>
+                <div style={{background:'rgba(34,211,238,0.05)',border:'0.5px solid rgba(34,211,238,0.18)',borderRadius:8,padding:'10px 14px'}}>
                   <div title="Estas métricas evalúan el rendimiento pasado de la estrategia con cada activo. Se aplican tanto al score de estrategia activa como al de top estrategia. Se usan para el ranking del Watchlist, para determinar la Top Estrategia de cada activo, y también (combinadas con las de mercado) para la priorización de slots en Capital Concentrado."
                     style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:'#22d3ee',marginBottom:8,letterSpacing:'0.04em',cursor:'help',textDecoration:'underline dotted',textDecorationColor:'rgba(34,211,238,0.4)'}}>Métricas históricas de estrategia ℹ</div>
                   {/* Peso global del bloque */}
@@ -780,7 +780,7 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                     ['ranking.rankingCAGRRobustoPct', 'CAGR sin top 3 trades',        settings.ranking?.rankingCAGRRobustoPct??34, 'CAGR excluyendo los 3 mejores trades. Mide la robustez real. Se aplica a estrategia activa y top estrategia. Se normaliza entre el percentil (100−P)% y P% de tu watchlist actual.'],
                     ['ranking.rankingMaxDDPct',       'Max drawdown (penalización)', settings.ranking?.rankingMaxDDPct??0,        'Penaliza el riesgo. Reduce el score. Se aplica a estrategia activa y top estrategia. Se normaliza entre el percentil (100−P)% y P% de tu watchlist actual.'],
                   ].map(([key,label,val,hint])=>(
-                    <div key={key} style={{marginBottom:12}}>
+                    <div key={key} style={{marginBottom:8}}>
                       <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:3}}>
                         <span style={{fontSize:13,fontWeight:500,color:'#d0e8fa',flex:1}}>{label}</span>
                         <span style={{fontFamily:MONO,fontSize:11,fontWeight:700,color:'#22d3ee',minWidth:30,textAlign:'right'}}>{val}%</span>
@@ -831,11 +831,9 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                     style={{width:60,background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,
                       color:'#e2eaf5',fontFamily:MONO,fontSize:12,padding:'4px 8px',textAlign:'center'}}/>
                 </div>
-                <div style={{fontSize:11,color:'#5a7a95',lineHeight:1.6,padding:'6px 10px',background:'rgba(34,211,238,0.04)',borderRadius:4,border:'0.5px solid rgba(34,211,238,0.1)'}}>
-                  Los valores extremos se recortan simétricamente: el percentil inferior (100−P)% actúa como suelo (score 0) y el superior P% como techo (score 100).
-                  Cualquier valor fuera de ese rango queda fijado en 0 o 100.
-                  {' '}Ejemplo con P=95 y 57 activos: se ignoran los 3 mejores y 3 peores valores de cada métrica. Un CAGR de 200% puntúa igual que el 4º mejor CAGR de tu watchlist.
-                  {' '}<span style={{color:'#7a9bc0'}}>Rango recomendado: 90–99.</span>
+                <div style={{fontSize:11,color:'#5a7a95',lineHeight:1.5,padding:'4px 8px',background:'rgba(34,211,238,0.04)',borderRadius:4,border:'0.5px solid rgba(34,211,238,0.1)'}}>
+                  p(100−P)% = suelo (score 0), pP% = techo (score 100). Con P=95 y 57 activos: se ignoran los 3 mejores y 3 peores de cada métrica.{' '}
+                  <span style={{color:'#7a9bc0'}}>Rango recomendado: 90–99.</span>
                 </div>
               </div>
               {/* Actualización automática Score mét.+señales */}
