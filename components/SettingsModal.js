@@ -699,7 +699,7 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                         onChange={e=>upd('ranking.rankingWeightMercado',Number(e.target.value))}
                         style={{width:90,accentColor:'#3b82f6'}}/>
                     </div>
-                  )})()
+                  )})()}
 
                   {/* Momentum */}
                   <div style={{marginBottom:14}}>
@@ -773,7 +773,7 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                         onChange={e=>upd('ranking.rankingWeightHistorico',Number(e.target.value))}
                         style={{width:90,accentColor:'#22d3ee'}}/>
                     </div>
-                  )})()
+                  )})()}
                   {[
                     ['ranking.rankingWinRatePct',     'Win rate',                    settings.ranking?.rankingWinRatePct??33,     '% de trades ganadores. Mide la consistencia. Se aplica a estrategia activa y top estrategia. Se normaliza entre el percentil (100−P)% y P% de tu watchlist actual.'],
                     ['ranking.rankingCAGRPct',        'CAGR',                         settings.ranking?.rankingCAGRPct??33,        'Tasa de crecimiento anual anualizada. Se aplica a estrategia activa y top estrategia. Se normaliza entre el percentil (100−P)% y P% de tu watchlist actual.'],
