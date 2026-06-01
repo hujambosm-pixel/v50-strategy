@@ -354,6 +354,16 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         }
       }
 
+      // ── Bandas de Bollinger (bbUpper, bbMid, bbLower desde chartData) ──
+      if (data.some(d => d.bbUpper != null)) {
+        const bbU = chart.addLineSeries({ color: '#2196F3', lineWidth: 1, lastValueVisible: false, priceLineVisible: false, title: 'BB Upper' })
+        bbU.setData(data.filter(d => d.bbUpper != null).map(d => ({ time: d.date, value: d.bbUpper })))
+        const bbM = chart.addLineSeries({ color: '#FF6D00', lineWidth: 1, lastValueVisible: false, priceLineVisible: false, title: 'BB Mid' })
+        bbM.setData(data.filter(d => d.bbMid != null).map(d => ({ time: d.date, value: d.bbMid })))
+        const bbL = chart.addLineSeries({ color: '#2196F3', lineWidth: 1, lastValueVisible: false, priceLineVisible: false, title: 'BB Lower' })
+        bbL.setData(data.filter(d => d.bbLower != null).map(d => ({ time: d.date, value: d.bbLower })))
+      }
+
       // ── MAE (Maximum Adverse Excursion) por trade ──
       const tradeMAEs = trades.map(t => {
         if(!t.entryDate||!t.exitDate||!t.entryPrice) return { ...t, mae:0, minLow:t.entryPrice, minDate:t.entryDate }
