@@ -140,7 +140,7 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
       background:'rgba(0,0,0,0.65)'}} onClick={onClose}>
       <div onClick={e=>e.stopPropagation()} style={{
         background:'#0a101a', border:'1px solid #1a2d45', borderRadius:10,
-        width:'min(860px,96vw)', maxHeight:'92vh', display:'flex', flexDirection:'column',
+        width:'min(860px,96vw)', maxHeight:'95vh', display:'flex', flexDirection:'column',
         boxShadow:'0 16px 60px rgba(0,0,0,0.7)', fontFamily:MONO
       }}>
 
@@ -163,7 +163,7 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
         </div>
 
         {/* Body */}
-        <div style={{overflowY:'auto',flex:1,minHeight:0,padding:'22px 28px'}}>
+        <div style={{overflowY:'auto',flex:1,minHeight:0,padding:'14px 18px'}}>
 
           {/* ── INTEGRACIONES ── */}
           {tab==='integraciones'&&(
