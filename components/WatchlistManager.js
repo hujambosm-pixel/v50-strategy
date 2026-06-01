@@ -1225,6 +1225,8 @@ export default function WatchlistManager({
                           const r2 = await onCalcScoreMetSen?.(sel)
                           if (r2?.ok === false && r2?.symbols?.length) {
                             setBlockingPopup({ message: 'Los siguientes activos no tienen Score métricas. Ejecuta primero ↻ Score métricas.', symbols: r2.symbols })
+                          } else {
+                            try { localStorage.setItem('wl_scores_last_updated', Date.now().toString()) } catch(_) {}
                           }
                         }}
                         title="Paso 2+3 · Calcula Score métricas y Score mét.+señales en secuencia para los activos seleccionados."
@@ -1242,7 +1244,7 @@ export default function WatchlistManager({
                     )}
                     {!rankingRunning && !rankingDoneFlash && (
                       <span style={{ fontSize:8, color:P.textMuted, fontWeight:400, marginLeft:1 }}>
-                        · {timeSinceLS('wl_score_metsen_last_updated')}
+                        · {timeSinceLS('wl_scores_last_updated')}
                       </span>
                     )}
                   </div>
