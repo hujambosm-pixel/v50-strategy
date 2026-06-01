@@ -140,7 +140,7 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
       background:'rgba(0,0,0,0.65)'}} onClick={onClose}>
       <div onClick={e=>e.stopPropagation()} style={{
         background:'#0a101a', border:'1px solid #1a2d45', borderRadius:10,
-        width:'min(860px,96vw)', maxHeight:'95vh', display:'flex', flexDirection:'column',
+        width:'min(980px,95vw)', maxHeight:'95vh', display:'flex', flexDirection:'column',
         boxShadow:'0 16px 60px rgba(0,0,0,0.7)', fontFamily:MONO
       }}>
 
@@ -683,29 +683,23 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                   combina ambos bloques. Se calcula desde el WatchlistManager (↻ Score mét.+señales) y se usa para priorizar entradas en el modo <em>Capital Concentrado</em> del backtesting multiactivo. Se puede actualizar automáticamente (ver opción abajo).
                 </div>
               </div>
-              {/* ── Pesos globales por bloque ── */}
-              {sep('Pesos globales por bloque')}
-              {[
-                ['ranking.rankingWeightMercado',   'Peso bloque métricas de mercado',  settings.ranking?.rankingWeightMercado??20,  '#3b82f6', 'Porcentaje de peso del bloque de métricas de mercado en el score COMPLETO. Solo afecta a la priorización de slots en Capital Concentrado. Si lo pones a 0%, la priorización usará solo métricas históricas'],
-                ['ranking.rankingWeightHistorico', 'Peso bloque métricas históricas',  settings.ranking?.rankingWeightHistorico??80,'#22d3ee', 'Porcentaje de peso del bloque de métricas históricas en el score COMPLETO y en el score HISTÓRICO puro'],
-              ].map(([key,label,val,color,tip])=>(
-                <div key={key} style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>
-                  <span style={{width:9,height:9,borderRadius:'50%',background:color,flexShrink:0,display:'inline-block'}}/>
-                  <span title={tip} style={{fontFamily:MONO,fontSize:12,color:'#cce0f5',flex:1,cursor:'help',textDecoration:'underline dotted',textDecorationColor:'rgba(200,224,245,0.3)'}}>{label}</span>
-                  <span style={{fontFamily:MONO,fontSize:12,fontWeight:700,color,minWidth:36,textAlign:'right'}}>{val}%</span>
-                  <input type="range" min={0} max={100} step={5} value={val}
-                    onChange={e=>upd(key,Number(e.target.value))}
-                    style={{width:120,accentColor:color}}/>
-                </div>
-              ))}
-
               {/* ── Dos columnas ── */}
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginTop:10}}>
 
                 {/* Columna izquierda — Métricas de mercado */}
                 <div style={{background:'rgba(59,130,246,0.06)',border:'0.5px solid rgba(59,130,246,0.22)',borderRadius:8,padding:14}}>
                   <div title="Estas métricas usan datos de precios actuales. Se usan SOLO para la priorización de slots en el modo Capital Concentrado del backtesting multiactivo. NO se usan para el ranking del Watchlist ni para determinar la Top Estrategia de cada activo"
-                    style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:'#3b82f6',marginBottom:12,letterSpacing:'0.04em',cursor:'help',textDecoration:'underline dotted',textDecorationColor:'rgba(59,130,246,0.4)'}}>Métricas de mercado actuales ℹ</div>
+                    style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:'#3b82f6',marginBottom:8,letterSpacing:'0.04em',cursor:'help',textDecoration:'underline dotted',textDecorationColor:'rgba(59,130,246,0.4)'}}>Métricas de mercado actuales ℹ</div>
+                  {/* Peso global del bloque */}
+                  {(()=>{const wm=settings.ranking?.rankingWeightMercado??20; return(
+                    <div style={{display:'flex',alignItems:'center',gap:8,paddingBottom:8,marginBottom:10,borderBottom:'1px solid rgba(59,130,246,0.2)'}}>
+                      <span title="Porcentaje de peso del bloque de métricas de mercado en el score COMPLETO. Solo afecta a la priorización de slots en Capital Concentrado." style={{fontFamily:MONO,fontSize:11,color:'#88b4d8',flex:1,cursor:'help',textDecoration:'underline dotted',textDecorationColor:'rgba(59,130,246,0.4)'}}>Peso del bloque</span>
+                      <span style={{fontFamily:MONO,fontSize:11,fontWeight:700,color:'#3b82f6',minWidth:30,textAlign:'right'}}>{wm}%</span>
+                      <input type="range" min={0} max={100} step={5} value={wm}
+                        onChange={e=>upd('ranking.rankingWeightMercado',Number(e.target.value))}
+                        style={{width:90,accentColor:'#3b82f6'}}/>
+                    </div>
+                  )})()
 
                   {/* Momentum */}
                   <div style={{marginBottom:14}}>
@@ -769,7 +763,17 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                 {/* Columna derecha — Métricas históricas */}
                 <div style={{background:'rgba(34,211,238,0.05)',border:'0.5px solid rgba(34,211,238,0.18)',borderRadius:8,padding:14}}>
                   <div title="Estas métricas evalúan el rendimiento pasado de la estrategia con cada activo. Se aplican tanto al score de estrategia activa como al de top estrategia. Se usan para el ranking del Watchlist, para determinar la Top Estrategia de cada activo, y también (combinadas con las de mercado) para la priorización de slots en Capital Concentrado."
-                    style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:'#22d3ee',marginBottom:12,letterSpacing:'0.04em',cursor:'help',textDecoration:'underline dotted',textDecorationColor:'rgba(34,211,238,0.4)'}}>Métricas históricas de estrategia ℹ</div>
+                    style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:'#22d3ee',marginBottom:8,letterSpacing:'0.04em',cursor:'help',textDecoration:'underline dotted',textDecorationColor:'rgba(34,211,238,0.4)'}}>Métricas históricas de estrategia ℹ</div>
+                  {/* Peso global del bloque */}
+                  {(()=>{const wh=settings.ranking?.rankingWeightHistorico??80; return(
+                    <div style={{display:'flex',alignItems:'center',gap:8,paddingBottom:8,marginBottom:10,borderBottom:'1px solid rgba(34,211,238,0.18)'}}>
+                      <span title="Porcentaje de peso del bloque de métricas históricas en el score COMPLETO y en el score HISTÓRICO puro." style={{fontFamily:MONO,fontSize:11,color:'#88d4d4',flex:1,cursor:'help',textDecoration:'underline dotted',textDecorationColor:'rgba(34,211,238,0.4)'}}>Peso del bloque</span>
+                      <span style={{fontFamily:MONO,fontSize:11,fontWeight:700,color:'#22d3ee',minWidth:30,textAlign:'right'}}>{wh}%</span>
+                      <input type="range" min={0} max={100} step={5} value={wh}
+                        onChange={e=>upd('ranking.rankingWeightHistorico',Number(e.target.value))}
+                        style={{width:90,accentColor:'#22d3ee'}}/>
+                    </div>
+                  )})()
                   {[
                     ['ranking.rankingWinRatePct',     'Win rate',                    settings.ranking?.rankingWinRatePct??33,     '% de trades ganadores. Mide la consistencia. Se aplica a estrategia activa y top estrategia. Se normaliza entre el percentil (100−P)% y P% de tu watchlist actual.'],
                     ['ranking.rankingCAGRPct',        'CAGR',                         settings.ranking?.rankingCAGRPct??33,        'Tasa de crecimiento anual anualizada. Se aplica a estrategia activa y top estrategia. Se normaliza entre el percentil (100−P)% y P% de tu watchlist actual.'],
