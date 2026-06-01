@@ -649,6 +649,31 @@ export default function WatchlistManager({
           🔍 Analizar
         </button>
 
+        {/* Botón ↻ Scores unificado */}
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
+          <button
+            disabled={rankingRunning}
+            onClick={async () => {
+              if (!onCalcScoreMetricas && !onCalcScoreMetSen) return
+              const sel = selected.size > 0 ? watchlist.filter(w => selected.has(w.id)) : null
+              const r = await onCalcScoreMetricas?.(sel)
+              if (r?.ok === false && r?.symbols?.length) {
+                setBlockingPopup({ message: 'Los siguientes activos no tienen métricas calculadas. Ejecuta primero ↻ Métricas.', symbols: r.symbols })
+                return
+              }
+              const r2 = await onCalcScoreMetSen?.(sel)
+              if (r2?.ok === false && r2?.symbols?.length) {
+                setBlockingPopup({ message: 'Los siguientes activos no tienen Score métricas. Ejecuta primero ↻ Score métricas.', symbols: r2.symbols })
+              }
+            }}
+            title="Paso 2+3: Calcula Score métricas y Score mét.+señales en secuencia para los activos seleccionados (o todos si no hay selección)."
+            style={{ ...subBtnStyle(null), opacity: rankingRunning ? 0.5 : 1, cursor: rankingRunning ? 'not-allowed' : 'pointer' }}>
+            ↻ Scores
+          </button>
+          <span style={{ fontSize: 10, color: P.textMuted, whiteSpace: 'nowrap' }}>
+            · {timeSinceLS('wl_score_metsen_last_updated')}
+          </span>
+        </div>
 
         {/* Buscador */}
         <div style={{ position: 'relative', width: 180, flexShrink: 0 }}>
@@ -1153,12 +1178,6 @@ export default function WatchlistManager({
         </div>
       )}
 
-      {/* ── Línea timestamps de score ── */}
-      <div style={{ flexShrink: 0, textAlign: 'right', padding: '2px 14px', background: P.bgPanel, borderBottom: `1px solid ${P.border}`, fontFamily: MONO, fontSize: 10, color: P.textMuted }}>
-        Score métricas: <span style={{ color: P.textSec }}>{timeSinceLS('wl_score_metricas_last_updated')}</span>
-        {' · '}Score mét.+señales: <span style={{ color: P.textSec }}>{timeSinceLS('wl_score_metsen_last_updated')}</span>
-      </div>
-
       {/* ── Tabla (dos tablas sincronizadas: header fijo + body con scroll) ── */}
       {(()=>{
         // Anchos fijos — idénticos en ambas tablas
@@ -1344,29 +1363,6 @@ export default function WatchlistManager({
                     : rankingRunning
                       ? <span style={{ fontSize: 9 }}>Calculando {rankingProgress?.done ?? 0}/{rankingProgress?.total ?? 0}…</span>
                       : <>SCORE MÉTRICAS{sortIcon('scoreHistorico')}</>}
-                  {!rankingRunning && !rankingDoneFlash && selected.size > 0 && (
-                    <span
-                      onClick={async e => {
-                        e.stopPropagation()
-                        setMetricsView('active')
-                        const sel = watchlist.filter(w => selected.has(w.id))
-                        if (onCalcScoreMetricas) {
-                          const result = await onCalcScoreMetricas(sel)
-                          if (result?.ok === false && result?.symbols?.length) {
-                            setBlockingPopup({ message: 'Los siguientes activos no tienen métricas calculadas. Ejecuta primero ↻ Métricas.', symbols: result.symbols })
-                          }
-                        } else if (onCalcRanking) {
-                          onCalcRanking(sel)
-                        }
-                      }}
-                      title="Paso 2/3 · Calcula el Score métricas (0-100%) usando las métricas ya calculadas. NO ejecuta backtesting. Requiere ↻ Métricas previo."
-                      style={{
-                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                        width: 16, height: 16, borderRadius: 3,
-                        background: 'rgba(26,107,58,0.18)', border: `1px solid #1a6b3a`,
-                        color: '#1a6b3a', fontSize: 10, cursor: 'pointer', flexShrink: 0,
-                      }}>↻</span>
-                  )}
                 </div>
               </th>
 
@@ -1382,29 +1378,6 @@ export default function WatchlistManager({
                     : rankingRunning
                       ? <span style={{ fontSize: 9 }}>Calculando {rankingProgress?.done ?? 0}/{rankingProgress?.total ?? 0}…</span>
                       : <>SCORE MÉT.+SEÑ.{sortIcon('scoreCompleto')}</>}
-                  {!rankingRunning && !rankingDoneFlash && selected.size > 0 && (
-                    <span
-                      onClick={async e => {
-                        e.stopPropagation()
-                        setMetricsView('active')
-                        const sel = watchlist.filter(w => selected.has(w.id))
-                        if (onCalcScoreMetSen) {
-                          const result = await onCalcScoreMetSen(sel)
-                          if (result?.ok === false && result?.symbols?.length) {
-                            setBlockingPopup({ message: 'Los siguientes activos no tienen Score métricas. Ejecuta primero ↻ Score métricas.', symbols: result.symbols })
-                          }
-                        } else if (onCalcRanking) {
-                          onCalcRanking(sel)
-                        }
-                      }}
-                      title="Paso 3/3 · Añade señales de mercado actuales (momentum, fuerza relativa SP500, proximidad máx. 52s) al Score métricas. Requiere ↻ Score métricas previo."
-                      style={{
-                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                        width: 16, height: 16, borderRadius: 3,
-                        background: 'rgba(26,107,58,0.18)', border: `1px solid #1a6b3a`,
-                        color: '#1a6b3a', fontSize: 10, cursor: 'pointer', flexShrink: 0,
-                      }}>↻</span>
-                  )}
                 </div>
               </th>
 
