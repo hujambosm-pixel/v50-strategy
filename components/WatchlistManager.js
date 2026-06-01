@@ -649,32 +649,6 @@ export default function WatchlistManager({
           🔍 Analizar
         </button>
 
-        {/* Botón ↻ Scores unificado */}
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
-          <button
-            disabled={rankingRunning}
-            onClick={async () => {
-              if (!onCalcScoreMetricas && !onCalcScoreMetSen) return
-              const sel = selected.size > 0 ? watchlist.filter(w => selected.has(w.id)) : null
-              const r = await onCalcScoreMetricas?.(sel)
-              if (r?.ok === false && r?.symbols?.length) {
-                setBlockingPopup({ message: 'Los siguientes activos no tienen métricas calculadas. Ejecuta primero ↻ Métricas.', symbols: r.symbols })
-                return
-              }
-              const r2 = await onCalcScoreMetSen?.(sel)
-              if (r2?.ok === false && r2?.symbols?.length) {
-                setBlockingPopup({ message: 'Los siguientes activos no tienen Score métricas. Ejecuta primero ↻ Score métricas.', symbols: r2.symbols })
-              }
-            }}
-            title="Paso 2+3: Calcula Score métricas y Score mét.+señales en secuencia para los activos seleccionados (o todos si no hay selección)."
-            style={{ ...subBtnStyle(null), opacity: rankingRunning ? 0.5 : 1, cursor: rankingRunning ? 'not-allowed' : 'pointer' }}>
-            ↻ Scores
-          </button>
-          <span style={{ fontSize: 10, color: P.textMuted, whiteSpace: 'nowrap' }}>
-            · {timeSinceLS('wl_score_metsen_last_updated')}
-          </span>
-        </div>
-
         {/* Buscador */}
         <div style={{ position: 'relative', width: 180, flexShrink: 0 }}>
           <input type="text" placeholder="Buscar en todas las columnas…"
@@ -1233,16 +1207,42 @@ export default function WatchlistManager({
                   </div>
                 ) : (
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
-                    <span>Scores</span>
-                    {selected.size > 0 && onDeleteScores && (
+                    {rankingDoneFlash
+                      ? <span style={{ color: '#1a6b3a' }}>✓ Listo</span>
+                      : rankingRunning
+                        ? <span style={{ fontSize: 9 }}>Calculando {rankingProgress?.done ?? 0}/{rankingProgress?.total ?? 0}…</span>
+                        : <span>SCORES</span>}
+                    {!rankingRunning && !rankingDoneFlash && selected.size > 0 && (
                       <span
-                        onClick={() => setConfirmScoresDelete(true)}
+                        onClick={async e => {
+                          e.stopPropagation()
+                          const sel = watchlist.filter(w => selected.has(w.id))
+                          const r = await onCalcScoreMetricas?.(sel)
+                          if (r?.ok === false && r?.symbols?.length) {
+                            setBlockingPopup({ message: 'Los siguientes activos no tienen métricas calculadas. Ejecuta primero ↻ Métricas.', symbols: r.symbols })
+                            return
+                          }
+                          const r2 = await onCalcScoreMetSen?.(sel)
+                          if (r2?.ok === false && r2?.symbols?.length) {
+                            setBlockingPopup({ message: 'Los siguientes activos no tienen Score métricas. Ejecuta primero ↻ Score métricas.', symbols: r2.symbols })
+                          }
+                        }}
+                        title="Paso 2+3 · Calcula Score métricas y Score mét.+señales en secuencia para los activos seleccionados."
+                        style={{ display:'inline-flex', alignItems:'center', justifyContent:'center',
+                          width:14, height:14, borderRadius:3, background:'rgba(26,107,58,0.18)',
+                          border:'1px solid #1a6b3a', color:'#1a6b3a', fontSize:9, cursor:'pointer', flexShrink:0 }}>↻</span>
+                    )}
+                    {!rankingRunning && !rankingDoneFlash && selected.size > 0 && onDeleteScores && (
+                      <span
+                        onClick={e => { e.stopPropagation(); setConfirmScoresDelete(true) }}
                         title={`Borrar score_historico y score_completo de los ${selected.size} activos seleccionados en Supabase (todas las estrategias)`}
-                        style={{ cursor: 'pointer', fontSize: 11, lineHeight: 1, color: P.textMuted,
-                          transition: 'color 0.15s' }}
+                        style={{ cursor:'pointer', fontSize:11, lineHeight:1, color:P.textMuted, transition:'color 0.15s', flexShrink:0 }}
                         onMouseEnter={e => e.currentTarget.style.color = '#ef4444'}
-                        onMouseLeave={e => e.currentTarget.style.color = P.textMuted}>
-                        🗑
+                        onMouseLeave={e => e.currentTarget.style.color = P.textMuted}>🗑</span>
+                    )}
+                    {!rankingRunning && !rankingDoneFlash && (
+                      <span style={{ fontSize:8, color:P.textMuted, fontWeight:400, marginLeft:1 }}>
+                        · {timeSinceLS('wl_score_metsen_last_updated')}
                       </span>
                     )}
                   </div>
@@ -1311,6 +1311,11 @@ export default function WatchlistManager({
                         onMouseEnter={e => e.currentTarget.style.color = '#ef4444'}
                         onMouseLeave={e => e.currentTarget.style.color = P.textMuted}>
                         🗑
+                      </span>
+                    )}
+                    {!topStratRunning && !topStratDoneFlash && !rankingRunning && (
+                      <span style={{ fontSize:8, color:P.textMuted, fontWeight:400, marginLeft:1 }}>
+                        · {timeSinceLS('wl_score_metricas_last_updated')}
                       </span>
                     )}
                   </div>
@@ -1676,11 +1681,11 @@ export default function WatchlistManager({
                             onDeleteItem(w.id)
                         }}
                         title="Eliminar activo (requiere confirmación)"
-                        style={{ background: 'transparent', border: '1px solid #ef4444', color: '#ef4444',
-                          fontFamily: MONO, fontSize: 13, padding: '2px 6px', borderRadius: 3, cursor: 'pointer',
+                        style={{ background: 'transparent', border: '1px solid #e05555', color: '#e05555',
+                          fontFamily: MONO, fontSize: 13, padding: '4px 8px', borderRadius: 3, cursor: 'pointer',
                           lineHeight: 1, transition: 'background 0.15s, color 0.15s' }}
-                        onMouseEnter={e => { e.currentTarget.style.background = '#dc2626'; e.currentTarget.style.color = '#fff'; e.currentTarget.style.borderColor = '#dc2626' }}
-                        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.borderColor = '#ef4444' }}>
+                        onMouseEnter={e => { e.currentTarget.style.background = '#e05555'; e.currentTarget.style.color = '#fff'; e.currentTarget.style.borderColor = '#e05555' }}
+                        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#e05555'; e.currentTarget.style.borderColor = '#e05555' }}>
                         🗑
                       </button>
                     </td>
