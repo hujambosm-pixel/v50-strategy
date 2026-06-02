@@ -4197,7 +4197,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.395</title>
+        <title>Trading Simulator V9.396</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4275,7 +4275,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.395
+            <span className="dot"/>Trading Simulator V9.396
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6381,8 +6381,9 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     const _filD=_gR>0?`M ${_gcx-_gRv} ${_gcy} A ${_gRv} ${_gRv} 0 ${_gR>0.5?1:0} 1 ${_gxe} ${_gye}`:''
                     const _gC=_riskPct>=_maxR?'#ff4d6d':_riskPct>=(_maxR*0.8)?'#ffd166':'#00e5a0'
                     // copy-btn helper
-                    const _cpBtn=(key,val)=>val?(<button title="Copiar valor"
-                      onClick={()=>{navigator.clipboard.writeText(val);setRiskCopied(key);setTimeout(()=>setRiskCopied(c=>c===key?null:c),1500)}}
+                    const _fmtForCopy=(val)=>{if(!val&&val!==0)return'';const n=parseFloat(String(val).replace(',','.'));return isNaN(n)?String(val):n.toFixed(2)}
+                    const _cpBtn=(key,val)=>val?(<button title="Copiar valor (punto decimal, 2 decimales)"
+                      onClick={()=>{navigator.clipboard.writeText(_fmtForCopy(val));setRiskCopied(key);setTimeout(()=>setRiskCopied(c=>c===key?null:c),1500)}}
                       style={{width:20,height:20,borderRadius:3,border:'1px solid var(--border)',background:'transparent',cursor:'pointer',padding:0,display:'inline-flex',alignItems:'center',justifyContent:'center',color:riskCopied===key?'#00e5a0':'var(--text2)',fontSize:11,flexShrink:0,transition:'color 0.2s'}}>
                       {riskCopied===key?'✓':'⧉'}
                     </button>):null
@@ -6593,7 +6594,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                               <div>
                                 <div style={{fontFamily:MONO,fontSize:10,fontWeight:500,color:'var(--text2)',marginBottom:2,lineHeight:1}}>Entrada</div>
                                 <div style={{display:'flex',alignItems:'center',gap:2}}>
-                                  <input type="text" inputMode="decimal" placeholder="0,00" value={riskCalc.entry}
+                                  <input type="text" inputMode="decimal" placeholder="0.00" value={_fmtForCopy(riskCalc.entry)||riskCalc.entry}
                                     onChange={e=>{const v=parseES(e.target.value);setRiskCalc(c=>({...c,entry:e.target.value}));setRiskLineActive(p=>({...p,entry:v>0}));if(v>0&&riskCaptureMode==='capture_entry')setRiskCaptureMode(null)}}
                                     style={{..._inp,width:90,fontSize:12,borderColor:isActive?ac:isCapturing?`${ac}99`:'var(--border)'}}/>
                                   <button title={isCapturing?'Cancelar':'Capturar del gráfico'} onClick={()=>setRiskCaptureMode(c=>c==='capture_entry'?null:'capture_entry')}
@@ -6613,7 +6614,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                               <div>
                                 <div style={{fontFamily:MONO,fontSize:10,fontWeight:500,color:'var(--text2)',marginBottom:2,lineHeight:1}}>Stop</div>
                                 <div style={{display:'flex',alignItems:'center',gap:2}}>
-                                  <input type="text" inputMode="decimal" placeholder="0,00" value={riskCalc.stop}
+                                  <input type="text" inputMode="decimal" placeholder="0.00" value={_fmtForCopy(riskCalc.stop)||riskCalc.stop}
                                     onChange={e=>{const v=parseES(e.target.value);setRiskCalc(c=>({...c,stop:e.target.value}));setRiskLineActive(p=>({...p,stop:v>0}));if(v>0&&riskCaptureMode==='capture_stop')setRiskCaptureMode(null)}}
                                     style={{..._inp,width:90,fontSize:12,borderColor:isActive?ac:isCapturing?`${ac}99`:'var(--border)'}}/>
                                   <button title={isCapturing?'Cancelar':'Capturar del gráfico'} onClick={()=>setRiskCaptureMode(c=>c==='capture_stop'?null:'capture_stop')}
@@ -6633,7 +6634,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                               <div>
                                 <div style={{fontFamily:MONO,fontSize:10,fontWeight:500,color:'var(--text2)',marginBottom:2,lineHeight:1}}>TP</div>
                                 <div style={{display:'flex',alignItems:'center',gap:2}}>
-                                  <input type="text" inputMode="decimal" placeholder="0,00" value={riskCalc.tp}
+                                  <input type="text" inputMode="decimal" placeholder="0.00" value={_fmtForCopy(riskCalc.tp)||riskCalc.tp}
                                     onChange={e=>{const v=parseES(e.target.value);setRiskCalc(c=>({...c,tp:e.target.value}));setRiskLineActive(p=>({...p,tp:v>0}));if(v>0&&riskCaptureMode==='capture_tp')setRiskCaptureMode(null)}}
                                     style={{..._inp,width:90,fontSize:12,borderColor:isActive?ac:isCapturing?`${ac}99`:'var(--border)'}}/>
                                   <button title={isCapturing?'Cancelar':'Capturar del gráfico'} onClick={()=>setRiskCaptureMode(c=>c==='capture_tp'?null:'capture_tp')}
