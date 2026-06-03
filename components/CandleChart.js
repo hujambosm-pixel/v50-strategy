@@ -247,8 +247,8 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
   const containerRef=useRef(null), svgRef=useRef(null), legendRef=useRef(null), tooltipRef=useRef(null)
   const activeLegendRef = externalLegendRef || legendRef
   const chartRef=useRef(null), candlesRef=useRef(null)
-  const rsiChartRef=useRef(null), macdChartRef=useRef(null)
-  const rsiContainerRef=useRef(null), macdContainerRef=useRef(null)
+  const rsiChartRef=useRef(null), macdChartRef=useRef(null), volumeChartRef=useRef(null)
+  const rsiContainerRef=useRef(null), macdContainerRef=useRef(null), volumeContainerRef=useRef(null)
   const chartAliveRef=useRef(true)
   const innerCleanupRef=useRef(null)
   const rulerStart=useRef(null), rulerActiveR=useRef(rulerActive)
@@ -657,15 +657,14 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         _syncPanels(rsiChart,rsiS)
       }
 
-      // ── Volume subpanel (muestra siempre que haya datos de volumen y no haya MACD/VOLUME activo) ──
-      const _hasVolume = !_hasMacdBars && _indType !== 'MACD' && _indType !== 'VOLUME'
-                       && data.some(d => d.volume != null)
-      if (_hasVolume && macdContainerRef.current) {
-        if (macdChartRef.current) { try { macdChartRef.current.remove() } catch(_) {}; macdChartRef.current = null }
-        const volChart = createChart(macdContainerRef.current, _panelOpts(80))
-        macdChartRef.current = volChart
+      // ── Volume subpanel — siempre que haya barras con volume > 0, independiente de MACD/RSI ──
+      const _hasVolume = data.some(d => d.volume > 0)
+      if (_hasVolume && volumeContainerRef.current) {
+        if (volumeChartRef.current) { try { volumeChartRef.current.remove() } catch(_) {}; volumeChartRef.current = null }
+        const volChart = createChart(volumeContainerRef.current, _panelOpts(80))
+        volumeChartRef.current = volChart
         const volS = volChart.addHistogramSeries({ lastValueVisible: false, priceLineVisible: false, title: 'Vol' })
-        volS.setData(data.filter(d => d.volume != null).map(d => ({
+        volS.setData(data.filter(d => d.volume > 0).map(d => ({
           time: d.date,
           value: d.volume,
           color: (d.close >= d.open) ? '#26a69a80' : '#ef535080',
@@ -1544,8 +1543,9 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
   }, [data])
 
   const activeIndType = definition ? getActiveIndicator(definition) : null
-  const hasMacdBars = !activeIndType && data?.some(d => d.macdLine != null)
-  const hasRsiBars  = !activeIndType && data?.some(d => d.rsiLine  != null)
+  const hasMacdBars   = !activeIndType && data?.some(d => d.macdLine != null)
+  const hasRsiBars    = !activeIndType && data?.some(d => d.rsiLine  != null)
+  const hasVolumeBars = data?.some(d => d.volume > 0)
   return (
     <div style={{display:'flex',flexDirection:'column',...(fillHeight?{flex:1,minHeight:0}:{})}}>
     <div style={{position:'relative',...(fillHeight?{flex:1,minHeight:0}:{})}}>
@@ -1593,6 +1593,12 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       <div style={{position:'relative',width:'100%',background:'#080c14',borderTop:'1px solid #1a2d45'}}>
         <div ref={rsiContainerRef} style={{width:'100%',height:120}}/>
         <span style={{position:'absolute',top:4,left:8,fontFamily:MONO,fontSize:9,color:'#7a9bc0',pointerEvents:'none',zIndex:10,letterSpacing:'0.06em',userSelect:'none'}}>RSI</span>
+      </div>
+    )}
+    {hasVolumeBars&&(
+      <div style={{position:'relative',width:'100%',background:'#080c14',borderTop:'1px solid #1a2d45'}}>
+        <div ref={volumeContainerRef} style={{width:'100%',height:80}}/>
+        <span style={{position:'absolute',top:4,left:8,fontFamily:MONO,fontSize:9,color:'#7a9bc0',pointerEvents:'none',zIndex:10,letterSpacing:'0.06em',userSelect:'none'}}>VOL</span>
       </div>
     )}
     </div>
