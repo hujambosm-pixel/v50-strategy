@@ -657,6 +657,26 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         _syncPanels(rsiChart,rsiS)
       }
 
+      // ── Volume subpanel (muestra siempre que haya datos de volumen y no haya MACD/VOLUME activo) ──
+      const _hasVolume = !_hasMacdBars && _indType !== 'MACD' && _indType !== 'VOLUME'
+                       && data.some(d => d.volume != null)
+      if (_hasVolume && macdContainerRef.current) {
+        if (macdChartRef.current) { try { macdChartRef.current.remove() } catch(_) {}; macdChartRef.current = null }
+        const volChart = createChart(macdContainerRef.current, _panelOpts(80))
+        macdChartRef.current = volChart
+        const volS = volChart.addHistogramSeries({ lastValueVisible: false, priceLineVisible: false, title: 'Vol' })
+        volS.setData(data.filter(d => d.volume != null).map(d => ({
+          time: d.date,
+          value: d.volume,
+          color: (d.close >= d.open) ? '#26a69a80' : '#ef535080',
+        })))
+        if (data.some(d => d.volumeAvg != null)) {
+          const volAvgS = volChart.addLineSeries({ color: '#FFB30080', lineWidth: 1, lastValueVisible: false, priceLineVisible: false })
+          volAvgS.setData(data.filter(d => d.volumeAvg != null).map(d => ({ time: d.date, value: d.volumeAvg })))
+        }
+        _syncPanels(volChart, volS)
+      }
+
       // ── Línea amarilla de entrada para posiciones abiertas (Tradelog) ──
       // tlOpenTrades usa campos de Supabase: entry_price, entry_date (distinto al backtest)
       tlOpenTrades.forEach(t=>{

@@ -539,6 +539,8 @@ export default async function handler(req, res) {
     const bbUpperArr   = indicators.bbUpper    || null
     const bbMidArr     = indicators.bbMid      || null
     const bbLowerArr   = indicators.bbLower    || null
+    const volArr       = indicators.volume     || null
+    const volAvgArr    = indicators.volumeAvg  || null
     if (indicators?.ema3) {
       console.log('[EMA3-DEBUG]', {
         ema3Length: indicators.ema3.length,
@@ -560,6 +562,8 @@ export default async function handler(req, res) {
       bbUpper:    bbUpperArr?.[i]    ?? null,
       bbMid:      bbMidArr?.[i]      ?? null,
       bbLower:    bbLowerArr?.[i]    ?? null,
+      volume:     volArr?.[i]        ?? (data[i]?.volume ?? null),
+      volumeAvg:  volAvgArr?.[i]     ?? null,
     }))
     if (indicators?.macdLine) {
       const first3 = chartData.filter(b => b.macdLine != null).slice(0, 3)
