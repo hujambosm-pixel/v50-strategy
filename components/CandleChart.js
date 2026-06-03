@@ -477,6 +477,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         })
       }
       // setMarkers siempre DESPUÉS de añadir customMarkers
+      console.log('[MARKERS]', allMarkers.length, JSON.stringify(allMarkers.filter(m => m.shape === 'circle')))
       if(allMarkers.length) candles.setMarkers(allMarkers.sort((a,b)=>a.time.localeCompare(b.time)))
       // ── Flechas oblicuas RSI: cruces RSI/MA → ↗/↘ en gráfico principal ──
       if(!_indType&&data.some(d=>d.rsiLine!=null)&&slopeChanges?.length){
@@ -680,6 +681,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
 
       // ── Volume subpanel — siempre que haya barras con volume > 0, independiente de MACD/RSI ──
       const _hasVolume = data.some(d => d.volume > 0)
+      console.log('[VOL-CREATE] container:', volumeContainerRef.current, 'hasVolumeBars:', _hasVolume)
       if (_hasVolume && volumeContainerRef.current) {
         if (volumeChartRef.current) { try { volumeChartRef.current.remove() } catch(_) {}; volumeChartRef.current = null }
         const volChart = createChart(volumeContainerRef.current, _panelOpts(80))
@@ -1363,7 +1365,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
 
       innerCleanupRef.current=()=>{disposed=true;chartAliveRef.current=false;try{unsubLabels()}catch(_){};cnt.removeEventListener('mousemove',onMove);cnt.removeEventListener('mousedown',onMouseDown);window.removeEventListener('mouseup',onMouseUp);window.removeEventListener('keydown',onKeyDown);window.removeEventListener('keyup',onKeyUp);ro.disconnect()}
     })
-    return()=>{innerCleanupRef.current?.();innerCleanupRef.current=null;chartAliveRef.current=false;if(rsiChartRef.current){if(rsiChartRef.current._isOverlay){try{const c=chartRef.current;if(c){for(const s of rsiChartRef.current._series){c.removeSeries(s)};c.priceScale('rsi').applyOptions({visible:false});c.priceScale('right').applyOptions({scaleMargins:{top:0.02,bottom:0.02}})}}catch(_){}}else{try{rsiChartRef.current.remove()}catch(_){}};rsiChartRef.current=null};if(macdChartRef.current){try{macdChartRef.current.remove()}catch(_){};macdChartRef.current=null};if(volumeChartRef.current){try{volumeChartRef.current.remove()}catch(_){};volumeChartRef.current=null};if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null}}
+    return()=>{console.log('[VOL-DESTROY]');innerCleanupRef.current?.();innerCleanupRef.current=null;chartAliveRef.current=false;if(rsiChartRef.current){if(rsiChartRef.current._isOverlay){try{const c=chartRef.current;if(c){for(const s of rsiChartRef.current._series){c.removeSeries(s)};c.priceScale('rsi').applyOptions({visible:false});c.priceScale('right').applyOptions({scaleMargins:{top:0.02,bottom:0.02}})}}catch(_){}}else{try{rsiChartRef.current.remove()}catch(_){}};rsiChartRef.current=null};if(macdChartRef.current){try{macdChartRef.current.remove()}catch(_){};macdChartRef.current=null};if(volumeChartRef.current){try{volumeChartRef.current.remove()}catch(_){};volumeChartRef.current=null};if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null}}
   },[data,emaRPeriod,emaLPeriod,trades,maxDD,labelMode,definition,isBareChart])
 
   // ── isBareChart: ajustar altura al resize de ventana ──
@@ -1617,6 +1619,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       </div>
     )}
     <div style={{display:hasVolumeBars?'block':'none',position:'relative',width:'100%',background:'#080c14',borderTop:'1px solid #1a2d45'}}>
+      {console.log('[VOL-JSX] hasVolumeBars:', hasVolumeBars)}
       <div ref={volumeContainerRef} style={{width:'100%',height:80}}/>
       <span style={{position:'absolute',top:4,left:8,fontFamily:MONO,fontSize:9,color:'#7a9bc0',pointerEvents:'none',zIndex:10,letterSpacing:'0.06em',userSelect:'none'}}>VOL</span>
     </div>
