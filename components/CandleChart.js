@@ -449,15 +449,6 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
           if(_sd==='oblicua') oblMarkers.push({date:data[j].date,anchor:'high',text:'↘',color:visuals?.emaCrossDownColor||'#ff4d6d'})
           else allMarkers.push({time:data[j].date,position:'aboveBar',color:visuals?.emaCrossDownColor||'#ff4d6d',shape:_sd,text:''})}
       }
-      if(allMarkers.length) candles.setMarkers(allMarkers.sort((a,b)=>a.time.localeCompare(b.time)))
-      // ── Flechas oblicuas RSI: cruces RSI/MA → ↗/↘ en gráfico principal ──
-      // Activas cuando hay panel RSI de barras (code_js strategy); reemplazan las de entrada/salida
-      if(!_indType&&data.some(d=>d.rsiLine!=null)&&slopeChanges?.length){
-        slopeChanges.forEach(sc=>{
-          const _dir=sc.direction||sc.type  // support both 'direction' and 'type' fields
-          oblMarkers.push({date:sc.date,anchor:_dir==='up'?'low':'high',text:_dir==='up'?'↗':'↘',color:_dir==='up'?'#00e5a0':'#ff4d6d'})
-        })
-      }
       // ── Marcadores personalizados desde code_js → customMarkers ──
       // Si tiene shape (y opcionalmente text): marcador nativo LW-Charts (circle, arrowUp, arrowDown, square)
       // Si tiene solo text: marcador SVG oblicuo (emoji/texto)
@@ -479,6 +470,15 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
             // Marcador de texto/emoji via SVG overlay
             oblMarkers.push({date:m.date,anchor:m.anchor??'low',text:m.text,color:m.color??'#ffffff'})
           }
+        })
+      }
+      // setMarkers siempre DESPUÉS de añadir customMarkers
+      if(allMarkers.length) candles.setMarkers(allMarkers.sort((a,b)=>a.time.localeCompare(b.time)))
+      // ── Flechas oblicuas RSI: cruces RSI/MA → ↗/↘ en gráfico principal ──
+      if(!_indType&&data.some(d=>d.rsiLine!=null)&&slopeChanges?.length){
+        slopeChanges.forEach(sc=>{
+          const _dir=sc.direction||sc.type
+          oblMarkers.push({date:sc.date,anchor:_dir==='up'?'low':'high',text:_dir==='up'?'↗':'↘',color:_dir==='up'?'#00e5a0':'#ff4d6d'})
         })
       }
 
@@ -678,7 +678,10 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       const _hasVolume = data.some(d => d.volume > 0)
       if (_hasVolume && volumeContainerRef.current) {
         if (volumeChartRef.current) { try { volumeChartRef.current.remove() } catch(_) {}; volumeChartRef.current = null }
-        const volChart = createChart(volumeContainerRef.current, _panelOpts(80))
+        const volChart = createChart(volumeContainerRef.current, {
+          ..._panelOpts(80),
+          rightPriceScale: { visible: false },
+        })
         volumeChartRef.current = volChart
         const volS = volChart.addHistogramSeries({ lastValueVisible: false, priceLineVisible: false, title: 'Vol' })
         volS.setData(data.filter(d => d.volume > 0).map(d => ({
