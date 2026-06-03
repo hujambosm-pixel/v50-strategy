@@ -458,11 +458,27 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
           oblMarkers.push({date:sc.date,anchor:_dir==='up'?'low':'high',text:_dir==='up'?'↗':'↘',color:_dir==='up'?'#00e5a0':'#ff4d6d'})
         })
       }
-      // ── Marcadores de texto personalizados desde code_js → customMarkers ──
+      // ── Marcadores personalizados desde code_js → customMarkers ──
+      // Si tiene shape (y opcionalmente text): marcador nativo LW-Charts (circle, arrowUp, arrowDown, square)
+      // Si tiene solo text: marcador SVG oblicuo (emoji/texto)
       if(customMarkers?.length){
+        const VALID_SHAPES=new Set(['circle','arrowUp','arrowDown','square'])
         customMarkers.forEach(m=>{
-          if(!m?.date||!m?.text) return
-          oblMarkers.push({date:m.date,anchor:m.anchor??'low',text:m.text,color:m.color??'#ffffff'})
+          if(!m?.date) return
+          const hasShape=m.shape&&VALID_SHAPES.has(m.shape)
+          if(hasShape){
+            // Marcador nativo: soporta circle, arrowUp, arrowDown, square
+            allMarkers.push({
+              time:m.date,
+              position:m.position||(m.anchor==='high'?'aboveBar':'belowBar'),
+              color:m.color??'#ffffff',
+              shape:m.shape,
+              text:m.text??'',
+            })
+          } else if(m.text){
+            // Marcador de texto/emoji via SVG overlay
+            oblMarkers.push({date:m.date,anchor:m.anchor??'low',text:m.text,color:m.color??'#ffffff'})
+          }
         })
       }
 
@@ -472,6 +488,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         layout:{background:{color:'#080c14'},textColor:'#7a9bc0',fontFamily:'-apple-system,BlinkMacSystemFont,Trebuchet MS,Roboto,Ubuntu,sans-serif'},
         grid:{vertLines:{color:'#0d1520'},horzLines:{color:'#0d1520'}},
         rightPriceScale:{borderColor:'#1a2d45',scaleMargins:{top:0.1,bottom:0.1}},
+        leftPriceScale:{visible:false},
         timeScale:{borderColor:'#1a2d45',timeVisible:true,visible:false},
         crosshair:{mode:CrosshairMode.Normal},
         handleScroll:false,handleScale:false,
@@ -1342,7 +1359,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
 
       innerCleanupRef.current=()=>{disposed=true;chartAliveRef.current=false;try{unsubLabels()}catch(_){};cnt.removeEventListener('mousemove',onMove);cnt.removeEventListener('mousedown',onMouseDown);window.removeEventListener('mouseup',onMouseUp);window.removeEventListener('keydown',onKeyDown);window.removeEventListener('keyup',onKeyUp);ro.disconnect()}
     })
-    return()=>{innerCleanupRef.current?.();innerCleanupRef.current=null;chartAliveRef.current=false;if(rsiChartRef.current){if(rsiChartRef.current._isOverlay){try{const c=chartRef.current;if(c){for(const s of rsiChartRef.current._series){c.removeSeries(s)};c.priceScale('rsi').applyOptions({visible:false});c.priceScale('right').applyOptions({scaleMargins:{top:0.02,bottom:0.02}})}}catch(_){}}else{try{rsiChartRef.current.remove()}catch(_){}};rsiChartRef.current=null};if(macdChartRef.current){try{macdChartRef.current.remove()}catch(_){};macdChartRef.current=null};if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null}}
+    return()=>{innerCleanupRef.current?.();innerCleanupRef.current=null;chartAliveRef.current=false;if(rsiChartRef.current){if(rsiChartRef.current._isOverlay){try{const c=chartRef.current;if(c){for(const s of rsiChartRef.current._series){c.removeSeries(s)};c.priceScale('rsi').applyOptions({visible:false});c.priceScale('right').applyOptions({scaleMargins:{top:0.02,bottom:0.02}})}}catch(_){}}else{try{rsiChartRef.current.remove()}catch(_){}};rsiChartRef.current=null};if(macdChartRef.current){try{macdChartRef.current.remove()}catch(_){};macdChartRef.current=null};if(volumeChartRef.current){try{volumeChartRef.current.remove()}catch(_){};volumeChartRef.current=null};if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null}}
   },[data,emaRPeriod,emaLPeriod,trades,maxDD,labelMode,definition,isBareChart])
 
   // ── isBareChart: ajustar altura al resize de ventana ──
