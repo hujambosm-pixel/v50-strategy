@@ -457,10 +457,14 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         customMarkers.forEach(m=>{
           if(!m?.date) return
           const hasShape=m.shape&&VALID_SHAPES.has(m.shape)
+          // Normalizar fecha: string 'YYYY-MM-DD' o timestamp Unix → string
+          const _mDate = typeof m.date === 'number'
+            ? new Date(m.date * 1000).toISOString().slice(0,10)
+            : m.date
           if(hasShape){
             // Marcador nativo: soporta circle, arrowUp, arrowDown, square
             allMarkers.push({
-              time:m.date,
+              time:_mDate,
               position:m.position||(m.anchor==='high'?'aboveBar':'belowBar'),
               color:m.color??'#ffffff',
               shape:m.shape,
@@ -468,7 +472,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
             })
           } else if(m.text){
             // Marcador de texto/emoji via SVG overlay
-            oblMarkers.push({date:m.date,anchor:m.anchor??'low',text:m.text,color:m.color??'#ffffff'})
+            oblMarkers.push({date:_mDate,anchor:m.anchor??'low',text:m.text,color:m.color??'#ffffff'})
           }
         })
       }
@@ -680,7 +684,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         if (volumeChartRef.current) { try { volumeChartRef.current.remove() } catch(_) {}; volumeChartRef.current = null }
         const volChart = createChart(volumeContainerRef.current, {
           ..._panelOpts(80),
-          rightPriceScale: { visible: false },
+          rightPriceScale: { borderColor: '#1a2d45', scaleMargins: { top: 0.1, bottom: 0.1 }, visible: false },
         })
         volumeChartRef.current = volChart
         const volS = volChart.addHistogramSeries({ lastValueVisible: false, priceLineVisible: false, title: 'Vol' })
@@ -1615,12 +1619,10 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         <span style={{position:'absolute',top:4,left:8,fontFamily:MONO,fontSize:9,color:'#7a9bc0',pointerEvents:'none',zIndex:10,letterSpacing:'0.06em',userSelect:'none'}}>RSI</span>
       </div>
     )}
-    {hasVolumeBars&&(
-      <div style={{position:'relative',width:'100%',background:'#080c14',borderTop:'1px solid #1a2d45'}}>
-        <div ref={volumeContainerRef} style={{width:'100%',height:80}}/>
-        <span style={{position:'absolute',top:4,left:8,fontFamily:MONO,fontSize:9,color:'#7a9bc0',pointerEvents:'none',zIndex:10,letterSpacing:'0.06em',userSelect:'none'}}>VOL</span>
-      </div>
-    )}
+    <div style={{display:hasVolumeBars?'block':'none',position:'relative',width:'100%',background:'#080c14',borderTop:'1px solid #1a2d45'}}>
+      <div ref={volumeContainerRef} style={{width:'100%',height:80}}/>
+      <span style={{position:'absolute',top:4,left:8,fontFamily:MONO,fontSize:9,color:'#7a9bc0',pointerEvents:'none',zIndex:10,letterSpacing:'0.06em',userSelect:'none'}}>VOL</span>
+    </div>
     </div>
   )
 }
