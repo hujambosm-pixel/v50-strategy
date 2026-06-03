@@ -686,6 +686,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         const volChart = createChart(volumeContainerRef.current, _panelOpts(80))
         volumeChartRef.current = volChart
         const volS = volChart.addHistogramSeries({ lastValueVisible: false, priceLineVisible: false, title: 'Vol' })
+        volChart.priceScale('right').applyOptions({ visible: false })
         volS.setData(data.filter(d => d.volume > 0).map(d => ({
           time: d.date,
           value: d.volume,
