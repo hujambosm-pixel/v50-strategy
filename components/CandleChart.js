@@ -682,10 +682,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       const _hasVolume = data.some(d => d.volume > 0)
       if (_hasVolume && volumeContainerRef.current) {
         if (volumeChartRef.current) { try { volumeChartRef.current.remove() } catch(_) {}; volumeChartRef.current = null }
-        const volChart = createChart(volumeContainerRef.current, {
-          ..._panelOpts(80),
-          rightPriceScale: { borderColor: '#1a2d45', scaleMargins: { top: 0.1, bottom: 0.1 }, visible: false },
-        })
+        const volChart = createChart(volumeContainerRef.current, _panelOpts(80))
         volumeChartRef.current = volChart
         const volS = volChart.addHistogramSeries({ lastValueVisible: false, priceLineVisible: false, title: 'Vol' })
         volS.setData(data.filter(d => d.volume > 0).map(d => ({
