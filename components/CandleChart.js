@@ -683,9 +683,16 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       const _hasVolume = data.some(d => d.volume > 0)
       if (_hasVolume && volumeContainerRef.current) {
         if (volumeChartRef.current) { try { volumeChartRef.current.remove() } catch(_) {}; volumeChartRef.current = null }
-        const volChart = createChart(volumeContainerRef.current, _panelOpts(80))
+        // Obtener ancho real del eje Y del chart principal para simular padding
+        const _axisWidth = chartRef.current?.priceScale('right').width() ?? 0
+        volumeContainerRef.current.style.paddingRight = _axisWidth + 'px'
+        const _volW = (volumeContainerRef.current.clientWidth || 400) - _axisWidth
+        const volChart = createChart(volumeContainerRef.current, {
+          ..._panelOpts(_volW > 0 ? _volW : 400),
+          width: _volW > 0 ? _volW : 400,
+          rightPriceScale: { visible: false, borderVisible: false },
+        })
         volumeChartRef.current = volChart
-        volChart.applyOptions({ localization: { priceFormatter: (p) => p>=1e9?(p/1e9).toFixed(1)+'B':p>=1e6?(p/1e6).toFixed(1)+'M':p>=1e3?(p/1e3).toFixed(1)+'K':p.toFixed(0) } })
         const volS = volChart.addHistogramSeries({ lastValueVisible: false, priceLineVisible: false, title: 'Vol' })
         volS.setData(data.filter(d => d.volume > 0).map(d => ({
           time: d.date,
@@ -697,13 +704,6 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
           volAvgS.setData(data.filter(d => d.volumeAvg != null).map(d => ({ time: d.date, value: d.volumeAvg })))
         }
         _syncPanels(volChart, volS)
-        const _syncVolWidth = () => {
-          if (!chartRef.current || !volumeChartRef.current) return
-          const mainWidth = chartRef.current.priceScale('right').width()
-          volumeChartRef.current.applyOptions({ rightPriceScale: { minimumWidth: mainWidth } })
-        }
-        _syncVolWidth()
-        chartRef.current.subscribeSizeChange(_syncVolWidth)
       } else {
         if (volumeChartRef.current) { try { volumeChartRef.current.remove() } catch(_) {}; volumeChartRef.current = null }
       }
