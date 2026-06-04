@@ -562,7 +562,7 @@ export default async function handler(req, res) {
       bbUpper:    bbUpperArr?.[i]    ?? null,
       bbMid:      bbMidArr?.[i]      ?? null,
       bbLower:    bbLowerArr?.[i]    ?? null,
-      volume:     volArr?.[i]        ?? (data[i]?.volume ?? null),
+      volume:     volArr?.[i]        ?? null,
       volumeAvg:  volAvgArr?.[i]     ?? null,
     }))
     if (indicators?.macdLine) {
