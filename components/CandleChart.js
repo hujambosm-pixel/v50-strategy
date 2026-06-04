@@ -697,6 +697,13 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
           volAvgS.setData(data.filter(d => d.volumeAvg != null).map(d => ({ time: d.date, value: d.volumeAvg })))
         }
         _syncPanels(volChart, volS)
+        const _syncVolWidth = () => {
+          if (!chartRef.current || !volumeChartRef.current) return
+          const mainWidth = chartRef.current.priceScale('right').width()
+          volumeChartRef.current.applyOptions({ rightPriceScale: { minimumWidth: mainWidth } })
+        }
+        _syncVolWidth()
+        chartRef.current.subscribeSizeChange(_syncVolWidth)
       } else {
         if (volumeChartRef.current) { try { volumeChartRef.current.remove() } catch(_) {}; volumeChartRef.current = null }
       }
