@@ -305,7 +305,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         layout:{background:{color:visuals?.chartBg||'#080c14'},textColor:'#7a9bc0',fontFamily:'-apple-system, BlinkMacSystemFont, Trebuchet MS, Roboto, Ubuntu, sans-serif'},
         grid:{vertLines:{color:'#0d1520'},horzLines:{color:'#0d1520'}},
         crosshair:{mode:CrosshairMode.Normal},
-        rightPriceScale:{borderColor:'#1a2d45'},
+        rightPriceScale:{borderColor:'#1a2d45',minimumWidth:70},
         timeScale:{borderColor:'#1a2d45',timeVisible:true},
       })
       chartRef.current=chart
@@ -492,7 +492,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         width:containerRef.current?.clientWidth||400, height:h,
         layout:{background:{color:'#080c14'},textColor:'#7a9bc0',fontFamily:'-apple-system,BlinkMacSystemFont,Trebuchet MS,Roboto,Ubuntu,sans-serif'},
         grid:{vertLines:{color:'#0d1520'},horzLines:{color:'#0d1520'}},
-        rightPriceScale:{borderColor:'#1a2d45',scaleMargins:{top:0.1,bottom:0.1}},
+        rightPriceScale:{borderColor:'#1a2d45',scaleMargins:{top:0.1,bottom:0.1},minimumWidth:70},
         leftPriceScale:{visible:false},
         timeScale:{borderColor:'#1a2d45',timeVisible:true,visible:false},
         crosshair:{mode:CrosshairMode.Normal},
