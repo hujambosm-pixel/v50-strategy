@@ -686,7 +686,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         const volChart = createChart(volumeContainerRef.current, _panelOpts(80))
         volumeChartRef.current = volChart
         const volS = volChart.addHistogramSeries({ lastValueVisible: false, priceLineVisible: false, title: 'Vol' })
-        volChart.priceScale('right').applyOptions({ visible: false })
+        volChart.priceScale('right').applyOptions({ borderVisible: true, borderColor: '#1a2d45', scaleMargins: { top: 0.1, bottom: 0.1 } })
         volS.setData(data.filter(d => d.volume > 0).map(d => ({
           time: d.date,
           value: d.volume,
@@ -697,6 +697,8 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
           volAvgS.setData(data.filter(d => d.volumeAvg != null).map(d => ({ time: d.date, value: d.volumeAvg })))
         }
         _syncPanels(volChart, volS)
+      } else {
+        if (volumeChartRef.current) { try { volumeChartRef.current.remove() } catch(_) {}; volumeChartRef.current = null }
       }
 
       // ── Línea amarilla de entrada para posiciones abiertas (Tradelog) ──
