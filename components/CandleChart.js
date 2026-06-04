@@ -683,16 +683,9 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       const _hasVolume = data.some(d => d.volume > 0)
       if (_hasVolume && volumeContainerRef.current) {
         if (volumeChartRef.current) { try { volumeChartRef.current.remove() } catch(_) {}; volumeChartRef.current = null }
-        // Obtener ancho real del eje Y del chart principal para simular padding
-        const _axisWidth = chartRef.current?.priceScale('right').width() ?? 0
-        volumeContainerRef.current.style.paddingRight = _axisWidth + 'px'
-        const _volW = (volumeContainerRef.current.clientWidth || 400) - _axisWidth
-        const volChart = createChart(volumeContainerRef.current, {
-          ..._panelOpts(_volW > 0 ? _volW : 400),
-          width: _volW > 0 ? _volW : 400,
-          rightPriceScale: { visible: false, borderVisible: false },
-        })
+        const volChart = createChart(volumeContainerRef.current, _panelOpts(80))
         volumeChartRef.current = volChart
+        volChart.applyOptions({ localization: { priceFormatter: () => '' } })
         const volS = volChart.addHistogramSeries({ lastValueVisible: false, priceLineVisible: false, title: 'Vol' })
         volS.setData(data.filter(d => d.volume > 0).map(d => ({
           time: d.date,
