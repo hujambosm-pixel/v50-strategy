@@ -685,6 +685,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         if (volumeChartRef.current) { try { volumeChartRef.current.remove() } catch(_) {}; volumeChartRef.current = null }
         const volChart = createChart(volumeContainerRef.current, _panelOpts(80))
         volumeChartRef.current = volChart
+        volChart.applyOptions({ localization: { priceFormatter: (p) => p>=1e9?(p/1e9).toFixed(1)+'B':p>=1e6?(p/1e6).toFixed(1)+'M':p>=1e3?(p/1e3).toFixed(1)+'K':p.toFixed(0) } })
         const volS = volChart.addHistogramSeries({ lastValueVisible: false, priceLineVisible: false, title: 'Vol' })
         volS.setData(data.filter(d => d.volume > 0).map(d => ({
           time: d.date,
