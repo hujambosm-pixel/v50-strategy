@@ -1137,8 +1137,251 @@ function _calcAssetMaxDD(trades, data, slotCapital, startDate) {
   }
 }
 
+// ── PORTFOLIO MODE: N estrategias × M símbolos, un único pool ────────────────
+// req.body: {
+//   portfolioMode: true,
+//   strategies: [{ id, name, symbols[] }],   // orden = prioridad de desempate
+//   cfg: { capitalIni, years, fromDate?, toDate? },
+//   modoAsig: 'concentrado' | 'compartido',
+//   sizeRules: { maxPosiciones },             // prioridad forzada a 'alfabetico' (Fase 2: momentum/score)
+//   intervalo: 'diario' | 'semanal',
+// }
+// Símbolo sintético: `${ticker}#${stratOrder.padStart(3,'0')}`
+// → orden alfabético del sintético = (ticker, orden_estrategia)  → desempate determinista
+// → buildConcentradoCurves no se modifica; ve N activos "distintos"
+async function handlePortfolioMode(req, res) {
+  const {
+    strategies,
+    cfg,
+    modoAsig = 'concentrado',
+    sizeRules: sizeRulesBody = null,
+    intervalo,
+  } = req.body
+
+  if (!Array.isArray(strategies) || strategies.length < 2)
+    return res.status(400).json({ error: 'portfolioMode requiere strategies[] con ≥2 entradas' })
+  if (!cfg?.capitalIni)
+    return res.status(400).json({ error: 'cfg.capitalIni requerido' })
+
+  const sizeRules     = sizeRulesBody || {}
+  const assetInterval = intervalo === 'semanal' ? '1wk' : '1d'
+
+  try {
+    // 1. Cargar code_js + params de cada estrategia desde Supabase (en paralelo)
+    const stratMeta = await Promise.all(strategies.map(async (s, stratOrder) => {
+      const base = { ...s, stratOrder, codeJs: null, effectiveCfg: cfg }
+      if (!SUPA_URL || !SUPA_KEY) return base
+      try {
+        const sr = await fetch(
+          `${SUPA_URL}/rest/v1/strategies?id=eq.${s.id}&select=code_js,params,name`,
+          { headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` } }
+        )
+        if (!sr.ok) return base
+        const row = (await sr.json())?.[0] || {}
+        let stratParams = {}
+        try { stratParams = row.params ? (typeof row.params === 'string' ? JSON.parse(row.params) : row.params) : {} } catch(_) {}
+        return {
+          ...s,
+          stratOrder,
+          name:        s.name || row.name || s.id,
+          codeJs:      row.code_js || null,
+          effectiveCfg: { ...cfg, ...stratParams },
+        }
+      } catch(_) { return base }
+    }))
+
+    // 2. Descargar OHLCV con cache por ticker (cada ticker solo una vez)
+    const allTickers = [...new Set(stratMeta.flatMap(s => s.symbols || []))]
+    const tickerCache = {}
+    const BATCH = 4
+    for (let i = 0; i < allTickers.length; i += BATCH) {
+      const chunk = allTickers.slice(i, i + BATCH)
+      await Promise.all(chunk.map(async ticker => {
+        tickerCache[ticker] = await fetchData(ticker, cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, assetInterval)
+      }))
+      if (i + BATCH < allTickers.length) await sleep(400)
+    }
+
+    let sp500Data = null
+    try { sp500Data = await fetchData('^GSPC', cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null) } catch(_) {}
+
+    // 3. Pre-contar pares válidos → slotCapital correcto antes de runCodeJsAsset
+    let nPairs = 0
+    for (const s of stratMeta) {
+      if (!s.codeJs) continue
+      for (const ticker of (s.symbols || []))
+        if (tickerCache[ticker]?.length) nPairs++
+    }
+    if (!nPairs) return res.status(400).json({ error: 'No hay pares (estrategia×símbolo) con datos válidos' })
+    const slotCapital = cfg.capitalIni / nPairs
+
+    // 4. runCodeJsAsset por (estrategia, símbolo) → símbolo sintético determinista
+    //    Símbolo sintético: `${ticker}#${stratOrder.padStart(3,'0')}`
+    //    → el orden alfabético del sintético refleja (ticker, orden_estrategia)
+    //    → buildConcentradoCurves ve N activos distintos; openSlots no colisiona
+    //    Nota: slotCapital pasado a runCodeJsAsset solo afecta capitalTras del
+    //    historial por símbolo — el pool recalcula todo desde pnlPct × capAsignado
+    const assetResults = []
+    for (const s of stratMeta) {
+      if (!s.codeJs) continue
+      const orderTag = String(s.stratOrder).padStart(3, '0')
+      for (const ticker of (s.symbols || [])) {
+        const data = tickerCache[ticker]
+        if (!data?.length) continue
+        const synSym = `${ticker}#${orderTag}`
+        const { trades: rawTrades } = runCodeJsAsset(data, sp500Data, s.codeJs, slotCapital, cfg.years ?? 5, s.effectiveCfg)
+        // Enriquecer cada trade con metadata de estrategia
+        const trades = rawTrades.map(t => ({
+          ...t,
+          _stratId:    s.id,
+          _stratName:  s.name,
+          _stratOrder: s.stratOrder,
+          _realSymbol: ticker,
+        }))
+        const cutoff = new Date(data[data.length - 1].date)
+        cutoff.setFullYear(cutoff.getFullYear() - (cfg.years ?? 5))
+        const startDate = cutoff.toISOString().split('T')[0]
+        assetResults.push({
+          symbol:      synSym,
+          _realSymbol: ticker,
+          _stratId:    s.id,
+          _stratName:  s.name,
+          _stratOrder: s.stratOrder,
+          data,
+          trades,
+          capitalReinv:   trades.length ? trades[trades.length - 1].capitalTras : slotCapital,
+          gananciaSimple: trades.reduce((acc, t) => acc + t.pnlSimple, 0),
+          startDate,
+          blockEvents: {},
+        })
+      }
+    }
+
+    const n = assetResults.length
+    if (!n) return res.status(400).json({ error: 'No se pudieron ejecutar señales para ningún par (estrategia×símbolo)' })
+
+    // 5. Curvas — prioridad FORZADA a 'alfabetico' en esta fase
+    //    (momentum/fuerza_relativa/scoreMap requieren lookups por synSym → Fase 2)
+    const _maxPos   = sizeRules.maxPosiciones ?? 5
+    const synList   = assetResults.map(ar => ar.symbol)   // orden para buildConcentradoCurves
+    let curves
+    if (modoAsig === 'compartido') {
+      curves = buildCompartidoCurves(assetResults, cfg.capitalIni)
+    } else {
+      // concentrado — prioridad 'alfabetico' → desempate por (ticker, stratOrder) via synSym
+      curves = buildConcentradoCurves(
+        assetResults, cfg.capitalIni, _maxPos,
+        'alfabetico',  // Fase 2: añadir momentum/scoreMap con synSym→data mapping
+        20, sp500Data, synList, null
+      )
+    }
+
+    // 6. assetStats agrupado por símbolo REAL (no sintético)
+    //    executedTrades tienen t.symbol = synSym; usamos t._realSymbol para agrupar
+    const execByRealSym = {}
+    ;(curves.executedTrades || assetResults.flatMap(ar => ar.trades)).forEach(t => {
+      const real = t._realSymbol || t.symbol.split('#')[0]
+      if (!execByRealSym[real]) execByRealSym[real] = []
+      execByRealSym[real].push(t)
+    })
+
+    const nRealSyms = Object.keys(execByRealSym).length || 1
+    const assetStats = Object.entries(execByRealSym).map(([realSym, execTrades]) => {
+      const wins   = execTrades.filter(t => t.pnlPct >= 0)
+      const losses = execTrades.filter(t => t.pnlPct < 0)
+      const totalDias     = execTrades.reduce((acc, t) => acc + (t.dias || 0), 0)
+      const ganSimple     = execTrades.reduce((acc, t) => acc + (t.pnlSimple || 0), 0)
+      const avgCapAsignado = execTrades.length
+        ? execTrades.reduce((acc, t) => acc + (t._capitalAtEntry ?? 0), 0) / execTrades.length
+        : slotCapital
+      // Datos OHLCV del ticker (cualquier assetResult que lo tenga)
+      const arRef = assetResults.find(a => a._realSymbol === realSym)
+      const { maxDD, maxDDDate, maxDDEur, tInvertido } =
+        _calcAssetMaxDD(execTrades, arRef?.data, avgCapAsignado, curves.startDate)
+      const capInvMedio = execTrades.length
+        ? execTrades.reduce((acc, t) => {
+            const tp = t._totalPortfolioAtEntry || cfg.capitalIni
+            return acc + (t._capitalAtEntry ?? 0) / tp * 100
+          }, 0) / execTrades.length
+        : 0
+      const filtData = arRef?.data?.filter(d => d.date >= curves.startDate) ?? []
+      const p0 = filtData[0]?.close
+      const pN = filtData[filtData.length - 1]?.close
+      const ganBH   = (p0 && pN && p0 > 0) ? slotCapital * (pN / p0 - 1) : 0
+      const { pct: priceMaxDD, factor: priceMaxDDFactor } = _calcPriceMaxDD(arRef?.data || [], curves.startDate)
+      const capInvertidoTotal = execTrades.reduce((acc, t) => acc + (t._capitalAtEntry || 0), 0)
+      return {
+        symbol:   realSym,
+        trades:   execTrades.length,
+        wins:     wins.length,
+        losses:   losses.length,
+        winRate:  execTrades.length ? (wins.length / execTrades.length) * 100 : 0,
+        ganSimple,
+        ganComp:  ganSimple,
+        totalDias,
+        weight:   100 / nRealSyms,
+        maxDD, maxDDDate, maxDDEur,
+        tInvertido, capInvMedio,
+        ganBH, priceMaxDD,
+        priceMaxDDEur:    slotCapital * priceMaxDDFactor,
+        avgCapAsignado,
+        capInvertidoTotal,
+      }
+    })
+
+    // 7. allTrades: restaurar symbol = realSymbol para el render de tabla
+    const sourceTrades = (curves.executedTrades || assetResults.flatMap(ar => ar.trades))
+      .map(t => ({ ...t, symbol: t._realSymbol || t.symbol.split('#')[0] }))
+      .sort((a, b) => (a.exitDate || '').localeCompare(b.exitDate || ''))
+
+    // 8. SP500 B&H benchmark
+    let sp500BHCurve = []
+    if (sp500Data?.length && curves.simpleCurve?.length) {
+      const sp0 = sp500Data.find(d => d.date >= curves.startDate)
+      if (sp0) {
+        sp500BHCurve = curves.simpleCurve.map(({ date }) => {
+          let bar = null
+          for (let i = sp500Data.length - 1; i >= 0; i--) {
+            if (sp500Data[i].date <= date) { bar = sp500Data[i]; break }
+          }
+          return bar ? { date, value: cfg.capitalIni * (bar.close / sp0.close) } : null
+        }).filter(Boolean)
+      }
+    }
+
+    const avgOccupancy = curves.avgCapOccupancy ?? (
+      curves.occupancyCurve?.length
+        ? curves.occupancyCurve.reduce((acc, p) => acc + p.value, 0) / curves.occupancyCurve.length
+        : 0
+    )
+
+    return res.status(200).json({
+      ...curves,
+      sp500BHCurve,
+      assetStats,
+      allTrades:       sourceTrades,
+      avgOccupancy,
+      tInvEstrategia:  curves.tInvEstrategia ?? 0,
+      avgCapOccupancy: curves.avgCapOccupancy ?? avgOccupancy,
+      n,
+      slotCapital,
+      modoAsig,
+      startDate:       curves.startDate,
+      senalStats:      curves.senalStats ?? null,
+      portfolioMode:   true,
+      strategyCount:   strategies.length,
+    })
+  } catch (err) {
+    console.error('[handlePortfolioMode]', err)
+    return res.status(500).json({ error: err.message || 'Error interno en portfolioMode' })
+  }
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
+  // ── NUEVA RAMA: portfolioMode ─────────────────────────────────────────────
+  if (req.body?.portfolioMode) return handlePortfolioMode(req, res)
+  // ── PATH EXISTENTE: estrategia única — sin cambio ninguno desde aquí ──────
   const { symbols, cfg: cfgInput, definition, modoAsig = 'slots', weights = {}, sizeRules: sizeRulesBody = null, strategyId = null, isNoStrategy = false, filtros: filtrosCfg, intervalo } = req.body
   const sizeRules = sizeRulesBody || cfgInput?.sizeRules || {}
   if (!Array.isArray(symbols) || !symbols.length) return res.status(400).json({ error: 'symbols requerido' })
