@@ -920,9 +920,10 @@ export default function Home() {
   const [mcProgress,setMcProgress]=useState(null)           // null|{current,total,name}
   // mcMultiResults + entrada sintética __portfolio__ si procede
   const mcDisplayResults=useMemo(()=>{
-    if(!mcStratSelected.includes('__portfolio__')||mcPortfolioIds.length<2) return mcMultiResults
+    const realResults=mcMultiResults.filter(r=>r.id!=='__portfolio__')
+    if(!mcStratSelected.includes('__portfolio__')||realResults.length<2) return mcMultiResults
     const capIni=Number(mcCapitalIni||capitalIni)
-    const participants=mcMultiResults.filter(r=>mcPortfolioIds.includes(r.id))
+    const participants=realResults
     if(participants.length<2) return mcMultiResults
     const pResults=participants.map(r=>r.result)
     const allDates=[...new Set(pResults.flatMap(r=>(r.compoundCurve||[]).map(p=>p.date)))].sort()
@@ -950,9 +951,12 @@ export default function Home() {
       bhCurve:pResults[0]?.bhCurve||[],sp500BHCurve:pResults[0]?.sp500BHCurve||[],
       assetStats:[],n:pResults.length,modoAsig:'portfolio',
       maxDDCompound,maxDDCompoundEur,maxDDFloatCompound:0,maxDDFloatCompoundEur:0,
+      avgCapOccupancy:pResults.reduce((s,r)=>s+(r.avgCapOccupancy||0),0)/pResults.length,
+      avgOccupancy:pResults.reduce((s,r)=>s+(r.avgOccupancy||0),0)/pResults.length,
+      tInvEstrategia:pResults.reduce((s,r)=>s+(r.tInvEstrategia||0),0)/pResults.length,
     }}
     return[...mcMultiResults,portfolioEntry]
-  },[mcMultiResults,mcStratSelected,mcPortfolioIds,mcCapitalIni,capitalIni])
+  },[mcMultiResults,mcStratSelected,mcCapitalIni,capitalIni])
   const [mcSectionOpen,setMcSectionOpen]=useState({mode:false,strats:false})
   const [mcFiltrosOpen,setMcFiltrosOpen]=useState(false)
   const [mcStratVisible,setMcStratVisible]=useState({})     // {id:bool}
@@ -4234,7 +4238,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.417</title>
+        <title>Trading Simulator V9.418</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4312,7 +4316,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.417
+            <span className="dot"/>Trading Simulator V9.418
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5871,14 +5875,14 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         <div style={{fontFamily:MONO,fontSize:11,color:'var(--text3)',padding:'4px 0'}}>No hay estrategias guardadas</div>
                       ):(
                         <div style={{display:'flex',flexDirection:'column',gap:3}}>
-                          {mcPortfolioIds.length>=2&&(
+                          {mcStratSelected.length>=2&&(
                             <div onClick={()=>setMcStratSelected(prev=>prev.includes('__portfolio__')?prev.filter(id=>id!=='__portfolio__'):[...prev,'__portfolio__'])}
                               style={{display:'flex',alignItems:'center',gap:6,padding:'5px 8px',borderRadius:6,cursor:'pointer',marginBottom:4,
                                 background:mcStratSelected.includes('__portfolio__')?'rgba(255,209,102,0.15)':'transparent',
                                 border:'1px solid rgba(255,209,102,0.4)'}}>
                               <input type="checkbox" readOnly checked={mcStratSelected.includes('__portfolio__')}
                                 onClick={e=>e.stopPropagation()} style={{accentColor:'#ffd166'}}/>
-                              <span style={{fontFamily:MONO,color:'#ffd166',fontSize:11,fontWeight:600}}>◈ Multicartera ({mcPortfolioIds.length})</span>
+                              <span style={{fontFamily:MONO,color:'#ffd166',fontSize:11,fontWeight:600}}>◈ Multicartera ({mcStratSelected.filter(id=>id!=='__portfolio__').length})</span>
                             </div>
                           )}
                           {strategies.map((s,i)=>{
@@ -5907,11 +5911,6 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                   overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.name||`Estrategia ${i+1}`}</span>
                                 {isActive&&<span style={{fontFamily:MONO,fontSize:8,color:'#00d4ff',background:'rgba(0,212,255,0.12)',
                                   border:'1px solid rgba(0,212,255,0.3)',borderRadius:3,padding:'1px 4px',flexShrink:0}}>activa</span>}
-                                <input type="checkbox" title="Incluir en Multicartera"
-                                  checked={mcPortfolioIds.includes(s.id)}
-                                  onClick={e=>e.stopPropagation()}
-                                  onChange={e=>{e.stopPropagation();setMcPortfolioIds(prev=>e.target.checked?[...prev,s.id]:prev.filter(id=>id!==s.id))}}
-                                  style={{marginLeft:'auto',cursor:'pointer',accentColor:'#ffd166',flexShrink:0}}/>
                               </div>
                             )
                           })}
