@@ -1277,9 +1277,29 @@ async function handlePortfolioMode(req, res) {
     }
 
     // 6. assetStats agrupado por símbolo REAL (no sintético)
-    //    executedTrades tienen t.symbol = synSym; usamos t._realSymbol para agrupar
+    //    buildConcentradoCurves reconstruye allCandidates con campos explícitos y pierde
+    //    _stratId/_stratName/_realSymbol. Re-enriquecer executedTrades desde synMeta
+    //    (assetResults sí conserva la metadata original del loop runCodeJsAsset).
+    const synMeta = {}
+    assetResults.forEach(ar => {
+      synMeta[ar.symbol] = { _stratId: ar._stratId, _stratName: ar._stratName, _realSymbol: ar._realSymbol }
+    })
+    const enrichedExec = (curves.executedTrades || []).map(t => {
+      const meta = synMeta[t.symbol] || {}
+      return {
+        ...t,
+        _stratId:    t._stratId    ?? meta._stratId,
+        _stratName:  t._stratName  ?? meta._stratName,
+        _realSymbol: t._realSymbol ?? meta._realSymbol ?? (t.symbol || '').split('#')[0],
+      }
+    })
+    // Fuente unificada: enrichedExec si hay executedTrades, fallback a trades directos (ya tienen metadata)
+    const execSource = enrichedExec.length
+      ? enrichedExec
+      : assetResults.flatMap(ar => ar.trades)
+
     const execByRealSym = {}
-    ;(curves.executedTrades || assetResults.flatMap(ar => ar.trades)).forEach(t => {
+    execSource.forEach(t => {
       const real = t._realSymbol || t.symbol.split('#')[0]
       if (!execByRealSym[real]) execByRealSym[real] = []
       execByRealSym[real].push(t)
@@ -1338,8 +1358,8 @@ async function handlePortfolioMode(req, res) {
       }
     })
 
-    // 7. allTrades: restaurar symbol = realSymbol para el render de tabla
-    const sourceTrades = (curves.executedTrades || assetResults.flatMap(ar => ar.trades))
+    // 7. allTrades: restaurar symbol = realSymbol para el render de tabla (usa execSource enriquecido)
+    const sourceTrades = execSource
       .map(t => ({ ...t, symbol: t._realSymbol || t.symbol.split('#')[0] }))
       .sort((a, b) => (a.exitDate || '').localeCompare(b.exitDate || ''))
 
