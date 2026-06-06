@@ -916,7 +916,35 @@ export default function Home() {
   const [indivAxisW,setIndivAxisW]=useState(72)   // measured individual EquityChart rightPriceScale width, shared with its monthly chart
   const [mcStratSelected,setMcStratSelected]=useState([])   // strategy IDs selected for comparison
   const [mcMultiResults,setMcMultiResults]=useState([])     // [{id,name,color,result}]
+  const [mcPortfolioIds,setMcPortfolioIds]=useState([])     // IDs marcados "Incluir en Multicartera"
   const [mcProgress,setMcProgress]=useState(null)           // null|{current,total,name}
+  // mcMultiResults + entrada sintética __portfolio__ si procede
+  const mcDisplayResults=useMemo(()=>{
+    if(!mcStratSelected.includes('__portfolio__')||mcPortfolioIds.length<2) return mcMultiResults
+    const capIni=Number(mcCapitalIni||capitalIni)
+    const participants=mcMultiResults.filter(r=>mcPortfolioIds.includes(r.id))
+    if(participants.length<2) return mcMultiResults
+    const pResults=participants.map(r=>r.result)
+    const allDates=[...new Set(pResults.flatMap(r=>(r.compoundCurve||[]).map(p=>p.date)))].sort()
+    const lk=pResults.map(()=>capIni)
+    const compoundCurve=allDates.map(date=>{
+      pResults.forEach((r,i)=>{const pt=(r.compoundCurve||[]).find(p=>p.date===date);if(pt)lk[i]=pt.value})
+      return{date,value:lk.reduce((s,v)=>s+v,0)/pResults.length}
+    })
+    const hasFloat=pResults.every(r=>r.floatCompoundCurve?.length)
+    const lkf=pResults.map(()=>capIni)
+    const floatCompoundCurve=hasFloat?allDates.map(date=>{
+      pResults.forEach((r,i)=>{const pt=(r.floatCompoundCurve||[]).find(p=>p.date===date);if(pt)lkf[i]=pt.value})
+      return{date,value:lkf.reduce((s,v)=>s+v,0)/pResults.length}
+    }):[]
+    const portfolioEntry={id:'__portfolio__',name:`◈ Multicartera (${pResults.length})`,color:'#ffd166',result:{
+      compoundCurve,floatCompoundCurve,
+      allTrades:pResults.flatMap(r=>r.allTrades||[]),
+      bhCurve:pResults[0]?.bhCurve||[],sp500BHCurve:pResults[0]?.sp500BHCurve||[],
+      assetStats:[],n:pResults.length,modoAsig:'portfolio',
+    }}
+    return[...mcMultiResults,portfolioEntry]
+  },[mcMultiResults,mcStratSelected,mcPortfolioIds,mcCapitalIni,capitalIni])
   const [mcSectionOpen,setMcSectionOpen]=useState({mode:false,strats:false})
   const [mcFiltrosOpen,setMcFiltrosOpen]=useState(false)
   const [mcStratVisible,setMcStratVisible]=useState({})     // {id:bool}
@@ -3797,12 +3825,13 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
     }
     // Multiple strategies — run sequentially with progress
     const results=[]
-    for(let i=0;i<stratIds.length;i++){
-      const sid=stratIds[i]
+    const realStratIds=stratIds.filter(id=>id!=='__portfolio__')
+    for(let i=0;i<realStratIds.length;i++){
+      const sid=realStratIds[i]
       const strat=strategies.find(s=>s.id===sid)
       const name=strat?.name||`Estrategia ${i+1}`
       const color=STRAT_COMPARE_COLORS[i%STRAT_COMPARE_COLORS.length]
-      setMcProgress({current:i+1,total:stratIds.length,name})
+      setMcProgress({current:i+1,total:realStratIds.length,name})
       try{
         const cfg=buildCfgFromStrat(strat)
         const res=await apiFetch('/api/multibacktest',{method:'POST',headers:{'Content-Type':'application/json'},
@@ -4197,7 +4226,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.415</title>
+        <title>Trading Simulator V9.416</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4275,7 +4304,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.415
+            <span className="dot"/>Trading Simulator V9.416
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5860,9 +5889,24 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                   overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.name||`Estrategia ${i+1}`}</span>
                                 {isActive&&<span style={{fontFamily:MONO,fontSize:8,color:'#00d4ff',background:'rgba(0,212,255,0.12)',
                                   border:'1px solid rgba(0,212,255,0.3)',borderRadius:3,padding:'1px 4px',flexShrink:0}}>activa</span>}
+                                <input type="checkbox" title="Incluir en Multicartera"
+                                  checked={mcPortfolioIds.includes(s.id)}
+                                  onClick={e=>e.stopPropagation()}
+                                  onChange={e=>{e.stopPropagation();setMcPortfolioIds(prev=>e.target.checked?[...prev,s.id]:prev.filter(id=>id!==s.id))}}
+                                  style={{marginLeft:'auto',cursor:'pointer',accentColor:'#ffd166',flexShrink:0}}/>
                               </div>
                             )
                           })}
+                          {mcPortfolioIds.length>=2&&(
+                            <div onClick={()=>setMcStratSelected(prev=>prev.includes('__portfolio__')?prev.filter(id=>id!=='__portfolio__'):[...prev,'__portfolio__'])}
+                              style={{display:'flex',alignItems:'center',gap:6,padding:'5px 8px',borderRadius:6,cursor:'pointer',marginTop:4,
+                                background:mcStratSelected.includes('__portfolio__')?'rgba(255,209,102,0.15)':'transparent',
+                                border:'1px solid rgba(255,209,102,0.4)'}}>
+                              <input type="checkbox" readOnly checked={mcStratSelected.includes('__portfolio__')}
+                                onClick={e=>e.stopPropagation()} style={{accentColor:'#ffd166'}}/>
+                              <span style={{fontFamily:MONO,color:'#ffd166',fontSize:11,fontWeight:600}}>◈ Multicartera ({mcPortfolioIds.length})</span>
+                            </div>
+                          )}
                           {mcStratSelected.length>1&&(
                             <div style={{marginTop:4,paddingTop:4,borderTop:'1px solid var(--border)',fontFamily:MONO,fontSize:10,color:'#7aabc8'}}>
                               {mcStratSelected.length} estrategias · comparación al ejecutar
@@ -7266,11 +7310,11 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
 
                 {/* ── Tabla unificada: Comparativa + Resumen por activo ── */}
                 {(()=>{
-                  const isMulti=mcMultiResults.length>1
+                  const isMulti=mcDisplayResults.length>1
                   const capIni=Number(mcCapitalIni||capitalIni)
-                  // Lista de estrategias: multi → mcMultiResults; single → wrapper sintético
-                  const stratList=isMulti
-                    ? mcMultiResults
+                  // Lista de estrategias: multi → mcDisplayResults; single → wrapper sintético
+                  let stratList=isMulti
+                    ? [...mcDisplayResults]
                     : [{id:currentStratId||'__single__',name:strategies.find(s=>s.id===currentStratId)?.name||'Estrategia activa',color:'#00d4ff',result:mcResult}]
                   // B&H globals (del result activo)
                   const bhLast=mcResult.bhCurve?.slice(-1)[0]?.value||capIni
@@ -7532,9 +7576,9 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                 <div className="equity-section" data-chart="equity">
                   <div className="section-title" style={{display:'flex',alignItems:'center',flexWrap:'wrap',gap:6,fontSize:14}}>
                     <span>Equity</span>
-                    {mcMultiResults.length>1?(
+                    {mcDisplayResults.length>1?(
                       <>
-                        {mcMultiResults.map(r=>(
+                        {mcDisplayResults.map(r=>(
                           <button key={r.id} onClick={()=>setMcStratVisible(v=>({...v,[r.id]:!v[r.id]}))}
                             style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',
                               border:`1px solid ${mcStratVisible[r.id]!==false?r.color:'#3d5a7a'}`,
@@ -7580,10 +7624,10 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       style={{marginLeft:'auto',fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',border:'1px solid #1a2d45',background:'rgba(0,212,255,0.07)',color:'#7a9bc0',flexShrink:0}}
                       title="Ver periodo completo">⊠ Periodo completo</button>
                   </div>
-                  {mcMultiResults.length>1?(
+                  {mcDisplayResults.length>1?(
                     <StratCompareChart
                       curves={[
-                        ...mcMultiResults.map(r=>({
+                        ...mcDisplayResults.map(r=>({
                           id:r.id,name:r.name,color:r.color,
                           data:(showMultiFloat&&r.result.floatCompoundCurve?.length)?r.result.floatCompoundCurve:r.result.compoundCurve,
                           show:mcStratVisible[r.id]!==false,
@@ -7642,15 +7686,15 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                 {/* ── Ganancias mensuales MC ── */}
                 {(()=>{
                   const capIniNum=Number(mcCapitalIni||capitalIni)
-                  let mSeries=mcMultiResults.length>0
-                    ?mcMultiResults.filter(r=>mcStratVisible[r.id]!==false).map(r=>({
+                  let mSeries=mcDisplayResults.length>0
+                    ?mcDisplayResults.filter(r=>mcStratVisible[r.id]!==false).map(r=>({
                         id:r.id,name:mcIsModoCompare?r.name.split(' · ').pop():r.name,
                         color:r.color,compoundCurve:r.result.compoundCurve}))
                     :[{id:'single',name:'Estrategia',color:'#00e5a0',compoundCurve:mcResult.compoundCurve}]
                   // Añadir B&H cuando su toggle está activo
-                  if(mcMultiResults.length>1&&mcShowBHCompare&&mcResult.bhCurve?.length)
+                  if(mcDisplayResults.length>1&&mcShowBHCompare&&mcResult.bhCurve?.length)
                     mSeries=[...mSeries,{id:'__bh__',name:'B&H Diversif.',color:'#a0b4c8',compoundCurve:mcResult.bhCurve}]
-                  else if(mcMultiResults.length===0&&mcShowBH&&mcResult.bhCurve?.length)
+                  else if(mcDisplayResults.length===0&&mcShowBH&&mcResult.bhCurve?.length)
                     mSeries=[...mSeries,{id:'__bh__',name:'B&H Diversif.',color:'#a0b4c8',compoundCurve:mcResult.bhCurve}]
                   if(!mSeries.some(s=>s.compoundCurve?.length)) return null
                   return <div data-chart="monthly"><div style={{width:'calc(100% - 21px)',marginLeft:0}}><McMonthlyGainsChart series={mSeries} capitalIni={capIniNum} syncRef={chartSyncRef} axisWidth={mcAxisW}/></div></div>
@@ -7666,8 +7710,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                     </div>
                     <div style={{width:'calc(100% - 21px)',marginLeft:0}}>
                     <McOccupancyChart
-                      series={mcMultiResults.length>0
-                        ?mcMultiResults.filter(r=>mcStratVisible[r.id]!==false).map(r=>({
+                      series={mcDisplayResults.length>0
+                        ?mcDisplayResults.filter(r=>mcStratVisible[r.id]!==false).map(r=>({
                             id:r.id,color:r.color,
                             occupancyCurve:r.result.occupancyCurve,
                             compoundCurve:r.result.compoundCurve,
@@ -7687,11 +7731,11 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                 {/* Tabla por activo — fusionada en COMPARATIVA DE ESTRATEGIAS */}
 
                 {/* Barras de resultados multicartera — N gráficos apilados si múltiples estrategias */}
-                {mcMultiResults.length>1
-                  ? (mcMultiResults.some(r=>mcStratVisible[r.id]!==false&&r.result.allTrades?.length>0)&&(
+                {mcDisplayResults.length>1
+                  ? (mcDisplayResults.some(r=>mcStratVisible[r.id]!==false&&r.result.allTrades?.length>0)&&(
                       <div className="equity-section">
                         <div className="section-title" style={{fontSize:14}}>Resultados por Operación</div>
-                        {mcMultiResults
+                        {mcDisplayResults
                           .filter(r=>mcStratVisible[r.id]!==false)
                           .map(r=>{
                             const trades=r.result.allTrades||[]
