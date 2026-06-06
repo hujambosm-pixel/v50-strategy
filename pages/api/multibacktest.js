@@ -1326,6 +1326,15 @@ async function handlePortfolioMode(req, res) {
         priceMaxDDEur:    slotCapital * priceMaxDDFactor,
         avgCapAsignado,
         capInvertidoTotal,
+        _stratBreakdown: (()=>{
+          const m = new Map()
+          execTrades.forEach(t => {
+            const k = t._stratId
+            if (!m.has(k)) m.set(k, { id: t._stratId, name: t._stratName, trades: 0 })
+            m.get(k).trades++
+          })
+          return [...m.values()].sort((a, b) => b.trades - a.trades)
+        })(),
       }
     })
 

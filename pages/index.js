@@ -4235,7 +4235,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.421</title>
+        <title>Trading Simulator V9.422</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4313,7 +4313,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.421
+            <span className="dot"/>Trading Simulator V9.422
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -7480,7 +7480,20 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                         onClick={()=>{setSimbolo(a.symbol);setSidePanel('watchlist')}}
                                         onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.04)'}
                                         onMouseOut={e=>e.currentTarget.style.background='rgba(0,0,0,0.12)'}>
-                                        <td style={{padding:'4px 6px 4px 22px',color:'var(--accent)',borderLeft:`2px solid ${r.color}`}}>{a.symbol}</td>
+                                        <td style={{padding:'4px 6px 4px 22px',color:'var(--accent)',borderLeft:`2px solid ${r.color}`}}>
+                                          <span style={{marginRight:6}}>{a.symbol}</span>
+                                          {r.id==='__portfolio__'&&Array.isArray(a._stratBreakdown)&&
+                                            a._stratBreakdown.map(b=>{
+                                              const c=mcDisplayResults.find(x=>x.id===b.id)?.color||'#3d5a7a'
+                                              return(<span key={b.id}
+                                                title={`${b.name} · ${b.trades} ops`}
+                                                style={{display:'inline-block',width:9,height:9,borderRadius:'50%',
+                                                  background:c,marginRight:3,verticalAlign:'middle',
+                                                  border:'1px solid rgba(0,0,0,0.3)'}}
+                                              />)
+                                            })
+                                          }
+                                        </td>
                                         <td style={{padding:'4px 6px',color:'var(--text)'}}>{a.trades}</td>
                                         <td style={{padding:'4px 6px',color:isFinite(cagr)?cagr>=0?'#00e5a0':'#ff4d6d':'#4a6a88'}}>{isFinite(cagr)?fmt(cagr,2,'%'):'—'}</td>
                                         <td style={{padding:'4px 6px',color:a.ganComp>=0?'#00e5a0':'#ff4d6d'}}>{fmt(a.ganComp,0,'€')}</td>
