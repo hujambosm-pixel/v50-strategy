@@ -945,11 +945,27 @@ export default function Home() {
       if(dd>maxDDCompound)maxDDCompound=dd
     }
     const maxDDCompoundEur=-(maxDDCompound/100)*capIni
+    // Agregar assetStats por símbolo sumando/promediando participantes
+    const allSymbols=[...new Set(pResults.flatMap(r=>(r.assetStats||[]).map(a=>a.symbol)))]
+    const assetStats=allSymbols.map(sym=>{
+      const parts=pResults.map(r=>(r.assetStats||[]).find(a=>a.symbol===sym)).filter(Boolean)
+      if(!parts.length)return null
+      const totalTrades=parts.reduce((s,a)=>s+(a.trades||0),0)
+      const ganComp=parts.reduce((s,a)=>s+(a.ganComp||0),0)
+      const winRate=totalTrades>0?parts.reduce((s,a)=>s+(a.winRate||0)*(a.trades||0),0)/totalTrades:0
+      const maxDD=Math.max(...parts.map(a=>a.maxDD||0))
+      const maxDDEur=parts.reduce((s,a)=>s+(a.maxDDEur||0),0)
+      const capInvertidoTotal=parts.reduce((s,a)=>s+(a.capInvertidoTotal||0),0)
+      const capInvMedio=parts.reduce((s,a)=>s+(a.capInvMedio||0),0)/parts.length
+      const tInvertido=parts.reduce((s,a)=>s+(a.tInvertido||0),0)/parts.length
+      const avgCapAsignado=parts.reduce((s,a)=>s+(a.avgCapAsignado||0),0)/parts.length
+      return{symbol:sym,trades:totalTrades,ganComp,winRate,maxDD,maxDDEur,capInvertidoTotal,capInvMedio,tInvertido,avgCapAsignado}
+    }).filter(Boolean)
     const portfolioEntry={id:'__portfolio__',name:`◈ Multicartera (${pResults.length})`,color:'#ffd166',result:{
       compoundCurve,floatCompoundCurve,
       allTrades:pResults.flatMap(r=>r.allTrades||[]),
       bhCurve:pResults[0]?.bhCurve||[],sp500BHCurve:pResults[0]?.sp500BHCurve||[],
-      assetStats:[],n:pResults.length,modoAsig:'portfolio',
+      assetStats,n:pResults.length,modoAsig:'portfolio',
       maxDDCompound,maxDDCompoundEur,maxDDFloatCompound:0,maxDDFloatCompoundEur:0,
       avgCapOccupancy:pResults.reduce((s,r)=>s+(r.avgCapOccupancy||0),0)/pResults.length,
       avgOccupancy:pResults.reduce((s,r)=>s+(r.avgOccupancy||0),0)/pResults.length,
@@ -4238,7 +4254,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.418</title>
+        <title>Trading Simulator V9.419</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4316,7 +4332,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.418
+            <span className="dot"/>Trading Simulator V9.419
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
