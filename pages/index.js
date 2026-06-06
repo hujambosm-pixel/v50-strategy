@@ -918,61 +918,9 @@ export default function Home() {
   const [mcMultiResults,setMcMultiResults]=useState([])     // [{id,name,color,result}]
   const [mcPortfolioIds,setMcPortfolioIds]=useState([])     // IDs marcados "Incluir en Multicartera"
   const [mcProgress,setMcProgress]=useState(null)           // null|{current,total,name}
-  // mcMultiResults + entrada sintética __portfolio__ si procede
-  const mcDisplayResults=useMemo(()=>{
-    const realResults=mcMultiResults.filter(r=>r.id!=='__portfolio__')
-    if(!mcStratSelected.includes('__portfolio__')||realResults.length<2) return mcMultiResults
-    const capIni=Number(mcCapitalIni||capitalIni)
-    const participants=realResults
-    if(participants.length<2) return mcMultiResults
-    const pResults=participants.map(r=>r.result)
-    const allDates=[...new Set(pResults.flatMap(r=>(r.compoundCurve||[]).map(p=>p.date)))].sort()
-    const lk=pResults.map(()=>capIni)
-    const compoundCurve=allDates.map(date=>{
-      pResults.forEach((r,i)=>{const pt=(r.compoundCurve||[]).find(p=>p.date===date);if(pt)lk[i]=pt.value})
-      return{date,value:lk.reduce((s,v)=>s+v,0)/pResults.length}
-    })
-    const hasFloat=pResults.every(r=>r.floatCompoundCurve?.length)
-    const lkf=pResults.map(()=>capIni)
-    const floatCompoundCurve=hasFloat?allDates.map(date=>{
-      pResults.forEach((r,i)=>{const pt=(r.floatCompoundCurve||[]).find(p=>p.date===date);if(pt)lkf[i]=pt.value})
-      return{date,value:lkf.reduce((s,v)=>s+v,0)/pResults.length}
-    }):[]
-    let _peak=capIni,maxDDCompound=0
-    for(const p of compoundCurve){
-      if(p.value>_peak)_peak=p.value
-      const dd=(_peak-p.value)/_peak*100
-      if(dd>maxDDCompound)maxDDCompound=dd
-    }
-    const maxDDCompoundEur=-(maxDDCompound/100)*capIni
-    // Agregar assetStats por símbolo sumando/promediando participantes
-    const allSymbols=[...new Set(pResults.flatMap(r=>(r.assetStats||[]).map(a=>a.symbol)))]
-    const assetStats=allSymbols.map(sym=>{
-      const parts=pResults.map(r=>(r.assetStats||[]).find(a=>a.symbol===sym)).filter(Boolean)
-      if(!parts.length)return null
-      const totalTrades=parts.reduce((s,a)=>s+(a.trades||0),0)
-      const ganComp=parts.reduce((s,a)=>s+(a.ganComp||0),0)
-      const winRate=totalTrades>0?parts.reduce((s,a)=>s+(a.winRate||0)*(a.trades||0),0)/totalTrades:0
-      const maxDD=Math.max(...parts.map(a=>a.maxDD||0))
-      const maxDDEur=parts.reduce((s,a)=>s+(a.maxDDEur||0),0)
-      const capInvertidoTotal=parts.reduce((s,a)=>s+(a.capInvertidoTotal||0),0)
-      const capInvMedio=parts.reduce((s,a)=>s+(a.capInvMedio||0),0)/parts.length
-      const tInvertido=parts.reduce((s,a)=>s+(a.tInvertido||0),0)/parts.length
-      const avgCapAsignado=parts.reduce((s,a)=>s+(a.avgCapAsignado||0),0)/parts.length
-      return{symbol:sym,trades:totalTrades,ganComp,winRate,maxDD,maxDDEur,capInvertidoTotal,capInvMedio,tInvertido,avgCapAsignado}
-    }).filter(Boolean)
-    const portfolioEntry={id:'__portfolio__',name:`◈ Multicartera (${pResults.length})`,color:'#ffd166',result:{
-      compoundCurve,floatCompoundCurve,
-      allTrades:pResults.flatMap(r=>r.allTrades||[]),
-      bhCurve:pResults[0]?.bhCurve||[],sp500BHCurve:pResults[0]?.sp500BHCurve||[],
-      assetStats,n:pResults.length,modoAsig:'portfolio',
-      maxDDCompound,maxDDCompoundEur,maxDDFloatCompound:0,maxDDFloatCompoundEur:0,
-      avgCapOccupancy:pResults.reduce((s,r)=>s+(r.avgCapOccupancy||0),0)/pResults.length,
-      avgOccupancy:pResults.reduce((s,r)=>s+(r.avgOccupancy||0),0)/pResults.length,
-      tInvEstrategia:pResults.reduce((s,r)=>s+(r.tInvEstrategia||0),0)/pResults.length,
-    }}
-    return[...mcMultiResults,portfolioEntry]
-  },[mcMultiResults,mcStratSelected,mcCapitalIni,capitalIni])
+  // mcDisplayResults: portfolio real viene inyectado en mcMultiResults por el backend (portfolioMode)
+  // El cálculo de promedio en cliente ha sido eliminado — __portfolio__ lo calcula handlePortfolioMode
+  const mcDisplayResults=mcMultiResults
   const [mcSectionOpen,setMcSectionOpen]=useState({mode:false,strats:false})
   const [mcFiltrosOpen,setMcFiltrosOpen]=useState(false)
   const [mcStratVisible,setMcStratVisible]=useState({})     // {id:bool}
@@ -3874,6 +3822,39 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
     const vis={};results.forEach(r=>{vis[r.id]=true});setMcStratVisible(vis)
     setMcAssetOpen({})
     const chartsVis={};results.forEach(r=>{chartsVis[r.id]=true});setMcChartsStratVisible(chartsVis)
+    // ── Multicartera real (backend portfolioMode) ──────────────────────────────
+    const _portfolioModoOk=(mcMode==='concentrado'||mcMode==='compartido')
+    if(mcStratSelected.includes('__portfolio__')&&results.length>=2){
+      if(!_portfolioModoOk){
+        setMcError('◈ Multicartera (Fase 1) disponible solo en modo Concentrado o Compartido')
+      }else{
+        try{
+          setMcProgress({current:results.length+1,total:results.length+1,name:'◈ Multicartera'})
+          const _pCfg=mcPeriodMode==='range'
+            ?{capitalIni:mcCapitalIni,fromDate:mcFromDate,toDate:mcToDate}
+            :{capitalIni:mcCapitalIni,years:mcYears}
+          const portfolioRes=await apiFetch('/api/multibacktest',{
+            method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({
+              portfolioMode:true,
+              strategies:results.map(r=>({id:r.id,name:r.name,symbols:mcSelected})),
+              cfg:_pCfg,
+              modoAsig:mcMode,
+              sizeRules:{maxPosiciones:mcMaxPosiciones,prioridad:'alfabetico'},
+              intervalo:mcIntervalo,
+            })
+          })
+          const portfolioJson=await portfolioRes.json()
+          if(!portfolioRes.ok) throw new Error(portfolioJson.error||'Error en Multicartera')
+          setMcMultiResults([...results,{
+            id:'__portfolio__',name:`◈ Multicartera (${results.length})`,
+            color:'#ffd166',result:portfolioJson
+          }])
+        }catch(e){
+          setMcError('Multicartera: '+e.message)  // no aborta: individuales ya están
+        }
+      }
+    }
     setMcLoading(false);setMcProgress(null)
   },[mcSelected,mcMode,selectedModos,mcWeights,mcCapital,mcCapitalIni,mcYears,mcPeriodMode,mcFromDate,mcToDate,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL,rankingData,mcStratSelected,strategies,currentStratId,mcRiskPerTrade,mcMaxPortfolioPct,mcMaxAccumRisk,mcMaxPosiciones,mcPrioridad,mcMomentumN,filtros,mcIntervalo])
 
@@ -4254,7 +4235,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.420</title>
+        <title>Trading Simulator V9.421</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4332,7 +4313,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.420
+            <span className="dot"/>Trading Simulator V9.421
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
