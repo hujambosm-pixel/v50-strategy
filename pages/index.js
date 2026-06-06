@@ -937,11 +937,19 @@ export default function Home() {
       pResults.forEach((r,i)=>{const pt=(r.floatCompoundCurve||[]).find(p=>p.date===date);if(pt)lkf[i]=pt.value})
       return{date,value:lkf.reduce((s,v)=>s+v,0)/pResults.length}
     }):[]
+    let _peak=capIni,maxDDCompound=0
+    for(const p of compoundCurve){
+      if(p.value>_peak)_peak=p.value
+      const dd=(_peak-p.value)/_peak*100
+      if(dd>maxDDCompound)maxDDCompound=dd
+    }
+    const maxDDCompoundEur=-(maxDDCompound/100)*capIni
     const portfolioEntry={id:'__portfolio__',name:`◈ Multicartera (${pResults.length})`,color:'#ffd166',result:{
       compoundCurve,floatCompoundCurve,
       allTrades:pResults.flatMap(r=>r.allTrades||[]),
       bhCurve:pResults[0]?.bhCurve||[],sp500BHCurve:pResults[0]?.sp500BHCurve||[],
       assetStats:[],n:pResults.length,modoAsig:'portfolio',
+      maxDDCompound,maxDDCompoundEur,maxDDFloatCompound:0,maxDDFloatCompoundEur:0,
     }}
     return[...mcMultiResults,portfolioEntry]
   },[mcMultiResults,mcStratSelected,mcPortfolioIds,mcCapitalIni,capitalIni])
@@ -4226,7 +4234,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.416</title>
+        <title>Trading Simulator V9.417</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4304,7 +4312,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.416
+            <span className="dot"/>Trading Simulator V9.417
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5863,6 +5871,16 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         <div style={{fontFamily:MONO,fontSize:11,color:'var(--text3)',padding:'4px 0'}}>No hay estrategias guardadas</div>
                       ):(
                         <div style={{display:'flex',flexDirection:'column',gap:3}}>
+                          {mcPortfolioIds.length>=2&&(
+                            <div onClick={()=>setMcStratSelected(prev=>prev.includes('__portfolio__')?prev.filter(id=>id!=='__portfolio__'):[...prev,'__portfolio__'])}
+                              style={{display:'flex',alignItems:'center',gap:6,padding:'5px 8px',borderRadius:6,cursor:'pointer',marginBottom:4,
+                                background:mcStratSelected.includes('__portfolio__')?'rgba(255,209,102,0.15)':'transparent',
+                                border:'1px solid rgba(255,209,102,0.4)'}}>
+                              <input type="checkbox" readOnly checked={mcStratSelected.includes('__portfolio__')}
+                                onClick={e=>e.stopPropagation()} style={{accentColor:'#ffd166'}}/>
+                              <span style={{fontFamily:MONO,color:'#ffd166',fontSize:11,fontWeight:600}}>◈ Multicartera ({mcPortfolioIds.length})</span>
+                            </div>
+                          )}
                           {strategies.map((s,i)=>{
                             const isActive=s.id===currentStratId
                             const selIdx=mcStratSelected.indexOf(s.id)
@@ -5897,16 +5915,6 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                               </div>
                             )
                           })}
-                          {mcPortfolioIds.length>=2&&(
-                            <div onClick={()=>setMcStratSelected(prev=>prev.includes('__portfolio__')?prev.filter(id=>id!=='__portfolio__'):[...prev,'__portfolio__'])}
-                              style={{display:'flex',alignItems:'center',gap:6,padding:'5px 8px',borderRadius:6,cursor:'pointer',marginTop:4,
-                                background:mcStratSelected.includes('__portfolio__')?'rgba(255,209,102,0.15)':'transparent',
-                                border:'1px solid rgba(255,209,102,0.4)'}}>
-                              <input type="checkbox" readOnly checked={mcStratSelected.includes('__portfolio__')}
-                                onClick={e=>e.stopPropagation()} style={{accentColor:'#ffd166'}}/>
-                              <span style={{fontFamily:MONO,color:'#ffd166',fontSize:11,fontWeight:600}}>◈ Multicartera ({mcPortfolioIds.length})</span>
-                            </div>
-                          )}
                           {mcStratSelected.length>1&&(
                             <div style={{marginTop:4,paddingTop:4,borderTop:'1px solid var(--border)',fontFamily:MONO,fontSize:10,color:'#7aabc8'}}>
                               {mcStratSelected.length} estrategias · comparación al ejecutar
@@ -7395,13 +7403,13 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                 <Fragment key={r.id}>
                                   {/* ── Fila madre (estrategia) ── */}
                                   <tr
-                                    onClick={()=>setMcAssetOpen(v=>({...v,[r.id]:!isOpen}))}
+                                    onClick={()=>rStats.length>0&&setMcAssetOpen(v=>({...v,[r.id]:!isOpen}))}
                                     style={{borderBottom:'1px solid rgba(255,255,255,0.04)',
                                       background:r.color+'14',
-                                      cursor:'pointer'}}>
+                                      cursor:rStats.length>0?'pointer':'default'}}>
                                     <td style={{padding:'5px 6px'}}>
                                       <div style={{display:'flex',alignItems:'center',gap:5}}>
-                                        <span style={{fontFamily:MONO,fontSize:9,color:'#4a7a9a',width:8,flexShrink:0}}>{isOpen?'▼':'▶'}</span>
+                                        {rStats.length>0&&<span style={{fontFamily:MONO,fontSize:9,color:'#4a7a9a',width:8,flexShrink:0}}>{isOpen?'▼':'▶'}</span>}
                                         <div style={{width:7,height:7,borderRadius:'50%',background:r.color,flexShrink:0}}/>
                                         <span style={{color:r.color,fontWeight:600}}>{r.name}</span>
                                         {isActive&&isMulti&&<span style={{fontSize:7,color:'#00d4ff',background:'rgba(0,212,255,0.1)',border:'1px solid rgba(0,212,255,0.25)',borderRadius:2,padding:'0 3px',flexShrink:0}}>✓</span>}
