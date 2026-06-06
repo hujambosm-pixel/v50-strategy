@@ -1155,6 +1155,7 @@ async function handlePortfolioMode(req, res) {
     cfg,
     modoAsig = 'concentrado',
     sizeRules: sizeRulesBody = null,
+    filtros: filtrosCfg,
     intervalo,
   } = req.body
 
@@ -1260,19 +1261,109 @@ async function handlePortfolioMode(req, res) {
     const n = assetResults.length
     if (!n) return res.status(400).json({ error: 'No se pudieron ejecutar señales para ningún par (estrategia×símbolo)' })
 
+    // 4b. Filtros de mercado — portar el mismo bloque del path único
+    //     Se ejecuta DESPUÉS de runCodeJsAsset (assetResults ya tiene trades con metadata)
+    //     y ANTES de construir curvas. Los datos auxiliares se descargan UNA sola vez.
+    const anyFiltroOn = !!(filtrosCfg?.vix?.activo || filtrosCfg?.indiceEma?.activo || filtrosCfg?.sectorEma?.activo || filtrosCfg?.cruceEma?.activo)
+    if (anyFiltroOn && filtrosCfg) {
+      // Descargar datos auxiliares una vez (VIX + EMA indices)
+      let vixRawData = null
+      const filterAuxData = {}
+      const filterFetchJobs = []
+      const vixIv = filtrosCfg.vix?.intervalo === 'semanal' ? '1wk' : '1d'
+      if (filtrosCfg.vix?.activo)
+        filterFetchJobs.push(fetchData('^VIX', cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, vixIv).then(r => { vixRawData = r }).catch(() => {}))
+      const auxKeys = new Set()
+      for (const key of ['indiceEma','sectorEma','cruceEma']) {
+        const f = filtrosCfg[key]
+        if (f?.activo && f.ticker) {
+          const iv = f.intervalo === 'semanal' ? '1wk' : '1d'
+          const akey = `${f.ticker}:${iv}`
+          if (f.ticker !== '^GSPC' || iv === '1wk') auxKeys.add(akey)
+        }
+      }
+      for (const akey of auxKeys) {
+        const colonIdx = akey.lastIndexOf(':')
+        const ticker = akey.slice(0, colonIdx), iv = akey.slice(colonIdx + 1)
+        filterFetchJobs.push(fetchData(ticker, cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, iv).then(r => { filterAuxData[akey] = r }).catch(() => {}))
+      }
+      if (filterFetchJobs.length) await Promise.all(filterFetchJobs)
+
+      const resolveFilterData = (ticker, iv) =>
+        (ticker === '^GSPC' && iv !== '1wk') ? sp500Data : (filterAuxData[`${ticker}:${iv}`] ?? sp500Data)
+
+      // Aplicar filtro por activo — ar.data = tickerCache[ar._realSymbol]
+      // rebuildCapitalTras usa {...t} → preserva _stratId/_stratName/_realSymbol
+      for (const ar of assetResults) {
+        const assetDates = ar.data.map(d => d.date)
+        const filtroActivoMap = {}
+
+        const vixCloses = filtrosCfg.vix?.activo ? buildAlignedCloses(vixRawData, assetDates) : null
+
+        const indiceIv = filtrosCfg.indiceEma?.intervalo === 'semanal' ? '1wk' : '1d'
+        const indiceDataRes = filtrosCfg.indiceEma?.activo ? resolveFilterData(filtrosCfg.indiceEma.ticker, indiceIv) : null
+        let indiceCloses = null, indiceEmaArr = null
+        if (indiceDataRes) {
+          if (indiceIv === '1wk') { const r = buildAlignedWeekly(indiceDataRes, assetDates, Math.max(1, filtrosCfg.indiceEma?.periodo ?? 200)); indiceCloses = r.closes; indiceEmaArr = r.ema }
+          else { indiceCloses = buildAlignedCloses(indiceDataRes, assetDates); indiceEmaArr = calcEMA(indiceCloses, Math.max(1, filtrosCfg.indiceEma?.periodo ?? 200)) }
+        }
+
+        const sectorIv = filtrosCfg.sectorEma?.intervalo === 'semanal' ? '1wk' : '1d'
+        const sectorDataRes = filtrosCfg.sectorEma?.activo ? resolveFilterData(filtrosCfg.sectorEma.ticker, sectorIv) : null
+        let sectorCloses = null, sectorEmaArr = null
+        if (sectorDataRes) {
+          if (sectorIv === '1wk') { const r = buildAlignedWeekly(sectorDataRes, assetDates, Math.max(1, filtrosCfg.sectorEma?.periodo ?? 50)); sectorCloses = r.closes; sectorEmaArr = r.ema }
+          else { sectorCloses = buildAlignedCloses(sectorDataRes, assetDates); sectorEmaArr = calcEMA(sectorCloses, Math.max(1, filtrosCfg.sectorEma?.periodo ?? 50)) }
+        }
+
+        const cruceIv = filtrosCfg.cruceEma?.intervalo === 'semanal' ? '1wk' : '1d'
+        const cruceDataRes = filtrosCfg.cruceEma?.activo ? resolveFilterData(filtrosCfg.cruceEma.ticker, cruceIv) : null
+        let cruceCloses = null, cruceEmaRArr = null, cruceEmaLArr = null
+        if (cruceDataRes) {
+          if (cruceIv === '1wk') { const rR = buildAlignedWeekly(cruceDataRes, assetDates, Math.max(1, filtrosCfg.cruceEma?.periodoR ?? 10)); const rL = buildAlignedWeekly(cruceDataRes, assetDates, Math.max(1, filtrosCfg.cruceEma?.periodoL ?? 11)); cruceCloses = rR.closes; cruceEmaRArr = rR.ema; cruceEmaLArr = rL.ema }
+          else { cruceCloses = buildAlignedCloses(cruceDataRes, assetDates); cruceEmaRArr = calcEMA(cruceCloses, Math.max(1, filtrosCfg.cruceEma?.periodoR ?? 10)); cruceEmaLArr = calcEMA(cruceCloses, Math.max(1, filtrosCfg.cruceEma?.periodoL ?? 11)) }
+        }
+
+        for (let i = 0; i < ar.data.length; i++) {
+          const date = ar.data[i].date
+          let vixOk = true, indiceOk = true, sectorOk = true, cruceOk = true
+          if (filtrosCfg.vix?.activo) { const vc = vixCloses?.[i]; vixOk = vc == null ? true : vc < (filtrosCfg.vix.umbral ?? 25) }
+          if (filtrosCfg.indiceEma?.activo) { const ic = indiceCloses?.[i], ie = indiceEmaArr?.[i]; indiceOk = ic == null || ie == null ? true : ic >= ie }
+          if (filtrosCfg.sectorEma?.activo) { const sc = sectorCloses?.[i], se = sectorEmaArr?.[i]; sectorOk = sc == null || se == null ? true : sc >= se }
+          if (filtrosCfg.cruceEma?.activo) { const er = cruceEmaRArr?.[i], el = cruceEmaLArr?.[i]; cruceOk = er == null || el == null ? true : er > el }
+          filtroActivoMap[date] = vixOk && indiceOk && sectorOk && cruceOk
+        }
+
+        const filtered = ar.trades.filter(t => filtroActivoMap[t.entryDate] !== false)
+        if (filtered.length !== ar.trades.length) {
+          // rebuildCapitalTras hace {...t} → _stratId/_stratName/_realSymbol se preservan
+          const rebuilt = rebuildCapitalTras(filtered, slotCapital)
+          ar.trades = rebuilt
+          ar.capitalReinv = rebuilt.length ? rebuilt[rebuilt.length - 1].capitalTras : slotCapital
+          ar.gananciaSimple = rebuilt.reduce((s, t) => s + t.pnlSimple, 0)
+        }
+      }
+    }
+
     // 5. Curvas — prioridad FORZADA a 'alfabetico' en esta fase
     //    (momentum/fuerza_relativa/scoreMap requieren lookups por synSym → Fase 2)
     const _maxPos   = sizeRules.maxPosiciones ?? 5
-    const synList   = assetResults.map(ar => ar.symbol)   // orden para buildConcentradoCurves
+    const _momentN  = sizeRules.momentumN ?? 20
+    const synList   = assetResults.map(ar => ar.symbol)
     let curves
     if (modoAsig === 'compartido') {
       curves = buildCompartidoCurves(assetResults, cfg.capitalIni)
+    } else if (modoAsig === 'positionsizing') {
+      // positionsizing: sizing por riesgo desde stopPx — slotCapital=capitalIni/nPairs es inocuo
+      // (igual que concentrado: pool recalcula todo desde pnlPct × capAsignado)
+      // executedTrades tendrá mismo problema de pérdida de metadata → cubierto por enrichedExec
+      curves = buildPositionSizingCurves(assetResults, cfg.capitalIni, sizeRules || {})
     } else {
-      // concentrado — prioridad 'alfabetico' → desempate por (ticker, stratOrder) via synSym
+      // concentrado (default) — prioridad 'alfabetico' → desempate por (ticker, stratOrder) via synSym
       curves = buildConcentradoCurves(
         assetResults, cfg.capitalIni, _maxPos,
         'alfabetico',  // Fase 2: añadir momentum/scoreMap con synSym→data mapping
-        20, sp500Data, synList, null
+        _momentN, sp500Data, synList, null
       )
     }
 

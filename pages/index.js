@@ -3823,10 +3823,14 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
     setMcAssetOpen({})
     const chartsVis={};results.forEach(r=>{chartsVis[r.id]=true});setMcChartsStratVisible(chartsVis)
     // ── Multicartera real (backend portfolioMode) ──────────────────────────────
-    const _portfolioModoOk=(mcMode==='concentrado'||mcMode==='compartido')
     if(mcStratSelected.includes('__portfolio__')&&results.length>=2){
-      if(!_portfolioModoOk){
-        setMcError('◈ Multicartera (Fase 1) disponible solo en modo Concentrado o Compartido')
+      const _modoPortfolioOk=['concentrado','compartido','positionsizing'].includes(mcMode)
+      if(!_modoPortfolioOk){
+        if(mcMode==='slots'){
+          setMcError('◈ Multicartera no soporta "Slots iguales": con varias estrategias el mismo activo podría acumular varias fracciones de capital, distorsionando el resultado. Usa Concentrado, Compartido o Position Sizing.')
+        }else{
+          setMcError('◈ Multicartera disponible en Concentrado, Compartido o Position Sizing.')
+        }
       }else{
         try{
           setMcProgress({current:results.length+1,total:results.length+1,name:'◈ Multicartera'})
@@ -3840,7 +3844,14 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               strategies:results.map(r=>({id:r.id,name:r.name,symbols:mcSelected})),
               cfg:_pCfg,
               modoAsig:mcMode,
-              sizeRules:{maxPosiciones:mcMaxPosiciones,prioridad:'alfabetico'},
+              sizeRules:{
+                maxPosiciones:mcMaxPosiciones,
+                prioridad:'alfabetico',
+                riskPerTrade:mcRiskPerTrade,
+                maxPortfolioPct:mcMaxPortfolioPct,
+                maxAccumRisk:mcMaxAccumRisk,
+              },
+              filtros,          // mismo objeto filtros que usa el path único
               intervalo:mcIntervalo,
             })
           })
@@ -4235,7 +4246,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.423</title>
+        <title>Trading Simulator V9.424</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4313,7 +4324,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.423
+            <span className="dot"/>Trading Simulator V9.424
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
