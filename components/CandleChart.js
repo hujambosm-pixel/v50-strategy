@@ -299,7 +299,6 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       let disposed=false
       if(chartRef.current){chartRef.current.remove();chartRef.current=null}
       if(!containerRef.current||containerRef.current.clientWidth<=0) return
-      console.log('[v50] chart created height',chartHeight)
       const chart=createChart(containerRef.current,{
         width:containerRef.current.clientWidth,height:chartHeight,
         layout:{background:{color:visuals?.chartBg||'#080c14'},textColor:'#7a9bc0',fontFamily:'-apple-system, BlinkMacSystemFont, Trebuchet MS, Roboto, Ubuntu, sans-serif'},
