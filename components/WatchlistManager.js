@@ -1226,12 +1226,9 @@ export default function WatchlistManager({
                             setBlockingPopup({ message: 'Los siguientes activos no tienen métricas calculadas. Ejecuta primero ↻ Métricas.', symbols: r.symbols })
                             return
                           }
-                          const r2 = await onCalcScoreMetSen?.(sel)
-                          if (r2?.ok === false && r2?.symbols?.length) {
-                            setBlockingPopup({ message: 'Los siguientes activos no tienen Score métricas. Ejecuta primero ↻ Score métricas.', symbols: r2.symbols })
-                          } else {
-                            try { localStorage.setItem('wl_scores_last_updated', Date.now().toString()) } catch(_) {}
-                          }
+                          // Pasar activeScoreMap fresco para evitar leer wlData stale
+                          await onCalcScoreMetSen?.(sel, r?.activeScoreMap ?? null)
+                          try { localStorage.setItem('wl_scores_last_updated', Date.now().toString()) } catch(_) {}
                         }}
                         title="Paso 2+3 · Calcula Score métricas y Score mét.+señales en secuencia para los activos seleccionados."
                         style={{ display:'inline-flex', alignItems:'center', justifyContent:'center',

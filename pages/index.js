@@ -2736,17 +2736,22 @@ export default function Home() {
       return next
     })
     setRankingRunning(false); setRankingProgress({done:0,total:0})
-    return { ok: true }
+    return { ok: true, activeScoreMap }
   },[watchlist,wlData,currentStratId,stratName,estrategiaIntervalo])
 
   // ── SCORE MÉT.+SEÑ. ↻ (Paso 3) — Añade señales de mercado al scoreMetricas existente ──
   // Requiere: ↻ Score métricas ejecutado previamente (scoreMetricas en wlData[sym].active)
-  const calcScoreMetSen = useCallback(async (rankSymbols=null) => {
+  const calcScoreMetSen = useCallback(async (rankSymbols=null, scoreOverride=null) => {
     const items = rankSymbols || watchlist
     const syms = items.map(w=>w.symbol)
 
     // ── Verificación previa: todos deben tener scoreMetricas ──
-    const missingScore = syms.filter(sym => wlData[sym.toUpperCase()]?.active?.scoreMetricas==null)
+    // scoreOverride contiene los scores recién calculados por calcScoreMetricas en la misma
+    // llamada (evita leer wlData stale antes de que React procese el setWlData anterior)
+    const missingScore = syms.filter(sym => {
+      const symUp = sym.toUpperCase()
+      return (scoreOverride?.[symUp] ?? wlData[symUp]?.active?.scoreMetricas) == null
+    })
     if (missingScore.length > 0) {
       return { ok: false, error: 'missing_score_metricas', symbols: missingScore }
     }
@@ -2768,7 +2773,7 @@ export default function Home() {
       await Promise.allSettled(batch.map(async sym=>{
         try{
           const symUp=sym.toUpperCase()
-          const activeShist=wlData[symUp]?.active?.scoreMetricas
+          const activeShist=scoreOverride?.[symUp]??wlData[symUp]?.active?.scoreMetricas
           const topShist=wlData[symUp]?.top?.scoreMetricas
           if(activeShist==null) return
           // Descargar precios actuales para señales de mercado
@@ -4248,7 +4253,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.432</title>
+        <title>Trading Simulator V9.433</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4326,7 +4331,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.432
+            <span className="dot"/>Trading Simulator V9.433
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
