@@ -37,10 +37,24 @@ export function MultiCartChart({simpleCurve,compoundCurve,bhCurve,sp500BHCurve,c
       const base=stCurve||coCurve||bhCurve||sp500BHCurve
       if(base?.length) chart.addLineSeries({color:'#2a3f55',lineWidth:1,lineStyle:LineStyle.Dotted,lastValueVisible:false,priceLineVisible:false})
         .setData([{time:base[0].date,value:capitalIni},{time:base[base.length-1].date,value:capitalIni}])
-      if(showSimple&&stCurve?.length) chart.addLineSeries({color:'#00d4ff',lineWidth:2,lastValueVisible:true,priceLineVisible:false,priceFormat:{type:'price',precision:0,minMove:1}}).setData(stCurve.map(p=>({time:p.date,value:p.value})))
-      if(showCompound&&coCurve?.length) chart.addLineSeries({color:'#00e5a0',lineWidth:2,lastValueVisible:true,priceLineVisible:false,priceFormat:{type:'price',precision:0,minMove:1}}).setData(coCurve.map(p=>({time:p.date,value:p.value})))
-      if(showBH&&bhCurve?.length) chart.addLineSeries({color:'#a0b4c8',lineWidth:2,lineStyle:LineStyle.Dashed,lastValueVisible:true,priceLineVisible:false,priceFormat:{type:'price',precision:0,minMove:1}}).setData(bhCurve.map(p=>({time:p.date,value:p.value})))
-      if(showSP500&&sp500BHCurve?.length) chart.addLineSeries({color:'#9b72ff',lineWidth:2,lineStyle:LineStyle.Dotted,lastValueVisible:true,priceLineVisible:false,priceFormat:{type:'price',precision:0,minMove:1}}).setData(sp500BHCurve.map(p=>({time:p.date,value:p.value})))
+      const _seriesEntries=[]
+      if(showSimple&&stCurve?.length){const _s=chart.addLineSeries({color:'#00d4ff',lineWidth:2,lastValueVisible:true,priceLineVisible:false,priceFormat:{type:'price',precision:0,minMove:1}});_s.setData(stCurve.map(p=>({time:p.date,value:p.value})));_seriesEntries.push({s:_s,color:'#00d4ff',name:'Simple'})}
+      if(showCompound&&coCurve?.length){const _s=chart.addLineSeries({color:'#00e5a0',lineWidth:2,lastValueVisible:true,priceLineVisible:false,priceFormat:{type:'price',precision:0,minMove:1}});_s.setData(coCurve.map(p=>({time:p.date,value:p.value})));_seriesEntries.push({s:_s,color:'#00e5a0',name:'Compuesto'})}
+      if(showBH&&bhCurve?.length){const _s=chart.addLineSeries({color:'#a0b4c8',lineWidth:2,lineStyle:LineStyle.Dashed,lastValueVisible:true,priceLineVisible:false,priceFormat:{type:'price',precision:0,minMove:1}});_s.setData(bhCurve.map(p=>({time:p.date,value:p.value})));_seriesEntries.push({s:_s,color:'#a0b4c8',name:'B&H'})}
+      if(showSP500&&sp500BHCurve?.length){const _s=chart.addLineSeries({color:'#9b72ff',lineWidth:2,lineStyle:LineStyle.Dotted,lastValueVisible:true,priceLineVisible:false,priceFormat:{type:'price',precision:0,minMove:1}});_s.setData(sp500BHCurve.map(p=>({time:p.date,value:p.value})));_seriesEntries.push({s:_s,color:'#9b72ff',name:'SP500'})}
+      // Tooltip crosshair: muestra valor exacto sin decimales al hacer hover
+      ref.current.querySelectorAll('.lw-eq-tip').forEach(el=>el.remove())
+      const _tip=document.createElement('div');_tip.className='lw-eq-tip'
+      Object.assign(_tip.style,{position:'absolute',display:'none',background:'rgba(10,20,35,0.92)',border:'1px solid #1a2d45',borderRadius:'6px',padding:'6px 10px',fontSize:'12px',color:'#e0e8f0',pointerEvents:'none',zIndex:'100',whiteSpace:'nowrap',fontFamily:'"JetBrains Mono","Fira Code",monospace'})
+      ref.current.appendChild(_tip)
+      chart.subscribeCrosshairMove(param=>{
+        if(!param.point||!param.seriesData?.size){_tip.style.display='none';return}
+        const lines=[]
+        _seriesEntries.forEach(({s,color,name})=>{const d=param.seriesData.get(s);if(d?.value!=null)lines.push(`<span style="color:${color}">${name}: ${Math.round(d.value).toLocaleString('es-ES')}€</span>`)})
+        if(!lines.length){_tip.style.display='none';return}
+        _tip.innerHTML=lines.join('<br>');_tip.style.display='block'
+        _tip.style.left=(param.point.x+15)+'px';_tip.style.top=Math.max(0,param.point.y-10)+'px'
+      })
       const addDD=(curve,date,dd,color)=>{
         if(!date||!dd||!curve?.length||!curve[0]) return
         let peak={date:curve[0].date,value:curve[0].value}
@@ -85,7 +99,7 @@ export function MultiCartChart({simpleCurve,compoundCurve,bhCurve,sp500BHCurve,c
 
 
 
-  return <div ref={ref} style={{minHeight:chartHeight}}/>
+  return <div ref={ref} style={{minHeight:chartHeight,position:'relative'}}/>
 }
 
 // ── OccupancyBarChart — individual asset capital invested chart ────
@@ -232,12 +246,27 @@ export function StratCompareChart({curves,capitalIni,showMaxDD=true,chartHeight=
       const base=curves.find(c=>c.data?.length)?.data
       if(base?.length) chart.addLineSeries({color:'#2a3f55',lineWidth:1,lineStyle:LineStyle.Dotted,lastValueVisible:false,priceLineVisible:false})
         .setData([{time:base[0].date,value:capitalIni},{time:base[base.length-1].date,value:capitalIni}])
+      const _seriesEntries=[]
       curves.forEach(c=>{
         if(!c.show||!c.data?.length) return
-        chart.addLineSeries({color:c.color,lineWidth:2,lastValueVisible:true,priceLineVisible:false,
+        const _s=chart.addLineSeries({color:c.color,lineWidth:2,lastValueVisible:true,priceLineVisible:false,
           lineStyle:c.dashed?LineStyle.Dashed:LineStyle.Solid,
           priceFormat:{type:'price',precision:0,minMove:1}})
-          .setData(c.data.map(p=>({time:p.date,value:p.value})))
+        _s.setData(c.data.map(p=>({time:p.date,value:p.value})))
+        _seriesEntries.push({s:_s,color:c.color,name:c.name})
+      })
+      // Tooltip crosshair: muestra valor exacto sin decimales al hacer hover
+      ref.current.querySelectorAll('.lw-eq-tip').forEach(el=>el.remove())
+      const _tip=document.createElement('div');_tip.className='lw-eq-tip'
+      Object.assign(_tip.style,{position:'absolute',display:'none',background:'rgba(10,20,35,0.92)',border:'1px solid #1a2d45',borderRadius:'6px',padding:'6px 10px',fontSize:'12px',color:'#e0e8f0',pointerEvents:'none',zIndex:'100',whiteSpace:'nowrap',fontFamily:'"JetBrains Mono","Fira Code",monospace'})
+      ref.current.appendChild(_tip)
+      chart.subscribeCrosshairMove(param=>{
+        if(!param.point||!param.seriesData?.size){_tip.style.display='none';return}
+        const lines=[]
+        _seriesEntries.forEach(({s,color,name})=>{const d=param.seriesData.get(s);if(d?.value!=null)lines.push(`<span style="color:${color}">${name}: ${Math.round(d.value).toLocaleString('es-ES')}€</span>`)})
+        if(!lines.length){_tip.style.display='none';return}
+        _tip.innerHTML=lines.join('<br>');_tip.style.display='block'
+        _tip.style.left=(param.point.x+15)+'px';_tip.style.top=Math.max(0,param.point.y-10)+'px'
       })
       if(showMaxDD){
         const addDD=(curve,date,dd,color)=>{
@@ -280,7 +309,7 @@ export function StratCompareChart({curves,capitalIni,showMaxDD=true,chartHeight=
   useEffect(()=>{
     if(chartRef.current) try{chartRef.current.applyOptions({height:chartHeight})}catch(_){}
   },[chartHeight])
-  return <div ref={ref} style={{minHeight:chartHeight}}/>
+  return <div ref={ref} style={{minHeight:chartHeight,position:'relative'}}/>
 }
 
 // ── AssetSignalChart — candles + strategy entry/exit markers, lazy-loaded ──
