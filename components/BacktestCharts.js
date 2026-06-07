@@ -163,18 +163,14 @@ export function McOccupancyChart({series=[], capitalIni, syncRef, axisWidth=72})
       chartRef.current=chart
       // One area series per strategy entry
       validSeries.forEach(s=>{
-        const compMap=new Map((s.compoundCurve||[]).map(c=>[c.date,c.value]))
         const color=s.color
         const area=chart.addAreaSeries({
           lineColor:color,topColor:`${color}55`,bottomColor:`${color}08`,
           lineWidth:2,lastValueVisible:true,priceLineVisible:false,
           priceFormat:{type:'price',precision:0,minMove:1},
         })
-        area.setData(s.occupancyCurve.map(p=>{
-          const pct=p.value/100
-          const total=compMap.get(p.date)??capitalIni
-          return{time:p.date,value:pct*total}
-        }))
+        // occupancyCurve.value ya son euros reales actualizados a mercado (no porcentaje)
+        area.setData(s.occupancyCurve.map(p=>({time:p.date,value:p.value})))
       })
       // Sync
       if(syncRef?.current){

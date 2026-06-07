@@ -639,14 +639,32 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
       capitalAtEntryMap[`${t.symbol}:${t.entryDate}`] != null &&
       t.entryDate <= date && (!t.exitDate || t.exitDate > date || (t._virtualClose && t.exitDate >= date))
     )
-    const openCapTotal = openTrades.reduce((s, t) => s + (capitalAtEntryMap[`${t.symbol}:${t.entryDate}`] || 0), 0)
-    const totalPortfolio = compoundCurve[i]?.value || capitalIni
+    // Valor actual de mercado de cada posición abierta (no el coste de entrada fijo)
+    // capAsignado × (1 + ret) donde ret = (precioCierre − precioEntrada) / precioEntrada
+    const openCapTotal = openTrades.reduce((s, t) => {
+      const capEntry = capitalAtEntryMap[`${t.symbol}:${t.entryDate}`] || 0
+      const fData = symbolDataMap[t.symbol] || []
+      let closePx = null
+      for (let k = fData.length - 1; k >= 0; k--) {
+        if (fData[k].date <= date) { closePx = fData[k].close; break }
+      }
+      if (closePx != null && t.entryPx > 0) {
+        const ret = (closePx - t.entryPx) / t.entryPx
+        return s + capEntry * (1 + ret)  // valor actualizado a mercado
+      }
+      return s + capEntry  // fallback: coste de entrada si no hay precio
+    }, 0)
     if (openTrades.length > 0) _tInvDays++
-    return { date, value: totalPortfolio > 0 ? (openCapTotal / totalPortfolio) * 100 : 0 }
+    return { date, value: openCapTotal }  // euros directos, no porcentaje
   })
   const tInvEstrategia = sampledDates.length > 0 ? (_tInvDays / sampledDates.length) * 100 : 0
-  const avgCapOccupancy = occupancyCurve.length
-    ? occupancyCurve.reduce((s, p) => s + p.value, 0) / occupancyCurve.length : 0
+  // avgCapOccupancy: media de (capitalEmpleado / portfolioTotal × 100) — mantiene % para la tabla
+  const avgCapOccupancy = occupancyCurve.length && compoundCurve.length
+    ? occupancyCurve.reduce((s, p, i) => {
+        const total = compoundCurve[i]?.value || capitalIni
+        return s + (total > 0 ? (p.value / total) * 100 : 0)
+      }, 0) / occupancyCurve.length
+    : 0
 
   const slotBH = capitalIni / n
   const bhCurve = sampledDates.map(date => {
