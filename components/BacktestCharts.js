@@ -31,10 +31,10 @@ export function MultiCartChart({simpleCurve,compoundCurve,bhCurve,sp500BHCurve,c
       const base=stCurve||coCurve||bhCurve||sp500BHCurve
       if(base?.length) chart.addLineSeries({color:'#2a3f55',lineWidth:1,lineStyle:LineStyle.Dotted,lastValueVisible:false,priceLineVisible:false})
         .setData([{time:base[0].date,value:capitalIni},{time:base[base.length-1].date,value:capitalIni}])
-      if(showSimple&&stCurve?.length) chart.addLineSeries({color:'#00d4ff',lineWidth:2,lastValueVisible:true,priceLineVisible:false}).setData(stCurve.map(p=>({time:p.date,value:p.value})))
-      if(showCompound&&coCurve?.length) chart.addLineSeries({color:'#00e5a0',lineWidth:2,lastValueVisible:true,priceLineVisible:false}).setData(coCurve.map(p=>({time:p.date,value:p.value})))
-      if(showBH&&bhCurve?.length) chart.addLineSeries({color:'#a0b4c8',lineWidth:2,lineStyle:LineStyle.Dashed,lastValueVisible:true,priceLineVisible:false}).setData(bhCurve.map(p=>({time:p.date,value:p.value})))
-      if(showSP500&&sp500BHCurve?.length) chart.addLineSeries({color:'#9b72ff',lineWidth:2,lineStyle:LineStyle.Dotted,lastValueVisible:true,priceLineVisible:false}).setData(sp500BHCurve.map(p=>({time:p.date,value:p.value})))
+      if(showSimple&&stCurve?.length) chart.addLineSeries({color:'#00d4ff',lineWidth:2,lastValueVisible:true,priceLineVisible:false,priceFormat:{type:'price',precision:0,minMove:1}}).setData(stCurve.map(p=>({time:p.date,value:p.value})))
+      if(showCompound&&coCurve?.length) chart.addLineSeries({color:'#00e5a0',lineWidth:2,lastValueVisible:true,priceLineVisible:false,priceFormat:{type:'price',precision:0,minMove:1}}).setData(coCurve.map(p=>({time:p.date,value:p.value})))
+      if(showBH&&bhCurve?.length) chart.addLineSeries({color:'#a0b4c8',lineWidth:2,lineStyle:LineStyle.Dashed,lastValueVisible:true,priceLineVisible:false,priceFormat:{type:'price',precision:0,minMove:1}}).setData(bhCurve.map(p=>({time:p.date,value:p.value})))
+      if(showSP500&&sp500BHCurve?.length) chart.addLineSeries({color:'#9b72ff',lineWidth:2,lineStyle:LineStyle.Dotted,lastValueVisible:true,priceLineVisible:false,priceFormat:{type:'price',precision:0,minMove:1}}).setData(sp500BHCurve.map(p=>({time:p.date,value:p.value})))
       const addDD=(curve,date,dd,color)=>{
         if(!date||!dd||!curve?.length||!curve[0]) return
         let peak={date:curve[0].date,value:curve[0].value}
