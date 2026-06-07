@@ -448,7 +448,10 @@ export default function WatchlistManager({
     const items = watchlist.filter(w => selected.has(w.id))
     setSaving(new Set(items.map(w => w.id)))
     try {
-      await Promise.all(items.map(item => _setItemLists(item.id, [bulkMoveList])))
+      await Promise.all(items.map(item =>
+        bulkMoveList === '__unassigned__'
+          ? _setItemLists(item.id, [])
+          : _setItemLists(item.id, [bulkMoveList])))
       onReload(); setSelected(new Set())
     }
     catch (e) { console.error(e) }
@@ -913,6 +916,7 @@ export default function WatchlistManager({
             <select value={bulkMoveList} onChange={e => setBulkMoveList(e.target.value)}
               style={bulkSelStyle}>
               <option value="" style={{ background: '#ffffff', color: '#1e293b' }}>— lista —</option>
+              <option value="__unassigned__" style={{ background: '#ffffff', color: '#1e293b' }}>Sin lista asignada</option>
               {wlLists.map(l => (
                 <option key={l.id} value={l.id} style={{ background: '#ffffff', color: '#1e293b' }}>
                   {l.name}
