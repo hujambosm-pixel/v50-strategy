@@ -575,6 +575,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         const {macdLine,signalLine,histogram}=calcMACD(_closes,mp.fast,mp.slow,mp.signal)
         if(macdChartRef.current){try{macdChartRef.current.remove()}catch(_){};macdChartRef.current=null}
         if(macdContainerRef.current.clientWidth<=0) return
+        console.log('[CHART-DEBUG] CandleChart MACD-indicator',macdContainerRef.current?.clientWidth,macdContainerRef.current?.clientHeight)
         const macdChart=createChart(macdContainerRef.current,_panelOpts(100))
         macdChartRef.current=macdChart
         const histS=macdChart.addHistogramSeries({lastValueVisible:false,priceLineVisible:false})
@@ -590,6 +591,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         if(macdChartRef.current){try{macdChartRef.current.remove()}catch(_){};macdChartRef.current=null}
         const volData=data.filter(d=>d.volume!=null)
         if(volData.length&&macdContainerRef.current.clientWidth>0){
+          console.log('[CHART-DEBUG] CandleChart VOLUME-macd',macdContainerRef.current?.clientWidth,macdContainerRef.current?.clientHeight)
           const volChart=createChart(macdContainerRef.current,_panelOpts(80))
           macdChartRef.current=volChart
           const volS=volChart.addHistogramSeries({lastValueVisible:false,priceLineVisible:false,title:'Volume'})
@@ -605,6 +607,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       if(_hasMacdBars&&macdContainerRef.current){
         if(macdChartRef.current){try{macdChartRef.current.remove()}catch(_){};macdChartRef.current=null}
         if(macdContainerRef.current.clientWidth<=0) return
+        console.log('[CHART-DEBUG] CandleChart MACD-bars',macdContainerRef.current?.clientWidth,macdContainerRef.current?.clientHeight)
         const macdChart=createChart(macdContainerRef.current,_panelOpts(120))
         macdChartRef.current=macdChart
         const validMacdData=data.filter(d=>d.macdLine!=null&&d.signalLine!=null&&d.histogram!=null)
@@ -647,6 +650,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
           rsiChartRef.current=null
         }
         if(rsiContainerRef.current.clientWidth<=0) return
+        console.log('[CHART-DEBUG] CandleChart RSI',rsiContainerRef.current?.clientWidth,rsiContainerRef.current?.clientHeight)
         const rsiChart=createChart(rsiContainerRef.current,_panelOpts(120))
         rsiChartRef.current=rsiChart
         const validRsiData=data.filter(d=>d.rsiLine!=null)
@@ -685,6 +689,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       if (_hasVolume && volumeContainerRef.current) {
         if (volumeChartRef.current) { try { volumeChartRef.current.remove() } catch(_) {}; volumeChartRef.current = null }
         if(volumeContainerRef.current.clientWidth<=0) return
+        console.log('[CHART-DEBUG] CandleChart Volume-subpanel',volumeContainerRef.current?.clientWidth,volumeContainerRef.current?.clientHeight)
         const volChart = createChart(volumeContainerRef.current, _panelOpts(80))
         volumeChartRef.current = volChart
         volChart.applyOptions({ localization: { priceFormatter: () => '' } })
