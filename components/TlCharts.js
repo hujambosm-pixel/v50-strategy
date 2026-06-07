@@ -39,13 +39,13 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
 
   useEffect(()=>{
     const ac = activeCurveRef.current
-    if(!ref.current||!ac?.length) return
+    if(!ref.current||!ac?.length||ref.current.clientWidth<=0) return
     let cancelled = false
     import('lightweight-charts').then(({createChart,CrosshairMode,LineStyle})=>{
       if(cancelled) return
       if(chartRef.current){chartRef.current.remove();chartRef.current=null;mainSeriesRef.current=null}
       const chart = createChart(ref.current,{
-        width:ref.current.clientWidth, height:height||ref.current.clientHeight||200,
+        width:ref.current.clientWidth||300, height:height||ref.current.clientHeight||200,
         layout:{background:{color:'#080c14'},textColor:'#7a9bc0',fontFamily:'-apple-system, BlinkMacSystemFont, Trebuchet MS, Roboto, Ubuntu, sans-serif'},
         grid:{vertLines:{color:'#0d1520'},horzLines:{color:'#0d1520'}},
         crosshair:{mode:CrosshairMode.Normal},
@@ -337,7 +337,7 @@ export function TlInvestChart({ investData, syncRef, patrimonyCurve, compact, he
   const [showPatrimony, setShowPatrimony] = useState(false)
 
   useEffect(()=>{
-    if(!ref.current||!investData?.length) return
+    if(!ref.current||!investData?.length||ref.current.clientWidth<=0) return
     import('lightweight-charts').then(({createChart,CrosshairMode,LineStyle})=>{
       if(chartRef.current){chartRef.current.remove();chartRef.current=null}
       // compact mode: inherit container height; standalone mode: use clientHeight or default 200

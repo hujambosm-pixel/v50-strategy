@@ -11,7 +11,7 @@ export default function EquityChart({
 }) {
   const ref=useRef(null),chartRef=useRef(null),equityTooltipRef=useRef(null)
   useEffect(()=>{
-    if(!ref.current) return
+    if(!ref.current||ref.current.clientWidth<=0) return
     import('lightweight-charts').then(({createChart,CrosshairMode,LineStyle})=>{
       if(chartRef.current){chartRef.current.remove();chartRef.current=null}
       const chart=createChart(ref.current,{
