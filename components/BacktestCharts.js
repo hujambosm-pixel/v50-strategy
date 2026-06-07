@@ -159,6 +159,12 @@ export function McOccupancyChart({series=[], capitalIni, syncRef, axisWidth=72})
         crosshair:{mode:CrosshairMode.Normal},
         rightPriceScale:{borderColor:'#1a2d45',minimumWidth:axisWidth,scaleMargins:{top:0.08,bottom:0.0}},
         timeScale:{borderColor:'#1a2d45',timeVisible:false},
+        localization:{priceFormatter:(price)=>{
+          const abs=Math.abs(price)
+          if(abs>=1000000) return (price/1000000).toFixed(1)+'M'
+          if(abs>=1000)    return (price/1000).toFixed(0)+'k'
+          return price.toFixed(0)
+        }},
       })
       chartRef.current=chart
       // One area series per strategy entry
@@ -217,7 +223,8 @@ export function StratCompareChart({curves,capitalIni,showMaxDD=true,chartHeight=
       curves.forEach(c=>{
         if(!c.show||!c.data?.length) return
         chart.addLineSeries({color:c.color,lineWidth:2,lastValueVisible:true,priceLineVisible:false,
-          lineStyle:c.dashed?LineStyle.Dashed:LineStyle.Solid})
+          lineStyle:c.dashed?LineStyle.Dashed:LineStyle.Solid,
+          priceFormat:{type:'price',precision:0,minMove:1}})
           .setData(c.data.map(p=>({time:p.date,value:p.value})))
       })
       if(showMaxDD){
