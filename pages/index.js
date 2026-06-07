@@ -2647,6 +2647,8 @@ export default function Home() {
   const calcScoreMetricas = useCallback(async (rankSymbols=null) => {
     const items = rankSymbols || watchlist
     const syms = items.map(w=>w.symbol)
+    // Universo completo para normalización percentil — siempre watchlist entero
+    const allSyms = watchlist.map(w=>w.symbol)
 
     // ── Verificación previa: todos los activos deben tener métricas ──
     const missingMetrics = syms.filter(sym => {
@@ -2668,15 +2670,15 @@ export default function Home() {
     const getPct=(arr,p)=>{const s=[...arr].sort((a,b)=>a-b);return s[Math.max(0,Math.floor(p*(s.length-1)))]??0}
     const normDyn=(v,floor,ceil)=>Math.max(0,Math.min(100,ceil===floor?50:(v-floor)/(ceil-floor)*100))
 
-    // Recopilar todos los valores válidos (activa y top por separado)
-    const allWR  =syms.map(s=>wlData[s.toUpperCase()]?.active?.winRate).filter(v=>v!=null)
-    const allCagr=syms.map(s=>wlData[s.toUpperCase()]?.active?.cagr).filter(v=>v!=null)
-    const allCRob=syms.map(s=>{const d=wlData[s.toUpperCase()]?.active;return d?.cagrRobust??d?.cagr}).filter(v=>v!=null)
-    const allDD  =syms.map(s=>wlData[s.toUpperCase()]?.active?.maxDD).filter(v=>v!=null)
-    const allWRT =syms.map(s=>wlData[s.toUpperCase()]?.top?.winRate).filter(v=>v!=null)
-    const allCT  =syms.map(s=>wlData[s.toUpperCase()]?.top?.cagr).filter(v=>v!=null)
-    const allCRT =syms.map(s=>{const d=wlData[s.toUpperCase()]?.top;return d?.cagrRobust??d?.cagr}).filter(v=>v!=null)
-    const allDDT =syms.map(s=>wlData[s.toUpperCase()]?.top?.maxDD).filter(v=>v!=null)
+    // Recopilar todos los valores válidos — universo completo para percentiles estables
+    const allWR  =allSyms.map(s=>wlData[s.toUpperCase()]?.active?.winRate).filter(v=>v!=null)
+    const allCagr=allSyms.map(s=>wlData[s.toUpperCase()]?.active?.cagr).filter(v=>v!=null)
+    const allCRob=allSyms.map(s=>{const d=wlData[s.toUpperCase()]?.active;return d?.cagrRobust??d?.cagr}).filter(v=>v!=null)
+    const allDD  =allSyms.map(s=>wlData[s.toUpperCase()]?.active?.maxDD).filter(v=>v!=null)
+    const allWRT =allSyms.map(s=>wlData[s.toUpperCase()]?.top?.winRate).filter(v=>v!=null)
+    const allCT  =allSyms.map(s=>wlData[s.toUpperCase()]?.top?.cagr).filter(v=>v!=null)
+    const allCRT =allSyms.map(s=>{const d=wlData[s.toUpperCase()]?.top;return d?.cagrRobust??d?.cagr}).filter(v=>v!=null)
+    const allDDT =allSyms.map(s=>wlData[s.toUpperCase()]?.top?.maxDD).filter(v=>v!=null)
 
     // Suelo y techo percentiles para activa
     const [wrFl,wrCe]      =[getPct(allWR  ,1-pct),getPct(allWR  ,pct)]
@@ -4246,7 +4248,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.430</title>
+        <title>Trading Simulator V9.431</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4324,7 +4326,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.430
+            <span className="dot"/>Trading Simulator V9.431
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
