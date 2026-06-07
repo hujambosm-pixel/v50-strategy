@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { MONO } from '../lib/utils'
-import { getSupaUrl, getSupaH } from '../lib/supabase'
 
 const TEMA_SECTIONS = {
   global:   { label:'🌐 Global (todo)', selector:'body *' },
@@ -51,21 +50,11 @@ export default function ContextThemeMenu({ x, y, section, onClose, onSave }) {
       localStorage.setItem('v50_settings', JSON.stringify(s))
     }catch(_){}
   }
-  const saveTemaSupabase = async (nf) => {
-    try{
-      await fetch(getSupaUrl()+'/rest/v1/user_settings?on_conflict=key',{
-        method:'POST',
-        headers:{...getSupaH(),'Prefer':'return=minimal,resolution=merge-duplicates'},
-        body:JSON.stringify({key:'v50_tema_fonts',value:JSON.stringify(nf),updated_at:new Date().toISOString()})
-      })
-    }catch(_){}
-  }
   const upd = (k,v) => {
     const nf = {...fonts, [section]:{...fc, [k]:v||undefined}}
     setFonts(nf)
     applyTema(nf)
     saveTemaLS(nf)
-    saveTemaSupabase(nf)
     onSave && onSave(nf)
   }
   const reset = () => {
