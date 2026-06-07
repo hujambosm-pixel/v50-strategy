@@ -19,6 +19,12 @@ export function MultiCartChart({simpleCurve,compoundCurve,bhCurve,sp500BHCurve,c
         crosshair:{mode:CrosshairMode.Normal},
         rightPriceScale:{borderColor:'#1a2d45'},
         timeScale:{borderColor:'#1a2d45',timeVisible:false},
+        localization:{priceFormatter:(price)=>{
+          const abs=Math.abs(price)
+          if(abs>=1000000) return (price/1000000).toFixed(1)+'M'
+          if(abs>=1000)    return (price/1000).toFixed(0)+'k'
+          return price.toFixed(0)
+        }},
       })
       chartRef.current=chart
       // Resolve float vs closed curves
@@ -215,6 +221,12 @@ export function StratCompareChart({curves,capitalIni,showMaxDD=true,chartHeight=
         crosshair:{mode:CrosshairMode.Normal},
         rightPriceScale:{borderColor:'#1a2d45'},
         timeScale:{borderColor:'#1a2d45',timeVisible:false},
+        localization:{priceFormatter:(price)=>{
+          const abs=Math.abs(price)
+          if(abs>=1000000) return (price/1000000).toFixed(1)+'M'
+          if(abs>=1000)    return (price/1000).toFixed(0)+'k'
+          return price.toFixed(0)
+        }},
       })
       chartRef.current=chart
       const base=curves.find(c=>c.data?.length)?.data
