@@ -53,7 +53,8 @@ export function MultiCartChart({simpleCurve,compoundCurve,bhCurve,sp500BHCurve,c
         _seriesEntries.forEach(({s,color,name})=>{const d=param.seriesData.get(s);if(d?.value!=null)lines.push(`<span style="color:${color}">${name}: ${Math.round(d.value).toLocaleString('es-ES')}€</span>`)})
         if(!lines.length){_tip.style.display='none';return}
         _tip.innerHTML=lines.join('<br>');_tip.style.display='block'
-        _tip.style.left=(param.point.x+15)+'px';_tip.style.top=Math.max(0,param.point.y-10)+'px'
+        const _cw=ref.current.offsetWidth,_tw=_tip.offsetWidth||160,_goLeft=param.point.x+_tw+20>_cw
+        _tip.style.left=(_goLeft?param.point.x-_tw-10:param.point.x+15)+'px';_tip.style.top=Math.max(0,param.point.y-10)+'px'
       })
       const addDD=(curve,date,dd,color)=>{
         if(!date||!dd||!curve?.length||!curve[0]) return
@@ -266,7 +267,8 @@ export function StratCompareChart({curves,capitalIni,showMaxDD=true,chartHeight=
         _seriesEntries.forEach(({s,color,name})=>{const d=param.seriesData.get(s);if(d?.value!=null)lines.push(`<span style="color:${color}">${name}: ${Math.round(d.value).toLocaleString('es-ES')}€</span>`)})
         if(!lines.length){_tip.style.display='none';return}
         _tip.innerHTML=lines.join('<br>');_tip.style.display='block'
-        _tip.style.left=(param.point.x+15)+'px';_tip.style.top=Math.max(0,param.point.y-10)+'px'
+        const _cw=ref.current.offsetWidth,_tw=_tip.offsetWidth||160,_goLeft=param.point.x+_tw+20>_cw
+        _tip.style.left=(_goLeft?param.point.x-_tw-10:param.point.x+15)+'px';_tip.style.top=Math.max(0,param.point.y-10)+'px'
       })
       if(showMaxDD){
         const addDD=(curve,date,dd,color)=>{
