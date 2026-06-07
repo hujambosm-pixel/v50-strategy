@@ -9,9 +9,10 @@ export function MultiCartChart({simpleCurve,compoundCurve,bhCurve,sp500BHCurve,c
   const ref=useRef(null),chartRef=useRef(null)
 
   useEffect(()=>{
-    if(!ref.current) return
+    if(!ref.current||ref.current.clientWidth<=0) return
     import('lightweight-charts').then(({createChart,CrosshairMode,LineStyle})=>{
       if(chartRef.current){chartRef.current.remove();chartRef.current=null}
+      if(!ref.current||ref.current.clientWidth<=0) return
       const chart=createChart(ref.current,{
         width:ref.current.clientWidth,height:chartHeight,
         layout:{background:{color:'#080c14'},textColor:'#7a9bc0'},
@@ -108,9 +109,10 @@ export function MultiCartChart({simpleCurve,compoundCurve,bhCurve,sp500BHCurve,c
 export function OccupancyBarChart({trades, chartData, capitalIni, syncRef, showMode='compound', axisWidth=90}) {
   const ref=useRef(null), chartRef=useRef(null)
   useEffect(()=>{
-    if(!ref.current||!trades?.length||!chartData?.length) return
+    if(!ref.current||!trades?.length||!chartData?.length||ref.current.clientWidth<=0) return
     import('lightweight-charts').then(({createChart,CrosshairMode})=>{
       if(chartRef.current){chartRef.current.__syncCleanup?.();chartRef.current.remove();chartRef.current=null}
+      if(!ref.current||ref.current.clientWidth<=0) return
       const chart=createChart(ref.current,{
         width:ref.current.clientWidth,height:100,
         layout:{background:{color:'#080c14'},textColor:'#7a9bc0'},
@@ -170,9 +172,10 @@ export function McOccupancyChart({series=[], capitalIni, syncRef, axisWidth=72})
   const ref=useRef(null), chartRef=useRef(null)
   useEffect(()=>{
     const validSeries=series.filter(s=>s.occupancyCurve?.length)
-    if(!ref.current||!validSeries.length) return
+    if(!ref.current||!validSeries.length||ref.current.clientWidth<=0) return
     import('lightweight-charts').then(({createChart,CrosshairMode})=>{
       if(chartRef.current){chartRef.current.__syncCleanup?.();chartRef.current.remove();chartRef.current=null}
+      if(!ref.current||ref.current.clientWidth<=0) return
       const chart=createChart(ref.current,{
         width:ref.current.clientWidth,height:100,
         layout:{background:{color:'#080c14'},textColor:'#7a9bc0'},
@@ -226,9 +229,10 @@ export function McOccupancyChart({series=[], capitalIni, syncRef, axisWidth=72})
 export function StratCompareChart({curves,capitalIni,showMaxDD=true,chartHeight=300,syncRef,onReady,onAxisWidth}) {
   const ref=useRef(null),chartRef=useRef(null)
   useEffect(()=>{
-    if(!ref.current||!curves?.length) return
+    if(!ref.current||!curves?.length||ref.current.clientWidth<=0) return
     import('lightweight-charts').then(({createChart,CrosshairMode,LineStyle})=>{
       if(chartRef.current){chartRef.current.__syncCleanup?.();chartRef.current.remove();chartRef.current=null}
+      if(!ref.current||ref.current.clientWidth<=0) return
       const chart=createChart(ref.current,{
         width:ref.current.clientWidth,height:chartHeight,
         layout:{background:{color:'#080c14'},textColor:'#7a9bc0'},
@@ -356,10 +360,11 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
 
   // Build/rebuild chart when data or signals change
   useEffect(()=>{
-    if(!ohlcv?.length||!chartDivRef.current) return
+    if(!ohlcv?.length||!chartDivRef.current||chartDivRef.current.clientWidth<=0) return
     import('lightweight-charts').then(({createChart,CrosshairMode})=>{
       // Cleanup previous instance and remove from sync group
       if(chartRef.current){chartRef.current.__syncCleanup?.();chartRef.current.remove();chartRef.current=null}
+      if(!chartDivRef.current||chartDivRef.current.clientWidth<=0) return
       const chart=createChart(chartDivRef.current,{
         width:chartDivRef.current.clientWidth,height,
         layout:{background:{color:'#080c14'},textColor:'#7a9bc0'},
