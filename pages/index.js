@@ -4241,7 +4241,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.440</title>
+        <title>Trading Simulator V9.441</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4319,7 +4319,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.440
+            <span className="dot"/>Trading Simulator V9.441
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5083,7 +5083,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                           return(
                             <span title={`${r?`Rank #${r} · `:''}Score: ${scoreStr}`}
                               style={{fontFamily:MONO,fontSize:9,fontWeight:700,color:col,flexShrink:0,minWidth:24,textAlign:'center',lineHeight:1.2,display:'flex',flexDirection:'column',alignItems:'center'}}>
-                              {r!=null&&<span>{r<=3?['🥇','🥈','🥉'][r-1]:`#${r}`}</span>}
+                              {r!=null&&<span style={r>3?{fontSize:11,color:'#e0e8f0',fontWeight:600}:undefined}>{r<=3?['🥇','🥈','🥉'][r-1]:`#${r}`}</span>}
                               <span style={{fontSize:12,color:'#e0e8f0',fontWeight:600,marginTop:r!=null?1:0}}>{scoreStr}</span>
                             </span>
                           )
@@ -5155,7 +5155,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                 onClick={e=>{e.stopPropagation();const r=e.currentTarget.getBoundingClientRect();setCondColorPicker(prev=>prev?.condId===c.id?null:{condId:c.id,x:r.left,y:r.bottom+4})}}
                                 style={{
                                   display:'inline-flex',alignItems:'center',justifyContent:'center',
-                                  width:15,height:15,borderRadius:'50%',flexShrink:0,
+                                  width:18,height:18,minWidth:18,borderRadius:'50%',flexShrink:0,
                                   background:active?col:'rgba(42,63,85,0.5)',
                                   border:`1.5px solid ${active?col:'#2a3f55'}`,
                                   color:active?'#080c14':'#3d5a7a',
@@ -5164,8 +5164,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                   opacity:!checked?0.4:1,
                                   animation:shouldBlink?`alarmPulse 1s ease-in-out infinite`:undefined,
                                 }}>
-                                {active&&<span style={{fontFamily:MONO,fontSize:9,fontWeight:800,lineHeight:1,
-                                  letterSpacing:'-0.5px',transform:'scale(0.7)',display:'inline-block',
+                                {active&&<span style={{fontFamily:MONO,fontSize:11,fontWeight:800,lineHeight:1,
+                                  letterSpacing:'-0.5px',display:'inline-block',
                                   whiteSpace:'nowrap'}}>
                                   {label}
                                 </span>}
