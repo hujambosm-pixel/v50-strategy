@@ -4241,7 +4241,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.442</title>
+        <title>Trading Simulator V9.443</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4319,7 +4319,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.442
+            <span className="dot"/>Trading Simulator V9.443
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -10207,6 +10207,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
         ['Win Rate', tAct?.winRate??null, tTop?.winRate??null, v=>fv(v,0)+'%', wrColor],
         ['Ops', tAct?.ops??null, tTop?.ops??null, v=>v!=null?String(Math.round(v)):null, ()=>'#8aadcc'],
       ]
+      const tooltipUpdatedAt = tAct?.updatedAt ?? tTop?.updatedAt ?? null
       return(
         <div style={{position:'fixed',left:wlTooltip.x,top:wlTooltip.y,zIndex:9999,
           background:'#090f18',border:'1px solid #1e3048',borderRadius:7,
@@ -10244,6 +10245,12 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                   </div>
                 )
               })}
+              {tooltipUpdatedAt&&(
+                <div style={{display:'flex',justifyContent:'space-between',marginTop:5,paddingTop:5,borderTop:'1px solid #131f2e'}}>
+                  <span style={{color:'#3d5a7a',fontSize:10}}>Actualizado</span>
+                  <span style={{color:'#5a8aaa',fontSize:10}}>{new Date(tooltipUpdatedAt).toLocaleDateString('es-ES',{day:'2-digit',month:'2-digit',year:'2-digit'})}</span>
+                </div>
+              )}
             </div>
           )}
         </div>

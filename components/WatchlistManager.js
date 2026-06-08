@@ -199,7 +199,7 @@ export default function WatchlistManager({
   const [newListName, setNewListName]     = useState('')
   const [renameValue, setRenameValue]     = useState('')
   const [listOpLoading, setListOpLoading] = useState(false)
-  const [blockingPopup, setBlockingPopup]          = useState(null)  // {message, symbols}
+  const [calcProgress, setCalcProgress]            = useState(null)  // null | string (paso actual)
   const [metricsView, setMetricsView]             = useState('top') // 'active' | 'top'
   const [rankingDoneFlash, setRankingDoneFlash]   = useState(false)
   const [topStratDoneFlash, setTopStratDoneFlash] = useState(false)
@@ -944,6 +944,38 @@ export default function WatchlistManager({
           </div>
         )}
 
+        {/* ── Botón único ↻ Actualizar ── */}
+        <button
+          disabled={selected.size === 0 || !!calcProgress}
+          onClick={async e => {
+            e.stopPropagation()
+            const sel = watchlist.filter(w => selected.has(w.id))
+            if (!sel.length) return
+            try {
+              setCalcProgress('Calculando métricas…')
+              await (onCalcMetricas ? onCalcMetricas(sel) : onCalcRankingAll?.(sel))
+              setCalcProgress('Calculando scores…')
+              const r2 = await onCalcScoreMetricas?.(sel)
+              setCalcProgress('Calculando señales…')
+              await onCalcScoreMetSen?.(sel, r2?.activeScoreMap ?? null)
+              try { localStorage.setItem('wl_scores_last_updated', Date.now().toString()) } catch(_) {}
+            } finally {
+              setCalcProgress(null)
+            }
+          }}
+          title={`Actualiza métricas, scores y señales para los activos seleccionados. Ejecuta los 3 pasos en orden:\n1. Métricas (CAGR, MaxDD, WinRate, Ops, Profit)\n2. Score métricas (normalización percentil)\n3. Score métricas + señales (momentum, fuerza relativa)`}
+          style={{
+            background: selected.size === 0 ? 'rgba(26,107,58,0.06)' : 'rgba(26,107,58,0.18)',
+            border: '1px solid #1a6b3a',
+            color: selected.size === 0 ? '#2a4a30' : '#1a6b3a',
+            fontFamily: MONO, fontSize: 11, fontWeight: 600,
+            padding: '5px 12px', borderRadius: 5,
+            cursor: selected.size === 0 || !!calcProgress ? 'not-allowed' : 'pointer',
+            flexShrink: 0, whiteSpace: 'nowrap',
+          }}>
+          {calcProgress ? `⟳ ${calcProgress}` : '↻ Actualizar'}
+        </button>
+
         {/* Botón cerrar */}
         <button onClick={onClose}
           title="Cerrar el panel de gestión y volver a la vista del gráfico"
@@ -1111,50 +1143,6 @@ export default function WatchlistManager({
         </div>
       )}
 
-      {/* ── Popup bloqueante de dependencia ── */}
-      {blockingPopup && (
-        <div style={{
-          position: 'fixed', inset: 0, zIndex: 1000,
-          background: 'rgba(0,0,0,0.65)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
-          <div style={{
-            background: '#1a1614',
-            border: '2px solid #d97706',
-            borderRadius: 8,
-            padding: '24px 28px',
-            maxWidth: 440,
-            width: '90%',
-            fontFamily: MONO,
-            boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
-          }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: '#fbbf24', marginBottom: 12 }}>
-              ⚠ Dependencia no satisfecha
-            </div>
-            <div style={{ fontSize: 12, color: '#e5e0d8', marginBottom: 10, lineHeight: 1.6 }}>
-              {blockingPopup.message}
-            </div>
-            {blockingPopup.symbols?.length > 0 && (
-              <div style={{
-                fontSize: 11, color: '#9a9590', marginBottom: 18,
-                background: 'rgba(255,255,255,0.04)', borderRadius: 4,
-                padding: '6px 10px', lineHeight: 1.7,
-              }}>
-                {blockingPopup.symbols.join(', ')}
-              </div>
-            )}
-            <button
-              onClick={() => setBlockingPopup(null)}
-              style={{
-                background: '#d97706', border: 'none', color: '#fff',
-                fontFamily: MONO, fontSize: 12, fontWeight: 600,
-                padding: '7px 22px', borderRadius: 5, cursor: 'pointer',
-              }}>
-              Entendido
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* ── Tabla (dos tablas sincronizadas: header fijo + body con scroll) ── */}
       {(()=>{
@@ -1216,25 +1204,6 @@ export default function WatchlistManager({
                       : rankingRunning
                         ? <span style={{ fontSize: 9 }}>Calculando {rankingProgress?.done ?? 0}/{rankingProgress?.total ?? 0}…</span>
                         : <span>SCORES</span>}
-                    {!rankingRunning && !rankingDoneFlash && selected.size > 0 && (
-                      <span
-                        onClick={async e => {
-                          e.stopPropagation()
-                          const sel = watchlist.filter(w => selected.has(w.id))
-                          const r = await onCalcScoreMetricas?.(sel)
-                          if (r?.ok === false && r?.symbols?.length) {
-                            setBlockingPopup({ message: 'Los siguientes activos no tienen métricas calculadas. Ejecuta primero ↻ Métricas.', symbols: r.symbols })
-                            return
-                          }
-                          // Pasar activeScoreMap fresco para evitar leer wlData stale
-                          await onCalcScoreMetSen?.(sel, r?.activeScoreMap ?? null)
-                          try { localStorage.setItem('wl_scores_last_updated', Date.now().toString()) } catch(_) {}
-                        }}
-                        title="Paso 2+3 · Calcula Score métricas y Score mét.+señales en secuencia para los activos seleccionados."
-                        style={{ display:'inline-flex', alignItems:'center', justifyContent:'center',
-                          width:14, height:14, borderRadius:3, background:'rgba(26,107,58,0.18)',
-                          border:'1px solid #1a6b3a', color:'#1a6b3a', fontSize:9, cursor:'pointer', flexShrink:0 }}>↻</span>
-                    )}
                     {!rankingRunning && !rankingDoneFlash && selected.size > 0 && onDeleteScores && (
                       <span
                         onClick={e => { e.stopPropagation(); setConfirmScoresDelete(true) }}
@@ -1289,22 +1258,6 @@ export default function WatchlistManager({
                       : topStratRunning
                         ? <span style={{ fontSize: 9 }}>Estrategia {topStratProgress?.current||0}/{topStratProgress?.total||0}…</span>
                         : (metricsView === 'active' ? (rankingStratName ? `MÉTRICAS · ${rankingStratName.toUpperCase()}` : 'MÉTRICAS ESTRATEGIA ACTIVA') : 'MÉTRICAS TOP ESTRATEGIA')}
-                    {!topStratRunning && !topStratDoneFlash && selected.size > 0 && (
-                      <span
-                        onClick={e => {
-                          e.stopPropagation()
-                          setMetricsView('top')
-                          const sel = watchlist.filter(w => selected.has(w.id))
-                          onCalcMetricas ? onCalcMetricas(sel) : onCalcRankingAll && onCalcRankingAll(sel)
-                        }}
-                        title="Paso 1/3 · Calcula CAGR, Profit€, Win%, MaxDD, Ops para los activos seleccionados con la estrategia activa (fase 1) y con todas las estrategias habilitadas para determinar la Top estrategia (fase 2). Debe ejecutarse ANTES que ↻ Score métricas."
-                        style={{
-                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                          width: 14, height: 14, borderRadius: 3,
-                          background: 'rgba(26,107,58,0.18)', border: `1px solid #1a6b3a`,
-                          color: '#1a6b3a', fontSize: 9, cursor: 'pointer', flexShrink: 0,
-                        }}>↻</span>
-                    )}
                     {calcPhase === 0 && !rankingRunning && !topStratRunning && selected.size > 0 && onDeleteMetrics && (
                       <span
                         onClick={e => { e.stopPropagation(); setConfirmMetricsDelete(true) }}
@@ -1415,6 +1368,11 @@ export default function WatchlistManager({
               <th style={{ ...TH2(), minWidth: 130, borderLeft: `2px solid ${P.borderStrong}`, cursor: 'pointer' }}
                 onClick={() => handleSort('stratName')}>
                 {metricsView === 'active' ? 'ESTRATEGIA ACTIVA' : 'TOP ESTRATEGIA'}{sortIcon('stratName')}
+              </th>
+              {/* Actualizado */}
+              <th style={{ ...TH2(), minWidth: 90, textAlign: 'center' }}
+                title="Fecha de la última actualización completa de métricas y scores">
+                Actualizado
               </th>
               {/* Temporalidad — sortable */}
               <th style={{ ...TH2(), minWidth: 80, textAlign: 'center', cursor: 'pointer' }}
@@ -1657,6 +1615,13 @@ export default function WatchlistManager({
                   }} title={displayStratName || undefined}>
                     {displayStratName
                       ? <span style={{ color: P.text, fontWeight: 600 }}>{displayStratName}</span>
+                      : <span style={{ color: P.textMuted }}>—</span>}
+                  </td>
+
+                  {/* Actualizado */}
+                  <td style={{ ...TD(), textAlign: 'center', fontSize: 11, color: '#5a8aaa' }}>
+                    {datos?.updatedAt
+                      ? new Date(datos.updatedAt).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit' })
                       : <span style={{ color: P.textMuted }}>—</span>}
                   </td>
 
