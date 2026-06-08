@@ -4241,7 +4241,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.441</title>
+        <title>Trading Simulator V9.442</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4319,7 +4319,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.441
+            <span className="dot"/>Trading Simulator V9.442
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5155,7 +5155,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                 onClick={e=>{e.stopPropagation();const r=e.currentTarget.getBoundingClientRect();setCondColorPicker(prev=>prev?.condId===c.id?null:{condId:c.id,x:r.left,y:r.bottom+4})}}
                                 style={{
                                   display:'inline-flex',alignItems:'center',justifyContent:'center',
-                                  width:18,height:18,minWidth:18,borderRadius:'50%',flexShrink:0,
+                                  width:16,height:16,minWidth:16,borderRadius:'50%',flexShrink:0,
                                   background:active?col:'rgba(42,63,85,0.5)',
                                   border:`1.5px solid ${active?col:'#2a3f55'}`,
                                   color:active?'#080c14':'#3d5a7a',
@@ -5164,7 +5164,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                   opacity:!checked?0.4:1,
                                   animation:shouldBlink?`alarmPulse 1s ease-in-out infinite`:undefined,
                                 }}>
-                                {active&&<span style={{fontFamily:MONO,fontSize:11,fontWeight:800,lineHeight:1,
+                                {active&&<span style={{fontFamily:MONO,fontSize:10,fontWeight:800,lineHeight:1,
                                   letterSpacing:'-0.5px',display:'inline-block',
                                   whiteSpace:'nowrap'}}>
                                   {label}
