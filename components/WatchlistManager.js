@@ -1150,8 +1150,8 @@ export default function WatchlistManager({
         // chk=36 + tick,nom,tipo,listas,smet,smetseg,cagr,profit,wr,dd,ops,strat,temp[,elim]
         // suma datos = 70+180+70+180+110+110+70+90+60+70+50+160+90 = 1310, +50 elim = 1360
         const COL_WIDTHS = onDeleteItem
-          ? [36, 70, 180, 70, 180, 110, 110, 70, 90, 60, 70, 50, 160, 90, 50]
-          : [36, 70, 180, 70, 180, 110, 110, 70, 90, 60, 70, 50, 160, 90]
+          ? [36, 70, 180, 70, 180, 110, 110, 70, 90, 60, 70, 50, 160, 90, 90, 50]
+          : [36, 70, 180, 70, 180, 110, 110, 70, 90, 60, 70, 50, 160, 90, 90]
         const totalWidth = COL_WIDTHS.reduce((a, b) => a + b, 0)
         const colGroup = (
           <colgroup>
@@ -1277,7 +1277,7 @@ export default function WatchlistManager({
                   </div>
                 )}
               </th>
-              <th colSpan={onDeleteItem ? 3 : 2} style={{
+              <th colSpan={onDeleteItem ? 4 : 3} style={{
                 ...TH(),
                 background: P.thBg,
                 borderLeft: `2px solid ${P.borderStrong}`,
