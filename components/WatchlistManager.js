@@ -1212,11 +1212,6 @@ export default function WatchlistManager({
                         onMouseEnter={e => e.currentTarget.style.color = '#ef4444'}
                         onMouseLeave={e => e.currentTarget.style.color = P.textMuted}>🗑</span>
                     )}
-                    {!rankingRunning && !rankingDoneFlash && (
-                      <span style={{ fontSize:8, color:P.textMuted, fontWeight:400, marginLeft:1 }}>
-                        · {timeSinceLS('wl_scores_last_updated')}
-                      </span>
-                    )}
                   </div>
                 )}
               </th>
@@ -1267,11 +1262,6 @@ export default function WatchlistManager({
                         onMouseEnter={e => e.currentTarget.style.color = '#ef4444'}
                         onMouseLeave={e => e.currentTarget.style.color = P.textMuted}>
                         🗑
-                      </span>
-                    )}
-                    {!topStratRunning && !topStratDoneFlash && !rankingRunning && (
-                      <span style={{ fontSize:8, color:P.textMuted, fontWeight:400, marginLeft:1 }}>
-                        · {timeSinceLS('wl_score_metricas_last_updated')}
                       </span>
                     )}
                   </div>
