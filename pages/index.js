@@ -2648,7 +2648,7 @@ export default function Home() {
 
   // ── SCORE MÉTRICAS ↻ (Paso 2) — Calcula scoreHistorico desde wlData, sin backtest ──
   // Requiere: ↻ Métricas ejecutado previamente (cagr/winRate/maxDD en wlData[sym].active)
-  const calcScoreMetricas = useCallback(async (rankSymbols=null, topMetricsOverride=null) => {
+  const calcScoreMetricas = useCallback(async (rankSymbols=null, topMetricsOverride=null, activeMetricsOverride=null) => {
     try {
     const items = rankSymbols || watchlist
     const syms = items.map(w=>w.symbol)
@@ -2679,12 +2679,13 @@ export default function Home() {
     const normDyn=(v,floor,ceil)=>Math.max(0,Math.min(100,ceil===floor?50:(v-floor)/(ceil-floor)*100))
 
     // Recopilar todos los valores válidos — universo completo para percentiles estables
-    // Para top: usar topMetricsOverride si está disponible (evita stale closure tras calcMetricas)
+    // Usar overrides si disponibles (evita stale closure tras calcMetricas)
     const getTop=(s)=>topMetricsOverride?.[s.toUpperCase()]??wlData[s.toUpperCase()]?.top
-    const allWR  =allSyms.map(s=>wlData[s.toUpperCase()]?.active?.winRate).filter(v=>v!=null)
-    const allCagr=allSyms.map(s=>wlData[s.toUpperCase()]?.active?.cagr).filter(v=>v!=null)
-    const allCRob=allSyms.map(s=>{const d=wlData[s.toUpperCase()]?.active;return d?.cagrRobust??d?.cagr}).filter(v=>v!=null)
-    const allDD  =allSyms.map(s=>wlData[s.toUpperCase()]?.active?.maxDD).filter(v=>v!=null)
+    const getAct=(s)=>activeMetricsOverride?.[s.toUpperCase()]??wlData[s.toUpperCase()]?.active
+    const allWR  =allSyms.map(s=>getAct(s)?.winRate).filter(v=>v!=null)
+    const allCagr=allSyms.map(s=>getAct(s)?.cagr).filter(v=>v!=null)
+    const allCRob=allSyms.map(s=>{const d=getAct(s);return d?.cagrRobust??d?.cagr}).filter(v=>v!=null)
+    const allDD  =allSyms.map(s=>getAct(s)?.maxDD).filter(v=>v!=null)
     const allWRT =allSyms.map(s=>getTop(s)?.winRate).filter(v=>v!=null)
     const allCT  =allSyms.map(s=>getTop(s)?.cagr).filter(v=>v!=null)
     const allCRT =allSyms.map(s=>{const d=getTop(s);return d?.cagrRobust??d?.cagr}).filter(v=>v!=null)
@@ -2705,7 +2706,7 @@ export default function Home() {
     const activeScoreMap={}, topScoreMap={}
     syms.forEach((sym,idx)=>{
       const symUp=sym.toUpperCase()
-      const ad=wlData[symUp]?.active
+      const ad=activeMetricsOverride?.[symUp]??wlData[symUp]?.active
       // Para top: usar override si disponible (evita stale closure tras calcMetricas)
       const td=topMetricsOverride?.[symUp]??wlData[symUp]?.top
       if(ad?.cagr!=null&&ad?.winRate!=null&&ad?.maxDD!=null){
@@ -2726,7 +2727,6 @@ export default function Home() {
     })
 
     // ── Guardar en Supabase ──
-    console.log('[SCORE-P4] guardando en Supabase, activeScoreMap keys:', Object.keys(activeScoreMap).length, 'topScoreMap keys:', Object.keys(topScoreMap).length)
     await upsertScoreHistoricoRemote(activeScoreMap, currentStratId||null)
     // Top scores: agrupar por stratId y guardar
     const topByStrat={}
@@ -2970,9 +2970,9 @@ export default function Home() {
       })
       await refreshBestStratPerSymbol().catch(()=>{})
       setTopStratRunning(false); setTopStratProgress({current:0,total:0})
-      return { ok: true, topMetricsMap }
+      return { ok: true, topMetricsMap, activeMetricsMap: activeMetrics }
     }
-    return { ok: true, topMetricsMap: {} }
+    return { ok: true, topMetricsMap: {}, activeMetricsMap: activeMetrics }
 
   },[watchlist,years,capitalIni,currentStratId,stratName,filtros,estrategiaIntervalo,strategies,refreshBestStratPerSymbol])
 
@@ -4267,7 +4267,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.464</title>
+        <title>Trading Simulator V9.465</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4345,7 +4345,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.464
+            <span className="dot"/>Trading Simulator V9.465
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}

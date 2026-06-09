@@ -956,7 +956,7 @@ export default function WatchlistManager({
                 setCalcProgress('1/3 Calculando métricas...')
                 const r1 = await (onCalcMetricas ? onCalcMetricas(sel) : onCalcRankingAll?.(sel))
                 setCalcProgress('2/3 Calculando scores...')
-                const r2 = await onCalcScoreMetricas?.(sel, r1?.topMetricsMap ?? null)
+                const r2 = await onCalcScoreMetricas?.(sel, r1?.topMetricsMap ?? null, r1?.activeMetricsMap ?? null)
                 setCalcProgress('3/3 Calculando señales...')
                 await onCalcScoreMetSen?.(sel, r2?.activeScoreMap ?? null, r2?.topScoreMap ?? null)
               } catch(e) {
