@@ -955,13 +955,13 @@ export default function WatchlistManager({
               const sel = watchlist.filter(w => selected.has(w.id))
               if (!sel.length) return
               try {
-                setCalcProgress('Calculando métricas…')
+                setCalcProgress('1/4 Calculando métricas...')
                 await (onCalcMetricas ? onCalcMetricas(sel) : onCalcRankingAll?.(sel))
-                setCalcProgress('Actualizando datos…')
+                setCalcProgress('2/4 Recargando datos...')
                 await onRefreshWlData?.()
-                setCalcProgress('Calculando scores…')
+                setCalcProgress('3/4 Calculando scores...')
                 const r2 = await onCalcScoreMetricas?.(sel, null)
-                setCalcProgress('Calculando señales…')
+                setCalcProgress('4/4 Calculando señales...')
                 await onCalcScoreMetSen?.(sel, r2?.activeScoreMap ?? null, r2?.topScoreMap ?? null)
                 try { localStorage.setItem('wl_scores_last_updated', Date.now().toString()) } catch(_) {}
               } catch(e) {
@@ -1205,11 +1205,9 @@ export default function WatchlistManager({
                   </div>
                 ) : (
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
-                    {rankingDoneFlash
-                      ? <span style={{ color: '#1a6b3a' }}>✓ Listo</span>
-                      : rankingRunning
-                        ? <span style={{ fontSize: 9 }}>Calculando {rankingProgress?.done ?? 0}/{rankingProgress?.total ?? 0}…</span>
-                        : <span>SCORES</span>}
+                    {rankingRunning
+                      ? <span style={{ fontSize: 9 }}>Calculando {rankingProgress?.done ?? 0}/{rankingProgress?.total ?? 0}…</span>
+                      : <span>SCORES</span>}
                     {!rankingRunning && !rankingDoneFlash && selected.size > 0 && onDeleteScores && (
                       <span
                         onClick={e => { e.stopPropagation(); setConfirmScoresDelete(true) }}
@@ -1254,11 +1252,9 @@ export default function WatchlistManager({
                   </div>
                 ) : (
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
-                    {topStratDoneFlash
-                      ? <span style={{ color: '#1a6b3a' }}>✓ Listo</span>
-                      : topStratRunning
-                        ? <span style={{ fontSize: 9 }}>Estrategia {topStratProgress?.current||0}/{topStratProgress?.total||0}…</span>
-                        : (metricsView === 'active' ? (rankingStratName ? `MÉTRICAS · ${rankingStratName.toUpperCase()}` : 'MÉTRICAS ESTRATEGIA ACTIVA') : 'MÉTRICAS TOP ESTRATEGIA')}
+                    {topStratRunning
+                      ? <span style={{ fontSize: 9 }}>Estrategia {topStratProgress?.current||0}/{topStratProgress?.total||0}…</span>
+                      : (metricsView === 'active' ? (rankingStratName ? `MÉTRICAS · ${rankingStratName.toUpperCase()}` : 'MÉTRICAS ESTRATEGIA ACTIVA') : 'MÉTRICAS TOP ESTRATEGIA')}
                     {calcPhase === 0 && !rankingRunning && !topStratRunning && selected.size > 0 && onDeleteMetrics && (
                       <span
                         onClick={e => { e.stopPropagation(); setConfirmMetricsDelete(true) }}
