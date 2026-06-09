@@ -2644,7 +2644,7 @@ export default function Home() {
 
   // ── SCORE MÉTRICAS ↻ (Paso 2) — Calcula scoreHistorico desde wlData, sin backtest ──
   // Requiere: ↻ Métricas ejecutado previamente (cagr/winRate/maxDD en wlData[sym].active)
-  const calcScoreMetricas = useCallback(async (rankSymbols=null) => {
+  const calcScoreMetricas = useCallback(async (rankSymbols=null, topMetricsOverride=null) => {
     const items = rankSymbols || watchlist
     const syms = items.map(w=>w.symbol)
     // Universo completo para normalización percentil — siempre watchlist entero
@@ -2671,14 +2671,16 @@ export default function Home() {
     const normDyn=(v,floor,ceil)=>Math.max(0,Math.min(100,ceil===floor?50:(v-floor)/(ceil-floor)*100))
 
     // Recopilar todos los valores válidos — universo completo para percentiles estables
+    // Para top: usar topMetricsOverride si está disponible (evita stale closure tras calcMetricas)
+    const getTop=(s)=>topMetricsOverride?.[s.toUpperCase()]??wlData[s.toUpperCase()]?.top
     const allWR  =allSyms.map(s=>wlData[s.toUpperCase()]?.active?.winRate).filter(v=>v!=null)
     const allCagr=allSyms.map(s=>wlData[s.toUpperCase()]?.active?.cagr).filter(v=>v!=null)
     const allCRob=allSyms.map(s=>{const d=wlData[s.toUpperCase()]?.active;return d?.cagrRobust??d?.cagr}).filter(v=>v!=null)
     const allDD  =allSyms.map(s=>wlData[s.toUpperCase()]?.active?.maxDD).filter(v=>v!=null)
-    const allWRT =allSyms.map(s=>wlData[s.toUpperCase()]?.top?.winRate).filter(v=>v!=null)
-    const allCT  =allSyms.map(s=>wlData[s.toUpperCase()]?.top?.cagr).filter(v=>v!=null)
-    const allCRT =allSyms.map(s=>{const d=wlData[s.toUpperCase()]?.top;return d?.cagrRobust??d?.cagr}).filter(v=>v!=null)
-    const allDDT =allSyms.map(s=>wlData[s.toUpperCase()]?.top?.maxDD).filter(v=>v!=null)
+    const allWRT =allSyms.map(s=>getTop(s)?.winRate).filter(v=>v!=null)
+    const allCT  =allSyms.map(s=>getTop(s)?.cagr).filter(v=>v!=null)
+    const allCRT =allSyms.map(s=>{const d=getTop(s);return d?.cagrRobust??d?.cagr}).filter(v=>v!=null)
+    const allDDT =allSyms.map(s=>getTop(s)?.maxDD).filter(v=>v!=null)
 
     // Suelo y techo percentiles para activa
     const [wrFl,wrCe]      =[getPct(allWR  ,1-pct),getPct(allWR  ,pct)]
@@ -2695,7 +2697,9 @@ export default function Home() {
     const activeScoreMap={}, topScoreMap={}
     syms.forEach((sym,idx)=>{
       const symUp=sym.toUpperCase()
-      const ad=wlData[symUp]?.active, td=wlData[symUp]?.top
+      const ad=wlData[symUp]?.active
+      // Para top: usar override si disponible (evita stale closure tras calcMetricas)
+      const td=topMetricsOverride?.[symUp]??wlData[symUp]?.top
       if(ad?.cagr!=null&&ad?.winRate!=null&&ad?.maxDD!=null){
         activeScoreMap[symUp]=Math.max(0,Math.min(100,
           normDyn(ad.winRate,            wrFl,wrCe)*wrPct+
@@ -2924,6 +2928,8 @@ export default function Home() {
       }
       // ── Merge top metrics: determinar top estrategia por CAGR desde allStratMetricsMap ──
       // No depende de refreshBestStratPerSymbol (que usa score_historico, no calculado aquí)
+      // Construir topMetricsMap para retorno (evita stale closure en calcScoreMetricas)
+      const topMetricsMap={}
       setWlData(prev=>{
         const next={...prev}
         syms.forEach(sym=>{
@@ -2941,13 +2947,16 @@ export default function Home() {
             next[symUp]={...(next[symUp]||{}),
               top:{...(next[symUp]?.top||{}),cagr:topM.cagr??null,cagrRobust:topM.cagrRobust??null,profit:topM.profit??null,winRate:topM.winRate??null,maxDD:topM.maxDD??null,ops:topM.trades??null,stratName:topStratName,stratId:bestStratId,intervalo:topIntv}
             }
+            topMetricsMap[symUp]={cagr:topM.cagr??null,cagrRobust:topM.cagrRobust??null,winRate:topM.winRate??null,maxDD:topM.maxDD??null}
           }
         })
         return next
       })
       await refreshBestStratPerSymbol().catch(()=>{})
       setTopStratRunning(false); setTopStratProgress({current:0,total:0})
+      return { ok: true, topMetricsMap }
     }
+    return { ok: true, topMetricsMap: {} }
 
   },[watchlist,years,capitalIni,currentStratId,stratName,filtros,estrategiaIntervalo,strategies,refreshBestStratPerSymbol])
 
@@ -4241,7 +4250,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.444</title>
+        <title>Trading Simulator V9.445</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4319,7 +4328,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.444
+            <span className="dot"/>Trading Simulator V9.445
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}

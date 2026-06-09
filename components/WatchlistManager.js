@@ -953,9 +953,9 @@ export default function WatchlistManager({
             if (!sel.length) return
             try {
               setCalcProgress('Calculando métricas…')
-              await (onCalcMetricas ? onCalcMetricas(sel) : onCalcRankingAll?.(sel))
+              const r1 = await (onCalcMetricas ? onCalcMetricas(sel) : onCalcRankingAll?.(sel))
               setCalcProgress('Calculando scores…')
-              const r2 = await onCalcScoreMetricas?.(sel)
+              const r2 = await onCalcScoreMetricas?.(sel, r1?.topMetricsMap ?? null)
               setCalcProgress('Calculando señales…')
               await onCalcScoreMetSen?.(sel, r2?.activeScoreMap ?? null)
               try { localStorage.setItem('wl_scores_last_updated', Date.now().toString()) } catch(_) {}
