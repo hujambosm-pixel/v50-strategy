@@ -692,6 +692,8 @@ export default function Home() {
   const [editForm,setEditForm]=useState({})
   const [editSaving,setEditSaving]=useState(false)
   const [strategies,setStrategies]=useState([])
+  const strategiesRef=useRef([])
+  useEffect(()=>{strategiesRef.current=strategies},[strategies])
   const [strLoading,setStrLoading]=useState(true)
   const [editingStr,setEditingStr]=useState(null)
   const [strForm,setStrForm]=useState({})
@@ -2038,6 +2040,7 @@ export default function Home() {
 
   // Carga todos los datos desde Supabase y rellena wlData para ambas vistas
   const refreshWlData = useCallback(async () => {
+    console.log('[refreshWlData] called', new Date().toISOString())
     if(!getSupaUrl()) return
     try {
       let url=`${getSupaUrl()}/rest/v1/ranking_results?select=symbol,strategy_id,score_historico,score_completo,updated_at,cagr_simple,win_rate,max_drawdown,total_trades,profit_simple&limit=10000`
@@ -2052,7 +2055,7 @@ export default function Home() {
       rows.forEach(r=>{const sym=(r.symbol||'').toUpperCase();if(!bySym[sym])bySym[sym]=[];bySym[sym].push(r)})
       const toEntry=(row)=>{
         if(!row) return undefined
-        const strat=strategies.find(s=>s.id===row.strategy_id)
+        const strat=strategiesRef.current.find(s=>s.id===row.strategy_id)
         let intervalo='diario'
         try{const p=typeof strat?.params==='string'?JSON.parse(strat.params||'{}'):(strat?.params||{});intervalo=p.intervalo||'diario'}catch(_){}
         return{scoreMetricas:row.score_historico??null,scoreMetSeñ:row.score_completo??null,
@@ -2075,11 +2078,11 @@ export default function Home() {
       })
       setWlData(newWlData)
     }catch(e){console.warn('[refreshWlData]',e.message)}
-  },[currentStratId,strategies])
+  },[currentStratId]) // strategies leído via ref estable — no recrea useCallback en cada render
 
   // useEffect aquí, DESPUÉS de la declaración de refreshBestStratPerSymbol para evitar TDZ
   useEffect(()=>{ refreshBestStratPerSymbol() },[refreshBestStratPerSymbol])
-  useEffect(()=>{ refreshWlData() },[currentStratId,strategies]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(()=>{ refreshWlData() },[currentStratId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Limpieza única al inicio: eliminar filas corruptas (score sin métricas)
   useEffect(()=>{ cleanCorruptRankingRows() },[]) // eslint-disable-line
@@ -4254,7 +4257,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.455</title>
+        <title>Trading Simulator V9.456</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4332,7 +4335,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.455
+            <span className="dot"/>Trading Simulator V9.456
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
