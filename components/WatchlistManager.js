@@ -958,12 +958,14 @@ export default function WatchlistManager({
                 setCalcProgress('Calculando métricas…')
                 await (onCalcMetricas ? onCalcMetricas(sel) : onCalcRankingAll?.(sel))
                 setCalcProgress('Actualizando datos…')
-                await onRefreshWlData?.()   // recarga wlData desde Supabase antes de calcular scores
+                await onRefreshWlData?.()
                 setCalcProgress('Calculando scores…')
-                const r2 = await onCalcScoreMetricas?.(sel, null)   // null: usa wlData fresco
+                const r2 = await onCalcScoreMetricas?.(sel, null)
                 setCalcProgress('Calculando señales…')
                 await onCalcScoreMetSen?.(sel, r2?.activeScoreMap ?? null, r2?.topScoreMap ?? null)
                 try { localStorage.setItem('wl_scores_last_updated', Date.now().toString()) } catch(_) {}
+              } catch(e) {
+                console.error('[Actualizar] Error en flujo:', e)
               } finally {
                 setCalcProgress(null)
               }
