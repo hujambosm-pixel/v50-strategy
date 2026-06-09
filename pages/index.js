@@ -2840,6 +2840,7 @@ export default function Home() {
   // ── MÉTRICAS ↻ — Calcula solo métricas (CAGR, Profit, Win%, MaxDD, Ops) para activa + todas ──
   const calcMetricas = useCallback(async (rankSymbols=null) => {
     const syms = (rankSymbols || watchlist).map(w=>w.symbol)
+    console.log('[calcMetricas] strategies:', strategies?.length, 'enabledStrats:', strategies?.filter(s=>s.enabled!==false)?.length, 'syms:', syms?.length)
     const sett=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')}catch(_){return {}}})()
     const minTrades=sett.ranking?.minTrades??3
     const BATCH=4
@@ -2924,7 +2925,7 @@ export default function Home() {
           }
           await upsertMetricsRemote(stratMetrics,stratId)
           allStratMetricsMap[stratId]=stratMetrics
-        }catch(e){console.error('[calcMetricas] Error estrategia:',strat.name,e)}
+        }catch(e){console.error('[calcMetricas] Error estrategia:',stratId,strat.name,e)}
       }
       // ── Merge top metrics: determinar top estrategia por CAGR desde allStratMetricsMap ──
       // No depende de refreshBestStratPerSymbol (que usa score_historico, no calculado aquí)
@@ -4253,7 +4254,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.451</title>
+        <title>Trading Simulator V9.452</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4331,7 +4332,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.451
+            <span className="dot"/>Trading Simulator V9.452
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
