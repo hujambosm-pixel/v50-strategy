@@ -179,6 +179,8 @@ export default function WatchlistManager({
   // Borrar scores / métricas de ranking_results
   onDeleteScores,
   onDeleteMetrics,
+  // Recargar wlData desde Supabase (ranking_results)
+  onRefreshWlData,
   // Unified data state from parent
   wlData,
 }) {
@@ -954,9 +956,11 @@ export default function WatchlistManager({
               if (!sel.length) return
               try {
                 setCalcProgress('Calculando métricas…')
-                const r1 = await (onCalcMetricas ? onCalcMetricas(sel) : onCalcRankingAll?.(sel))
+                await (onCalcMetricas ? onCalcMetricas(sel) : onCalcRankingAll?.(sel))
+                setCalcProgress('Actualizando datos…')
+                await onRefreshWlData?.()   // recarga wlData desde Supabase antes de calcular scores
                 setCalcProgress('Calculando scores…')
-                const r2 = await onCalcScoreMetricas?.(sel, r1?.topMetricsMap ?? null)
+                const r2 = await onCalcScoreMetricas?.(sel, null)   // null: usa wlData fresco
                 setCalcProgress('Calculando señales…')
                 await onCalcScoreMetSen?.(sel, r2?.activeScoreMap ?? null, r2?.topScoreMap ?? null)
                 try { localStorage.setItem('wl_scores_last_updated', Date.now().toString()) } catch(_) {}
