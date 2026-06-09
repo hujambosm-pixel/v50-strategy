@@ -2649,6 +2649,8 @@ export default function Home() {
   // ── SCORE MÉTRICAS ↻ (Paso 2) — Calcula scoreHistorico desde wlData, sin backtest ──
   // Requiere: ↻ Métricas ejecutado previamente (cagr/winRate/maxDD en wlData[sym].active)
   const calcScoreMetricas = useCallback(async (rankSymbols=null, topMetricsOverride=null) => {
+    console.log('[SCORE-START] syms:',(rankSymbols||watchlist).map(w=>w.symbol),'topOverride keys:',Object.keys(topMetricsOverride||{}))
+    try {
     const items = rankSymbols || watchlist
     const syms = items.map(w=>w.symbol)
     // Universo completo para normalización percentil — siempre watchlist entero
@@ -2746,6 +2748,10 @@ export default function Home() {
     setRankingRunning(false); setRankingProgress({done:0,total:0})
     console.log('[SCORE-DEBUG]','ALAB en topMetricsMap:',JSON.stringify(topMetricsOverride?.['ALAB']),'ALAB en wlData.top:',JSON.stringify(wlData['ALAB']?.top?.cagr),'topScoreMap ALAB:',topScoreMap['ALAB'],'activeScoreMap ALAB:',activeScoreMap['ALAB'])
     return { ok: true, activeScoreMap, topScoreMap }
+    } catch(e) {
+      console.error('[calcScoreMetricas] ERROR:', e)
+      return { ok: false, error: e.message }
+    }
   },[watchlist,wlData,currentStratId,stratName,estrategiaIntervalo])
 
   // ── SCORE MÉT.+SEÑ. ↻ (Paso 3) — Añade señales de mercado al scoreMetricas existente ──
@@ -4260,7 +4266,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.461</title>
+        <title>Trading Simulator V9.462</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4338,7 +4344,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.461
+            <span className="dot"/>Trading Simulator V9.462
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
