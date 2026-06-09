@@ -768,7 +768,6 @@ export default function Home() {
   // { SYMBOL: { stratName, stratId, score, intervalo, stratCount } }
   const [bestStratBySymbol,setBestStratBySymbol]=useState({})
   const [wlData, setWlData] = useState({})
-  const wlRefreshBlockedRef = useRef(false)  // bloquea disparos involuntarios del useEffect durante flujo Actualizar
   // wlData[SYM] = {
   //   active: { scoreMetricas, scoreMetSeñ, cagr, profit, winRate, maxDD, ops, stratName, stratId, intervalo, updatedAt },
   //   top:    { scoreMetricas, scoreMetSeñ, cagr, profit, winRate, maxDD, ops, stratName, stratId, intervalo, updatedAt }
@@ -2083,7 +2082,7 @@ export default function Home() {
 
   // useEffect aquí, DESPUÉS de la declaración de refreshBestStratPerSymbol para evitar TDZ
   useEffect(()=>{ refreshBestStratPerSymbol() },[refreshBestStratPerSymbol])
-  useEffect(()=>{ if(!wlRefreshBlockedRef.current) refreshWlData() },[currentStratId]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(()=>{ refreshWlData() },[]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Limpieza única al inicio: eliminar filas corruptas (score sin métricas)
   useEffect(()=>{ cleanCorruptRankingRows() },[]) // eslint-disable-line
@@ -2110,6 +2109,7 @@ export default function Home() {
     setResult(null)
     setError(null)
     setCurrentStratId(null)
+    refreshWlData()
     setEstrategiaIntervalo('diario')
     setStratName('')
     try {
@@ -2154,6 +2154,7 @@ export default function Home() {
     setStrForm(f=>({...f,_loadedName:s.name}))
     setStratName(s.name||'')
     setCurrentStratId(s.id||null)
+    refreshWlData()
     setEstrategiaIntervalo(readStratIntervalo(s))
     if(navigateToConfig) setSidePanel('config')
     setRankingData({});setRankingStratId(null);setRankingStratName('')
@@ -3126,6 +3127,7 @@ export default function Home() {
     setStratDesc(strat.description||'')
     setStratColor(strat.color||'#00d4ff')
     setCurrentStratId(strat.id)
+    refreshWlData()
     setEstrategiaIntervalo(readStratIntervalo(strat))
     // symbol intentionally not stored in strategy (apply to any asset separately)
     setStratTab('build')
@@ -3166,7 +3168,7 @@ export default function Home() {
     if(!confirm('¿Eliminar esta estrategia?')) return
     await fetch(`/api/strategies?id=${id}`,{method:'DELETE'})
     setStrategies(prev=>prev.filter(s=>s.id!==id))
-    if(currentStratId===id){setCurrentStratId(null);setStratMsg({type:'ok',text:'Estrategia eliminada'})}
+    if(currentStratId===id){setCurrentStratId(null);refreshWlData();setStratMsg({type:'ok',text:'Estrategia eliminada'})}
   },[currentStratId])
 
   // ── Debounce: lanza backtest automáticamente al cambiar parámetros ──
@@ -4258,7 +4260,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.457</title>
+        <title>Trading Simulator V9.458</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4336,7 +4338,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.457
+            <span className="dot"/>Trading Simulator V9.458
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6312,7 +6314,6 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 rankingStratId={rankingStratId}
                 onRefreshBestStrat={refreshBestStratPerSymbol}
                 onRefreshWlData={refreshWlData}
-                onBlockWlRefresh={(blocked)=>{ wlRefreshBlockedRef.current=blocked }}
                 onCalcRankingAll={calcRankingAllStrategies}
                 topStratRunning={topStratRunning}
                 topStratProgress={topStratProgress}

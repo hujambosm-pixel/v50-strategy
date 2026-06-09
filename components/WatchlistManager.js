@@ -181,8 +181,6 @@ export default function WatchlistManager({
   onDeleteMetrics,
   // Recargar wlData desde Supabase (ranking_results)
   onRefreshWlData,
-  // Bloquear/desbloquear disparos involuntarios de refreshWlData durante el flujo del botón
-  onBlockWlRefresh,
   // Unified data state from parent
   wlData,
 }) {
@@ -956,7 +954,6 @@ export default function WatchlistManager({
               e.stopPropagation()
               const sel = watchlist.filter(w => selected.has(w.id))
               if (!sel.length) return
-              onBlockWlRefresh?.(true)   // bloquear disparos involuntarios del useEffect durante el flujo
               try {
                 setCalcProgress('1/4 Calculando métricas...')
                 await (onCalcMetricas ? onCalcMetricas(sel) : onCalcRankingAll?.(sel))
@@ -970,7 +967,6 @@ export default function WatchlistManager({
               } catch(e) {
                 console.error('[Actualizar] Error en flujo:', e)
               } finally {
-                onBlockWlRefresh?.(false)  // desbloquear siempre al terminar
                 setCalcProgress(null)
               }
             }}
