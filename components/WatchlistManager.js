@@ -948,29 +948,19 @@ export default function WatchlistManager({
 
         {/* ── Botones derecha: ↻ Actualizar + ✕ Cerrar — agrupados para no wrappear ── */}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, flexShrink: 0, alignItems: 'center' }}>
+          {/* ── Botón 1: solo métricas ── */}
           <button
             disabled={selected.size === 0 || !!calcProgress}
-            onClick={async e => {
-              e.stopPropagation()
+            onClick={async () => {
               const sel = watchlist.filter(w => selected.has(w.id))
               if (!sel.length) return
+              setCalcProgress('Calculando métricas...')
               try {
-                setCalcProgress('1/4 Calculando métricas...')
                 await (onCalcMetricas ? onCalcMetricas(sel) : onCalcRankingAll?.(sel))
-                setCalcProgress('2/4 Recargando datos...')
-                await onRefreshWlData?.()   // llamada directa — corre siempre (no afectada por el bloqueo)
-                setCalcProgress('3/4 Calculando scores...')
-                const r2 = await onCalcScoreMetricas?.(sel, null)
-                setCalcProgress('4/4 Calculando señales...')
-                await onCalcScoreMetSen?.(sel, r2?.activeScoreMap ?? null, r2?.topScoreMap ?? null)
-                try { localStorage.setItem('wl_scores_last_updated', Date.now().toString()) } catch(_) {}
-              } catch(e) {
-                console.error('[Actualizar] Error en flujo:', e)
-              } finally {
-                setCalcProgress(null)
-              }
+              } catch(e) { console.error('[Métricas]', e) }
+              finally { setCalcProgress(null) }
             }}
-            title={`Actualiza métricas, scores y señales para los activos seleccionados. Ejecuta los 3 pasos en orden:\n1. Métricas (CAGR, MaxDD, WinRate, Ops, Profit)\n2. Score métricas (normalización percentil)\n3. Score métricas + señales (momentum, fuerza relativa)`}
+            title="Calcula métricas (CAGR, MaxDD, WinRate, Ops, Profit) para los activos seleccionados"
             style={{
               background: selected.size === 0 ? 'rgba(26,107,58,0.06)' : 'rgba(26,107,58,0.18)',
               border: '1px solid #1a6b3a',
@@ -980,7 +970,34 @@ export default function WatchlistManager({
               cursor: selected.size === 0 || !!calcProgress ? 'not-allowed' : 'pointer',
               flexShrink: 0, whiteSpace: 'nowrap',
             }}>
-            {calcProgress ? `⟳ ${calcProgress}` : '↻ Actualizar'}
+            {calcProgress?.includes('métricas') ? `⟳ ${calcProgress}` : '↻ Métricas'}
+          </button>
+
+          {/* ── Botón 2: scores + señales ── */}
+          <button
+            disabled={selected.size === 0 || !!calcProgress}
+            onClick={async () => {
+              const sel = watchlist.filter(w => selected.has(w.id))
+              if (!sel.length) return
+              setCalcProgress('Calculando scores...')
+              try {
+                const r2 = await onCalcScoreMetricas?.(sel, null)
+                setCalcProgress('Calculando señales...')
+                await onCalcScoreMetSen?.(sel, r2?.activeScoreMap ?? null, r2?.topScoreMap ?? null)
+              } catch(e) { console.error('[Scores]', e) }
+              finally { setCalcProgress(null) }
+            }}
+            title="Calcula scores (métricas + señales) para los activos seleccionados"
+            style={{
+              background: selected.size === 0 ? 'rgba(26,107,58,0.06)' : 'rgba(26,107,58,0.18)',
+              border: '1px solid #1a6b3a',
+              color: selected.size === 0 ? '#2a4a30' : '#1a6b3a',
+              fontFamily: MONO, fontSize: 11, fontWeight: 600,
+              padding: '5px 12px', borderRadius: 5,
+              cursor: selected.size === 0 || !!calcProgress ? 'not-allowed' : 'pointer',
+              flexShrink: 0, whiteSpace: 'nowrap',
+            }}>
+            {calcProgress && !calcProgress.includes('métricas') ? `⟳ ${calcProgress}` : '↻ Scores'}
           </button>
           <button onClick={onClose}
             title="Cerrar el panel de gestión y volver a la vista del gráfico"

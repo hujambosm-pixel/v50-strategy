@@ -2040,7 +2040,6 @@ export default function Home() {
 
   // Carga todos los datos desde Supabase y rellena wlData para ambas vistas
   const refreshWlData = useCallback(async () => {
-    console.log('[refreshWlData] called', new Date().toISOString())
     if(!getSupaUrl()) return
     try {
       let url=`${getSupaUrl()}/rest/v1/ranking_results?select=symbol,strategy_id,score_historico,score_completo,updated_at,cagr_simple,win_rate,max_drawdown,total_trades,profit_simple&limit=10000`
@@ -2845,7 +2844,6 @@ export default function Home() {
   // ── MÉTRICAS ↻ — Calcula solo métricas (CAGR, Profit, Win%, MaxDD, Ops) para activa + todas ──
   const calcMetricas = useCallback(async (rankSymbols=null) => {
     const syms = (rankSymbols || watchlist).map(w=>w.symbol)
-    console.log('[calcMetricas] strategies:', strategies?.length, 'enabledStrats:', strategies?.filter(s=>s.enabled!==false)?.length, 'syms:', syms?.length)
     const sett=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')}catch(_){return {}}})()
     const minTrades=sett.ranking?.minTrades??3
     const BATCH=4
@@ -4260,7 +4258,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.458</title>
+        <title>Trading Simulator V9.459</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4338,7 +4336,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.458
+            <span className="dot"/>Trading Simulator V9.459
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
