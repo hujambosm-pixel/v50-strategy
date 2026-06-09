@@ -160,7 +160,7 @@ export function OccupancyBarChart({trades, chartData, capitalIni, syncRef, showM
         chart.__syncCleanup=()=>{try{unsub()}catch(_){};if(syncRef.current)syncRef.current.listeners=syncRef.current.listeners.filter(e=>e.id!==syncId)}
       }
       chart.timeScale().fitContent()
-      const ro=new ResizeObserver(()=>{if(ref.current)chart.applyOptions({width:ref.current.clientWidth})})
+      const ro=new ResizeObserver(()=>{if(ref.current&&chartRef.current){try{chart.applyOptions({width:ref.current.clientWidth})}catch(e){if(!e?.message?.includes('disposed'))throw e}}})
       ro.observe(ref.current)
       return()=>ro.disconnect()
     })
@@ -219,7 +219,7 @@ export function McOccupancyChart({series=[], capitalIni, syncRef, axisWidth=72})
         chart.__syncCleanup=()=>{try{unsub()}catch(_){};if(syncRef.current)syncRef.current.listeners=syncRef.current.listeners.filter(e=>e.id!==syncId)}
       }
       chart.timeScale().fitContent()
-      const ro=new ResizeObserver(()=>{if(ref.current)chart.applyOptions({width:ref.current.clientWidth})})
+      const ro=new ResizeObserver(()=>{if(ref.current&&chartRef.current){try{chart.applyOptions({width:ref.current.clientWidth})}catch(e){if(!e?.message?.includes('disposed'))throw e}}})
       ro.observe(ref.current)
       return()=>ro.disconnect()
     })

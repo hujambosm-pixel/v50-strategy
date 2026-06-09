@@ -944,50 +944,50 @@ export default function WatchlistManager({
           </div>
         )}
 
-        {/* ── Botón único ↻ Actualizar ── */}
-        <button
-          disabled={selected.size === 0 || !!calcProgress}
-          onClick={async e => {
-            e.stopPropagation()
-            const sel = watchlist.filter(w => selected.has(w.id))
-            if (!sel.length) return
-            try {
-              setCalcProgress('Calculando métricas…')
-              const r1 = await (onCalcMetricas ? onCalcMetricas(sel) : onCalcRankingAll?.(sel))
-              setCalcProgress('Calculando scores…')
-              const r2 = await onCalcScoreMetricas?.(sel, r1?.topMetricsMap ?? null)
-              setCalcProgress('Calculando señales…')
-              await onCalcScoreMetSen?.(sel, r2?.activeScoreMap ?? null, r2?.topScoreMap ?? null)
-              try { localStorage.setItem('wl_scores_last_updated', Date.now().toString()) } catch(_) {}
-            } finally {
-              setCalcProgress(null)
-            }
-          }}
-          title={`Actualiza métricas, scores y señales para los activos seleccionados. Ejecuta los 3 pasos en orden:\n1. Métricas (CAGR, MaxDD, WinRate, Ops, Profit)\n2. Score métricas (normalización percentil)\n3. Score métricas + señales (momentum, fuerza relativa)`}
-          style={{
-            background: selected.size === 0 ? 'rgba(26,107,58,0.06)' : 'rgba(26,107,58,0.18)',
-            border: '1px solid #1a6b3a',
-            color: selected.size === 0 ? '#2a4a30' : '#1a6b3a',
-            fontFamily: MONO, fontSize: 11, fontWeight: 600,
-            padding: '5px 12px', borderRadius: 5,
-            cursor: selected.size === 0 || !!calcProgress ? 'not-allowed' : 'pointer',
-            flexShrink: 0, whiteSpace: 'nowrap',
-          }}>
-          {calcProgress ? `⟳ ${calcProgress}` : '↻ Actualizar'}
-        </button>
-
-        {/* Botón cerrar */}
-        <button onClick={onClose}
-          title="Cerrar el panel de gestión y volver a la vista del gráfico"
-          style={{
-            marginLeft: 'auto', background: P.bg,
-            border: `1px solid ${P.borderStrong}`,
-            color: '#8b3030', fontFamily: MONO, fontSize: 12,
-            padding: '5px 12px', borderRadius: 5,
-            cursor: 'pointer', flexShrink: 0,
-          }}>
-          ✕ Cerrar
-        </button>
+        {/* ── Botones derecha: ↻ Actualizar + ✕ Cerrar — agrupados para no wrappear ── */}
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, flexShrink: 0, alignItems: 'center' }}>
+          <button
+            disabled={selected.size === 0 || !!calcProgress}
+            onClick={async e => {
+              e.stopPropagation()
+              const sel = watchlist.filter(w => selected.has(w.id))
+              if (!sel.length) return
+              try {
+                setCalcProgress('Calculando métricas…')
+                const r1 = await (onCalcMetricas ? onCalcMetricas(sel) : onCalcRankingAll?.(sel))
+                setCalcProgress('Calculando scores…')
+                const r2 = await onCalcScoreMetricas?.(sel, r1?.topMetricsMap ?? null)
+                setCalcProgress('Calculando señales…')
+                await onCalcScoreMetSen?.(sel, r2?.activeScoreMap ?? null, r2?.topScoreMap ?? null)
+                try { localStorage.setItem('wl_scores_last_updated', Date.now().toString()) } catch(_) {}
+              } finally {
+                setCalcProgress(null)
+              }
+            }}
+            title={`Actualiza métricas, scores y señales para los activos seleccionados. Ejecuta los 3 pasos en orden:\n1. Métricas (CAGR, MaxDD, WinRate, Ops, Profit)\n2. Score métricas (normalización percentil)\n3. Score métricas + señales (momentum, fuerza relativa)`}
+            style={{
+              background: selected.size === 0 ? 'rgba(26,107,58,0.06)' : 'rgba(26,107,58,0.18)',
+              border: '1px solid #1a6b3a',
+              color: selected.size === 0 ? '#2a4a30' : '#1a6b3a',
+              fontFamily: MONO, fontSize: 11, fontWeight: 600,
+              padding: '5px 12px', borderRadius: 5,
+              cursor: selected.size === 0 || !!calcProgress ? 'not-allowed' : 'pointer',
+              flexShrink: 0, whiteSpace: 'nowrap',
+            }}>
+            {calcProgress ? `⟳ ${calcProgress}` : '↻ Actualizar'}
+          </button>
+          <button onClick={onClose}
+            title="Cerrar el panel de gestión y volver a la vista del gráfico"
+            style={{
+              background: P.bg,
+              border: `1px solid ${P.borderStrong}`,
+              color: '#8b3030', fontFamily: MONO, fontSize: 12,
+              padding: '5px 12px', borderRadius: 5,
+              cursor: 'pointer', flexShrink: 0,
+            }}>
+            ✕ Cerrar
+          </button>
+        </div>
       </div>
 
       {/* ── Sub-panel expandible (Notificaciones / Analizar candidatos) ── */}
