@@ -2649,22 +2649,22 @@ export default function Home() {
   // ── SCORE MÉTRICAS ↻ (Paso 2) — Calcula scoreHistorico desde wlData, sin backtest ──
   // Requiere: ↻ Métricas ejecutado previamente (cagr/winRate/maxDD en wlData[sym].active)
   const calcScoreMetricas = useCallback(async (rankSymbols=null, topMetricsOverride=null) => {
-    console.log('[SCORE-START] syms:',(rankSymbols||watchlist).map(w=>w.symbol),'topOverride keys:',Object.keys(topMetricsOverride||{}))
     try {
     const items = rankSymbols || watchlist
     const syms = items.map(w=>w.symbol)
     // Universo completo para normalización percentil — siempre watchlist entero
     const allSyms = watchlist.map(w=>w.symbol)
 
-    // ── Verificación previa: todos los activos deben tener métricas ──
-    const missingMetrics = syms.filter(sym => {
-      const d = wlData[sym.toUpperCase()]?.active
-      return !d || d.cagr==null || d.winRate==null || d.maxDD==null
-    })
-    console.log('[SCORE-P1] missingMetrics:', missingMetrics, 'allSyms:', allSyms.length, 'allCagr will be:', allSyms.map(s=>wlData[s.toUpperCase()]?.active?.cagr).filter(v=>v!=null).length)
-    if (missingMetrics.length > 0) {
-      console.log('[SCORE-P1] EARLY RETURN — missing metrics for:', missingMetrics)
-      return { ok: false, error: 'missing_metrics', symbols: missingMetrics }
+    // ── Verificación previa: solo si no hay override (flujo manual sin métricas previas) ──
+    // Con override, las métricas vienen del paso 1 directamente — no leer wlData (puede estar stale)
+    if (!topMetricsOverride) {
+      const missingMetrics = syms.filter(sym => {
+        const d = wlData[sym.toUpperCase()]?.active
+        return !d || d.cagr==null || d.winRate==null || d.maxDD==null
+      })
+      if (missingMetrics.length > 0) {
+        return { ok: false, error: 'missing_metrics', symbols: missingMetrics }
+      }
     }
 
     setRankingRunning(true); setRankingError(null)
@@ -2702,11 +2702,9 @@ export default function Home() {
     const [ddFlT,ddCeT]    =[getPct(allDDT ,1-pct),getPct(allDDT ,pct)]
 
     // ── Calcular scoreHistorico desde wlData (sin backtest) ──
-    console.log('[SCORE-P2] iniciando loop, syms:', syms.length, 'allCagr:', allCagr.length, 'allCT:', allCT.length)
     const activeScoreMap={}, topScoreMap={}
     syms.forEach((sym,idx)=>{
       const symUp=sym.toUpperCase()
-      if(idx===0) console.log('[SCORE-P3] procesando:', symUp, 'ad:', JSON.stringify(wlData[symUp]?.active?.cagr), 'td:', JSON.stringify(topMetricsOverride?.[symUp]?.cagr ?? wlData[symUp]?.top?.cagr))
       const ad=wlData[symUp]?.active
       // Para top: usar override si disponible (evita stale closure tras calcMetricas)
       const td=topMetricsOverride?.[symUp]??wlData[symUp]?.top
@@ -2751,10 +2749,9 @@ export default function Home() {
       return next
     })
     setRankingRunning(false); setRankingProgress({done:0,total:0})
-    console.log('[SCORE-DEBUG]','ALAB en topMetricsMap:',JSON.stringify(topMetricsOverride?.['ALAB']),'ALAB en wlData.top:',JSON.stringify(wlData['ALAB']?.top?.cagr),'topScoreMap ALAB:',topScoreMap['ALAB'],'activeScoreMap ALAB:',activeScoreMap['ALAB'])
     return { ok: true, activeScoreMap, topScoreMap }
     } catch(e) {
-      console.error('[calcScoreMetricas] ERROR:', e)
+      console.error('[calcScoreMetricas] error:', e)
       return { ok: false, error: e.message }
     }
   },[watchlist,wlData,currentStratId,stratName,estrategiaIntervalo])
@@ -2973,7 +2970,6 @@ export default function Home() {
       })
       await refreshBestStratPerSymbol().catch(()=>{})
       setTopStratRunning(false); setTopStratProgress({current:0,total:0})
-      console.log('[METRICS-DEBUG]','ALAB en topMetricsMap:',JSON.stringify(topMetricsMap['ALAB']))
       return { ok: true, topMetricsMap }
     }
     return { ok: true, topMetricsMap: {} }
@@ -4271,7 +4267,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.463</title>
+        <title>Trading Simulator V9.464</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4349,7 +4345,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.463
+            <span className="dot"/>Trading Simulator V9.464
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
