@@ -2928,27 +2928,30 @@ export default function Home() {
       }
       // ── Merge top metrics: determinar top estrategia por CAGR desde allStratMetricsMap ──
       // No depende de refreshBestStratPerSymbol (que usa score_historico, no calculado aquí)
-      // Construir topMetricsMap para retorno (evita stale closure en calcScoreMetricas)
+      // Construir topMetricsMap ANTES de setWlData — el updater de setState es asíncrono
+      // y no popula el mapa a tiempo para el return { topMetricsMap }
       const topMetricsMap={}
+      const topWlUpdates={}  // datos para setWlData, calculados síncronamente
+      syms.forEach(sym=>{
+        const symUp=sym.toUpperCase()
+        let bestStratId=null, bestCagr=-Infinity
+        Object.entries(allStratMetricsMap).forEach(([sid,metricsForStrat])=>{
+          const m=metricsForStrat[symUp]
+          if(m && (m.cagr??-Infinity)>bestCagr){ bestCagr=m.cagr; bestStratId=sid }
+        })
+        if(bestStratId){
+          const topM=allStratMetricsMap[bestStratId][symUp]
+          const topStrat=enabledStrats.find(s=>s.id===bestStratId)
+          const topStratName=topStrat?.name||''
+          const topIntv=(()=>{try{const p=typeof topStrat?.params==='string'?JSON.parse(topStrat.params||'{}'):(topStrat?.params||{});return p.intervalo||'diario'}catch(_){return 'diario'}})()
+          topMetricsMap[symUp]={cagr:topM.cagr??null,cagrRobust:topM.cagrRobust??null,winRate:topM.winRate??null,maxDD:topM.maxDD??null}
+          topWlUpdates[symUp]={cagr:topM.cagr??null,cagrRobust:topM.cagrRobust??null,profit:topM.profit??null,winRate:topM.winRate??null,maxDD:topM.maxDD??null,ops:topM.trades??null,stratName:topStratName,stratId:bestStratId,intervalo:topIntv}
+        }
+      })
       setWlData(prev=>{
         const next={...prev}
-        syms.forEach(sym=>{
-          const symUp=sym.toUpperCase()
-          let bestStratId=null, bestCagr=-Infinity
-          Object.entries(allStratMetricsMap).forEach(([sid,metricsForStrat])=>{
-            const m=metricsForStrat[symUp]
-            if(m && (m.cagr??-Infinity)>bestCagr){ bestCagr=m.cagr; bestStratId=sid }
-          })
-          if(bestStratId){
-            const topM=allStratMetricsMap[bestStratId][symUp]
-            const topStrat=enabledStrats.find(s=>s.id===bestStratId)
-            const topStratName=topStrat?.name||''
-            const topIntv=(()=>{try{const p=typeof topStrat?.params==='string'?JSON.parse(topStrat.params||'{}'):(topStrat?.params||{});return p.intervalo||'diario'}catch(_){return 'diario'}})()
-            next[symUp]={...(next[symUp]||{}),
-              top:{...(next[symUp]?.top||{}),cagr:topM.cagr??null,cagrRobust:topM.cagrRobust??null,profit:topM.profit??null,winRate:topM.winRate??null,maxDD:topM.maxDD??null,ops:topM.trades??null,stratName:topStratName,stratId:bestStratId,intervalo:topIntv}
-            }
-            topMetricsMap[symUp]={cagr:topM.cagr??null,cagrRobust:topM.cagrRobust??null,winRate:topM.winRate??null,maxDD:topM.maxDD??null}
-          }
+        Object.entries(topWlUpdates).forEach(([symUp,topData])=>{
+          next[symUp]={...(next[symUp]||{}),top:{...(next[symUp]?.top||{}), ...topData}}
         })
         return next
       })
@@ -4250,7 +4253,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.445</title>
+        <title>Trading Simulator V9.446</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4328,7 +4331,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.445
+            <span className="dot"/>Trading Simulator V9.446
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
