@@ -2661,7 +2661,9 @@ export default function Home() {
       const d = wlData[sym.toUpperCase()]?.active
       return !d || d.cagr==null || d.winRate==null || d.maxDD==null
     })
+    console.log('[SCORE-P1] missingMetrics:', missingMetrics, 'allSyms:', allSyms.length, 'allCagr will be:', allSyms.map(s=>wlData[s.toUpperCase()]?.active?.cagr).filter(v=>v!=null).length)
     if (missingMetrics.length > 0) {
+      console.log('[SCORE-P1] EARLY RETURN — missing metrics for:', missingMetrics)
       return { ok: false, error: 'missing_metrics', symbols: missingMetrics }
     }
 
@@ -2700,9 +2702,11 @@ export default function Home() {
     const [ddFlT,ddCeT]    =[getPct(allDDT ,1-pct),getPct(allDDT ,pct)]
 
     // ── Calcular scoreHistorico desde wlData (sin backtest) ──
+    console.log('[SCORE-P2] iniciando loop, syms:', syms.length, 'allCagr:', allCagr.length, 'allCT:', allCT.length)
     const activeScoreMap={}, topScoreMap={}
     syms.forEach((sym,idx)=>{
       const symUp=sym.toUpperCase()
+      if(idx===0) console.log('[SCORE-P3] procesando:', symUp, 'ad:', JSON.stringify(wlData[symUp]?.active?.cagr), 'td:', JSON.stringify(topMetricsOverride?.[symUp]?.cagr ?? wlData[symUp]?.top?.cagr))
       const ad=wlData[symUp]?.active
       // Para top: usar override si disponible (evita stale closure tras calcMetricas)
       const td=topMetricsOverride?.[symUp]??wlData[symUp]?.top
@@ -2724,6 +2728,7 @@ export default function Home() {
     })
 
     // ── Guardar en Supabase ──
+    console.log('[SCORE-P4] guardando en Supabase, activeScoreMap keys:', Object.keys(activeScoreMap).length, 'topScoreMap keys:', Object.keys(topScoreMap).length)
     await upsertScoreHistoricoRemote(activeScoreMap, currentStratId||null)
     // Top scores: agrupar por stratId y guardar
     const topByStrat={}
@@ -4266,7 +4271,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.462</title>
+        <title>Trading Simulator V9.463</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4344,7 +4349,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.462
+            <span className="dot"/>Trading Simulator V9.463
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
