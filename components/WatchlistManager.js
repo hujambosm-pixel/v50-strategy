@@ -1311,11 +1311,9 @@ export default function WatchlistManager({
                 onClick={() => handleSort('scoreHistorico')}
                 title="Score 0-100 basado en métricas históricas. Clic para ordenar.">
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
-                  {rankingDoneFlash
-                    ? <span style={{ color: '#1a6b3a', fontWeight: 700 }}>✓ Listo</span>
-                    : rankingRunning
-                      ? <span style={{ fontSize: 9 }}>Calculando {rankingProgress?.done ?? 0}/{rankingProgress?.total ?? 0}…</span>
-                      : <>SCORE MÉTRICAS{sortIcon('scoreHistorico')}</>}
+                  {rankingRunning
+                    ? <span style={{ fontSize: 9 }}>Calculando {rankingProgress?.done ?? 0}/{rankingProgress?.total ?? 0}…</span>
+                    : <>SCORE MÉTRICAS{sortIcon('scoreHistorico')}</>}
                 </div>
               </th>
 
@@ -1326,11 +1324,9 @@ export default function WatchlistManager({
                 onClick={() => handleSort('scoreCompleto')}
                 title="Score 0-100 que combina métricas históricas + señales de mercado. Clic para ordenar.">
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
-                  {rankingDoneFlash
-                    ? <span style={{ color: '#1a6b3a', fontWeight: 700 }}>✓ Listo</span>
-                    : rankingRunning
-                      ? <span style={{ fontSize: 9 }}>Calculando {rankingProgress?.done ?? 0}/{rankingProgress?.total ?? 0}…</span>
-                      : <>SCORE MÉT.+SEÑ.{sortIcon('scoreCompleto')}</>}
+                  {rankingRunning
+                    ? <span style={{ fontSize: 9 }}>Calculando {rankingProgress?.done ?? 0}/{rankingProgress?.total ?? 0}…</span>
+                    : <>SCORE MÉT.+SEÑ.{sortIcon('scoreCompleto')}</>}
                 </div>
               </th>
 
