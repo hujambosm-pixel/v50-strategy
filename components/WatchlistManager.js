@@ -958,19 +958,24 @@ export default function WatchlistManager({
                 alert('Selecciona una estrategia activa antes de actualizar')
                 return
               }
+              // Paso 1: Métricas
+              setCalcProgress('Calculando métricas...')
               try {
-                setCalcProgress('1/3 Calculando métricas...')
-                const r1 = await (onCalcMetricas ? onCalcMetricas(sel) : onCalcRankingAll?.(sel))
-                setCalcProgress('2/3 Calculando scores...')
-                const r2 = await onCalcScoreMetricas?.(sel, r1?.topMetricsMap ?? null, r1?.activeMetricsMap ?? null)
-                setCalcProgress('3/3 Calculando señales...')
+                await (onCalcMetricas ? onCalcMetricas(sel) : onCalcRankingAll?.(sel))
+              } catch(e) { console.error('[Métricas]', e) }
+              finally { setCalcProgress(null) }
+
+              // Esperar a que React procese el setState de calcMetricas
+              await new Promise(resolve => setTimeout(resolve, 3000))
+
+              // Paso 2: Scores + señales
+              setCalcProgress('Calculando scores...')
+              try {
+                const r2 = await onCalcScoreMetricas?.(sel, null, null)
+                setCalcProgress('Calculando señales...')
                 await onCalcScoreMetSen?.(sel, r2?.activeScoreMap ?? null, r2?.topScoreMap ?? null)
-              } catch(e) {
-                console.error('[Actualizar]', e)
-              } finally {
-                setCalcProgress(null)
-                await onRefreshWlData?.()
-              }
+              } catch(e) { console.error('[Scores]', e) }
+              finally { setCalcProgress(null) }
             }}
             title={`Actualiza métricas, scores y señales para los activos seleccionados.\n1. Métricas (CAGR, MaxDD, WinRate, Ops, Profit)\n2. Score métricas (normalización percentil)\n3. Score métricas + señales (momentum, fuerza relativa)`}
             style={{
