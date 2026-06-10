@@ -181,6 +181,7 @@ export default function WatchlistManager({
   onDeleteMetrics,
   // Unified data state from parent
   wlData,
+  currentStratId,
 }) {
   const [allRankings, setAllRankings]       = useState({})
   const [loadingRank, setLoadingRank]       = useState(true)
@@ -952,6 +953,10 @@ export default function WatchlistManager({
             onClick={async () => {
               const sel = watchlist.filter(w => selected.has(w.id))
               if (!sel.length) return
+              if (!currentStratId) {
+                alert('Selecciona una estrategia activa antes de actualizar')
+                return
+              }
               try {
                 setCalcProgress('1/3 Calculando métricas...')
                 const r1 = await (onCalcMetricas ? onCalcMetricas(sel) : onCalcRankingAll?.(sel))
