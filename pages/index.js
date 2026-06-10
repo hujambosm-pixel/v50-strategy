@@ -402,8 +402,6 @@ async function loadAllRankingsRemote() {
 async function cleanCorruptRankingRows() {
   if (!getSupaUrl()) return
   try {
-    const check = await fetch(`${getSupaUrl()}/rest/v1/ranking_results?cagr_simple=is.null&score_historico=not.is.null&select=symbol,strategy_id`, { headers: getSupaH() }).catch(()=>null)
-    if (check?.ok) { const data = await check.json(); if (data?.length) console.log('[CLEAN-CORRUPT] borrando filas:', data.map(r=>r.symbol+'/'+r.strategy_id)) }
     await fetch(`${getSupaUrl()}/rest/v1/ranking_results?cagr_simple=is.null&score_historico=not.is.null`, {
       method: 'DELETE', headers: { ...getSupaH(), 'Prefer': 'return=minimal' }
     })
@@ -442,7 +440,7 @@ async function upsertScoreHistoricoRemote(scoreMap, stratId) {
       headers: { ...getSupaH(), 'Prefer': 'resolution=merge-duplicates,return=minimal', 'Content-Type': 'application/json' },
       body: JSON.stringify(rows.slice(i, i+20))
     }).catch(()=>null)
-    if (res) { const text = await res.text(); if (!res.ok) console.error('[UPSERT-SCORE ERROR]', res.status, text); else console.log('[UPSERT-SCORE OK]', res.status) }
+    if (res && !res.ok) { const text = await res.text(); console.error('[UPSERT-SCORE ERROR]', res.status, text) }
   }
 }
 
@@ -458,14 +456,13 @@ async function upsertScoreCompletoRemote(scoreMap, stratId) {
       headers: { ...getSupaH(), 'Prefer': 'resolution=merge-duplicates,return=minimal', 'Content-Type': 'application/json' },
       body: JSON.stringify(rows.slice(i, i+20))
     }).catch(()=>null)
-    if (res) { const text = await res.text(); if (!res.ok) console.error('[UPSERT-COMPLETO ERROR]', res.status, text); else console.log('[UPSERT-COMPLETO OK]', res.status) }
+    if (res && !res.ok) { const text = await res.text(); console.error('[UPSERT-COMPLETO ERROR]', res.status, text) }
   }
 }
 
 // Upsert parcial: actualiza SOLO métricas (sin tocar score_historico ni score_completo)
 async function upsertMetricsRemote(metricsMap, stratId) {
   if (!getSupaUrl()) return
-  const _jwt=getCurrentJwt(); console.log('[AUTH-UPSERT]', _jwt ? 'JWT:'+_jwt.substring(0,20) : 'ANON')
   const rows = Object.entries(metricsMap).map(([symbol, m]) => ({
     symbol, strategy_id: stratId||null,
     win_rate: m.winRate??null, cagr_simple: m.cagr??null,
@@ -478,7 +475,7 @@ async function upsertMetricsRemote(metricsMap, stratId) {
       headers: { ...getSupaH(), 'Prefer': 'resolution=merge-duplicates,return=minimal', 'Content-Type': 'application/json' },
       body: JSON.stringify(rows.slice(i, i+20))
     }).catch(()=>null)
-    if (res) { const text = await res.text(); if (!res.ok) console.error('[UPSERT-METRICS ERROR]', res.status, text, 'rows:', rows.length); else console.log('[UPSERT-METRICS OK]', res.status, 'rows:', rows.length) }
+    if (res && !res.ok) { const text = await res.text(); console.error('[UPSERT-METRICS ERROR]', res.status, text) }
   }
 }
 
@@ -2043,7 +2040,6 @@ export default function Home() {
   // Carga todos los datos desde Supabase y rellena wlData para ambas vistas
   const refreshWlData = useCallback(async () => {
     if(!getSupaUrl()) return
-    const _jwt=getCurrentJwt(); console.log('[AUTH-REFRESH]', _jwt ? 'JWT:'+_jwt.substring(0,20) : 'ANON')
     try {
       let url=`${getSupaUrl()}/rest/v1/ranking_results?select=symbol,strategy_id,score_historico,score_completo,updated_at,cagr_simple,win_rate,max_drawdown,total_trades,profit_simple&limit=10000`
       let res=await fetch(url,{headers:getSupaH()})
@@ -2053,7 +2049,6 @@ export default function Home() {
       }
       if(!res.ok) return
       const rows=(await res.json())||[]
-      const alabRows=rows.filter(r=>r.symbol==='ALAB'); if(alabRows.length>0) console.log('[REFRESH-ALAB]',alabRows.length,'filas',alabRows.map(r=>r.strategy_id))
       const bySym={}
       rows.forEach(r=>{const sym=(r.symbol||'').toUpperCase();if(!bySym[sym])bySym[sym]=[];bySym[sym].push(r)})
       const toEntry=(row)=>{
@@ -2085,7 +2080,14 @@ export default function Home() {
 
   // useEffect aquí, DESPUÉS de la declaración de refreshBestStratPerSymbol para evitar TDZ
   useEffect(()=>{ refreshBestStratPerSymbol() },[refreshBestStratPerSymbol])
-  useEffect(()=>{ refreshWlData() },[]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(()=>{
+    const waitForAuth=async()=>{
+      let attempts=0
+      while(!getCurrentJwt()&&attempts<20){await new Promise(r=>setTimeout(r,200));attempts++}
+      refreshWlData()
+    }
+    waitForAuth()
+  },[]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Limpieza única al inicio: eliminar filas corruptas (score sin métricas)
   useEffect(()=>{ cleanCorruptRankingRows() },[]) // eslint-disable-line
@@ -4271,7 +4273,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.475</title>
+        <title>Trading Simulator V9.476</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4349,7 +4351,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.475
+            <span className="dot"/>Trading Simulator V9.476
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
