@@ -402,10 +402,12 @@ async function loadAllRankingsRemote() {
 async function cleanCorruptRankingRows() {
   if (!getSupaUrl()) return
   try {
+    const check = await fetch(`${getSupaUrl()}/rest/v1/ranking_results?cagr_simple=is.null&score_historico=not.is.null&select=symbol,strategy_id`, { headers: getSupaH() }).catch(()=>null)
+    if (check?.ok) { const data = await check.json(); if (data?.length) console.log('[CLEAN-CORRUPT] borrando filas:', data.map(r=>r.symbol+'/'+r.strategy_id)) }
     await fetch(`${getSupaUrl()}/rest/v1/ranking_results?cagr_simple=is.null&score_historico=not.is.null`, {
       method: 'DELETE', headers: { ...getSupaH(), 'Prefer': 'return=minimal' }
     })
-  } catch(_) {} // ignorar errores silenciosamente
+  } catch(_) {}
 }
 
 // Nullifica scores (score_historico, score_completo, score) para una lista de símbolos
@@ -2049,7 +2051,8 @@ export default function Home() {
       }
       if(!res.ok) return
       const rows=(await res.json())||[]
-const bySym={}
+      const alabRows=rows.filter(r=>r.symbol==='ALAB'); if(alabRows.length>0) console.log('[REFRESH-ALAB]',alabRows.length,'filas',alabRows.map(r=>r.strategy_id))
+      const bySym={}
       rows.forEach(r=>{const sym=(r.symbol||'').toUpperCase();if(!bySym[sym])bySym[sym]=[];bySym[sym].push(r)})
       const toEntry=(row)=>{
         if(!row) return undefined
@@ -4266,7 +4269,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.473</title>
+        <title>Trading Simulator V9.474</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4344,7 +4347,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.473
+            <span className="dot"/>Trading Simulator V9.474
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
