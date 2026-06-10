@@ -819,14 +819,14 @@ export default function Home() {
       setSession(session||null)
       if(session?.access_token){
         setCurrentJwt(session.access_token)
-        // Re-fetch watchlist data now that JWT is available (RLS requires auth.uid())
         reloadWatchlist()
+        refreshWlData()
       }
     })
     const {data:{subscription}}=supabase.auth.onAuthStateChange((_e,session)=>{
       setSession(session||null)
       setCurrentJwt(session?.access_token||null)
-      if(session?.access_token){ reloadWatchlist() }
+      if(session?.access_token){ reloadWatchlist(); refreshWlData() }
     })
     return ()=>subscription.unsubscribe()
   },[]) // eslint-disable-line
@@ -2080,14 +2080,7 @@ export default function Home() {
 
   // useEffect aquí, DESPUÉS de la declaración de refreshBestStratPerSymbol para evitar TDZ
   useEffect(()=>{ refreshBestStratPerSymbol() },[refreshBestStratPerSymbol])
-  useEffect(()=>{
-    const waitForAuth=async()=>{
-      let attempts=0
-      while(!getCurrentJwt()&&attempts<20){await new Promise(r=>setTimeout(r,200));attempts++}
-      refreshWlData()
-    }
-    waitForAuth()
-  },[]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(()=>{ refreshWlData() },[]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Limpieza única al inicio: eliminar filas corruptas (score sin métricas)
   useEffect(()=>{ cleanCorruptRankingRows() },[]) // eslint-disable-line
@@ -4273,7 +4266,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.476</title>
+        <title>Trading Simulator V9.477</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4351,7 +4344,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.476
+            <span className="dot"/>Trading Simulator V9.477
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
