@@ -467,17 +467,12 @@ async function upsertMetricsRemote(metricsMap, stratId) {
     max_drawdown: m.maxDD??null, total_trades: m.trades??null,
     profit_simple: m.profit??null, updated_at: new Date().toISOString()
   }))
-  console.log('[UPSERT] strategy_id:', stratId, 'symbols:', rows.map(r=>r.symbol))
   for (let i=0; i<rows.length; i+=20) {
-    const res = await fetch(`${getSupaUrl()}/rest/v1/ranking_results?on_conflict=symbol,strategy_id`, {
+    await fetch(`${getSupaUrl()}/rest/v1/ranking_results?on_conflict=symbol,strategy_id`, {
       method: 'POST',
       headers: { ...getSupaH(), 'Prefer': 'resolution=merge-duplicates,return=minimal', 'Content-Type': 'application/json' },
       body: JSON.stringify(rows.slice(i, i+20))
     }).catch(()=>null)
-    if (res && !res.ok) {
-      const errText = await res.text().catch(()=>'')
-      console.error('[UPSERT ERROR]', res.status, errText.slice(0,200))
-    }
   }
 }
 
@@ -2051,9 +2046,7 @@ export default function Home() {
       }
       if(!res.ok) return
       const rows=(await res.json())||[]
-      console.log('[CURRENT-STRAT]', currentStratId)
-      console.log('[SUPABASE-ALAB]', JSON.stringify(rows.filter(r=>r.symbol==='ALAB'), null, 2))
-      const bySym={}
+const bySym={}
       rows.forEach(r=>{const sym=(r.symbol||'').toUpperCase();if(!bySym[sym])bySym[sym]=[];bySym[sym].push(r)})
       const toEntry=(row)=>{
         if(!row) return undefined
@@ -4270,7 +4263,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.469</title>
+        <title>Trading Simulator V9.470</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4348,7 +4341,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.469
+            <span className="dot"/>Trading Simulator V9.470
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6332,6 +6325,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 onDeleteMetrics={deleteMetrics}
                 wlData={wlData}
                 currentStratId={currentStratId}
+                onRefreshWlData={refreshWlData}
               />
             </div>
             )}

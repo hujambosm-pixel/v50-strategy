@@ -182,6 +182,7 @@ export default function WatchlistManager({
   // Unified data state from parent
   wlData,
   currentStratId,
+  onRefreshWlData,
 }) {
   const [allRankings, setAllRankings]       = useState({})
   const [loadingRank, setLoadingRank]       = useState(true)
@@ -968,6 +969,7 @@ export default function WatchlistManager({
                 console.error('[Actualizar]', e)
               } finally {
                 setCalcProgress(null)
+                await onRefreshWlData?.()
               }
             }}
             title={`Actualiza métricas, scores y señales para los activos seleccionados.\n1. Métricas (CAGR, MaxDD, WinRate, Ops, Profit)\n2. Score métricas (normalización percentil)\n3. Score métricas + señales (momentum, fuerza relativa)`}
