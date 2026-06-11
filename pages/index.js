@@ -2046,11 +2046,12 @@ export default function Home() {
   const refreshWlData = useCallback(async () => {
     if(!getSupaUrl()) return
     try {
+      const rangeH={...getSupaH(),'Range':'0-9999','Range-Unit':'items'}
       let url=`${getSupaUrl()}/rest/v1/ranking_results?select=symbol,strategy_id,score_historico,score_completo,updated_at,cagr_simple,win_rate,max_drawdown,total_trades,profit_simple&limit=10000`
-      let res=await fetch(url,{headers:getSupaH()})
+      let res=await fetch(url,{headers:rangeH})
       if(!res.ok){
         url=`${getSupaUrl()}/rest/v1/ranking_results?select=symbol,strategy_id,score_historico,score_completo,updated_at,cagr_simple,win_rate,max_drawdown,total_trades&limit=10000`
-        res=await fetch(url,{headers:getSupaH()})
+        res=await fetch(url,{headers:rangeH})
       }
       if(!res.ok) return
       const rows=(await res.json())||[]
@@ -4271,7 +4272,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.484</title>
+        <title>Trading Simulator V9.485</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4349,7 +4350,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.484
+            <span className="dot"/>Trading Simulator V9.485
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
