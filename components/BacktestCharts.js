@@ -13,7 +13,6 @@ export function MultiCartChart({simpleCurve,compoundCurve,bhCurve,sp500BHCurve,c
     import('lightweight-charts').then(({createChart,CrosshairMode,LineStyle})=>{
       if(chartRef.current){chartRef.current.remove();chartRef.current=null}
       if(!ref.current||ref.current.clientWidth<=0) return
-      console.log('[CHART-DEBUG] BacktestCharts MultiCartChart',ref.current?.clientWidth,ref.current?.clientHeight)
       const chart=createChart(ref.current,{
         width:ref.current.clientWidth,height:chartHeight,
         layout:{background:{color:'#080c14'},textColor:'#7a9bc0'},
@@ -114,7 +113,6 @@ export function OccupancyBarChart({trades, chartData, capitalIni, syncRef, showM
     import('lightweight-charts').then(({createChart,CrosshairMode})=>{
       if(chartRef.current){chartRef.current.__syncCleanup?.();chartRef.current.remove();chartRef.current=null}
       if(!ref.current||ref.current.clientWidth<=0) return
-      console.log('[CHART-DEBUG] BacktestCharts OccupancyBarChart',ref.current?.clientWidth,ref.current?.clientHeight)
       const chart=createChart(ref.current,{
         width:ref.current.clientWidth,height:100,
         layout:{background:{color:'#080c14'},textColor:'#7a9bc0'},
@@ -178,7 +176,6 @@ export function McOccupancyChart({series=[], capitalIni, syncRef, axisWidth=72})
     import('lightweight-charts').then(({createChart,CrosshairMode})=>{
       if(chartRef.current){chartRef.current.__syncCleanup?.();chartRef.current.remove();chartRef.current=null}
       if(!ref.current||ref.current.clientWidth<=0) return
-      console.log('[CHART-DEBUG] BacktestCharts McOccupancyChart',ref.current?.clientWidth,ref.current?.clientHeight)
       const chart=createChart(ref.current,{
         width:ref.current.clientWidth,height:100,
         layout:{background:{color:'#080c14'},textColor:'#7a9bc0'},
@@ -236,7 +233,6 @@ export function StratCompareChart({curves,capitalIni,showMaxDD=true,chartHeight=
     import('lightweight-charts').then(({createChart,CrosshairMode,LineStyle})=>{
       if(chartRef.current){chartRef.current.__syncCleanup?.();chartRef.current.remove();chartRef.current=null}
       if(!ref.current||ref.current.clientWidth<=0) return
-      console.log('[CHART-DEBUG] BacktestCharts StratCompareChart',ref.current?.clientWidth,ref.current?.clientHeight)
       const chart=createChart(ref.current,{
         width:ref.current.clientWidth,height:chartHeight,
         layout:{background:{color:'#080c14'},textColor:'#7a9bc0'},
@@ -369,7 +365,6 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
       // Cleanup previous instance and remove from sync group
       if(chartRef.current){chartRef.current.__syncCleanup?.();chartRef.current.remove();chartRef.current=null}
       if(!chartDivRef.current||chartDivRef.current.clientWidth<=0) return
-      console.log('[CHART-DEBUG] BacktestCharts MiniChart',chartDivRef.current?.clientWidth,chartDivRef.current?.clientHeight)
       const chart=createChart(chartDivRef.current,{
         width:chartDivRef.current.clientWidth,height,
         layout:{background:{color:'#080c14'},textColor:'#7a9bc0'},
