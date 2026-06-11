@@ -2663,18 +2663,6 @@ export default function Home() {
     // Universo completo para normalización percentil — siempre watchlist entero
     const allSyms = watchlist.map(w=>w.symbol)
 
-    // ── Verificación previa: solo si no hay override (flujo manual sin métricas previas) ──
-    // Con override, las métricas vienen del paso 1 directamente — no leer wlData (puede estar stale)
-    if (!topMetricsOverride) {
-      const missingMetrics = syms.filter(sym => {
-        const d = wlData[sym.toUpperCase()]?.active
-        return !d || d.cagr==null || d.winRate==null || d.maxDD==null
-      })
-      if (missingMetrics.length > 0) {
-        return { ok: false, error: 'missing_metrics', symbols: missingMetrics }
-      }
-    }
-
     setRankingRunning(true); setRankingError(null)
     setRankingProgress({done:0, total:syms.length})
     const sett=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')}catch(_){return {}}})()
@@ -2731,7 +2719,6 @@ export default function Home() {
           normDyn(td.cagrRobust??td.cagr,crFlT,crCeT)*cagrRobPct-
           normDyn(td.maxDD,              ddFlT,ddCeT)*ddPct))
       }
-      console.log('[SCORE-SYM]',symUp,'act:',JSON.stringify(activeMetricsOverride?.[symUp]??wlData[symUp]?.active),'top:',JSON.stringify(wlData[symUp]?.top),'activeScore:',activeScoreMap[symUp],'topScore:',topScoreMap[symUp])
       setRankingProgress({done:idx+1,total:syms.length})
     })
 
@@ -4276,7 +4263,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.492</title>
+        <title>Trading Simulator V9.493</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4354,7 +4341,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.492
+            <span className="dot"/>Trading Simulator V9.493
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
