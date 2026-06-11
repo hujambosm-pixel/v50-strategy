@@ -696,6 +696,8 @@ export default function Home() {
   const [strategies,setStrategies]=useState([])
   const strategiesRef=useRef([])
   useEffect(()=>{strategiesRef.current=strategies},[strategies])
+  const currentStratIdRef=useRef(currentStratId)
+  useEffect(()=>{currentStratIdRef.current=currentStratId},[currentStratId])
   const [strLoading,setStrLoading]=useState(true)
   const [editingStr,setEditingStr]=useState(null)
   const [strForm,setStrForm]=useState({})
@@ -2052,7 +2054,7 @@ export default function Home() {
       }
       if(!res.ok) return
       const rows=(await res.json())||[]
-      console.log('[REFRESH-CHECK]','currentStratId:',currentStratId,'ALAB rows:',rows.filter(r=>r.symbol==='ALAB').length,'ALAB active row:',rows.find(r=>r.symbol==='ALAB'&&r.strategy_id===currentStratId))
+      console.log('[REFRESH-CHECK]','currentStratId:',currentStratIdRef.current,'ALAB rows:',rows.filter(r=>r.symbol==='ALAB').length,'ALAB active row:',rows.find(r=>r.symbol==='ALAB'&&r.strategy_id===currentStratIdRef.current))
       const bySym={}
       rows.forEach(r=>{const sym=(r.symbol||'').toUpperCase();if(!bySym[sym])bySym[sym]=[];bySym[sym].push(r)})
       const toEntry=(row)=>{
@@ -2067,7 +2069,7 @@ export default function Home() {
       }
       const newWlData={}
       Object.entries(bySym).forEach(([sym,symRows])=>{
-        const activeRow=currentStratId?symRows.find(r=>r.strategy_id===currentStratId):null
+        const activeRow=currentStratIdRef.current?symRows.find(r=>r.strategy_id===currentStratIdRef.current):null
         // Top: la estrategia con mayor CAGR entre las filas con métricas completas
         // (mismo criterio que calcMetricas fase 2 — no usa score_historico que puede ser null)
         const complete=symRows.filter(r=>r.cagr_simple!=null&&r.win_rate!=null&&r.max_drawdown!=null)
@@ -2080,7 +2082,7 @@ export default function Home() {
       })
       setWlData(newWlData)
     }catch(e){console.warn('[refreshWlData]',e.message)}
-  },[currentStratId]) // strategies leído via ref estable — no recrea useCallback en cada render
+  },[]) // currentStratId y strategies leídos via ref — función estable, no se recrea
 
   // useEffect aquí, DESPUÉS de la declaración de refreshBestStratPerSymbol para evitar TDZ
   useEffect(()=>{ refreshBestStratPerSymbol() },[refreshBestStratPerSymbol])
@@ -4270,7 +4272,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.479</title>
+        <title>Trading Simulator V9.480</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4348,7 +4350,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.479
+            <span className="dot"/>Trading Simulator V9.480
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
