@@ -975,14 +975,19 @@ export default function WatchlistManager({
             disabled={selected.size === 0 || !!calcProgress}
             onClick={async () => {
               const sel = watchlist.filter(w => selected.has(w.id))
-              console.log('[SCORES-DEBUG]','selected.size:',selected.size,'watchlist.length:',watchlist.length,'sel.length:',sel.length,'selected values:',[...selected].slice(0,3),'watchlist[0].id:',watchlist[0]?.id,'types:',typeof [...selected][0],typeof watchlist[0]?.id)
+              console.log('[SCORES-DEBUG] sel:', sel.length)
               if (!sel.length) return
+              console.log('[SCORES-DEBUG] antes setCalcProgress')
               setCalcProgress('Calculando scores...')
+              console.log('[SCORES-DEBUG] después setCalcProgress')
               try {
+                console.log('[SCORES-DEBUG] llamando calcScoreMetricas')
                 const r2 = await onCalcScoreMetricas?.(sel, null, null)
+                console.log('[SCORES-DEBUG] resultado r2:', r2?.ok, r2?.error)
                 setCalcProgress('Calculando señales...')
                 await onCalcScoreMetSen?.(sel, r2?.activeScoreMap ?? null, r2?.topScoreMap ?? null)
-              } catch(e) { console.error('[Scores]', e) }
+                console.log('[SCORES-DEBUG] completado')
+              } catch(e) { console.error('[SCORES-ERROR]', e) }
               finally { setCalcProgress(null) }
             }}
             title="Calcula scores y señales (normalización percentil + momentum) para los activos seleccionados"
