@@ -975,6 +975,7 @@ export default function WatchlistManager({
             disabled={selected.size === 0 || !!calcProgress}
             onClick={async () => {
               const sel = watchlist.filter(w => selected.has(w.id))
+              console.log('[SCORES-DEBUG]','selected.size:',selected.size,'watchlist.length:',watchlist.length,'sel.length:',sel.length,'selected values:',[...selected].slice(0,3),'watchlist[0].id:',watchlist[0]?.id,'types:',typeof [...selected][0],typeof watchlist[0]?.id)
               if (!sel.length) return
               setCalcProgress('Calculando scores...')
               try {
