@@ -2048,13 +2048,14 @@ export default function Home() {
     try {
       let url=`${getSupaUrl()}/rest/v1/ranking_results?select=symbol,strategy_id,score_historico,score_completo,updated_at,cagr_simple,win_rate,max_drawdown,total_trades,profit_simple&limit=10000`
       let res=await fetch(url,{headers:getSupaH()})
+      console.log('[REFRESH-HTTP]',res.status,res.ok)
       if(!res.ok){
         url=`${getSupaUrl()}/rest/v1/ranking_results?select=symbol,strategy_id,score_historico,score_completo,updated_at,cagr_simple,win_rate,max_drawdown,total_trades&limit=10000`
         res=await fetch(url,{headers:getSupaH()})
       }
       if(!res.ok) return
       const rows=(await res.json())||[]
-      console.log('[REFRESH-CHECK]','currentStratId:',currentStratIdRef.current,'ALAB rows:',rows.filter(r=>r.symbol==='ALAB').length,'ALAB active row:',rows.find(r=>r.symbol==='ALAB'&&r.strategy_id===currentStratIdRef.current))
+      console.log('[REFRESH-CHECK]','currentStratId:',currentStratIdRef.current,'jwt:',getCurrentJwt()?'JWT:'+getCurrentJwt().substring(0,20):'ANON','ALAB rows:',rows.filter(r=>r.symbol==='ALAB').length,'total rows:',rows.length,'ALAB active row:',rows.find(r=>r.symbol==='ALAB'&&r.strategy_id===currentStratIdRef.current))
       const bySym={}
       rows.forEach(r=>{const sym=(r.symbol||'').toUpperCase();if(!bySym[sym])bySym[sym]=[];bySym[sym].push(r)})
       const toEntry=(row)=>{
@@ -4272,7 +4273,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.482</title>
+        <title>Trading Simulator V9.483</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4350,7 +4351,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.482
+            <span className="dot"/>Trading Simulator V9.483
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
