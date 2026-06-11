@@ -2052,6 +2052,7 @@ export default function Home() {
       }
       if(!res.ok) return
       const rows=(await res.json())||[]
+      console.log('[REFRESH-CHECK]','currentStratId:',currentStratId,'ALAB rows:',rows.filter(r=>r.symbol==='ALAB').length,'ALAB active row:',rows.find(r=>r.symbol==='ALAB'&&r.strategy_id===currentStratId))
       const bySym={}
       rows.forEach(r=>{const sym=(r.symbol||'').toUpperCase();if(!bySym[sym])bySym[sym]=[];bySym[sym].push(r)})
       const toEntry=(row)=>{
@@ -4269,7 +4270,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.478</title>
+        <title>Trading Simulator V9.479</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4347,7 +4348,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.478
+            <span className="dot"/>Trading Simulator V9.479
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
