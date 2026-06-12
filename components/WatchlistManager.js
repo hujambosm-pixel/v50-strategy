@@ -946,46 +946,29 @@ export default function WatchlistManager({
           </div>
         )}
 
-        {/* ── Botones derecha: ↻ Métricas + ↻ Scores + ✕ Cerrar ── */}
+        {/* ── Botones derecha: ↻ Actualizar + ✕ Cerrar ── */}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, flexShrink: 0, alignItems: 'center' }}>
           <button
             disabled={selected.size === 0 || !!calcProgress}
             onClick={async () => {
               const sel = watchlist.filter(w => selected.has(w.id))
               if (!sel.length) return
-              setCalcProgress('Calculando métricas...')
+              if (!currentStratId) {
+                alert('Selecciona una estrategia activa antes de actualizar')
+                return
+              }
               try {
-                await (onCalcMetricas ? onCalcMetricas(sel) : onCalcRankingAll?.(sel))
-              } catch(e) { console.error('[Métricas]', e) }
-              finally { setCalcProgress(null) }
-            }}
-            title="Calcula métricas (CAGR, MaxDD, WinRate, Ops, Profit) para los activos seleccionados"
-            style={{
-              background: selected.size === 0 ? 'rgba(26,107,58,0.06)' : 'rgba(26,107,58,0.18)',
-              border: '1px solid #1a6b3a',
-              color: selected.size === 0 ? '#2a4a30' : '#1a6b3a',
-              fontFamily: MONO, fontSize: 11, fontWeight: 600,
-              padding: '5px 12px', borderRadius: 5,
-              cursor: selected.size === 0 || !!calcProgress ? 'not-allowed' : 'pointer',
-              flexShrink: 0, whiteSpace: 'nowrap',
-            }}>
-            {calcProgress?.includes('métrica') ? `⟳ ${calcProgress}` : '↻ Métricas'}
-          </button>
-          <button
-            disabled={selected.size === 0 || !!calcProgress}
-            onClick={async () => {
-              const sel = watchlist.filter(w => selected.has(w.id))
-              if (!sel.length) return
-              setCalcProgress('Calculando scores...')
-              try {
-                const r2 = await onCalcScoreMetricas?.(sel, null, null)
-                setCalcProgress('Calculando señales...')
+                setCalcProgress('1/3 Calculando métricas...')
+                const r1 = await (onCalcMetricas ? onCalcMetricas(sel) : onCalcRankingAll?.(sel))
+                setCalcProgress('2/3 Calculando scores...')
+                const r2 = await onCalcScoreMetricas?.(sel, r1?.topMetricsMap ?? null, r1?.activeMetricsMap ?? null)
+                setCalcProgress('3/3 Calculando señales...')
                 await onCalcScoreMetSen?.(sel, r2?.activeScoreMap ?? null, r2?.topScoreMap ?? null)
                 await onRefreshWlData?.()
-              } catch(e) { console.error('[Scores]', e) }
+              } catch(e) { console.error('[Actualizar]', e) }
               finally { setCalcProgress(null) }
             }}
-            title="Calcula scores y señales (normalización percentil + momentum) para los activos seleccionados"
+            title="Actualiza métricas, scores y señales para los activos seleccionados"
             style={{
               background: selected.size === 0 ? 'rgba(26,107,58,0.06)' : 'rgba(26,107,58,0.18)',
               border: '1px solid #1a6b3a',
@@ -995,7 +978,7 @@ export default function WatchlistManager({
               cursor: selected.size === 0 || !!calcProgress ? 'not-allowed' : 'pointer',
               flexShrink: 0, whiteSpace: 'nowrap',
             }}>
-            {calcProgress?.includes('score') || calcProgress?.includes('señal') ? `⟳ ${calcProgress}` : '↻ Scores'}
+            {calcProgress ? `⟳ ${calcProgress}` : '↻ Actualizar'}
           </button>
           <button onClick={onClose}
             title="Cerrar el panel de gestión y volver a la vista del gráfico"
