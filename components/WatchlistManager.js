@@ -183,6 +183,7 @@ export default function WatchlistManager({
   wlData,
   currentStratId,
   onRefreshWlData,
+  onDisableAutoRefresh,
 }) {
   const [allRankings, setAllRankings]       = useState({})
   const [loadingRank, setLoadingRank]       = useState(true)
@@ -958,6 +959,7 @@ export default function WatchlistManager({
                 return
               }
               try {
+                onDisableAutoRefresh?.()
                 setCalcProgress('1/3 Calculando métricas...')
                 const r1 = await (onCalcMetricas ? onCalcMetricas(sel) : onCalcRankingAll?.(sel))
                 setCalcProgress('2/3 Calculando scores...')
