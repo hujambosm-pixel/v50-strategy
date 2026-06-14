@@ -1310,10 +1310,31 @@ export default function WatchlistManager({
                 cursor: 'pointer' }}
                 onClick={() => handleSort('scoreHistorico')}
                 title="Score 0-100 basado en métricas históricas. Clic para ordenar.">
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
-                  {rankingRunning
-                    ? <span style={{ fontSize: 9 }}>Calculando {rankingProgress?.done ?? 0}/{rankingProgress?.total ?? 0}…</span>
-                    : <>SCORE MÉTRICAS{sortIcon('scoreHistorico')}</>}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
+                  {!rankingRunning && selected.size > 0 && (
+                    <button
+                      title="Recalcular solo scores (sin recalcular métricas)"
+                      onClick={async e => {
+                        e.stopPropagation()
+                        const sel = watchlist.filter(w => selected.has(w.id))
+                        if (!sel.length) return
+                        try {
+                          const r = await onCalcScoreMetricas?.(sel, null, null)
+                          await onCalcScoreMetSen?.(sel, r?.activeScoreMap ?? null, r?.topScoreMap ?? null, null)
+                          await onRefreshWlData?.()
+                        } catch(e) { console.error('[↻ Scores]', e) }
+                      }}
+                      style={{ fontSize: 10, padding: '1px 4px', cursor: 'pointer',
+                        background: '#b8b0a4', border: '1px solid #9a9088', borderRadius: 3,
+                        color: '#3a3028', lineHeight: 1.2, flexShrink: 0 }}>
+                      ↻
+                    </button>
+                  )}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end', flex: 1 }}>
+                    {rankingRunning
+                      ? <span style={{ fontSize: 9 }}>Calculando {rankingProgress?.done ?? 0}/{rankingProgress?.total ?? 0}…</span>
+                      : <>SCORE MÉTRICAS{sortIcon('scoreHistorico')}</>}
+                  </div>
                 </div>
               </th>
 
