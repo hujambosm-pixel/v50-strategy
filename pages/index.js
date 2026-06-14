@@ -432,7 +432,7 @@ async function deleteMetricsRemote(symbols) {
 async function upsertScoreHistoricoRemote(scoreMap, stratId) {
   if (!getSupaUrl()) return
   const rows = Object.entries(scoreMap).map(([symbol, sh]) => ({
-    symbol, strategy_id: stratId||null, score_historico: sh, updated_at: new Date().toISOString(),
+    symbol, strategy_id: stratId||null, score_historico: sh,
     ...(getUidFromJwt() ? { user_id: getUidFromJwt() } : {})
   }))
   for (let i=0; i<rows.length; i+=20) {
@@ -449,7 +449,7 @@ async function upsertScoreHistoricoRemote(scoreMap, stratId) {
 async function upsertScoreCompletoRemote(scoreMap, stratId) {
   if (!getSupaUrl()) return
   const rows = Object.entries(scoreMap).map(([symbol, sc]) => ({
-    symbol, strategy_id: stratId||null, score_completo: sc, updated_at: new Date().toISOString(),
+    symbol, strategy_id: stratId||null, score_completo: sc,
     ...(getUidFromJwt() ? { user_id: getUidFromJwt() } : {})
   }))
   for (let i=0; i<rows.length; i+=20) {
@@ -4251,7 +4251,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.498</title>
+        <title>Trading Simulator V9.499</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4329,7 +4329,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.498
+            <span className="dot"/>Trading Simulator V9.499
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
