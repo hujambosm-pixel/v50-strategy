@@ -2727,7 +2727,7 @@ export default function Home() {
     // Top scores: agrupar por stratId y guardar
     const topByStrat={}
     Object.entries(topScoreMap).forEach(([sym,sh])=>{
-      const sid=wlData[sym]?.top?.stratId; if(sid){if(!topByStrat[sid])topByStrat[sid]={};topByStrat[sid][sym]=sh}
+      const sid=topMetricsOverride?.[sym]?.stratId??wlData[sym]?.top?.stratId; if(sid){if(!topByStrat[sid])topByStrat[sid]={};topByStrat[sid][sym]=sh}
     })
     for(const [sid,m] of Object.entries(topByStrat)) await upsertScoreHistoricoRemote(m,sid)
 
@@ -2754,7 +2754,7 @@ export default function Home() {
 
   // ── SCORE MÉT.+SEÑ. ↻ (Paso 3) — Añade señales de mercado al scoreMetricas existente ──
   // Requiere: ↻ Score métricas ejecutado previamente (scoreMetricas en wlData[sym].active)
-  const calcScoreMetSen = useCallback(async (rankSymbols=null, scoreOverride=null, topScoreOverride=null) => {
+  const calcScoreMetSen = useCallback(async (rankSymbols=null, scoreOverride=null, topScoreOverride=null, topMetricsOverride=null) => {
     const items = rankSymbols || watchlist
     const syms = items.map(w=>w.symbol)
     setRankingRunning(true); setRankingError(null)
@@ -2812,7 +2812,7 @@ export default function Home() {
     await upsertScoreCompletoRemote(activeScMap, currentStratId||null)
     const topScByStrat={}
     Object.entries(topScMap).forEach(([sym,sc])=>{
-      const sid=wlData[sym]?.top?.stratId; if(sid){if(!topScByStrat[sid])topScByStrat[sid]={};topScByStrat[sid][sym]=sc}
+      const sid=topMetricsOverride?.[sym]?.stratId??wlData[sym]?.top?.stratId; if(sid){if(!topScByStrat[sid])topScByStrat[sid]={};topScByStrat[sid][sym]=sc}
     })
     for(const [sid,m] of Object.entries(topScByStrat)) await upsertScoreCompletoRemote(m,sid)
 
@@ -2941,7 +2941,7 @@ export default function Home() {
           const topStrat=enabledStrats.find(s=>s.id===bestStratId)
           const topStratName=topStrat?.name||''
           const topIntv=(()=>{try{const p=typeof topStrat?.params==='string'?JSON.parse(topStrat.params||'{}'):(topStrat?.params||{});return p.intervalo||'diario'}catch(_){return 'diario'}})()
-          topMetricsMap[symUp]={cagr:topM.cagr??null,cagrRobust:topM.cagrRobust??null,winRate:topM.winRate??null,maxDD:topM.maxDD??null}
+          topMetricsMap[symUp]={cagr:topM.cagr??null,cagrRobust:topM.cagrRobust??null,winRate:topM.winRate??null,maxDD:topM.maxDD??null,stratId:bestStratId}
           topWlUpdates[symUp]={cagr:topM.cagr??null,cagrRobust:topM.cagrRobust??null,profit:topM.profit??null,winRate:topM.winRate??null,maxDD:topM.maxDD??null,ops:topM.trades??null,stratName:topStratName,stratId:bestStratId,intervalo:topIntv}
         }
       })
@@ -4251,7 +4251,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.497</title>
+        <title>Trading Simulator V9.498</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4329,7 +4329,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.497
+            <span className="dot"/>Trading Simulator V9.498
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
