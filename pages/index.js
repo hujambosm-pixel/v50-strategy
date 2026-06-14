@@ -4251,7 +4251,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.501</title>
+        <title>Trading Simulator V9.502</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4329,7 +4329,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.501
+            <span className="dot"/>Trading Simulator V9.502
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4988,19 +4988,16 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     // scoreCompleto es efímero → fallback a scoreHistorico si no hay sesión activa
                     const all=filtered.slice().sort((a,b)=>{
                       const symA=(a.symbol||'').toUpperCase(), symB=(b.symbol||'').toUpperCase()
-                      const rdA=rankingData[symA], rdB=rankingData[symB]
-                      const bsbA=bestStratBySymbol[symA], bsbB=bestStratBySymbol[symB]
                       if(wlSortMode==='scoreHistorico'){
-                        const sa=rdA?.scoreHistorico??bsbA?.scoreHistorico
-                        const sb=rdB?.scoreHistorico??bsbB?.scoreHistorico
+                        const sa=wlData[symA]?.active?.scoreMetricas??null
+                        const sb=wlData[symB]?.active?.scoreMetricas??null
                         if(sa!=null&&sb!=null) return sb-sa
                         if(sa!=null) return -1; if(sb!=null) return 1
                         return symA.localeCompare(symB)
                       }
                       if(wlSortMode==='scoreCompleto'){
-                        // scoreCompleto requiere sesión activa; fallback a scoreHistorico
-                        const sa=rdA?.scoreCompleto??rdA?.scoreHistorico??bsbA?.scoreHistorico
-                        const sb=rdB?.scoreCompleto??rdB?.scoreHistorico??bsbB?.scoreHistorico
+                        const sa=wlData[symA]?.active?.scoreMetSeñ??wlData[symA]?.active?.scoreMetricas??null
+                        const sb=wlData[symB]?.active?.scoreMetSeñ??wlData[symB]?.active?.scoreMetricas??null
                         if(sa!=null&&sb!=null) return sb-sa
                         if(sa!=null) return -1; if(sb!=null) return 1
                         return symA.localeCompare(symB)
