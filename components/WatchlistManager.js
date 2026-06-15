@@ -1524,23 +1524,17 @@ export default function WatchlistManager({
                     )
                   })()}
 
-                  {/* Score completo — guardado en DB, con indicador de antigüedad */}
+                  {/* Score completo — guardado en DB */}
                   {(()=>{
                     const sc = datos.scoreMetSeñ ?? null
-                    const scTs = datos.updatedAt ?? null
-                    const daysSince = scTs ? Math.floor((Date.now() - new Date(scTs)) / 86400000) : null
-                    const isStale = sc != null && daysSince != null && daysSince >= 1
-                    const staleTooltip = isStale
-                      ? `Dato de hace ${daysSince} día${daysSince > 1 ? 's' : ''} · Ejecuta Ranking para actualizar`
-                      : undefined
                     return (
-                      <td title={staleTooltip} style={{
+                      <td style={{
                         ...TD(), textAlign: 'right', fontWeight: 600,
                         borderLeft: `1px solid ${P.border}`, borderRight: `2px solid ${P.borderStrong}`,
-                        color: isStale ? '#f59e0b' : scoreFg(sc),
+                        color: scoreFg(sc),
                       }}>
                         {sc != null
-                          ? <>{fmt(sc, 1)}%{isStale && <span style={{ marginLeft: 2, fontSize: 10 }}>⚠</span>}</>
+                          ? <>{fmt(sc, 1)}%</>
                           : <span style={{ color: P.textMuted }}>—</span>}
                       </td>
                     )
