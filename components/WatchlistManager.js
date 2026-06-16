@@ -17,28 +17,31 @@ async function _setItemLists(itemId, listIds) {
 }
 
 async function loadAllRankingsWithMetrics() {
-  let url = `${getSupaUrl()}/rest/v1/ranking_results?select=symbol,strategy_id,score,score_historico,score_completo,updated_at,win_rate,cagr_simple,max_drawdown,total_trades,profit_simple,rank_position&limit=10000`
-  let res = await fetch(url, { headers: getSupaH() })
-  if (!res.ok) {
-    // Fallback nivel 1: sin profit_simple (columna puede no existir)
-    url = `${getSupaUrl()}/rest/v1/ranking_results?select=symbol,strategy_id,score,score_historico,score_completo,updated_at,win_rate,cagr_simple,max_drawdown,total_trades,rank_position&limit=10000`
-    res = await fetch(url, { headers: getSupaH() })
+  // Selects con fallback progresivo (algunas columnas pueden no existir en el proyecto)
+  const SELECTS = [
+    'symbol,strategy_id,score,score_historico,score_completo,updated_at,win_rate,cagr_simple,max_drawdown,total_trades,profit_simple,rank_position',
+    'symbol,strategy_id,score,score_historico,score_completo,updated_at,win_rate,cagr_simple,max_drawdown,total_trades,rank_position',
+    'symbol,strategy_id,score,score_historico,win_rate,cagr_simple,max_drawdown,total_trades,rank_position',
+    'symbol,strategy_id,score,win_rate,cagr_simple,max_drawdown,total_trades,rank_position',
+  ]
+  const PAGE_SIZE = 1000
+  // Determinar el select que funciona pidiendo la primera página
+  let select = null, firstPage = null
+  for (const sel of SELECTS) {
+    const res = await fetch(`${getSupaUrl()}/rest/v1/ranking_results?select=${sel}&offset=0&limit=${PAGE_SIZE}`, { headers: getSupaH() })
+    if (res.ok) { select = sel; firstPage = (await res.json()) || []; break }
   }
-  if (!res.ok) {
-    // Fallback nivel 2: sin score_completo y updated_at
-    url = `${getSupaUrl()}/rest/v1/ranking_results?select=symbol,strategy_id,score,score_historico,win_rate,cagr_simple,max_drawdown,total_trades,rank_position&limit=10000`
-    res = await fetch(url, { headers: getSupaH() })
+  if (select == null) return []
+  // Paginar en bloques de 1000 — Supabase corta en max_rows=1000, ignora limits mayores
+  let allRows = firstPage, from = PAGE_SIZE, hasMore = firstPage.length === PAGE_SIZE
+  while (hasMore) {
+    const res = await fetch(`${getSupaUrl()}/rest/v1/ranking_results?select=${select}&offset=${from}&limit=${PAGE_SIZE}`, { headers: getSupaH() })
+    if (!res.ok) break
+    const page = (await res.json()) || []
+    if (!Array.isArray(page) || page.length === 0) { hasMore = false }
+    else { allRows = allRows.concat(page); if (page.length < PAGE_SIZE) hasMore = false; else from += PAGE_SIZE }
   }
-  if (!res.ok) {
-    // Fallback nivel 3: sin score_historico
-    url = `${getSupaUrl()}/rest/v1/ranking_results?select=symbol,strategy_id,score,win_rate,cagr_simple,max_drawdown,total_trades,rank_position&limit=10000`
-    res = await fetch(url, { headers: getSupaH() })
-  }
-  if (!res.ok) return []
-  const data = (await res.json()) || []
-  // [DIAG TEMPORAL] detectar truncamiento: la query usa limit=10000 sin paginar
-  console.log(`[DIAG load] ranking_results filas leídas=${data.length}${data.length>=10000?' ⚠️ POSIBLE TRUNCAMIENTO (limit=10000, no pagina) → allRankings incompleto':''}`)
-  return data
+  return allRows
 }
 
 // ── Warm-notebook color helpers ──────────────────────────────
@@ -298,28 +301,6 @@ export default function WatchlistManager({
     }
     prevTopStratRunning.current = topStratRunning
   }, [topStratRunning])  // eslint-disable-line
-
-  // ── [DIAG TEMPORAL] Cobertura por símbolo: SIN FILA vs FILA con métricas null ──
-  // Uso en consola del navegador:  __diagCobertura('AAPL')  ó  __diagCobertura()  (1er símbolo de la lista)
-  useEffect(() => {
-    window.__diagCobertura = (symArg) => {
-      const enabled = strategies.filter(s => s.enabled !== false)
-      const sym = (symArg || watchlist?.[0]?.symbol || '').toUpperCase()
-      if (!sym) { console.warn('[DIAG] sin símbolo'); return }
-      const sinFila = [], nullMetrics = [], conDatos = []
-      enabled.forEach(s => {
-        const d = allRankings[s.id]?.[sym]
-        if (d == null) sinFila.push(s.name)
-        else if (d.cagr == null || d.winRate == null || d.maxDD == null)
-          nullMetrics.push(`${s.name} (cagr=${d.cagr}, wr=${d.winRate}, dd=${d.maxDD}, trades=${d.trades})`)
-        else conDatos.push(s.name)
-      })
-      console.log(`[DIAG cobertura] ${sym} — habilitadas=${enabled.length}, conDatos=${conDatos.length}, SIN FILA=${sinFila.length}, FILA null=${nullMetrics.length}`)
-      console.log('  ▸ SIN FILA en ranking_results:', sinFila)
-      console.log('  ▸ FILA pero métricas null:', nullMetrics)
-      console.log('  ▸ con datos completos:', conDatos)
-    }
-  }, [allRankings, strategies, watchlist])
 
   // ── Best strategy for a symbol ────────────────────────────
   // Priority: bestStratBySymbol (score-based, same source as sidebar tooltip)
