@@ -15,6 +15,7 @@ import { MultiCartChart, OccupancyBarChart, McOccupancyChart, StratCompareChart,
 import dynamic from 'next/dynamic'
 const McMonthlyGainsChart = dynamic(() => import('../components/McMonthlyGainsChart'), { ssr: false })
 import { TlEquityChart, TlInvestChart } from '../components/TlCharts'
+import { taxStrategyCurve, taxBHCurve } from '../lib/afterTaxSim'
 import ContextThemeMenu, { applyTema } from '../components/ContextThemeMenu'
 import { exportTimeline, exportGantt, exportHistorial } from '../lib/exportTimeline'
 import GanttChart from '../components/GanttChart'
@@ -902,6 +903,7 @@ export default function Home() {
   const [mcShowBH,setMcShowBH]=useState(true)
   const [mcShowSP500,setMcShowSP500]=useState(false)
   const [showMultiFloat,setShowMultiFloat]=useState(true)
+  const [mcShowAfterTax,setMcShowAfterTax]=useState(false) // toggle "Después de impuestos" (solo modos pool)
   const [mcChartsStratVisible,setMcChartsStratVisible]=useState({})
   const [mcShowOccupancy,setMcShowOccupancy]=useState(true)
   const [mcOccMode,setMcOccMode]=useState('compound')  // own filter for MC capital chart
@@ -932,6 +934,21 @@ export default function Home() {
   const [mcStratVisible,setMcStratVisible]=useState({})     // {id:bool}
   const [mcAssetOpen,setMcAssetOpen]=useState({})           // {stratId:bool} acordeón resumen por activo
   const [mcShowBHCompare,setMcShowBHCompare]=useState(true) // B&H curve toggle in multi-strategy chart
+  // ── Curvas "después de impuestos" (IRPF base del ahorro). Solo modos pool. ──
+  // Reemplazan compoundCurve (estrategias activas) y bhCurve cuando mcShowAfterTax está activo.
+  const mcAfterTax=useMemo(()=>{
+    if(!mcShowAfterTax||!mcResult||mcResult.modoAsig==='slots') return null
+    const capIni=Number(mcCapitalIni||capitalIni)
+    const isMulti=mcDisplayResults.length>1
+    const list=isMulti?mcDisplayResults:[{id:'__single__',result:mcResult}]
+    const compoundById={}
+    list.forEach(r=>{
+      const md=r.result?.modoAsig||mcResult.modoAsig
+      compoundById[r.id]=(md==='slots')?null  // resultado slots: dejar original
+        :taxStrategyCurve(r.result?.compoundCurve,r.result?.allTrades,capIni)
+    })
+    return { compoundById, bh:taxBHCurve(mcResult.bhCurve,capIni) }
+  },[mcShowAfterTax,mcResult,mcDisplayResults,mcCapitalIni,capitalIni])
   // mcAxisW is fed by the equity chart's onAxisWidth callback (measured after
   // layout via double rAF + on resize) so the occupancy / monthly charts end
   // their plot area at exactly the same x as the equity chart.
@@ -4251,7 +4268,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.506</title>
+        <title>Trading Simulator V9.507</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4329,7 +4346,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.506
+            <span className="dot"/>Trading Simulator V9.507
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -7653,6 +7670,16 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         </button>
                       ))
                     )}
+                    {mcResult.modoAsig!=='slots'&&(
+                      <button onClick={()=>setMcShowAfterTax(s=>!s)}
+                        title="Simula el IRPF de la base del ahorro. Estrategias: impuesto anual (31 dic) sobre ganancias realizadas. Buy&hold: impuesto único al final. Tramos progresivos 19%-28%. Las pérdidas de un año compensan ganancias de años siguientes."
+                        style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',
+                          border:`1px solid ${mcShowAfterTax?'#e0b341':'#3d5a7a'}`,
+                          background:mcShowAfterTax?'rgba(224,179,65,0.14)':'transparent',
+                          color:mcShowAfterTax?'#e0b341':'#3d5a7a'}}>
+                        Después de impuestos
+                      </button>
+                    )}
                     <button onClick={()=>mcChartApiRef.current?.fitAll()}
                       style={{marginLeft:'auto',fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',border:'1px solid #1a2d45',background:'rgba(0,212,255,0.07)',color:'#7a9bc0',flexShrink:0}}
                       title="Ver periodo completo">⊠ Periodo completo</button>
@@ -7662,14 +7689,15 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       curves={[
                         ...mcDisplayResults.map(r=>({
                           id:r.id,name:r.name,color:r.color,
-                          data:(showMultiFloat&&r.result.floatCompoundCurve?.length)?r.result.floatCompoundCurve:r.result.compoundCurve,
+                          data:(mcAfterTax&&mcAfterTax.compoundById[r.id])?mcAfterTax.compoundById[r.id]
+                            :(showMultiFloat&&r.result.floatCompoundCurve?.length)?r.result.floatCompoundCurve:r.result.compoundCurve,
                           show:mcStratVisible[r.id]!==false,
                           maxDD:showMultiFloat?(r.result.maxDDFloatCompound||0):(r.result.maxDDCompound||0),
                           maxDDDate:showMultiFloat?r.result.maxDDFloatCompoundDate:r.result.maxDDCompoundDate,
                         })),
                         ...(mcResult.bhCurve?.length>0?[{
                           id:'__bh__',name:'B&H Diversificado',color:'#a0b4c8',
-                          data:mcResult.bhCurve,
+                          data:mcAfterTax?mcAfterTax.bh:mcResult.bhCurve,
                           show:mcShowBHCompare,
                           dashed:true,
                           maxDD:mcResult.maxDDBH||0,
@@ -7686,8 +7714,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                   ):(
                     <MultiCartChart
                       simpleCurve={mcResult.simpleCurve}
-                      compoundCurve={mcResult.compoundCurve}
-                      bhCurve={mcResult.bhCurve}
+                      compoundCurve={(mcAfterTax&&mcAfterTax.compoundById['__single__'])?mcAfterTax.compoundById['__single__']:mcResult.compoundCurve}
+                      bhCurve={mcAfterTax?mcAfterTax.bh:mcResult.bhCurve}
                       sp500BHCurve={mcResult.sp500BHCurve||[]}
                       capitalIni={Number(mcCapitalIni||capitalIni)}
                       maxDDSimple={mcResult.maxDDSimple}   maxDDSimpleDate={mcResult.maxDDSimpleDate}
