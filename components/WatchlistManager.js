@@ -35,7 +35,10 @@ async function loadAllRankingsWithMetrics() {
     res = await fetch(url, { headers: getSupaH() })
   }
   if (!res.ok) return []
-  return (await res.json()) || []
+  const data = (await res.json()) || []
+  // [DIAG TEMPORAL] detectar truncamiento: la query usa limit=10000 sin paginar
+  console.log(`[DIAG load] ranking_results filas leídas=${data.length}${data.length>=10000?' ⚠️ POSIBLE TRUNCAMIENTO (limit=10000, no pagina) → allRankings incompleto':''}`)
+  return data
 }
 
 // ── Warm-notebook color helpers ──────────────────────────────

@@ -464,7 +464,7 @@ async function upsertScoreCompletoRemote(scoreMap, stratId) {
 
 // Upsert parcial: actualiza SOLO métricas (sin tocar score_historico ni score_completo)
 async function upsertMetricsRemote(metricsMap, stratId) {
-  if (!getSupaUrl()) return
+  if (!getSupaUrl()) return { rows: 0, ok: false, reason: 'no-supa' }
   const rows = Object.entries(metricsMap).map(([symbol, m]) => ({
     symbol, strategy_id: stratId||null,
     win_rate: m.winRate??null, cagr_simple: m.cagr??null,
@@ -472,14 +472,16 @@ async function upsertMetricsRemote(metricsMap, stratId) {
     profit_simple: m.profit??null, updated_at: new Date().toISOString(),
     ...(getUidFromJwt() ? { user_id: getUidFromJwt() } : {})
   }))
+  let ok = true  // [DIAG] estado del upsert para logging
   for (let i=0; i<rows.length; i+=20) {
     const res = await fetch(`${getSupaUrl()}/rest/v1/ranking_results?on_conflict=symbol,strategy_id`, {
       method: 'POST',
       headers: { ...getSupaH(), 'Prefer': 'resolution=merge-duplicates,return=minimal', 'Content-Type': 'application/json' },
       body: JSON.stringify(rows.slice(i, i+20))
     }).catch(()=>null)
-    if (res && !res.ok) { const text = await res.text(); console.error('[UPSERT-METRICS ERROR]', res.status, text) }
+    if (!res || !res.ok) { ok = false; if (res) { const text = await res.text(); console.error('[UPSERT-METRICS ERROR]', res.status, text) } }
   }
+  return { rows: rows.length, ok }
 }
 
 // ── Strategies API ────────────────────────────────────────────
@@ -2919,10 +2921,15 @@ export default function Home() {
               }catch(e){console.error('[calcMetricas-all]',sym,e)}
             }))
           }
-          await upsertMetricsRemote(stratMetrics,stratId)
+          const up=await upsertMetricsRemote(stratMetrics,stratId)
           allStratMetricsMap[stratId]=stratMetrics
-        }catch(e){console.error('[calcMetricas] Error estrategia:',stratId,strat.name,e)}
+          // [DIAG TEMPORAL] estado por estrategia: cuántos símbolos pasaron minTrades y si persistió
+          console.log(`[DIAG fase2] ${si+1}/${enabledStrats.length} "${strat.name}" (${stratId}) — pasaron minTrades=${Object.keys(stratMetrics).length}/${syms.length} filas=${up?.rows??'?'} upsert=${up?.ok?'OK':'ERROR'} syms=[${Object.keys(stratMetrics).join(',')}]`)
+        }catch(e){console.error('[DIAG fase2] ✗ EXCEPCIÓN estrategia:',si+1,strat.name,stratId,e)}
       }
+      // [DIAG TEMPORAL] resumen: cuántas estrategias persistieron ≥1 símbolo
+      const conDatos=Object.values(allStratMetricsMap).filter(m=>Object.keys(m).length).length
+      console.log(`[DIAG fase2] FIN — procesadas=${enabledStrats.length}, con ≥1 símbolo persistido=${conDatos}, syms actualizados=[${syms.join(',')}]`)
       // ── Merge top metrics: determinar top estrategia por CAGR desde allStratMetricsMap ──
       // No depende de refreshBestStratPerSymbol (que usa score_historico, no calculado aquí)
       // Construir topMetricsMap ANTES de setWlData — el updater de setState es asíncrono
@@ -4251,7 +4258,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.504</title>
+        <title>Trading Simulator V9.505</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4329,7 +4336,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.504
+            <span className="dot"/>Trading Simulator V9.505
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
