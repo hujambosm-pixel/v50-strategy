@@ -1,11 +1,35 @@
 import { useRef, useEffect, useState } from 'react'
 
+// Normaliza param.time de lightweight-charts a 'YYYY-MM-DD' (puede venir como string
+// o como {year,month,day} según versión). Devuelve '' si no se reconoce.
+function normalizeTime(t) {
+  if (t == null) return ''
+  if (typeof t === 'string') return t
+  if (typeof t === 'object' && t.year != null) {
+    const p = n => String(n).padStart(2, '0')
+    return `${t.year}-${p(t.month)}-${p(t.day)}`
+  }
+  return ''
+}
+
+// Líneas de impuesto para el tooltip (cuando afterTax activo y la serie tiene taxByDate).
+function taxTooltipLines(taxByDate, timeKey, color) {
+  if (!taxByDate) return []
+  const tx = taxByDate[timeKey]
+  if (!tx) return []
+  const out = []
+  if (tx.accum > 0) out.push(`<span style="color:${color}">Impuesto acumulado: ${Math.round(tx.accum).toLocaleString('es-ES')}€</span>`)
+  if (tx.paid > 0) out.push(`<span style="color:${color}">Pagado aquí: ${Math.round(tx.paid).toLocaleString('es-ES')}€</span>`)
+  return out
+}
+
 export function MultiCartChart({simpleCurve,compoundCurve,bhCurve,sp500BHCurve,capitalIni,
   maxDDSimple,maxDDSimpleDate,maxDDCompound,maxDDCompoundDate,maxDDBH,maxDDBHDate,
   maxDDSP500,maxDDSP500Date,
   floatSimpleCurve,floatCompoundCurve,showFloat,
   maxDDFloatSimple,maxDDFloatSimpleDate,maxDDFloatCompound,maxDDFloatCompoundDate,
-  showSimple,showCompound,showBH,showSP500,onReady,onAxisWidth,syncRef,chartHeight=300}) {
+  showSimple,showCompound,showBH,showSP500,onReady,onAxisWidth,syncRef,chartHeight=300,
+  afterTax=false,taxByDateCompound=null,taxByDateBH=null}) {
   const ref=useRef(null),chartRef=useRef(null)
 
   useEffect(()=>{
@@ -40,8 +64,8 @@ export function MultiCartChart({simpleCurve,compoundCurve,bhCurve,sp500BHCurve,c
         .setData([{time:base[0].date,value:capitalIni},{time:base[base.length-1].date,value:capitalIni}])
       const _seriesEntries=[]
       if(showSimple&&stCurve?.length){const _s=chart.addLineSeries({color:'#00d4ff',lineWidth:2,lastValueVisible:true,priceLineVisible:false,priceFormat:{type:'price',precision:0,minMove:1}});_s.setData(stCurve.map(p=>({time:p.date,value:p.value})));_seriesEntries.push({s:_s,color:'#00d4ff',name:'Simple'})}
-      if(showCompound&&coCurve?.length){const _s=chart.addLineSeries({color:'#00e5a0',lineWidth:2,lastValueVisible:true,priceLineVisible:false,priceFormat:{type:'price',precision:0,minMove:1}});_s.setData(coCurve.map(p=>({time:p.date,value:p.value})));_seriesEntries.push({s:_s,color:'#00e5a0',name:'Compuesto'})}
-      if(showBH&&bhCurve?.length){const _s=chart.addLineSeries({color:'#a0b4c8',lineWidth:2,lineStyle:LineStyle.Dashed,lastValueVisible:true,priceLineVisible:false,priceFormat:{type:'price',precision:0,minMove:1}});_s.setData(bhCurve.map(p=>({time:p.date,value:p.value})));_seriesEntries.push({s:_s,color:'#a0b4c8',name:'B&H'})}
+      if(showCompound&&coCurve?.length){const _s=chart.addLineSeries({color:'#00e5a0',lineWidth:2,lastValueVisible:true,priceLineVisible:false,priceFormat:{type:'price',precision:0,minMove:1}});_s.setData(coCurve.map(p=>({time:p.date,value:p.value})));_seriesEntries.push({s:_s,color:'#00e5a0',name:'Compuesto',taxByDate:afterTax?taxByDateCompound:null})}
+      if(showBH&&bhCurve?.length){const _s=chart.addLineSeries({color:'#a0b4c8',lineWidth:2,lineStyle:LineStyle.Dashed,lastValueVisible:true,priceLineVisible:false,priceFormat:{type:'price',precision:0,minMove:1}});_s.setData(bhCurve.map(p=>({time:p.date,value:p.value})));_seriesEntries.push({s:_s,color:'#a0b4c8',name:'B&H',taxByDate:afterTax?taxByDateBH:null})}
       if(showSP500&&sp500BHCurve?.length){const _s=chart.addLineSeries({color:'#9b72ff',lineWidth:2,lineStyle:LineStyle.Dotted,lastValueVisible:true,priceLineVisible:false,priceFormat:{type:'price',precision:0,minMove:1}});_s.setData(sp500BHCurve.map(p=>({time:p.date,value:p.value})));_seriesEntries.push({s:_s,color:'#9b72ff',name:'SP500'})}
       // Tooltip crosshair: muestra valor exacto sin decimales al hacer hover
       ref.current.querySelectorAll('.lw-eq-tip').forEach(el=>el.remove())
@@ -51,7 +75,8 @@ export function MultiCartChart({simpleCurve,compoundCurve,bhCurve,sp500BHCurve,c
       chart.subscribeCrosshairMove(param=>{
         if(!param.point||!param.seriesData?.size){_tip.style.display='none';return}
         const lines=[]
-        _seriesEntries.forEach(({s,color,name})=>{const d=param.seriesData.get(s);if(d?.value!=null)lines.push(`<span style="color:${color}">${name}: ${Math.round(d.value).toLocaleString('es-ES')}€</span>`)})
+        const _tk=afterTax?normalizeTime(param.time):''
+        _seriesEntries.forEach(({s,color,name,taxByDate})=>{const d=param.seriesData.get(s);if(d?.value!=null){lines.push(`<span style="color:${color}">${name}: ${Math.round(d.value).toLocaleString('es-ES')}€</span>`);if(_tk)lines.push(...taxTooltipLines(taxByDate,_tk,color))}})
         if(!lines.length){_tip.style.display='none';return}
         _tip.innerHTML=lines.join('<br>');_tip.style.display='block'
         const _cw=ref.current.offsetWidth,_tw=_tip.offsetWidth||160,_goLeft=param.point.x+_tw+20>_cw
@@ -93,7 +118,7 @@ export function MultiCartChart({simpleCurve,compoundCurve,bhCurve,sp500BHCurve,c
       return()=>ro.disconnect()
     })
     return()=>{if(chartRef.current){chartRef.current.remove();chartRef.current=null}}
-  },[simpleCurve,compoundCurve,bhCurve,sp500BHCurve,capitalIni,maxDDSimple,maxDDSimpleDate,maxDDCompound,maxDDCompoundDate,maxDDBH,maxDDBHDate,maxDDSP500,maxDDSP500Date,floatSimpleCurve,floatCompoundCurve,showFloat,maxDDFloatSimple,maxDDFloatSimpleDate,maxDDFloatCompound,maxDDFloatCompoundDate,showSimple,showCompound,showBH,showSP500])
+  },[simpleCurve,compoundCurve,bhCurve,sp500BHCurve,capitalIni,maxDDSimple,maxDDSimpleDate,maxDDCompound,maxDDCompoundDate,maxDDBH,maxDDBHDate,maxDDSP500,maxDDSP500Date,floatSimpleCurve,floatCompoundCurve,showFloat,maxDDFloatSimple,maxDDFloatSimpleDate,maxDDFloatCompound,maxDDFloatCompoundDate,showSimple,showCompound,showBH,showSP500,afterTax,taxByDateCompound,taxByDateBH])
 
   useEffect(()=>{
     if(chartRef.current) try{chartRef.current.applyOptions({height:chartHeight})}catch(_){}
@@ -226,7 +251,7 @@ export function McOccupancyChart({series=[], capitalIni, syncRef, axisWidth=72})
 }
 
 // ── StratCompareChart — multiple strategy equity curves ──────────────────────
-export function StratCompareChart({curves,capitalIni,showMaxDD=true,chartHeight=300,syncRef,onReady,onAxisWidth}) {
+export function StratCompareChart({curves,capitalIni,showMaxDD=true,chartHeight=300,syncRef,onReady,onAxisWidth,afterTax=false}) {
   const ref=useRef(null),chartRef=useRef(null)
   useEffect(()=>{
     if(!ref.current||!curves?.length||ref.current.clientWidth<=0) return
@@ -258,7 +283,7 @@ export function StratCompareChart({curves,capitalIni,showMaxDD=true,chartHeight=
           lineStyle:c.dashed?LineStyle.Dashed:LineStyle.Solid,
           priceFormat:{type:'price',precision:0,minMove:1}})
         _s.setData(c.data.map(p=>({time:p.date,value:p.value})))
-        _seriesEntries.push({s:_s,color:c.color,name:c.name})
+        _seriesEntries.push({s:_s,color:c.color,name:c.name,taxByDate:afterTax?c.taxByDate:null})
       })
       // Tooltip crosshair: muestra valor exacto sin decimales al hacer hover
       ref.current.querySelectorAll('.lw-eq-tip').forEach(el=>el.remove())
@@ -268,7 +293,8 @@ export function StratCompareChart({curves,capitalIni,showMaxDD=true,chartHeight=
       chart.subscribeCrosshairMove(param=>{
         if(!param.point||!param.seriesData?.size){_tip.style.display='none';return}
         const lines=[]
-        _seriesEntries.forEach(({s,color,name})=>{const d=param.seriesData.get(s);if(d?.value!=null)lines.push(`<span style="color:${color}">${name}: ${Math.round(d.value).toLocaleString('es-ES')}€</span>`)})
+        const _tk=afterTax?normalizeTime(param.time):''
+        _seriesEntries.forEach(({s,color,name,taxByDate})=>{const d=param.seriesData.get(s);if(d?.value!=null){lines.push(`<span style="color:${color}">${name}: ${Math.round(d.value).toLocaleString('es-ES')}€</span>`);if(_tk)lines.push(...taxTooltipLines(taxByDate,_tk,color))}})
         if(!lines.length){_tip.style.display='none';return}
         _tip.innerHTML=lines.join('<br>');_tip.style.display='block'
         const _cw=ref.current.offsetWidth,_tw=_tip.offsetWidth||160,_goLeft=param.point.x+_tw+20>_cw
@@ -311,7 +337,7 @@ export function StratCompareChart({curves,capitalIni,showMaxDD=true,chartHeight=
       return()=>ro.disconnect()
     })
     return()=>{if(chartRef.current){chartRef.current.__syncCleanup?.();chartRef.current.remove();chartRef.current=null}}
-  },[curves,capitalIni])
+  },[curves,capitalIni,showMaxDD,afterTax])
   useEffect(()=>{
     if(chartRef.current) try{chartRef.current.applyOptions({height:chartHeight})}catch(_){}
   },[chartHeight])

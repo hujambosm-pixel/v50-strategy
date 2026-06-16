@@ -941,13 +941,15 @@ export default function Home() {
     const capIni=Number(mcCapitalIni||capitalIni)
     const isMulti=mcDisplayResults.length>1
     const list=isMulti?mcDisplayResults:[{id:'__single__',result:mcResult}]
-    const compoundById={}
+    const compoundById={}, taxByDateById={}
     list.forEach(r=>{
       const md=r.result?.modoAsig||mcResult.modoAsig
-      compoundById[r.id]=(md==='slots')?null  // resultado slots: dejar original
-        :taxStrategyCurve(r.result?.compoundCurve,r.result?.allTrades,capIni)
+      if(md==='slots'){ compoundById[r.id]=null; taxByDateById[r.id]=null; return }  // slots: dejar original
+      const res=taxStrategyCurve(r.result?.compoundCurve,r.result?.allTrades,capIni)
+      compoundById[r.id]=res.curve; taxByDateById[r.id]=res.taxByDate
     })
-    return { compoundById, bh:taxBHCurve(mcResult.bhCurve,capIni) }
+    const bhRes=taxBHCurve(mcResult.bhCurve,capIni)
+    return { compoundById, taxByDateById, bh:bhRes.curve, bhTaxByDate:bhRes.taxByDate }
   },[mcShowAfterTax,mcResult,mcDisplayResults,mcCapitalIni,capitalIni])
   // mcAxisW is fed by the equity chart's onAxisWidth callback (measured after
   // layout via double rAF + on resize) so the occupancy / monthly charts end
@@ -4268,7 +4270,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.507</title>
+        <title>Trading Simulator V9.508</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4346,7 +4348,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.507
+            <span className="dot"/>Trading Simulator V9.508
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -7694,6 +7696,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           show:mcStratVisible[r.id]!==false,
                           maxDD:showMultiFloat?(r.result.maxDDFloatCompound||0):(r.result.maxDDCompound||0),
                           maxDDDate:showMultiFloat?r.result.maxDDFloatCompoundDate:r.result.maxDDCompoundDate,
+                          taxByDate:mcAfterTax?.taxByDateById[r.id]||null,
                         })),
                         ...(mcResult.bhCurve?.length>0?[{
                           id:'__bh__',name:'B&H Diversificado',color:'#a0b4c8',
@@ -7702,8 +7705,10 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           dashed:true,
                           maxDD:mcResult.maxDDBH||0,
                           maxDDDate:mcResult.maxDDBHDate||null,
+                          taxByDate:mcAfterTax?.bhTaxByDate||null,
                         }]:[])
                       ]}
+                      afterTax={!!mcAfterTax}
                       capitalIni={Number(mcCapitalIni||capitalIni)}
                       showMaxDD={mcShowMaxDD}
                       onReady={api=>{mcChartApiRef.current=api}}
@@ -7716,6 +7721,9 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       simpleCurve={mcResult.simpleCurve}
                       compoundCurve={(mcAfterTax&&mcAfterTax.compoundById['__single__'])?mcAfterTax.compoundById['__single__']:mcResult.compoundCurve}
                       bhCurve={mcAfterTax?mcAfterTax.bh:mcResult.bhCurve}
+                      afterTax={!!mcAfterTax}
+                      taxByDateCompound={mcAfterTax?.taxByDateById['__single__']||null}
+                      taxByDateBH={mcAfterTax?.bhTaxByDate||null}
                       sp500BHCurve={mcResult.sp500BHCurve||[]}
                       capitalIni={Number(mcCapitalIni||capitalIni)}
                       maxDDSimple={mcResult.maxDDSimple}   maxDDSimpleDate={mcResult.maxDDSimpleDate}
