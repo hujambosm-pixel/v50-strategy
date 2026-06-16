@@ -296,6 +296,28 @@ export default function WatchlistManager({
     prevTopStratRunning.current = topStratRunning
   }, [topStratRunning])  // eslint-disable-line
 
+  // ── [DIAG TEMPORAL] Cobertura por símbolo: SIN FILA vs FILA con métricas null ──
+  // Uso en consola del navegador:  __diagCobertura('AAPL')  ó  __diagCobertura()  (1er símbolo de la lista)
+  useEffect(() => {
+    window.__diagCobertura = (symArg) => {
+      const enabled = strategies.filter(s => s.enabled !== false)
+      const sym = (symArg || watchlist?.[0]?.symbol || '').toUpperCase()
+      if (!sym) { console.warn('[DIAG] sin símbolo'); return }
+      const sinFila = [], nullMetrics = [], conDatos = []
+      enabled.forEach(s => {
+        const d = allRankings[s.id]?.[sym]
+        if (d == null) sinFila.push(s.name)
+        else if (d.cagr == null || d.winRate == null || d.maxDD == null)
+          nullMetrics.push(`${s.name} (cagr=${d.cagr}, wr=${d.winRate}, dd=${d.maxDD}, trades=${d.trades})`)
+        else conDatos.push(s.name)
+      })
+      console.log(`[DIAG cobertura] ${sym} — habilitadas=${enabled.length}, conDatos=${conDatos.length}, SIN FILA=${sinFila.length}, FILA null=${nullMetrics.length}`)
+      console.log('  ▸ SIN FILA en ranking_results:', sinFila)
+      console.log('  ▸ FILA pero métricas null:', nullMetrics)
+      console.log('  ▸ con datos completos:', conDatos)
+    }
+  }, [allRankings, strategies, watchlist])
+
   // ── Best strategy for a symbol ────────────────────────────
   // Priority: bestStratBySymbol (score-based, same source as sidebar tooltip)
   // Fallback: allRankings scan by CAGR (when bestStratBySymbol not populated)
