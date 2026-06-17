@@ -941,16 +941,43 @@ export default function Home() {
     const capIni=Number(mcCapitalIni||capitalIni)
     const isMulti=mcDisplayResults.length>1
     const list=isMulti?mcDisplayResults:[{id:'__single__',result:mcResult}]
-    const compoundById={}, taxByDateById={}
+    const compoundById={}, taxByDateById={}, totalTaxById={}
     list.forEach(r=>{
       const md=r.result?.modoAsig||mcResult.modoAsig
-      if(md==='slots'){ compoundById[r.id]=null; taxByDateById[r.id]=null; return }  // slots: dejar original
-      const res=taxStrategyCurve(r.result?.compoundCurve,r.result?.allTrades,capIni)
-      compoundById[r.id]=res.curve; taxByDateById[r.id]=res.taxByDate
+      if(md==='slots'){ compoundById[r.id]=null; taxByDateById[r.id]=null; totalTaxById[r.id]=0; return }  // slots: dejar original
+      // Base = curva FLOTANTE cuando showMultiFloat está activo (misma base que la pre-tax mostrada)
+      const base=(showMultiFloat&&r.result?.floatCompoundCurve?.length)?r.result.floatCompoundCurve:r.result?.compoundCurve
+      const res=taxStrategyCurve(base,r.result?.allTrades,capIni)
+      compoundById[r.id]=res.curve; taxByDateById[r.id]=res.taxByDate; totalTaxById[r.id]=res.totalTax
     })
-    const bhRes=taxBHCurve(mcResult.bhCurve,capIni)
-    return { compoundById, taxByDateById, bh:bhRes.curve, bhTaxByDate:bhRes.taxByDate }
-  },[mcShowAfterTax,mcResult,mcDisplayResults,mcCapitalIni,capitalIni])
+    const bhRes=taxBHCurve(mcResult.bhCurve,capIni)  // B&H no tiene curva flotante (siempre 100% invertido)
+    return { compoundById, taxByDateById, totalTaxById, bh:bhRes.curve, bhTaxByDate:bhRes.taxByDate, bhTotalTax:bhRes.totalTax }
+  },[mcShowAfterTax,mcResult,mcDisplayResults,mcCapitalIni,capitalIni,showMultiFloat])
+  // Resumen fiscal neto para una curva taxada (CAGR neto, ganancia neta, impuesto total).
+  // años: misma fórmula que la tabla de estrategias (rango vs fd/ld vs mcYears).
+  const mcTaxSummaryFor=(taxedCurve,totalTax,startDate)=>{
+    if(!taxedCurve?.length) return null
+    const capIni=Number(mcCapitalIni||capitalIni)
+    const valorFinal=taxedCurve[taxedCurve.length-1].value
+    const fd=startDate?new Date(startDate):null
+    const ld=taxedCurve[taxedCurve.length-1].date?new Date(taxedCurve[taxedCurve.length-1].date):new Date()
+    const anios=mcPeriodMode==='range'&&mcFromDate&&mcToDate
+      ?(new Date(mcToDate)-new Date(mcFromDate))/(365.25*24*3600*1000)
+      :fd&&ld?(ld-fd)/86400000/365.25
+      :mcYears
+    const cagr=(Math.pow(Math.max(valorFinal,0.01)/Math.max(capIni,0.01),1/Math.max(anios,0.01))-1)*100
+    return { cagr, gan:valorFinal-capIni, tax:totalTax||0 }
+  }
+  // Bloque vertical de 3 cifras bajo un botón (modo comparación).
+  const renderTaxBlock=(s)=> s?(
+    <div style={{fontFamily:MONO,fontSize:8,lineHeight:1.3,color:'#8a98a6',textAlign:'center',marginTop:1}}>
+      <div>CAGR {s.cagr>=0?'+':''}{s.cagr.toFixed(1)}%</div>
+      <div>{s.gan>=0?'+':'−'}€{Math.round(Math.abs(s.gan)).toLocaleString('es-ES')}</div>
+      <div style={{color:'#c08a3a'}}>Imp €{Math.round(s.tax).toLocaleString('es-ES')}</div>
+    </div>
+  ):null
+  // Línea compacta para el recuadro de modo single.
+  const fmtTaxLine=(label,s)=> s?`${label}: CAGR ${s.cagr>=0?'+':''}${s.cagr.toFixed(1)}% · Gan. ${s.gan>=0?'+':'−'}€${Math.round(Math.abs(s.gan)).toLocaleString('es-ES')} · Imp. €${Math.round(s.tax).toLocaleString('es-ES')}`:''
   // mcAxisW is fed by the equity chart's onAxisWidth callback (measured after
   // layout via double rAF + on resize) so the occupancy / monthly charts end
   // their plot area at exactly the same x as the equity chart.
@@ -4270,7 +4297,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.508</title>
+        <title>Trading Simulator V9.509</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4348,7 +4375,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.508
+            <span className="dot"/>Trading Simulator V9.509
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -7631,7 +7658,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                     {mcDisplayResults.length>1?(
                       <>
                         {mcDisplayResults.map(r=>(
-                          <button key={r.id} onClick={()=>setMcStratVisible(v=>({...v,[r.id]:!v[r.id]}))}
+                          <div key={r.id} style={{display:'flex',flexDirection:'column',alignItems:'center',gap:2}}>
+                          <button onClick={()=>setMcStratVisible(v=>({...v,[r.id]:!v[r.id]}))}
                             style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',
                               border:`1px solid ${mcStratVisible[r.id]!==false?r.color:'#3d5a7a'}`,
                               background:mcStratVisible[r.id]!==false?`${r.color}18`:'transparent',
@@ -7639,8 +7667,11 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               ...(mcIsModoCompare?{}:{maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'})}}>
                             {mcIsModoCompare?r.name.split(' · ').pop():r.name}
                           </button>
+                          {mcShowAfterTax&&mcAfterTax&&renderTaxBlock(mcTaxSummaryFor(mcAfterTax.compoundById[r.id],mcAfterTax.totalTaxById[r.id],r.result.startDate))}
+                          </div>
                         ))}
                         {mcResult.bhCurve?.length>0&&(
+                          <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:2}}>
                           <button onClick={()=>setMcShowBHCompare(s=>!s)}
                             style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',
                               border:`1px solid ${mcShowBHCompare?'#a0b4c8':'#3d5a7a'}`,
@@ -7648,6 +7679,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               color:mcShowBHCompare?'#a0b4c8':'#3d5a7a'}}>
                             B&H Diversif.
                           </button>
+                          {mcShowAfterTax&&mcAfterTax&&renderTaxBlock(mcTaxSummaryFor(mcAfterTax.bh,mcAfterTax.bhTotalTax,mcResult.startDate))}
+                          </div>
                         )}
                         <button onClick={()=>setMcShowMaxDD(s=>!s)}
                           style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',
@@ -7686,6 +7719,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       style={{marginLeft:'auto',fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',border:'1px solid #1a2d45',background:'rgba(0,212,255,0.07)',color:'#7a9bc0',flexShrink:0}}
                       title="Ver periodo completo">⊠ Periodo completo</button>
                   </div>
+                  <div style={{position:'relative'}}>
                   {mcDisplayResults.length>1?(
                     <StratCompareChart
                       curves={[
@@ -7731,7 +7765,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       maxDDBH={mcResult.maxDDBH}           maxDDBHDate={mcResult.maxDDBHDate}
                       maxDDSP500={mcResult.maxDDSP500||0}  maxDDSP500Date={mcResult.maxDDSP500Date||null}
                       floatSimpleCurve={mcResult.floatSimpleCurve||[]}
-                      floatCompoundCurve={mcResult.floatCompoundCurve||[]}
+                      floatCompoundCurve={(mcAfterTax&&mcAfterTax.compoundById['__single__'])?mcAfterTax.compoundById['__single__']:(mcResult.floatCompoundCurve||[])}
                       showFloat={showMultiFloat}
                       maxDDFloatSimple={mcResult.maxDDFloatSimple||0}      maxDDFloatSimpleDate={mcResult.maxDDFloatSimpleDate||null}
                       maxDDFloatCompound={mcResult.maxDDFloatCompound||0}  maxDDFloatCompoundDate={mcResult.maxDDFloatCompoundDate||null}
@@ -7743,6 +7777,13 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       chartHeight={mcEquityH}
                     />
                   )}
+                  {mcDisplayResults.length<=1&&mcShowAfterTax&&mcAfterTax&&(
+                    <div style={{position:'absolute',top:8,left:8,zIndex:5,pointerEvents:'none',background:'rgba(10,20,35,0.82)',border:'1px solid #2a3f55',borderRadius:6,padding:'5px 9px',fontFamily:MONO,fontSize:9,lineHeight:1.5,color:'#aab8c6'}}>
+                      <div>{fmtTaxLine('Estrategia',mcTaxSummaryFor(mcAfterTax.compoundById['__single__'],mcAfterTax.totalTaxById['__single__'],mcResult.startDate))}</div>
+                      <div>{fmtTaxLine('B&H',mcTaxSummaryFor(mcAfterTax.bh,mcAfterTax.bhTotalTax,mcResult.startDate))}</div>
+                    </div>
+                  )}
+                  </div>
                   <div onMouseDown={e=>{mcEquityResizing.current=true;mcEquityStartY.current=e.clientY;mcEquityStartH.current=mcEquityH;document.body.style.cursor='row-resize';document.body.style.userSelect='none'}}
                     style={{height:6,cursor:'row-resize',background:'transparent',transition:'background 0.15s',
                       borderTop:'2px solid var(--border)',display:'flex',alignItems:'center',justifyContent:'center'}}
