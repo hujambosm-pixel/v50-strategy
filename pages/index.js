@@ -15,7 +15,7 @@ import { MultiCartChart, OccupancyBarChart, McOccupancyChart, StratCompareChart,
 import dynamic from 'next/dynamic'
 const McMonthlyGainsChart = dynamic(() => import('../components/McMonthlyGainsChart'), { ssr: false })
 import { TlEquityChart, TlInvestChart } from '../components/TlCharts'
-import { taxStrategyCurve, taxBHCurve } from '../lib/afterTaxSim'
+import { taxStrategyCurve, taxBHCurve, gananciaPorAñoPool, gananciaPorAñoSlots } from '../lib/afterTaxSim'
 import ContextThemeMenu, { applyTema } from '../components/ContextThemeMenu'
 import { exportTimeline, exportGantt, exportHistorial } from '../lib/exportTimeline'
 import GanttChart from '../components/GanttChart'
@@ -937,17 +937,20 @@ export default function Home() {
   // ── Curvas "después de impuestos" (IRPF base del ahorro). Solo modos pool. ──
   // Reemplazan compoundCurve (estrategias activas) y bhCurve cuando mcShowAfterTax está activo.
   const mcAfterTax=useMemo(()=>{
-    if(!mcShowAfterTax||!mcResult||mcResult.modoAsig==='slots') return null
+    if(!mcShowAfterTax||!mcResult) return null
     const capIni=Number(mcCapitalIni||capitalIni)
     const isMulti=mcDisplayResults.length>1
     const list=isMulti?mcDisplayResults:[{id:'__single__',result:mcResult}]
     const compoundById={}, taxByDateById={}, totalTaxById={}
     list.forEach(r=>{
       const md=r.result?.modoAsig||mcResult.modoAsig
-      if(md==='slots'){ compoundById[r.id]=null; taxByDateById[r.id]=null; totalTaxById[r.id]=0; return }  // slots: dejar original
       // Base = curva FLOTANTE cuando showMultiFloat está activo (misma base que la pre-tax mostrada)
       const base=(showMultiFloat&&r.result?.floatCompoundCurve?.length)?r.result.floatCompoundCurve:r.result?.compoundCurve
-      const res=taxStrategyCurve(base,r.result?.allTrades,capIni)
+      const trades=r.result?.allTrades||[]
+      // Ganancia realizada por año según el modo: slots deriva pnlCompound por activo; pool Σ pnlSimple.
+      const sc=r.result?.slotCapital??mcResult.slotCapital
+      const gpa=md==='slots'?gananciaPorAñoSlots(trades,sc):gananciaPorAñoPool(trades)
+      const res=taxStrategyCurve(base,gpa,capIni)
       compoundById[r.id]=res.curve; taxByDateById[r.id]=res.taxByDate; totalTaxById[r.id]=res.totalTax
     })
     const bhRes=taxBHCurve(mcResult.bhCurve,capIni)  // B&H no tiene curva flotante (siempre 100% invertido)
@@ -4297,7 +4300,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.511</title>
+        <title>Trading Simulator V9.512</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4375,7 +4378,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.511
+            <span className="dot"/>Trading Simulator V9.512
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -7705,16 +7708,14 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         </button>
                       ))
                     )}
-                    {mcResult.modoAsig!=='slots'&&(
-                      <button onClick={()=>setMcShowAfterTax(s=>!s)}
-                        title="Simula el IRPF de la base del ahorro. Estrategias: impuesto anual (31 dic) sobre ganancias realizadas. Buy&hold: impuesto único al final. Tramos progresivos 19%-28%. Las pérdidas de un año compensan ganancias de años siguientes."
-                        style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',
-                          border:`1px solid ${mcShowAfterTax?'#e0b341':'#3d5a7a'}`,
-                          background:mcShowAfterTax?'rgba(224,179,65,0.14)':'transparent',
-                          color:mcShowAfterTax?'#e0b341':'#3d5a7a'}}>
-                        Después de impuestos
-                      </button>
-                    )}
+                    <button onClick={()=>setMcShowAfterTax(s=>!s)}
+                      title="Simula el IRPF de la base del ahorro. Estrategias: impuesto anual (31 dic) sobre ganancias realizadas. Buy&hold: impuesto único al final. Tramos progresivos 19%-28%. Las pérdidas de un año compensan ganancias de años siguientes."
+                      style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',
+                        border:`1px solid ${mcShowAfterTax?'#e0b341':'#3d5a7a'}`,
+                        background:mcShowAfterTax?'rgba(224,179,65,0.14)':'transparent',
+                        color:mcShowAfterTax?'#e0b341':'#3d5a7a'}}>
+                      Después de impuestos
+                    </button>
                     <button onClick={()=>mcChartApiRef.current?.fitAll()}
                       style={{marginLeft:'auto',fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',border:'1px solid #1a2d45',background:'rgba(0,212,255,0.07)',color:'#7a9bc0',flexShrink:0}}
                       title="Ver periodo completo">⊠ Periodo completo</button>
