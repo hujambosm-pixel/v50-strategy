@@ -120,7 +120,10 @@ function buildSlotsCurves(assetResults, capitalIni) {
         for (let i = filtData.length-1; i>=0; i--) { if (filtData[i].date <= date) { bar=filtData[i]; break } }
         if (bar) { bh = slotCapital * (bar.close / p0); closePx = bar.close }
       }
-      const openPnl = openTrades.reduce((s,t) => { if(closePx==null) return s; const ep=t.entryPx??t.entryPrice; const capAtEntry=t.capitalTras/(1+t.pnlPct/100); return ep!=null ? s+(closePx-ep)/ep*capAtEntry : s }, 0)
+      // openPnl SOLO sobre posiciones estrictamente abiertas (exitDate > date o sin exitDate).
+      // Las ya realizadas en `compound` (incl. cierres virtuales en su exitDate) se excluyen para
+      // no contar su ganancia dos veces. `open`/ocupación siguen usando openTrades (sin tocar).
+      const openPnl = openTrades.reduce((s,t) => { if(closePx==null) return s; if(t.exitDate && t.exitDate <= date) return s; const ep=t.entryPx??t.entryPrice; const capAtEntry=t.capitalTras/(1+t.pnlPct/100); return ep!=null ? s+(closePx-ep)/ep*capAtEntry : s }, 0)
       byDate[date] = { simple, compound, open, bh, openPnl }
     })
     return byDate
