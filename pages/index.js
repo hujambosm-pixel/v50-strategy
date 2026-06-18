@@ -970,7 +970,7 @@ export default function Home() {
   }
   // Bloque vertical de 3 cifras bajo un botón (modo comparación).
   const renderTaxBlock=(s)=> s?(
-    <div style={{fontFamily:MONO,fontSize:8,lineHeight:1.3,color:'#8a98a6',textAlign:'center',marginTop:1}}>
+    <div style={{fontFamily:MONO,fontSize:11,lineHeight:1.35,color:'#8a98a6',textAlign:'center',marginTop:2}}>
       <div>CAGR {s.cagr>=0?'+':''}{s.cagr.toFixed(1)}%</div>
       <div>{s.gan>=0?'+':'−'}€{Math.round(Math.abs(s.gan)).toLocaleString('es-ES')}</div>
       <div style={{color:'#c08a3a'}}>Imp €{Math.round(s.tax).toLocaleString('es-ES')}</div>
@@ -4297,7 +4297,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.509</title>
+        <title>Trading Simulator V9.510</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4375,7 +4375,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.509
+            <span className="dot"/>Trading Simulator V9.510
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -7653,7 +7653,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
 
                 {/* ── Equity — misma estructura que activos individuales ── */}
                 <div className="equity-section" data-chart="equity">
-                  <div className="section-title" style={{display:'flex',alignItems:'center',flexWrap:'wrap',gap:6,fontSize:14}}>
+                  <div className="section-title" style={{display:'flex',alignItems:'flex-start',flexWrap:'wrap',gap:6,fontSize:14}}>
                     <span>Equity</span>
                     {mcDisplayResults.length>1?(
                       <>
