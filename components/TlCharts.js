@@ -9,7 +9,7 @@ const CONTRIB_MARKER = {
   dividendo:  { color:'#aaff44', shape:'circle',     position:'belowBar', prefix:'D+' },
 }
 
-export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContribs, curveBH, showBH, onToggleBH, equityMode, onToggleMode, contributions, showWithContribs, onToggleContribs, curveFloat, floatLoading, showFloat, onToggleFloat, onFirstFloat, height, showTimeScale, syncRef }) {
+export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContribs, curveBH, showBH, onToggleBH, equityMode, onToggleMode, contributions, showWithContribs, onToggleContribs, curveFloat, floatLoading, showFloat, onToggleFloat, onFirstFloat, pnlDaily, pnlDailyLoading, onTogglePnlDaily, height, showTimeScale, syncRef }) {
   const ref = useRef(null), chartRef = useRef(null), equityTooltipRef = useRef(null), lastTTStateRef = useRef(null)
   const mainSeriesRef = useRef(null)
   const [showSinFx, setShowSinFx] = useState(false)
@@ -300,6 +300,17 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
             disabled={floatLoading}
           >
             <span style={{display:'inline-block',width:10,height:2,background:'#52c788',borderRadius:1,opacity:showFloat?0.8:0.3,borderBottom:'1px dashed #52c788'}}/>{floatLoading?' ⟳':' Flotante'}
+          </button>
+        )}
+        {/* Flotante día a día — P&L mode only; carga históricos en la 1ª activación */}
+        {!isEquityMode&&onTogglePnlDaily&&(
+          <button
+            onClick={onTogglePnlDaily}
+            style={btnStyle(pnlDaily,'#52c788')}
+            title={pnlDailyLoading?'Cargando precios históricos…':pnlDaily?'Ocultar flotante día a día (volver a realizado + dividendos + flotante hoy)':'Mostrar el flotante día a día (picos/drawdowns reales de estar invertido)'}
+            disabled={pnlDailyLoading}
+          >
+            <span style={{display:'inline-block',width:10,height:2,background:'#52c788',borderRadius:1,opacity:pnlDaily?0.8:0.3,borderBottom:'1px dashed #52c788'}}/>{pnlDailyLoading&&pnlDaily?' ⟳':' Flotante día a día'}
           </button>
         )}
         {/* Contribution type toggles — equity mode only */}
