@@ -661,12 +661,13 @@ function buildFloatCurve(allTrades, historicalCloses, capitalBase, contributions
 // Igual que buildFloatCurve pero value = dividendosAcum(solo type==='dividendo') + pnlClosed + pnlFloat.
 // SIN base de aportaciones/capital. Reutiliza el forward-fill de precios y el bucle de flotante.
 function buildPnlFloatCurve(allTrades, historicalCloses, contributions=[]) {
-  if(!allTrades?.length||!Object.keys(historicalCloses).length) return []
+  const _empty={main:[],sinFx:[],sinComm:[]}
+  if(!allTrades?.length||!Object.keys(historicalCloses).length) return _empty
   const firstTradeDate=allTrades.map(t=>t.entry_date).filter(Boolean).sort()[0]||''
   const dateSet=new Set()
   Object.values(historicalCloses).forEach(arr=>arr.forEach(p=>{if(!firstTradeDate||p.date>=firstTradeDate)dateSet.add(p.date)}))
   const allDates=[...dateSet].sort()
-  if(!allDates.length) return []
+  if(!allDates.length) return _empty
   const priceFor={}
   Object.entries(historicalCloses).forEach(([sym,arr])=>{ priceFor[sym]=[...arr].sort((a,b)=>a.date.localeCompare(b.date)) })
   const getPrice=(sym,date)=>{
@@ -678,11 +679,19 @@ function buildPnlFloatCurve(allTrades, historicalCloses, contributions=[]) {
   // Solo dividendos (ingreso de caja), acumulados por su fecha de cobro. Sin aportaciones/retiradas.
   const divsSorted=[...contributions].filter(c=>c.type==='dividendo'&&c.date).sort((a,b)=>a.date.localeCompare(b.date))
   const closed=allTrades.filter(t=>t.status==='closed').sort((a,b)=>(a.exit_date||'').localeCompare(b.exit_date||''))
-  let pnlClosed=0, closedIdx=0, runDiv=0, divIdx=0
-  const curve=[]
+  // Tres realizados en paralelo (mismo runDiv y mismo pnlFloat): principal (pnl_eur),
+  // Sin FX (sin drift cambiario: precio×shares/fx_entry) y Sin Comm (pnl_eur+commission).
+  let pnlClosed=0, pnlClosedSinFx=0, pnlClosedSinComm=0, closedIdx=0, runDiv=0, divIdx=0
+  const main=[], sinFx=[], sinComm=[]
   for(const date of allDates){
     while(divIdx<divsSorted.length&&divsSorted[divIdx].date<=date){ runDiv+=parseFloat(divsSorted[divIdx].amount||0); divIdx++ }
-    while(closedIdx<closed.length&&(closed[closedIdx].exit_date||'')<=date){ pnlClosed+=parseFloat(closed[closedIdx].pnl_eur||0); closedIdx++ }
+    while(closedIdx<closed.length&&(closed[closedIdx].exit_date||'')<=date){
+      const ct=closed[closedIdx]; const cFx=parseFloat(ct.fx_entry||0)||1
+      pnlClosed       += parseFloat(ct.pnl_eur||0)
+      pnlClosedSinFx  += (parseFloat(ct.exit_price||0)-parseFloat(ct.entry_price||0))*parseFloat(ct.shares||0)/cFx
+      pnlClosedSinComm+= parseFloat(ct.pnl_eur||0)+parseFloat(ct.commission||0)
+      closedIdx++
+    }
     let pnlFloat=0
     for(const t of allTrades){
       if(!t.entry_date||t.entry_date>date) continue
@@ -695,9 +704,11 @@ function buildPnlFloatCurve(allTrades, historicalCloses, contributions=[]) {
       const fx=fxE>0?(fxE<1?1/fxE:fxE):1
       pnlFloat+=(px-entryPx)*shares/fx
     }
-    curve.push({date,value:runDiv+pnlClosed+pnlFloat})
+    main.push({date,value:runDiv+pnlClosed+pnlFloat})
+    sinFx.push({date,value:parseFloat((runDiv+pnlClosedSinFx+pnlFloat).toFixed(4))})
+    sinComm.push({date,value:parseFloat((runDiv+pnlClosedSinComm+pnlFloat).toFixed(4))})
   }
-  return curve
+  return { main, sinFx, sinComm }
 }
 
 export default function Home() {
@@ -4349,7 +4360,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.515</title>
+        <title>Trading Simulator V9.516</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4427,7 +4438,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.515
+            <span className="dot"/>Trading Simulator V9.516
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -9056,28 +9067,10 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       const equityCurve = Object.keys(equityByDate).sort().map(date=>({date,value:equityByDate[date]}))
                       const curveSinFx = Object.keys(sinFxByDate).sort().map(date=>({date,value:sinFxByDate[date]}))
                       const curveSinComm = Object.keys(sinCommByDate).sort().map(date=>({date,value:sinCommByDate[date]}))
-                      // Punto flotante final: flotante de HOY con precios live (liveFloatEur_), coherente con las tarjetas.
-                      // Último punto = realizado(acum) + dividendos(ya en cum) + flotante hoy = P&L TOTAL.
+                      // Flotante de HOY con precios live (liveFloatEur_), coherente con las tarjetas.
+                      // Se aplica como endpoint más abajo (en la selección de eqDisp), igual en Nivel 1 y día a día.
                       const floatToday_ = openTrades.reduce((s,t)=>{const v=liveFloatEur_(t);return s+(v!=null?v:0)},0)
                       const openComm = openTrades.reduce((s,t)=>s+parseFloat(t.commission||0),0)
-                      if(openTrades.length>0){
-                        // Anchor at entry of first open trade if no closed trades exist yet
-                        if(equityCurve.length===0){
-                          equityCurve.push({date:openTrades[0].entry_date||today, value:0})
-                          curveSinFx.push({date:openTrades[0].entry_date||today, value:0})
-                          curveSinComm.push({date:openTrades[0].entry_date||today, value:0})
-                        }
-                        // Endpoint de hoy: si hoy ya es el último punto, ACTUALIZAR (fechas estrictamente ascendentes); si no, añadir.
-                        const _applyEnd_=(curve,val)=>{
-                          if(!curve.length) return
-                          const last=curve[curve.length-1]
-                          if(last.date===today) curve[curve.length-1]={date:today,value:val,isFloat:true}
-                          else if(today>last.date) curve.push({date:today,value:val,isFloat:true})
-                        }
-                        _applyEnd_(equityCurve, cumPnl+floatToday_)
-                        _applyEnd_(curveSinFx, parseFloat((cumSinFx+floatToday_).toFixed(4)))
-                        _applyEnd_(curveSinComm, parseFloat((cumSinComm+floatToday_+openComm).toFixed(4)))
-                      }
                       // ── Patrimony curve (P&L + net contributions) ──
                       let curveWithContribs=[]
                       if(contributions.length){
@@ -9110,9 +9103,28 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         : (arr||[])
                       // Modo 'pnl': curva diaria (toggle "Flotante día a día") si activo y floatCloses cargado; si no, la de Nivel 1.
                       const _pnlDailyReady = tlPnlDaily && Object.keys(floatCloses).length>0
-                      const eqDisp   = _clip(_pnlDailyReady ? buildPnlFloatCurve(tlTradesFiltered, floatCloses, contributions) : equityCurve)
-                      const sfxDisp  = _clip(curveSinFx)
-                      const scommDisp= _clip(curveSinComm)
+                      const _dd = _pnlDailyReady ? buildPnlFloatCurve(tlTradesFiltered, floatCloses, contributions) : null
+                      let mainC = _dd ? _dd.main    : equityCurve
+                      let sfxC  = _dd ? _dd.sinFx   : curveSinFx
+                      let scmC  = _dd ? _dd.sinComm : curveSinComm
+                      // Endpoint LIVE de hoy (idéntico en Nivel 1 y día a día): último punto = realizado+dividendos+floatHoy = P&L TOTAL.
+                      // Robusto ante last.date <,==,> today: solo ajusta la FECHA del último punto a hoy; el VALOR ya incluye
+                      // el pnl_eur de las cerradas hoy (en cumPnl), no se pierde ningún realizado.
+                      if(openTrades.length>0){
+                        if(mainC.length===0){ const d0=openTrades[0].entry_date||today; mainC=[{date:d0,value:0}]; sfxC=[{date:d0,value:0}]; scmC=[{date:d0,value:0}] }
+                        const _applyEnd_=(curve,val)=>{
+                          if(!curve.length) return
+                          const last=curve[curve.length-1]
+                          if(last.date<today) curve.push({date:today,value:val,isFloat:true})
+                          else curve[curve.length-1]={date:today,value:val,isFloat:true}  // ==today o >today: fijar a hoy (solo la fecha)
+                        }
+                        _applyEnd_(mainC, cumPnl+floatToday_)
+                        _applyEnd_(sfxC,  parseFloat((cumSinFx+floatToday_).toFixed(4)))
+                        _applyEnd_(scmC,  parseFloat((cumSinComm+floatToday_+openComm).toFixed(4)))
+                      }
+                      const eqDisp   = _clip(mainC)
+                      const sfxDisp  = _clip(sfxC)
+                      const scommDisp= _clip(scmC)
                       const cwcDisp  = _clip(curveWithContribs)
                       const bhRaw    = tlShowBH&&tlBHData?.length ? computeBuyAndHold(contributions, tlBHData) : null
                       const bhDisp   = bhRaw ? _clip(bhRaw) : null
@@ -9205,7 +9217,11 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       const floatCurveDisp=_clip(floatCurveRaw)
                       let maxDD=0,maxDDPct=0
                       // DD curve: float curve when toggle active; else cwcDisp; else eqDisp+capitalBase
-                      const _ddCurve=tlShowFloat&&floatCurveDisp?.length>1?floatCurveDisp:(cwcDisp?.length>1?cwcDisp:eqDisp.map(p=>({date:p.date,value:capitalBase+p.value})))
+                      // tlPnlDaily tiene prioridad: el MaxDD se calcula sobre la curva día a día (con sus picos MTM reales).
+                      const _ddCurve=(tlPnlDaily&&eqDisp?.length>1)?eqDisp.map(p=>({date:p.date,value:capitalBase+p.value}))
+                        :tlShowFloat&&floatCurveDisp?.length>1?floatCurveDisp
+                        :cwcDisp?.length>1?cwcDisp
+                        :eqDisp.map(p=>({date:p.date,value:capitalBase+p.value}))
                       if(_ddCurve.length>1){let peak=_ddCurve[0].value;_ddCurve.forEach(p=>{if(p.value>peak)peak=p.value;const dd=peak-p.value;const ddPct=peak>0?(dd/peak)*100:0;if(dd>maxDD){maxDD=dd;maxDDPct=ddPct}})}
                       // CAGR: misma fórmula siempre — (1 + pnlTotal/capitalBase)^(1/años) - 1
                       // CAGR usa siempre pnlTotal — coherente con P&L TOTAL mostrado
