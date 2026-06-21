@@ -660,12 +660,19 @@ function buildFloatCurve(allTrades, historicalCloses, capitalBase, contributions
 // ── P&L PURO día a día (para el gráfico P&L modo 'pnl', toggle "Flotante día a día") ──
 // Igual que buildFloatCurve pero value = dividendosAcum(solo type==='dividendo') + pnlClosed + pnlFloat.
 // SIN base de aportaciones/capital. Reutiliza el forward-fill de precios y el bucle de flotante.
-function buildPnlFloatCurve(allTrades, historicalCloses, contributions=[]) {
+function buildPnlFloatCurve(allTrades, historicalCloses, contributions=[], opts={}) {
+  // floatOpenOnly: si true, el flotante día a día SOLO cuenta posiciones status==='open'
+  // (Nivel 1: realizado+dividendos completos, flotante solo de las abiertas actuales).
+  const { floatOpenOnly=false } = opts
   const _empty={main:[],sinFx:[],sinComm:[]}
   if(!allTrades?.length||!Object.keys(historicalCloses).length) return _empty
   const firstTradeDate=allTrades.map(t=>t.entry_date).filter(Boolean).sort()[0]||''
+  // Eje de fechas = unión de closes históricos ∪ exit_dates de cerradas ∪ fechas de dividendos.
+  // Imprescindible para que el realizado no se trunque cuando solo cargamos histórico de las abiertas.
   const dateSet=new Set()
   Object.values(historicalCloses).forEach(arr=>arr.forEach(p=>{if(!firstTradeDate||p.date>=firstTradeDate)dateSet.add(p.date)}))
+  allTrades.forEach(t=>{ if(t.status==='closed'&&t.exit_date&&(!firstTradeDate||t.exit_date>=firstTradeDate)) dateSet.add(t.exit_date) })
+  contributions.forEach(c=>{ if(c.type==='dividendo'&&c.date&&(!firstTradeDate||c.date>=firstTradeDate)) dateSet.add(c.date) })
   const allDates=[...dateSet].sort()
   if(!allDates.length) return _empty
   const priceFor={}
@@ -694,6 +701,7 @@ function buildPnlFloatCurve(allTrades, historicalCloses, contributions=[]) {
     }
     let pnlFloat=0
     for(const t of allTrades){
+      if(floatOpenOnly&&t.status!=='open') continue   // Nivel 1: flotante solo de posiciones abiertas
       if(!t.entry_date||t.entry_date>date) continue
       if(t.status==='closed'&&t.exit_date&&t.exit_date<=date) continue
       const sym=t.symbol; if(!sym||!historicalCloses[sym]) continue
@@ -1070,7 +1078,8 @@ export default function Home() {
   const [tlBHData,setTlBHData]=useState(null)     // cached SP500+FX history from /api/sp500history
   const [tlShowBH,setTlShowBH]=useState(false)    // toggle B&H line in equity chart
   const [tlEquityMode,setTlEquityMode]=useState('pnl') // 'pnl' | 'equity'
-  const [floatCloses,setFloatCloses]=useState({})      // {sym: [{date,close}]}
+  const [floatCloses,setFloatCloses]=useState({})      // {sym: [{date,close}]} — Nivel 2 (todos los símbolos)
+  const [openFloatCloses,setOpenFloatCloses]=useState({}) // {sym: [{date,close}]} — Nivel 1 (solo abiertas, carga ligera)
   const [floatLoading,setFloatLoading]=useState(false)
   const [tlShowFloat,setTlShowFloat]=useState(false)   // float toggle (lifted from TlCharts)
   const [tlPnlDaily,setTlPnlDaily]=useState(false)     // toggle "Flotante día a día" del gráfico P&L (modo 'pnl')
@@ -1266,6 +1275,29 @@ export default function Home() {
         ))
         if(i+3<syms.length) await new Promise(r=>setTimeout(r,200))
       }
+    })()
+  },[tlTab,tlTrades]) // eslint-disable-line
+
+  // ── Carga ligera de históricos SOLO de las posiciones abiertas (Nivel 1 del gráfico P&L) ──
+  // Permite distribuir el flotante de las ~9 abiertas día a día sin cargar los símbolos de las cerradas.
+  const openFloatFetched=useRef(false)
+  useEffect(()=>{
+    if(tlTab!=='dashboard'||openFloatFetched.current) return
+    const {openPositions}=computeFifo(tlTrades, {})
+    const syms=[...new Set(openPositions.map(p=>p.symbol).filter(Boolean))]
+    if(!syms.length) return
+    openFloatFetched.current=true
+    ;(async()=>{
+      const result={}
+      const bs=4
+      for(let i=0;i<syms.length;i+=bs){
+        const batch=syms.slice(i,i+bs)
+        await Promise.all(batch.map(async sym=>{
+          try{ const r=await apiFetch(`/api/closes?symbol=${sym}&days=1800&dates=1`); const data=await r.json(); if(Array.isArray(data)&&data.length>=10) result[sym]=data }catch{}
+        }))
+        if(i+bs<syms.length) await new Promise(r=>setTimeout(r,300))
+      }
+      setOpenFloatCloses(result)
     })()
   },[tlTab,tlTrades]) // eslint-disable-line
 
@@ -4360,7 +4392,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.516</title>
+        <title>Trading Simulator V9.517</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4438,7 +4470,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.516
+            <span className="dot"/>Trading Simulator V9.517
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -9101,9 +9133,13 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                             return true
                           })
                         : (arr||[])
-                      // Modo 'pnl': curva diaria (toggle "Flotante día a día") si activo y floatCloses cargado; si no, la de Nivel 1.
+                      // Modo 'pnl': Nivel 2 (toggle) = día a día COMPLETO con floatCloses; Nivel 1 (por defecto) = flotante
+                      // de SOLO las abiertas distribuido (openFloatCloses, floatOpenOnly); si nada cargado → realizado+div (equityCurve).
                       const _pnlDailyReady = tlPnlDaily && Object.keys(floatCloses).length>0
-                      const _dd = _pnlDailyReady ? buildPnlFloatCurve(tlTradesFiltered, floatCloses, contributions) : null
+                      const _openMode = !tlPnlDaily && Object.keys(openFloatCloses).length>0
+                      const _dd = _pnlDailyReady ? buildPnlFloatCurve(tlTradesFiltered, floatCloses, contributions, {floatOpenOnly:false})
+                        : _openMode ? buildPnlFloatCurve(tlTradesFiltered, openFloatCloses, contributions, {floatOpenOnly:true})
+                        : null
                       let mainC = _dd ? _dd.main    : equityCurve
                       let sfxC  = _dd ? _dd.sinFx   : curveSinFx
                       let scmC  = _dd ? _dd.sinComm : curveSinComm
@@ -9217,8 +9253,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       const floatCurveDisp=_clip(floatCurveRaw)
                       let maxDD=0,maxDDPct=0
                       // DD curve: float curve when toggle active; else cwcDisp; else eqDisp+capitalBase
-                      // tlPnlDaily tiene prioridad: el MaxDD se calcula sobre la curva día a día (con sus picos MTM reales).
-                      const _ddCurve=(tlPnlDaily&&eqDisp?.length>1)?eqDisp.map(p=>({date:p.date,value:capitalBase+p.value}))
+                      // En modo 'pnl' con flotante distribuido (Nivel 2 tlPnlDaily o Nivel 1 _openMode) el MaxDD sigue eqDisp.
+                      const _ddCurve=((tlPnlDaily||_openMode)&&eqDisp?.length>1)?eqDisp.map(p=>({date:p.date,value:capitalBase+p.value}))
                         :tlShowFloat&&floatCurveDisp?.length>1?floatCurveDisp
                         :cwcDisp?.length>1?cwcDisp
                         :eqDisp.map(p=>({date:p.date,value:capitalBase+p.value}))
