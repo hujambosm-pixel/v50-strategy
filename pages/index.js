@@ -1086,6 +1086,7 @@ export default function Home() {
   const [floatCloses,setFloatCloses]=useState({})      // {sym: [{date,close}]} — Nivel 2 (todos los símbolos)
   const [openFloatCloses,setOpenFloatCloses]=useState({}) // {sym: [{date,close}]} — Nivel 1 (solo abiertas, carga ligera)
   const [floatLoading,setFloatLoading]=useState(false)
+  const [livePricesReady,setLivePricesReady]=useState(false)
   const [tlShowFloat,setTlShowFloat]=useState(false)   // float toggle (lifted from TlCharts)
   const [tlPnlDaily,setTlPnlDaily]=useState(false)     // toggle "Flotante día a día" del gráfico P&L (modo 'pnl')
   const [tlPnlView,setTlPnlView]=useState('operacion') // 'operacion' | 'estrategia'
@@ -1310,9 +1311,10 @@ export default function Home() {
   useEffect(()=>{
     const {openPositions} = computeFifo(tlTrades, {})
     const symbols = [...new Set(openPositions.map(p=>p.symbol).filter(Boolean))]
-    if(!symbols.length){ setTlLivePrices({}); setTlLiveFx({}); return }
+    if(!symbols.length){ setTlLivePrices({}); setTlLiveFx({}); setLivePricesReady(true); return }
     const cfg={emaR:10,emaL:11,years:1,capitalIni:1000,tipoStop:'none',atrPeriod:14,atrMult:1,sinPerdidas:false,reentry:false,tipoFiltro:'none',sp500EmaR:10,sp500EmaL:11}
     // Live prices — sequential with 300ms gap and 1 retry on failure
+    setLivePricesReady(false)
     ;(async()=>{
       const fetchResults=[]
       for(const sym of symbols){
@@ -1332,6 +1334,7 @@ export default function Home() {
       const prices={}
       fetchResults.forEach(({sym,price,unavailable})=>{prices[sym]={price,unavailable:!!unavailable}})
       setTlLivePrices(prices)
+      setLivePricesReady(true)
     })()
     // Live FX for each unique non-EUR currency among open positions
     const today=new Date().toISOString().slice(0,10)
@@ -4461,7 +4464,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.520</title>
+        <title>Trading Simulator V9.521</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4539,7 +4542,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.520
+            <span className="dot"/>Trading Simulator V9.521
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -9266,6 +9269,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                             return true
                           })
                         : investDataRaw
+                      const _loadingFloat=!livePricesReady&&openTrades.length>0
                       const pnlReal=closed.reduce((s,t)=>s+parseFloat(t.pnl_eur||0),0)
                       const pnlFloat_=openTrades.reduce((s,t)=>{const v=liveFloatEur_(t);return s+(v!=null?v:0)},0)
                       const hasUnavailablePrices_=Object.values(tlLivePrices).some(v=>v?.unavailable)
@@ -9378,12 +9382,12 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           <div style={{flex:1,display:'flex',flexDirection:'column',minWidth:0,overflow:'hidden'}}>
                           <div style={{display:'flex',borderBottom:'1px solid var(--border)',flexShrink:0,overflowX:'auto'}}>
                             {[
-                              {l:'Patrimonio',v:patrimonioActual!=null?fmtAbs_(patrimonioActual):'—',c:'#00d4ff'},
-                              {l:'Cap. disponible',v:capitalDisp!=null?fmtEur_(capitalDisp):'—',c:capitalDisp==null?'#3d5a7a':capitalDisp>=0?'#00e5a0':'#ff4d6d'},
+                              {l:'Patrimonio',v:_loadingFloat?'⋯':(patrimonioActual!=null?fmtAbs_(patrimonioActual):'—'),c:'#00d4ff'},
+                              {l:'Cap. disponible',v:_loadingFloat?'⋯':(capitalDisp!=null?fmtEur_(capitalDisp):'—'),c:_loadingFloat?'#3d5a7a':(capitalDisp==null?'#3d5a7a':capitalDisp>=0?'#00e5a0':'#ff4d6d')},
                               {l:'Balance inicial',v:hasContribs?fmtAbs_(capitalNeto):'—',c:'#a8ccdf'},
                               {l:'Capital emp.',v:capitalEmpAll>0?fmtAbs_(capitalEmpAll):'—',c:'#00d4ff'},
                               {l:'P&L realizado',v:fmtEur_(pnlReal),c:pnlReal>=0?'#00e5a0':'#ff4d6d'},
-                              {l:'P&L flotante',v:fmtEur_(pnlFloat_),c:pnlFloat_>=0?'#00e5a0':'#ff4d6d',warn:hasUnavailablePrices_?`⚠ Incompleto — falta precio de: ${unavailableSymbols_.join(', ')}`:null},
+                              {l:'P&L flotante',v:_loadingFloat?'⋯':fmtEur_(pnlFloat_),c:_loadingFloat?'#3d5a7a':(pnlFloat_>=0?'#00e5a0':'#ff4d6d'),warn:(!_loadingFloat&&hasUnavailablePrices_)?`⚠ Incompleto — falta precio de: ${unavailableSymbols_.join(', ')}`:null},
                               {l:'Nº Operaciones',v:`${closed.length} cer. / ${openTrades.length} ab.`,c:'#f59e0b'},
                               {l:'Comisiones',v:commTotal>0?'-€'+Math.round(commTotal).toLocaleString('es-ES'):'€0',c:'#ff4d6d'},
                               {l:'Dividendos',v:dividendosAcum>0?'+€'+Math.round(dividendosAcum).toLocaleString('es-ES'):'—',c:'#00e5a0'},
@@ -9401,7 +9405,9 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                             <div style={{flex:2.5,borderRight:'1px solid var(--border)',display:'flex',flexDirection:'column',overflow:'hidden',position:'relative',minWidth:0}}>
                               {/* Subcol equity */}
                               <div style={{flex:tlEquityFlex,display:'flex',flexDirection:'column',overflow:'hidden',position:'relative',minHeight:0}}>
-                                {eqDisp.length>1
+                                {_loadingFloat
+                                  ?<div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:MONO,fontSize:10,color:'#3d5a7a'}}>⟳ Cargando precios…</div>
+                                  :eqDisp.length>1
                                   ?<div ref={tlEquityContainerRef} style={{flex:1,minHeight:0}}><TlEquityChart curve={eqDisp} curveSinFx={sfxDisp.length>1?sfxDisp:null} curveSinComm={scommDisp.length>1?scommDisp:null} curveWithContribs={cwcDisp.length>1?cwcDisp:null} curveBH={bhDisp?.length>1?bhDisp:null} showBH={tlShowBH} onToggleBH={async()=>{const next=!tlShowBH;setTlShowBH(next);if(next&&!tlBHData){const first=contributions.filter(c=>c.type==='aportacion').sort((a,b)=>(a.date||'').localeCompare(b.date||''))[0]?.date;const r=await fetch('/api/sp500history'+(first?'?from='+first:''));if(r.ok){const{history}=await r.json();setTlBHData(history||[])}}}} equityMode={tlEquityMode} onToggleMode={()=>setTlEquityMode(m=>m==='pnl'?'equity':'pnl')} contributions={contributions} showWithContribs={showWithContribs} onToggleContribs={()=>setShowWithContribs(v=>!v)} curveFloat={floatCurveDisp.length>1?floatCurveDisp:null} floatLoading={floatLoading} showFloat={tlShowFloat} onToggleFloat={()=>setTlShowFloat(v=>!v)} onFirstFloat={triggerFloatFetch} pnlDaily={tlPnlDaily} pnlDailyLoading={floatLoading} onTogglePnlDaily={()=>{const n=!tlPnlDaily;setTlPnlDaily(n);if(n)triggerFloatFetch()}} height={tlEquityHeight} showTimeScale={false} syncRef={tlDashSyncRef}/></div>
                                   :<div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:MONO,fontSize:10,color:'#3d5a7a'}}>Sin datos equity</div>}
                                 <div onClick={()=>{document.getElementById('tlDetailEquity')?.scrollIntoView({behavior:'smooth'})}} title="Ir al gráfico detallado"
@@ -9434,7 +9440,9 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               {/* Subcol invest */}
                               <div style={{flex:2-tlEquityFlex,position:'relative',display:'flex',flexDirection:'column',overflow:'hidden',minHeight:0}}>
                                 <div ref={tlInvestContainerRef} style={{flex:1,minHeight:0,height:'100%'}}>
-                                  {investData.length>1
+                                  {_loadingFloat
+                                    ?<div style={{height:'100%',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:MONO,fontSize:9,color:'#3d5a7a'}}>⟳ Cargando precios…</div>
+                                    :investData.length>1
                                     ?<TlInvestChart investData={investData} syncRef={tlDashSyncRef} patrimonyCurve={cwcDisp.length>1?cwcDisp:null} compact={false} height={tlInvestHeight}/>
                                     :<div style={{height:'100%',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:MONO,fontSize:9,color:'#3d5a7a'}}>—</div>}
                                 </div>
@@ -9447,12 +9455,12 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                             <div style={{flex:1.4,borderRight:'1px solid var(--border)',display:'flex',flexDirection:'column',overflow:'hidden',minWidth:0}}>
                               <div style={{flex:1,borderBottom:'1px solid var(--border)',overflow:'hidden',display:'grid',gridTemplateColumns:'1fr 1fr',gridTemplateRows:'1fr 1fr 1fr',gap:0}}>
                                 {[
-                                  {l:'P&L TOTAL',t:'pnlTotal',v:fmtEur_(pnlTotal),c:pnlTotal>=0?'#00e5a0':'#ff4d6d'},
-                                  {l:'P&L S/CAPITAL',t:'pnlSCapital',v:pnlSCapPct!=null?(pnlSCapPct>=0?'+':'')+pnlSCapPct.toFixed(2)+'%':'—',c:pnlSCapPct!=null&&pnlSCapPct>=0?'#00e5a0':'#ff4d6d'},
-                                  {l:'CAGR',t:'cagr',v:cagrReal_!=null?(cagrReal_>=0?'+':'')+cagrReal_.toFixed(2)+'%':'—',c:cagrReal_!=null&&cagrReal_>=0?'#00e5a0':'#ff4d6d'},
-                                  {l:'MAX DRAWDOWN',t:'maxDrawdown',v:maxDD>0?('-€'+Math.round(maxDD)+' ('+maxDDPct.toFixed(1)+'%)'):'—',c:'#ff4d6d'},
-                                  {l:'WIN RATE',t:'winRate',v:allWithPnl.length?wr.toFixed(1)+'%':'—',c:wr>=50?'#00e5a0':'#ff4d6d'},
-                                  {l:'FACTOR BEN.',t:'factorBeneficio',v:factorBen_!=null?factorBen_.toFixed(2):'—',c:factorBen_!=null&&factorBen_>=1?'#00e5a0':'#ff4d6d'},
+                                  {l:'P&L TOTAL',t:'pnlTotal',v:_loadingFloat?'⋯':fmtEur_(pnlTotal),c:_loadingFloat?'#3d5a7a':(pnlTotal>=0?'#00e5a0':'#ff4d6d')},
+                                  {l:'P&L S/CAPITAL',t:'pnlSCapital',v:_loadingFloat?'⋯':(pnlSCapPct!=null?(pnlSCapPct>=0?'+':'')+pnlSCapPct.toFixed(2)+'%':'—'),c:_loadingFloat?'#3d5a7a':(pnlSCapPct!=null&&pnlSCapPct>=0?'#00e5a0':'#ff4d6d')},
+                                  {l:'CAGR',t:'cagr',v:_loadingFloat?'⋯':(cagrReal_!=null?(cagrReal_>=0?'+':'')+cagrReal_.toFixed(2)+'%':'—'),c:_loadingFloat?'#3d5a7a':(cagrReal_!=null&&cagrReal_>=0?'#00e5a0':'#ff4d6d')},
+                                  {l:'MAX DRAWDOWN',t:'maxDrawdown',v:_loadingFloat?'⋯':(maxDD>0?('-€'+Math.round(maxDD)+' ('+maxDDPct.toFixed(1)+'%)'):'—'),c:'#ff4d6d'},
+                                  {l:'WIN RATE',t:'winRate',v:_loadingFloat?'⋯':(allWithPnl.length?wr.toFixed(1)+'%':'—'),c:_loadingFloat?'#3d5a7a':(wr>=50?'#00e5a0':'#ff4d6d')},
+                                  {l:'FACTOR BEN.',t:'factorBeneficio',v:_loadingFloat?'⋯':(factorBen_!=null?factorBen_.toFixed(2):'—'),c:_loadingFloat?'#3d5a7a':(factorBen_!=null&&factorBen_>=1?'#00e5a0':'#ff4d6d')},
                                 ].map(({l,t,v,c},i)=>(
                                   <div key={i} style={{padding:'10px 12px',borderRight:i%2===0?'1px solid var(--border)':'none',borderBottom:i<4?'1px solid var(--border)':'none',display:'flex',flexDirection:'column',justifyContent:'center',gap:3}}>
                                     <div style={{fontFamily:MONO,fontSize:9,color:'#e2e8f0',letterSpacing:'0.08em',textTransform:'uppercase',display:'flex',alignItems:'center',gap:4}}>{l}<Tip id={t}/></div>
@@ -9557,8 +9565,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           <div style={{display:'flex',flexWrap:'nowrap',borderBottom:'1px solid var(--border)',flexShrink:0,overflowX:'auto'}}>
                             {[
                               {l:'Impacto FX',t:'impactoFx',v:fxImpact!==0?(fxImpact>=0?'+':'-')+'€'+Math.round(Math.abs(fxImpact)).toLocaleString('es-ES'):'€0',c:fxImpact>=0?'#00e5a0':'#ff4d6d'},
-                              {l:'Gan. media %',t:'ganMediaPct',v:avgWinPct>0?('+'+avgWinPct.toFixed(2)+'%'):'—',c:'#00e5a0'},
-                              {l:'Pérd. media %',t:'perdMediaPct',v:avgLossPct>0?(avgLossPct.toFixed(2)+'%'):'—',c:'#ff4d6d'},
+                              {l:'Gan. media %',t:'ganMediaPct',v:_loadingFloat?'⋯':(avgWinPct>0?('+'+avgWinPct.toFixed(2)+'%'):'—'),c:_loadingFloat?'#3d5a7a':'#00e5a0'},
+                              {l:'Pérd. media %',t:'perdMediaPct',v:_loadingFloat?'⋯':(avgLossPct>0?(avgLossPct.toFixed(2)+'%'):'—'),c:_loadingFloat?'#3d5a7a':'#ff4d6d'},
                               {l:'Días prom.',t:'diasProm',v:diasProm!=null?Math.round(diasProm)+' d':'—',c:'#a8ccdf'},
                               {l:'Total días',t:'totalDias',v:totalDiasInv+' d',c:'#a8ccdf'},
                               {l:'T. invertido',t:'tInvertido',v:tiempoInvPct_!=null?tiempoInvPct_+'%':'—',c:'#ffd166'},
@@ -9572,8 +9580,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           {/* FILA 4 */}
                           <div style={{display:'flex',flexWrap:'nowrap',borderBottom:'1px solid var(--border)',flexShrink:0,overflowX:'auto'}}>
                             {[
-                              {l:'Ganadoras',t:'ganadoras',v:wins_.length,c:'#00e5a0'},
-                              {l:'Perdedoras',t:'perdedoras',v:losses_.length,c:'#ff4d6d'},
+                              {l:'Ganadoras',t:'ganadoras',v:_loadingFloat?'⋯':wins_.length,c:_loadingFloat?'#3d5a7a':'#00e5a0'},
+                              {l:'Perdedoras',t:'perdedoras',v:_loadingFloat?'⋯':losses_.length,c:_loadingFloat?'#3d5a7a':'#ff4d6d'},
                               {l:'Días promedio',t:'diasPromedioInv',v:diasProm!=null?Math.round(diasProm)+' d':'—',c:'#a8ccdf'},
                               {l:'Total días inv.',t:'totalDiasInv',v:totalDiasInv+' d',c:'#a8ccdf'},
                             ].map(({l,t,v,c},i)=>(
@@ -9653,8 +9661,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           {/* GRÁFICOS DETALLADOS (scroll) */}
                           <div style={{flexShrink:0,overflowY:'auto'}}>
                             <div style={{padding:'5px 14px 3px',fontFamily:MONO,fontSize:11,color:'#e2e8f0',letterSpacing:'0.1em',textTransform:'uppercase',borderBottom:'1px solid var(--border)'}}>Gráficos detallados</div>
-                            {eqDisp.length>1&&<div id="tlDetailEquity" style={{height:'calc(100vh - 30px)',position:'relative',display:'flex',flexDirection:'column'}}><TlEquityChart curve={eqDisp} curveSinFx={sfxDisp.length>1?sfxDisp:null} curveSinComm={scommDisp.length>1?scommDisp:null} curveWithContribs={cwcDisp.length>1?cwcDisp:null} curveBH={bhDisp?.length>1?bhDisp:null} showBH={tlShowBH} onToggleBH={async()=>{const next=!tlShowBH;setTlShowBH(next);if(next&&!tlBHData){const first=contributions.filter(c=>c.type==='aportacion').sort((a,b)=>(a.date||'').localeCompare(b.date||''))[0]?.date;const r=await fetch('/api/sp500history'+(first?'?from='+first:''));if(r.ok){const{history}=await r.json();setTlBHData(history||[])}}}} equityMode={tlEquityMode} onToggleMode={()=>setTlEquityMode(m=>m==='pnl'?'equity':'pnl')} contributions={contributions} showWithContribs={showWithContribs} onToggleContribs={()=>setShowWithContribs(v=>!v)} curveFloat={floatCurveDisp.length>1?floatCurveDisp:null} floatLoading={floatLoading} showFloat={tlShowFloat} onToggleFloat={()=>setTlShowFloat(v=>!v)} onFirstFloat={triggerFloatFetch} height={typeof window!=='undefined'?window.innerHeight-30:700} showTimeScale={true} syncRef={tlDashSyncRef}/></div>}
-                            {investData.length>1&&<div id="tlDetailInvest" style={{height:'calc(100vh - 30px)',position:'relative',display:'flex',flexDirection:'column'}}><TlInvestChart investData={investData} syncRef={tlDashSyncRef} patrimonyCurve={cwcDisp.length>1?cwcDisp:null} height={typeof window!=='undefined'?window.innerHeight-30:700} compact={false}/></div>}
+                            {!_loadingFloat&&eqDisp.length>1&&<div id="tlDetailEquity" style={{height:'calc(100vh - 30px)',position:'relative',display:'flex',flexDirection:'column'}}><TlEquityChart curve={eqDisp} curveSinFx={sfxDisp.length>1?sfxDisp:null} curveSinComm={scommDisp.length>1?scommDisp:null} curveWithContribs={cwcDisp.length>1?cwcDisp:null} curveBH={bhDisp?.length>1?bhDisp:null} showBH={tlShowBH} onToggleBH={async()=>{const next=!tlShowBH;setTlShowBH(next);if(next&&!tlBHData){const first=contributions.filter(c=>c.type==='aportacion').sort((a,b)=>(a.date||'').localeCompare(b.date||''))[0]?.date;const r=await fetch('/api/sp500history'+(first?'?from='+first:''));if(r.ok){const{history}=await r.json();setTlBHData(history||[])}}}} equityMode={tlEquityMode} onToggleMode={()=>setTlEquityMode(m=>m==='pnl'?'equity':'pnl')} contributions={contributions} showWithContribs={showWithContribs} onToggleContribs={()=>setShowWithContribs(v=>!v)} curveFloat={floatCurveDisp.length>1?floatCurveDisp:null} floatLoading={floatLoading} showFloat={tlShowFloat} onToggleFloat={()=>setTlShowFloat(v=>!v)} onFirstFloat={triggerFloatFetch} height={typeof window!=='undefined'?window.innerHeight-30:700} showTimeScale={true} syncRef={tlDashSyncRef}/></div>}
+                            {!_loadingFloat&&investData.length>1&&<div id="tlDetailInvest" style={{height:'calc(100vh - 30px)',position:'relative',display:'flex',flexDirection:'column'}}><TlInvestChart investData={investData} syncRef={tlDashSyncRef} patrimonyCurve={cwcDisp.length>1?cwcDisp:null} height={typeof window!=='undefined'?window.innerHeight-30:700} compact={false}/></div>}
                             {(closed.length>0||openTrades.length>0)&&(
                               <div id="tlDetailPnl" style={{height:'calc(100vh - 30px)',padding:'12px 16px 8px',borderTop:'1px solid var(--border)',display:'flex',flexDirection:'column'}}>
                                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8,flexShrink:0}}>
