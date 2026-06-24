@@ -1571,7 +1571,14 @@ export default function Home() {
     const curveSinComm=Object.keys(sinCommByDate).sort().map(date=>({date,value:sinCommByDate[date]}))
     const floatToday_=openTrades.reduce((s,t)=>{const v=liveFloatEur_(t);return s+(v!=null?v:0)},0)
     const openComm=openTrades.reduce((s,t)=>s+parseFloat(t.commission||0),0)
-    const _applyEnd_=(curve,val)=>{if(!curve.length)return;const last=curve[curve.length-1];if(last.date<today)curve.push({date:today,value:val,isFloat:true});else curve[curve.length-1]={date:today,value:val,isFloat:true}}
+    // Endpoint live de HOY. Deduplica: elimina CUALQUIER punto preexistente con fecha==today
+    // (p.ej. el close de hoy de Yahoo en openFloatCloses) antes de fijar el punto live único.
+    // Sin esto, dos puntos con date==today → lightweight-charts peta ("Value is null") → la línea desaparece.
+    const _applyEnd_=(curve,val)=>{
+      if(!curve.length)return
+      while(curve.length&&curve[curve.length-1].date>=today)curve.pop()
+      curve.push({date:today,value:val,isFloat:true})
+    }
     const _clip=arr=>(tlFilterYear||tlFilterMonth)?(arr||[]).filter(p=>{if(!p?.date)return false;if(tlFilterYear&&!p.date.startsWith(tlFilterYear))return false;if(tlFilterMonth&&p.date.slice(5,7)!==tlFilterMonth)return false;return true}):(arr||[])
     const _pnlDailyReady=tlPnlDaily&&Object.keys(floatCloses).length>0
     const _openMode=!tlPnlDaily&&Object.keys(openFloatCloses).length>0
@@ -4477,7 +4484,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.528</title>
+        <title>Trading Simulator V9.529</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4555,7 +4562,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.528
+            <span className="dot"/>Trading Simulator V9.529
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -9235,9 +9242,10 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         if(mainC.length===0){ const d0=openTrades[0].entry_date||today; mainC=[{date:d0,value:0}]; sfxC=[{date:d0,value:0}]; scmC=[{date:d0,value:0}] }
                         const _applyEnd_=(curve,val)=>{
                           if(!curve.length) return
-                          const last=curve[curve.length-1]
-                          if(last.date<today) curve.push({date:today,value:val,isFloat:true})
-                          else curve[curve.length-1]={date:today,value:val,isFloat:true}  // ==today o >today: fijar a hoy (solo la fecha)
+                          // Deduplica: elimina cualquier punto preexistente con fecha>=today (close de hoy de Yahoo)
+                          // antes de fijar el punto live único. Sin esto: fecha duplicada → "Value is null".
+                          while(curve.length&&curve[curve.length-1].date>=today) curve.pop()
+                          curve.push({date:today,value:val,isFloat:true})
                         }
                         _applyEnd_(mainC, cumPnl+floatToday_)
                         _applyEnd_(sfxC,  parseFloat((cumSinFx+floatToday_).toFixed(4)))
