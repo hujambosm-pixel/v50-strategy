@@ -12,6 +12,7 @@ const CONTRIB_MARKER = {
 export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContribs, curveBH, showBH, onToggleBH, equityMode, onToggleMode, contributions, showWithContribs, onToggleContribs, curveFloat, floatLoading, showFloat, onToggleFloat, onFirstFloat, pnlDaily, pnlDailyLoading, onTogglePnlDaily, height, showTimeScale, syncRef }) {
   const ref = useRef(null), chartRef = useRef(null), equityTooltipRef = useRef(null), lastTTStateRef = useRef(null)
   const mainSeriesRef = useRef(null)
+  const _prevDepsRef = useRef(null)
   const [showSinFx, setShowSinFx] = useState(false)
   const [showSinComm, setShowSinComm] = useState(false)
   const [showAportacion, setShowAportacion] = useState(true)
@@ -38,6 +39,15 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
   }
 
   useEffect(()=>{
+    // DIAG: identificar qué dep dispara cada recreación del chart
+    {
+      const _names=['curve','curveWithContribs','curveSinFx','curveSinComm','showSinFx','showSinComm','showWithContribs','contributions','showAportacion','showRetirada','showDividendo','showBH','curveBH','isEquityMode','showDD']
+      const _now=[curve,curveWithContribs,curveSinFx,curveSinComm,showSinFx,showSinComm,showWithContribs,contributions,showAportacion,showRetirada,showDividendo,showBH,curveBH,isEquityMode,showDD]
+      const _prev=_prevDepsRef.current
+      if(_prev){const ch=_names.filter((n,i)=>_prev[i]!==_now[i]);console.log('[CHART recreate] TlEquityChart cambió:',ch.length?ch.join(','):'(ninguna — montaje/strict)')}
+      else console.log('[CHART recreate] TlEquityChart primer montaje')
+      _prevDepsRef.current=_now
+    }
     const ac = activeCurveRef.current
     if(!ref.current||!ac?.length||ref.current.clientWidth<=0) return
     let cancelled = false
@@ -345,9 +355,19 @@ export function TlInvestChart({ investData, syncRef, patrimonyCurve, compact, he
   // investData: [{date, capital, profit}]  sorted by date
   // compact=true: no header/legend, chart fills container height (used in Dashboard mini view)
   const ref = useRef(null), chartRef = useRef(null), investTooltipRef = useRef(null)
+  const _prevDepsRef = useRef(null)
   const [showPatrimony, setShowPatrimony] = useState(false)
 
   useEffect(()=>{
+    // DIAG: identificar qué dep dispara cada recreación del chart
+    {
+      const _names=['investData','showPatrimony','patrimonyCurve']
+      const _now=[investData,showPatrimony,patrimonyCurve]
+      const _prev=_prevDepsRef.current
+      if(_prev){const ch=_names.filter((n,i)=>_prev[i]!==_now[i]);console.log('[CHART recreate] TlInvestChart cambió:',ch.length?ch.join(','):'(ninguna — montaje/strict)')}
+      else console.log('[CHART recreate] TlInvestChart primer montaje')
+      _prevDepsRef.current=_now
+    }
     if(!ref.current||!investData?.length||ref.current.clientWidth<=0) return
     import('lightweight-charts').then(({createChart,CrosshairMode,LineStyle})=>{
       if(chartRef.current){chartRef.current.remove();chartRef.current=null}
