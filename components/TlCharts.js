@@ -9,7 +9,7 @@ const CONTRIB_MARKER = {
   dividendo:  { color:'#aaff44', shape:'circle',     position:'belowBar', prefix:'D+' },
 }
 
-export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContribs, curveBH, showBH, onToggleBH, equityMode, onToggleMode, contributions, showWithContribs, onToggleContribs, curveFloat, floatLoading, showFloat, onToggleFloat, onFirstFloat, pnlDaily, pnlDailyLoading, onTogglePnlDaily, height, showTimeScale, syncRef }) {
+export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContribs, curveBH, showBH, onToggleBH, equityMode, onToggleMode, contributions, showWithContribs, onToggleContribs, curveFloat, floatLoading, showFloat, onToggleFloat, onFirstFloat, pnlDaily, pnlDailyLoading, onTogglePnlDaily, height, showTimeScale, syncRef, ready }) {
   const ref = useRef(null), chartRef = useRef(null), equityTooltipRef = useRef(null), lastTTStateRef = useRef(null)
   const mainSeriesRef = useRef(null)
   const [showSinFx, setShowSinFx] = useState(false)
@@ -37,17 +37,10 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
     return `${parseInt(day)} ${months[parseInt(m)-1]} ${y}`
   }
 
-  // DIAG: detect which dep changed
-  const _diagDepsRef = useRef(null)
-  const _diagDeps = [curve, curveWithContribs, curveSinFx, curveSinComm, showSinFx, showSinComm, showWithContribs, contributions, showAportacion, showRetirada, showDividendo, showBH, curveBH, isEquityMode, showDD]
-  const _diagNames = ['curve','curveWithContribs','curveSinFx','curveSinComm','showSinFx','showSinComm','showWithContribs','contributions','showAportacion','showRetirada','showDividendo','showBH','curveBH','isEquityMode','showDD']
-  if(_diagDepsRef.current){_diagDeps.forEach((d,i)=>{if(d!==_diagDepsRef.current[i])console.log('[EQ dep changed]',_diagNames[i],_diagDepsRef.current[i],'→',d)})}
-  _diagDepsRef.current = _diagDeps
-
   useEffect(()=>{
-    console.log('[EQ effect] run', new Date().toISOString())
+    if(!ready) return
     const ac = activeCurveRef.current
-    if(!ref.current||!ac?.length||ref.current.clientWidth<=0){console.log('[EQ effect] early return — ref=',!!ref.current,'ac=',ac?.length,'w=',ref.current?.clientWidth);return}
+    if(!ref.current||!ac?.length||ref.current.clientWidth<=0) return
     let cancelled = false
     import('lightweight-charts').then(({createChart,CrosshairMode,LineStyle})=>{
       if(cancelled) return
@@ -74,8 +67,7 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
       lastTTStateRef.current = null
       const lc = '#00e676'
       const mainSeries = chart.addLineSeries({color:lc,lineWidth:2,lastValueVisible:true,priceLineVisible:false})
-      const _acData=activeCurveRef.current;const _nulls=_acData.filter(p=>p.value==null||!isFinite(p.value));console.log('[EQ setData] main len=',_acData.length,'nulls=',_nulls.length,'first=',_acData[0],'last=',_acData[_acData.length-1])
-      mainSeries.setData(_acData.map(p=>({time:p.date,value:p.value})))
+      mainSeries.setData(activeCurveRef.current.map(p=>({time:p.date,value:p.value})))
       mainSeriesRef.current = mainSeries
       track(activeCurveRef.current,'main')
       // Contribution markers — only in equity mode
@@ -233,14 +225,13 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
       }
       const ro = new ResizeObserver(()=>{
         if(!ref.current||!chartRef.current) return
-        console.log('[EQ RO] resize w=',ref.current.clientWidth,'h=',ref.current.clientHeight,'heightProp=',height)
         try{chart.applyOptions({width:ref.current.clientWidth,height:height||ref.current.clientHeight||200})}catch(_){}
       })
       ro.observe(ref.current)
       return ()=>ro.disconnect()
     })
-    return ()=>{ console.log('[EQ cleanup] dispose',new Date().toISOString()); cancelled=true; if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};try{chartRef.current.remove()}catch(_){};chartRef.current=null;mainSeriesRef.current=null} }
-  },[curve, curveWithContribs, curveSinFx, curveSinComm, showSinFx, showSinComm, showWithContribs, contributions, showAportacion, showRetirada, showDividendo, showBH, curveBH, isEquityMode, showDD])
+    return ()=>{ cancelled=true; if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};try{chartRef.current.remove()}catch(_){};chartRef.current=null;mainSeriesRef.current=null} }
+  },[ready, curve, curveWithContribs, curveSinFx, curveSinComm, showSinFx, showSinComm, showWithContribs, contributions, showAportacion, showRetirada, showDividendo, showBH, curveBH, isEquityMode, showDD])
 
   // Secondary effect: update main series data only when activeCurve changes (e.g. float toggle)
   // This avoids full chart recreation and prevents "Object is disposed" errors
@@ -351,14 +342,14 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
 }
 
 // ── Capital Invertido vs Profit acumulado (area + line) ──
-export function TlInvestChart({ investData, syncRef, patrimonyCurve, compact, height }) {
+export function TlInvestChart({ investData, syncRef, patrimonyCurve, compact, height, ready }) {
   // investData: [{date, capital, profit}]  sorted by date
   // compact=true: no header/legend, chart fills container height (used in Dashboard mini view)
   const ref = useRef(null), chartRef = useRef(null), investTooltipRef = useRef(null)
   const [showPatrimony, setShowPatrimony] = useState(false)
 
   useEffect(()=>{
-    if(!ref.current||!investData?.length||ref.current.clientWidth<=0) return
+    if(!ready||!ref.current||!investData?.length||ref.current.clientWidth<=0) return
     import('lightweight-charts').then(({createChart,CrosshairMode,LineStyle})=>{
       if(chartRef.current){chartRef.current.remove();chartRef.current=null}
       // compact mode: inherit container height; standalone mode: use clientHeight or default 200
@@ -466,7 +457,7 @@ export function TlInvestChart({ investData, syncRef, patrimonyCurve, compact, he
       return ()=>ro.disconnect()
     })
     return ()=>{ if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};try{chartRef.current.remove()}catch(_){};chartRef.current=null} }
-  },[investData, showPatrimony, patrimonyCurve])
+  },[ready, investData, showPatrimony, patrimonyCurve])
 
   const btnStyle = (active, color) => ({
     display:'flex',alignItems:'center',gap:4,
