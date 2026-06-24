@@ -1648,16 +1648,6 @@ export default function Home() {
     }
   },[tlTradesFiltered,tlLivePrices,contributions,openFloatCloses,floatCloses,tlPnlDaily,tlFilterYear,tlFilterMonth,tlShowBH,tlBHData])
 
-  // DIAG: identificar qué dep hace recomputar dashboardCurves (causa upstream de recreación de charts)
-  const _dcPrevRef = useRef(null)
-  useEffect(()=>{
-    const _names=['tlTradesFiltered','tlLivePrices','contributions','openFloatCloses','floatCloses','tlPnlDaily','tlFilterYear','tlFilterMonth','tlShowBH','tlBHData']
-    const _now=[tlTradesFiltered,tlLivePrices,contributions,openFloatCloses,floatCloses,tlPnlDaily,tlFilterYear,tlFilterMonth,tlShowBH,tlBHData]
-    const _prev=_dcPrevRef.current
-    if(_prev){const ch=_names.filter((n,i)=>_prev[i]!==_now[i]);if(ch.length)console.log('[DC recompute] dashboardCurves dep cambió:',ch.join(','))}
-    _dcPrevRef.current=_now
-  })
-
   // ── Lazy fetch of historical closes for float equity curve ──
   // Triggered only on first "Flotante" toggle click (not on mount)
   const triggerFloatFetch=useCallback(()=>{
@@ -4507,7 +4497,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.532</title>
+        <title>Trading Simulator V9.533</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4585,7 +4575,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.532
+            <span className="dot"/>Trading Simulator V9.533
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
