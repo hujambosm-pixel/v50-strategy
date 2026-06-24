@@ -42,7 +42,9 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
     if(!ref.current||!ac?.length||ref.current.clientWidth<=0) return
     let cancelled = false
     import('lightweight-charts').then(({createChart,CrosshairMode,LineStyle})=>{
+      console.log('[chart cb START] cancelled=', cancelled)
       if(cancelled) return
+      console.log('[chart cb] cancelled=', cancelled, 'activeCurve length=', activeCurveRef.current?.length)
       if(chartRef.current){chartRef.current.remove();chartRef.current=null;mainSeriesRef.current=null}
       const chart = createChart(ref.current,{
         width:ref.current.clientWidth||300, height:height||ref.current.clientHeight||200,
@@ -229,14 +231,14 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
       ro.observe(ref.current)
       return ()=>ro.disconnect()
     })
-    return ()=>{ cancelled=true; if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};try{chartRef.current.remove()}catch(_){};chartRef.current=null;mainSeriesRef.current=null} }
+    return ()=>{ console.log('[chart cleanup] destroying chart'); cancelled=true; if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};try{chartRef.current.remove()}catch(_){};chartRef.current=null;mainSeriesRef.current=null} }
   },[curve, curveWithContribs, curveSinFx, curveSinComm, showSinFx, showSinComm, showWithContribs, contributions, showAportacion, showRetirada, showDividendo, showBH, curveBH, isEquityMode, showDD])
 
   // Secondary effect: update main series data only when activeCurve changes (e.g. float toggle)
   // This avoids full chart recreation and prevents "Object is disposed" errors
   useEffect(()=>{
     if(mainSeriesRef.current && chartRef.current){
-      try{ mainSeriesRef.current.setData(activeCurve.map(p=>({time:p.date,value:p.value}))) }catch(_){}
+      try{ mainSeriesRef.current.setData(activeCurve.map(p=>({time:p.date,value:p.value}))) }catch(e){ console.error('Secondary setData error:', e) }
     }
   },[activeCurve])
 
