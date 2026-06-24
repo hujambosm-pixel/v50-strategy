@@ -1311,7 +1311,7 @@ export default function Home() {
   useEffect(()=>{
     const {openPositions} = computeFifo(tlTrades, {})
     const symbols = [...new Set(openPositions.map(p=>p.symbol).filter(Boolean))]
-    if(!symbols.length){ setTlLivePrices({}); setTlLiveFx({}); setLivePricesReady(true); return }
+    if(!symbols.length){ setTlLivePrices({}); setTlLiveFx({}); console.log('[livePrices] setReady true (no symbols)'); setLivePricesReady(true); return }
     const cfg={emaR:10,emaL:11,years:1,capitalIni:1000,tipoStop:'none',atrPeriod:14,atrMult:1,sinPerdidas:false,reentry:false,tipoFiltro:'none',sp500EmaR:10,sp500EmaL:11}
     // Live prices — sequential with 300ms gap and 1 retry on failure
     setLivePricesReady(false)
@@ -1334,6 +1334,7 @@ export default function Home() {
       const prices={}
       fetchResults.forEach(({sym,price,unavailable})=>{prices[sym]={price,unavailable:!!unavailable}})
       setTlLivePrices(prices)
+      console.log('[livePrices] setReady true')
       setLivePricesReady(true)
     })()
     // Live FX for each unique non-EUR currency among open positions
@@ -4464,7 +4465,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.525</title>
+        <title>Trading Simulator V9.526</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4542,7 +4543,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.525
+            <span className="dot"/>Trading Simulator V9.526
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -9270,6 +9271,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           })
                         : investDataRaw
                       const _loadingFloat=!livePricesReady&&openTrades.length>0
+                      console.log('[render] _loadingFloat=',_loadingFloat,'tlEquityHeight=',tlEquityHeight,'ready prop=',!_loadingFloat,'livePricesReady=',livePricesReady,'openTrades=',openTrades.length)
                       const pnlReal=closed.reduce((s,t)=>s+parseFloat(t.pnl_eur||0),0)
                       const pnlFloat_=openTrades.reduce((s,t)=>{const v=liveFloatEur_(t);return s+(v!=null?v:0)},0)
                       const hasUnavailablePrices_=Object.values(tlLivePrices).some(v=>v?.unavailable)
