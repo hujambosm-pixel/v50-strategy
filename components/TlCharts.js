@@ -37,9 +37,17 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
     return `${parseInt(day)} ${months[parseInt(m)-1]} ${y}`
   }
 
+  // DIAG: detect which dep changed
+  const _diagDepsRef = useRef(null)
+  const _diagDeps = [curve, curveWithContribs, curveSinFx, curveSinComm, showSinFx, showSinComm, showWithContribs, contributions, showAportacion, showRetirada, showDividendo, showBH, curveBH, isEquityMode, showDD]
+  const _diagNames = ['curve','curveWithContribs','curveSinFx','curveSinComm','showSinFx','showSinComm','showWithContribs','contributions','showAportacion','showRetirada','showDividendo','showBH','curveBH','isEquityMode','showDD']
+  if(_diagDepsRef.current){_diagDeps.forEach((d,i)=>{if(d!==_diagDepsRef.current[i])console.log('[EQ dep changed]',_diagNames[i],_diagDepsRef.current[i],'→',d)})}
+  _diagDepsRef.current = _diagDeps
+
   useEffect(()=>{
+    console.log('[EQ effect] run', new Date().toISOString())
     const ac = activeCurveRef.current
-    if(!ref.current||!ac?.length||ref.current.clientWidth<=0) return
+    if(!ref.current||!ac?.length||ref.current.clientWidth<=0){console.log('[EQ effect] early return — ref=',!!ref.current,'ac=',ac?.length,'w=',ref.current?.clientWidth);return}
     let cancelled = false
     import('lightweight-charts').then(({createChart,CrosshairMode,LineStyle})=>{
       if(cancelled) return
@@ -66,7 +74,8 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
       lastTTStateRef.current = null
       const lc = '#00e676'
       const mainSeries = chart.addLineSeries({color:lc,lineWidth:2,lastValueVisible:true,priceLineVisible:false})
-      mainSeries.setData(activeCurveRef.current.map(p=>({time:p.date,value:p.value})))
+      const _acData=activeCurveRef.current;const _nulls=_acData.filter(p=>p.value==null||!isFinite(p.value));console.log('[EQ setData] main len=',_acData.length,'nulls=',_nulls.length,'first=',_acData[0],'last=',_acData[_acData.length-1])
+      mainSeries.setData(_acData.map(p=>({time:p.date,value:p.value})))
       mainSeriesRef.current = mainSeries
       track(activeCurveRef.current,'main')
       // Contribution markers — only in equity mode
@@ -224,12 +233,13 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
       }
       const ro = new ResizeObserver(()=>{
         if(!ref.current||!chartRef.current) return
+        console.log('[EQ RO] resize w=',ref.current.clientWidth,'h=',ref.current.clientHeight,'heightProp=',height)
         try{chart.applyOptions({width:ref.current.clientWidth,height:height||ref.current.clientHeight||200})}catch(_){}
       })
       ro.observe(ref.current)
       return ()=>ro.disconnect()
     })
-    return ()=>{ cancelled=true; if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};try{chartRef.current.remove()}catch(_){};chartRef.current=null;mainSeriesRef.current=null} }
+    return ()=>{ console.log('[EQ cleanup] dispose',new Date().toISOString()); cancelled=true; if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};try{chartRef.current.remove()}catch(_){};chartRef.current=null;mainSeriesRef.current=null} }
   },[curve, curveWithContribs, curveSinFx, curveSinComm, showSinFx, showSinComm, showWithContribs, contributions, showAportacion, showRetirada, showDividendo, showBH, curveBH, isEquityMode, showDD])
 
   // Secondary effect: update main series data only when activeCurve changes (e.g. float toggle)
