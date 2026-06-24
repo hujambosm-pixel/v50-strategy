@@ -1543,6 +1543,58 @@ export default function Home() {
       })
   },[tlFifo,tlFilterBroker,tlFilterStrat,tlSearch,tlFilterYear,tlFilterMonth,tlFilterStatus])
 
+  // ── Memoized display curves for dashboard equity chart ──
+  // Prevents infinite chart-recreation loop: eqDisp/sfxDisp/scommDisp/cwcDisp are arrays built
+  // inline on every render; without memo they change identity each render → TlEquityChart's useEffect
+  // re-fires → chart destroyed/created → ResizeObserver fires setTlEquityHeight → re-render → loop.
+  const dashboardCurves = useMemo(()=>{
+    const today=new Date().toISOString().split('T')[0]
+    const closed=tlTradesFiltered.filter(t=>t.status==='closed').slice().sort((a,b)=>(a.exit_date||a.entry_date||'').localeCompare(b.exit_date||b.entry_date||''))
+    const openTrades=tlTradesFiltered.filter(t=>t.status==='open')
+    const liveFloatEur_=(t)=>{const lp=tlLivePrices[t.symbol];if(lp?.unavailable)return null;const px=lp?.price!=null?parseFloat(lp.price):null;if(px!==null){const fxE=t.fx_entry||1;return(px-t.entry_price)*t.shares/fxE};return typeof t._pnl_float_eur==='number'?t._pnl_float_eur:0}
+    const _divEvts_=contributions.filter(c=>c.type==='dividendo'&&c.date).map(c=>{const a=parseFloat(c.amount||0);return{date:c.date,pnl:a,sinFx:a,sinComm:a}})
+    const _closedEvts_=closed.map(t=>{const fxE=parseFloat(t.fx_entry||0)||1;const comm=parseFloat(t.commission||0);return{date:t.exit_date||t.entry_date||today,pnl:parseFloat(t.pnl_eur||0),sinFx:(parseFloat(t.exit_price||0)-parseFloat(t.entry_price||0))*parseFloat(t.shares||0)/fxE,sinComm:parseFloat(t.pnl_eur||0)+comm}})
+    const _pnlEvts_=[..._closedEvts_,..._divEvts_].sort((a,b)=>(a.date||'').localeCompare(b.date||''))
+    let cumPnl=0,cumSinFx=0,cumSinComm=0
+    const equityByDate={},sinFxByDate={},sinCommByDate={}
+    _pnlEvts_.forEach(e=>{cumPnl+=e.pnl;cumSinFx+=e.sinFx;cumSinComm+=e.sinComm;equityByDate[e.date]=cumPnl;sinFxByDate[e.date]=parseFloat(cumSinFx.toFixed(4));sinCommByDate[e.date]=parseFloat(cumSinComm.toFixed(4))})
+    const equityCurve=Object.keys(equityByDate).sort().map(date=>({date,value:equityByDate[date]}))
+    const curveSinFx=Object.keys(sinFxByDate).sort().map(date=>({date,value:sinFxByDate[date]}))
+    const curveSinComm=Object.keys(sinCommByDate).sort().map(date=>({date,value:sinCommByDate[date]}))
+    const floatToday_=openTrades.reduce((s,t)=>{const v=liveFloatEur_(t);return s+(v!=null?v:0)},0)
+    const openComm=openTrades.reduce((s,t)=>s+parseFloat(t.commission||0),0)
+    let curveWithContribs=[]
+    if(contributions.length){
+      const cSorted=[...contributions].filter(c=>c.date).sort((a,b)=>a.date.localeCompare(b.date))
+      const allEvts=[...closed.map(t=>({date:t.exit_date||t.entry_date||today,pnl:parseFloat(t.pnl_eur||0),contrib:0})),...cSorted.map(c=>({date:c.date,pnl:0,contrib:c.type==='retirada'?-parseFloat(c.amount):parseFloat(c.amount)}))].filter(e=>e.date).sort((a,b)=>a.date.localeCompare(b.date))
+      let runPnlW=0,runContribW=0
+      const patrimByDate={}
+      allEvts.forEach(e=>{runPnlW+=e.pnl;runContribW+=e.contrib;patrimByDate[e.date]=runPnlW+runContribW})
+      curveWithContribs=Object.keys(patrimByDate).sort().map(d=>({date:d,value:patrimByDate[d]}))
+      if(curveWithContribs.length===0&&openTrades.length){const anchor=cSorted[0]?.date||openTrades[0]?.entry_date||today;curveWithContribs.push({date:anchor,value:runContribW})}
+      if(openTrades.length&&curveWithContribs.length){const lastW=curveWithContribs[curveWithContribs.length-1].date;if(today>lastW)curveWithContribs.push({date:today,value:runContribW+runPnlW+floatToday_,isFloat:true})}
+    }
+    const _clip=arr=>(tlFilterYear||tlFilterMonth)?(arr||[]).filter(p=>{if(!p?.date)return false;if(tlFilterYear&&!p.date.startsWith(tlFilterYear))return false;if(tlFilterMonth&&p.date.slice(5,7)!==tlFilterMonth)return false;return true}):(arr||[])
+    const _pnlDailyReady=tlPnlDaily&&Object.keys(floatCloses).length>0
+    const _openMode=!tlPnlDaily&&Object.keys(openFloatCloses).length>0
+    const _dd=_pnlDailyReady?buildPnlFloatCurve(tlTradesFiltered,floatCloses,contributions,{floatOpenOnly:false}):_openMode?buildPnlFloatCurve(tlTradesFiltered,openFloatCloses,contributions,{floatOpenOnly:true}):null
+    let mainC=_dd?_dd.main:equityCurve
+    let sfxC=_dd?_dd.sinFx:curveSinFx
+    let scmC=_dd?_dd.sinComm:curveSinComm
+    if(openTrades.length>0){
+      if(mainC.length===0){const d0=openTrades[0].entry_date||today;mainC=[{date:d0,value:0}];sfxC=[{date:d0,value:0}];scmC=[{date:d0,value:0}]}
+      const _applyEnd_=(curve,val)=>{if(!curve.length)return;const last=curve[curve.length-1];if(last.date<today)curve.push({date:today,value:val,isFloat:true});else curve[curve.length-1]={date:today,value:val,isFloat:true}}
+      _applyEnd_(mainC,cumPnl+floatToday_)
+      _applyEnd_(sfxC,parseFloat((cumSinFx+floatToday_).toFixed(4)))
+      _applyEnd_(scmC,parseFloat((cumSinComm+floatToday_+openComm).toFixed(4)))
+    }
+    const bhRaw=tlShowBH&&tlBHData?.length?computeBuyAndHold(contributions,tlBHData):null
+    return {
+      eqDisp:_clip(mainC), sfxDisp:_clip(sfxC), scommDisp:_clip(scmC), cwcDisp:_clip(curveWithContribs),
+      bhDisp:bhRaw?_clip(bhRaw):null
+    }
+  },[tlTradesFiltered,tlLivePrices,contributions,openFloatCloses,floatCloses,tlPnlDaily,tlFilterYear,tlFilterMonth,tlShowBH,tlBHData])
+
   // ── Lazy fetch of historical closes for float equity curve ──
   // Triggered only on first "Flotante" toggle click (not on mount)
   const triggerFloatFetch=useCallback(()=>{
@@ -4392,7 +4444,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.518</title>
+        <title>Trading Simulator V9.519</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4470,7 +4522,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.518
+            <span className="dot"/>Trading Simulator V9.519
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -9158,12 +9210,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         _applyEnd_(sfxC,  parseFloat((cumSinFx+floatToday_).toFixed(4)))
                         _applyEnd_(scmC,  parseFloat((cumSinComm+floatToday_+openComm).toFixed(4)))
                       }
-                      const eqDisp   = _clip(mainC)
-                      const sfxDisp  = _clip(sfxC)
-                      const scommDisp= _clip(scmC)
-                      const cwcDisp  = _clip(curveWithContribs)
-                      const bhRaw    = tlShowBH&&tlBHData?.length ? computeBuyAndHold(contributions, tlBHData) : null
-                      const bhDisp   = bhRaw ? _clip(bhRaw) : null
+                      const { eqDisp, sfxDisp, scommDisp, cwcDisp, bhDisp } = dashboardCurves
 
                       // Build invest chart data: timeline of capital invested vs cumulative profit
                       // Bug fix V5.60: include open trade entry events in the events array so their
