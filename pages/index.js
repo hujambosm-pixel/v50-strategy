@@ -1609,8 +1609,21 @@ export default function Home() {
       }
     }
     const bhRaw=tlShowBH&&tlBHData?.length?computeBuyAndHold(contributions,tlBHData):null
+    const _eqFinal=_clip(mainC)
+    // DIAG: validar la curva eqDisp contra los requisitos de lightweight-charts
+    ;(()=>{
+      const c=_eqFinal
+      const src=_dd?'buildPnlFloatCurve('+(_openMode?'openFloatCloses,floatOpenOnly':'floatCloses')+')':'equityCurve(simple)'
+      const badVal=c.filter(p=>p==null||p.value==null||!isFinite(p.value))
+      const badDate=c.filter(p=>!p||!p.date)
+      const dups=[],disorder=[]
+      for(let i=1;i<c.length;i++){const a=c[i-1]?.date,b=c[i]?.date;if(a===b)dups.push(b);else if(a&&b&&a>b)disorder.push(a+'>'+b)}
+      console.log('[eqDIAG] src=',src,'len=',c.length,'_openMode=',_openMode,'openFloatClosesKeys=',Object.keys(openFloatCloses).length)
+      console.log('[eqDIAG] first3=',JSON.stringify(c.slice(0,3)),'last3=',JSON.stringify(c.slice(-3)))
+      console.log('[eqDIAG] badVal=',badVal.length,badVal.slice(0,5),'badDate=',badDate.length,'dups=',dups.length,dups.slice(0,8),'disorder=',disorder.length,disorder.slice(0,8))
+    })()
     return {
-      eqDisp:_clip(mainC), sfxDisp:_clip(sfxC), scommDisp:_clip(scmC), cwcDisp:_clip(curveWithContribs),
+      eqDisp:_eqFinal, sfxDisp:_clip(sfxC), scommDisp:_clip(scmC), cwcDisp:_clip(curveWithContribs),
       bhDisp:bhRaw?_clip(bhRaw):null
     }
   },[tlTradesFiltered,tlLivePrices,contributions,openFloatCloses,floatCloses,tlPnlDaily,tlFilterYear,tlFilterMonth,tlShowBH,tlBHData])
@@ -4464,7 +4477,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.527</title>
+        <title>Trading Simulator V9.528</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4542,7 +4555,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.527
+            <span className="dot"/>Trading Simulator V9.528
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
