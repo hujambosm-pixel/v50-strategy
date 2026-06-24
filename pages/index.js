@@ -1615,8 +1615,42 @@ export default function Home() {
         _applyEnd_(curveWithContribs,_netContrib_+cumPnl+floatToday_)
       }
     }
+    // ── Invest chart data (Capital invertido vs Profit acum) ──
+    // Memoizado aquí (antes inline en el render → nueva ref cada render → TlInvestChart se recreaba
+    // en bucle → parpadeo + carreras "Object is disposed"/"Value is null"). investMap keyed por
+    // fecha → claves únicas → sin duplicados. floatToday_ ya calculado arriba.
+    const _invEvents=[]
+    closed.forEach(t=>{
+      const fxE=t.fx_entry>0?(t.fx_entry<1?1/t.fx_entry:t.fx_entry):1
+      const capitalEur=(parseFloat(t.shares||0)*parseFloat(t.entry_price||0))/fxE
+      const commIn=parseFloat(t.commission||0)/2
+      _invEvents.push({date:t.entry_date, capDelta:+capitalEur+commIn, pnlDelta:-commIn})
+      _invEvents.push({date:t.exit_date||today, capDelta:-(capitalEur+commIn), pnlDelta:parseFloat(t.pnl_eur||0)+commIn})
+    })
+    openTrades.forEach(t=>{
+      const fxE=t.fx_entry>0?(t.fx_entry<1?1/t.fx_entry:t.fx_entry):1
+      const capitalEur=(parseFloat(t.shares||0)*parseFloat(t.entry_price||0))/fxE
+      _invEvents.push({date:t.entry_date||today, capDelta:+capitalEur, pnlDelta:0})
+    })
+    _invEvents.sort((a,b)=>(a.date||'').localeCompare(b.date||''))
+    let _runCap=0,_runPnl=0
+    const investMap={}
+    _invEvents.forEach(ev=>{ _runCap+=ev.capDelta; _runPnl+=ev.pnlDelta; investMap[ev.date]={capital:Math.max(0,_runCap),profit:_runPnl} })
+    const _divAcum=contributions.filter(c=>c.type==='dividendo').reduce((s,c)=>s+parseFloat(c.amount||0),0)
+    investMap[today]={capital:Math.max(0,_runCap),profit:_runPnl+floatToday_+_divAcum}
+    const investDataRaw=Object.keys(investMap).sort().map(d=>({date:d,...investMap[d]}))
+    const investDisp=_clip(investDataRaw)
     const bhRaw=tlShowBH&&tlBHData?.length?computeBuyAndHold(contributions,tlBHData):null
     const _eqFinal=_clip(mainC)
+    // DIAG: validar curvas del gráfico inferior (investDisp.capital/profit, cwcDisp/Patrimonio)
+    ;(()=>{
+      const chk=(name,arr,key)=>{
+        const dups=[],disorder=[],bad=[]
+        for(let i=0;i<arr.length;i++){const p=arr[i];const v=key?p?.[key]:p?.value;if(p==null||v==null||!isFinite(v))bad.push(p);if(i>0){const a=arr[i-1]?.date,b=p?.date;if(a===b)dups.push(b);else if(a&&b&&a>b)disorder.push(a+'>'+b)}}
+        console.log('[invDIAG]',name,'len=',arr.length,'dups=',dups.length,dups.slice(0,6),'disorder=',disorder.length,'bad=',bad.length)
+      }
+      chk('invest.capital',investDisp,'capital'); chk('invest.profit',investDisp,'profit'); chk('patrimony(cwc)',_clip(curveWithContribs),'value')
+    })()
     // DIAG: validar la curva eqDisp contra los requisitos de lightweight-charts
     ;(()=>{
       const c=_eqFinal
@@ -1631,7 +1665,7 @@ export default function Home() {
     })()
     return {
       eqDisp:_eqFinal, sfxDisp:_clip(sfxC), scommDisp:_clip(scmC), cwcDisp:_clip(curveWithContribs),
-      bhDisp:bhRaw?_clip(bhRaw):null
+      investDisp, bhDisp:bhRaw?_clip(bhRaw):null
     }
   },[tlTradesFiltered,tlLivePrices,contributions,openFloatCloses,floatCloses,tlPnlDaily,tlFilterYear,tlFilterMonth,tlShowBH,tlBHData])
 
@@ -4484,7 +4518,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.529</title>
+        <title>Trading Simulator V9.530</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4562,7 +4596,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.529
+            <span className="dot"/>Trading Simulator V9.530
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -9251,45 +9285,11 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         _applyEnd_(sfxC,  parseFloat((cumSinFx+floatToday_).toFixed(4)))
                         _applyEnd_(scmC,  parseFloat((cumSinComm+floatToday_+openComm).toFixed(4)))
                       }
-                      const { eqDisp, sfxDisp, scommDisp, cwcDisp, bhDisp } = dashboardCurves
+                      const { eqDisp, sfxDisp, scommDisp, cwcDisp, investDisp, bhDisp } = dashboardCurves
 
-                      // Build invest chart data: timeline of capital invested vs cumulative profit
-                      // Bug fix V5.60: include open trade entry events in the events array so their
-                      // capital propagates correctly through the timeline up to today (instead of
-                      // patching investMap at entry_date which didn't propagate forward).
-                      const events = []
-                      closed.forEach(t=>{
-                        const fxE = t.fx_entry>0?(t.fx_entry<1?1/t.fx_entry:t.fx_entry):1
-                        const capitalEur = (parseFloat(t.shares||0)*parseFloat(t.entry_price||0))/fxE
-                        const commIn = parseFloat(t.commission||0)/2
-                        events.push({date:t.entry_date, capDelta:+capitalEur+commIn, pnlDelta:-commIn})
-                        // Exit removes full deployed amount (capitalEur+commIn) so commIn doesn't accumulate
-                        events.push({date:t.exit_date||today, capDelta:-(capitalEur+commIn), pnlDelta:parseFloat(t.pnl_eur||0)+commIn})
-                      })
-                      // Open trades: capital enters at entry_date and stays deployed (no exit event)
-                      openTrades.forEach(t=>{
-                        const fxE = t.fx_entry>0?(t.fx_entry<1?1/t.fx_entry:t.fx_entry):1
-                        const capitalEur = (parseFloat(t.shares||0)*parseFloat(t.entry_price||0))/fxE
-                        events.push({date:t.entry_date||today, capDelta:+capitalEur, pnlDelta:0})
-                      })
-                      events.sort((a,b)=>(a.date||'').localeCompare(b.date||''))
-                      let runCap=0, runPnl=0
-                      const investMap = {}
-                      events.forEach(ev=>{
-                        runCap += ev.capDelta; runPnl += ev.pnlDelta
-                        investMap[ev.date]={capital:Math.max(0,runCap), profit:runPnl}
-                      })
-                      // Ensure today point reflects current float P&L + dividends
-                      investMap[today]={capital:Math.max(0,runCap), profit:runPnl+floatToday_+contributions.filter(c=>c.type==='dividendo').reduce((s,c)=>s+parseFloat(c.amount||0),0)}
-                      const investDataRaw = Object.keys(investMap).sort().map(d=>({date:d,...investMap[d]}))
-                      // V5.79: clip invest chart data to active year/month filter (same logic as equity chart)
-                      const investData = (tlFilterYear||tlFilterMonth)
-                        ? investDataRaw.filter(p=>{
-                            if(tlFilterYear&&!p.date.startsWith(tlFilterYear)) return false
-                            if(tlFilterMonth&&p.date.slice(5,7)!==tlFilterMonth) return false
-                            return true
-                          })
-                        : investDataRaw
+                      // Invest chart data ahora memoizado en dashboardCurves (investDisp) — antes inline
+                      // aquí → nueva ref cada render → TlInvestChart recreado en bucle (parpadeo/null).
+                      const investData = investDisp
                       const _loadingFloat=!livePricesReady&&openTrades.length>0
                       const pnlReal=closed.reduce((s,t)=>s+parseFloat(t.pnl_eur||0),0)
                       const pnlFloat_=openTrades.reduce((s,t)=>{const v=liveFloatEur_(t);return s+(v!=null?v:0)},0)
