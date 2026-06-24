@@ -9,8 +9,7 @@ const CONTRIB_MARKER = {
   dividendo:  { color:'#aaff44', shape:'circle',     position:'belowBar', prefix:'D+' },
 }
 
-export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContribs, curveBH, showBH, onToggleBH, equityMode, onToggleMode, contributions, showWithContribs, onToggleContribs, curveFloat, floatLoading, showFloat, onToggleFloat, onFirstFloat, pnlDaily, pnlDailyLoading, onTogglePnlDaily, height, showTimeScale, syncRef, ready }) {
-  console.log('[EQ render] ready=',ready,'height=',height,'curve len=',curve?.length)
+export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContribs, curveBH, showBH, onToggleBH, equityMode, onToggleMode, contributions, showWithContribs, onToggleContribs, curveFloat, floatLoading, showFloat, onToggleFloat, onFirstFloat, pnlDaily, pnlDailyLoading, onTogglePnlDaily, height, showTimeScale, syncRef }) {
   const ref = useRef(null), chartRef = useRef(null), equityTooltipRef = useRef(null), lastTTStateRef = useRef(null)
   const mainSeriesRef = useRef(null)
   const [showSinFx, setShowSinFx] = useState(false)
@@ -39,10 +38,8 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
   }
 
   useEffect(()=>{
-    console.log('[EQ effect] run ready=',ready,'height=',height, new Date().toISOString())
-    if(!ready) return
     const ac = activeCurveRef.current
-    if(!ref.current||!ac?.length||ref.current.clientWidth<=0){console.log('[EQ effect] early-return ref=',!!ref.current,'ac=',ac?.length,'w=',ref.current?.clientWidth);return}
+    if(!ref.current||!ac?.length||ref.current.clientWidth<=0) return
     let cancelled = false
     import('lightweight-charts').then(({createChart,CrosshairMode,LineStyle})=>{
       if(cancelled) return
@@ -227,14 +224,13 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
       }
       const ro = new ResizeObserver(()=>{
         if(!ref.current||!chartRef.current) return
-        console.log('[EQ RO] resize w=',ref.current.clientWidth,'h=',ref.current.clientHeight,'heightProp=',height)
         try{chart.applyOptions({width:ref.current.clientWidth,height:height||ref.current.clientHeight||200})}catch(_){}
       })
       ro.observe(ref.current)
       return ()=>ro.disconnect()
     })
-    return ()=>{ console.log('[EQ cleanup] dispose',new Date().toISOString()); cancelled=true; if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};try{chartRef.current.remove()}catch(_){};chartRef.current=null;mainSeriesRef.current=null} }
-  },[ready, curve, curveWithContribs, curveSinFx, curveSinComm, showSinFx, showSinComm, showWithContribs, contributions, showAportacion, showRetirada, showDividendo, showBH, curveBH, isEquityMode, showDD])
+    return ()=>{ cancelled=true; if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};try{chartRef.current.remove()}catch(_){};chartRef.current=null;mainSeriesRef.current=null} }
+  },[curve, curveWithContribs, curveSinFx, curveSinComm, showSinFx, showSinComm, showWithContribs, contributions, showAportacion, showRetirada, showDividendo, showBH, curveBH, isEquityMode, showDD])
 
   // Secondary effect: update main series data only when activeCurve changes (e.g. float toggle)
   // This avoids full chart recreation and prevents "Object is disposed" errors
@@ -345,14 +341,14 @@ export function TlEquityChart({ curve, curveSinFx, curveSinComm, curveWithContri
 }
 
 // ── Capital Invertido vs Profit acumulado (area + line) ──
-export function TlInvestChart({ investData, syncRef, patrimonyCurve, compact, height, ready }) {
+export function TlInvestChart({ investData, syncRef, patrimonyCurve, compact, height }) {
   // investData: [{date, capital, profit}]  sorted by date
   // compact=true: no header/legend, chart fills container height (used in Dashboard mini view)
   const ref = useRef(null), chartRef = useRef(null), investTooltipRef = useRef(null)
   const [showPatrimony, setShowPatrimony] = useState(false)
 
   useEffect(()=>{
-    if(!ready||!ref.current||!investData?.length||ref.current.clientWidth<=0) return
+    if(!ref.current||!investData?.length||ref.current.clientWidth<=0) return
     import('lightweight-charts').then(({createChart,CrosshairMode,LineStyle})=>{
       if(chartRef.current){chartRef.current.remove();chartRef.current=null}
       // compact mode: inherit container height; standalone mode: use clientHeight or default 200
@@ -460,7 +456,7 @@ export function TlInvestChart({ investData, syncRef, patrimonyCurve, compact, he
       return ()=>ro.disconnect()
     })
     return ()=>{ if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};try{chartRef.current.remove()}catch(_){};chartRef.current=null} }
-  },[ready, investData, showPatrimony, patrimonyCurve])
+  },[investData, showPatrimony, patrimonyCurve])
 
   const btnStyle = (active, color) => ({
     display:'flex',alignItems:'center',gap:4,

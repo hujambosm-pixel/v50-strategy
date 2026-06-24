@@ -1311,7 +1311,7 @@ export default function Home() {
   useEffect(()=>{
     const {openPositions} = computeFifo(tlTrades, {})
     const symbols = [...new Set(openPositions.map(p=>p.symbol).filter(Boolean))]
-    if(!symbols.length){ setTlLivePrices({}); setTlLiveFx({}); console.log('[livePrices] setReady true (no symbols)'); setLivePricesReady(true); return }
+    if(!symbols.length){ setTlLivePrices({}); setTlLiveFx({}); setLivePricesReady(true); return }
     const cfg={emaR:10,emaL:11,years:1,capitalIni:1000,tipoStop:'none',atrPeriod:14,atrMult:1,sinPerdidas:false,reentry:false,tipoFiltro:'none',sp500EmaR:10,sp500EmaL:11}
     // Live prices — sequential with 300ms gap and 1 retry on failure
     setLivePricesReady(false)
@@ -1334,7 +1334,6 @@ export default function Home() {
       const prices={}
       fetchResults.forEach(({sym,price,unavailable})=>{prices[sym]={price,unavailable:!!unavailable}})
       setTlLivePrices(prices)
-      console.log('[livePrices] setReady true')
       setLivePricesReady(true)
     })()
     // Live FX for each unique non-EUR currency among open positions
@@ -4465,7 +4464,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.526</title>
+        <title>Trading Simulator V9.527</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4543,7 +4542,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.526
+            <span className="dot"/>Trading Simulator V9.527
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -9271,7 +9270,6 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           })
                         : investDataRaw
                       const _loadingFloat=!livePricesReady&&openTrades.length>0
-                      console.log('[render] _loadingFloat=',_loadingFloat,'tlEquityHeight=',tlEquityHeight,'ready prop=',!_loadingFloat,'livePricesReady=',livePricesReady,'openTrades=',openTrades.length)
                       const pnlReal=closed.reduce((s,t)=>s+parseFloat(t.pnl_eur||0),0)
                       const pnlFloat_=openTrades.reduce((s,t)=>{const v=liveFloatEur_(t);return s+(v!=null?v:0)},0)
                       const hasUnavailablePrices_=Object.values(tlLivePrices).some(v=>v?.unavailable)
@@ -9407,9 +9405,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                             <div style={{flex:2.5,borderRight:'1px solid var(--border)',display:'flex',flexDirection:'column',overflow:'hidden',position:'relative',minWidth:0}}>
                               {/* Subcol equity */}
                               <div style={{flex:tlEquityFlex,display:'flex',flexDirection:'column',overflow:'hidden',position:'relative',minHeight:0}}>
-                                {_loadingFloat&&<div style={{position:'absolute',inset:0,zIndex:5,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:MONO,fontSize:10,color:'#3d5a7a',background:'var(--bg)',pointerEvents:'none'}}>⟳ Cargando precios…</div>}
                                 {eqDisp.length>1
-                                  ?<div ref={tlEquityContainerRef} style={{flex:1,minHeight:0,visibility:_loadingFloat?'hidden':'visible'}}><TlEquityChart curve={eqDisp} curveSinFx={sfxDisp.length>1?sfxDisp:null} curveSinComm={scommDisp.length>1?scommDisp:null} curveWithContribs={cwcDisp.length>1?cwcDisp:null} curveBH={bhDisp?.length>1?bhDisp:null} showBH={tlShowBH} onToggleBH={async()=>{const next=!tlShowBH;setTlShowBH(next);if(next&&!tlBHData){const first=contributions.filter(c=>c.type==='aportacion').sort((a,b)=>(a.date||'').localeCompare(b.date||''))[0]?.date;const r=await fetch('/api/sp500history'+(first?'?from='+first:''));if(r.ok){const{history}=await r.json();setTlBHData(history||[])}}}} equityMode={tlEquityMode} onToggleMode={()=>setTlEquityMode(m=>m==='pnl'?'equity':'pnl')} contributions={contributions} showWithContribs={showWithContribs} onToggleContribs={()=>setShowWithContribs(v=>!v)} curveFloat={floatCurveDisp.length>1?floatCurveDisp:null} floatLoading={floatLoading} showFloat={tlShowFloat} onToggleFloat={()=>setTlShowFloat(v=>!v)} onFirstFloat={triggerFloatFetch} pnlDaily={tlPnlDaily} pnlDailyLoading={floatLoading} onTogglePnlDaily={()=>{const n=!tlPnlDaily;setTlPnlDaily(n);if(n)triggerFloatFetch()}} height={tlEquityHeight} showTimeScale={false} syncRef={tlDashSyncRef} ready={!_loadingFloat}/></div>
+                                  ?<div ref={tlEquityContainerRef} style={{flex:1,minHeight:0}}><TlEquityChart curve={eqDisp} curveSinFx={sfxDisp.length>1?sfxDisp:null} curveSinComm={scommDisp.length>1?scommDisp:null} curveWithContribs={cwcDisp.length>1?cwcDisp:null} curveBH={bhDisp?.length>1?bhDisp:null} showBH={tlShowBH} onToggleBH={async()=>{const next=!tlShowBH;setTlShowBH(next);if(next&&!tlBHData){const first=contributions.filter(c=>c.type==='aportacion').sort((a,b)=>(a.date||'').localeCompare(b.date||''))[0]?.date;const r=await fetch('/api/sp500history'+(first?'?from='+first:''));if(r.ok){const{history}=await r.json();setTlBHData(history||[])}}}} equityMode={tlEquityMode} onToggleMode={()=>setTlEquityMode(m=>m==='pnl'?'equity':'pnl')} contributions={contributions} showWithContribs={showWithContribs} onToggleContribs={()=>setShowWithContribs(v=>!v)} curveFloat={floatCurveDisp.length>1?floatCurveDisp:null} floatLoading={floatLoading} showFloat={tlShowFloat} onToggleFloat={()=>setTlShowFloat(v=>!v)} onFirstFloat={triggerFloatFetch} pnlDaily={tlPnlDaily} pnlDailyLoading={floatLoading} onTogglePnlDaily={()=>{const n=!tlPnlDaily;setTlPnlDaily(n);if(n)triggerFloatFetch()}} height={tlEquityHeight} showTimeScale={false} syncRef={tlDashSyncRef}/></div>
                                   :<div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:MONO,fontSize:10,color:'#3d5a7a'}}>Sin datos equity</div>}
                                 <div onClick={()=>{document.getElementById('tlDetailEquity')?.scrollIntoView({behavior:'smooth'})}} title="Ir al gráfico detallado"
                                   style={{position:'absolute',top:6,right:6,zIndex:10,cursor:'pointer',color:'#3d5a7a',fontSize:13,lineHeight:1,background:'rgba(13,21,32,0.75)',borderRadius:3,padding:'2px 5px',border:'1px solid #1a2d45'}}
@@ -9441,10 +9438,9 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               {/* Subcol invest */}
                               <div style={{flex:2-tlEquityFlex,position:'relative',display:'flex',flexDirection:'column',overflow:'hidden',minHeight:0}}>
                                 <div ref={tlInvestContainerRef} style={{flex:1,minHeight:0,height:'100%',position:'relative'}}>
-                                  {_loadingFloat&&<div style={{position:'absolute',inset:0,zIndex:5,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:MONO,fontSize:9,color:'#3d5a7a',background:'var(--bg)',pointerEvents:'none'}}>⟳ Cargando precios…</div>}
-                                  <div style={{height:'100%',visibility:_loadingFloat?'hidden':'visible'}}>
+                                  <div style={{height:'100%'}}>
                                     {investData.length>1
-                                      ?<TlInvestChart investData={investData} syncRef={tlDashSyncRef} patrimonyCurve={cwcDisp.length>1?cwcDisp:null} compact={false} height={tlInvestHeight} ready={!_loadingFloat}/>
+                                      ?<TlInvestChart investData={investData} syncRef={tlDashSyncRef} patrimonyCurve={cwcDisp.length>1?cwcDisp:null} compact={false} height={tlInvestHeight}/>
                                       :<div style={{height:'100%',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:MONO,fontSize:9,color:'#3d5a7a'}}>—</div>}
                                   </div>
                                 </div>
@@ -9663,8 +9659,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           {/* GRÁFICOS DETALLADOS (scroll) */}
                           <div style={{flexShrink:0,overflowY:'auto'}}>
                             <div style={{padding:'5px 14px 3px',fontFamily:MONO,fontSize:11,color:'#e2e8f0',letterSpacing:'0.1em',textTransform:'uppercase',borderBottom:'1px solid var(--border)'}}>Gráficos detallados</div>
-                            {eqDisp.length>1&&<div id="tlDetailEquity" style={{height:'calc(100vh - 30px)',position:'relative',display:'flex',flexDirection:'column'}}><TlEquityChart curve={eqDisp} curveSinFx={sfxDisp.length>1?sfxDisp:null} curveSinComm={scommDisp.length>1?scommDisp:null} curveWithContribs={cwcDisp.length>1?cwcDisp:null} curveBH={bhDisp?.length>1?bhDisp:null} showBH={tlShowBH} onToggleBH={async()=>{const next=!tlShowBH;setTlShowBH(next);if(next&&!tlBHData){const first=contributions.filter(c=>c.type==='aportacion').sort((a,b)=>(a.date||'').localeCompare(b.date||''))[0]?.date;const r=await fetch('/api/sp500history'+(first?'?from='+first:''));if(r.ok){const{history}=await r.json();setTlBHData(history||[])}}}} equityMode={tlEquityMode} onToggleMode={()=>setTlEquityMode(m=>m==='pnl'?'equity':'pnl')} contributions={contributions} showWithContribs={showWithContribs} onToggleContribs={()=>setShowWithContribs(v=>!v)} curveFloat={floatCurveDisp.length>1?floatCurveDisp:null} floatLoading={floatLoading} showFloat={tlShowFloat} onToggleFloat={()=>setTlShowFloat(v=>!v)} onFirstFloat={triggerFloatFetch} height={typeof window!=='undefined'?window.innerHeight-30:700} showTimeScale={true} syncRef={tlDashSyncRef} ready={!_loadingFloat}/></div>}
-                            {investData.length>1&&<div id="tlDetailInvest" style={{height:'calc(100vh - 30px)',position:'relative',display:'flex',flexDirection:'column'}}><TlInvestChart investData={investData} syncRef={tlDashSyncRef} patrimonyCurve={cwcDisp.length>1?cwcDisp:null} height={typeof window!=='undefined'?window.innerHeight-30:700} compact={false} ready={!_loadingFloat}/></div>}
+                            {eqDisp.length>1&&<div id="tlDetailEquity" style={{height:'calc(100vh - 30px)',position:'relative',display:'flex',flexDirection:'column'}}><TlEquityChart curve={eqDisp} curveSinFx={sfxDisp.length>1?sfxDisp:null} curveSinComm={scommDisp.length>1?scommDisp:null} curveWithContribs={cwcDisp.length>1?cwcDisp:null} curveBH={bhDisp?.length>1?bhDisp:null} showBH={tlShowBH} onToggleBH={async()=>{const next=!tlShowBH;setTlShowBH(next);if(next&&!tlBHData){const first=contributions.filter(c=>c.type==='aportacion').sort((a,b)=>(a.date||'').localeCompare(b.date||''))[0]?.date;const r=await fetch('/api/sp500history'+(first?'?from='+first:''));if(r.ok){const{history}=await r.json();setTlBHData(history||[])}}}} equityMode={tlEquityMode} onToggleMode={()=>setTlEquityMode(m=>m==='pnl'?'equity':'pnl')} contributions={contributions} showWithContribs={showWithContribs} onToggleContribs={()=>setShowWithContribs(v=>!v)} curveFloat={floatCurveDisp.length>1?floatCurveDisp:null} floatLoading={floatLoading} showFloat={tlShowFloat} onToggleFloat={()=>setTlShowFloat(v=>!v)} onFirstFloat={triggerFloatFetch} height={typeof window!=='undefined'?window.innerHeight-30:700} showTimeScale={true} syncRef={tlDashSyncRef}/></div>}
+                            {investData.length>1&&<div id="tlDetailInvest" style={{height:'calc(100vh - 30px)',position:'relative',display:'flex',flexDirection:'column'}}><TlInvestChart investData={investData} syncRef={tlDashSyncRef} patrimonyCurve={cwcDisp.length>1?cwcDisp:null} height={typeof window!=='undefined'?window.innerHeight-30:700} compact={false}/></div>}
                             {(closed.length>0||openTrades.length>0)&&(
                               <div id="tlDetailPnl" style={{height:'calc(100vh - 30px)',padding:'12px 16px 8px',borderTop:'1px solid var(--border)',display:'flex',flexDirection:'column'}}>
                                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8,flexShrink:0}}>
