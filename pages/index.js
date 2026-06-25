@@ -4497,7 +4497,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.533</title>
+        <title>Trading Simulator V9.534</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4575,7 +4575,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.533
+            <span className="dot"/>Trading Simulator V9.534
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -9265,6 +9265,16 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         _applyEnd_(scmC,  parseFloat((cumSinComm+floatToday_+openComm).toFixed(4)))
                       }
                       const { eqDisp, sfxDisp, scommDisp, cwcDisp, investDisp, bhDisp } = dashboardCurves
+                      // Modo "Meses" del minigráfico P&L: delta del equity flotante (eqDisp) entre fin de mes y fin del mes anterior.
+                      // eqDisp ya está ordenado ascendente y refleja el toggle Flotante día a día (Nivel 1/2) + filtros año/mes.
+                      const pnlMonthly=(()=>{
+                        if(!eqDisp||eqDisp.length<1) return []
+                        const lastByMonth=new Map()
+                        for(const p of eqDisp){ if(p&&p.date) lastByMonth.set(p.date.slice(0,7),p.value) }
+                        const months=[...lastByMonth.keys()].sort()
+                        let prev=eqDisp[0].value
+                        return months.map(m=>{ const v=lastByMonth.get(m); const delta=v-prev; prev=v; return {month:m,delta} })
+                      })()
 
                       // Invest chart data ahora memoizado en dashboardCurves (investDisp) — antes inline
                       // aquí → nueva ref cada render → TlInvestChart recreado en bucle (parpadeo/null).
@@ -9343,7 +9353,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       const bot3_=openSorted_.length>3?[...openSorted_].reverse().slice(0,Math.min(3,openSorted_.length-3)):[]
                       const ps_={fontFamily:MONO,fontSize:10,padding:'2px 8px',border:'1px solid var(--border)',borderRadius:10,background:'var(--bg3)',cursor:'pointer',outline:'none',color:'#4a6a88',maxWidth:110}
                       return (
-                        <div id="tlDashOuter" data-dash-outer="1" style={{display:'flex',flexDirection:'column',background:'var(--bg)',flex:1,minHeight:0,overflow:'hidden',alignItems:'stretch'}}>
+                        <div id="tlDashOuter" data-dash-outer="1" style={{display:'flex',flexDirection:'column',background:'var(--bg)',flex:1,minHeight:0,overflowY:'auto',overflowX:'hidden',alignItems:'stretch'}}>
                           {/* BARRA SUPERIOR — always visible even when noData */}
                           <div style={{display:'flex',alignItems:'center',gap:5,padding:'6px 12px',borderBottom:'1px solid var(--border)',background:'var(--bg2)',flexShrink:0,flexWrap:'nowrap',overflowX:'auto'}}>
                             <span style={{fontFamily:MONO,fontSize:11,fontWeight:700,color:'var(--text)',letterSpacing:'0.08em',textTransform:'uppercase',marginRight:8,flexShrink:0}}>Dashboard</span>
@@ -9378,7 +9388,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           {/* Thin banner when no data — layout stays fully visible */}
                           {noData&&<div style={{padding:'4px 12px',background:'rgba(255,77,109,0.07)',borderBottom:'1px solid rgba(255,77,109,0.18)',fontFamily:MONO,fontSize:9,color:'#ff6b85',flexShrink:0,letterSpacing:'0.05em'}}>Sin resultados para este filtro — mostrando métricas en cero</div>}
                           {/* FILA 1 — 10 métricas */}
-                          <div style={{display:'flex',flex:1,minHeight:0,overflow:'hidden',alignItems:'stretch',maxHeight:'calc(100vh - 110px)'}}>
+                          <div style={{display:'flex',height:'calc(100vh - 88px)',flexShrink:0,minHeight:0,overflow:'hidden',alignItems:'stretch'}}>
                           <div style={{flex:1,display:'flex',flexDirection:'column',minWidth:0,overflow:'hidden'}}>
                           <div style={{display:'flex',borderBottom:'1px solid var(--border)',flexShrink:0,overflowX:'auto'}}>
                             {[
@@ -9469,12 +9479,12 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               <div style={{flex:1,overflow:'hidden',position:'relative',padding:'6px 6px 4px',display:'flex',flexDirection:'column'}}>
                                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4,flexShrink:0,paddingRight:22}}>
                                   <span style={{fontFamily:MONO,fontSize:11,color:'#e2e8f0',letterSpacing:'0.08em',textTransform:'uppercase'}}>
-                                    {tlPnlView==='operacion'?'P&L por operación':'P&L por estrategia'}
+                                    {tlPnlView==='operacion'?'P&L por operación':tlPnlView==='estrategia'?'P&L por estrategia':'P&L mensual'}
                                   </span>
                                   <div style={{display:'flex',gap:3}}>
-                                    {['operacion','estrategia'].map(v=>(
+                                    {['operacion','estrategia','meses'].map(v=>(
                                       <button key={v} onClick={()=>setTlPnlView(v)} style={{fontFamily:MONO,fontSize:8,padding:'2px 6px',borderRadius:3,border:'1px solid',cursor:'pointer',borderColor:tlPnlView===v?'#00d4ff':'#1a2d45',background:tlPnlView===v?'rgba(0,212,255,0.1)':'transparent',color:tlPnlView===v?'#00d4ff':'#3d5a7a'}}>
-                                        {v==='operacion'?'Op.':'Estrat.'}
+                                        {v==='operacion'?'Op.':v==='estrategia'?'Estrat.':'Meses'}
                                       </button>
                                     ))}
                                   </div>
@@ -9522,7 +9532,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                       </div>
                                     )
                                   })()
-                                ):(
+                                ):tlPnlView==='estrategia'?(
                                   (()=>{
                                     const data=tlPnlByStrategy
                                     const mx=Math.max(...data.map(d=>Math.abs(d.pnl)),1)
@@ -9551,6 +9561,38 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                           {[mx,mx*0.5,0,-mx*0.5,-mx].map((v,i)=>(
                                             <span key={i} style={{lineHeight:1}}>{(v>0?'+':'')}{'€'+Math.round(v)}</span>
                                           ))}
+                                        </div>
+                                      </div>
+                                    )
+                                  })()
+                                ):(
+                                  (()=>{
+                                    const data=pnlMonthly
+                                    if(!data.length) return <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:MONO,fontSize:9,color:'#3d5a7a'}}>Sin datos mensuales</div>
+                                    const maxPos=Math.max(...data.map(d=>Math.max(d.delta,0)),0.01)
+                                    const maxNeg=Math.max(...data.map(d=>Math.max(-d.delta,0)),0.01)
+                                    const totalRange=maxPos+maxNeg
+                                    const zeroPct=(maxPos/totalRange)*100
+                                    return (
+                                      <div style={{display:'flex',flex:1,minHeight:0,gap:0}}>
+                                        <div style={{flex:1,position:'relative',minWidth:0}}>
+                                          <div style={{position:'absolute',left:0,right:0,top:zeroPct+'%',height:1,background:'rgba(255,255,255,0.15)',pointerEvents:'none'}}/>
+                                          <div style={{position:'absolute',left:0,right:0,top:(zeroPct/2)+'%',height:1,background:'rgba(255,255,255,0.04)',pointerEvents:'none'}}/>
+                                          <div style={{position:'absolute',left:0,right:0,top:(zeroPct+(100-zeroPct)/2)+'%',height:1,background:'rgba(255,255,255,0.04)',pointerEvents:'none'}}/>
+                                          {data.map((d,i)=>{
+                                            const isW=d.delta>=0
+                                            const barW=Math.max(0.3,(80/data.length))
+                                            const barL=i/data.length*100
+                                            const pct=isW?Math.max(0.5,(d.delta/maxPos)*zeroPct):Math.max(0.5,(Math.abs(d.delta)/maxNeg)*(100-zeroPct))
+                                            return <div key={i}
+                                              title={d.month+'  '+(isW?'+':'−')+'€'+Math.abs(Math.round(d.delta))}
+                                              style={{position:'absolute',left:barL+'%',width:barW+'%',height:pct+'%',top:isW?(zeroPct-pct)+'%':zeroPct+'%',background:isW?'#00e5a0':'#ff4d6d',borderRadius:isW?'2px 2px 0 0':'0 0 2px 2px',minWidth:2}}/>
+                                          })}
+                                        </div>
+                                        <div style={{position:'relative',width:42,flexShrink:0,paddingLeft:4,fontFamily:MONO,fontSize:8,color:'#3d5a7a'}}>
+                                          <span style={{position:'absolute',top:'0%',left:4,lineHeight:1}}>+€{Math.round(maxPos)}</span>
+                                          <span style={{position:'absolute',top:zeroPct+'%',left:4,lineHeight:1,color:'rgba(255,255,255,0.25)'}}>€0</span>
+                                          <span style={{position:'absolute',bottom:'0%',left:4,lineHeight:1}}>-€{Math.round(maxNeg)}</span>
                                         </div>
                                       </div>
                                     )
@@ -9665,12 +9707,12 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               <div id="tlDetailPnl" style={{height:'calc(100vh - 30px)',padding:'12px 16px 8px',borderTop:'1px solid var(--border)',display:'flex',flexDirection:'column'}}>
                                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8,flexShrink:0}}>
                                   <span style={{fontFamily:MONO,fontSize:11,color:'#e2e8f0',letterSpacing:'0.08em',textTransform:'uppercase'}}>
-                                    {tlPnlView==='operacion'?'P&L por operación':'P&L por estrategia'}
+                                    {tlPnlView==='operacion'?'P&L por operación':tlPnlView==='estrategia'?'P&L por estrategia':'P&L mensual'}
                                   </span>
                                   <div style={{display:'flex',gap:3}}>
-                                    {['operacion','estrategia'].map(v=>(
+                                    {['operacion','estrategia','meses'].map(v=>(
                                       <button key={v} onClick={()=>setTlPnlView(v)} style={{fontFamily:MONO,fontSize:8,padding:'2px 6px',borderRadius:3,border:'1px solid',cursor:'pointer',borderColor:tlPnlView===v?'#00d4ff':'#1a2d45',background:tlPnlView===v?'rgba(0,212,255,0.1)':'transparent',color:tlPnlView===v?'#00d4ff':'#3d5a7a'}}>
-                                        {v==='operacion'?'Op.':'Estrat.'}
+                                        {v==='operacion'?'Op.':v==='estrategia'?'Estrat.':'Meses'}
                                       </button>
                                     ))}
                                   </div>
@@ -9708,7 +9750,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                       </div>
                                     )
                                   })()
-                                ):(
+                                ):tlPnlView==='estrategia'?(
                                   (()=>{
                                     const data=tlPnlByStrategy
                                     const mx=Math.max(...data.map(d=>Math.abs(d.pnl)),1)
@@ -9734,6 +9776,42 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                               <Fragment key={i}>
                                                 <div style={{position:'absolute',left:barL+'%',width:barW+'%',...(isW?{bottom:`calc(50% + ${pct}% + 2px)`}:{top:`calc(50% + ${pct}% + 2px)`}),textAlign:'center',fontFamily:MONO,fontSize:7,color:'#f59e0b',overflow:'hidden',whiteSpace:'nowrap',pointerEvents:'none',lineHeight:1}}>{d.name.split(' ')[0]}</div>
                                                 <div title={d.name+' ('+d.count+' ops) '+(isW?'+':'')+'€'+Math.round(d.pnl)} style={{position:'absolute',left:barL+'%',width:barW+'%',height:pct+'%',bottom:isW?'50%':undefined,top:isW?undefined:'50%',background:isW?'rgba(34,197,94,0.75)':'rgba(239,68,68,0.75)',borderRadius:isW?'2px 2px 0 0':'0 0 2px 2px',cursor:'default'}}/>
+                                              </Fragment>
+                                            )
+                                          })}
+                                        </div>
+                                      </div>
+                                    )
+                                  })()
+                                ):(
+                                  (()=>{
+                                    const data=pnlMonthly
+                                    if(!data.length) return <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:MONO,fontSize:10,color:'#3d5a7a'}}>Sin datos mensuales</div>
+                                    const maxPos=Math.max(...data.map(d=>Math.max(d.delta,0)),0.01)
+                                    const maxNeg=Math.max(...data.map(d=>Math.max(-d.delta,0)),0.01)
+                                    const totalRange=maxPos+maxNeg
+                                    const zeroPct=(maxPos/totalRange)*100
+                                    const levels=[maxPos,maxPos*0.5,0,-maxNeg*0.5,-maxNeg]
+                                    return (
+                                      <div style={{display:'flex',flex:1,minHeight:0,gap:0}}>
+                                        <div style={{display:'flex',flexDirection:'column',justifyContent:'space-between',width:58,flexShrink:0,paddingRight:6,paddingBottom:2,fontFamily:MONO,fontSize:9,color:'#3d5a7a',textAlign:'right'}}>
+                                          {levels.map((v,i)=>(
+                                            <span key={i} style={{lineHeight:1}}>{(v>=0?'+':'')}{'€'+Math.round(v)}</span>
+                                          ))}
+                                        </div>
+                                        <div style={{flex:1,position:'relative',minWidth:0}}>
+                                          <div style={{position:'absolute',left:0,right:0,top:zeroPct+'%',height:1,background:'rgba(255,255,255,0.15)',pointerEvents:'none'}}/>
+                                          <div style={{position:'absolute',left:0,right:0,top:(zeroPct/2)+'%',height:1,background:'rgba(255,255,255,0.04)',pointerEvents:'none'}}/>
+                                          <div style={{position:'absolute',left:0,right:0,top:(zeroPct+(100-zeroPct)/2)+'%',height:1,background:'rgba(255,255,255,0.04)',pointerEvents:'none'}}/>
+                                          {data.map((d,i)=>{
+                                            const isW=d.delta>=0
+                                            const barW=Math.max(0.3,80/data.length)
+                                            const barL=i/data.length*100
+                                            const pct=isW?Math.max(0.5,(d.delta/maxPos)*zeroPct):Math.max(0.5,(Math.abs(d.delta)/maxNeg)*(100-zeroPct))
+                                            return (
+                                              <Fragment key={i}>
+                                                <div style={{position:'absolute',left:barL+'%',width:barW+'%',...(isW?{top:`calc(${zeroPct-pct}% - 9px)`}:{top:`calc(${zeroPct+pct}% + 2px)`}),textAlign:'center',fontFamily:MONO,fontSize:7,color:'#7a9bc0',overflow:'hidden',whiteSpace:'nowrap',pointerEvents:'none',lineHeight:1}}>{d.month.slice(2)}</div>
+                                                <div title={d.month+'  '+(isW?'+':'−')+'€'+Math.abs(Math.round(d.delta))} style={{position:'absolute',left:barL+'%',width:barW+'%',height:pct+'%',top:isW?(zeroPct-pct)+'%':zeroPct+'%',background:isW?'#00e5a0':'#ff4d6d',borderRadius:isW?'2px 2px 0 0':'0 0 2px 2px',cursor:'default',minWidth:2}}/>
                                               </Fragment>
                                             )
                                           })}
