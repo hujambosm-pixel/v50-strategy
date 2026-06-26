@@ -4497,7 +4497,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.534</title>
+        <title>Trading Simulator V9.535</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4575,7 +4575,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.534
+            <span className="dot"/>Trading Simulator V9.535
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -9323,7 +9323,9 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       const capitalNeto=contributions.reduce((s,c)=>c.type==='aportacion'?s+parseFloat(c.amount||0):c.type==='retirada'?s-parseFloat(c.amount||0):s,0)
                       const dividendosAcum=contributions.filter(c=>c.type==='dividendo').reduce((s,c)=>s+parseFloat(c.amount||0),0)
                       const patrimonioActual=hasContribs?capitalNeto+dividendosAcum+pnlTotalAll:null
-                      const capitalDisp=hasContribs&&patrimonioActual!=null?patrimonioActual-capitalEmpAll:null
+                      // Cash real: independiente de precios live. NO incluye pnlFloatAll (flotante de abiertas).
+                      // = contribuciones netas + dividendos + realizado − coste inmovilizado en abiertas.
+                      const capitalDisp=hasContribs?capitalNeto+dividendosAcum+pnlRealAll-capitalEmpAll:null
                       const capitalBase=showWithContribs&&netContrib>0?netContrib:peakCapBase
                       // Float equity curve — daily P&L including open positions
                       const floatCurveRaw=Object.keys(floatCloses).length>0
@@ -10080,7 +10082,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                     const capitalNeto=contributions.reduce((s,c)=>c.type==='aportacion'?s+parseFloat(c.amount||0):c.type==='retirada'?s-parseFloat(c.amount||0):s,0)
                     const dividendosAcum=contributions.filter(c=>c.type==='dividendo').reduce((s,c)=>s+parseFloat(c.amount||0),0)
                     const patrimonioActual=hasContribs?capitalNeto+dividendosAcum+pnlTotalAll:null
-                    const capitalDisp=hasContribs&&patrimonioActual!=null?patrimonioActual-capitalEmpAll:null
+                    // Cash real: independiente de precios live. NO incluye pnlFloatAll (flotante de abiertas).
+                    const capitalDisp=hasContribs?capitalNeto+dividendosAcum+pnlRealAll-capitalEmpAll:null
                     const capitalBase=showWithContribs&&netContrib>0?netContrib:peakCapBase
                     const cagrLabel=showWithContribs&&netContrib>0?'global':'op.'
                     const cagrReal=aniosPeriodo&&pnlTotal!==0?
