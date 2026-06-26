@@ -1136,6 +1136,7 @@ export default function Home() {
   const [tlFormOpen,setTlFormOpen]=useState(false)
   const [tlFilterStrat,setTlFilterStrat]=useState('')
   const [tlDashMarkets,setTlDashMarkets]=useState([])         // [{symbol,name,price,ema10,trend}]
+  const [tlRefreshing,setTlRefreshing]=useState(false)        // botón ↻ refresco manual del Dashboard
   const tlEquityContainerRef=useRef(null)
   const [tlEquityHeight,setTlEquityHeight]=useState(300)
   const tlInvestContainerRef=useRef(null)
@@ -3681,6 +3682,23 @@ export default function Home() {
   useEffect(()=>{ if(session?.user?.id) loadTrades() },[loadTrades,session?.user?.id]) // eslint-disable-line
   useEffect(()=>{ if(sidePanel==='tradelog') loadTrades() },[sidePanel,loadTrades])
 
+  // ── Refresco manual del Dashboard (F5 lógico en caliente, sin recargar la página) ──
+  // Re-dispara TODAS las cargas conservando filtros, scroll y toggles. Resetea los refs one-shot
+  // (openFloatFetched/floatFetched) y vacía tlDashMarkets para sortear los guards de carga.
+  const handleDashboardRefresh=useCallback(async()=>{
+    setTlRefreshing(true)
+    try{
+      setTlDashMarkets([])                                   // A: re-dispara Mercados (deps .length)
+      openFloatFetched.current=false                         // C: permite re-fetch Nivel 1
+      if(tlPnlDaily) floatFetched.current=false              // G: permite re-fetch Nivel 2 (si activo)
+      // E: recargar contribuciones + dividendos
+      apiFetch('/api/tradelog?action=contributions').then(r=>r.json())
+        .then(d=>{ if(Array.isArray(d)) setContributions(d) }).catch(()=>{})
+      await loadTrades()                                     // F: setTlTrades → cascada D (live) + C (openFloat)
+      if(tlPnlDaily) triggerFloatFetch()                     // G
+    } finally { setTlRefreshing(false) }
+  },[loadTrades,tlPnlDaily,triggerFloatFetch])
+
   // ── Risk: Escape cancela capture mode o limpia todo ──
   useEffect(()=>{
     const handler=e=>{
@@ -4497,7 +4515,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.535</title>
+        <title>Trading Simulator V9.536</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4575,7 +4593,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.535
+            <span className="dot"/>Trading Simulator V9.536
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -9386,6 +9404,10 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               style={{fontFamily:MONO,fontSize:9,padding:'2px 8px',borderRadius:10,border:'1px solid rgba(255,77,109,0.4)',background:'rgba(255,77,109,0.08)',color:'#ff4d6d',cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>
                               ✕ Limpiar
                             </button>}
+                            <button onClick={handleDashboardRefresh} disabled={tlRefreshing} title="Refrescar datos del Dashboard (Mercados, precios, flotantes, trades)"
+                              style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:4,fontFamily:MONO,fontSize:11,padding:'2px 9px',borderRadius:10,border:'1px solid rgba(0,212,255,0.4)',background:'rgba(0,212,255,0.08)',color:'#00d4ff',cursor:tlRefreshing?'wait':'pointer',whiteSpace:'nowrap',flexShrink:0,opacity:tlRefreshing?0.6:1}}>
+                              <span style={{display:'inline-block',animation:tlRefreshing?'spin 0.8s linear infinite':'none',lineHeight:1}}>↻</span>
+                            </button>
                           </div>
                           {/* Thin banner when no data — layout stays fully visible */}
                           {noData&&<div style={{padding:'4px 12px',background:'rgba(255,77,109,0.07)',borderBottom:'1px solid rgba(255,77,109,0.18)',fontFamily:MONO,fontSize:9,color:'#ff6b85',flexShrink:0,letterSpacing:'0.05em'}}>Sin resultados para este filtro — mostrando métricas en cero</div>}
