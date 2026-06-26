@@ -2,6 +2,7 @@
 // Backtest de cartera multi-activo — Slots iguales | Capital compartido | Pesos personalizados
 
 import { calcEMA as _libEMA, calcSMA, calcRSI, calcATR as _libATR, calcMACD } from '../../lib/backtester'
+import { fetchAV } from './datos'
 
 const SUPA_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPA_KEY = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -62,39 +63,24 @@ function rebuildCapitalTras(trades, initCapital) {
   })
 }
 
+// Adaptador sobre fetchAV (Stooq primario + Yahoo fallback, con timeouts) — MISMA fuente robusta
+// que los gráficos individuales (datos.js). Mantiene la firma de fetchData y el contrato null-on-failure
+// que espera multibacktest.js. Antes usaba solo Yahoo → NVDA y otros llegaban truncados (~21 may).
 async function fetchData(symbol, years=5, fromDate=null, toDate=null, interval='1d') {
   try {
-    const encoded = encodeURIComponent(symbol)
-    let url
+    const avInterval = (interval === '1wk' || interval === 'w') ? 'w' : 'd'
+    // +1 año de buffer para warm-up de la EMA (igual que datos.js)
+    let data = await fetchAV(symbol, Math.ceil(years) + 1, avInterval)
+    if (!data?.length) return null
     if (fromDate && toDate) {
-      const p1 = Math.floor(new Date(fromDate).getTime() / 1000)
-      const p2 = Math.floor(new Date(toDate).getTime() / 1000)
-      url = `https://query1.finance.yahoo.com/v8/finance/chart/${encoded}?interval=${interval}&period1=${p1}&period2=${p2}`
+      data = data.filter(d => d.date >= fromDate && d.date <= toDate)
     } else {
-      url = `https://query1.finance.yahoo.com/v8/finance/chart/${encoded}?interval=${interval}&range=${Math.min(years,10)}y`
+      const cut = new Date(); cut.setFullYear(cut.getFullYear() - Math.ceil(years))
+      const cutStr = cut.toISOString().slice(0, 10)
+      data = data.filter(d => d.date >= cutStr)
     }
-    const res = await fetch(url, { headers: { 'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36','Accept':'application/json' } })
-    if (!res.ok) return null
-    const json = await res.json()
-    const timestamps = json?.chart?.result?.[0]?.timestamp
-    const closes    = json?.chart?.result?.[0]?.indicators?.quote?.[0]?.close
-    const opens     = json?.chart?.result?.[0]?.indicators?.quote?.[0]?.open
-    const highs     = json?.chart?.result?.[0]?.indicators?.quote?.[0]?.high
-    const lows      = json?.chart?.result?.[0]?.indicators?.quote?.[0]?.low
-    const volumes   = json?.chart?.result?.[0]?.indicators?.quote?.[0]?.volume ?? []
-    if (!timestamps?.length) { console.log('[MC fetch]', symbol, 'SIN timestamps (status', res.status, ')'); return null }
-    const out = timestamps.map((ts,i) => ({
-      date:   new Date(ts*1000).toISOString().slice(0,10),
-      open:   opens?.[i]   ?? null,
-      high:   highs?.[i]   ?? null,
-      low:    lows?.[i]    ?? null,
-      close:  closes?.[i]  ?? null,
-      volume: volumes?.[i] ?? null,
-    })).filter(d => d.close && !isNaN(d.close))
-      .sort((a,b) => a.date.localeCompare(b.date))
-    console.log('[MC fetch]', symbol, 'primera=', out[0]?.date, 'última=', out[out.length-1]?.date, 'barras=', out.length, 'modo=', fromDate&&toDate?('period '+fromDate+'→'+toDate):('range '+Math.min(years,10)+'y'))
-    return out
-  } catch (e) { console.log('[MC fetch]', symbol, 'ERROR', e.message); return null }
+    return data.length ? data : null
+  } catch { return null }
 }
 
 // ── MODO SLOTS: capital dividido en N partes iguales ─────────
