@@ -82,8 +82,8 @@ async function fetchData(symbol, years=5, fromDate=null, toDate=null, interval='
     const highs     = json?.chart?.result?.[0]?.indicators?.quote?.[0]?.high
     const lows      = json?.chart?.result?.[0]?.indicators?.quote?.[0]?.low
     const volumes   = json?.chart?.result?.[0]?.indicators?.quote?.[0]?.volume ?? []
-    if (!timestamps?.length) return null
-    return timestamps.map((ts,i) => ({
+    if (!timestamps?.length) { console.log('[MC fetch]', symbol, 'SIN timestamps (status', res.status, ')'); return null }
+    const out = timestamps.map((ts,i) => ({
       date:   new Date(ts*1000).toISOString().slice(0,10),
       open:   opens?.[i]   ?? null,
       high:   highs?.[i]   ?? null,
@@ -92,7 +92,9 @@ async function fetchData(symbol, years=5, fromDate=null, toDate=null, interval='
       volume: volumes?.[i] ?? null,
     })).filter(d => d.close && !isNaN(d.close))
       .sort((a,b) => a.date.localeCompare(b.date))
-  } catch { return null }
+    console.log('[MC fetch]', symbol, 'primera=', out[0]?.date, 'última=', out[out.length-1]?.date, 'barras=', out.length, 'modo=', fromDate&&toDate?('period '+fromDate+'→'+toDate):('range '+Math.min(years,10)+'y'))
+    return out
+  } catch (e) { console.log('[MC fetch]', symbol, 'ERROR', e.message); return null }
 }
 
 // ── MODO SLOTS: capital dividido en N partes iguales ─────────
