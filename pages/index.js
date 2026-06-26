@@ -4515,7 +4515,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.537</title>
+        <title>Trading Simulator V9.538</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4593,7 +4593,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.537
+            <span className="dot"/>Trading Simulator V9.538
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -7900,6 +7900,15 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           {mcShowAfterTax&&mcAfterTax&&renderTaxBlock(mcTaxSummaryFor(mcAfterTax.bh,mcAfterTax.bhTotalTax,mcResult.startDate))}
                           </div>
                         )}
+                        {mcResult.sp500BHCurve?.length>0&&(
+                          <button onClick={()=>setMcShowSP500(s=>!s)}
+                            style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',
+                              border:`1px solid ${mcShowSP500?'#9b72ff':'#3d5a7a'}`,
+                              background:mcShowSP500?'rgba(155,114,255,0.12)':'transparent',
+                              color:mcShowSP500?'#9b72ff':'#3d5a7a'}}>
+                            B&H SP500
+                          </button>
+                        )}
                         <button onClick={()=>setMcShowMaxDD(s=>!s)}
                           style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',
                             border:`1px solid ${mcShowMaxDD?'#ff4d6d':'#3d5a7a'}`,
@@ -7956,6 +7965,15 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           maxDD:mcResult.maxDDBH||0,
                           maxDDDate:mcResult.maxDDBHDate||null,
                           taxByDate:mcAfterTax?.bhTaxByDate||null,
+                        }]:[]),
+                        ...(mcResult.sp500BHCurve?.length>0?[{
+                          id:'__sp500__',name:'B&H SP500',color:'#9b72ff',
+                          data:mcResult.sp500BHCurve,
+                          show:mcShowSP500,
+                          dashed:true,
+                          maxDD:mcResult.maxDDSP500||0,
+                          maxDDDate:mcResult.maxDDSP500Date||null,
+                          taxByDate:null,
                         }]:[])
                       ]}
                       afterTax={!!mcAfterTax}
