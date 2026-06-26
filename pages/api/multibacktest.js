@@ -68,9 +68,11 @@ function rebuildCapitalTras(trades, initCapital) {
 // que espera multibacktest.js. Antes usaba solo Yahoo → NVDA y otros llegaban truncados (~21 may).
 async function fetchData(symbol, years=5, fromDate=null, toDate=null, interval='1d') {
   try {
+    console.log('[fetchData] llamada para', symbol, 'via adaptador fetchAV')
     const avInterval = (interval === '1wk' || interval === 'w') ? 'w' : 'd'
     // +1 año de buffer para warm-up de la EMA (igual que datos.js)
     let data = await fetchAV(symbol, Math.ceil(years) + 1, avInterval)
+    console.log('[fetchData→fetchAV]', symbol, 'primera=', data?.[0]?.date, 'última=', data?.[data.length-1]?.date, 'barras=', data?.length)
     if (!data?.length) return null
     if (fromDate && toDate) {
       data = data.filter(d => d.date >= fromDate && d.date <= toDate)
@@ -207,6 +209,8 @@ function buildCompartidoCurves(assetResults, capitalIni, symbolOrder = null) {
     ...allCandidates.map(t => t.entryDate),
     ...allCandidates.map(t => t.exitDate).filter(d => d != null),
   ])].sort()
+  console.log('[MC concentrado] totalCandidatos=', allCandidates.length, 'último eventDate=', eventDates[eventDates.length-1])
+  console.log('[MC concentrado] candidatos NVDA entryDates=', allCandidates.filter(t=>(t.symbol||'').toUpperCase().includes('NVDA')).map(t=>t.entryDate+'→'+(t.exitDate||'abierta')).join(', ')||'(ninguno)')
 
   eventDates.forEach(date => {
     // 1. Cerrar primero (libera capital para nuevas entradas del mismo día)
@@ -497,6 +501,8 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
     ...allCandidates.map(t => t.entryDate),
     ...allCandidates.map(t => t.exitDate).filter(d => d != null),
   ])].sort()
+  console.log('[MC concentrado] totalCandidatos=', allCandidates.length, 'último eventDate=', eventDates[eventDates.length-1])
+  console.log('[MC concentrado] candidatos NVDA entryDates=', allCandidates.filter(t=>(t.symbol||'').toUpperCase().includes('NVDA')).map(t=>t.entryDate+'→'+(t.exitDate||'abierta')).join(', ')||'(ninguno)')
 
   eventDates.forEach(date => {
     // 1. Cerrar primero (libera capital)
@@ -994,6 +1000,8 @@ function _commonDates(assetResults) {
     return s > mx ? s : mx
   }, '0000-00-00')
   const filteredDates = allDates.filter(d => d >= startDate)
+  console.log('[MC eje] startDate=', startDate, 'lastDate=', filteredDates[filteredDates.length-1], 'totalFechas=', filteredDates.length, 'allDatesLast=', allDates[allDates.length-1])
+  console.log('[MC eje] últimaFecha por activo=', assetResults.map(ar=>ar.symbol+':'+(ar.data?.[ar.data.length-1]?.date||'∅')).join(', '))
   return { allDates, startDate, filteredDates }
 }
 function _calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni) {
