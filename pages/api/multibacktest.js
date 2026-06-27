@@ -340,6 +340,8 @@ function buildCompartidoCurves(assetResults, capitalIni, symbolOrder = null) {
     if (openTrades.length > 0) _tInvDays++
     return { date, value: totalPortfolio > 0 ? (openCapTotal / totalPortfolio) * 100 : 0 }
   })
+  console.log('[MC ejecutadas] trades fin de periodo=', executedTrades.filter(t=>t.entryDate>='2026-05-15').map(t=>t.symbol+' '+t.entryDate+'→'+(t.exitDate||'abierta')).join(', ')||'(ninguna)')
+  console.log('[MC occupancy] step=', step, 'totalPuntos=', occupancyCurve.length, 'sampledIncluye 2026-06-02=', sampledDates.includes('2026-06-02'), 'puntos valor>0 tras 2026-05-15=', occupancyCurve.filter(p=>p.date>='2026-05-15'&&p.value>0).map(p=>p.date).join(', ')||'(ninguno)')
   const tInvEstrategia = sampledDates.length > 0 ? (_tInvDays / sampledDates.length) * 100 : 0
   const avgCapOccupancy = occupancyCurve.length
     ? occupancyCurve.reduce((s, p) => s + p.value, 0) / occupancyCurve.length
@@ -654,6 +656,8 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
     if (openTrades.length > 0) _tInvDays++
     return { date, value: openCapTotal }  // euros directos, no porcentaje
   })
+  console.log('[MC ejecutadas] trades fin de periodo=', executedTrades.filter(t=>t.entryDate>='2026-05-15').map(t=>t.symbol+' '+t.entryDate+'→'+(t.exitDate||'abierta')).join(', ')||'(ninguna)')
+  console.log('[MC occupancy] step=', step, 'totalPuntos=', occupancyCurve.length, 'sampledIncluye 2026-06-02=', sampledDates.includes('2026-06-02'), 'puntos valor>0 tras 2026-05-15=', occupancyCurve.filter(p=>p.date>='2026-05-15'&&p.value>0).map(p=>p.date).join(', ')||'(ninguno)')
   const tInvEstrategia = sampledDates.length > 0 ? (_tInvDays / sampledDates.length) * 100 : 0
   // avgCapOccupancy: media de (capitalEmpleado / portfolioTotal × 100) — mantiene % para la tabla
   const avgCapOccupancy = occupancyCurve.length && compoundCurve.length
