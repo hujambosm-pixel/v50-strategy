@@ -4515,7 +4515,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.542</title>
+        <title>Trading Simulator V9.543</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4593,7 +4593,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.542
+            <span className="dot"/>Trading Simulator V9.543
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -8145,9 +8145,13 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                 {/* Historial combinado — same style as individual */}
                 {(()=>{
                   const isMultiHist=mcMultiResults.length>1
+                  // DEFAULT del historial = resultado del MODO DE ASIGNACIÓN REAL, no el run individual.
+                  // Rama C (multi-estrategia): preferir __portfolio__ (cartera combinada) sobre mcResult (estrategia suelta).
+                  // El selector mcHistStratId sigue permitiendo ver una estrategia individual manualmente.
+                  const _histPortfolioResult=mcMultiResults.find(r=>r.id==='__portfolio__')?.result
                   const histResult=isMultiHist&&mcHistStratId
                     ?(mcMultiResults.find(r=>r.id===mcHistStratId)?.result??mcResult)
-                    :mcResult
+                    :(_histPortfolioResult??mcResult)
                   const histTitle=isMultiHist&&mcHistStratId
                     ?(mcMultiResults.find(r=>r.id===mcHistStratId)?.name??'Historial')
                     :'Historial Multicartera'
@@ -8253,7 +8257,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       {isMultiHist&&(
                         <div style={{display:'flex',gap:3,alignItems:'center',flexWrap:'wrap'}}>
                           {mcMultiResults.map(r=>{
-                            const isAct=mcHistStratId===r.id
+                            // __portfolio__ se resalta también por defecto (mcHistStratId null = historial del portfolio)
+                            const isAct=mcHistStratId===r.id||(mcHistStratId===null&&r.id==='__portfolio__')
                             return(
                               <button key={r.id} onClick={()=>setMcHistStratId(isAct?null:r.id)}
                                 style={{fontSize:9,padding:'2px 8px',borderRadius:3,cursor:'pointer',
