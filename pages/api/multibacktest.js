@@ -1387,6 +1387,7 @@ async function handlePortfolioMode(req, res) {
         _momentN, sp500Data, synList, null
       )
     }
+    console.log('[MC build]','tipo= PORTFOLIO (portfolioMode)','modoAsig=',modoAsig,'nEstrategias=',strategies.length,'nActivos=',assetResults.length,'executedTrades=',curves.executedTrades?.length,'última fecha=',curves.executedTrades?.length?curves.executedTrades.map(t=>t.exitDate).filter(Boolean).sort().slice(-1)[0]:'∅')
 
     // 6. assetStats agrupado por símbolo REAL (no sintético)
     //    buildConcentradoCurves reconstruye allCandidates con campos explícitos y pierde
@@ -1800,6 +1801,7 @@ export default async function handler(req, res) {
       // 'slots' por defecto — también maneja legacy 'custom'
       curves = buildSlotsCurves(assetResults, cfg.capitalIni)
     }
+    console.log('[MC build]','tipo= INDIVIDUAL (sin portfolioMode)','modoAsig=',modoAsig,'nActivos=',assetResults.length,'executedTrades=',curves.executedTrades?.length,'última fecha=',curves.executedTrades?.length?curves.executedTrades.map(t=>t.exitDate).filter(Boolean).sort().slice(-1)[0]:'∅')
 
     // Métricas por activo (tabla resumen)
     let assetStats = assetResults.map(ar => {
