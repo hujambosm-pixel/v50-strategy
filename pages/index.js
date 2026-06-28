@@ -4516,7 +4516,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.553</title>
+        <title>Trading Simulator V9.554</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4594,7 +4594,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.553
+            <span className="dot"/>Trading Simulator V9.554
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -7746,7 +7746,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                             ss.pfDescartadas!=null?`PF descartadas: ${ss.pfDescartadas.toFixed(2)}x`:null,
                                             ss.pnlHipoteticoDescartadas!=null?`€P&L hipotético descartadas: ~${ss.pnlHipoteticoDescartadas>=0?'+':'-'}€${Math.round(Math.abs(ss.pnlHipoteticoDescartadas)).toLocaleString('es-ES')} (estimación)`:null,
                                             ``,
-                                            `Estimación calculada con el capital que habría tocado a cada señal en su momento. No considera el efecto cascada de haberlas ejecutado.`,
+                                            `Estimación calculada con el capital que habría tocado a cada señal en su momento. Es un P&L bruto e incluye las tres categorías (slots llenos, sin capital y filtro RS): no considera el efecto cascada de haberlas ejecutado, ya que habrían ocupado slots y desplazado a otras operaciones (potencialmente mejores), además de añadir drawdown. Un valor positivo no significa que el filtro RS reste valor: descartar señales débiles mejora el perfil risk-adjusted aunque deje algo de P&L bruto sin capturar.`,
                                           ].filter(Boolean).join('\n')
                                       return(<span style={{display:'flex',alignItems:'center',gap:4}}>
                                         <span>{allT.length}</span>
