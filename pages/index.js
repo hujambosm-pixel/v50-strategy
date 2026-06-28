@@ -4516,7 +4516,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.550</title>
+        <title>Trading Simulator V9.551</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4594,7 +4594,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.550
+            <span className="dot"/>Trading Simulator V9.551
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -7723,7 +7723,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                       if(!ss||!ss.generadas) return allT.length
                                       const pct=Math.round(ss.ejecutadas/ss.generadas*100)
                                       const is100=pct>=100
-                                      const totalDesc=(ss.descartadasPorSlots||0)+(ss.descartadasPorCapital||0)+(ss.descartadasPorRiesgo||0)
+                                      const totalDesc=(ss.descartadasPorSlots||0)+(ss.descartadasPorCapital||0)+(ss.descartadasPorRiesgo||0)+(ss.descartadasPorGate||0)
                                       const tip=totalDesc===0
                                         ? [
                                             `Señales generadas: ${ss.generadas}`,
@@ -7738,6 +7738,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                             ss.descartadasPorSlots>0?`Descartadas — slots llenos: ${ss.descartadasPorSlots}`:null,
                                             ss.descartadasPorRiesgo>0?`Descartadas — riesgo acum.: ${ss.descartadasPorRiesgo}`:null,
                                             ss.descartadasPorCapital>0?`Descartadas — sin capital: ${ss.descartadasPorCapital}`:null,
+                                            ss.descartadasPorGate>0?`Descartadas — filtro RS: ${ss.descartadasPorGate}`:null,
                                             ss.winRateDescartadas!=null?`WR descartadas: ${ss.winRateDescartadas.toFixed(1)}%`:null,
                                             ss.pfDescartadas!=null?`PF descartadas: ${ss.pfDescartadas.toFixed(2)}x`:null,
                                             ss.pnlHipoteticoDescartadas!=null?`€P&L hipotético descartadas: ~${ss.pnlHipoteticoDescartadas>=0?'+':'-'}€${Math.round(Math.abs(ss.pnlHipoteticoDescartadas)).toLocaleString('es-ES')} (estimación)`:null,
