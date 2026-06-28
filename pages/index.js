@@ -4516,7 +4516,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.551</title>
+        <title>Trading Simulator V9.552</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4594,7 +4594,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.551
+            <span className="dot"/>Trading Simulator V9.552
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6066,7 +6066,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                           style={{fontSize:9,color:'#4a6a88',cursor:'help',textDecoration:'underline dotted'}}>
                           Criterio de entrada
                         </span>
-                        <select value={mcPrioridad} onChange={e=>{const v=e.target.value;setMcPrioridad(v);if(v==='alfabetico'||v==='score_metricas'||v==='ranking')setMcCriterioUso('desempate')}}
+                        <select value={mcPrioridad} onChange={e=>{const v=e.target.value;setMcPrioridad(v);if(v!=='fuerza_relativa')setMcCriterioUso('desempate')}}
                           style={{padding:'2px 4px',borderRadius:3,background:'#0d1929',border:'1px solid #1a2a3a',
                             color:'#e0e8f0',fontSize:10,fontFamily:MONO,cursor:'pointer',maxWidth:130}}>
                           <option value="score_metricas" title="Usa el Score métricas actual para priorizar entradas históricas. ⚠️ Sesgo futuro: el ranking actual no refleja el que existía en cada fecha del pasado.">Ranking por métricas (sesgo futuro) ⚠️</option>
@@ -6078,7 +6078,10 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       </div>
                       {/* Uso del criterio: Desempate (defecto) | Filtro (gate) — v1 solo fuerza_relativa */}
                       {(()=>{
-                        const _filtroDisabled=mcPrioridad==='alfabetico'||mcPrioridad==='score_metricas'||mcPrioridad==='ranking'
+                        const _filtroDisabled=mcPrioridad!=='fuerza_relativa'
+                        const _filtroDisabledMsg=(mcPrioridad==='momentum'||mcPrioridad==='max52')
+                          ?"El filtro para esta métrica aún no está disponible. En esta versión solo Fuerza relativa vs SP500 puede usarse como filtro de entrada."
+                          :"Esta métrica no puede usarse como filtro: el orden alfabético no define un umbral, y el ranking por métricas usa datos futuros. Elige Fuerza relativa vs SP500 para filtrar."
                         return (
                           <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:4}}>
                             <span style={{fontSize:9,color:'#4a6a88'}}>Uso del criterio</span>
@@ -6091,7 +6094,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                   color:mcCriterioUso==='desempate'?'#00d4ff':'#3d5a7a'}}>Desempate</button>
                               <button onClick={()=>{if(!_filtroDisabled)setMcCriterioUso('filtro')}} disabled={_filtroDisabled}
                                 title={_filtroDisabled
-                                  ?"Esta métrica no puede usarse como filtro: el orden alfabético no define un umbral, y el ranking por métricas usa datos futuros. Elige Fuerza relativa vs SP500 para filtrar."
+                                  ?_filtroDisabledMsg
                                   :"El criterio elegido actúa como condición de entrada: solo se abren posiciones en activos que lo superan. Las señales que no lo cumplen se descartan aunque haya un slot libre. (v1: solo aplica a Fuerza relativa vs SP500 y al modo Capital concentrado.)"}
                                 style={{fontFamily:MONO,fontSize:9,padding:'2px 7px',borderRadius:3,cursor:_filtroDisabled?'not-allowed':'pointer',
                                   border:`1px solid ${_filtroDisabled?'#16202c':(mcCriterioUso==='filtro'?'#00e5a0':'#1a2d45')}`,
