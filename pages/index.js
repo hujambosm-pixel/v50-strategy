@@ -951,6 +951,7 @@ export default function Home() {
   const [mcMaxAccumRisk,setMcMaxAccumRisk]=useState(20)
   const [mcMaxPosiciones,setMcMaxPosiciones]=useState(4)  // para modo concentrado
   const [mcPrioridad,setMcPrioridad]=useState('alfabetico') // criterio desempate concentrado
+  const [mcCriterioUso,setMcCriterioUso]=useState('desempate') // 'desempate' | 'filtro' — uso del criterio en Concentrado
   const [mcMomentumN,setMcMomentumN]=useState(20)           // lookback días para criterio momentum
   const [mcCapital,setMcCapital]=useState('compound')    // 'simple' | 'compound'
   const [mcCapitalIni,setMcCapitalIni]=useState(10000)
@@ -4009,7 +4010,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
       fromDate:_mcFrom,toDate:_mcTo,
       tipoStop,atrPeriod:Number(atrP),atrMult:Number(atrM),sinPerdidas,reentry,
       tipoFiltro,sp500EmaR:Number(sp500EmaR),sp500EmaL:Number(sp500EmaL),tipoCapital:mcCapital,
-      sizeRules:{riskPerTrade:mcRiskPerTrade,maxPortfolioPct:mcMaxPortfolioPct,maxAccumRisk:mcMaxAccumRisk,maxPosiciones:mcMaxPosiciones,prioridad:mcPrioridad,momentumN:Number(mcMomentumN),
+      sizeRules:{riskPerTrade:mcRiskPerTrade,maxPortfolioPct:mcMaxPortfolioPct,maxAccumRisk:mcMaxAccumRisk,maxPosiciones:mcMaxPosiciones,prioridad:mcPrioridad,criterioUso:mcCriterioUso,momentumN:Number(mcMomentumN),
         scoreMap:Object.fromEntries(mcSelected.map(sym=>[sym,wlData[sym.toUpperCase()]?.active?.scoreMetricas??null]))}}
     const buildCfgFromStrat=(strat)=>{
       // Parsear params del code_js (campo principal para estrategias modernas)
@@ -4148,7 +4149,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
       }
     }
     setMcLoading(false);setMcProgress(null)
-  },[mcSelected,mcMode,selectedModos,mcWeights,mcCapital,mcCapitalIni,mcYears,mcPeriodMode,mcFromDate,mcToDate,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL,rankingData,mcStratSelected,strategies,currentStratId,mcRiskPerTrade,mcMaxPortfolioPct,mcMaxAccumRisk,mcMaxPosiciones,mcPrioridad,mcMomentumN,filtros,mcIntervalo])
+  },[mcSelected,mcMode,selectedModos,mcWeights,mcCapital,mcCapitalIni,mcYears,mcPeriodMode,mcFromDate,mcToDate,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL,rankingData,mcStratSelected,strategies,currentStratId,mcRiskPerTrade,mcMaxPortfolioPct,mcMaxAccumRisk,mcMaxPosiciones,mcPrioridad,mcCriterioUso,mcMomentumN,filtros,mcIntervalo])
 
   // Auto-inicializar pesos iguales cuando cambian activos seleccionados (modo custom)
   useEffect(()=>{
@@ -4515,7 +4516,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.548</title>
+        <title>Trading Simulator V9.549</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4593,7 +4594,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.548
+            <span className="dot"/>Trading Simulator V9.549
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6063,18 +6064,44 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:mcPrioridad==='momentum'?4:0}}>
                         <span title="Criterio para decidir qué activo entra primero cuando hay más señales simultáneas que slots disponibles. 'Score completo' combina rendimiento histórico + condiciones actuales del mercado (configurable en Ajustes → Ranking)"
                           style={{fontSize:9,color:'#4a6a88',cursor:'help',textDecoration:'underline dotted'}}>
-                          Prioridad de entrada
+                          Criterio de entrada
                         </span>
-                        <select value={mcPrioridad} onChange={e=>setMcPrioridad(e.target.value)}
+                        <select value={mcPrioridad} onChange={e=>{const v=e.target.value;setMcPrioridad(v);if(v==='alfabetico'||v==='score_metricas'||v==='ranking')setMcCriterioUso('desempate')}}
                           style={{padding:'2px 4px',borderRadius:3,background:'#0d1929',border:'1px solid #1a2a3a',
                             color:'#e0e8f0',fontSize:10,fontFamily:MONO,cursor:'pointer',maxWidth:130}}>
                           <option value="score_metricas" title="Usa el Score métricas actual para priorizar entradas históricas. ⚠️ Sesgo futuro: el ranking actual no refleja el que existía en cada fecha del pasado.">Ranking por métricas (sesgo futuro) ⚠️</option>
                           <option value="alfabetico"    title="Orden A→Z por ticker. Sin criterio financiero">Alfabético</option>
                           <option value="momentum"      title="Prioriza el activo con mayor retorno en los últimos N días">Momentum (N días)</option>
-                          <option value="fuerza_relativa" title="Prioriza el activo que más ha superado al SP500 en los últimos 63 días">Fuerza relativa vs SP500</option>
+                          <option value="fuerza_relativa" title="Rendimiento del activo menos el del SP500 en los últimos 63 días. Como Filtro: solo entra si es > 0 (el activo ha batido al índice en ese periodo).">Fuerza relativa vs SP500</option>
                           <option value="max52"         title="Prioriza el activo más cercano a su máximo de 52 semanas (favorece breakouts)">Proximidad máximo 52s</option>
                         </select>
                       </div>
+                      {/* Uso del criterio: Desempate (defecto) | Filtro (gate) — v1 solo fuerza_relativa */}
+                      {(()=>{
+                        const _filtroDisabled=mcPrioridad==='alfabetico'||mcPrioridad==='score_metricas'||mcPrioridad==='ranking'
+                        return (
+                          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:4}}>
+                            <span style={{fontSize:9,color:'#4a6a88'}}>Uso del criterio</span>
+                            <div style={{display:'flex',gap:3}}>
+                              <button onClick={()=>setMcCriterioUso('desempate')}
+                                title="El criterio elegido solo decide qué activo entra cuando varias señales coinciden el mismo día y no hay slots libres para todas. No filtra nada: cualquier señal con un slot libre entra."
+                                style={{fontFamily:MONO,fontSize:9,padding:'2px 7px',borderRadius:3,cursor:'pointer',
+                                  border:`1px solid ${mcCriterioUso==='desempate'?'#00d4ff':'#1a2d45'}`,
+                                  background:mcCriterioUso==='desempate'?'rgba(0,212,255,0.1)':'transparent',
+                                  color:mcCriterioUso==='desempate'?'#00d4ff':'#3d5a7a'}}>Desempate</button>
+                              <button onClick={()=>{if(!_filtroDisabled)setMcCriterioUso('filtro')}} disabled={_filtroDisabled}
+                                title={_filtroDisabled
+                                  ?"Esta métrica no puede usarse como filtro: el orden alfabético no define un umbral, y el ranking por métricas usa datos futuros. Elige Fuerza relativa vs SP500 para filtrar."
+                                  :"El criterio elegido actúa como condición de entrada: solo se abren posiciones en activos que lo superan. Las señales que no lo cumplen se descartan aunque haya un slot libre. (v1: solo aplica a Fuerza relativa vs SP500 y al modo Capital concentrado.)"}
+                                style={{fontFamily:MONO,fontSize:9,padding:'2px 7px',borderRadius:3,cursor:_filtroDisabled?'not-allowed':'pointer',
+                                  border:`1px solid ${_filtroDisabled?'#16202c':(mcCriterioUso==='filtro'?'#00e5a0':'#1a2d45')}`,
+                                  background:mcCriterioUso==='filtro'&&!_filtroDisabled?'rgba(0,229,160,0.1)':'transparent',
+                                  color:_filtroDisabled?'#2a3a48':(mcCriterioUso==='filtro'?'#00e5a0':'#3d5a7a'),
+                                  opacity:_filtroDisabled?0.6:1}}>Filtro</button>
+                            </div>
+                          </div>
+                        )
+                      })()}
                       {mcPrioridad==='score_metricas'&&(
                         <div style={{fontSize:9,color:'#f59e0b',lineHeight:1.4,paddingLeft:2,marginBottom:4,marginTop:2}}>
                           ⚠️ Usa el score de métricas actual para priorizar entradas históricas. Los resultados pueden ser optimistas porque el ranking actual no refleja el que existía en cada fecha del pasado.

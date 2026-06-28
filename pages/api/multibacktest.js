@@ -407,7 +407,7 @@ function buildCompartidoCurves(assetResults, capitalIni, symbolOrder = null) {
 // sp500Data: array de barras del SP500 (para fuerza_relativa)
 // symbolsList: array ordenado de símbolos del watchlist (para score_metricas legacy)
 // scoreMap: {symbol: scoreMetricas} para prioridad 'score_metricas'
-function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, prioridad = 'alfabetico', momentumN = 20, sp500Data = null, symbolsList = null, scoreMap = null) {
+function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, prioridad = 'alfabetico', momentumN = 20, sp500Data = null, symbolsList = null, scoreMap = null, criterioUso = 'desempate') {
   const n = assetResults.length
   if (!n) return _emptyCurves()
   const { startDate, filteredDates } = _commonDates(assetResults)
@@ -501,7 +501,7 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
   if (!allCandidates.length) return buildSlotsCurves(assetResults, capitalIni)
 
   const senalesGeneradas = allCandidates.length
-  let cntEjecutadas = 0, cntDescSlots = 0, cntDescCapital = 0
+  let cntEjecutadas = 0, cntDescSlots = 0, cntDescCapital = 0, cntDescGate = 0
   let pnlHipEur = 0
   const pnlDescartados = []
 
@@ -567,6 +567,14 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
         const slotsEfectivos = Math.min(maxPosiciones, n)
         const capMaxPorPosicion = capitalTotal / slotsEfectivos
         if (slotsLibresEfectivos <= 0) { cntDescSlots++; if (isFinite(t.pnlPct)) { pnlDescartados.push(t.pnlPct); pnlHipEur += capMaxPorPosicion * t.pnlPct / 100 } return }
+        // GATE v1 (filtro de entrada): solo si criterioUso==='filtro' && prioridad==='fuerza_relativa'.
+        // t._ps es el score NEGADO de la RS → "RS vs SP500 > 0" ⟺ t._ps < 0. Si la RS no es válida
+        // (null/NaN: <63 barras o sin ^GSPC) se DEJA PASAR (no filtra ante la duda). Solo bloquea con dato válido y RS no positiva.
+        if (criterioUso === 'filtro' && prioridad === 'fuerza_relativa' && t._ps != null && isFinite(t._ps) && t._ps >= 0) {
+          cntDescGate++
+          if (isFinite(t.pnlPct)) { pnlDescartados.push(t.pnlPct); pnlHipEur += capMaxPorPosicion * t.pnlPct / 100 }
+          return
+        }
         const capPorEntrada = Math.min(poolLibre, capMaxPorPosicion)
         if (capPorEntrada < 0.01) { cntDescCapital++; if (isFinite(t.pnlPct)) { pnlDescartados.push(t.pnlPct); pnlHipEur += capMaxPorPosicion * t.pnlPct / 100 } return }
         cntEjecutadas++
@@ -690,6 +698,7 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
     ejecutadas:           cntEjecutadas,
     descartadasPorSlots:  cntDescSlots,
     descartadasPorCapital: cntDescCapital,
+    descartadasPorGate:   cntDescGate,
     winRateDescartadas:   pnlDescartados.length ? _descWinsC.length / pnlDescartados.length * 100 : null,
     pfDescartadas:        _descGrossLossC > 0 ? _descGrossWinC / _descGrossLossC : _descGrossWinC > 0 ? 99 : null,
     pnlHipoteticoDescartadas: pnlHipEur,
@@ -1796,7 +1805,8 @@ export default async function handler(req, res) {
       const _prior    = sizeRules.prioridad  ?? 'alfabetico'
       const _momentN  = sizeRules.momentumN  ?? 20
       const _scoreMap = sizeRules.scoreMap   ?? null
-      curves = buildConcentradoCurves(assetResults, cfg.capitalIni, sizeRules.maxPosiciones ?? 5, _prior, _momentN, sp500Data, symbols, _scoreMap)
+      const _criterio = sizeRules.criterioUso ?? 'desempate'
+      curves = buildConcentradoCurves(assetResults, cfg.capitalIni, sizeRules.maxPosiciones ?? 5, _prior, _momentN, sp500Data, symbols, _scoreMap, _criterio)
     } else if (modoAsig === 'positionsizing') {
       curves = buildPositionSizingCurves(assetResults, cfg.capitalIni, sizeRules)
     } else {
