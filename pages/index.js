@@ -4042,7 +4042,6 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
     }
     if(stratIds.length<=1){
       const modesToRun=selectedModos.length>0?selectedModos:['slots']
-      console.log('[MC rama]','nEstrategias=',stratIds.length,'nModos=',modesToRun.length,'rama=',modesToRun.length===1?'A (1 estrat·1 modo)':'B (1 estrat·N modos)','genera __portfolio__=',false,'modos=',modesToRun.join(','))
       if(modesToRun.length===1){
         // Single mode run
         try{
@@ -4084,7 +4083,6 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
     // Multiple strategies — run sequentially with progress
     const results=[]
     const realStratIds=stratIds.filter(id=>id!=='__portfolio__')
-    console.log('[MC rama]','rama=C (M estrategias)','nEstrategiasReales=',realStratIds.length,'nSeleccionadas=',stratIds.length,'incluye __portfolio__=',mcStratSelected.includes('__portfolio__'))
     for(let i=0;i<realStratIds.length;i++){
       const sid=realStratIds[i]
       const strat=strategies.find(s=>s.id===sid)
@@ -4106,7 +4104,6 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
     setMcAssetOpen({})
     const chartsVis={};results.forEach(r=>{chartsVis[r.id]=true});setMcChartsStratVisible(chartsVis)
     // ── Multicartera real (backend portfolioMode) ──────────────────────────────
-    console.log('[MC rama]','__portfolio__ gen check: includes=',mcStratSelected.includes('__portfolio__'),'results.length=',results.length,'GENERA __portfolio__=',mcStratSelected.includes('__portfolio__')&&results.length>=2)
     if(mcStratSelected.includes('__portfolio__')&&results.length>=2){
       const _modoPortfolioOk=['concentrado','compartido','positionsizing'].includes(mcMode)
       if(!_modoPortfolioOk){
@@ -4518,7 +4515,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.544</title>
+        <title>Trading Simulator V9.545</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4596,7 +4593,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.544
+            <span className="dot"/>Trading Simulator V9.545
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}

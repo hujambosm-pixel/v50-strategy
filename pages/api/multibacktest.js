@@ -68,11 +68,9 @@ function rebuildCapitalTras(trades, initCapital) {
 // que espera multibacktest.js. Antes usaba solo Yahoo → NVDA y otros llegaban truncados (~21 may).
 async function fetchData(symbol, years=5, fromDate=null, toDate=null, interval='1d') {
   try {
-    console.log('[fetchData] llamada para', symbol, 'via adaptador fetchAV')
     const avInterval = (interval === '1wk' || interval === 'w') ? 'w' : 'd'
     // +1 año de buffer para warm-up de la EMA (igual que datos.js)
     let data = await fetchAV(symbol, Math.ceil(years) + 1, avInterval)
-    console.log('[fetchData→fetchAV]', symbol, 'primera=', data?.[0]?.date, 'última=', data?.[data.length-1]?.date, 'barras=', data?.length)
     if (!data?.length) return null
     if (fromDate && toDate) {
       data = data.filter(d => d.date >= fromDate && d.date <= toDate)
@@ -83,6 +81,20 @@ async function fetchData(symbol, years=5, fromDate=null, toDate=null, interval='
     }
     return data.length ? data : null
   } catch { return null }
+}
+
+// Muestreo de fechas para curvas: intervalos fijos (cada step días) + SIEMPRE las fechas
+// donde cambia la ocupación (entryDate/exitDate de cada operación), para que el "capital empleado"
+// no se pierda picos de posiciones cortas (1-2 días) que caen entre muestras. Dedup + orden asc.
+function _sampledWithChanges(filteredDates, step, trades) {
+  const inAxis = new Set(filteredDates)
+  const set = new Set()
+  filteredDates.forEach((d, i) => { if (i % step === 0 || i === filteredDates.length - 1) set.add(d) })
+  ;(trades || []).forEach(t => {
+    if (t.entryDate && inAxis.has(t.entryDate)) set.add(t.entryDate)
+    if (t.exitDate && inAxis.has(t.exitDate)) set.add(t.exitDate)
+  })
+  return [...set].sort()
 }
 
 // ── MODO SLOTS: capital dividido en N partes iguales ─────────
@@ -121,7 +133,7 @@ function buildSlotsCurves(assetResults, capitalIni) {
 
   const simpleCurve=[], compoundCurve=[], bhCurve=[], occupancyCurve=[], floatSimpleCurve=[], floatCompoundCurve=[]
   const step = Math.max(1, Math.floor(filteredDates.length / 400))
-  filteredDates.filter((_,i)=>i%step===0||i===filteredDates.length-1).forEach(date => {
+  _sampledWithChanges(filteredDates, step, assetResults.flatMap(ar=>ar.trades||[])).forEach(date => {
     let totSimple=0, totCompound=0, totBH=0, openSlots=0, totOpenPnl=0
     assetEquities.forEach(byDate => {
       const e = byDate[date]
@@ -209,8 +221,6 @@ function buildCompartidoCurves(assetResults, capitalIni, symbolOrder = null) {
     ...allCandidates.map(t => t.entryDate),
     ...allCandidates.map(t => t.exitDate).filter(d => d != null),
   ])].sort()
-  console.log('[MC concentrado] totalCandidatos=', allCandidates.length, 'último eventDate=', eventDates[eventDates.length-1])
-  console.log('[MC concentrado] candidatos NVDA entryDates=', allCandidates.filter(t=>(t.symbol||'').toUpperCase().includes('NVDA')).map(t=>t.entryDate+'→'+(t.exitDate||'abierta')).join(', ')||'(ninguno)')
 
   eventDates.forEach(date => {
     // 1. Cerrar primero (libera capital para nuevas entradas del mismo día)
@@ -295,7 +305,7 @@ function buildCompartidoCurves(assetResults, capitalIni, symbolOrder = null) {
 
   // Construir curvas fecha a fecha
   const step = Math.max(1, Math.floor(filteredDates.length / 400))
-  const sampledDates = filteredDates.filter((_, i) => i % step === 0 || i === filteredDates.length - 1)
+  const sampledDates = _sampledWithChanges(filteredDates, step, executedTrades)
 
   const simpleCurve = [], compoundCurve = [], floatSimpleCurve = [], floatCompoundCurve = []
 
@@ -340,8 +350,6 @@ function buildCompartidoCurves(assetResults, capitalIni, symbolOrder = null) {
     if (openTrades.length > 0) _tInvDays++
     return { date, value: totalPortfolio > 0 ? (openCapTotal / totalPortfolio) * 100 : 0 }
   })
-  console.log('[MC ejecutadas] trades fin de periodo=', executedTrades.filter(t=>t.entryDate>='2026-05-15').map(t=>t.symbol+' '+t.entryDate+'→'+(t.exitDate||'abierta')).join(', ')||'(ninguna)')
-  console.log('[MC occupancy] step=', step, 'totalPuntos=', occupancyCurve.length, 'sampledIncluye 2026-06-02=', sampledDates.includes('2026-06-02'), 'puntos valor>0 tras 2026-05-15=', occupancyCurve.filter(p=>p.date>='2026-05-15'&&p.value>0).map(p=>p.date).join(', ')||'(ninguno)')
   const tInvEstrategia = sampledDates.length > 0 ? (_tInvDays / sampledDates.length) * 100 : 0
   const avgCapOccupancy = occupancyCurve.length
     ? occupancyCurve.reduce((s, p) => s + p.value, 0) / occupancyCurve.length
@@ -503,8 +511,6 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
     ...allCandidates.map(t => t.entryDate),
     ...allCandidates.map(t => t.exitDate).filter(d => d != null),
   ])].sort()
-  console.log('[MC concentrado] totalCandidatos=', allCandidates.length, 'último eventDate=', eventDates[eventDates.length-1])
-  console.log('[MC concentrado] candidatos NVDA entryDates=', allCandidates.filter(t=>(t.symbol||'').toUpperCase().includes('NVDA')).map(t=>t.entryDate+'→'+(t.exitDate||'abierta')).join(', ')||'(ninguno)')
 
   eventDates.forEach(date => {
     // 1. Cerrar primero (libera capital)
@@ -605,7 +611,7 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
   assetResults.forEach(ar => { symbolDataMap[ar.symbol] = ar.data ? ar.data.filter(d => d.date >= startDate) : [] })
 
   const step = Math.max(1, Math.floor(filteredDates.length / 400))
-  const sampledDates = filteredDates.filter((_, i) => i % step === 0 || i === filteredDates.length - 1)
+  const sampledDates = _sampledWithChanges(filteredDates, step, executedTrades)
 
   const simpleCurve = [], compoundCurve = [], floatSimpleCurve = [], floatCompoundCurve = []
   sampledDates.forEach(date => {
@@ -656,8 +662,6 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
     if (openTrades.length > 0) _tInvDays++
     return { date, value: openCapTotal }  // euros directos, no porcentaje
   })
-  console.log('[MC ejecutadas] trades fin de periodo=', executedTrades.filter(t=>t.entryDate>='2026-05-15').map(t=>t.symbol+' '+t.entryDate+'→'+(t.exitDate||'abierta')).join(', ')||'(ninguna)')
-  console.log('[MC occupancy] step=', step, 'totalPuntos=', occupancyCurve.length, 'sampledIncluye 2026-06-02=', sampledDates.includes('2026-06-02'), 'puntos valor>0 tras 2026-05-15=', occupancyCurve.filter(p=>p.date>='2026-05-15'&&p.value>0).map(p=>p.date).join(', ')||'(ninguno)')
   const tInvEstrategia = sampledDates.length > 0 ? (_tInvDays / sampledDates.length) * 100 : 0
   // avgCapOccupancy: media de (capitalEmpleado / portfolioTotal × 100) — mantiene % para la tabla
   const avgCapOccupancy = occupancyCurve.length && compoundCurve.length
@@ -845,7 +849,7 @@ function buildPositionSizingCurves(assetResults, capitalIni, sizeRules) {
 
   // ── Construir curvas (mismo patrón que buildCompartidoCurves) ──
   const step = Math.max(1, Math.floor(filteredDates.length / 400))
-  const sampledDates = filteredDates.filter((_, i) => i % step === 0 || i === filteredDates.length - 1)
+  const sampledDates = _sampledWithChanges(filteredDates, step, executedTrades)
 
   const simpleCurve = [], compoundCurve = [], floatSimpleCurve = [], floatCompoundCurve = []
 
@@ -971,7 +975,7 @@ function buildCustomCurves(assetResults, capitalIni, weights) {
   const simpleCurve=[], compoundCurve=[], bhCurve=[], occupancyCurve=[], floatSimpleCurve=[], floatCompoundCurve=[]
   const totalSlots = assetResults.length
   const step = Math.max(1, Math.floor(filteredDates.length / 400))
-  filteredDates.filter((_,i)=>i%step===0||i===filteredDates.length-1).forEach(date => {
+  _sampledWithChanges(filteredDates, step, assetResults.flatMap(ar=>ar.trades||[])).forEach(date => {
     let totSimple=0, totCompound=0, totBH=0, openSlots=0, totOpenPnl=0
     assetEquities.forEach(({ byDate }) => {
       const e = byDate[date]
@@ -1004,8 +1008,6 @@ function _commonDates(assetResults) {
     return s > mx ? s : mx
   }, '0000-00-00')
   const filteredDates = allDates.filter(d => d >= startDate)
-  console.log('[MC eje] startDate=', startDate, 'lastDate=', filteredDates[filteredDates.length-1], 'totalFechas=', filteredDates.length, 'allDatesLast=', allDates[allDates.length-1])
-  console.log('[MC eje] últimaFecha por activo=', assetResults.map(ar=>ar.symbol+':'+(ar.data?.[ar.data.length-1]?.date||'∅')).join(', '))
   return { allDates, startDate, filteredDates }
 }
 function _calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni) {
@@ -1387,7 +1389,6 @@ async function handlePortfolioMode(req, res) {
         _momentN, sp500Data, synList, null
       )
     }
-    console.log('[MC build]','tipo= PORTFOLIO (portfolioMode)','modoAsig=',modoAsig,'nEstrategias=',strategies.length,'nActivos=',assetResults.length,'executedTrades=',curves.executedTrades?.length,'última fecha=',curves.executedTrades?.length?curves.executedTrades.map(t=>t.exitDate).filter(Boolean).sort().slice(-1)[0]:'∅')
 
     // 6. assetStats agrupado por símbolo REAL (no sintético)
     //    buildConcentradoCurves reconstruye allCandidates con campos explícitos y pierde
@@ -1801,7 +1802,6 @@ export default async function handler(req, res) {
       // 'slots' por defecto — también maneja legacy 'custom'
       curves = buildSlotsCurves(assetResults, cfg.capitalIni)
     }
-    console.log('[MC build]','tipo= INDIVIDUAL (sin portfolioMode)','modoAsig=',modoAsig,'nActivos=',assetResults.length,'executedTrades=',curves.executedTrades?.length,'última fecha=',curves.executedTrades?.length?curves.executedTrades.map(t=>t.exitDate).filter(Boolean).sort().slice(-1)[0]:'∅')
 
     // Métricas por activo (tabla resumen)
     let assetStats = assetResults.map(ar => {
