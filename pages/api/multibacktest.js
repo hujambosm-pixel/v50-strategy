@@ -142,7 +142,8 @@ function buildSlotsCurves(assetResults, capitalIni) {
     simpleCurve.push({ date, value: totSimple })
     compoundCurve.push({ date, value: totCompound })
     bhCurve.push({ date, value: totBH })
-    occupancyCurve.push({ date, value: (openSlots/n)*100 })
+    // CAPITAL EMPLEADO unificado: euros de COSTE = nº slots abiertos × coste fijo por slot.
+    occupancyCurve.push({ date, value: openSlots * slotCapital })
     floatSimpleCurve.push({ date, value: totSimple+totOpenPnl })
     floatCompoundCurve.push({ date, value: totCompound+totOpenPnl })
   })
@@ -150,8 +151,12 @@ function buildSlotsCurves(assetResults, capitalIni) {
   const tInvEstrategia = occupancyCurve.length
     ? (occupancyCurve.filter(p => p.value > 0).length / occupancyCurve.length) * 100
     : 0
-  const avgCapOccupancy = occupancyCurve.length
-    ? occupancyCurve.reduce((s, p) => s + p.value, 0) / occupancyCurve.length
+  // Cap.inv% sobre base COSTE: media de (capitalEmpleado_coste / portfolioTotal × 100)
+  const avgCapOccupancy = occupancyCurve.length && compoundCurve.length
+    ? occupancyCurve.reduce((s, p, i) => {
+        const total = compoundCurve[i]?.value || capitalIni
+        return s + (total > 0 ? (p.value / total) * 100 : 0)
+      }, 0) / occupancyCurve.length
     : 0
   const _totalSenalesSlots = assetResults.reduce((s, ar) => s + (ar.trades?.length || 0), 0)
   const senalStatsSlots = {
@@ -345,14 +350,18 @@ function buildCompartidoCurves(assetResults, capitalIni, symbolOrder = null) {
       capitalAtEntryMap[`${t.symbol}:${t.entryDate}`] != null &&
       t.entryDate <= date && (!t.exitDate || t.exitDate > date || (t._virtualClose && t.exitDate >= date))
     )
+    // CAPITAL EMPLEADO unificado: COSTE de entrada de las posiciones abiertas (Σ capEntry), en EUROS.
     const openCapTotal = openTrades.reduce((s, t) => s + (capitalAtEntryMap[`${t.symbol}:${t.entryDate}`] || 0), 0)
-    const totalPortfolio = compoundCurve[i]?.value || capitalIni
     if (openTrades.length > 0) _tInvDays++
-    return { date, value: totalPortfolio > 0 ? (openCapTotal / totalPortfolio) * 100 : 0 }
+    return { date, value: openCapTotal }  // euros de coste
   })
   const tInvEstrategia = sampledDates.length > 0 ? (_tInvDays / sampledDates.length) * 100 : 0
-  const avgCapOccupancy = occupancyCurve.length
-    ? occupancyCurve.reduce((s, p) => s + p.value, 0) / occupancyCurve.length
+  // Cap.inv% sobre base COSTE: media de (capitalEmpleado_coste / portfolioTotal × 100)
+  const avgCapOccupancy = occupancyCurve.length && compoundCurve.length
+    ? occupancyCurve.reduce((s, p, i) => {
+        const total = compoundCurve[i]?.value || capitalIni
+        return s + (total > 0 ? (p.value / total) * 100 : 0)
+      }, 0) / occupancyCurve.length
     : 0
 
   // B&H combinado
@@ -644,26 +653,14 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
       capitalAtEntryMap[`${t.symbol}:${t.entryDate}`] != null &&
       t.entryDate <= date && (!t.exitDate || t.exitDate > date || (t._virtualClose && t.exitDate >= date))
     )
-    // Valor actual de mercado de cada posición abierta (no el coste de entrada fijo)
-    // capAsignado × (1 + ret) donde ret = (precioCierre − precioEntrada) / precioEntrada
-    const openCapTotal = openTrades.reduce((s, t) => {
-      const capEntry = capitalAtEntryMap[`${t.symbol}:${t.entryDate}`] || 0
-      const fData = symbolDataMap[t.symbol] || []
-      let closePx = null
-      for (let k = fData.length - 1; k >= 0; k--) {
-        if (fData[k].date <= date) { closePx = fData[k].close; break }
-      }
-      if (closePx != null && t.entryPx > 0) {
-        const ret = (closePx - t.entryPx) / t.entryPx
-        return s + capEntry * (1 + ret)  // valor actualizado a mercado
-      }
-      return s + capEntry  // fallback: coste de entrada si no hay precio
-    }, 0)
+    // CAPITAL EMPLEADO unificado: COSTE de entrada de las posiciones abiertas (Σ capEntry), en EUROS.
+    // Sin (1+ret): estable, no se mueve con el precio (mismo criterio que Cap. disponible del Dashboard).
+    const openCapTotal = openTrades.reduce((s, t) => s + (capitalAtEntryMap[`${t.symbol}:${t.entryDate}`] || 0), 0)
     if (openTrades.length > 0) _tInvDays++
-    return { date, value: openCapTotal }  // euros directos, no porcentaje
+    return { date, value: openCapTotal }  // euros de coste
   })
   const tInvEstrategia = sampledDates.length > 0 ? (_tInvDays / sampledDates.length) * 100 : 0
-  // avgCapOccupancy: media de (capitalEmpleado / portfolioTotal × 100) — mantiene % para la tabla
+  // avgCapOccupancy: media de (capitalEmpleado_coste / portfolioTotal × 100) — % para la tabla
   const avgCapOccupancy = occupancyCurve.length && compoundCurve.length
     ? occupancyCurve.reduce((s, p, i) => {
         const total = compoundCurve[i]?.value || capitalIni
@@ -884,14 +881,18 @@ function buildPositionSizingCurves(assetResults, capitalIni, sizeRules) {
       capitalAtEntryMap[`${t.symbol}:${t.entryDate}`] != null &&
       t.entryDate <= date && (!t.exitDate || t.exitDate > date || (t._virtualClose && t.exitDate >= date))
     )
+    // CAPITAL EMPLEADO unificado: COSTE de entrada de las posiciones abiertas (Σ capEntry), en EUROS.
     const openCapTotal = openTrades.reduce((s, t) => s + (capitalAtEntryMap[`${t.symbol}:${t.entryDate}`] || 0), 0)
-    const totalPortfolio = compoundCurve[i]?.value || capitalIni
     if (openTrades.length > 0) _tInvDaysPS++
-    return { date, value: totalPortfolio > 0 ? (openCapTotal / totalPortfolio) * 100 : 0 }
+    return { date, value: openCapTotal }  // euros de coste
   })
   const tInvEstrategia = sampledDates.length > 0 ? (_tInvDaysPS / sampledDates.length) * 100 : 0
-  const avgCapOccupancy = occupancyCurve.length
-    ? occupancyCurve.reduce((s, p) => s + p.value, 0) / occupancyCurve.length
+  // Cap.inv% sobre base COSTE: media de (capitalEmpleado_coste / portfolioTotal × 100)
+  const avgCapOccupancy = occupancyCurve.length && compoundCurve.length
+    ? occupancyCurve.reduce((s, p, i) => {
+        const total = compoundCurve[i]?.value || capitalIni
+        return s + (total > 0 ? (p.value / total) * 100 : 0)
+      }, 0) / occupancyCurve.length
     : 0
 
   const slotBH = capitalIni / n
