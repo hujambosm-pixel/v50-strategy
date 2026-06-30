@@ -953,6 +953,9 @@ export default function Home() {
   const [mcPrioridad,setMcPrioridad]=useState('alfabetico') // criterio desempate concentrado
   const [mcCriterioUso,setMcCriterioUso]=useState('desempate') // 'desempate' | 'filtro' — uso del criterio en Concentrado
   const [mcMomentumN,setMcMomentumN]=useState(20)           // lookback días para criterio momentum
+  const [mcRsGateThr,setMcRsGateThr]=useState(0)            // umbral gate RS (%) — default 0 (basta batir al índice)
+  const [mcMomGateThr,setMcMomGateThr]=useState(10)         // umbral gate momentum (% subida mínima)
+  const [mcProxGateThr,setMcProxGateThr]=useState(10)       // umbral gate proximidad (% bajo el máximo 52s)
   const [mcCapital,setMcCapital]=useState('compound')    // 'simple' | 'compound'
   const [mcCapitalIni,setMcCapitalIni]=useState(10000)
   const [mcPeriodMode,setMcPeriodMode]=useState('years') // 'years' | 'range'
@@ -4010,7 +4013,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
       fromDate:_mcFrom,toDate:_mcTo,
       tipoStop,atrPeriod:Number(atrP),atrMult:Number(atrM),sinPerdidas,reentry,
       tipoFiltro,sp500EmaR:Number(sp500EmaR),sp500EmaL:Number(sp500EmaL),tipoCapital:mcCapital,
-      sizeRules:{riskPerTrade:mcRiskPerTrade,maxPortfolioPct:mcMaxPortfolioPct,maxAccumRisk:mcMaxAccumRisk,maxPosiciones:mcMaxPosiciones,prioridad:mcPrioridad,criterioUso:mcCriterioUso,momentumN:Number(mcMomentumN),
+      sizeRules:{riskPerTrade:mcRiskPerTrade,maxPortfolioPct:mcMaxPortfolioPct,maxAccumRisk:mcMaxAccumRisk,maxPosiciones:mcMaxPosiciones,prioridad:mcPrioridad,criterioUso:mcCriterioUso,momentumN:Number(mcMomentumN),rsGateThr:Number(mcRsGateThr),momGateThr:Number(mcMomGateThr),proxGateThr:Number(mcProxGateThr),
         scoreMap:Object.fromEntries(mcSelected.map(sym=>[sym,wlData[sym.toUpperCase()]?.active?.scoreMetricas??null]))}}
     const buildCfgFromStrat=(strat)=>{
       // Parsear params del code_js (campo principal para estrategias modernas)
@@ -4149,7 +4152,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
       }
     }
     setMcLoading(false);setMcProgress(null)
-  },[mcSelected,mcMode,selectedModos,mcWeights,mcCapital,mcCapitalIni,mcYears,mcPeriodMode,mcFromDate,mcToDate,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL,rankingData,mcStratSelected,strategies,currentStratId,mcRiskPerTrade,mcMaxPortfolioPct,mcMaxAccumRisk,mcMaxPosiciones,mcPrioridad,mcCriterioUso,mcMomentumN,filtros,mcIntervalo])
+  },[mcSelected,mcMode,selectedModos,mcWeights,mcCapital,mcCapitalIni,mcYears,mcPeriodMode,mcFromDate,mcToDate,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL,rankingData,mcStratSelected,strategies,currentStratId,mcRiskPerTrade,mcMaxPortfolioPct,mcMaxAccumRisk,mcMaxPosiciones,mcPrioridad,mcCriterioUso,mcMomentumN,mcRsGateThr,mcMomGateThr,mcProxGateThr,filtros,mcIntervalo])
 
   // Auto-inicializar pesos iguales cuando cambian activos seleccionados (modo custom)
   useEffect(()=>{
@@ -4516,7 +4519,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.558</title>
+        <title>Trading Simulator V9.559</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4594,7 +4597,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.558
+            <span className="dot"/>Trading Simulator V9.559
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6066,7 +6069,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                           style={{fontSize:9,color:'#4a6a88',cursor:'help',textDecoration:'underline dotted'}}>
                           Criterio de entrada
                         </span>
-                        <select value={mcPrioridad} onChange={e=>{const v=e.target.value;setMcPrioridad(v);if(v!=='fuerza_relativa')setMcCriterioUso('desempate')}}
+                        <select value={mcPrioridad} onChange={e=>{const v=e.target.value;setMcPrioridad(v);if(v==='alfabetico'||v==='score_metricas'||v==='ranking')setMcCriterioUso('desempate')}}
                           style={{padding:'2px 4px',borderRadius:3,background:'#0d1929',border:'1px solid #1a2a3a',
                             color:'#e0e8f0',fontSize:10,fontFamily:MONO,cursor:'pointer',maxWidth:130}}>
                           <option value="score_metricas" title="Usa el Score métricas actual para priorizar entradas históricas. ⚠️ Sesgo futuro: el ranking actual no refleja el que existía en cada fecha del pasado.">Ranking por métricas (sesgo futuro) ⚠️</option>
@@ -6076,12 +6079,10 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                           <option value="max52"         title="Prioriza el activo más cercano a su máximo de 52 semanas (favorece breakouts)">Proximidad máximo 52s</option>
                         </select>
                       </div>
-                      {/* Uso del criterio: Desempate (defecto) | Filtro (gate) — v1 solo fuerza_relativa */}
+                      {/* Uso del criterio: Desempate (defecto) | Filtro (gate) — fuerza_relativa / momentum / max52 */}
                       {(()=>{
-                        const _filtroDisabled=mcPrioridad!=='fuerza_relativa'
-                        const _filtroDisabledMsg=(mcPrioridad==='momentum'||mcPrioridad==='max52')
-                          ?"El filtro para esta métrica aún no está disponible. En esta versión solo Fuerza relativa vs SP500 puede usarse como filtro de entrada."
-                          :"Esta métrica no puede usarse como filtro: el orden alfabético no define un umbral, y el ranking por métricas usa datos futuros. Elige Fuerza relativa vs SP500 para filtrar."
+                        const _filtroDisabled=mcPrioridad==='alfabetico'||mcPrioridad==='score_metricas'||mcPrioridad==='ranking'
+                        const _filtroDisabledMsg="Esta métrica no puede usarse como filtro: el orden alfabético no define un umbral, y el ranking por métricas usa datos futuros. Elige Fuerza relativa, Momentum o Proximidad 52s para filtrar."
                         return (
                           <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:4}}>
                             <span style={{fontSize:9,color:'#4a6a88'}}>Uso del criterio</span>
@@ -6095,7 +6096,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                               <button onClick={()=>{if(!_filtroDisabled)setMcCriterioUso('filtro')}} disabled={_filtroDisabled}
                                 title={_filtroDisabled
                                   ?_filtroDisabledMsg
-                                  :"El criterio elegido actúa como condición de entrada: solo se abren posiciones en activos que lo superan. Las señales que no lo cumplen se descartan aunque haya un slot libre. (v1: solo aplica a Fuerza relativa vs SP500 y al modo Capital concentrado.)"}
+                                  :"El criterio elegido actúa como condición de entrada: solo se abren posiciones en activos que lo superan (según el umbral configurable). Las señales que no lo cumplen se descartan aunque haya un slot libre. (Aplica a Fuerza relativa, Momentum y Proximidad 52s, en el modo Capital concentrado.)"}
                                 style={{fontFamily:MONO,fontSize:9,padding:'2px 7px',borderRadius:3,cursor:_filtroDisabled?'not-allowed':'pointer',
                                   border:`1px solid ${_filtroDisabled?'#16202c':(mcCriterioUso==='filtro'?'#00e5a0':'#1a2d45')}`,
                                   background:mcCriterioUso==='filtro'&&!_filtroDisabled?'rgba(0,229,160,0.1)':'transparent',
@@ -6105,6 +6106,31 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                           </div>
                         )
                       })()}
+                      {/* Umbral del gate — solo el de la métrica activa, cuando Filtro está activo */}
+                      {mcCriterioUso==='filtro'&&mcPrioridad==='fuerza_relativa'&&(
+                        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:4}}>
+                          <span title="Solo entra si la fuerza relativa vs SP500 (rendimiento del activo menos el del SP500 a 63 días) supera este %. Default 0 = basta con batir al índice."
+                            style={{fontSize:9,color:'#4a6a88',cursor:'help',textDecoration:'underline dotted'}}>RS mínima (%)</span>
+                          <input type="number" step="0.5" value={mcRsGateThr} onChange={e=>setMcRsGateThr(Number(e.target.value))}
+                            style={{width:65,padding:'2px 4px',borderRadius:3,background:'#0d1929',border:'1px solid #1a2a3a',color:'#e0e8f0',fontSize:11,fontFamily:MONO,textAlign:'right'}}/>
+                        </div>
+                      )}
+                      {mcCriterioUso==='filtro'&&mcPrioridad==='momentum'&&(
+                        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:4}}>
+                          <span title="Solo entra si el activo ha subido más de este % en la ventana de N días del momentum. Default 10%."
+                            style={{fontSize:9,color:'#4a6a88',cursor:'help',textDecoration:'underline dotted'}}>Subida mínima (%)</span>
+                          <input type="number" step="0.5" value={mcMomGateThr} onChange={e=>setMcMomGateThr(Number(e.target.value))}
+                            style={{width:65,padding:'2px 4px',borderRadius:3,background:'#0d1929',border:'1px solid #1a2a3a',color:'#e0e8f0',fontSize:11,fontFamily:MONO,textAlign:'right'}}/>
+                        </div>
+                      )}
+                      {mcCriterioUso==='filtro'&&mcPrioridad==='max52'&&(
+                        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:4}}>
+                          <span title="Solo entra si el precio está a menos de este % por debajo de su máximo de las últimas 52 semanas. Default 10% = dentro del 10% del máximo."
+                            style={{fontSize:9,color:'#4a6a88',cursor:'help',textDecoration:'underline dotted'}}>Máx. % bajo el máximo 52s</span>
+                          <input type="number" step="0.5" min="0" max="100" value={mcProxGateThr} onChange={e=>setMcProxGateThr(Math.max(0,Math.min(100,Number(e.target.value))))}
+                            style={{width:65,padding:'2px 4px',borderRadius:3,background:'#0d1929',border:'1px solid #1a2a3a',color:'#e0e8f0',fontSize:11,fontFamily:MONO,textAlign:'right'}}/>
+                        </div>
+                      )}
                       {mcPrioridad==='score_metricas'&&(
                         <div style={{fontSize:9,color:'#f59e0b',lineHeight:1.4,paddingLeft:2,marginBottom:4,marginTop:2}}>
                           ⚠️ Usa el score de métricas actual para priorizar entradas históricas. Los resultados pueden ser optimistas porque el ranking actual no refleja el que existía en cada fecha del pasado.
@@ -7741,7 +7767,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                             ss.descartadasPorSlots>0?`Descartadas — slots llenos: ${ss.descartadasPorSlots}`:null,
                                             ss.descartadasPorRiesgo>0?`Descartadas — riesgo acum.: ${ss.descartadasPorRiesgo}`:null,
                                             ss.descartadasPorCapital>0?`Descartadas — sin capital: ${ss.descartadasPorCapital}`:null,
-                                            ss.descartadasPorGate>0?`Descartadas — filtro RS: ${ss.descartadasPorGate}`:null,
+                                            ss.descartadasPorGate>0?`Descartadas — filtro ${mcPrioridad==='momentum'?'Momentum':mcPrioridad==='max52'?'Proximidad 52s':'RS'}: ${ss.descartadasPorGate}`:null,
                                             ss.winRateDescartadas!=null?`WR descartadas: ${ss.winRateDescartadas.toFixed(1)}%`:null,
                                             ss.pfDescartadas!=null?`PF descartadas: ${ss.pfDescartadas.toFixed(2)}x`:null,
                                             ss.pnlHipoteticoDescartadas!=null?`€P&L hipotético descartadas: ~${ss.pnlHipoteticoDescartadas>=0?'+':'-'}€${Math.round(Math.abs(ss.pnlHipoteticoDescartadas)).toLocaleString('es-ES')} (estimación)`:null,
