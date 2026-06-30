@@ -407,7 +407,7 @@ function buildCompartidoCurves(assetResults, capitalIni, symbolOrder = null) {
 // sp500Data: array de barras del SP500 (para fuerza_relativa)
 // symbolsList: array ordenado de símbolos del watchlist (para score_metricas legacy)
 // scoreMap: {symbol: scoreMetricas} para prioridad 'score_metricas'
-function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, prioridad = 'alfabetico', momentumN = 20, sp500Data = null, symbolsList = null, scoreMap = null, criterioUso = 'desempate') {
+function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, prioridad = 'alfabetico', momentumN = 20, sp500Data = null, symbolsList = null, scoreMap = null, criterioUso = 'desempate', rsGateThr = 0, momGateThr = 10, proxGateThr = 10) {
   const n = assetResults.length
   if (!n) return _emptyCurves()
   const { startDate, filteredDates } = _commonDates(assetResults)
@@ -510,7 +510,6 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
 
   const senalesGeneradas = allCandidates.length
   let cntEjecutadas = 0, cntDescSlots = 0, cntDescCapital = 0, cntDescGate = 0
-  const debugGatePass = []  // DIAG temporal: señales que pasan el gate de RS por _psValid===false (delta del Paso A)
   let pnlHipEur = 0
   const pnlDescartados = []
 
@@ -576,20 +575,20 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
         const slotsEfectivos = Math.min(maxPosiciones, n)
         const capMaxPorPosicion = capitalTotal / slotsEfectivos
         if (slotsLibresEfectivos <= 0) { cntDescSlots++; if (isFinite(t.pnlPct)) { pnlDescartados.push(t.pnlPct); pnlHipEur += capMaxPorPosicion * t.pnlPct / 100 } return }
-        // GATE v1 (filtro de entrada): solo si criterioUso==='filtro' && prioridad==='fuerza_relativa'.
-        // Vía limpia con valor crudo + flag de validez (sin la ambigüedad de _ps=0):
-        // bloquea solo con RS calculable y no positiva (_psValid===true && _rsRaw<=0).
-        // Si no hay historial/SP500 (_psValid===false) DEJA PASAR (no filtra ante la duda).
-        if (criterioUso === 'filtro' && prioridad === 'fuerza_relativa' && t._psValid === true && t._rsRaw <= 0) {
-          cntDescGate++
-          if (isFinite(t.pnlPct)) { pnlDescartados.push(t.pnlPct); pnlHipEur += capMaxPorPosicion * t.pnlPct / 100 }
-          return
-        }
-        // DIAG temporal: el viejo gate bloqueaba _ps>=0 (incluye _ps===0 de "sin historial"). La vía nueva
-        // deja pasar _psValid===false. Capturamos exactamente ese delta (señales que antes se bloqueaban).
-        if (criterioUso === 'filtro' && prioridad === 'fuerza_relativa' && t._psValid === false && t._ps != null && t._ps >= 0) {
-          const _idxDbg = _dateIdxMap[t.symbol]?.[t.entryDate] ?? null
-          debugGatePass.push({ symbol: t.symbol, date: t.entryDate, idx: _idxDbg, rsRaw: t._rsRaw ?? null, psValid: t._psValid, ps: t._ps, barsDisponibles: _idxDbg })
+        // GATE (filtro de entrada): activo si criterioUso==='filtro' y la métrica activa es gateable.
+        // Vía limpia con valor CRUDO + flag de validez (sin la ambigüedad de _ps=0). _momRaw/_rsRaw son
+        // FRACCIONES (0.10 = 10%); los umbrales llegan en % → se dividen por 100. _proxRaw es ratio close/max252.
+        // Si _psValid===false (sin historial/SP500) DEJA PASAR (no filtra ante la duda).
+        if (criterioUso === 'filtro' && (prioridad === 'fuerza_relativa' || prioridad === 'momentum' || prioridad === 'max52') && t._psValid === true) {
+          let _gateBloquea = false
+          if (prioridad === 'fuerza_relativa')  _gateBloquea = t._rsRaw  <= rsGateThr  / 100   // RS <= umbral% (default 0 → ≡ gate actual)
+          else if (prioridad === 'momentum')    _gateBloquea = t._momRaw <= momGateThr / 100    // subió menos del umbral% → fuera
+          else if (prioridad === 'max52')       _gateBloquea = t._proxRaw < (1 - proxGateThr / 100) // más lejos del X% del máximo → fuera
+          if (_gateBloquea) {
+            cntDescGate++
+            if (isFinite(t.pnlPct)) { pnlDescartados.push(t.pnlPct); pnlHipEur += capMaxPorPosicion * t.pnlPct / 100 }
+            return
+          }
         }
         const capPorEntrada = Math.min(poolLibre, capMaxPorPosicion)
         if (capPorEntrada < 0.01) { cntDescCapital++; if (isFinite(t.pnlPct)) { pnlDescartados.push(t.pnlPct); pnlHipEur += capMaxPorPosicion * t.pnlPct / 100 } return }
@@ -724,7 +723,6 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
     simpleCurve, compoundCurve, bhCurve, occupancyCurve, startDate,
     executedTrades, floatSimpleCurve, floatCompoundCurve,
     tInvEstrategia, avgCapOccupancy, senalStats,
-    debugGatePass,  // DIAG temporal: delta del gate RS tras Paso A
     ..._calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni),
     ..._calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni)
   }
@@ -1823,7 +1821,10 @@ export default async function handler(req, res) {
       const _momentN  = sizeRules.momentumN  ?? 20
       const _scoreMap = sizeRules.scoreMap   ?? null
       const _criterio = sizeRules.criterioUso ?? 'desempate'
-      curves = buildConcentradoCurves(assetResults, cfg.capitalIni, sizeRules.maxPosiciones ?? 5, _prior, _momentN, sp500Data, symbols, _scoreMap, _criterio)
+      const _rsThr   = sizeRules.rsGateThr   ?? 0
+      const _momThr  = sizeRules.momGateThr  ?? 10
+      const _proxThr = sizeRules.proxGateThr ?? 10
+      curves = buildConcentradoCurves(assetResults, cfg.capitalIni, sizeRules.maxPosiciones ?? 5, _prior, _momentN, sp500Data, symbols, _scoreMap, _criterio, _rsThr, _momThr, _proxThr)
     } else if (modoAsig === 'positionsizing') {
       curves = buildPositionSizingCurves(assetResults, cfg.capitalIni, sizeRules)
     } else {
