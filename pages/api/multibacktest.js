@@ -510,6 +510,7 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
 
   const senalesGeneradas = allCandidates.length
   let cntEjecutadas = 0, cntDescSlots = 0, cntDescCapital = 0, cntDescGate = 0
+  const debugGatePass = []  // DIAG temporal: señales que pasan el gate de RS por _psValid===false (delta del Paso A)
   let pnlHipEur = 0
   const pnlDescartados = []
 
@@ -583,6 +584,12 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
           cntDescGate++
           if (isFinite(t.pnlPct)) { pnlDescartados.push(t.pnlPct); pnlHipEur += capMaxPorPosicion * t.pnlPct / 100 }
           return
+        }
+        // DIAG temporal: el viejo gate bloqueaba _ps>=0 (incluye _ps===0 de "sin historial"). La vía nueva
+        // deja pasar _psValid===false. Capturamos exactamente ese delta (señales que antes se bloqueaban).
+        if (criterioUso === 'filtro' && prioridad === 'fuerza_relativa' && t._psValid === false && t._ps != null && t._ps >= 0) {
+          const _idxDbg = _dateIdxMap[t.symbol]?.[t.entryDate] ?? null
+          debugGatePass.push({ symbol: t.symbol, date: t.entryDate, idx: _idxDbg, rsRaw: t._rsRaw ?? null, psValid: t._psValid, ps: t._ps, barsDisponibles: _idxDbg })
         }
         const capPorEntrada = Math.min(poolLibre, capMaxPorPosicion)
         if (capPorEntrada < 0.01) { cntDescCapital++; if (isFinite(t.pnlPct)) { pnlDescartados.push(t.pnlPct); pnlHipEur += capMaxPorPosicion * t.pnlPct / 100 } return }
@@ -717,6 +724,7 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
     simpleCurve, compoundCurve, bhCurve, occupancyCurve, startDate,
     executedTrades, floatSimpleCurve, floatCompoundCurve,
     tInvEstrategia, avgCapOccupancy, senalStats,
+    debugGatePass,  // DIAG temporal: delta del gate RS tras Paso A
     ..._calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni),
     ..._calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni)
   }
