@@ -436,31 +436,36 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
       const ri = symbolsList ? symbolsList.indexOf(t.symbol) : -1
       return ri >= 0 ? ri : (symbolsList ? symbolsList.length : 999)
     }
+    // Campos CRUDOS + flag de validez por candidato (para gates con umbral, sin la ambigüedad de _ps=0).
+    // _psValid se refiere a la métrica ACTIVA (prioridad). El _ps devuelto NO cambia (orden idéntico).
     const data = _dataMap[t.symbol] || []
     const idx  = _dateIdxMap[t.symbol]?.[t.entryDate]
-    if (idx == null || data.length === 0) return 0
+    if (idx == null || data.length === 0) { t._psValid = false; return 0 }
 
     if (prioridad === 'momentum') {
       const N = Math.max(1, momentumN || 20)
-      if (idx < N) return 0
+      if (idx < N) { t._psValid = false; return 0 }   // sin historial suficiente
       const ret = (data[idx].close - data[idx - N].close) / data[idx - N].close
+      t._momRaw = ret; t._psValid = true
       return -ret  // mayor retorno → score más bajo → entra antes
     }
     if (prioridad === 'fuerza_relativa') {
       const LB = 63
-      if (idx < LB) return 0
+      if (idx < LB) { t._psValid = false; return 0 }  // sin historial suficiente del activo
       const retAsset = (data[idx].close - data[idx - LB].close) / data[idx - LB].close
       if (!sp500Data || !sp500Data.length) {
         console.warn('[concentrado] fuerza_relativa: sp500Data no disponible, usando momentum N=63')
-        return -retAsset
+        t._psValid = false; return -retAsset  // sin SP500 → RS no calculable → no válido (gate deja pasar)
       }
       let spIdx = -1
       for (let i = sp500Data.length - 1; i >= 0; i--) {
         if (sp500Data[i].date <= t.entryDate) { spIdx = i; break }
       }
-      if (spIdx < LB) return -retAsset
+      if (spIdx < LB) { t._psValid = false; return -retAsset }  // SP500 sin 63 barras en esa fecha
       const retSP = (sp500Data[spIdx].close - sp500Data[spIdx - LB].close) / sp500Data[spIdx - LB].close
-      return -(retAsset - retSP)  // mayor alfa vs SP500 → entra antes
+      const rs = retAsset - retSP
+      t._rsRaw = rs; t._psValid = true
+      return -rs  // mayor alfa vs SP500 → entra antes
     }
     if (prioridad === 'max52') {
       const LB = Math.min(idx, 251)
@@ -469,8 +474,11 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
         const h = (data[i].high != null ? data[i].high : data[i].close)
         if (h > max252) max252 = h
       }
-      if (max252 <= 0 || max252 === -Infinity) return 0
-      return -(data[idx].close / max252)  // más cercano al máximo → entra antes
+      if (max252 <= 0 || max252 === -Infinity) { t._psValid = false; return 0 }
+      const ratio = data[idx].close / max252
+      t._proxRaw = ratio                 // 1.0 = en el máximo; 0.9 = 10% por debajo
+      t._psValid = idx >= 251            // válido solo con la ventana completa de 252 barras
+      return -ratio  // más cercano al máximo → entra antes
     }
     return 0
   }
@@ -568,9 +576,10 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
         const capMaxPorPosicion = capitalTotal / slotsEfectivos
         if (slotsLibresEfectivos <= 0) { cntDescSlots++; if (isFinite(t.pnlPct)) { pnlDescartados.push(t.pnlPct); pnlHipEur += capMaxPorPosicion * t.pnlPct / 100 } return }
         // GATE v1 (filtro de entrada): solo si criterioUso==='filtro' && prioridad==='fuerza_relativa'.
-        // t._ps es el score NEGADO de la RS → "RS vs SP500 > 0" ⟺ t._ps < 0. Si la RS no es válida
-        // (null/NaN: <63 barras o sin ^GSPC) se DEJA PASAR (no filtra ante la duda). Solo bloquea con dato válido y RS no positiva.
-        if (criterioUso === 'filtro' && prioridad === 'fuerza_relativa' && t._ps != null && isFinite(t._ps) && t._ps >= 0) {
+        // Vía limpia con valor crudo + flag de validez (sin la ambigüedad de _ps=0):
+        // bloquea solo con RS calculable y no positiva (_psValid===true && _rsRaw<=0).
+        // Si no hay historial/SP500 (_psValid===false) DEJA PASAR (no filtra ante la duda).
+        if (criterioUso === 'filtro' && prioridad === 'fuerza_relativa' && t._psValid === true && t._rsRaw <= 0) {
           cntDescGate++
           if (isFinite(t.pnlPct)) { pnlDescartados.push(t.pnlPct); pnlHipEur += capMaxPorPosicion * t.pnlPct / 100 }
           return
