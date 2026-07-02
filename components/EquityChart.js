@@ -9,10 +9,12 @@ export default function EquityChart({
   floatCurve,floatCompoundCurve,showFloat,maxDDFloat,maxDDFloatDate,maxDDFloatCompound,maxDDFloatCompoundDate,
   syncRef,chartHeight=260,onAxisWidth
 }) {
-  const ref=useRef(null),chartRef=useRef(null),equityTooltipRef=useRef(null)
+  const ref=useRef(null),chartRef=useRef(null),equityTooltipRef=useRef(null),roRef=useRef(null)
   useEffect(()=>{
     if(!ref.current||ref.current.clientWidth<=0) return
+    let cancelled=false
     import('lightweight-charts').then(({createChart,CrosshairMode,LineStyle})=>{
+      if(cancelled) return
       if(chartRef.current){chartRef.current.remove();chartRef.current=null}
       const chart=createChart(ref.current,{
         width:ref.current.clientWidth,height:chartHeight,
@@ -120,11 +122,16 @@ export default function EquityChart({
       chart.timeScale().fitContent()
       const reportW=()=>{try{const w=chart.priceScale('right').width();if(w>0)onAxisWidth?.(w)}catch(_){}}
       requestAnimationFrame(()=>requestAnimationFrame(reportW))
+      if(roRef.current){try{roRef.current.disconnect()}catch(_){}}
       const ro=new ResizeObserver(()=>{if(ref.current&&chartRef.current){try{chart.applyOptions({width:ref.current.clientWidth})}catch(_){};requestAnimationFrame(reportW)}})
       ro.observe(ref.current)
-      return()=>ro.disconnect()
+      roRef.current=ro
     })
-    return()=>{if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null}}
+    return()=>{
+      cancelled=true
+      if(roRef.current){try{roRef.current.disconnect()}catch(_){};roRef.current=null}
+      if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};try{chartRef.current.remove()}catch(_){};chartRef.current=null}
+    }
   },[strategyCurve,bhCurve,sp500BHCurve,compoundCurve,maxDDStrategy,maxDDBH,maxDDSP500,maxDDCompound,maxDDStrategyDate,maxDDBHDate,maxDDSP500Date,maxDDCompoundDate,capitalIni,showStrategy,showBH,showSP500,showCompound,floatCurve,floatCompoundCurve,showFloat,maxDDFloat,maxDDFloatDate,maxDDFloatCompound,maxDDFloatCompoundDate])
 
   useEffect(()=>{

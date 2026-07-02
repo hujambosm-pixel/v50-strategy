@@ -881,7 +881,6 @@ export default function Home() {
   const [mcEquityH,setMcEquityH]=useState(300) // resizable MC equity chart height
   const candleResizing=useRef(false),candleStartY=useRef(0),candleStartH=useRef(0)
   const equityResizing=useRef(false),equityStartY=useRef(0),equityStartH=useRef(0)
-  const mcEquityResizing=useRef(false),mcEquityStartY=useRef(0),mcEquityStartH=useRef(0)
   const mcEquityContainerRef=useRef(null)  // mide el hueco disponible para autoajustar mcEquityH
   const sidebarResizing=useRef(false), rightResizing=useRef(false)
   const sidebarStartX=useRef(0), sidebarStartW=useRef(0)
@@ -923,14 +922,10 @@ export default function Home() {
         const dy=e.clientY-equityStartY.current
         setEquityH(Math.max(120,Math.min(600,equityStartH.current+dy)))
       }
-      if(mcEquityResizing.current){
-        const dy=e.clientY-mcEquityStartY.current
-        setMcEquityH(Math.max(120,Math.min(600,mcEquityStartH.current+dy)))
-      }
     }
     const onUp=()=>{
     sidebarResizing.current=false;rightResizing.current=false
-    candleResizing.current=false;equityResizing.current=false;mcEquityResizing.current=false
+    candleResizing.current=false;equityResizing.current=false
     document.body.style.cursor='';document.body.style.userSelect=''
   }
     window.addEventListener('mousemove',onMove)
@@ -4538,7 +4533,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.564</title>
+        <title>Trading Simulator V9.565</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4616,7 +4611,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.564
+            <span className="dot"/>Trading Simulator V9.565
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -8094,13 +8089,6 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       <div>{fmtTaxLine('B&H',mcTaxSummaryFor(mcAfterTax.bh,mcAfterTax.bhTotalTax,mcResult.startDate))}</div>
                     </div>
                   )}
-                  </div>
-                  <div onMouseDown={e=>{mcEquityResizing.current=true;mcEquityStartY.current=e.clientY;mcEquityStartH.current=mcEquityH;document.body.style.cursor='row-resize';document.body.style.userSelect='none'}}
-                    style={{height:6,cursor:'row-resize',background:'transparent',transition:'background 0.15s',
-                      borderTop:'2px solid var(--border)',display:'flex',alignItems:'center',justifyContent:'center'}}
-                    onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.15)'}
-                    onMouseOut={e=>e.currentTarget.style.background='transparent'}>
-                    <div style={{width:32,height:2,borderRadius:1,background:'rgba(0,212,255,0.3)'}}/>
                   </div>
                 </div>
 

@@ -30,11 +30,13 @@ export function MultiCartChart({simpleCurve,compoundCurve,bhCurve,sp500BHCurve,c
   maxDDFloatSimple,maxDDFloatSimpleDate,maxDDFloatCompound,maxDDFloatCompoundDate,
   showSimple,showCompound,showBH,showSP500,onReady,onAxisWidth,syncRef,chartHeight=300,
   afterTax=false,taxByDateCompound=null,taxByDateBH=null}) {
-  const ref=useRef(null),chartRef=useRef(null)
+  const ref=useRef(null),chartRef=useRef(null),roRef=useRef(null)
 
   useEffect(()=>{
     if(!ref.current||ref.current.clientWidth<=0) return
+    let cancelled=false
     import('lightweight-charts').then(({createChart,CrosshairMode,LineStyle})=>{
+      if(cancelled) return
       if(chartRef.current){chartRef.current.remove();chartRef.current=null}
       if(!ref.current||ref.current.clientWidth<=0) return
       const chart=createChart(ref.current,{
@@ -113,11 +115,16 @@ export function MultiCartChart({simpleCurve,compoundCurve,bhCurve,sp500BHCurve,c
       if(onReady) onReady({fitAll:()=>{try{chart.timeScale().fitContent()}catch(_){}},getPriceScaleWidth:()=>{try{return chart.priceScale('right').width()}catch(_){return 0}}})
       const reportW=()=>{try{const w=chart.priceScale('right').width();if(w>0)onAxisWidth?.(w)}catch(_){}}
       requestAnimationFrame(()=>requestAnimationFrame(reportW))
+      if(roRef.current){try{roRef.current.disconnect()}catch(_){}}
       const ro=new ResizeObserver(()=>{if(ref.current&&chartRef.current){try{chart.applyOptions({width:ref.current.clientWidth})}catch(_){};requestAnimationFrame(reportW)}})
       ro.observe(ref.current)
-      return()=>ro.disconnect()
+      roRef.current=ro
     })
-    return()=>{if(chartRef.current){chartRef.current.remove();chartRef.current=null}}
+    return()=>{
+      cancelled=true
+      if(roRef.current){try{roRef.current.disconnect()}catch(_){};roRef.current=null}
+      if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};try{chartRef.current.remove()}catch(_){};chartRef.current=null}
+    }
   },[simpleCurve,compoundCurve,bhCurve,sp500BHCurve,capitalIni,maxDDSimple,maxDDSimpleDate,maxDDCompound,maxDDCompoundDate,maxDDBH,maxDDBHDate,maxDDSP500,maxDDSP500Date,floatSimpleCurve,floatCompoundCurve,showFloat,maxDDFloatSimple,maxDDFloatSimpleDate,maxDDFloatCompound,maxDDFloatCompoundDate,showSimple,showCompound,showBH,showSP500,afterTax,taxByDateCompound,taxByDateBH])
 
   useEffect(()=>{
@@ -132,10 +139,12 @@ export function MultiCartChart({simpleCurve,compoundCurve,bhCurve,sp500BHCurve,c
 // ── OccupancyBarChart — individual asset capital invested chart ────
 // showMode: 'compound'|'simple' — independent filter, own toggle
 export function OccupancyBarChart({trades, chartData, capitalIni, syncRef, showMode='compound', axisWidth=90}) {
-  const ref=useRef(null), chartRef=useRef(null)
+  const ref=useRef(null), chartRef=useRef(null), roRef=useRef(null)
   useEffect(()=>{
     if(!ref.current||!trades?.length||!chartData?.length||ref.current.clientWidth<=0) return
+    let cancelled=false
     import('lightweight-charts').then(({createChart,CrosshairMode})=>{
+      if(cancelled) return
       if(chartRef.current){chartRef.current.__syncCleanup?.();chartRef.current.remove();chartRef.current=null}
       if(!ref.current||ref.current.clientWidth<=0) return
       const chart=createChart(ref.current,{
@@ -183,22 +192,29 @@ export function OccupancyBarChart({trades, chartData, capitalIni, syncRef, showM
         chart.__syncCleanup=()=>{try{unsub()}catch(_){};if(syncRef.current)syncRef.current.listeners=syncRef.current.listeners.filter(e=>e.id!==syncId)}
       }
       chart.timeScale().fitContent()
+      if(roRef.current){try{roRef.current.disconnect()}catch(_){}}
       const ro=new ResizeObserver(()=>{try{if(!ref.current||!chartRef.current)return;const w=ref.current.clientWidth;if(w>0)chartRef.current.applyOptions({width:w})}catch(_){}})
       ro.observe(ref.current)
-      return()=>ro.disconnect()
+      roRef.current=ro
     })
-    return()=>{if(chartRef.current){chartRef.current.__syncCleanup?.();chartRef.current.remove();chartRef.current=null}}
+    return()=>{
+      cancelled=true
+      if(roRef.current){try{roRef.current.disconnect()}catch(_){};roRef.current=null}
+      if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};try{chartRef.current.remove()}catch(_){};chartRef.current=null}
+    }
   },[trades,chartData,showMode,capitalIni,axisWidth])
   return <div ref={ref} style={{minHeight:100}}/>
 }
 
 // ── McOccupancyChart — MC capital empleado, multi-series ──
 export function McOccupancyChart({series=[], capitalIni, syncRef, axisWidth=72}) {
-  const ref=useRef(null), chartRef=useRef(null)
+  const ref=useRef(null), chartRef=useRef(null), roRef=useRef(null)
   useEffect(()=>{
     const validSeries=series.filter(s=>s.occupancyCurve?.length)
     if(!ref.current||!validSeries.length||ref.current.clientWidth<=0) return
+    let cancelled=false
     import('lightweight-charts').then(({createChart,CrosshairMode})=>{
+      if(cancelled) return
       if(chartRef.current){chartRef.current.__syncCleanup?.();chartRef.current.remove();chartRef.current=null}
       if(!ref.current||ref.current.clientWidth<=0) return
       const chart=createChart(ref.current,{
@@ -241,21 +257,28 @@ export function McOccupancyChart({series=[], capitalIni, syncRef, axisWidth=72})
         chart.__syncCleanup=()=>{try{unsub()}catch(_){};if(syncRef.current)syncRef.current.listeners=syncRef.current.listeners.filter(e=>e.id!==syncId)}
       }
       chart.timeScale().fitContent()
+      if(roRef.current){try{roRef.current.disconnect()}catch(_){}}
       const ro=new ResizeObserver(()=>{try{if(!ref.current||!chartRef.current)return;const w=ref.current.clientWidth;if(w>0)chartRef.current.applyOptions({width:w})}catch(_){}})
       ro.observe(ref.current)
-      return()=>ro.disconnect()
+      roRef.current=ro
     })
-    return()=>{if(chartRef.current){chartRef.current.__syncCleanup?.();chartRef.current.remove();chartRef.current=null}}
+    return()=>{
+      cancelled=true
+      if(roRef.current){try{roRef.current.disconnect()}catch(_){};roRef.current=null}
+      if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};try{chartRef.current.remove()}catch(_){};chartRef.current=null}
+    }
   },[series,capitalIni,syncRef,axisWidth])
   return <div ref={ref} style={{minHeight:100}}/>
 }
 
 // ── StratCompareChart — multiple strategy equity curves ──────────────────────
 export function StratCompareChart({curves,capitalIni,showMaxDD=true,chartHeight=300,syncRef,onReady,onAxisWidth,afterTax=false}) {
-  const ref=useRef(null),chartRef=useRef(null)
+  const ref=useRef(null),chartRef=useRef(null),roRef=useRef(null)
   useEffect(()=>{
     if(!ref.current||!curves?.length||ref.current.clientWidth<=0) return
+    let cancelled=false
     import('lightweight-charts').then(({createChart,CrosshairMode,LineStyle})=>{
+      if(cancelled) return
       if(chartRef.current){chartRef.current.__syncCleanup?.();chartRef.current.remove();chartRef.current=null}
       if(!ref.current||ref.current.clientWidth<=0) return
       const chart=createChart(ref.current,{
@@ -332,11 +355,16 @@ export function StratCompareChart({curves,capitalIni,showMaxDD=true,chartHeight=
       if(onReady) onReady({fitAll:()=>{try{chart.timeScale().fitContent()}catch(_){}},getPriceScaleWidth:()=>{try{return chart.priceScale('right').width()}catch(_){return 0}}})
       const reportW=()=>{try{const w=chart.priceScale('right').width();if(w>0)onAxisWidth?.(w)}catch(_){}}
       requestAnimationFrame(()=>requestAnimationFrame(reportW))
+      if(roRef.current){try{roRef.current.disconnect()}catch(_){}}
       const ro=new ResizeObserver(()=>{if(ref.current&&chartRef.current){try{chart.applyOptions({width:ref.current.clientWidth})}catch(_){};requestAnimationFrame(reportW)}})
       ro.observe(ref.current)
-      return()=>ro.disconnect()
+      roRef.current=ro
     })
-    return()=>{if(chartRef.current){chartRef.current.__syncCleanup?.();chartRef.current.remove();chartRef.current=null}}
+    return()=>{
+      cancelled=true
+      if(roRef.current){try{roRef.current.disconnect()}catch(_){};roRef.current=null}
+      if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};try{chartRef.current.remove()}catch(_){};chartRef.current=null}
+    }
   },[curves,capitalIni,showMaxDD,afterTax])
   useEffect(()=>{
     if(chartRef.current) try{chartRef.current.applyOptions({height:chartHeight})}catch(_){}
@@ -355,6 +383,7 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
   const svgRef=useRef(null)
   const candlesRef=useRef(null)
   const tradeSeriesMapRef=useRef(new Map())
+  const roRef=useRef(null)
   const [inView,setInView]=useState(false)
   const [ohlcv,setOhlcv]=useState(null)
   const [loading,setLoading]=useState(false)
@@ -387,7 +416,9 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
   // Build/rebuild chart when data or signals change
   useEffect(()=>{
     if(!ohlcv?.length||!chartDivRef.current||chartDivRef.current.clientWidth<=0) return
+    let cancelled=false
     import('lightweight-charts').then(({createChart,CrosshairMode})=>{
+      if(cancelled) return
       // Cleanup previous instance and remove from sync group
       if(chartRef.current){chartRef.current.__syncCleanup?.();chartRef.current.remove();chartRef.current=null}
       if(!chartDivRef.current||chartDivRef.current.clientWidth<=0) return
@@ -535,6 +566,7 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
         }
       }
       setTimeout(drawTradeLabels,100)
+      if(roRef.current){try{roRef.current.disconnect()}catch(_){}}
       const ro=new ResizeObserver(()=>{
         if(chartDivRef.current&&chartRef.current){
           try{chart.applyOptions({width:chartDivRef.current.clientWidth})}catch(_){}
@@ -542,13 +574,15 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
         }
       })
       ro.observe(chartDivRef.current)
-      return()=>ro.disconnect()
+      roRef.current=ro
     })
     return()=>{
+      cancelled=true
+      if(roRef.current){try{roRef.current.disconnect()}catch(_){};roRef.current=null}
       svgRef.current?.querySelectorAll('.trade-label').forEach(el=>el.remove())
       candlesRef.current=null
       tradeSeriesMapRef.current=new Map()
-      if(chartRef.current){chartRef.current.__syncCleanup?.();chartRef.current.remove();chartRef.current=null}
+      if(chartRef.current){chartRef.current.__syncCleanup?.();try{chartRef.current.remove()}catch(_){};chartRef.current=null}
     }
   },[ohlcv,stratSignals,height])
 
