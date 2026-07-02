@@ -882,6 +882,7 @@ export default function Home() {
   const candleResizing=useRef(false),candleStartY=useRef(0),candleStartH=useRef(0)
   const equityResizing=useRef(false),equityStartY=useRef(0),equityStartH=useRef(0)
   const mcEquityResizing=useRef(false),mcEquityStartY=useRef(0),mcEquityStartH=useRef(0)
+  const mcEquityContainerRef=useRef(null)  // mide el hueco disponible para autoajustar mcEquityH
   const sidebarResizing=useRef(false), rightResizing=useRef(false)
   const sidebarStartX=useRef(0), sidebarStartW=useRef(0)
   const rightStartX=useRef(0), rightStartW=useRef(0)
@@ -1202,6 +1203,24 @@ export default function Home() {
     ro.observe(tlInvestContainerRef.current)
     return ()=>ro.disconnect()
   },[])
+  // ── Autoajuste de la altura del equity del multibacktest ──
+  // Mide el hueco entre el borde superior del contenedor del gráfico (bajo la fila de botones EQUITY)
+  // y el fondo de la ventana, y lo usa como mcEquityH. Recalcula al montar, al hacer resize de la ventana,
+  // y cuando cambia mcDisplayResults/mcResult (varía la altura de la tabla comparativa → cambia el hueco).
+  // El drag-handle sobrescribe mcEquityH manualmente hasta el próximo recálculo. Cleanup en el return externo.
+  useEffect(()=>{
+    if(sidePanel!=='multi') return
+    const recompute=()=>{
+      const el=mcEquityContainerRef.current
+      if(!el) return
+      const top=el.getBoundingClientRect().top
+      const h=Math.round(window.innerHeight - top - 10)  // ~10px de margen inferior
+      if(h>150) setMcEquityH(prev=>prev===h?prev:h)
+    }
+    const raf=requestAnimationFrame(()=>requestAnimationFrame(recompute))
+    window.addEventListener('resize',recompute)
+    return ()=>{ cancelAnimationFrame(raf); window.removeEventListener('resize',recompute) }
+  },[sidePanel,mcDisplayResults,mcResult])
   // ── groupTradesForDisplay: FIFO match individual fills → virtual grouped rows ──
   // tlTrades stores raw fills (fill_type:'buy'|'sell', status:'open').
   // This function pairs them chronologically per symbol so the UI shows closed ops with entry+exit.
@@ -4519,7 +4538,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.563</title>
+        <title>Trading Simulator V9.564</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4597,7 +4616,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.563
+            <span className="dot"/>Trading Simulator V9.564
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -8002,7 +8021,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       style={{marginLeft:'auto',fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',border:'1px solid #1a2d45',background:'rgba(0,212,255,0.07)',color:'#7a9bc0',flexShrink:0}}
                       title="Ver periodo completo">⊠ Periodo completo</button>
                   </div>
-                  <div style={{position:'relative'}}>
+                  <div ref={mcEquityContainerRef} style={{position:'relative'}}>
                   {mcDisplayResults.length>1?(
                     <StratCompareChart
                       curves={[
