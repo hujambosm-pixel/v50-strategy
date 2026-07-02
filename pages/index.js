@@ -879,9 +879,11 @@ export default function Home() {
   const [chartFullscreen,setChartFullscreen]=useState(false)
   const [equityH,setEquityH]=useState(260)     // resizable equity chart height
   const [mcEquityH,setMcEquityH]=useState(300) // resizable MC equity chart height
-  const candleResizing=useRef(false),candleStartY=useRef(0),candleStartH=useRef(0)
-  const equityResizing=useRef(false),equityStartY=useRef(0),equityStartH=useRef(0)
   const mcEquityContainerRef=useRef(null)  // mide el hueco disponible para autoajustar mcEquityH
+  // Individual: reparto velas/equity con un divisor único y proporción persistente (default 2/3 velas)
+  const [indivSplitRatio,setIndivSplitRatio]=useState(2/3)
+  const indivSplitResizing=useRef(false),indivSplitStartY=useRef(0),indivSplitStartRatio=useRef(0)
+  const indivBudgetRef=useRef(0)  // último "hueco" (px) repartible entre velas y equity
   const sidebarResizing=useRef(false), rightResizing=useRef(false)
   const sidebarStartX=useRef(0), sidebarStartW=useRef(0)
   const rightStartX=useRef(0), rightStartW=useRef(0)
@@ -914,18 +916,17 @@ export default function Home() {
         const delta=rightStartX.current-e.clientX
         setRightPanelW(Math.max(200,Math.min(480,rightStartW.current+delta)))
       }
-      if(candleResizing.current){
-        const dy=e.clientY-candleStartY.current
-        setCandleH(Math.max(200,Math.min(900,candleStartH.current+dy)))
-      }
-      if(equityResizing.current){
-        const dy=e.clientY-equityStartY.current
-        setEquityH(Math.max(120,Math.min(600,equityStartH.current+dy)))
+      if(indivSplitResizing.current){
+        // Divisor único velas/equity: arrastrar abajo → más velas; el ratio persiste en resize
+        const budget=indivBudgetRef.current||1
+        const dy=e.clientY-indivSplitStartY.current
+        const r=Math.max(0.4,Math.min(0.8,indivSplitStartRatio.current+dy/budget))
+        setIndivSplitRatio(r)
       }
     }
     const onUp=()=>{
     sidebarResizing.current=false;rightResizing.current=false
-    candleResizing.current=false;equityResizing.current=false
+    indivSplitResizing.current=false
     document.body.style.cursor='';document.body.style.userSelect=''
   }
     window.addEventListener('mousemove',onMove)
@@ -1216,6 +1217,29 @@ export default function Home() {
     window.addEventListener('resize',recompute)
     return ()=>{ cancelAnimationFrame(raf); window.removeEventListener('resize',recompute) }
   },[sidePanel,mcDisplayResults,mcResult])
+
+  // ── Reparto velas/equity del backtesting individual (divisor único, proporción persistente) ──
+  // Mide el hueco desde el top de la sección de velas hasta el fondo de la ventana y lo reparte entre
+  // candleH y equityH según indivSplitRatio (default 2/3 velas). Recalcula al montar, al hacer resize
+  // (manteniendo el ratio → Opción Y), y al cambiar el ratio (arrastre del divisor). Cleanup externo.
+  useEffect(()=>{
+    if(sidePanel==='multi'||sidePanel==='tradelog'||sidePanel==='risk'||!result||result.isBareChart) return
+    const OVERHEAD=56  // barras/legends de cada chart + divisor (aprox., para que la suma no genere scroll)
+    const recompute=()=>{
+      const el=chartWrapRef.current
+      if(!el) return
+      const top=el.getBoundingClientRect().top
+      const budget=Math.max(240, Math.round(window.innerHeight - top - 10 - OVERHEAD))
+      indivBudgetRef.current=budget
+      const r=Math.max(0.4,Math.min(0.8,indivSplitRatio))
+      const ch=Math.round(budget*r), eh=Math.round(budget*(1-r))
+      setCandleH(prev=>prev===ch?prev:ch)
+      setEquityH(prev=>prev===eh?prev:eh)
+    }
+    const raf=requestAnimationFrame(()=>requestAnimationFrame(recompute))
+    window.addEventListener('resize',recompute)
+    return ()=>{ cancelAnimationFrame(raf); window.removeEventListener('resize',recompute) }
+  },[sidePanel,result,indivSplitRatio])
   // ── groupTradesForDisplay: FIFO match individual fills → virtual grouped rows ──
   // tlTrades stores raw fills (fill_type:'buy'|'sell', status:'open').
   // This function pairs them chronologically per symbol so the UI shows closed ops with entry+exit.
@@ -4533,7 +4557,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.566</title>
+        <title>Trading Simulator V9.567</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4611,7 +4635,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.566
+            <span className="dot"/>Trading Simulator V9.567
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -7260,8 +7284,9 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         filterZones={result?.filterZones||[]}
                       />
                     </div>
-                    {/* Drag handle — resize candle chart (oculto en bare chart) */}
-                    {!result.isBareChart&&<div onMouseDown={e=>{candleResizing.current=true;candleStartY.current=e.clientY;candleStartH.current=candleH;document.body.style.cursor='row-resize';document.body.style.userSelect='none'}}
+                    {/* Divisor único velas/equity — arrastra el reparto (sube uno, baja el otro) */}
+                    {!result.isBareChart&&<div onMouseDown={e=>{indivSplitResizing.current=true;indivSplitStartY.current=e.clientY;indivSplitStartRatio.current=indivSplitRatio;document.body.style.cursor='row-resize';document.body.style.userSelect='none'}}
+                      title="Arrastra para repartir el alto entre velas y equity"
                       style={{height:6,cursor:'row-resize',background:'transparent',transition:'background 0.15s',
                         borderTop:'2px solid var(--border)',display:'flex',alignItems:'center',justifyContent:'center'}}
                       onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.15)'}
@@ -7454,14 +7479,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       chartHeight={equityH}
                       onAxisWidth={w=>setIndivAxisW(prev=>Math.abs(prev-w)>0.5?w:prev)}
                     />
-                    {/* Drag handle — resize equity chart height */}
-                    <div onMouseDown={e=>{equityResizing.current=true;equityStartY.current=e.clientY;equityStartH.current=equityH;document.body.style.cursor='row-resize';document.body.style.userSelect='none'}}
-                      style={{height:6,cursor:'row-resize',background:'transparent',transition:'background 0.15s',
-                        borderTop:'2px solid var(--border)',display:'flex',alignItems:'center',justifyContent:'center'}}
-                      onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.15)'}
-                      onMouseOut={e=>e.currentTarget.style.background='transparent'}>
-                      <div style={{width:32,height:2,borderRadius:1,background:'rgba(0,212,255,0.3)'}}/>
-                    </div>
+                    {/* (handle de equity eliminado — ahora hay un único divisor velas/equity arriba) */}
                     {/* ── Ganancias mensuales (individual) — Estrategia vs B&H del activo ── */}
                     {(()=>{
                       const capIniNum=Number(capitalIni)
