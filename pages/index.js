@@ -881,7 +881,7 @@ export default function Home() {
   const [mcEquityH,setMcEquityH]=useState(300) // resizable MC equity chart height
   const mcEquityContainerRef=useRef(null)  // mide el hueco disponible para autoajustar mcEquityH
   // Individual: reparto velas/equity con un divisor único y proporción persistente (default 2/3 velas)
-  const [indivSplitRatio,setIndivSplitRatio]=useState(2/3)
+  const [indivSplitRatio,setIndivSplitRatio]=useState(0.75)
   const indivSplitResizing=useRef(false),indivSplitStartY=useRef(0),indivSplitStartRatio=useRef(0)
   const indivBudgetRef=useRef(0)  // último "hueco" (px) repartible entre velas y equity
   const sidebarResizing=useRef(false), rightResizing=useRef(false)
@@ -920,7 +920,7 @@ export default function Home() {
         // Divisor único velas/equity: arrastrar abajo → más velas; el ratio persiste en resize
         const budget=indivBudgetRef.current||1
         const dy=e.clientY-indivSplitStartY.current
-        const r=Math.max(0.4,Math.min(0.8,indivSplitStartRatio.current+dy/budget))
+        const r=Math.max(0.4,Math.min(0.85,indivSplitStartRatio.current+dy/budget))
         setIndivSplitRatio(r)
       }
     }
@@ -1224,14 +1224,14 @@ export default function Home() {
   // (manteniendo el ratio → Opción Y), y al cambiar el ratio (arrastre del divisor). Cleanup externo.
   useEffect(()=>{
     if(sidePanel==='multi'||sidePanel==='tradelog'||sidePanel==='risk'||!result||result.isBareChart) return
-    const OVERHEAD=56  // barras/legends de cada chart + divisor (aprox., para que la suma no genere scroll)
+    const OVERHEAD=96  // barras/legends de cada chart + divisor (aprox.; reserva de más para que "Ganancias mensuales" quede bajo el pliegue)
     const recompute=()=>{
       const el=chartWrapRef.current
       if(!el) return
       const top=el.getBoundingClientRect().top
       const budget=Math.max(240, Math.round(window.innerHeight - top - 10 - OVERHEAD))
       indivBudgetRef.current=budget
-      const r=Math.max(0.4,Math.min(0.8,indivSplitRatio))
+      const r=Math.max(0.4,Math.min(0.85,indivSplitRatio))
       const ch=Math.round(budget*r), eh=Math.round(budget*(1-r))
       setCandleH(prev=>prev===ch?prev:ch)
       setEquityH(prev=>prev===eh?prev:eh)
@@ -4557,7 +4557,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.567</title>
+        <title>Trading Simulator V9.568</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4635,7 +4635,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.567
+            <span className="dot"/>Trading Simulator V9.568
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
