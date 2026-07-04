@@ -880,10 +880,13 @@ export default function Home() {
   const [equityH,setEquityH]=useState(260)     // resizable equity chart height
   const [mcEquityH,setMcEquityH]=useState(300) // resizable MC equity chart height
   const mcEquityContainerRef=useRef(null)  // mide el hueco disponible para autoajustar mcEquityH
-  // Individual: reparto velas/equity con un divisor único y proporción persistente (default 2/3 velas)
+  // Individual: reparto velas/equity con un divisor único y proporción persistente (default 0.75 velas)
   const [indivSplitRatio,setIndivSplitRatio]=useState(0.75)
   const indivSplitResizing=useRef(false),indivSplitStartY=useRef(0),indivSplitStartRatio=useRef(0)
-  const indivBudgetRef=useRef(0)  // último "hueco" (px) repartible entre velas y equity
+  const indivBudgetRef=useRef(0)      // último "hueco" (px) repartible entre velas y equity
+  const indivMonthlyRef=useRef(null)  // ancla: top del bloque "Ganancias mensuales" del individual
+  const candleHRef=useRef(candleH); candleHRef.current=candleH      // espejo para lectura fresca en el efecto
+  const equityHRef=useRef(equityH); equityHRef.current=equityH
   const sidebarResizing=useRef(false), rightResizing=useRef(false)
   const sidebarStartX=useRef(0), sidebarStartW=useRef(0)
   const rightStartX=useRef(0), rightStartW=useRef(0)
@@ -1219,17 +1222,23 @@ export default function Home() {
   },[sidePanel,mcDisplayResults,mcResult])
 
   // ── Reparto velas/equity del backtesting individual (divisor único, proporción persistente) ──
-  // Mide el hueco desde el top de la sección de velas hasta el fondo de la ventana y lo reparte entre
-  // candleH y equityH según indivSplitRatio (default 2/3 velas). Recalcula al montar, al hacer resize
-  // (manteniendo el ratio → Opción Y), y al cambiar el ratio (arrastre del divisor). Cleanup externo.
+  // Anclado al bloque "Ganancias mensuales": el "chrome" (barras/legends/divisor entre velas y mensuales)
+  // se mide restando las alturas ACTUALES de los charts (candleHRef+equityHRef) del gap topMensuales−topVelas.
+  // Ese chrome NO depende del ratio ni del reparto → medición exacta y loop-safe (ver nota abajo).
+  // budget = innerHeight − topVelas − chrome (+SAFETY para que mensuales quede bajo el pliegue).
+  // Recalcula al montar, al hacer resize (mantiene el ratio → Opción Y) y al cambiar el ratio. Cleanup externo.
   useEffect(()=>{
     if(sidePanel==='multi'||sidePanel==='tradelog'||sidePanel==='risk'||!result||result.isBareChart) return
-    const OVERHEAD=96  // barras/legends de cada chart + divisor (aprox.; reserva de más para que "Ganancias mensuales" quede bajo el pliegue)
+    const SAFETY=8  // px que empujan "Ganancias mensuales" justo por debajo del pliegue (equity pierde ~8px de margen inferior, imperceptible)
     const recompute=()=>{
-      const el=chartWrapRef.current
-      if(!el) return
-      const top=el.getBoundingClientRect().top
-      const budget=Math.max(240, Math.round(window.innerHeight - top - 10 - OVERHEAD))
+      const velasEl=chartWrapRef.current, monthlyEl=indivMonthlyRef.current
+      if(!velasEl||!monthlyEl) return
+      const topVelas=velasEl.getBoundingClientRect().top
+      const topMonthly=monthlyEl.getBoundingClientRect().top
+      const curCharts=(candleHRef.current||0)+(equityHRef.current||0)
+      // chrome = todo lo no-chart entre velas y mensuales (infobar velas + subpaneles + divisor + legend equity)
+      const chrome=Math.max(0,(topMonthly-topVelas)-curCharts)
+      const budget=Math.max(240, Math.round(window.innerHeight - topVelas - chrome + SAFETY))
       indivBudgetRef.current=budget
       const r=Math.max(0.4,Math.min(0.85,indivSplitRatio))
       const ch=Math.round(budget*r), eh=Math.round(budget*(1-r))
@@ -4557,7 +4566,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.568</title>
+        <title>Trading Simulator V9.569</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4635,7 +4644,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.568
+            <span className="dot"/>Trading Simulator V9.569
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -7487,7 +7496,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       if(result.compoundCurve?.length) mSeries.push({id:'__strat__',name:'Estrategia',color:'#00e5a0',compoundCurve:result.compoundCurve,visible:showCompound})
                       if(result.bhCurve?.length) mSeries.push({id:'__bh__',name:'B&H Activo',color:'#ffd166',compoundCurve:result.bhCurve,visible:showBH})
                       if(!mSeries.some(s=>s.compoundCurve?.length)) return null
-                      return <div data-chart="monthly"><div style={{width:'calc(100% - 21px)',marginLeft:0}}><McMonthlyGainsChart series={mSeries} capitalIni={capIniNum} syncRef={chartSyncRef} axisWidth={indivAxisW}/></div></div>
+                      return <div ref={indivMonthlyRef} data-chart="monthly"><div style={{width:'calc(100% - 21px)',marginLeft:0}}><McMonthlyGainsChart series={mSeries} capitalIni={capIniNum} syncRef={chartSyncRef} axisWidth={indivAxisW}/></div></div>
                     })()}
                     {/* Capital invertido — filtro propio independiente */}
                     {result.trades?.length>0&&(
