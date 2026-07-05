@@ -885,7 +885,6 @@ export default function Home() {
   const indivSplitResizing=useRef(false),indivSplitStartY=useRef(0),indivSplitStartRatio=useRef(0)
   const indivBudgetRef=useRef(0)      // último "hueco" (px) repartible entre velas y equity
   const indivMonthlyRef=useRef(null)  // ancla: top del bloque "Ganancias mensuales" del individual
-  const indivEquityRef=useRef(null)   // DEBUG temporal: medir bottom del bloque equity
   const candleHRef=useRef(candleH); candleHRef.current=candleH      // espejo para lectura fresca en el efecto
   const equityHRef=useRef(equityH); equityHRef.current=equityH
   const sidebarResizing=useRef(false), rightResizing=useRef(false)
@@ -1223,46 +1222,28 @@ export default function Home() {
   },[sidePanel,mcDisplayResults,mcResult])
 
   // ── Reparto velas/equity del backtesting individual (divisor único, proporción persistente) ──
-  // Anclado al bloque "Ganancias mensuales": el "chrome" (barras/legends/divisor entre velas y mensuales)
-  // se mide restando las alturas ACTUALES de los charts (candleHRef+equityHRef) del gap topMensuales−topVelas.
-  // Ese chrome NO depende del ratio ni del reparto → medición exacta y loop-safe (ver nota abajo).
-  // budget = innerHeight − topVelas − chrome (+SAFETY para que mensuales quede bajo el pliegue).
-  // Recalcula al montar, al hacer resize (mantiene el ratio → Opción Y) y al cambiar el ratio. Cleanup externo.
+  // Corrección por DELTA medido del DOM: el objetivo es que "Ganancias mensuales" quede justo bajo el pliegue
+  // (topMonthly ≈ innerHeight + SAFETY). Medimos topMonthly real y calculamos delta = target − topMonthly;
+  // el nuevo total de charts = (candleH+equityH actuales) + delta → al crecer/encoger los charts en `delta`,
+  // topMonthly se mueve en `delta` y aterriza en el target. NO dependemos de medir el "chrome" (poco fiable).
+  // Loop-safe: el efecto es one-shot por trigger (deps = [sidePanel,result,indivSplitRatio]); setCandleH/setEquityH
+  // NO están en deps, así que no se re-dispara → no oscila. Tolerancia: si |delta| pequeño y el ratio no cambió,
+  // los guards prev===x evitan re-render. Recalcula al montar, resize (mantiene ratio → Opción Y) y cambio de ratio.
   useEffect(()=>{
     if(sidePanel==='multi'||sidePanel==='tradelog'||sidePanel==='risk'||!result||result.isBareChart) return
-    const SAFETY=8  // px que empujan "Ganancias mensuales" justo por debajo del pliegue (equity pierde ~8px de margen inferior, imperceptible)
+    const SAFETY=2  // topMonthly objetivo = innerHeight+2 → mensuales justo por debajo del pliegue (equity pierde ~2px de margen, imperceptible)
     const recompute=()=>{
-      const velasEl=chartWrapRef.current, monthlyEl=indivMonthlyRef.current
-      if(!velasEl||!monthlyEl) return
-      const topVelas=velasEl.getBoundingClientRect().top
+      const monthlyEl=indivMonthlyRef.current
+      if(!monthlyEl) return
       const topMonthly=monthlyEl.getBoundingClientRect().top
-      const curCharts=(candleHRef.current||0)+(equityHRef.current||0)
-      // chrome = todo lo no-chart entre velas y mensuales (infobar velas + subpaneles + divisor + legend equity)
-      const chrome=Math.max(0,(topMonthly-topVelas)-curCharts)
-      const budget=Math.max(240, Math.round(window.innerHeight - topVelas - chrome + SAFETY))
-      indivBudgetRef.current=budget
+      const curTotal=(candleHRef.current||0)+(equityHRef.current||0)
+      const delta=(window.innerHeight + SAFETY) - topMonthly   // >0 asoma → crecer; <0 equity cortado → encoger
+      const newTotal=Math.max(240, Math.round(curTotal + delta))
+      indivBudgetRef.current=newTotal
       const r=Math.max(0.4,Math.min(0.85,indivSplitRatio))
-      const ch=Math.round(budget*r), eh=Math.round(budget*(1-r))
-      console.log('[REPARTO]', {
-        innerHeight: window.innerHeight,
-        topVelas,
-        topMonthly,
-        bottomEquity: indivEquityRef.current?.getBoundingClientRect().bottom,
-        candleH_actual: candleHRef.current,
-        equityH_actual: equityHRef.current,
-        chrome_calculado: chrome,
-        budget_calculado: budget,
-        candleH_nuevo: ch,
-        equityH_nuevo: eh,
-        ratio: indivSplitRatio
-      })
+      const ch=Math.round(newTotal*r), eh=Math.round(newTotal*(1-r))
       setCandleH(prev=>prev===ch?prev:ch)
       setEquityH(prev=>prev===eh?prev:eh)
-      requestAnimationFrame(()=>console.log('[REPARTO-POST]', {
-        topMonthly: indivMonthlyRef.current?.getBoundingClientRect().top,
-        bottomEquity: indivEquityRef.current?.getBoundingClientRect().bottom,
-        innerHeight: window.innerHeight
-      }))
     }
     const raf=requestAnimationFrame(()=>requestAnimationFrame(recompute))
     window.addEventListener('resize',recompute)
@@ -4585,7 +4566,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.570</title>
+        <title>Trading Simulator V9.571</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4663,7 +4644,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.570
+            <span className="dot"/>Trading Simulator V9.571
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -7464,7 +7445,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
 
                   {/* Equity + Barras + Historial — ocultos en Risk Management y bare chart */}
                   {!result.isBareChart&&sidePanel!=='risk'&&<>
-                  <div ref={indivEquityRef} className="equity-section" onContextMenu={e=>openCtx(e,'equity')}>
+                  <div className="equity-section" onContextMenu={e=>openCtx(e,'equity')}>
                     <div className="section-title" style={{display:'flex',alignItems:'center',flexWrap:'wrap',gap:6,fontSize:14}}>
                       <span>Equity</span>
                       {[
