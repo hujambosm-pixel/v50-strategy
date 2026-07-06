@@ -271,7 +271,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
     const forceResize=()=>{
       if(!chartRef.current||!containerRef.current) return
       const w=containerRef.current.clientWidth||window.innerWidth
-      const h=window.innerHeight-30  // 30 = altura barra superior
+      const h=containerRef.current.clientHeight||(window.innerHeight-30)  // altura REAL del contenedor; fallback si aún no midió
       if(w>0&&h>0) chartRef.current.resize(w,h)
     }
     setTimeout(forceResize,0)
@@ -1362,12 +1362,16 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       setTimeout(()=>applyInitialRange(), 0)
       setTimeout(()=>{if(disposed)return;drawTradeLabels();drawFilterZones()},200)
 
-      // FIX 2: si el chart se crea en modo fillHeight, forzar resize a window.innerHeight
+      // FIX 2: si el chart se crea en modo fillHeight, forzar un resize inicial a la altura REAL del
+      // contenedor (el mismo clientHeight que lee el ResizeObserver). Antes usaba window.innerHeight-30,
+      // válido solo a pantalla completa; en el individual embebido (fillHeight sobre un contenedor de
+      // altura velasH) sobredimensionaba el canvas y recortaba las velas inferiores (overflow:hidden).
+      // clientHeight es correcto en AMBOS casos: en fullscreen el contenedor ya mide ~100dvh-30-subpaneles.
       if(fillHeightRef.current){
         setTimeout(()=>{
           if(disposed) return
           const w=containerRef.current?.clientWidth||window.innerWidth
-          const h=window.innerHeight-30
+          const h=containerRef.current?.clientHeight||(window.innerHeight-30)  // prioriza altura real; fallback si aún no midió
           if(w>0&&h>0) chartRef.current?.resize(w,h)
         },50)
       }
