@@ -272,6 +272,13 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       if(!chartRef.current||!containerRef.current) return
       const w=containerRef.current.clientWidth||window.innerWidth
       const h=containerRef.current.clientHeight||(window.innerHeight-30)  // altura REAL del contenedor; fallback si aún no midió
+      console.log('[CANDLE]', {
+        source: 'forceResize(:274)',
+        containerClientHeight: containerRef.current?.clientHeight,
+        chartHeight_prop: chartHeight,
+        fillHeight,
+        appliedHeight: h
+      })
       if(w>0&&h>0) chartRef.current.resize(w,h)
     }
     setTimeout(forceResize,0)
@@ -1346,6 +1353,13 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         try{
           const opts={width:containerRef.current.clientWidth}
           if(fillHeightRef.current){const h=containerRef.current.clientHeight;if(h>0)opts.height=h}
+          console.log('[CANDLE]', {
+            source: 'RO(:1355)',
+            containerClientHeight: containerRef.current.clientHeight,
+            chartHeight_prop: chartHeight,
+            fillHeight: fillHeightRef.current,
+            appliedHeight: opts.height
+          })
           chart.applyOptions(opts)
         }catch(_){}
         // labelMode=0: solo limpiar SVG, nunca redibujar
@@ -1372,6 +1386,13 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
           if(disposed) return
           const w=containerRef.current?.clientWidth||window.innerWidth
           const h=containerRef.current?.clientHeight||(window.innerHeight-30)  // prioriza altura real; fallback si aún no midió
+          console.log('[CANDLE]', {
+            source: 'FIX2(:1381)',
+            containerClientHeight: containerRef.current?.clientHeight,
+            chartHeight_prop: chartHeight,
+            fillHeight: fillHeightRef.current,
+            appliedHeight: h
+          })
           if(w>0&&h>0) chartRef.current?.resize(w,h)
         },50)
       }
