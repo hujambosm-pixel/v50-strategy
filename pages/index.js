@@ -1209,19 +1209,29 @@ export default function Home() {
   },[sidePanel,mcDisplayResults,mcResult])
 
   // ── Altura del contenedor de velas del backtesting individual (equity FIJO, velas llena el resto) ──
-  // DETERMINISTA: mide SOLO el top del contenedor de velas (chartWrapRef) — estable, no depende de las
-  // alturas de los charts ni de subpaneles → sin race condition. velasH = innerHeight − topVelas − BLOQUE_EQUITY.
-  // El CandleChart va en fillHeight (llena su contenedor y reparte subpaneles internamente); el equity tiene
-  // altura fija (EQUITY_CHART_H). "Ganancias mensuales" queda naturalmente bajo el pliegue (fuera del contenedor).
+  // DETERMINISTA: mide (a) el top del contenedor de velas (chartWrapRef) y (b) la altura REAL del bloque
+  // equity (indivEquityBlockRef = botones+legend+EquityChart). velasH = innerHeight − topVelas − alturaEquity − margen.
+  // Medir la altura real del equity evita infravalorar el hueco que ocupa (antes se restaba una constante
+  // demasiado pequeña → velas se pasaba y su parte inferior salía de vista).
+  // LOOP-SAFE: tanto topVelas como la altura del bloque equity son ESTABLES — no dependen de velasH.
+  //  · topVelas depende solo de lo que hay ENCIMA de velas (barra símbolo/toolbars), no de las velas.
+  //  · el bloque equity tiene altura fija: EquityChart es EQUITY_CHART_H (constante) y los botones/legend
+  //    tienen altura natural fija → medir su height no lo altera, applyOptions({height}) no lo cambia.
+  //  Ninguno de los dos cambia al variar velasH, así que setVelasH no realimenta la medición → sin bucle.
+  // El CandleChart va en fillHeight (llena su contenedor y reparte subpaneles internamente).
+  // "Ganancias mensuales" queda naturalmente bajo el pliegue (fuera del bloque medido).
   // Recalcula al montar y al hacer resize. Cleanup del listener en el return externo.
   useEffect(()=>{
     if(sidePanel==='multi'||sidePanel==='tradelog'||sidePanel==='risk'||!result||result.isBareChart) return
-    const EQUITY_BLOCK=EQUITY_CHART_H+40  // gráfico equity + su legend/botones + margen (bloque equity, FIJO)
+    const EQUITY_FALLBACK=EQUITY_CHART_H+70  // si el bloque equity aún no renderizó (height=0), estimación de reserva
+    const MARGEN=8
     const recompute=()=>{
       const el=chartWrapRef.current
       if(!el) return
       const topVelas=el.getBoundingClientRect().top   // estable: solo depende de lo que hay ENCIMA de velas
-      const h=Math.max(240, Math.round(window.innerHeight - topVelas - EQUITY_BLOCK))
+      const eqH=indivEquityBlockRef.current?.getBoundingClientRect().height||0
+      const equityBlock=eqH>0?eqH:EQUITY_FALLBACK    // prioriza la altura REAL; fallback si aún no renderizó
+      const h=Math.max(240, Math.round(window.innerHeight - topVelas - equityBlock - MARGEN))
       setVelasH(prev=>prev===h?prev:h)
     }
     const raf=requestAnimationFrame(()=>requestAnimationFrame(recompute))
@@ -4321,6 +4331,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
 
   // Navegar al trade: scroll arriba + zoom en el gráfico
   const chartWrapRef=useRef(null)
+  const indivEquityBlockRef=useRef(null)  // mide la altura REAL del bloque equity (botones+legend+EquityChart) para restarla de velasH
   const navigateToTrade=(trade)=>{
     // Scroll instantáneo al top del contenedor + zoom al trade
     const el=contentRef.current
@@ -4545,7 +4556,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.573</title>
+        <title>Trading Simulator V9.574</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4623,7 +4634,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.573
+            <span className="dot"/>Trading Simulator V9.574
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -7416,6 +7427,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                   {/* Equity + Barras + Historial — ocultos en Risk Management y bare chart */}
                   {!result.isBareChart&&sidePanel!=='risk'&&<>
                   <div className="equity-section" onContextMenu={e=>openCtx(e,'equity')}>
+                    <div ref={indivEquityBlockRef}>
                     <div className="section-title" style={{display:'flex',alignItems:'center',flexWrap:'wrap',gap:6,fontSize:14}}>
                       <span>Equity</span>
                       {[
@@ -7458,6 +7470,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       chartHeight={EQUITY_CHART_H}
                       onAxisWidth={w=>setIndivAxisW(prev=>Math.abs(prev-w)>0.5?w:prev)}
                     />
+                    </div>{/* /indivEquityBlockRef — fin del bloque equity medido (botones+legend+chart) */}
                     {/* (handle de equity eliminado — ahora hay un único divisor velas/equity arriba) */}
                     {/* ── Ganancias mensuales (individual) — Estrategia vs B&H del activo ── */}
                     {(()=>{
