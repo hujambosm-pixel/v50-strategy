@@ -1224,13 +1224,6 @@ export default function Home() {
       if(!el) return
       const topVelas=el.getBoundingClientRect().top   // estable: solo depende de lo que hay ENCIMA de velas
       const h=Math.max(240, Math.round(window.innerHeight - topVelas - MARGEN))
-      console.log('[VELAS]', {
-        innerHeight: window.innerHeight,
-        topVelas,
-        velasH_calculado: h,
-        chartWrap_height_real: el.getBoundingClientRect().height,
-        velasH_state_actual: velasH
-      })
       setVelasH(prev=>prev===h?prev:h)
     }
     const raf=requestAnimationFrame(()=>requestAnimationFrame(recompute))
@@ -4554,7 +4547,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.579</title>
+        <title>Trading Simulator V9.580</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4632,7 +4625,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.579
+            <span className="dot"/>Trading Simulator V9.580
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -7120,7 +7113,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
 
                   {/* Gráfico de velas */}
                   <div className="chart-wrap" ref={chartWrapRef} onContextMenu={e=>openCtx(e,'chart')} style={{padding:0,borderBottom:'1px solid var(--border)',...((sidePanel==='risk'||result.isBareChart)?{flex:1,minHeight:0,display:'flex',flexDirection:'column'}:{height:velasH,minHeight:0,display:'flex',flexDirection:'column',overflow:'hidden'})}}>
-                    <div style={{position:'relative',flex:1,minHeight:0,height:'100%'}}>
+                    <div style={{position:'relative',flex:1,minHeight:0,height:'100%',display:'flex',flexDirection:'column'}}>
                       {/* ── Barra de info integrada — una sola fila sobre el gráfico ── */}
                       <div style={{position:'absolute',top:0,left:0,right:0,zIndex:11,height:30,
                         display:'flex',alignItems:'center',gap:5,padding:'0 8px',
