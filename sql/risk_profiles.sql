@@ -15,9 +15,18 @@ CREATE TABLE IF NOT EXISTS risk_profiles (
   risk_per_trade_value        numeric NOT NULL DEFAULT 1,
   max_total_risk              numeric NOT NULL DEFAULT 5,    -- % del equity
   max_simultaneous_positions  integer NOT NULL DEFAULT 5,
+  active_riesgo_op            boolean NOT NULL DEFAULT true,  -- card "Máx. riesgo / op." activada
+  active_capital_op          boolean NOT NULL DEFAULT false, -- card "Máx. capital / op." activada
+  active_slots               boolean NOT NULL DEFAULT false, -- card "Máx. slots simult." activada
   created_at                  timestamptz NOT NULL DEFAULT now(),
   updated_at                  timestamptz NOT NULL DEFAULT now()
 );
+
+-- Para tablas ya creadas antes de estas columnas (idempotente):
+ALTER TABLE risk_profiles
+  ADD COLUMN IF NOT EXISTS active_riesgo_op  boolean NOT NULL DEFAULT true,
+  ADD COLUMN IF NOT EXISTS active_capital_op boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS active_slots      boolean NOT NULL DEFAULT false;
 
 -- ─────────────────────────────────────────────────────────────
 -- PASO 2: Índice
