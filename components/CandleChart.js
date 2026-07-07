@@ -270,8 +270,11 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
     if(!fillHeight||!containerRef.current) return
     const forceResize=()=>{
       if(!chartRef.current||!containerRef.current) return
-      const w=containerRef.current.clientWidth||window.innerWidth
-      const h=containerRef.current.clientHeight||(window.innerHeight-30)  // altura REAL del contenedor; fallback si aún no midió
+      const cont=containerRef.current
+      const w=cont.clientWidth||window.innerWidth
+      // Sin fallback a la ventana: usa clientHeight; si aún es 0, la altura REAL del padre (chart-wrap con height:velasH,
+      // definido); si tampoco hay, NO redimensiona y espera al ResizeObserver. Nunca innerHeight-30 (estiraba el canvas).
+      const h=cont.clientHeight||cont.parentElement?.getBoundingClientRect().height||0
       if(w>0&&h>0) chartRef.current.resize(w,h)
     }
     setTimeout(forceResize,0)
@@ -1370,8 +1373,10 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       if(fillHeightRef.current){
         setTimeout(()=>{
           if(disposed) return
-          const w=containerRef.current?.clientWidth||window.innerWidth
-          const h=containerRef.current?.clientHeight||(window.innerHeight-30)  // prioriza altura real; fallback si aún no midió
+          const cont=containerRef.current
+          const w=cont?.clientWidth||window.innerWidth
+          // Sin fallback a la ventana: clientHeight, o la altura REAL del padre (chart-wrap); si 0, esperar al RO. Nunca innerHeight-30.
+          const h=cont?.clientHeight||cont?.parentElement?.getBoundingClientRect().height||0
           if(w>0&&h>0) chartRef.current?.resize(w,h)
         },50)
       }
