@@ -880,8 +880,6 @@ export default function Home() {
   const EQUITY_CHART_H=190                      // altura FIJA del gráfico de equity del individual
   const [mcEquityH,setMcEquityH]=useState(300) // resizable MC equity chart height
   const mcEquityContainerRef=useRef(null)  // mide el hueco disponible para autoajustar mcEquityH
-  // Individual: velas ocupa el alto disponible (fillHeight) dentro de un contenedor medido; equity fijo → determinista.
-  const [velasH,setVelasH]=useState(500)  // altura del contenedor de velas = innerHeight − topVelas − bloque equity
   const sidebarResizing=useRef(false), rightResizing=useRef(false)
   const sidebarStartX=useRef(0), sidebarStartW=useRef(0)
   const rightStartX=useRef(0), rightStartW=useRef(0)
@@ -1208,25 +1206,13 @@ export default function Home() {
     return ()=>{ cancelAnimationFrame(raf); window.removeEventListener('resize',recompute) }
   },[sidePanel,mcDisplayResults,mcResult])
 
-  // ── Altura del contenedor de velas — SOLO modo RISK ──
-  // El individual/watchlist usa CSS puro (contentRef height:calc(100vh-56px) + chart-wrap height:100%),
-  // así que NO necesita este cálculo JS (se eliminó su acoplamiento al scroll / bucle de realimentación).
-  // En risk, contentRef es flex-column overflow:hidden (no scrollea), así que topVelas es estable y este
-  // cálculo es seguro (sin acoplamiento a scroll). Recalcula al montar y al hacer resize.
-  useEffect(()=>{
-    if(sidePanel!=='risk'||!result||result.isBareChart) return  // solo risk usa height:velasH; watchlist=CSS, bare=altura propia
-    const MARGEN=8
-    const recompute=()=>{
-      const el=chartWrapRef.current
-      if(!el) return
-      const topVelas=el.getBoundingClientRect().top   // estable: solo depende de lo que hay ENCIMA de velas
-      const h=Math.max(240, Math.round(window.innerHeight - topVelas - MARGEN))
-      setVelasH(prev=>prev===h?prev:h)
-    }
-    const raf=requestAnimationFrame(()=>requestAnimationFrame(recompute))
-    window.addEventListener('resize',recompute)
-    return ()=>{ cancelAnimationFrame(raf); window.removeEventListener('resize',recompute) }
-  },[sidePanel,result])
+  // ── Altura del gráfico: 100% CSS puro (sin JS) ──
+  // watchlist → chart-wrap height:calc(100vh-64px) dentro de contentRef (scroll-container); el resto
+  //             (equity/mensuales/historial) fluye debajo y se alcanza con scroll.
+  // risk       → contentRef flex-column acotado (height:calc(100vh-56px)); chart-wrap flex:1 llena el
+  //             espacio bajo el panel de métricas de riesgo. Sin nada debajo del chart.
+  // bare       → altura propia (fillHeight=false, chartHeight=bareChartHeight).
+  // Eliminado el cálculo JS de velasH (acoplaba al scroll / creaba bucle de realimentación).
 
   // ── Al cargar un activo nuevo (cambia result), resetear el scroll del contenido a top ──
   // Cubre TODAS las vías de selección (clic en fila del watchlist, búsqueda, clic en trade que cambie de
@@ -4553,7 +4539,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.597</title>
+        <title>Trading Simulator V9.598</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4631,7 +4617,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.597
+            <span className="dot"/>Trading Simulator V9.598
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6706,7 +6692,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
             {sidePanel!=='multi'&&sidePanel!=='tradelog'&&!(editingStr&&sidePanel==='config')&&result&&(
               <div style={{display:'flex',flex:1,minHeight:0,overflow:'hidden',height:'100%'}}>
                 {/* Columna principal */}
-                <div ref={contentRef} style={(sidePanel==='risk'||result.isBareChart)?{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',height:'100%'}:{flex:1,height:'calc(100vh - 56px)',overflowY:'auto'}}>
+                <div ref={contentRef} style={sidePanel==='risk'?{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',height:'calc(100vh - 56px)'}:result.isBareChart?{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',height:'100%'}:{flex:1,height:'calc(100vh - 56px)',overflowY:'auto'}}>
 
                   {/* ══════════════════════════════════════════════════════
                       RISK MANAGEMENT — Fila 1 (métricas) + Fila 2 (config + calc)
@@ -7118,7 +7104,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   })()}
 
                   {/* Gráfico de velas */}
-                  <div className="chart-wrap" ref={chartWrapRef} onContextMenu={e=>openCtx(e,'chart')} style={{padding:0,borderBottom:'1px solid var(--border)',...(result.isBareChart?{flex:1,minHeight:0,display:'flex',flexDirection:'column',overflow:'hidden'}:(sidePanel==='risk'?{height:velasH,minHeight:0,display:'flex',flexDirection:'column',overflow:'hidden'}:{height:'100%',minHeight:0,display:'flex',flexDirection:'column',overflow:'hidden'}))}}>
+                  <div className="chart-wrap" ref={chartWrapRef} onContextMenu={e=>openCtx(e,'chart')} style={{padding:0,borderBottom:'1px solid var(--border)',...((result.isBareChart||sidePanel==='risk')?{flex:1,minHeight:0,display:'flex',flexDirection:'column',overflow:'hidden'}:{height:'calc(100vh - 64px)',minHeight:0,display:'flex',flexDirection:'column',overflow:'hidden'})}}>
                     <div style={{position:'relative',flex:1,minHeight:0,height:'100%',display:'flex',flexDirection:'column'}}>
                       {/* ── Barra de info integrada — una sola fila sobre el gráfico ── */}
                       <div style={{position:'absolute',top:0,left:0,right:0,zIndex:11,height:30,
