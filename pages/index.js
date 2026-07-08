@@ -1220,14 +1220,10 @@ export default function Home() {
     if(sidePanel==='multi'||sidePanel==='tradelog'||!result||result.isBareChart) return  // corre en individual Y risk (ambos usan height:velasH); bare tiene su propia altura
     const MARGEN=8
     const recompute=()=>{
-      const el=chartWrapRef.current, cont=contentRef.current
-      if(!el||!cont) return
-      // INDEPENDIENTE DEL SCROLL: alto disponible = clientHeight del contenido (una ALTURA, invariante al scroll)
-      // menos el offset del chart dentro del contenido (diferencia de dos .top: ambos se desplazan igual con el
-      // scroll → la resta es invariante). Antes se usaba innerHeight − chartWrap.top, acoplado a la posición viewport
-      // → con scroll activo velasH se inflaba y deformaba el gráfico (acciones de abajo de la lista).
-      const offsetDentro=el.getBoundingClientRect().top - cont.getBoundingClientRect().top
-      const h=Math.max(240, Math.round(cont.clientHeight - offsetDentro - MARGEN))
+      const el=chartWrapRef.current
+      if(!el) return
+      const topVelas=el.getBoundingClientRect().top   // estable: solo depende de lo que hay ENCIMA de velas
+      const h=Math.max(240, Math.round(window.innerHeight - topVelas - MARGEN))
       setVelasH(prev=>prev===h?prev:h)
     }
     const raf=requestAnimationFrame(()=>requestAnimationFrame(recompute))
@@ -4560,7 +4556,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.593</title>
+        <title>Trading Simulator V9.594</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4638,7 +4634,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.593
+            <span className="dot"/>Trading Simulator V9.594
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
