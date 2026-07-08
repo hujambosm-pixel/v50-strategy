@@ -1208,16 +1208,13 @@ export default function Home() {
     return ()=>{ cancelAnimationFrame(raf); window.removeEventListener('resize',recompute) }
   },[sidePanel,mcDisplayResults,mcResult])
 
-  // ── Altura del contenedor de velas del backtesting individual (velas a pantalla completa) ──
-  // SIMPLE Y ROBUSTO: las velas llenan desde su top hasta el fondo de la ventana. El equity, "Ganancias
-  // mensuales" e historial quedan DEBAJO, en el scroll de contentRef (bajo el pliegue). Un solo gráfico a
-  // pantalla → sin reparto, sin huecos muertos, sin descuadres.
-  // velasH = innerHeight − topVelas − margen. Solo se descuenta lo que hay ENCIMA de las velas.
-  // LOOP-SAFE: topVelas depende solo de las toolbars/barra de símbolo encima de las velas (estable, NO del
-  // reparto ni del render de los charts) → setVelasH no realimenta la medición → sin oscilación ni race.
-  // Recalcula al montar y al hacer resize. Cleanup del listener en el return externo.
+  // ── Altura del contenedor de velas — SOLO modo RISK ──
+  // El individual/watchlist usa CSS puro (contentRef height:calc(100vh-56px) + chart-wrap height:100%),
+  // así que NO necesita este cálculo JS (se eliminó su acoplamiento al scroll / bucle de realimentación).
+  // En risk, contentRef es flex-column overflow:hidden (no scrollea), así que topVelas es estable y este
+  // cálculo es seguro (sin acoplamiento a scroll). Recalcula al montar y al hacer resize.
   useEffect(()=>{
-    if(sidePanel==='multi'||sidePanel==='tradelog'||!result||result.isBareChart) return  // corre en individual Y risk (ambos usan height:velasH); bare tiene su propia altura
+    if(sidePanel!=='risk'||!result||result.isBareChart) return  // solo risk usa height:velasH; watchlist=CSS, bare=altura propia
     const MARGEN=8
     const recompute=()=>{
       const el=chartWrapRef.current
@@ -4556,7 +4553,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.595</title>
+        <title>Trading Simulator V9.596</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4634,7 +4631,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.595
+            <span className="dot"/>Trading Simulator V9.596
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6709,7 +6706,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
             {sidePanel!=='multi'&&sidePanel!=='tradelog'&&!(editingStr&&sidePanel==='config')&&result&&(
               <div style={{display:'flex',flex:1,minHeight:0,overflow:'hidden',height:'100%'}}>
                 {/* Columna principal */}
-                <div ref={contentRef} style={(sidePanel==='risk'||result.isBareChart)?{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',height:'100%'}:{flex:1,overflowY:'auto'}}>
+                <div ref={contentRef} style={(sidePanel==='risk'||result.isBareChart)?{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',height:'100%'}:{flex:1,height:'calc(100vh - 56px)',overflowY:'auto'}}>
 
                   {/* ══════════════════════════════════════════════════════
                       RISK MANAGEMENT — Fila 1 (métricas) + Fila 2 (config + calc)
@@ -7121,7 +7118,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   })()}
 
                   {/* Gráfico de velas */}
-                  <div className="chart-wrap" ref={chartWrapRef} onContextMenu={e=>openCtx(e,'chart')} style={{padding:0,borderBottom:'1px solid var(--border)',...(result.isBareChart?{flex:1,minHeight:0,display:'flex',flexDirection:'column',overflow:'hidden'}:{height:velasH,minHeight:0,display:'flex',flexDirection:'column',overflow:'hidden'})}}>
+                  <div className="chart-wrap" ref={chartWrapRef} onContextMenu={e=>openCtx(e,'chart')} style={{padding:0,borderBottom:'1px solid var(--border)',...(result.isBareChart?{flex:1,minHeight:0,display:'flex',flexDirection:'column',overflow:'hidden'}:(sidePanel==='risk'?{height:velasH,minHeight:0,display:'flex',flexDirection:'column',overflow:'hidden'}:{height:'100%',minHeight:0,display:'flex',flexDirection:'column',overflow:'hidden'}))}}>
                     <div style={{position:'relative',flex:1,minHeight:0,height:'100%',display:'flex',flexDirection:'column'}}>
                       {/* ── Barra de info integrada — una sola fila sobre el gráfico ── */}
                       <div style={{position:'absolute',top:0,left:0,right:0,zIndex:11,height:30,
