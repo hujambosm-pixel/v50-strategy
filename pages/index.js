@@ -1230,6 +1230,15 @@ export default function Home() {
     window.addEventListener('resize',recompute)
     return ()=>{ cancelAnimationFrame(raf); window.removeEventListener('resize',recompute) }
   },[sidePanel,result])
+
+  // ── Al cargar un activo nuevo (cambia result), resetear el scroll del contenido a top ──
+  // Cubre TODAS las vías de selección (clic en fila del watchlist, búsqueda, clic en trade que cambie de
+  // activo…). Sin esto, contentRef conservaba el scrollTop anterior → el gráfico aparecía "por abajo" al
+  // elegir una acción tras haber desplazado. Réplica del reset que ya hace navigateToTrade (scrollTop=0).
+  // Inocuo cuando contentRef no scrollea (risk/bare: overflow:hidden) o no está montado (multi: null).
+  useEffect(()=>{
+    if(contentRef.current) contentRef.current.scrollTop=0
+  },[result])
   // ── groupTradesForDisplay: FIFO match individual fills → virtual grouped rows ──
   // tlTrades stores raw fills (fill_type:'buy'|'sell', status:'open').
   // This function pairs them chronologically per symbol so the UI shows closed ops with entry+exit.
@@ -4547,7 +4556,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.589</title>
+        <title>Trading Simulator V9.590</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4625,7 +4634,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.589
+            <span className="dot"/>Trading Simulator V9.590
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
