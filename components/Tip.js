@@ -80,6 +80,11 @@ export const TIP_DATA = {
     title: 'SIZING — Tamaño de posición',
     text: 'Capital fijo: cada trade usa siempre el mismo importe en euros. El P&L Simple suma linealmente. El P&L Compuesto reinvierte las ganancias: cada operación usa el capital acumulado del trade anterior. El sizing no afecta a las señales, solo a los resultados monetarios.'
   },
+  // ── Multibacktest ──────────────────────────────────────────
+  multicartera: {
+    title: '◈ Multicartera',
+    text: 'Simula varias estrategias operando a la vez sobre el mismo watchlist, compartiendo capital. Cada combinación activo+estrategia se trata internamente como un símbolo sintético. Cuatro modos de reparto de capital: Slots iguales, Compartido, Concentrado, Position Sizing. Los filtros de mercado y gates se aplican igual que en modo individual.'
+  },
   // ── Dashboard métricas ──────────────────────────────────────
   pnlTotal: { title: 'P&L Total', text: 'P&L Realizado + P&L Flotante + Dividendos. Suma de todo el beneficio/pérdida del portfolio, incluyendo posiciones abiertas valoradas a precio actual y dividendos recibidos.' },
   cagr: { title: 'CAGR', text: 'Rentabilidad anualizada. Fórmula: (1 + P&L / Capital)^(1/años) − 1. Expresa a qué tasa anual compuesta ha crecido el portfolio desde la primera operación hasta hoy.' },

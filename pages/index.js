@@ -4539,7 +4539,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.601</title>
+        <title>Trading Simulator V9.602</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4617,7 +4617,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.601
+            <span className="dot"/>Trading Simulator V9.602
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6232,7 +6232,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                 border:'1px solid rgba(255,209,102,0.4)'}}>
                               <input type="checkbox" readOnly checked={mcStratSelected.includes('__portfolio__')}
                                 onClick={e=>e.stopPropagation()} style={{accentColor:'#ffd166'}}/>
-                              <span style={{fontFamily:MONO,color:'#ffd166',fontSize:11,fontWeight:600}}>◈ Multicartera ({mcStratSelected.filter(id=>id!=='__portfolio__').length})</span>
+                              <span style={{fontFamily:MONO,color:'#ffd166',fontSize:11,fontWeight:600,display:'inline-flex',alignItems:'center'}}>◈ Multicartera ({mcStratSelected.filter(id=>id!=='__portfolio__').length})<Tip id="multicartera" style={{marginLeft:4}}/></span>
                             </div>
                           )}
                           {strategies.map((s,i)=>{
