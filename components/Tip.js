@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { MONO } from '../lib/utils'
 
 export const TIP_DATA = {
@@ -107,12 +107,10 @@ export const TIP_DATA = {
   totalDiasInv: { title: 'Total Días Inv.', text: 'Suma total de días-posición de todas las operaciones cerradas.' },
 }
 
-export default function Tip({id, style}) {
+export default function Tip({id, style, open=false, fontSize=10}) {
   const [show, setShow] = useState(false)
   const anchorRef = useRef(null)
   const [pos, setPos] = useState({top:true, left:'50%', transform:'translateX(-50%)'})
-  const tip = TIP_DATA[id]
-  if (!tip) return null
 
   const calcPos = () => {
     if (!anchorRef.current) return
@@ -129,11 +127,19 @@ export default function Tip({id, style}) {
     setPos({ top, left, transform })
   }
 
+  // Permite que un contenedor externo (p.ej. el botón completo) dispare el tooltip
+  useEffect(() => { if (open) calcPos() }, [open])
+
+  const tip = TIP_DATA[id]
+  if (!tip) return null
+
+  const visible = show || open
+
   return (
     <span ref={anchorRef} style={{position:'relative', display:'inline-flex', alignItems:'center', ...style}}
       onMouseEnter={()=>{calcPos();setShow(true)}} onMouseLeave={()=>setShow(false)}>
       <span style={{cursor:'help', color:'#4a7fa0', fontSize:10, lineHeight:1, userSelect:'none'}}>ⓘ</span>
-      {show && (
+      {visible && (
         <div style={{
           position:'fixed',
           top: pos.top
@@ -145,11 +151,11 @@ export default function Tip({id, style}) {
           )) : 0,
           transform: pos.top ? 'translateY(-100%)' : 'none',
           background:'#0a1520', border:'1px solid #2a4a66', borderRadius:6,
-          padding:'9px 11px', zIndex:9999, width:250, fontFamily:MONO, fontSize:10,
+          padding:'9px 11px', zIndex:9999, width:250, fontFamily:MONO, fontSize,
           color:'#cce0f5', lineHeight:1.65, boxShadow:'0 6px 24px rgba(0,0,0,0.9)',
           pointerEvents:'none', whiteSpace:'normal'
         }}>
-          <div style={{color:'#00d4ff', fontWeight:700, marginBottom:5, fontSize:10}}>{tip.title}</div>
+          <div style={{color:'#00d4ff', fontWeight:700, marginBottom:5, fontSize}}>{tip.title}</div>
           <div style={{color:'#b0ccdf'}}>{tip.text}</div>
         </div>
       )}

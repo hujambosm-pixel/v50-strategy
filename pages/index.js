@@ -981,6 +981,7 @@ export default function Home() {
   const [mcStratSelected,setMcStratSelected]=useState([])   // strategy IDs selected for comparison
   const [mcMultiResults,setMcMultiResults]=useState([])     // [{id,name,color,result}]
   const [mcPortfolioIds,setMcPortfolioIds]=useState([])     // IDs marcados "Incluir en Multicartera"
+  const [mcPortfolioTipOpen,setMcPortfolioTipOpen]=useState(false)  // hover en todo el botón ◈ Multicartera → dispara el <Tip>
   const [mcProgress,setMcProgress]=useState(null)           // null|{current,total,name}
   // mcDisplayResults: portfolio real viene inyectado en mcMultiResults por el backend (portfolioMode)
   // El cálculo de promedio en cliente ha sido eliminado — __portfolio__ lo calcula handlePortfolioMode
@@ -4539,7 +4540,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.604</title>
+        <title>Trading Simulator V9.605</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4617,7 +4618,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.604
+            <span className="dot"/>Trading Simulator V9.605
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6043,7 +6044,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         }
                         return(
                           <div key={m.id} style={{marginBottom:3}}>
-                            <div onClick={handleClick}
+                            <div onClick={handleClick} title={m.desc}
                               style={{display:'flex',alignItems:'center',gap:8,padding:'6px 8px',borderRadius:4,
                                 background:isActive?'rgba(0,212,255,0.08)':'transparent',
                                 border:`1px solid ${isActive?'var(--accent)':'var(--border)'}`,
@@ -6227,12 +6228,13 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         <div style={{display:'flex',flexDirection:'column',gap:3}}>
                           {mcStratSelected.length>=2&&(
                             <div onClick={()=>setMcStratSelected(prev=>prev.includes('__portfolio__')?prev.filter(id=>id!=='__portfolio__'):[...prev,'__portfolio__'])}
+                              onMouseEnter={()=>setMcPortfolioTipOpen(true)} onMouseLeave={()=>setMcPortfolioTipOpen(false)}
                               style={{display:'flex',alignItems:'center',gap:6,padding:'5px 8px',borderRadius:6,cursor:'pointer',marginBottom:4,
                                 background:mcStratSelected.includes('__portfolio__')?'rgba(255,209,102,0.15)':'transparent',
                                 border:'1px solid rgba(255,209,102,0.4)'}}>
                               <input type="checkbox" readOnly checked={mcStratSelected.includes('__portfolio__')}
                                 onClick={e=>e.stopPropagation()} style={{accentColor:'#ffd166'}}/>
-                              <span style={{fontFamily:MONO,color:'#ffd166',fontSize:11,fontWeight:600,display:'inline-flex',alignItems:'center'}}>◈ Multicartera ({mcStratSelected.filter(id=>id!=='__portfolio__').length})<Tip id="multicartera" style={{marginLeft:4}}/></span>
+                              <span style={{fontFamily:MONO,color:'#ffd166',fontSize:11,fontWeight:600,display:'inline-flex',alignItems:'center'}}>◈ Multicartera ({mcStratSelected.filter(id=>id!=='__portfolio__').length})<Tip id="multicartera" open={mcPortfolioTipOpen} fontSize={12} style={{marginLeft:4}}/></span>
                             </div>
                           )}
                           {strategies.map((s,i)=>{
