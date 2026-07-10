@@ -107,7 +107,7 @@ export const TIP_DATA = {
   totalDiasInv: { title: 'Total Días Inv.', text: 'Suma total de días-posición de todas las operaciones cerradas.' },
 }
 
-export default function Tip({id, style, open=false, fontSize=10}) {
+export default function Tip({id, style, open=false, fontSize=10, hideIcon=false}) {
   const [show, setShow] = useState(false)
   const anchorRef = useRef(null)
   const [pos, setPos] = useState({top:true, left:'50%', transform:'translateX(-50%)'})
@@ -138,7 +138,7 @@ export default function Tip({id, style, open=false, fontSize=10}) {
   return (
     <span ref={anchorRef} style={{position:'relative', display:'inline-flex', alignItems:'center', ...style}}
       onMouseEnter={()=>{calcPos();setShow(true)}} onMouseLeave={()=>setShow(false)}>
-      <span style={{cursor:'help', color:'#4a7fa0', fontSize:10, lineHeight:1, userSelect:'none'}}>ⓘ</span>
+      {!hideIcon && <span style={{cursor:'help', color:'#4a7fa0', fontSize:10, lineHeight:1, userSelect:'none'}}>ⓘ</span>}
       {visible && (
         <div style={{
           position:'fixed',
