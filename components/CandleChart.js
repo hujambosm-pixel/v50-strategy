@@ -338,7 +338,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
           ss.setData(data.map(d=>({time:d.date,value:d.emaL})).filter(x=>x.value!=null))
           const hasEma3=data.some(d=>d.ema3!=null)
           if(hasEma3){
-            const s3=chart.addLineSeries({color:'#9C27B0',lineWidth:2,lastValueVisible:false,priceLineVisible:false,title:'EMA50'})
+            const s3=chart.addLineSeries({color:'#9C27B0',lineWidth:2,lastValueVisible:false,priceLineVisible:false,title:''})
             s3.setData(data.filter(d=>d.ema3!=null).map(d=>({time:d.date,value:d.ema3})))
           }
         } else {
