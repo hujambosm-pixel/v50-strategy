@@ -796,6 +796,29 @@ export default function Home() {
     const retSP500  = (cSp  / cSpBase)  - 1
     return { ok: true, pct: (retActivo - retSP500) * 100 }
   }, [result?.chartData, rsVisualWindow])
+  // Persiste el intervalo ('diario'|'semanal') en los params de una estrategia (local + Supabase).
+  // Mecanismo único compartido por el toggle lateral por-estrategia y el badge D/W de la cabecera.
+  const persistStratIntervalo = async (strat, newIv) => {
+    if(!strat) return
+    setStrategies(prev=>prev.map(st=>{
+      if(st.id!==strat.id)return st
+      try{const p=typeof st.params==='string'?JSON.parse(st.params||'{}'):(st.params||{});return{...st,params:JSON.stringify({...p,intervalo:newIv})}}
+      catch{return{...st,params:JSON.stringify({intervalo:newIv})}}
+    }))
+    try{
+      const p=typeof strat.params==='string'?JSON.parse(strat.params||'{}'):(strat.params||{})
+      await apiFetch('/api/strategies',{method:'PUT',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({id:strat.id,params:JSON.stringify({...p,intervalo:newIv})})})
+    }catch(_){}
+  }
+  // Badge D/W de la cabecera: alterna el intervalo del gráfico usando el mismo mecanismo que el
+  // toggle lateral (persiste en la estrategia activa + setEstrategiaIntervalo → dispara la recarga).
+  const toggleHeaderIntervalo = async () => {
+    const newIv = estrategiaIntervalo==='semanal' ? 'diario' : 'semanal'
+    const active = strategies.find(st=>st.id===currentStratId)
+    if(active) await persistStratIntervalo(active, newIv)
+    setEstrategiaIntervalo(newIv)
+  }
   const [stratMsg, setStratMsg]       = useState(null)
   const [stratTab, setStratTab]       = useState('build')
   // Alertas
@@ -4559,7 +4582,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.612</title>
+        <title>Trading Simulator V9.613</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4637,7 +4660,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.612
+            <span className="dot"/>Trading Simulator V9.613
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -4993,18 +5016,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       const toggleSIv=async(e)=>{
                         e.stopPropagation()
                         const newIv=sIsSemanal?'diario':'semanal'
-                        // Optimistic update local state
-                        setStrategies(prev=>prev.map(st=>{
-                          if(st.id!==s.id)return st
-                          try{const p=typeof st.params==='string'?JSON.parse(st.params||'{}'):(st.params||{});return{...st,params:JSON.stringify({...p,intervalo:newIv})}}
-                          catch{return{...st,params:JSON.stringify({intervalo:newIv})}}
-                        }))
-                        // Save to Supabase
-                        try{
-                          const p=typeof s.params==='string'?JSON.parse(s.params||'{}'):(s.params||{})
-                          await apiFetch('/api/strategies',{method:'PUT',headers:{'Content-Type':'application/json'},
-                            body:JSON.stringify({id:s.id,params:JSON.stringify({...p,intervalo:newIv})})})
-                        }catch(_){}
+                        // Mecanismo compartido: persiste params (local + Supabase)
+                        await persistStratIntervalo(s, newIv)
                         // Re-ejecutar si es la estrategia activa
                         if(isActive)setEstrategiaIntervalo(newIv)
                       }
@@ -7160,9 +7173,14 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         <span ref={chartLegendRef} style={{flex:1,minWidth:0,overflow:'hidden',
                           whiteSpace:'nowrap',textOverflow:'ellipsis'}}/>
                         {/* ── RS visual (timeframe D/W + RS vs SP500 + ventana) — zona derecha, junto a estrategia ── */}
-                        {/* Timeframe activo (D/W) */}
-                        <span title={estrategiaIntervalo==='semanal'?'Semanal':'Diario'}
-                          style={{flexShrink:0,color:'#7a9bc0',fontSize:11,fontWeight:600,userSelect:'none'}}>
+                        {/* Timeframe activo (D/W) — clic alterna diario/semanal (mismo mecanismo que el toggle lateral) */}
+                        <span onClick={toggleHeaderIntervalo}
+                          title={estrategiaIntervalo==='semanal'?'Semanal — pulsar para cambiar a diario':'Diario — pulsar para cambiar a semanal'}
+                          onMouseOver={e=>e.currentTarget.style.background='rgba(255,255,255,0.08)'}
+                          onMouseOut={e=>e.currentTarget.style.background='rgba(13,21,32,0.85)'}
+                          style={{pointerEvents:'all',cursor:'pointer',flexShrink:0,color:'#7a9bc0',fontSize:11,fontWeight:600,
+                            userSelect:'none',background:'rgba(13,21,32,0.85)',border:'1px solid #1a2d45',borderRadius:3,
+                            padding:'1px 6px',height:18,lineHeight:'16px',transition:'background 0.1s'}}>
                           {estrategiaIntervalo==='semanal'?'W':'D'}
                         </span>
                         {/* RS visual vs SP500 (indicador de cabecera, independiente de estrategias) */}
