@@ -776,7 +776,26 @@ export default function Home() {
   const currentStratIdRef=useRef(null)
   useEffect(()=>{currentStratIdRef.current=currentStratId},[currentStratId])
   const [estrategiaIntervalo, setEstrategiaIntervalo] = useState('diario') // 'diario'|'semanal' — intervalo del activo en backtest individual
+  const [rsVisualWindow, setRsVisualWindow] = useState(20) // ventana (en velas) del RS visual de la cabecera — indicador independiente, no ligado a ninguna estrategia
+  const [rsWinText, setRsWinText] = useState('20')          // texto editable del input (permite vaciar sin romper el cálculo; rsVisualWindow guarda el último válido)
   const [stratSaving, setStratSaving] = useState(false)
+  // RS visual de la cabecera: fuerza relativa del activo vs SP500 en las últimas N velas.
+  // Independiente de cualquier estrategia/params. Devuelve {ok, pct} o {ok:false} si faltan datos.
+  const rsVisual = useMemo(() => {
+    const bars = result?.chartData
+    const N = Math.trunc(Number(rsVisualWindow))
+    if (!Array.isArray(bars) || !Number.isFinite(N) || N < 2) return { ok: false }
+    const last = bars.length - 1
+    const base = last - N
+    if (base < 0) return { ok: false }                       // no hay N+1 velas
+    const cAct = bars[last]?.close,      cActBase = bars[base]?.close
+    const cSp  = bars[last]?.sp500Close, cSpBase  = bars[base]?.sp500Close
+    if (cAct == null || cActBase == null || cActBase <= 0) return { ok: false }
+    if (cSp == null || cSpBase == null || cSpBase <= 0)    return { ok: false }   // sp500Close ausente en algún extremo
+    const retActivo = (cAct / cActBase) - 1
+    const retSP500  = (cSp  / cSpBase)  - 1
+    return { ok: true, pct: (retActivo - retSP500) * 100 }
+  }, [result?.chartData, rsVisualWindow])
   const [stratMsg, setStratMsg]       = useState(null)
   const [stratTab, setStratTab]       = useState('build')
   // Alertas
@@ -4540,7 +4559,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.610</title>
+        <title>Trading Simulator V9.611</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4618,7 +4637,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.610
+            <span className="dot"/>Trading Simulator V9.611
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -7131,6 +7150,47 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                             flexShrink:0,pointerEvents:'all',userSelect:'none'}}>
                           {displayedSimbolo||simbolo}
                         </span>
+                        {/* Timeframe activo (D/W) */}
+                        <span title={estrategiaIntervalo==='semanal'?'Semanal':'Diario'}
+                          style={{flexShrink:0,color:'#7a9bc0',fontSize:11,fontWeight:600,userSelect:'none'}}>
+                          · {estrategiaIntervalo==='semanal'?'W':'D'}
+                        </span>
+                        {/* RS visual vs SP500 (indicador de cabecera, independiente de estrategias) */}
+                        {(()=>{
+                          if(!rsVisual.ok) return (
+                            <span title={`RS vs SP500 — datos insuficientes (${rsVisualWindow} velas)`}
+                              style={{flexShrink:0,color:'#7a9bc0',fontSize:11,fontWeight:600,userSelect:'none'}}>
+                              · RS —
+                            </span>
+                          )
+                          const v=rsVisual.pct
+                          const col=v>0?'#00e5a0':v<0?'#ff4d6d':'#7a9bc0'
+                          const sign=v>0?'+':v<0?'−':''
+                          const txt=sign+Math.abs(v).toFixed(1).replace('.',',')+'%'
+                          return (
+                            <span title={`Fuerza relativa vs SP500 en ${rsVisualWindow} velas`}
+                              style={{flexShrink:0,fontSize:11,fontWeight:600,userSelect:'none'}}>
+                              <span style={{color:'#7a9bc0'}}>· RS </span>
+                              <span style={{color:col}}>{txt}</span>
+                            </span>
+                          )
+                        })()}
+                        {/* Input nº de velas de la ventana RS */}
+                        <input type="number" min={2} max={500} value={rsWinText}
+                          onChange={e=>{
+                            const raw=e.target.value
+                            setRsWinText(raw)
+                            const n=Math.trunc(Number(raw))
+                            if(Number.isFinite(n)&&n>=2&&n<=500) setRsVisualWindow(n)
+                          }}
+                          onBlur={()=>{
+                            const n=Math.trunc(Number(rsWinText))
+                            if(!(Number.isFinite(n)&&n>=2&&n<=500)) setRsWinText(String(rsVisualWindow))
+                          }}
+                          title="Nº de velas de la ventana RS (indicador visual)"
+                          style={{pointerEvents:'all',width:40,flexShrink:0,background:'rgba(13,21,32,0.85)',
+                            border:'1px solid #1a2d45',borderRadius:3,color:'#c8dff5',fontFamily:MONO,
+                            fontSize:10,padding:'1px 4px',height:18,lineHeight:'16px',textAlign:'center'}}/>
                         {/* + añadir a watchlist */}
                         <button onClick={newItem} title="Añadir a watchlist"
                           style={{pointerEvents:'all',background:'rgba(0,212,255,0.06)',
