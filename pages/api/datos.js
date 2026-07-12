@@ -301,12 +301,24 @@ export default async function handler(req, res) {
     let sp500Data = null, vixRawData = null
     const sp500Map = {}
     const auxDataMap = {} // ticker -> data (para todos los filtros no-GSPC, dedupado)
+    // Fase 2C: SP500 en el timeframe del activo (assetInterval), SOLO para el sp500Close visual del RS
+    // de cabecera. NO sustituye a sp500Data (diaria), que sigue alimentando filtros de mercado y B&H,
+    // ni a d.sp500Close (que consumen las estrategias con filtro SP500). En diario se reutiliza sp500Data.
+    let sp500DataTf = null
 
     const fetchJobs = [
       fetchAV('^GSPC', years + 1)
         .then(r => { sp500Data = r.filter(d => d.date >= data[0].date); sp500Data.forEach(d => { sp500Map[d.date] = d.close }) })
         .catch(() => {}),
     ]
+    // Segunda descarga SOLO en semanal (en diario, sp500DataTf = sp500Data → sin doble descarga)
+    if (assetInterval === 'w') {
+      fetchJobs.push(
+        fetchAV('^GSPC', years + 1, 'w')
+          .then(r => { sp500DataTf = r.filter(d => d.date >= data[0].date) })
+          .catch(() => {})
+      )
+    }
     if (anyFiltroOn) {
       const vixIv = filtrosCfg.vix?.intervalo === 'semanal' ? 'w' : 'd'
       if (filtrosCfg.vix?.activo)
@@ -430,8 +442,13 @@ export default async function handler(req, res) {
     }
 
     // ── Inyectar sp500Close + filtroActivo en cada barra ──
-    data.forEach(d => {
+    // sp500Close: serie diaria con match exacto — SIN CAMBIOS (la consumen las estrategias con filtro SP500).
+    // sp500CloseTf: SP500 en el timeframe del activo con forward-fill, SOLO para el RS visual de la cabecera.
+    //   En diario: idéntico a sp500Close (mismo valor exacto). En semanal: forward-fill de la serie semanal.
+    const sp500CloseTfAligned = assetInterval === 'w' ? buildAlignedCloses(sp500DataTf, assetDates) : null
+    data.forEach((d, i) => {
       d.sp500Close    = sp500Map[d.date] ?? null
+      d.sp500CloseTf  = assetInterval === 'w' ? (sp500CloseTfAligned[i] ?? null) : d.sp500Close
       d.filtroActivo  = anyFiltroOn ? (filtroActivoMap[d.date] ?? true) : true
     })
 

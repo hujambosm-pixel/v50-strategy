@@ -788,10 +788,13 @@ export default function Home() {
     const last = bars.length - 1
     const base = last - N
     if (base < 0) return { ok: false }                       // no hay N+1 velas
-    const cAct = bars[last]?.close,      cActBase = bars[base]?.close
-    const cSp  = bars[last]?.sp500Close, cSpBase  = bars[base]?.sp500Close
+    const cAct = bars[last]?.close, cActBase = bars[base]?.close
+    // sp500CloseTf: SP500 en el timeframe del activo (Fase 2C). Fallback a sp500Close (serie diaria)
+    // por robustez ante datos antiguos sin el campo nuevo.
+    const cSp     = bars[last]?.sp500CloseTf ?? bars[last]?.sp500Close
+    const cSpBase = bars[base]?.sp500CloseTf ?? bars[base]?.sp500Close
     if (cAct == null || cActBase == null || cActBase <= 0) return { ok: false }
-    if (cSp == null || cSpBase == null || cSpBase <= 0)    return { ok: false }   // sp500Close ausente en algún extremo
+    if (cSp == null || cSpBase == null || cSpBase <= 0)    return { ok: false }   // sp500 ausente en algún extremo
     const retActivo = (cAct / cActBase) - 1
     const retSP500  = (cSp  / cSpBase)  - 1
     return { ok: true, pct: (retActivo - retSP500) * 100 }
@@ -4582,7 +4585,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.615</title>
+        <title>Trading Simulator V9.616</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4660,7 +4663,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.615
+            <span className="dot"/>Trading Simulator V9.616
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
