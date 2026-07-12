@@ -503,7 +503,9 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
     if (a.entryDate < b.entryDate) return -1
     if (a.entryDate > b.entryDate) return 1
     if (prioridad === 'alfabetico') return a.symbol < b.symbol ? -1 : a.symbol > b.symbol ? 1 : 0
-    return (a._ps ?? 0) - (b._ps ?? 0)
+    // Desempate final alfabético por símbolo cuando el score de prioridad empata (p.ej. mismo ticker
+    // en dos estrategias → RS idéntico) → orden determinista y reproducible.
+    return ((a._ps ?? 0) - (b._ps ?? 0)) || (a.symbol < b.symbol ? -1 : a.symbol > b.symbol ? 1 : 0)
   })
 
   if (!allCandidates.length) return buildSlotsCurves(assetResults, capitalIni)
@@ -1412,11 +1414,21 @@ async function handlePortfolioMode(req, res) {
       // executedTrades tendrá mismo problema de pérdida de metadata → cubierto por enrichedExec
       curves = buildPositionSizingCurves(assetResults, cfg.capitalIni, sizeRules || {})
     } else {
-      // concentrado (default) — prioridad 'alfabetico' → desempate por (ticker, stratOrder) via synSym
+      // concentrado — Fase 3: desempate/gate por el criterio del usuario (fuerza_relativa/momentum),
+      // reutilizando el mismo motor que el path normal. sp500DataTf ya en timeframe activo.
+      // score_metricas/ranking necesitan scoreMap por símbolo REAL (no mapeable a synSym en Multicartera)
+      // → se degradan a 'alfabetico' de forma segura.
+      const _priorRaw = sizeRules.prioridad ?? 'alfabetico'
+      const _prior    = (_priorRaw === 'score_metricas' || _priorRaw === 'ranking') ? 'alfabetico' : _priorRaw
+      const _criterio = sizeRules.criterioUso ?? 'desempate'
+      const _rsThr    = sizeRules.rsGateThr   ?? 0
+      const _momThr   = sizeRules.momGateThr  ?? 10
+      const _proxThr  = sizeRules.proxGateThr ?? 10
+      const _rsWindow = sizeRules.rsWindow    ?? 63
       curves = buildConcentradoCurves(
         assetResults, cfg.capitalIni, _maxPos,
-        'alfabetico',  // Fase 2: añadir momentum/scoreMap con synSym→data mapping
-        _momentN, sp500DataTf, synList, null   // gate usa SP500 en timeframe activo (inerte aquí: prioridad alfabético)
+        _prior, _momentN, sp500DataTf, synList, null,
+        _criterio, _rsThr, _momThr, _proxThr, _rsWindow
       )
     }
 

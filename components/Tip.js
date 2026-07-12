@@ -85,6 +85,10 @@ export const TIP_DATA = {
     title: '◈ Multicartera',
     text: 'Simula varias estrategias operando a la vez sobre el mismo watchlist, compartiendo un pool común de capital. Cada combinación activo+estrategia se trata internamente como un símbolo sintético. Tres modos de reparto: Compartido, Concentrado y Position Sizing (Slots iguales no está disponible, porque sus bolsas de capital aisladas duplicarían la exposición cuando un mismo activo aparece en dos estrategias). Los filtros de mercado y gates se aplican igual que en modo individual.'
   },
+  multicarteraDesempate: {
+    title: 'Desempate por criterio en Multicartera',
+    text: 'En Multicartera, el desempate por fuerza relativa o momentum solo se aplica en el modo Concentrado, que es el que usa slots limitados que compiten entre sí. Los modos Compartido y Position Sizing reparten el capital de otra forma y ordenan por fecha, sin desempate por criterio.'
+  },
   // ── Dashboard métricas ──────────────────────────────────────
   pnlTotal: { title: 'P&L Total', text: 'P&L Realizado + P&L Flotante + Dividendos. Suma de todo el beneficio/pérdida del portfolio, incluyendo posiciones abiertas valoradas a precio actual y dividendos recibidos.' },
   cagr: { title: 'CAGR', text: 'Rentabilidad anualizada. Fórmula: (1 + P&L / Capital)^(1/años) − 1. Expresa a qué tasa anual compuesta ha crecido el portfolio desde la primera operación hasta hoy.' },

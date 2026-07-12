@@ -4198,7 +4198,13 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               modoAsig:mcMode,
               sizeRules:{
                 maxPosiciones:mcMaxPosiciones,
-                prioridad:'alfabetico',
+                prioridad:mcPrioridad,                    // Fase 3: desempate por criterio (solo Concentrado)
+                criterioUso:mcCriterioUso,
+                momentumN:Number(mcMomentumN),
+                rsWindow:Number(mcRsWindow),
+                rsGateThr:Number(mcRsGateThr),
+                momGateThr:Number(mcMomGateThr),
+                proxGateThr:Number(mcProxGateThr),
                 riskPerTrade:mcRiskPerTrade,
                 maxPortfolioPct:mcMaxPortfolioPct,
                 maxAccumRisk:mcMaxAccumRisk,
@@ -4586,7 +4592,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.620</title>
+        <title>Trading Simulator V9.621</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4664,7 +4670,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.620
+            <span className="dot"/>Trading Simulator V9.621
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6119,9 +6125,12 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       </div>
                       {/* Prioridad de entrada */}
                       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:mcPrioridad==='momentum'?4:0}}>
-                        <span title="Criterio para decidir qué activo entra primero cuando hay más señales simultáneas que slots disponibles. 'Score completo' combina rendimiento histórico + condiciones actuales del mercado (configurable en Ajustes → Ranking)"
-                          style={{fontSize:9,color:'#4a6a88',cursor:'help',textDecoration:'underline dotted'}}>
-                          Criterio de entrada
+                        <span style={{display:'inline-flex',alignItems:'center',gap:3}}>
+                          <span title="Criterio para decidir qué activo entra primero cuando hay más señales simultáneas que slots disponibles. 'Score completo' combina rendimiento histórico + condiciones actuales del mercado (configurable en Ajustes → Ranking)"
+                            style={{fontSize:9,color:'#4a6a88',cursor:'help',textDecoration:'underline dotted'}}>
+                            Criterio de entrada
+                          </span>
+                          <Tip id="multicarteraDesempate"/>
                         </span>
                         <select value={mcPrioridad} onChange={e=>{const v=e.target.value;setMcPrioridad(v);if(v==='alfabetico'||v==='score_metricas'||v==='ranking')setMcCriterioUso('desempate')}}
                           style={{padding:'2px 4px',borderRadius:3,background:'#0d1929',border:'1px solid #1a2a3a',
