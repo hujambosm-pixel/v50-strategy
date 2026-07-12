@@ -407,7 +407,7 @@ function buildCompartidoCurves(assetResults, capitalIni, symbolOrder = null) {
 // sp500Data: array de barras del SP500 (para fuerza_relativa)
 // symbolsList: array ordenado de símbolos del watchlist (para score_metricas legacy)
 // scoreMap: {symbol: scoreMetricas} para prioridad 'score_metricas'
-function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, prioridad = 'alfabetico', momentumN = 20, sp500Data = null, symbolsList = null, scoreMap = null, criterioUso = 'desempate', rsGateThr = 0, momGateThr = 10, proxGateThr = 10) {
+function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, prioridad = 'alfabetico', momentumN = 20, sp500Data = null, symbolsList = null, scoreMap = null, criterioUso = 'desempate', rsGateThr = 0, momGateThr = 10, proxGateThr = 10, rsWindow = 63) {
   const n = assetResults.length
   if (!n) return _emptyCurves()
   const { startDate, filteredDates } = _commonDates(assetResults)
@@ -450,7 +450,7 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
       return -ret  // mayor retorno → score más bajo → entra antes
     }
     if (prioridad === 'fuerza_relativa') {
-      const LB = 63
+      const LB = Math.max(2, Math.trunc(rsWindow) || 63)  // ventana en VELAS (configurable, default 63)
       if (idx < LB) { t._psValid = false; return 0 }  // sin historial suficiente del activo
       const retAsset = (data[idx].close - data[idx - LB].close) / data[idx - LB].close
       if (!sp500Data || !sp500Data.length) {
@@ -1253,6 +1253,11 @@ async function handlePortfolioMode(req, res) {
 
     let sp500Data = null
     try { sp500Data = await fetchData('^GSPC', cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null) } catch(_) {}
+    // Fase 2B: SP500 en el timeframe del activo, SOLO para el gate de fuerza relativa.
+    // Los demás consumidores (inyección a codeJs, filtros, B&H) siguen usando sp500Data diaria.
+    // En diario, sp500DataTf === sp500Data (sin doble descarga).
+    let sp500DataTf = sp500Data
+    if (assetInterval === '1wk') { try { sp500DataTf = await fetchData('^GSPC', cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, assetInterval) } catch(_) {} }
 
     // 3. Pre-contar pares válidos → slotCapital correcto antes de runCodeJsAsset
     let nPairs = 0
@@ -1411,7 +1416,7 @@ async function handlePortfolioMode(req, res) {
       curves = buildConcentradoCurves(
         assetResults, cfg.capitalIni, _maxPos,
         'alfabetico',  // Fase 2: añadir momentum/scoreMap con synSym→data mapping
-        _momentN, sp500Data, synList, null
+        _momentN, sp500DataTf, synList, null   // gate usa SP500 en timeframe activo (inerte aquí: prioridad alfabético)
       )
     }
 
@@ -1619,6 +1624,11 @@ export default async function handler(req, res) {
     // SP500 para el filtro (siempre diario)
     let sp500Data = null
     try { sp500Data = await fetchData('^GSPC', cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null) } catch(_) {}
+    // Fase 2B: SP500 en el timeframe del activo, SOLO para el gate de fuerza relativa.
+    // Filtros de mercado, curva B&H y sp500Close inyectado al codeJs siguen usando sp500Data diaria.
+    // En diario, sp500DataTf === sp500Data (sin doble descarga).
+    let sp500DataTf = sp500Data
+    if (assetInterval === '1wk') { try { sp500DataTf = await fetchData('^GSPC', cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, assetInterval) } catch(_) {} }
 
     // ── Fetch datos auxiliares para filtros de mercado ──
     const anyFiltroOn = !!(filtrosCfg?.vix?.activo || filtrosCfg?.indiceEma?.activo || filtrosCfg?.sectorEma?.activo || filtrosCfg?.cruceEma?.activo)
@@ -1824,7 +1834,8 @@ export default async function handler(req, res) {
       const _rsThr   = sizeRules.rsGateThr   ?? 0
       const _momThr  = sizeRules.momGateThr  ?? 10
       const _proxThr = sizeRules.proxGateThr ?? 10
-      curves = buildConcentradoCurves(assetResults, cfg.capitalIni, sizeRules.maxPosiciones ?? 5, _prior, _momentN, sp500Data, symbols, _scoreMap, _criterio, _rsThr, _momThr, _proxThr)
+      const _rsWindow = sizeRules.rsWindow   ?? 63   // ventana del gate RS en velas (default 63)
+      curves = buildConcentradoCurves(assetResults, cfg.capitalIni, sizeRules.maxPosiciones ?? 5, _prior, _momentN, sp500DataTf, symbols, _scoreMap, _criterio, _rsThr, _momThr, _proxThr, _rsWindow)
     } else if (modoAsig === 'positionsizing') {
       curves = buildPositionSizingCurves(assetResults, cfg.capitalIni, sizeRules)
     } else {

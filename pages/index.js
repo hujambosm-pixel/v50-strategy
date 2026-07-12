@@ -984,6 +984,7 @@ export default function Home() {
   const [mcCriterioUso,setMcCriterioUso]=useState('desempate') // 'desempate' | 'filtro' — uso del criterio en Concentrado
   const [mcMomentumN,setMcMomentumN]=useState(20)           // lookback días para criterio momentum
   const [mcRsGateThr,setMcRsGateThr]=useState(0)            // umbral gate RS (%) — default 0 (basta batir al índice)
+  const [mcRsWindow,setMcRsWindow]=useState(63)             // ventana (velas) del gate de fuerza relativa — default 63; independiente del RS visual (C) y del ranking (A)
   const [mcMomGateThr,setMcMomGateThr]=useState(10)         // umbral gate momentum (% subida mínima)
   const [mcProxGateThr,setMcProxGateThr]=useState(10)       // umbral gate proximidad (% bajo el máximo 52s)
   const [mcCapital,setMcCapital]=useState('compound')    // 'simple' | 'compound'
@@ -4079,7 +4080,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
       fromDate:_mcFrom,toDate:_mcTo,
       tipoStop,atrPeriod:Number(atrP),atrMult:Number(atrM),sinPerdidas,reentry,
       tipoFiltro,sp500EmaR:Number(sp500EmaR),sp500EmaL:Number(sp500EmaL),tipoCapital:mcCapital,
-      sizeRules:{riskPerTrade:mcRiskPerTrade,maxPortfolioPct:mcMaxPortfolioPct,maxAccumRisk:mcMaxAccumRisk,maxPosiciones:mcMaxPosiciones,prioridad:mcPrioridad,criterioUso:mcCriterioUso,momentumN:Number(mcMomentumN),rsGateThr:Number(mcRsGateThr),momGateThr:Number(mcMomGateThr),proxGateThr:Number(mcProxGateThr),
+      sizeRules:{riskPerTrade:mcRiskPerTrade,maxPortfolioPct:mcMaxPortfolioPct,maxAccumRisk:mcMaxAccumRisk,maxPosiciones:mcMaxPosiciones,prioridad:mcPrioridad,criterioUso:mcCriterioUso,momentumN:Number(mcMomentumN),rsWindow:Number(mcRsWindow),rsGateThr:Number(mcRsGateThr),momGateThr:Number(mcMomGateThr),proxGateThr:Number(mcProxGateThr),
         scoreMap:Object.fromEntries(mcSelected.map(sym=>[sym,wlData[sym.toUpperCase()]?.active?.scoreMetricas??null]))}}
     const buildCfgFromStrat=(strat)=>{
       // Parsear params del code_js (campo principal para estrategias modernas)
@@ -4218,7 +4219,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
       }
     }
     setMcLoading(false);setMcProgress(null)
-  },[mcSelected,mcMode,selectedModos,mcWeights,mcCapital,mcCapitalIni,mcYears,mcPeriodMode,mcFromDate,mcToDate,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL,rankingData,mcStratSelected,strategies,currentStratId,mcRiskPerTrade,mcMaxPortfolioPct,mcMaxAccumRisk,mcMaxPosiciones,mcPrioridad,mcCriterioUso,mcMomentumN,mcRsGateThr,mcMomGateThr,mcProxGateThr,filtros,mcIntervalo])
+  },[mcSelected,mcMode,selectedModos,mcWeights,mcCapital,mcCapitalIni,mcYears,mcPeriodMode,mcFromDate,mcToDate,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL,rankingData,mcStratSelected,strategies,currentStratId,mcRiskPerTrade,mcMaxPortfolioPct,mcMaxAccumRisk,mcMaxPosiciones,mcPrioridad,mcCriterioUso,mcMomentumN,mcRsWindow,mcRsGateThr,mcMomGateThr,mcProxGateThr,filtros,mcIntervalo])
 
   // Auto-inicializar pesos iguales cuando cambian activos seleccionados (modo custom)
   useEffect(()=>{
@@ -4585,7 +4586,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.617</title>
+        <title>Trading Simulator V9.618</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4663,7 +4664,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.617
+            <span className="dot"/>Trading Simulator V9.618
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6198,6 +6199,21 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                           <input type="number" min="5" max="120" step="1"
                             value={mcMomentumN}
                             onChange={e=>setMcMomentumN(Math.max(5,Math.min(120,Number(e.target.value))))}
+                            style={{width:65,padding:'2px 4px',borderRadius:3,
+                              background:'#0d1929',border:'1px solid #1a2a3a',
+                              color:'#e0e8f0',fontSize:11,fontFamily:MONO,textAlign:'right'}}
+                          />
+                        </div>
+                      )}
+                      {mcPrioridad==='fuerza_relativa'&&(
+                        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                          <span title="Número de VELAS de lookback para la fuerza relativa vs SP500 (retorno del activo menos el del SP500). Cuenta velas del timeframe activo: en semanal, 63 = 63 semanas. Independiente del RS de la cabecera y del ranking. Default 63."
+                            style={{fontSize:9,color:'#4a6a88',cursor:'help',textDecoration:'underline dotted',paddingLeft:10}}>
+                            N velas lookback
+                          </span>
+                          <input type="number" min="2" max="500" step="1"
+                            value={mcRsWindow}
+                            onChange={e=>setMcRsWindow(Math.max(2,Math.min(500,Number(e.target.value))))}
                             style={{width:65,padding:'2px 4px',borderRadius:3,
                               background:'#0d1929',border:'1px solid #1a2a3a',
                               color:'#e0e8f0',fontSize:11,fontFamily:MONO,textAlign:'right'}}
