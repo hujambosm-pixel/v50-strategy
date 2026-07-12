@@ -597,6 +597,22 @@ function apiFetch(url, opts={}) {
   return fetch(url,{...opts,headers})
 }
 
+// ── Fuerza relativa (RS) del ranking del watchlist — fuente única compartida ──
+// Réplica EXACTA de la lógica que estaba triplicada (calcRanking / calcRankingAllStrategies /
+// calcScoreMetSen): RS = retorno del activo − retorno del SP500 sobre `window` velas (default 63,
+// índice -(window+1) = -64). Mismo guard, mismos fallbacks y mismo short-circuit por frPct que el
+// código original. Devuelve 0 si no hay SP500 suficiente o frPct<=0. NO cambia comportamiento.
+function calcRankingRS(priceArr, sp500Closes, window = 63, frPct = 1) {
+  if (!(sp500Closes?.length >= window + 1) || !(frPct > 0)) return 0
+  const lastP  = priceArr[priceArr.length - 1]
+  const spLast = sp500Closes[sp500Closes.length - 1]
+  const spN    = sp500Closes[sp500Closes.length - 1 - window]
+  const spRet  = spN > 0 ? (spLast / spN - 1) * 100 : 0
+  const assetN = priceArr.length >= window + 1 ? priceArr[priceArr.length - 1 - window] : priceArr[0]
+  const assetRet = assetN > 0 ? (lastP / assetN - 1) * 100 : 0
+  return assetRet - spRet
+}
+
 // ── Build equity curve with daily float P&L ──────────────────────────────────
 // allTrades: all trades (open+closed); historicalCloses: {sym:[{date,close}]}
 // capitalBase: fallback base when no contributions; contributions: aportaciones array
@@ -2795,15 +2811,8 @@ export default function Home() {
               const hist252=priceArr.slice(-252)
               const high52=Math.max(...hist252)
               const proximity52=high52>0?(lastP/high52)*100:50  // 50 = neutral if no data
-              let relStrength=0
-              if (sp500Closes?.length>=64&&frPct>0) {
-                const spLast=sp500Closes[sp500Closes.length-1]
-                const sp63=sp500Closes[sp500Closes.length-64]
-                const spRet=sp63>0?(spLast/sp63-1)*100:0
-                const asset63=priceArr.length>=64?priceArr[priceArr.length-64]:priceArr[0]
-                const assetRet=asset63>0?(lastP/asset63-1)*100:0
-                relStrength=assetRet-spRet
-              } else if (sp500Closes===null&&frPct>0) {
+              const relStrength=calcRankingRS(priceArr, sp500Closes, 63, frPct)
+              if (sp500Closes===null&&frPct>0) {
                 console.warn(`[calcRanking] ${sym}: sin datos SP500, fuerza relativa omitida`)
               }
               scoreMercado=Math.max(0,Math.min(100,
@@ -2921,14 +2930,7 @@ export default function Home() {
                 const momentum = momP>0?(lastP/momP-1)*100:0
                 const hist252 = priceArr.slice(-252), high52 = Math.max(...hist252)
                 const proximity52 = high52>0?(lastP/high52)*100:50
-                let relStrength = 0
-                if (sp500Closes?.length>=64&&frPct>0) {
-                  const spLast=sp500Closes[sp500Closes.length-1], sp63=sp500Closes[sp500Closes.length-64]
-                  const spRet=sp63>0?(spLast/sp63-1)*100:0
-                  const asset63=priceArr.length>=64?priceArr[priceArr.length-64]:priceArr[0]
-                  const assetRet=asset63>0?(lastP/asset63-1)*100:0
-                  relStrength=assetRet-spRet
-                }
+                const relStrength = calcRankingRS(priceArr, sp500Closes, 63, frPct)
                 scoreMercado=Math.max(0,Math.min(100,
                   norm(momentum,-20,40)*momPct + norm(relStrength,-30,30)*frPct + norm(proximity52,50,100)*max52Pct
                 ))
@@ -3107,14 +3109,7 @@ export default function Home() {
                 const momentum=momP>0?(lastP/momP-1)*100:0
                 const hist252=priceArr.slice(-252), high52=Math.max(...hist252)
                 const proximity52=high52>0?(lastP/high52)*100:50
-                let relStrength=0
-                if(sp500Closes?.length>=64&&frPct>0){
-                  const spLast=sp500Closes[sp500Closes.length-1], sp63=sp500Closes[sp500Closes.length-64]
-                  const spRet=sp63>0?(spLast/sp63-1)*100:0
-                  const asset63=priceArr.length>=64?priceArr[priceArr.length-64]:priceArr[0]
-                  const assetRet=asset63>0?(lastP/asset63-1)*100:0
-                  relStrength=assetRet-spRet
-                }
+                const relStrength=calcRankingRS(priceArr, sp500Closes, 63, frPct)
                 scoreMercado=Math.max(0,Math.min(100,norm(momentum,-20,40)*momPct+norm(relStrength,-30,30)*frPct+norm(proximity52,50,100)*max52Pct))
               }
             }
@@ -4592,7 +4587,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.622</title>
+        <title>Trading Simulator V9.623</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4670,7 +4665,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.622
+            <span className="dot"/>Trading Simulator V9.623
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
