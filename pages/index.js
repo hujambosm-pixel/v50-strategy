@@ -981,10 +981,10 @@ export default function Home() {
   const [mcMaxAccumRisk,setMcMaxAccumRisk]=useState(20)
   const [mcMaxPosiciones,setMcMaxPosiciones]=useState(4)  // para modo concentrado
   const [mcPrioridad,setMcPrioridad]=useState('alfabetico') // criterio desempate concentrado
-  const [mcCriterioUso,setMcCriterioUso]=useState('desempate') // 'desempate' | 'filtro' — uso del criterio en Concentrado
+  const [mcCriterioUso,setMcCriterioUso]=useState('filtro') // 'desempate' | 'filtro' — uso del criterio en Concentrado (default: filtro)
   const [mcMomentumN,setMcMomentumN]=useState(20)           // lookback días para criterio momentum
   const [mcRsGateThr,setMcRsGateThr]=useState(0)            // umbral gate RS (%) — default 0 (basta batir al índice)
-  const [mcRsWindow,setMcRsWindow]=useState(63)             // ventana (velas) del gate de fuerza relativa — default 63; independiente del RS visual (C) y del ranking (A)
+  const [mcRsWindow,setMcRsWindow]=useState(20)             // ventana (velas) del gate de fuerza relativa — default 20 (fallback backend sigue en 63); independiente del RS visual (C) y del ranking (A)
   const [mcMomGateThr,setMcMomGateThr]=useState(10)         // umbral gate momentum (% subida mínima)
   const [mcProxGateThr,setMcProxGateThr]=useState(10)       // umbral gate proximidad (% bajo el máximo 52s)
   const [mcCapital,setMcCapital]=useState('compound')    // 'simple' | 'compound'
@@ -4586,7 +4586,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.618</title>
+        <title>Trading Simulator V9.619</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4664,7 +4664,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.618
+            <span className="dot"/>Trading Simulator V9.619
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
