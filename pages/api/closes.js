@@ -1,14 +1,18 @@
 // pages/api/closes.js — últimos N closes de cualquier ticker via Yahoo Finance
 // ?dates=1 → devuelve [{date, close}] en lugar de array plano (retrocompatible)
 export default async function handler(req, res) {
-  const { symbol, days = '300', dates } = req.query
+  const { symbol, days = '300', dates, interval } = req.query
   if (!symbol) return res.status(400).json({ error: 'symbol required' })
 
-  const nDays = Math.min(Math.max(Number(days) || 300, 30), 1500)
+  // interval: '1d' (default, retrocompatible) | '1wk'. El cap de días solo se eleva en semanal
+  // (para cubrir la ventana en velas); en diario queda en 1500 → el tradelog (days=1800→1500) no cambia.
+  const iv = interval === '1wk' ? '1wk' : '1d'
+  const cap = iv === '1wk' ? 4000 : 1500
+  const nDays = Math.min(Math.max(Number(days) || 300, 30), cap)
   const period1 = Math.floor(Date.now() / 1000) - nDays * 24 * 3600
   const period2 = Math.floor(Date.now() / 1000)
 
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?period1=${period1}&period2=${period2}&interval=1d`
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?period1=${period1}&period2=${period2}&interval=${iv}`
   try {
     const r = await fetch(url, {
       headers: {

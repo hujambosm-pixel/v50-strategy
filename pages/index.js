@@ -613,6 +613,15 @@ function calcRankingRS(priceArr, sp500Closes, window = 63, frPct = 1) {
   return assetRet - spRet
 }
 
+// Intervalo Yahoo del ranking a partir del intervalo de la app ('diario'/'semanal').
+function rankingYfIv(intervalo) { return intervalo === 'semanal' ? '1wk' : '1d' }
+// Días de calendario a pedir a closes.js para cubrir ~(window + margen) velas en el intervalo dado.
+// En diario con la ventana por defecto (63) devuelve 300 → idéntico al comportamiento actual.
+function rankingRsDays(window, yfInterval) {
+  const velas = Math.max(300, (Number(window) || 63) + 20)
+  return velas * (yfInterval === '1wk' ? 7 : 1)
+}
+
 // ── Build equity curve with daily float P&L ──────────────────────────────────
 // allTrades: all trades (open+closed); historicalCloses: {sym:[{date,close}]}
 // capitalBase: fallback base when no contributions; contributions: aportaciones array
@@ -2746,6 +2755,7 @@ export default function Home() {
     const frPct       = (sett.ranking?.rankingFRPct        ?? 33) / 100
     const max52Pct    = (sett.ranking?.rankingMax52Pct     ?? 34) / 100
     const momN        = Math.max(5, sett.ranking?.rankingMomentumN ?? 20)
+    const rsWindow    = Math.max(2, sett.ranking?.rankingRsWindow  ?? 63)  // ventana RS en velas (default 63 = índice -64)
     // ── Pesos métricas históricas ──
     const wrPct       = (sett.ranking?.rankingWinRatePct      ?? 33) / 100
     const cagrPct     = (sett.ranking?.rankingCAGRPct         ?? 33) / 100
@@ -2753,11 +2763,12 @@ export default function Home() {
     const ddPct       = (sett.ranking?.rankingMaxDDPct        ?? 0)  / 100
     const minTrades   = sett.ranking?.minTrades ?? 3
 
-    // ── Fetch SP500 closes una vez si las métricas de mercado están activas ──
+    // ── Fetch SP500 closes una vez si las métricas de mercado están activas — al MISMO timeframe que el activo ──
     let sp500Closes = null
     if (wMercado > 0 && frPct > 0) {
       try {
-        const r = await apiFetch('/api/closes?symbol=%5EGSPC&days=300')
+        const _iv = rankingYfIv(estrategiaIntervalo)
+        const r = await apiFetch(`/api/closes?symbol=%5EGSPC&interval=${_iv}&days=${rankingRsDays(rsWindow, _iv)}`)
         if (r.ok) sp500Closes = await r.json()
       } catch(e) { console.warn('[calcRanking] SP500 fetch failed:', e.message) }
     }
@@ -2811,7 +2822,7 @@ export default function Home() {
               const hist252=priceArr.slice(-252)
               const high52=Math.max(...hist252)
               const proximity52=high52>0?(lastP/high52)*100:50  // 50 = neutral if no data
-              const relStrength=calcRankingRS(priceArr, sp500Closes, 63, frPct)
+              const relStrength=calcRankingRS(priceArr, sp500Closes, rsWindow, frPct)
               if (sp500Closes===null&&frPct>0) {
                 console.warn(`[calcRanking] ${sym}: sin datos SP500, fuerza relativa omitida`)
               }
@@ -2872,13 +2883,22 @@ export default function Home() {
     const ddPct      = (sett.ranking?.rankingMaxDDPct        ?? 0)  / 100
     const minTrades  = sett.ranking?.minTrades ?? 3
     const norm = (v,mn,mx) => Math.max(0, Math.min(100, (v-mn)/(mx-mn)*100))
+    const rsWindow = Math.max(2, sett.ranking?.rankingRsWindow ?? 63)  // ventana RS en velas (default 63)
 
-    let sp500Closes = null
-    if (wMercado > 0 && frPct > 0) {
-      try {
-        const r = await apiFetch('/api/closes?symbol=%5EGSPC&days=300')
-        if (r.ok) sp500Closes = await r.json()
-      } catch(e) { console.warn('[calcRankingAll] SP500 fetch failed:', e.message) }
+    // SP500 al MISMO timeframe que cada estrategia (stratIntv), cacheado por intervalo Yahoo
+    // (no se refetch si dos estrategias comparten intervalo).
+    const _sp500ByIv = {}
+    const getSp500ForIv = async (yfInterval) => {
+      if (yfInterval in _sp500ByIv) return _sp500ByIv[yfInterval]
+      let s = null
+      if (wMercado > 0 && frPct > 0) {
+        try {
+          const r = await apiFetch(`/api/closes?symbol=%5EGSPC&interval=${yfInterval}&days=${rankingRsDays(rsWindow, yfInterval)}`)
+          if (r.ok) s = await r.json()
+        } catch(e) { console.warn('[calcRankingAll] SP500 fetch failed:', e.message) }
+      }
+      _sp500ByIv[yfInterval] = s
+      return s
     }
 
     const BATCH = 4
@@ -2891,6 +2911,7 @@ export default function Home() {
       const stratYears  = strat.years || Number(years)
       const stratCap    = strat.capital_ini || Number(capitalIni)
       const stratIntv   = (()=>{try{const p=typeof strat?.params==='string'?JSON.parse(strat.params||'{}'):(strat?.params||{});return p.intervalo||'diario'}catch(_){return 'diario'}})()
+      const sp500Closes = await getSp500ForIv(rankingYfIv(stratIntv))  // SP500 alineado al timeframe de esta estrategia
       const results = {}
       let _stratError = null
       try {
@@ -2930,7 +2951,7 @@ export default function Home() {
                 const momentum = momP>0?(lastP/momP-1)*100:0
                 const hist252 = priceArr.slice(-252), high52 = Math.max(...hist252)
                 const proximity52 = high52>0?(lastP/high52)*100:50
-                const relStrength = calcRankingRS(priceArr, sp500Closes, 63, frPct)
+                const relStrength = calcRankingRS(priceArr, sp500Closes, rsWindow, frPct)
                 scoreMercado=Math.max(0,Math.min(100,
                   norm(momentum,-20,40)*momPct + norm(relStrength,-30,30)*frPct + norm(proximity52,50,100)*max52Pct
                 ))
@@ -3083,10 +3104,13 @@ export default function Home() {
     const wMercado=(sett.ranking?.rankingWeightMercado??20)/100, wHistorico=(sett.ranking?.rankingWeightHistorico??80)/100
     const momPct=(sett.ranking?.rankingMomentumPct??33)/100, frPct=(sett.ranking?.rankingFRPct??33)/100
     const max52Pct=(sett.ranking?.rankingMax52Pct??34)/100, momN=Math.max(5,sett.ranking?.rankingMomentumN??20)
+    const rsWindow=Math.max(2,sett.ranking?.rankingRsWindow??63)  // ventana RS en velas (default 63)
+    const _ivA3=rankingYfIv(estrategiaIntervalo)                  // activo y SP500 al mismo timeframe
+    const _daysA3=rankingRsDays(rsWindow,_ivA3)
     const norm=(v,mn,mx)=>Math.max(0,Math.min(100,(v-mn)/(mx-mn)*100))
 
     let sp500Closes=null
-    if(wMercado>0&&frPct>0){try{const r=await apiFetch('/api/closes?symbol=%5EGSPC&days=300');if(r.ok)sp500Closes=await r.json()}catch(e){console.warn('[calcScoreMetSen] SP500:',e.message)}}
+    if(wMercado>0&&frPct>0){try{const r=await apiFetch(`/api/closes?symbol=%5EGSPC&interval=${_ivA3}&days=${_daysA3}`);if(r.ok)sp500Closes=await r.json()}catch(e){console.warn('[calcScoreMetSen] SP500:',e.message)}}
 
     const BATCH=4, activeScMap={}, topScMap={}
     for(let i=0;i<syms.length;i+=BATCH){
@@ -3100,7 +3124,7 @@ export default function Home() {
           // Descargar precios actuales para señales de mercado
           let scoreMercado=0
           if(wMercado>0){
-            const r=await apiFetch(`/api/closes?symbol=${encodeURIComponent(sym)}&days=300`)
+            const r=await apiFetch(`/api/closes?symbol=${encodeURIComponent(sym)}&interval=${_ivA3}&days=${_daysA3}`)
             if(r.ok){
               const closes=await r.json()
               const priceArr=(Array.isArray(closes)?closes:[]).filter(v=>v!=null&&!isNaN(v))
@@ -3109,7 +3133,7 @@ export default function Home() {
                 const momentum=momP>0?(lastP/momP-1)*100:0
                 const hist252=priceArr.slice(-252), high52=Math.max(...hist252)
                 const proximity52=high52>0?(lastP/high52)*100:50
-                const relStrength=calcRankingRS(priceArr, sp500Closes, 63, frPct)
+                const relStrength=calcRankingRS(priceArr, sp500Closes, rsWindow, frPct)
                 scoreMercado=Math.max(0,Math.min(100,norm(momentum,-20,40)*momPct+norm(relStrength,-30,30)*frPct+norm(proximity52,50,100)*max52Pct))
               }
             }
@@ -4587,7 +4611,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.623</title>
+        <title>Trading Simulator V9.624</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4665,7 +4689,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.623
+            <span className="dot"/>Trading Simulator V9.624
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
