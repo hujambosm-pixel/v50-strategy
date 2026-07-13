@@ -1358,6 +1358,16 @@ export default function Home() {
   const [tlLivePrices,setTlLivePrices]=useState({})
   const [tlLiveFx,setTlLiveFx]=useState({})
   const tlFifo = useMemo(()=>computeFifo(tlTrades, tlLivePrices), [tlTrades, tlLivePrices])
+  // Marcadores de flecha en la vela de entrada de las posiciones ABIERTAS del símbolo visible.
+  // Formato customMarkers de CandleChart ({date:'YYYY-MM-DD', shape, position, color, text}). Coincide
+  // con el formato de la serie de velas → sin conversión. Complementa la línea amarilla (tlOpenTrades),
+  // que se mantiene intacta. El marcador solo aparece si entry_date cae en el rango de velas visible.
+  const openEntryMarkers = useMemo(()=>{
+    const symUp=(simbolo||'').toUpperCase()
+    return (tlFifo?.openPositions||[])
+      .filter(p=>(p.symbol||'').toUpperCase()===symUp && p.entry_date)
+      .map(p=>({date:p.entry_date, position:'belowBar', shape:'arrowUp', color:'#2e7d32', text:'Entrada'}))
+  },[tlFifo, simbolo])
 
   // ── Background cache warm: fire priceOnly requests in parallel batches when Dashboard opens ──
   // Warms the server-side 60s cache so the subsequent sequential fetch hits cache (near-instant).
@@ -4611,7 +4621,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.625</title>
+        <title>Trading Simulator V9.626</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4689,7 +4699,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.625
+            <span className="dot"/>Trading Simulator V9.626
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -7346,7 +7356,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         data={result.chartData} emaRPeriod={emaR} emaLPeriod={emaL} definition={null}
                         visuals={result.visuals??null}
                         slopeChanges={result.slopeChanges??[]}
-                        customMarkers={result.customMarkers??[]}
+                        customMarkers={[...(result.customMarkers??[]), ...openEntryMarkers]}
                         trades={result.isBareChart?[]:result.trades||[]} maxDD={result.isBareChart?0:metrics?.ddSimple||0}
                         isBareChart={result.isBareChart??false}
                         chartHeight={result.isBareChart?bareChartHeight:candleH}
@@ -7498,7 +7508,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           data={result.chartData} emaRPeriod={emaR} emaLPeriod={emaL} definition={null}
                           visuals={result.visuals??null}
                           slopeChanges={result.slopeChanges??[]}
-                          customMarkers={result.customMarkers??[]}
+                          customMarkers={[...(result.customMarkers??[]), ...openEntryMarkers]}
                           trades={result.isBareChart?[]:result.trades||[]}
                           maxDD={result.isBareChart?0:metrics?.ddSimple||0}
                           isBareChart={result.isBareChart??false}
