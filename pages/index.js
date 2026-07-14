@@ -1182,6 +1182,11 @@ export default function Home() {
   const [riskNewForm,setRiskNewForm]=useState(null) // null | {name,risk_per_trade_value,risk_per_trade_type,max_total_risk,max_simultaneous_positions}
   // Parsea números en formato español (1.234,56) o inglés (1234.56)
   const parseES=useCallback((s)=>parseFloat(String(s).replace(/\./g,'').replace(',','.'))||0,[])
+  // ── Órdenes pendientes (Risk MGMT → guardado automático) ──
+  const [pendingOrders,setPendingOrders]=useState([])
+  const riskSaveRef=useRef({shares:null,currency:null})   // {shares,currency} escrito en el render del panel risk
+  const pendingSaveTimerRef=useRef(null)                  // debounce manual del auto-guardado
+  const prevSidePanelRef=useRef(sidePanel)                // detectar transición de apertura del panel risk
   const [tlFilterBroker,setTlFilterBroker]=useState('')
   const [tlFilterYear,setTlFilterYear]=useState('')
   const [tlFilterMonth,setTlFilterMonth]=useState('')  // '01'..'12'
@@ -1366,8 +1371,54 @@ export default function Home() {
     const symUp=(simbolo||'').toUpperCase()
     return (tlFifo?.openPositions||[])
       .filter(p=>(p.symbol||'').toUpperCase()===symUp && p.entry_date)
-      .map(p=>({date:p.entry_date, position:'belowBar', shape:'arrowUp', color:'#2e7d32', text:'Entrada'}))
+      .map(p=>({date:p.entry_date, position:'belowBar', shape:'arrowUp', color:'#ffd166', text:'Entrada'}))
   },[tlFifo, simbolo])
+
+  // ── Órdenes pendientes: carga inicial (al montar) ──
+  useEffect(()=>{
+    apiFetch('/api/pending?action=list')
+      .then(r=>r.ok?r.json():[])
+      .then(d=>setPendingOrders(Array.isArray(d)?d:[]))
+      .catch(()=>{})
+  },[])
+
+  // ── RESET al abrir el panel Risk MGMT: vaciar entrada/stop SOLO en la transición a 'risk'.
+  //    Deja los campos inválidos → el auto-guardado (más abajo) no dispara nada. ──
+  useEffect(()=>{
+    const prev=prevSidePanelRef.current
+    prevSidePanelRef.current=sidePanel
+    if(sidePanel==='risk'&&prev!=='risk'){
+      setRiskCalc(c=>({...c,entry:'',stop:''}))
+    }
+  },[sidePanel])
+
+  // ── AUTO-GUARDADO de orden pendiente (sin botón), debounce manual ~600ms.
+  //    Solo guarda si entrada/stop del usuario parsean a números válidos y distintos.
+  //    El nº de acciones (y currency) se leen de riskSaveRef, escrito en el render del panel. ──
+  useEffect(()=>{
+    if(sidePanel!=='risk') return
+    if(pendingSaveTimerRef.current) clearTimeout(pendingSaveTimerRef.current)
+    pendingSaveTimerRef.current=setTimeout(()=>{
+      const _eN=parseES(riskCalc.entry), _sN=parseES(riskCalc.stop), _tN=parseES(riskCalc.tp)
+      if(!(_eN>0)||!(_sN>0)||Math.abs(_eN-_sN)<=0) return   // inválidos/vacíos → no guardar ni borrar
+      const sym=(simbolo||'').toUpperCase()
+      if(!sym) return
+      const {shares,currency}=riskSaveRef.current||{}
+      apiFetch('/api/pending?action=upsert',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({symbol:sym,entry_price:_eN,stop_price:_sN,tp_price:_tN>0?_tN:null,
+          shares:shares!=null?shares:null,currency:currency||null,profile_id:riskActiveProfile?.id||null})})
+        .then(r=>r.ok?r.json():null)
+        .then(saved=>{ if(saved&&saved.symbol) setPendingOrders(prev=>[...prev.filter(o=>(o.symbol||'').toUpperCase()!==sym), saved]) })
+        .catch(()=>{})
+    },600)
+    return()=>{ if(pendingSaveTimerRef.current) clearTimeout(pendingSaveTimerRef.current) }
+  },[riskCalc.entry,riskCalc.stop,riskCalc.tp,simbolo,sidePanel])   // eslint-disable-line
+
+  // Órdenes pendientes del símbolo visible (0 o 1) — memoizado para no recrear el chart
+  const pendingOrdersForSym=useMemo(()=>{
+    const symUp=(simbolo||'').toUpperCase()
+    return pendingOrders.filter(o=>(o.symbol||'').toUpperCase()===symUp)
+  },[pendingOrders, simbolo])
 
   // ── Background cache warm: fire priceOnly requests in parallel batches when Dashboard opens ──
   // Warms the server-side 60s cache so the subsequent sequential fetch hits cache (near-instant).
@@ -4621,7 +4672,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.626</title>
+        <title>Trading Simulator V9.627</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4699,7 +4750,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.626
+            <span className="dot"/>Trading Simulator V9.627
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6835,6 +6886,9 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     if(_activeCO&&_maxR!=null&&_capOpShs>0) _candidatos.push(_capOpShs)
                     if(_activeSL&&_ns>0&&_slotShs>0) _candidatos.push(_slotShs)
                     const _resAcc=_candidatos.length>0?Math.min(..._candidatos):0
+                    // Exponer nº de acciones (resultado conservador) + currency al auto-guardado de órdenes pendientes.
+                    // _resAcc = min de cards activas; == _shs en la config por defecto (solo riesgo/op activo).
+                    riskSaveRef.current={shares:_resAcc>0?_resAcc:(_shs||null), currency:(_ops.find(p=>(p.symbol||'').toUpperCase()===(simbolo||'').toUpperCase())?.currency)||null}
                     const _resImp=_resAcc>0&&_eN>0?_resAcc*_eN:0
                     const _resImportePrev=_slotShs*_eN // para la barra de slots
                     const _resPct=_eq>0&&_resImp>0?(_resImp/_eq)*100:0
@@ -7357,6 +7411,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         visuals={result.visuals??null}
                         slopeChanges={result.slopeChanges??[]}
                         customMarkers={[...(result.customMarkers??[]), ...openEntryMarkers]}
+                        pendingOrders={pendingOrdersForSym}
                         trades={result.isBareChart?[]:result.trades||[]} maxDD={result.isBareChart?0:metrics?.ddSimple||0}
                         isBareChart={result.isBareChart??false}
                         chartHeight={result.isBareChart?bareChartHeight:candleH}
@@ -7509,6 +7564,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           visuals={result.visuals??null}
                           slopeChanges={result.slopeChanges??[]}
                           customMarkers={[...(result.customMarkers??[]), ...openEntryMarkers]}
+                        pendingOrders={pendingOrdersForSym}
                           trades={result.isBareChart?[]:result.trades||[]}
                           maxDD={result.isBareChart?0:metrics?.ddSimple||0}
                           isBareChart={result.isBareChart??false}

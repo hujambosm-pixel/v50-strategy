@@ -243,7 +243,7 @@ function createRiskPrimitive(configRef) {
   }
 }
 
-export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, isNewResultRef=null, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null, isBareChart=false, visuals=null, filterZones=[], slopeChanges=[], customMarkers=[] }) {
+export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, isNewResultRef=null, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null, isBareChart=false, visuals=null, filterZones=[], slopeChanges=[], customMarkers=[], pendingOrders=[] }) {
   const containerRef=useRef(null), svgRef=useRef(null), legendRef=useRef(null), tooltipRef=useRef(null)
   const activeLegendRef = externalLegendRef || legendRef
   const chartRef=useRef(null), candlesRef=useRef(null)
@@ -253,6 +253,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
   const innerCleanupRef=useRef(null)
   const rulerStart=useRef(null), rulerActiveR=useRef(rulerActive)
   const priceAlarmLinesRef=useRef([])    // [{alarmId, priceLine, price}]
+  const pendingSeriesRef=useRef([])      // line series de órdenes pendientes (2 por orden: entrada+stop)
   const dragRef=useRef(null)             // {lineObj} while dragging
   const priceAlarmTimersRef=useRef([])   // setInterval IDs for blinking
   const lastCloseRef=useRef(null)        // último close cargado
@@ -1453,6 +1454,38 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       priceAlarmTimersRef.current=[]
     }
   },[priceAlarms,ackedAlarms,data])
+
+  // ── Órdenes pendientes: dos segmentos DISCONTINUOS (entrada naranja + stop rojo) por orden,
+  //    desde created_at (clampado a la primera vela) hasta la última vela. Efecto independiente,
+  //    line series propias (pendingSeriesRef) → no recrea el chart. lineStyle:2 = Dashed. ──
+  useEffect(()=>{
+    const chart=chartRef.current
+    // Limpiar series anteriores SIEMPRE (aunque no haya órdenes)
+    pendingSeriesRef.current.forEach(s=>{try{chart&&chart.removeSeries(s)}catch(_){}})
+    pendingSeriesRef.current=[]
+    if(!chart||!data?.length) return
+    const firstDate=data[0]?.date
+    const lastDate=data[data.length-1]?.date
+    if(!firstDate||!lastDate) return
+    ;(pendingOrders||[]).forEach(o=>{
+      const entry=parseFloat(o.entry_price), stop=parseFloat(o.stop_price)
+      let start=(o.created_at||'').slice(0,10)||firstDate
+      if(start<firstDate) start=firstDate            // clamp al rango visible
+      if(start>lastDate)  start=lastDate
+      const seg=(value,color)=>{
+        if(value==null||isNaN(value)) return
+        const s=chart.addLineSeries({color,lineWidth:2,lineStyle:2,lastValueVisible:true,priceLineVisible:false,crosshairMarkerVisible:false})
+        s.setData([{time:start,value},{time:lastDate,value}])
+        pendingSeriesRef.current.push(s)
+      }
+      seg(entry,'#ff9800')   // entrada — naranja
+      seg(stop, '#e53935')   // stop — rojo
+    })
+    return()=>{
+      pendingSeriesRef.current.forEach(s=>{try{chart&&chart.removeSeries(s)}catch(_){}})
+      pendingSeriesRef.current=[]
+    }
+  },[pendingOrders,data])
 
   // ── Risk levels: price lines + labels + bands (update-in-place to avoid flicker) ──
   useEffect(()=>{
