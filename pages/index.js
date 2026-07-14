@@ -1392,6 +1392,12 @@ export default function Home() {
     }
   },[sidePanel])
 
+  // ── RESET al CAMBIAR de símbolo: vaciar entrada/stop (conserva tp). Evita que los valores del
+  //    símbolo anterior queden colgando bajo el nuevo. En mount es inocuo (ya están vacíos). ──
+  useEffect(()=>{
+    setRiskCalc(c=>({...c,entry:'',stop:''}))
+  },[simbolo])
+
   // ── AUTO-GUARDADO de orden pendiente (sin botón), debounce manual ~600ms.
   //    Solo guarda si entrada/stop del usuario parsean a números válidos y distintos.
   //    El nº de acciones (y currency) se leen de riskSaveRef, escrito en el render del panel. ──
@@ -1412,7 +1418,9 @@ export default function Home() {
         .catch(()=>{})
     },600)
     return()=>{ if(pendingSaveTimerRef.current) clearTimeout(pendingSaveTimerRef.current) }
-  },[riskCalc.entry,riskCalc.stop,riskCalc.tp,simbolo,sidePanel])   // eslint-disable-line
+    // Deps SOLO entrada/stop: un cambio de símbolo NO re-dispara el guardado (evita contaminar el
+    // símbolo nuevo con valores del anterior); simbolo/sidePanel/tp se leen frescos en la ejecución.
+  },[riskCalc.entry,riskCalc.stop])   // eslint-disable-line
 
   // Órdenes pendientes del símbolo visible (0 o 1) — memoizado para no recrear el chart
   const pendingOrdersForSym=useMemo(()=>{
@@ -4672,7 +4680,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.627</title>
+        <title>Trading Simulator V9.628</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4750,7 +4758,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.627
+            <span className="dot"/>Trading Simulator V9.628
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
