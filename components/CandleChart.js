@@ -1466,16 +1466,28 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
     if(!chart||!data?.length) return
     const firstDate=data[0]?.date
     const lastDate=data[data.length-1]?.date
-    if(!firstDate||!lastDate) return
+    const lastIdx=data.length-1
+    if(!firstDate||!lastDate||lastIdx<1) return   // se necesitan ≥2 velas para un segmento
+    console.log('[pendDIAG] count',(pendingOrders||[]).length,'firstDate',firstDate,'lastDate',lastDate)
     ;(pendingOrders||[]).forEach(o=>{
       const entry=parseFloat(o.entry_price), stop=parseFloat(o.stop_price)
-      let start=(o.created_at||'').slice(0,10)||firstDate
-      if(start<firstDate) start=firstDate            // clamp al rango visible
-      if(start>lastDate)  start=lastDate
+      // created_at SIEMPRE recortado a 'YYYY-MM-DD' (nunca el timestamp con hora)
+      const startTrim=String(o.created_at||'').slice(0,10)
+      // índice as-of: última vela con date <= created_at (clamp a extremos)
+      let startIdx
+      if(!startTrim||startTrim<=firstDate) startIdx=0
+      else if(startTrim>=lastDate) startIdx=lastIdx
+      else { startIdx=0; for(let i=0;i<data.length;i++){ if(data[i].date<=startTrim) startIdx=i; else break } }
+      // ANCHO MÍNIMO ~3 velas: garantiza 2 times estrictamente ascendentes y distintos
+      // (evita el colapso de ancho cero cuando la orden se crea el mismo día / tras la última vela).
+      // Solo actúa cuando el ancho natural sería <3 velas; órdenes antiguas conservan su ancho real.
+      if(lastIdx-startIdx<3) startIdx=Math.max(0,lastIdx-3)
+      const startTime=data[startIdx].date
+      console.log('[pendDIAG]',{symbol:o.symbol,createdRaw:o.created_at,createdTrim:startTrim,firstDate,lastDate,startIdx,lastIdx,entryPts:[{time:startTime,value:entry},{time:lastDate,value:entry}]})
       const seg=(value,color)=>{
         if(value==null||isNaN(value)) return
         const s=chart.addLineSeries({color,lineWidth:2,lineStyle:2,lastValueVisible:true,priceLineVisible:false,crosshairMarkerVisible:false})
-        s.setData([{time:start,value},{time:lastDate,value}])
+        s.setData([{time:startTime,value},{time:lastDate,value}])
         pendingSeriesRef.current.push(s)
       }
       seg(entry,'#ff9800')   // entrada — naranja
