@@ -1374,13 +1374,15 @@ export default function Home() {
       .map(p=>({date:p.entry_date, position:'belowBar', shape:'arrowUp', color:'#ffd166', text:'Entrada'}))
   },[tlFifo, simbolo])
 
-  // ── Órdenes pendientes: carga inicial (al montar) ──
+  // ── Órdenes pendientes: carga tras resolverse la sesión (mismo patrón que risk_profiles:
+  //    gate de sesión + reintento). Evita disparar antes de tener JWT → anon → RLS vacío. ──
   useEffect(()=>{
+    if(!session?.user?.id) return
     apiFetch('/api/pending?action=list')
-      .then(async r=>{ const d=r.ok?await r.json():[]; console.log('[pendLOAD] status',r.status,'len',Array.isArray(d)?d.length:'(no-array)','first',Array.isArray(d)?d[0]:d); return d })
+      .then(r=>r.ok?r.json():[])
       .then(d=>setPendingOrders(Array.isArray(d)?d:[]))
-      .catch(e=>{ console.log('[pendLOAD] error',e?.message); })
-  },[])
+      .catch(()=>{})
+  },[session?.user?.id]) // eslint-disable-line
 
   // ── RESET al abrir el panel Risk MGMT: vaciar entrada/stop SOLO en la transición a 'risk'.
   //    Deja los campos inválidos → el auto-guardado (más abajo) no dispara nada. ──
@@ -1425,9 +1427,7 @@ export default function Home() {
   // Órdenes pendientes del símbolo visible (0 o 1) — memoizado para no recrear el chart
   const pendingOrdersForSym=useMemo(()=>{
     const symUp=(simbolo||'').toUpperCase()
-    const out=pendingOrders.filter(o=>(o.symbol||'').toUpperCase()===symUp)
-    console.log('[pendFILT] simbolo',JSON.stringify(simbolo),'total',pendingOrders.length,'filtrado',out.length)
-    return out
+    return pendingOrders.filter(o=>(o.symbol||'').toUpperCase()===symUp)
   },[pendingOrders, simbolo])
 
   // ── Background cache warm: fire priceOnly requests in parallel batches when Dashboard opens ──
@@ -4682,7 +4682,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.630</title>
+        <title>Trading Simulator V9.631</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4760,7 +4760,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.630
+            <span className="dot"/>Trading Simulator V9.631
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}

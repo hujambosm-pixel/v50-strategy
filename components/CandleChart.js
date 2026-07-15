@@ -1468,7 +1468,6 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
     const lastDate=data[data.length-1]?.date
     const lastIdx=data.length-1
     if(!firstDate||!lastDate||lastIdx<1) return   // se necesitan ≥2 velas para un segmento
-    console.log('[pendDIAG] count',(pendingOrders||[]).length,'firstDate',firstDate,'lastDate',lastDate)
     ;(pendingOrders||[]).forEach(o=>{
       const entry=parseFloat(o.entry_price), stop=parseFloat(o.stop_price)
       // created_at SIEMPRE recortado a 'YYYY-MM-DD' (nunca el timestamp con hora)
@@ -1483,7 +1482,6 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       // Solo actúa cuando el ancho natural sería <3 velas; órdenes antiguas conservan su ancho real.
       if(lastIdx-startIdx<3) startIdx=Math.max(0,lastIdx-3)
       const startTime=data[startIdx].date
-      console.log('[pendDIAG]',{symbol:o.symbol,createdRaw:o.created_at,createdTrim:startTrim,firstDate,lastDate,startIdx,lastIdx,entryPts:[{time:startTime,value:entry},{time:lastDate,value:entry}]})
       const seg=(value,color)=>{
         if(value==null||isNaN(value)) return
         const s=chart.addLineSeries({color,lineWidth:2,lineStyle:2,lastValueVisible:true,priceLineVisible:false,crosshairMarkerVisible:false})
