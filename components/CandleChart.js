@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useState } from 'react'
 import { MONO, f2, fmtDate } from '../lib/utils'
 
 // ── Indicator calc functions ───────────────────────────────────────────
@@ -254,6 +254,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
   const rulerStart=useRef(null), rulerActiveR=useRef(rulerActive)
   const priceAlarmLinesRef=useRef([])    // [{alarmId, priceLine, price}]
   const pendingPriceLinesRef=useRef([])  // price lines de órdenes pendientes (2 por orden: entrada+stop)
+  const [chartReadyTick,setChartReadyTick]=useState(0)  // nonce: se incrementa al recrear el chart → re-dibuja pendientes con candlesRef fresco
   const dragRef=useRef(null)             // {lineObj} while dragging
   const priceAlarmTimersRef=useRef([])   // setInterval IDs for blinking
   const lastCloseRef=useRef(null)        // último close cargado
@@ -320,6 +321,9 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       })
       candles.setData(data.map(d=>({time:d.date,open:d.open,high:d.high,low:d.low,close:d.close})))
       candlesRef.current=candles
+      // Chart recreado y candlesRef fresco → bump del nonce para que el efecto de pendientes re-dibuje
+      // sobre las velas nuevas (no en el candlesRef viejo/muerto de la recreación async).
+      setChartReadyTick(t=>t+1)
 
       // ── Dynamic indicator overlay ──────────────────────────────────
       const _closes=data.map(d=>d.close)
@@ -1384,7 +1388,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
 
       innerCleanupRef.current=()=>{disposed=true;chartAliveRef.current=false;try{unsubLabels()}catch(_){};cnt.removeEventListener('mousemove',onMove);cnt.removeEventListener('mousedown',onMouseDown);window.removeEventListener('mouseup',onMouseUp);window.removeEventListener('keydown',onKeyDown);window.removeEventListener('keyup',onKeyUp);ro.disconnect()}
     })
-    return()=>{innerCleanupRef.current?.();innerCleanupRef.current=null;chartAliveRef.current=false;if(rsiChartRef.current){if(rsiChartRef.current._isOverlay){try{const c=chartRef.current;if(c){for(const s of rsiChartRef.current._series){c.removeSeries(s)};c.priceScale('rsi').applyOptions({visible:false});c.priceScale('right').applyOptions({scaleMargins:{top:0.02,bottom:0.02}})}}catch(_){}}else{try{rsiChartRef.current.remove()}catch(_){}};rsiChartRef.current=null};if(macdChartRef.current){try{macdChartRef.current.remove()}catch(_){};macdChartRef.current=null};if(volumeChartRef.current){try{volumeChartRef.current.remove()}catch(_){};volumeChartRef.current=null};if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null}}
+    return()=>{innerCleanupRef.current?.();innerCleanupRef.current=null;chartAliveRef.current=false;if(rsiChartRef.current){if(rsiChartRef.current._isOverlay){try{const c=chartRef.current;if(c){for(const s of rsiChartRef.current._series){c.removeSeries(s)};c.priceScale('rsi').applyOptions({visible:false});c.priceScale('right').applyOptions({scaleMargins:{top:0.02,bottom:0.02}})}}catch(_){}}else{try{rsiChartRef.current.remove()}catch(_){}};rsiChartRef.current=null};if(macdChartRef.current){try{macdChartRef.current.remove()}catch(_){};macdChartRef.current=null};if(volumeChartRef.current){try{volumeChartRef.current.remove()}catch(_){};volumeChartRef.current=null};if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null};candlesRef.current=null}
   },[data,emaRPeriod,emaLPeriod,trades,maxDD,labelMode,definition,isBareChart])
 
   // ── isBareChart: ajustar altura al resize de ventana ──
@@ -1480,7 +1484,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       pendingPriceLinesRef.current.forEach(pl=>{try{candles&&candles.removePriceLine(pl)}catch(_){}})
       pendingPriceLinesRef.current=[]
     }
-  },[pendingOrders,simbolo,data])
+  },[pendingOrders,simbolo,data,chartReadyTick])
 
   // ── Risk levels: price lines + labels + bands (update-in-place to avoid flicker) ──
   useEffect(()=>{
