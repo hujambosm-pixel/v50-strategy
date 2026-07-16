@@ -1475,7 +1475,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       const entry=parseFloat(o.entry_price), stop=parseFloat(o.stop_price)
       const line=(price,color,title)=>{
         if(price==null||isNaN(price)) return
-        try{ pendingPriceLinesRef.current.push(candles.createPriceLine({price,color,lineWidth:1,lineStyle:2,axisLabelVisible:true,title})) }catch(_){}
+        try{ pendingPriceLinesRef.current.push(candles.createPriceLine({price,color,lineWidth:2,lineStyle:3,axisLabelVisible:true})) }catch(_){}
       }
       line(entry,'#ff9800','Entrada')   // entrada — naranja, discontinua
       line(stop, '#e53935','Stop')      // stop — rojo, discontinua
