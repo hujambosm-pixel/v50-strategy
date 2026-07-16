@@ -253,7 +253,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
   const innerCleanupRef=useRef(null)
   const rulerStart=useRef(null), rulerActiveR=useRef(rulerActive)
   const priceAlarmLinesRef=useRef([])    // [{alarmId, priceLine, price}]
-  const pendingSeriesRef=useRef([])      // line series de órdenes pendientes (2 por orden: entrada+stop)
+  const pendingPriceLinesRef=useRef([])  // price lines de órdenes pendientes (2 por orden: entrada+stop)
   const dragRef=useRef(null)             // {lineObj} while dragging
   const priceAlarmTimersRef=useRef([])   // setInterval IDs for blinking
   const lastCloseRef=useRef(null)        // último close cargado
@@ -1455,52 +1455,32 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
     }
   },[priceAlarms,ackedAlarms,data])
 
-  // ── Órdenes pendientes: dos segmentos DISCONTINUOS (entrada naranja + stop rojo) por orden,
-  //    desde created_at (clampado a la primera vela) hasta la última vela. Efecto independiente,
-  //    line series propias (pendingSeriesRef) → no recrea el chart. lineStyle:2 = Dashed. ──
+  // ── Órdenes pendientes: LÍNEAS DE PRECIO discontinuas que cruzan todo el gráfico (createPriceLine,
+  //    mismo patrón que las alarmas). Entrada naranja + stop rojo. createPriceLine NO distorsiona el
+  //    autoescalado del eje. Guard por símbolo (defensa en profundidad: no dibuja la orden ajena).
+  //    Deps incluyen `data` porque candlesRef se RECREA al cambiar data (efecto principal); sin él
+  //    las price lines quedarían colgadas de la serie destruida tras un refresh del mismo símbolo. ──
   useEffect(()=>{
-    const chart=chartRef.current
-    // Limpiar series anteriores SIEMPRE (aunque no haya órdenes)
-    pendingSeriesRef.current.forEach(s=>{try{chart&&chart.removeSeries(s)}catch(_){}})
-    pendingSeriesRef.current=[]
-    if(!chart||!data?.length) return
-    const firstDate=data[0]?.date
-    const lastDate=data[data.length-1]?.date
-    const lastIdx=data.length-1
-    if(!firstDate||!lastDate||lastIdx<1) return   // se necesitan ≥2 velas para un segmento
-    // CAPA 2 — defensa en profundidad: solo dibujar órdenes del símbolo actual del chart.
-    // Durante el desfase transitorio (data ya cambió, prop aún trae la orden ajena) no coincide → no dibuja.
+    const candles=candlesRef.current
+    // Limpiar price lines previas SIEMPRE (aunque no haya órdenes)
+    pendingPriceLinesRef.current.forEach(pl=>{try{candles&&candles.removePriceLine(pl)}catch(_){}})
+    pendingPriceLinesRef.current=[]
+    if(!candles) return
     const _symUp=(simbolo||'').toUpperCase()
     ;(pendingOrders||[]).filter(o=>(o.symbol||'').toUpperCase()===_symUp).forEach(o=>{
       const entry=parseFloat(o.entry_price), stop=parseFloat(o.stop_price)
-      // created_at SIEMPRE recortado a 'YYYY-MM-DD' (nunca el timestamp con hora)
-      const startTrim=String(o.created_at||'').slice(0,10)
-      // índice as-of: última vela con date <= created_at (clamp a extremos)
-      let startIdx
-      if(!startTrim||startTrim<=firstDate) startIdx=0
-      else if(startTrim>=lastDate) startIdx=lastIdx
-      else { startIdx=0; for(let i=0;i<data.length;i++){ if(data[i].date<=startTrim) startIdx=i; else break } }
-      // ANCHO MÍNIMO ~3 velas: garantiza 2 times estrictamente ascendentes y distintos
-      // (evita el colapso de ancho cero cuando la orden se crea el mismo día / tras la última vela).
-      // Solo actúa cuando el ancho natural sería <3 velas; órdenes antiguas conservan su ancho real.
-      if(lastIdx-startIdx<3) startIdx=Math.max(0,lastIdx-3)
-      const startTime=data[startIdx].date
-      const seg=(value,color)=>{
-        if(value==null||isNaN(value)) return
-        // CAPA 1 — autoscaleInfoProvider:()=>null → la serie NO participa del autoescalado del eje
-        // de velas: un precio lejano ya no estira la escala (y el flash transitorio es imperceptible).
-        const s=chart.addLineSeries({color,lineWidth:2,lineStyle:2,lastValueVisible:true,priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:()=>null})
-        s.setData([{time:startTime,value},{time:lastDate,value}])
-        pendingSeriesRef.current.push(s)
+      const line=(price,color,title)=>{
+        if(price==null||isNaN(price)) return
+        try{ pendingPriceLinesRef.current.push(candles.createPriceLine({price,color,lineWidth:1,lineStyle:2,axisLabelVisible:true,title})) }catch(_){}
       }
-      seg(entry,'#ff9800')   // entrada — naranja
-      seg(stop, '#e53935')   // stop — rojo
+      line(entry,'#ff9800','Entrada')   // entrada — naranja, discontinua
+      line(stop, '#e53935','Stop')      // stop — rojo, discontinua
     })
     return()=>{
-      pendingSeriesRef.current.forEach(s=>{try{chart&&chart.removeSeries(s)}catch(_){}})
-      pendingSeriesRef.current=[]
+      pendingPriceLinesRef.current.forEach(pl=>{try{candles&&candles.removePriceLine(pl)}catch(_){}})
+      pendingPriceLinesRef.current=[]
     }
-  },[pendingOrders,data,simbolo])
+  },[pendingOrders,simbolo,data])
 
   // ── Risk levels: price lines + labels + bands (update-in-place to avoid flicker) ──
   useEffect(()=>{
