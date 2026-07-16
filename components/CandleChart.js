@@ -243,7 +243,7 @@ function createRiskPrimitive(configRef) {
   }
 }
 
-export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, isNewResultRef=null, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null, isBareChart=false, visuals=null, filterZones=[], slopeChanges=[], customMarkers=[], pendingOrders=[] }) {
+export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, isNewResultRef=null, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null, isBareChart=false, visuals=null, filterZones=[], slopeChanges=[], customMarkers=[], pendingOrders=[], simbolo=null }) {
   const containerRef=useRef(null), svgRef=useRef(null), legendRef=useRef(null), tooltipRef=useRef(null)
   const activeLegendRef = externalLegendRef || legendRef
   const chartRef=useRef(null), candlesRef=useRef(null)
@@ -1468,7 +1468,10 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
     const lastDate=data[data.length-1]?.date
     const lastIdx=data.length-1
     if(!firstDate||!lastDate||lastIdx<1) return   // se necesitan ≥2 velas para un segmento
-    ;(pendingOrders||[]).forEach(o=>{
+    // CAPA 2 — defensa en profundidad: solo dibujar órdenes del símbolo actual del chart.
+    // Durante el desfase transitorio (data ya cambió, prop aún trae la orden ajena) no coincide → no dibuja.
+    const _symUp=(simbolo||'').toUpperCase()
+    ;(pendingOrders||[]).filter(o=>(o.symbol||'').toUpperCase()===_symUp).forEach(o=>{
       const entry=parseFloat(o.entry_price), stop=parseFloat(o.stop_price)
       // created_at SIEMPRE recortado a 'YYYY-MM-DD' (nunca el timestamp con hora)
       const startTrim=String(o.created_at||'').slice(0,10)
@@ -1484,7 +1487,9 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       const startTime=data[startIdx].date
       const seg=(value,color)=>{
         if(value==null||isNaN(value)) return
-        const s=chart.addLineSeries({color,lineWidth:2,lineStyle:2,lastValueVisible:true,priceLineVisible:false,crosshairMarkerVisible:false})
+        // CAPA 1 — autoscaleInfoProvider:()=>null → la serie NO participa del autoescalado del eje
+        // de velas: un precio lejano ya no estira la escala (y el flash transitorio es imperceptible).
+        const s=chart.addLineSeries({color,lineWidth:2,lineStyle:2,lastValueVisible:true,priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:()=>null})
         s.setData([{time:startTime,value},{time:lastDate,value}])
         pendingSeriesRef.current.push(s)
       }
@@ -1495,7 +1500,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       pendingSeriesRef.current.forEach(s=>{try{chart&&chart.removeSeries(s)}catch(_){}})
       pendingSeriesRef.current=[]
     }
-  },[pendingOrders,data])
+  },[pendingOrders,data,simbolo])
 
   // ── Risk levels: price lines + labels + bands (update-in-place to avoid flicker) ──
   useEffect(()=>{
