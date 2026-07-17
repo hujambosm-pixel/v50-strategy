@@ -4682,7 +4682,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.636</title>
+        <title>Trading Simulator V9.637</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4760,7 +4760,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.636
+            <span className="dot"/>Trading Simulator V9.637
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5445,7 +5445,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     // para que el contador refleje exactamente lo que se muestra
                     // Filtrar símbolos vacíos para evitar falsos positivos con symbol=null
                     const openSymbols=new Set((tlFifo.openPositions||[]).map(p=>p.symbol?.toUpperCase()).filter(Boolean))
-                    const allFiltered=onlyOpen?all.filter(w=>w.symbol&&openSymbols.has(w.symbol.toUpperCase())):all
+                    const pendingSet=new Set((pendingOrders||[]).map(o=>(o.symbol||'').toUpperCase()).filter(Boolean))
+                    const allFiltered=onlyOpen?all.filter(w=>w.symbol&&(openSymbols.has(w.symbol.toUpperCase())||pendingSet.has(w.symbol.toUpperCase()))):all
                     if(!allFiltered.length) return <div style={{padding:'12px',fontFamily:MONO,fontSize:11,color:'#8aadcc'}}>Sin activos para los filtros activos</div>
                     // Count badge + ranking button above list
                     const hasRanking=Object.keys(rankingData).length>0
@@ -5481,7 +5482,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       <div key={w.id||`${w.symbol}-${wIdx}`}
                         style={{padding:'6px 10px',display:'flex',alignItems:'center',gap:6,borderBottom:'1px solid var(--border)',
                           background:simbolo===w.symbol?'rgba(0,212,255,0.07)':'transparent',
-                          borderLeft:`3px solid ${openSymbols.has((w.symbol||'').toUpperCase())?'#ffd166':'transparent'}`,
+                          borderLeft:`3px solid ${openSymbols.has((w.symbol||'').toUpperCase())?'#ffd166':(pendingSet.has((w.symbol||'').toUpperCase())?'#ff9800':'transparent')}`,
                           transition:'border-color 0.2s'}}
                         onMouseOver={e=>e.currentTarget.style.background='rgba(255,255,255,0.03)'}
                         onMouseOut={e=>e.currentTarget.style.background=simbolo===w.symbol?'rgba(0,212,255,0.07)':'transparent'}
@@ -5601,6 +5602,14 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                             )
                           })
                         })()}
+                        {/* "X" borrar orden pendiente (directo, sin confirmación) — solo filas con pendiente */}
+                        {pendingSet.has((w.symbol||'').toUpperCase())&&(
+                          <span title="Borrar orden pendiente"
+                            onClick={async(e)=>{e.stopPropagation();const symUp=(w.symbol||'').toUpperCase();try{const r=await apiFetch('/api/pending?action=delete&symbol='+encodeURIComponent(symUp),{method:'POST'});if(r.ok)setPendingOrders(prev=>prev.filter(o=>(o.symbol||'').toUpperCase()!==symUp))}catch(_){}}}
+                            style={{cursor:'pointer',color:'#ff9800',fontSize:14,fontWeight:700,lineHeight:1,flexShrink:0,marginLeft:2}}>
+                            ×
+                          </span>
+                        )}
                       </div>
                     )
                     })}
