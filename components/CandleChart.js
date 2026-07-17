@@ -723,7 +723,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         if(!px||isNaN(px)) return
         candles.createPriceLine({
           price: px,
-          color: '#ffd166',
+          color: '#ffe500',
           lineWidth: 2,
           lineStyle: 0,
           axisLabelVisible: true,

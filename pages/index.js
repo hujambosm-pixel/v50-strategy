@@ -1371,7 +1371,7 @@ export default function Home() {
     const symUp=(simbolo||'').toUpperCase()
     return (tlFifo?.openPositions||[])
       .filter(p=>(p.symbol||'').toUpperCase()===symUp && p.entry_date)
-      .map(p=>({date:p.entry_date, position:'belowBar', shape:'arrowUp', color:'#ffd166', text:'Entrada'}))
+      .map(p=>({date:p.entry_date, position:'belowBar', shape:'arrowUp', color:'#ffe500', text:'Entrada'}))
   },[tlFifo, simbolo])
 
   // ── Órdenes pendientes: carga tras resolverse la sesión (mismo patrón que risk_profiles:
@@ -4682,7 +4682,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.637</title>
+        <title>Trading Simulator V9.638</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4760,7 +4760,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.637
+            <span className="dot"/>Trading Simulator V9.638
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5321,7 +5321,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
 
                       {/* Briefcase — en cartera */}
                       <button onClick={()=>setOnlyOpen(f=>!f)}
-                        title={onlyOpen?'En cartera (activo — click para quitar)':'Filtrar solo posiciones abiertas'}
+                        title={onlyOpen?'Cartera y pendientes (activo — click para quitar)':'Mostrar solo cartera y pendientes'}
                         style={iBtn(onlyOpen,'#00d4ff')}
                         onMouseOver={e=>{if(!onlyOpen)e.currentTarget.style.color='#00d4ff'}}
                         onMouseOut={e=>{if(!onlyOpen)e.currentTarget.style.color='#4a6a88'}}>
@@ -5482,7 +5482,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       <div key={w.id||`${w.symbol}-${wIdx}`}
                         style={{padding:'6px 10px',display:'flex',alignItems:'center',gap:6,borderBottom:'1px solid var(--border)',
                           background:simbolo===w.symbol?'rgba(0,212,255,0.07)':'transparent',
-                          borderLeft:`3px solid ${openSymbols.has((w.symbol||'').toUpperCase())?'#ffd166':(pendingSet.has((w.symbol||'').toUpperCase())?'#ff9800':'transparent')}`,
+                          borderLeft:`3px solid ${openSymbols.has((w.symbol||'').toUpperCase())?'#ffe500':(pendingSet.has((w.symbol||'').toUpperCase())?'#ff9800':'transparent')}`,
                           transition:'border-color 0.2s'}}
                         onMouseOver={e=>e.currentTarget.style.background='rgba(255,255,255,0.03)'}
                         onMouseOut={e=>e.currentTarget.style.background=simbolo===w.symbol?'rgba(0,212,255,0.07)':'transparent'}
