@@ -254,6 +254,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
   const rulerStart=useRef(null), rulerActiveR=useRef(rulerActive)
   const priceAlarmLinesRef=useRef([])    // [{alarmId, priceLine, price}]
   const pendingPriceLinesRef=useRef([])  // price lines de órdenes pendientes (2 por orden: entrada+stop)
+  const openTradeLinesRef=useRef([])     // price lines SÓLIDAS de entrada de posiciones abiertas (tlOpenTrades)
   const [chartReadyTick,setChartReadyTick]=useState(0)  // nonce: se incrementa al recrear el chart → re-dibuja pendientes con candlesRef fresco
   const dragRef=useRef(null)             // {lineObj} while dragging
   const priceAlarmTimersRef=useRef([])   // setInterval IDs for blinking
@@ -716,21 +717,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         if (volumeChartRef.current) { try { volumeChartRef.current.remove() } catch(_) {}; volumeChartRef.current = null }
       }
 
-      // ── Línea amarilla de entrada para posiciones abiertas (Tradelog) ──
-      // tlOpenTrades usa campos de Supabase: entry_price, entry_date (distinto al backtest)
-      tlOpenTrades.forEach(t=>{
-        const px=parseFloat(t.entry_price)
-        if(!px||isNaN(px)) return
-        candles.createPriceLine({
-          price: px,
-          color: '#ffe500',
-          lineWidth: 2,
-          lineStyle: 0,
-          axisLabelVisible: true,
-          title: '',
-        })
-      })
-
+      // ── Línea amarilla de entrada (tlOpenTrades): gestionada en efecto separado (patrón A.6) ──
       // ── Líneas de alertas de precio — gestionadas en efecto separado ──
 
       const ohlcMap={},erMap={},elMap={}
@@ -1485,6 +1472,28 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       pendingPriceLinesRef.current=[]
     }
   },[pendingOrders,simbolo,data,chartReadyTick])
+
+  // ── Entradas reales (posiciones abiertas): LÍNEA DE PRECIO SÓLIDA amarilla que cruza todo el gráfico
+  //    (createPriceLine, mismo patrón A.6 que las pendientes). Se dibuja en efecto propio — NO one-shot
+  //    dentro del .then() — para redibujar sobre el candlesRef fresco tras la recreación async del chart
+  //    (chartReadyTick) y cuando tlOpenTrades llega tarde. Guard por símbolo (defensa en profundidad). ──
+  useEffect(()=>{
+    const candles=candlesRef.current
+    // Limpiar price lines previas SIEMPRE (aunque no haya posiciones)
+    openTradeLinesRef.current.forEach(pl=>{try{candles&&candles.removePriceLine(pl)}catch(_){}})
+    openTradeLinesRef.current=[]
+    if(!candles) return
+    const _symUp=(simbolo||'').toUpperCase()
+    ;(tlOpenTrades||[]).filter(t=>(t.symbol||'').toUpperCase()===_symUp).forEach(t=>{
+      const px=parseFloat(t.entry_price)
+      if(!px||isNaN(px)) return
+      try{ openTradeLinesRef.current.push(candles.createPriceLine({price:px,color:'#ffe500',lineWidth:2,lineStyle:0,axisLabelVisible:true,title:''})) }catch(_){}
+    })
+    return()=>{
+      openTradeLinesRef.current.forEach(pl=>{try{candles&&candles.removePriceLine(pl)}catch(_){}})
+      openTradeLinesRef.current=[]
+    }
+  },[tlOpenTrades,simbolo,data,chartReadyTick])
 
   // ── Risk levels: price lines + labels + bands (update-in-place to avoid flicker) ──
   useEffect(()=>{
