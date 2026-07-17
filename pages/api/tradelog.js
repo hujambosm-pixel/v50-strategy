@@ -227,12 +227,13 @@ function parseIBKRorderDetail(text, useDDMM = true) {
       // C) DESCARTE FX: símbolo par divisa o venue IDEALPRO → no emitir
       const isFX = symFX || venue === 'IDEALPRO'
 
-      // D) FECHA hoy si falta (solo hora) para operaciones válidas no-FX
+      // D) FECHA hoy si falta (solo hora) para operaciones válidas no-FX.
+      //    Anclada a Europe/Madrid ('en-CA' → 'YYYY-MM-DD') para que "hoy" sea el día
+      //    real del usuario, no el UTC (que de madrugada daría el día anterior).
       if (!date && symbol && price && qty && !isFX) {
-        date = new Date().toISOString().slice(0,10)
+        const hoyMadrid = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Madrid' })
+        date = /^\d{4}-\d{2}-\d{2}$/.test(hoyMadrid) ? hoyMadrid : new Date().toISOString().slice(0,10)
       }
-
-      console.log('[importDIAG]', { symbol, venue, cand, date, isFX, qty, price })
 
       // E) PUSH: mismos campos que antes; date ya nunca null para válidas no-FX
       if (!isFX && symbol && price && qty && date) {
