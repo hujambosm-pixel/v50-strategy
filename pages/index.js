@@ -1854,7 +1854,7 @@ export default function Home() {
   const [tlSideEdit,setTlSideEdit]=useState(false)   // edit panel in left sidebar
   const [tlCloseOpen,setTlCloseOpen]=useState(false)
   const [tlImportText,setTlImportText]=useState('')
-  const [tlImportFormat,setTlImportFormat]=useState('csv')
+  const [tlImportFormat,setTlImportFormat]=useState('ai')
   const [tlParsedRaw,setTlParsedRaw]=useState([])  // raw fills from parser (always saved)
   const [tlParsed,setTlParsed]=useState([])          // grouped preview (display only)
 
@@ -4682,7 +4682,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.640</title>
+        <title>Trading Simulator V9.641</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4760,7 +4760,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.640
+            <span className="dot"/>Trading Simulator V9.641
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -9258,12 +9258,11 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                 </td>
                                 {cell('symbol',t.symbol,'#c8dff5')}
                                 <td style={{padding:'3px 5px'}}>
-                                  <input value={t.entry_date||''} onChange={e=>ed('entry_date',e.target.value)}
-                                    style={{background:'transparent',border:'none',borderBottom:'1px solid transparent',
-                                      color:'#a8ccdf',fontFamily:MONO,fontSize:11,width:88,
-                                      padding:'1px 3px',outline:'none'}}
-                                    onFocus={e=>e.target.style.borderBottomColor='var(--accent)'}
-                                    onBlur={e=>e.target.style.borderBottomColor='transparent'}/>
+                                  {/* Solo presentación: se MUESTRA dd/mm/aaaa (fmtDate); el valor real en estado sigue ISO YYYY-MM-DD */}
+                                  <span title={t.entry_date||''}
+                                    style={{color:'#a8ccdf',fontFamily:MONO,fontSize:11,whiteSpace:'nowrap',padding:'1px 3px'}}>
+                                    {fmtDate(t.entry_date)}
+                                  </span>
                                 </td>
                                 {cell('shares',t.shares)}
                                 <td style={{padding:'3px 5px',whiteSpace:'nowrap'}}>
