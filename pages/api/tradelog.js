@@ -178,6 +178,8 @@ function parseIBKRorderDetail(text, useDDMM = true) {
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean)
   const actionRe = /^(Bought|Bot|Bght|Sold|Sld|Comprado|Vendido)\s+(\d+(?:[.,]\d+)?)\s+@\s+([\d.,]+)/i
   const dateRe = /^(\d{1,2})[/\-](\d{1,2})[/\-](\d{4})/
+  // Venues/ECN a excluir como símbolo (el ticker nunca es uno de estos)
+  const VENUES = new Set(['DARK','IDEALPRO','IBKRATS','ISLAND','ARCA','NYSE','NASDAQ','BATS','EDGX','LSE','AMEX','OVERNIGHT','PSX','MEMX','IEX'])
   let i = 0
   while (i < lines.length) {
     const m = actionRe.exec(lines[i])
@@ -185,7 +187,25 @@ function parseIBKRorderDetail(text, useDDMM = true) {
       const qty   = parseFloat(m[2].replace(',','.'))
       const price = parseFloat(m[3].replace(',','.'))
       const isBuy = /Bought|Bot|Bght|Comprado/i.test(m[1])
-      let date = null, fees = 0, symbol = null
+
+      // A) VENUE: capturado de la propia línea de acción (… on VENUE), sin tocar m1/m2/m3
+      const vm = /\bon\s+([A-Z.]+)\s*$/i.exec(lines[i])
+      const venue = vm ? vm[1].toUpperCase() : null
+
+      // B) SÍMBOLO robusto: línea inmediatamente anterior a la acción (A−1)
+      const cand = (lines[i-1] || '').trim()
+      const symFX = /^[A-Z]{3}\.[A-Z]{3}$/.test(cand)   // par divisa tipo EUR.USD
+      let symbol = (/^[A-Z]{1,6}$/.test(cand) && !VENUES.has(cand)) ? cand : null
+      // Fallback conservador: subir i-2..i-4 buscando un ticker válido (nunca un venue)
+      if (!symbol && !symFX) {
+        for (let j = i - 2; j >= Math.max(0, i - 4); j--) {
+          const c = (lines[j] || '').trim()
+          if (/^[A-Z]{1,6}$/.test(c) && !VENUES.has(c)) { symbol = c; break }
+        }
+      }
+
+      // Fecha + fees: bucle hacia abajo (i+1..i+15, break en otra acción)
+      let date = null, fees = 0
       for (let j = i + 1; j < Math.min(i + 15, lines.length); j++) {
         if (!date) {
           const dm = dateRe.exec(lines[j])
@@ -203,10 +223,19 @@ function parseIBKRorderDetail(text, useDDMM = true) {
         if (fm) fees = parseFloat(fm[1].replace(',','.'))
         if (j > i && actionRe.test(lines[j])) break
       }
-      for (let j = Math.max(0, i - 8); j < i; j++) {
-        if (/^[A-Z]{1,6}$/.test(lines[j])) symbol = lines[j]
+
+      // C) DESCARTE FX: símbolo par divisa o venue IDEALPRO → no emitir
+      const isFX = symFX || venue === 'IDEALPRO'
+
+      // D) FECHA hoy si falta (solo hora) para operaciones válidas no-FX
+      if (!date && symbol && price && qty && !isFX) {
+        date = new Date().toISOString().slice(0,10)
       }
-      if (symbol && price && qty && date) {
+
+      console.log('[importDIAG]', { symbol, venue, cand, date, isFX, qty, price })
+
+      // E) PUSH: mismos campos que antes; date ya nunca null para válidas no-FX
+      if (!isFX && symbol && price && qty && date) {
         fills.push({ symbol, date, price, shares: qty, currency: 'USD', commission: fees,
           fill_type: isBuy ? 'buy' : 'sell', broker: 'ibkr', import_source: 'ibkr_order' })
       }
