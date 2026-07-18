@@ -1860,9 +1860,93 @@ export default function Home() {
 
   // ── Enriquece filas: detecta duplicados y cierres (totales/parciales) ──
   const enrichParsedRows = (rows) => {
-    return rows.map(r => {
-      let enriched = {...r}
+    // Estado compartido para emparejamiento SECUENCIAL de ventas parciales del mismo símbolo:
+    // remaining[posId] = shares abiertas que quedan por cerrar; se descuentan por cada venta.
+    // Así 2 ventas de 47 contra una posición de 94 encadenan (1ª: resto 47; 2ª: cierre total),
+    // en vez de compararse cada una contra los 94 originales.
+    const remaining = {}
+    const openPosCache = {}  // symbol -> openPositions[] (evita recomputar FIFO por fila)
 
+    const getOpenPositions = (symbol) => {
+      if (openPosCache[symbol]) return openPosCache[symbol]
+      const symFills = tlTrades.filter(t => t.symbol === symbol)
+      // Normalize field names: Supabase fills use 'date'/'price'; legacy LS may use 'entry_date'/'entry_price'
+      const normFills = symFills.map(t => ({
+        ...t,
+        date: t.date || t.entry_date || '',
+        price: parseFloat(t.price ?? t.entry_price ?? 0),
+        fill_type: t.fill_type || 'buy',
+        fx: (()=>{ let fx=parseFloat(t.fx??t.fx_entry??1); if(fx>0&&fx<1)fx=1/fx; return(!fx||isNaN(fx))?1:fx })(),
+      }))
+      const { fillStatus: fifoStatus } = computeFifo(normFills, {})
+      const openPositions = normFills
+        .filter(t =>
+          (t.fill_type || 'buy') === 'buy' &&
+          (fifoStatus[t.id] === 'open' || fifoStatus[t.id] === 'partial')
+        )
+        .sort((a,b)=>{ const da=a.date||'',db=b.date||''; return da<db?-1:da>db?1:0 }) // oldest first
+      openPosCache[symbol] = openPositions
+      return openPositions
+    }
+
+    // Orden de CONSUMO de las ventas: por fecha y, a igualdad, orden de aparición en el import
+    // (las 2 ventas de COGT tienen misma fecha/precio → el desempate por índice es imprescindible).
+    const sellOrder = rows
+      .map((r, idx) => ({ r, idx }))
+      .filter(({ r }) => (r.fill_type === 'sell' || r._orphanSell) && !r._grouped)
+      .sort((a, b) => {
+        const da = a.r.entry_date || '', db = b.r.entry_date || ''
+        if (da < db) return -1; if (da > db) return 1
+        return a.idx - b.idx
+      })
+
+    const flags = {}  // idx -> flags de enriquecimiento calculados secuencialmente
+
+    sellOrder.forEach(({ r, idx }) => {
+      const openPositions = getOpenPositions(r.symbol)
+      if (openPositions.length === 0) return  // sin posición de origen → se queda como orphan
+
+      if (openPositions.length > 1) {
+        // Varias posiciones abiertas → se PRESERVA el comportamiento actual (no reparte entre ellas).
+        const presel     = openPositions[0]
+        const openShares = parseFloat(presel.shares||0)
+        const sellShares = parseFloat(r.shares||0)
+        flags[idx] = {
+          _multipleOpen: true,
+          _openOptions: openPositions.map(t=>{
+            const sh = parseFloat(t.shares||0), px = parseFloat(t.price||0), fx = t.fx
+            return { id: t.id, entry_date: t.date, shares: sh, entry_price: px, capital_eur: Math.round(sh*px/fx) }
+          }),
+          _closesTradeId: presel.id, _closesSymbol: presel.symbol, _openEntryDate: presel.date,
+          _openShares: openShares, _sellShares: sellShares,
+          _isPartialClose: sellShares < openShares - 0.001,
+          _isFullClose: Math.abs(sellShares - openShares) < 0.001,
+          _isExcessSell: sellShares > openShares + 0.001,
+          ...(sellShares < openShares - 0.001 ? { _remainingShares: openShares - sellShares } : {}),
+        }
+        return
+      }
+
+      // Una sola posición abierta → emparejamiento SECUENCIAL con remanente descontable.
+      const openPos = openPositions[0]
+      if (remaining[openPos.id] == null) remaining[openPos.id] = parseFloat(openPos.shares||0)
+      const openShares = remaining[openPos.id]                 // remanente ACTUAL (no el original)
+      const sellShares = parseFloat(r.shares||0)
+      const remAfter   = Math.max(0, openShares - sellShares)
+      const isFull     = remAfter <= 0.001
+      flags[idx] = {
+        _closesTradeId: openPos.id, _closesSymbol: openPos.symbol, _openEntryDate: openPos.date,
+        _openShares: openShares, _sellShares: sellShares,
+        _isFullClose: isFull,
+        _isPartialClose: !isFull && sellShares > 0.001,
+        _isExcessSell: sellShares > openShares + 0.001,
+        ...(!isFull ? { _remainingShares: remAfter } : {}),
+      }
+      remaining[openPos.id] = remAfter                         // descuenta para la siguiente venta
+    })
+
+    return rows.map((r, idx) => {
+      const enriched = {...r}
       // Duplicate detection: same symbol + date + fill_type + shares + price already in DB
       const isDup = tlTrades.some(t =>
         t.symbol === r.symbol &&
@@ -1872,67 +1956,7 @@ export default function Home() {
         Math.abs(parseFloat(t.entry_price||0) - parseFloat(r.entry_price||0)) < 0.01
       )
       if (isDup) enriched._isDuplicate = true
-
-      // Closure detection: any SELL fill (isolated or _orphanSell) → find open positions
-      const isSellFill = r.fill_type === 'sell' || r._orphanSell
-      if (isSellFill && !r._grouped) {
-        // Build FIFO-aware set of truly open BUY fills for this symbol
-        const symFills = tlTrades.filter(t => t.symbol === r.symbol)
-        // Normalize field names: Supabase fills use 'date'/'price'; legacy LS may use 'entry_date'/'entry_price'
-        const normFills = symFills.map(t => ({
-          ...t,
-          date: t.date || t.entry_date || '',
-          price: parseFloat(t.price ?? t.entry_price ?? 0),
-          fill_type: t.fill_type || 'buy',
-          fx: (()=>{ let fx=parseFloat(t.fx??t.fx_entry??1); if(fx>0&&fx<1)fx=1/fx; return(!fx||isNaN(fx))?1:fx })(),
-        }))
-        const { fillStatus: fifoStatus } = computeFifo(normFills, {})
-        const openPositions = normFills
-          .filter(t =>
-            (t.fill_type || 'buy') === 'buy' &&
-            (fifoStatus[t.id] === 'open' || fifoStatus[t.id] === 'partial')
-          )
-          .sort((a,b)=>{ const da=a.date||'',db=b.date||''; return da<db?-1:da>db?1:0 }) // oldest first
-
-        if (openPositions.length === 1) {
-          // Single open position → auto-assign
-          const openPos    = openPositions[0]
-          const openShares = parseFloat(openPos.shares||0)
-          const sellShares = parseFloat(r.shares||0)
-          enriched._closesTradeId  = openPos.id
-          enriched._closesSymbol   = openPos.symbol
-          enriched._openEntryDate  = openPos.date
-          enriched._openShares     = openShares
-          enriched._sellShares     = sellShares
-          enriched._isPartialClose = sellShares < openShares - 0.001
-          enriched._isFullClose    = Math.abs(sellShares - openShares) < 0.001
-          enriched._isExcessSell   = sellShares > openShares + 0.001
-          if (enriched._isPartialClose) enriched._remainingShares = openShares - sellShares
-        } else if (openPositions.length > 1) {
-          // Multiple open positions → flag for user selection
-          enriched._multipleOpen   = true
-          enriched._openOptions    = openPositions.map(t=>{
-            const sh = parseFloat(t.shares||0)
-            const px = parseFloat(t.price||0)
-            const fx = t.fx  // already normalized above
-            const capital_eur = Math.round(sh * px / fx)
-            return { id: t.id, entry_date: t.date, shares: sh, entry_price: px, capital_eur }
-          })
-          // Pre-select oldest (FIFO) but user can change
-          const presel = openPositions[0]
-          const openShares = parseFloat(presel.shares||0)
-          const sellShares = parseFloat(r.shares||0)
-          enriched._closesTradeId  = presel.id
-          enriched._closesSymbol   = presel.symbol
-          enriched._openEntryDate  = presel.date
-          enriched._openShares     = openShares
-          enriched._sellShares     = sellShares
-          enriched._isPartialClose = sellShares < openShares - 0.001
-          enriched._isFullClose    = Math.abs(sellShares - openShares) < 0.001
-          enriched._isExcessSell   = sellShares > openShares + 0.001
-          if (enriched._isPartialClose) enriched._remainingShares = openShares - sellShares
-        }
-      }
+      if (flags[idx]) Object.assign(enriched, flags[idx])
       return enriched
     })
   }
@@ -4682,7 +4706,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.643</title>
+        <title>Trading Simulator V9.644</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4760,7 +4784,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.643
+            <span className="dot"/>Trading Simulator V9.644
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -9324,9 +9348,9 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                 </td>
                                 <td style={{padding:'3px 5px'}}>
                                   <span style={{fontSize:9,padding:'1px 5px',borderRadius:3,
-                                    background: t._isFullClose||t.status==='closed'?'rgba(0,229,160,0.1)':t.status==='sell_close'?'rgba(155,114,255,0.15)':t.status==='orphan'?'rgba(255,77,109,0.1)':t._isPartialClose?'rgba(255,209,102,0.15)':'rgba(255,209,102,0.1)',
-                                    color: t._isFullClose||t.status==='closed'?'#00e5a0':t.status==='sell_close'?'#9b72ff':t.status==='orphan'?'#ff4d6d':t._isPartialClose?'#ffd166':'#ffd166'}}>
-                                    {t._isFullClose||t.status==='closed'?'✓ Cerrada':t.status==='sell_close'?'↩ Cierre':t.status==='orphan'?'⊘ Sin origen':t._isPartialClose?'◑ Parcial':'○ Abierta'}
+                                    background: t._isFullClose||t.status==='closed'?'rgba(0,229,160,0.1)':t._isPartialClose?'rgba(255,209,102,0.15)':t.status==='sell_close'?'rgba(155,114,255,0.15)':(t.status==='orphan'&&!t._closesTradeId)?'rgba(255,77,109,0.1)':'rgba(255,209,102,0.1)',
+                                    color: t._isFullClose||t.status==='closed'?'#00e5a0':t._isPartialClose?'#ffd166':t.status==='sell_close'?'#9b72ff':(t.status==='orphan'&&!t._closesTradeId)?'#ff4d6d':'#ffd166'}}>
+                                    {t._isFullClose||t.status==='closed'?'✓ Cerrada':t._isPartialClose?'◑ Parcial':t.status==='sell_close'?'↩ Cierre':(t.status==='orphan'&&!t._closesTradeId)?'⊘ Sin origen':'○ Abierta'}
                                   </span>
                                 </td>
                                 <td style={{padding:'3px 5px',color:'#00d4ff'}}>{(()=>{
