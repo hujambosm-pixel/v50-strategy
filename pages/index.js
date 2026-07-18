@@ -3022,7 +3022,6 @@ export default function Home() {
     const ddPct      = (sett.ranking?.rankingMaxDDPct        ?? 0)  / 100
     const minTrades  = sett.ranking?.minTrades ?? 3
     const norm = (v,mn,mx) => Math.max(0, Math.min(100, (v-mn)/(mx-mn)*100))
-    const rsWindow = estrategiaIntervalo === 'semanal' ? 13 : 63  // ventana RS FIJA por timeframe (no configurable): 63 diario / 13 semanal
 
     // SP500 al MISMO timeframe que cada estrategia (stratIntv), cacheado por intervalo Yahoo
     // (no se refetch si dos estrategias comparten intervalo).
@@ -3032,7 +3031,7 @@ export default function Home() {
       let s = null
       if (wMercado > 0 && frPct > 0) {
         try {
-          const r = await apiFetch(`/api/closes?symbol=%5EGSPC&interval=${yfInterval}&days=${rankingRsDays(rsWindow, yfInterval)}`)
+          const r = await apiFetch(`/api/closes?symbol=%5EGSPC&interval=${yfInterval}&days=${rankingRsDays(yfInterval==='1wk'?13:63, yfInterval)}`)
           if (r.ok) s = await r.json()
         } catch(e) { console.warn('[calcRankingAll] SP500 fetch failed:', e.message) }
       }
@@ -3050,6 +3049,7 @@ export default function Home() {
       const stratYears  = strat.years || Number(years)
       const stratCap    = strat.capital_ini || Number(capitalIni)
       const stratIntv   = (()=>{try{const p=typeof strat?.params==='string'?JSON.parse(strat.params||'{}'):(strat?.params||{});return p.intervalo||'diario'}catch(_){return 'diario'}})()
+      const rsWindow    = stratIntv === 'semanal' ? 13 : 63  // ventana RS por TIMEFRAME de ESTA estrategia (63 diario / 13 semanal)
       const sp500Closes = await getSp500ForIv(rankingYfIv(stratIntv))  // SP500 alineado al timeframe de esta estrategia
       const results = {}
       let _stratError = null
@@ -4750,7 +4750,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.650</title>
+        <title>Trading Simulator V9.651</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4828,7 +4828,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.650
+            <span className="dot"/>Trading Simulator V9.651
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
