@@ -2894,7 +2894,7 @@ export default function Home() {
     const frPct       = (sett.ranking?.rankingFRPct        ?? 33) / 100
     const max52Pct    = (sett.ranking?.rankingMax52Pct     ?? 34) / 100
     const momN        = Math.max(5, sett.ranking?.rankingMomentumN ?? 20)
-    const rsWindow    = Math.max(2, sett.ranking?.rankingRsWindow  ?? 63)  // ventana RS en velas (default 63 = índice -64)
+    const rsWindow    = estrategiaIntervalo === 'semanal' ? 13 : 63  // ventana RS FIJA por timeframe (no configurable): 63 diario / 13 semanal
     // ── Pesos métricas históricas ──
     const wrPct       = (sett.ranking?.rankingWinRatePct      ?? 33) / 100
     const cagrPct     = (sett.ranking?.rankingCAGRPct         ?? 33) / 100
@@ -3022,7 +3022,7 @@ export default function Home() {
     const ddPct      = (sett.ranking?.rankingMaxDDPct        ?? 0)  / 100
     const minTrades  = sett.ranking?.minTrades ?? 3
     const norm = (v,mn,mx) => Math.max(0, Math.min(100, (v-mn)/(mx-mn)*100))
-    const rsWindow = Math.max(2, sett.ranking?.rankingRsWindow ?? 63)  // ventana RS en velas (default 63)
+    const rsWindow = estrategiaIntervalo === 'semanal' ? 13 : 63  // ventana RS FIJA por timeframe (no configurable): 63 diario / 13 semanal
 
     // SP500 al MISMO timeframe que cada estrategia (stratIntv), cacheado por intervalo Yahoo
     // (no se refetch si dos estrategias comparten intervalo).
@@ -3243,7 +3243,7 @@ export default function Home() {
     const wMercado=(sett.ranking?.rankingWeightMercado??20)/100, wHistorico=(sett.ranking?.rankingWeightHistorico??80)/100
     const momPct=(sett.ranking?.rankingMomentumPct??33)/100, frPct=(sett.ranking?.rankingFRPct??33)/100
     const max52Pct=(sett.ranking?.rankingMax52Pct??34)/100, momN=Math.max(5,sett.ranking?.rankingMomentumN??20)
-    const rsWindow=Math.max(2,sett.ranking?.rankingRsWindow??63)  // ventana RS en velas (default 63)
+    const rsWindow=estrategiaIntervalo === 'semanal' ? 13 : 63  // ventana RS FIJA por timeframe (no configurable): 63 diario / 13 semanal
     const _ivA3=rankingYfIv(estrategiaIntervalo)                  // activo y SP500 al mismo timeframe
     const _daysA3=rankingRsDays(rsWindow,_ivA3)
     const norm=(v,mn,mx)=>Math.max(0,Math.min(100,(v-mn)/(mx-mn)*100))
@@ -4750,7 +4750,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.649</title>
+        <title>Trading Simulator V9.650</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4828,7 +4828,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.649
+            <span className="dot"/>Trading Simulator V9.650
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}

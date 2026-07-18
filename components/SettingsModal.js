@@ -729,14 +729,8 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                         onChange={e=>upd('ranking.rankingFRPct',Number(e.target.value))}
                         style={{width:80,accentColor:'#3b82f6'}}/>
                     </div>
-                    <div style={{fontSize:12,color:'#7a9bc0',lineHeight:1.5}}>Rendimiento del activo menos el del SP500 en las últimas {settings.ranking?.rankingRsWindow??63} velas (respeta el timeframe activo)</div>
-                    <div style={{display:'flex',alignItems:'center',gap:8,marginTop:6}}>
-                      <span style={{fontSize:12,color:'#9fb8d0',flex:1}}>Ventana RS (velas)</span>
-                      <input type="number" min={2} max={500} value={settings.ranking?.rankingRsWindow??63}
-                        onChange={e=>upd('ranking.rankingRsWindow',Math.max(2,Math.min(500,Number(e.target.value)||63)))}
-                        style={{width:64,padding:'3px 6px',borderRadius:4,background:'#0d1929',border:'1px solid #1a2a3a',color:'#e0e8f0',fontSize:12,fontFamily:MONO,textAlign:'right'}}/>
-                    </div>
-                    <div style={{fontSize:11,color:'#5a7a95',lineHeight:1.4,marginTop:3}}>Cuenta velas del timeframe activo (diario/semanal). Independiente del RS de la cabecera y del gate del multibacktest.</div>
+                    <div style={{fontSize:12,color:'#7a9bc0',lineHeight:1.5}}>Rendimiento del activo menos el del SP500 en la ventana fija del timeframe activo.</div>
+                    <div style={{fontSize:11,color:'#5a7a95',lineHeight:1.4,marginTop:6}}>Ventana fija por timeframe (no configurable): <span style={{color:'#9fb8d0'}}>63 velas en diario</span> (~3 meses) y <span style={{color:'#9fb8d0'}}>13 velas en semanal</span> (~3 meses), para que el resultado sea comparable entre timeframes. Independiente del RS de la cabecera y del gate del multibacktest.</div>
                   </div>
 
                   {/* Proximidad máximo 52 semanas */}
