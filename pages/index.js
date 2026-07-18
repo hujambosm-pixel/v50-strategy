@@ -1384,10 +1384,11 @@ export default function Home() {
       .catch(()=>{})
   },[session?.user?.id]) // eslint-disable-line
 
-  // ── RECONCILIACIÓN (paso 1: SOLO DETECCIÓN + log, sin borrar) ──
-  // Una pendiente se considera EJECUTADA si existe un fill BUY del mismo símbolo (mayúsculas)
-  // con date >= created_at.slice(0,10) (mismo día o posterior). Aquí NO se borra ni se toca estado:
-  // solo se calcula y se loguea (candidatas a borrado en el siguiente ladrillo C-2).
+  // ── RECONCILIACIÓN: detecta pendientes ya ejecutadas y las BORRA de pending_orders ──
+  // Ejecutada = existe fill BUY del mismo símbolo (mayúsculas) con date >= created_at.slice(0,10).
+  // reconciledRef guarda los símbolos ya mandados a borrar en esta sesión → evita reintentos
+  // mientras la petición está en vuelo o tras el setPendingOrders que re-dispara el efecto.
+  const reconciledRef = useRef(new Set())
   useEffect(()=>{
     if(!tlTrades?.length || !pendingOrders?.length) return   // esperar a que ambos carguen (async)
     const detalle = pendingOrders.map(o=>{
@@ -1400,7 +1401,23 @@ export default function Home() {
       )
       return { symbol: symUp, pendDay, ejecutada: !!hit, fillDate: hit?.date || null, fillShares: hit?.shares || null }
     })
-    console.log('[reconcileDIAG]', { pendientes: pendingOrders.length, fills: tlTrades.length, detalle })
+    // Borrado de las ejecutadas (una vez por símbolo; solo pending_orders, nunca trades_log)
+    const borradas = []
+    detalle.forEach(d=>{
+      if(!d.ejecutada) return
+      const symUp = d.symbol
+      if(reconciledRef.current.has(symUp)) return          // ya procesada / en vuelo → no reintentar
+      reconciledRef.current.add(symUp)                     // marcar ANTES de la llamada
+      borradas.push(symUp)
+      ;(async()=>{
+        try{
+          const r=await apiFetch('/api/pending?action=delete&symbol='+encodeURIComponent(symUp),{method:'POST'})
+          if(r.ok) setPendingOrders(prev=>prev.filter(o=>(o.symbol||'').toUpperCase()!==symUp))
+          else reconciledRef.current.delete(symUp)         // no borrada en BD → permitir reintento
+        }catch(_){ reconciledRef.current.delete(symUp) }   // fallo de red → permitir reintento
+      })()
+    })
+    console.log('[reconcileDIAG]', { pendientes: pendingOrders.length, fills: tlTrades.length, detalle, borradas })
   },[tlTrades, pendingOrders])
 
   // ── RESET al abrir el panel Risk MGMT: vaciar entrada/stop SOLO en la transición a 'risk'.
@@ -4725,7 +4742,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.645</title>
+        <title>Trading Simulator V9.646</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4803,7 +4820,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.645
+            <span className="dot"/>Trading Simulator V9.646
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
