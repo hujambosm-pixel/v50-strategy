@@ -1017,7 +1017,7 @@ export default function Home() {
   const [mcCriterioUso,setMcCriterioUso]=useState('filtro') // 'desempate' | 'filtro' — uso del criterio en Concentrado (default: filtro)
   const [mcMomentumN,setMcMomentumN]=useState(20)           // lookback días para criterio momentum
   const [mcRsGateThr,setMcRsGateThr]=useState(0)            // umbral gate RS (%) — default 0 (basta batir al índice)
-  const [mcRsWindow,setMcRsWindow]=useState(20)             // ventana (velas) del gate de fuerza relativa — default 20 (fallback backend sigue en 63); independiente del RS visual (C) y del ranking (A)
+  const [mcRsWindow,setMcRsWindow]=useState(63)             // ventana (velas) del gate de fuerza relativa — default diario 63 (semanal 13); se resetea al cambiar mcIntervalo; independiente del RS visual (C) y del ranking (A)
   const [mcMomGateThr,setMcMomGateThr]=useState(10)         // umbral gate momentum (% subida mínima)
   const [mcProxGateThr,setMcProxGateThr]=useState(10)       // umbral gate proximidad (% bajo el máximo 52s)
   const [mcCapital,setMcCapital]=useState('compound')    // 'simple' | 'compound'
@@ -1043,6 +1043,9 @@ export default function Home() {
   const [mcShowOccupancy,setMcShowOccupancy]=useState(true)
   const [mcOccMode,setMcOccMode]=useState('compound')  // own filter for MC capital chart
   const [mcIntervalo,setMcIntervalo]=useState('diario')  // 'diario' | 'semanal' — intervalo de datos MC
+  // Reset de la ventana RS del multibacktest al default de su timeframe SIEMPRE que cambie mcIntervalo:
+  // 63 diario, 13 semanal. Pisa el valor manual del input. Solo setState → no dispara backtest (manual).
+  useEffect(()=>{ setMcRsWindow(mcIntervalo==='semanal' ? 13 : 63) },[mcIntervalo])
   const mcChartRef=useRef(null)
   const savedRangeRef=useRef(null)   // preserve zoom when changing asset
   const isNewResultRef=useRef(false) // signals applyInitialRange to skip savedRange → apply recentMonths
@@ -4747,7 +4750,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.648</title>
+        <title>Trading Simulator V9.649</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4825,7 +4828,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.648
+            <span className="dot"/>Trading Simulator V9.649
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
