@@ -1384,6 +1384,25 @@ export default function Home() {
       .catch(()=>{})
   },[session?.user?.id]) // eslint-disable-line
 
+  // ── RECONCILIACIÓN (paso 1: SOLO DETECCIÓN + log, sin borrar) ──
+  // Una pendiente se considera EJECUTADA si existe un fill BUY del mismo símbolo (mayúsculas)
+  // con date >= created_at.slice(0,10) (mismo día o posterior). Aquí NO se borra ni se toca estado:
+  // solo se calcula y se loguea (candidatas a borrado en el siguiente ladrillo C-2).
+  useEffect(()=>{
+    if(!tlTrades?.length || !pendingOrders?.length) return   // esperar a que ambos carguen (async)
+    const detalle = pendingOrders.map(o=>{
+      const symUp   = (o.symbol||'').toUpperCase()
+      const pendDay = String(o.created_at||'').slice(0,10)
+      const hit = tlTrades.find(f =>
+        f.fill_type==='buy' &&
+        (f.symbol||'').toUpperCase()===symUp &&
+        String(f.date||'') >= pendDay
+      )
+      return { symbol: symUp, pendDay, ejecutada: !!hit, fillDate: hit?.date || null, fillShares: hit?.shares || null }
+    })
+    console.log('[reconcileDIAG]', { pendientes: pendingOrders.length, fills: tlTrades.length, detalle })
+  },[tlTrades, pendingOrders])
+
   // ── RESET al abrir el panel Risk MGMT: vaciar entrada/stop SOLO en la transición a 'risk'.
   //    Deja los campos inválidos → el auto-guardado (más abajo) no dispara nada. ──
   useEffect(()=>{
@@ -4706,7 +4725,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.644</title>
+        <title>Trading Simulator V9.645</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4784,7 +4803,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.644
+            <span className="dot"/>Trading Simulator V9.645
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
