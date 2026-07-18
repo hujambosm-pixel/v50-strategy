@@ -801,8 +801,8 @@ export default function Home() {
   const currentStratIdRef=useRef(null)
   useEffect(()=>{currentStratIdRef.current=currentStratId},[currentStratId])
   const [estrategiaIntervalo, setEstrategiaIntervalo] = useState('diario') // 'diario'|'semanal' — intervalo del activo en backtest individual
-  const [rsVisualWindow, setRsVisualWindow] = useState(20) // ventana (en velas) del RS visual de la cabecera — indicador independiente, no ligado a ninguna estrategia
-  const [rsWinText, setRsWinText] = useState('20')          // texto editable del input (permite vaciar sin romper el cálculo; rsVisualWindow guarda el último válido)
+  const [rsVisualWindow, setRsVisualWindow] = useState(63) // ventana (en velas) del RS visual de la cabecera — default diario 63 (semanal 13); se resetea al cambiar timeframe
+  const [rsWinText, setRsWinText] = useState('63')          // texto editable del input (permite vaciar sin romper el cálculo; rsVisualWindow guarda el último válido)
   const [stratSaving, setStratSaving] = useState(false)
   // RS visual de la cabecera: fuerza relativa del activo vs SP500 en las últimas N velas.
   // Independiente de cualquier estrategia/params. Devuelve {ok, pct} o {ok:false} si faltan datos.
@@ -824,6 +824,14 @@ export default function Home() {
     const retSP500  = (cSp  / cSpBase)  - 1
     return { ok: true, pct: (retActivo - retSP500) * 100 }
   }, [result?.chartData, rsVisualWindow])
+  // Reset de la ventana RS visual al default de su timeframe SIEMPRE que cambie el intervalo:
+  // 63 en diario, 13 en semanal. Pisa cualquier valor manual del input (así se pidió). Un solo
+  // efecto keyed a estrategiaIntervalo cubre todos los orígenes del cambio (badge D/W, toggle
+  // lateral, carga de estrategia, reset). En el mount fija el default del intervalo activo.
+  useEffect(()=>{
+    const def = estrategiaIntervalo==='semanal' ? 13 : 63
+    setRsVisualWindow(def); setRsWinText(String(def))
+  },[estrategiaIntervalo])
   // Persiste el intervalo ('diario'|'semanal') en los params de una estrategia (local + Supabase).
   // Mecanismo único compartido por el toggle lateral por-estrategia y el badge D/W de la cabecera.
   const persistStratIntervalo = async (strat, newIv) => {
@@ -4739,7 +4747,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.647</title>
+        <title>Trading Simulator V9.648</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4817,7 +4825,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.647
+            <span className="dot"/>Trading Simulator V9.648
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
