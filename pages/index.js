@@ -1399,16 +1399,14 @@ export default function Home() {
         (f.symbol||'').toUpperCase()===symUp &&
         String(f.date||'') >= pendDay
       )
-      return { symbol: symUp, pendDay, ejecutada: !!hit, fillDate: hit?.date || null, fillShares: hit?.shares || null }
+      return { symbol: symUp, ejecutada: !!hit }
     })
     // Borrado de las ejecutadas (una vez por símbolo; solo pending_orders, nunca trades_log)
-    const borradas = []
     detalle.forEach(d=>{
       if(!d.ejecutada) return
       const symUp = d.symbol
       if(reconciledRef.current.has(symUp)) return          // ya procesada / en vuelo → no reintentar
       reconciledRef.current.add(symUp)                     // marcar ANTES de la llamada
-      borradas.push(symUp)
       ;(async()=>{
         try{
           const r=await apiFetch('/api/pending?action=delete&symbol='+encodeURIComponent(symUp),{method:'POST'})
@@ -1417,7 +1415,6 @@ export default function Home() {
         }catch(_){ reconciledRef.current.delete(symUp) }   // fallo de red → permitir reintento
       })()
     })
-    console.log('[reconcileDIAG]', { pendientes: pendingOrders.length, fills: tlTrades.length, detalle, borradas })
   },[tlTrades, pendingOrders])
 
   // ── RESET al abrir el panel Risk MGMT: vaciar entrada/stop SOLO en la transición a 'risk'.
@@ -4742,7 +4739,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.646</title>
+        <title>Trading Simulator V9.647</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4820,7 +4817,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.646
+            <span className="dot"/>Trading Simulator V9.647
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
