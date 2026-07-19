@@ -1622,7 +1622,7 @@ export default function WatchlistManager({
                         color: scoreFg(sh),
                       }}>
                         {sh != null
-                          ? <>{fmt(sh, 1)}%</>
+                          ? <>{fmt(sh, 1)}%{showCoverage && <span style={{ marginLeft: 2, fontSize: 9, color: P.textMuted }}>ⓘ</span>}</>
                           : <span style={{ color: P.textMuted }}>—</span>}
                       </td>
                     )
