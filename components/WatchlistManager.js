@@ -1508,7 +1508,10 @@ export default function WatchlistManager({
                   {/* Score histórico + indicador cobertura de estrategias */}
                   {(()=>{
                     const sh = datos.scoreMetricas ?? null
-                    // Cobertura: cuántas estrategias habilitadas tienen métricas completas para este activo
+                    // Cobertura: cuántas estrategias habilitadas dejaron métricas completas para este activo.
+                    // NO es un error que "falten": todas se ejecutan, pero muchas generan menos operaciones
+                    // que el mínimo exigido y por eso no dejan fila. Se muestra solo como tooltip informativo
+                    // (sin ⚠ ni color de alerta). El ⚠ se reservará para errores reales de descarga.
                     const enabledStrats = strategies.filter(s => s.enabled !== false)
                     const stratsWithData = enabledStrats.filter(s => {
                       const d = allRankings[s.id]?.[sym]
@@ -1516,22 +1519,32 @@ export default function WatchlistManager({
                     })
                     const coverageCount = stratsWithData.length
                     const coverageTotal = enabledStrats.length
-                    const isPartial = metricsView === 'top' && coverageTotal > 0 && coverageCount > 0 && coverageCount < coverageTotal
-                    const missingNames = isPartial
-                      ? enabledStrats.filter(s => !allRankings[s.id]?.[sym] || allRankings[s.id][sym].cagr == null).map(s => s.name).join(', ')
-                      : ''
-                    const coverageTip = isPartial
-                      ? `Score calculado con ${coverageCount} de ${coverageTotal} estrategias habilitadas.\nFaltan: ${missingNames}\nEjecuta el header ↻ para calcular las que faltan`
-                      : undefined
-                    const shColor = isPartial ? '#b87a20' : scoreFg(sh)
+                    // Cobertura tiene sentido sobre todo en la vista TOP (considera todas las estrategias);
+                    // en la vista activa solo cuenta la estrategia activa, así que ahí no mostramos el tooltip.
+                    const showCoverage = metricsView === 'top' && coverageTotal > 0 && coverageCount > 0 && coverageCount < coverageTotal
+                    let coverageTip
+                    if (showCoverage) {
+                      const missing = enabledStrats
+                        .filter(s => !allRankings[s.id]?.[sym] || allRankings[s.id][sym].cagr == null)
+                        .map(s => s.name)
+                      const missingTxt = missing.length > 10
+                        ? `${missing.slice(0, 10).join(', ')} y ${missing.length - 10} más`
+                        : missing.join(', ')
+                      coverageTip =
+                        `Score calculado con ${coverageCount} de ${coverageTotal} estrategias habilitadas.\n` +
+                        `Las demás sí se ejecutaron, pero generaron menos operaciones que el mínimo configurado y por eso no cuentan.\n` +
+                        `Suele deberse a que las reglas de esas estrategias se cumplen pocas veces en este activo, o a que el activo tiene poco histórico de cotización.\n` +
+                        `Es normal y no indica ningún error.\n` +
+                        `No cualifican: ${missingTxt}`
+                    }
                     return (
                       <td title={coverageTip} style={{
                         ...TD(), textAlign: 'right', fontWeight: 600,
                         borderLeft: `2px solid ${P.borderStrong}`, borderRight: `1px solid ${P.border}`,
-                        color: shColor,
+                        color: scoreFg(sh),
                       }}>
                         {sh != null
-                          ? <>{fmt(sh, 1)}%{isPartial && <span style={{ marginLeft: 2, fontSize: 9 }}>⚠</span>}</>
+                          ? <>{fmt(sh, 1)}%</>
                           : <span style={{ color: P.textMuted }}>—</span>}
                       </td>
                     )
