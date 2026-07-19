@@ -3235,6 +3235,15 @@ export default function Home() {
 
   // ── SCORE MÉT.+SEÑ. ↻ (Paso 3) — Añade señales de mercado al scoreMetricas existente ──
   // Requiere: ↻ Score métricas ejecutado previamente (scoreMetricas en wlData[sym].active)
+  // ── Captura de ERRORES REALES de la corrida (fallos de descarga / excepciones / fallo del WIPE).
+  //    Acumulador en REF (no estado): evita el problema de estado obsoleto dentro de los bucles
+  //    async (Promise.allSettled) — cada push ve siempre el array vivo. Se resetea al inicio de
+  //    calcMetricas y se lee desde el modal al terminar la cadena. Nunca rompe la corrida (try). ──
+  const updateErrorsRef = useRef([])
+  const logUpdateError = useCallback((symbol, tipo, detalle, estrategia=null)=>{
+    try{ updateErrorsRef.current.push({ symbol: symbol?String(symbol).toUpperCase():null, tipo, detalle: detalle!=null?String(detalle):'', estrategia: estrategia||null }) }catch(_){}
+  },[])
+
   const calcScoreMetSen = useCallback(async (rankSymbols=null, scoreOverride=null, topScoreOverride=null, topMetricsOverride=null) => {
     const items = rankSymbols || watchlist
     const syms = items.map(w=>w.symbol)
@@ -3254,7 +3263,7 @@ export default function Home() {
     const getSp500=async(iv)=>{
       if(iv in _sp500Cache) return _sp500Cache[iv]
       let s=null
-      if(wMercado>0&&frPct>0){try{const r=await apiFetch(`/api/closes?symbol=%5EGSPC&interval=${iv}&days=${rankingRsDays(_rsWinForIv(iv),iv)}`);if(r.ok)s=await r.json()}catch(e){console.warn('[calcScoreMetSen] SP500:',e.message)}}
+      if(wMercado>0&&frPct>0){try{const r=await apiFetch(`/api/closes?symbol=%5EGSPC&interval=${iv}&days=${rankingRsDays(_rsWinForIv(iv),iv)}`);if(r.ok)s=await r.json();else logUpdateError('^GSPC','descarga',r.status,null)}catch(e){logUpdateError('^GSPC','excepcion',e?.message,null);console.warn('[calcScoreMetSen] SP500:',e.message)}}
       _sp500Cache[iv]=s; return s
     }
     const _closesCache={}
@@ -3262,7 +3271,7 @@ export default function Home() {
       const key=sym.toUpperCase()+'|'+iv
       if(key in _closesCache) return _closesCache[key]
       let arr=null
-      try{const r=await apiFetch(`/api/closes?symbol=${encodeURIComponent(sym)}&interval=${iv}&days=${rankingRsDays(_rsWinForIv(iv),iv)}`);if(r.ok){const closes=await r.json();arr=(Array.isArray(closes)?closes:[]).filter(v=>v!=null&&!isNaN(v))}}catch(_){}
+      try{const r=await apiFetch(`/api/closes?symbol=${encodeURIComponent(sym)}&interval=${iv}&days=${rankingRsDays(_rsWinForIv(iv),iv)}`);if(r.ok){const closes=await r.json();arr=(Array.isArray(closes)?closes:[]).filter(v=>v!=null&&!isNaN(v))}else logUpdateError(sym,'descarga',r.status,null)}catch(e){logUpdateError(sym,'excepcion',e?.message,null)}
       _closesCache[key]=arr; return arr
     }
     // Helper de mercado — MISMA lógica/pesos/normalizaciones que antes (momentum + RS + proximidad)
@@ -3345,7 +3354,7 @@ export default function Home() {
     setRankingRunning(false); setRankingProgress({done:0,total:0})
     try{localStorage.setItem('wl_score_metsen_last_updated',Date.now().toString())}catch(_){}
     return { ok: true }
-  },[watchlist,wlData,currentStratId,stratName,estrategiaIntervalo,strategies])  // estrategiaIntervalo: timeframe RS activa; strategies: fallback intervalo top por stratId
+  },[watchlist,wlData,currentStratId,stratName,estrategiaIntervalo,strategies,logUpdateError])  // estrategiaIntervalo: timeframe RS activa; strategies: fallback intervalo top por stratId
 
   // ── MÉTRICAS ↻ — Calcula solo métricas (CAGR, Profit, Win%, MaxDD, Ops) para activa + todas ──
   const calcMetricas = useCallback(async (rankSymbols=null) => {
@@ -3358,6 +3367,9 @@ export default function Home() {
     setRankingRunning(true); setRankingError(null)
     setRankingProgress({done:0, total:syms.length})
     const activeMetrics={}
+
+    // Reset de errores: cada corrida empieza limpia (calcMetricas es la primera fase del botón ↻).
+    updateErrorsRef.current=[]
 
     // ── Limpieza previa: borrar filas viejas de ranking_results de los símbolos SELECCIONADOS ──
     // Evita "filas zombis": una estrategia que hoy no cualifica (<minTrades) dejaba su fila antigua
@@ -3373,10 +3385,10 @@ export default function Home() {
           const res=await fetch(`${getSupaUrl()}/rest/v1/ranking_results?symbol=in.(${chunk.join(',')})`,{
             method:'DELETE', headers:{...getSupaH(),'Prefer':'return=minimal'}
           })
-          if(!res.ok){ _wipeOk=false; const t=await res.text().catch(()=>''); console.error('[calcMetricas] fallo al limpiar ranking_results', res.status, t) }
+          if(!res.ok){ _wipeOk=false; logUpdateError(null,'wipe',res.status,null); const t=await res.text().catch(()=>''); console.error('[calcMetricas] fallo al limpiar ranking_results', res.status, t) }
         }
       }
-    }catch(e){ _wipeOk=false; console.error('[calcMetricas] fallo al limpiar ranking_results', e) }
+    }catch(e){ _wipeOk=false; logUpdateError(null,'wipe',e?.message,null); console.error('[calcMetricas] fallo al limpiar ranking_results', e) }
     console.log('[WIPE]', { symbols:_wipeSyms.length, ok:_wipeOk })
 
     for(let i=0;i<syms.length;i+=BATCH){
@@ -3386,7 +3398,7 @@ export default function Home() {
           const res=await apiFetch('/api/datos',{method:'POST',headers:{'Content-Type':'application/json'},
             body:JSON.stringify({simbolo:sym,strategyId:currentStratId,capital_ini:Number(capitalIni),years:Number(years),allocation_pct:100,filtros,intervalo:estrategiaIntervalo})})
           const json=await res.json()
-          if(!res.ok||!json.trades?.length){ console.warn('[MET-activa SKIP]', sym, {ok:res.ok, nTrades:json.trades?.length}); return }
+          if(!res.ok||!json.trades?.length){ if(!res.ok) logUpdateError(sym,'descarga',res.status,null); console.warn('[MET-activa SKIP]', sym, {ok:res.ok, nTrades:json.trades?.length}); return }
           const trades=json.trades; if(trades.length<minTrades){ console.warn('[MET-activa SKIP<min]', sym, {nTrades:trades.length, minTrades}); return }
           const wins=trades.filter(t=>t.pnlPct>=0), winRate=(wins.length/trades.length)*100
           const totalDiasNat=json.startDate?(new Date(json.meta?.ultimaFecha)-new Date(json.startDate))/86400000:365*Number(years)
@@ -3399,7 +3411,7 @@ export default function Home() {
           const cagrRobust=capRob>0?(Math.pow(capRob/Number(capitalIni),1/anios)-1)*100:-99
           const maxDD=json.maxDDStrategyFloat??json.maxDDStrategy??0
           activeMetrics[sym.toUpperCase()]={winRate,cagr,cagrRobust,maxDD,trades:trades.length,profit:json.gananciaSimple??null}
-        }catch(e){console.error('[calcMetricas-activa]',sym,e)}
+        }catch(e){logUpdateError(sym,'excepcion',e?.message,null);console.error('[calcMetricas-activa]',sym,e)}
       }))
       setRankingProgress({done:Math.min(i+BATCH,syms.length),total:syms.length})
     }
@@ -3437,7 +3449,7 @@ export default function Home() {
                 const res=await apiFetch('/api/datos',{method:'POST',headers:{'Content-Type':'application/json'},
                   body:JSON.stringify({simbolo:sym,strategyId:stratId,capital_ini:stratCap,years:stratYears,allocation_pct:100,filtros,intervalo:stratIntv})})
                 const json=await res.json()
-                if(!res.ok||!json.trades?.length){ console.warn('[MET-all SKIP]', strat.name, stratIntv, sym, {ok:res.ok, nTrades:json.trades?.length}); return }
+                if(!res.ok||!json.trades?.length){ if(!res.ok) logUpdateError(sym,'descarga',res.status,strat.name); console.warn('[MET-all SKIP]', strat.name, stratIntv, sym, {ok:res.ok, nTrades:json.trades?.length}); return }
                 const trades=json.trades; if(trades.length<minTrades){ console.warn('[MET-all SKIP<min]', strat.name, stratIntv, sym, {nTrades:trades.length}); return }
                 const wins=trades.filter(t=>t.pnlPct>=0), winRate=(wins.length/trades.length)*100
                 const totalDiasNat=json.startDate?(new Date(json.meta?.ultimaFecha)-new Date(json.startDate))/86400000:365*stratYears
@@ -3450,12 +3462,12 @@ export default function Home() {
                 const cagrRobust=capRob>0?(Math.pow(capRob/stratCap,1/anios)-1)*100:-99
                 const maxDD=json.maxDDStrategyFloat??json.maxDDStrategy??0
                 stratMetrics[sym.toUpperCase()]={winRate,cagr,cagrRobust,maxDD,trades:trades.length,profit:json.gananciaSimple??null}
-              }catch(e){console.error('[calcMetricas-all]',sym,e)}
+              }catch(e){logUpdateError(sym,'excepcion',e?.message,strat.name);console.error('[calcMetricas-all]',sym,e)}
             }))
           }
           await upsertMetricsRemote(stratMetrics,stratId)
           allStratMetricsMap[stratId]=stratMetrics
-        }catch(e){console.error('[calcMetricas] Error estrategia:',stratId,strat.name,stratIntv,e)}
+        }catch(e){logUpdateError(null,'excepcion',e?.message,strat.name);console.error('[calcMetricas] Error estrategia:',stratId,strat.name,stratIntv,e)}
       }
       // ── Merge top metrics: determinar top estrategia por CAGR desde allStratMetricsMap ──
       // No depende de refreshBestStratPerSymbol (que usa score_historico, no calculado aquí)
@@ -3493,7 +3505,7 @@ export default function Home() {
     }
     return { ok: true, topMetricsMap: {}, activeMetricsMap: activeMetrics }
 
-  },[watchlist,years,capitalIni,currentStratId,stratName,filtros,estrategiaIntervalo,strategies,refreshBestStratPerSymbol])
+  },[watchlist,years,capitalIni,currentStratId,stratName,filtros,estrategiaIntervalo,strategies,refreshBestStratPerSymbol,logUpdateError])
 
   // ── Borrar scores (score_historico + score_completo) de símbolos seleccionados ──
   const deleteScores = useCallback(async (symbols) => {
@@ -4809,7 +4821,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.657</title>
+        <title>Trading Simulator V9.658</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4887,7 +4899,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.657
+            <span className="dot"/>Trading Simulator V9.658
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6929,6 +6941,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 onCalcRankingAll={calcRankingAllStrategies}
                 topStratRunning={topStratRunning}
                 topStratProgress={topStratProgress}
+                updateErrorsRef={updateErrorsRef}
                 hasBestStrat={Object.keys(bestStratBySymbol).length>0}
                 onClearBestStrat={()=>setBestStratBySymbol({})}
                 onDeleteScores={deleteScores}

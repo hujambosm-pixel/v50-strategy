@@ -174,6 +174,7 @@ export default function WatchlistManager({
   onCalcRankingAll,
   topStratRunning,
   topStratProgress,
+  updateErrorsRef,   // ref (pages/index.js) con los errores REALES de la corrida (descarga/excepcion/wipe)
   hasBestStrat,
   onClearBestStrat,
   // Ranking data from parent (for score columns)
@@ -209,6 +210,7 @@ export default function WatchlistManager({
   const [renameValue, setRenameValue]     = useState('')
   const [listOpLoading, setListOpLoading] = useState(false)
   const [calcStep, setCalcStep]                    = useState(null)  // null | 1|2|3 (fase encadenada del botón ↻ Actualizar)
+  const [errorModal, setErrorModal]                = useState(null)  // null | { rows:[], global:[], symConErrores, symTotal }
   const [metricsView, setMetricsView]             = useState('top') // 'active' | 'top'
   const [rankingDoneFlash, setRankingDoneFlash]   = useState(false)
   const [topStratDoneFlash, setTopStratDoneFlash] = useState(false)
@@ -635,6 +637,59 @@ export default function WatchlistManager({
       fontFamily: MONO,
     }}>
 
+      {/* ── Modal de ERRORES de la corrida (solo si hubo fallos reales) ── */}
+      {errorModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.65)' }}
+          onClick={() => setErrorModal(null)}>
+          <div onClick={e => e.stopPropagation()} style={{
+            width: 'min(560px, 92vw)', maxHeight: '82vh', overflow: 'auto',
+            background: P.bg, border: `1px solid ${P.borderStrong}`, borderRadius: 8,
+            boxShadow: '0 16px 60px rgba(0,0,0,0.7)', fontFamily: MONO, padding: '16px 18px', color: P.text,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <span style={{ fontSize: 14, fontWeight: 700, color: '#b87a20' }}>⚠ Problemas durante la actualización</span>
+              <button onClick={() => setErrorModal(null)} style={{ background: 'none', border: 'none', color: P.textSec, fontSize: 16, cursor: 'pointer', padding: '0 4px', lineHeight: 1 }}>✕</button>
+            </div>
+            <div style={{ fontSize: 12, color: P.textSec, marginBottom: 6 }}>
+              {errorModal.symConErrores > 0
+                ? `${errorModal.symConErrores} de ${errorModal.symTotal} activos tuvieron errores de descarga.`
+                : 'Hubo incidencias generales durante la actualización.'}
+            </div>
+            <div style={{ fontSize: 11, color: P.textMuted, lineHeight: 1.5, marginBottom: 10 }}>
+              Los fallos de descarga suelen ser temporales (límite de peticiones de la fuente de datos). Normalmente basta con volver a actualizar esos activos. (No incluye las estrategias que se ejecutan bien pero generan pocas operaciones — eso es normal.)
+            </div>
+            {errorModal.rows.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginBottom: errorModal.global.length ? 10 : 0 }}>
+                {errorModal.rows.map(r => (
+                  <div key={r.symbol} style={{
+                    display: 'flex', alignItems: 'center', gap: 8, padding: '4px 8px', borderRadius: 4,
+                    background: r.sinDatos ? 'rgba(184,26,26,0.10)' : 'rgba(184,122,32,0.08)',
+                    border: `1px solid ${r.sinDatos ? 'rgba(184,26,26,0.4)' : P.border}`,
+                  }}>
+                    <span style={{ fontWeight: 700, fontSize: 12, minWidth: 64, color: r.sinDatos ? '#8b1a1a' : P.text }}>{r.symbol}</span>
+                    {r.sinDatos && <span style={{ fontSize: 9, fontWeight: 700, color: '#fff', background: '#8b1a1a', padding: '1px 6px', borderRadius: 3 }}>SIN DATOS</span>}
+                    <span style={{ fontSize: 10, color: P.textSec, marginLeft: 'auto' }}>
+                      {[r.descarga && `${r.descarga} descarga${r.descarga > 1 ? 's' : ''}`, r.excepcion && `${r.excepcion} excepción${r.excepcion > 1 ? 'es' : ''}`].filter(Boolean).join(' · ')}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {errorModal.global.length > 0 && (
+              <div style={{ fontSize: 10, color: P.textMuted, borderTop: `1px solid ${P.border}`, paddingTop: 8 }}>
+                Incidencias generales: {errorModal.global.length} (borrado previo / índice SP500).
+              </div>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
+              <button onClick={() => setErrorModal(null)} style={{
+                padding: '6px 16px', borderRadius: 4, border: `1px solid ${P.borderStrong}`, background: 'transparent',
+                color: P.text, fontFamily: MONO, fontSize: 11, fontWeight: 600, cursor: 'pointer',
+              }}>Entendido</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Cabecera ── */}
       <div style={{
         flexShrink: 0,
@@ -974,7 +1029,30 @@ export default function WatchlistManager({
                 await onCalcScoreMetSen?.(sel, r2?.activeScoreMap ?? null, r2?.topScoreMap ?? null, r1?.topMetricsMap ?? null)
                 await onRefreshWlData?.()
               } catch(e) { console.error('[Actualizar]', e) }
-              finally { setCalcStep(null) }
+              finally {
+                setCalcStep(null)
+                // Errores reales de la corrida (leídos del ref del padre → siempre valor final, sin estado obsoleto)
+                try {
+                  const errs = updateErrorsRef?.current || []
+                  if (errs.length) {
+                    const enabledCount = (strategies || []).filter(s => s.enabled !== false).length
+                    const bySym = {}, global = []
+                    errs.forEach(e => {
+                      const s = e.symbol
+                      if (!s || s === '^GSPC') { global.push(e); return }  // wipe / errores de estrategia / SP500 = globales
+                      if (!bySym[s]) bySym[s] = { symbol: s, descarga: 0, excepcion: 0, wipe: 0, stratErrs: 0 }
+                      bySym[s][e.tipo] = (bySym[s][e.tipo] || 0) + 1
+                      if (e.estrategia) bySym[s].stratErrs++
+                    })
+                    const rows = Object.values(bySym)
+                      .map(r => ({ ...r, total: r.descarga + r.excepcion + r.wipe, sinDatos: enabledCount > 0 && r.stratErrs >= enabledCount }))
+                      .sort((a, b) => (b.sinDatos - a.sinDatos) || (b.total - a.total))
+                    if (rows.length || global.length) {
+                      setErrorModal({ rows, global, symConErrores: rows.length, symTotal: sel.length })
+                    }
+                  }
+                } catch(_) {}
+              }
             }}
             title="Actualiza métricas, scores y señales para los activos seleccionados"
             style={{
