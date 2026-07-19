@@ -208,7 +208,7 @@ export default function WatchlistManager({
   const [newListName, setNewListName]     = useState('')
   const [renameValue, setRenameValue]     = useState('')
   const [listOpLoading, setListOpLoading] = useState(false)
-  const [calcProgress, setCalcProgress]            = useState(null)  // null | string (paso actual)
+  const [calcStep, setCalcStep]                    = useState(null)  // null | 1|2|3 (fase encadenada del botón ↻ Actualizar)
   const [metricsView, setMetricsView]             = useState('top') // 'active' | 'top'
   const [rankingDoneFlash, setRankingDoneFlash]   = useState(false)
   const [topStratDoneFlash, setTopStratDoneFlash] = useState(false)
@@ -956,7 +956,7 @@ export default function WatchlistManager({
         {/* ── Botones derecha: ↻ Actualizar + ✕ Cerrar ── */}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, flexShrink: 0, alignItems: 'center' }}>
           <button
-            disabled={selected.size === 0 || !!calcProgress}
+            disabled={selected.size === 0 || !!calcStep}
             onClick={async () => {
               const sel = watchlist.filter(w => selected.has(w.id))
               if (!sel.length) return
@@ -966,15 +966,15 @@ export default function WatchlistManager({
               }
               try {
                 onDisableAutoRefresh?.()
-                setCalcProgress('1/3 Calculando métricas...')
+                setCalcStep(1)
                 const r1 = await (onCalcMetricas ? onCalcMetricas(sel) : onCalcRankingAll?.(sel))
-                setCalcProgress('2/3 Calculando scores...')
+                setCalcStep(2)
                 const r2 = await onCalcScoreMetricas?.(sel, r1?.topMetricsMap ?? null, r1?.activeMetricsMap ?? null)
-                setCalcProgress('3/3 Calculando señales...')
+                setCalcStep(3)
                 await onCalcScoreMetSen?.(sel, r2?.activeScoreMap ?? null, r2?.topScoreMap ?? null, r1?.topMetricsMap ?? null)
                 await onRefreshWlData?.()
               } catch(e) { console.error('[Actualizar]', e) }
-              finally { setCalcProgress(null) }
+              finally { setCalcStep(null) }
             }}
             title="Actualiza métricas, scores y señales para los activos seleccionados"
             style={{
@@ -983,10 +983,17 @@ export default function WatchlistManager({
               color: selected.size === 0 ? '#2a4a30' : '#1a6b3a',
               fontFamily: MONO, fontSize: 11, fontWeight: 600,
               padding: '5px 12px', borderRadius: 5,
-              cursor: selected.size === 0 || !!calcProgress ? 'not-allowed' : 'pointer',
+              cursor: selected.size === 0 || !!calcStep ? 'not-allowed' : 'pointer',
               flexShrink: 0, whiteSpace: 'nowrap',
             }}>
-            {calcProgress ? `⟳ ${calcProgress}` : '↻ Actualizar'}
+            {calcStep ? (() => {
+              // Fase 1 (métricas): mientras corre la Fase 2 (por estrategia) → contador de estrategias;
+              // si no → contador de activos. Fases 2 y 3 → contador de activos. Si no hay dato → solo fase.
+              const cnt = (calcStep === 1 && topStratRunning)
+                ? (topStratProgress?.total ? `str ${topStratProgress.current || 0}/${topStratProgress.total}` : '')
+                : (rankingProgress?.total ? `${rankingProgress.done || 0}/${rankingProgress.total}` : '')
+              return `⟳ ${calcStep}/3${cnt ? ` · ${cnt}` : ''}`
+            })() : '↻ Actualizar'}
           </button>
           <button onClick={onClose}
             title="Cerrar el panel de gestión y volver a la vista del gráfico"
