@@ -3244,13 +3244,37 @@ export default function Home() {
     const wMercado=(sett.ranking?.rankingWeightMercado??20)/100, wHistorico=(sett.ranking?.rankingWeightHistorico??80)/100
     const momPct=(sett.ranking?.rankingMomentumPct??33)/100, frPct=(sett.ranking?.rankingFRPct??33)/100
     const max52Pct=(sett.ranking?.rankingMax52Pct??34)/100, momN=Math.max(5,sett.ranking?.rankingMomentumN??20)
-    const rsWindow=estrategiaIntervalo === 'semanal' ? 13 : 63  // ventana RS FIJA por timeframe (no configurable): 63 diario / 13 semanal
-    const _ivA3=rankingYfIv(estrategiaIntervalo)                  // activo y SP500 al mismo timeframe
-    const _daysA3=rankingRsDays(rsWindow,_ivA3)
+    const rsWindow=estrategiaIntervalo === 'semanal' ? 13 : 63  // ventana RS del intervalo GLOBAL (activa): 63 diario / 13 semanal
+    const _ivA3=rankingYfIv(estrategiaIntervalo)                  // intervalo global (score activa)
     const norm=(v,mn,mx)=>Math.max(0,Math.min(100,(v-mn)/(mx-mn)*100))
 
-    let sp500Closes=null
-    if(wMercado>0&&frPct>0){try{const r=await apiFetch(`/api/closes?symbol=%5EGSPC&interval=${_ivA3}&days=${_daysA3}`);if(r.ok)sp500Closes=await r.json()}catch(e){console.warn('[calcScoreMetSen] SP500:',e.message)}}
+    // ── Caches por intervalo (evitan re-descargar SP500/closes del mismo par en la corrida) ──
+    const _rsWinForIv=(iv)=>iv==='1wk'?13:63   // ventana RS coherente con el intervalo yahoo
+    const _sp500Cache={}
+    const getSp500=async(iv)=>{
+      if(iv in _sp500Cache) return _sp500Cache[iv]
+      let s=null
+      if(wMercado>0&&frPct>0){try{const r=await apiFetch(`/api/closes?symbol=%5EGSPC&interval=${iv}&days=${rankingRsDays(_rsWinForIv(iv),iv)}`);if(r.ok)s=await r.json()}catch(e){console.warn('[calcScoreMetSen] SP500:',e.message)}}
+      _sp500Cache[iv]=s; return s
+    }
+    const _closesCache={}
+    const getCloses=async(sym,iv)=>{
+      const key=sym.toUpperCase()+'|'+iv
+      if(key in _closesCache) return _closesCache[key]
+      let arr=null
+      try{const r=await apiFetch(`/api/closes?symbol=${encodeURIComponent(sym)}&interval=${iv}&days=${rankingRsDays(_rsWinForIv(iv),iv)}`);if(r.ok){const closes=await r.json();arr=(Array.isArray(closes)?closes:[]).filter(v=>v!=null&&!isNaN(v))}}catch(_){}
+      _closesCache[key]=arr; return arr
+    }
+    // Helper de mercado — MISMA lógica/pesos/normalizaciones que antes (momentum + RS + proximidad)
+    const computeScoreMercado=(priceArr,sp500ForIv,rsWin)=>{
+      if(!priceArr||priceArr.length<momN+1) return 0
+      const lastP=priceArr[priceArr.length-1], momP=priceArr[Math.max(0,priceArr.length-1-momN)]
+      const momentum=momP>0?(lastP/momP-1)*100:0
+      const hist252=priceArr.slice(-252), high52=Math.max(...hist252)
+      const proximity52=high52>0?(lastP/high52)*100:50
+      const relStrength=calcRankingRS(priceArr, sp500ForIv, rsWin, frPct)
+      return Math.max(0,Math.min(100,norm(momentum,-20,40)*momPct+norm(relStrength,-30,30)*frPct+norm(proximity52,50,100)*max52Pct))
+    }
 
     const BATCH=4, activeScMap={}, topScMap={}
     for(let i=0;i<syms.length;i+=BATCH){
@@ -3261,25 +3285,37 @@ export default function Home() {
           const activeShist=scoreOverride?.[symUp]??wlData[symUp]?.active?.scoreMetricas
           const topShist=topScoreOverride?.[symUp]??wlData[symUp]?.top?.scoreMetricas
           if(activeShist==null) return
-          // Descargar precios actuales para señales de mercado
-          let scoreMercado=0
+
+          // ── Mercado (ACTIVA): intervalo global — resultado IDÉNTICO al anterior ──
+          let scoreMercadoActive=0
           if(wMercado>0){
-            const r=await apiFetch(`/api/closes?symbol=${encodeURIComponent(sym)}&interval=${_ivA3}&days=${_daysA3}`)
-            if(r.ok){
-              const closes=await r.json()
-              const priceArr=(Array.isArray(closes)?closes:[]).filter(v=>v!=null&&!isNaN(v))
-              if(priceArr.length>=momN+1){
-                const lastP=priceArr[priceArr.length-1], momP=priceArr[Math.max(0,priceArr.length-1-momN)]
-                const momentum=momP>0?(lastP/momP-1)*100:0
-                const hist252=priceArr.slice(-252), high52=Math.max(...hist252)
-                const proximity52=high52>0?(lastP/high52)*100:50
-                const relStrength=calcRankingRS(priceArr, sp500Closes, rsWindow, frPct)
-                scoreMercado=Math.max(0,Math.min(100,norm(momentum,-20,40)*momPct+norm(relStrength,-30,30)*frPct+norm(proximity52,50,100)*max52Pct))
-              }
+            const priceArr=await getCloses(sym,_ivA3)
+            const sp500A=await getSp500(_ivA3)
+            scoreMercadoActive=computeScoreMercado(priceArr,sp500A,rsWindow)
+          }
+
+          // ── Mercado (TOP): temporalidad de la top estrategia de ESTE activo ──
+          let scoreMercadoTop=scoreMercadoActive
+          if(wMercado>0&&topShist!=null){
+            let topIntv=topMetricsOverride?.[symUp]?.intervalo
+            if(!topIntv){  // fallback: derivar del stratId de la top
+              const sid=topMetricsOverride?.[symUp]?.stratId??wlData[symUp]?.top?.stratId
+              const st=sid?(strategies||[]).find(s=>s.id===sid):null
+              if(st){try{const p=typeof st.params==='string'?JSON.parse(st.params||'{}'):(st.params||{});topIntv=p.intervalo}catch(_){}}
+            }
+            topIntv=topIntv||estrategiaIntervalo
+            if(topIntv!==estrategiaIntervalo){  // difiere → recalcular al intervalo top (si coincide, se reutiliza)
+              try{
+                const ivTop=rankingYfIv(topIntv)
+                const priceArrTop=await getCloses(sym,ivTop)
+                const sp500T=await getSp500(ivTop)
+                scoreMercadoTop=computeScoreMercado(priceArrTop,sp500T,topIntv==='semanal'?13:63)
+              }catch(_){ scoreMercadoTop=scoreMercadoActive }  // fallo → fallback a activa, no romper
             }
           }
-          activeScMap[symUp]=Math.max(0,Math.min(100,activeShist*wHistorico+scoreMercado*wMercado))
-          if(topShist!=null) topScMap[symUp]=Math.max(0,Math.min(100,topShist*wHistorico+scoreMercado*wMercado))
+
+          activeScMap[symUp]=Math.max(0,Math.min(100,activeShist*wHistorico+scoreMercadoActive*wMercado))
+          if(topShist!=null) topScMap[symUp]=Math.max(0,Math.min(100,topShist*wHistorico+scoreMercadoTop*wMercado))
         }catch(e){console.error('[calcScoreMetSen]',sym,e)}
       }))
       setRankingProgress({done:Math.min(i+BATCH,syms.length),total:syms.length})
@@ -3309,7 +3345,7 @@ export default function Home() {
     setRankingRunning(false); setRankingProgress({done:0,total:0})
     try{localStorage.setItem('wl_score_metsen_last_updated',Date.now().toString())}catch(_){}
     return { ok: true }
-  },[watchlist,wlData,currentStratId,stratName,estrategiaIntervalo])  // estrategiaIntervalo: A2 lo usa para el timeframe del RS (evita stale closure)
+  },[watchlist,wlData,currentStratId,stratName,estrategiaIntervalo,strategies])  // estrategiaIntervalo: timeframe RS activa; strategies: fallback intervalo top por stratId
 
   // ── MÉTRICAS ↻ — Calcula solo métricas (CAGR, Profit, Win%, MaxDD, Ops) para activa + todas ──
   const calcMetricas = useCallback(async (rankSymbols=null) => {
@@ -3418,7 +3454,7 @@ export default function Home() {
           const topStrat=enabledStrats.find(s=>s.id===bestStratId)
           const topStratName=topStrat?.name||''
           const topIntv=(()=>{try{const p=typeof topStrat?.params==='string'?JSON.parse(topStrat.params||'{}'):(topStrat?.params||{});return p.intervalo||'diario'}catch(_){return 'diario'}})()
-          topMetricsMap[symUp]={cagr:topM.cagr??null,cagrRobust:topM.cagrRobust??null,winRate:topM.winRate??null,maxDD:topM.maxDD??null,stratId:bestStratId}
+          topMetricsMap[symUp]={cagr:topM.cagr??null,cagrRobust:topM.cagrRobust??null,winRate:topM.winRate??null,maxDD:topM.maxDD??null,stratId:bestStratId,intervalo:topIntv}
           topWlUpdates[symUp]={cagr:topM.cagr??null,cagrRobust:topM.cagrRobust??null,profit:topM.profit??null,winRate:topM.winRate??null,maxDD:topM.maxDD??null,ops:topM.trades??null,stratName:topStratName,stratId:bestStratId,intervalo:topIntv}
         }
       })
@@ -4751,7 +4787,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.652</title>
+        <title>Trading Simulator V9.653</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4829,7 +4865,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.652
+            <span className="dot"/>Trading Simulator V9.653
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
