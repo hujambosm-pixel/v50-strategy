@@ -3365,8 +3365,8 @@ export default function Home() {
           const res=await apiFetch('/api/datos',{method:'POST',headers:{'Content-Type':'application/json'},
             body:JSON.stringify({simbolo:sym,strategyId:currentStratId,capital_ini:Number(capitalIni),years:Number(years),allocation_pct:100,filtros,intervalo:estrategiaIntervalo})})
           const json=await res.json()
-          if(!res.ok||!json.trades?.length) return
-          const trades=json.trades; if(trades.length<minTrades) return
+          if(!res.ok||!json.trades?.length){ console.warn('[MET-activa SKIP]', sym, {ok:res.ok, nTrades:json.trades?.length}); return }
+          const trades=json.trades; if(trades.length<minTrades){ console.warn('[MET-activa SKIP<min]', sym, {nTrades:trades.length, minTrades}); return }
           const wins=trades.filter(t=>t.pnlPct>=0), winRate=(wins.length/trades.length)*100
           const totalDiasNat=json.startDate?(new Date(json.meta?.ultimaFecha)-new Date(json.startDate))/86400000:365*Number(years)
           const anios=Math.max(totalDiasNat/365.25,0.01)
@@ -3416,8 +3416,8 @@ export default function Home() {
                 const res=await apiFetch('/api/datos',{method:'POST',headers:{'Content-Type':'application/json'},
                   body:JSON.stringify({simbolo:sym,strategyId:stratId,capital_ini:stratCap,years:stratYears,allocation_pct:100,filtros,intervalo:stratIntv})})
                 const json=await res.json()
-                if(!res.ok||!json.trades?.length) return
-                const trades=json.trades; if(trades.length<minTrades) return
+                if(!res.ok||!json.trades?.length){ console.warn('[MET-all SKIP]', strat.name, stratIntv, sym, {ok:res.ok, nTrades:json.trades?.length}); return }
+                const trades=json.trades; if(trades.length<minTrades){ console.warn('[MET-all SKIP<min]', strat.name, stratIntv, sym, {nTrades:trades.length}); return }
                 const wins=trades.filter(t=>t.pnlPct>=0), winRate=(wins.length/trades.length)*100
                 const totalDiasNat=json.startDate?(new Date(json.meta?.ultimaFecha)-new Date(json.startDate))/86400000:365*stratYears
                 const anios=Math.max(totalDiasNat/365.25,0.01)
@@ -3434,7 +3434,7 @@ export default function Home() {
           }
           await upsertMetricsRemote(stratMetrics,stratId)
           allStratMetricsMap[stratId]=stratMetrics
-        }catch(e){console.error('[calcMetricas] Error estrategia:',stratId,strat.name,e)}
+        }catch(e){console.error('[calcMetricas] Error estrategia:',stratId,strat.name,stratIntv,e)}
       }
       // ── Merge top metrics: determinar top estrategia por CAGR desde allStratMetricsMap ──
       // No depende de refreshBestStratPerSymbol (que usa score_historico, no calculado aquí)
@@ -3454,6 +3454,7 @@ export default function Home() {
           const topStrat=enabledStrats.find(s=>s.id===bestStratId)
           const topStratName=topStrat?.name||''
           const topIntv=(()=>{try{const p=typeof topStrat?.params==='string'?JSON.parse(topStrat.params||'{}'):(topStrat?.params||{});return p.intervalo||'diario'}catch(_){return 'diario'}})()
+          console.log('[TOP]', symUp, { bestStratId, topIntv, nCandidatas: Object.values(allStratMetricsMap).filter(mm=>mm[symUp]).length })
           topMetricsMap[symUp]={cagr:topM.cagr??null,cagrRobust:topM.cagrRobust??null,winRate:topM.winRate??null,maxDD:topM.maxDD??null,stratId:bestStratId,intervalo:topIntv}
           topWlUpdates[symUp]={cagr:topM.cagr??null,cagrRobust:topM.cagrRobust??null,profit:topM.profit??null,winRate:topM.winRate??null,maxDD:topM.maxDD??null,ops:topM.trades??null,stratName:topStratName,stratId:bestStratId,intervalo:topIntv}
         }
@@ -4787,7 +4788,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.653</title>
+        <title>Trading Simulator V9.654</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4865,7 +4866,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.653
+            <span className="dot"/>Trading Simulator V9.654
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
