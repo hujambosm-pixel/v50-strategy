@@ -3358,6 +3358,27 @@ export default function Home() {
     setRankingRunning(true); setRankingError(null)
     setRankingProgress({done:0, total:syms.length})
     const activeMetrics={}
+
+    // ── Limpieza previa: borrar filas viejas de ranking_results de los símbolos SELECCIONADOS ──
+    // Evita "filas zombis": una estrategia que hoy no cualifica (<minTrades) dejaba su fila antigua
+    // con CAGR alto y seguía ganando el "top" (refreshWlData elige por mayor cagr_simple entre TODAS
+    // las filas). Al borrar antes, solo se regeneran las de estrategias que cualifican en este run.
+    // Acotado a syms (mayúsculas) + usuario actual vía RLS (getSupaH). No toca otras tablas.
+    const _wipeSyms=[...new Set(syms.map(s=>(s||'').toUpperCase()).filter(Boolean))]
+    let _wipeOk=true
+    try{
+      if(getSupaUrl()&&_wipeSyms.length){
+        for(let i=0;i<_wipeSyms.length;i+=100){  // trocear para no exceder longitud de URL
+          const chunk=_wipeSyms.slice(i,i+100)
+          const res=await fetch(`${getSupaUrl()}/rest/v1/ranking_results?symbol=in.(${chunk.join(',')})`,{
+            method:'DELETE', headers:{...getSupaH(),'Prefer':'return=minimal'}
+          })
+          if(!res.ok){ _wipeOk=false; const t=await res.text().catch(()=>''); console.error('[calcMetricas] fallo al limpiar ranking_results', res.status, t) }
+        }
+      }
+    }catch(e){ _wipeOk=false; console.error('[calcMetricas] fallo al limpiar ranking_results', e) }
+    console.log('[WIPE]', { symbols:_wipeSyms.length, ok:_wipeOk })
+
     for(let i=0;i<syms.length;i+=BATCH){
       const batch=syms.slice(i,i+BATCH)
       await Promise.allSettled(batch.map(async sym=>{
@@ -4788,7 +4809,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.654</title>
+        <title>Trading Simulator V9.655</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4866,7 +4887,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.654
+            <span className="dot"/>Trading Simulator V9.655
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
