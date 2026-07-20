@@ -3050,7 +3050,6 @@ export default function Home() {
       const stratCap    = strat.capital_ini || Number(capitalIni)
       const stratIntv   = (()=>{try{const p=typeof strat?.params==='string'?JSON.parse(strat.params||'{}'):(strat?.params||{});return p.intervalo||'diario'}catch(_){return 'diario'}})()
       const rsWindow    = stratIntv === 'semanal' ? 13 : 63  // ventana RS por TIMEFRAME de ESTA estrategia (63 diario / 13 semanal)
-      console.log('[rankRS]', { estrategia: strat.name, stratIntv, rsWindow })
       const sp500Closes = await getSp500ForIv(rankingYfIv(stratIntv))  // SP500 alineado al timeframe de esta estrategia
       const results = {}
       let _stratError = null
@@ -3377,7 +3376,6 @@ export default function Home() {
     // las filas). Al borrar antes, solo se regeneran las de estrategias que cualifican en este run.
     // Acotado a syms (mayúsculas) + usuario actual vía RLS (getSupaH). No toca otras tablas.
     const _wipeSyms=[...new Set(syms.map(s=>(s||'').toUpperCase()).filter(Boolean))]
-    let _wipeOk=true
     try{
       if(getSupaUrl()&&_wipeSyms.length){
         for(let i=0;i<_wipeSyms.length;i+=100){  // trocear para no exceder longitud de URL
@@ -3385,11 +3383,10 @@ export default function Home() {
           const res=await fetch(`${getSupaUrl()}/rest/v1/ranking_results?symbol=in.(${chunk.join(',')})`,{
             method:'DELETE', headers:{...getSupaH(),'Prefer':'return=minimal'}
           })
-          if(!res.ok){ _wipeOk=false; logUpdateError(null,'wipe',res.status,null); const t=await res.text().catch(()=>''); console.error('[calcMetricas] fallo al limpiar ranking_results', res.status, t) }
+          if(!res.ok){ logUpdateError(null,'wipe',res.status,null); const t=await res.text().catch(()=>''); console.error('[calcMetricas] fallo al limpiar ranking_results', res.status, t) }
         }
       }
-    }catch(e){ _wipeOk=false; logUpdateError(null,'wipe',e?.message,null); console.error('[calcMetricas] fallo al limpiar ranking_results', e) }
-    console.log('[WIPE]', { symbols:_wipeSyms.length, ok:_wipeOk })
+    }catch(e){ logUpdateError(null,'wipe',e?.message,null); console.error('[calcMetricas] fallo al limpiar ranking_results', e) }
 
     for(let i=0;i<syms.length;i+=BATCH){
       const batch=syms.slice(i,i+BATCH)
@@ -3398,8 +3395,8 @@ export default function Home() {
           const res=await apiFetch('/api/datos',{method:'POST',headers:{'Content-Type':'application/json'},
             body:JSON.stringify({simbolo:sym,strategyId:currentStratId,capital_ini:Number(capitalIni),years:Number(years),allocation_pct:100,filtros,intervalo:estrategiaIntervalo})})
           const json=await res.json()
-          if(!res.ok||!json.trades?.length){ if(!res.ok) logUpdateError(sym,'descarga',res.status,null); console.warn('[MET-activa SKIP]', sym, {ok:res.ok, nTrades:json.trades?.length}); return }
-          const trades=json.trades; if(trades.length<minTrades){ console.warn('[MET-activa SKIP<min]', sym, {nTrades:trades.length, minTrades}); return }
+          if(!res.ok||!json.trades?.length){ if(!res.ok) logUpdateError(sym,'descarga',res.status,null); return }
+          const trades=json.trades; if(trades.length<minTrades) return
           const wins=trades.filter(t=>t.pnlPct>=0), winRate=(wins.length/trades.length)*100
           const totalDiasNat=json.startDate?(new Date(json.meta?.ultimaFecha)-new Date(json.startDate))/86400000:365*Number(years)
           const anios=Math.max(totalDiasNat/365.25,0.01)
@@ -3449,8 +3446,8 @@ export default function Home() {
                 const res=await apiFetch('/api/datos',{method:'POST',headers:{'Content-Type':'application/json'},
                   body:JSON.stringify({simbolo:sym,strategyId:stratId,capital_ini:stratCap,years:stratYears,allocation_pct:100,filtros,intervalo:stratIntv})})
                 const json=await res.json()
-                if(!res.ok||!json.trades?.length){ if(!res.ok) logUpdateError(sym,'descarga',res.status,strat.name); console.warn('[MET-all SKIP]', strat.name, stratIntv, sym, {ok:res.ok, nTrades:json.trades?.length}); return }
-                const trades=json.trades; if(trades.length<minTrades){ console.warn('[MET-all SKIP<min]', strat.name, stratIntv, sym, {nTrades:trades.length}); return }
+                if(!res.ok||!json.trades?.length){ if(!res.ok) logUpdateError(sym,'descarga',res.status,strat.name); return }
+                const trades=json.trades; if(trades.length<minTrades) return
                 const wins=trades.filter(t=>t.pnlPct>=0), winRate=(wins.length/trades.length)*100
                 const totalDiasNat=json.startDate?(new Date(json.meta?.ultimaFecha)-new Date(json.startDate))/86400000:365*stratYears
                 const anios=Math.max(totalDiasNat/365.25,0.01)
@@ -3487,7 +3484,6 @@ export default function Home() {
           const topStrat=enabledStrats.find(s=>s.id===bestStratId)
           const topStratName=topStrat?.name||''
           const topIntv=(()=>{try{const p=typeof topStrat?.params==='string'?JSON.parse(topStrat.params||'{}'):(topStrat?.params||{});return p.intervalo||'diario'}catch(_){return 'diario'}})()
-          console.log('[TOP]', symUp, { bestStratId, topIntv, nCandidatas: Object.values(allStratMetricsMap).filter(mm=>mm[symUp]).length })
           topMetricsMap[symUp]={cagr:topM.cagr??null,cagrRobust:topM.cagrRobust??null,winRate:topM.winRate??null,maxDD:topM.maxDD??null,stratId:bestStratId,intervalo:topIntv}
           topWlUpdates[symUp]={cagr:topM.cagr??null,cagrRobust:topM.cagrRobust??null,profit:topM.profit??null,winRate:topM.winRate??null,maxDD:topM.maxDD??null,ops:topM.trades??null,stratName:topStratName,stratId:bestStratId,intervalo:topIntv}
         }
@@ -4821,7 +4817,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.659</title>
+        <title>Trading Simulator V9.660</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4899,7 +4895,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.659
+            <span className="dot"/>Trading Simulator V9.660
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
