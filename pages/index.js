@@ -3497,6 +3497,14 @@ export default function Home() {
       })
       await refreshBestStratPerSymbol().catch(()=>{})
       setTopStratRunning(false); setTopStratProgress({current:0,total:0})
+      // ── SIN MÉTRICAS: símbolos procesados SIN error pero para los que NINGUNA estrategia (ni la
+      //    activa ni ninguna de la Fase 2) generó métricas válidas (todas <minTrades). Quedan con la
+      //    fila vacía en la tabla → se avisan en el modal como categoría propia (no es fallo de descarga). ──
+      try{
+        const _conMet=new Set(Object.keys(activeMetrics))
+        Object.values(allStratMetricsMap).forEach(m=>Object.keys(m||{}).forEach(s=>_conMet.add(s)))
+        syms.forEach(sym=>{ const symUp=(sym||'').toUpperCase(); if(symUp&&!_conMet.has(symUp)) logUpdateError(symUp,'sin_metricas',String(enabledStrats.length),null) })
+      }catch(_){}
       return { ok: true, topMetricsMap, activeMetricsMap: activeMetrics }
     }
     return { ok: true, topMetricsMap: {}, activeMetricsMap: activeMetrics }
@@ -4817,7 +4825,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.660</title>
+        <title>Trading Simulator V9.661</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4895,7 +4903,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.660
+            <span className="dot"/>Trading Simulator V9.661
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}

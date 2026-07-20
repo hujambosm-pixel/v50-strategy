@@ -210,7 +210,7 @@ export default function WatchlistManager({
   const [renameValue, setRenameValue]     = useState('')
   const [listOpLoading, setListOpLoading] = useState(false)
   const [calcStep, setCalcStep]                    = useState(null)  // null | 1|2|3 (fase encadenada del botón ↻ Actualizar)
-  const [errorModal, setErrorModal]                = useState(null)  // null | { rows:[], global:[], symConErrores, symTotal }
+  const [errorModal, setErrorModal]                = useState(null)  // null | { rows:[], sinMet:[], global:[], symConErrores, symSinMet, symTotal }
   const [metricsView, setMetricsView]             = useState('top') // 'active' | 'top'
   const [rankingDoneFlash, setRankingDoneFlash]   = useState(false)
   const [topStratDoneFlash, setTopStratDoneFlash] = useState(false)
@@ -650,31 +650,59 @@ export default function WatchlistManager({
               <span style={{ fontSize: 14, fontWeight: 700, color: '#b87a20' }}>⚠ Problemas durante la actualización</span>
               <button onClick={() => setErrorModal(null)} style={{ background: 'none', border: 'none', color: P.textSec, fontSize: 16, cursor: 'pointer', padding: '0 4px', lineHeight: 1 }}>✕</button>
             </div>
-            <div style={{ fontSize: 12, color: P.textSec, marginBottom: 6 }}>
-              {errorModal.symConErrores > 0
-                ? `${errorModal.symConErrores} de ${errorModal.symTotal} activos tuvieron errores de descarga.`
-                : 'Hubo incidencias generales durante la actualización.'}
+            <div style={{ fontSize: 12, color: P.textSec, marginBottom: 8 }}>
+              {(() => {
+                const parts = []
+                if (errorModal.symConErrores > 0) parts.push(`${errorModal.symConErrores} con errores de descarga`)
+                if (errorModal.symSinMet > 0) parts.push(`${errorModal.symSinMet} sin métricas`)
+                return parts.length ? `${parts.join(' · ')} (de ${errorModal.symTotal} activos).` : 'Hubo incidencias generales durante la actualización.'
+              })()}
             </div>
-            <div style={{ fontSize: 11, color: P.textMuted, lineHeight: 1.5, marginBottom: 10 }}>
-              Los fallos de descarga suelen ser temporales (límite de peticiones de la fuente de datos). Normalmente basta con volver a actualizar esos activos. (No incluye las estrategias que se ejecutan bien pero generan pocas operaciones — eso es normal.)
-            </div>
+
+            {/* Fallos de descarga */}
             {errorModal.rows.length > 0 && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginBottom: errorModal.global.length ? 10 : 0 }}>
-                {errorModal.rows.map(r => (
-                  <div key={r.symbol} style={{
-                    display: 'flex', alignItems: 'center', gap: 8, padding: '4px 8px', borderRadius: 4,
-                    background: r.sinDatos ? 'rgba(184,26,26,0.10)' : 'rgba(184,122,32,0.08)',
-                    border: `1px solid ${r.sinDatos ? 'rgba(184,26,26,0.4)' : P.border}`,
-                  }}>
-                    <span style={{ fontWeight: 700, fontSize: 12, minWidth: 64, color: r.sinDatos ? '#8b1a1a' : P.text }}>{r.symbol}</span>
-                    {r.sinDatos && <span style={{ fontSize: 9, fontWeight: 700, color: '#fff', background: '#8b1a1a', padding: '1px 6px', borderRadius: 3 }}>SIN DATOS</span>}
-                    <span style={{ fontSize: 10, color: P.textSec, marginLeft: 'auto' }}>
-                      {[r.descarga && `${r.descarga} descarga${r.descarga > 1 ? 's' : ''}`, r.excepcion && `${r.excepcion} excepción${r.excepcion > 1 ? 'es' : ''}`].filter(Boolean).join(' · ')}
-                    </span>
-                  </div>
-                ))}
-              </div>
+              <>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#8b1a1a', marginBottom: 4 }}>Fallos de descarga</div>
+                <div style={{ fontSize: 11, color: P.textMuted, lineHeight: 1.5, marginBottom: 8 }}>
+                  Suelen ser temporales (límite de peticiones de la fuente de datos). Normalmente basta con volver a actualizar esos activos.
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginBottom: 12 }}>
+                  {errorModal.rows.map(r => (
+                    <div key={r.symbol} style={{
+                      display: 'flex', alignItems: 'center', gap: 8, padding: '4px 8px', borderRadius: 4,
+                      background: r.sinDatos ? 'rgba(184,26,26,0.10)' : 'rgba(184,122,32,0.08)',
+                      border: `1px solid ${r.sinDatos ? 'rgba(184,26,26,0.4)' : P.border}`,
+                    }}>
+                      <span style={{ fontWeight: 700, fontSize: 12, minWidth: 64, color: r.sinDatos ? '#8b1a1a' : P.text }}>{r.symbol}</span>
+                      {r.sinDatos && <span style={{ fontSize: 9, fontWeight: 700, color: '#fff', background: '#8b1a1a', padding: '1px 6px', borderRadius: 3 }}>SIN DATOS</span>}
+                      <span style={{ fontSize: 10, color: P.textSec, marginLeft: 'auto' }}>
+                        {[r.descarga && `${r.descarga} descarga${r.descarga > 1 ? 's' : ''}`, r.excepcion && `${r.excepcion} excepción${r.excepcion > 1 ? 'es' : ''}`].filter(Boolean).join(' · ')}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </>
             )}
+
+            {/* Sin métricas — procesados OK pero ninguna estrategia generó suficientes operaciones */}
+            {errorModal.sinMet.length > 0 && (
+              <>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#7a5c10', marginBottom: 4 }}>Sin métricas</div>
+                <div style={{ fontSize: 11, color: P.textMuted, lineHeight: 1.5, marginBottom: 8 }}>
+                  Se procesaron correctamente, pero ninguna estrategia generó suficientes operaciones (mínimo configurado), así que quedan sin datos en la tabla. Suele deberse a activos con muy poco movimiento, poco histórico o cotización casi plana.
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 12 }}>
+                  {errorModal.sinMet.map(r => (
+                    <span key={r.symbol} style={{
+                      fontWeight: 700, fontSize: 11, color: '#7a5c10',
+                      background: 'rgba(122,92,16,0.08)', border: `1px solid ${P.border}`,
+                      padding: '2px 8px', borderRadius: 4,
+                    }}>{r.symbol}</span>
+                  ))}
+                </div>
+              </>
+            )}
+
             {errorModal.global.length > 0 && (
               <div style={{ fontSize: 10, color: P.textMuted, borderTop: `1px solid ${P.border}`, paddingTop: 8 }}>
                 Incidencias generales: {errorModal.global.length} (borrado previo / índice SP500).
@@ -1040,15 +1068,21 @@ export default function WatchlistManager({
                     errs.forEach(e => {
                       const s = e.symbol
                       if (!s || s === '^GSPC') { global.push(e); return }  // wipe / errores de estrategia / SP500 = globales
-                      if (!bySym[s]) bySym[s] = { symbol: s, descarga: 0, excepcion: 0, wipe: 0, stratErrs: 0 }
+                      if (!bySym[s]) bySym[s] = { symbol: s, descarga: 0, excepcion: 0, wipe: 0, sin_metricas: 0, stratErrs: 0 }
                       bySym[s][e.tipo] = (bySym[s][e.tipo] || 0) + 1
                       if (e.estrategia) bySym[s].stratErrs++
                     })
-                    const rows = Object.values(bySym)
-                      .map(r => ({ ...r, total: r.descarga + r.excepcion + r.wipe, sinDatos: enabledCount > 0 && r.stratErrs >= enabledCount }))
+                    const all = Object.values(bySym)
+                    // Fallos de descarga (prioridad sobre 'sin métricas' si un símbolo tiene ambos)
+                    const rows = all.filter(r => (r.descarga + r.excepcion) > 0)
+                      .map(r => ({ ...r, total: r.descarga + r.excepcion, sinDatos: enabledCount > 0 && r.stratErrs >= enabledCount }))
                       .sort((a, b) => (b.sinDatos - a.sinDatos) || (b.total - a.total))
-                    if (rows.length || global.length) {
-                      setErrorModal({ rows, global, symConErrores: rows.length, symTotal: sel.length })
+                    // Sin métricas: procesados SIN error de descarga pero sin ninguna métrica válida
+                    const sinMet = all.filter(r => (r.descarga + r.excepcion) === 0 && r.sin_metricas > 0)
+                      .map(r => ({ symbol: r.symbol }))
+                      .sort((a, b) => a.symbol.localeCompare(b.symbol))
+                    if (rows.length || sinMet.length || global.length) {
+                      setErrorModal({ rows, sinMet, global, symConErrores: rows.length, symSinMet: sinMet.length, symTotal: sel.length })
                     }
                   }
                 } catch(_) {}
