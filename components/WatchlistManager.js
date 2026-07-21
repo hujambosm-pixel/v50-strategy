@@ -145,7 +145,6 @@ export default function WatchlistManager({
   onCalcScoreMetSen,     // solo score_completo  (activa + top)
   onCalcMetricas,        // solo métricas: CAGR, Profit, Win%, MaxDD, Ops
   // Ranking
-  onCalcRanking,
   onClearRanking,
   hasRanking,
   rankingRunning,

@@ -284,74 +284,6 @@ async function deleteWatchlistList(listId) {
 }
 
 // ── Ranking results API ───────────────────────────────────────
-async function saveRankingRemote(rankingData, stratId) {
-  // 1 — Borrar filas anteriores del cálculo para esta estrategia
-  //     Evita rangos duplicados de runs anteriores con distintos subconjuntos
-  const deleteFilter = stratId
-    ? `strategy_id=eq.${stratId}`
-    : `strategy_id=is.null`
-  await fetch(`${getSupaUrl()}/rest/v1/ranking_results?${deleteFilter}`, {
-    method: 'DELETE', headers: getSupaH()
-  }).catch(()=>{}) // ignorar errores de borrado (tabla vacía, sin permisos, etc.)
-
-  // 2 — Insertar los nuevos resultados
-  const rows = Object.entries(rankingData).map(([symbol, rd]) => ({
-    symbol,
-    strategy_id:     stratId || null,
-    win_rate:        rd.metrics?.winRate  ?? null,
-    cagr_simple:     rd.metrics?.cagr     ?? null,
-    max_drawdown:    rd.metrics?.maxDD    ?? null,
-    total_trades:    rd.metrics?.trades   ?? null,
-    profit_simple:   rd.profitSimple      ?? null,
-    score:           rd.score             ?? null,
-    score_historico: rd.scoreHistorico    ?? null,
-    score_completo:  rd.scoreCompleto     ?? null,
-    rank_position:   rd.rank             ?? null,
-    updated_at:      new Date().toISOString(),
-  }))
-  let missingCols = new Set()   // columnas que la DB no tiene aún
-  for (let i=0; i<rows.length; i+=20) {
-    const batch = rows.slice(i, i+20)
-    const cleanBatch = (b) => b.map(r => {
-      const out = {...r}
-      if (missingCols.has('score_historico')) delete out.score_historico
-      if (missingCols.has('score_completo'))  delete out.score_completo
-      if (missingCols.has('profit_simple'))   delete out.profit_simple
-      return out
-    })
-    const res = await fetch(`${getSupaUrl()}/rest/v1/ranking_results`, {
-      method: 'POST',
-      headers: { ...getSupaH(), 'Prefer': 'resolution=merge-duplicates,return=minimal',
-        'Content-Type': 'application/json' },
-      body: JSON.stringify(cleanBatch(batch))
-    })
-    if (!res.ok) {
-      const txt = await res.text().catch(()=>'')
-      const wasMissing = missingCols.size
-      if (txt.includes('score_historico')) {
-        console.warn('[Ranking] Columna score_historico no existe. SQL:\nALTER TABLE ranking_results ADD COLUMN IF NOT EXISTS score_historico numeric;')
-        missingCols.add('score_historico')
-      }
-      if (txt.includes('score_completo')) {
-        console.warn('[Ranking] Columna score_completo no existe. SQL:\nALTER TABLE ranking_results ADD COLUMN IF NOT EXISTS score_completo numeric;')
-        missingCols.add('score_completo')
-      }
-      if (txt.includes('profit_simple')) {
-        console.warn('[Ranking] Columna profit_simple no existe. SQL:\nALTER TABLE ranking_results ADD COLUMN IF NOT EXISTS profit_simple numeric;')
-        missingCols.add('profit_simple')
-      }
-      if (missingCols.size > wasMissing) {
-        // retry without the missing columns
-        await fetch(`${getSupaUrl()}/rest/v1/ranking_results`, {
-          method: 'POST',
-          headers: { ...getSupaH(), 'Prefer': 'resolution=merge-duplicates,return=minimal',
-            'Content-Type': 'application/json' },
-          body: JSON.stringify(cleanBatch(batch))
-        }).catch(()=>{})
-      }
-    }
-  }
-}
 async function loadRankingRemote(stratId) {
   const base = stratId
     ? `${getSupaUrl()}/rest/v1/ranking_results?strategy_id=eq.${stratId}&order=rank_position.asc`
@@ -2875,131 +2807,6 @@ export default function Home() {
       refreshAlarmStatus(filteredWlItems,alarms)
   },[alarms,conditions.length,filteredWlItems.length,selectedLists.length,alertThreshold]) // eslint-disable-line
 
-  // ── Ranking: ejecuta backtest en paralelo sobre toda la watchlist ──
-  // Usa gananciaSimple (CAGR Simple) para puntuar. Score ponderado:
-  // CAGR Simple (25%) + Win Rate (25%) + Profit Factor (25%) + CAGR Robusto (20%) − MaxDD (5%)
-  const calcRanking = useCallback(async (rankSymbols=null) => {
-    // Use the currently visible/filtered watchlist items
-    // (passed as argument, falls back to full watchlist)
-    const syms = (rankSymbols || watchlist).map(w=>w.symbol)
-    setRankingRunning(true); setRankingError(null)
-    setRankingProgress({done:0, total:syms.length})
-
-    const sett = (()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')}catch(_){return {}}})()
-    // ── Pesos de bloque ──
-    const wMercado    = (sett.ranking?.rankingWeightMercado   ?? 20) / 100
-    const wHistorico  = (sett.ranking?.rankingWeightHistorico ?? 80) / 100
-    // ── Pesos métricas de mercado ──
-    const momPct      = (sett.ranking?.rankingMomentumPct  ?? 33) / 100
-    const frPct       = (sett.ranking?.rankingFRPct        ?? 33) / 100
-    const max52Pct    = (sett.ranking?.rankingMax52Pct     ?? 34) / 100
-    const momN        = Math.max(5, sett.ranking?.rankingMomentumN ?? 20)
-    const rsWindow    = estrategiaIntervalo === 'semanal' ? 13 : 63  // ventana RS FIJA por timeframe (no configurable): 63 diario / 13 semanal
-    // ── Pesos métricas históricas ──
-    const wrPct       = (sett.ranking?.rankingWinRatePct      ?? 33) / 100
-    const cagrPct     = (sett.ranking?.rankingCAGRPct         ?? 33) / 100
-    const cagrRobPct  = (sett.ranking?.rankingCAGRRobustoPct  ?? 34) / 100
-    const ddPct       = (sett.ranking?.rankingMaxDDPct        ?? 0)  / 100
-    const minTrades   = sett.ranking?.minTrades ?? 3
-
-    // ── Fetch SP500 closes una vez si las métricas de mercado están activas — al MISMO timeframe que el activo ──
-    let sp500Closes = null
-    if (wMercado > 0 && frPct > 0) {
-      try {
-        const _iv = rankingYfIv(estrategiaIntervalo)
-        const r = await apiFetch(`/api/closes?symbol=%5EGSPC&interval=${_iv}&days=${rankingRsDays(rsWindow, _iv)}`)
-        if (r.ok) sp500Closes = await r.json()
-      } catch(e) { console.warn('[calcRanking] SP500 fetch failed:', e.message) }
-    }
-
-    const BATCH = 4
-    const results = {}
-    const norm=(v,mn,mx)=>Math.max(0,Math.min(100,(v-mn)/(mx-mn)*100))
-
-    for (let i=0; i<syms.length; i+=BATCH) {
-      const batch = syms.slice(i, i+BATCH)
-      await Promise.allSettled(batch.map(async sym => {
-        try {
-          const res = await apiFetch('/api/datos', {
-            method:'POST', headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({ simbolo:sym, strategyId:currentStratId, capital_ini:Number(capitalIni), years:Number(years), allocation_pct:100, filtros, intervalo:estrategiaIntervalo })
-          })
-          const json = await res.json()
-          if (!res.ok || !json.trades?.length) return
-          const trades = json.trades
-          if (trades.length < minTrades) return
-
-          // ── Métricas históricas ──
-          const wins=trades.filter(t=>t.pnlPct>=0), losses=trades.filter(t=>t.pnlPct<0)
-          const winRate=(wins.length/trades.length)*100
-          const gBrut=wins.reduce((s,t)=>s+t.pnlSimple,0), lBrut=losses.reduce((s,t)=>s+Math.abs(t.pnlSimple),0)
-          const factorBen=lBrut>0?Math.min(gBrut/lBrut,9.99):9.99
-          const totalDiasNat=json.startDate?(new Date(json.meta?.ultimaFecha)-new Date(json.startDate))/86400000:365*Number(years)
-          const anios=Math.max(totalDiasNat/365.25,0.01)
-          const capFinal=Number(capitalIni)+json.gananciaSimple
-          const cagr=capFinal>0?(Math.pow(capFinal/Number(capitalIni),1/anios)-1)*100:-99
-          const sorted3=[...trades].sort((a,b)=>b.pnlSimple-a.pnlSimple).slice(3)
-          const ganRobust=sorted3.reduce((s,t)=>s+t.pnlSimple,0)
-          const capRob=Number(capitalIni)+ganRobust
-          const cagrRobust=capRob>0?(Math.pow(capRob/Number(capitalIni),1/anios)-1)*100:-99
-          const maxDD=json.maxDDStrategyFloat??json.maxDDStrategy??0
-          const scoreHistorico=Math.max(0,Math.min(100,
-            norm(winRate,20,80)*wrPct +
-            norm(cagr,-20,60)*cagrPct +
-            norm(cagrRobust,-20,50)*cagrRobPct -
-            norm(maxDD,0,60)*ddPct
-          ))
-
-          // ── Métricas de mercado (desde chartData) ──
-          let scoreMercado=0
-          if (wMercado > 0) {
-            const priceArr=(json.chartData||[]).map(d=>d.close).filter(v=>v!=null&&!isNaN(v))
-            if (priceArr.length >= momN+1) {
-              const lastP=priceArr[priceArr.length-1]
-              const momP=priceArr[Math.max(0,priceArr.length-1-momN)]
-              const momentum=momP>0?(lastP/momP-1)*100:0
-              const hist252=priceArr.slice(-252)
-              const high52=Math.max(...hist252)
-              const proximity52=high52>0?(lastP/high52)*100:50  // 50 = neutral if no data
-              const relStrength=calcRankingRS(priceArr, sp500Closes, rsWindow, frPct)
-              if (sp500Closes===null&&frPct>0) {
-                console.warn(`[calcRanking] ${sym}: sin datos SP500, fuerza relativa omitida`)
-              }
-              scoreMercado=Math.max(0,Math.min(100,
-                norm(momentum,-20,40)*momPct +
-                norm(relStrength,-30,30)*frPct +
-                norm(proximity52,50,100)*max52Pct
-              ))
-            } else {
-              console.warn(`[calcRanking] ${sym}: datos de precio insuficientes para métricas de mercado`)
-            }
-          }
-
-          const scoreCompleto=Math.max(0,Math.min(100,
-            scoreHistorico*wHistorico + scoreMercado*wMercado
-          ))
-          results[sym.toUpperCase()]={
-            score:          scoreCompleto,   // backward compat
-            scoreCompleto,
-            scoreHistorico,
-            profitSimple:   json.gananciaSimple ?? null,
-            metrics:{winRate,factorBen,cagr,cagrRobust,maxDD,trades:trades.length,profit:json.gananciaSimple??null}
-          }
-        } catch(e){ console.error('[calcRanking]', sym, e) }
-      }))
-      setRankingProgress({done:Math.min(i+BATCH,syms.length),total:syms.length})
-    }
-    const sortedEntries=Object.entries(results).sort((a,b)=>b[1].score-a[1].score)
-    sortedEntries.forEach(([sym],i)=>{results[sym].rank=i+1})
-    setRankingData(results)
-    setRankingRunning(false)
-    setRankingProgress({done:0,total:0})
-    // Save ranking linked to the currently loaded strategy
-    setRankingStratId(currentStratId)
-    setRankingStratName(stratName||'')
-    saveRankingRemote(results, currentStratId||null).catch(()=>{})
-    refreshBestStratPerSymbol().catch(()=>{})
-  }, [watchlist,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL,currentStratId,stratName,filtros,estrategiaIntervalo,refreshBestStratPerSymbol])
 
 
   // ── SCORE MÉTRICAS ↻ (Paso 2) — Calcula scoreHistorico desde wlData, sin backtest ──
@@ -4693,7 +4500,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.662</title>
+        <title>Trading Simulator V9.663</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4771,7 +4578,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.662
+            <span className="dot"/>Trading Simulator V9.663
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6774,7 +6581,6 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 onClose={()=>setShowWlManager(false)}
                 onEditItem={w=>{setShowWlManager(false);setWlManagerReturn(true);openEditItem(w)}}
                 onDeleteItem={async(id)=>{await deleteWatchlistItem(id);reloadWatchlist()}}
-                onCalcRanking={calcRanking}
                 calcPhase={calcPhase}
                 onCalcScoreMetricas={calcScoreMetricas}
                 onCalcScoreMetSen={calcScoreMetSen}
