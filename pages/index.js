@@ -913,7 +913,7 @@ export default function Home() {
   const [rankingError,setRankingError]=useState(null)
   const [topStratRunning,setTopStratRunning]=useState(false)
   const [topStratProgress,setTopStratProgress]=useState({current:0,total:0})
-  const [calcPhase,setCalcPhase]=useState(0)  // 0=idle, 1=fase1 ranking activo, 2=fase2 top estrategia
+  const [calcPhase]=useState(0)  // siempre 0: quedó tras eliminar calcRankingFull (código muerto); WatchlistManager lo lee como prop
   // Mejor estrategia por símbolo entre TODAS las estrategias calculadas en Supabase
   // { SYMBOL: { stratName, stratId, score, intervalo, stratCount } }
   const [bestStratBySymbol,setBestStratBySymbol]=useState({})
@@ -3001,138 +3001,6 @@ export default function Home() {
     refreshBestStratPerSymbol().catch(()=>{})
   }, [watchlist,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL,currentStratId,stratName,filtros,estrategiaIntervalo,refreshBestStratPerSymbol])
 
-  // ── Calcular Ranking para TODAS las estrategias en secuencia → determina Top estrategia ──
-  const calcRankingAllStrategies = useCallback(async (filteredSymbols=null) => {
-    const enabledStrats = (strategies||[]).filter(s => s.enabled !== false)
-    if (!enabledStrats.length) return
-    setTopStratRunning(true)
-    setTopStratProgress({current:0, total:enabledStrats.length})
-
-    const syms = (filteredSymbols || watchlist).map(w => w.symbol)
-    const sett = (()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')}catch(_){return {}}})()
-    const wMercado   = (sett.ranking?.rankingWeightMercado   ?? 20) / 100
-    const wHistorico = (sett.ranking?.rankingWeightHistorico ?? 80) / 100
-    const momPct     = (sett.ranking?.rankingMomentumPct  ?? 33) / 100
-    const frPct      = (sett.ranking?.rankingFRPct        ?? 33) / 100
-    const max52Pct   = (sett.ranking?.rankingMax52Pct     ?? 34) / 100
-    const momN       = Math.max(5, sett.ranking?.rankingMomentumN ?? 20)
-    const wrPct      = (sett.ranking?.rankingWinRatePct      ?? 33) / 100
-    const cagrPct    = (sett.ranking?.rankingCAGRPct         ?? 33) / 100
-    const cagrRobPct = (sett.ranking?.rankingCAGRRobustoPct  ?? 34) / 100
-    const ddPct      = (sett.ranking?.rankingMaxDDPct        ?? 0)  / 100
-    const minTrades  = sett.ranking?.minTrades ?? 3
-    const norm = (v,mn,mx) => Math.max(0, Math.min(100, (v-mn)/(mx-mn)*100))
-
-    // SP500 al MISMO timeframe que cada estrategia (stratIntv), cacheado por intervalo Yahoo
-    // (no se refetch si dos estrategias comparten intervalo).
-    const _sp500ByIv = {}
-    const getSp500ForIv = async (yfInterval) => {
-      if (yfInterval in _sp500ByIv) return _sp500ByIv[yfInterval]
-      let s = null
-      if (wMercado > 0 && frPct > 0) {
-        try {
-          const r = await apiFetch(`/api/closes?symbol=%5EGSPC&interval=${yfInterval}&days=${rankingRsDays(yfInterval==='1wk'?13:63, yfInterval)}`)
-          if (r.ok) s = await r.json()
-        } catch(e) { console.warn('[calcRankingAll] SP500 fetch failed:', e.message) }
-      }
-      _sp500ByIv[yfInterval] = s
-      return s
-    }
-
-    const BATCH = 4
-    let _exitosas = 0, _fallidas = 0, _fallidasNombres = []
-    for (let si = 0; si < enabledStrats.length; si++) {
-      const strat = enabledStrats[si]
-      console.log('[ALL-RANKING] Procesando estrategia:', strat.name, strat.id)
-      setTopStratProgress({current: si + 1, total: enabledStrats.length})
-      const stratId = strat.id
-      const stratYears  = strat.years || Number(years)
-      const stratCap    = strat.capital_ini || Number(capitalIni)
-      const stratIntv   = (()=>{try{const p=typeof strat?.params==='string'?JSON.parse(strat.params||'{}'):(strat?.params||{});return p.intervalo||'diario'}catch(_){return 'diario'}})()
-      const rsWindow    = stratIntv === 'semanal' ? 13 : 63  // ventana RS por TIMEFRAME de ESTA estrategia (63 diario / 13 semanal)
-      const sp500Closes = await getSp500ForIv(rankingYfIv(stratIntv))  // SP500 alineado al timeframe de esta estrategia
-      const results = {}
-      let _stratError = null
-      try {
-      for (let i = 0; i < syms.length; i += BATCH) {
-        const batch = syms.slice(i, i + BATCH)
-        await Promise.allSettled(batch.map(async sym => {
-          try {
-            const res = await apiFetch('/api/datos', {
-              method:'POST', headers:{'Content-Type':'application/json'},
-              body: JSON.stringify({ simbolo:sym, strategyId:stratId, capital_ini:stratCap, years:stratYears, allocation_pct:100, filtros, intervalo:stratIntv })
-            })
-            const json = await res.json()
-            if (!res.ok || !json.trades?.length) return
-            const trades = json.trades
-            if (trades.length < minTrades) return
-            const wins = trades.filter(t=>t.pnlPct>=0), losses = trades.filter(t=>t.pnlPct<0)
-            const winRate = (wins.length/trades.length)*100
-            const totalDiasNat = json.startDate?(new Date(json.meta?.ultimaFecha)-new Date(json.startDate))/86400000:365*stratYears
-            const anios = Math.max(totalDiasNat/365.25, 0.01)
-            const capFinal = stratCap + json.gananciaSimple
-            const cagr = capFinal>0?(Math.pow(capFinal/stratCap,1/anios)-1)*100:-99
-            const sorted3 = [...trades].sort((a,b)=>b.pnlSimple-a.pnlSimple).slice(3)
-            const ganRobust = sorted3.reduce((s,t)=>s+t.pnlSimple, 0)
-            const capRob = stratCap + ganRobust
-            const cagrRobust = capRob>0?(Math.pow(capRob/stratCap,1/anios)-1)*100:-99
-            const maxDD = json.maxDDStrategyFloat??json.maxDDStrategy??0
-            const scoreHistorico = Math.max(0, Math.min(100,
-              norm(winRate,20,80)*wrPct + norm(cagr,-20,60)*cagrPct +
-              norm(cagrRobust,-20,50)*cagrRobPct - norm(maxDD,0,60)*ddPct
-            ))
-            let scoreMercado = 0
-            if (wMercado > 0) {
-              const priceArr = (json.chartData||[]).map(d=>d.close).filter(v=>v!=null&&!isNaN(v))
-              if (priceArr.length >= momN+1) {
-                const lastP = priceArr[priceArr.length-1]
-                const momP  = priceArr[Math.max(0,priceArr.length-1-momN)]
-                const momentum = momP>0?(lastP/momP-1)*100:0
-                const hist252 = priceArr.slice(-252), high52 = Math.max(...hist252)
-                const proximity52 = high52>0?(lastP/high52)*100:50
-                const relStrength = calcRankingRS(priceArr, sp500Closes, rsWindow, frPct)
-                scoreMercado=Math.max(0,Math.min(100,
-                  norm(momentum,-20,40)*momPct + norm(relStrength,-30,30)*frPct + norm(proximity52,50,100)*max52Pct
-                ))
-              }
-            }
-            const scoreCompleto = Math.max(0, Math.min(100, scoreHistorico*wHistorico + scoreMercado*wMercado))
-            results[sym.toUpperCase()] = {
-              score: scoreCompleto, scoreCompleto, scoreHistorico,
-              profitSimple: json.gananciaSimple ?? null,
-              metrics: { winRate, cagr, cagrRobust, maxDD, trades: trades.length, profit: json.gananciaSimple ?? null }
-            }
-          } catch(e) { console.error('[calcRankingAll]', sym, e) }
-        }))
-      }
-      } catch(error) {
-        _stratError = error
-        console.error('[ALL-RANKING] Error en estrategia:', strat.name, error)
-        _fallidas++; _fallidasNombres.push(strat.name)
-        continue
-      }
-      const sortedEntries = Object.entries(results).sort((a,b)=>b[1].score-a[1].score)
-      sortedEntries.forEach(([sym],i)=>{ results[sym].rank=i+1 })
-      await saveRankingRemote(results, stratId).catch(()=>{})
-      console.log('[ALL-RANKING] Completada:', strat.name, 'activos procesados:', Object.keys(results).length)
-      _exitosas++
-    }
-
-    console.log('[ALL-RANKING] Resumen completo:', {total: enabledStrats.length, exitosas: _exitosas, fallidas: _fallidas, fallidas_nombres: _fallidasNombres})
-    await refreshBestStratPerSymbol().catch(()=>{})
-    setTopStratRunning(false)
-    setTopStratProgress({current:0, total:0})
-  }, [strategies, watchlist, years, capitalIni, filtros, refreshBestStratPerSymbol])
-
-  // ── Cálculo COMPLETO: Fase 1 (estrategia activa) + Fase 2 (top estrategia) ──
-  // Todos los headers ↻ del WatchlistManager lanzan esta función.
-  const calcRankingFull = useCallback(async (selectedItems) => {
-    setCalcPhase(1)
-    try { await calcRanking(selectedItems) } catch(_) {}
-    setCalcPhase(2)
-    try { await calcRankingAllStrategies(selectedItems) } catch(_) {}
-    setCalcPhase(0)
-  }, [calcRanking, calcRankingAllStrategies])
 
   // ── SCORE MÉTRICAS ↻ (Paso 2) — Calcula scoreHistorico desde wlData, sin backtest ──
   // Requiere: ↻ Métricas ejecutado previamente (cagr/winRate/maxDD en wlData[sym].active)
@@ -4825,7 +4693,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.661</title>
+        <title>Trading Simulator V9.662</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4903,7 +4771,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.661
+            <span className="dot"/>Trading Simulator V9.662
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6907,7 +6775,6 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 onEditItem={w=>{setShowWlManager(false);setWlManagerReturn(true);openEditItem(w)}}
                 onDeleteItem={async(id)=>{await deleteWatchlistItem(id);reloadWatchlist()}}
                 onCalcRanking={calcRanking}
-                onCalcFull={calcRankingFull}
                 calcPhase={calcPhase}
                 onCalcScoreMetricas={calcScoreMetricas}
                 onCalcScoreMetSen={calcScoreMetSen}
@@ -6942,7 +6809,6 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 rankingData={rankingData}
                 rankingStratId={rankingStratId}
                 onRefreshBestStrat={refreshBestStratPerSymbol}
-                onCalcRankingAll={calcRankingAllStrategies}
                 topStratRunning={topStratRunning}
                 topStratProgress={topStratProgress}
                 updateErrorsRef={updateErrorsRef}

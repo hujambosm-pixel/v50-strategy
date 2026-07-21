@@ -139,9 +139,7 @@ export default function WatchlistManager({
   wlLists,
   onReload,
   onClose,
-  // Cálculo completo (fase 1 + fase 2)
-  onCalcFull,
-  calcPhase,    // 0=idle, 1=fase1 ranking activo, 2=fase2 top estrategia
+  calcPhase,    // 0=idle (residual tras eliminar calcRankingFull; se lee para mostrar el 🗑 de métricas)
   // Cálculos específicos por columna
   onCalcScoreMetricas,   // solo score_historico (activa + top)
   onCalcScoreMetSen,     // solo score_completo  (activa + top)
@@ -171,7 +169,6 @@ export default function WatchlistManager({
   onDeleteList,
   // Top estrategia
   onRefreshBestStrat,
-  onCalcRankingAll,
   topStratRunning,
   topStratProgress,
   updateErrorsRef,   // ref (pages/index.js) con los errores REALES de la corrida (descarga/excepcion/wipe)
@@ -1050,7 +1047,7 @@ export default function WatchlistManager({
               try {
                 onDisableAutoRefresh?.()
                 setCalcStep(1)
-                const r1 = await (onCalcMetricas ? onCalcMetricas(sel) : onCalcRankingAll?.(sel))
+                const r1 = await onCalcMetricas?.(sel)
                 setCalcStep(2)
                 const r2 = await onCalcScoreMetricas?.(sel, r1?.topMetricsMap ?? null, r1?.activeMetricsMap ?? null)
                 setCalcStep(3)
