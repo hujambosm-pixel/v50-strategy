@@ -383,7 +383,7 @@ export function TlInvestChart({ investData, syncRef, patrimonyCurve, compact, he
           topColor:'rgba(0,229,160,0.15)',
           bottomColor:'rgba(0,229,160,0.02)',
           lineWidth:1,
-          title:'Patrimonio',
+          title:'',
           lastValueVisible:true,
           priceLineVisible:false,
         }).setData(patrimonyCurve.map(p=>({time:p.date,value:p.value})))
