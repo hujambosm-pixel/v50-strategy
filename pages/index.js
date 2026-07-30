@@ -681,6 +681,18 @@ function buildPnlFloatCurve(allTrades, historicalCloses, contributions=[], opts=
   return { main, sinFx, sinComm }
 }
 
+// Mapeo campo del PREVIEW (tlParsed, agrupado) → campo(s) del FILL crudo (tlParsedRaw, lo que se guarda).
+// tlImportConfirm lee `raw.price ?? raw.entry_price` y `raw.currency || raw.entry_currency`, es decir
+// los nombres SIN prefijo tienen prioridad: hay que escribir ESOS para que la edición se persista.
+// Se escriben ambos alias para dejar el fill coherente consigo mismo.
+const PREVIEW_TO_RAW_FIELDS = {
+  symbol:         ['symbol'],
+  shares:         ['shares'],
+  broker:         ['broker'],
+  entry_price:    ['price', 'entry_price'],
+  entry_currency: ['currency', 'entry_currency'],
+}
+
 export default function Home() {
   const [simbolo,setSimbolo]=useState('^GSPC')
   const [displayedSimbolo,setDisplayedSimbolo]=useState('^GSPC') // lags behind simbolo — updates only when chart data is ready
@@ -1992,6 +2004,10 @@ export default function Home() {
   // Las SELLs sin BUY previa = cierre huérfano (buscará en tlTrades).
   const groupParsedFills = (rows) => {
     if(!rows||rows.length===0) return rows
+    // Índice de origen: los bucles iteran copias reordenadas (bySymbol/sorted) pero conservan las
+    // MISMAS referencias de objeto que `rows` (= tlParsedRaw), así que la identidad da el índice.
+    // Cada fila del preview lleva _rawIdx → la edición puede propagarse al fill que se guarda.
+    const idxOf = new Map(rows.map((r,i)=>[r,i]))
     // Agrupar por símbolo
     const bySymbol = {}
     rows.forEach(r=>{
@@ -2032,7 +2048,10 @@ export default function Home() {
           if(sharesToAssign > 0.001){
             result.push({
               ...fill, shares:sharesToAssign, _orphanSell:true,
-              fill_type:'sell', status:'orphan'
+              fill_type:'sell', status:'orphan',
+              _rawIdx: idxOf.get(fill),
+              // Si solo parte de la venta quedó huérfana, las shares mostradas ≠ las del fill crudo
+              _sharesLocked: Math.abs(sharesToAssign-fill.shares) > 0.001,
             })
           }
         }
@@ -2092,7 +2111,8 @@ export default function Home() {
         if(sellFills.length===0){
           // Fully open buy — share group_id if multiple open buys
           result.push({...buyFill, status:'open',
-            group_id: openGroupId || null
+            group_id: openGroupId || null,
+            _rawIdx: idxOf.get(buyFill),
           })
         } else {
           // Has matching sells
@@ -2119,6 +2139,10 @@ export default function Home() {
             _sellCount: sellCount,
             _fills: [buyFill, ...sellFills],
             group_id: partialGroupId,
+            _rawIdx: idxOf.get(buyFill),
+            // Cierre parcial → esta fila y su remainder son DOS filas del MISMO fill de compra:
+            // las shares mostradas son porciones, no el valor crudo → no editables.
+            _sharesLocked: !isFull,
           })
           if(!isFull){
             const remainder = buyFill.shares - totalSell
@@ -2126,6 +2150,8 @@ export default function Home() {
               ...buyFill, shares:remainder, status:'open',
               fill_type:'buy', _remainder:true,
               group_id: partialGroupId,
+              _rawIdx: idxOf.get(buyFill),
+              _sharesLocked: true,
             })
           }
         }
@@ -4500,7 +4526,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.664</title>
+        <title>Trading Simulator V9.665</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4578,7 +4604,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.664
+            <span className="dot"/>Trading Simulator V9.665
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -9034,16 +9060,33 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               const isDup=t._isDuplicate
                               const isClose=!!t._closesTradeId
                               const isGrouped=t._grouped
-                              const ed=(field,val)=>setTlParsed(prev=>{
-                                const next=[...prev]; next[i]={...next[i],[field]:val}; return next
-                              })
-                              const cell=(field,val,cls)=>(
+                              // Edita la fila del preview Y propaga al fill crudo (tlParsedRaw), que es
+                              // lo que tlImportConfirm guarda realmente. Sin _rawIdx (fila sin origen
+                              // identificable) solo se actualiza el preview, como hasta ahora.
+                              const ed=(field,val)=>{
+                                setTlParsed(prev=>{
+                                  const next=[...prev]; next[i]={...next[i],[field]:val}; return next
+                                })
+                                const rawIdx=t._rawIdx
+                                const targets=PREVIEW_TO_RAW_FIELDS[field]
+                                if(rawIdx==null||!targets) return
+                                setTlParsedRaw(prev=>{
+                                  if(!prev[rawIdx]) return prev
+                                  const next=[...prev]
+                                  const patch={}
+                                  targets.forEach(k=>{patch[k]=val})
+                                  next[rawIdx]={...next[rawIdx],...patch}
+                                  return next
+                                })
+                              }
+                              const cell=(field,val,cls,disabled=false,disabledTitle)=>(
                                 <td style={{padding:'3px 5px'}}>
                                   <input value={val||''} onChange={e=>ed(field,e.target.value)}
+                                    disabled={disabled} title={disabled?disabledTitle:undefined}
                                     style={{background:'transparent',border:'none',borderBottom:'1px solid transparent',
-                                      color:cls||'var(--text)',fontFamily:MONO,fontSize:11,width:'100%',
-                                      padding:'1px 3px',outline:'none'}}
-                                    onFocus={e=>e.target.style.borderBottomColor='var(--accent)'}
+                                      color:disabled?'#4a6a88':(cls||'var(--text)'),fontFamily:MONO,fontSize:11,width:'100%',
+                                      padding:'1px 3px',outline:'none',cursor:disabled?'not-allowed':'text'}}
+                                    onFocus={e=>{if(!disabled)e.target.style.borderBottomColor='var(--accent)'}}
                                     onBlur={e=>e.target.style.borderBottomColor='transparent'}/>
                                 </td>
                               )
@@ -9080,7 +9123,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                     {fmtDate(t.entry_date)}
                                   </span>
                                 </td>
-                                {cell('shares',t.shares)}
+                                {cell('shares',t.shares,null,!!t._sharesLocked,
+                                  'Las acciones de una compra parcialmente cerrada (o de una venta cubierta en parte) se reparten entre varias filas: no se editan aquí.')}
                                 <td style={{padding:'3px 5px',whiteSpace:'nowrap'}}>
                                   <input value={t.entry_price||''} onChange={e=>ed('entry_price',e.target.value)}
                                     style={{background:'transparent',border:'none',borderBottom:'1px solid transparent',
