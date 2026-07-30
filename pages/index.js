@@ -689,6 +689,7 @@ const PREVIEW_TO_RAW_FIELDS = {
   symbol:         ['symbol'],
   shares:         ['shares'],
   broker:         ['broker'],
+  strategy:       ['strategy'],   // tlImportConfirm lee raw.strategy → mismo nombre en ambos lados
   entry_price:    ['price', 'entry_price'],
   entry_currency: ['currency', 'entry_currency'],
 }
@@ -3432,15 +3433,21 @@ export default function Home() {
   // ── TradeLog helpers ────────────────────────────────────────
   // ── TradeLog: storage mode (local vs supabase) ──────────────
   const TL_LS_KEY = 'v50_tradelog'
+  // Nombre (TEXTO) de la estrategia activa — es lo que se guarda en trades_log.strategy.
+  // Fuente única para el alta manual y para el import, para que ambos escriban el mismo formato.
+  const tlActiveStrategyName = () => {
+    const s = (()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')}catch(_){return {}}})()
+    const activeStrat = strategies.find(st=>st.id===currentStratId)
+      || strategies.find(st=>st.id===s.defaultStrategyId)
+      || (strategies.length>0 ? strategies[0] : null)
+    return activeStrat ? (activeStrat.name||`V50 EMA ${activeStrat.ema_r}/${activeStrat.ema_l}`) : 'V50'
+  }
   // Genera formulario con defaults desde settings + estrategia activa
   const tlDefaultForm = (overrides={}) => {
     const s = JSON.parse(localStorage.getItem('v50_settings')||'{}')
     const today = todayDisplay()
     // Estrategia activa: la cargada en el backtest (currentStratId) o la primera disponible
-    const activeStrat = strategies.find(st=>st.id===currentStratId)
-      || strategies.find(st=>st.id===s.defaultStrategyId)
-      || (strategies.length>0 ? strategies[0] : null)
-    const stratName = activeStrat ? (activeStrat.name||`V50 EMA ${activeStrat.ema_r}/${activeStrat.ema_l}`) : 'V50'
+    const stratName = tlActiveStrategyName()
     // Precio actual del activo activo en el chart principal
     const currentPrice = result?.meta?.ultimoPrecio ? String(result.meta.ultimoPrecio.toFixed(2)) : ''
     return {
@@ -3914,8 +3921,14 @@ export default function Home() {
           commission_sell: !isBuy ? (r.commission!=null?r.commission:r.commission_sell||0) : (r.commission_sell||0),
         }
       })
+      // Estrategia activa por defecto SOLO en compras (editable luego en el preview).
+      // Se pone en el array RAW porque es el que persiste tlImportConfirm (raw.strategy || '').
+      // Las ventas se quedan sin estrategia, como hasta ahora.
+      const _activeStratName = tlActiveStrategyName()
       // Mark duplicates on raw fills (for save-time skip + button count)
-      const markedRaw = raw.map(r=>({...r, _isDuplicate: tlTrades.some(t=>
+      const markedRaw = raw.map(r=>({...r,
+        strategy: (r.fill_type||'buy')!=='sell' ? (r.strategy || _activeStratName) : (r.strategy || ''),
+        _isDuplicate: tlTrades.some(t=>
         t.symbol===r.symbol && (t.date||t.entry_date)===(r.date||r.entry_date) &&
         (t.fill_type||'buy')===(r.fill_type||'buy') &&
         Math.abs(parseFloat(t.shares||0)-parseFloat(r.shares||0))<0.01 &&
@@ -4527,7 +4540,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.666</title>
+        <title>Trading Simulator V9.667</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4605,7 +4618,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.666
+            <span className="dot"/>Trading Simulator V9.667
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -9052,7 +9065,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         </div>
                         <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:11}}>
                           <thead><tr style={{background:'var(--bg2)'}}>
-                            {['Tipo','Símbolo','Fecha','Acc.','Precio','Div.','FX','Broker','Com.','Estado','Cap. €',''].map(h=>(
+                            {['Tipo','Símbolo','Fecha','Acc.','Precio','Div.','FX','Broker','Estrategia','Com.','Estado','Cap. €',''].map(h=>(
                               <th key={h} style={{padding:'5px 8px',textAlign:'left',fontSize:9,color:'#3d5a7a',letterSpacing:'0.08em',textTransform:'uppercase',borderBottom:'1px solid var(--border)'}}>{h}</th>
                             ))}
                           </tr></thead>
@@ -9062,6 +9075,9 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                             // cerrada → fila cerrada + remainder comparten el mismo fill de compra).
                             const _rawCount={}
                             tlParsed.forEach(r=>{ if(r._rawIdx!=null) _rawCount[r._rawIdx]=(_rawCount[r._rawIdx]||0)+1 })
+                            // Nombres de estrategia para el desplegable (mismo formato que se guarda)
+                            const _stratOpts=(strategies||[]).filter(s=>s.enabled!==false)
+                              .map(s=>s.name||`V50 EMA ${s.ema_r}/${s.ema_l}`)
                             return tlParsed.map((t,i)=>{
                               const isDup=t._isDuplicate
                               const isClose=!!t._closesTradeId
@@ -9074,11 +9090,18 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               // lo que tlImportConfirm guarda realmente. Sin _rawIdx (fila sin origen
                               // identificable) solo se actualiza el preview, como hasta ahora.
                               const ed=(field,val)=>{
-                                setTlParsed(prev=>{
-                                  const next=[...prev]; next[i]={...next[i],[field]:val}; return next
-                                })
                                 const rawIdx=t._rawIdx
                                 const targets=PREVIEW_TO_RAW_FIELDS[field]
+                                setTlParsed(prev=>{
+                                  const next=[...prev]; next[i]={...next[i],[field]:val}
+                                  // Filas hermanas del MISMO fill (cierre parcial: cerrada + remainder):
+                                  // comparten el valor, así que se sincronizan para no divergir del raw.
+                                  // `shares` no entra aquí: está bloqueado en esas filas (_sharesLocked).
+                                  if(rawIdx!=null&&targets) next.forEach((r,j)=>{
+                                    if(j!==i&&r._rawIdx===rawIdx) next[j]={...r,[field]:val}
+                                  })
+                                  return next
+                                })
                                 if(rawIdx==null||!targets) return
                                 setTlParsedRaw(prev=>{
                                   if(!prev[rawIdx]) return prev
@@ -9189,6 +9212,25 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                 {cell('entry_currency',t.entry_currency,'#ffd166')}
                                 <td style={{padding:'3px 5px',color:'#4a7a95',fontSize:10}}>{(()=>{let fx=parseFloat(t.fx_entry);if(!fx||isNaN(fx))return'—';if(fx<1)fx=1/fx;return fx.toFixed(4)})()}</td>
                                 {cell('broker',t.broker)}
+                                {/* Estrategia — solo en COMPRAS (las ventas no llevan estrategia) */}
+                                <td style={{padding:'3px 5px'}}>
+                                  {t.fill_type==='buy' ? (()=>{
+                                    // Si el valor actual no está entre las habilitadas (estrategia
+                                    // deshabilitada/borrada), se añade para no perderlo al renderizar.
+                                    const opts=_stratOpts.includes(t.strategy)||!t.strategy
+                                      ? _stratOpts : [t.strategy,..._stratOpts]
+                                    return (
+                                      <select value={t.strategy||''} onChange={e=>ed('strategy',e.target.value)}
+                                        title="Estrategia que se asignará a esta compra"
+                                        style={{background:'var(--bg3)',border:'1px solid var(--border)',
+                                          color:t.strategy?'#c8dff5':'#4a6a88',fontFamily:MONO,fontSize:10,
+                                          padding:'1px 3px',borderRadius:3,maxWidth:130,cursor:'pointer'}}>
+                                        <option value="">—</option>
+                                        {opts.map(n=><option key={n} value={n}>{n}</option>)}
+                                      </select>
+                                    )
+                                  })() : <span style={{color:'#3d5a7a'}}>—</span>}
+                                </td>
                                 <td style={{padding:'3px 5px',color:'#7a9bc0',fontSize:10,textAlign:'right'}}>
                                   {(()=>{const c=(t.commission_buy||0)+(t.commission_sell||0);return c>0?c.toFixed(2):'—'})()}
                                 </td>
