@@ -3951,6 +3951,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
       let errors=[]
       for(const raw of tlParsedRaw){
         if(raw._isDuplicate) continue
+        if(raw._removed) continue   // fila descartada con la ✕ del preview
         // Whitelist estricta — solo campos válidos en trades_log, sin importar qué traiga raw
         const trade = {
           symbol:        raw.symbol,
@@ -4526,7 +4527,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.665</title>
+        <title>Trading Simulator V9.666</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4604,7 +4605,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.665
+            <span className="dot"/>Trading Simulator V9.666
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -9041,8 +9042,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                 cursor:'pointer',border:'1px solid #00e5a0',
                                 background:'rgba(0,229,160,0.1)',color:'#00e5a0',fontWeight:700}}>
                               {(()=>{
-                const valid=tlParsedRaw.filter(r=>!r._isDuplicate).length
-                const dups=tlParsedRaw.filter(r=>r._isDuplicate).length
+                const valid=tlParsedRaw.filter(r=>!r._isDuplicate&&!r._removed).length
+                const dups=tlParsedRaw.filter(r=>r._isDuplicate&&!r._removed).length
                 if(dups>0) return `✓ Importar ${valid} fills · ⊘ ${dups} duplicada${dups!==1?'s':''} omitida${dups!==1?'s':''}`
                 return `✓ Importar ${valid} fill${valid!==1?'s':''}`
               })()}
@@ -9056,10 +9057,19 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                             ))}
                           </tr></thead>
                           <tbody>
-                            {tlParsed.map((t,i)=>{
+                            {(()=>{
+                            // _rawIdx que aparecen en MÁS de una fila visible (compra parcialmente
+                            // cerrada → fila cerrada + remainder comparten el mismo fill de compra).
+                            const _rawCount={}
+                            tlParsed.forEach(r=>{ if(r._rawIdx!=null) _rawCount[r._rawIdx]=(_rawCount[r._rawIdx]||0)+1 })
+                            return tlParsed.map((t,i)=>{
                               const isDup=t._isDuplicate
                               const isClose=!!t._closesTradeId
                               const isGrouped=t._grouped
+                              // Descartar la fila solo es seguro si su fill NO se comparte con otra fila
+                              // visible y la fila muestra el fill completo (no una porción).
+                              const canDelete = t._rawIdx==null
+                                || (!t._sharesLocked && (_rawCount[t._rawIdx]||0)<=1)
                               // Edita la fila del preview Y propaga al fill crudo (tlParsedRaw), que es
                               // lo que tlImportConfirm guarda realmente. Sin _rawIdx (fila sin origen
                               // identificable) solo se actualiza el preview, como hasta ahora.
@@ -9196,15 +9206,35 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                   return capEur>0?'€'+Math.round(capEur).toLocaleString('es-ES'):'—'
                                 })()}</td>
                                 <td style={{padding:'3px 5px'}}>
-                                  <button onClick={()=>setTlParsed(prev=>prev.filter((_,j)=>j!==i))}
-                                    title="Eliminar esta fila"
-                                    style={{background:'transparent',border:'none',color:'#3d5a7a',cursor:'pointer',
+                                  <button
+                                    disabled={!canDelete}
+                                    onClick={()=>{
+                                      if(!canDelete) return
+                                      // Quitar de la vista Y marcar el fill como descartado en tlParsedRaw.
+                                      // Se MARCA (no se hace splice) para no desfasar los _rawIdx del resto.
+                                      setTlParsed(prev=>prev.filter((_,j)=>j!==i))
+                                      const rawIdx=t._rawIdx
+                                      if(rawIdx==null) return
+                                      setTlParsedRaw(prev=>{
+                                        if(!prev[rawIdx]) return prev
+                                        const next=[...prev]
+                                        next[rawIdx]={...next[rawIdx],_removed:true}
+                                        return next
+                                      })
+                                    }}
+                                    title={canDelete
+                                      ? 'Descartar esta operación (no se importará)'
+                                      : 'Esta fila comparte el fill de compra con otra (cierre parcial): no se puede descartar individualmente'}
+                                    style={{background:'transparent',border:'none',
+                                      color:canDelete?'#3d5a7a':'#22384f',
+                                      cursor:canDelete?'pointer':'not-allowed',
                                       fontSize:12,padding:'0 4px',lineHeight:1}}
-                                    onMouseOver={e=>e.currentTarget.style.color='#ff4d6d'}
-                                    onMouseOut={e=>e.currentTarget.style.color='#3d5a7a'}>✕</button>
+                                    onMouseOver={e=>{if(canDelete)e.currentTarget.style.color='#ff4d6d'}}
+                                    onMouseOut={e=>{if(canDelete)e.currentTarget.style.color='#3d5a7a'}}>✕</button>
                                 </td>
                               </tr>
-                            )})}
+                            )})
+                            })()}
                           </tbody>
                         </table>
                       </div>
