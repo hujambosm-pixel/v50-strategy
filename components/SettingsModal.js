@@ -862,6 +862,53 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                         <span style={{fontFamily:MONO,fontSize:11,color:'#7a9bc0'}}>horas sin actualizar</span>
                       </div>
                     )}
+                    <div style={{fontSize:11,color:'#5a7a95',lineHeight:1.5,marginTop:6,paddingLeft:22}}>
+                      Solo <b style={{color:'#7a9bc0'}}>recompone los scores</b> a partir de las métricas ya guardadas.
+                      No descarga precios ni ejecuta backtests, así que es instantáneo. No renueva las métricas.
+                    </div>
+                  </div>
+                )
+              })()}
+              {/* Recordatorio de métricas completas (backtest) — distinto del anterior */}
+              {(()=>{
+                const days  = settings.ranking?.metricsReminderDays  ?? 15
+                const batch = settings.ranking?.metricsReminderBatch ?? 30
+                const enabled = days > 0
+                return(
+                  <div style={{marginTop:16,paddingTop:14,borderTop:'1px solid #16233a'}}>
+                    <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:enabled?8:0}}>
+                      <input type="checkbox" checked={enabled}
+                        onChange={e=>upd('ranking.metricsReminderDays', e.target.checked ? 15 : 0)}
+                        style={{accentColor:'#f59e0b',cursor:'pointer'}}/>
+                      <span style={{fontFamily:MONO,fontSize:12,color:'#cce0f5',flex:1,cursor:'pointer'}}
+                        onClick={()=>upd('ranking.metricsReminderDays', enabled ? 0 : 15)}>
+                        Recordar recalcular métricas completas (con backtest)
+                      </span>
+                    </div>
+                    {enabled&&(<>
+                      <div style={{display:'flex',alignItems:'center',gap:8,paddingLeft:22,marginBottom:6}}>
+                        <span style={{fontFamily:MONO,fontSize:11,color:'#7a9bc0'}}>Avisar si hay activos con más de</span>
+                        <input type="number" value={days} min={1} max={365}
+                          onChange={e=>upd('ranking.metricsReminderDays', Math.max(1,Number(e.target.value)))}
+                          style={{width:52,background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,
+                            color:'#e2eaf5',fontFamily:MONO,fontSize:12,padding:'3px 6px',textAlign:'center'}}/>
+                        <span style={{fontFamily:MONO,fontSize:11,color:'#7a9bc0'}}>días sin recalcular</span>
+                      </div>
+                      <div style={{display:'flex',alignItems:'center',gap:8,paddingLeft:22}}>
+                        <span style={{fontFamily:MONO,fontSize:11,color:'#7a9bc0'}}>Actualizar por lote los</span>
+                        <input type="number" value={batch} min={1} max={200}
+                          onChange={e=>upd('ranking.metricsReminderBatch', Math.max(1,Number(e.target.value)))}
+                          style={{width:52,background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,
+                            color:'#e2eaf5',fontFamily:MONO,fontSize:12,padding:'3px 6px',textAlign:'center'}}/>
+                        <span style={{fontFamily:MONO,fontSize:11,color:'#7a9bc0'}}>activos más antiguos</span>
+                      </div>
+                    </>)}
+                    <div style={{fontSize:11,color:'#5a7a95',lineHeight:1.5,marginTop:6,paddingLeft:22}}>
+                      Recalcula las <b style={{color:'#7a9bc0'}}>métricas de verdad</b>: descarga precios actualizados y
+                      backtestea cada activo contra todas las estrategias habilitadas (y después recompone sus scores).
+                      Tarda varios minutos, por eso solo aparece un <b style={{color:'#7a9bc0'}}>aviso</b> al cargar la app
+                      con un botón para lanzarlo: nunca se ejecuta solo.
+                    </div>
                   </div>
                 )
               })()}

@@ -2552,6 +2552,66 @@ export default function Home() {
     }
   },[wlData]) // eslint-disable-line
 
+  // ── Recordatorio de MÉTRICAS COMPLETAS (backtest) — semiautomático: solo avisa, nunca arranca solo.
+  //    Distinto del auto-refresco de arriba: aquel recompone scores desde las métricas guardadas;
+  //    este propone RENOVAR las métricas (descarga + backtest) de los activos más desactualizados. ──
+  const METRICS_REMINDER_SNOOZE_KEY = 'wl_metrics_reminder_snoozed_until'
+  const metricsReminderChecked = useRef(false)
+  const [metricsReminder,setMetricsReminder] = useState(null)   // {total, lote:[items watchlist]}
+  const [reminderRunning,setReminderRunning] = useState(false)
+  const [reminderStep,setReminderStep]       = useState(null)   // 1|2|3 fase de la cadena
+  const [reminderDone,setReminderDone]       = useState(null)   // resumen breve al terminar
+  useEffect(()=>{
+    if(metricsReminderChecked.current) return
+    if(!watchlist?.length) return
+    if(Object.keys(wlData).length===0) return          // esperar a que refreshWlData haya cargado
+    metricsReminderChecked.current = true
+    const sett=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')}catch(_){return {}}})()
+    const days = sett.ranking?.metricsReminderDays ?? 15
+    if(days === 0) return                              // desactivado
+    const batch = Math.max(1, sett.ranking?.metricsReminderBatch ?? 30)
+    const snoozed = Number(localStorage.getItem(METRICS_REMINDER_SNOOZE_KEY)||0)
+    if(snoozed > Date.now()) return                    // pospuesto por el usuario
+    const maxAge = days*86400000
+    const now = Date.now()
+    const aged = watchlist.map(w=>{
+      const sym=(w.symbol||'').toUpperCase()
+      const d = wlData[sym]?.top?.updatedAt ?? wlData[sym]?.active?.updatedAt
+      const ts = d ? Date.parse(d) : NaN
+      // Sin entrada en wlData o sin fecha válida = NUNCA actualizado → antigüedad infinita (lo más urgente)
+      return { w, age: Number.isFinite(ts) ? now-ts : Infinity }
+    }).filter(x=>x.age > maxAge)
+    if(!aged.length) return
+    aged.sort((a,b)=>b.age-a.age)                      // del más antiguo al menos
+    setMetricsReminder({ total: aged.length, lote: aged.slice(0,batch).map(x=>x.w) })
+  },[wlData,watchlist]) // eslint-disable-line
+
+  const snoozeMetricsReminder = ()=>{
+    try{ localStorage.setItem(METRICS_REMINDER_SNOOZE_KEY, String(Date.now()+86400000)) }catch(_){}
+    setMetricsReminder(null)
+  }
+  // MISMA cadena que el botón ↻ de Mantenimiento Watchlist, sobre el lote de activos más antiguos.
+  const runMetricsReminder = async()=>{
+    if(reminderRunning || !metricsReminder?.lote?.length) return   // sin corridas simultáneas
+    const lote = metricsReminder.lote
+    setReminderRunning(true); setReminderStep(1)
+    autoRefreshTriggered.current = true   // igual que onDisableAutoRefresh: no colisionar con el de scores
+    try{
+      const r1 = await calcMetricas(lote)
+      setReminderStep(2)
+      const r2 = await calcScoreMetricas(lote, r1?.topMetricsMap ?? null, r1?.activeMetricsMap ?? null)
+      setReminderStep(3)
+      await calcScoreMetSen(lote, r2?.activeScoreMap ?? null, r2?.topScoreMap ?? null, r1?.topMetricsMap ?? null)
+      await refreshWlData()
+      const conIncidencias = new Set((updateErrorsRef.current||[]).map(e=>e.symbol).filter(Boolean)).size
+      setReminderDone(`✓ Actualizados ${lote.length} activos`+(conIncidencias?` · ${conIncidencias} con incidencias`:''))
+    }catch(e){
+      setReminderDone('⚠ La actualización falló: '+(e?.message||'error desconocido'))
+    }finally{
+      setReminderRunning(false); setReminderStep(null); setMetricsReminder(null)
+    }
+  }
+
   function stopStrategy({skipDebounce=true}={}) {
     if(skipDebounce) skipNextRunRef.current = true
     setResult(null)
@@ -4540,7 +4600,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.667</title>
+        <title>Trading Simulator V9.668</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4618,7 +4678,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.667
+            <span className="dot"/>Trading Simulator V9.668
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -10845,6 +10905,71 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
     })()}
 
     {/* ── Modal de configuración global ── */}
+    {/* ── Aviso: métricas desactualizadas (recordatorio semiautomático — nunca arranca solo) ── */}
+    {(metricsReminder||reminderDone)&&(
+      <div style={{position:'fixed',top:56,left:'50%',transform:'translateX(-50%)',zIndex:998,
+        width:'calc(100% - 32px)',maxWidth:640,background:'#1a2a3a',
+        border:'1px solid #2a3f55',borderLeft:'3px solid #f59e0b',borderRadius:6,
+        padding:'12px 14px',boxShadow:'0 8px 30px rgba(0,0,0,0.6)',fontFamily:MONO}}>
+        {reminderDone ? (
+          <div style={{display:'flex',alignItems:'center',gap:10}}>
+            <span style={{fontSize:12,color:'#cce0f5',flex:1}}>{reminderDone}</span>
+            <button onClick={()=>setReminderDone(null)}
+              style={{background:'transparent',border:'1px solid #2a4060',color:'#94a3b8',
+                fontFamily:MONO,fontSize:11,padding:'3px 10px',borderRadius:4,cursor:'pointer'}}>Cerrar</button>
+          </div>
+        ) : reminderRunning ? (
+          <div style={{display:'flex',alignItems:'center',gap:10}}>
+            <span style={{fontSize:12,color:'#f59e0b',flex:1}}>
+              {(()=>{
+                const cnt = (reminderStep===1&&topStratRunning)
+                  ? (topStratProgress?.total?`estrategia ${topStratProgress.current||0}/${topStratProgress.total}`:'')
+                  : (rankingProgress?.total?`${rankingProgress.done||0}/${rankingProgress.total} activos`:'')
+                const fase = reminderStep===1?'Recalculando métricas':reminderStep===2?'Calculando scores':'Calculando señales'
+                return `⟳ ${fase} (${reminderStep}/3)${cnt?` · ${cnt}`:''}…`
+              })()}
+            </span>
+            <span style={{fontSize:10,color:'#7a9bc0'}}>No cierres la pestaña</span>
+          </div>
+        ) : (
+          <>
+            <div style={{display:'flex',alignItems:'flex-start',gap:8,marginBottom:8}}>
+              <span style={{fontSize:12,color:'#f59e0b',fontWeight:700,flex:1}}>
+                ⚠ {metricsReminder.total} activo{metricsReminder.total!==1?'s':''} con las métricas desactualizadas
+              </span>
+              <span onClick={snoozeMetricsReminder} title="Recordármelo mañana"
+                style={{cursor:'pointer',color:'#5a7a95',fontSize:13,lineHeight:1,padding:'0 2px'}}>✕</span>
+            </div>
+            <div style={{fontSize:11,color:'#94a3b8',lineHeight:1.6,marginBottom:10}}>
+              Llevan más de {(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.ranking?.metricsReminderDays ?? 15}catch(_){return 15}})()} días
+              sin recalcularse (o no se han calculado nunca).<br/>
+              Al pulsar el botón se ejecuta el <b style={{color:'#cce0f5'}}>ciclo completo</b>, igual que el botón ↻ de
+              Mantenimiento Watchlist, sobre los <b style={{color:'#cce0f5'}}>{metricsReminder.lote.length} más antiguos</b>:
+              se borran sus métricas guardadas, se vuelven a calcular backtesteando cada activo contra todas las
+              estrategias habilitadas con precios actualizados, y después se recomponen sus scores.<br/>
+              <span style={{color:'#7a9bc0'}}>No es lo mismo que el refresco automático diario</span>, que solo recompone
+              los scores a partir de las métricas ya guardadas (sin descargar ni backtestear nada); esto renueva las métricas de verdad.<br/>
+              Tarda <b style={{color:'#cce0f5'}}>varios minutos</b>: no cierres la pestaña mientras corre.
+              Puedes ajustar o desactivar este recordatorio en <b style={{color:'#cce0f5'}}>Ajustes → Ranking</b>.
+            </div>
+            <div style={{display:'flex',alignItems:'center',gap:8}}>
+              <button onClick={runMetricsReminder} disabled={reminderRunning}
+                style={{background:'rgba(245,158,11,0.12)',border:'1px solid rgba(245,158,11,0.5)',color:'#f59e0b',
+                  fontFamily:MONO,fontSize:11,fontWeight:700,padding:'5px 12px',borderRadius:4,cursor:'pointer'}}>
+                ↻ Actualizar los {metricsReminder.lote.length} más antiguos
+              </button>
+              <button onClick={snoozeMetricsReminder}
+                style={{background:'transparent',border:'1px solid #2a4060',color:'#94a3b8',
+                  fontFamily:MONO,fontSize:11,padding:'5px 12px',borderRadius:4,cursor:'pointer'}}>
+                Ahora no
+              </button>
+              <span style={{fontSize:10,color:'#5a7a95',marginLeft:'auto'}}>Se puede lanzar también desde Mantenimiento Watchlist</span>
+            </div>
+          </>
+        )}
+      </div>
+    )}
+
     {settingsOpen&&<SettingsModal onClose={()=>{
       setSettingsOpen(false);setTemaKey(k=>k+1);
       try{const t=JSON.parse(localStorage.getItem('v50_settings')||'{}')?.alarmas?.autoRefreshThreshold;if(t!=null)setAlertThreshold(Number(t))}catch(_){}
