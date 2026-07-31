@@ -163,7 +163,7 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
         </div>
 
         {/* Body */}
-        <div style={{overflowY:'auto',flex:1,minHeight:0,padding:'14px 18px'}}>
+        <div style={{overflowY:'auto',flex:1,minHeight:0,padding:'12px 16px'}}>
 
           {/* ── INTEGRACIONES ── */}
           {tab==='integraciones'&&(
@@ -672,23 +672,27 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
             <div>
               {/* ── Bloque informativo ── */}
               <div style={{background:'#0f1f2e',borderLeft:'3px solid #06b6d4',borderRadius:'0 4px 4px 0',
-                padding:'10px 14px',fontSize:12,color:'#94a3b8',marginBottom:16,lineHeight:1.6}}>
+                padding:'8px 12px',fontSize:12,color:'#94a3b8',marginBottom:10,lineHeight:1.55}}>
                 <div style={{fontWeight:700,color:'#22d3ee',marginBottom:6}}>ℹ️ Cómo se usan estos pesos</div>
                 <div style={{marginBottom:4}}>
                   <span style={{color:'#e2e8f0',fontWeight:600}}>Score por métricas:</span>{' '}
-                  usa solo el bloque <em>Métricas históricas</em>. Se guarda en Supabase y determina el orden del Watchlist al cargar la app y la Top estrategia de cada activo.
+                  usa solo el bloque <em>Métricas históricas</em>. Se guarda en Supabase y es uno de los criterios por los que puedes ordenar el Watchlist.
+                  Ojo: la <em>Top estrategia</em> de cada activo NO la decide este score, sino el <b style={{color:'#cce0f5'}}>CAGR más alto</b> entre todas las estrategias habilitadas.
                 </div>
                 <div>
                   <span style={{color:'#e2e8f0',fontWeight:600}}>Score por métricas + señales:</span>{' '}
-                  combina ambos bloques. Se calcula desde el WatchlistManager (↻ Score mét.+señales) y se usa para priorizar entradas en el modo <em>Capital Concentrado</em> del backtesting multiactivo. Se puede actualizar automáticamente (ver opción abajo).
+                  combina ambos bloques. Se calcula en la fase 3/3 del botón <b style={{color:'#cce0f5'}}>↻ Actualizar</b> de Mantenimiento Watchlist (o solo, cada 24 h — ver abajo),
+                  sirve para ordenar el Watchlist y prioriza entradas en el modo <em>Capital Concentrado</em> del backtesting multiactivo.
                 </div>
               </div>
               {/* ── Dos columnas ── */}
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginTop:10}}>
+              {/* minmax(0,1fr) + minWidth:0 — sin esto los ítems del grid no encogen por debajo de su
+                  contenido mínimo (sliders + etiquetas) y desbordan, cortando los títulos. */}
+              <div style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) minmax(0,1fr)',gap:12,marginTop:10}}>
 
                 {/* Columna izquierda — Métricas de mercado */}
-                <div style={{background:'rgba(59,130,246,0.06)',border:'0.5px solid rgba(59,130,246,0.22)',borderRadius:8,padding:'10px 14px'}}>
-                  <div title="Estas métricas usan datos de precios actuales. Se usan SOLO para la priorización de slots en el modo Capital Concentrado del backtesting multiactivo. NO se usan para el ranking del Watchlist ni para determinar la Top Estrategia de cada activo"
+                <div style={{minWidth:0,background:'rgba(59,130,246,0.06)',border:'0.5px solid rgba(59,130,246,0.22)',borderRadius:8,padding:'10px 12px'}}>
+                  <div title="Estas métricas usan datos de precios actuales. Alimentan el Score mét.+señales, que es una columna ordenable de la tabla y dos de los cuatro modos de ordenación del Watchlist, y prioriza slots en el modo Capital Concentrado del backtesting multiactivo. NO intervienen en la elección de la Top Estrategia de cada activo (esa se decide por CAGR)."
                     style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:'#3b82f6',marginBottom:8,letterSpacing:'0.04em',cursor:'help',textDecoration:'underline dotted',textDecorationColor:'rgba(59,130,246,0.4)'}}>Métricas de mercado actuales ℹ</div>
                   {/* Peso global del bloque */}
                   {(()=>{const wm=settings.ranking?.rankingWeightMercado??20; return(
@@ -697,7 +701,7 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                       <span style={{fontFamily:MONO,fontSize:11,fontWeight:700,color:'#3b82f6',minWidth:30,textAlign:'right'}}>{wm}%</span>
                       <input type="range" min={0} max={100} step={5} value={wm}
                         onChange={e=>upd('ranking.rankingWeightMercado',Number(e.target.value))}
-                        style={{width:90,accentColor:'#3b82f6'}}/>
+                        style={{width:70,accentColor:'#3b82f6'}}/>
                     </div>
                   )})()}
 
@@ -708,11 +712,11 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                       <span style={{fontFamily:MONO,fontSize:11,fontWeight:700,color:'#3b82f6',minWidth:30,textAlign:'right'}}>{settings.ranking?.rankingMomentumPct??33}%</span>
                       <input type="range" min={0} max={100} step={5} value={settings.ranking?.rankingMomentumPct??33}
                         onChange={e=>upd('ranking.rankingMomentumPct',Number(e.target.value))}
-                        style={{width:80,accentColor:'#3b82f6'}}/>
+                        style={{width:64,accentColor:'#3b82f6'}}/>
                     </div>
-                    <div style={{fontSize:12,color:'#7a9bc0',lineHeight:1.5,marginBottom:7}}>% de subida del activo en los últimos N días</div>
+                    <div style={{fontSize:12,color:'#7a9bc0',lineHeight:1.5,marginBottom:7}}>% de subida del activo en las últimas N velas (en semanal, N semanas)</div>
                     <div style={{display:'flex',alignItems:'center',gap:8}}>
-                      <span style={{fontFamily:MONO,fontSize:11,color:'#5a7a95'}}>N días:</span>
+                      <span style={{fontFamily:MONO,fontSize:11,color:'#5a7a95'}}>N velas:</span>
                       <input type="number" min={5} max={120} value={settings.ranking?.rankingMomentumN??20}
                         onChange={e=>upd('ranking.rankingMomentumN',Math.max(5,Math.min(120,Number(e.target.value)||20)))}
                         style={{width:60,background:'#080c14',border:'1px solid #1a2d45',borderRadius:3,
@@ -727,10 +731,10 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                       <span style={{fontFamily:MONO,fontSize:11,fontWeight:700,color:'#3b82f6',minWidth:30,textAlign:'right'}}>{settings.ranking?.rankingFRPct??33}%</span>
                       <input type="range" min={0} max={100} step={5} value={settings.ranking?.rankingFRPct??33}
                         onChange={e=>upd('ranking.rankingFRPct',Number(e.target.value))}
-                        style={{width:80,accentColor:'#3b82f6'}}/>
+                        style={{width:64,accentColor:'#3b82f6'}}/>
                     </div>
-                    <div style={{fontSize:12,color:'#7a9bc0',lineHeight:1.5}}>Rendimiento del activo menos el del SP500 en la ventana fija del timeframe activo.</div>
-                    <div style={{fontSize:11,color:'#5a7a95',lineHeight:1.4,marginTop:6}}>Ventana fija por timeframe (no configurable): <span style={{color:'#9fb8d0'}}>63 velas en diario</span> (~3 meses) y <span style={{color:'#9fb8d0'}}>13 velas en semanal</span> (~3 meses), para que el resultado sea comparable entre timeframes. Independiente del RS de la cabecera y del gate del multibacktest.</div>
+                    <div style={{fontSize:12,color:'#7a9bc0',lineHeight:1.5}}>Rendimiento del activo menos el del SP500.</div>
+                    <div style={{fontSize:11,color:'#5a7a95',lineHeight:1.4,marginTop:5}}>Ventana fija, no configurable: <span style={{color:'#9fb8d0'}}>63 velas en diario</span> y <span style={{color:'#9fb8d0'}}>13 en semanal</span> (~3 meses en ambos). El score de <b>estrategia activa</b> la mide en el timeframe de esa estrategia; el de <b>top estrategia</b>, en el de la top de cada activo.</div>
                   </div>
 
                   {/* Proximidad máximo 52 semanas */}
@@ -740,9 +744,9 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                       <span style={{fontFamily:MONO,fontSize:11,fontWeight:700,color:'#3b82f6',minWidth:30,textAlign:'right'}}>{settings.ranking?.rankingMax52Pct??34}%</span>
                       <input type="range" min={0} max={100} step={5} value={settings.ranking?.rankingMax52Pct??34}
                         onChange={e=>upd('ranking.rankingMax52Pct',Number(e.target.value))}
-                        style={{width:80,accentColor:'#3b82f6'}}/>
+                        style={{width:64,accentColor:'#3b82f6'}}/>
                     </div>
-                    <div style={{fontSize:12,color:'#7a9bc0',lineHeight:1.5}}>Precio actual respecto al máximo de los últimos 252 días</div>
+                    <div style={{fontSize:12,color:'#7a9bc0',lineHeight:1.5}}>Precio actual respecto al máximo de las últimas 252 velas</div>
                   </div>
 
                   {/* Total bloque mercado */}
@@ -762,7 +766,7 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                 </div>
 
                 {/* Columna derecha — Métricas históricas */}
-                <div style={{background:'rgba(34,211,238,0.05)',border:'0.5px solid rgba(34,211,238,0.18)',borderRadius:8,padding:'10px 14px'}}>
+                <div style={{minWidth:0,background:'rgba(34,211,238,0.05)',border:'0.5px solid rgba(34,211,238,0.18)',borderRadius:8,padding:'10px 12px'}}>
                   <div title="Estas métricas evalúan el rendimiento pasado de la estrategia con cada activo. Se aplican tanto al score de estrategia activa como al de top estrategia. Se usan para el ranking del Watchlist, para determinar la Top Estrategia de cada activo, y también (combinadas con las de mercado) para la priorización de slots en Capital Concentrado."
                     style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:'#22d3ee',marginBottom:8,letterSpacing:'0.04em',cursor:'help',textDecoration:'underline dotted',textDecorationColor:'rgba(34,211,238,0.4)'}}>Métricas históricas de estrategia ℹ</div>
                   {/* Peso global del bloque */}
@@ -772,14 +776,19 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                       <span style={{fontFamily:MONO,fontSize:11,fontWeight:700,color:'#22d3ee',minWidth:30,textAlign:'right'}}>{wh}%</span>
                       <input type="range" min={0} max={100} step={5} value={wh}
                         onChange={e=>upd('ranking.rankingWeightHistorico',Number(e.target.value))}
-                        style={{width:90,accentColor:'#22d3ee'}}/>
+                        style={{width:70,accentColor:'#22d3ee'}}/>
                     </div>
                   )})()}
+                  {/* Nota común a las cuatro métricas — antes se repetía en cada descripción */}
+                  <div style={{fontSize:11,color:'#5a7a95',lineHeight:1.4,marginBottom:8}}>
+                    Las cuatro se aplican tanto al score de <b>estrategia activa</b> como al de <b>top estrategia</b>,
+                    y se normalizan entre el percentil (100−P)% y P% de tu watchlist actual.
+                  </div>
                   {[
-                    ['ranking.rankingWinRatePct',     'Win rate',                    settings.ranking?.rankingWinRatePct??33,     '% de trades ganadores. Mide la consistencia. Se aplica a estrategia activa y top estrategia. Se normaliza entre el percentil (100−P)% y P% de tu watchlist actual.'],
-                    ['ranking.rankingCAGRPct',        'CAGR',                         settings.ranking?.rankingCAGRPct??33,        'Tasa de crecimiento anual anualizada. Se aplica a estrategia activa y top estrategia. Se normaliza entre el percentil (100−P)% y P% de tu watchlist actual.'],
-                    ['ranking.rankingCAGRRobustoPct', 'CAGR sin top 3 trades',        settings.ranking?.rankingCAGRRobustoPct??34, 'CAGR excluyendo los 3 mejores trades. Mide la robustez real. Se aplica a estrategia activa y top estrategia. Se normaliza entre el percentil (100−P)% y P% de tu watchlist actual.'],
-                    ['ranking.rankingMaxDDPct',       'Max drawdown (penalización)', settings.ranking?.rankingMaxDDPct??0,        'Penaliza el riesgo. Reduce el score. Se aplica a estrategia activa y top estrategia. Se normaliza entre el percentil (100−P)% y P% de tu watchlist actual.'],
+                    ['ranking.rankingWinRatePct',     'Win rate',                    settings.ranking?.rankingWinRatePct??33,     '% de trades ganadores. Mide la consistencia.'],
+                    ['ranking.rankingCAGRPct',        'CAGR',                         settings.ranking?.rankingCAGRPct??33,        'Tasa de crecimiento anual anualizada.'],
+                    ['ranking.rankingCAGRRobustoPct', 'CAGR sin top 3 trades',        settings.ranking?.rankingCAGRRobustoPct??34, 'CAGR excluyendo los 3 mejores trades. Mide la robustez real.'],
+                    ['ranking.rankingMaxDDPct',       'Max drawdown (penalización)', settings.ranking?.rankingMaxDDPct??0,        'Penaliza el riesgo: resta score.'],
                   ].map(([key,label,val,hint])=>(
                     <div key={key} style={{marginBottom:8}}>
                       <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:3}}>
@@ -787,7 +796,7 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                         <span style={{fontFamily:MONO,fontSize:11,fontWeight:700,color:'#22d3ee',minWidth:30,textAlign:'right'}}>{val}%</span>
                         <input type="range" min={0} max={100} step={5} value={val}
                           onChange={e=>upd(key,Number(e.target.value))}
-                          style={{width:80,accentColor:'#22d3ee'}}/>
+                          style={{width:64,accentColor:'#22d3ee'}}/>
                       </div>
                       <div style={{fontSize:12,color:'#7a9bc0',lineHeight:1.5}}>{hint}</div>
                     </div>
@@ -824,7 +833,7 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                     color:'#e2eaf5',fontFamily:MONO,fontSize:12,padding:'4px 8px',textAlign:'center'}}/>
               </div>
               {/* Percentil de normalización */}
-              <div style={{marginTop:14}}>
+              <div style={{marginTop:10}}>
                 <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:6}}>
                   <span style={{fontFamily:MONO,fontSize:12,color:'#cce0f5',flex:1}}>Percentil de normalización (suelo y techo)</span>
                   <input type="number" value={settings.ranking?.rankingNormPercentile??95} min={50} max={100}
@@ -833,7 +842,7 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                       color:'#e2eaf5',fontFamily:MONO,fontSize:12,padding:'4px 8px',textAlign:'center'}}/>
                 </div>
                 <div style={{fontSize:11,color:'#5a7a95',lineHeight:1.5,padding:'4px 8px',background:'rgba(34,211,238,0.04)',borderRadius:4,border:'0.5px solid rgba(34,211,238,0.1)'}}>
-                  p(100−P)% = suelo (score 0), pP% = techo (score 100). Con P=95 y 57 activos: se ignoran los 3 mejores y 3 peores de cada métrica.{' '}
+                  p(100−P)% = suelo (score 0), pP% = techo (score 100). Con P=95 se ignora aproximadamente el 5% superior e inferior de cada métrica (los valores extremos no distorsionan la escala).{' '}
                   <span style={{color:'#7a9bc0'}}>Rango recomendado: 90–99.</span>
                 </div>
               </div>
@@ -842,7 +851,7 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                 const hours = settings.ranking?.autoRefreshScoreMetSenHours ?? 24
                 const enabled = hours > 0
                 return(
-                  <div style={{marginTop:14}}>
+                  <div style={{marginTop:10}}>
                     <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:enabled?8:0}}>
                       <input type="checkbox" checked={enabled}
                         onChange={e=>upd('ranking.autoRefreshScoreMetSenHours', e.target.checked ? 24 : 0)}
@@ -875,7 +884,7 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                 const batch = settings.ranking?.metricsReminderBatch ?? 30
                 const enabled = days > 0
                 return(
-                  <div style={{marginTop:16,paddingTop:14,borderTop:'1px solid #16233a'}}>
+                  <div style={{marginTop:10,paddingTop:10,borderTop:'1px solid #16233a'}}>
                     <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:enabled?8:0}}>
                       <input type="checkbox" checked={enabled}
                         onChange={e=>upd('ranking.metricsReminderDays', e.target.checked ? 15 : 0)}
