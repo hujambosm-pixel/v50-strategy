@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { MONO, fmt } from '../lib/utils'
+import { MONO, fmt, pesosScoreHistorico, floorsDe, scoreHistoricoDe } from '../lib/utils'
 import { getSupaUrl, getSupaH } from '../lib/supabase'
 
 // ── Supabase helpers ─────────────────────────────────────────
@@ -322,13 +322,21 @@ export default function WatchlistManager({
       }
     }
 
-    // ── Fallback: best CAGR scan from allRankings ──
+    // ── Fallback: mejor SCORE ponderado (mismo criterio que calcMetricas / refreshWlData) ──
+    const sett = (()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')}catch(_){return {}}})()
+    const pesos = pesosScoreHistorico(sett)
+    const pctN  = (sett.ranking?.rankingNormPercentile ?? 95)/100
+    const universo = []
+    Object.values(allRankings).forEach(data => Object.values(data||{}).forEach(m => { if (m) universo.push(m) }))
+    const floors = floorsDe(universo, pctN)
     let best = null
     Object.entries(allRankings).forEach(([sid, data]) => {
       const m = data[symUp]
-      if (!m) return
-      if (best == null || (m.cagr ?? -999) > (best.metrics.cagr ?? -999))
-        best = { sid, metrics: m }
+      if (!m || m.cagr == null || m.winRate == null || m.maxDD == null) return
+      const sc = scoreHistoricoDe(m, floors, pesos)
+      if (sc == null) return
+      if (best == null || sc > best.sc || (sc === best.sc && (m.cagr ?? -999) > (best.metrics.cagr ?? -999)))
+        best = { sid, metrics: m, sc }
     })
     if (!best) return null
     const strat = strategies.find(s => s.id === best.sid)

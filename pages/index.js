@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo, Fragment } from 'react'
 import Head from 'next/head'
 import { ListFilter, Briefcase, Star, Bell, X as LucideX } from 'lucide-react'
-import { calcMetrics, MONO, fmt, fmtDate, f2, tvSym } from '../lib/utils'
+import { calcMetrics, MONO, fmt, fmtDate, f2, tvSym, pesosScoreHistorico, floorsDe, scoreHistoricoDe } from '../lib/utils'
 import { WATCHLIST_DEFAULT } from '../lib/constants'
 import { getSupaUrl, getSupaKey, getSupaH, setCurrentJwt, getCurrentJwt } from '../lib/supabase'
 import { loadSettings, saveSettings, saveSettingsRemote, loadSettingsRemote } from '../lib/settings'
@@ -2511,14 +2511,27 @@ export default function Home() {
           maxDD:row.max_drawdown??null,ops:row.total_trades??null,
           stratName:strat?.name||'',stratId:row.strategy_id,intervalo,updatedAt:row.updated_at??null}
       }
+      // ── Criterio de TOP al recargar: el MISMO score ponderado que usa calcMetricas.
+      //    Se recalcula desde las métricas crudas de cada fila con una única escala de percentiles
+      //    (todas las filas cargadas), en vez de leer score_historico: ese valor persistido se calculó
+      //    con otra base de normalización (solo activa/top), así que mezclarlo compararía escalas
+      //    distintas. cagrRobust no está en ranking_results → fallback cagrRobust ?? cagr (como siempre). ──
+      const _settWl=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')}catch(_){return {}}})()
+      const _pesosWl=pesosScoreHistorico(_settWl)
+      const _pctWl=(_settWl.ranking?.rankingNormPercentile??95)/100
+      const _mDe=(r)=>({winRate:r.win_rate,cagr:r.cagr_simple,cagrRobust:null,maxDD:r.max_drawdown})
+      const _floorsWl=floorsDe(
+        rows.filter(r=>r.cagr_simple!=null&&r.win_rate!=null&&r.max_drawdown!=null).map(_mDe),
+        _pctWl)
       const newWlData={}
       Object.entries(bySym).forEach(([sym,symRows])=>{
         const activeRow=currentStratIdRef.current?symRows.find(r=>r.strategy_id===currentStratIdRef.current):null
-        // Top: la estrategia con mayor CAGR entre las filas con métricas completas
-        // (mismo criterio que calcMetricas fase 2 — no usa score_historico que puede ser null)
+        // Top: la estrategia con mayor SCORE entre las filas con métricas completas
         const complete=symRows.filter(r=>r.cagr_simple!=null&&r.win_rate!=null&&r.max_drawdown!=null)
         const topRow=complete.length>0
-          ?complete.reduce((acc,r)=>(r.cagr_simple??-Infinity)>(acc?.cagr_simple??-Infinity)?r:acc,null)
+          ?complete
+            .map(r=>({r,sc:scoreHistoricoDe(_mDe(r),_floorsWl,_pesosWl)??-Infinity}))
+            .reduce((a,b)=>(b.sc>a.sc||(b.sc===a.sc&&(b.r.cagr_simple??-Infinity)>(a.r.cagr_simple??-Infinity)))?b:a).r
           :null
         // Si no hay activeRow pero solo hay una estrategia con datos, usarla como activa también
         const fallbackActive = !activeRow && symRows.length===1 ? symRows[0] : activeRow
@@ -2908,37 +2921,17 @@ export default function Home() {
     setRankingRunning(true); setRankingError(null)
     setRankingProgress({done:0, total:syms.length})
     const sett=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')}catch(_){return {}}})()
-    const wrPct=(sett.ranking?.rankingWinRatePct??33)/100, cagrPct=(sett.ranking?.rankingCAGRPct??33)/100
-    const cagrRobPct=(sett.ranking?.rankingCAGRRobustoPct??34)/100, ddPct=(sett.ranking?.rankingMaxDDPct??0)/100
-
-    // ── Normalización percentil dinámica ──
+    // Pesos y percentiles vía helper compartido (misma fórmula que usan calcMetricas y refreshWlData)
+    const pesos=pesosScoreHistorico(sett)
     const pct=(sett.ranking?.rankingNormPercentile??95)/100
-    const getPct=(arr,p)=>{const s=[...arr].sort((a,b)=>a-b);return s[Math.max(0,Math.floor(p*(s.length-1)))]??0}
-    const normDyn=(v,floor,ceil)=>Math.max(0,Math.min(100,ceil===floor?50:(v-floor)/(ceil-floor)*100))
 
     // Recopilar todos los valores válidos — universo completo para percentiles estables
     // Usar overrides si disponibles (evita stale closure tras calcMetricas)
     const getTop=(s)=>topMetricsOverride?.[s.toUpperCase()]??wlData[s.toUpperCase()]?.top
     const getAct=(s)=>activeMetricsOverride?.[s.toUpperCase()]??wlData[s.toUpperCase()]?.active
-    const allWR  =allSyms.map(s=>getAct(s)?.winRate).filter(v=>v!=null)
-    const allCagr=allSyms.map(s=>getAct(s)?.cagr).filter(v=>v!=null)
-    const allCRob=allSyms.map(s=>{const d=getAct(s);return d?.cagrRobust??d?.cagr}).filter(v=>v!=null)
-    const allDD  =allSyms.map(s=>getAct(s)?.maxDD).filter(v=>v!=null)
-    const allWRT =allSyms.map(s=>getTop(s)?.winRate).filter(v=>v!=null)
-    const allCT  =allSyms.map(s=>getTop(s)?.cagr).filter(v=>v!=null)
-    const allCRT =allSyms.map(s=>{const d=getTop(s);return d?.cagrRobust??d?.cagr}).filter(v=>v!=null)
-    const allDDT =allSyms.map(s=>getTop(s)?.maxDD).filter(v=>v!=null)
-
-    // Suelo y techo percentiles para activa
-    const [wrFl,wrCe]      =[getPct(allWR  ,1-pct),getPct(allWR  ,pct)]
-    const [caFl,caCe]      =[getPct(allCagr,1-pct),getPct(allCagr,pct)]
-    const [crFl,crCe]      =[getPct(allCRob,1-pct),getPct(allCRob,pct)]
-    const [ddFl,ddCe]      =[getPct(allDD  ,1-pct),getPct(allDD  ,pct)]
-    // para top
-    const [wrFlT,wrCeT]    =[getPct(allWRT ,1-pct),getPct(allWRT ,pct)]
-    const [caFlT,caCeT]    =[getPct(allCT  ,1-pct),getPct(allCT  ,pct)]
-    const [crFlT,crCeT]    =[getPct(allCRT ,1-pct),getPct(allCRT ,pct)]
-    const [ddFlT,ddCeT]    =[getPct(allDDT ,1-pct),getPct(allDDT ,pct)]
+    // Suelos/techos: uno para la activa y otro para la top (distribuciones separadas, como antes)
+    const fAct=floorsDe(allSyms.map(s=>getAct(s)),pct)
+    const fTop=floorsDe(allSyms.map(s=>getTop(s)),pct)
 
     // ── Calcular scoreHistorico desde wlData (sin backtest) ──
     const activeScoreMap={}, topScoreMap={}
@@ -2948,18 +2941,10 @@ export default function Home() {
       // Para top: usar override si disponible (evita stale closure tras calcMetricas)
       const td=topMetricsOverride?.[symUp]??wlData[symUp]?.top
       if(ad?.cagr!=null&&ad?.winRate!=null&&ad?.maxDD!=null){
-        activeScoreMap[symUp]=Math.max(0,Math.min(100,
-          normDyn(ad.winRate,            wrFl,wrCe)*wrPct+
-          normDyn(ad.cagr,               caFl,caCe)*cagrPct+
-          normDyn(ad.cagrRobust??ad.cagr,crFl,crCe)*cagrRobPct-
-          normDyn(ad.maxDD,              ddFl,ddCe)*ddPct))
+        activeScoreMap[symUp]=scoreHistoricoDe(ad,fAct,pesos)
       }
       if(td?.cagr!=null&&td?.winRate!=null&&td?.maxDD!=null){
-        topScoreMap[symUp]=Math.max(0,Math.min(100,
-          normDyn(td.winRate,            wrFlT,wrCeT)*wrPct+
-          normDyn(td.cagr,               caFlT,caCeT)*cagrPct+
-          normDyn(td.cagrRobust??td.cagr,crFlT,crCeT)*cagrRobPct-
-          normDyn(td.maxDD,              ddFlT,ddCeT)*ddPct))
+        topScoreMap[symUp]=scoreHistoricoDe(td,fTop,pesos)
       }
       setRankingProgress({done:idx+1,total:syms.length})
     })
@@ -3234,12 +3219,25 @@ export default function Home() {
       // y no popula el mapa a tiempo para el return { topMetricsMap }
       const topMetricsMap={}
       const topWlUpdates={}  // datos para setWlData, calculados síncronamente
+      // ── Criterio de TOP: el SCORE PONDERADO de Ajustes → Ranking (mismo helper que calcScoreMetricas),
+      //    no el CAGR. Los percentiles se calculan UNA vez sobre el universo estrategia×símbolo de esta
+      //    corrida, para que todas las candidatas se midan contra la misma escala. ──
+      const _pesosTop=pesosScoreHistorico(sett)
+      const _pctTop=(sett.ranking?.rankingNormPercentile??95)/100
+      const _universoTop=[]
+      Object.values(allStratMetricsMap).forEach(mm=>Object.values(mm||{}).forEach(m=>{ if(m) _universoTop.push(m) }))
+      const _floorsTop=floorsDe(_universoTop,_pctTop)
       syms.forEach(sym=>{
         const symUp=sym.toUpperCase()
-        let bestStratId=null, bestCagr=-Infinity
+        let bestStratId=null, bestScore=-Infinity, bestCagr=-Infinity
         Object.entries(allStratMetricsMap).forEach(([sid,metricsForStrat])=>{
           const m=metricsForStrat[symUp]
-          if(m && (m.cagr??-Infinity)>bestCagr){ bestCagr=m.cagr; bestStratId=sid }
+          if(!m||m.cagr==null||m.winRate==null||m.maxDD==null) return   // solo métricas completas
+          const sc=scoreHistoricoDe(m,_floorsTop,_pesosTop)
+          if(sc==null) return
+          const cg=m.cagr??-Infinity
+          // Empate en score → desempata el CAGR (comportamiento predecible)
+          if(sc>bestScore||(sc===bestScore&&cg>bestCagr)){ bestScore=sc; bestCagr=cg; bestStratId=sid }
         })
         if(bestStratId){
           const topM=allStratMetricsMap[bestStratId][symUp]
@@ -4600,7 +4598,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.672</title>
+        <title>Trading Simulator V9.673</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4678,7 +4676,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.672
+            <span className="dot"/>Trading Simulator V9.673
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
