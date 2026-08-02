@@ -859,6 +859,9 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                       <span style={{fontFamily:MONO,fontSize:12,color:'#cce0f5',flex:1,cursor:'pointer'}}
                         onClick={()=>upd('ranking.autoRefreshScoreMetSenHours', enabled ? 0 : 24)}>
                         Actualización automática Score mét.+señales al cargar
+                        <span title="Solo recompone los scores a partir de las métricas ya guardadas. No descarga precios ni ejecuta backtests, así que es instantáneo. No renueva las métricas."
+                          onClick={e=>e.stopPropagation()}
+                          style={{marginLeft:6,fontSize:11,color:'#5a7a95',textDecoration:'none',cursor:'help'}}>ⓘ</span>
                       </span>
                     </div>
                     {enabled&&(
@@ -871,10 +874,6 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                         <span style={{fontFamily:MONO,fontSize:11,color:'#7a9bc0'}}>horas sin actualizar</span>
                       </div>
                     )}
-                    <div style={{fontSize:11,color:'#5a7a95',lineHeight:1.5,marginTop:6,paddingLeft:22}}>
-                      Solo <b style={{color:'#7a9bc0'}}>recompone los scores</b> a partir de las métricas ya guardadas.
-                      No descarga precios ni ejecuta backtests, así que es instantáneo. No renueva las métricas.
-                    </div>
                   </div>
                 )
               })()}
@@ -892,6 +891,9 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                       <span style={{fontFamily:MONO,fontSize:12,color:'#cce0f5',flex:1,cursor:'pointer'}}
                         onClick={()=>upd('ranking.metricsReminderDays', enabled ? 0 : 15)}>
                         Recordar recalcular métricas completas (con backtest)
+                        <span title="Recalcula las métricas de verdad: descarga precios actualizados y backtestea cada activo contra todas las estrategias habilitadas (y después recompone sus scores). Tarda varios minutos, por eso solo aparece un aviso al cargar la app con un botón para lanzarlo: nunca se ejecuta solo."
+                          onClick={e=>e.stopPropagation()}
+                          style={{marginLeft:6,fontSize:11,color:'#5a7a95',textDecoration:'none',cursor:'help'}}>ⓘ</span>
                       </span>
                     </div>
                     {enabled&&(
@@ -911,12 +913,6 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                         <span style={{fontFamily:MONO,fontSize:11,color:'#7a9bc0'}}>más antiguos</span>
                       </div>
                     )}
-                    <div style={{fontSize:11,color:'#5a7a95',lineHeight:1.5,marginTop:6,paddingLeft:22}}>
-                      Recalcula las <b style={{color:'#7a9bc0'}}>métricas de verdad</b>: descarga precios actualizados y
-                      backtestea cada activo contra todas las estrategias habilitadas (y después recompone sus scores).
-                      Tarda varios minutos, por eso solo aparece un <b style={{color:'#7a9bc0'}}>aviso</b> al cargar la app
-                      con un botón para lanzarlo: nunca se ejecuta solo.
-                    </div>
                   </div>
                 )
               })()}
