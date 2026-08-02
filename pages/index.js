@@ -395,24 +395,66 @@ async function upsertScoreCompletoRemote(scoreMap, stratId) {
   }
 }
 
+// Columna cagr_robusto (sql/add_cagr_robusto.sql): puede no existir todavía en la BD del usuario.
+// Se detecta al primer fallo y se recuerda, para no reintentar en cada lectura/escritura.
+let _cagrRobustoOk = true
+const _sinCagrRobusto = (b)=>b.map(r=>{const o={...r}; delete o.cagr_robusto; return o})
+
 // Upsert parcial: actualiza SOLO métricas (sin tocar score_historico ni score_completo)
 async function upsertMetricsRemote(metricsMap, stratId) {
   if (!getSupaUrl()) return
   const rows = Object.entries(metricsMap).map(([symbol, m]) => ({
     symbol, strategy_id: stratId||null,
     win_rate: m.winRate??null, cagr_simple: m.cagr??null,
+    cagr_robusto: m.cagrRobust??null,
     max_drawdown: m.maxDD??null, total_trades: m.trades??null,
     profit_simple: m.profit??null, updated_at: new Date().toISOString(),
     ...(getUidFromJwt() ? { user_id: getUidFromJwt() } : {})
   }))
+  const post = (batch) => fetch(`${getSupaUrl()}/rest/v1/ranking_results?on_conflict=symbol,strategy_id`, {
+    method: 'POST',
+    headers: { ...getSupaH(), 'Prefer': 'resolution=merge-duplicates,return=minimal', 'Content-Type': 'application/json' },
+    body: JSON.stringify(batch)
+  }).catch(()=>null)
   for (let i=0; i<rows.length; i+=20) {
-    const res = await fetch(`${getSupaUrl()}/rest/v1/ranking_results?on_conflict=symbol,strategy_id`, {
-      method: 'POST',
-      headers: { ...getSupaH(), 'Prefer': 'resolution=merge-duplicates,return=minimal', 'Content-Type': 'application/json' },
-      body: JSON.stringify(rows.slice(i, i+20))
-    }).catch(()=>null)
-    if (res && !res.ok) { const text = await res.text(); console.error('[UPSERT-METRICS ERROR]', res.status, text) }
+    const batch = rows.slice(i, i+20)
+    let res = await post(_cagrRobustoOk ? batch : _sinCagrRobusto(batch))
+    if (res && !res.ok) {
+      const text = await res.text()
+      if (_cagrRobustoOk && text.includes('cagr_robusto')) {
+        // La columna aún no existe → reintentar sin ella y recordarlo (no rompe nada)
+        _cagrRobustoOk = false
+        res = await post(_sinCagrRobusto(batch))
+        if (res && !res.ok) console.error('[UPSERT-METRICS ERROR]', res.status, await res.text())
+      } else {
+        console.error('[UPSERT-METRICS ERROR]', res.status, text)
+      }
+    }
   }
+}
+
+// Universo COMPLETO de métricas de ranking_results (todos los símbolos × estrategias), paginado.
+// Sirve para que la escala de percentiles del score no dependa de cuántos activos tenga la corrida.
+async function loadMetricsUniverseRemote() {
+  if (!getSupaUrl()) return []
+  const COLS='symbol,strategy_id,win_rate,cagr_simple,max_drawdown'
+  const sel = ()=>_cagrRobustoOk ? COLS+',cagr_robusto' : COLS
+  const PAGE=1000
+  let all=[], from=0
+  while (true) {
+    let res = await fetch(`${getSupaUrl()}/rest/v1/ranking_results?select=${sel()}&offset=${from}&limit=${PAGE}`,{headers:getSupaH()})
+    if (!res.ok && _cagrRobustoOk) {   // columna inexistente → reintentar sin ella
+      _cagrRobustoOk = false
+      res = await fetch(`${getSupaUrl()}/rest/v1/ranking_results?select=${sel()}&offset=${from}&limit=${PAGE}`,{headers:getSupaH()})
+    }
+    if (!res.ok) break
+    const page = await res.json()
+    if (!Array.isArray(page) || page.length===0) break
+    all = all.concat(page)
+    if (page.length < PAGE) break
+    from += PAGE
+  }
+  return all
 }
 
 // ── Strategies API ────────────────────────────────────────────
@@ -2489,9 +2531,14 @@ export default function Home() {
     try {
       const PAGE_SIZE=1000
       let allRows=[],from=0,hasMore=true
-      const BASE_SELECT='symbol,strategy_id,score_historico,score_completo,updated_at,cagr_simple,win_rate,max_drawdown,total_trades,profit_simple'
+      const BASE_COLS='symbol,strategy_id,score_historico,score_completo,updated_at,cagr_simple,win_rate,max_drawdown,total_trades,profit_simple'
+      const BASE_SELECT=()=>_cagrRobustoOk?BASE_COLS+',cagr_robusto':BASE_COLS
       while(hasMore){
-        const res=await fetch(`${getSupaUrl()}/rest/v1/ranking_results?select=${BASE_SELECT}&offset=${from}&limit=${PAGE_SIZE}`,{headers:getSupaH()})
+        let res=await fetch(`${getSupaUrl()}/rest/v1/ranking_results?select=${BASE_SELECT()}&offset=${from}&limit=${PAGE_SIZE}`,{headers:getSupaH()})
+        if(!res.ok&&_cagrRobustoOk){   // columna cagr_robusto aún inexistente → reintentar sin ella
+          _cagrRobustoOk=false
+          res=await fetch(`${getSupaUrl()}/rest/v1/ranking_results?select=${BASE_SELECT()}&offset=${from}&limit=${PAGE_SIZE}`,{headers:getSupaH()})
+        }
         if(!res.ok) break
         const page=await res.json()
         if(!Array.isArray(page)||page.length===0){hasMore=false}
@@ -2507,7 +2554,8 @@ export default function Home() {
         let intervalo='diario'
         try{const p=typeof strat?.params==='string'?JSON.parse(strat.params||'{}'):(strat?.params||{});intervalo=p.intervalo||'diario'}catch(_){}
         return{scoreMetricas:row.score_historico??null,scoreMetSeñ:row.score_completo??null,
-          cagr:row.cagr_simple??null,profit:row.profit_simple??null,winRate:row.win_rate??null,
+          cagr:row.cagr_simple??null,cagrRobust:row.cagr_robusto??null,
+          profit:row.profit_simple??null,winRate:row.win_rate??null,
           maxDD:row.max_drawdown??null,ops:row.total_trades??null,
           stratName:strat?.name||'',stratId:row.strategy_id,intervalo,updatedAt:row.updated_at??null}
       }
@@ -2522,7 +2570,8 @@ export default function Home() {
       const _settWl=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')}catch(_){return {}}})()
       const _pesosWl=pesosScoreHistorico(_settWl)
       const _pctWl=(_settWl.ranking?.rankingNormPercentile??95)/100
-      const _mDe=(r)=>({winRate:r.win_rate,cagr:r.cagr_simple,cagrRobust:null,maxDD:r.max_drawdown})
+      // cagr_robusto ya persistido (si la columna existe y la fila lo tiene); si no, el helper aplica ?? cagr
+      const _mDe=(r)=>({winRate:r.win_rate,cagr:r.cagr_simple,cagrRobust:r.cagr_robusto??null,maxDD:r.max_drawdown})
       const _floorsWl=floorsDe(
         rows.filter(r=>r.cagr_simple!=null&&r.win_rate!=null&&r.max_drawdown!=null).map(_mDe),
         _pctWl)
@@ -3231,11 +3280,24 @@ export default function Home() {
       const topMetricsMap={}
       const topWlUpdates={}  // datos para setWlData, calculados síncronamente
       // ── Criterio de TOP: el SCORE PONDERADO de Ajustes → Ranking (mismo helper que calcScoreMetricas),
-      //    no el CAGR. Los percentiles se calculan UNA vez sobre el universo estrategia×símbolo de esta
-      //    corrida, para que todas las candidatas se midan contra la misma escala. ──
+      //    no el CAGR. Los percentiles se calculan sobre el universo COMPLETO de ranking_results (una
+      //    sola lectura paginada por corrida), no sobre los activos seleccionados: así el score de un
+      //    activo no depende de con cuántos otros se haya actualizado. Las métricas recién calculadas
+      //    sustituyen a las persistidas del mismo par (símbolo, estrategia) por ser más frescas.
+      //    Si la lectura falla, se cae al universo de la corrida (comportamiento anterior). ──
       const _pesosTop=pesosScoreHistorico(sett)
       const _pctTop=(sett.ranking?.rankingNormPercentile??95)/100
       const _universoTop=[]
+      try{
+        const _persist=await loadMetricsUniverseRemote()
+        const _frescas=new Set()
+        Object.entries(allStratMetricsMap).forEach(([sid,mm])=>Object.keys(mm||{}).forEach(s=>_frescas.add(sid+'|'+s)))
+        _persist.forEach(r=>{
+          if(r.cagr_simple==null||r.win_rate==null||r.max_drawdown==null) return
+          if(_frescas.has((r.strategy_id||'')+'|'+(r.symbol||'').toUpperCase())) return  // manda la de la corrida
+          _universoTop.push({winRate:r.win_rate,cagr:r.cagr_simple,cagrRobust:r.cagr_robusto??null,maxDD:r.max_drawdown})
+        })
+      }catch(e){ console.error('[calcMetricas] no se pudo cargar el universo completo de ranking_results',e) }
       Object.values(allStratMetricsMap).forEach(mm=>Object.values(mm||{}).forEach(m=>{ if(m) _universoTop.push(m) }))
       const _floorsTop=floorsDe(_universoTop,_pctTop)
       syms.forEach(sym=>{
@@ -4609,7 +4671,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.674</title>
+        <title>Trading Simulator V9.675</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4687,7 +4749,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.674
+            <span className="dot"/>Trading Simulator V9.675
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
