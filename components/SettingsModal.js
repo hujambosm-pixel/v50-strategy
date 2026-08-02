@@ -894,24 +894,23 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                         Recordar recalcular métricas completas (con backtest)
                       </span>
                     </div>
-                    {enabled&&(<>
-                      <div style={{display:'flex',alignItems:'center',gap:8,paddingLeft:22,marginBottom:6}}>
+                    {enabled&&(
+                      <div style={{display:'flex',alignItems:'center',gap:8,paddingLeft:22,flexWrap:'wrap'}}>
                         <span style={{fontFamily:MONO,fontSize:11,color:'#7a9bc0'}}>Avisar si hay activos con más de</span>
                         <input type="number" value={days} min={1} max={365}
                           onChange={e=>upd('ranking.metricsReminderDays', Math.max(1,Number(e.target.value)))}
                           style={{width:52,background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,
                             color:'#e2eaf5',fontFamily:MONO,fontSize:12,padding:'3px 6px',textAlign:'center'}}/>
                         <span style={{fontFamily:MONO,fontSize:11,color:'#7a9bc0'}}>días sin recalcular</span>
-                      </div>
-                      <div style={{display:'flex',alignItems:'center',gap:8,paddingLeft:22}}>
-                        <span style={{fontFamily:MONO,fontSize:11,color:'#7a9bc0'}}>Actualizar por lote los</span>
+                        <span style={{fontFamily:MONO,fontSize:11,color:'#3d5a7a',padding:'0 2px'}}>·</span>
+                        <span style={{fontFamily:MONO,fontSize:11,color:'#7a9bc0'}}>actualizar por lote los</span>
                         <input type="number" value={batch} min={1} max={200}
                           onChange={e=>upd('ranking.metricsReminderBatch', Math.max(1,Number(e.target.value)))}
                           style={{width:52,background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,
                             color:'#e2eaf5',fontFamily:MONO,fontSize:12,padding:'3px 6px',textAlign:'center'}}/>
-                        <span style={{fontFamily:MONO,fontSize:11,color:'#7a9bc0'}}>activos más antiguos</span>
+                        <span style={{fontFamily:MONO,fontSize:11,color:'#7a9bc0'}}>más antiguos</span>
                       </div>
-                    </>)}
+                    )}
                     <div style={{fontSize:11,color:'#5a7a95',lineHeight:1.5,marginTop:6,paddingLeft:22}}>
                       Recalcula las <b style={{color:'#7a9bc0'}}>métricas de verdad</b>: descarga precios actualizados y
                       backtestea cada activo contra todas las estrategias habilitadas (y después recompone sus scores).
