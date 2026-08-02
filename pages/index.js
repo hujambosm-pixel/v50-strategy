@@ -2511,11 +2511,14 @@ export default function Home() {
           maxDD:row.max_drawdown??null,ops:row.total_trades??null,
           stratName:strat?.name||'',stratId:row.strategy_id,intervalo,updatedAt:row.updated_at??null}
       }
-      // ── Criterio de TOP al recargar: el MISMO score ponderado que usa calcMetricas.
-      //    Se recalcula desde las métricas crudas de cada fila con una única escala de percentiles
-      //    (todas las filas cargadas), en vez de leer score_historico: ese valor persistido se calculó
-      //    con otra base de normalización (solo activa/top), así que mezclarlo compararía escalas
-      //    distintas. cagrRobust no está en ranking_results → fallback cagrRobust ?? cagr (como siempre). ──
+      // ── Criterio de TOP al recargar: RESPETAR la elección ya persistida, no re-elegir.
+      //    calcMetricas elige la top con el score ponderado (con cagrRobust real y los percentiles de la
+      //    corrida) y calcScoreMetricas guarda ese score en la fila de ESA estrategia. Re-elegir aquí con
+      //    una escala propia (todas las filas + cagrRobust ausente) hacía que se mostrara otra estrategia,
+      //    que no tiene score_historico → la columna SCORE MÉTRICAS salía vacía. Basta con quedarse con la
+      //    fila de mayor score_historico.
+      //    El recálculo por percentiles queda SOLO como último recurso, para símbolos cuyas filas no
+      //    tienen ningún score guardado. cagrRobust no está en ranking_results → fallback ?? cagr. ──
       const _settWl=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')}catch(_){return {}}})()
       const _pesosWl=pesosScoreHistorico(_settWl)
       const _pctWl=(_settWl.ranking?.rankingNormPercentile??95)/100
@@ -2526,13 +2529,21 @@ export default function Home() {
       const newWlData={}
       Object.entries(bySym).forEach(([sym,symRows])=>{
         const activeRow=currentStratIdRef.current?symRows.find(r=>r.strategy_id===currentStratIdRef.current):null
-        // Top: la estrategia con mayor SCORE entre las filas con métricas completas
+        // Top: entre las filas con métricas completas...
         const complete=symRows.filter(r=>r.cagr_simple!=null&&r.win_rate!=null&&r.max_drawdown!=null)
-        const topRow=complete.length>0
-          ?complete
-            .map(r=>({r,sc:scoreHistoricoDe(_mDe(r),_floorsWl,_pesosWl)??-Infinity}))
-            .reduce((a,b)=>(b.sc>a.sc||(b.sc===a.sc&&(b.r.cagr_simple??-Infinity)>(a.r.cagr_simple??-Infinity)))?b:a).r
-          :null
+        // 1) preferente — la de mayor score_historico PERSISTIDO (empate → mayor CAGR)
+        const conScore=complete.filter(r=>r.score_historico!=null)
+        const topRow=conScore.length>0
+          ?conScore.reduce((a,b)=>(
+             b.score_historico>a.score_historico||
+             (b.score_historico===a.score_historico&&(b.cagr_simple??-Infinity)>(a.cagr_simple??-Infinity))
+           )?b:a)
+          // 2) último recurso — ninguna fila tiene score guardado: recalcular por percentiles
+          :(complete.length>0
+            ?complete
+              .map(r=>({r,sc:scoreHistoricoDe(_mDe(r),_floorsWl,_pesosWl)??-Infinity}))
+              .reduce((a,b)=>(b.sc>a.sc||(b.sc===a.sc&&(b.r.cagr_simple??-Infinity)>(a.r.cagr_simple??-Infinity)))?b:a).r
+            :null)
         // Si no hay activeRow pero solo hay una estrategia con datos, usarla como activa también
         const fallbackActive = !activeRow && symRows.length===1 ? symRows[0] : activeRow
         newWlData[sym]={active:toEntry(fallbackActive),top:toEntry(topRow)}
@@ -4598,7 +4609,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.673</title>
+        <title>Trading Simulator V9.674</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4676,7 +4687,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.673
+            <span className="dot"/>Trading Simulator V9.674
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
