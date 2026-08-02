@@ -140,7 +140,7 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
       background:'rgba(0,0,0,0.65)'}} onClick={onClose}>
       <div onClick={e=>e.stopPropagation()} style={{
         background:'#0a101a', border:'1px solid #1a2d45', borderRadius:10,
-        width:'min(980px,95vw)', maxHeight:'95vh', display:'flex', flexDirection:'column',
+        width:'min(1280px,95vw)', maxHeight:'95vh', display:'flex', flexDirection:'column',
         boxShadow:'0 16px 60px rgba(0,0,0,0.7)', fontFamily:MONO
       }}>
 
@@ -693,7 +693,7 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                 {/* Columna izquierda — Métricas de mercado */}
                 <div style={{minWidth:0,background:'rgba(59,130,246,0.06)',border:'0.5px solid rgba(59,130,246,0.22)',borderRadius:8,padding:'10px 12px'}}>
                   <div title="Estas métricas usan datos de precios actuales. Alimentan el Score mét.+señales, que es una columna ordenable de la tabla y dos de los cuatro modos de ordenación del Watchlist, y prioriza slots en el modo Capital Concentrado del backtesting multiactivo. NO intervienen en la elección de la Top Estrategia de cada activo (esa se decide por CAGR)."
-                    style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:'#3b82f6',marginBottom:8,letterSpacing:'0.04em',cursor:'help',textDecoration:'underline dotted',textDecorationColor:'rgba(59,130,246,0.4)'}}>Métricas de mercado actuales ℹ</div>
+                    style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:'#3b82f6',marginBottom:8,letterSpacing:'0.04em',cursor:'help',textDecoration:'underline dotted',textDecorationColor:'rgba(59,130,246,0.4)'}}>Métricas de mercado actuales<span style={{marginLeft:6,fontSize:11,color:'#5a7a95',textDecoration:'none'}}>ⓘ</span></div>
                   {/* Peso global del bloque */}
                   {(()=>{const wm=settings.ranking?.rankingWeightMercado??20; return(
                     <div style={{display:'flex',alignItems:'center',gap:8,paddingBottom:8,marginBottom:10,borderBottom:'1px solid rgba(59,130,246,0.2)'}}>
@@ -768,7 +768,7 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                 {/* Columna derecha — Métricas históricas */}
                 <div style={{minWidth:0,background:'rgba(34,211,238,0.05)',border:'0.5px solid rgba(34,211,238,0.18)',borderRadius:8,padding:'10px 12px'}}>
                   <div title="Estas métricas evalúan el rendimiento pasado de la estrategia con cada activo. Se aplican tanto al score de estrategia activa como al de top estrategia. Se usan para el ranking del Watchlist, para determinar la Top Estrategia de cada activo, y también (combinadas con las de mercado) para la priorización de slots en Capital Concentrado."
-                    style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:'#22d3ee',marginBottom:8,letterSpacing:'0.04em',cursor:'help',textDecoration:'underline dotted',textDecorationColor:'rgba(34,211,238,0.4)'}}>Métricas históricas de estrategia ℹ</div>
+                    style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:'#22d3ee',marginBottom:8,letterSpacing:'0.04em',cursor:'help',textDecoration:'underline dotted',textDecorationColor:'rgba(34,211,238,0.4)'}}>Métricas históricas de estrategia<span style={{marginLeft:6,fontSize:11,color:'#5a7a95',textDecoration:'none'}}>ⓘ</span></div>
                   {/* Peso global del bloque */}
                   {(()=>{const wh=settings.ranking?.rankingWeightHistorico??80; return(
                     <div style={{display:'flex',alignItems:'center',gap:8,paddingBottom:8,marginBottom:10,borderBottom:'1px solid rgba(34,211,238,0.18)'}}>
