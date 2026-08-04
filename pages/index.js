@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo, Fragment } from 'react'
 import Head from 'next/head'
 import { ListFilter, Briefcase, Star, Bell, X as LucideX } from 'lucide-react'
-import { calcMetrics, MONO, fmt, fmtDate, f2, tvSym, pesosScoreHistorico, floorsDe, scoreHistoricoDe } from '../lib/utils'
+import { calcMetrics, MONO, fmt, fmtDate, f2, tvSym, pesosScoreHistorico, floorsDe, scoreHistoricoDe, desgloseScoreHistorico } from '../lib/utils'
 import { WATCHLIST_DEFAULT } from '../lib/constants'
 import { getSupaUrl, getSupaKey, getSupaH, setCurrentJwt, getCurrentJwt } from '../lib/supabase'
 import { loadSettings, saveSettings, saveSettingsRemote, loadSettingsRemote } from '../lib/settings'
@@ -919,6 +919,9 @@ export default function Home() {
   const [stratManagerReturn,setStratManagerReturn]=useState(false) // volver al StrategyManager al cerrar editor
   // Tooltip flotante del Watchlist — {x, y, symbol} | null
   const [wlTooltip,setWlTooltip]=useState(null)
+  // Escala del score (suelos/techos por percentil del universo completo + pesos), retenida por
+  // refreshWlData para poder desglosar el score en el tooltip sin recalcular nada por fila.
+  const [scoreEscala,setScoreEscala]=useState(null)
   // Búsqueda async de nombre
   const symSearchRef=useRef(null)
   const [mcTradeFilter,setMcTradeFilter]=useState('')
@@ -2575,6 +2578,8 @@ export default function Home() {
       const _floorsWl=floorsDe(
         rows.filter(r=>r.cagr_simple!=null&&r.win_rate!=null&&r.max_drawdown!=null).map(_mDe),
         _pctWl)
+      // Se retienen (no cambia su uso actual) para poder mostrar el desglose del score en el tooltip
+      setScoreEscala({floors:_floorsWl,pesos:_pesosWl})
       const newWlData={}
       Object.entries(bySym).forEach(([sym,symRows])=>{
         const activeRow=currentStratIdRef.current?symRows.find(r=>r.strategy_id===currentStratIdRef.current):null
@@ -4671,7 +4676,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.675</title>
+        <title>Trading Simulator V9.676</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4749,7 +4754,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.675
+            <span className="dot"/>Trading Simulator V9.676
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -10921,6 +10926,9 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
         ['Estrategia', tAct?.stratName||null, tTop?.stratName||null, s=>s, ()=>'#ffd166'],
         ['Temporalidad', tAct?.intervalo||null, tTop?.intervalo||null, s=>s==='semanal'?'Semanal':'Diario', ()=>'#8aadcc'],
         ['CAGR', tAct?.cagr??null, tTop?.cagr??null, v=>fv(v,1)+'%', cagrColor],
+        // Componente de MAYOR peso del score (34% por defecto). Se muestra siempre (6º flag) aunque
+        // aún no esté persistido: en ese caso sale "—" y el desglose avisa de que se usó el CAGR normal.
+        ['CAGR robusto', tAct?.cagrRobust??null, tTop?.cagrRobust??null, v=>fv(v,1)+'%', cagrColor, true],
         ['Max DD', tAct?.maxDD??null, tTop?.maxDD??null, v=>'-'+fv(Math.abs(v),1)+'%', ()=>'#ff7eb3'],
         ['Win Rate', tAct?.winRate??null, tTop?.winRate??null, v=>fv(v,0)+'%', wrColor],
         ['Ops', tAct?.ops??null, tTop?.ops??null, v=>v!=null?String(Math.round(v)):null, ()=>'#8aadcc'],
@@ -10946,10 +10954,10 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                   <span style={{fontSize:9,color:sameStrat?'#4a7a95':'#ff9500',textAlign:'right'}}>Top</span>
                 </div>
               )}
-              {rows.map(([label,vAct,vTop,fmtFn,colorFn])=>{
+              {rows.map(([label,vAct,vTop,fmtFn,colorFn,siempre])=>{
                 const aStr=vAct!=null?fmtFn(vAct):null
                 const tStr=vTop!=null?fmtFn(vTop):null
-                if(!aStr&&!tStr) return null
+                if(!aStr&&!tStr&&!siempre) return null
                 return(
                   <div key={label} style={{display:'grid',gridTemplateColumns:'70px 1fr'+(sameStrat?'':' 1fr'),gap:4,marginBottom:3,alignItems:'start'}}>
                     <span style={{color:'#3d5a7a',fontSize:10}}>{label}</span>
@@ -10963,6 +10971,60 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                   </div>
                 )
               })}
+              {/* ── Desglose del score: cuántos puntos aporta cada métrica ── */}
+              {scoreEscala&&(()=>{
+                // Se desglosa la columna que alimenta el score visible en la lista (según wlSortMode)
+                const usarTop=wlSortMode==='scoreHistoricoTop'||wlSortMode==='scoreCompletoTop'
+                const m=usarTop?tTop:tAct
+                if(!m||m.cagr==null||m.winRate==null||m.maxDD==null) return null
+                const d=desgloseScoreHistorico(m,scoreEscala.floors,scoreEscala.pesos)
+                if(!d) return null
+                const guardado=usarTop?(tTop?.scoreMetricas??null):(tAct?.scoreMetricas??null)
+                const difiere=guardado!=null&&Math.abs(guardado-d.total)>0.5
+                const G='62px 46px 30px 1fr'
+                const comps=[
+                  ['Win rate',     d.winRate,    v=>fv(v,0)+'%'],
+                  ['CAGR',         d.cagr,       v=>fv(v,1)+'%'],
+                  ['CAGR robusto', d.cagrRobust, v=>fv(v,1)+'%'],
+                  ['Max DD',       d.maxDD,      v=>'-'+fv(Math.abs(v),1)+'%'],
+                ]
+                return(
+                  <div style={{marginTop:6,paddingTop:6,borderTop:'1px solid #1a2d40'}}>
+                    <div style={{fontSize:9,color:'#4a7a95',marginBottom:4}}>
+                      Desglose del score · {usarTop?'Top':'Activa'}
+                    </div>
+                    <div style={{display:'grid',gridTemplateColumns:G,gap:3,fontSize:9,color:'#31506e',marginBottom:2}}>
+                      <span/><span style={{textAlign:'right'}}>valor</span>
+                      <span style={{textAlign:'right'}}>0-100</span><span style={{textAlign:'right'}}>puntos</span>
+                    </div>
+                    {comps.map(([label,c,f])=>(
+                      <div key={label} style={{display:'grid',gridTemplateColumns:G,gap:3,marginBottom:1,fontSize:10}}>
+                        <span style={{color:'#3d5a7a'}}>{label}</span>
+                        <span style={{color:'#8aadcc',textAlign:'right'}}>{c.valor!=null?f(c.valor):'—'}</span>
+                        <span style={{color:'#5a8aaa',textAlign:'right'}}>{fv(c.norm,0)}</span>
+                        <span style={{color:c.puntos<0?'#ff7eb3':'#c8dff5',fontWeight:600,textAlign:'right'}}>
+                          {c.puntos>=0?'+':''}{fv(c.puntos,1)}
+                          <span style={{color:'#31506e',fontWeight:400}}> ({Math.round(c.peso*100)}%)</span>
+                        </span>
+                      </div>
+                    ))}
+                    <div style={{display:'flex',justifyContent:'space-between',marginTop:4,paddingTop:4,borderTop:'1px solid #131f2e'}}>
+                      <span style={{color:'#4a7a95',fontSize:10}}>Total</span>
+                      <span style={{color:'#e8f4ff',fontWeight:700,fontSize:11}}>{fv(d.total,1)}%</span>
+                    </div>
+                    {difiere&&(
+                      <div style={{fontSize:9,color:'#ffd166',marginTop:3,lineHeight:1.35}}>
+                        recalculado hoy: {fv(d.total,1)}% · guardado: {fv(guardado,1)}%
+                      </div>
+                    )}
+                    {d.cagrRobustEsFallback&&(
+                      <div style={{fontSize:9,color:'#5a7a95',marginTop:3,lineHeight:1.35}}>
+                        Sin CAGR robusto guardado: el score usó el CAGR normal en su lugar.
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
               {tooltipUpdatedAt&&(
                 <div style={{display:'flex',justifyContent:'space-between',marginTop:5,paddingTop:5,borderTop:'1px solid #131f2e'}}>
                   <span style={{color:'#3d5a7a',fontSize:10}}>Actualizado</span>
