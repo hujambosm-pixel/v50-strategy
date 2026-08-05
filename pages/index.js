@@ -331,11 +331,13 @@ async function loadAllRankingsRemote() {
   return rows
 }
 
-// Limpia filas corruptas: tienen score_historico pero sin métricas (cagr_simple IS NULL)
+// Limpia filas corruptas: tienen score_historico pero NINGUNA métrica.
+// OJO: cagr_simple puede ser NULL legítimamente (centinela -99 → "no calculable", ver _sinCentinela),
+// así que ya no basta con esa condición: se exige también win_rate IS NULL para no borrar filas válidas.
 async function cleanCorruptRankingRows() {
   if (!getSupaUrl()) return
   try {
-    await fetch(`${getSupaUrl()}/rest/v1/ranking_results?cagr_simple=is.null&score_historico=not.is.null`, {
+    await fetch(`${getSupaUrl()}/rest/v1/ranking_results?cagr_simple=is.null&win_rate=is.null&score_historico=not.is.null`, {
       method: 'DELETE', headers: { ...getSupaH(), 'Prefer': 'return=minimal' }
     })
   } catch(_) {}
@@ -400,13 +402,18 @@ async function upsertScoreCompletoRemote(scoreMap, stratId) {
 let _cagrRobustoOk = true
 const _sinCagrRobusto = (b)=>b.map(r=>{const o={...r}; delete o.cagr_robusto; return o})
 
+// -99 es el CENTINELA de "CAGR no calculable" (capital final ≤ 0), no una rentabilidad real.
+// Se persiste como NULL para que no entre en los percentiles y destroce la escala del score:
+// con NULL, el helper aplica el fallback ya existente (cagrRobust ?? cagr) o descarta el valor.
+const _sinCentinela = (v)=>(v==null||v<=-99)?null:v
+
 // Upsert parcial: actualiza SOLO métricas (sin tocar score_historico ni score_completo)
 async function upsertMetricsRemote(metricsMap, stratId) {
   if (!getSupaUrl()) return
   const rows = Object.entries(metricsMap).map(([symbol, m]) => ({
     symbol, strategy_id: stratId||null,
-    win_rate: m.winRate??null, cagr_simple: m.cagr??null,
-    cagr_robusto: m.cagrRobust??null,
+    win_rate: m.winRate??null, cagr_simple: _sinCentinela(m.cagr),
+    cagr_robusto: _sinCentinela(m.cagrRobust),
     max_drawdown: m.maxDD??null, total_trades: m.trades??null,
     profit_simple: m.profit??null, updated_at: new Date().toISOString(),
     ...(getUidFromJwt() ? { user_id: getUidFromJwt() } : {})
@@ -4676,7 +4683,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.676</title>
+        <title>Trading Simulator V9.677</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4754,7 +4761,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.676
+            <span className="dot"/>Trading Simulator V9.677
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
