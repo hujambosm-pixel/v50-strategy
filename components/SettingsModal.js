@@ -1,15 +1,42 @@
 import { useState, useRef, useEffect } from 'react'
-import { MONO } from '../lib/utils'
+import { MONO, pctOf } from '../lib/utils'
 import { getSupaUrl, getSupaKey } from '../lib/supabase'
 import { loadSettings, saveSettingsRemote } from '../lib/settings'
 import { fetchConditions, saveCondition, deleteCondition, groqParseCondition, lsGetConds, lsSaveConds } from '../lib/conditions'
 import Tip from './Tip'
 
-export default function SettingsModal({ onClose, strategies=[], initialTab='integraciones' }) {
+export default function SettingsModal({ onClose, strategies=[], initialTab='integraciones', wlData={} }) {
   const [tab, setTab] = useState(initialTab)
   const [settings, setSettings] = useState(loadSettings)
   const [groqStatus, setGroqStatus] = useState(null) // null | 'testing' | 'ok' | 'err'
   const [dirty, setDirty] = useState(false)
+  // ── Visor de distribución (pestaña Ranking) — bajo demanda, no altera ningún cálculo ──
+  const [distrib, setDistrib] = useState(null)   // null = colapsado
+  // Percentiles reales de las cuatro métricas del score en las DOS poblaciones que ordenan el
+  // watchlist: la estrategia ACTIVA de cada activo y su TOP estrategia (~160 filas cada una).
+  // Filtrado: se descartan los null y, en cagr/cagrRobust, el centinela -99 ("no calculable"),
+  // que si no hundiría la mediana y el P10. Cálculo síncrono sobre ~320 valores.
+  const calcularDistribucion = () => {
+    const METRICAS = [
+      ['Win rate',      'winRate',    false],
+      ['CAGR',          'cagr',       true],
+      ['CAGR robusto',  'cagrRobust', true],
+      ['Max drawdown',  'maxDD',      false],
+    ]
+    const pobla = (cual) => METRICAS.map(([label,campo,esCagr])=>{
+      const vals = Object.values(wlData||{})
+        .map(d => d?.[cual]?.[campo])
+        .filter(v => v!=null && !isNaN(v) && (!esCagr || v > -99))   // -99 = centinela
+      return { label, n: vals.length,
+        p10: vals.length?pctOf(vals,0.1):null,
+        p50: vals.length?pctOf(vals,0.5):null,
+        p90: vals.length?pctOf(vals,0.9):null }
+    })
+    const active = pobla('active'), top = pobla('top')
+    const nAct = Math.max(...active.map(m=>m.n), 0)
+    const nTop = Math.max(...top.map(m=>m.n), 0)
+    setDistrib({ active, top, nAct, nTop })
+  }
   // Conditions tab state
   const [localConds, setLocalConds]   = useState([])
   const [condTab, setCondTab]         = useState('list')   // 'list' | 'create'
@@ -845,6 +872,74 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                   p(100−P)% = suelo (score 0), pP% = techo (score 100). Con P=95 se ignora aproximadamente el 5% superior e inferior de cada métrica (los valores extremos no distorsionan la escala).{' '}
                   <span style={{color:'#7a9bc0'}}>Rango recomendado: 90–99.</span>
                 </div>
+              </div>
+              {/* ── Visor de distribución (colapsado: en reposo solo el botón) ── */}
+              <div style={{marginTop:10}}>
+                <div style={{display:'flex',alignItems:'center',gap:10}}>
+                  <span style={{fontFamily:MONO,fontSize:12,color:'#cce0f5',flex:1}}>
+                    Distribución real de tus métricas
+                    <span title="Percentil 10, mediana y percentil 90 de las cuatro métricas del score, en las dos poblaciones que ordenan el watchlist: la estrategia activa de cada activo y su top estrategia. Sirve para calibrar umbrales; no cambia ningún cálculo."
+                      style={{marginLeft:6,fontSize:11,color:'#5a7a95',textDecoration:'none',cursor:'help'}}>ⓘ</span>
+                  </span>
+                  <button onClick={()=>distrib?setDistrib(null):calcularDistribucion()} style={{
+                    padding:'6px 12px', borderRadius:4, border:'1px solid #1a2d45',
+                    background:distrib?'rgba(34,211,238,0.12)':'rgba(13,21,32,0.9)',
+                    color:distrib?'#22d3ee':'#7a9bc0',
+                    fontFamily:MONO, fontSize:11, cursor:'pointer', whiteSpace:'nowrap', flexShrink:0
+                  }}>{distrib?'Ocultar':'Calcular distribución'}</button>
+                </div>
+                {distrib&&(()=>{
+                  const f=v=>v==null?'—':`${v.toFixed(1)}%`
+                  const G='104px repeat(3,1fr) 12px repeat(3,1fr)'
+                  const pocaActiva=distrib.nAct < distrib.nTop/2
+                  return(
+                    <div style={{marginTop:8,padding:'8px 10px',background:'rgba(34,211,238,0.04)',
+                      border:'0.5px solid rgba(34,211,238,0.12)',borderRadius:5}}>
+                      {/* Cabecera de poblaciones */}
+                      <div style={{display:'grid',gridTemplateColumns:G,gap:4,fontSize:10,marginBottom:3}}>
+                        <span/>
+                        <span style={{gridColumn:'2 / span 3',textAlign:'center',color:'#22d3ee',fontWeight:700}}>
+                          Activa <span style={{color:'#3d5a7a',fontWeight:400}}>(n={distrib.nAct})</span>
+                        </span>
+                        <span/>
+                        <span style={{gridColumn:'6 / span 3',textAlign:'center',color:'#ff9500',fontWeight:700}}>
+                          Top <span style={{color:'#3d5a7a',fontWeight:400}}>(n={distrib.nTop})</span>
+                        </span>
+                      </div>
+                      {/* Cabecera de percentiles */}
+                      <div style={{display:'grid',gridTemplateColumns:G,gap:4,fontSize:9,color:'#3d5a7a',marginBottom:3}}>
+                        <span/>
+                        <span style={{textAlign:'right'}}>P10</span><span style={{textAlign:'right'}}>mediana</span><span style={{textAlign:'right'}}>P90</span>
+                        <span/>
+                        <span style={{textAlign:'right'}}>P10</span><span style={{textAlign:'right'}}>mediana</span><span style={{textAlign:'right'}}>P90</span>
+                      </div>
+                      {distrib.active.map((mA,i)=>{
+                        const mT=distrib.top[i]
+                        return(
+                          <div key={mA.label} style={{display:'grid',gridTemplateColumns:G,gap:4,fontSize:11,marginBottom:2}}>
+                            <span style={{color:'#7a9bc0'}}>{mA.label}</span>
+                            <span style={{color:'#5a8aaa',textAlign:'right'}}>{f(mA.p10)}</span>
+                            <span style={{color:'#e2eaf5',fontWeight:600,textAlign:'right'}}>{f(mA.p50)}</span>
+                            <span style={{color:'#5a8aaa',textAlign:'right'}}>{f(mA.p90)}</span>
+                            <span/>
+                            <span style={{color:'#5a8aaa',textAlign:'right'}}>{f(mT.p10)}</span>
+                            <span style={{color:'#e2eaf5',fontWeight:600,textAlign:'right'}}>{f(mT.p50)}</span>
+                            <span style={{color:'#5a8aaa',textAlign:'right'}}>{f(mT.p90)}</span>
+                          </div>
+                        )
+                      })}
+                      {pocaActiva&&(
+                        <div style={{fontSize:10,color:'#f59e0b',marginTop:6,lineHeight:1.45}}>
+                          ⚠ La población &ldquo;Activa&rdquo; tiene muy pocos datos (n={distrib.nAct} frente a {distrib.nTop}):
+                          probablemente no hay una estrategia activa cargada. No la uses para calibrar.
+                        </div>
+                      )}
+                      <div style={{fontSize:10,color:'#5a7a95',marginTop:6,lineHeight:1.45}}>
+                        Se excluyen los valores sin dato y los CAGR marcados como no calculables (centinela −99).
+                      </div>
+                    </div>
+                  )
+                })()}
               </div>
               {/* Actualización automática Score mét.+señales */}
               {(()=>{
