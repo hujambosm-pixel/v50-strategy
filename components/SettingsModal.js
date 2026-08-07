@@ -14,14 +14,14 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
   const [distrib, setDistrib] = useState(null)   // null = colapsado
   // Percentiles reales de las cuatro métricas del score en las DOS poblaciones que ordenan el
   // watchlist: la estrategia ACTIVA de cada activo y su TOP estrategia (~160 filas cada una).
-  // Filtrado: se descartan los null y, en cagr/cagrRobust, el centinela -99 ("no calculable"),
+  // Filtrado: se descartan los null y, en cagr, el centinela -99 ("no calculable"),
   // que si no hundiría la mediana y el P10. Cálculo síncrono sobre ~320 valores.
   const calcularDistribucion = () => {
     const METRICAS = [
-      ['Win rate',      'winRate',    false],
-      ['CAGR',          'cagr',       true],
-      ['CAGR robusto',  'cagrRobust', true],
-      ['Max drawdown',  'maxDD',      false],
+      ['Win rate',      'winRate',  false],
+      ['CAGR',          'cagr',     true],   // true = filtrar el centinela -99
+      ['Robustez',      'robustez', false],  // 0-100 por construcción: sin centinelas
+      ['Max drawdown',  'maxDD',    false],
     ]
     const pobla = (cual) => METRICAS.map(([label,campo,esCagr])=>{
       const vals = Object.values(wlData||{})
@@ -812,14 +812,21 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                     y se normalizan entre el percentil (100−P)% y P% de tu watchlist actual.
                   </div>
                   {[
-                    ['ranking.rankingWinRatePct',     'Win rate',                    settings.ranking?.rankingWinRatePct??33,     '% de trades ganadores. Mide la consistencia.'],
-                    ['ranking.rankingCAGRPct',        'CAGR',                         settings.ranking?.rankingCAGRPct??33,        'Tasa de crecimiento anual anualizada.'],
-                    ['ranking.rankingCAGRRobustoPct', 'CAGR sin top 3 trades',        settings.ranking?.rankingCAGRRobustoPct??34, 'CAGR excluyendo los 3 mejores trades. Mide la robustez real.'],
-                    ['ranking.rankingMaxDDPct',       'Max drawdown (penalización)', settings.ranking?.rankingMaxDDPct??0,        'Penaliza el riesgo: resta score.'],
-                  ].map(([key,label,val,hint])=>(
+                    ['ranking.rankingWinRatePct',     'Win rate',                    settings.ranking?.rankingWinRatePct??33,     '% de trades ganadores. Mide la consistencia.',
+                      'Porcentaje de operaciones cerradas en positivo sobre el total. Mide con qué frecuencia acierta la estrategia, no cuánto gana: un win rate alto con ganancias pequeñas puede rendir menos que uno bajo con ganancias grandes. Entra en el score normalizado por percentiles y SUMA puntos.'],
+                    ['ranking.rankingCAGRPct',        'CAGR',                         settings.ranking?.rankingCAGRPct??33,        'Tasa de crecimiento anual anualizada.',
+                      'Rentabilidad anualizada del backtest: a qué ritmo habría crecido el capital al año. Se calcula sobre el resultado en modo Simple (sin reinvertir) y el periodo real de la prueba. Si el capital final quedara en cero o negativo, se marca como no calculable y se descarta. Entra en el score normalizado por percentiles y SUMA puntos.'],
+                    ['ranking.rankingCAGRRobustoPct', 'Robustez (independencia del mejor trade)', settings.ranking?.rankingCAGRRobustoPct??34, 'Qué parte de las ganancias NO depende de una sola operación.',
+                      'Mide qué porcentaje de las ganancias NO depende del mejor trade. Se calcula como 100 menos el peso del mejor trade sobre la suma de TODOS los trades ganadores. Un valor alto significa beneficio repartido entre varias operaciones (sólido); uno bajo, que casi todo viene de una sola (frágil). Si la estrategia pierde dinero en total, vale 0. Entra en el score normalizado por percentiles y SUMA puntos.'],
+                    ['ranking.rankingMaxDDPct',       'Max drawdown (penalización)', settings.ranking?.rankingMaxDDPct??0,        'Penaliza el riesgo: resta score.',
+                      'Máxima caída desde un máximo de la curva de capital hasta el mínimo posterior: cuánto habrías llegado a perder en el peor tramo. Es la única métrica que RESTA puntos, porque más drawdown es peor. Con peso 0 el riesgo no se penaliza y el score solo premia rentabilidad y consistencia.'],
+                  ].map(([key,label,val,hint,tip])=>(
                     <div key={key} style={{marginBottom:8}}>
                       <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:3}}>
-                        <span style={{fontSize:13,fontWeight:500,color:'#d0e8fa',flex:1}}>{label}</span>
+                        <span style={{fontSize:13,fontWeight:500,color:'#d0e8fa',flex:1}}>
+                          {label}
+                          <span title={tip} style={{marginLeft:6,fontSize:11,color:'#5a7a95',textDecoration:'none',cursor:'help'}}>ⓘ</span>
+                        </span>
                         <span style={{fontFamily:MONO,fontSize:11,fontWeight:700,color:'#22d3ee',minWidth:30,textAlign:'right'}}>{val}%</span>
                         <input type="range" min={0} max={100} step={5} value={val}
                           onChange={e=>upd(key,Number(e.target.value))}

@@ -397,14 +397,15 @@ async function upsertScoreCompletoRemote(scoreMap, stratId) {
   }
 }
 
-// Columna cagr_robusto (sql/add_cagr_robusto.sql): puede no existir todavía en la BD del usuario.
+// Columna robustez_pct (sql/add_robustez_pct.sql): puede no existir todavía en la BD del usuario.
 // Se detecta al primer fallo y se recuerda, para no reintentar en cada lectura/escritura.
-let _cagrRobustoOk = true
-const _sinCagrRobusto = (b)=>b.map(r=>{const o={...r}; delete o.cagr_robusto; return o})
+// (La antigua cagr_robusto se conserva como histórico pero ya NO se escribe ni se lee.)
+let _robustezOk = true
+const _sinRobustez = (b)=>b.map(r=>{const o={...r}; delete o.robustez_pct; return o})
 
 // -99 es el CENTINELA de "CAGR no calculable" (capital final ≤ 0), no una rentabilidad real.
-// Se persiste como NULL para que no entre en los percentiles y destroce la escala del score:
-// con NULL, el helper aplica el fallback ya existente (cagrRobust ?? cagr) o descarta el valor.
+// Se persiste como NULL para que no entre en los percentiles y destroce la escala del score.
+// (Solo aplica a cagr_simple: la robustez, por construcción, no tiene centinelas.)
 const _sinCentinela = (v)=>(v==null||v<=-99)?null:v
 
 // Upsert parcial: actualiza SOLO métricas (sin tocar score_historico ni score_completo)
@@ -413,7 +414,7 @@ async function upsertMetricsRemote(metricsMap, stratId) {
   const rows = Object.entries(metricsMap).map(([symbol, m]) => ({
     symbol, strategy_id: stratId||null,
     win_rate: m.winRate??null, cagr_simple: _sinCentinela(m.cagr),
-    cagr_robusto: _sinCentinela(m.cagrRobust),
+    robustez_pct: m.robustez??null,
     max_drawdown: m.maxDD??null, total_trades: m.trades??null,
     profit_simple: m.profit??null, updated_at: new Date().toISOString(),
     ...(getUidFromJwt() ? { user_id: getUidFromJwt() } : {})
@@ -425,13 +426,13 @@ async function upsertMetricsRemote(metricsMap, stratId) {
   }).catch(()=>null)
   for (let i=0; i<rows.length; i+=20) {
     const batch = rows.slice(i, i+20)
-    let res = await post(_cagrRobustoOk ? batch : _sinCagrRobusto(batch))
+    let res = await post(_robustezOk ? batch : _sinRobustez(batch))
     if (res && !res.ok) {
       const text = await res.text()
-      if (_cagrRobustoOk && text.includes('cagr_robusto')) {
+      if (_robustezOk && text.includes('robustez_pct')) {
         // La columna aún no existe → reintentar sin ella y recordarlo (no rompe nada)
-        _cagrRobustoOk = false
-        res = await post(_sinCagrRobusto(batch))
+        _robustezOk = false
+        res = await post(_sinRobustez(batch))
         if (res && !res.ok) console.error('[UPSERT-METRICS ERROR]', res.status, await res.text())
       } else {
         console.error('[UPSERT-METRICS ERROR]', res.status, text)
@@ -445,13 +446,13 @@ async function upsertMetricsRemote(metricsMap, stratId) {
 async function loadMetricsUniverseRemote() {
   if (!getSupaUrl()) return []
   const COLS='symbol,strategy_id,win_rate,cagr_simple,max_drawdown'
-  const sel = ()=>_cagrRobustoOk ? COLS+',cagr_robusto' : COLS
+  const sel = ()=>_robustezOk ? COLS+',robustez_pct' : COLS
   const PAGE=1000
   let all=[], from=0
   while (true) {
     let res = await fetch(`${getSupaUrl()}/rest/v1/ranking_results?select=${sel()}&offset=${from}&limit=${PAGE}`,{headers:getSupaH()})
-    if (!res.ok && _cagrRobustoOk) {   // columna inexistente → reintentar sin ella
-      _cagrRobustoOk = false
+    if (!res.ok && _robustezOk) {   // columna inexistente → reintentar sin ella
+      _robustezOk = false
       res = await fetch(`${getSupaUrl()}/rest/v1/ranking_results?select=${sel()}&offset=${from}&limit=${PAGE}`,{headers:getSupaH()})
     }
     if (!res.ok) break
@@ -2542,11 +2543,11 @@ export default function Home() {
       const PAGE_SIZE=1000
       let allRows=[],from=0,hasMore=true
       const BASE_COLS='symbol,strategy_id,score_historico,score_completo,updated_at,cagr_simple,win_rate,max_drawdown,total_trades,profit_simple'
-      const BASE_SELECT=()=>_cagrRobustoOk?BASE_COLS+',cagr_robusto':BASE_COLS
+      const BASE_SELECT=()=>_robustezOk?BASE_COLS+',robustez_pct':BASE_COLS
       while(hasMore){
         let res=await fetch(`${getSupaUrl()}/rest/v1/ranking_results?select=${BASE_SELECT()}&offset=${from}&limit=${PAGE_SIZE}`,{headers:getSupaH()})
-        if(!res.ok&&_cagrRobustoOk){   // columna cagr_robusto aún inexistente → reintentar sin ella
-          _cagrRobustoOk=false
+        if(!res.ok&&_robustezOk){   // columna robustez_pct aún inexistente → reintentar sin ella
+          _robustezOk=false
           res=await fetch(`${getSupaUrl()}/rest/v1/ranking_results?select=${BASE_SELECT()}&offset=${from}&limit=${PAGE_SIZE}`,{headers:getSupaH()})
         }
         if(!res.ok) break
@@ -2564,24 +2565,23 @@ export default function Home() {
         let intervalo='diario'
         try{const p=typeof strat?.params==='string'?JSON.parse(strat.params||'{}'):(strat?.params||{});intervalo=p.intervalo||'diario'}catch(_){}
         return{scoreMetricas:row.score_historico??null,scoreMetSeñ:row.score_completo??null,
-          cagr:row.cagr_simple??null,cagrRobust:row.cagr_robusto??null,
+          cagr:row.cagr_simple??null,robustez:row.robustez_pct??null,
           profit:row.profit_simple??null,winRate:row.win_rate??null,
           maxDD:row.max_drawdown??null,ops:row.total_trades??null,
           stratName:strat?.name||'',stratId:row.strategy_id,intervalo,updatedAt:row.updated_at??null}
       }
       // ── Criterio de TOP al recargar: RESPETAR la elección ya persistida, no re-elegir.
-      //    calcMetricas elige la top con el score ponderado (con cagrRobust real y los percentiles de la
-      //    corrida) y calcScoreMetricas guarda ese score en la fila de ESA estrategia. Re-elegir aquí con
-      //    una escala propia (todas las filas + cagrRobust ausente) hacía que se mostrara otra estrategia,
-      //    que no tiene score_historico → la columna SCORE MÉTRICAS salía vacía. Basta con quedarse con la
-      //    fila de mayor score_historico.
+      //    calcMetricas elige la top con el score ponderado (con las métricas frescas de la corrida) y
+      //    calcScoreMetricas guarda ese score en la fila de ESA estrategia. Re-elegir aquí con una escala
+      //    propia hacía que se mostrara otra estrategia, que no tiene score_historico → la columna SCORE
+      //    MÉTRICAS salía vacía. Basta con quedarse con la fila de mayor score_historico.
       //    El recálculo por percentiles queda SOLO como último recurso, para símbolos cuyas filas no
-      //    tienen ningún score guardado. cagrRobust no está en ranking_results → fallback ?? cagr. ──
+      //    tienen ningún score guardado (la robustez saldrá null si aún no se ha recalculado). ──
       const _settWl=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')}catch(_){return {}}})()
       const _pesosWl=pesosScoreHistorico(_settWl)
       const _pctWl=(_settWl.ranking?.rankingNormPercentile??95)/100
-      // cagr_robusto ya persistido (si la columna existe y la fila lo tiene); si no, el helper aplica ?? cagr
-      const _mDe=(r)=>({winRate:r.win_rate,cagr:r.cagr_simple,cagrRobust:r.cagr_robusto??null,maxDD:r.max_drawdown})
+      // robustez_pct persistida (null mientras la columna no exista o la fila no se haya recalculado)
+      const _mDe=(r)=>({winRate:r.win_rate,cagr:r.cagr_simple,robustez:r.robustez_pct??null,maxDD:r.max_drawdown})
       const _floorsWl=floorsDe(
         rows.filter(r=>r.cagr_simple!=null&&r.win_rate!=null&&r.max_drawdown!=null).map(_mDe),
         _pctWl)
@@ -3221,12 +3221,14 @@ export default function Home() {
           const anios=Math.max(totalDiasNat/365.25,0.01)
           const capFinal=Number(capitalIni)+json.gananciaSimple
           const cagr=capFinal>0?(Math.pow(capFinal/Number(capitalIni),1/anios)-1)*100:-99
-          const sorted3=[...trades].sort((a,b)=>b.pnlSimple-a.pnlSimple).slice(3)
-          const ganRobust=sorted3.reduce((s,t)=>s+t.pnlSimple,0)
-          const capRob=Number(capitalIni)+ganRobust
-          const cagrRobust=capRob>0?(Math.pow(capRob/Number(capitalIni),1/anios)-1)*100:-99
+          // ROBUSTEZ: qué % de las ganancias NO depende del mejor trade. Denominador = beneficio
+          // BRUTO (suma de ganadoras), siempre >= el mejor trade → cae solo en [0,100), sin clamps
+          // ni centinelas. Beneficio NETO <= 0 → 0 (una estrategia perdedora no es robusta).
+          const ganadoras=trades.filter(t=>t.pnlSimple>0).reduce((s,t)=>s+t.pnlSimple,0)
+          const mejor=trades.length?Math.max(...trades.map(t=>t.pnlSimple)):0
+          const robustez=((json.gananciaSimple??0)<=0||ganadoras<=0)?0:Math.max(0,100-(mejor/ganadoras)*100)
           const maxDD=json.maxDDStrategyFloat??json.maxDDStrategy??0
-          activeMetrics[sym.toUpperCase()]={winRate,cagr,cagrRobust,maxDD,trades:trades.length,profit:json.gananciaSimple??null}
+          activeMetrics[sym.toUpperCase()]={winRate,cagr,robustez,maxDD,trades:trades.length,profit:json.gananciaSimple??null}
         }catch(e){logUpdateError(sym,'excepcion',e?.message,null);console.error('[calcMetricas-activa]',sym,e)}
       }))
       setRankingProgress({done:Math.min(i+BATCH,syms.length),total:syms.length})
@@ -3239,7 +3241,7 @@ export default function Home() {
       const next={...prev}
       Object.entries(activeMetrics).forEach(([sym,m])=>{
         next[sym]={...(next[sym]||{}),
-          active:{...(next[sym]?.active||{}),cagr:m.cagr??null,cagrRobust:m.cagrRobust??null,profit:m.profit??null,winRate:m.winRate??null,maxDD:m.maxDD??null,ops:m.trades??null,stratName:stratName||'',stratId:currentStratId,intervalo:estrategiaIntervalo}
+          active:{...(next[sym]?.active||{}),cagr:m.cagr??null,robustez:m.robustez??null,profit:m.profit??null,winRate:m.winRate??null,maxDD:m.maxDD??null,ops:m.trades??null,stratName:stratName||'',stratId:currentStratId,intervalo:estrategiaIntervalo}
         }
       })
       return next
@@ -3272,12 +3274,12 @@ export default function Home() {
                 const anios=Math.max(totalDiasNat/365.25,0.01)
                 const capFinal=stratCap+json.gananciaSimple
                 const cagr=capFinal>0?(Math.pow(capFinal/stratCap,1/anios)-1)*100:-99
-                const sorted3=[...trades].sort((a,b)=>b.pnlSimple-a.pnlSimple).slice(3)
-                const ganRobust=sorted3.reduce((s,t)=>s+t.pnlSimple,0)
-                const capRob=stratCap+ganRobust
-                const cagrRobust=capRob>0?(Math.pow(capRob/stratCap,1/anios)-1)*100:-99
+                // ROBUSTEZ — misma definición que en la Fase 1 (ver comentario allí)
+                const ganadoras=trades.filter(t=>t.pnlSimple>0).reduce((s,t)=>s+t.pnlSimple,0)
+                const mejor=trades.length?Math.max(...trades.map(t=>t.pnlSimple)):0
+                const robustez=((json.gananciaSimple??0)<=0||ganadoras<=0)?0:Math.max(0,100-(mejor/ganadoras)*100)
                 const maxDD=json.maxDDStrategyFloat??json.maxDDStrategy??0
-                stratMetrics[sym.toUpperCase()]={winRate,cagr,cagrRobust,maxDD,trades:trades.length,profit:json.gananciaSimple??null}
+                stratMetrics[sym.toUpperCase()]={winRate,cagr,robustez,maxDD,trades:trades.length,profit:json.gananciaSimple??null}
               }catch(e){logUpdateError(sym,'excepcion',e?.message,strat.name);console.error('[calcMetricas-all]',sym,e)}
             }))
           }
@@ -3307,7 +3309,7 @@ export default function Home() {
         _persist.forEach(r=>{
           if(r.cagr_simple==null||r.win_rate==null||r.max_drawdown==null) return
           if(_frescas.has((r.strategy_id||'')+'|'+(r.symbol||'').toUpperCase())) return  // manda la de la corrida
-          _universoTop.push({winRate:r.win_rate,cagr:r.cagr_simple,cagrRobust:r.cagr_robusto??null,maxDD:r.max_drawdown})
+          _universoTop.push({winRate:r.win_rate,cagr:r.cagr_simple,robustez:r.robustez_pct??null,maxDD:r.max_drawdown})
         })
       }catch(e){ console.error('[calcMetricas] no se pudo cargar el universo completo de ranking_results',e) }
       Object.values(allStratMetricsMap).forEach(mm=>Object.values(mm||{}).forEach(m=>{ if(m) _universoTop.push(m) }))
@@ -3329,8 +3331,8 @@ export default function Home() {
           const topStrat=enabledStrats.find(s=>s.id===bestStratId)
           const topStratName=topStrat?.name||''
           const topIntv=(()=>{try{const p=typeof topStrat?.params==='string'?JSON.parse(topStrat.params||'{}'):(topStrat?.params||{});return p.intervalo||'diario'}catch(_){return 'diario'}})()
-          topMetricsMap[symUp]={cagr:topM.cagr??null,cagrRobust:topM.cagrRobust??null,winRate:topM.winRate??null,maxDD:topM.maxDD??null,stratId:bestStratId,intervalo:topIntv}
-          topWlUpdates[symUp]={cagr:topM.cagr??null,cagrRobust:topM.cagrRobust??null,profit:topM.profit??null,winRate:topM.winRate??null,maxDD:topM.maxDD??null,ops:topM.trades??null,stratName:topStratName,stratId:bestStratId,intervalo:topIntv}
+          topMetricsMap[symUp]={cagr:topM.cagr??null,robustez:topM.robustez??null,winRate:topM.winRate??null,maxDD:topM.maxDD??null,stratId:bestStratId,intervalo:topIntv}
+          topWlUpdates[symUp]={cagr:topM.cagr??null,robustez:topM.robustez??null,profit:topM.profit??null,winRate:topM.winRate??null,maxDD:topM.maxDD??null,ops:topM.trades??null,stratName:topStratName,stratId:bestStratId,intervalo:topIntv}
         }
       })
       setWlData(prev=>{
@@ -4683,7 +4685,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.678</title>
+        <title>Trading Simulator V9.679</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4761,7 +4763,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.678
+            <span className="dot"/>Trading Simulator V9.679
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -10935,7 +10937,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
         ['CAGR', tAct?.cagr??null, tTop?.cagr??null, v=>fv(v,1)+'%', cagrColor],
         // Componente de MAYOR peso del score (34% por defecto). Se muestra siempre (6º flag) aunque
         // aún no esté persistido: en ese caso sale "—" y el desglose avisa de que se usó el CAGR normal.
-        ['CAGR robusto', tAct?.cagrRobust??null, tTop?.cagrRobust??null, v=>fv(v,1)+'%', cagrColor, true],
+        ['Robustez', tAct?.robustez??null, tTop?.robustez??null, v=>fv(v,1)+'%', ()=>'#8aadcc', true],
         ['Max DD', tAct?.maxDD??null, tTop?.maxDD??null, v=>'-'+fv(Math.abs(v),1)+'%', ()=>'#ff7eb3'],
         ['Win Rate', tAct?.winRate??null, tTop?.winRate??null, v=>fv(v,0)+'%', wrColor],
         ['Ops', tAct?.ops??null, tTop?.ops??null, v=>v!=null?String(Math.round(v)):null, ()=>'#8aadcc'],
@@ -10992,7 +10994,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                 const comps=[
                   ['Win rate',     d.winRate,    v=>fv(v,0)+'%'],
                   ['CAGR',         d.cagr,       v=>fv(v,1)+'%'],
-                  ['CAGR robusto', d.cagrRobust, v=>fv(v,1)+'%'],
+                  ['Robustez',     d.robustez,   v=>fv(v,1)+'%'],
                   ['Max DD',       d.maxDD,      v=>'-'+fv(Math.abs(v),1)+'%'],
                 ]
                 return(
@@ -11024,9 +11026,9 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         recalculado hoy: {fv(d.total,1)}% · guardado: {fv(guardado,1)}%
                       </div>
                     )}
-                    {d.cagrRobustEsFallback&&(
+                    {d.robustezNoDisponible&&(
                       <div style={{fontSize:9,color:'#5a7a95',marginTop:3,lineHeight:1.35}}>
-                        Sin CAGR robusto guardado: el score usó el CAGR normal en su lugar.
+                        Robustez aún no calculada para esta fila: ese componente aporta 0 puntos hasta que actualices sus métricas.
                       </div>
                     )}
                   </div>
