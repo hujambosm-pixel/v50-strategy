@@ -165,15 +165,17 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
   return (
     <div style={{position:'fixed',inset:0,zIndex:900,display:'flex',alignItems:'center',justifyContent:'center',
       background:'rgba(0,0,0,0.65)'}} onClick={onClose}>
+      {/* Casi pantalla completa (margen de 2vw/2vh) para que el contenido no se corte por abajo:
+          el body se lleva todo el alto sobrante y el scroll queda solo como red de seguridad. */}
       <div onClick={e=>e.stopPropagation()} style={{
         background:'#0a101a', border:'1px solid #1a2d45', borderRadius:10,
-        width:'min(1280px,95vw)', maxHeight:'95vh', display:'flex', flexDirection:'column',
+        width:'96vw', height:'96vh', display:'flex', flexDirection:'column',
         boxShadow:'0 16px 60px rgba(0,0,0,0.7)', fontFamily:MONO
       }}>
 
         {/* Header */}
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',
-          padding:'14px 20px 0', borderBottom:'1px solid #0d1520', paddingBottom:0}}>
+          padding:'14px 20px 0', borderBottom:'1px solid #0d1520', paddingBottom:0, flexShrink:0}}>
           <div style={{fontSize:16,fontWeight:700,color:'#e2eaf5',letterSpacing:'0.04em'}}>⚙ Configuración</div>
           <button onClick={onClose} style={{background:'none',border:'none',color:'#5a7a95',fontSize:16,cursor:'pointer',padding:'0 4px',lineHeight:1}}>✕</button>
         </div>
