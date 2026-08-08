@@ -441,30 +441,6 @@ async function upsertMetricsRemote(metricsMap, stratId) {
   }
 }
 
-// Universo COMPLETO de métricas de ranking_results (todos los símbolos × estrategias), paginado.
-// Sirve para que la escala de percentiles del score no dependa de cuántos activos tenga la corrida.
-async function loadMetricsUniverseRemote() {
-  if (!getSupaUrl()) return []
-  const COLS='symbol,strategy_id,win_rate,cagr_simple,max_drawdown'
-  const sel = ()=>_robustezOk ? COLS+',robustez_pct' : COLS
-  const PAGE=1000
-  let all=[], from=0
-  while (true) {
-    let res = await fetch(`${getSupaUrl()}/rest/v1/ranking_results?select=${sel()}&offset=${from}&limit=${PAGE}`,{headers:getSupaH()})
-    if (!res.ok && _robustezOk) {   // columna inexistente → reintentar sin ella
-      _robustezOk = false
-      res = await fetch(`${getSupaUrl()}/rest/v1/ranking_results?select=${sel()}&offset=${from}&limit=${PAGE}`,{headers:getSupaH()})
-    }
-    if (!res.ok) break
-    const page = await res.json()
-    if (!Array.isArray(page) || page.length===0) break
-    all = all.concat(page)
-    if (page.length < PAGE) break
-    from += PAGE
-  }
-  return all
-}
-
 // ── Strategies API ────────────────────────────────────────────
 async function fetchStrategies() {
   const res=await fetch(`${getSupaUrl()}/rest/v1/strategies?active=eq.true&order=name.asc`,{headers:getSupaH()})
@@ -3288,28 +3264,10 @@ export default function Home() {
       const topMetricsMap={}
       const topWlUpdates={}  // datos para setWlData, calculados síncronamente
       // ── Criterio de TOP: el SCORE PONDERADO de Ajustes → Ranking (mismo helper que calcScoreMetricas),
-      //    no el CAGR. Los percentiles se calculan sobre el universo COMPLETO de ranking_results (una
-      //    sola lectura paginada por corrida), no sobre los activos seleccionados: así el score de un
-      //    activo no depende de con cuántos otros se haya actualizado. Las métricas recién calculadas
-      //    sustituyen a las persistidas del mismo par (símbolo, estrategia) por ser más frescas.
-      //    Si la lectura falla, se cae al universo de la corrida (comportamiento anterior). ──
+      //    no el CAGR. Los umbrales son ABSOLUTOS (leídos de settings), así que el score de un activo
+      //    no depende de con qué otros se compare ni de cuántos se actualicen en esta corrida. ──
       const _pesosTop=pesosScoreHistorico(sett)
-      // NOTA: con umbrales absolutos el universo YA NO se usa para normalizar. La lectura paginada
-      // de abajo se conserva a propósito en este ladrillo (pendiente de retirar si no se le da otro
-      // uso), pero sus datos no intervienen en el score.
-      const _universoTop=[]
-      try{
-        const _persist=await loadMetricsUniverseRemote()
-        const _frescas=new Set()
-        Object.entries(allStratMetricsMap).forEach(([sid,mm])=>Object.keys(mm||{}).forEach(s=>_frescas.add(sid+'|'+s)))
-        _persist.forEach(r=>{
-          if(r.cagr_simple==null||r.win_rate==null||r.max_drawdown==null) return
-          if(_frescas.has((r.strategy_id||'')+'|'+(r.symbol||'').toUpperCase())) return  // manda la de la corrida
-          _universoTop.push({winRate:r.win_rate,cagr:r.cagr_simple,robustez:r.robustez_pct??null,maxDD:r.max_drawdown})
-        })
-      }catch(e){ console.error('[calcMetricas] no se pudo cargar el universo completo de ranking_results',e) }
-      Object.values(allStratMetricsMap).forEach(mm=>Object.values(mm||{}).forEach(m=>{ if(m) _universoTop.push(m) }))
-      const _floorsTop=umbralesDe(sett)   // umbrales absolutos, iguales para toda la app
+      const _floorsTop=umbralesDe(sett)
       syms.forEach(sym=>{
         const symUp=sym.toUpperCase()
         let bestStratId=null, bestScore=-Infinity, bestCagr=-Infinity
@@ -4681,7 +4639,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.681</title>
+        <title>Trading Simulator V9.682</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4759,7 +4717,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.681
+            <span className="dot"/>Trading Simulator V9.682
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
