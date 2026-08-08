@@ -794,7 +794,7 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
 
                 {/* Columna derecha — Métricas históricas */}
                 <div style={{minWidth:0,background:'rgba(34,211,238,0.05)',border:'0.5px solid rgba(34,211,238,0.18)',borderRadius:8,padding:'10px 12px'}}>
-                  <div title="Estas métricas evalúan el rendimiento pasado de la estrategia con cada activo. Se aplican tanto al score de estrategia activa como al de top estrategia. Se usan para el ranking del Watchlist, para determinar la Top Estrategia de cada activo, y también (combinadas con las de mercado) para la priorización de slots en Capital Concentrado."
+                  <div title="Estas métricas evalúan el rendimiento pasado de la estrategia con cada activo. Se aplican tanto al score de estrategia activa como al de top estrategia. Se usan para el ranking del Watchlist, para determinar la Top Estrategia de cada activo, y también (combinadas con las de mercado) para la priorización de slots en Capital Concentrado. CÓMO SE PUNTÚAN: con umbrales ABSOLUTOS que defines tú (suelo = 0 puntos, techo = 100 puntos, proporcional en medio). Antes se comparaba cada activo contra el resto de la watchlist, así que su score cambiaba al añadir o quitar activos; ahora un mismo valor da siempre los mismos puntos. Para calibrar los umbrales usa el visor 'Distribución real de tus métricas', más abajo: te da la mediana y el rango habitual de cada métrica en tu propia cartera."
                     style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:'#22d3ee',marginBottom:8,letterSpacing:'0.04em',cursor:'help',textDecoration:'underline dotted',textDecorationColor:'rgba(34,211,238,0.4)'}}>Métricas históricas de estrategia<span style={{marginLeft:6,fontSize:11,color:'#5a7a95',textDecoration:'none'}}>ⓘ</span></div>
                   {/* Peso global del bloque */}
                   {(()=>{const wh=settings.ranking?.rankingWeightHistorico??80; return(
@@ -806,21 +806,39 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                         style={{width:70,accentColor:'#22d3ee'}}/>
                     </div>
                   )})()}
-                  {/* Nota común a las cuatro métricas — antes se repetía en cada descripción */}
+                  {/* Nota común a las cuatro métricas */}
                   <div style={{fontSize:11,color:'#5a7a95',lineHeight:1.4,marginBottom:8}}>
-                    Las cuatro se aplican tanto al score de <b>estrategia activa</b> como al de <b>top estrategia</b>,
-                    y se normalizan entre el percentil (100−P)% y P% de tu watchlist actual.
+                    Las cuatro se aplican tanto al score de <b>estrategia activa</b> como al de <b>top estrategia</b>.
+                    Cada una se convierte a puntos con sus <b style={{color:'#7a9bc0'}}>umbrales fijos</b>: suelo → 0 pts,
+                    techo → 100 pts, proporcional en medio. Esos puntos se multiplican por su peso.
                   </div>
                   {[
-                    ['ranking.rankingWinRatePct',     'Win rate',                    settings.ranking?.rankingWinRatePct??33,     '% de trades ganadores. Mide la consistencia.',
-                      'Porcentaje de operaciones cerradas en positivo sobre el total. Mide con qué frecuencia acierta la estrategia, no cuánto gana: un win rate alto con ganancias pequeñas puede rendir menos que uno bajo con ganancias grandes. Entra en el score normalizado por percentiles y SUMA puntos.'],
-                    ['ranking.rankingCAGRPct',        'CAGR',                         settings.ranking?.rankingCAGRPct??33,        'Tasa de crecimiento anual anualizada.',
-                      'Rentabilidad anualizada del backtest: a qué ritmo habría crecido el capital al año. Se calcula sobre el resultado en modo Simple (sin reinvertir) y el periodo real de la prueba. Si el capital final quedara en cero o negativo, se marca como no calculable y se descarta. Entra en el score normalizado por percentiles y SUMA puntos.'],
-                    ['ranking.rankingCAGRRobustoPct', 'Robustez (independencia del mejor trade)', settings.ranking?.rankingCAGRRobustoPct??34, 'Qué parte de las ganancias NO depende de una sola operación.',
-                      'Mide qué porcentaje de las ganancias NO depende del mejor trade. Se calcula como 100 menos el peso del mejor trade sobre la suma de TODOS los trades ganadores. Un valor alto significa beneficio repartido entre varias operaciones (sólido); uno bajo, que casi todo viene de una sola (frágil). Si la estrategia pierde dinero en total, vale 0. Entra en el score normalizado por percentiles y SUMA puntos.'],
-                    ['ranking.rankingMaxDDPct',       'Max drawdown (penalización)', settings.ranking?.rankingMaxDDPct??0,        'Penaliza el riesgo: resta score.',
-                      'Máxima caída desde un máximo de la curva de capital hasta el mínimo posterior: cuánto habrías llegado a perder en el peor tramo. Es la única métrica que RESTA puntos, porque más drawdown es peor. Con peso 0 el riesgo no se penaliza y el score solo premia rentabilidad y consistencia.'],
-                  ].map(([key,label,val,hint,tip])=>(
+                    {key:'ranking.rankingWinRatePct', label:'Win rate', val:settings.ranking?.rankingWinRatePct??33,
+                     hint:'% de trades ganadores. Mide la consistencia.',
+                     flKey:'ranking.rankingWinRateFloor', flDef:25, ceKey:'ranking.rankingWinRateCeil', ceDef:65,
+                     tip:'Porcentaje de operaciones cerradas en positivo sobre el total. Mide con qué frecuencia acierta la estrategia, no cuánto gana: un win rate alto con ganancias pequeñas puede rendir menos que uno bajo con ganancias grandes. PUNTOS: por debajo del suelo da 0, por encima del techo da 100, y en medio proporcionalmente; esos puntos se multiplican por el peso que le asignes y SUMAN al score.'},
+                    {key:'ranking.rankingCAGRPct', label:'CAGR', val:settings.ranking?.rankingCAGRPct??33,
+                     hint:'Tasa de crecimiento anual anualizada.',
+                     flKey:'ranking.rankingCAGRFloor', flDef:0, ceKey:'ranking.rankingCAGRCeil', ceDef:40,
+                     tip:'Rentabilidad anualizada del backtest: a qué ritmo habría crecido el capital al año. Se calcula sobre el resultado en modo Simple (sin reinvertir) y el periodo real de la prueba. Si el capital final quedara en cero o negativo se marca como no calculable y se descarta. PUNTOS: por debajo del suelo da 0, por encima del techo da 100, y en medio proporcionalmente; esos puntos se multiplican por el peso que le asignes y SUMAN al score.'},
+                    {key:'ranking.rankingCAGRRobustoPct', label:'Robustez (independencia del mejor trade)', val:settings.ranking?.rankingCAGRRobustoPct??34,
+                     hint:'Qué parte de las ganancias NO depende de una sola operación.',
+                     flKey:'ranking.rankingRobustezFloor', flDef:30, ceKey:'ranking.rankingRobustezCeil', ceDef:85,
+                     tip:'Mide qué porcentaje de las ganancias NO depende del mejor trade: 100 menos el peso del mejor trade sobre la suma de TODOS los trades ganadores. Un valor alto significa beneficio repartido entre varias operaciones (sólido); uno bajo, que casi todo viene de una sola (frágil). Si la estrategia pierde dinero en total, vale 0. PUNTOS: por debajo del suelo da 0, por encima del techo da 100, y en medio proporcionalmente; esos puntos se multiplican por el peso que le asignes y SUMAN al score.'},
+                    {key:'ranking.rankingMaxDDPct', label:'Max drawdown', val:settings.ranking?.rankingMaxDDPct??0,
+                     hint:'Penaliza el riesgo: cuanto menos drawdown, más puntos.',
+                     flKey:'ranking.rankingMaxDDFloor', flDef:50, ceKey:'ranking.rankingMaxDDCeil', ceDef:10, invertido:true,
+                     tip:'Máxima caída desde un máximo de la curva de capital hasta el mínimo posterior: cuánto habrías llegado a perder en el peor tramo. OJO, EL SENTIDO ESTÁ INVERTIDO respecto a las demás: menos drawdown = MÁS puntos. PUNTOS: con un drawdown igual o peor que el suelo da 0, igual o mejor que el techo da 100, y en medio proporcionalmente; así es como penaliza el riesgo, restando score a los activos con caídas grandes. Con peso 0 el riesgo no influye y el score solo premia rentabilidad, consistencia y robustez.'},
+                  ].map(({key,label,val,hint,tip,flKey,flDef,ceKey,ceDef,invertido})=>{
+                    const fl=settings.ranking?.[flKey.split('.')[1]]??flDef
+                    const ce=settings.ranking?.[ceKey.split('.')[1]]??ceDef
+                    const numIn=(v,k,def)=>(
+                      <input type="number" value={v} step={1}
+                        onChange={e=>upd(k, e.target.value===''?def:Number(e.target.value))}
+                        style={{width:46,background:'#080c14',border:'1px solid #1a2d45',borderRadius:3,
+                          color:'#cce0f5',fontFamily:MONO,fontSize:11,padding:'2px 4px',textAlign:'center'}}/>
+                    )
+                    return(
                     <div key={key} style={{marginBottom:8}}>
                       <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:3}}>
                         <span style={{fontSize:13,fontWeight:500,color:'#d0e8fa',flex:1}}>
@@ -832,9 +850,15 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                           onChange={e=>upd(key,Number(e.target.value))}
                           style={{width:64,accentColor:'#22d3ee'}}/>
                       </div>
-                      <div style={{fontSize:12,color:'#7a9bc0',lineHeight:1.5}}>{hint}</div>
+                      <div style={{fontSize:12,color:'#7a9bc0',lineHeight:1.5,marginBottom:4}}>{hint}</div>
+                      {/* Umbrales absolutos de esta métrica */}
+                      <div style={{display:'flex',alignItems:'center',gap:5,flexWrap:'wrap',fontFamily:MONO,fontSize:10,color:'#5a7a95'}}>
+                        <span>0 pts si {invertido?'≥':'≤'}</span>{numIn(fl,flKey,flDef)}
+                        <span style={{color:'#31506e'}}>·</span>
+                        <span>100 pts si {invertido?'≤':'≥'}</span>{numIn(ce,ceKey,ceDef)}
+                      </div>
                     </div>
-                  ))}
+                  )})}
                   {/* Total bloque histórico */}
                   {(()=>{
                     const total=(settings.ranking?.rankingWinRatePct??33)+(settings.ranking?.rankingCAGRPct??33)+(settings.ranking?.rankingCAGRRobustoPct??34)+(settings.ranking?.rankingMaxDDPct??0)
@@ -865,20 +889,6 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                   onChange={e=>upd('ranking.minTrades',Number(e.target.value))}
                   style={{width:60,background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,
                     color:'#e2eaf5',fontFamily:MONO,fontSize:12,padding:'4px 8px',textAlign:'center'}}/>
-              </div>
-              {/* Percentil de normalización */}
-              <div style={{marginTop:10}}>
-                <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:6}}>
-                  <span style={{fontFamily:MONO,fontSize:12,color:'#cce0f5',flex:1}}>Percentil de normalización (suelo y techo)</span>
-                  <input type="number" value={settings.ranking?.rankingNormPercentile??95} min={50} max={100}
-                    onChange={e=>upd('ranking.rankingNormPercentile',Math.max(50,Math.min(100,Number(e.target.value))))}
-                    style={{width:60,background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,
-                      color:'#e2eaf5',fontFamily:MONO,fontSize:12,padding:'4px 8px',textAlign:'center'}}/>
-                </div>
-                <div style={{fontSize:11,color:'#5a7a95',lineHeight:1.5,padding:'4px 8px',background:'rgba(34,211,238,0.04)',borderRadius:4,border:'0.5px solid rgba(34,211,238,0.1)'}}>
-                  p(100−P)% = suelo (score 0), pP% = techo (score 100). Con P=95 se ignora aproximadamente el 5% superior e inferior de cada métrica (los valores extremos no distorsionan la escala).{' '}
-                  <span style={{color:'#7a9bc0'}}>Rango recomendado: 90–99.</span>
-                </div>
               </div>
               {/* ── Visor de distribución (colapsado: en reposo solo el botón) ── */}
               <div style={{marginTop:10}}>
