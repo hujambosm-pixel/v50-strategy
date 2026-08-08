@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { MONO, fmt, pesosScoreHistorico, floorsDe, scoreHistoricoDe } from '../lib/utils'
+import { MONO, fmt, pesosScoreHistorico, umbralesDe, scoreHistoricoDe } from '../lib/utils'
 import { getSupaUrl, getSupaH } from '../lib/supabase'
 
 // ── Supabase helpers ─────────────────────────────────────────
@@ -325,10 +325,7 @@ export default function WatchlistManager({
     // ── Fallback: mejor SCORE ponderado (mismo criterio que calcMetricas / refreshWlData) ──
     const sett = (()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')}catch(_){return {}}})()
     const pesos = pesosScoreHistorico(sett)
-    const pctN  = (sett.ranking?.rankingNormPercentile ?? 95)/100
-    const universo = []
-    Object.values(allRankings).forEach(data => Object.values(data||{}).forEach(m => { if (m) universo.push(m) }))
-    const floors = floorsDe(universo, pctN)
+    const floors = umbralesDe(sett)   // umbrales absolutos: no dependen del universo de comparación
     let best = null
     Object.entries(allRankings).forEach(([sid, data]) => {
       const m = data[symUp]

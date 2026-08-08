@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo, Fragment } from 'react'
 import Head from 'next/head'
 import { ListFilter, Briefcase, Star, Bell, X as LucideX } from 'lucide-react'
-import { calcMetrics, MONO, fmt, fmtDate, f2, tvSym, pesosScoreHistorico, floorsDe, scoreHistoricoDe, desgloseScoreHistorico } from '../lib/utils'
+import { calcMetrics, MONO, fmt, fmtDate, f2, tvSym, pesosScoreHistorico, umbralesDe, scoreHistoricoDe, desgloseScoreHistorico } from '../lib/utils'
 import { WATCHLIST_DEFAULT } from '../lib/constants'
 import { getSupaUrl, getSupaKey, getSupaH, setCurrentJwt, getCurrentJwt } from '../lib/supabase'
 import { loadSettings, saveSettings, saveSettingsRemote, loadSettingsRemote } from '../lib/settings'
@@ -2579,12 +2579,9 @@ export default function Home() {
       //    tienen ningún score guardado (la robustez saldrá null si aún no se ha recalculado). ──
       const _settWl=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')}catch(_){return {}}})()
       const _pesosWl=pesosScoreHistorico(_settWl)
-      const _pctWl=(_settWl.ranking?.rankingNormPercentile??95)/100
       // robustez_pct persistida (null mientras la columna no exista o la fila no se haya recalculado)
       const _mDe=(r)=>({winRate:r.win_rate,cagr:r.cagr_simple,robustez:r.robustez_pct??null,maxDD:r.max_drawdown})
-      const _floorsWl=floorsDe(
-        rows.filter(r=>r.cagr_simple!=null&&r.win_rate!=null&&r.max_drawdown!=null).map(_mDe),
-        _pctWl)
+      const _floorsWl=umbralesDe(_settWl)   // umbrales absolutos: ya no dependen del universo
       // Se retienen (no cambia su uso actual) para poder mostrar el desglose del score en el tooltip
       setScoreEscala({floors:_floorsWl,pesos:_pesosWl})
       const newWlData={}
@@ -2993,17 +2990,14 @@ export default function Home() {
     setRankingRunning(true); setRankingError(null)
     setRankingProgress({done:0, total:syms.length})
     const sett=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')}catch(_){return {}}})()
-    // Pesos y percentiles vía helper compartido (misma fórmula que usan calcMetricas y refreshWlData)
+    // Pesos y umbrales vía helper compartido (mismo criterio que calcMetricas y refreshWlData)
     const pesos=pesosScoreHistorico(sett)
-    const pct=(sett.ranking?.rankingNormPercentile??95)/100
 
-    // Recopilar todos los valores válidos — universo completo para percentiles estables
     // Usar overrides si disponibles (evita stale closure tras calcMetricas)
     const getTop=(s)=>topMetricsOverride?.[s.toUpperCase()]??wlData[s.toUpperCase()]?.top
     const getAct=(s)=>activeMetricsOverride?.[s.toUpperCase()]??wlData[s.toUpperCase()]?.active
-    // Suelos/techos: uno para la activa y otro para la top (distribuciones separadas, como antes)
-    const fAct=floorsDe(allSyms.map(s=>getAct(s)),pct)
-    const fTop=floorsDe(allSyms.map(s=>getTop(s)),pct)
+    // Umbrales ABSOLUTOS: los mismos para activa y top (antes eran dos distribuciones distintas)
+    const fAct=umbralesDe(sett), fTop=fAct
 
     // ── Calcular scoreHistorico desde wlData (sin backtest) ──
     const activeScoreMap={}, topScoreMap={}
@@ -3300,7 +3294,9 @@ export default function Home() {
       //    sustituyen a las persistidas del mismo par (símbolo, estrategia) por ser más frescas.
       //    Si la lectura falla, se cae al universo de la corrida (comportamiento anterior). ──
       const _pesosTop=pesosScoreHistorico(sett)
-      const _pctTop=(sett.ranking?.rankingNormPercentile??95)/100
+      // NOTA: con umbrales absolutos el universo YA NO se usa para normalizar. La lectura paginada
+      // de abajo se conserva a propósito en este ladrillo (pendiente de retirar si no se le da otro
+      // uso), pero sus datos no intervienen en el score.
       const _universoTop=[]
       try{
         const _persist=await loadMetricsUniverseRemote()
@@ -3313,7 +3309,7 @@ export default function Home() {
         })
       }catch(e){ console.error('[calcMetricas] no se pudo cargar el universo completo de ranking_results',e) }
       Object.values(allStratMetricsMap).forEach(mm=>Object.values(mm||{}).forEach(m=>{ if(m) _universoTop.push(m) }))
-      const _floorsTop=floorsDe(_universoTop,_pctTop)
+      const _floorsTop=umbralesDe(sett)   // umbrales absolutos, iguales para toda la app
       syms.forEach(sym=>{
         const symUp=sym.toUpperCase()
         let bestStratId=null, bestScore=-Infinity, bestCagr=-Infinity
@@ -4685,7 +4681,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.679</title>
+        <title>Trading Simulator V9.680</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4763,7 +4759,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.679
+            <span className="dot"/>Trading Simulator V9.680
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
