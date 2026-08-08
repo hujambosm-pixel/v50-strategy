@@ -180,8 +180,9 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
           <button onClick={onClose} style={{background:'none',border:'none',color:'#5a7a95',fontSize:16,cursor:'pointer',padding:'0 4px',lineHeight:1}}>✕</button>
         </div>
 
-        {/* Tabs */}
-        <div style={{display:'flex',borderBottom:'1px solid #0d1520',padding:'0 20px',marginTop:0,flexShrink:0}}>
+        {/* Tabs + acciones (Cancelar/Guardar viven aquí arriba: con el modal a pantalla casi
+            completa, un pie fijo quedaba demasiado lejos del contenido que se está editando) */}
+        <div style={{display:'flex',alignItems:'center',borderBottom:'1px solid #0d1520',padding:'0 20px',marginTop:0,flexShrink:0}}>
           {TABS.map(t=>(
             <button key={t.id} onClick={()=>setTab(t.id)} style={{
               background:'none', border:'none', borderBottom: tab===t.id ? '2px solid #00d4ff' : '2px solid transparent',
@@ -189,6 +190,18 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
               cursor:'pointer', letterSpacing:'0.06em', textTransform:'uppercase', transition:'color .15s'
             }}>{t.label}</button>
           ))}
+          <div style={{marginLeft:'auto',display:'flex',gap:8,flexShrink:0,paddingLeft:12}}>
+            <button onClick={onClose} style={{padding:'7px 16px',borderRadius:4,border:'1px solid #1a2d45',
+              background:'transparent',color:'#7a9bc0',fontFamily:MONO,fontSize:11,cursor:'pointer'}}>
+              Cancelar
+            </button>
+            <button onClick={handleSave} style={{padding:'7px 16px',borderRadius:4,border:'none',
+              background: dirty ? '#00d4ff' : '#1a2d45',
+              color: dirty ? '#080c14' : '#5a7a95',
+              fontFamily:MONO,fontSize:11,fontWeight:700,cursor:'pointer',transition:'all .15s'}}>
+              {dirty ? '✓ Guardar' : 'Guardado'}
+            </button>
+          </div>
         </div>
 
         {/* Body */}
@@ -897,7 +910,7 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                 <div style={{display:'flex',alignItems:'center',gap:10}}>
                   <span style={{fontFamily:MONO,fontSize:12,color:'#cce0f5',flex:1}}>
                     Distribución real de tus métricas
-                    <span title="Percentil 10, mediana y percentil 90 de las cuatro métricas del score, en las dos poblaciones que ordenan el watchlist: la estrategia activa de cada activo y su top estrategia. Sirve para calibrar umbrales; no cambia ningún cálculo."
+                    <span title="Para cada una de las cuatro métricas del score: el valor del 10% peor de tus activos, la mediana y el valor del 10% mejor (percentiles 10, 50 y 90). Se muestran las dos poblaciones que ordenan el watchlist: la estrategia activa de cada activo y su top estrategia. Sirve para calibrar umbrales; no cambia ningún cálculo."
                       style={{marginLeft:6,fontSize:11,color:'#5a7a95',textDecoration:'none',cursor:'help'}}>ⓘ</span>
                   </span>
                   <button onClick={()=>distrib?setDistrib(null):calcularDistribucion()} style={{
@@ -925,25 +938,32 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                           Top <span style={{color:'#3d5a7a',fontWeight:400}}>(n={distrib.nTop})</span>
                         </span>
                       </div>
-                      {/* Cabecera de percentiles */}
+                      {/* Cabecera de columnas: en lenguaje llano, no en percentiles */}
                       <div style={{display:'grid',gridTemplateColumns:G,gap:4,fontSize:9,color:'#3d5a7a',marginBottom:3}}>
                         <span/>
-                        <span style={{textAlign:'right'}}>P10</span><span style={{textAlign:'right'}}>mediana</span><span style={{textAlign:'right'}}>P90</span>
+                        <span style={{textAlign:'right',whiteSpace:'nowrap'}}>el 10% peor</span><span style={{textAlign:'right'}}>mediana</span><span style={{textAlign:'right',whiteSpace:'nowrap'}}>el 10% mejor</span>
                         <span/>
-                        <span style={{textAlign:'right'}}>P10</span><span style={{textAlign:'right'}}>mediana</span><span style={{textAlign:'right'}}>P90</span>
+                        <span style={{textAlign:'right',whiteSpace:'nowrap'}}>el 10% peor</span><span style={{textAlign:'right'}}>mediana</span><span style={{textAlign:'right',whiteSpace:'nowrap'}}>el 10% mejor</span>
                       </div>
                       {distrib.active.map((mA,i)=>{
                         const mT=distrib.top[i]
+                        // Max drawdown va al revés: menos es MEJOR, así que su P10 (el drawdown más bajo)
+                        // es el mejor caso, no el peor. Se intercambian las columnas SOLO en esa fila para
+                        // que "el 10% peor" contenga de verdad el peor valor. Además así la columna
+                        // izquierda coincide siempre con el SUELO (0 pts) y la derecha con el TECHO (100 pts).
+                        const inv = mA.label==='Max drawdown'
+                        const peorA=inv?mA.p90:mA.p10, mejorA=inv?mA.p10:mA.p90
+                        const peorT=inv?mT.p90:mT.p10, mejorT=inv?mT.p10:mT.p90
                         return(
                           <div key={mA.label} style={{display:'grid',gridTemplateColumns:G,gap:4,fontSize:11,marginBottom:2}}>
                             <span style={{color:'#7a9bc0'}}>{mA.label}</span>
-                            <span style={{color:'#5a8aaa',textAlign:'right'}}>{f(mA.p10)}</span>
+                            <span style={{color:'#5a8aaa',textAlign:'right'}}>{f(peorA)}</span>
                             <span style={{color:'#e2eaf5',fontWeight:600,textAlign:'right'}}>{f(mA.p50)}</span>
-                            <span style={{color:'#5a8aaa',textAlign:'right'}}>{f(mA.p90)}</span>
+                            <span style={{color:'#5a8aaa',textAlign:'right'}}>{f(mejorA)}</span>
                             <span/>
-                            <span style={{color:'#5a8aaa',textAlign:'right'}}>{f(mT.p10)}</span>
+                            <span style={{color:'#5a8aaa',textAlign:'right'}}>{f(peorT)}</span>
                             <span style={{color:'#e2eaf5',fontWeight:600,textAlign:'right'}}>{f(mT.p50)}</span>
-                            <span style={{color:'#5a8aaa',textAlign:'right'}}>{f(mT.p90)}</span>
+                            <span style={{color:'#5a8aaa',textAlign:'right'}}>{f(mejorT)}</span>
                           </div>
                         )
                       })}
@@ -954,6 +974,10 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                         </div>
                       )}
                       <div style={{fontSize:10,color:'#5a7a95',marginTop:6,lineHeight:1.45}}>
+                        En <strong style={{color:'#7a9bc0',fontWeight:600}}>Max drawdown</strong> menos es mejor, así que
+                        sus columnas van intercambiadas respecto a las demás: &ldquo;el 10% peor&rdquo; es el drawdown
+                        más alto. En las cuatro métricas, la columna izquierda corresponde al suelo (0 pts) y la
+                        derecha al techo (100 pts).<br/>
                         Se excluyen los valores sin dato y los CAGR marcados como no calculables (centinela −99).
                       </div>
                     </div>
@@ -1079,20 +1103,7 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
               </div>
             </div>
           )}
-        {/* Footer */}
-        <div style={{display:'flex',justifyContent:'flex-end',gap:8,padding:'12px 20px',
-          borderTop:'1px solid #0d1520',flexShrink:0}}>
-          <button onClick={onClose} style={{padding:'7px 16px',borderRadius:4,border:'1px solid #1a2d45',
-            background:'transparent',color:'#7a9bc0',fontFamily:MONO,fontSize:11,cursor:'pointer'}}>
-            Cancelar
-          </button>
-          <button onClick={handleSave} style={{padding:'7px 16px',borderRadius:4,border:'none',
-            background: dirty ? '#00d4ff' : '#1a2d45',
-            color: dirty ? '#080c14' : '#5a7a95',
-            fontFamily:MONO,fontSize:11,fontWeight:700,cursor:'pointer',transition:'all .15s'}}>
-            {dirty ? '✓ Guardar' : 'Guardado'}
-          </button>
-        </div>
+        {/* Sin footer: Cancelar/Guardar están arriba, en la fila de pestañas */}
       </div>
     </div>
   )
