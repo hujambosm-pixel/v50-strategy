@@ -172,6 +172,31 @@ function buildSlotsCurves(assetResults, capitalIni) {
   return { simpleCurve, compoundCurve, bhCurve, occupancyCurve, startDate, floatSimpleCurve, floatCompoundCurve, tInvEstrategia, avgCapOccupancy, senalStats: senalStatsSlots, ..._calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni), ..._calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni) }
 }
 
+// ── Stop INICIAL de un trade — fuente ÚNICA para los cuatro modos de asignación ──
+// Antes se leía `stopHistory[0].stopPx` sin mirar la fecha. Con estrategias cuyo stop no existe
+// al entrar y aparece varias velas después (p.ej. cuando una vela cierra bajo la EMA20), ese
+// primer nivel del historial se estaba usando como si fuera el stop de la vela de entrada:
+// look-ahead puro, y además con un nivel que puede quedar por encima del precio de entrada.
+// Reglas:
+//   1. stopHistory[0] SOLO vale si su fecha es <= entryDate (o si el registro no lleva fecha,
+//      caso en el que se asume contemporáneo de la entrada = comportamiento previo).
+//   2. Si el trade NO trae stopHistory, se cae a t.stopPx — que el flush de posición abierta
+//      rellena y hasta ahora se ignoraba. Sin historial, stopPx es un stop fijo de todo el
+//      trade (misma convención que usa CandleChart al dibujarlo como línea horizontal).
+//   3. Si HAY historial pero su primer nivel es posterior a la entrada, se devuelve null y NO
+//      se cae a stopPx: en ese escenario stopPx es también un nivel posterior (el último), así
+//      que usarlo reintroduciría el mismo look-ahead que estamos corrigiendo.
+// null = el trade se abrió sin stop conocido.
+function _stopInicial(t) {
+  if (!t) return null
+  const h = Array.isArray(t.stopHistory) ? t.stopHistory[0] : null
+  if (h && h.stopPx != null) {
+    if (h.date == null || t.entryDate == null || h.date <= t.entryDate) return h.stopPx
+    return null
+  }
+  return t.stopPx ?? null
+}
+
 // ── MODO CAPITAL COMPARTIDO: pool libre repartido entre slots activos ──
 // symbolOrder: array opcional de símbolos para desempate en entradas simultáneas
 //   null → desempate alfabético (modo compartido estándar)
@@ -190,7 +215,7 @@ function buildCompartidoCurves(assetResults, capitalIni, symbolOrder = null) {
       exitDate:     t.exitDate,
       pnlPct:       t.pnlPct,
       entryPx:      t.entryPrice ?? t.entryPx,
-      stopPx:       t.stopHistory?.[0]?.stopPx ?? null,
+      stopPx:       _stopInicial(t),
       dias:         t.dias,
       _virtualClose: !!t._virtualClose,
     }))
@@ -491,7 +516,7 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
         exitDate:      t.exitDate,
         pnlPct:        t.pnlPct,
         entryPx:       t.entryPrice ?? t.entryPx,
-        stopPx:        t.stopHistory?.[0]?.stopPx ?? null,
+        stopPx:        _stopInicial(t),
         dias:          t.dias,
         _virtualClose: !!t._virtualClose,
       }
@@ -732,10 +757,18 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
 
 // ── MODO POSITION SIZING: tamaño variable basado en stop loss ──
 function buildPositionSizingCurves(assetResults, capitalIni, sizeRules) {
-  const { riskPerTrade=5, maxPortfolioPct=20, maxAccumRisk=20 } = sizeRules || {}
+  const { riskPerTrade=5, maxPortfolioPct=20, maxAccumRisk=20, assumedStopPct=20 } = sizeRules || {}
   const riskPct   = riskPerTrade / 100
   const maxPctCap = maxPortfolioPct / 100
   const maxAccum  = maxAccumRisk / 100
+  // Distancia de stop ASUMIDA para trades sin stop inicial válido. Antes, esos trades se
+  // dimensionaban al techo de cartera E IMPUTABAN LA POSICIÓN ENTERA al riesgo acumulado
+  // (riesgo = capital × maxPctCap), lo que con 20%/20% dejaba sitio para UNA sola posición
+  // simultánea y hundía el modo. Ahora se les asigna una distancia plausible y siguen la MISMA
+  // fórmula que los trades con stop real, así que riskPerTrade vuelve a tener efecto sobre ellos.
+  const _asum = Number(assumedStopPct)
+  const assumedDist = (Number.isFinite(_asum) && _asum > 0) ? _asum / 100 : 0.20
+  const assumedPctShown = assumedDist * 100
   const n = assetResults.length
   if (!n) return _emptyCurves()
   const { startDate, filteredDates } = _commonDates(assetResults)
@@ -748,7 +781,7 @@ function buildPositionSizingCurves(assetResults, capitalIni, sizeRules) {
       exitDate:      t.exitDate,
       pnlPct:        t.pnlPct,
       entryPrice:    t.entryPrice ?? t.entryPx,
-      stopPx:        t.stopHistory?.[0]?.stopPx ?? null,
+      stopPx:        _stopInicial(t),
       dias:          Math.round((new Date(t.exitDate) - new Date(t.entryDate)) / 86400000),
       _virtualClose: !!t._virtualClose,
     }))
@@ -758,6 +791,7 @@ function buildPositionSizingCurves(assetResults, capitalIni, sizeRules) {
 
   const senalesGeneradasPS = allCandidates.length
   let cntEjecutadasPS = 0, cntDescRiesgoPS = 0, cntDescCapitalPS = 0
+  let cntSinStopPS = 0   // ejecutadas que se dimensionaron con la distancia ASUMIDA
   let pnlHipEurPS = 0
   const pnlDescartadosPS = []
 
@@ -819,30 +853,28 @@ function buildPositionSizingCurves(assetResults, capitalIni, sizeRules) {
       const _openCapsPS = Object.values(openSlots).reduce((s, slot) => s + (slot.capAsignado || 0), 0)
       const _totalPortfolioPS = poolLibre + _openCapsPS
 
-      let distancia = null
+      // Sin stop inicial válido → distancia ASUMIDA. A partir de aquí el trade recorre
+      // exactamente el mismo camino que uno con stop real (mismo sizing, mismo riesgo imputado).
+      let distancia, _sinStop = false
       if (t.stopPx != null && t.stopPx > 0 && ep > t.stopPx) {
         distancia = (ep - t.stopPx) / ep
-      }
-
-      let capAsignado
-      if (distancia && distancia > 0) {
-        capAsignado = Math.min(
-          capitalActual * riskPct / distancia,
-          capitalActual * maxPctCap
-        )
       } else {
-        capAsignado = capitalActual * maxPctCap
+        distancia = assumedDist
+        _sinStop = true
       }
 
-      const riesgoEsteTrade = distancia
-        ? capAsignado * distancia
-        : capitalActual * maxPctCap
+      let capAsignado = Math.min(
+        capitalActual * riskPct / distancia,   // riesgo por trade
+        capitalActual * maxPctCap              // techo de cartera por trade
+      )
+      const riesgoEsteTrade = capAsignado * distancia
 
       const _capSizedPS = capAsignado  // tamaño dimensionado antes del clamp a poolLibre
       if (riesgoAcumulado + riesgoEsteTrade > capitalActual * maxAccum) { cntDescRiesgoPS++; if (isFinite(t.pnlPct)) { pnlDescartadosPS.push(t.pnlPct); pnlHipEurPS += _capSizedPS * t.pnlPct / 100 } return }
       if (capAsignado > poolLibre) capAsignado = poolLibre
       if (capAsignado <= 0) { cntDescCapitalPS++; if (isFinite(t.pnlPct)) { pnlDescartadosPS.push(t.pnlPct); pnlHipEurPS += _capSizedPS * t.pnlPct / 100 } return }
       cntEjecutadasPS++
+      if (_sinStop) cntSinStopPS++
 
       if (t.exitDate === date) {
         const capFinal = capAsignado * (1 + t.pnlPct / 100)
@@ -944,6 +976,10 @@ function buildPositionSizingCurves(assetResults, capitalIni, sizeRules) {
     descartadasPorSlots:   0,
     descartadasPorRiesgo:  cntDescRiesgoPS,
     descartadasPorCapital: cntDescCapitalPS,
+    // Aviso: operaciones ejecutadas que se dimensionaron con la distancia asumida por no tener
+    // stop conocido en la vela de entrada (ver _stopInicial).
+    sinStopInicial:        cntSinStopPS,
+    distanciaAsumidaPct:   assumedPctShown,
     winRateDescartadas:    pnlDescartadosPS.length ? _descWinsPS.length / pnlDescartadosPS.length * 100 : null,
     pfDescartadas:         _descGrossLossPS > 0 ? _descGrossWinPS / _descGrossLossPS : _descGrossWinPS > 0 ? 99 : null,
     pnlHipoteticoDescartadas: pnlHipEurPS,
@@ -1957,14 +1993,14 @@ export default async function handler(req, res) {
       ? (curves.executedTrades || []).map(t => {
           if (t.riesgoAcum !== undefined) return t  // positionsizing ya lo tiene
           const ep = t.entryPrice ?? t.entryPx
-          const stopIni = t.stopHistory?.[0]?.stopPx
+          const stopIni = _stopInicial(t)
           const dist = (ep && stopIni && ep > stopIni) ? (ep - stopIni) / ep : null
           const cap = t._capitalAtEntry ?? slotCapital
           return { ...t, riesgoAcum: dist != null ? dist * cap : null }
         })
       : assetResults.flatMap(ar => ar.trades.map(t => {
           const ep = t.entryPrice ?? t.entryPx
-          const stopIni = t.stopHistory?.[0]?.stopPx
+          const stopIni = _stopInicial(t)
           const dist = (ep && stopIni && ep > stopIni) ? (ep - stopIni) / ep : null
           return { ...t, symbol: ar.symbol, riesgoAcum: dist != null ? dist * slotCapital : null }
         })).sort((a,b) => a.exitDate.localeCompare(b.exitDate))

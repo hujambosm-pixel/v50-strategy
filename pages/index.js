@@ -986,6 +986,7 @@ export default function Home() {
   const [mcRiskPerTrade,setMcRiskPerTrade]=useState(5)
   const [mcMaxPortfolioPct,setMcMaxPortfolioPct]=useState(20)
   const [mcMaxAccumRisk,setMcMaxAccumRisk]=useState(20)
+  const [mcAssumedStopPct,setMcAssumedStopPct]=useState(20)   // distancia de stop asumida (Position Sizing)
   const [mcMaxPosiciones,setMcMaxPosiciones]=useState(4)  // para modo concentrado
   const [mcPrioridad,setMcPrioridad]=useState('alfabetico') // criterio desempate concentrado
   const [mcCriterioUso,setMcCriterioUso]=useState('filtro') // 'desempate' | 'filtro' — uso del criterio en Concentrado (default: filtro)
@@ -4127,7 +4128,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
       fromDate:_mcFrom,toDate:_mcTo,
       tipoStop,atrPeriod:Number(atrP),atrMult:Number(atrM),sinPerdidas,reentry,
       tipoFiltro,sp500EmaR:Number(sp500EmaR),sp500EmaL:Number(sp500EmaL),tipoCapital:mcCapital,
-      sizeRules:{riskPerTrade:mcRiskPerTrade,maxPortfolioPct:mcMaxPortfolioPct,maxAccumRisk:mcMaxAccumRisk,maxPosiciones:mcMaxPosiciones,prioridad:mcPrioridad,criterioUso:mcCriterioUso,momentumN:Number(mcMomentumN),rsWindow:Number(mcRsWindow),rsGateThr:Number(mcRsGateThr),momGateThr:Number(mcMomGateThr),proxGateThr:Number(mcProxGateThr),
+      sizeRules:{riskPerTrade:mcRiskPerTrade,maxPortfolioPct:mcMaxPortfolioPct,maxAccumRisk:mcMaxAccumRisk,assumedStopPct:mcAssumedStopPct,maxPosiciones:mcMaxPosiciones,prioridad:mcPrioridad,criterioUso:mcCriterioUso,momentumN:Number(mcMomentumN),rsWindow:Number(mcRsWindow),rsGateThr:Number(mcRsGateThr),momGateThr:Number(mcMomGateThr),proxGateThr:Number(mcProxGateThr),
         scoreMap:Object.fromEntries(mcSelected.map(sym=>[sym,wlData[sym.toUpperCase()]?.active?.scoreMetricas??null]))}}
     const buildCfgFromStrat=(strat)=>{
       // Parsear params del code_js (campo principal para estrategias modernas)
@@ -4255,6 +4256,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 riskPerTrade:mcRiskPerTrade,
                 maxPortfolioPct:mcMaxPortfolioPct,
                 maxAccumRisk:mcMaxAccumRisk,
+                assumedStopPct:mcAssumedStopPct,
               },
               filtros,          // mismo objeto filtros que usa el path único
               intervalo:mcIntervalo,
@@ -4272,7 +4274,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
       }
     }
     setMcLoading(false);setMcProgress(null)
-  },[mcSelected,mcMode,selectedModos,mcWeights,mcCapital,mcCapitalIni,mcYears,mcPeriodMode,mcFromDate,mcToDate,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL,rankingData,mcStratSelected,strategies,currentStratId,mcRiskPerTrade,mcMaxPortfolioPct,mcMaxAccumRisk,mcMaxPosiciones,mcPrioridad,mcCriterioUso,mcMomentumN,mcRsWindow,mcRsGateThr,mcMomGateThr,mcProxGateThr,filtros,mcIntervalo])
+  },[mcSelected,mcMode,selectedModos,mcWeights,mcCapital,mcCapitalIni,mcYears,mcPeriodMode,mcFromDate,mcToDate,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL,rankingData,mcStratSelected,strategies,currentStratId,mcRiskPerTrade,mcMaxPortfolioPct,mcMaxAccumRisk,mcAssumedStopPct,mcMaxPosiciones,mcPrioridad,mcCriterioUso,mcMomentumN,mcRsWindow,mcRsGateThr,mcMomGateThr,mcProxGateThr,filtros,mcIntervalo])
 
   // Auto-inicializar pesos iguales cuando cambian activos seleccionados (modo custom)
   useEffect(()=>{
@@ -4639,7 +4641,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.684</title>
+        <title>Trading Simulator V9.685</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4717,7 +4719,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.684
+            <span className="dot"/>Trading Simulator V9.685
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6124,7 +6126,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         {id:'concentrado',label:'Capital concentrado',ready:true,
                           desc:'Pool de capital único con un máximo de N posiciones simultáneas (configurable). Capital por operación = equity_total / N_slots, donde equity_total = capital libre + capital comprometido en posiciones abiertas. Así, aunque el capital esté casi todo invertido, cada nueva operación recibe siempre su fracción justa del portafolio. Al cerrar, capital ± P&L vuelve al pool. Cuando hay más señales de entrada el mismo día que slots libres disponibles, el criterio de prioridad (configurable) decide cuáles entran: alfabético, ranking del watchlist, momentum, fuerza relativa vs SP500, o proximidad al máximo de 52 semanas. Las señales que no caben ese día se descartan: no hay cola — el activo solo entrará cuando genere una nueva señal en el futuro.'},
                         {id:'positionsizing',label:'Position Sizing',ready:true,
-                          desc:'Pool de capital compartido con sizing por riesgo: el tamaño de cada posición se calcula dinámicamente según el stop loss (riesgo/trade × distancia al stop). Permite posiciones simultáneas con tamaños variables. Cuando una señal nueva supera el riesgo acumulado máximo o agota el pool disponible, se descarta. Las señales se procesan por fecha de entrada (más antigua primero) y, en empate de fecha, por orden alfabético del símbolo.'},
+                          desc:'Pool de capital compartido con sizing por riesgo: el tamaño de cada posición sale de la distancia entrada→stop (capital × riesgo/trade ÷ distancia, limitado por el máximo de cartera por trade). Permite posiciones simultáneas con tamaños variables. Cuando una señal nueva supera el riesgo acumulado máximo o agota el pool disponible, se descarta. Las señales se procesan por fecha de entrada (más antigua primero) y, en empate de fecha, por orden alfabético del símbolo. IMPORTANTE: el stop debe existir en la vela de entrada. Se lee el primer nivel del historial de stops de la estrategia, y solo se acepta si su fecha no es posterior a la entrada. Las estrategias cuyo stop aparece más tarde (por ejemplo, cuando una vela cierra bajo la EMA20) entran sin stop conocido: esas operaciones se dimensionan con la "Distancia de stop asumida" configurable más abajo. Revisa en los resultados el aviso de operaciones dimensionadas sin stop inicial: si son muchas, el sizing depende de ese supuesto y conviene comparar con Concentrado o Compartido.'},
                       ].map(m=>{
                         const isCheckbox=mcStratSelected.length<=1
                         const isActive=isCheckbox?selectedModos.includes(m.id):mcMode===m.id
@@ -6296,7 +6298,9 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         {label:'Máx. cartera/trade',value:mcMaxPortfolioPct,set:setMcMaxPortfolioPct,
                           tooltip:'Límite máximo del capital total que puedes invertir en una sola operación, independientemente del stop. Actúa como techo de seguridad cuando el stop está muy ajustado o no está definido.'},
                         {label:'Máx. riesgo acumulado',value:mcMaxAccumRisk,set:setMcMaxAccumRisk,
-                          tooltip:'Porcentaje máximo del capital total que puede estar en riesgo simultáneamente entre todas las posiciones abiertas. Cuando se alcanza este límite, no se permiten nuevas entradas hasta que alguna posición cierre y libere riesgo.'},
+                          tooltip:'Porcentaje máximo del capital total que puede estar en riesgo simultáneamente entre todas las posiciones abiertas. Cuando se alcanza este límite, no se permiten nuevas entradas hasta que alguna posición cierre y libere riesgo.\n\nRELACIÓN CLAVE: este parámetro fija de hecho cuántas posiciones puedes tener a la vez ≈ máx. riesgo acumulado ÷ riesgo por trade. Con 20% y 5% caben 4 posiciones simultáneas; si bajas el acumulado a 10% caben solo 2, por mucho pool libre que tengas. Si ves muchas señales descartadas por riesgo acumulado, es esta división la que manda.'},
+                        {label:'Distancia de stop asumida',value:mcAssumedStopPct,set:setMcAssumedStopPct,
+                          tooltip:'Solo se aplica a las operaciones que NO tienen stop conocido en la vela de entrada — por ejemplo, estrategias cuyo stop aparece más tarde, cuando el precio cierra bajo una media. En esos casos se asume esta distancia entrada→stop y la operación se dimensiona con la fórmula normal (capital × riesgo/trade ÷ distancia, con el techo de cartera por trade), imputando al riesgo acumulado solo esa fracción y no la posición entera.\n\nSubirla = posiciones más pequeñas y menos riesgo imputado por operación (caben más simultáneas). Bajarla = posiciones mayores, que normalmente acabarán topando con el techo de cartera por trade.\n\nEl resultado del backtest indica cuántas operaciones se dimensionaron así.'},
                       ].map(p=>(
                         <div key={p.label} style={{display:'flex',alignItems:'center',
                           justifyContent:'space-between',marginBottom:6}}>
@@ -7925,17 +7929,24 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                       const pct=Math.round(ss.ejecutadas/ss.generadas*100)
                                       const is100=pct>=100
                                       const totalDesc=(ss.descartadasPorSlots||0)+(ss.descartadasPorCapital||0)+(ss.descartadasPorRiesgo||0)+(ss.descartadasPorGate||0)
+                                      // Position Sizing: aviso de operaciones dimensionadas con la distancia asumida
+                                      // (sin stop conocido en la vela de entrada). Se muestra en ambas ramas del tooltip.
+                                      const lineaSinStop=ss.sinStopInicial>0
+                                        ? `⚠ ${ss.sinStopInicial} de ${ss.ejecutadas} operaciones dimensionadas sin stop inicial (distancia asumida ${ss.distanciaAsumidaPct}%)`
+                                        : null
                                       const tip=totalDesc===0
                                         ? [
                                             `Señales generadas: ${ss.generadas}`,
                                             `Ejecutadas: ${ss.ejecutadas} (100%)`,
                                             `Descartadas: 0`,
+                                            lineaSinStop,
                                             ``,
                                             `Este modo ejecuta el 100% de las señales por construcción.`,
-                                          ].join('\n')
+                                          ].filter(l=>l!==null).join('\n')
                                         : [
                                             `Señales generadas: ${ss.generadas}`,
                                             `Ejecutadas: ${ss.ejecutadas} (${pct}%)`,
+                                            lineaSinStop,
                                             ss.descartadasPorSlots>0?`Descartadas — slots llenos: ${ss.descartadasPorSlots}`:null,
                                             ss.descartadasPorRiesgo>0?`Descartadas — riesgo acum.: ${ss.descartadasPorRiesgo}`:null,
                                             ss.descartadasPorCapital>0?`Descartadas — sin capital: ${ss.descartadasPorCapital}`:null,
@@ -7949,6 +7960,12 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                       return(<span style={{display:'flex',alignItems:'center',gap:4}}>
                                         <span>{allT.length}</span>
                                         <span title={tip} style={{fontSize:9,color:is100?'#00e5a0':'#ff9f43',cursor:'help',fontWeight:400,background:is100?'rgba(0,229,160,0.08)':'rgba(255,159,67,0.12)',borderRadius:2,padding:'1px 4px'}}>{pct}%</span>
+                                        {lineaSinStop&&(
+                                          <span title={`${lineaSinStop}\n\nSu tamaño no sale de un stop real, sino de la distancia asumida que has configurado en Risk management. Si la proporción es alta, el resultado de este modo depende de ese supuesto.`}
+                                            style={{fontSize:9,color:'#ffd166',cursor:'help',fontWeight:400,background:'rgba(255,209,102,0.12)',borderRadius:2,padding:'1px 4px'}}>
+                                            ⚠{ss.sinStopInicial}
+                                          </span>
+                                        )}
                                       </span>)
                                     })()}</td>
                                     <td style={{padding:'5px 6px',color:cagrC>=0?'#00e5a0':'#ff4d6d',fontWeight:600}}>{fmt(cagrC,2,'%')}</td>
@@ -8394,7 +8411,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         fromDate:_mcFrom,toDate:_mcTo,tipoStop,atrPeriod:Number(atrP),atrMult:Number(atrM),
                         sinPerdidas,reentry,tipoFiltro,sp500EmaR:Number(sp500EmaR),sp500EmaL:Number(sp500EmaL),
                         tipoCapital:mcCapital,
-                        sizeRules:{riskPerTrade:mcRiskPerTrade,maxPortfolioPct:mcMaxPortfolioPct,maxAccumRisk:mcMaxAccumRisk,maxPosiciones:9999}}
+                        sizeRules:{riskPerTrade:mcRiskPerTrade,maxPortfolioPct:mcMaxPortfolioPct,maxAccumRisk:mcMaxAccumRisk,assumedStopPct:mcAssumedStopPct,maxPosiciones:9999}}
                       const sid=(mcStratSelected.filter(Boolean)[0])||currentStratId||null
                       const strat=strategies.find(s=>s.id===sid)
                       const isNoStrategyG=(strat?.name||'').includes('No Strategy')
@@ -8426,7 +8443,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         fromDate:_mcFrom,toDate:_mcTo,tipoStop,atrPeriod:Number(atrP),atrMult:Number(atrM),
                         sinPerdidas,reentry,tipoFiltro,sp500EmaR:Number(sp500EmaR),sp500EmaL:Number(sp500EmaL),
                         tipoCapital:mcCapital,
-                        sizeRules:{riskPerTrade:mcRiskPerTrade,maxPortfolioPct:mcMaxPortfolioPct,maxAccumRisk:mcMaxAccumRisk,maxPosiciones:mcMaxPosiciones}}
+                        sizeRules:{riskPerTrade:mcRiskPerTrade,maxPortfolioPct:mcMaxPortfolioPct,maxAccumRisk:mcMaxAccumRisk,assumedStopPct:mcAssumedStopPct,maxPosiciones:mcMaxPosiciones}}
                       const sid=(mcStratSelected.filter(Boolean)[0])||currentStratId||null
                       const strat=strategies.find(s=>s.id===sid)
                       const stratName=strat?.name||'estrategia'
