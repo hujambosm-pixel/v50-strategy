@@ -53,10 +53,21 @@ function buildAlignedWeekly(weeklyData, assetDates, emaPeriod) {
 }
 
 // ── Rebuild compound capitalTras after filtering trades ──
+// Se llama SOLO cuando un filtro de mercado ha eliminado operaciones, para recomponer la cadena
+// de interés compuesto sobre las que sobreviven.
+// El cierre virtual (posición abierta al final del periodo) participa como una operación más:
+// es lo que ya hacía buildTrades antes de filtrar, y lo que hacen los otros tres modos, que
+// realizan su P&L en su exitDate. Excluirlo lo devolvía INTACTO, conservando el capitalTras
+// calculado sobre la cadena SIN filtrar; como buildSlotsCurves lee el capitalTras de la última
+// salida y el cierre virtual es siempre la última, la curva compuesta de Slots saltaba el último
+// día al valor sin filtrar (beneficio inflado + escalón vertical al final).
+// La guarda restante es defensiva —buildTrades ya exige entryPrice>0 && exitPrice>0— pero debe
+// arrastrar el capital acumulado en curso: devolver el trade tal cual filtraría el mismo valor
+// obsoleto que causaba el bug.
 function rebuildCapitalTras(trades, initCapital) {
   let capital = initCapital
   return trades.map(t => {
-    if (!t.exitPrice || !t.entryPrice || t._virtualClose) return t
+    if (!t.exitPrice || !t.entryPrice) return { ...t, capitalTras: capital }
     const pnlComp = capital * ((t.exitPrice - t.entryPrice) / t.entryPrice)
     capital += pnlComp
     return { ...t, capitalTras: capital }
