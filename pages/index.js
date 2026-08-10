@@ -4677,7 +4677,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.691</title>
+        <title>Trading Simulator V9.692</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4755,7 +4755,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.691
+            <span className="dot"/>Trading Simulator V9.692
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -7154,7 +7154,11 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                               <div>
                                 <div style={{fontFamily:MONO,fontSize:10,fontWeight:500,color:'var(--text2)',marginBottom:2,lineHeight:1}}>Entrada</div>
                                 <div style={{display:'flex',alignItems:'center',gap:2}}>
-                                  <input type="text" inputMode="decimal" placeholder="0.00" value={_fmtForCopy(riskCalc.entry)||riskCalc.entry}
+                                  {/* value EN CRUDO: pasarlo por _fmtForCopy (toFixed(2)) reformateaba el campo en
+                                      cada render, o sea en cada tecla → React reasignaba el valor del DOM, el cursor
+                                      saltaba al final y el separador decimal se destruía antes de terminar de escribir.
+                                      _fmtForCopy sigue usándose donde se creó: el botón de copiar. */}
+                                  <input type="text" inputMode="decimal" placeholder="0.00" value={riskCalc.entry}
                                     onChange={e=>{const v=parseES(e.target.value);setRiskCalc(c=>({...c,entry:e.target.value}));setRiskLineActive(p=>({...p,entry:v>0}));if(v>0&&riskCaptureMode==='capture_entry')setRiskCaptureMode(null)}}
                                     style={{..._inp,width:90,fontSize:12,borderColor:isActive?ac:isCapturing?`${ac}99`:'var(--border)'}}/>
                                   <button title={isCapturing?'Cancelar':'Capturar del gráfico'} onClick={()=>setRiskCaptureMode(c=>c==='capture_entry'?null:'capture_entry')}
@@ -7174,7 +7178,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                               <div>
                                 <div style={{fontFamily:MONO,fontSize:10,fontWeight:500,color:'var(--text2)',marginBottom:2,lineHeight:1}}>Stop</div>
                                 <div style={{display:'flex',alignItems:'center',gap:2}}>
-                                  <input type="text" inputMode="decimal" placeholder="0.00" value={_fmtForCopy(riskCalc.stop)||riskCalc.stop}
+                                  <input type="text" inputMode="decimal" placeholder="0.00" value={riskCalc.stop}
                                     onChange={e=>{const v=parseES(e.target.value);setRiskCalc(c=>({...c,stop:e.target.value}));setRiskLineActive(p=>({...p,stop:v>0}));if(v>0&&riskCaptureMode==='capture_stop')setRiskCaptureMode(null)}}
                                     style={{..._inp,width:90,fontSize:12,borderColor:isActive?ac:isCapturing?`${ac}99`:'var(--border)'}}/>
                                   <button title={isCapturing?'Cancelar':'Capturar del gráfico'} onClick={()=>setRiskCaptureMode(c=>c==='capture_stop'?null:'capture_stop')}
@@ -7194,7 +7198,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                               <div>
                                 <div style={{fontFamily:MONO,fontSize:10,fontWeight:500,color:'var(--text2)',marginBottom:2,lineHeight:1}}>TP</div>
                                 <div style={{display:'flex',alignItems:'center',gap:2}}>
-                                  <input type="text" inputMode="decimal" placeholder="0.00" value={_fmtForCopy(riskCalc.tp)||riskCalc.tp}
+                                  <input type="text" inputMode="decimal" placeholder="0.00" value={riskCalc.tp}
                                     onChange={e=>{const v=parseES(e.target.value);setRiskCalc(c=>({...c,tp:e.target.value}));setRiskLineActive(p=>({...p,tp:v>0}));if(v>0&&riskCaptureMode==='capture_tp')setRiskCaptureMode(null)}}
                                     style={{..._inp,width:90,fontSize:12,borderColor:isActive?ac:isCapturing?`${ac}99`:'var(--border)'}}/>
                                   <button title={isCapturing?'Cancelar':'Capturar del gráfico'} onClick={()=>setRiskCaptureMode(c=>c==='capture_tp'?null:'capture_tp')}
