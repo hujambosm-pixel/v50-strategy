@@ -1173,6 +1173,9 @@ export default function Home() {
   const riskSaveRef=useRef({shares:null,currency:null})   // {shares,currency} escrito en el render del panel risk
   const pendingSaveTimerRef=useRef(null)                  // debounce manual del auto-guardado
   const prevSidePanelRef=useRef(sidePanel)                // detectar transición de apertura del panel risk
+  // Última hidratación del panel desde pending_orders: {sym,entry,stop}. Mientras riskCalc siga
+  // siendo EXACTAMENTE esto, el auto-guardado aborta → no hay upsert espurio al restaurar.
+  const riskHydratedRef=useRef({sym:null,entry:'',stop:''})
   const [tlFilterBroker,setTlFilterBroker]=useState('')
   const [tlFilterYear,setTlFilterYear]=useState('')
   const [tlFilterMonth,setTlFilterMonth]=useState('')  // '01'..'12'
@@ -1403,27 +1406,53 @@ export default function Home() {
     })
   },[tlTrades, pendingOrders])
 
-  // ── RESET al abrir el panel Risk MGMT: vaciar entrada/stop SOLO en la transición a 'risk'.
-  //    Deja los campos inválidos → el auto-guardado (más abajo) no dispara nada. ──
+  // ── HIDRATACIÓN del panel Risk MGMT desde la orden pendiente del símbolo visible. ──
+  // Sustituye a los dos RESET anteriores (cambio de símbolo / apertura del panel), que vaciaban
+  // los campos sin que nada los repoblara: el dato estaba en pending_orders y en el estado
+  // pendingOrders, pero nunca volvía a riskCalc. Unificados en UN solo efecto para que no se pisen.
+  // Con orden → carga entry/stop/tp. Sin orden → vacía LOS TRES (antes tp quedaba colgando del
+  // símbolo anterior). Todo lo demás del panel (acciones, importe, riesgo) es calculado y se
+  // reconstruye solo a partir de estos tres valores.
   useEffect(()=>{
-    const prev=prevSidePanelRef.current
+    const symUp=(simbolo||'').toUpperCase()
+    const ord=(pendingOrders||[]).find(o=>(o.symbol||'').toUpperCase()===symUp)||null
+    const prevPanel=prevSidePanelRef.current
     prevSidePanelRef.current=sidePanel
-    if(sidePanel==='risk'&&prev!=='risk'){
-      setRiskCalc(c=>({...c,entry:'',stop:''}))
-    }
-  },[sidePanel])
-
-  // ── RESET al CAMBIAR de símbolo: vaciar entrada/stop (conserva tp). Evita que los valores del
-  //    símbolo anterior queden colgando bajo el nuevo. En mount es inocuo (ya están vacíos). ──
-  useEffect(()=>{
-    setRiskCalc(c=>({...c,entry:'',stop:''}))
-  },[simbolo])
+    const symChanged     = riskHydratedRef.current.sym !== symUp
+    const panelJustOpened= sidePanel==='risk' && prevPanel!=='risk'
+    // Mismo símbolo y panel ya abierto → solo se re-hidrata si los campos están vacíos/inválidos.
+    // Así una orden que llega tarde (la carga es asíncrona, tras resolverse la sesión) sí entra,
+    // pero el eco del propio auto-guardado —que también muta pendingOrders— no pisa lo que el
+    // usuario está tecleando.
+    const camposVacios = !(parseES(riskCalc.entry)>0) || !(parseES(riskCalc.stop)>0)
+    if(!(symChanged || panelJustOpened || (ord && camposVacios))) return
+    // parseES borra los puntos y toma la coma como decimal → hay que volcar en formato coma,
+    // el mismo que produce el usuario al teclear. Escribir "425.7" se leería como 4257.
+    const _toInput=v=>(v==null||v==='')?'':String(v).replace('.',',')
+    const next=ord
+      ? { entry:_toInput(ord.entry_price), stop:_toInput(ord.stop_price), tp:_toInput(ord.tp_price) }
+      : { entry:'', stop:'', tp:'' }
+    // Snapshot de lo hidratado: el auto-guardado aborta mientras riskCalc siga siendo exactamente
+    // esto (ver más abajo). Evita un upsert espurio que refrescaría created_at, que es la marca
+    // que usa la reconciliación para decidir si una pendiente ya se ejecutó.
+    riskHydratedRef.current={ sym:symUp, entry:next.entry, stop:next.stop }
+    setRiskCalc(next)
+    setRiskLineActive({ entry:parseES(next.entry)>0, stop:parseES(next.stop)>0, tp:parseES(next.tp)>0 })
+  },[simbolo, pendingOrders, sidePanel])   // eslint-disable-line
 
   // ── AUTO-GUARDADO de orden pendiente (sin botón), debounce manual ~600ms.
   //    Solo guarda si entrada/stop del usuario parsean a números válidos y distintos.
   //    El nº de acciones (y currency) se leen de riskSaveRef, escrito en el render del panel. ──
   useEffect(()=>{
     if(sidePanel!=='risk') return
+    // Guarda anti-eco: si riskCalc es idéntico a lo que se acaba de cargar desde pending_orders
+    // para este mismo símbolo, no hay nada que guardar. Sin esto, restaurar el panel dispararía un
+    // upsert que refresca created_at y rompería la reconciliación de pendientes ya ejecutadas.
+    // Se compara el valor (no un flag booleano) para no depender de que este efecto llegue a
+    // re-ejecutarse: si el símbolo nuevo tuviera los mismos entry/stop que el anterior, las deps
+    // no cambiarían y un flag se quedaría activo, tragándose la siguiente edición real.
+    const _hy=riskHydratedRef.current
+    if(_hy && _hy.sym===(simbolo||'').toUpperCase() && _hy.entry===riskCalc.entry && _hy.stop===riskCalc.stop) return
     if(pendingSaveTimerRef.current) clearTimeout(pendingSaveTimerRef.current)
     pendingSaveTimerRef.current=setTimeout(()=>{
       const _eN=parseES(riskCalc.entry), _sN=parseES(riskCalc.stop), _tN=parseES(riskCalc.tp)
@@ -4641,7 +4670,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.689</title>
+        <title>Trading Simulator V9.690</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4719,7 +4748,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.689
+            <span className="dot"/>Trading Simulator V9.690
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
