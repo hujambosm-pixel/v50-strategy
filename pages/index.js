@@ -1173,9 +1173,16 @@ export default function Home() {
   const riskSaveRef=useRef({shares:null,currency:null})   // {shares,currency} escrito en el render del panel risk
   const pendingSaveTimerRef=useRef(null)                  // debounce manual del auto-guardado
   const prevSidePanelRef=useRef(sidePanel)                // detectar transición de apertura del panel risk
-  // Última hidratación del panel desde pending_orders: {sym,entry,stop,tp}. Mientras riskCalc siga
-  // siendo EXACTAMENTE esto, el auto-guardado aborta → no hay upsert espurio al restaurar.
-  const riskHydratedRef=useRef({sym:null,entry:'',stop:'',tp:''})
+  // Última hidratación del panel desde pending_orders. DOS conceptos SEPARADOS que antes compartían
+  // el campo `sym` y se pisaban entre sí:
+  //   sym  → qué símbolo está hidratado. Solo lo escribe la hidratación. Alimenta `symChanged`.
+  //   vals → {entry,stop,tp} hidratados, o null. Alimenta la guarda anti-eco del auto-guardado, que
+  //          los invalida (vals=null) en cuanto el usuario toca algo. Antes esa invalidación ponía
+  //          sym=null y la hidratación lo leía como "cambio de símbolo", sobrescribiendo el campo a
+  //          medio escribir cuando llegaba el eco del upsert (la coma desaparecía ~1s después).
+  const riskHydratedRef=useRef({sym:null,vals:null})
+  // Marca que el próximo refresco de pendingOrders es el eco de NUESTRO propio upsert.
+  const riskEchoRef=useRef(false)
   const [tlFilterBroker,setTlFilterBroker]=useState('')
   const [tlFilterYear,setTlFilterYear]=useState('')
   const [tlFilterMonth,setTlFilterMonth]=useState('')  // '01'..'12'
@@ -1420,12 +1427,19 @@ export default function Home() {
     prevSidePanelRef.current=sidePanel
     const symChanged     = riskHydratedRef.current.sym !== symUp
     const panelJustOpened= sidePanel==='risk' && prevPanel!=='risk'
-    // Mismo símbolo y panel ya abierto → solo se re-hidrata si los campos están vacíos/inválidos.
-    // Así una orden que llega tarde (la carga es asíncrona, tras resolverse la sesión) sí entra,
-    // pero el eco del propio auto-guardado —que también muta pendingOrders— no pisa lo que el
-    // usuario está tecleando.
-    const camposVacios = !(parseES(riskCalc.entry)>0) || !(parseES(riskCalc.stop)>0)
-    if(!(symChanged || panelJustOpened || (ord && camposVacios))) return
+    // Eco del propio upsert: pendingOrders cambia porque ACABAMOS de guardar este símbolo. Si el
+    // símbolo no ha cambiado y el panel no se acaba de abrir, no hay nada que restaurar y sí algo
+    // que destrozar: el texto a medio teclear ("79," volvería como "79"). Se consume siempre para
+    // que la marca no quede colgando.
+    const esEco=riskEchoRef.current; riskEchoRef.current=false
+    if(esEco && !symChanged && !panelJustOpened) return
+    // Mismo símbolo y panel ya abierto → solo se re-hidrata si el panel está INTACTO (los tres
+    // campos vacíos). Así una orden que llega tarde (la carga es asíncrona, tras resolverse la
+    // sesión) sí entra, pero nada de lo que el usuario haya escrito se pisa. Antes esto miraba si
+    // entry/stop parseaban a >0 e ignoraba tp: con un tp vacío —lo normal— habría dado "vacío"
+    // siempre, invitando a sobrescribir entry y stop mientras se tecleaban.
+    const panelVacio = !riskCalc.entry && !riskCalc.stop && !riskCalc.tp
+    if(!(symChanged || panelJustOpened || (ord && panelVacio))) return
     // parseES borra los puntos y toma la coma como decimal → hay que volcar en formato coma,
     // el mismo que produce el usuario al teclear. Escribir "425.7" se leería como 4257.
     const _toInput=v=>(v==null||v==='')?'':String(v).replace('.',',')
@@ -1435,7 +1449,7 @@ export default function Home() {
     // Snapshot de lo hidratado: el auto-guardado aborta mientras riskCalc siga siendo exactamente
     // esto (ver más abajo). Evita un upsert espurio que refrescaría created_at, que es la marca
     // que usa la reconciliación para decidir si una pendiente ya se ejecutó.
-    riskHydratedRef.current={ sym:symUp, entry:next.entry, stop:next.stop, tp:next.tp }
+    riskHydratedRef.current={ sym:symUp, vals:{ entry:next.entry, stop:next.stop, tp:next.tp } }
     setRiskCalc(next)
     setRiskLineActive({ entry:parseES(next.entry)>0, stop:parseES(next.stop)>0, tp:parseES(next.tp)>0 })
   },[simbolo, pendingOrders, sidePanel])   // eslint-disable-line
@@ -1451,13 +1465,15 @@ export default function Home() {
     // Se compara el valor (no un flag booleano) para no depender de que este efecto llegue a
     // re-ejecutarse: si el símbolo nuevo tuviera los mismos entry/stop/tp que el anterior, las deps
     // no cambiarían y un flag se quedaría activo, tragándose la siguiente edición real.
-    const _hy=riskHydratedRef.current
-    if(_hy && _hy.sym===(simbolo||'').toUpperCase()
-       && _hy.entry===riskCalc.entry && _hy.stop===riskCalc.stop && _hy.tp===riskCalc.tp) return
+    const _hy=riskHydratedRef.current, _v=_hy.vals
+    if(_v && _hy.sym===(simbolo||'').toUpperCase()
+       && _v.entry===riskCalc.entry && _v.stop===riskCalc.stop && _v.tp===riskCalc.tp) return
     // Superada la guarda, el usuario ya ha tocado algo: el snapshot ha cumplido su función (frenar
     // el eco de ESA hidratación) y se invalida. Si no, revertir un campo al valor hidratado volvería
     // a activar la guarda y ese cambio no se guardaría, aunque la BD tuviera ya otro valor.
-    riskHydratedRef.current={sym:null,entry:'',stop:'',tp:''}
+    // Se limpian SOLO los valores: `sym` sigue marcando qué símbolo está hidratado, que es lo que
+    // lee symChanged. Nulificarlo también era lo que hacía que el eco borrase la coma.
+    riskHydratedRef.current={ ...riskHydratedRef.current, vals:null }
     if(pendingSaveTimerRef.current) clearTimeout(pendingSaveTimerRef.current)
     pendingSaveTimerRef.current=setTimeout(()=>{
       const _eN=parseES(riskCalc.entry), _sN=parseES(riskCalc.stop), _tN=parseES(riskCalc.tp)
@@ -1469,7 +1485,9 @@ export default function Home() {
         body:JSON.stringify({symbol:sym,entry_price:_eN,stop_price:_sN,tp_price:_tN>0?_tN:null,
           shares:shares!=null?shares:null,currency:currency||null,profile_id:riskActiveProfile?.id||null})})
         .then(r=>r.ok?r.json():null)
-        .then(saved=>{ if(saved&&saved.symbol) setPendingOrders(prev=>[...prev.filter(o=>(o.symbol||'').toUpperCase()!==sym), saved]) })
+        // Marcar ANTES de setPendingOrders: la hidratación verá que este refresco es nuestro eco
+        // y no reescribirá el campo que el usuario pueda estar tecleando todavía.
+        .then(saved=>{ if(saved&&saved.symbol){ riskEchoRef.current=true; setPendingOrders(prev=>[...prev.filter(o=>(o.symbol||'').toUpperCase()!==sym), saved]) } })
         .catch(()=>{})
     },600)
     return()=>{ if(pendingSaveTimerRef.current) clearTimeout(pendingSaveTimerRef.current) }
@@ -4677,7 +4695,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.692</title>
+        <title>Trading Simulator V9.693</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4755,7 +4773,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.692
+            <span className="dot"/>Trading Simulator V9.693
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
