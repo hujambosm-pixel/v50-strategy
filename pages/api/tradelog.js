@@ -205,7 +205,11 @@ function parseIBKRorderDetail(text, useDDMM = true) {
       }
 
       // Fecha + fees: bucle hacia abajo (i+1..i+15, break en otra acción)
-      let date = null, fees = 0
+      // Ambos toman el PRIMER valor encontrado y no se vuelven a escribir: la ventana puede
+      // alcanzar el bloque de la operación siguiente (p.ej. la conversión EUR.USD que IBKR
+      // intercala entre dos fills), cuyo "Fees:" machacaba la comisión ya leída.
+      // feesFound es un flag explícito, no `fees === 0`: 0.0 es una comisión legítima.
+      let date = null, fees = 0, feesFound = false
       for (let j = i + 1; j < Math.min(i + 15, lines.length); j++) {
         if (!date) {
           const dm = dateRe.exec(lines[j])
@@ -219,8 +223,10 @@ function parseIBKRorderDetail(text, useDDMM = true) {
             date = year+'-'+String(month).padStart(2,'0')+'-'+String(day).padStart(2,'0')
           }
         }
-        const fm = /Fees?:\s*([\d.,]+)/i.exec(lines[j])
-        if (fm) fees = parseFloat(fm[1].replace(',','.'))
+        if (!feesFound) {
+          const fm = /Fees?:\s*([\d.,]+)/i.exec(lines[j])
+          if (fm) { fees = parseFloat(fm[1].replace(',','.')); feesFound = true }
+        }
         if (j > i && actionRe.test(lines[j])) break
       }
 
