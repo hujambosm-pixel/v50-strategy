@@ -137,7 +137,14 @@ function buildSlotsCurves(assetResults, capitalIni) {
       // Las ya realizadas en `compound` (incl. cierres virtuales en su exitDate) se excluyen para
       // no contar su ganancia dos veces. `open`/ocupación siguen usando openTrades (sin tocar).
       const openPnl = openTrades.reduce((s,t) => { if(closePx==null) return s; if(t.exitDate && t.exitDate <= date) return s; const ep=t.entryPx??t.entryPrice; const capAtEntry=t.capitalTras/(1+t.pnlPct/100); return ep!=null ? s+(closePx-ep)/ep*capAtEntry : s }, 0)
-      byDate[date] = { simple, compound, open, bh, openPnl }
+      // COSTE de las posiciones abiertas: capital compuesto realmente asignado al entrar
+      // (capitalTras deshaciendo el retorno del propio trade), sobre el MISMO conjunto y con el
+      // MISMO filtro de exitDate que openPnl, para que ambos hablen siempre de las mismas
+      // posiciones. Sustituye a `openSlots × slotCapital`: aquel numerador quedaba anclado al
+      // capital INICIAL mientras el denominador de Cap.inv% (compoundCurve) sí crecía con los
+      // beneficios, así que la ocupación se infravaloraba más cuanto mejor iba la estrategia.
+      const openCost = openTrades.reduce((s,t) => { if(t.exitDate && t.exitDate <= date) return s; return s + t.capitalTras/(1+t.pnlPct/100) }, 0)
+      byDate[date] = { simple, compound, open, bh, openPnl, openCost }
     })
     return byDate
   })
@@ -145,16 +152,17 @@ function buildSlotsCurves(assetResults, capitalIni) {
   const simpleCurve=[], compoundCurve=[], bhCurve=[], occupancyCurve=[], floatSimpleCurve=[], floatCompoundCurve=[]
   const step = Math.max(1, Math.floor(filteredDates.length / 400))
   _sampledWithChanges(filteredDates, step, assetResults.flatMap(ar=>ar.trades||[])).forEach(date => {
-    let totSimple=0, totCompound=0, totBH=0, openSlots=0, totOpenPnl=0
+    let totSimple=0, totCompound=0, totBH=0, openSlots=0, totOpenPnl=0, totOpenCost=0
     assetEquities.forEach(byDate => {
       const e = byDate[date]
-      if (e) { totSimple+=e.simple; totCompound+=e.compound; totBH+=e.bh; if(e.open)openSlots++; totOpenPnl+=e.openPnl||0 }
+      if (e) { totSimple+=e.simple; totCompound+=e.compound; totBH+=e.bh; if(e.open)openSlots++; totOpenPnl+=e.openPnl||0; totOpenCost+=e.openCost||0 }
     })
     simpleCurve.push({ date, value: totSimple })
     compoundCurve.push({ date, value: totCompound })
     bhCurve.push({ date, value: totBH })
-    // CAPITAL EMPLEADO unificado: euros de COSTE = nº slots abiertos × coste fijo por slot.
-    occupancyCurve.push({ date, value: openSlots * slotCapital })
+    // CAPITAL EMPLEADO unificado: euros de COSTE de las posiciones abiertas (Σ capital de entrada),
+    // igual que en los otros tres modos (allí, Σ capitalAtEntryMap).
+    occupancyCurve.push({ date, value: totOpenCost })
     floatSimpleCurve.push({ date, value: totSimple+totOpenPnl })
     floatCompoundCurve.push({ date, value: totCompound+totOpenPnl })
   })
