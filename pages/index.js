@@ -1173,9 +1173,9 @@ export default function Home() {
   const riskSaveRef=useRef({shares:null,currency:null})   // {shares,currency} escrito en el render del panel risk
   const pendingSaveTimerRef=useRef(null)                  // debounce manual del auto-guardado
   const prevSidePanelRef=useRef(sidePanel)                // detectar transición de apertura del panel risk
-  // Última hidratación del panel desde pending_orders: {sym,entry,stop}. Mientras riskCalc siga
+  // Última hidratación del panel desde pending_orders: {sym,entry,stop,tp}. Mientras riskCalc siga
   // siendo EXACTAMENTE esto, el auto-guardado aborta → no hay upsert espurio al restaurar.
-  const riskHydratedRef=useRef({sym:null,entry:'',stop:''})
+  const riskHydratedRef=useRef({sym:null,entry:'',stop:'',tp:''})
   const [tlFilterBroker,setTlFilterBroker]=useState('')
   const [tlFilterYear,setTlFilterYear]=useState('')
   const [tlFilterMonth,setTlFilterMonth]=useState('')  // '01'..'12'
@@ -1435,7 +1435,7 @@ export default function Home() {
     // Snapshot de lo hidratado: el auto-guardado aborta mientras riskCalc siga siendo exactamente
     // esto (ver más abajo). Evita un upsert espurio que refrescaría created_at, que es la marca
     // que usa la reconciliación para decidir si una pendiente ya se ejecutó.
-    riskHydratedRef.current={ sym:symUp, entry:next.entry, stop:next.stop }
+    riskHydratedRef.current={ sym:symUp, entry:next.entry, stop:next.stop, tp:next.tp }
     setRiskCalc(next)
     setRiskLineActive({ entry:parseES(next.entry)>0, stop:parseES(next.stop)>0, tp:parseES(next.tp)>0 })
   },[simbolo, pendingOrders, sidePanel])   // eslint-disable-line
@@ -1449,10 +1449,15 @@ export default function Home() {
     // para este mismo símbolo, no hay nada que guardar. Sin esto, restaurar el panel dispararía un
     // upsert que refresca created_at y rompería la reconciliación de pendientes ya ejecutadas.
     // Se compara el valor (no un flag booleano) para no depender de que este efecto llegue a
-    // re-ejecutarse: si el símbolo nuevo tuviera los mismos entry/stop que el anterior, las deps
+    // re-ejecutarse: si el símbolo nuevo tuviera los mismos entry/stop/tp que el anterior, las deps
     // no cambiarían y un flag se quedaría activo, tragándose la siguiente edición real.
     const _hy=riskHydratedRef.current
-    if(_hy && _hy.sym===(simbolo||'').toUpperCase() && _hy.entry===riskCalc.entry && _hy.stop===riskCalc.stop) return
+    if(_hy && _hy.sym===(simbolo||'').toUpperCase()
+       && _hy.entry===riskCalc.entry && _hy.stop===riskCalc.stop && _hy.tp===riskCalc.tp) return
+    // Superada la guarda, el usuario ya ha tocado algo: el snapshot ha cumplido su función (frenar
+    // el eco de ESA hidratación) y se invalida. Si no, revertir un campo al valor hidratado volvería
+    // a activar la guarda y ese cambio no se guardaría, aunque la BD tuviera ya otro valor.
+    riskHydratedRef.current={sym:null,entry:'',stop:'',tp:''}
     if(pendingSaveTimerRef.current) clearTimeout(pendingSaveTimerRef.current)
     pendingSaveTimerRef.current=setTimeout(()=>{
       const _eN=parseES(riskCalc.entry), _sN=parseES(riskCalc.stop), _tN=parseES(riskCalc.tp)
@@ -1468,9 +1473,11 @@ export default function Home() {
         .catch(()=>{})
     },600)
     return()=>{ if(pendingSaveTimerRef.current) clearTimeout(pendingSaveTimerRef.current) }
-    // Deps SOLO entrada/stop: un cambio de símbolo NO re-dispara el guardado (evita contaminar el
-    // símbolo nuevo con valores del anterior); simbolo/sidePanel/tp se leen frescos en la ejecución.
-  },[riskCalc.entry,riskCalc.stop])   // eslint-disable-line
+    // Deps SOLO los tres campos del usuario: un cambio de símbolo NO re-dispara el guardado (evita
+    // contaminar el símbolo nuevo con valores del anterior); simbolo/sidePanel se leen frescos en la
+    // ejecución. tp entra aquí para que editarlo solo también persista; la condición de validez de
+    // arriba sigue exigiendo entrada y stop, así que un TP suelto no crea orden.
+  },[riskCalc.entry,riskCalc.stop,riskCalc.tp])   // eslint-disable-line
 
   // Órdenes pendientes del símbolo visible (0 o 1) — memoizado para no recrear el chart
   const pendingOrdersForSym=useMemo(()=>{
@@ -4670,7 +4677,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.690</title>
+        <title>Trading Simulator V9.691</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4748,7 +4755,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.690
+            <span className="dot"/>Trading Simulator V9.691
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
