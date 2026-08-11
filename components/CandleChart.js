@@ -262,6 +262,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
   const riskLinesRef=useRef([null,null,null]) // [entryLine, stopLine, tpLine]
   const riskBandSeriesRef=useRef(null)         // dummy LineSeries hosting risk primitive
   const riskConfigRef=useRef({entry:null,stop:null,tp:null,shares:0,tradeRiskEur:0,rrRatio:0})
+  const riskTickRef=useRef(chartReadyTick)     // último chartReadyTick visto por el efecto de riskLevels
   const onRiskLevelChangeRef=useRef(onRiskLevelChange)
   const fillHeightRef=useRef(fillHeight)
   useEffect(()=>{ fillHeightRef.current=fillHeight },[fillHeight])
@@ -1511,6 +1512,21 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
     const candles = candlesRef.current
     if (!chart || !candles) return
 
+    // Chart recreado (nonce nuevo): las price lines y la serie dummy de la banda pertenecían al
+    // chart destruido por el import() async. Se SUELTAN las referencias —sin intentar removerlas,
+    // porque el objeto que las contenía ya no existe— para que abajo se reconstruyan sobre las
+    // velas nuevas. Sin esto, upsertLine haría applyOptions sobre una línea huérfana (que puede no
+    // lanzar, así que el catch no la nulificaría) y la guarda de la banda seguiría creyendo que
+    // existe: el resultado era que las líneas de edición desaparecían y no volvían.
+    // Los dos efectos hermanos resuelven lo mismo limpiando su array en cada pasada; aquí no vale,
+    // porque este efecto corre en CADA render (riskLevels es un objeto nuevo) y actualiza in-place
+    // para no parpadear. De ahí que el reseteo se acote al cambio de nonce.
+    if (riskTickRef.current !== chartReadyTick) {
+      riskTickRef.current = chartReadyTick
+      riskLinesRef.current = [null,null,null]
+      riskBandSeriesRef.current = null
+    }
+
     const cleanup = () => {
       riskLinesRef.current.forEach((pl,i)=>{ if(pl){ try{candles.removePriceLine(pl)}catch(_){}; riskLinesRef.current[i]=null } })
       if(riskBandSeriesRef.current){ try{chart.removeSeries(riskBandSeriesRef.current)}catch(_){}; riskBandSeriesRef.current=null }
@@ -1550,7 +1566,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       } catch(_) {}
     }
   // eslint-disable-next-line
-  },[riskLevels, riskLineActive, data])
+  },[riskLevels, riskLineActive, data, chartReadyTick])
 
   // ── Risk drag: mousedown near a line → drag to update prices ──
   useEffect(()=>{
