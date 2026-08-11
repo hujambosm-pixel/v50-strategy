@@ -1167,7 +1167,20 @@ export default function Home() {
   const [riskEditingNameVal,setRiskEditingNameVal]=useState('')
   const [riskNewForm,setRiskNewForm]=useState(null) // null | {name,risk_per_trade_value,risk_per_trade_type,max_total_risk,max_simultaneous_positions}
   // Parsea números en formato español (1.234,56) o inglés (1234.56)
-  const parseES=useCallback((s)=>parseFloat(String(s).replace(/\./g,'').replace(',','.'))||0,[])
+  // Precio tecleado → número. Regla: el ÚLTIMO separador es el decimal; los anteriores son
+  // millares y se eliminan. Un separador suelto es SIEMPRE decimal, cuenten los dígitos que
+  // cuenten detrás: la versión anterior borraba todos los puntos (los daba por millares), así que
+  // "60.5" se guardaba como 605 y "425.6995" como 4256995. Tratar "X,YYY" como millares tampoco
+  // vale: rompería 218 de los 910 precios reales del histórico (159,718 · 21,602 · 9,342…), todos
+  // ellos con 3 decimales. El precio entero de 4 cifras escrito "1.234" se lee como 1,234 — caso
+  // que no ha ocurrido nunca en 920 operaciones y que además tiene salida escribiendo 1234.
+  const parseES=useCallback((s)=>{
+    const t=String(s??'').trim()
+    if(!t) return 0
+    const last=Math.max(t.lastIndexOf('.'), t.lastIndexOf(','))
+    if(last<0) return parseFloat(t)||0
+    return parseFloat(t.slice(0,last).replace(/[.,]/g,'')+'.'+t.slice(last+1))||0
+  },[])
   // ── Órdenes pendientes (Risk MGMT → guardado automático) ──
   const [pendingOrders,setPendingOrders]=useState([])
   const riskSaveRef=useRef({shares:null,currency:null})   // {shares,currency} escrito en el render del panel risk
@@ -4695,7 +4708,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.693</title>
+        <title>Trading Simulator V9.694</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4773,7 +4786,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.693
+            <span className="dot"/>Trading Simulator V9.694
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
