@@ -253,7 +253,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
   const innerCleanupRef=useRef(null)
   const rulerStart=useRef(null), rulerActiveR=useRef(rulerActive)
   const priceAlarmLinesRef=useRef([])    // [{alarmId, priceLine, price}]
-  const pendingPriceLinesRef=useRef([])  // price lines de órdenes pendientes (2 por orden: entrada+stop)
+  const pendingPriceLinesRef=useRef([])  // price lines de órdenes pendientes (hasta 3 por orden: entrada+stop+TP)
   const openTradeLinesRef=useRef([])     // price lines SÓLIDAS de entrada de posiciones abiertas (tlOpenTrades)
   const [chartReadyTick,setChartReadyTick]=useState(0)  // nonce: se incrementa al recrear el chart → re-dibuja pendientes con candlesRef fresco
   const dragRef=useRef(null)             // {lineObj} while dragging
@@ -1459,13 +1459,17 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
     if(!candles) return
     const _symUp=(simbolo||'').toUpperCase()
     ;(pendingOrders||[]).filter(o=>(o.symbol||'').toUpperCase()===_symUp).forEach(o=>{
-      const entry=parseFloat(o.entry_price), stop=parseFloat(o.stop_price)
+      const entry=parseFloat(o.entry_price), stop=parseFloat(o.stop_price), tp=parseFloat(o.tp_price)
       const line=(price,color,title)=>{
         if(price==null||isNaN(price)) return
         try{ pendingPriceLinesRef.current.push(candles.createPriceLine({price,color,lineWidth:2,lineStyle:3,axisLabelVisible:true})) }catch(_){}
       }
       line(entry,'#8b5a2b','Entrada')   // entrada — marrón tierra, discontinua
       line(stop, '#e53935','Stop')      // stop — rojo, discontinua
+      // TP — verde, discontinua. Mismo verde que la línea de edición en vivo de riskLevels, para que
+      // se reconozca como el mismo nivel. tp_price es opcional: sin él, parseFloat da NaN y `line`
+      // retorna sin dibujar. Antes no se leía, así que el objetivo solo existía con el panel abierto.
+      line(tp,   '#00e5a0','Objetivo')
     })
     return()=>{
       pendingPriceLinesRef.current.forEach(pl=>{try{candles&&candles.removePriceLine(pl)}catch(_){}})
