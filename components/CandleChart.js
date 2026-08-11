@@ -243,7 +243,7 @@ function createRiskPrimitive(configRef) {
   }
 }
 
-export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, isNewResultRef=null, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null, isBareChart=false, visuals=null, filterZones=[], slopeChanges=[], customMarkers=[], pendingOrders=[], simbolo=null }) {
+export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, isNewResultRef=null, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null, isBareChart=false, visuals=null, filterZones=[], slopeChanges=[], customMarkers=[], pendingOrders=[], simbolo=null, riskPanelOpen=false }) {
   const containerRef=useRef(null), svgRef=useRef(null), legendRef=useRef(null), tooltipRef=useRef(null)
   const activeLegendRef = externalLegendRef || legendRef
   const chartRef=useRef(null), candlesRef=useRef(null)
@@ -1457,6 +1457,12 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
     pendingPriceLinesRef.current.forEach(pl=>{try{candles&&candles.removePriceLine(pl)}catch(_){}})
     pendingPriceLinesRef.current=[]
     if(!candles) return
+    // Con el panel Risk abierto, la vía riskLevels ya dibuja estos MISMOS tres niveles (sólidas, en
+    // vivo desde riskCalc): dibujar además las persistentes duplicaría la información. Se sale
+    // DESPUÉS de la limpieza de arriba, así que las que hubiera ya pintadas se retiran, no quedan
+    // huérfanas. No se usa `riskLevels!=null` como señal porque también es null con el panel abierto
+    // y los tres campos vacíos (tras ✕ o Escape), y ahí reaparecerían.
+    if(riskPanelOpen) return
     const _symUp=(simbolo||'').toUpperCase()
     ;(pendingOrders||[]).filter(o=>(o.symbol||'').toUpperCase()===_symUp).forEach(o=>{
       const entry=parseFloat(o.entry_price), stop=parseFloat(o.stop_price), tp=parseFloat(o.tp_price)
@@ -1475,7 +1481,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       pendingPriceLinesRef.current.forEach(pl=>{try{candles&&candles.removePriceLine(pl)}catch(_){}})
       pendingPriceLinesRef.current=[]
     }
-  },[pendingOrders,simbolo,data,chartReadyTick])
+  },[pendingOrders,simbolo,data,chartReadyTick,riskPanelOpen])
 
   // ── Entradas reales (posiciones abiertas): LÍNEA DE PRECIO SÓLIDA amarilla que cruza todo el gráfico
   //    (createPriceLine, mismo patrón A.6 que las pendientes). Se dibuja en efecto propio — NO one-shot
