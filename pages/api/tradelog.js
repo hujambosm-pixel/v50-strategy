@@ -176,7 +176,13 @@ function parseIBKRtext(text) {
 function parseIBKRorderDetail(text, useDDMM = true) {
   const fills = []
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean)
-  const actionRe = /^(Bought|Bot|Bght|Sold|Sld|Comprado|Vendido)\s+(\d+(?:[.,]\d+)?)\s+@\s+([\d.,]+)/i
+  // Cantidad: con grupos de millares (1,500 · 1,234,567 · 7,742.8) o sin ellos (11 · 425.6995).
+  // La alternativa de millares va PRIMERO para que consuma la cantidad entera; antes el grupo era
+  // (\d+(?:[.,]\d+)?), que solo admitía UN separador: ante "7,742.8" capturaba "7,742" y luego
+  // exigía espacio donde encontraba ".", de modo que la línea no casaba y la operación se perdía
+  // en silencio. Se conservan el ancla ^, el verbo obligatorio y el @, que son lo que impide que
+  // casen líneas que no son operaciones (detalle de cuenta, importes, "Filled", fechas…).
+  const actionRe = /^(Bought|Bot|Bght|Sold|Sld|Comprado|Vendido)\s+(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)\s+@\s+([\d.,]+)/i
   const dateRe = /^(\d{1,2})[/\-](\d{1,2})[/\-](\d{4})/
   // Venues/ECN a excluir como símbolo (el ticker nunca es uno de estos)
   const VENUES = new Set(['DARK','IDEALPRO','IBKRATS','ISLAND','ARCA','NYSE','NASDAQ','BATS','EDGX','LSE','AMEX','OVERNIGHT','PSX','MEMX','IEX'])
