@@ -1094,11 +1094,11 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
               </div>
 
               <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:14}}>
-                <span style={{fontFamily:MONO,fontSize:10,color:'#7a9bc0',width:200,flexShrink:0}}>Formato fecha IBKR import</span>
+                <span style={{fontFamily:MONO,fontSize:10,color:'#7a9bc0',width:200,flexShrink:0}}>Cómo escribe las fechas el broker</span>
                 <select value={settings.tradelog?.ibkrDateFormat||'DD/MM'} onChange={e=>upd('tradelog.ibkrDateFormat',e.target.value)}
                   style={{flex:1,background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,color:'#e2eaf5',fontFamily:MONO,fontSize:11,padding:'5px 8px'}}>
-                  <option value="DD/MM">DD/MM/YYYY — Europa (IBKR España/UK)</option>
-                  <option value="MM/DD">MM/DD/YYYY — USA</option>
+                  <option value="DD/MM">Día/Mes/Año — p.ej. 08/05/2026 = 8 de mayo</option>
+                  <option value="MM/DD">Mes/Día/Año — p.ej. 08/05/2026 = 5 de agosto (Interactive Brokers)</option>
                 </select>
               </div>
             </div>
