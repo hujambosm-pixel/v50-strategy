@@ -180,6 +180,24 @@ function parseIBKRorderDetail(text, useDDMM = true) {
   const dateRe = /^(\d{1,2})[/\-](\d{1,2})[/\-](\d{4})/
   // Venues/ECN a excluir como símbolo (el ticker nunca es uno de estos)
   const VENUES = new Set(['DARK','IDEALPRO','IBKRATS','ISLAND','ARCA','NYSE','NASDAQ','BATS','EDGX','LSE','AMEX','OVERNIGHT','PSX','MEMX','IEX'])
+  // Venues de DIVISA: si el bloque se ejecutó en uno de estos, es una conversión de moneda y no
+  // una operación de acciones. Lista PROPIA, separada de VENUES a propósito: VENUES sirve para lo
+  // contrario (que un venue no se confunda con un ticker) e IDEALPRO debe seguir en ambas.
+  // FXCONV es el que usa IBKR para las conversiones automáticas de divisa.
+  const FX_VENUES = new Set(['IDEALPRO','IDEALFX','FXCONV'])
+  // Códigos ISO de divisa habituales en IBKR. Solo intervienen en la forma SIN separador (EURUSD),
+  // donde un ticker de 6 letras podría confundirse con un par; con separador la forma ya es
+  // inequívoca. Exigirlos evita clasificar como divisa un ticker legítimo.
+  const ISO_CCY = new Set(['USD','EUR','GBP','CHF','JPY','CAD','AUD','NZD','SEK','NOK','DKK',
+    'HKD','SGD','MXN','PLN','CZK','HUF','ILS','TRY','ZAR','CNH','CNY','KRW','INR','BRL','RUB'])
+  // Par de divisas en cualquiera de sus formas: EUR.USD | EUR/USD | EUR-USD | EURUSD, con
+  // mayúsculas o minúsculas. Exactamente 3 letras por lado.
+  const esParDivisa = (s) => {
+    const u = String(s || '').toUpperCase()
+    if (/^[A-Z]{3}[./-][A-Z]{3}$/.test(u)) return true
+    const n = /^([A-Z]{3})([A-Z]{3})$/.exec(u)
+    return !!(n && ISO_CCY.has(n[1]) && ISO_CCY.has(n[2]))
+  }
   let i = 0
   while (i < lines.length) {
     const m = actionRe.exec(lines[i])
@@ -193,19 +211,29 @@ function parseIBKRorderDetail(text, useDDMM = true) {
       const price = parseFloat(m[3].replace(/,/g,''))
       const isBuy = /Bought|Bot|Bght|Comprado/i.test(m[1])
 
-      // A) VENUE: capturado de la propia línea de acción (… on VENUE), sin tocar m1/m2/m3
-      const vm = /\bon\s+([A-Z.]+)\s*$/i.exec(lines[i])
-      const venue = vm ? vm[1].toUpperCase() : null
+      // A) VENUE: capturado de la propia línea de acción (… on VENUE), sin tocar m1/m2/m3.
+      //    Ya NO se ancla al final de línea: si IBKR añadiera texto detrás, el venue quedaba a
+      //    null y un bloque de divisa perdía su señal principal. Se recorre y se toma la ÚLTIMA
+      //    aparición de "on X"; la clase de caracteres excluye dígitos, así que una fecha u hora
+      //    posterior no puede capturarse por error.
+      let venue = null
+      const vRe = /\bon\s+([A-Za-z.]{2,15})/g
+      for (let vm; (vm = vRe.exec(lines[i])) !== null; ) venue = vm[1].toUpperCase()
+      const fxVenue = venue ? FX_VENUES.has(venue) : false
 
       // B) SÍMBOLO robusto: línea inmediatamente anterior a la acción (A−1)
       const cand = (lines[i-1] || '').trim()
-      const symFX = /^[A-Z]{3}\.[A-Z]{3}$/.test(cand)   // par divisa tipo EUR.USD
+      const symFX = esParDivisa(cand)
       let symbol = (/^[A-Z]{1,6}$/.test(cand) && !VENUES.has(cand)) ? cand : null
-      // Fallback conservador: subir i-2..i-4 buscando un ticker válido (nunca un venue)
-      if (!symbol && !symFX) {
+      let symHeredado = false   // true si el símbolo NO vino de A−1 sino del rastreo hacia arriba
+      // Fallback conservador: subir i-2..i-4 buscando un ticker válido (nunca un venue).
+      // CERRADO ante cualquier señal de divisa (par en A−1 o venue de divisa): sin este guard,
+      // una conversión de moneda sin su par en A−1 heredaba el ticker del bloque ANTERIOR y se
+      // emitía como operación de acciones de ese símbolo.
+      if (!symbol && !symFX && !fxVenue) {
         for (let j = i - 2; j >= Math.max(0, i - 4); j--) {
           const c = (lines[j] || '').trim()
-          if (/^[A-Z]{1,6}$/.test(c) && !VENUES.has(c)) { symbol = c; break }
+          if (/^[A-Z]{1,6}$/.test(c) && !VENUES.has(c)) { symbol = c; symHeredado = true; break }
         }
       }
 
@@ -236,8 +264,8 @@ function parseIBKRorderDetail(text, useDDMM = true) {
         if (j > i && actionRe.test(lines[j])) break
       }
 
-      // C) DESCARTE FX: símbolo par divisa o venue IDEALPRO → no emitir
-      const isFX = symFX || venue === 'IDEALPRO'
+      // C) DESCARTE FX: par de divisas (en A−1 o en el propio símbolo) o venue de divisa → no emitir
+      const isFX = symFX || fxVenue || esParDivisa(symbol)
 
       // D) FECHA hoy si falta (solo hora) para operaciones válidas no-FX.
       //    Anclada a Europe/Madrid ('en-CA' → 'YYYY-MM-DD') para que "hoy" sea el día
@@ -247,8 +275,14 @@ function parseIBKRorderDetail(text, useDDMM = true) {
         date = /^\d{4}-\d{2}-\d{2}$/.test(hoyMadrid) ? hoyMadrid : new Date().toISOString().slice(0,10)
       }
 
-      // E) PUSH: mismos campos que antes; date ya nunca null para válidas no-FX
-      if (!isFX && symbol && price && qty && date) {
+      // E) DEFENSA FINAL: un símbolo HEREDADO del bloque anterior nunca se emite si algo apunta a
+      //    divisa. Con el fallback ya cerrado en B esto es redundante por construcción; se deja
+      //    como invariante explícito para que la protección no se pierda si alguien reabre aquel
+      //    guard sin reparar en esta consecuencia.
+      const heredadoSospechoso = symHeredado && (symFX || fxVenue)
+
+      // PUSH: mismos campos que antes; date ya nunca null para válidas no-FX
+      if (!isFX && !heredadoSospechoso && symbol && price && qty && date) {
         fills.push({ symbol, date, price, shares: qty, currency: 'USD', commission: fees,
           fill_type: isBuy ? 'buy' : 'sell', broker: 'ibkr', import_source: 'ibkr_order' })
       }
