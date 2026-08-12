@@ -184,8 +184,13 @@ function parseIBKRorderDetail(text, useDDMM = true) {
   while (i < lines.length) {
     const m = actionRe.exec(lines[i])
     if (m) {
-      const qty   = parseFloat(m[2].replace(',','.'))
-      const price = parseFloat(m[3].replace(',','.'))
+      // La COMA es separador de MILLARES y se elimina; el PUNTO es el decimal. Es lo que emite
+      // IBKR en este panel y la convención que ya usan parseIBKRtext y parseIBKRtabSpanish.
+      // Antes era `.replace(',','.')`: tomaba la coma por decimal y además solo sustituía la
+      // PRIMERA ocurrencia, así que "1,500" acciones entraban como 1,5 y un precio de "1,234.56"
+      // como 1,234 — sin aviso, directo a trades_log.
+      const qty   = parseFloat(m[2].replace(/,/g,''))
+      const price = parseFloat(m[3].replace(/,/g,''))
       const isBuy = /Bought|Bot|Bght|Comprado/i.test(m[1])
 
       // A) VENUE: capturado de la propia línea de acción (… on VENUE), sin tocar m1/m2/m3
@@ -225,7 +230,8 @@ function parseIBKRorderDetail(text, useDDMM = true) {
         }
         if (!feesFound) {
           const fm = /Fees?:\s*([\d.,]+)/i.exec(lines[j])
-          if (fm) { fees = parseFloat(fm[1].replace(',','.')); feesFound = true }
+          // Misma convención que qty/price: coma = millares, global.
+          if (fm) { fees = parseFloat(fm[1].replace(/,/g,'')); feesFound = true }
         }
         if (j > i && actionRe.test(lines[j])) break
       }
