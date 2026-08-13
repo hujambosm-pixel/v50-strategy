@@ -189,41 +189,13 @@ function createRiskPrimitive(configRef) {
                 }
                 if (yS!=null) band(yE, yS, '#ff4d6d')
                 if (yT!=null) band(yE, yT, '#00e5a0')
-                // ── Label boxes ──
-                const lh  = Math.round(16 * vpr)
-                const lw  = Math.round(162 * hpr)
-                const lx  = W - lw - Math.round(72 * hpr)
-                const lbl = (y, color, main, sub) => {
-                  if (y==null) return
-                  const yp = y * vpr
-                  ctx.fillStyle = color + '28'
-                  ctx.fillRect(lx, yp - lh/2, lw, lh)
-                  ctx.strokeStyle = color + 'cc'
-                  ctx.lineWidth = Math.max(1, hpr * 0.8)
-                  ctx.strokeRect(lx, yp - lh/2, lw, lh)
-                  ctx.font = `bold ${Math.round(8.5*hpr)}px monospace`
-                  ctx.fillStyle = color
-                  ctx.textAlign = 'left'
-                  ctx.textBaseline = 'middle'
-                  ctx.fillText(main, lx + 4*hpr, yp)
-                  if (sub) {
-                    ctx.font = `${Math.round(7.5*hpr)}px monospace`
-                    ctx.fillStyle = color + 'cc'
-                    ctx.textAlign = 'right'
-                    ctx.fillText(sub, lx + lw - 4*hpr, yp)
-                  }
-                }
-                lbl(yE, '#00d4ff', `↔ ENTRADA  ${entry.toFixed(2)}`, '')
-                if (yS!=null && stop) {
-                  const dp = ((stop-entry)/entry*100).toFixed(2)+'%'
-                  const ls = shares>0 ? ` -€${Math.round(tradeRiskEur)}` : ''
-                  lbl(yS, '#ff4d6d', `▼ STOP  ${stop.toFixed(2)}`, dp+ls)
-                }
-                if (yT!=null && tp) {
-                  const dp = '+'+((tp-entry)/entry*100).toFixed(2)+'%'
-                  const gs = shares>0&&rrRatio>0 ? ` +€${Math.round(tradeRiskEur*rrRatio)}` : ''
-                  lbl(yT, '#00e5a0', `▲ TP  ${tp.toFixed(2)}`, dp+gs)
-                }
+                // ── Label boxes: RETIRADAS ──
+                // Este primitivo pintaba sobre las velas una caja por nivel ("↔ ENTRADA 294.30",
+                // "▼ STOP 275.80", "▲ TP …") con su distancia en % y el importe en €. Tapaban
+                // justo la zona que hace falta ver para colocar los niveles, y el precio ya sale
+                // en el eje derecho por la vía de createPriceLine (title + axisLabelVisible), que
+                // es otro mecanismo y sigue intacto. El % y el € siguen estando en el panel.
+                // Se conservan las bandas de arriba y el R:R de abajo.
                 // ── R:R ratio ──
                 if (yT!=null && rrRatio>0) {
                   const my = ((yE+yT)/2) * vpr
