@@ -1093,13 +1093,21 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                 ))}
               </div>
 
-              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:14}}>
-                <span style={{fontFamily:MONO,fontSize:10,color:'#7a9bc0',width:200,flexShrink:0}}>Cómo escribe las fechas el broker</span>
-                <select value={settings.tradelog?.ibkrDateFormat||'DD/MM'} onChange={e=>upd('tradelog.ibkrDateFormat',e.target.value)}
-                  style={{flex:1,background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,color:'#e2eaf5',fontFamily:MONO,fontSize:11,padding:'5px 8px'}}>
-                  <option value="DD/MM">Día/Mes/Año — p.ej. 08/05/2026 = 8 de mayo</option>
-                  <option value="MM/DD">Mes/Día/Año — p.ej. 08/05/2026 = 5 de agosto (Interactive Brokers)</option>
-                </select>
+              {/* Fila + hint: mismo patrón que los ajustes con explicación de la pestaña Gráfico —
+                  el contenedor exterior se queda el marginBottom, la fila va sin margen propio y el
+                  hint detrás, alineado bajo el control (200 de etiqueta + 8 de gap). */}
+              <div style={{marginBottom:14}}>
+                <div style={{display:'flex',alignItems:'center',gap:8}}>
+                  <span style={{fontFamily:MONO,fontSize:10,color:'#7a9bc0',width:200,flexShrink:0}}>Cómo escribe las fechas el broker</span>
+                  <select value={settings.tradelog?.ibkrDateFormat||'DD/MM'} onChange={e=>upd('tradelog.ibkrDateFormat',e.target.value)}
+                    style={{flex:1,background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,color:'#e2eaf5',fontFamily:MONO,fontSize:11,padding:'5px 8px'}}>
+                    <option value="DD/MM">Día/Mes/Año — p.ej. 08/05/2026 = 8 de mayo</option>
+                    <option value="MM/DD">Mes/Día/Año — p.ej. 08/05/2026 = 5 de agosto (Interactive Brokers)</option>
+                  </select>
+                </div>
+                <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',lineHeight:1.5,marginLeft:208,marginTop:2}}>
+                  Solo afecta a la lectura del texto pegado. En la app las fechas siempre se muestran como Día/Mes/Año.
+                </div>
               </div>
             </div>
           )}
