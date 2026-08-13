@@ -1158,6 +1158,7 @@ export default function Home() {
   const [riskCalc,setRiskCalc]=useState({entry:'',stop:'',tp:''})
   const [riskLineActive,setRiskLineActive]=useState({entry:false,stop:false,tp:false})
   const [riskCaptureMode,setRiskCaptureMode]=useState(null) // null|'capture_entry'|'capture_stop'|'capture_tp'
+  const riskInputsRef=useRef({})   // {entry,stop,tp} → nodos DOM de los tres campos de precio
   const [riskProfileDropOpen,setRiskProfileDropOpen]=useState(false)
   const [riskMode,setRiskMode]=useState(()=>{try{return localStorage.getItem('v50_risk_mode')||'slots'}catch{return 'slots'}})
   const [nSlots,setNSlots]=useState(()=>{try{return parseInt(localStorage.getItem('v50_risk_nslots')||'5')}catch{return 5}})
@@ -3940,6 +3941,13 @@ export default function Home() {
     setRiskLineActive(v=>({...v,[field]:true}))
   },[riskCalc,parseES])
 
+  // ── El gráfico devuelve el foco al campo tras soltar (o clicar) su línea de edición ──
+  // Solo enfoca: no selecciona el texto ni toca el contenido. Con el foco puesto, las flechas
+  // ↑/↓ de onRiskArrowStep ya afinan el precio sin volver al ratón.
+  const onRiskLineFocus = useCallback((field)=>{
+    riskInputsRef.current?.[field]?.focus()
+  },[])
+
   const loadFills = useCallback(async(id)=>{
     try{
       if(tlUseLocal()){ setTlFills([]); setTlFillsList([]); return }
@@ -4735,7 +4743,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.705</title>
+        <title>Trading Simulator V9.706</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4813,7 +4821,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.705
+            <span className="dot"/>Trading Simulator V9.706
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -7219,6 +7227,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                   <input type="text" inputMode="decimal" placeholder="0.00" value={riskCalc.entry}
                                     onChange={e=>{const v=parseES(e.target.value);setRiskCalc(c=>({...c,entry:e.target.value}));setRiskLineActive(p=>({...p,entry:v>0}));if(v>0&&riskCaptureMode==='capture_entry')setRiskCaptureMode(null)}}
                                     onKeyDown={e=>onRiskArrowStep('entry',e)}
+                                    ref={el=>{riskInputsRef.current.entry=el}}
                                     style={{..._inp,width:90,fontSize:12,borderColor:isActive?ac:isCapturing?`${ac}99`:'var(--border)'}}/>
                                   <button title={isCapturing?'Cancelar':'Capturar del gráfico'} onClick={()=>setRiskCaptureMode(c=>c==='capture_entry'?null:'capture_entry')}
                                     style={_capBtnSm(ac,isCapturing?'rgba(68,136,204,0.35)':isActive?'rgba(68,136,204,0.2)':undefined,isCapturing?'pulse-ring 1s infinite':'')}>⊕</button>
@@ -7240,6 +7249,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                   <input type="text" inputMode="decimal" placeholder="0.00" value={riskCalc.stop}
                                     onChange={e=>{const v=parseES(e.target.value);setRiskCalc(c=>({...c,stop:e.target.value}));setRiskLineActive(p=>({...p,stop:v>0}));if(v>0&&riskCaptureMode==='capture_stop')setRiskCaptureMode(null)}}
                                     onKeyDown={e=>onRiskArrowStep('stop',e)}
+                                    ref={el=>{riskInputsRef.current.stop=el}}
                                     style={{..._inp,width:90,fontSize:12,borderColor:isActive?ac:isCapturing?`${ac}99`:'var(--border)'}}/>
                                   <button title={isCapturing?'Cancelar':'Capturar del gráfico'} onClick={()=>setRiskCaptureMode(c=>c==='capture_stop'?null:'capture_stop')}
                                     style={_capBtnSm(ac,isCapturing?'rgba(204,68,68,0.35)':isActive?'rgba(204,68,68,0.2)':undefined)}>⊕</button>
@@ -7261,6 +7271,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                   <input type="text" inputMode="decimal" placeholder="0.00" value={riskCalc.tp}
                                     onChange={e=>{const v=parseES(e.target.value);setRiskCalc(c=>({...c,tp:e.target.value}));setRiskLineActive(p=>({...p,tp:v>0}));if(v>0&&riskCaptureMode==='capture_tp')setRiskCaptureMode(null)}}
                                     onKeyDown={e=>onRiskArrowStep('tp',e)}
+                                    ref={el=>{riskInputsRef.current.tp=el}}
                                     style={{..._inp,width:90,fontSize:12,borderColor:isActive?ac:isCapturing?`${ac}99`:'var(--border)'}}/>
                                   <button title={isCapturing?'Cancelar':'Capturar del gráfico'} onClick={()=>setRiskCaptureMode(c=>c==='capture_tp'?null:'capture_tp')}
                                     style={_capBtnSm(ac,isCapturing?'rgba(68,204,136,0.35)':isActive?'rgba(68,204,136,0.2)':undefined)}>⊕</button>
@@ -7509,6 +7520,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         riskMode={sidePanel==='risk'&&riskCaptureMode?riskCaptureMode:null}
                         onRiskPrice={sidePanel==='risk'&&riskCaptureMode?onRiskPrice:null}
                         onRiskLevelChange={sidePanel==='risk'?onRiskLevelChange:null}
+                        onRiskLineFocus={sidePanel==='risk'?onRiskLineFocus:null}
                         riskLineActive={sidePanel==='risk'?riskLineActive:null}
                         riskPanelOpen={sidePanel==='risk'}
                         riskLevels={(()=>{

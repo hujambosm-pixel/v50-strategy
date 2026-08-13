@@ -215,7 +215,7 @@ function createRiskPrimitive(configRef) {
   }
 }
 
-export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, isNewResultRef=null, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null, isBareChart=false, visuals=null, filterZones=[], slopeChanges=[], customMarkers=[], pendingOrders=[], simbolo=null, riskPanelOpen=false }) {
+export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, isNewResultRef=null, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null, isBareChart=false, visuals=null, filterZones=[], slopeChanges=[], customMarkers=[], pendingOrders=[], simbolo=null, riskPanelOpen=false, onRiskLineFocus=null }) {
   const containerRef=useRef(null), svgRef=useRef(null), legendRef=useRef(null), tooltipRef=useRef(null)
   const activeLegendRef = externalLegendRef || legendRef
   const chartRef=useRef(null), candlesRef=useRef(null)
@@ -236,6 +236,9 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
   const riskConfigRef=useRef({entry:null,stop:null,tp:null,shares:0,tradeRiskEur:0,rrRatio:0})
   const riskTickRef=useRef(chartReadyTick)     // último chartReadyTick visto por el efecto de riskLevels
   const onRiskLevelChangeRef=useRef(onRiskLevelChange)
+  // Mismo patrón por ref: el efecto de arrastre tiene deps [data], así que una prop capturada
+  // directamente en su closure se quedaría obsoleta al re-renderizar.
+  const onRiskLineFocusRef=useRef(onRiskLineFocus)
   const fillHeightRef=useRef(fillHeight)
   useEffect(()=>{ fillHeightRef.current=fillHeight },[fillHeight])
   const labelModeRef=useRef(labelMode)
@@ -260,6 +263,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
     return()=>window.removeEventListener('resize',forceResize)
   },[fillHeight])
   useEffect(()=>{ onRiskLevelChangeRef.current=onRiskLevelChange },[onRiskLevelChange])
+  useEffect(()=>{ onRiskLineFocusRef.current=onRiskLineFocus },[onRiskLineFocus])
   useEffect(()=>{
     rulerActiveR.current=rulerActive
     if(!rulerActive){
@@ -1614,7 +1618,16 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
     }
 
     const onUp = () => {
-      if (dragging) { dragging=null; container.style.cursor='' }
+      if (dragging) {
+        const field = dragging
+        dragging=null; container.style.cursor=''
+        // Al SOLTAR se devuelve el foco al campo del panel, para poder afinar el precio con las
+        // flechas sin volver al ratón. Cubre los dos gestos sin distinguirlos: `dragging` se activa
+        // en el mousedown cercano a la línea y se limpia aquí, así que un arrastre real y un clic
+        // simple sobre la línea pasan ambos por este punto — y nunca al empezar, para no interferir
+        // mientras se arrastra. Un clic lejos de toda línea no llega a poner `dragging`.
+        onRiskLineFocusRef.current?.(field)
+      }
     }
 
     container.addEventListener('mousedown', onDown, true)
