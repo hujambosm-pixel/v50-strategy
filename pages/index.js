@@ -3913,6 +3913,33 @@ export default function Home() {
     setRiskLineActive(v=>({...v,[key]:true}))
   },[])
 
+  // ── Flechas ↑/↓ en los campos de precio del panel Risk: dial con escalón proporcional ──
+  // Escalón según el valor ACTUAL y fijado ANTES de aplicar el cambio (no se re-evalúa a mitad):
+  //   <10 → 0,01 · 10–100 → 0,05 · ≥100 → 0,10
+  // El resultado se ALINEA al múltiplo del escalón, no se suma conservando decimales: desde
+  // 425,6995 la primera pulsación da 425,7 y la siguiente 425,8, como un dial de posiciones limpias.
+  // Todo el cálculo va en ENTEROS (posición del dial = valor × inv) para que no arrastre coma
+  // flotante: 425.7+0.1 daría 425.79999999999995. El épsilon absorbe el error de valor×inv, que en
+  // un valor ya alineado puede dar 4256,999999 en vez de 4257 y haría perder una posición.
+  // Se escribe TEXTO con coma por la MISMA vía que el onChange: el debounce de 600 ms del
+  // auto-guardado sigue colapsando la ráfaga —incluido el auto-repeat de la tecla— en un solo
+  // upsert. String(pos/inv) reproduce exactamente el formato de _toInput (sin ceros de relleno:
+  // "10", no "10,00"), y eso importa porque la guarda anti-eco compara CADENAS.
+  const onRiskArrowStep = useCallback((field, e)=>{
+    if(e.key!=='ArrowUp' && e.key!=='ArrowDown') return
+    const actual = parseES(riskCalc[field])
+    // parseES devuelve 0 tanto con el campo vacío como con texto no numérico: no se toca nada,
+    // para no destruir lo que el usuario haya escrito ni inventar un 0,01 de la nada.
+    if(!(actual>0)) return
+    e.preventDefault()                       // que el cursor no salte dentro del campo
+    const inv = actual<10 ? 100 : actual<100 ? 20 : 10   // 1/escalón, entero
+    const x   = actual*inv
+    const pos = e.key==='ArrowUp' ? Math.floor(x+1e-9)+1 : Math.ceil(x-1e-9)-1
+    if(!(pos>0)) return                      // nunca 0 ni negativo
+    setRiskCalc(c=>({...c,[field]:String(pos/inv).replace('.',',')}))
+    setRiskLineActive(v=>({...v,[field]:true}))
+  },[riskCalc,parseES])
+
   const loadFills = useCallback(async(id)=>{
     try{
       if(tlUseLocal()){ setTlFills([]); setTlFillsList([]); return }
@@ -4708,7 +4735,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.702</title>
+        <title>Trading Simulator V9.703</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4786,7 +4813,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.702
+            <span className="dot"/>Trading Simulator V9.703
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -7191,6 +7218,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                       _fmtForCopy sigue usándose donde se creó: el botón de copiar. */}
                                   <input type="text" inputMode="decimal" placeholder="0.00" value={riskCalc.entry}
                                     onChange={e=>{const v=parseES(e.target.value);setRiskCalc(c=>({...c,entry:e.target.value}));setRiskLineActive(p=>({...p,entry:v>0}));if(v>0&&riskCaptureMode==='capture_entry')setRiskCaptureMode(null)}}
+                                    onKeyDown={e=>onRiskArrowStep('entry',e)}
                                     style={{..._inp,width:90,fontSize:12,borderColor:isActive?ac:isCapturing?`${ac}99`:'var(--border)'}}/>
                                   <button title={isCapturing?'Cancelar':'Capturar del gráfico'} onClick={()=>setRiskCaptureMode(c=>c==='capture_entry'?null:'capture_entry')}
                                     style={_capBtnSm(ac,isCapturing?'rgba(68,136,204,0.35)':isActive?'rgba(68,136,204,0.2)':undefined,isCapturing?'pulse-ring 1s infinite':'')}>⊕</button>
@@ -7211,6 +7239,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                 <div style={{display:'flex',alignItems:'center',gap:2}}>
                                   <input type="text" inputMode="decimal" placeholder="0.00" value={riskCalc.stop}
                                     onChange={e=>{const v=parseES(e.target.value);setRiskCalc(c=>({...c,stop:e.target.value}));setRiskLineActive(p=>({...p,stop:v>0}));if(v>0&&riskCaptureMode==='capture_stop')setRiskCaptureMode(null)}}
+                                    onKeyDown={e=>onRiskArrowStep('stop',e)}
                                     style={{..._inp,width:90,fontSize:12,borderColor:isActive?ac:isCapturing?`${ac}99`:'var(--border)'}}/>
                                   <button title={isCapturing?'Cancelar':'Capturar del gráfico'} onClick={()=>setRiskCaptureMode(c=>c==='capture_stop'?null:'capture_stop')}
                                     style={_capBtnSm(ac,isCapturing?'rgba(204,68,68,0.35)':isActive?'rgba(204,68,68,0.2)':undefined)}>⊕</button>
@@ -7231,6 +7260,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                 <div style={{display:'flex',alignItems:'center',gap:2}}>
                                   <input type="text" inputMode="decimal" placeholder="0.00" value={riskCalc.tp}
                                     onChange={e=>{const v=parseES(e.target.value);setRiskCalc(c=>({...c,tp:e.target.value}));setRiskLineActive(p=>({...p,tp:v>0}));if(v>0&&riskCaptureMode==='capture_tp')setRiskCaptureMode(null)}}
+                                    onKeyDown={e=>onRiskArrowStep('tp',e)}
                                     style={{..._inp,width:90,fontSize:12,borderColor:isActive?ac:isCapturing?`${ac}99`:'var(--border)'}}/>
                                   <button title={isCapturing?'Cancelar':'Capturar del gráfico'} onClick={()=>setRiskCaptureMode(c=>c==='capture_tp'?null:'capture_tp')}
                                     style={_capBtnSm(ac,isCapturing?'rgba(68,204,136,0.35)':isActive?'rgba(68,204,136,0.2)':undefined)}>⊕</button>
