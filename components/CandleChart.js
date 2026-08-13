@@ -1523,9 +1523,14 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         riskLinesRef.current[idx]=candles.createPriceLine({price,color,lineWidth:2,lineStyle:0,axisLabelVisible:true,title})
       } catch(_) {}
     }
-    upsertLine(0, entry,  '#00d4ff', entry ? `Entrada: ${entry.toFixed(2)}` : '')
-    upsertLine(1, stop,   '#ff4d6d', stop  ? `Stop: ${stop.toFixed(2)}`    : '')
-    upsertLine(2, tp,     '#00e5a0', tp    ? `Objetivo: ${tp.toFixed(2)}`  : '')
+    // Sin texto en `title`: lightweight-charts lo pinta DENTRO del panel, pegado al borde derecho
+    // pero sobre las velas — era el "Entrada: 294.30" que seguía tapando el gráfico tras retirar
+    // las cajas del primitivo. El valor sigue viéndose en la caja de color del eje derecho, que
+    // depende de axisLabelVisible:true y es independiente. Mismo criterio que la línea de entradas
+    // reales (title:'') y que las pendientes, que directamente no lo pasan.
+    upsertLine(0, entry,  '#00d4ff', '')
+    upsertLine(1, stop,   '#ff4d6d', '')
+    upsertLine(2, tp,     '#00e5a0', '')
 
     // Create primitive once (it reads from riskConfigRef which we mutate in place)
     if (!riskBandSeriesRef.current && data?.length && entry) {
@@ -1600,9 +1605,10 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       riskConfigRef.current[dragging] = price
       // Update price line directly (triggers LWC repaint which redraws primitive)
       const lineIdx = {entry:0,stop:1,tp:2}
-      const titles  = {entry:`Entrada: ${price.toFixed(2)}`,stop:`Stop: ${price.toFixed(2)}`,tp:`Objetivo: ${price.toFixed(2)}`}
+      // Solo el precio: reaplicar `title` aquí devolvía el texto sobre las velas en cuanto se
+      // arrastraba una línea, aunque se hubiera creado sin él.
       const pl = riskLinesRef.current[lineIdx[dragging]]
-      if (pl) try { pl.applyOptions({price, title: titles[dragging]}) } catch(_) {}
+      if (pl) try { pl.applyOptions({price}) } catch(_) {}
       // Sync to form (real-time update)
       onRiskLevelChangeRef.current?.(dragging, price)
     }
