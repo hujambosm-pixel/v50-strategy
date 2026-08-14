@@ -3903,7 +3903,17 @@ export default function Home() {
       setRiskLineActive(v=>({...v,[key]:true}))
       return null // sale de capture mode
     })
-  },[])
+    // Foco al campo capturado, mismo mecanismo que V9.706. Va FUERA del updater de arriba: ahí
+    // sería un efecto secundario y React puede ejecutar los updaters más de una vez. El campo se
+    // deduce de riskCaptureMode leído del scope (por eso entra en deps); el overlay solo llama a
+    // esta función cuando el modo está activo. Basta con enfocar de forma síncrona: el clic sobre
+    // el overlay deja el foco en el body y este handler corre después, así que tiene la última
+    // palabra, y el input no se remonta al cerrarse el modo (solo cambia su borde).
+    const k = riskCaptureMode==='capture_entry' ? 'entry'
+            : riskCaptureMode==='capture_stop'  ? 'stop'
+            : riskCaptureMode==='capture_tp'    ? 'tp' : null
+    if(k) riskInputsRef.current?.[k]?.focus()
+  },[riskCaptureMode])
 
   // ── onRiskLevelChange: drag de líneas en gráfico actualiza campos en tiempo real ──
   const onRiskLevelChange = useCallback((type, price)=>{
@@ -4743,7 +4753,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.706</title>
+        <title>Trading Simulator V9.707</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4821,7 +4831,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.706
+            <span className="dot"/>Trading Simulator V9.707
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
