@@ -45,8 +45,17 @@ function buildAlignedWeekly(weeklyData, assetDates, emaPeriod) {
   const closes = [], ema = []
   let ptr = 0, lastClose = null, lastEma = null
   for (const date of assetDates) {
+    // Las velas semanales llevan la fecha del LUNES (inicio de semana) y su `close` es el del
+    // viernes. Por eso `ptr` —última vela cuyo inicio es <= date— es la semana EN CURSO, y usar su
+    // cierre era mirar al futuro: un martes se decidía con el cierre del viernes de esa misma
+    // semana, hasta 4 sesiones de look-ahead.
+    // Se avanza igual, pero se consume la ANTERIOR: que la vela ptr ya haya empezado prueba que la
+    // ptr-1 está cerrada. El dato de una semana pasa a estar disponible el lunes siguiente, que es
+    // justo cuando se conoce. Al principio de la serie ptr-1 es -1 y los valores quedan a null →
+    // el filtro permite (fail-open), igual que antes pero con una semana más de margen.
     while (ptr < sorted.length-1 && sorted[ptr+1].date <= date) ptr++
-    if (sorted[ptr].date <= date) { lastClose = sorted[ptr].close; lastEma = wEma[ptr] }
+    const closedIdx = ptr - 1
+    if (closedIdx >= 0 && sorted[closedIdx].date <= date) { lastClose = sorted[closedIdx].close; lastEma = wEma[closedIdx] }
     closes.push(lastClose); ema.push(lastEma)
   }
   return { closes, ema }
