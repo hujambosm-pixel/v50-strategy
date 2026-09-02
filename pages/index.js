@@ -1043,6 +1043,16 @@ export default function Home() {
   // mcDisplayResults: portfolio real viene inyectado en mcMultiResults por el backend (portfolioMode)
   // El cálculo de promedio en cliente ha sido eliminado — __portfolio__ lo calcula handlePortfolioMode
   const mcDisplayResults=mcMultiResults
+  // Nombre con el que ROTULAR el resultado cuando no viaja dentro de una lista con nombre propio:
+  // con UNA estrategia y UN modo, el runner hace una llamada única, guarda en mcResult y deja
+  // mcMultiResults vacío, así que la etiqueta hay que reconstruirla. Prioriza la estrategia
+  // SELECCIONADA sobre la activa global —mismo criterio que ya usaba la exportación—, que es lo
+  // que fallaba: se rotulaba con la del selector superior aunque se hubiera ejecutado otra.
+  // Resuelto en UN solo sitio a propósito: estaba repetido en tres y por eso divergió.
+  const mcSingleStratName=(()=>{
+    const sid=(mcStratSelected.filter(Boolean)[0])||currentStratId||null
+    return strategies.find(s=>s.id===sid)?.name||'Estrategia activa'
+  })()
   const [mcSectionOpen,setMcSectionOpen]=useState({mode:false,strats:false})
   const [mcFiltrosOpen,setMcFiltrosOpen]=useState(false)
   const [mcStratVisible,setMcStratVisible]=useState({})     // {id:bool}
@@ -4756,7 +4766,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.709</title>
+        <title>Trading Simulator V9.710</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4834,7 +4844,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.709
+            <span className="dot"/>Trading Simulator V9.710
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -7958,7 +7968,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                   // Lista de estrategias: multi → mcDisplayResults; single → wrapper sintético
                   let stratList=isMulti
                     ? [...mcDisplayResults]
-                    : [{id:currentStratId||'__single__',name:strategies.find(s=>s.id===currentStratId)?.name||'Estrategia activa',color:'#00d4ff',result:mcResult}]
+                    : [{id:currentStratId||'__single__',name:mcSingleStratName,color:'#00d4ff',result:mcResult}]
                   // B&H globals (del result activo)
                   const bhLast=mcResult.bhCurve?.slice(-1)[0]?.value||capIni
                   const bhFd=mcResult.bhCurve?.[0]?.date?new Date(mcResult.bhCurve[0].date):mcResult.startDate?new Date(mcResult.startDate):null
@@ -8755,7 +8765,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                     ? mcMultiResults.slice(0,MAX_STRATS).filter(r=>mcChartsStratVisible[r.id]!==false)
                     : [{
                         id:currentStratId||'__single__',
-                        name:stratName||'Estrategia',
+                        name:mcSingleStratName,
                         color:STRAT_COMPARE_COLORS[0],
                         result:mcResult
                       }]
@@ -8783,7 +8793,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           )}
                           {/* Leyenda */}
                           <div style={{padding:'4px 16px',borderBottom:'1px solid var(--border)',display:'flex',gap:10,flexWrap:'wrap',background:'var(--bg2)'}}>
-                            {(isMulti?mcMultiResults.slice(0,MAX_STRATS):[{id:currentStratId||'__single__',name:stratName||'Estrategia',color:STRAT_COMPARE_COLORS[0]}]).map(r=>{
+                            {(isMulti?mcMultiResults.slice(0,MAX_STRATS):[{id:currentStratId||'__single__',name:mcSingleStratName,color:STRAT_COMPARE_COLORS[0]}]).map(r=>{
                               const on=mcChartsStratVisible[r.id]!==false
                               return(
                                 <button key={r.id}
