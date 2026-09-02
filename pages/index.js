@@ -4219,7 +4219,10 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
 
   // ── Backtesting runner ─────────────────────────────────────
   const runBacktesting=useCallback(async()=>{
-    if(mcSelected.length<2){setMcError('Selecciona al menos 2 activos');return}
+    // Mínimo 1: con un solo activo los cuatro modos degradan a "todo el capital en la única
+    // posición" y el endpoint ya acepta un símbolo. Permite comparar varias estrategias sobre
+    // el mismo valor, que antes no tenía vía en la app.
+    if(mcSelected.length<1){setMcError('Selecciona al menos un activo');return}
     if(mcMode==='custom'){
       const total=mcSelected.reduce((s,sym)=>s+(Number(mcWeights[sym])||0),0)
       if(Math.abs(total-100)>0.5){setMcError(`Los pesos suman ${total.toFixed(1)}% — deben sumar 100%`);return}
@@ -4753,7 +4756,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.707</title>
+        <title>Trading Simulator V9.708</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4831,7 +4834,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.707
+            <span className="dot"/>Trading Simulator V9.708
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6007,7 +6010,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         <div style={{width:`${(mcProgress.current/mcProgress.total)*100}%`,height:'100%',background:'var(--accent)',borderRadius:2,transition:'width 0.3s'}}/>
                       </div>
                     </div>
-                  ):mcSelected.length>=2?(
+                  ):mcSelected.length>=1?(
                     <button onClick={runBacktesting} disabled={mcLoading}
                       style={{width:'100%',fontFamily:MONO,fontSize:11,padding:'7px 10px',borderRadius:4,cursor:mcLoading?'wait':'pointer',
                         background:mcLoading?'rgba(0,212,255,0.05)':'rgba(0,212,255,0.15)',
@@ -6017,7 +6020,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   ):(
                     <button disabled style={{width:'100%',fontFamily:MONO,fontSize:12,padding:'7px 10px',borderRadius:4,cursor:'not-allowed',
                       background:'transparent',border:'1px solid #2a3f55',color:'#7aabc8',letterSpacing:'0.05em'}}>
-                      ▶ EJECUTAR — selecciona 2+ activos
+                      ▶ EJECUTAR — selecciona un activo
                     </button>
                   )}
                   {mcError&&<div style={{fontFamily:MONO,fontSize:12,color:'#ff4d6d',marginTop:5}}>⚠ {mcError}</div>}
