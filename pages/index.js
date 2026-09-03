@@ -5,6 +5,8 @@ import { calcMetrics, MONO, fmt, fmtDate, f2, tvSym, pesosScoreHistorico, umbral
 import { WATCHLIST_DEFAULT } from '../lib/constants'
 import { getSupaUrl, getSupaKey, getSupaH, setCurrentJwt, getCurrentJwt } from '../lib/supabase'
 import { loadSettings, saveSettings, saveSettingsRemote, loadSettingsRemote } from '../lib/settings'
+import { mergeFiltros, loadFiltros, guardarFiltros, hayFiltroActivo, aplanarFiltros } from '../lib/filtros'
+import FiltrosPanel from '../components/FiltrosPanel'
 import { supabase } from '../lib/supabaseClient'
 import { fetchConditions, lsGetConds, lsSaveConds, COND_LS_KEY } from '../lib/conditions'
 import CandleChart from '../components/CandleChart'
@@ -720,171 +722,6 @@ const PREVIEW_TO_RAW_FIELDS = {
   entry_currency: ['currency', 'entry_currency'],
 }
 
-// Configuración por defecto de los filtros de mercado. Fuente ÚNICA del valor inicial: la consume
-// el useState de `filtros` y también filtrosSafe, que rellena con ella las claves que falten.
-// No es una constante decorativa —cf. RANKING_DEFAULTS en lib/settings.js, declarada y nunca usada—:
-// si deja de consumirse, el blindaje de abajo deja de funcionar.
-const FILTROS_DEFAULT={
-  indiceEma:{activo:true, ticker:'^GSPC',periodo:10,intervalo:'diario'},
-  cruceEma: {activo:false,ticker:'^GSPC',periodoR:10,periodoL:11,intervalo:'diario'},
-}
-
-// Persistencia de los filtros: CLAVE PROPIA, deliberadamente fuera de v50_settings. SettingsModal
-// toma una instantánea de los ajustes al montarse y guarda esa instantánea entera, así que un dato
-// que se escribe a cada clic de un toggle se perdería en la secuencia abrir Ajustes → tocar un
-// filtro → Guardar. Sin sincronización con Supabase: la estructura va a cambiar en los próximos
-// commits del rediseño y sincronizar entre dispositivos multiplicaría los casos de migración.
-const FILTROS_LS_KEY='v50_filtros'
-const FILTROS_LS_VERSION=1
-
-// Completa el objeto con los defaults. Se aplica ANTES de entrar en el estado, no solo en
-// filtrosSafe: el backend recibe el objeto CRUDO del estado, de modo que un estado incompleto haría
-// divergir lo pintado de lo calculado (el render mostraría un filtro activo por su default y el
-// backend no lo aplicaría). Siempre devuelve un objeto nuevo → FILTROS_DEFAULT nunca se comparte
-// por referencia ni puede acabar mutado.
-function mergeFiltros(raw){
-  const out={}
-  for(const k of Object.keys(FILTROS_DEFAULT)) out[k]={...FILTROS_DEFAULT[k],...(raw?.[k]||{})}
-  return out
-}
-const hayFiltroActivo=(f)=>Object.keys(FILTROS_DEFAULT).some(k=>f?.[k]?.activo)
-
-// Lectura síncrona en el montaje. Descarta sin intentar migrar si la marca de versión no es la
-// esperada o si el contenido no es un objeto: este commit no migra nada. `restaurado` distingue
-// "venía de otra sesión" de "defaults de fábrica" — solo lo primero despliega la sección.
-// En SSR no existe localStorage: el acceso lanza, lo recoge el catch y se arranca con defaults.
-function loadFiltros(){
-  const vacio={filtros:mergeFiltros(null),restaurado:false}
-  try{
-    const raw=localStorage.getItem(FILTROS_LS_KEY)
-    if(!raw) return vacio
-    const parsed=JSON.parse(raw)
-    if(parsed?.v!==FILTROS_LS_VERSION) return vacio
-    const data=parsed.data
-    if(!data||typeof data!=='object'||Array.isArray(data)) return vacio
-    return {filtros:mergeFiltros(data),restaurado:true}
-  }catch(_){ return vacio }
-}
-
-// Las dos únicas diferencias reales entre los sitios donde se pinta la sección: cómo encaja en su
-// panel. En el panel de estrategias el contenedor cierra la sección con su propio borde y la
-// cabecera solo se separa del cuerpo al desplegarse; en el de multicartera va encajada entre otras
-// secciones, así que los bordes los ponen la cabecera y el cuerpo.
-const FILTROS_VARIANTES={
-  panel:{wrap:{borderBottom:'1px solid var(--border)',flexShrink:0},padX:10,bordeCabeceraSiempre:false,bordeCuerpo:false},
-  mc:   {wrap:{flexShrink:0},                                       padX:12,bordeCabeceraSiempre:true, bordeCuerpo:true },
-}
-
-// Sección FILTROS DE MERCADO. Estaba duplicada carácter a carácter en el panel de estrategias y en
-// el de multicartera, y las copias ya habían divergido en detalles que nadie eligió (un flexShrink
-// repetido, dos textos de ayuda distintos). Aquí vive una sola vez; lo único que varía por sitio es
-// el estado de apertura y la variante de encaje.
-// `filtros` es la vista saneada (filtrosSafe), no el estado crudo: el JSX lee sin optional chaining.
-function FiltrosMercadoPanel({filtros,setFiltros,open,setOpen,variant='panel'}){
-  const V=FILTROS_VARIANTES[variant]||FILTROS_VARIANTES.panel
-  const anyOn=filtros.indiceEma.activo||filtros.cruceEma.activo
-  const onCnt=[filtros.indiceEma.activo,filtros.cruceEma.activo].filter(Boolean).length
-  const fInp={background:'#0a1520',border:'1px solid #1a3d5a',borderRadius:3,color:'var(--text)',fontFamily:MONO,fontSize:10,padding:'1px 4px',boxSizing:'border-box',outline:'none',width:'100%'}
-  // Parten del default de la clave: si el estado no la trae (forma antigua), se crea
-  // completa en vez de quedar con un único campo suelto.
-  const fCur=(p,key)=>({...(FILTROS_DEFAULT[key]||{}),...(p?.[key]||{})})
-  const fToggle=(key)=>setFiltros(p=>{const c=fCur(p,key);return {...p,[key]:{...c,activo:!c.activo}}})
-  const fSet=(key,field,val)=>setFiltros(p=>{const c=fCur(p,key);return {...p,[key]:{...c,[field]:val}}})
-  const toggleBtn=(active)=>({display:'inline-flex',alignItems:'center',justifyContent:'center',width:28,height:14,borderRadius:7,flexShrink:0,cursor:'pointer',transition:'background 0.15s',background:active?'#00e5a0':'#1a2d45',position:'relative'})
-  const toggleKnob=(active)=>({position:'absolute',width:10,height:10,borderRadius:'50%',background:active?'#fff':'#7a9bc0',left:active?16:2,transition:'left 0.15s'})
-  const lbl=(active)=>({fontFamily:MONO,fontSize:11,color:active?'var(--text)':'var(--text2)',flex:1})
-  const plbl={fontFamily:MONO,fontSize:9,color:'var(--text2)',whiteSpace:'nowrap'}
-  const ivBtn=(on,semanal=false)=>({fontFamily:MONO,fontSize:9,padding:'1px 5px',borderRadius:3,cursor:'pointer',
-    border:`1px solid ${on?(semanal?'#a07820':'#2d6e4e'):'#1a3d5a'}`,
-    background:on?(semanal?'rgba(240,192,64,0.12)':'rgba(76,175,130,0.12)'):'transparent',
-    color:on?(semanal?'#f0c040':'#4caf82'):'var(--text2)'})
-  // Fila de intervalo D/S, común a los dos filtros
-  const ivRow=(key)=>(
-    <span style={{display:'inline-flex',alignItems:'center',gap:3,flexShrink:0}}>
-      <button style={ivBtn(filtros[key].intervalo!=='semanal',false)} onClick={()=>fSet(key,'intervalo','diario')}>D</button>
-      <button style={ivBtn(filtros[key].intervalo==='semanal',true)} onClick={()=>fSet(key,'intervalo','semanal')}>S</button>
-    </span>
-  )
-  return(
-    <div style={V.wrap}>
-      {/* Cabecera colapsable */}
-      <div onClick={()=>setOpen(v=>!v)}
-        style={{padding:`8px ${V.padX}px`,borderBottom:(V.bordeCabeceraSiempre||open)?'1px solid var(--border)':'none',display:'flex',alignItems:'center',gap:6,cursor:'pointer',background:'var(--bg2)',userSelect:'none'}}
-        onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.04)'}
-        onMouseOut={e=>e.currentTarget.style.background='var(--bg2)'}>
-        <span style={{fontFamily:MONO,fontSize:9,color:'#4a7a9a',width:10}}>{open?'▼':'▶'}</span>
-        <span style={{fontFamily:MONO,fontSize:12,color:anyOn?'#00e5a0':'#c8dff5',fontWeight:600,letterSpacing:'0.05em'}}>FILTROS DE MERCADO</span>
-        {anyOn&&<span style={{fontFamily:MONO,fontSize:9,background:'rgba(0,229,160,0.18)',color:'#00e5a0',
-          borderRadius:3,padding:'0 4px',lineHeight:'14px',flexShrink:0}}>
-          {onCnt} activo{onCnt>1?'s':''}
-        </span>}
-      </div>
-
-      {open&&(
-        <div style={{padding:`2px ${V.padX}px 8px`,display:'flex',flexDirection:'column',gap:7,...(V.bordeCuerpo?{borderBottom:'1px solid var(--border)'}:{})}}>
-
-          {/* ── Filtro Índice EMA ── */}
-          <div>
-            <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:filtros.indiceEma.activo?4:0}}>
-              <div style={toggleBtn(filtros.indiceEma.activo)} onClick={()=>fToggle('indiceEma')}>
-                <div style={toggleKnob(filtros.indiceEma.activo)}/>
-              </div>
-              <span style={lbl(filtros.indiceEma.activo)}>Índice &gt; EMA</span>
-            </div>
-            {filtros.indiceEma.activo&&(
-              <div style={{display:'flex',alignItems:'center',flexWrap:'wrap',gap:5,rowGap:4,paddingLeft:34}}>
-                <span style={plbl}>Ticker</span>
-                <input type="text" value={filtros.indiceEma.ticker}
-                  onChange={e=>fSet('indiceEma','ticker',e.target.value.toUpperCase())}
-                  style={{...fInp,width:60}}/>
-                <span style={plbl}>EMA</span>
-                <input type="number" min={2} max={500} step={1}
-                  value={filtros.indiceEma.periodo}
-                  onChange={e=>fSet('indiceEma','periodo',Number(e.target.value)||200)}
-                  style={{...fInp,width:50}}/>
-                {ivRow('indiceEma')}
-              </div>
-            )}
-          </div>
-
-          {/* ── Filtro Cruce EMA ── */}
-          <div>
-            <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:filtros.cruceEma.activo?4:0}}>
-              <div style={toggleBtn(filtros.cruceEma.activo)} onClick={()=>fToggle('cruceEma')}>
-                <div style={toggleKnob(filtros.cruceEma.activo)}/>
-              </div>
-              <span style={lbl(filtros.cruceEma.activo)}>Cruce EMA (R&gt;L)</span>
-            </div>
-            {filtros.cruceEma.activo&&(
-              <div style={{display:'flex',alignItems:'center',flexWrap:'wrap',gap:5,rowGap:4,paddingLeft:34}}>
-                <span style={plbl}>Ticker</span>
-                <input type="text" value={filtros.cruceEma.ticker}
-                  onChange={e=>fSet('cruceEma','ticker',e.target.value.toUpperCase())}
-                  style={{...fInp,width:60}}/>
-                <span style={plbl}>R</span>
-                <input type="number" min={2} max={500} step={1}
-                  value={filtros.cruceEma.periodoR}
-                  onChange={e=>fSet('cruceEma','periodoR',Number(e.target.value)||10)}
-                  style={{...fInp,width:42}}/>
-                <span style={plbl}>L</span>
-                <input type="number" min={2} max={500} step={1}
-                  value={filtros.cruceEma.periodoL}
-                  onChange={e=>fSet('cruceEma','periodoL',Number(e.target.value)||11)}
-                  style={{...fInp,width:42}}/>
-                {ivRow('cruceEma')}
-              </div>
-            )}
-          </div>
-
-          {anyOn&&<div style={{fontFamily:MONO,fontSize:9,color:'var(--text2)',lineHeight:1.4,marginTop:1}}>
-            AND — todos los filtros activos en verde para permitir entrada. Zonas bloqueadas en rojo en el gráfico.
-          </div>}
-        </div>
-      )}
-    </div>
-  )
-}
-
 export default function Home() {
   const [simbolo,setSimbolo]=useState('^GSPC')
   const [displayedSimbolo,setDisplayedSimbolo]=useState('^GSPC') // lags behind simbolo — updates only when chart data is ready
@@ -897,22 +734,23 @@ export default function Home() {
   const [sinPerdidas,setSinPerdidas]=useState(true),[reentry,setReentry]=useState(true)
   const [tipoFiltro,setTipoFiltro]=useState('none'),[sp500EmaR,setSp500EmaR]=useState(10),[sp500EmaL,setSp500EmaL]=useState(11)
   // Lectura de lo persistido, una sola vez y de forma síncrona en el montaje: no hay un instante con
-  // los defaults antes de aplicar lo guardado. Tres consumidores: el estado, y el desplegado inicial
-  // de las dos secciones de filtros.
+  // los defaults antes de aplicar lo guardado. Lo consumen el estado y el desplegado inicial de las
+  // cuatro secciones (dos ámbitos × dos paneles).
   const [filtrosBoot]=useState(loadFiltros)   // {filtros, restaurado}
   const [filtros,setFiltros]=useState(filtrosBoot.filtros)
-  // Vista saneada para el RENDER: segunda red, por si el estado se degradara en caliente. El JSX lee
-  // sin optional chaining, así que una clave ausente sería un TypeError en pleno render.
-  // Solo para pintar: al backend se sigue enviando `filtros` tal cual, sin cambios.
+  // Vista saneada para el RENDER: segunda red, por si el estado se degradara en caliente.
   const filtrosSafe=useMemo(()=>mergeFiltros(filtros),[filtros])
-  // Guardado: en cada cambio, y también en el montaje, lo que de paso normaliza en disco un objeto
-  // que llegara incompleto. Un fallo de localStorage (modo privado, cuota) no debe romper nada.
-  useEffect(()=>{
-    try{ localStorage.setItem(FILTROS_LS_KEY,JSON.stringify({v:FILTROS_LS_VERSION,data:filtros})) }catch(_){}
-  },[filtros])
-  // Se auto-despliega solo si la configuración viene de otra sesión y trae algún filtro activo: así
-  // no pasa desapercibida bajo una cabecera plegada. Con los defaults de fábrica sigue colapsada.
-  const [filtrosOpen,setFiltrosOpen]=useState(()=>filtrosBoot.restaurado&&hayFiltroActivo(filtrosBoot.filtros))
+  // La ÚNICA forma que ve el backend. Se deriva una vez y se usa en los diez puntos de envío: si
+  // alguno mandara la lista cruda, el backend no reconocería nada y los filtros dejarían de
+  // aplicarse en silencio, arrastrando también al ranking, que escribe scores en Supabase.
+  const filtrosBackend=useMemo(()=>aplanarFiltros(filtrosSafe),[filtrosSafe])
+  // Guardado: en cada cambio, y también en el montaje, lo que de paso normaliza en disco una lista
+  // que llegara incompleta. Un fallo de localStorage (modo privado, cuota) no debe romper nada.
+  useEffect(()=>{ guardarFiltros(filtros) },[filtros])
+  // Se auto-despliega solo el ámbito que traiga filtros activos de otra sesión: así no pasan
+  // desapercibidos bajo una cabecera plegada. Con los defaults de fábrica siguen colapsados.
+  const [filtrosOpen,setFiltrosOpen]=useState(()=>filtrosBoot.restaurado&&hayFiltroActivo(filtrosBoot.filtros,'mercado'))
+  const [filtrosActivoOpen,setFiltrosActivoOpen]=useState(()=>filtrosBoot.restaurado&&hayFiltroActivo(filtrosBoot.filtros,'activo'))
   const [result,setResult]=useState(null),[loading,setLoading]=useState(false),[error,setError]=useState(null)
   const [labelMode,setLabelMode]=useState(1),[rulerOn,setRulerOn]=useState(false)
   const [chartViewFull,setChartViewFull]=useState(false)
@@ -1234,7 +1072,8 @@ export default function Home() {
     return strategies.find(s=>s.id===sid)?.name||'Estrategia activa'
   })()
   const [mcSectionOpen,setMcSectionOpen]=useState({mode:false,strats:false})
-  const [mcFiltrosOpen,setMcFiltrosOpen]=useState(()=>filtrosBoot.restaurado&&hayFiltroActivo(filtrosBoot.filtros))
+  const [mcFiltrosOpen,setMcFiltrosOpen]=useState(()=>filtrosBoot.restaurado&&hayFiltroActivo(filtrosBoot.filtros,'mercado'))
+  const [mcFiltrosActivoOpen,setMcFiltrosActivoOpen]=useState(()=>filtrosBoot.restaurado&&hayFiltroActivo(filtrosBoot.filtros,'activo'))
   const [mcStratVisible,setMcStratVisible]=useState({})     // {id:bool}
   const [mcAssetOpen,setMcAssetOpen]=useState({})           // {stratId:bool} acordeón resumen por activo
   const [mcShowBHCompare,setMcShowBHCompare]=useState(true) // B&H curve toggle in multi-strategy chart
@@ -2700,7 +2539,7 @@ export default function Home() {
       }
       const saved=await upsertStrategy(payload)
       reloadStrategies(); closeEditStr()
-      if(saved?.id) run(simbolo,{strategyId:saved.id,capital_ini:Number(payload.capital_ini),years:Number(payload.years),allocation_pct:Number(payload.allocation_pct||100),filtros})
+      if(saved?.id) run(simbolo,{strategyId:saved.id,capital_ini:Number(payload.capital_ini),years:Number(payload.years),allocation_pct:Number(payload.allocation_pct||100),filtros:filtrosBackend})
     }catch(e){alert('Error: '+e.message)}
     finally{setStrSaving(false)}
   }
@@ -3441,7 +3280,7 @@ export default function Home() {
       await Promise.allSettled(batch.map(async sym=>{
         try{
           const res=await apiFetch('/api/datos',{method:'POST',headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({simbolo:sym,strategyId:currentStratId,capital_ini:Number(capitalIni),years:Number(years),allocation_pct:100,filtros,intervalo:estrategiaIntervalo})})
+            body:JSON.stringify({simbolo:sym,strategyId:currentStratId,capital_ini:Number(capitalIni),years:Number(years),allocation_pct:100,filtros:filtrosBackend,intervalo:estrategiaIntervalo})})
           const json=await res.json()
           if(!res.ok||!json.trades?.length){ if(!res.ok) logUpdateError(sym,'descarga',res.status,null); return }
           const trades=json.trades; if(trades.length<minTrades) return
@@ -3494,7 +3333,7 @@ export default function Home() {
             await Promise.allSettled(batch.map(async sym=>{
               try{
                 const res=await apiFetch('/api/datos',{method:'POST',headers:{'Content-Type':'application/json'},
-                  body:JSON.stringify({simbolo:sym,strategyId:stratId,capital_ini:stratCap,years:stratYears,allocation_pct:100,filtros,intervalo:stratIntv})})
+                  body:JSON.stringify({simbolo:sym,strategyId:stratId,capital_ini:stratCap,years:stratYears,allocation_pct:100,filtros:filtrosBackend,intervalo:stratIntv})})
                 const json=await res.json()
                 if(!res.ok||!json.trades?.length){ if(!res.ok) logUpdateError(sym,'descarga',res.status,strat.name); return }
                 const trades=json.trades; if(trades.length<minTrades) return
@@ -3569,7 +3408,7 @@ export default function Home() {
     }
     return { ok: true, topMetricsMap: {}, activeMetricsMap: activeMetrics }
 
-  },[watchlist,years,capitalIni,currentStratId,stratName,filtros,estrategiaIntervalo,strategies,refreshBestStratPerSymbol,logUpdateError])
+  },[watchlist,years,capitalIni,currentStratId,stratName,filtrosBackend,estrategiaIntervalo,strategies,refreshBestStratPerSymbol,logUpdateError])
 
   // ── Borrar scores (score_historico + score_completo) de símbolos seleccionados ──
   const deleteScores = useCallback(async (symbols) => {
@@ -3635,7 +3474,7 @@ export default function Home() {
         const res=await apiFetch('/api/datos',{method:'POST',headers:{'Content-Type':'application/json'},
           body:JSON.stringify({simbolo:sym,strategyId:currentStratId,
             capital_ini:Number(capitalIni),years:Number(years),allocation_pct:100,
-            filtros,intervalo:estrategiaIntervalo})})
+            filtros:filtrosBackend,intervalo:estrategiaIntervalo})})
         if(!res.ok) return {symbol:sym,error:true}
         const json=await res.json()
         const trades=json.trades||[]
@@ -3665,7 +3504,7 @@ export default function Home() {
     }
     setCandidatesLoading(false)
     setCandidatesProgress(null)
-  },[candidatesText,currentStratId,capitalIni,years,filtros,estrategiaIntervalo])
+  },[candidatesText,currentStratId,capitalIni,years,filtrosBackend,estrategiaIntervalo])
 
   const run=useCallback(async(sym,payload)=>{
     setLoading(true);setError(null)
@@ -3779,14 +3618,14 @@ export default function Home() {
     if(!currentStratId&&sidePanel!=='strats')return
     if(debounceRef.current)clearTimeout(debounceRef.current)
     const payload = currentStratId
-      ? { strategyId:currentStratId, capital_ini:Number(capitalIni), years:Number(years), allocation_pct:100, filtros, intervalo:estrategiaIntervalo }
+      ? { strategyId:currentStratId, capital_ini:Number(capitalIni), years:Number(years), allocation_pct:100, filtros:filtrosBackend, intervalo:estrategiaIntervalo }
       : { cfg:{emaR:Number(emaR),emaL:Number(emaL),years:Number(years),capitalIni:Number(capitalIni),
               tipoStop,atrPeriod:Number(atrP),atrMult:Number(atrM),sinPerdidas,reentry,
               tipoFiltro,sp500EmaR:Number(sp500EmaR),sp500EmaL:Number(sp500EmaL)} }
     debounceRef.current=setTimeout(()=>run(simbolo, payload),800)
     return()=>clearTimeout(debounceRef.current)
   },[simbolo,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,
-     sp500EmaR,sp500EmaL,sidePanel,currentStratId,filtros,estrategiaIntervalo,run])
+     sp500EmaR,sp500EmaL,sidePanel,currentStratId,filtrosBackend,estrategiaIntervalo,run])
 
   // ── TradeLog helpers ────────────────────────────────────────
   // ── TradeLog: storage mode (local vs supabase) ──────────────
@@ -4472,7 +4311,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
           const _strat1=strategies.find(s=>s.id===stratIds[0])
           const isNoStrategy=(_strat1?.name||'').includes('No Strategy')
           const res=await apiFetch('/api/multibacktest',{method:'POST',headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({symbols:mcSelected,modoAsig:modesToRun[0],weights:weightsNorm,cfg:baseCfg,strategyId:stratIds[0]||null,isNoStrategy,filtros,intervalo:mcIntervalo})})
+            body:JSON.stringify({symbols:mcSelected,modoAsig:modesToRun[0],weights:weightsNorm,cfg:baseCfg,strategyId:stratIds[0]||null,isNoStrategy,filtros:filtrosBackend,intervalo:mcIntervalo})})
           const json=await res.json()
           if(!res.ok) throw new Error(json.error||'Error')
           setMcResult(json);setMcMultiResults([]);setMcIsModoCompare(false)
@@ -4492,7 +4331,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
           setMcProgress({current:i+1,total:modesToRun.length,name:MODE_LABELS[modo]||modo})
           const color=STRAT_COMPARE_COLORS[i%STRAT_COMPARE_COLORS.length]
           const res=await apiFetch('/api/multibacktest',{method:'POST',headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({symbols:mcSelected,modoAsig:modo,weights:weightsNorm,cfg:baseCfg,strategyId:sid,isNoStrategy:isNoStrategyMode,filtros,intervalo:mcIntervalo})})
+            body:JSON.stringify({symbols:mcSelected,modoAsig:modo,weights:weightsNorm,cfg:baseCfg,strategyId:sid,isNoStrategy:isNoStrategyMode,filtros:filtrosBackend,intervalo:mcIntervalo})})
           const json=await res.json()
           if(!res.ok) throw new Error(json.error||'Error en '+MODE_LABELS[modo])
           modeResults.push({id:`${sid||'__single__'}__${modo}`,name:`${stratName} · ${MODE_LABELS[modo]}`,color,result:json,modo})
@@ -4516,7 +4355,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
       try{
         const cfg=buildCfgFromStrat(strat)
         const res=await apiFetch('/api/multibacktest',{method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({symbols:mcSelected,modoAsig:mcMode,weights:weightsNorm,cfg,strategyId:sid,isNoStrategy:(strat?.name||'').includes('No Strategy'),filtros,intervalo:mcIntervalo})})
+          body:JSON.stringify({symbols:mcSelected,modoAsig:mcMode,weights:weightsNorm,cfg,strategyId:sid,isNoStrategy:(strat?.name||'').includes('No Strategy'),filtros:filtrosBackend,intervalo:mcIntervalo})})
         const json=await res.json()
         if(!res.ok) throw new Error(json.error||'Error en '+name)
         results.push({id:sid,name,color,result:json})
@@ -4563,7 +4402,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 maxAccumRisk:mcMaxAccumRisk,
                 assumedStopPct:mcAssumedStopPct,
               },
-              filtros,          // mismo objeto filtros que usa el path único
+              filtros:filtrosBackend,   // misma forma aplanada que usa el path único
               intervalo:mcIntervalo,
             })
           })
@@ -4579,7 +4418,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
       }
     }
     setMcLoading(false);setMcProgress(null)
-  },[mcSelected,mcMode,selectedModos,mcWeights,mcCapital,mcCapitalIni,mcYears,mcPeriodMode,mcFromDate,mcToDate,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL,rankingData,mcStratSelected,strategies,currentStratId,mcRiskPerTrade,mcMaxPortfolioPct,mcMaxAccumRisk,mcAssumedStopPct,mcMaxPosiciones,mcPrioridad,mcCriterioUso,mcMomentumN,mcRsWindow,mcRsGateThr,mcMomGateThr,mcProxGateThr,filtros,mcIntervalo])
+  },[mcSelected,mcMode,selectedModos,mcWeights,mcCapital,mcCapitalIni,mcYears,mcPeriodMode,mcFromDate,mcToDate,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL,rankingData,mcStratSelected,strategies,currentStratId,mcRiskPerTrade,mcMaxPortfolioPct,mcMaxAccumRisk,mcAssumedStopPct,mcMaxPosiciones,mcPrioridad,mcCriterioUso,mcMomentumN,mcRsWindow,mcRsGateThr,mcMomGateThr,mcProxGateThr,filtrosBackend,mcIntervalo])
 
   // Auto-inicializar pesos iguales cuando cambian activos seleccionados (modo custom)
   useEffect(()=>{
@@ -4946,7 +4785,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.717</title>
+        <title>Trading Simulator V9.718</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5024,7 +4863,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.717
+            <span className="dot"/>Trading Simulator V9.718
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5195,9 +5034,13 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   </div>
                 </div>
 
-                {/* ── Filtros de mercado ── */}
-                <FiltrosMercadoPanel filtros={filtrosSafe} setFiltros={setFiltros}
+                {/* ── Filtros: mercado (serie externa) y activo (serie del propio símbolo) ── */}
+                <FiltrosPanel ambito="mercado" titulo="FILTROS DE MERCADO"
+                  filtros={filtrosSafe} setFiltros={setFiltros}
                   open={filtrosOpen} setOpen={setFiltrosOpen} variant="panel"/>
+                <FiltrosPanel ambito="activo" titulo="FILTROS DEL ACTIVO"
+                  filtros={filtrosSafe} setFiltros={setFiltros}
+                  open={filtrosActivoOpen} setOpen={setFiltrosActivoOpen} variant="panel"/>
 
                 {/* ── Lista ── */}
                 <div style={{overflowY:'auto',flex:1}}>
@@ -6133,9 +5976,13 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   </div>
                 </div>
 
-                {/* FILTROS DE MERCADO — colapsable (MC) */}
-                <FiltrosMercadoPanel filtros={filtrosSafe} setFiltros={setFiltros}
+                {/* FILTROS — colapsables (MC) */}
+                <FiltrosPanel ambito="mercado" titulo="FILTROS DE MERCADO"
+                  filtros={filtrosSafe} setFiltros={setFiltros}
                   open={mcFiltrosOpen} setOpen={setMcFiltrosOpen} variant="mc"/>
+                <FiltrosPanel ambito="activo" titulo="FILTROS DEL ACTIVO"
+                  filtros={filtrosSafe} setFiltros={setFiltros}
+                  open={mcFiltrosActivoOpen} setOpen={setMcFiltrosActivoOpen} variant="mc"/>
 
                 {/* MODO DE ASIGNACIÓN — colapsable */}
                 <div style={{flexShrink:0}}>
@@ -8480,7 +8327,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       }
                       const res=await apiFetch('/api/multibacktest',{method:'POST',headers:{'Content-Type':'application/json'},
                         body:JSON.stringify({symbols:mcSelected,modoAsig:histResult.modoAsig==='concentrado'?'concentrado':'compartido',
-                          weights:weightsNorm,cfg:unlimCfg,strategyId:sid,isNoStrategy:isNoStrategyG,filtros,intervalo:mcIntervalo})})
+                          weights:weightsNorm,cfg:unlimCfg,strategyId:sid,isNoStrategy:isNoStrategyG,filtros:filtrosBackend,intervalo:mcIntervalo})})
                       if(res.ok){
                         const json=await res.json()
                         const unlimTrades=json.allTrades||[]
