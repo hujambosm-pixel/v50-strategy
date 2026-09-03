@@ -1,7 +1,8 @@
 // pages/api/datos.js — Motor V50 v3.0 (V9.260)
 
 import { calcEMA, calcSMA, calcRSI, calcATR, calcMACD } from '../../lib/backtester'
-import { normalizaFiltrosEntrada, hayFiltrosActivos, clavesAuxiliares, construirFiltroActivoMap, filtrosActivos } from '../../lib/filtros'
+import { normalizaFiltrosEntrada, hayFiltrosActivos, clavesAuxiliares, construirFiltroActivoMap, filtrosActivos,
+         requiereSemanalDelActivo, proyectarSemanal } from '../../lib/filtros'
 
 const SUPA_URL = process.env.SUPABASE_URL || 'https://uqjngxxbdlquiuhywiuc.supabase.co'
 const SUPA_KEY = process.env.SUPABASE_ANON_KEY || 'sb_publishable_st9QJ3zcQbY5ec-JhxwqXQ_joy3udz3'
@@ -204,26 +205,17 @@ function buildAlignedCloses(externalData, assetDates) {
 function buildAlignedWeekly(weeklyData, assetDates, emaPeriod) {
   if (!weeklyData?.length || !assetDates?.length)
     return { closes: assetDates.map(()=>null), ema: assetDates.map(()=>null) }
+  // La regla de la última semana CERRADA (corregida en V9.709) vive ahora en proyectarSemanal, en
+  // lib/filtros.js, para que no haya dos calendarios que puedan divergir. Aquí solo se preparan las
+  // series semanales y se proyectan ambas con esa misma regla.
   const sorted = [...weeklyData].sort((a,b)=>a.date.localeCompare(b.date))
+  const wDates  = sorted.map(d=>d.date)
   const wCloses = sorted.map(d=>d.close)
-  const wEma = calcEMA(wCloses, Math.max(1, emaPeriod))
-  const closes = [], ema = []
-  let ptr = 0, lastClose = null, lastEma = null
-  for (const date of assetDates) {
-    // Las velas semanales llevan la fecha del LUNES (inicio de semana) y su `close` es el del
-    // viernes. Por eso `ptr` —última vela cuyo inicio es <= date— es la semana EN CURSO, y usar su
-    // cierre era mirar al futuro: un martes se decidía con el cierre del viernes de esa misma
-    // semana, hasta 4 sesiones de look-ahead.
-    // Se avanza igual, pero se consume la ANTERIOR: que la vela ptr ya haya empezado prueba que la
-    // ptr-1 está cerrada. El dato de una semana pasa a estar disponible el lunes siguiente, que es
-    // justo cuando se conoce. Al principio de la serie ptr-1 es -1 y los valores quedan a null →
-    // el filtro permite (fail-open), igual que antes pero con una semana más de margen.
-    while (ptr < sorted.length-1 && sorted[ptr+1].date <= date) ptr++
-    const closedIdx = ptr - 1
-    if (closedIdx >= 0 && sorted[closedIdx].date <= date) { lastClose = sorted[closedIdx].close; lastEma = wEma[closedIdx] }
-    closes.push(lastClose); ema.push(lastEma)
+  const wEma    = calcEMA(wCloses, Math.max(1, emaPeriod))
+  return {
+    closes: proyectarSemanal(wCloses, wDates, assetDates),
+    ema:    proyectarSemanal(wEma,    wDates, assetDates),
   }
-  return { closes, ema }
 }
 
 // ── Build full trade objects from raw { entryDate, exitDate, entryPrice, exitPrice } ──
@@ -314,6 +306,13 @@ export default async function handler(req, res) {
     // de cabecera. NO sustituye a sp500Data (diaria), que sigue alimentando filtros de mercado y B&H,
     // ni a d.sp500Close (que consumen las estrategias con filtro SP500). En diario se reutiliza sp500Data.
     let sp500DataTf = null
+    // Serie SEMANAL del propio activo, para los filtros de ámbito activo que la pidan estando el
+    // backtest en diario. Si el backtest ya corre en semanal, `data` YA son esas velas y no se pide
+    // nada. Si la descarga falla queda a null → el filtro no participa (fail-open) y el símbolo se
+    // anota en avisosFiltros para que el usuario sepa que se quedó sin filtrar.
+    let activoSemanal = null
+    const sinSerieSemanal = []
+    const pideSemanalActivo = requiereSemanalDelActivo(filtrosLista) && assetInterval !== 'w'
 
     const fetchJobs = [
       fetchAV('^GSPC', years + 1)
@@ -338,7 +337,16 @@ export default async function handler(req, res) {
         fetchJobs.push(fetchAV(ticker, years + 1, iv).then(r => { auxDataMap[akey] = r.filter(d => d.date >= data[0].date) }).catch(() => {}))
       }
     }
+    // Una descarga más, en paralelo con las que ya hay: no alarga el camino crítico.
+    if (pideSemanalActivo) {
+      fetchJobs.push(
+        fetchAV(simbolo, years + 1, 'w')
+          .then(r => { activoSemanal = r.filter(d => d.date >= data[0].date) })
+          .catch(() => { sinSerieSemanal.push(simbolo) })
+      )
+    }
     await Promise.all(fetchJobs)
+    if (pideSemanalActivo && !activoSemanal?.length && !sinSerieSemanal.includes(simbolo)) sinSerieSemanal.push(simbolo)
 
     // ── Compute filtroActivo per date ──
     const assetDates = data.map(d => d.date)
@@ -358,7 +366,10 @@ export default async function handler(req, res) {
 
       Object.assign(filtroActivoMap, construirFiltroActivoMap(filtrosLista, {
         assetBars: data, assetDates, alineado,
+        assetSymbol: simbolo,
+        assetInterval: assetInterval === 'w' ? 'semanal' : 'diario',
         resolveMercado: (ticker, semanal) => resolveData(ticker, semanal ? 'w' : 'd'),
+        resolveSemanalActivo: () => activoSemanal,
       }))
 
       // Serie de visualización del índice: la del primer filtro de mercado que la use.
@@ -548,6 +559,9 @@ export default async function handler(req, res) {
       chartData,
       trades,
       filterZones: anyFiltroOn ? filterZonesFromFiltros : (Array.isArray(rawFilterZones) ? rawFilterZones : []),
+      // Solo presente si hay algo que avisar: símbolos cuya serie semanal no se pudo descargar y
+      // que por tanto operaron SIN el filtro de activo en semanal (fail-open silencioso de otro modo).
+      ...(sinSerieSemanal.length ? { avisosFiltros: { sinSerieSemanal } } : {}),
       slopeChanges:   Array.isArray(slopeChanges)   ? slopeChanges   : [],
       customMarkers:  Array.isArray(customMarkers)  ? customMarkers  : [],
       gananciaSimple,

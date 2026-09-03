@@ -2,7 +2,8 @@
 // Backtest de cartera multi-activo — Slots iguales | Capital compartido | Pesos personalizados
 
 import { calcEMA as _libEMA, calcSMA, calcRSI, calcATR as _libATR, calcMACD } from '../../lib/backtester'
-import { normalizaFiltrosEntrada, hayFiltrosActivos, clavesAuxiliares, construirFiltroActivoMap, filtrosActivos } from '../../lib/filtros'
+import { normalizaFiltrosEntrada, hayFiltrosActivos, clavesAuxiliares, construirFiltroActivoMap, filtrosActivos,
+         requiereSemanalDelActivo, proyectarSemanal } from '../../lib/filtros'
 import { fetchAV } from './datos'
 
 const SUPA_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -40,26 +41,17 @@ function buildAlignedCloses(externalData, assetDates) {
 function buildAlignedWeekly(weeklyData, assetDates, emaPeriod) {
   if (!weeklyData?.length || !assetDates?.length)
     return { closes: assetDates.map(()=>null), ema: assetDates.map(()=>null) }
+  // La regla de la última semana CERRADA (corregida en V9.709) vive ahora en proyectarSemanal, en
+  // lib/filtros.js, para que no haya dos calendarios que puedan divergir. Aquí solo se preparan las
+  // series semanales y se proyectan ambas con esa misma regla.
   const sorted = [...weeklyData].sort((a,b)=>a.date.localeCompare(b.date))
+  const wDates  = sorted.map(d=>d.date)
   const wCloses = sorted.map(d=>d.close)
-  const wEma = calcEMA(wCloses, Math.max(1, emaPeriod))
-  const closes = [], ema = []
-  let ptr = 0, lastClose = null, lastEma = null
-  for (const date of assetDates) {
-    // Las velas semanales llevan la fecha del LUNES (inicio de semana) y su `close` es el del
-    // viernes. Por eso `ptr` —última vela cuyo inicio es <= date— es la semana EN CURSO, y usar su
-    // cierre era mirar al futuro: un martes se decidía con el cierre del viernes de esa misma
-    // semana, hasta 4 sesiones de look-ahead.
-    // Se avanza igual, pero se consume la ANTERIOR: que la vela ptr ya haya empezado prueba que la
-    // ptr-1 está cerrada. El dato de una semana pasa a estar disponible el lunes siguiente, que es
-    // justo cuando se conoce. Al principio de la serie ptr-1 es -1 y los valores quedan a null →
-    // el filtro permite (fail-open), igual que antes pero con una semana más de margen.
-    while (ptr < sorted.length-1 && sorted[ptr+1].date <= date) ptr++
-    const closedIdx = ptr - 1
-    if (closedIdx >= 0 && sorted[closedIdx].date <= date) { lastClose = sorted[closedIdx].close; lastEma = wEma[closedIdx] }
-    closes.push(lastClose); ema.push(lastEma)
+  const wEma    = calcEMA(wCloses, Math.max(1, emaPeriod))
+  return {
+    closes: proyectarSemanal(wCloses, wDates, assetDates),
+    ema:    proyectarSemanal(wEma,    wDates, assetDates),
   }
-  return { closes, ema }
 }
 
 // ── Rebuild compound capitalTras after filtering trades ──
@@ -1386,9 +1378,11 @@ async function handlePortfolioMode(req, res) {
     //     y ANTES de construir curvas. Los datos auxiliares se descargan UNA sola vez.
     const filtrosLista = normalizaFiltrosEntrada(filtrosCfg)
     const anyFiltroOn = hayFiltrosActivos(filtrosLista)
+    const semanalPorSimbolo = {}   // ticker → serie semanal, solo si algún filtro de activo la pide
+    const sinSerieSemanal = []     // tickers cuya serie semanal falló → operan sin ese filtro
     if (anyFiltroOn) {
       // Descargar UNA vez las series externas que piden los filtros de ámbito mercado. Los de
-      // ámbito activo se evalúan sobre ar.data y no añaden ninguna petición.
+      // ámbito activo en DIARIO se evalúan sobre ar.data y no añaden ninguna petición.
       const filterAuxData = {}
       const filterFetchJobs = []
       const auxKeys = clavesAuxiliares(filtrosLista, '1wk', '1d')
@@ -1398,6 +1392,21 @@ async function handlePortfolioMode(req, res) {
         filterFetchJobs.push(fetchData(ticker, cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, iv).then(r => { filterAuxData[akey] = r }).catch(() => {}))
       }
       if (filterFetchJobs.length) await Promise.all(filterFetchJobs)
+
+      // Series SEMANALES de los propios activos, solo si algún filtro de ámbito activo las pide y el
+      // backtest corre en diario (en semanal, ar.data YA son esas velas). Mismos lotes de 4 con
+      // pausa de 400 ms que la descarga de activos, para no saturar al proveedor.
+      if (requiereSemanalDelActivo(filtrosLista) && assetInterval !== '1wk') {
+        for (let i = 0; i < allTickers.length; i += BATCH) {
+          const chunk = allTickers.slice(i, i + BATCH)
+          await Promise.all(chunk.map(async ticker => {
+            const r = await fetchData(ticker, cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, '1wk')
+            if (r?.length) semanalPorSimbolo[ticker] = r
+            else sinSerieSemanal.push(ticker)   // fail-open: opera sin filtro, pero se avisa
+          }))
+          if (i + BATCH < allTickers.length) await sleep(400)
+        }
+      }
 
       const resolveFilterData = (ticker, iv) =>
         (ticker === '^GSPC' && iv !== '1wk') ? sp500Data : (filterAuxData[`${ticker}:${iv}`] ?? sp500Data)
@@ -1411,7 +1420,11 @@ async function handlePortfolioMode(req, res) {
           : (() => { const closes = buildAlignedCloses(src, assetDates); return { closes, ema: calcEMA(closes, periodo) } })()
         const filtroActivoMap = construirFiltroActivoMap(filtrosLista, {
           assetBars: ar.data, assetDates, alineado,
+          // Aquí ar.symbol es el símbolo SINTÉTICO (`ticker#orden`); el real es _realSymbol.
+          assetSymbol: ar._realSymbol ?? ar.symbol,
+          assetInterval: assetInterval === '1wk' ? 'semanal' : 'diario',
           resolveMercado: (ticker, semanal) => resolveFilterData(ticker, semanal ? '1wk' : '1d'),
+          resolveSemanalActivo: (sym) => semanalPorSimbolo[sym] ?? null,
         })
 
         const filtered = ar.trades.filter(t => filtroActivoMap[t.entryDate] !== false)
@@ -1568,6 +1581,9 @@ async function handlePortfolioMode(req, res) {
     return res.status(200).json({
       ...curves,
       sp500BHCurve,
+      // Solo presente si hay algo que avisar: símbolos cuya serie semanal no se pudo descargar y
+      // que por tanto operaron SIN el filtro de activo en semanal (fail-open silencioso de otro modo).
+      ...(sinSerieSemanal.length ? { avisosFiltros: { sinSerieSemanal } } : {}),
       assetStats,
       allTrades:       sourceTrades,
       avgOccupancy,
@@ -1671,9 +1687,12 @@ export default async function handler(req, res) {
     const filtrosLista = normalizaFiltrosEntrada(filtrosCfg)
     const anyFiltroOn = hayFiltrosActivos(filtrosLista)
     const filterAuxData = {} // key: `${ticker}:${iv}` → data
+    const semanalPorSimbolo = {}   // símbolo → serie semanal, solo si algún filtro de activo la pide
+    const sinSerieSemanal = []     // símbolos cuya serie semanal falló → operan sin ese filtro
     if (anyFiltroOn) {
       const filterFetchJobs = []
-      // Solo las series externas de los filtros de ámbito mercado; los de ámbito activo usan ar.data.
+      // Solo las series externas de los filtros de ámbito mercado; los de ámbito activo en DIARIO
+      // usan ar.data.
       const auxKeys = clavesAuxiliares(filtrosLista, '1wk', '1d')
       for (const akey of auxKeys) {
         const colonIdx = akey.lastIndexOf(':')
@@ -1684,6 +1703,21 @@ export default async function handler(req, res) {
         )
       }
       if (filterFetchJobs.length) await Promise.all(filterFetchJobs)
+
+      // Series SEMANALES de los propios activos, solo si algún filtro de ámbito activo las pide y el
+      // backtest corre en diario (en semanal, allData[sym] YA son esas velas). Mismos lotes de 4 con
+      // pausa de 400 ms que la descarga de activos, para no saturar al proveedor.
+      if (requiereSemanalDelActivo(filtrosLista) && assetInterval !== '1wk') {
+        for (let i = 0; i < symbols.length; i += BATCH) {
+          const chunk = symbols.slice(i, i + BATCH)
+          await Promise.all(chunk.map(async sym => {
+            const r = await fetchData(sym, cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, '1wk')
+            if (r?.length) semanalPorSimbolo[sym] = r
+            else sinSerieSemanal.push(sym)   // fail-open: opera sin filtro, pero se avisa
+          }))
+          if (i + BATCH < symbols.length) await sleep(400)
+        }
+      }
     }
 
     // Capital por slot (base para pnlPct; reescalado en modos con pool compartido)
@@ -1733,7 +1767,10 @@ export default async function handler(req, res) {
 
         const filtroActivoMap = construirFiltroActivoMap(filtrosLista, {
           assetBars: ar.data, assetDates, alineado,
+          assetSymbol: ar.symbol,
+          assetInterval: assetInterval === '1wk' ? 'semanal' : 'diario',
           resolveMercado: (ticker, semanal) => resolveFilterData(ticker, semanal ? '1wk' : '1d'),
+          resolveSemanalActivo: (sym) => semanalPorSimbolo[sym] ?? null,
         })
 
         // Guardar filterZones del primer activo para incluirlas en la respuesta
@@ -1945,6 +1982,9 @@ export default async function handler(req, res) {
     res.status(200).json({
       ...curves,
       sp500BHCurve,
+      // Solo presente si hay algo que avisar: símbolos cuya serie semanal no se pudo descargar y
+      // que por tanto operaron SIN el filtro de activo en semanal (fail-open silencioso de otro modo).
+      ...(sinSerieSemanal.length ? { avisosFiltros: { sinSerieSemanal } } : {}),
       assetStats,
       allTrades: sourceTrades,
       avgOccupancy,
