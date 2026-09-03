@@ -720,6 +720,15 @@ const PREVIEW_TO_RAW_FIELDS = {
   entry_currency: ['currency', 'entry_currency'],
 }
 
+// Configuración por defecto de los filtros de mercado. Fuente ÚNICA del valor inicial: la consume
+// el useState de `filtros` y también filtrosSafe, que rellena con ella las claves que falten.
+// No es una constante decorativa —cf. RANKING_DEFAULTS en lib/settings.js, declarada y nunca usada—:
+// si deja de consumirse, el blindaje de abajo deja de funcionar.
+const FILTROS_DEFAULT={
+  indiceEma:{activo:true, ticker:'^GSPC',periodo:10,intervalo:'diario'},
+  cruceEma: {activo:false,ticker:'^GSPC',periodoR:10,periodoL:11,intervalo:'diario'},
+}
+
 export default function Home() {
   const [simbolo,setSimbolo]=useState('^GSPC')
   const [displayedSimbolo,setDisplayedSimbolo]=useState('^GSPC') // lags behind simbolo — updates only when chart data is ready
@@ -731,7 +740,16 @@ export default function Home() {
   const [tipoStop,setTipoStop]=useState('tecnico'),[atrP,setAtrP]=useState(14),[atrM,setAtrM]=useState(1.0)
   const [sinPerdidas,setSinPerdidas]=useState(true),[reentry,setReentry]=useState(true)
   const [tipoFiltro,setTipoFiltro]=useState('none'),[sp500EmaR,setSp500EmaR]=useState(10),[sp500EmaL,setSp500EmaL]=useState(11)
-  const [filtros,setFiltros]=useState({indiceEma:{activo:true,ticker:'^GSPC',periodo:10,intervalo:'diario'},cruceEma:{activo:false,ticker:'^GSPC',periodoR:10,periodoL:11,intervalo:'diario'}})
+  const [filtros,setFiltros]=useState(FILTROS_DEFAULT)
+  // Vista saneada para el RENDER: cada clave ausente o incompleta se completa con su default, de modo
+  // que un objeto con forma antigua no pueda romper el JSX, que lee sin optional chaining. Hoy `filtros`
+  // siempre viene del literal y filtrosSafe es idéntico; el blindaje es para cuando se persista.
+  // Solo para pintar: al backend se sigue enviando `filtros` tal cual, sin cambios.
+  const filtrosSafe=useMemo(()=>{
+    const out={}
+    for(const k of Object.keys(FILTROS_DEFAULT)) out[k]={...FILTROS_DEFAULT[k],...(filtros?.[k]||{})}
+    return out
+  },[filtros])
   const [filtrosOpen,setFiltrosOpen]=useState(false)
   const [result,setResult]=useState(null),[loading,setLoading]=useState(false),[error,setError]=useState(null)
   const [labelMode,setLabelMode]=useState(1),[rulerOn,setRulerOn]=useState(false)
@@ -4766,7 +4784,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.713</title>
+        <title>Trading Simulator V9.715</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4844,7 +4862,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.713
+            <span className="dot"/>Trading Simulator V9.715
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5017,11 +5035,14 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
 
                 {/* ── Filtros de mercado ── */}
                 {(()=>{
-                  const anyOn=filtros.indiceEma.activo||filtros.cruceEma.activo
-                  const onCnt=[filtros.indiceEma.activo,filtros.cruceEma.activo].filter(Boolean).length
+                  const anyOn=filtrosSafe.indiceEma.activo||filtrosSafe.cruceEma.activo
+                  const onCnt=[filtrosSafe.indiceEma.activo,filtrosSafe.cruceEma.activo].filter(Boolean).length
                   const fInp={background:'#0a1520',border:'1px solid #1a3d5a',borderRadius:3,color:'var(--text)',fontFamily:MONO,fontSize:10,padding:'1px 4px',boxSizing:'border-box',outline:'none',width:'100%'}
-                  const fToggle=(key)=>setFiltros(p=>({...p,[key]:{...p[key],activo:!p[key].activo}}))
-                  const fSet=(key,field,val)=>setFiltros(p=>({...p,[key]:{...p[key],[field]:val}}))
+                  // Parten del default de la clave: si el estado no la trae (forma antigua), se crea
+                  // completa en vez de quedar con un único campo suelto.
+                  const fCur=(p,key)=>({...(FILTROS_DEFAULT[key]||{}),...(p?.[key]||{})})
+                  const fToggle=(key)=>setFiltros(p=>{const c=fCur(p,key);return {...p,[key]:{...c,activo:!c.activo}}})
+                  const fSet=(key,field,val)=>setFiltros(p=>{const c=fCur(p,key);return {...p,[key]:{...c,[field]:val}}})
                   const toggleBtn=(active)=>({
                     display:'inline-flex',alignItems:'center',justifyContent:'center',
                     width:28,height:14,borderRadius:7,flexShrink:0,cursor:'pointer',transition:'background 0.15s',
@@ -5058,26 +5079,26 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
 
                         {/* ── Filtro Índice EMA ── */}
                         <div>
-                          <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:filtros.indiceEma.activo?4:0}}>
-                            <div style={toggleBtn(filtros.indiceEma.activo)} onClick={()=>fToggle('indiceEma')}>
-                              <div style={toggleKnob(filtros.indiceEma.activo)}/>
+                          <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:filtrosSafe.indiceEma.activo?4:0}}>
+                            <div style={toggleBtn(filtrosSafe.indiceEma.activo)} onClick={()=>fToggle('indiceEma')}>
+                              <div style={toggleKnob(filtrosSafe.indiceEma.activo)}/>
                             </div>
-                            <span style={lbl(filtros.indiceEma.activo)}>Índice &gt; EMA</span>
+                            <span style={lbl(filtrosSafe.indiceEma.activo)}>Índice &gt; EMA</span>
                           </div>
-                          {filtros.indiceEma.activo&&(
+                          {filtrosSafe.indiceEma.activo&&(
                             <div style={{display:'flex',alignItems:'center',flexWrap:'wrap',gap:5,rowGap:4,paddingLeft:34}}>
                               <span style={plbl}>Ticker</span>
-                              <input type="text" value={filtros.indiceEma.ticker}
+                              <input type="text" value={filtrosSafe.indiceEma.ticker}
                                 onChange={e=>fSet('indiceEma','ticker',e.target.value.toUpperCase())}
                                 style={{...fInp,width:60}}/>
                               <span style={plbl}>EMA</span>
                               <input type="number" min={2} max={500} step={1}
-                                value={filtros.indiceEma.periodo}
+                                value={filtrosSafe.indiceEma.periodo}
                                 onChange={e=>fSet('indiceEma','periodo',Number(e.target.value)||200)}
                                 style={{...fInp,width:50}}/>
                               <span style={{display:'inline-flex',alignItems:'center',gap:3,flexShrink:0}}>
-                                <button style={ivBtn(filtros.indiceEma.intervalo!=='semanal',false)} onClick={()=>fSet('indiceEma','intervalo','diario')}>D</button>
-                                <button style={ivBtn(filtros.indiceEma.intervalo==='semanal',true)} onClick={()=>fSet('indiceEma','intervalo','semanal')}>S</button>
+                                <button style={ivBtn(filtrosSafe.indiceEma.intervalo!=='semanal',false)} onClick={()=>fSet('indiceEma','intervalo','diario')}>D</button>
+                                <button style={ivBtn(filtrosSafe.indiceEma.intervalo==='semanal',true)} onClick={()=>fSet('indiceEma','intervalo','semanal')}>S</button>
                               </span>
                             </div>
                           )}
@@ -5085,31 +5106,31 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
 
                         {/* ── Filtro Cruce EMA ── */}
                         <div>
-                          <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:filtros.cruceEma.activo?4:0}}>
-                            <div style={toggleBtn(filtros.cruceEma.activo)} onClick={()=>fToggle('cruceEma')}>
-                              <div style={toggleKnob(filtros.cruceEma.activo)}/>
+                          <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:filtrosSafe.cruceEma.activo?4:0}}>
+                            <div style={toggleBtn(filtrosSafe.cruceEma.activo)} onClick={()=>fToggle('cruceEma')}>
+                              <div style={toggleKnob(filtrosSafe.cruceEma.activo)}/>
                             </div>
-                            <span style={lbl(filtros.cruceEma.activo)}>Cruce EMA (R&gt;L)</span>
+                            <span style={lbl(filtrosSafe.cruceEma.activo)}>Cruce EMA (R&gt;L)</span>
                           </div>
-                          {filtros.cruceEma.activo&&(
+                          {filtrosSafe.cruceEma.activo&&(
                             <div style={{display:'flex',alignItems:'center',flexWrap:'wrap',gap:5,rowGap:4,paddingLeft:34}}>
                               <span style={plbl}>Ticker</span>
-                              <input type="text" value={filtros.cruceEma.ticker}
+                              <input type="text" value={filtrosSafe.cruceEma.ticker}
                                 onChange={e=>fSet('cruceEma','ticker',e.target.value.toUpperCase())}
                                 style={{...fInp,width:60}}/>
                               <span style={plbl}>R</span>
                               <input type="number" min={2} max={500} step={1}
-                                value={filtros.cruceEma.periodoR}
+                                value={filtrosSafe.cruceEma.periodoR}
                                 onChange={e=>fSet('cruceEma','periodoR',Number(e.target.value)||10)}
                                 style={{...fInp,width:42}}/>
                               <span style={plbl}>L</span>
                               <input type="number" min={2} max={500} step={1}
-                                value={filtros.cruceEma.periodoL}
+                                value={filtrosSafe.cruceEma.periodoL}
                                 onChange={e=>fSet('cruceEma','periodoL',Number(e.target.value)||11)}
                                 style={{...fInp,width:42}}/>
                               <span style={{display:'inline-flex',alignItems:'center',gap:3,flexShrink:0}}>
-                                <button style={ivBtn(filtros.cruceEma.intervalo!=='semanal',false)} onClick={()=>fSet('cruceEma','intervalo','diario')}>D</button>
-                                <button style={ivBtn(filtros.cruceEma.intervalo==='semanal',true)} onClick={()=>fSet('cruceEma','intervalo','semanal')}>S</button>
+                                <button style={ivBtn(filtrosSafe.cruceEma.intervalo!=='semanal',false)} onClick={()=>fSet('cruceEma','intervalo','diario')}>D</button>
+                                <button style={ivBtn(filtrosSafe.cruceEma.intervalo==='semanal',true)} onClick={()=>fSet('cruceEma','intervalo','semanal')}>S</button>
                               </span>
                             </div>
                           )}
@@ -6060,11 +6081,14 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
 
                 {/* FILTROS DE MERCADO — colapsable (MC) */}
                 {(()=>{
-                  const anyOn=filtros.indiceEma.activo||filtros.cruceEma.activo
-                  const onCnt=[filtros.indiceEma.activo,filtros.cruceEma.activo].filter(Boolean).length
+                  const anyOn=filtrosSafe.indiceEma.activo||filtrosSafe.cruceEma.activo
+                  const onCnt=[filtrosSafe.indiceEma.activo,filtrosSafe.cruceEma.activo].filter(Boolean).length
                   const fInp={background:'#0a1520',border:'1px solid #1a3d5a',borderRadius:3,color:'var(--text)',fontFamily:MONO,fontSize:10,padding:'1px 4px',boxSizing:'border-box',outline:'none',width:'100%'}
-                  const fToggle=(key)=>setFiltros(p=>({...p,[key]:{...p[key],activo:!p[key].activo}}))
-                  const fSet=(key,field,val)=>setFiltros(p=>({...p,[key]:{...p[key],[field]:val}}))
+                  // Parten del default de la clave: si el estado no la trae (forma antigua), se crea
+                  // completa en vez de quedar con un único campo suelto.
+                  const fCur=(p,key)=>({...(FILTROS_DEFAULT[key]||{}),...(p?.[key]||{})})
+                  const fToggle=(key)=>setFiltros(p=>{const c=fCur(p,key);return {...p,[key]:{...c,activo:!c.activo}}})
+                  const fSet=(key,field,val)=>setFiltros(p=>{const c=fCur(p,key);return {...p,[key]:{...c,[field]:val}}})
                   const toggleBtn=(active)=>({display:'inline-flex',alignItems:'center',justifyContent:'center',width:28,height:14,borderRadius:7,flexShrink:0,cursor:'pointer',transition:'background 0.15s',background:active?'#00e5a0':'#1a2d45',position:'relative'})
                   const toggleKnob=(active)=>({position:'absolute',width:10,height:10,borderRadius:'50%',background:active?'#fff':'#7a9bc0',left:active?16:2,transition:'left 0.15s'})
                   const lbl=(active)=>({fontFamily:MONO,fontSize:11,color:active?'var(--text)':'var(--text2)',flex:1})
@@ -6087,40 +6111,40 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       <div style={{padding:'2px 12px 8px',display:'flex',flexDirection:'column',gap:7,borderBottom:'1px solid var(--border)'}}>
                         {/* Índice EMA */}
                         <div>
-                          <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:filtros.indiceEma.activo?4:0}}>
-                            <div style={toggleBtn(filtros.indiceEma.activo)} onClick={()=>fToggle('indiceEma')}><div style={toggleKnob(filtros.indiceEma.activo)}/></div>
-                            <span style={lbl(filtros.indiceEma.activo)}>Índice &gt; EMA</span>
+                          <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:filtrosSafe.indiceEma.activo?4:0}}>
+                            <div style={toggleBtn(filtrosSafe.indiceEma.activo)} onClick={()=>fToggle('indiceEma')}><div style={toggleKnob(filtrosSafe.indiceEma.activo)}/></div>
+                            <span style={lbl(filtrosSafe.indiceEma.activo)}>Índice &gt; EMA</span>
                           </div>
-                          {filtros.indiceEma.activo&&(
+                          {filtrosSafe.indiceEma.activo&&(
                             <div style={{display:'flex',alignItems:'center',flexWrap:'wrap',gap:5,rowGap:4,paddingLeft:34}}>
                               <span style={plbl}>Ticker</span>
-                              <input type="text" value={filtros.indiceEma.ticker} onChange={e=>fSet('indiceEma','ticker',e.target.value.toUpperCase())} style={{...fInp,width:60}}/>
+                              <input type="text" value={filtrosSafe.indiceEma.ticker} onChange={e=>fSet('indiceEma','ticker',e.target.value.toUpperCase())} style={{...fInp,width:60}}/>
                               <span style={plbl}>EMA</span>
-                              <input type="number" min={2} max={500} step={1} value={filtros.indiceEma.periodo} onChange={e=>fSet('indiceEma','periodo',Number(e.target.value)||200)} style={{...fInp,width:50}}/>
+                              <input type="number" min={2} max={500} step={1} value={filtrosSafe.indiceEma.periodo} onChange={e=>fSet('indiceEma','periodo',Number(e.target.value)||200)} style={{...fInp,width:50}}/>
                               <span style={{display:'inline-flex',alignItems:'center',gap:3,flexShrink:0}}>
-                                <button style={ivBtn(filtros.indiceEma.intervalo!=='semanal',false)} onClick={()=>fSet('indiceEma','intervalo','diario')}>D</button>
-                                <button style={ivBtn(filtros.indiceEma.intervalo==='semanal',true)} onClick={()=>fSet('indiceEma','intervalo','semanal')}>S</button>
+                                <button style={ivBtn(filtrosSafe.indiceEma.intervalo!=='semanal',false)} onClick={()=>fSet('indiceEma','intervalo','diario')}>D</button>
+                                <button style={ivBtn(filtrosSafe.indiceEma.intervalo==='semanal',true)} onClick={()=>fSet('indiceEma','intervalo','semanal')}>S</button>
                               </span>
                             </div>
                           )}
                         </div>
                         {/* Cruce EMA */}
                         <div>
-                          <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:filtros.cruceEma.activo?4:0}}>
-                            <div style={toggleBtn(filtros.cruceEma.activo)} onClick={()=>fToggle('cruceEma')}><div style={toggleKnob(filtros.cruceEma.activo)}/></div>
-                            <span style={lbl(filtros.cruceEma.activo)}>Cruce EMA (R&gt;L)</span>
+                          <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:filtrosSafe.cruceEma.activo?4:0}}>
+                            <div style={toggleBtn(filtrosSafe.cruceEma.activo)} onClick={()=>fToggle('cruceEma')}><div style={toggleKnob(filtrosSafe.cruceEma.activo)}/></div>
+                            <span style={lbl(filtrosSafe.cruceEma.activo)}>Cruce EMA (R&gt;L)</span>
                           </div>
-                          {filtros.cruceEma.activo&&(
+                          {filtrosSafe.cruceEma.activo&&(
                             <div style={{display:'flex',alignItems:'center',flexWrap:'wrap',gap:5,rowGap:4,paddingLeft:34}}>
                               <span style={plbl}>Ticker</span>
-                              <input type="text" value={filtros.cruceEma.ticker} onChange={e=>fSet('cruceEma','ticker',e.target.value.toUpperCase())} style={{...fInp,width:60}}/>
+                              <input type="text" value={filtrosSafe.cruceEma.ticker} onChange={e=>fSet('cruceEma','ticker',e.target.value.toUpperCase())} style={{...fInp,width:60}}/>
                               <span style={plbl}>R</span>
-                              <input type="number" min={2} max={500} step={1} value={filtros.cruceEma.periodoR} onChange={e=>fSet('cruceEma','periodoR',Number(e.target.value)||10)} style={{...fInp,width:42}}/>
+                              <input type="number" min={2} max={500} step={1} value={filtrosSafe.cruceEma.periodoR} onChange={e=>fSet('cruceEma','periodoR',Number(e.target.value)||10)} style={{...fInp,width:42}}/>
                               <span style={plbl}>L</span>
-                              <input type="number" min={2} max={500} step={1} value={filtros.cruceEma.periodoL} onChange={e=>fSet('cruceEma','periodoL',Number(e.target.value)||11)} style={{...fInp,width:42}}/>
+                              <input type="number" min={2} max={500} step={1} value={filtrosSafe.cruceEma.periodoL} onChange={e=>fSet('cruceEma','periodoL',Number(e.target.value)||11)} style={{...fInp,width:42}}/>
                               <span style={{display:'inline-flex',alignItems:'center',gap:3,flexShrink:0}}>
-                                <button style={ivBtn(filtros.cruceEma.intervalo!=='semanal',false)} onClick={()=>fSet('cruceEma','intervalo','diario')}>D</button>
-                                <button style={ivBtn(filtros.cruceEma.intervalo==='semanal',true)} onClick={()=>fSet('cruceEma','intervalo','semanal')}>S</button>
+                                <button style={ivBtn(filtrosSafe.cruceEma.intervalo!=='semanal',false)} onClick={()=>fSet('cruceEma','intervalo','diario')}>D</button>
+                                <button style={ivBtn(filtrosSafe.cruceEma.intervalo==='semanal',true)} onClick={()=>fSet('cruceEma','intervalo','semanal')}>S</button>
                               </span>
                             </div>
                           )}
