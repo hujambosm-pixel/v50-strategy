@@ -731,7 +731,7 @@ export default function Home() {
   const [tipoStop,setTipoStop]=useState('tecnico'),[atrP,setAtrP]=useState(14),[atrM,setAtrM]=useState(1.0)
   const [sinPerdidas,setSinPerdidas]=useState(true),[reentry,setReentry]=useState(true)
   const [tipoFiltro,setTipoFiltro]=useState('none'),[sp500EmaR,setSp500EmaR]=useState(10),[sp500EmaL,setSp500EmaL]=useState(11)
-  const [filtros,setFiltros]=useState({vix:{activo:false,umbral:25,intervalo:'diario'},indiceEma:{activo:true,ticker:'^GSPC',periodo:10,intervalo:'diario'},sectorEma:{activo:false,ticker:'XLK',periodo:50,intervalo:'diario'},cruceEma:{activo:false,ticker:'^GSPC',periodoR:10,periodoL:11,intervalo:'diario'}})
+  const [filtros,setFiltros]=useState({vix:{activo:false,umbral:25,intervalo:'diario'},indiceEma:{activo:true,ticker:'^GSPC',periodo:10,intervalo:'diario'},cruceEma:{activo:false,ticker:'^GSPC',periodoR:10,periodoL:11,intervalo:'diario'}})
   const [filtrosOpen,setFiltrosOpen]=useState(false)
   const [result,setResult]=useState(null),[loading,setLoading]=useState(false),[error,setError]=useState(null)
   const [labelMode,setLabelMode]=useState(1),[rulerOn,setRulerOn]=useState(false)
@@ -4766,7 +4766,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.711</title>
+        <title>Trading Simulator V9.712</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4844,7 +4844,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.711
+            <span className="dot"/>Trading Simulator V9.712
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5017,8 +5017,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
 
                 {/* ── Filtros de mercado ── */}
                 {(()=>{
-                  const anyOn=filtros.vix.activo||filtros.indiceEma.activo||filtros.sectorEma.activo||filtros.cruceEma.activo
-                  const onCnt=[filtros.vix.activo,filtros.indiceEma.activo,filtros.sectorEma.activo,filtros.cruceEma.activo].filter(Boolean).length
+                  const anyOn=filtros.vix.activo||filtros.indiceEma.activo||filtros.cruceEma.activo
+                  const onCnt=[filtros.vix.activo,filtros.indiceEma.activo,filtros.cruceEma.activo].filter(Boolean).length
                   const fInp={background:'#0a1520',border:'1px solid #1a3d5a',borderRadius:3,color:'var(--text)',fontFamily:MONO,fontSize:10,padding:'1px 4px',boxSizing:'border-box',outline:'none',width:'100%'}
                   const fToggle=(key)=>setFiltros(p=>({...p,[key]:{...p[key],activo:!p[key].activo}}))
                   const fSet=(key,field,val)=>setFiltros(p=>({...p,[key]:{...p[key],[field]:val}}))
@@ -5102,33 +5102,6 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                               <span style={{display:'inline-flex',alignItems:'center',gap:3,flexShrink:0}}>
                                 <button style={ivBtn(filtros.indiceEma.intervalo!=='semanal',false)} onClick={()=>fSet('indiceEma','intervalo','diario')}>D</button>
                                 <button style={ivBtn(filtros.indiceEma.intervalo==='semanal',true)} onClick={()=>fSet('indiceEma','intervalo','semanal')}>S</button>
-                              </span>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* ── Filtro Sector EMA ── */}
-                        <div>
-                          <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:filtros.sectorEma.activo?4:0}}>
-                            <div style={toggleBtn(filtros.sectorEma.activo)} onClick={()=>fToggle('sectorEma')}>
-                              <div style={toggleKnob(filtros.sectorEma.activo)}/>
-                            </div>
-                            <span style={lbl(filtros.sectorEma.activo)}>Sector ETF &gt; EMA</span>
-                          </div>
-                          {filtros.sectorEma.activo&&(
-                            <div style={{display:'flex',alignItems:'center',flexWrap:'wrap',gap:5,rowGap:4,paddingLeft:34}}>
-                              <span style={plbl}>ETF</span>
-                              <input type="text" value={filtros.sectorEma.ticker}
-                                onChange={e=>fSet('sectorEma','ticker',e.target.value.toUpperCase())}
-                                style={{...fInp,width:60}}/>
-                              <span style={plbl}>EMA</span>
-                              <input type="number" min={2} max={500} step={1}
-                                value={filtros.sectorEma.periodo}
-                                onChange={e=>fSet('sectorEma','periodo',Number(e.target.value)||50)}
-                                style={{...fInp,width:50}}/>
-                              <span style={{display:'inline-flex',alignItems:'center',gap:3,flexShrink:0}}>
-                                <button style={ivBtn(filtros.sectorEma.intervalo!=='semanal',false)} onClick={()=>fSet('sectorEma','intervalo','diario')}>D</button>
-                                <button style={ivBtn(filtros.sectorEma.intervalo==='semanal',true)} onClick={()=>fSet('sectorEma','intervalo','semanal')}>S</button>
                               </span>
                             </div>
                           )}
@@ -6111,8 +6084,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
 
                 {/* FILTROS DE MERCADO — colapsable (MC) */}
                 {(()=>{
-                  const anyOn=filtros.vix.activo||filtros.indiceEma.activo||filtros.sectorEma.activo||filtros.cruceEma.activo
-                  const onCnt=[filtros.vix.activo,filtros.indiceEma.activo,filtros.sectorEma.activo,filtros.cruceEma.activo].filter(Boolean).length
+                  const anyOn=filtros.vix.activo||filtros.indiceEma.activo||filtros.cruceEma.activo
+                  const onCnt=[filtros.vix.activo,filtros.indiceEma.activo,filtros.cruceEma.activo].filter(Boolean).length
                   const fInp={background:'#0a1520',border:'1px solid #1a3d5a',borderRadius:3,color:'var(--text)',fontFamily:MONO,fontSize:10,padding:'1px 4px',boxSizing:'border-box',outline:'none',width:'100%'}
                   const fToggle=(key)=>setFiltros(p=>({...p,[key]:{...p[key],activo:!p[key].activo}}))
                   const fSet=(key,field,val)=>setFiltros(p=>({...p,[key]:{...p[key],[field]:val}}))
@@ -6169,25 +6142,6 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                               <span style={{display:'inline-flex',alignItems:'center',gap:3,flexShrink:0}}>
                                 <button style={ivBtn(filtros.indiceEma.intervalo!=='semanal',false)} onClick={()=>fSet('indiceEma','intervalo','diario')}>D</button>
                                 <button style={ivBtn(filtros.indiceEma.intervalo==='semanal',true)} onClick={()=>fSet('indiceEma','intervalo','semanal')}>S</button>
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                        {/* Sector EMA */}
-                        <div>
-                          <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:filtros.sectorEma.activo?4:0}}>
-                            <div style={toggleBtn(filtros.sectorEma.activo)} onClick={()=>fToggle('sectorEma')}><div style={toggleKnob(filtros.sectorEma.activo)}/></div>
-                            <span style={lbl(filtros.sectorEma.activo)}>Sector ETF &gt; EMA</span>
-                          </div>
-                          {filtros.sectorEma.activo&&(
-                            <div style={{display:'flex',alignItems:'center',flexWrap:'wrap',gap:5,rowGap:4,paddingLeft:34}}>
-                              <span style={plbl}>ETF</span>
-                              <input type="text" value={filtros.sectorEma.ticker} onChange={e=>fSet('sectorEma','ticker',e.target.value.toUpperCase())} style={{...fInp,width:60}}/>
-                              <span style={plbl}>EMA</span>
-                              <input type="number" min={2} max={500} step={1} value={filtros.sectorEma.periodo} onChange={e=>fSet('sectorEma','periodo',Number(e.target.value)||50)} style={{...fInp,width:50}}/>
-                              <span style={{display:'inline-flex',alignItems:'center',gap:3,flexShrink:0}}>
-                                <button style={ivBtn(filtros.sectorEma.intervalo!=='semanal',false)} onClick={()=>fSet('sectorEma','intervalo','diario')}>D</button>
-                                <button style={ivBtn(filtros.sectorEma.intervalo==='semanal',true)} onClick={()=>fSet('sectorEma','intervalo','semanal')}>S</button>
                               </span>
                             </div>
                           )}

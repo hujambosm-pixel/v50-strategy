@@ -305,7 +305,7 @@ export default async function handler(req, res) {
 
     // ── Fetch SP500 + filtro auxiliares en paralelo ──
     const filtrosCfg = filtros || {}
-    const anyFiltroOn = !!(filtrosCfg.vix?.activo || filtrosCfg.indiceEma?.activo || filtrosCfg.sectorEma?.activo || filtrosCfg.cruceEma?.activo)
+    const anyFiltroOn = !!(filtrosCfg.vix?.activo || filtrosCfg.indiceEma?.activo || filtrosCfg.cruceEma?.activo)
     let sp500Data = null, vixRawData = null
     const sp500Map = {}
     const auxDataMap = {} // ticker -> data (para todos los filtros no-GSPC, dedupado)
@@ -334,7 +334,7 @@ export default async function handler(req, res) {
       // Colectar (ticker:interval) únicos de todos los filtros activos con EMA
       // ^GSPC diario ya está en sp500Data; solo añadir si ticker distinto o intervalo semanal
       const auxKeys = new Set()
-      for (const key of ['indiceEma','sectorEma','cruceEma']) {
+      for (const key of ['indiceEma','cruceEma']) {
         const f = filtrosCfg[key]
         if (f?.activo && f.ticker) {
           const iv = f.intervalo === 'semanal' ? 'w' : 'd'
@@ -377,20 +377,6 @@ export default async function handler(req, res) {
         }
       }
 
-      // Sector EMA
-      const sectorIv = filtrosCfg.sectorEma?.intervalo === 'semanal' ? 'w' : 'd'
-      const sectorDataRes = filtrosCfg.sectorEma?.activo ? resolveData(filtrosCfg.sectorEma.ticker, sectorIv) : null
-      let sectorCloses = null, sectorEmaArr = null
-      if (sectorDataRes) {
-        if (sectorIv === 'w') {
-          const r = buildAlignedWeekly(sectorDataRes, assetDates, Math.max(1, filtrosCfg.sectorEma?.periodo ?? 50))
-          sectorCloses = r.closes; sectorEmaArr = r.ema
-        } else {
-          sectorCloses = buildAlignedCloses(sectorDataRes, assetDates)
-          sectorEmaArr = calcEMA(sectorCloses, Math.max(1, filtrosCfg.sectorEma?.periodo ?? 50))
-        }
-      }
-
       // Cruce EMA (EMA rápida > EMA lenta del ticker de referencia)
       const cruceIv = filtrosCfg.cruceEma?.intervalo === 'semanal' ? 'w' : 'd'
       const cruceDataRes = filtrosCfg.cruceEma?.activo ? resolveData(filtrosCfg.cruceEma.ticker, cruceIv) : null
@@ -414,7 +400,7 @@ export default async function handler(req, res) {
 
       for (let i = 0; i < data.length; i++) {
         const date = data[i].date
-        let vixOk = true, indiceOk = true, sectorOk = true, cruceOk = true
+        let vixOk = true, indiceOk = true, cruceOk = true
 
         if (filtrosCfg.vix?.activo) {
           const vc = vixCloses?.[i]
@@ -424,15 +410,11 @@ export default async function handler(req, res) {
           const ic = indiceCloses?.[i], ie = indiceEmaArr?.[i]
           indiceOk = ic == null || ie == null ? true : ic >= ie
         }
-        if (filtrosCfg.sectorEma?.activo) {
-          const sc = sectorCloses?.[i], se = sectorEmaArr?.[i]
-          sectorOk = sc == null || se == null ? true : sc >= se
-        }
         if (filtrosCfg.cruceEma?.activo) {
           const er = cruceEmaRArr?.[i], el = cruceEmaLArr?.[i]
           cruceOk = er == null || el == null ? true : er > el
         }
-        filtroActivoMap[date] = vixOk && indiceOk && sectorOk && cruceOk
+        filtroActivoMap[date] = vixOk && indiceOk && cruceOk
 
         // Inyectar en barra para visualización
         data[i].vixClose    = vixMap[date]    ?? null

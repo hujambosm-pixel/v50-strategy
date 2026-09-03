@@ -1383,7 +1383,7 @@ async function handlePortfolioMode(req, res) {
     // 4b. Filtros de mercado — portar el mismo bloque del path único
     //     Se ejecuta DESPUÉS de runCodeJsAsset (assetResults ya tiene trades con metadata)
     //     y ANTES de construir curvas. Los datos auxiliares se descargan UNA sola vez.
-    const anyFiltroOn = !!(filtrosCfg?.vix?.activo || filtrosCfg?.indiceEma?.activo || filtrosCfg?.sectorEma?.activo || filtrosCfg?.cruceEma?.activo)
+    const anyFiltroOn = !!(filtrosCfg?.vix?.activo || filtrosCfg?.indiceEma?.activo || filtrosCfg?.cruceEma?.activo)
     if (anyFiltroOn && filtrosCfg) {
       // Descargar datos auxiliares una vez (VIX + EMA indices)
       let vixRawData = null
@@ -1393,7 +1393,7 @@ async function handlePortfolioMode(req, res) {
       if (filtrosCfg.vix?.activo)
         filterFetchJobs.push(fetchData('^VIX', cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, vixIv).then(r => { vixRawData = r }).catch(() => {}))
       const auxKeys = new Set()
-      for (const key of ['indiceEma','sectorEma','cruceEma']) {
+      for (const key of ['indiceEma','cruceEma']) {
         const f = filtrosCfg[key]
         if (f?.activo && f.ticker) {
           const iv = f.intervalo === 'semanal' ? '1wk' : '1d'
@@ -1427,14 +1427,6 @@ async function handlePortfolioMode(req, res) {
           else { indiceCloses = buildAlignedCloses(indiceDataRes, assetDates); indiceEmaArr = calcEMA(indiceCloses, Math.max(1, filtrosCfg.indiceEma?.periodo ?? 200)) }
         }
 
-        const sectorIv = filtrosCfg.sectorEma?.intervalo === 'semanal' ? '1wk' : '1d'
-        const sectorDataRes = filtrosCfg.sectorEma?.activo ? resolveFilterData(filtrosCfg.sectorEma.ticker, sectorIv) : null
-        let sectorCloses = null, sectorEmaArr = null
-        if (sectorDataRes) {
-          if (sectorIv === '1wk') { const r = buildAlignedWeekly(sectorDataRes, assetDates, Math.max(1, filtrosCfg.sectorEma?.periodo ?? 50)); sectorCloses = r.closes; sectorEmaArr = r.ema }
-          else { sectorCloses = buildAlignedCloses(sectorDataRes, assetDates); sectorEmaArr = calcEMA(sectorCloses, Math.max(1, filtrosCfg.sectorEma?.periodo ?? 50)) }
-        }
-
         const cruceIv = filtrosCfg.cruceEma?.intervalo === 'semanal' ? '1wk' : '1d'
         const cruceDataRes = filtrosCfg.cruceEma?.activo ? resolveFilterData(filtrosCfg.cruceEma.ticker, cruceIv) : null
         let cruceCloses = null, cruceEmaRArr = null, cruceEmaLArr = null
@@ -1445,12 +1437,11 @@ async function handlePortfolioMode(req, res) {
 
         for (let i = 0; i < ar.data.length; i++) {
           const date = ar.data[i].date
-          let vixOk = true, indiceOk = true, sectorOk = true, cruceOk = true
+          let vixOk = true, indiceOk = true, cruceOk = true
           if (filtrosCfg.vix?.activo) { const vc = vixCloses?.[i]; vixOk = vc == null ? true : vc < (filtrosCfg.vix.umbral ?? 25) }
           if (filtrosCfg.indiceEma?.activo) { const ic = indiceCloses?.[i], ie = indiceEmaArr?.[i]; indiceOk = ic == null || ie == null ? true : ic >= ie }
-          if (filtrosCfg.sectorEma?.activo) { const sc = sectorCloses?.[i], se = sectorEmaArr?.[i]; sectorOk = sc == null || se == null ? true : sc >= se }
           if (filtrosCfg.cruceEma?.activo) { const er = cruceEmaRArr?.[i], el = cruceEmaLArr?.[i]; cruceOk = er == null || el == null ? true : er > el }
-          filtroActivoMap[date] = vixOk && indiceOk && sectorOk && cruceOk
+          filtroActivoMap[date] = vixOk && indiceOk && cruceOk
         }
 
         const filtered = ar.trades.filter(t => filtroActivoMap[t.entryDate] !== false)
@@ -1707,7 +1698,7 @@ export default async function handler(req, res) {
     if (assetInterval === '1wk') { try { sp500DataTf = await fetchData('^GSPC', cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, assetInterval) } catch(_) {} }
 
     // ── Fetch datos auxiliares para filtros de mercado ──
-    const anyFiltroOn = !!(filtrosCfg?.vix?.activo || filtrosCfg?.indiceEma?.activo || filtrosCfg?.sectorEma?.activo || filtrosCfg?.cruceEma?.activo)
+    const anyFiltroOn = !!(filtrosCfg?.vix?.activo || filtrosCfg?.indiceEma?.activo || filtrosCfg?.cruceEma?.activo)
     let vixRawData = null
     const filterAuxData = {} // key: `${ticker}:${iv}` → data
     if (anyFiltroOn && filtrosCfg) {
@@ -1719,7 +1710,7 @@ export default async function handler(req, res) {
             .then(r => { vixRawData = r }).catch(() => {})
         )
       const auxKeys = new Set()
-      for (const key of ['indiceEma','sectorEma','cruceEma']) {
+      for (const key of ['indiceEma','cruceEma']) {
         const f = filtrosCfg[key]
         if (f?.activo && f.ticker) {
           const iv = f.intervalo === 'semanal' ? '1wk' : '1d'
@@ -1792,20 +1783,6 @@ export default async function handler(req, res) {
           }
         }
 
-        // Sector EMA
-        const sectorIv = filtrosCfg.sectorEma?.intervalo === 'semanal' ? '1wk' : '1d'
-        const sectorDataRes = filtrosCfg.sectorEma?.activo ? resolveFilterData(filtrosCfg.sectorEma.ticker, sectorIv) : null
-        let sectorCloses = null, sectorEmaArr = null
-        if (sectorDataRes) {
-          if (sectorIv === '1wk') {
-            const r = buildAlignedWeekly(sectorDataRes, assetDates, Math.max(1, filtrosCfg.sectorEma?.periodo ?? 50))
-            sectorCloses = r.closes; sectorEmaArr = r.ema
-          } else {
-            sectorCloses = buildAlignedCloses(sectorDataRes, assetDates)
-            sectorEmaArr = calcEMA(sectorCloses, Math.max(1, filtrosCfg.sectorEma?.periodo ?? 50))
-          }
-        }
-
         // Cruce EMA
         const cruceIv = filtrosCfg.cruceEma?.intervalo === 'semanal' ? '1wk' : '1d'
         const cruceDataRes = filtrosCfg.cruceEma?.activo ? resolveFilterData(filtrosCfg.cruceEma.ticker, cruceIv) : null
@@ -1825,7 +1802,7 @@ export default async function handler(req, res) {
         // Calcular filtroActivoMap para este activo
         for (let i = 0; i < ar.data.length; i++) {
           const date = ar.data[i].date
-          let vixOk = true, indiceOk = true, sectorOk = true, cruceOk = true
+          let vixOk = true, indiceOk = true, cruceOk = true
           if (filtrosCfg.vix?.activo) {
             const vc = vixCloses?.[i]
             vixOk = vc == null ? true : vc < (filtrosCfg.vix.umbral ?? 25)
@@ -1834,15 +1811,11 @@ export default async function handler(req, res) {
             const ic = indiceCloses?.[i], ie = indiceEmaArr?.[i]
             indiceOk = ic == null || ie == null ? true : ic >= ie
           }
-          if (filtrosCfg.sectorEma?.activo) {
-            const sc = sectorCloses?.[i], se = sectorEmaArr?.[i]
-            sectorOk = sc == null || se == null ? true : sc >= se
-          }
           if (filtrosCfg.cruceEma?.activo) {
             const er = cruceEmaRArr?.[i], el = cruceEmaLArr?.[i]
             cruceOk = er == null || el == null ? true : er > el
           }
-          filtroActivoMap[date] = vixOk && indiceOk && sectorOk && cruceOk
+          filtroActivoMap[date] = vixOk && indiceOk && cruceOk
         }
 
         // Guardar filterZones del primer activo para incluirlas en la respuesta
