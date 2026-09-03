@@ -766,6 +766,125 @@ function loadFiltros(){
   }catch(_){ return vacio }
 }
 
+// Las dos únicas diferencias reales entre los sitios donde se pinta la sección: cómo encaja en su
+// panel. En el panel de estrategias el contenedor cierra la sección con su propio borde y la
+// cabecera solo se separa del cuerpo al desplegarse; en el de multicartera va encajada entre otras
+// secciones, así que los bordes los ponen la cabecera y el cuerpo.
+const FILTROS_VARIANTES={
+  panel:{wrap:{borderBottom:'1px solid var(--border)',flexShrink:0},padX:10,bordeCabeceraSiempre:false,bordeCuerpo:false},
+  mc:   {wrap:{flexShrink:0},                                       padX:12,bordeCabeceraSiempre:true, bordeCuerpo:true },
+}
+
+// Sección FILTROS DE MERCADO. Estaba duplicada carácter a carácter en el panel de estrategias y en
+// el de multicartera, y las copias ya habían divergido en detalles que nadie eligió (un flexShrink
+// repetido, dos textos de ayuda distintos). Aquí vive una sola vez; lo único que varía por sitio es
+// el estado de apertura y la variante de encaje.
+// `filtros` es la vista saneada (filtrosSafe), no el estado crudo: el JSX lee sin optional chaining.
+function FiltrosMercadoPanel({filtros,setFiltros,open,setOpen,variant='panel'}){
+  const V=FILTROS_VARIANTES[variant]||FILTROS_VARIANTES.panel
+  const anyOn=filtros.indiceEma.activo||filtros.cruceEma.activo
+  const onCnt=[filtros.indiceEma.activo,filtros.cruceEma.activo].filter(Boolean).length
+  const fInp={background:'#0a1520',border:'1px solid #1a3d5a',borderRadius:3,color:'var(--text)',fontFamily:MONO,fontSize:10,padding:'1px 4px',boxSizing:'border-box',outline:'none',width:'100%'}
+  // Parten del default de la clave: si el estado no la trae (forma antigua), se crea
+  // completa en vez de quedar con un único campo suelto.
+  const fCur=(p,key)=>({...(FILTROS_DEFAULT[key]||{}),...(p?.[key]||{})})
+  const fToggle=(key)=>setFiltros(p=>{const c=fCur(p,key);return {...p,[key]:{...c,activo:!c.activo}}})
+  const fSet=(key,field,val)=>setFiltros(p=>{const c=fCur(p,key);return {...p,[key]:{...c,[field]:val}}})
+  const toggleBtn=(active)=>({display:'inline-flex',alignItems:'center',justifyContent:'center',width:28,height:14,borderRadius:7,flexShrink:0,cursor:'pointer',transition:'background 0.15s',background:active?'#00e5a0':'#1a2d45',position:'relative'})
+  const toggleKnob=(active)=>({position:'absolute',width:10,height:10,borderRadius:'50%',background:active?'#fff':'#7a9bc0',left:active?16:2,transition:'left 0.15s'})
+  const lbl=(active)=>({fontFamily:MONO,fontSize:11,color:active?'var(--text)':'var(--text2)',flex:1})
+  const plbl={fontFamily:MONO,fontSize:9,color:'var(--text2)',whiteSpace:'nowrap'}
+  const ivBtn=(on,semanal=false)=>({fontFamily:MONO,fontSize:9,padding:'1px 5px',borderRadius:3,cursor:'pointer',
+    border:`1px solid ${on?(semanal?'#a07820':'#2d6e4e'):'#1a3d5a'}`,
+    background:on?(semanal?'rgba(240,192,64,0.12)':'rgba(76,175,130,0.12)'):'transparent',
+    color:on?(semanal?'#f0c040':'#4caf82'):'var(--text2)'})
+  // Fila de intervalo D/S, común a los dos filtros
+  const ivRow=(key)=>(
+    <span style={{display:'inline-flex',alignItems:'center',gap:3,flexShrink:0}}>
+      <button style={ivBtn(filtros[key].intervalo!=='semanal',false)} onClick={()=>fSet(key,'intervalo','diario')}>D</button>
+      <button style={ivBtn(filtros[key].intervalo==='semanal',true)} onClick={()=>fSet(key,'intervalo','semanal')}>S</button>
+    </span>
+  )
+  return(
+    <div style={V.wrap}>
+      {/* Cabecera colapsable */}
+      <div onClick={()=>setOpen(v=>!v)}
+        style={{padding:`8px ${V.padX}px`,borderBottom:(V.bordeCabeceraSiempre||open)?'1px solid var(--border)':'none',display:'flex',alignItems:'center',gap:6,cursor:'pointer',background:'var(--bg2)',userSelect:'none'}}
+        onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.04)'}
+        onMouseOut={e=>e.currentTarget.style.background='var(--bg2)'}>
+        <span style={{fontFamily:MONO,fontSize:9,color:'#4a7a9a',width:10}}>{open?'▼':'▶'}</span>
+        <span style={{fontFamily:MONO,fontSize:12,color:anyOn?'#00e5a0':'#c8dff5',fontWeight:600,letterSpacing:'0.05em'}}>FILTROS DE MERCADO</span>
+        {anyOn&&<span style={{fontFamily:MONO,fontSize:9,background:'rgba(0,229,160,0.18)',color:'#00e5a0',
+          borderRadius:3,padding:'0 4px',lineHeight:'14px',flexShrink:0}}>
+          {onCnt} activo{onCnt>1?'s':''}
+        </span>}
+      </div>
+
+      {open&&(
+        <div style={{padding:`2px ${V.padX}px 8px`,display:'flex',flexDirection:'column',gap:7,...(V.bordeCuerpo?{borderBottom:'1px solid var(--border)'}:{})}}>
+
+          {/* ── Filtro Índice EMA ── */}
+          <div>
+            <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:filtros.indiceEma.activo?4:0}}>
+              <div style={toggleBtn(filtros.indiceEma.activo)} onClick={()=>fToggle('indiceEma')}>
+                <div style={toggleKnob(filtros.indiceEma.activo)}/>
+              </div>
+              <span style={lbl(filtros.indiceEma.activo)}>Índice &gt; EMA</span>
+            </div>
+            {filtros.indiceEma.activo&&(
+              <div style={{display:'flex',alignItems:'center',flexWrap:'wrap',gap:5,rowGap:4,paddingLeft:34}}>
+                <span style={plbl}>Ticker</span>
+                <input type="text" value={filtros.indiceEma.ticker}
+                  onChange={e=>fSet('indiceEma','ticker',e.target.value.toUpperCase())}
+                  style={{...fInp,width:60}}/>
+                <span style={plbl}>EMA</span>
+                <input type="number" min={2} max={500} step={1}
+                  value={filtros.indiceEma.periodo}
+                  onChange={e=>fSet('indiceEma','periodo',Number(e.target.value)||200)}
+                  style={{...fInp,width:50}}/>
+                {ivRow('indiceEma')}
+              </div>
+            )}
+          </div>
+
+          {/* ── Filtro Cruce EMA ── */}
+          <div>
+            <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:filtros.cruceEma.activo?4:0}}>
+              <div style={toggleBtn(filtros.cruceEma.activo)} onClick={()=>fToggle('cruceEma')}>
+                <div style={toggleKnob(filtros.cruceEma.activo)}/>
+              </div>
+              <span style={lbl(filtros.cruceEma.activo)}>Cruce EMA (R&gt;L)</span>
+            </div>
+            {filtros.cruceEma.activo&&(
+              <div style={{display:'flex',alignItems:'center',flexWrap:'wrap',gap:5,rowGap:4,paddingLeft:34}}>
+                <span style={plbl}>Ticker</span>
+                <input type="text" value={filtros.cruceEma.ticker}
+                  onChange={e=>fSet('cruceEma','ticker',e.target.value.toUpperCase())}
+                  style={{...fInp,width:60}}/>
+                <span style={plbl}>R</span>
+                <input type="number" min={2} max={500} step={1}
+                  value={filtros.cruceEma.periodoR}
+                  onChange={e=>fSet('cruceEma','periodoR',Number(e.target.value)||10)}
+                  style={{...fInp,width:42}}/>
+                <span style={plbl}>L</span>
+                <input type="number" min={2} max={500} step={1}
+                  value={filtros.cruceEma.periodoL}
+                  onChange={e=>fSet('cruceEma','periodoL',Number(e.target.value)||11)}
+                  style={{...fInp,width:42}}/>
+                {ivRow('cruceEma')}
+              </div>
+            )}
+          </div>
+
+          {anyOn&&<div style={{fontFamily:MONO,fontSize:9,color:'var(--text2)',lineHeight:1.4,marginTop:1}}>
+            AND — todos los filtros activos en verde para permitir entrada. Zonas bloqueadas en rojo en el gráfico.
+          </div>}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function Home() {
   const [simbolo,setSimbolo]=useState('^GSPC')
   const [displayedSimbolo,setDisplayedSimbolo]=useState('^GSPC') // lags behind simbolo — updates only when chart data is ready
@@ -4827,7 +4946,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.716</title>
+        <title>Trading Simulator V9.717</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4905,7 +5024,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.716
+            <span className="dot"/>Trading Simulator V9.717
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5077,116 +5196,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 </div>
 
                 {/* ── Filtros de mercado ── */}
-                {(()=>{
-                  const anyOn=filtrosSafe.indiceEma.activo||filtrosSafe.cruceEma.activo
-                  const onCnt=[filtrosSafe.indiceEma.activo,filtrosSafe.cruceEma.activo].filter(Boolean).length
-                  const fInp={background:'#0a1520',border:'1px solid #1a3d5a',borderRadius:3,color:'var(--text)',fontFamily:MONO,fontSize:10,padding:'1px 4px',boxSizing:'border-box',outline:'none',width:'100%'}
-                  // Parten del default de la clave: si el estado no la trae (forma antigua), se crea
-                  // completa en vez de quedar con un único campo suelto.
-                  const fCur=(p,key)=>({...(FILTROS_DEFAULT[key]||{}),...(p?.[key]||{})})
-                  const fToggle=(key)=>setFiltros(p=>{const c=fCur(p,key);return {...p,[key]:{...c,activo:!c.activo}}})
-                  const fSet=(key,field,val)=>setFiltros(p=>{const c=fCur(p,key);return {...p,[key]:{...c,[field]:val}}})
-                  const toggleBtn=(active)=>({
-                    display:'inline-flex',alignItems:'center',justifyContent:'center',
-                    width:28,height:14,borderRadius:7,flexShrink:0,cursor:'pointer',transition:'background 0.15s',
-                    background:active?'#00e5a0':'#1a2d45',position:'relative',flexShrink:0,
-                  })
-                  const toggleKnob=(active)=>({
-                    position:'absolute',width:10,height:10,borderRadius:'50%',
-                    background:active?'#fff':'#7a9bc0',
-                    left:active?16:2,transition:'left 0.15s',
-                  })
-                  const lbl=(active)=>({fontFamily:MONO,fontSize:11,color:active?'var(--text)':'var(--text2)',flex:1})
-                  const plbl={fontFamily:MONO,fontSize:9,color:'var(--text2)',whiteSpace:'nowrap'}
-                  const ivBtn=(on,semanal=false)=>({fontFamily:MONO,fontSize:9,padding:'1px 5px',borderRadius:3,cursor:'pointer',
-                    border:`1px solid ${on?(semanal?'#a07820':'#2d6e4e'):'#1a3d5a'}`,
-                    background:on?(semanal?'rgba(240,192,64,0.12)':'rgba(76,175,130,0.12)'):'transparent',
-                    color:on?(semanal?'#f0c040':'#4caf82'):'var(--text2)'})
-                  return(
-                  <div style={{borderBottom:'1px solid var(--border)',flexShrink:0}}>
-                    {/* Cabecera colapsable */}
-                    <div onClick={()=>setFiltrosOpen(v=>!v)}
-                      style={{padding:'8px 10px',borderBottom:filtrosOpen?'1px solid var(--border)':'none',display:'flex',alignItems:'center',gap:6,cursor:'pointer',background:'var(--bg2)',userSelect:'none'}}
-                      onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.04)'}
-                      onMouseOut={e=>e.currentTarget.style.background='var(--bg2)'}>
-                      <span style={{fontFamily:MONO,fontSize:9,color:'#4a7a9a',width:10}}>{filtrosOpen?'▼':'▶'}</span>
-                      <span style={{fontFamily:MONO,fontSize:12,color:anyOn?'#00e5a0':'#c8dff5',fontWeight:600,letterSpacing:'0.05em'}}>FILTROS DE MERCADO</span>
-                      {anyOn&&<span style={{fontFamily:MONO,fontSize:9,background:'rgba(0,229,160,0.18)',color:'#00e5a0',
-                        borderRadius:3,padding:'0 4px',lineHeight:'14px',flexShrink:0}}>
-                        {onCnt} activo{onCnt>1?'s':''}
-                      </span>}
-                    </div>
-
-                    {filtrosOpen&&(
-                      <div style={{padding:'2px 10px 8px',display:'flex',flexDirection:'column',gap:7}}>
-
-                        {/* ── Filtro Índice EMA ── */}
-                        <div>
-                          <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:filtrosSafe.indiceEma.activo?4:0}}>
-                            <div style={toggleBtn(filtrosSafe.indiceEma.activo)} onClick={()=>fToggle('indiceEma')}>
-                              <div style={toggleKnob(filtrosSafe.indiceEma.activo)}/>
-                            </div>
-                            <span style={lbl(filtrosSafe.indiceEma.activo)}>Índice &gt; EMA</span>
-                          </div>
-                          {filtrosSafe.indiceEma.activo&&(
-                            <div style={{display:'flex',alignItems:'center',flexWrap:'wrap',gap:5,rowGap:4,paddingLeft:34}}>
-                              <span style={plbl}>Ticker</span>
-                              <input type="text" value={filtrosSafe.indiceEma.ticker}
-                                onChange={e=>fSet('indiceEma','ticker',e.target.value.toUpperCase())}
-                                style={{...fInp,width:60}}/>
-                              <span style={plbl}>EMA</span>
-                              <input type="number" min={2} max={500} step={1}
-                                value={filtrosSafe.indiceEma.periodo}
-                                onChange={e=>fSet('indiceEma','periodo',Number(e.target.value)||200)}
-                                style={{...fInp,width:50}}/>
-                              <span style={{display:'inline-flex',alignItems:'center',gap:3,flexShrink:0}}>
-                                <button style={ivBtn(filtrosSafe.indiceEma.intervalo!=='semanal',false)} onClick={()=>fSet('indiceEma','intervalo','diario')}>D</button>
-                                <button style={ivBtn(filtrosSafe.indiceEma.intervalo==='semanal',true)} onClick={()=>fSet('indiceEma','intervalo','semanal')}>S</button>
-                              </span>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* ── Filtro Cruce EMA ── */}
-                        <div>
-                          <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:filtrosSafe.cruceEma.activo?4:0}}>
-                            <div style={toggleBtn(filtrosSafe.cruceEma.activo)} onClick={()=>fToggle('cruceEma')}>
-                              <div style={toggleKnob(filtrosSafe.cruceEma.activo)}/>
-                            </div>
-                            <span style={lbl(filtrosSafe.cruceEma.activo)}>Cruce EMA (R&gt;L)</span>
-                          </div>
-                          {filtrosSafe.cruceEma.activo&&(
-                            <div style={{display:'flex',alignItems:'center',flexWrap:'wrap',gap:5,rowGap:4,paddingLeft:34}}>
-                              <span style={plbl}>Ticker</span>
-                              <input type="text" value={filtrosSafe.cruceEma.ticker}
-                                onChange={e=>fSet('cruceEma','ticker',e.target.value.toUpperCase())}
-                                style={{...fInp,width:60}}/>
-                              <span style={plbl}>R</span>
-                              <input type="number" min={2} max={500} step={1}
-                                value={filtrosSafe.cruceEma.periodoR}
-                                onChange={e=>fSet('cruceEma','periodoR',Number(e.target.value)||10)}
-                                style={{...fInp,width:42}}/>
-                              <span style={plbl}>L</span>
-                              <input type="number" min={2} max={500} step={1}
-                                value={filtrosSafe.cruceEma.periodoL}
-                                onChange={e=>fSet('cruceEma','periodoL',Number(e.target.value)||11)}
-                                style={{...fInp,width:42}}/>
-                              <span style={{display:'inline-flex',alignItems:'center',gap:3,flexShrink:0}}>
-                                <button style={ivBtn(filtrosSafe.cruceEma.intervalo!=='semanal',false)} onClick={()=>fSet('cruceEma','intervalo','diario')}>D</button>
-                                <button style={ivBtn(filtrosSafe.cruceEma.intervalo==='semanal',true)} onClick={()=>fSet('cruceEma','intervalo','semanal')}>S</button>
-                              </span>
-                            </div>
-                          )}
-                        </div>
-
-                        {anyOn&&<div style={{fontFamily:MONO,fontSize:9,color:'var(--text2)',lineHeight:1.4,marginTop:1}}>
-                          AND — todos los filtros activos en verde para permitir entrada. Zonas bloqueadas en rojo en el gráfico.
-                        </div>}
-                      </div>
-                    )}
-                  </div>
-                  )
-                })()}
+                <FiltrosMercadoPanel filtros={filtrosSafe} setFiltros={setFiltros}
+                  open={filtrosOpen} setOpen={setFiltrosOpen} variant="panel"/>
 
                 {/* ── Lista ── */}
                 <div style={{overflowY:'auto',flex:1}}>
@@ -6123,81 +6134,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 </div>
 
                 {/* FILTROS DE MERCADO — colapsable (MC) */}
-                {(()=>{
-                  const anyOn=filtrosSafe.indiceEma.activo||filtrosSafe.cruceEma.activo
-                  const onCnt=[filtrosSafe.indiceEma.activo,filtrosSafe.cruceEma.activo].filter(Boolean).length
-                  const fInp={background:'#0a1520',border:'1px solid #1a3d5a',borderRadius:3,color:'var(--text)',fontFamily:MONO,fontSize:10,padding:'1px 4px',boxSizing:'border-box',outline:'none',width:'100%'}
-                  // Parten del default de la clave: si el estado no la trae (forma antigua), se crea
-                  // completa en vez de quedar con un único campo suelto.
-                  const fCur=(p,key)=>({...(FILTROS_DEFAULT[key]||{}),...(p?.[key]||{})})
-                  const fToggle=(key)=>setFiltros(p=>{const c=fCur(p,key);return {...p,[key]:{...c,activo:!c.activo}}})
-                  const fSet=(key,field,val)=>setFiltros(p=>{const c=fCur(p,key);return {...p,[key]:{...c,[field]:val}}})
-                  const toggleBtn=(active)=>({display:'inline-flex',alignItems:'center',justifyContent:'center',width:28,height:14,borderRadius:7,flexShrink:0,cursor:'pointer',transition:'background 0.15s',background:active?'#00e5a0':'#1a2d45',position:'relative'})
-                  const toggleKnob=(active)=>({position:'absolute',width:10,height:10,borderRadius:'50%',background:active?'#fff':'#7a9bc0',left:active?16:2,transition:'left 0.15s'})
-                  const lbl=(active)=>({fontFamily:MONO,fontSize:11,color:active?'var(--text)':'var(--text2)',flex:1})
-                  const plbl={fontFamily:MONO,fontSize:9,color:'var(--text2)',whiteSpace:'nowrap'}
-                  const ivBtn=(on,semanal=false)=>({fontFamily:MONO,fontSize:9,padding:'1px 5px',borderRadius:3,cursor:'pointer',
-                    border:`1px solid ${on?(semanal?'#a07820':'#2d6e4e'):'#1a3d5a'}`,
-                    background:on?(semanal?'rgba(240,192,64,0.12)':'rgba(76,175,130,0.12)'):'transparent',
-                    color:on?(semanal?'#f0c040':'#4caf82'):'var(--text2)'})
-                  return(
-                  <div style={{flexShrink:0}}>
-                    <div onClick={()=>setMcFiltrosOpen(v=>!v)}
-                      style={{padding:'8px 12px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:6,cursor:'pointer',background:'var(--bg2)',userSelect:'none'}}
-                      onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.04)'}
-                      onMouseOut={e=>e.currentTarget.style.background='var(--bg2)'}>
-                      <span style={{fontFamily:MONO,fontSize:9,color:'#4a7a9a',width:10}}>{mcFiltrosOpen?'▼':'▶'}</span>
-                      <span style={{fontFamily:MONO,fontSize:12,color:anyOn?'#00e5a0':'#c8dff5',fontWeight:600,letterSpacing:'0.05em'}}>FILTROS DE MERCADO</span>
-                      {anyOn&&<span style={{fontFamily:MONO,fontSize:9,background:'rgba(0,229,160,0.18)',color:'#00e5a0',borderRadius:3,padding:'0 4px',lineHeight:'14px',flexShrink:0}}>{onCnt} activo{onCnt>1?'s':''}</span>}
-                    </div>
-                    {mcFiltrosOpen&&(
-                      <div style={{padding:'2px 12px 8px',display:'flex',flexDirection:'column',gap:7,borderBottom:'1px solid var(--border)'}}>
-                        {/* Índice EMA */}
-                        <div>
-                          <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:filtrosSafe.indiceEma.activo?4:0}}>
-                            <div style={toggleBtn(filtrosSafe.indiceEma.activo)} onClick={()=>fToggle('indiceEma')}><div style={toggleKnob(filtrosSafe.indiceEma.activo)}/></div>
-                            <span style={lbl(filtrosSafe.indiceEma.activo)}>Índice &gt; EMA</span>
-                          </div>
-                          {filtrosSafe.indiceEma.activo&&(
-                            <div style={{display:'flex',alignItems:'center',flexWrap:'wrap',gap:5,rowGap:4,paddingLeft:34}}>
-                              <span style={plbl}>Ticker</span>
-                              <input type="text" value={filtrosSafe.indiceEma.ticker} onChange={e=>fSet('indiceEma','ticker',e.target.value.toUpperCase())} style={{...fInp,width:60}}/>
-                              <span style={plbl}>EMA</span>
-                              <input type="number" min={2} max={500} step={1} value={filtrosSafe.indiceEma.periodo} onChange={e=>fSet('indiceEma','periodo',Number(e.target.value)||200)} style={{...fInp,width:50}}/>
-                              <span style={{display:'inline-flex',alignItems:'center',gap:3,flexShrink:0}}>
-                                <button style={ivBtn(filtrosSafe.indiceEma.intervalo!=='semanal',false)} onClick={()=>fSet('indiceEma','intervalo','diario')}>D</button>
-                                <button style={ivBtn(filtrosSafe.indiceEma.intervalo==='semanal',true)} onClick={()=>fSet('indiceEma','intervalo','semanal')}>S</button>
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                        {/* Cruce EMA */}
-                        <div>
-                          <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:filtrosSafe.cruceEma.activo?4:0}}>
-                            <div style={toggleBtn(filtrosSafe.cruceEma.activo)} onClick={()=>fToggle('cruceEma')}><div style={toggleKnob(filtrosSafe.cruceEma.activo)}/></div>
-                            <span style={lbl(filtrosSafe.cruceEma.activo)}>Cruce EMA (R&gt;L)</span>
-                          </div>
-                          {filtrosSafe.cruceEma.activo&&(
-                            <div style={{display:'flex',alignItems:'center',flexWrap:'wrap',gap:5,rowGap:4,paddingLeft:34}}>
-                              <span style={plbl}>Ticker</span>
-                              <input type="text" value={filtrosSafe.cruceEma.ticker} onChange={e=>fSet('cruceEma','ticker',e.target.value.toUpperCase())} style={{...fInp,width:60}}/>
-                              <span style={plbl}>R</span>
-                              <input type="number" min={2} max={500} step={1} value={filtrosSafe.cruceEma.periodoR} onChange={e=>fSet('cruceEma','periodoR',Number(e.target.value)||10)} style={{...fInp,width:42}}/>
-                              <span style={plbl}>L</span>
-                              <input type="number" min={2} max={500} step={1} value={filtrosSafe.cruceEma.periodoL} onChange={e=>fSet('cruceEma','periodoL',Number(e.target.value)||11)} style={{...fInp,width:42}}/>
-                              <span style={{display:'inline-flex',alignItems:'center',gap:3,flexShrink:0}}>
-                                <button style={ivBtn(filtrosSafe.cruceEma.intervalo!=='semanal',false)} onClick={()=>fSet('cruceEma','intervalo','diario')}>D</button>
-                                <button style={ivBtn(filtrosSafe.cruceEma.intervalo==='semanal',true)} onClick={()=>fSet('cruceEma','intervalo','semanal')}>S</button>
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                        {anyOn&&<div style={{fontFamily:MONO,fontSize:9,color:'var(--text2)',lineHeight:1.4,marginTop:1}}>AND — todos activos en verde para permitir entrada.</div>}
-                      </div>
-                    )}
-                  </div>
-                  )
-                })()}
+                <FiltrosMercadoPanel filtros={filtrosSafe} setFiltros={setFiltros}
+                  open={mcFiltrosOpen} setOpen={setMcFiltrosOpen} variant="mc"/>
 
                 {/* MODO DE ASIGNACIÓN — colapsable */}
                 <div style={{flexShrink:0}}>
