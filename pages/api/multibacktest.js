@@ -2,6 +2,7 @@
 // Backtest de cartera multi-activo — Slots iguales | Capital compartido | Pesos personalizados
 
 import { calcEMA as _libEMA, calcSMA, calcRSI, calcATR as _libATR, calcMACD } from '../../lib/backtester'
+import { normalizaFiltrosEntrada, hayFiltrosActivos, clavesAuxiliares, construirFiltroActivoMap, filtrosActivos } from '../../lib/filtros'
 import { fetchAV } from './datos'
 
 const SUPA_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -1383,20 +1384,14 @@ async function handlePortfolioMode(req, res) {
     // 4b. Filtros de mercado — portar el mismo bloque del path único
     //     Se ejecuta DESPUÉS de runCodeJsAsset (assetResults ya tiene trades con metadata)
     //     y ANTES de construir curvas. Los datos auxiliares se descargan UNA sola vez.
-    const anyFiltroOn = !!(filtrosCfg?.indiceEma?.activo || filtrosCfg?.cruceEma?.activo)
-    if (anyFiltroOn && filtrosCfg) {
-      // Descargar datos auxiliares una vez (EMA indices)
+    const filtrosLista = normalizaFiltrosEntrada(filtrosCfg)
+    const anyFiltroOn = hayFiltrosActivos(filtrosLista)
+    if (anyFiltroOn) {
+      // Descargar UNA vez las series externas que piden los filtros de ámbito mercado. Los de
+      // ámbito activo se evalúan sobre ar.data y no añaden ninguna petición.
       const filterAuxData = {}
       const filterFetchJobs = []
-      const auxKeys = new Set()
-      for (const key of ['indiceEma','cruceEma']) {
-        const f = filtrosCfg[key]
-        if (f?.activo && f.ticker) {
-          const iv = f.intervalo === 'semanal' ? '1wk' : '1d'
-          const akey = `${f.ticker}:${iv}`
-          if (f.ticker !== '^GSPC' || iv === '1wk') auxKeys.add(akey)
-        }
-      }
+      const auxKeys = clavesAuxiliares(filtrosLista, '1wk', '1d')
       for (const akey of auxKeys) {
         const colonIdx = akey.lastIndexOf(':')
         const ticker = akey.slice(0, colonIdx), iv = akey.slice(colonIdx + 1)
@@ -1411,31 +1406,13 @@ async function handlePortfolioMode(req, res) {
       // rebuildCapitalTras usa {...t} → preserva _stratId/_stratName/_realSymbol
       for (const ar of assetResults) {
         const assetDates = ar.data.map(d => d.date)
-        const filtroActivoMap = {}
-
-        const indiceIv = filtrosCfg.indiceEma?.intervalo === 'semanal' ? '1wk' : '1d'
-        const indiceDataRes = filtrosCfg.indiceEma?.activo ? resolveFilterData(filtrosCfg.indiceEma.ticker, indiceIv) : null
-        let indiceCloses = null, indiceEmaArr = null
-        if (indiceDataRes) {
-          if (indiceIv === '1wk') { const r = buildAlignedWeekly(indiceDataRes, assetDates, Math.max(1, filtrosCfg.indiceEma?.periodo ?? 200)); indiceCloses = r.closes; indiceEmaArr = r.ema }
-          else { indiceCloses = buildAlignedCloses(indiceDataRes, assetDates); indiceEmaArr = calcEMA(indiceCloses, Math.max(1, filtrosCfg.indiceEma?.periodo ?? 200)) }
-        }
-
-        const cruceIv = filtrosCfg.cruceEma?.intervalo === 'semanal' ? '1wk' : '1d'
-        const cruceDataRes = filtrosCfg.cruceEma?.activo ? resolveFilterData(filtrosCfg.cruceEma.ticker, cruceIv) : null
-        let cruceCloses = null, cruceEmaRArr = null, cruceEmaLArr = null
-        if (cruceDataRes) {
-          if (cruceIv === '1wk') { const rR = buildAlignedWeekly(cruceDataRes, assetDates, Math.max(1, filtrosCfg.cruceEma?.periodoR ?? 10)); const rL = buildAlignedWeekly(cruceDataRes, assetDates, Math.max(1, filtrosCfg.cruceEma?.periodoL ?? 11)); cruceCloses = rR.closes; cruceEmaRArr = rR.ema; cruceEmaLArr = rL.ema }
-          else { cruceCloses = buildAlignedCloses(cruceDataRes, assetDates); cruceEmaRArr = calcEMA(cruceCloses, Math.max(1, filtrosCfg.cruceEma?.periodoR ?? 10)); cruceEmaLArr = calcEMA(cruceCloses, Math.max(1, filtrosCfg.cruceEma?.periodoL ?? 11)) }
-        }
-
-        for (let i = 0; i < ar.data.length; i++) {
-          const date = ar.data[i].date
-          let indiceOk = true, cruceOk = true
-          if (filtrosCfg.indiceEma?.activo) { const ic = indiceCloses?.[i], ie = indiceEmaArr?.[i]; indiceOk = ic == null || ie == null ? true : ic >= ie }
-          if (filtrosCfg.cruceEma?.activo) { const er = cruceEmaRArr?.[i], el = cruceEmaLArr?.[i]; cruceOk = er == null || el == null ? true : er > el }
-          filtroActivoMap[date] = indiceOk && cruceOk
-        }
+        const alineado = (src, semanal, periodo) => semanal
+          ? buildAlignedWeekly(src, assetDates, periodo)
+          : (() => { const closes = buildAlignedCloses(src, assetDates); return { closes, ema: calcEMA(closes, periodo) } })()
+        const filtroActivoMap = construirFiltroActivoMap(filtrosLista, {
+          assetBars: ar.data, assetDates, alineado,
+          resolveMercado: (ticker, semanal) => resolveFilterData(ticker, semanal ? '1wk' : '1d'),
+        })
 
         const filtered = ar.trades.filter(t => filtroActivoMap[t.entryDate] !== false)
         if (filtered.length !== ar.trades.length) {
@@ -1691,19 +1668,13 @@ export default async function handler(req, res) {
     if (assetInterval === '1wk') { try { sp500DataTf = await fetchData('^GSPC', cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, assetInterval) } catch(_) {} }
 
     // ── Fetch datos auxiliares para filtros de mercado ──
-    const anyFiltroOn = !!(filtrosCfg?.indiceEma?.activo || filtrosCfg?.cruceEma?.activo)
+    const filtrosLista = normalizaFiltrosEntrada(filtrosCfg)
+    const anyFiltroOn = hayFiltrosActivos(filtrosLista)
     const filterAuxData = {} // key: `${ticker}:${iv}` → data
-    if (anyFiltroOn && filtrosCfg) {
+    if (anyFiltroOn) {
       const filterFetchJobs = []
-      const auxKeys = new Set()
-      for (const key of ['indiceEma','cruceEma']) {
-        const f = filtrosCfg[key]
-        if (f?.activo && f.ticker) {
-          const iv = f.intervalo === 'semanal' ? '1wk' : '1d'
-          const akey = `${f.ticker}:${iv}`
-          if (f.ticker !== '^GSPC' || iv === '1wk') auxKeys.add(akey)
-        }
-      }
+      // Solo las series externas de los filtros de ámbito mercado; los de ámbito activo usan ar.data.
+      const auxKeys = clavesAuxiliares(filtrosLista, '1wk', '1d')
       for (const akey of auxKeys) {
         const colonIdx = akey.lastIndexOf(':')
         const ticker = akey.slice(0, colonIdx), iv = akey.slice(colonIdx + 1)
@@ -1743,62 +1714,30 @@ export default async function handler(req, res) {
 
     // ── Aplicar filtros de mercado a trades por activo ──
     let filterZones = []
-    if (anyFiltroOn && filtrosCfg) {
+    // Las filterZones de la respuesta se toman del PRIMER activo, así que solo son representativas
+    // si todos los filtros activos son de ámbito mercado (iguales para todos los activos). En cuanto
+    // haya alguno de ámbito activo, las zonas del primero no valen para el resto y no se emiten:
+    // mejor sin campo que con un campo que miente.
+    const zonasRepresentativas = filtrosActivos(filtrosLista).every(f => f.ambito === 'mercado')
+    if (anyFiltroOn) {
       for (const ar of assetResults) {
         const assetDates = ar.data.map(d => d.date)
-        const filtroActivoMap = {}
 
         // Resuelve dataset para ticker+interval (^GSPC diario → sp500Data)
         const resolveFilterData = (ticker, iv) =>
           (ticker === '^GSPC' && iv !== '1wk') ? sp500Data : (filterAuxData[`${ticker}:${iv}`] ?? sp500Data)
 
-        // Índice EMA
-        const indiceIv = filtrosCfg.indiceEma?.intervalo === 'semanal' ? '1wk' : '1d'
-        const indiceDataRes = filtrosCfg.indiceEma?.activo ? resolveFilterData(filtrosCfg.indiceEma.ticker, indiceIv) : null
-        let indiceCloses = null, indiceEmaArr = null
-        if (indiceDataRes) {
-          if (indiceIv === '1wk') {
-            const r = buildAlignedWeekly(indiceDataRes, assetDates, Math.max(1, filtrosCfg.indiceEma?.periodo ?? 200))
-            indiceCloses = r.closes; indiceEmaArr = r.ema
-          } else {
-            indiceCloses = buildAlignedCloses(indiceDataRes, assetDates)
-            indiceEmaArr = calcEMA(indiceCloses, Math.max(1, filtrosCfg.indiceEma?.periodo ?? 200))
-          }
-        }
+        const alineado = (src, semanal, periodo) => semanal
+          ? buildAlignedWeekly(src, assetDates, periodo)
+          : (() => { const closes = buildAlignedCloses(src, assetDates); return { closes, ema: calcEMA(closes, periodo) } })()
 
-        // Cruce EMA
-        const cruceIv = filtrosCfg.cruceEma?.intervalo === 'semanal' ? '1wk' : '1d'
-        const cruceDataRes = filtrosCfg.cruceEma?.activo ? resolveFilterData(filtrosCfg.cruceEma.ticker, cruceIv) : null
-        let cruceCloses = null, cruceEmaRArr = null, cruceEmaLArr = null
-        if (cruceDataRes) {
-          if (cruceIv === '1wk') {
-            const rR = buildAlignedWeekly(cruceDataRes, assetDates, Math.max(1, filtrosCfg.cruceEma?.periodoR ?? 10))
-            const rL = buildAlignedWeekly(cruceDataRes, assetDates, Math.max(1, filtrosCfg.cruceEma?.periodoL ?? 11))
-            cruceCloses = rR.closes; cruceEmaRArr = rR.ema; cruceEmaLArr = rL.ema
-          } else {
-            cruceCloses = buildAlignedCloses(cruceDataRes, assetDates)
-            cruceEmaRArr = calcEMA(cruceCloses, Math.max(1, filtrosCfg.cruceEma?.periodoR ?? 10))
-            cruceEmaLArr = calcEMA(cruceCloses, Math.max(1, filtrosCfg.cruceEma?.periodoL ?? 11))
-          }
-        }
-
-        // Calcular filtroActivoMap para este activo
-        for (let i = 0; i < ar.data.length; i++) {
-          const date = ar.data[i].date
-          let indiceOk = true, cruceOk = true
-          if (filtrosCfg.indiceEma?.activo) {
-            const ic = indiceCloses?.[i], ie = indiceEmaArr?.[i]
-            indiceOk = ic == null || ie == null ? true : ic >= ie
-          }
-          if (filtrosCfg.cruceEma?.activo) {
-            const er = cruceEmaRArr?.[i], el = cruceEmaLArr?.[i]
-            cruceOk = er == null || el == null ? true : er > el
-          }
-          filtroActivoMap[date] = indiceOk && cruceOk
-        }
+        const filtroActivoMap = construirFiltroActivoMap(filtrosLista, {
+          assetBars: ar.data, assetDates, alineado,
+          resolveMercado: (ticker, semanal) => resolveFilterData(ticker, semanal ? '1wk' : '1d'),
+        })
 
         // Guardar filterZones del primer activo para incluirlas en la respuesta
-        if (!filterZones.length) {
+        if (zonasRepresentativas && !filterZones.length) {
           let zoneStart = null
           for (const bar of ar.data) {
             const blocked = !filtroActivoMap[bar.date]

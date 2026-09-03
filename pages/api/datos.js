@@ -1,6 +1,7 @@
 // pages/api/datos.js — Motor V50 v3.0 (V9.260)
 
 import { calcEMA, calcSMA, calcRSI, calcATR, calcMACD } from '../../lib/backtester'
+import { normalizaFiltrosEntrada, hayFiltrosActivos, clavesAuxiliares, construirFiltroActivoMap, filtrosActivos } from '../../lib/filtros'
 
 const SUPA_URL = process.env.SUPABASE_URL || 'https://uqjngxxbdlquiuhywiuc.supabase.co'
 const SUPA_KEY = process.env.SUPABASE_ANON_KEY || 'sb_publishable_st9QJ3zcQbY5ec-JhxwqXQ_joy3udz3'
@@ -304,8 +305,8 @@ export default async function handler(req, res) {
     if (!data.length) throw new Error('Sin datos para ' + simbolo)
 
     // ── Fetch SP500 + filtro auxiliares en paralelo ──
-    const filtrosCfg = filtros || {}
-    const anyFiltroOn = !!(filtrosCfg.indiceEma?.activo || filtrosCfg.cruceEma?.activo)
+    const filtrosLista = normalizaFiltrosEntrada(filtros)
+    const anyFiltroOn = hayFiltrosActivos(filtrosLista)
     let sp500Data = null
     const sp500Map = {}
     const auxDataMap = {} // ticker -> data (para todos los filtros no-GSPC, dedupado)
@@ -328,17 +329,9 @@ export default async function handler(req, res) {
       )
     }
     if (anyFiltroOn) {
-      // Colectar (ticker:interval) únicos de todos los filtros activos con EMA
-      // ^GSPC diario ya está en sp500Data; solo añadir si ticker distinto o intervalo semanal
-      const auxKeys = new Set()
-      for (const key of ['indiceEma','cruceEma']) {
-        const f = filtrosCfg[key]
-        if (f?.activo && f.ticker) {
-          const iv = f.intervalo === 'semanal' ? 'w' : 'd'
-          const akey = `${f.ticker}:${iv}`
-          if (f.ticker !== '^GSPC' || iv === 'w') auxKeys.add(akey)
-        }
-      }
+      // Series externas únicas que piden los filtros de ámbito mercado (los de ámbito activo se
+      // evalúan sobre `data`, ya descargada, así que no añaden ninguna petición).
+      const auxKeys = clavesAuxiliares(filtrosLista, 'w', 'd')
       for (const akey of auxKeys) {
         const colonIdx = akey.lastIndexOf(':')
         const ticker = akey.slice(0, colonIdx), iv = akey.slice(colonIdx + 1)
@@ -357,57 +350,25 @@ export default async function handler(req, res) {
       const resolveData = (ticker, iv) =>
         (ticker === '^GSPC' && iv !== 'w') ? sp500Data : (auxDataMap[`${ticker}:${iv}`] ?? sp500Data)
 
-      // Índice EMA
-      const indiceIv = filtrosCfg.indiceEma?.intervalo === 'semanal' ? 'w' : 'd'
-      const indiceDataRes = filtrosCfg.indiceEma?.activo ? resolveData(filtrosCfg.indiceEma.ticker, indiceIv) : null
-      let indiceCloses = null, indiceEmaArr = null
-      if (indiceDataRes) {
-        if (indiceIv === 'w') {
-          const r = buildAlignedWeekly(indiceDataRes, assetDates, Math.max(1, filtrosCfg.indiceEma?.periodo ?? 200))
-          indiceCloses = r.closes; indiceEmaArr = r.ema
-        } else {
-          indiceCloses = buildAlignedCloses(indiceDataRes, assetDates)
-          indiceEmaArr = calcEMA(indiceCloses, Math.max(1, filtrosCfg.indiceEma?.periodo ?? 200))
-        }
-      }
+      // Proyecta una serie sobre las fechas del activo y calcula su EMA. Semanal y diario se
+      // resuelven igual que antes; buildAlignedWeekly evita el look-ahead de las velas semanales.
+      const alineado = (src, semanal, periodo) => semanal
+        ? buildAlignedWeekly(src, assetDates, periodo)
+        : (() => { const closes = buildAlignedCloses(src, assetDates); return { closes, ema: calcEMA(closes, periodo) } })()
 
-      // Cruce EMA (EMA rápida > EMA lenta del ticker de referencia)
-      const cruceIv = filtrosCfg.cruceEma?.intervalo === 'semanal' ? 'w' : 'd'
-      const cruceDataRes = filtrosCfg.cruceEma?.activo ? resolveData(filtrosCfg.cruceEma.ticker, cruceIv) : null
-      let cruceCloses = null, cruceEmaRArr = null, cruceEmaLArr = null
-      if (cruceDataRes) {
-        if (cruceIv === 'w') {
-          const rR = buildAlignedWeekly(cruceDataRes, assetDates, Math.max(1, filtrosCfg.cruceEma?.periodoR ?? 10))
-          const rL = buildAlignedWeekly(cruceDataRes, assetDates, Math.max(1, filtrosCfg.cruceEma?.periodoL ?? 11))
-          cruceCloses = rR.closes; cruceEmaRArr = rR.ema; cruceEmaLArr = rL.ema
-        } else {
-          cruceCloses = buildAlignedCloses(cruceDataRes, assetDates)
-          cruceEmaRArr = calcEMA(cruceCloses, Math.max(1, filtrosCfg.cruceEma?.periodoR ?? 10))
-          cruceEmaLArr = calcEMA(cruceCloses, Math.max(1, filtrosCfg.cruceEma?.periodoL ?? 11))
-        }
-      }
+      Object.assign(filtroActivoMap, construirFiltroActivoMap(filtrosLista, {
+        assetBars: data, assetDates, alineado,
+        resolveMercado: (ticker, semanal) => resolveData(ticker, semanal ? 'w' : 'd'),
+      }))
 
-      // Mapas de visualización
+      // Serie de visualización del índice: la del primer filtro de mercado que la use.
+      const fIndice = filtrosActivos(filtrosLista).find(f => f.tipo === 'indiceEma' && f.ambito === 'mercado')
       const indiceMap = {}
-      if (indiceDataRes) indiceDataRes.forEach(d => { indiceMap[d.date] = d.close })
-
-      for (let i = 0; i < data.length; i++) {
-        const date = data[i].date
-        let indiceOk = true, cruceOk = true
-
-        if (filtrosCfg.indiceEma?.activo) {
-          const ic = indiceCloses?.[i], ie = indiceEmaArr?.[i]
-          indiceOk = ic == null || ie == null ? true : ic >= ie
-        }
-        if (filtrosCfg.cruceEma?.activo) {
-          const er = cruceEmaRArr?.[i], el = cruceEmaLArr?.[i]
-          cruceOk = er == null || el == null ? true : er > el
-        }
-        filtroActivoMap[date] = indiceOk && cruceOk
-
-        // Inyectar en barra para visualización
-        data[i].indiceClose = indiceMap[date] ?? null
+      if (fIndice) {
+        const src = resolveData(fIndice.params?.ticker, fIndice.params?.intervalo === 'semanal' ? 'w' : 'd')
+        if (src) src.forEach(d => { indiceMap[d.date] = d.close })
       }
+      for (let i = 0; i < data.length; i++) data[i].indiceClose = indiceMap[data[i].date] ?? null
 
       // Build filterZones (franjas donde filtroActivo = false)
       let zoneStart = null

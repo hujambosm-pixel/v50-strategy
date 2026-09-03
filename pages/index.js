@@ -5,7 +5,7 @@ import { calcMetrics, MONO, fmt, fmtDate, f2, tvSym, pesosScoreHistorico, umbral
 import { WATCHLIST_DEFAULT } from '../lib/constants'
 import { getSupaUrl, getSupaKey, getSupaH, setCurrentJwt, getCurrentJwt } from '../lib/supabase'
 import { loadSettings, saveSettings, saveSettingsRemote, loadSettingsRemote } from '../lib/settings'
-import { mergeFiltros, loadFiltros, guardarFiltros, hayFiltroActivo, aplanarFiltros } from '../lib/filtros'
+import { mergeFiltros, loadFiltros, guardarFiltros, hayFiltroActivo } from '../lib/filtros'
 import FiltrosPanel from '../components/FiltrosPanel'
 import { supabase } from '../lib/supabaseClient'
 import { fetchConditions, lsGetConds, lsSaveConds, COND_LS_KEY } from '../lib/conditions'
@@ -740,10 +740,10 @@ export default function Home() {
   const [filtros,setFiltros]=useState(filtrosBoot.filtros)
   // Vista saneada para el RENDER: segunda red, por si el estado se degradara en caliente.
   const filtrosSafe=useMemo(()=>mergeFiltros(filtros),[filtros])
-  // La ÚNICA forma que ve el backend. Se deriva una vez y se usa en los diez puntos de envío: si
-  // alguno mandara la lista cruda, el backend no reconocería nada y los filtros dejarían de
-  // aplicarse en silencio, arrastrando también al ranking, que escribe scores en Supabase.
-  const filtrosBackend=useMemo(()=>aplanarFiltros(filtrosSafe),[filtrosSafe])
+  // Lo que ve el backend, que desde el commit anterior entiende la lista: ya no hay traducción, se
+  // envía la lista saneada. Sigue siendo una única derivación usada por los diez puntos de envío,
+  // para que ninguno pueda quedarse atrás en el siguiente cambio de forma.
+  const filtrosBackend=filtrosSafe
   // Guardado: en cada cambio, y también en el montaje, lo que de paso normaliza en disco una lista
   // que llegara incompleta. Un fallo de localStorage (modo privado, cuota) no debe romper nada.
   useEffect(()=>{ guardarFiltros(filtros) },[filtros])
@@ -4785,7 +4785,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.718</title>
+        <title>Trading Simulator V9.719</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4863,7 +4863,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.718
+            <span className="dot"/>Trading Simulator V9.719
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
