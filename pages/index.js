@@ -4766,7 +4766,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.710</title>
+        <title>Trading Simulator V9.711</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4844,7 +4844,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.710
+            <span className="dot"/>Trading Simulator V9.711
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -8302,9 +8302,13 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       </>
                     ):(
                       [
-                        // Vista Simple retirada del multibacktest (V9.562): solo Compuesto. El botón muestra
-                        // el nombre de la estrategia activa (misma fuente que la tabla/leyenda, sin sufijo de modo).
-                        {key:'compound',label:(strategies.find(s=>s.id===currentStratId)?.name||(mcDisplayResults[0]?.name||'').split(' · ')[0]||'Compuesto'),color:'#00e5a0',state:mcShowCompound,set:setMcShowCompound},
+                        // Vista Simple retirada del multibacktest (V9.562): solo Compuesto. El botón rotula con
+                        // mcSingleStratName —misma fuente que la tabla y la leyenda—, que prioriza la estrategia
+                        // SELECCIONADA sobre la activa global. Este punto se quedó fuera de V9.710 y por eso el
+                        // botón seguía mostrando la del selector superior aunque se hubiera ejecutado otra.
+                        // La cascada posterior queda como red de seguridad: hoy es inalcanzable porque
+                        // mcSingleStratName ya trae su propio fallback ('Estrategia activa').
+                        {key:'compound',label:(mcSingleStratName||(mcDisplayResults[0]?.name||'').split(' · ')[0]||'Compuesto'),color:'#00e5a0',state:mcShowCompound,set:setMcShowCompound},
                         {key:'bh',      label:'B&H Diversificado',color:'#a0b4c8',state:mcShowBH,      set:setMcShowBH},
                         {key:'sp500',   label:'B&H SP500',        color:'#9b72ff',state:mcShowSP500,   set:setMcShowSP500},
                         {key:'fl',      label:'Flotante',         color:'#ff9a3c',state:showMultiFloat, set:setShowMultiFloat},
