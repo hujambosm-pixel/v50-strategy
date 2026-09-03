@@ -729,6 +729,43 @@ const FILTROS_DEFAULT={
   cruceEma: {activo:false,ticker:'^GSPC',periodoR:10,periodoL:11,intervalo:'diario'},
 }
 
+// Persistencia de los filtros: CLAVE PROPIA, deliberadamente fuera de v50_settings. SettingsModal
+// toma una instantánea de los ajustes al montarse y guarda esa instantánea entera, así que un dato
+// que se escribe a cada clic de un toggle se perdería en la secuencia abrir Ajustes → tocar un
+// filtro → Guardar. Sin sincronización con Supabase: la estructura va a cambiar en los próximos
+// commits del rediseño y sincronizar entre dispositivos multiplicaría los casos de migración.
+const FILTROS_LS_KEY='v50_filtros'
+const FILTROS_LS_VERSION=1
+
+// Completa el objeto con los defaults. Se aplica ANTES de entrar en el estado, no solo en
+// filtrosSafe: el backend recibe el objeto CRUDO del estado, de modo que un estado incompleto haría
+// divergir lo pintado de lo calculado (el render mostraría un filtro activo por su default y el
+// backend no lo aplicaría). Siempre devuelve un objeto nuevo → FILTROS_DEFAULT nunca se comparte
+// por referencia ni puede acabar mutado.
+function mergeFiltros(raw){
+  const out={}
+  for(const k of Object.keys(FILTROS_DEFAULT)) out[k]={...FILTROS_DEFAULT[k],...(raw?.[k]||{})}
+  return out
+}
+const hayFiltroActivo=(f)=>Object.keys(FILTROS_DEFAULT).some(k=>f?.[k]?.activo)
+
+// Lectura síncrona en el montaje. Descarta sin intentar migrar si la marca de versión no es la
+// esperada o si el contenido no es un objeto: este commit no migra nada. `restaurado` distingue
+// "venía de otra sesión" de "defaults de fábrica" — solo lo primero despliega la sección.
+// En SSR no existe localStorage: el acceso lanza, lo recoge el catch y se arranca con defaults.
+function loadFiltros(){
+  const vacio={filtros:mergeFiltros(null),restaurado:false}
+  try{
+    const raw=localStorage.getItem(FILTROS_LS_KEY)
+    if(!raw) return vacio
+    const parsed=JSON.parse(raw)
+    if(parsed?.v!==FILTROS_LS_VERSION) return vacio
+    const data=parsed.data
+    if(!data||typeof data!=='object'||Array.isArray(data)) return vacio
+    return {filtros:mergeFiltros(data),restaurado:true}
+  }catch(_){ return vacio }
+}
+
 export default function Home() {
   const [simbolo,setSimbolo]=useState('^GSPC')
   const [displayedSimbolo,setDisplayedSimbolo]=useState('^GSPC') // lags behind simbolo — updates only when chart data is ready
@@ -740,17 +777,23 @@ export default function Home() {
   const [tipoStop,setTipoStop]=useState('tecnico'),[atrP,setAtrP]=useState(14),[atrM,setAtrM]=useState(1.0)
   const [sinPerdidas,setSinPerdidas]=useState(true),[reentry,setReentry]=useState(true)
   const [tipoFiltro,setTipoFiltro]=useState('none'),[sp500EmaR,setSp500EmaR]=useState(10),[sp500EmaL,setSp500EmaL]=useState(11)
-  const [filtros,setFiltros]=useState(FILTROS_DEFAULT)
-  // Vista saneada para el RENDER: cada clave ausente o incompleta se completa con su default, de modo
-  // que un objeto con forma antigua no pueda romper el JSX, que lee sin optional chaining. Hoy `filtros`
-  // siempre viene del literal y filtrosSafe es idéntico; el blindaje es para cuando se persista.
+  // Lectura de lo persistido, una sola vez y de forma síncrona en el montaje: no hay un instante con
+  // los defaults antes de aplicar lo guardado. Tres consumidores: el estado, y el desplegado inicial
+  // de las dos secciones de filtros.
+  const [filtrosBoot]=useState(loadFiltros)   // {filtros, restaurado}
+  const [filtros,setFiltros]=useState(filtrosBoot.filtros)
+  // Vista saneada para el RENDER: segunda red, por si el estado se degradara en caliente. El JSX lee
+  // sin optional chaining, así que una clave ausente sería un TypeError en pleno render.
   // Solo para pintar: al backend se sigue enviando `filtros` tal cual, sin cambios.
-  const filtrosSafe=useMemo(()=>{
-    const out={}
-    for(const k of Object.keys(FILTROS_DEFAULT)) out[k]={...FILTROS_DEFAULT[k],...(filtros?.[k]||{})}
-    return out
+  const filtrosSafe=useMemo(()=>mergeFiltros(filtros),[filtros])
+  // Guardado: en cada cambio, y también en el montaje, lo que de paso normaliza en disco un objeto
+  // que llegara incompleto. Un fallo de localStorage (modo privado, cuota) no debe romper nada.
+  useEffect(()=>{
+    try{ localStorage.setItem(FILTROS_LS_KEY,JSON.stringify({v:FILTROS_LS_VERSION,data:filtros})) }catch(_){}
   },[filtros])
-  const [filtrosOpen,setFiltrosOpen]=useState(false)
+  // Se auto-despliega solo si la configuración viene de otra sesión y trae algún filtro activo: así
+  // no pasa desapercibida bajo una cabecera plegada. Con los defaults de fábrica sigue colapsada.
+  const [filtrosOpen,setFiltrosOpen]=useState(()=>filtrosBoot.restaurado&&hayFiltroActivo(filtrosBoot.filtros))
   const [result,setResult]=useState(null),[loading,setLoading]=useState(false),[error,setError]=useState(null)
   const [labelMode,setLabelMode]=useState(1),[rulerOn,setRulerOn]=useState(false)
   const [chartViewFull,setChartViewFull]=useState(false)
@@ -1072,7 +1115,7 @@ export default function Home() {
     return strategies.find(s=>s.id===sid)?.name||'Estrategia activa'
   })()
   const [mcSectionOpen,setMcSectionOpen]=useState({mode:false,strats:false})
-  const [mcFiltrosOpen,setMcFiltrosOpen]=useState(false)
+  const [mcFiltrosOpen,setMcFiltrosOpen]=useState(()=>filtrosBoot.restaurado&&hayFiltroActivo(filtrosBoot.filtros))
   const [mcStratVisible,setMcStratVisible]=useState({})     // {id:bool}
   const [mcAssetOpen,setMcAssetOpen]=useState({})           // {stratId:bool} acordeón resumen por activo
   const [mcShowBHCompare,setMcShowBHCompare]=useState(true) // B&H curve toggle in multi-strategy chart
@@ -4784,7 +4827,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.715</title>
+        <title>Trading Simulator V9.716</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4862,7 +4905,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.715
+            <span className="dot"/>Trading Simulator V9.716
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
