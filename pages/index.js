@@ -1060,7 +1060,26 @@ export default function Home() {
   const [mcProgress,setMcProgress]=useState(null)           // null|{current,total,name}
   // mcDisplayResults: portfolio real viene inyectado en mcMultiResults por el backend (portfolioMode)
   // El cálculo de promedio en cliente ha sido eliminado — __portfolio__ lo calcula handlePortfolioMode
-  const mcDisplayResults=mcMultiResults
+  //
+  // ORDEN DE PRESENTACIÓN. mcMultiResults llega en el orden de mcStratSelected, que es el orden en
+  // que el usuario fue MARCANDO las casillas ([...prev, s.id] en el selector), no el de la lista.
+  // Por eso dos ejecuciones con las mismas estrategias podían pintar las filas en orden distinto:
+  // el runner es secuencial y determinista, pero su entrada no lo era. Aquí se reordena para pintar
+  // en el mismo orden que la lista lateral, que es `strategies`.
+  // Se ordena UNA sola vez y aguas arriba: la tabla, los botones de la fila EQUITY, la leyenda y las
+  // series del gráfico leen todos de aquí, así que quedan coherentes entre sí.
+  // No se toca el color: cada resultado ya trae el suyo, asignado por posición en mcStratSelected e
+  // idéntico al punto de la lista lateral. Reordenar filas conservando r.color mantiene la
+  // correspondencia color ↔ estrategia ↔ curva.
+  // En comparativa de MODOS no se ordena: ahí las entradas son modos de una misma estrategia y su
+  // orden (el de modesToRun) sí es significativo.
+  const mcDisplayResults=useMemo(()=>{
+    if(mcIsModoCompare) return mcMultiResults
+    // Lo que no está en `strategies` —hoy solo ◈ Multicartera— va al final, y entre sí conserva su
+    // orden porque Array.prototype.sort es estable.
+    const pos=(id)=>{const k=strategies.findIndex(s=>s.id===id);return k===-1?Number.MAX_SAFE_INTEGER:k}
+    return [...mcMultiResults].sort((a,b)=>pos(a.id)-pos(b.id))
+  },[mcMultiResults,mcIsModoCompare,strategies])
   // Nombre con el que ROTULAR el resultado cuando no viaja dentro de una lista con nombre propio:
   // con UNA estrategia y UN modo, el runner hace una llamada única, guarda en mcResult y deja
   // mcMultiResults vacío, así que la etiqueta hay que reconstruirla. Prioriza la estrategia
@@ -4785,7 +4804,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.720</title>
+        <title>Trading Simulator V9.721</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4863,7 +4882,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.720
+            <span className="dot"/>Trading Simulator V9.721
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -8401,7 +8420,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       </div>
                       {isMultiHist&&(
                         <div style={{display:'flex',gap:3,alignItems:'center',flexWrap:'wrap'}}>
-                          {mcMultiResults.map(r=>{
+                          {mcDisplayResults.map(r=>{
                             // __portfolio__ se resalta también por defecto (mcHistStratId null = historial del portfolio)
                             const isAct=mcHistStratId===r.id||(mcHistStratId===null&&r.id==='__portfolio__')
                             return(
@@ -8530,7 +8549,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                   const isMulti=mcMultiResults.length>1
                   // Estrategias efectivas: multi-run o estrategia activa única
                   const strats=isMulti
-                    ? mcMultiResults.slice(0,MAX_STRATS).filter(r=>mcChartsStratVisible[r.id]!==false)
+                    ? mcDisplayResults.slice(0,MAX_STRATS).filter(r=>mcChartsStratVisible[r.id]!==false)
                     : [{
                         id:currentStratId||'__single__',
                         name:mcSingleStratName,
@@ -8561,7 +8580,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           )}
                           {/* Leyenda */}
                           <div style={{padding:'4px 16px',borderBottom:'1px solid var(--border)',display:'flex',gap:10,flexWrap:'wrap',background:'var(--bg2)'}}>
-                            {(isMulti?mcMultiResults.slice(0,MAX_STRATS):[{id:currentStratId||'__single__',name:mcSingleStratName,color:STRAT_COMPARE_COLORS[0]}]).map(r=>{
+                            {(isMulti?mcDisplayResults.slice(0,MAX_STRATS):[{id:currentStratId||'__single__',name:mcSingleStratName,color:STRAT_COMPARE_COLORS[0]}]).map(r=>{
                               const on=mcChartsStratVisible[r.id]!==false
                               return(
                                 <button key={r.id}
