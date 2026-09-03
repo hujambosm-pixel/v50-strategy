@@ -731,7 +731,7 @@ export default function Home() {
   const [tipoStop,setTipoStop]=useState('tecnico'),[atrP,setAtrP]=useState(14),[atrM,setAtrM]=useState(1.0)
   const [sinPerdidas,setSinPerdidas]=useState(true),[reentry,setReentry]=useState(true)
   const [tipoFiltro,setTipoFiltro]=useState('none'),[sp500EmaR,setSp500EmaR]=useState(10),[sp500EmaL,setSp500EmaL]=useState(11)
-  const [filtros,setFiltros]=useState({vix:{activo:false,umbral:25,intervalo:'diario'},indiceEma:{activo:true,ticker:'^GSPC',periodo:10,intervalo:'diario'},cruceEma:{activo:false,ticker:'^GSPC',periodoR:10,periodoL:11,intervalo:'diario'}})
+  const [filtros,setFiltros]=useState({indiceEma:{activo:true,ticker:'^GSPC',periodo:10,intervalo:'diario'},cruceEma:{activo:false,ticker:'^GSPC',periodoR:10,periodoL:11,intervalo:'diario'}})
   const [filtrosOpen,setFiltrosOpen]=useState(false)
   const [result,setResult]=useState(null),[loading,setLoading]=useState(false),[error,setError]=useState(null)
   const [labelMode,setLabelMode]=useState(1),[rulerOn,setRulerOn]=useState(false)
@@ -4766,7 +4766,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.712</title>
+        <title>Trading Simulator V9.713</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4844,7 +4844,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.712
+            <span className="dot"/>Trading Simulator V9.713
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5017,8 +5017,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
 
                 {/* ── Filtros de mercado ── */}
                 {(()=>{
-                  const anyOn=filtros.vix.activo||filtros.indiceEma.activo||filtros.cruceEma.activo
-                  const onCnt=[filtros.vix.activo,filtros.indiceEma.activo,filtros.cruceEma.activo].filter(Boolean).length
+                  const anyOn=filtros.indiceEma.activo||filtros.cruceEma.activo
+                  const onCnt=[filtros.indiceEma.activo,filtros.cruceEma.activo].filter(Boolean).length
                   const fInp={background:'#0a1520',border:'1px solid #1a3d5a',borderRadius:3,color:'var(--text)',fontFamily:MONO,fontSize:10,padding:'1px 4px',boxSizing:'border-box',outline:'none',width:'100%'}
                   const fToggle=(key)=>setFiltros(p=>({...p,[key]:{...p[key],activo:!p[key].activo}}))
                   const fSet=(key,field,val)=>setFiltros(p=>({...p,[key]:{...p[key],[field]:val}}))
@@ -5055,30 +5055,6 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
 
                     {filtrosOpen&&(
                       <div style={{padding:'2px 10px 8px',display:'flex',flexDirection:'column',gap:7}}>
-
-                        {/* ── Filtro VIX ── */}
-                        <div>
-                          <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:filtros.vix.activo?4:0}}>
-                            <div style={toggleBtn(filtros.vix.activo)} onClick={()=>fToggle('vix')}>
-                              <div style={toggleKnob(filtros.vix.activo)}/>
-                            </div>
-                            <span style={lbl(filtros.vix.activo)}>VIX &lt; umbral</span>
-                          </div>
-                          {filtros.vix.activo&&(
-                            <div style={{display:'flex',alignItems:'center',flexWrap:'wrap',gap:5,rowGap:4,paddingLeft:34}}>
-                              <span style={plbl}>Umbral</span>
-                              <input type="number" min={5} max={80} step={1}
-                                value={filtros.vix.umbral}
-                                onChange={e=>fSet('vix','umbral',Number(e.target.value)||25)}
-                                style={{...fInp,width:54}}/>
-                              <span style={{display:'inline-flex',alignItems:'center',gap:3,flexShrink:0}}>
-                                <span style={plbl}>Int</span>
-                                <button style={ivBtn(filtros.vix.intervalo!=='semanal',false)} onClick={()=>fSet('vix','intervalo','diario')}>D</button>
-                                <button style={ivBtn(filtros.vix.intervalo==='semanal',true)} onClick={()=>fSet('vix','intervalo','semanal')}>S</button>
-                              </span>
-                            </div>
-                          )}
-                        </div>
 
                         {/* ── Filtro Índice EMA ── */}
                         <div>
@@ -6084,8 +6060,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
 
                 {/* FILTROS DE MERCADO — colapsable (MC) */}
                 {(()=>{
-                  const anyOn=filtros.vix.activo||filtros.indiceEma.activo||filtros.cruceEma.activo
-                  const onCnt=[filtros.vix.activo,filtros.indiceEma.activo,filtros.cruceEma.activo].filter(Boolean).length
+                  const anyOn=filtros.indiceEma.activo||filtros.cruceEma.activo
+                  const onCnt=[filtros.indiceEma.activo,filtros.cruceEma.activo].filter(Boolean).length
                   const fInp={background:'#0a1520',border:'1px solid #1a3d5a',borderRadius:3,color:'var(--text)',fontFamily:MONO,fontSize:10,padding:'1px 4px',boxSizing:'border-box',outline:'none',width:'100%'}
                   const fToggle=(key)=>setFiltros(p=>({...p,[key]:{...p[key],activo:!p[key].activo}}))
                   const fSet=(key,field,val)=>setFiltros(p=>({...p,[key]:{...p[key],[field]:val}}))
@@ -6109,24 +6085,6 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     </div>
                     {mcFiltrosOpen&&(
                       <div style={{padding:'2px 12px 8px',display:'flex',flexDirection:'column',gap:7,borderBottom:'1px solid var(--border)'}}>
-                        {/* VIX */}
-                        <div>
-                          <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:filtros.vix.activo?4:0}}>
-                            <div style={toggleBtn(filtros.vix.activo)} onClick={()=>fToggle('vix')}><div style={toggleKnob(filtros.vix.activo)}/></div>
-                            <span style={lbl(filtros.vix.activo)}>VIX &lt; umbral</span>
-                          </div>
-                          {filtros.vix.activo&&(
-                            <div style={{display:'flex',alignItems:'center',flexWrap:'wrap',gap:5,rowGap:4,paddingLeft:34}}>
-                              <span style={plbl}>Umbral</span>
-                              <input type="number" min={5} max={80} step={1} value={filtros.vix.umbral} onChange={e=>fSet('vix','umbral',Number(e.target.value)||25)} style={{...fInp,width:54}}/>
-                              <span style={{display:'inline-flex',alignItems:'center',gap:3,flexShrink:0}}>
-                                <span style={plbl}>Int</span>
-                                <button style={ivBtn(filtros.vix.intervalo!=='semanal',false)} onClick={()=>fSet('vix','intervalo','diario')}>D</button>
-                                <button style={ivBtn(filtros.vix.intervalo==='semanal',true)} onClick={()=>fSet('vix','intervalo','semanal')}>S</button>
-                              </span>
-                            </div>
-                          )}
-                        </div>
                         {/* Índice EMA */}
                         <div>
                           <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:filtros.indiceEma.activo?4:0}}>

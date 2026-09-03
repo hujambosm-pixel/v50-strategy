@@ -305,8 +305,8 @@ export default async function handler(req, res) {
 
     // ── Fetch SP500 + filtro auxiliares en paralelo ──
     const filtrosCfg = filtros || {}
-    const anyFiltroOn = !!(filtrosCfg.vix?.activo || filtrosCfg.indiceEma?.activo || filtrosCfg.cruceEma?.activo)
-    let sp500Data = null, vixRawData = null
+    const anyFiltroOn = !!(filtrosCfg.indiceEma?.activo || filtrosCfg.cruceEma?.activo)
+    let sp500Data = null
     const sp500Map = {}
     const auxDataMap = {} // ticker -> data (para todos los filtros no-GSPC, dedupado)
     // Fase 2C: SP500 en el timeframe del activo (assetInterval), SOLO para el sp500Close visual del RS
@@ -328,9 +328,6 @@ export default async function handler(req, res) {
       )
     }
     if (anyFiltroOn) {
-      const vixIv = filtrosCfg.vix?.intervalo === 'semanal' ? 'w' : 'd'
-      if (filtrosCfg.vix?.activo)
-        fetchJobs.push(fetchAV('^VIX', years + 1, vixIv).then(r => { vixRawData = r.filter(d => d.date >= data[0].date) }).catch(() => {}))
       // Colectar (ticker:interval) únicos de todos los filtros activos con EMA
       // ^GSPC diario ya está en sp500Data; solo añadir si ticker distinto o intervalo semanal
       const auxKeys = new Set()
@@ -359,9 +356,6 @@ export default async function handler(req, res) {
       // Resuelve el dataset para un ticker+interval (^GSPC diario → sp500Data, resto → auxDataMap)
       const resolveData = (ticker, iv) =>
         (ticker === '^GSPC' && iv !== 'w') ? sp500Data : (auxDataMap[`${ticker}:${iv}`] ?? sp500Data)
-
-      // VIX (forward-fill funciona igual sea semanal o diario)
-      const vixCloses = filtrosCfg.vix?.activo ? buildAlignedCloses(vixRawData, assetDates) : null
 
       // Índice EMA
       const indiceIv = filtrosCfg.indiceEma?.intervalo === 'semanal' ? 'w' : 'd'
@@ -394,18 +388,13 @@ export default async function handler(req, res) {
       }
 
       // Mapas de visualización
-      const vixMap = {}, indiceMap = {}
-      if (vixRawData) vixRawData.forEach(d => { vixMap[d.date] = d.close })
+      const indiceMap = {}
       if (indiceDataRes) indiceDataRes.forEach(d => { indiceMap[d.date] = d.close })
 
       for (let i = 0; i < data.length; i++) {
         const date = data[i].date
-        let vixOk = true, indiceOk = true, cruceOk = true
+        let indiceOk = true, cruceOk = true
 
-        if (filtrosCfg.vix?.activo) {
-          const vc = vixCloses?.[i]
-          vixOk = vc == null ? true : vc < (filtrosCfg.vix.umbral ?? 25)
-        }
         if (filtrosCfg.indiceEma?.activo) {
           const ic = indiceCloses?.[i], ie = indiceEmaArr?.[i]
           indiceOk = ic == null || ie == null ? true : ic >= ie
@@ -414,10 +403,9 @@ export default async function handler(req, res) {
           const er = cruceEmaRArr?.[i], el = cruceEmaLArr?.[i]
           cruceOk = er == null || el == null ? true : er > el
         }
-        filtroActivoMap[date] = vixOk && indiceOk && cruceOk
+        filtroActivoMap[date] = indiceOk && cruceOk
 
         // Inyectar en barra para visualización
-        data[i].vixClose    = vixMap[date]    ?? null
         data[i].indiceClose = indiceMap[date] ?? null
       }
 

@@ -1383,15 +1383,11 @@ async function handlePortfolioMode(req, res) {
     // 4b. Filtros de mercado — portar el mismo bloque del path único
     //     Se ejecuta DESPUÉS de runCodeJsAsset (assetResults ya tiene trades con metadata)
     //     y ANTES de construir curvas. Los datos auxiliares se descargan UNA sola vez.
-    const anyFiltroOn = !!(filtrosCfg?.vix?.activo || filtrosCfg?.indiceEma?.activo || filtrosCfg?.cruceEma?.activo)
+    const anyFiltroOn = !!(filtrosCfg?.indiceEma?.activo || filtrosCfg?.cruceEma?.activo)
     if (anyFiltroOn && filtrosCfg) {
-      // Descargar datos auxiliares una vez (VIX + EMA indices)
-      let vixRawData = null
+      // Descargar datos auxiliares una vez (EMA indices)
       const filterAuxData = {}
       const filterFetchJobs = []
-      const vixIv = filtrosCfg.vix?.intervalo === 'semanal' ? '1wk' : '1d'
-      if (filtrosCfg.vix?.activo)
-        filterFetchJobs.push(fetchData('^VIX', cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, vixIv).then(r => { vixRawData = r }).catch(() => {}))
       const auxKeys = new Set()
       for (const key of ['indiceEma','cruceEma']) {
         const f = filtrosCfg[key]
@@ -1417,8 +1413,6 @@ async function handlePortfolioMode(req, res) {
         const assetDates = ar.data.map(d => d.date)
         const filtroActivoMap = {}
 
-        const vixCloses = filtrosCfg.vix?.activo ? buildAlignedCloses(vixRawData, assetDates) : null
-
         const indiceIv = filtrosCfg.indiceEma?.intervalo === 'semanal' ? '1wk' : '1d'
         const indiceDataRes = filtrosCfg.indiceEma?.activo ? resolveFilterData(filtrosCfg.indiceEma.ticker, indiceIv) : null
         let indiceCloses = null, indiceEmaArr = null
@@ -1437,11 +1431,10 @@ async function handlePortfolioMode(req, res) {
 
         for (let i = 0; i < ar.data.length; i++) {
           const date = ar.data[i].date
-          let vixOk = true, indiceOk = true, cruceOk = true
-          if (filtrosCfg.vix?.activo) { const vc = vixCloses?.[i]; vixOk = vc == null ? true : vc < (filtrosCfg.vix.umbral ?? 25) }
+          let indiceOk = true, cruceOk = true
           if (filtrosCfg.indiceEma?.activo) { const ic = indiceCloses?.[i], ie = indiceEmaArr?.[i]; indiceOk = ic == null || ie == null ? true : ic >= ie }
           if (filtrosCfg.cruceEma?.activo) { const er = cruceEmaRArr?.[i], el = cruceEmaLArr?.[i]; cruceOk = er == null || el == null ? true : er > el }
-          filtroActivoMap[date] = vixOk && indiceOk && cruceOk
+          filtroActivoMap[date] = indiceOk && cruceOk
         }
 
         const filtered = ar.trades.filter(t => filtroActivoMap[t.entryDate] !== false)
@@ -1698,17 +1691,10 @@ export default async function handler(req, res) {
     if (assetInterval === '1wk') { try { sp500DataTf = await fetchData('^GSPC', cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, assetInterval) } catch(_) {} }
 
     // ── Fetch datos auxiliares para filtros de mercado ──
-    const anyFiltroOn = !!(filtrosCfg?.vix?.activo || filtrosCfg?.indiceEma?.activo || filtrosCfg?.cruceEma?.activo)
-    let vixRawData = null
+    const anyFiltroOn = !!(filtrosCfg?.indiceEma?.activo || filtrosCfg?.cruceEma?.activo)
     const filterAuxData = {} // key: `${ticker}:${iv}` → data
     if (anyFiltroOn && filtrosCfg) {
       const filterFetchJobs = []
-      const vixIv = filtrosCfg.vix?.intervalo === 'semanal' ? '1wk' : '1d'
-      if (filtrosCfg.vix?.activo)
-        filterFetchJobs.push(
-          fetchData('^VIX', cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, vixIv)
-            .then(r => { vixRawData = r }).catch(() => {})
-        )
       const auxKeys = new Set()
       for (const key of ['indiceEma','cruceEma']) {
         const f = filtrosCfg[key]
@@ -1766,9 +1752,6 @@ export default async function handler(req, res) {
         const resolveFilterData = (ticker, iv) =>
           (ticker === '^GSPC' && iv !== '1wk') ? sp500Data : (filterAuxData[`${ticker}:${iv}`] ?? sp500Data)
 
-        // VIX
-        const vixCloses = filtrosCfg.vix?.activo ? buildAlignedCloses(vixRawData, assetDates) : null
-
         // Índice EMA
         const indiceIv = filtrosCfg.indiceEma?.intervalo === 'semanal' ? '1wk' : '1d'
         const indiceDataRes = filtrosCfg.indiceEma?.activo ? resolveFilterData(filtrosCfg.indiceEma.ticker, indiceIv) : null
@@ -1802,11 +1785,7 @@ export default async function handler(req, res) {
         // Calcular filtroActivoMap para este activo
         for (let i = 0; i < ar.data.length; i++) {
           const date = ar.data[i].date
-          let vixOk = true, indiceOk = true, cruceOk = true
-          if (filtrosCfg.vix?.activo) {
-            const vc = vixCloses?.[i]
-            vixOk = vc == null ? true : vc < (filtrosCfg.vix.umbral ?? 25)
-          }
+          let indiceOk = true, cruceOk = true
           if (filtrosCfg.indiceEma?.activo) {
             const ic = indiceCloses?.[i], ie = indiceEmaArr?.[i]
             indiceOk = ic == null || ie == null ? true : ic >= ie
@@ -1815,7 +1794,7 @@ export default async function handler(req, res) {
             const er = cruceEmaRArr?.[i], el = cruceEmaLArr?.[i]
             cruceOk = er == null || el == null ? true : er > el
           }
-          filtroActivoMap[date] = vixOk && indiceOk && cruceOk
+          filtroActivoMap[date] = indiceOk && cruceOk
         }
 
         // Guardar filterZones del primer activo para incluirlas en la respuesta
