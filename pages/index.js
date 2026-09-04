@@ -752,6 +752,11 @@ export default function Home() {
   const [filtrosOpen,setFiltrosOpen]=useState(()=>filtrosBoot.restaurado&&hayFiltroActivo(filtrosBoot.filtros,'mercado'))
   const [filtrosActivoOpen,setFiltrosActivoOpen]=useState(()=>filtrosBoot.restaurado&&hayFiltroActivo(filtrosBoot.filtros,'activo'))
   const [result,setResult]=useState(null),[loading,setLoading]=useState(false),[error,setError]=useState(null)
+  // Símbolos que operaron SIN los filtros de ámbito activo porque su serie semanal no se pudo
+  // descargar. El backend lo manda en avisosFiltros y OMITE el campo cuando no hay nada que avisar,
+  // así que no hace falta estado propio ni limpiarlo: se deriva de la respuesta vigente y desaparece
+  // solo en cuanto llega una sin avisos.
+  const avisoFiltrosIndiv=useMemo(()=>result?.avisosFiltros?.sinSerieSemanal||[],[result])
   const [labelMode,setLabelMode]=useState(1),[rulerOn,setRulerOn]=useState(false)
   const [chartViewFull,setChartViewFull]=useState(false)
   const [settingsOpen,setSettingsOpen]=useState(false)
@@ -1080,6 +1085,14 @@ export default function Home() {
     const pos=(id)=>{const k=strategies.findIndex(s=>s.id===id);return k===-1?Number.MAX_SAFE_INTEGER:k}
     return [...mcMultiResults].sort((a,b)=>pos(a.id)-pos(b.id))
   },[mcMultiResults,mcIsModoCompare,strategies])
+  // Unión de los avisos de TODAS las respuestas del multibacktest: con varias estrategias hay una
+  // llamada por estrategia y la descarga pudo fallar en unas y no en otras. Igual que en el path
+  // individual, no necesita estado ni limpieza: sale de las respuestas vigentes.
+  const avisoFiltrosMc=useMemo(()=>{
+    const s=new Set(mcResult?.avisosFiltros?.sinSerieSemanal||[])
+    for(const r of mcMultiResults)(r?.result?.avisosFiltros?.sinSerieSemanal||[]).forEach(x=>s.add(x))
+    return [...s]
+  },[mcResult,mcMultiResults])
   // Nombre con el que ROTULAR el resultado cuando no viaja dentro de una lista con nombre propio:
   // con UNA estrategia y UN modo, el runner hace una llamada única, guarda en mcResult y deja
   // mcMultiResults vacío, así que la etiqueta hay que reconstruirla. Prioriza la estrategia
@@ -4804,7 +4817,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.723</title>
+        <title>Trading Simulator V9.724</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4882,7 +4895,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.723
+            <span className="dot"/>Trading Simulator V9.724
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5058,7 +5071,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   filtros={filtrosSafe} setFiltros={setFiltros}
                   open={filtrosOpen} setOpen={setFiltrosOpen} variant="panel"/>
                 <FiltrosPanel ambito="activo" titulo="FILTROS DEL ACTIVO"
-                  filtros={filtrosSafe} setFiltros={setFiltros}
+                  filtros={filtrosSafe} setFiltros={setFiltros} aviso={avisoFiltrosIndiv}
                   open={filtrosActivoOpen} setOpen={setFiltrosActivoOpen} variant="panel"/>
 
                 {/* ── Lista ── */}
@@ -6000,7 +6013,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   filtros={filtrosSafe} setFiltros={setFiltros}
                   open={mcFiltrosOpen} setOpen={setMcFiltrosOpen} variant="mc"/>
                 <FiltrosPanel ambito="activo" titulo="FILTROS DEL ACTIVO"
-                  filtros={filtrosSafe} setFiltros={setFiltros}
+                  filtros={filtrosSafe} setFiltros={setFiltros} aviso={avisoFiltrosMc}
                   open={mcFiltrosActivoOpen} setOpen={setMcFiltrosActivoOpen} variant="mc"/>
 
                 {/* MODO DE ASIGNACIÓN — colapsable */}

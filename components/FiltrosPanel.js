@@ -27,12 +27,21 @@ const ivBtn = (on, semanal=false) => ({ fontFamily:MONO, fontSize:9, padding:'1p
 
 // Una sección de filtros: un ámbito, en un sitio. Se instancia cuatro veces (mercado y activo, en
 // el panel de estrategias y en el de multicartera), y las cuatro comparten el mismo estado `filtros`.
-export default function FiltrosPanel({ ambito, titulo, filtros, setFiltros, open, setOpen, variant='panel', ayuda=true }) {
+export default function FiltrosPanel({ ambito, titulo, filtros, setFiltros, open, setOpen, variant='panel', ayuda=true, aviso=null }) {
   const V = VARIANTES[variant] || VARIANTES.panel
   const items = filtrosDe(filtros, ambito)
   const onCnt = cuentaActivos(filtros, ambito)
   const anyOn = onCnt > 0
   const puedeAnadir = tiposDisponibles(filtros, ambito)
+  // Símbolos que operaron SIN los filtros de este ámbito porque no se pudo descargar su serie
+  // semanal. Es un fail-open: el backtest salió, pero para ellos el filtro no existió. Se avisa
+  // también en la CABECERA porque la sección puede estar plegada, que es justo cuando pasaría
+  // desapercibido.
+  const avisoSims = Array.isArray(aviso) ? aviso : []
+  const avisoTexto = avisoSims.length
+    ? `${avisoSims.slice(0, 3).join(', ')}${avisoSims.length > 3 ? ` y ${avisoSims.length - 3} más` : ''}`
+    : ''
+  const avisoTitle = `No se pudo descargar la serie semanal de ${avisoSims.length === 1 ? 'este símbolo' : 'estos símbolos'}, así que operaron SIN los filtros de este ámbito:\n\n${avisoSims.join(', ')}\n\nEl resto de activos sí los aplicó. Vuelve a ejecutar para reintentar la descarga.`
 
   // Desplegable de añadir — mismo patrón que el "+ Añadir a lista" de WatchlistManager
   const [addOpen, setAddOpen] = useState(false)
@@ -70,6 +79,11 @@ export default function FiltrosPanel({ ambito, titulo, filtros, setFiltros, open
         {anyOn&&<span style={{fontFamily:MONO,fontSize:9,background:'rgba(0,229,160,0.18)',color:'#00e5a0',
           borderRadius:3,padding:'0 4px',lineHeight:'14px',flexShrink:0}}>
           {onCnt} activo{onCnt>1?'s':''}
+        </span>}
+        {avisoSims.length>0&&<span title={avisoTitle}
+          style={{fontFamily:MONO,fontSize:9,background:'rgba(255,209,102,0.12)',color:'#ffd166',
+            borderRadius:2,padding:'1px 4px',lineHeight:'14px',flexShrink:0,cursor:'help'}}>
+          ⚠{avisoSims.length}
         </span>}
         <div style={{position:'relative',marginLeft:'auto',flexShrink:0}} ref={addRef}
           onClick={e=>e.stopPropagation()}>
@@ -149,6 +163,11 @@ export default function FiltrosPanel({ ambito, titulo, filtros, setFiltros, open
               </div>
             )
           })}
+
+          {avisoSims.length>0&&<div title={avisoTitle}
+            style={{fontFamily:MONO,fontSize:9,color:'#ffd166',lineHeight:1.4,marginTop:1,cursor:'help'}}>
+            ⚠ {avisoTexto} {avisoSims.length===1?'operó':'operaron'} sin este filtro: no se pudo descargar su serie semanal.
+          </div>}
 
           {ayuda&&anyOn&&<div style={{fontFamily:MONO,fontSize:9,color:'var(--text2)',lineHeight:1.4,marginTop:1}}>
             AND — todos los filtros activos en verde para permitir entrada. Zonas bloqueadas en rojo en el gráfico.
