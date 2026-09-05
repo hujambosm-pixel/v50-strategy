@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { MONO } from '../lib/utils'
-import { FILTROS_CATALOGO, nuevoFiltro, filtrosDe, cuentaActivos, tiposDisponibles } from '../lib/filtros'
+import { FILTROS_CATALOGO, defDe, nuevoFiltro, filtrosDe, cuentaActivos, tiposDisponibles } from '../lib/filtros'
 
 // Cómo encaja la sección en su panel. Son las únicas diferencias reales entre los dos sitios donde
 // se pinta: en el panel de estrategias el contenedor cierra la sección con su propio borde y la
@@ -66,7 +66,7 @@ export default function FiltrosPanel({ ambito, titulo, filtros, setFiltros, open
   const quitar = (id) => setFiltros(p => (p || []).filter(f => f.id !== id))
   // Parten del default del catálogo: si el elemento llegara con params incompletos, se completa en
   // vez de quedar con un único campo suelto.
-  const conDefaults = (f) => ({ ...FILTROS_CATALOGO[f.tipo].params, ...(f.params || {}) })
+  const conDefaults = (f) => ({ ...defDe(f.tipo, f.ambito).params, ...(f.params || {}) })
   const toggle = (id) => setFiltros(p => (p || []).map(f => f.id === id ? { ...f, activo: !f.activo } : f))
   const setParam = (id, campo, val) => setFiltros(p => (p || []).map(f =>
     f.id === id ? { ...f, params: { ...conDefaults(f), [campo]: val } } : f))
@@ -113,7 +113,7 @@ export default function FiltrosPanel({ ambito, titulo, filtros, setFiltros, open
                   style={{padding:'5px 10px',fontFamily:MONO,fontSize:11,color:'#c8dff5',cursor:'pointer',whiteSpace:'nowrap'}}
                   onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.08)'}
                   onMouseOut={e=>e.currentTarget.style.background='transparent'}>
-                  {FILTROS_CATALOGO[t].label}
+                  {defDe(t, ambito).label}
                 </div>
               ))}
               {puedeAnadir.length===0&&(
@@ -138,7 +138,7 @@ export default function FiltrosPanel({ ambito, titulo, filtros, setFiltros, open
           )}
 
           {items.map(f=>{
-            const def=FILTROS_CATALOGO[f.tipo]
+            const def=defDe(f.tipo, f.ambito)
             const p=conDefaults(f)
             return(
               <div key={f.id}>
