@@ -74,11 +74,16 @@ export default function FiltrosPanel({ ambito, titulo, filtros, setFiltros, open
         style={{padding:`8px ${V.padX}px`,borderBottom:(V.bordeCabeceraSiempre||open)?'1px solid var(--border)':'none',display:'flex',alignItems:'center',gap:6,cursor:'pointer',background:'var(--bg2)',userSelect:'none'}}
         onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.04)'}
         onMouseOut={e=>e.currentTarget.style.background='var(--bg2)'}>
-        <span style={{fontFamily:MONO,fontSize:9,color:'#4a7a9a',width:10}}>{open?'▼':'▶'}</span>
-        <span style={{fontFamily:MONO,fontSize:12,color:anyOn?'#00e5a0':'#c8dff5',fontWeight:600,letterSpacing:'0.05em'}}>{titulo}</span>
-        {anyOn&&<span style={{fontFamily:MONO,fontSize:9,background:'rgba(0,229,160,0.18)',color:'#00e5a0',
-          borderRadius:3,padding:'0 4px',lineHeight:'14px',flexShrink:0}}>
-          {onCnt} activo{onCnt>1?'s':''}
+        <span style={{fontFamily:MONO,fontSize:9,color:'#4a7a9a',width:10,flexShrink:0}}>{open?'▼':'▶'}</span>
+        {/* El título es el ÚNICO hijo que podía envolver —los demás llevan flexShrink:0—, así que
+            absorbía el sobrante partiéndose por sus espacios: "FILTROS DE MERCADO" caía a tres
+            líneas en la barra lateral de 240px. Con nowrap ya no puede, y para que quepa el badge y
+            el botón se abrevian a su número y a "+ ▾", con el texto en sus tooltips. */}
+        <span style={{fontFamily:MONO,fontSize:12,color:anyOn?'#00e5a0':'#c8dff5',fontWeight:600,letterSpacing:'0.05em',whiteSpace:'nowrap',flexShrink:0}}>{titulo}</span>
+        {anyOn&&<span title={`${onCnt} de ${items.length} filtro${items.length>1?'s':''} de esta sección ${onCnt>1?'están encendidos':'está encendido'}. Cuenta solo los ACTIVOS: los añadidos pero apagados no se aplican y no suman aquí.`}
+          style={{fontFamily:MONO,fontSize:9,background:'rgba(0,229,160,0.18)',color:'#00e5a0',
+          borderRadius:3,padding:'0 4px',lineHeight:'14px',flexShrink:0,cursor:'help'}}>
+          {onCnt}
         </span>}
         {avisoSims.length>0&&<span title={avisoTitle}
           style={{fontFamily:MONO,fontSize:9,background:'rgba(255,209,102,0.12)',color:'#ffd166',
@@ -89,7 +94,7 @@ export default function FiltrosPanel({ ambito, titulo, filtros, setFiltros, open
           onClick={e=>e.stopPropagation()}>
           <span onClick={()=>setAddOpen(v=>!v)} title="Añadir filtro"
             style={{fontFamily:MONO,fontSize:9,padding:'1px 6px',borderRadius:3,cursor:'pointer',
-              border:'1px solid #3d5a7a',color:'#7aabcc',userSelect:'none'}}>+ Añadir filtro ▾</span>
+              border:'1px solid #3d5a7a',color:'#7aabcc',userSelect:'none',whiteSpace:'nowrap'}}>+ ▾</span>
           {addOpen&&(
             <div style={{position:'absolute',right:0,top:'100%',zIndex:200,marginTop:3,
               background:'var(--bg2)',border:'1px solid #3d5a7a',borderRadius:4,
