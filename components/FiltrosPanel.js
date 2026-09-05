@@ -20,6 +20,11 @@ const toggleBtn = (active) => ({ display:'inline-flex', alignItems:'center', jus
 const toggleKnob = (active) => ({ position:'absolute', width:10, height:10, borderRadius:'50%',
   background:active?'#fff':'#7a9bc0', left:active?16:2, transition:'left 0.15s' })
 const lbl = (active) => ({ fontFamily:MONO, fontSize:11, color:active?'var(--text)':'var(--text2)', flex:1 })
+// Cómo se combinan los filtros de una sección. Estaba siempre a la vista bajo cada sección y
+// ocupaba tres líneas; con dos secciones, seis líneas permanentes en una barra lateral estrecha.
+// Ahora cuelga del título de la sección como tooltip.
+const AYUDA_AND = 'AND — todos los filtros activos en verde para permitir entrada. Zonas bloqueadas en rojo en el gráfico.'
+
 const ivBtn = (on, semanal=false) => ({ fontFamily:MONO, fontSize:9, padding:'1px 5px', borderRadius:3, cursor:'pointer',
   border:`1px solid ${on?(semanal?'#a07820':'#2d6e4e'):'#1a3d5a'}`,
   background:on?(semanal?'rgba(240,192,64,0.12)':'rgba(76,175,130,0.12)'):'transparent',
@@ -27,7 +32,7 @@ const ivBtn = (on, semanal=false) => ({ fontFamily:MONO, fontSize:9, padding:'1p
 
 // Una sección de filtros: un ámbito, en un sitio. Se instancia cuatro veces (mercado y activo, en
 // el panel de estrategias y en el de multicartera), y las cuatro comparten el mismo estado `filtros`.
-export default function FiltrosPanel({ ambito, titulo, filtros, setFiltros, open, setOpen, variant='panel', ayuda=true, aviso=null }) {
+export default function FiltrosPanel({ ambito, titulo, filtros, setFiltros, open, setOpen, variant='panel', aviso=null }) {
   const V = VARIANTES[variant] || VARIANTES.panel
   const items = filtrosDe(filtros, ambito)
   const onCnt = cuentaActivos(filtros, ambito)
@@ -78,8 +83,12 @@ export default function FiltrosPanel({ ambito, titulo, filtros, setFiltros, open
         {/* El título es el ÚNICO hijo que podía envolver —los demás llevan flexShrink:0—, así que
             absorbía el sobrante partiéndose por sus espacios: "FILTROS DE MERCADO" caía a tres
             líneas en la barra lateral de 240px. Con nowrap ya no puede, y para que quepa el badge y
-            el botón se abrevian a su número y a "+ ▾", con el texto en sus tooltips. */}
-        <span style={{fontFamily:MONO,fontSize:12,color:anyOn?'#00e5a0':'#c8dff5',fontWeight:600,letterSpacing:'0.05em',whiteSpace:'nowrap',flexShrink:0}}>{titulo}</span>
+            el botón se abrevian a su número y a "+ ▾", con el texto en sus tooltips.
+            La ayuda cuelga del propio título en vez de un (?) aparte: en esta cabecera no sobra un
+            solo píxel —el caso con badge y aviso deja 5px— y los otros tres elementos ya explican
+            lo suyo con `title` sin marca visual. `title` es pasivo, así que el clic sigue
+            burbujeando al contenedor y la sección pliega igual. */}
+        <span title={AYUDA_AND} style={{fontFamily:MONO,fontSize:12,color:anyOn?'#00e5a0':'#c8dff5',fontWeight:600,letterSpacing:'0.05em',whiteSpace:'nowrap',flexShrink:0}}>{titulo}</span>
         {anyOn&&<span title={`${onCnt} de ${items.length} filtro${items.length>1?'s':''} de esta sección ${onCnt>1?'están encendidos':'está encendido'}. Cuenta solo los ACTIVOS: los añadidos pero apagados no se aplican y no suman aquí.`}
           style={{fontFamily:MONO,fontSize:9,background:'rgba(0,229,160,0.18)',color:'#00e5a0',
           borderRadius:3,padding:'0 4px',lineHeight:'14px',flexShrink:0,cursor:'help'}}>
@@ -174,9 +183,6 @@ export default function FiltrosPanel({ ambito, titulo, filtros, setFiltros, open
             ⚠ {avisoTexto} {avisoSims.length===1?'operó':'operaron'} sin este filtro: no se pudo descargar su serie semanal.
           </div>}
 
-          {ayuda&&anyOn&&<div style={{fontFamily:MONO,fontSize:9,color:'var(--text2)',lineHeight:1.4,marginTop:1}}>
-            AND — todos los filtros activos en verde para permitir entrada. Zonas bloqueadas en rojo en el gráfico.
-          </div>}
         </div>
       )}
     </div>
