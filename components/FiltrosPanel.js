@@ -12,8 +12,21 @@ const VARIANTES = {
 }
 
 const fInp = { background:'#0a1520', border:'1px solid #1a3d5a', borderRadius:3, color:'var(--text)',
-  fontFamily:MONO, fontSize:10, padding:'1px 4px', boxSizing:'border-box', outline:'none', width:'100%' }
-const plbl = { fontFamily:MONO, fontSize:9, color:'var(--text2)', whiteSpace:'nowrap' }
+  fontFamily:MONO, fontSize:9, padding:'1px 3px', boxSizing:'border-box', outline:'none', width:'100%' }
+const plbl = { fontFamily:MONO, fontSize:8, color:'var(--text2)', whiteSpace:'nowrap' }
+// Etiqueta y campo, pegados. Antes el envoltorio era `display:'contents'`, que no genera caja: los
+// dos quedaban como items de flex hermanos e independientes y el salto de línea podía caer JUSTO
+// entre ellos —"Mín" al final de una línea y su casilla al principio de la siguiente—. Con una caja
+// propia que no encoge, la pareja es indivisible y el salto solo puede caer entre parejas.
+const par = { display:'inline-flex', alignItems:'center', gap:3, flexShrink:0 }
+// Los ▲▼ de Chrome miden ~13px y se SUPERPONEN al texto: en un campo estrecho tapaban el último
+// dígito. Se ocultan por dos motivos: para que el valor se lea entero con los anchos nuevos, y
+// porque viven pegados al borde derecho, donde es fácil pinchar ▼ al ir a poner el cursor al final.
+// No tiene nada que ver con la rueda —eso lo resuelve el onWheel de CampoNumero, y está medido que
+// ocultar el botón por sí solo no la detenía—. Va en una etiqueta <style> y no en el estilo inline
+// porque es un pseudo-elemento, y con clase propia para no tocar los type=number del resto de la app.
+const CLASE_NUM = 'fltNum'
+const CSS_NUM = `.${CLASE_NUM}::-webkit-outer-spin-button,.${CLASE_NUM}::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}.${CLASE_NUM}{-moz-appearance:textfield}`
 const toggleBtn = (active) => ({ display:'inline-flex', alignItems:'center', justifyContent:'center',
   width:28, height:14, borderRadius:7, flexShrink:0, cursor:'pointer', transition:'background 0.15s',
   background:active?'#00e5a0':'#1a2d45', position:'relative' })
@@ -25,7 +38,7 @@ const lbl = (active) => ({ fontFamily:MONO, fontSize:11, color:active?'var(--tex
 // Ahora cuelga del título de la sección como tooltip.
 const AYUDA_AND = 'AND — todos los filtros activos en verde para permitir entrada. Zonas bloqueadas en rojo en el gráfico.'
 
-const ivBtn = (on, semanal=false) => ({ fontFamily:MONO, fontSize:9, padding:'1px 5px', borderRadius:3, cursor:'pointer',
+const ivBtn = (on, semanal=false) => ({ fontFamily:MONO, fontSize:9, padding:'1px 3px', borderRadius:3, cursor:'pointer',
   border:`1px solid ${on?(semanal?'#a07820':'#2d6e4e'):'#1a3d5a'}`,
   background:on?(semanal?'rgba(240,192,64,0.12)':'rgba(76,175,130,0.12)'):'transparent',
   color:on?(semanal?'#f0c040':'#4caf82'):'var(--text2)' })
@@ -67,7 +80,7 @@ function CampoNumero({ campo: c, valor, onCommit, style }) {
     setBorrador(null)
   }
   return (
-    <input type="number" min={c.min} max={c.max} step={1}
+    <input type="number" className={CLASE_NUM} min={c.min} max={c.max} step={1}
       value={borrador ?? String(actual)}
       onChange={e => {
         const v = e.target.value
@@ -125,6 +138,7 @@ export default function FiltrosPanel({ ambito, titulo, filtros, setFiltros, open
 
   return (
     <div style={V.wrap}>
+      <style>{CSS_NUM}</style>
       {/* Cabecera: chevron, título, contador y el desplegable de añadir. Con la lista vacía esta
           fila es toda la sección. */}
       <div onClick={()=>setOpen(v=>!v)}
@@ -205,9 +219,9 @@ export default function FiltrosPanel({ ambito, titulo, filtros, setFiltros, open
                     onMouseOut={e=>e.currentTarget.style.color='#4a6a88'}>✕</span>
                 </div>
                 {f.activo&&(
-                  <div style={{display:'flex',alignItems:'center',flexWrap:'wrap',gap:5,rowGap:4,paddingLeft:34}}>
+                  <div style={{display:'flex',alignItems:'center',flexWrap:'wrap',gap:4,rowGap:4,paddingLeft:34}}>
                     {def.campos.map(c=>(
-                      <span key={c.k} style={{display:'contents'}}>
+                      <span key={c.k} style={par}>
                         <span style={plbl}>{c.etiqueta}</span>
                         {c.tipo==='texto'
                           ?<input type="text" value={p[c.k]}
