@@ -30,6 +30,58 @@ const ivBtn = (on, semanal=false) => ({ fontFamily:MONO, fontSize:9, padding:'1p
   background:on?(semanal?'rgba(240,192,64,0.12)':'rgba(76,175,130,0.12)'):'transparent',
   color:on?(semanal?'#f0c040':'#4caf82'):'var(--text2)' })
 
+// Campo numérico de un filtro. Tiene componente propio porque necesita estado propio: el BORRADOR
+// de lo que se está tecleando, que no puede vivir en `filtros` sin contaminar el backend.
+// Antes el valor iba al estado en cada pulsación con `Number(x) || fallback`, y eso confundía el
+// campo VACÍO con el CERO: borrarlo entero para reescribirlo lo devolvía al fallback en mitad de la
+// edición, y el 0 de «Mín» era inalcanzable porque 0 es falsy —bastaba bajar de 1 a 0 con la rueda
+// para que el campo saltara a 55—.
+// Las reglas, y el porqué de cada una:
+//  · Mientras se teclea NO se acota. Acotar por pulsación haría imposible escribir cifras de varios
+//    dígitos: en un campo de mínimo 2, el «1» de «100» saltaría a 2 antes del siguiente dígito.
+//  · Se acota al CONFIRMAR: al salir del campo o al pulsar Enter. Un clic en cualquier botón provoca
+//    antes el blur, así que no hay forma de lanzar un backtest con un valor sin acotar.
+//  · Al estado solo viajan NÚMEROS. El borrador vacío se queda dentro del componente, así que ni
+//    localStorage ni el backend ven jamás un '' — que además de no ser un número rompería la
+//    evaluación en silencio: `?? ` no lo captura, y `v <= ''` se compara contra 0.
+//  · Salir dejándolo vacío no cambia nada: se recupera el último valor válido, que es el que sigue
+//    en `params` porque el vacío nunca llegó a escribirse. Cancelar es lo menos sorprendente aquí:
+//    no hay valor «neutro» que un filtro pueda usar, y el fallback del catálogo tampoco lo es
+//    —el de indiceEma.periodo es 200 cuando su default es 10—.
+//  · La RUEDA quita el foco. Un input type=number enfocado hace stepDown con la rueda Y se come el
+//    evento: el panel no bajaba y el número sí, sin que se notara. Sin foco el input la ignora y el
+//    gesto sigue su camino hasta el panel, que es lo que se pretendía. preventDefault también lo
+//    pararía, pero se tragaría además el scroll, que es justo lo que el usuario quería hacer.
+//  · Las FLECHAS del teclado se DEJAN: exigen enfocar el campo a propósito —son un gesto deliberado,
+//    no un efecto colateral de otro—, son la forma estándar y accesible de ajustar un number, y el
+//    navegador ya las acota solo al min/max del input.
+function CampoNumero({ campo: c, valor, onCommit, style }) {
+  const [borrador, setBorrador] = useState(null)   // null = no se está editando; se muestra el estado
+  const n0 = Number(valor)
+  const actual = Number.isFinite(n0) ? n0 : c.fallback   // el fallback solo cubre un param corrupto
+  const acota = (n) => Math.min(c.max ?? Infinity, Math.max(c.min ?? -Infinity, n))
+  const valido = (s) => { const n = Number(s); return s.trim() !== '' && Number.isFinite(n) ? n : null }
+
+  const confirmar = () => {
+    if (borrador != null) { const n = valido(borrador); if (n != null) onCommit(acota(n)) }
+    setBorrador(null)
+  }
+  return (
+    <input type="number" min={c.min} max={c.max} step={1}
+      value={borrador ?? String(actual)}
+      onChange={e => {
+        const v = e.target.value
+        setBorrador(v)
+        const n = valido(v)
+        if (n != null) onCommit(n)   // sin acotar: eso es cosa de confirmar
+      }}
+      onWheel={e => e.currentTarget.blur()}
+      onBlur={confirmar}
+      onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}   // el blur ya confirma
+      style={style}/>
+  )
+}
+
 // Una sección de filtros: un ámbito, en un sitio. Se instancia cuatro veces (mercado y activo, en
 // el panel de estrategias y en el de multicartera), y las cuatro comparten el mismo estado `filtros`.
 export default function FiltrosPanel({ ambito, titulo, filtros, setFiltros, open, setOpen, variant='panel', aviso=null }) {
@@ -161,8 +213,8 @@ export default function FiltrosPanel({ ambito, titulo, filtros, setFiltros, open
                           ?<input type="text" value={p[c.k]}
                              onChange={e=>setParam(f.id,c.k,e.target.value.toUpperCase())}
                              style={{...fInp,width:c.ancho}}/>
-                          :<input type="number" min={c.min} max={c.max} step={1} value={p[c.k]}
-                             onChange={e=>setParam(f.id,c.k,Number(e.target.value)||c.fallback)}
+                          :<CampoNumero campo={c} valor={p[c.k]}
+                             onCommit={v=>setParam(f.id,c.k,v)}
                              style={{...fInp,width:c.ancho}}/>}
                       </span>
                     ))}
