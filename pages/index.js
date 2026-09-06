@@ -486,6 +486,34 @@ async function deleteAlarm(id) {
   if(!res.ok) throw new Error('Error eliminando alarma')
 }
 
+// ── Cuánta historia pedir para evaluar las alarmas ────────────────────────────
+// Se pedían 300 días naturales FIJOS —unas 207 sesiones— sin mirar los periodos configurados. Para
+// una media de 200 sesiones eso es la mitad de lo necesario: la EMA llega a 8 valores y arrastra un
+// 12% de error de siembra, que se traduce en un 3% de días con el veredicto contrario al que pinta
+// el gráfico. El propio status.js calcula su `needed`, pero el cliente lo ignoraba.
+// EL MÚLTIPLO ES 4× el periodo más largo. La influencia de la siembra de una EMA decae como
+// (1-k)^n con k=2/(P+1), que tras m·P barras es ≈ e^(-2m): 0,25% a 3×, 0,03% a 4×, 0,005% a 5×.
+// Medido: a 4,1× el error residual era del 0,002% —indistinguible del ruido— y a 1× del 12%. Con 4×
+// quedan además 3P barras CON VALOR, que es lo que necesita el contador de "hace N velas" para no
+// degenerar al tope de la ventana.
+// 1 sesión ≈ 1,45 días naturales (medido sobre SPY a 1, 2 y 5 años: 0,6923 / 0,6886 / 0,6884
+// sesiones por día). La conversión va aquí porque /api/closes cuenta en días naturales.
+const CLAVES_PERIODO=['ma_fast','ma_slow','ma_period','period','fast','slow','signal']
+function diasDeHistoria(alarmas){
+  let maxPeriodo=0
+  const mira=v=>{const n=Number(v); if(Number.isFinite(n)&&n>maxPeriodo) maxPeriodo=n}
+  for(const a of alarmas||[]){
+    mira(a?.ema_r); mira(a?.ema_l)
+    for(const k of CLAVES_PERIODO) if(a?.params?.[k]!=null) mira(a.params[k])
+  }
+  // SUELO 300: es lo que se pedía antes, y con periodos cortos 4×P se quedaría por debajo del mínimo
+  // que status.js exige (`needed` nunca baja de 50, y son 78 con los parámetros por defecto del
+  // MACD). Así una configuración corta —todas las de fábrica— no cambia ni una petición.
+  // TECHO 1500: el tope de /api/closes en diario. A partir de un periodo de ~258 el margen empieza a
+  // bajar de 4×; no hay forma de cubrirlo sin subir ese tope, y hoy no existe ninguna alarma así.
+  return Math.min(1500, Math.max(300, Math.ceil(4*maxPeriodo*1.45)))
+}
+
 // ── Búsqueda de nombre vía Yahoo Finance (proxy local) ───────
 async function searchSymbolName(sym) {
   if(!sym||sym.length<1) return ''
@@ -1053,7 +1081,9 @@ export default function Home() {
 
   const debounceRef=useRef(null),chartApiRef=useRef(null),chartApiFullscreenRef=useRef(null),contentRef=useRef(null),skipNextRunRef=useRef(false)
   const chartLegendRef=useRef(null)   // external legend ref for integrated chart info bar
-  const closesCache=useRef({})  // { SYM: { data:[...], ts:Date.now() } } — TTL 20 min para refreshAlarmStatus
+  const closesCache=useRef({})  // { SYM: { data:[...], ts, days } } — TTL 20 min para refreshAlarmStatus.
+                                // `days` es la ventana con la que se pidió: una entrada más corta que
+                                // la que hace falta ahora NO sirve (ver diasDeHistoria).
 
   const mcChartApiRef=useRef(null)
   const [mcAxisW,setMcAxisW]=useState(72)   // measured equity rightPriceScale width, shared with occupancy & monthly charts
@@ -3003,20 +3033,25 @@ export default function Home() {
       const closes={}
       const _cacheSett=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')}catch(_){return {}}})()
       const TTL=(_cacheSett.alarmas?.cacheTTLMinutes??20)*60*1000
+      const dias=diasDeHistoria(allEvalAlarms)   // ventana según el periodo más largo en juego
       const _bs=4
       for(let _i=0;_i<symbols.length;_i+=_bs){
         const _batch=symbols.slice(_i,_i+_bs)
         await Promise.all(_batch.map(async sym=>{
           try{
             const cached=closesCache.current[sym]
-            if(!forceRefresh&&cached&&(Date.now()-cached.ts)<TTL){
+            // Una entrada cacheada con MENOS historia de la que ahora hace falta no sirve: se
+            // evaluaría con una ventana insuficiente, que es justo lo que se viene a arreglar. Una
+            // más larga sí vale, porque status.js recorta. Una entrada anterior a este cambio no
+            // lleva `days`, así que se vuelve a pedir.
+            if(!forceRefresh&&cached&&(Date.now()-cached.ts)<TTL&&cached.days>=dias){
               closes[sym]=cached.data  // hit de caché
             } else {
-              const r=await apiFetch(`/api/closes?symbol=${sym}&days=300`)
+              const r=await apiFetch(`/api/closes?symbol=${sym}&days=${dias}`)
               const data=await r.json()
               if(Array.isArray(data)&&data.length>=30){
                 closes[sym]=data
-                closesCache.current[sym]={data,ts:Date.now()}
+                closesCache.current[sym]={data,ts:Date.now(),days:dias}
               }
             }
           }catch{}
@@ -4817,7 +4852,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.732</title>
+        <title>Trading Simulator V9.733</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4895,7 +4930,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.732
+            <span className="dot"/>Trading Simulator V9.733
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
