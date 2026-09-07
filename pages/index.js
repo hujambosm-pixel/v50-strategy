@@ -3027,7 +3027,13 @@ export default function Home() {
       }))
       const realAlarmIds=new Set(alarmList.map(a=>a.id))
       const extraConds=pseudoAlarms.filter(p=>!realAlarmIds.has(p.id))
-      const allEvalAlarms=[...alarmList.map(a=>({id:a.id,symbol:a.symbol,condition:a.condition,condition_detail:a.condition_detail,price_level:a.price_level,ema_r:a.ema_r,ema_l:a.ema_l,params:a.params})),...extraConds]
+      // ema_r/ema_l con su default AQUÍ, no solo en el formulario: openEditAlarm aplica `||10` al
+      // CARGAR la ficha, pero esta lectura iba en crudo. Una fila con el campo a null viajaba tal
+      // cual, y en el otro extremo Number(null) vale 0 mientras que `??` no captura el 0: acababa en
+      // una EMA de periodo 0. Hoy no hay ninguna fila así, pero eso dependía de un default del DDL
+      // que no se pudo confirmar. El endpoint tiene además su propia guarda; esto lo corrige en
+      // origen y de paso alimenta un periodo sano a diasDeHistoria.
+      const allEvalAlarms=[...alarmList.map(a=>({id:a.id,symbol:a.symbol,condition:a.condition,condition_detail:a.condition_detail,price_level:a.price_level,ema_r:a.ema_r||10,ema_l:a.ema_l||11,params:a.params})),...extraConds]
 
       // Pre-fetch closes con caché en memoria (TTL configurable). forceRefresh=true lo ignora.
       const closes={}
@@ -4852,7 +4858,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.733</title>
+        <title>Trading Simulator V9.734</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4930,7 +4936,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.733
+            <span className="dot"/>Trading Simulator V9.734
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}

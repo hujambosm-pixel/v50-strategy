@@ -3,54 +3,12 @@
 // Soporta: ema_cross_*, price_*_ma, rsi_*, macd_cross_*
 
 // ── Indicadores ──────────────────────────────────────────────
-function calcEMAArr(values, period) {
-  const k = 2 / (period + 1)
-  const result = new Array(values.length).fill(null)
-  let ema = null
-  for (let i = 0; i < values.length; i++) {
-    const v = values[i]
-    if (v == null || isNaN(v)) continue
-    ema = ema === null ? v : v * k + ema * (1 - k)
-    result[i] = ema
-  }
-  return result
-}
-
-function calcRSI(closes, period) {
-  const result = new Array(closes.length).fill(null)
-  let avgGain = 0, avgLoss = 0
-  for (let i = 1; i <= period; i++) {
-    const diff = closes[i] - closes[i - 1]
-    if (diff > 0) avgGain += diff; else avgLoss -= diff
-  }
-  avgGain /= period; avgLoss /= period
-  result[period] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss)
-  for (let i = period + 1; i < closes.length; i++) {
-    const diff = closes[i] - closes[i - 1]
-    const gain = diff > 0 ? diff : 0
-    const loss = diff < 0 ? -diff : 0
-    avgGain = (avgGain * (period - 1) + gain) / period
-    avgLoss = (avgLoss * (period - 1) + loss) / period
-    result[i] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss)
-  }
-  return result
-}
-
-function calcMACD(closes, fast, slow, signal) {
-  const emaFast = calcEMAArr(closes, fast)
-  const emaSlow = calcEMAArr(closes, slow)
-  const macdLine = closes.map((_, i) =>
-    emaFast[i] != null && emaSlow[i] != null ? emaFast[i] - emaSlow[i] : null
-  )
-  const signalLine = calcEMAArr(macdLine.filter(v => v != null), signal)
-  // Re-align signal to original indices
-  const signalFull = new Array(closes.length).fill(null)
-  let si = 0
-  for (let i = 0; i < closes.length; i++) {
-    if (macdLine[i] != null) { signalFull[i] = signalLine[si] ?? null; si++ }
-  }
-  return { macdLine, signalLine: signalFull }
-}
+// Los mismos que el gráfico y que el backtest. Este archivo tenía copias propias desde antes de que
+// lib/backtester.js existiera, y su EMA sembraba con el PRIMER valor en vez de con la SMA de los
+// primeros `period`. Consecuencia: una alarma podía dar el veredicto contrario al que se veía en el
+// gráfico. Con periodos cortos daba igual —medido, 0 diferencias con 10/11, RSI 14 y MACD
+// 12/26/9—, pero con una media de 200 el error de siembra llegaba al 12%.
+import { calcEMA, calcRSI, calcMACD } from '../../lib/backtester'
 
 // ── Stooq fetch ───────────────────────────────────────────────
 function toStooqSym(symbol) {
@@ -104,26 +62,41 @@ function evalConditionFull(alarm, closes, sym) {
   const condition = alarm.condition
   const p = alarm.params || {}
 
-  // Resolve params — global condition params take priority over legacy fields
-  const maFast   = p.ma_fast   ?? Number(alarm.ema_r)  ?? 10
-  const maSlow   = p.ma_slow   ?? Number(alarm.ema_l)  ?? 11
-  const maPeriod = p.ma_period ?? maFast
-  const rsiPer   = p.period    ?? 14
-  const rsiLev   = p.level     ?? 50
-  const macdF    = p.fast      ?? 12
-  const macdS    = p.slow      ?? 26
-  const macdSig  = p.signal    ?? 9
+  // Resolve params — global condition params take priority over legacy fields.
+  // Un periodo tiene que ser un entero >= 1; cualquier otra cosa cae al valor por defecto. Antes era
+  // `p.ma_fast ?? Number(alarm.ema_r) ?? 10`, y ahí `??` NO captura el 0 mientras que Number(null)
+  // SÍ vale 0: un ema_r nulo se convertía en periodo 0, con k = 2/(0+1) = 2, y la EMA degeneraba en
+  // la oscilación 2v−ema. Sin excepción, sin log, y con veredictos de aspecto normal —medido: activa
+  // el 50% de los días, contraria a la correcta en el 50,8%—. Con la guarda, un valor imposible cae
+  // al default en vez de producir una serie sin sentido.
+  const per = (v, def) => { const n = Math.floor(Number(v)); return Number.isFinite(n) && n >= 1 ? n : def }
+  const maFast   = per(p.ma_fast   ?? alarm.ema_r, 10)
+  const maSlow   = per(p.ma_slow   ?? alarm.ema_l, 11)
+  const maPeriod = per(p.ma_period, maFast)
+  const rsiPer   = per(p.period, 14)
+  const rsiLev   = p.level ?? 50   // es un NIVEL, no un periodo: el 0 es legítimo
+  const macdF    = per(p.fast, 12)
+  const macdS    = per(p.slow, 26)
+  const macdSig  = per(p.signal, 9)
 
+  // `needed` es el MÍNIMO para no abortar; sigue igual.
   const needed = Math.max(maSlow, maPeriod, rsiPer * 3, macdS * 3, 50)
   if (!closes || closes.length < needed) return { active: null, bars: null }
 
-  const last = closes.slice(-Math.max(400, needed))
+  // La ventana que se EVALÚA es otra cosa. Estaba topada en 400 barras, y desde V9.733 el cliente
+  // descarga hasta 4× el periodo más largo —797 sesiones para una 50/200—, así que el tope tiraba
+  // más de la mitad de lo descargado. Ahora vale 4× el periodo más largo de ESTA alarma: el mismo
+  // criterio que usa el cliente al pedir, y ni una barra más de las que hacen falta para que el
+  // indicador converja (la influencia de la siembra tras 4·P barras es ~e^-8, un 0,03%).
+  // El suelo de 400 se mantiene: con periodos cortos es lo que ya se evaluaba.
+  const ventana = Math.max(400, 4 * Math.max(maSlow, maPeriod, rsiPer, macdS))
+  const last = closes.slice(-ventana)
   const n = last.length - 1
 
   // ── EMA cross ──
   if (condition === 'ema_cross_up' || condition === 'ema_cross_down') {
-    const erArr = calcEMAArr(last, maFast)
-    const elArr = calcEMAArr(last, maSlow)
+    const erArr = calcEMA(last, maFast)
+    const elArr = calcEMA(last, maSlow)
     const er = erArr[n], el = elArr[n]
     if (er == null || el == null) return { active: null, bars: null }
     const isUp = condition === 'ema_cross_up'
@@ -143,7 +116,7 @@ function evalConditionFull(alarm, closes, sym) {
   // ── Price vs MA ──
   if (condition === 'price_above_ma' || condition === 'price_below_ma' ||
       condition === 'price_above_ema' || condition === 'price_below_ema') {
-    const maArr = calcEMAArr(last, maPeriod)
+    const maArr = calcEMA(last, maPeriod)
     const price = last[n], ma = maArr[n]
     if (ma == null) return { active: null, bars: null }
     const isAbove = condition === 'price_above_ma' || condition === 'price_above_ema'
@@ -199,7 +172,7 @@ function evalConditionFull(alarm, closes, sym) {
 
   // ── MACD cross up/down ──
   if (condition === 'macd_cross_up' || condition === 'macd_cross_down') {
-    const { macdLine, signalLine } = calcMACD(last, macdF, macdS, macdSig)
+    const { line: macdLine, signal: signalLine } = calcMACD(last, macdF, macdS, macdSig)
     const m = macdLine[n], s = signalLine[n], mp = macdLine[n-1], sp = signalLine[n-1]
     if (m == null || s == null || mp == null || sp == null) return { active: null, bars: null }
     const isUp = condition === 'macd_cross_up'
