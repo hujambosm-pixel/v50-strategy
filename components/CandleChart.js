@@ -215,10 +215,38 @@ function createRiskPrimitive(configRef) {
   }
 }
 
+// ── Tramos contiguos de una serie con huecos ──────────────────────────────────
+// Devuelve un array de tramos; cada tramo es un array contiguo de puntos {time, value} sin nulos, y
+// entre dos tramos hay al menos una barra sin valor.
+// Existe porque lightweight-charts NO sabe cortar una línea. Verificado sobre la 4.2.0 que usa el
+// proyecto: omitir los puntos nulos y pasarlos como whitespace ({time} sin `value`) dibujan
+// EXACTAMENTE lo mismo —une el último punto con valor con el siguiente y cruza el hueco con una
+// diagonal—, y `value:null` pinta un pico hasta cero. Tampoco hay ninguna opción tipo `connectNulls`
+// en la API. Una LineSeries por tramo es la única forma de que un hueco se vea como un hueco.
+// Un tramo de un solo punto se conserva: no dibuja trazo (una línea necesita dos puntos) pero no se
+// descarta el dato.
+const tramosDe = (bars, campo) => {
+  const out = []
+  let cur = null
+  for (const b of bars) {
+    const v = b[campo]
+    if (v == null || Number.isNaN(v)) { cur = null; continue }
+    if (!cur) { cur = []; out.push(cur) }
+    cur.push({ time: b.date, value: v })
+  }
+  return out
+}
+// Por encima de este número de tramos se deja de trocear. Es un caso patológico —una serie que
+// alterna valor y hueco barra a barra—, y vale más una diagonal que centenares de series.
+const MAX_TRAMOS = 200
+
 export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, isNewResultRef=null, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null, isBareChart=false, visuals=null, filterZones=[], slopeChanges=[], customMarkers=[], pendingOrders=[], simbolo=null, riskPanelOpen=false, onRiskLineFocus=null }) {
   const containerRef=useRef(null), svgRef=useRef(null), legendRef=useRef(null), tooltipRef=useRef(null)
   const activeLegendRef = externalLegendRef || legendRef
   const chartRef=useRef(null), candlesRef=useRef(null)
+  // Series de línea sobre el precio (EMAs y Bollinger). Son VARIAS por campo —una por tramo, ver
+  // tramosDe—, así que se registran en un array en vez de en refs sueltas.
+  const overlaySeriesRef=useRef([])
   const rsiChartRef=useRef(null), macdChartRef=useRef(null), volumeChartRef=useRef(null)
   const rsiContainerRef=useRef(null), macdContainerRef=useRef(null), volumeContainerRef=useRef(null)
   const chartAliveRef=useRef(true)
@@ -281,6 +309,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
     import('lightweight-charts').then(({createChart,CrosshairMode,LineStyle})=>{
       let disposed=false
       if(chartRef.current){chartRef.current.remove();chartRef.current=null}
+      overlaySeriesRef.current=[]   // se fueron con el gráfico que acaba de destruirse
       if(!containerRef.current||containerRef.current.clientWidth<=0) return
       const chart=createChart(containerRef.current,{
         width:containerRef.current.clientWidth,height:chartHeight,
@@ -311,19 +340,37 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       const _emaIndicators=(definition?.visuals?.indicators||[])
         .filter(i=>(i.type==='ema'||i.type==='sma')&&i.visible!==false)
         .sort((a,b)=>(a.period||0)-(b.period||0))
+      // Dibuja un campo de chartData como línea sobre el precio, TROCEADA en tramos contiguos para
+      // que los huecos se vean como huecos y no como diagonales. Todas las series del campo
+      // comparten opciones y quedan registradas en overlaySeriesRef.
+      const pintarLinea=(campo,opts)=>{
+        const tramos=tramosDe(data,campo)
+        if(!tramos.length) return
+        if(tramos.length>MAX_TRAMOS){
+          // Vuelta al dibujo de siempre: una sola serie con los nulos omitidos. Los huecos saldrán
+          // otra vez como diagonales, que es preferible a crear centenares de series.
+          console.warn(`[CandleChart] ${campo}: ${tramos.length} tramos (máx ${MAX_TRAMOS}) — se dibuja en UNA sola serie, así que los huecos saldrán como diagonales`)
+          const s=chart.addLineSeries(opts)
+          s.setData(tramos.flat())
+          overlaySeriesRef.current.push(s)
+          return
+        }
+        // Solo el primer tramo lleva `title`: los demás son continuación visual de la misma línea y
+        // no deben anunciarse por separado.
+        tramos.forEach((t,i)=>{
+          const s=chart.addLineSeries(i===0?opts:{...opts,title:''})
+          s.setData(t)
+          overlaySeriesRef.current.push(s)
+        })
+      }
+
       const _showEma=!isBareChart&&(!definition||_emaIndicators.length>0)
       if(_showEma){
         if(!definition){
           // Ruta legacy: sin definition, usar emaR/emaL precomputados del chartData
-          const fs=chart.addLineSeries({color:'#ffd166',lineWidth:1,lastValueVisible:false,priceLineVisible:false})
-          fs.setData(data.map(d=>({time:d.date,value:d.emaR})).filter(x=>x.value!=null))
-          const ss=chart.addLineSeries({color:'#ff4d6d',lineWidth:1,lastValueVisible:false,priceLineVisible:false})
-          ss.setData(data.map(d=>({time:d.date,value:d.emaL})).filter(x=>x.value!=null))
-          const hasEma3=data.some(d=>d.ema3!=null)
-          if(hasEma3){
-            const s3=chart.addLineSeries({color:'#9C27B0',lineWidth:2,lastValueVisible:false,priceLineVisible:false,title:''})
-            s3.setData(data.filter(d=>d.ema3!=null).map(d=>({time:d.date,value:d.ema3})))
-          }
+          pintarLinea('emaR',{color:'#ffd166',lineWidth:1,lastValueVisible:false,priceLineVisible:false})
+          pintarLinea('emaL',{color:'#ff4d6d',lineWidth:1,lastValueVisible:false,priceLineVisible:false})
+          pintarLinea('ema3',{color:'#9C27B0',lineWidth:2,lastValueVisible:false,priceLineVisible:false,title:''})
         } else {
           _emaIndicators.forEach((ind,idx)=>{
             const mtype=(ind.type||'ema').toUpperCase()
@@ -341,12 +388,9 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
 
       // ── Bandas de Bollinger (bbUpper, bbMid, bbLower desde chartData) ──
       if (data.some(d => d.bbUpper != null)) {
-        const bbU = chart.addLineSeries({ color: '#2196F3', lineWidth: 1, lastValueVisible: false, priceLineVisible: false, title: 'BB Upper' })
-        bbU.setData(data.filter(d => d.bbUpper != null).map(d => ({ time: d.date, value: d.bbUpper })))
-        const bbM = chart.addLineSeries({ color: '#FF6D00', lineWidth: 1, lastValueVisible: false, priceLineVisible: false, title: 'BB Mid' })
-        bbM.setData(data.filter(d => d.bbMid != null).map(d => ({ time: d.date, value: d.bbMid })))
-        const bbL = chart.addLineSeries({ color: '#2196F3', lineWidth: 1, lastValueVisible: false, priceLineVisible: false, title: 'BB Lower' })
-        bbL.setData(data.filter(d => d.bbLower != null).map(d => ({ time: d.date, value: d.bbLower })))
+        pintarLinea('bbUpper', { color: '#2196F3', lineWidth: 1, lastValueVisible: false, priceLineVisible: false, title: 'BB Upper' })
+        pintarLinea('bbMid',   { color: '#FF6D00', lineWidth: 1, lastValueVisible: false, priceLineVisible: false, title: 'BB Mid' })
+        pintarLinea('bbLower', { color: '#2196F3', lineWidth: 1, lastValueVisible: false, priceLineVisible: false, title: 'BB Lower' })
       }
 
       // ── MAE (Maximum Adverse Excursion) por trade ──
@@ -1352,7 +1396,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
 
       innerCleanupRef.current=()=>{disposed=true;chartAliveRef.current=false;try{unsubLabels()}catch(_){};cnt.removeEventListener('mousemove',onMove);cnt.removeEventListener('mousedown',onMouseDown);window.removeEventListener('mouseup',onMouseUp);window.removeEventListener('keydown',onKeyDown);window.removeEventListener('keyup',onKeyUp);ro.disconnect()}
     })
-    return()=>{innerCleanupRef.current?.();innerCleanupRef.current=null;chartAliveRef.current=false;if(rsiChartRef.current){if(rsiChartRef.current._isOverlay){try{const c=chartRef.current;if(c){for(const s of rsiChartRef.current._series){c.removeSeries(s)};c.priceScale('rsi').applyOptions({visible:false});c.priceScale('right').applyOptions({scaleMargins:{top:0.02,bottom:0.02}})}}catch(_){}}else{try{rsiChartRef.current.remove()}catch(_){}};rsiChartRef.current=null};if(macdChartRef.current){try{macdChartRef.current.remove()}catch(_){};macdChartRef.current=null};if(volumeChartRef.current){try{volumeChartRef.current.remove()}catch(_){};volumeChartRef.current=null};if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null};candlesRef.current=null}
+    return()=>{innerCleanupRef.current?.();innerCleanupRef.current=null;chartAliveRef.current=false;if(rsiChartRef.current){if(rsiChartRef.current._isOverlay){try{const c=chartRef.current;if(c){for(const s of rsiChartRef.current._series){c.removeSeries(s)};c.priceScale('rsi').applyOptions({visible:false});c.priceScale('right').applyOptions({scaleMargins:{top:0.02,bottom:0.02}})}}catch(_){}}else{try{rsiChartRef.current.remove()}catch(_){}};rsiChartRef.current=null};if(macdChartRef.current){try{macdChartRef.current.remove()}catch(_){};macdChartRef.current=null};if(volumeChartRef.current){try{volumeChartRef.current.remove()}catch(_){};volumeChartRef.current=null};overlaySeriesRef.current.forEach(s=>{try{chartRef.current?.removeSeries(s)}catch(_){}});overlaySeriesRef.current=[];if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null};candlesRef.current=null}
   },[data,emaRPeriod,emaLPeriod,trades,maxDD,labelMode,definition,isBareChart])
 
   // ── isBareChart: ajustar altura al resize de ventana ──
