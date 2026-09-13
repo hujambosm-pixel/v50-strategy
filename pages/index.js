@@ -6,6 +6,7 @@ import { WATCHLIST_DEFAULT } from '../lib/constants'
 import { getSupaUrl, getSupaKey, getSupaH, setCurrentJwt, getCurrentJwt } from '../lib/supabase'
 import { loadSettings, saveSettings, saveSettingsRemote, loadSettingsRemote } from '../lib/settings'
 import { mergeFiltros, loadFiltros, guardarFiltros, hayFiltroActivo } from '../lib/filtros'
+import { loadAsignacionMc, guardarAsignacionMc } from '../lib/mcAsignacion'
 import FiltrosPanel from '../components/FiltrosPanel'
 import { supabase } from '../lib/supabaseClient'
 import { fetchConditions, lsGetConds, lsSaveConds, COND_LS_KEY } from '../lib/conditions'
@@ -1030,20 +1031,24 @@ export default function Home() {
   const [mcSearch,setMcSearch]=useState('')
   const [mcOnlyFavs,setMcOnlyFavs]=useState(false)
   const [mcListFilter,setMcListFilter]=useState('')
-  const [mcMode,setMcMode]=useState('concentrado')       // 'slots' | 'concentrado' | 'compartido' | 'custom' | 'positionsizing'
-  const [selectedModos,setSelectedModos]=useState(['concentrado']) // multi-mode when 1 strategy selected
+  // Ajustes del modo de asignación: se cargan UNA vez, síncronos y ya saneados sobre los defaults
+  // (lib/mcAsignacion.js), así que el estado nace completo y lo que se pinta es lo que viaja al
+  // backend. Se guardan en un único efecto, tras la declaración de mcIntervalo.
+  const [mcAsigBoot]=useState(loadAsignacionMc)
+  const [mcMode,setMcMode]=useState(mcAsigBoot.modo)       // 'slots' | 'concentrado' | 'compartido' | 'custom' | 'positionsizing'
+  const [selectedModos,setSelectedModos]=useState(mcAsigBoot.modos) // multi-mode when 1 strategy selected
   const [mcIsModoCompare,setMcIsModoCompare]=useState(false) // true when comparing modes (vs strategies)
   const [mcWeights,setMcWeights]=useState({})             // {symbol: pct} para modo custom
   const [mcRiskPerTrade,setMcRiskPerTrade]=useState(5)
   const [mcMaxPortfolioPct,setMcMaxPortfolioPct]=useState(20)
   const [mcMaxAccumRisk,setMcMaxAccumRisk]=useState(20)
   const [mcAssumedStopPct,setMcAssumedStopPct]=useState(20)   // distancia de stop asumida (Position Sizing)
-  const [mcMaxPosiciones,setMcMaxPosiciones]=useState(4)  // para modo concentrado
-  const [mcPrioridad,setMcPrioridad]=useState('alfabetico') // criterio desempate concentrado
-  const [mcCriterioUso,setMcCriterioUso]=useState('filtro') // 'desempate' | 'filtro' — uso del criterio en Concentrado (default: filtro)
-  const [mcMomentumN,setMcMomentumN]=useState(20)           // lookback días para criterio momentum
+  const [mcMaxPosiciones,setMcMaxPosiciones]=useState(mcAsigBoot.maxPosiciones)  // para modo concentrado
+  const [mcPrioridad,setMcPrioridad]=useState(mcAsigBoot.prioridad) // criterio desempate concentrado
+  const [mcCriterioUso,setMcCriterioUso]=useState(mcAsigBoot.criterioUso) // 'desempate' | 'filtro' — uso del criterio en Concentrado (default: filtro)
+  const [mcMomentumN,setMcMomentumN]=useState(mcAsigBoot.momentumN)           // lookback días para criterio momentum
   const [mcRsGateThr,setMcRsGateThr]=useState(0)            // umbral gate RS (%) — default 0 (basta batir al índice)
-  const [mcRsWindow,setMcRsWindow]=useState(63)             // ventana (velas) del gate de fuerza relativa — default diario 63 (semanal 13); se resetea al cambiar mcIntervalo; independiente del RS visual (C) y del ranking (A)
+  const [mcRsWindow,setMcRsWindow]=useState(mcAsigBoot.rsWindow)             // ventana (velas) del gate de fuerza relativa — default diario 63 (semanal 13); se resetea al cambiar mcIntervalo; independiente del RS visual (C) y del ranking (A)
   const [mcMomGateThr,setMcMomGateThr]=useState(10)         // umbral gate momentum (% subida mínima)
   const [mcProxGateThr,setMcProxGateThr]=useState(10)       // umbral gate proximidad (% bajo el máximo 52s)
   const [mcCapital,setMcCapital]=useState('compound')    // 'simple' | 'compound'
@@ -1068,10 +1073,26 @@ export default function Home() {
   const [mcChartsStratVisible,setMcChartsStratVisible]=useState({})
   const [mcShowOccupancy,setMcShowOccupancy]=useState(true)
   const [mcOccMode,setMcOccMode]=useState('compound')  // own filter for MC capital chart
-  const [mcIntervalo,setMcIntervalo]=useState('diario')  // 'diario' | 'semanal' — intervalo de datos MC
-  // Reset de la ventana RS del multibacktest al default de su timeframe SIEMPRE que cambie mcIntervalo:
-  // 63 diario, 13 semanal. Pisa el valor manual del input. Solo setState → no dispara backtest (manual).
-  useEffect(()=>{ setMcRsWindow(mcIntervalo==='semanal' ? 13 : 63) },[mcIntervalo])
+  const [mcIntervalo,setMcIntervalo]=useState(mcAsigBoot.intervalo)  // 'diario' | 'semanal' — intervalo de datos MC
+  // Cambiar de intervalo resetea la ventana RS del multibacktest al default de su timeframe —63 diario,
+  // 13 semanal—, pisando el valor manual del input. Solo setState → no dispara backtest (manual).
+  // Vive en este handler y NO en un efecto sobre mcIntervalo, por dos motivos. Un efecto corre también
+  // en el montaje, y ahora que la ventana y el intervalo se restauran de la sesión anterior, la pisaría
+  // en cada recarga. Y en el handler las dos actualizaciones caen en el mismo render, así que el
+  // guardado de abajo escribe UNA vez con los dos valores ya coherentes, en lugar de dos.
+  // Cualquier otro sitio que cambie el intervalo debe pasar por aquí para no saltarse el reset.
+  const cambiarMcIntervalo=(iv)=>{
+    if(iv===mcIntervalo) return   // pulsar el ya activo no resetea, igual que antes
+    setMcIntervalo(iv)
+    setMcRsWindow(iv==='semanal' ? 13 : 63)
+  }
+  // Persistencia de los ajustes del modo de asignación (lib/mcAsignacion.js): una sola escritura por
+  // cambio, con estos ocho campos y ninguno más —capital, periodo y selección de estrategias no se
+  // guardan—. Está aquí porque necesita los ocho estados ya declarados.
+  useEffect(()=>{
+    guardarAsignacionMc({modo:mcMode,modos:selectedModos,maxPosiciones:mcMaxPosiciones,prioridad:mcPrioridad,
+      criterioUso:mcCriterioUso,momentumN:mcMomentumN,rsWindow:mcRsWindow,intervalo:mcIntervalo})
+  },[mcMode,selectedModos,mcMaxPosiciones,mcPrioridad,mcCriterioUso,mcMomentumN,mcRsWindow,mcIntervalo])
   const mcChartRef=useRef(null)
   const savedRangeRef=useRef(null)   // preserve zoom when changing asset
   const isNewResultRef=useRef(false) // signals applyInitialRange to skip savedRange → apply recentMonths
@@ -4858,7 +4879,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.735</title>
+        <title>Trading Simulator V9.736</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4936,7 +4957,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.735
+            <span className="dot"/>Trading Simulator V9.736
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6037,7 +6058,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     <span style={{fontFamily:MONO,fontSize:11,color:'#7aabc8',whiteSpace:'nowrap'}}>Intervalo</span>
                     <div style={{display:'flex',gap:4,marginLeft:'auto'}}>
                       {[{id:'diario',label:'Diario',activeColor:'#4caf82',activeBorder:'#2d6e4e',activeBg:'rgba(76,175,130,0.12)'},{id:'semanal',label:'Semanal',activeColor:'#f0c040',activeBorder:'#a07820',activeBg:'rgba(240,192,64,0.12)'}].map(opt=>(
-                        <button key={opt.id} onClick={()=>setMcIntervalo(opt.id)}
+                        <button key={opt.id} onClick={()=>cambiarMcIntervalo(opt.id)}
                           style={{fontFamily:MONO,fontSize:10,padding:'2px 8px',borderRadius:3,cursor:'pointer',
                             border:`1px solid ${mcIntervalo===opt.id?opt.activeBorder:'var(--border)'}`,
                             background:mcIntervalo===opt.id?opt.activeBg:'transparent',
