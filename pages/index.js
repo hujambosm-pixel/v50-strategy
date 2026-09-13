@@ -1182,18 +1182,30 @@ export default function Home() {
     const bhRes=taxBHCurve(mcResult.bhCurve,capIni)  // B&H no tiene curva flotante (siempre 100% invertido)
     return { compoundById, taxByDateById, totalTaxById, bh:bhRes.curve, bhTaxByDate:bhRes.taxByDate, bhTotalTax:bhRes.totalTax }
   },[mcShowAfterTax,mcResult,mcDisplayResults,mcCapitalIni,capitalIni,showMultiFloat])
+  // ── Base temporal del CAGR en el multibacktest ──
+  // Los años se cuentan SIEMPRE sobre el tramo que la curva cubre de verdad, de su primera a su última
+  // fecha: el mismo tramo del que sale el beneficio, que es el valor final de esa misma curva. Así CAGR
+  // y beneficio hablan del mismo periodo.
+  // NO se usa result.startDate: es la fecha SOLICITADA (última vela − años pedidos) y puede quedar años
+  // antes del primer dato real. Con el tope de descarga de 10 años, un backtest de 20 arranca su curva
+  // en 2016 mientras startDate dice 2006, y las filas de estrategia repartían un beneficio de 10 años
+  // entre 20 —la del B&H ya contaba desde su curva y era la única coherente—. Tampoco las fechas
+  // tecleadas en modo rango, por el mismo motivo: si no hay datos desde el inicio del rango, la curva
+  // empieza después.
+  // startDate sigue intacto en la respuesta: lo usan la exportación, el Gantt y los filtros de Max DD.
+  const mcAniosDeCurva=(curve)=>{
+    const fd=curve?.[0]?.date, ld=curve?.[curve.length-1]?.date
+    return fd&&ld?(new Date(ld)-new Date(fd))/(365.25*24*3600*1000):null
+  }
+  // Primera fecha real de un resultado: la de su curva compuesta (la bhCurve comparte fechas).
+  const mcInicioReal=(res)=>res?.compoundCurve?.[0]?.date||res?.bhCurve?.[0]?.date||res?.startDate||null
   // Resumen fiscal neto para una curva taxada (CAGR neto, ganancia neta, impuesto total).
-  // años: misma fórmula que la tabla de estrategias (rango vs fd/ld vs mcYears).
-  const mcTaxSummaryFor=(taxedCurve,totalTax,startDate)=>{
+  // Años sobre el tramo real de la propia curva taxada, que conserva las fechas de su curva de origen.
+  const mcTaxSummaryFor=(taxedCurve,totalTax)=>{
     if(!taxedCurve?.length) return null
     const capIni=Number(mcCapitalIni||capitalIni)
     const valorFinal=taxedCurve[taxedCurve.length-1].value
-    const fd=startDate?new Date(startDate):null
-    const ld=taxedCurve[taxedCurve.length-1].date?new Date(taxedCurve[taxedCurve.length-1].date):new Date()
-    const anios=mcPeriodMode==='range'&&mcFromDate&&mcToDate
-      ?(new Date(mcToDate)-new Date(mcFromDate))/(365.25*24*3600*1000)
-      :fd&&ld?(ld-fd)/86400000/365.25
-      :mcYears
+    const anios=mcAniosDeCurva(taxedCurve)??mcYears
     const cagr=(Math.pow(Math.max(valorFinal,0.01)/Math.max(capIni,0.01),1/Math.max(anios,0.01))-1)*100
     return { cagr, gan:valorFinal-capIni, tax:totalTax||0 }
   }
@@ -4879,7 +4891,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.736</title>
+        <title>Trading Simulator V9.737</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4957,7 +4969,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.736
+            <span className="dot"/>Trading Simulator V9.737
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -7813,9 +7825,10 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                   <span style={{fontFamily:MONO,fontSize:13,color:'var(--accent)',fontWeight:700}}>📊 Multicartera</span>
                   <span style={{fontFamily:MONO,fontSize:11,color:'#8ab8d4'}}>{mcResult.n} activos · <span style={{color:mcResult.modoAsig==='custom'?'#9b72ff':'#00d4ff'}}>{mcResult.modoAsig==='compartido'?'Capital compartido':mcResult.modoAsig==='concentrado'?'Capital concentrado':'Slots iguales'}</span></span>
                   <span style={{fontFamily:MONO,fontSize:11,color:'#8ab8d4'}}>
+                    {/* Fechas REALES de la curva, no las solicitadas (ver mcAniosDeCurva) */}
                     {mcPeriodMode==='range'&&mcFromDate&&mcToDate
-                      ?<>Desde {fmtDate(mcFromDate)} hasta {fmtDate(mcToDate)}</>
-                      :<>Desde {fmtDate(mcResult.startDate)}</>}
+                      ?<>Desde {fmtDate(mcInicioReal(mcResult)||mcFromDate)} hasta {fmtDate(mcResult.compoundCurve?.slice(-1)[0]?.date||mcToDate)}</>
+                      :<>Desde {fmtDate(mcInicioReal(mcResult))}</>}
                   </span>
                 </div>
 
@@ -7831,10 +7844,9 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                   const bhLast=mcResult.bhCurve?.slice(-1)[0]?.value||capIni
                   const bhFd=mcResult.bhCurve?.[0]?.date?new Date(mcResult.bhCurve[0].date):mcResult.startDate?new Date(mcResult.startDate):null
                   const bhLd=mcResult.bhCurve?.slice(-1)[0]?.date?new Date(mcResult.bhCurve.slice(-1)[0].date):new Date()
-                  const bhAnios=mcPeriodMode==='range'&&mcFromDate&&mcToDate
-                    ?(new Date(mcToDate)-new Date(mcFromDate))/(365.25*24*3600*1000)
-                    :bhFd&&bhLd?(bhLd-bhFd)/86400000/365.25
-                    :1
+                  // Tramo real de la bhCurve (mcAniosDeCurva). En modo años ya contaba así —era la fila
+                  // coherente—; en modo rango usaba las fechas tecleadas, que pueden quedar antes del dato.
+                  const bhAnios=mcAniosDeCurva(mcResult.bhCurve)??(bhFd&&bhLd?(bhLd-bhFd)/86400000/365.25:1)
                   const bhCagr=(Math.pow(Math.max(bhLast,0.01)/Math.max(capIni,0.01),1/Math.max(bhAnios,0.01))-1)*100
                   const bhProfit=bhLast-capIni
                   const bhProfitPct=capIni>0?bhProfit/capIni*100:0
@@ -7887,11 +7899,10 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               const firstC=r.result.compoundCurve?.[0]?.value||capIni
                               const fd=r.result.startDate?new Date(r.result.startDate):null
                               const ld=r.result.compoundCurve?.slice(-1)[0]?.date?new Date(r.result.compoundCurve.slice(-1)[0].date):new Date()
-                              // Modo rango: usar siempre las fechas del usuario (fd/ld son del span completo de datos)
-                              const anios=mcPeriodMode==='range'&&mcFromDate&&mcToDate
-                                ?(new Date(mcToDate)-new Date(mcFromDate))/(365.25*24*3600*1000)
-                                :fd&&ld?(ld-fd)/86400000/365.25
-                                :mcYears
+                              // Años sobre el tramo REAL de su curva compuesta, el mismo del que sale `profit`
+                              // (ver mcAniosDeCurva). Antes contaba desde r.result.startDate —la fecha solicitada—,
+                              // y un backtest que simuló 10 años repartía su beneficio entre 20.
+                              const anios=mcAniosDeCurva(r.result.compoundCurve)??(fd&&ld?(ld-fd)/86400000/365.25:mcYears)
                               const cagrC=(Math.pow(Math.max(lastC,0.01)/Math.max(firstC,0.01),1/Math.max(anios,0.01))-1)*100
                               const grossWin=wins.reduce((s,t)=>s+(t.pnlSimple||0),0)
                               const grossLoss=Math.abs(losses.reduce((s,t)=>s+(t.pnlSimple||0),0))
@@ -7976,7 +7987,9 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                   </tr>
                                   {/* ── Subfilas (activos) ── */}
                                   {isOpen&&rStats.map(a=>{
-                                    const startMs=r.result.startDate?new Date(r.result.startDate).getTime():0
+                                    // Misma base que la fila madre: primera fecha REAL de la curva (mcInicioReal)
+                                    const _inicio=mcInicioReal(r.result)
+                                    const startMs=_inicio?new Date(_inicio).getTime():0
                                     const lastCurveDate=r.result.compoundCurve?.slice(-1)[0]?.date
                                     const endMs=lastCurveDate?new Date(lastCurveDate).getTime():Date.now()
                                     const yrs=startMs>0
@@ -8073,10 +8086,10 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                     const bhWin=a.ganBH>0?100:0
                                     const bhLastDate=mcResult.compoundCurve?.slice(-1)[0]?.date||mcResult.bhCurve?.slice(-1)[0]?.date
                                     const bhEndMs=bhLastDate?new Date(bhLastDate).getTime():Date.now()
-                                    const bhCagrYears=mcPeriodMode==='range'&&mcFromDate&&mcToDate
-                                      ?(new Date(mcToDate)-new Date(mcFromDate))/(365.25*24*3600*1000)
-                                      :mcResult.startDate?(bhEndMs-new Date(mcResult.startDate).getTime())/(365.25*24*3600*1000)
-                                      :5
+                                    // Misma base que la fila madre del B&H: primera fecha REAL de la curva. Antes contaba
+                                    // desde mcResult.startDate (la solicitada) aunque la madre ya usaba la curva.
+                                    const _bhInicio=mcInicioReal(mcResult)
+                                    const bhCagrYears=_bhInicio?(bhEndMs-new Date(_bhInicio).getTime())/(365.25*24*3600*1000):5
                                     const bhCagr=sc>0&&bhCagrYears>0?(Math.pow((sc+ganBH)/sc,1/bhCagrYears)-1)*100:0
                                     return(
                                       <tr key={a.symbol}
@@ -8126,7 +8139,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               ...(mcIsModoCompare?{}:{maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'})}}>
                             {mcIsModoCompare?r.name.split(' · ').pop():r.name}
                           </button>
-                          {mcShowAfterTax&&mcAfterTax&&renderTaxBlock(mcTaxSummaryFor(mcAfterTax.compoundById[r.id],mcAfterTax.totalTaxById[r.id],r.result.startDate))}
+                          {mcShowAfterTax&&mcAfterTax&&renderTaxBlock(mcTaxSummaryFor(mcAfterTax.compoundById[r.id],mcAfterTax.totalTaxById[r.id]))}
                           </div>
                         ))}
                         {mcResult.bhCurve?.length>0&&(
@@ -8138,7 +8151,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               color:mcShowBHCompare?'#a0b4c8':'#3d5a7a'}}>
                             B&H Diversif.
                           </button>
-                          {mcShowAfterTax&&mcAfterTax&&renderTaxBlock(mcTaxSummaryFor(mcAfterTax.bh,mcAfterTax.bhTotalTax,mcResult.startDate))}
+                          {mcShowAfterTax&&mcAfterTax&&renderTaxBlock(mcTaxSummaryFor(mcAfterTax.bh,mcAfterTax.bhTotalTax))}
                           </div>
                         )}
                         {mcResult.sp500BHCurve?.length>0&&(
@@ -8259,8 +8272,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                   )}
                   {mcDisplayResults.length<=1&&mcShowAfterTax&&mcAfterTax&&(
                     <div style={{position:'absolute',top:8,left:8,zIndex:5,pointerEvents:'none',background:'rgba(10,20,35,0.82)',border:'1px solid #2a3f55',borderRadius:6,padding:'5px 9px',fontFamily:MONO,fontSize:9,lineHeight:1.5,color:'#aab8c6'}}>
-                      <div>{fmtTaxLine('Estrategia',mcTaxSummaryFor(mcAfterTax.compoundById['__single__'],mcAfterTax.totalTaxById['__single__'],mcResult.startDate))}</div>
-                      <div>{fmtTaxLine('B&H',mcTaxSummaryFor(mcAfterTax.bh,mcAfterTax.bhTotalTax,mcResult.startDate))}</div>
+                      <div>{fmtTaxLine('Estrategia',mcTaxSummaryFor(mcAfterTax.compoundById['__single__'],mcAfterTax.totalTaxById['__single__']))}</div>
+                      <div>{fmtTaxLine('B&H',mcTaxSummaryFor(mcAfterTax.bh,mcAfterTax.bhTotalTax))}</div>
                     </div>
                   )}
                   </div>
