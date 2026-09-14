@@ -1094,6 +1094,54 @@ function _commonDates(assetResults) {
   const filteredDates = allDates.filter(d => d >= startDate)
   return { allDates, startDate, filteredDates }
 }
+
+// ── Cobertura del periodo solicitado ─────────────────────────
+// Hay dos topes SILENCIOSOS que hacen que un backtest cubra menos de lo pedido, y se avisan por separado
+// porque sus causas son distintas:
+//  · Histórico corto por activo: su primera vela es posterior al inicio pedido. Puede ser un activo que
+//    empezó a cotizar más tarde o una descarga que no trae más historia (hoy fetchAV no pasa de 10 años
+//    por el respaldo de Yahoo). Con lo que devuelve fetchAV —no dice qué fuente sirvió ni si recortó— NO
+//    se puede distinguir cuál de las dos, así que la causa no se informa en lugar de adivinarla.
+//  · Recorte del modo rango: el cliente no manda `years` en modo rango, así que ar.startDate cae a
+//    `última vela − (cfg.years ?? 5)` y un rango de más de 5 años se simula solo en sus últimos 5, aunque
+//    haya datos anteriores. Se detecta por su condición EXACTA, sin heurística. No se arregla aquí: toca
+//    el cálculo de startDate en la construcción de curvas.
+// Tolerancia de 10 días naturales en las dos comparaciones: el inicio pedido es una fecha de calendario y
+// la primera vela real puede llegar días después por fin de semana, festivo o vela semanal.
+const _TOLERANCIA_INICIO_DIAS = 10
+const _diasEntre = (desde, hasta) => (new Date(hasta) - new Date(desde)) / 86400000
+function _coberturaHistorico(assetResults, curves, cfg) {
+  const modoRango = !!(cfg?.fromDate && cfg?.toDate)
+  const solicitadoDesde = modoRango ? cfg.fromDate : (curves?.startDate ?? null)
+  // Por símbolo REAL: en portfolioMode cada ticker aparece una vez por estrategia con los mismos datos.
+  const primera = {}, datosDesde = {}
+  for (const ar of assetResults || []) {
+    if (!ar?.data?.length) continue
+    const sym = ar._realSymbol ?? ar.symbol
+    if (sym in datosDesde) continue
+    datosDesde[sym] = ar.data[0].date
+    // Primera vela que la curva usa de verdad para este activo (las anteriores a startDate se descartan)
+    primera[sym] = ar.data.find(d => d.date >= curves?.startDate)?.date ?? null
+  }
+  const cc = curves?.compoundCurve || []
+  const realDesde = cc[0]?.date ?? null
+  const realHasta = cc[cc.length - 1]?.date ?? null
+  const cortos = solicitadoDesde
+    ? Object.entries(datosDesde)
+        .filter(([, desde]) => _diasEntre(solicitadoDesde, desde) > _TOLERANCIA_INICIO_DIAS)
+        .map(([symbol, desde]) => ({ symbol, desde }))
+        .sort((a, b) => a.desde.localeCompare(b.desde) || a.symbol.localeCompare(b.symbol))
+    : []
+  const recorteRango = modoRango && cfg.years == null && realDesde && curves.startDate > cfg.fromDate
+    && _diasEntre(cfg.fromDate, realDesde) > _TOLERANCIA_INICIO_DIAS
+    ? { pedidoDesde: cfg.fromDate, pedidoHasta: cfg.toDate, simuladoDesde: realDesde, simuladoHasta: realHasta, aniosMotor: cfg.years ?? 5 }
+    : null
+  // null cuando todo cubre lo pedido: la respuesta OMITE entonces el campo y el aviso desaparece solo.
+  const avisos = (cortos.length || recorteRango)
+    ? { solicitadoDesde, solicitadoHasta: modoRango ? cfg.toDate : null, realDesde, realHasta, cortos, recorteRango }
+    : null
+  return { primera, avisos }
+}
 function _calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni) {
   const calcDD = curve => {
     let peak=curve[0]?.value||capitalIni, maxDD=0, maxDDDate=null, ddPeak=peak, ddValley=peak
@@ -1578,13 +1626,18 @@ async function handlePortfolioMode(req, res) {
         : 0
     )
 
+    // Cobertura del periodo pedido (ver _coberturaHistorico). Clave por símbolo real, como assetStats aquí.
+    const cobertura = _coberturaHistorico(assetResults, curves, cfg)
+
     return res.status(200).json({
       ...curves,
       sp500BHCurve,
       // Solo presente si hay algo que avisar: símbolos cuya serie semanal no se pudo descargar y
       // que por tanto operaron SIN el filtro de activo en semanal (fail-open silencioso de otro modo).
       ...(sinSerieSemanal.length ? { avisosFiltros: { sinSerieSemanal } } : {}),
-      assetStats,
+      // Solo presente si algo no cubre el periodo pedido: activos cortos y/o recorte del modo rango.
+      ...(cobertura.avisos ? { avisosHistorico: cobertura.avisos } : {}),
+      assetStats: assetStats.map(a => ({ ...a, primeraFecha: cobertura.primera[a.symbol] ?? null })),
       allTrades:       sourceTrades,
       avgOccupancy,
       tInvEstrategia:  curves.tInvEstrategia ?? 0,
@@ -1979,13 +2032,18 @@ export default async function handler(req, res) {
       }
     }
 
+    // Cobertura del periodo pedido (ver _coberturaHistorico)
+    const cobertura = _coberturaHistorico(assetResults, curves, cfg)
+
     res.status(200).json({
       ...curves,
       sp500BHCurve,
       // Solo presente si hay algo que avisar: símbolos cuya serie semanal no se pudo descargar y
       // que por tanto operaron SIN el filtro de activo en semanal (fail-open silencioso de otro modo).
       ...(sinSerieSemanal.length ? { avisosFiltros: { sinSerieSemanal } } : {}),
-      assetStats,
+      // Solo presente si algo no cubre el periodo pedido: activos cortos y/o recorte del modo rango.
+      ...(cobertura.avisos ? { avisosHistorico: cobertura.avisos } : {}),
+      assetStats: assetStats.map(a => ({ ...a, primeraFecha: cobertura.primera[a.symbol] ?? null })),
       allTrades: sourceTrades,
       avgOccupancy,
       tInvEstrategia: curves.tInvEstrategia ?? 0,

@@ -555,8 +555,21 @@ export default async function handler(req, res) {
     // ── MaxDD con flotante (P&L no realizado incluido) ── igual que toggle "Flotante" del gráfico
     const maxDDStrategyFloat = calcMaxDDFloat(trades, data, capital_ini)
 
+    // ── Cobertura del periodo pedido ──
+    // Si el activo no tiene datos desde el corte (hoy − años), el backtest cubre menos de lo pedido y hasta
+    // ahora no lo decía: las cifras ya se calculan sobre data[0].date, pero el usuario no sabía que sus N
+    // años eran menos. Tolerancia de 10 días naturales: el corte es una fecha de calendario y la primera
+    // vela puede llegar días después por fin de semana, festivo o vela semanal. La causa —activo que empezó
+    // a cotizar más tarde o descarga sin más historia— no se puede distinguir con lo que devuelve fetchAV.
+    const solicitadoDesde = cutoff.toISOString().slice(0, 10)
+    const avisosHistorico = (new Date(data[0].date) - new Date(solicitadoDesde)) / 86400000 > 10
+      ? { solicitadoDesde, realDesde: data[0].date }
+      : null
+
     return res.status(200).json({
       chartData,
+      // Solo presente si el activo no cubre el periodo pedido (se omite en otro caso, como avisosFiltros)
+      ...(avisosHistorico ? { avisosHistorico } : {}),
       trades,
       filterZones: anyFiltroOn ? filterZonesFromFiltros : (Array.isArray(rawFilterZones) ? rawFilterZones : []),
       // Solo presente si hay algo que avisar: símbolos cuya serie semanal no se pudo descargar y

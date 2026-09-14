@@ -1144,6 +1144,21 @@ export default function Home() {
     for(const r of mcMultiResults)(r?.result?.avisosFiltros?.sinSerieSemanal||[]).forEach(x=>s.add(x))
     return [...s]
   },[mcResult,mcMultiResults])
+  // Cobertura del periodo pedido. El backend manda avisosHistorico SOLO si algo no cubre lo solicitado y
+  // lo omite en otro caso, así que, igual que avisoFiltrosMc, no necesita estado: sale de las respuestas
+  // vigentes y desaparece solo. Con varias estrategias hay una respuesta por estrategia sobre los mismos
+  // activos: se unen los activos cortos y el resto se toma de la respuesta visible (mcResult).
+  const avisoHistoricoMc=useMemo(()=>{
+    const conAviso=[mcResult,...mcMultiResults.map(r=>r?.result)].map(r=>r?.avisosHistorico).filter(Boolean)
+    if(!conAviso.length) return null
+    const base=mcResult?.avisosHistorico||conAviso[0]
+    const cortos=new Map()
+    for(const a of conAviso)for(const c of (a.cortos||[]))if(!cortos.has(c.symbol))cortos.set(c.symbol,c.desde)
+    return {...base,
+      cortos:[...cortos].map(([symbol,desde])=>({symbol,desde})).sort((a,b)=>a.desde.localeCompare(b.desde)||a.symbol.localeCompare(b.symbol)),
+      recorteRango:base.recorteRango||conAviso.find(a=>a.recorteRango)?.recorteRango||null}
+  },[mcResult,mcMultiResults])
+  const avisoHistoricoIndiv=result?.avisosHistorico||null
   // Nombre con el que ROTULAR el resultado cuando no viaja dentro de una lista con nombre propio:
   // con UNA estrategia y UN modo, el runner hace una llamada única, guarda en mcResult y deja
   // mcMultiResults vacío, así que la etiqueta hay que reconstruirla. Prioriza la estrategia
@@ -4891,7 +4906,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.737</title>
+        <title>Trading Simulator V9.738</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4969,7 +4984,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.737
+            <span className="dot"/>Trading Simulator V9.738
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -7580,6 +7595,11 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           {metricsView==='multi'?'⊟ 1col':'⊞ 3col'}
                         </button>
                       </div>
+                      {/* Aviso de cobertura del backtest individual (ver avisoHistoricoIndiv): mismo chip ámbar */}
+                      {avisoHistoricoIndiv&&<div title={`Se pidió desde ${fmtDate(avisoHistoricoIndiv.solicitadoDesde)}, pero ${result?.meta?.simbolo||simbolo} solo tiene datos desde el ${fmtDate(avisoHistoricoIndiv.realDesde)}: el backtest cubre menos años de los pedidos.\n\nCausas posibles: el activo empezó a cotizar más tarde, o la descarga no trae más historia (hoy está limitada a 10 años). Con los datos disponibles no se puede distinguir cuál de las dos.\nLas métricas ya se calculan sobre el periodo realmente simulado.`}
+                        style={{fontFamily:MONO,fontSize:10,background:'rgba(255,209,102,0.12)',color:'#ffd166',padding:'3px 10px',cursor:'help',borderBottom:'1px solid var(--border)'}}>
+                        ⚠ Datos desde {fmtDate(avisoHistoricoIndiv.realDesde)} · se pidió desde {fmtDate(avisoHistoricoIndiv.solicitadoDesde)}
+                      </div>}
                       <StratSelector strats={metricsStrats} setStrats={setMetricsStrats}/>
                       <MetricsWrapper rows={buildUnifiedRows(metrics,result?.maxDDBH||0)} strats={metricsStrats}/>
                     </div>
@@ -7787,6 +7807,11 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                     <div style={{padding:'6px 12px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:6}}>
                       <span style={{fontFamily:MONO,fontSize:10,color:'#b8d8f0',letterSpacing:'0.08em',fontWeight:600,flex:1}}>RESUMEN · {displayedSimbolo||simbolo}</span>
                     </div>
+                    {/* Aviso de cobertura del backtest individual (ver avisoHistoricoIndiv): mismo chip ámbar */}
+                    {avisoHistoricoIndiv&&<div title={`Se pidió desde ${fmtDate(avisoHistoricoIndiv.solicitadoDesde)}, pero ${result?.meta?.simbolo||simbolo} solo tiene datos desde el ${fmtDate(avisoHistoricoIndiv.realDesde)}: el backtest cubre menos años de los pedidos.\n\nCausas posibles: el activo empezó a cotizar más tarde, o la descarga no trae más historia (hoy está limitada a 10 años). Con los datos disponibles no se puede distinguir cuál de las dos.\nLas métricas ya se calculan sobre el periodo realmente simulado.`}
+                      style={{fontFamily:MONO,fontSize:10,background:'rgba(255,209,102,0.12)',color:'#ffd166',padding:'3px 10px',cursor:'help',borderBottom:'1px solid var(--border)'}}>
+                      ⚠ Datos desde {fmtDate(avisoHistoricoIndiv.realDesde)} · se pidió desde {fmtDate(avisoHistoricoIndiv.solicitadoDesde)}
+                    </div>}
                     <StratSelector strats={metricsStrats} setStrats={setMetricsStrats}/>
                     {(()=>{
                       const rows = buildUnifiedRows(metrics, result?.maxDDBH||0)
@@ -7830,6 +7855,34 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       ?<>Desde {fmtDate(mcInicioReal(mcResult)||mcFromDate)} hasta {fmtDate(mcResult.compoundCurve?.slice(-1)[0]?.date||mcToDate)}</>
                       :<>Desde {fmtDate(mcInicioReal(mcResult))}</>}
                   </span>
+                  {/* Avisos de cobertura: el periodo simulado es menor que el pedido (ver avisoHistoricoMc).
+                      Mismo chip ámbar que el aviso de filtros de V9.724; el detalle va en el tooltip. */}
+                  {avisoHistoricoMc?.cortos?.length>0&&(()=>{
+                    const a=avisoHistoricoMc, n=a.cortos.length
+                    const tip=[
+                      `Se pidió desde ${fmtDate(a.solicitadoDesde)}, pero el backtest arranca realmente el ${fmtDate(a.realDesde)}.`,
+                      ``,
+                      `${n} ${n===1?'activo no tiene':'activos no tienen'} datos desde la fecha pedida:`,
+                      ...a.cortos.map(c=>`  ${c.symbol} — desde ${fmtDate(c.desde)}`),
+                      ``,
+                      `Causas posibles: el activo empezó a cotizar más tarde, o la descarga no trae más historia (hoy está limitada a 10 años). Con los datos disponibles no se puede distinguir cuál de las dos.`,
+                      `Las cifras de la tabla ya se calculan sobre el periodo realmente simulado.`,
+                    ].join('\n')
+                    return <span title={tip} style={{fontFamily:MONO,fontSize:10,background:'rgba(255,209,102,0.12)',color:'#ffd166',borderRadius:2,padding:'1px 5px',lineHeight:'15px',cursor:'help',whiteSpace:'nowrap'}}>
+                      ⚠ {n} {n===1?'activo corto':'activos cortos'} · arranca {fmtDate(a.realDesde)}
+                    </span>
+                  })()}
+                  {avisoHistoricoMc?.recorteRango&&(()=>{
+                    const r=avisoHistoricoMc.recorteRango
+                    const tip=[
+                      `Se pidió simular del ${fmtDate(r.pedidoDesde)} al ${fmtDate(r.pedidoHasta)}, pero se simula del ${fmtDate(r.simuladoDesde)} al ${fmtDate(r.simuladoHasta)}.`,
+                      ``,
+                      `En modo rango el motor solo usa los últimos ${r.aniosMotor} años del rango: es un límite del cálculo, no de los datos descargados.`,
+                    ].join('\n')
+                    return <span title={tip} style={{fontFamily:MONO,fontSize:10,background:'rgba(255,209,102,0.12)',color:'#ffd166',borderRadius:2,padding:'1px 5px',lineHeight:'15px',cursor:'help',whiteSpace:'nowrap'}}>
+                      ⚠ Simula {fmtDate(r.simuladoDesde)}–{fmtDate(r.simuladoHasta)} · se pidió {fmtDate(r.pedidoDesde)}–{fmtDate(r.pedidoHasta)}
+                    </span>
+                  })()}
                 </div>
 
                 {/* ── Tabla unificada: Comparativa + Resumen por activo ── */}
