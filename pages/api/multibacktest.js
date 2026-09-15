@@ -82,8 +82,11 @@ function rebuildCapitalTras(trades, initCapital) {
 async function fetchData(symbol, years=5, fromDate=null, toDate=null, interval='1d') {
   try {
     const avInterval = (interval === '1wk' || interval === 'w') ? 'w' : 'd'
-    // +1 año de buffer para warm-up de la EMA (igual que datos.js)
-    let data = await fetchAV(symbol, Math.ceil(years) + 1, avInterval)
+    // +1 año de buffer para warm-up de la EMA (igual que datos.js). En modo Fechas se piden los años que
+    // hay desde fromDate hasta hoy (nunca menos que antes): con solo `years` —5 por defecto, el cliente no
+    // lo manda en rango— un rango largo llegaba ya truncado. El modo Años pide exactamente lo mismo.
+    const anios = (fromDate && toDate) ? Math.max(years, _aniosHastaHoy(fromDate)) : years
+    let data = await fetchAV(symbol, Math.ceil(anios) + 1, avInterval)
     if (!data?.length) return null
     if (fromDate && toDate) {
       data = data.filter(d => d.date >= fromDate && d.date <= toDate)
@@ -94,6 +97,16 @@ async function fetchData(symbol, years=5, fromDate=null, toDate=null, interval='
     }
     return data.length ? data : null
   } catch { return null }
+}
+const _aniosHastaHoy = (fecha) => (Date.now() - new Date(fecha)) / (365.25 * 86400000)
+
+// Inicio de la simulación de un activo (ar.startDate). En modo Fechas es fromDate: la curva arranca en la
+// primera vela ≥ fromDate, o en la primera disponible si es posterior. En modo Años, última vela − años.
+function _inicioSimulacion(data, cfg) {
+  if (cfg?.fromDate && cfg?.toDate) return cfg.fromDate
+  const cutoff = new Date(data[data.length - 1].date)
+  cutoff.setFullYear(cutoff.getFullYear() - (cfg.years ?? 5))
+  return cutoff.toISOString().split('T')[0]
 }
 
 // Muestreo de fechas para curvas: intervalos fijos (cada step días) + SIEMPRE las fechas
@@ -1102,10 +1115,10 @@ function _commonDates(assetResults) {
 //    empezó a cotizar más tarde o una descarga que no trae más historia (hoy fetchAV no pasa de 10 años
 //    por el respaldo de Yahoo). Con lo que devuelve fetchAV —no dice qué fuente sirvió ni si recortó— NO
 //    se puede distinguir cuál de las dos, así que la causa no se informa en lugar de adivinarla.
-//  · Recorte del modo rango: el cliente no manda `years` en modo rango, así que ar.startDate cae a
-//    `última vela − (cfg.years ?? 5)` y un rango de más de 5 años se simula solo en sus últimos 5, aunque
-//    haya datos anteriores. Se detecta por su condición EXACTA, sin heurística. No se arregla aquí: toca
-//    el cálculo de startDate en la construcción de curvas.
+//  · Recorte del modo rango: el cliente no manda `years` en modo rango y el motor caía a 5 años, así que
+//    un rango largo se simulaba solo en sus últimos 5 aunque hubiera datos. Ya no ocurre: fetchData
+//    descarga desde fromDate y _inicioSimulacion arranca en fromDate. La comprobación se mantiene, por su
+//    condición EXACTA, como guarda: si el recorte volviera, el aviso reaparece en vez de callarse.
 // Tolerancia de 10 días naturales en las dos comparaciones: el inicio pedido es una fecha de calendario y
 // la primera vela real puede llegar días después por fin de semana, festivo o vela semanal.
 const _TOLERANCIA_INICIO_DIAS = 10
@@ -1399,9 +1412,7 @@ async function handlePortfolioMode(req, res) {
           _stratOrder: s.stratOrder,
           _realSymbol: ticker,
         }))
-        const cutoff = new Date(data[data.length - 1].date)
-        cutoff.setFullYear(cutoff.getFullYear() - (cfg.years ?? 5))
-        const startDate = cutoff.toISOString().split('T')[0]
+        const startDate = _inicioSimulacion(data, cfg)
         assetResults.push({
           symbol:      synSym,
           _realSymbol: ticker,
@@ -1787,15 +1798,11 @@ export default async function handler(req, res) {
         const { trades } = runCodeJsAsset(data, sp500Data, codeJs, slotCapital, cfg.years ?? 5, effectiveCfg)
         const capitalReinv = trades.length ? trades[trades.length-1].capitalTras : slotCapital
         const gananciaSimple = trades.reduce((s,t) => s + t.pnlSimple, 0)
-        const cutoff = new Date(data[data.length-1].date)
-        cutoff.setFullYear(cutoff.getFullYear() - (cfg.years ?? 5))
-        const startDate = cutoff.toISOString().split('T')[0]
+        const startDate = _inicioSimulacion(data, cfg)
         return { symbol: sym, data, trades, capitalReinv, gananciaSimple, startDate, blockEvents: {} }
       }
       // isNoStrategy: sin código → trades vacíos; los filtros los poblarán si están activos
-      const cutoff = new Date(data[data.length-1].date)
-      cutoff.setFullYear(cutoff.getFullYear() - (cfg.years ?? 5))
-      const startDate = cutoff.toISOString().split('T')[0]
+      const startDate = _inicioSimulacion(data, cfg)
       return { symbol: sym, data, trades: [], capitalReinv: slotCapital, gananciaSimple: 0, startDate, blockEvents: {} }
     }).filter(Boolean)
 
