@@ -1147,15 +1147,18 @@ export default function Home() {
   // Cobertura del periodo pedido. El backend manda avisosHistorico SOLO si algo no cubre lo solicitado y
   // lo omite en otro caso, así que, igual que avisoFiltrosMc, no necesita estado: sale de las respuestas
   // vigentes y desaparece solo. Con varias estrategias hay una respuesta por estrategia sobre los mismos
-  // activos: se unen los activos cortos y el resto se toma de la respuesta visible (mcResult).
+  // activos: se unen los activos cortos y los excluidos (cada lista por separado) y el resto se toma de la
+  // respuesta visible (mcResult).
   const avisoHistoricoMc=useMemo(()=>{
     const conAviso=[mcResult,...mcMultiResults.map(r=>r?.result)].map(r=>r?.avisosHistorico).filter(Boolean)
     if(!conAviso.length) return null
     const base=mcResult?.avisosHistorico||conAviso[0]
-    const cortos=new Map()
+    const cortos=new Map(), excluidos=new Map()
     for(const a of conAviso)for(const c of (a.cortos||[]))if(!cortos.has(c.symbol))cortos.set(c.symbol,c.desde)
+    for(const a of conAviso)for(const e of (a.excluidos||[]))if(!excluidos.has(e.symbol))excluidos.set(e.symbol,e)
     return {...base,
       cortos:[...cortos].map(([symbol,desde])=>({symbol,desde})).sort((a,b)=>a.desde.localeCompare(b.desde)||a.symbol.localeCompare(b.symbol)),
+      excluidos:[...excluidos.values()].sort((a,b)=>a.symbol.localeCompare(b.symbol)),
       recorteRango:base.recorteRango||conAviso.find(a=>a.recorteRango)?.recorteRango||null}
   },[mcResult,mcMultiResults])
   const avisoHistoricoIndiv=result?.avisosHistorico||null
@@ -4906,7 +4909,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.740</title>
+        <title>Trading Simulator V9.741</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4984,7 +4987,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.740
+            <span className="dot"/>Trading Simulator V9.741
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -7848,7 +7851,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                 {/* Header resumen */}
                 <div style={{padding:'7px 16px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
                   <span style={{fontFamily:MONO,fontSize:13,color:'var(--accent)',fontWeight:700}}>📊 Multicartera</span>
-                  <span style={{fontFamily:MONO,fontSize:11,color:'#8ab8d4'}}>{mcResult.n} activos · <span style={{color:mcResult.modoAsig==='custom'?'#9b72ff':'#00d4ff'}}>{mcResult.modoAsig==='compartido'?'Capital compartido':mcResult.modoAsig==='concentrado'?'Capital concentrado':'Slots iguales'}</span></span>
+                  <span style={{fontFamily:MONO,fontSize:11,color:'#8ab8d4'}}>{/* Con excluidos, "N de M": los que entran frente a los pedidos (misma respuesta) */}{mcResult.avisosHistorico?.excluidos?.length?`${mcResult.n} de ${mcResult.n+mcResult.avisosHistorico.excluidos.length}`:mcResult.n} activos · <span style={{color:mcResult.modoAsig==='custom'?'#9b72ff':'#00d4ff'}}>{mcResult.modoAsig==='compartido'?'Capital compartido':mcResult.modoAsig==='concentrado'?'Capital concentrado':'Slots iguales'}</span></span>
                   <span style={{fontFamily:MONO,fontSize:11,color:'#8ab8d4'}}>
                     {/* Fechas REALES de la curva, no las solicitadas (ver mcAniosDeCurva) */}
                     {mcPeriodMode==='range'&&mcFromDate&&mcToDate
@@ -7857,6 +7860,20 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                   </span>
                   {/* Avisos de cobertura: el periodo simulado es menor que el pedido (ver avisoHistoricoMc).
                       Mismo chip ámbar que el aviso de filtros de V9.724; el detalle va en el tooltip. */}
+                  {avisoHistoricoMc?.excluidos?.length>0&&(()=>{
+                    const n=avisoHistoricoMc.excluidos.length
+                    const tip=[
+                      `${n} ${n===1?'activo pedido no entra':'activos pedidos no entran'} en el backtest:`,
+                      ...avisoHistoricoMc.excluidos.map(e=>e.motivo==='sinVelasEnPeriodo'
+                        ?`  ${e.symbol} — sin velas en el periodo pedido (hay datos del ${fmtDate(e.disponibleDesde)} al ${fmtDate(e.disponibleHasta)})`
+                        :`  ${e.symbol} — la descarga no trajo datos (símbolo inexistente o fallo del proveedor)`),
+                      ``,
+                      `No reciben capital: el reparto y el B&H Diversificado se calculan solo sobre los activos con datos.`,
+                    ].join('\n')
+                    return <span title={tip} style={{fontFamily:MONO,fontSize:10,background:'rgba(255,209,102,0.12)',color:'#ffd166',borderRadius:2,padding:'1px 5px',lineHeight:'15px',cursor:'help',whiteSpace:'nowrap'}}>
+                      ⚠ {n} {n===1?'activo excluido':'activos excluidos'}
+                    </span>
+                  })()}
                   {avisoHistoricoMc?.cortos?.length>0&&(()=>{
                     const a=avisoHistoricoMc, n=a.cortos.length
                     const tip=[

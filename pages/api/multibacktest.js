@@ -80,23 +80,50 @@ function rebuildCapitalTras(trades, initCapital) {
 // que los gráficos individuales (datos.js). Mantiene la firma de fetchData y el contrato null-on-failure
 // que espera multibacktest.js. Antes usaba solo Yahoo → NVDA y otros llegaban truncados (~21 may).
 async function fetchData(symbol, years=5, fromDate=null, toDate=null, interval='1d') {
+  return (await fetchDataConMotivo(symbol, years, fromDate, toDate, interval)).data
+}
+// Igual que fetchData, pero sin reducir a null los casos sin velas: dice POR QUÉ no hay datos. Los activos
+// pedidos se descargan con esta para poder avisar de los que se quedan fuera; las series auxiliares siguen
+// con fetchData.
+//   { data }                                                   → hay velas en el periodo
+//   { data: null, motivo: 'descargaFallida' }                   → la descarga no trae nada: símbolo inexistente
+//                                                                  o fallo del proveedor (no se distingue)
+//   { data: null, motivo: 'sinVelasEnPeriodo', disponibleDesde, disponibleHasta }
+//                                                               → hay datos, pero ninguno en el periodo pedido
+async function fetchDataConMotivo(symbol, years=5, fromDate=null, toDate=null, interval='1d') {
   try {
     const avInterval = (interval === '1wk' || interval === 'w') ? 'w' : 'd'
     // +1 año de buffer para warm-up de la EMA (igual que datos.js). En modo Fechas se piden los años que
     // hay desde fromDate hasta hoy (nunca menos que antes): con solo `years` —5 por defecto, el cliente no
     // lo manda en rango— un rango largo llegaba ya truncado. El modo Años pide exactamente lo mismo.
     const anios = (fromDate && toDate) ? Math.max(years, _aniosHastaHoy(fromDate)) : years
-    let data = await fetchAV(symbol, Math.ceil(anios) + 1, avInterval)
-    if (!data?.length) return null
+    const bruto = await fetchAV(symbol, Math.ceil(anios) + 1, avInterval)
+    if (!bruto?.length) return { data: null, motivo: 'descargaFallida' }
+    let data
     if (fromDate && toDate) {
-      data = data.filter(d => d.date >= fromDate && d.date <= toDate)
+      data = bruto.filter(d => d.date >= fromDate && d.date <= toDate)
     } else {
       const cut = new Date(); cut.setFullYear(cut.getFullYear() - Math.ceil(years))
       const cutStr = cut.toISOString().slice(0, 10)
-      data = data.filter(d => d.date >= cutStr)
+      data = bruto.filter(d => d.date >= cutStr)
     }
-    return data.length ? data : null
-  } catch { return null }
+    return data.length
+      ? { data }
+      : { data: null, motivo: 'sinVelasEnPeriodo', disponibleDesde: bruto[0].date, disponibleHasta: bruto[bruto.length - 1].date }
+  } catch { return { data: null, motivo: 'descargaFallida' } }
+}
+// Activos pedidos que no llegan a assetResults por no tener velas utilizables, con su motivo (ver
+// fetchDataConMotivo). `descargas`: símbolo → resultado de fetchDataConMotivo.
+function _activosExcluidos(simbolos, descargas) {
+  return [...new Set(simbolos)]
+    .filter(s => !descargas[s]?.data?.length)
+    .map(s => {
+      const r = descargas[s] || { motivo: 'descargaFallida' }
+      return r.motivo === 'sinVelasEnPeriodo'
+        ? { symbol: s, motivo: r.motivo, disponibleDesde: r.disponibleDesde, disponibleHasta: r.disponibleHasta }
+        : { symbol: s, motivo: 'descargaFallida' }
+    })
+    .sort((a, b) => a.symbol.localeCompare(b.symbol))
 }
 const _aniosHastaHoy = (fecha) => (Date.now() - new Date(fecha)) / (365.25 * 86400000)
 
@@ -1119,11 +1146,15 @@ function _commonDates(assetResults) {
 //    un rango largo se simulaba solo en sus últimos 5 aunque hubiera datos. Ya no ocurre: fetchData
 //    descarga desde fromDate y _inicioSimulacion arranca en fromDate. La comprobación se mantiene, por su
 //    condición EXACTA, como guarda: si el recorte volviera, el aviso reaparece en vez de callarse.
+//  · Activos excluidos: pedidos que no tienen NINGUNA vela en el periodo, o cuya descarga no trajo nada,
+//    y por eso no llegan a assetResults (el reparto de capital y el B&H se hacen sin ellos). No pueden
+//    salir como cortos porque aquí solo se recorre assetResults: llegan aparte, ya calculados, en
+//    `excluidos` (ver _activosExcluidos) y viajan en su propia lista, sin mezclarse con los cortos.
 // Tolerancia de 10 días naturales en las dos comparaciones: el inicio pedido es una fecha de calendario y
 // la primera vela real puede llegar días después por fin de semana, festivo o vela semanal.
 const _TOLERANCIA_INICIO_DIAS = 10
 const _diasEntre = (desde, hasta) => (new Date(hasta) - new Date(desde)) / 86400000
-function _coberturaHistorico(assetResults, curves, cfg) {
+function _coberturaHistorico(assetResults, curves, cfg, excluidos = []) {
   const modoRango = !!(cfg?.fromDate && cfg?.toDate)
   const solicitadoDesde = modoRango ? cfg.fromDate : (curves?.startDate ?? null)
   // Por símbolo REAL: en portfolioMode cada ticker aparece una vez por estrategia con los mismos datos.
@@ -1150,8 +1181,8 @@ function _coberturaHistorico(assetResults, curves, cfg) {
     ? { pedidoDesde: cfg.fromDate, pedidoHasta: cfg.toDate, simuladoDesde: realDesde, simuladoHasta: realHasta, aniosMotor: cfg.years ?? 5 }
     : null
   // null cuando todo cubre lo pedido: la respuesta OMITE entonces el campo y el aviso desaparece solo.
-  const avisos = (cortos.length || recorteRango)
-    ? { solicitadoDesde, solicitadoHasta: modoRango ? cfg.toDate : null, realDesde, realHasta, cortos, recorteRango }
+  const avisos = (cortos.length || recorteRango || excluidos.length)
+    ? { solicitadoDesde, solicitadoHasta: modoRango ? cfg.toDate : null, realDesde, realHasta, cortos, recorteRango, excluidos }
     : null
   return { primera, avisos }
 }
@@ -1362,11 +1393,13 @@ async function handlePortfolioMode(req, res) {
     // 2. Descargar OHLCV con cache por ticker (cada ticker solo una vez)
     const allTickers = [...new Set(stratMeta.flatMap(s => s.symbols || []))]
     const tickerCache = {}
+    const descargas = {}   // ticker → resultado de fetchDataConMotivo, para avisar de los excluidos
     const BATCH = 4
     for (let i = 0; i < allTickers.length; i += BATCH) {
       const chunk = allTickers.slice(i, i + BATCH)
       await Promise.all(chunk.map(async ticker => {
-        tickerCache[ticker] = await fetchData(ticker, cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, assetInterval)
+        descargas[ticker] = await fetchDataConMotivo(ticker, cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, assetInterval)
+        tickerCache[ticker] = descargas[ticker].data
       }))
       if (i + BATCH < allTickers.length) await sleep(400)
     }
@@ -1638,7 +1671,7 @@ async function handlePortfolioMode(req, res) {
     )
 
     // Cobertura del periodo pedido (ver _coberturaHistorico). Clave por símbolo real, como assetStats aquí.
-    const cobertura = _coberturaHistorico(assetResults, curves, cfg)
+    const cobertura = _coberturaHistorico(assetResults, curves, cfg, _activosExcluidos(allTickers, descargas))
 
     return res.status(200).json({
       ...curves,
@@ -1732,9 +1765,13 @@ export default async function handler(req, res) {
     const assetInterval = intervalo === 'semanal' ? '1wk' : '1d'
     const BATCH = 4
     const allData = {}
+    const descargas = {}   // símbolo → resultado de fetchDataConMotivo, para avisar de los excluidos
     for (let i = 0; i < symbols.length; i += BATCH) {
       const chunk = symbols.slice(i, i+BATCH)
-      await Promise.all(chunk.map(async sym => { allData[sym] = await fetchData(sym, cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, assetInterval) }))
+      await Promise.all(chunk.map(async sym => {
+        descargas[sym] = await fetchDataConMotivo(sym, cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, assetInterval)
+        allData[sym] = descargas[sym].data
+      }))
       if (i+BATCH < symbols.length) await sleep(400)
     }
 
@@ -2040,7 +2077,7 @@ export default async function handler(req, res) {
     }
 
     // Cobertura del periodo pedido (ver _coberturaHistorico)
-    const cobertura = _coberturaHistorico(assetResults, curves, cfg)
+    const cobertura = _coberturaHistorico(assetResults, curves, cfg, _activosExcluidos(symbols, descargas))
 
     res.status(200).json({
       ...curves,
