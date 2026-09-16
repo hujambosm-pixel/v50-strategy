@@ -67,10 +67,10 @@ export async function fetchAV(symbol, years=5, interval='d') {
   // ── Yahoo Finance fallback with 4-second timeout ──
   if (!rawData || rawData.length === 0) {
     const yfInterval = interval === 'w' ? '1wk' : '1d'
-    const yfYears = Math.min(Math.max(Math.ceil(years), 1), 10)
-    const yfUrl = yfYears <= 10
-      ? `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=${yfInterval}&range=${yfYears}y`
-      : (() => { const p1=Math.floor(Date.now()/1000)-Math.ceil(years)*365*24*3600; return `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=${yfInterval}&period1=${p1}&period2=${Math.floor(Date.now()/1000)}` })()
+    // Se piden los años solicitados, sin tope: range=Ny sirve velas diarias/semanales hasta toda la historia
+    // del activo (si se pide más, Yahoo devuelve lo que hay). NO usar range=max: degrada a velas trimestrales.
+    const yfYears = Math.max(Math.ceil(years), 1)
+    const yfUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=${yfInterval}&range=${yfYears}y`
     const yfCtrl = new AbortController()
     const yfTimer = setTimeout(() => yfCtrl.abort(), 4000)
     try {
