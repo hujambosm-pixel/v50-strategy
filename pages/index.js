@@ -1205,7 +1205,7 @@ export default function Home() {
   // fecha: el mismo tramo del que sale el beneficio, que es el valor final de esa misma curva. Así CAGR
   // y beneficio hablan del mismo periodo.
   // NO se usa result.startDate: es la fecha SOLICITADA (última vela − años pedidos) y puede quedar años
-  // antes del primer dato real. Con el tope de descarga de 10 años, un backtest de 20 arranca su curva
+  // antes del primer dato real. Con el tope de descarga de 10 años que hubo, un backtest de 20 arrancaba su curva
   // en 2016 mientras startDate dice 2006, y las filas de estrategia repartían un beneficio de 10 años
   // entre 20 —la del B&H ya contaba desde su curva y era la única coherente—. Tampoco las fechas
   // tecleadas en modo rango, por el mismo motivo: si no hay datos desde el inicio del rango, la curva
@@ -4909,7 +4909,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.741</title>
+        <title>Trading Simulator V9.742</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4987,7 +4987,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.741
+            <span className="dot"/>Trading Simulator V9.742
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -7599,7 +7599,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         </button>
                       </div>
                       {/* Aviso de cobertura del backtest individual (ver avisoHistoricoIndiv): mismo chip ámbar */}
-                      {avisoHistoricoIndiv&&<div title={`Se pidió desde ${fmtDate(avisoHistoricoIndiv.solicitadoDesde)}, pero ${result?.meta?.simbolo||simbolo} solo tiene datos desde el ${fmtDate(avisoHistoricoIndiv.realDesde)}: el backtest cubre menos años de los pedidos.\n\nCausas posibles: el activo empezó a cotizar más tarde, o la descarga no trae más historia (hoy está limitada a 10 años). Con los datos disponibles no se puede distinguir cuál de las dos.\nLas métricas ya se calculan sobre el periodo realmente simulado.`}
+                      {avisoHistoricoIndiv&&<div title={`Se pidió desde ${fmtDate(avisoHistoricoIndiv.solicitadoDesde)}, pero ${result?.meta?.simbolo||simbolo} solo tiene datos desde el ${fmtDate(avisoHistoricoIndiv.realDesde)}: el backtest cubre menos años de los pedidos.\n\nCausas posibles: el activo empezó a cotizar más tarde, o la fuente de datos no tiene más histórico de ese activo. Con los datos disponibles no se puede distinguir cuál de las dos.\nLas métricas ya se calculan sobre el periodo realmente simulado.`}
                         style={{fontFamily:MONO,fontSize:10,background:'rgba(255,209,102,0.12)',color:'#ffd166',padding:'3px 10px',cursor:'help',borderBottom:'1px solid var(--border)'}}>
                         ⚠ Datos desde {fmtDate(avisoHistoricoIndiv.realDesde)} · se pidió desde {fmtDate(avisoHistoricoIndiv.solicitadoDesde)}
                       </div>}
@@ -7811,7 +7811,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       <span style={{fontFamily:MONO,fontSize:10,color:'#b8d8f0',letterSpacing:'0.08em',fontWeight:600,flex:1}}>RESUMEN · {displayedSimbolo||simbolo}</span>
                     </div>
                     {/* Aviso de cobertura del backtest individual (ver avisoHistoricoIndiv): mismo chip ámbar */}
-                    {avisoHistoricoIndiv&&<div title={`Se pidió desde ${fmtDate(avisoHistoricoIndiv.solicitadoDesde)}, pero ${result?.meta?.simbolo||simbolo} solo tiene datos desde el ${fmtDate(avisoHistoricoIndiv.realDesde)}: el backtest cubre menos años de los pedidos.\n\nCausas posibles: el activo empezó a cotizar más tarde, o la descarga no trae más historia (hoy está limitada a 10 años). Con los datos disponibles no se puede distinguir cuál de las dos.\nLas métricas ya se calculan sobre el periodo realmente simulado.`}
+                    {avisoHistoricoIndiv&&<div title={`Se pidió desde ${fmtDate(avisoHistoricoIndiv.solicitadoDesde)}, pero ${result?.meta?.simbolo||simbolo} solo tiene datos desde el ${fmtDate(avisoHistoricoIndiv.realDesde)}: el backtest cubre menos años de los pedidos.\n\nCausas posibles: el activo empezó a cotizar más tarde, o la fuente de datos no tiene más histórico de ese activo. Con los datos disponibles no se puede distinguir cuál de las dos.\nLas métricas ya se calculan sobre el periodo realmente simulado.`}
                       style={{fontFamily:MONO,fontSize:10,background:'rgba(255,209,102,0.12)',color:'#ffd166',padding:'3px 10px',cursor:'help',borderBottom:'1px solid var(--border)'}}>
                       ⚠ Datos desde {fmtDate(avisoHistoricoIndiv.realDesde)} · se pidió desde {fmtDate(avisoHistoricoIndiv.solicitadoDesde)}
                     </div>}
@@ -7882,7 +7882,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       `${n} ${n===1?'activo no tiene':'activos no tienen'} datos desde la fecha pedida:`,
                       ...a.cortos.map(c=>`  ${c.symbol} — desde ${fmtDate(c.desde)}`),
                       ``,
-                      `Causas posibles: el activo empezó a cotizar más tarde, o la descarga no trae más historia (hoy está limitada a 10 años). Con los datos disponibles no se puede distinguir cuál de las dos.`,
+                      `Causas posibles: el activo empezó a cotizar más tarde, o la fuente de datos no tiene más histórico de ese activo. Con los datos disponibles no se puede distinguir cuál de las dos.`,
                       `Las cifras de la tabla ya se calculan sobre el periodo realmente simulado.`,
                     ].join('\n')
                     return <span title={tip} style={{fontFamily:MONO,fontSize:10,background:'rgba(255,209,102,0.12)',color:'#ffd166',borderRadius:2,padding:'1px 5px',lineHeight:'15px',cursor:'help',whiteSpace:'nowrap'}}>

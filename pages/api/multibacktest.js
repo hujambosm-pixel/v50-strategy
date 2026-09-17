@@ -125,6 +125,24 @@ function _activosExcluidos(simbolos, descargas) {
     })
     .sort((a, b) => a.symbol.localeCompare(b.symbol))
 }
+// Mensaje del 400 cuando NINGÚN activo pedido tiene datos, según el motivo (ver fetchDataConMotivo). Si
+// todos fallaron en la descarga devuelve null: cada camino conserva entonces su mensaje de fallo.
+function _mensajeTodosExcluidos(excluidos, cfg) {
+  const sinVelas = excluidos.filter(e => e.motivo === 'sinVelasEnPeriodo')
+    .sort((a, b) => a.disponibleDesde.localeCompare(b.disponibleDesde) || a.symbol.localeCompare(b.symbol))
+  const fallidos = excluidos.filter(e => e.motivo !== 'sinVelasEnPeriodo')
+  if (!sinVelas.length) return null
+  const fmt = f => f.split('-').reverse().join('/')
+  const lista = (xs, txt) => xs.slice(0, 6).map(txt).join(', ') + (xs.length > 6 ? ` y ${xs.length - 6} más` : '')
+  const modoRango = !!(cfg?.fromDate && cfg?.toDate)
+  const periodo = modoRango ? `entre el ${fmt(cfg.fromDate)} y el ${fmt(cfg.toDate)}` : `en los últimos ${cfg?.years ?? 5} años`
+  const disponibles = lista(sinVelas, e => `${e.symbol} ${fmt(e.disponibleDesde)}–${fmt(e.disponibleHasta)}`)
+  if (!fallidos.length) {
+    const posteriores = modoRango && sinVelas.every(e => e.disponibleDesde > cfg.toDate)
+    return `Ningún activo tiene velas ${periodo}${posteriores ? ': el rango es anterior a los datos de todos ellos' : ''}. Datos disponibles: ${disponibles}.`
+  }
+  return `Ningún activo tiene datos ${periodo}: ${sinVelas.length} sin velas en ese periodo (datos disponibles: ${disponibles}) y ${fallidos.length} con la descarga fallida (${lista(fallidos, e => e.symbol)}).`
+}
 const _aniosHastaHoy = (fecha) => (Date.now() - new Date(fecha)) / (365.25 * 86400000)
 
 // Inicio de la simulación de un activo (ar.startDate). En modo Fechas es fromDate: la curva arranca en la
@@ -1139,9 +1157,9 @@ function _commonDates(assetResults) {
 // Hay dos topes SILENCIOSOS que hacen que un backtest cubra menos de lo pedido, y se avisan por separado
 // porque sus causas son distintas:
 //  · Histórico corto por activo: su primera vela es posterior al inicio pedido. Puede ser un activo que
-//    empezó a cotizar más tarde o una descarga que no trae más historia (hoy fetchAV no pasa de 10 años
-//    por el respaldo de Yahoo). Con lo que devuelve fetchAV —no dice qué fuente sirvió ni si recortó— NO
-//    se puede distinguir cuál de las dos, así que la causa no se informa en lugar de adivinarla.
+//    empezó a cotizar más tarde o una fuente que no tiene más histórico de ese activo. Con lo que devuelve
+//    fetchAV —no dice qué fuente sirvió— NO se puede distinguir cuál de las dos, así que la causa no se
+//    informa en lugar de adivinarla.
 //  · Recorte del modo rango: el cliente no manda `years` en modo rango y el motor caía a 5 años, así que
 //    un rango largo se simulaba solo en sus últimos 5 aunque hubiera datos. Ya no ocurre: fetchData
 //    descarga desde fromDate y _inicioSimulacion arranca en fromDate. La comprobación se mantiene, por su
@@ -1419,7 +1437,13 @@ async function handlePortfolioMode(req, res) {
       for (const ticker of (s.symbols || []))
         if (tickerCache[ticker]?.length) nPairs++
     }
-    if (!nPairs) return res.status(400).json({ error: 'No hay pares (estrategia×símbolo) con datos válidos' })
+    if (!nPairs) {
+      // Si TODOS los tickers pedidos se quedaron sin datos, se dice por qué; si hay datos pero ninguna
+      // estrategia con código, el mensaje de siempre.
+      const excluidos = _activosExcluidos(allTickers, descargas)
+      const motivo = excluidos.length === allTickers.length ? _mensajeTodosExcluidos(excluidos, cfg) : null
+      return res.status(400).json({ error: motivo ?? 'No hay pares (estrategia×símbolo) con datos válidos' })
+    }
     const slotCapital = cfg.capitalIni / nPairs
 
     // 4. runCodeJsAsset por (estrategia, símbolo) → símbolo sintético determinista
@@ -1487,16 +1511,18 @@ async function handlePortfolioMode(req, res) {
 
       // Series SEMANALES de los propios activos, solo si algún filtro de ámbito activo las pide y el
       // backtest corre en diario (en semanal, ar.data YA son esas velas). Mismos lotes de 4 con
-      // pausa de 400 ms que la descarga de activos, para no saturar al proveedor.
+      // pausa de 400 ms que la descarga de activos, para no saturar al proveedor. Solo los tickers que
+      // llegaron a assetResults: los excluidos no operan, así que ni se descarga ni se avisa su semanal.
       if (requiereSemanalDelActivo(filtrosLista) && assetInterval !== '1wk') {
-        for (let i = 0; i < allTickers.length; i += BATCH) {
-          const chunk = allTickers.slice(i, i + BATCH)
+        const tickersEnBacktest = [...new Set(assetResults.map(ar => ar._realSymbol))]
+        for (let i = 0; i < tickersEnBacktest.length; i += BATCH) {
+          const chunk = tickersEnBacktest.slice(i, i + BATCH)
           await Promise.all(chunk.map(async ticker => {
             const r = await fetchData(ticker, cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, '1wk')
             if (r?.length) semanalPorSimbolo[ticker] = r
             else sinSerieSemanal.push(ticker)   // fail-open: opera sin filtro, pero se avisa
           }))
-          if (i + BATCH < allTickers.length) await sleep(400)
+          if (i + BATCH < tickersEnBacktest.length) await sleep(400)
         }
       }
 
@@ -1807,23 +1833,28 @@ export default async function handler(req, res) {
 
       // Series SEMANALES de los propios activos, solo si algún filtro de ámbito activo las pide y el
       // backtest corre en diario (en semanal, allData[sym] YA son esas velas). Mismos lotes de 4 con
-      // pausa de 400 ms que la descarga de activos, para no saturar al proveedor.
+      // pausa de 400 ms que la descarga de activos, para no saturar al proveedor. Solo los símbolos con
+      // datos, que son los que llegan a assetResults: los excluidos no operan, así que ni se descarga ni
+      // se avisa su semanal.
       if (requiereSemanalDelActivo(filtrosLista) && assetInterval !== '1wk') {
-        for (let i = 0; i < symbols.length; i += BATCH) {
-          const chunk = symbols.slice(i, i + BATCH)
+        const simbolosConDatos = symbols.filter(s => allData[s]?.length)
+        for (let i = 0; i < simbolosConDatos.length; i += BATCH) {
+          const chunk = simbolosConDatos.slice(i, i + BATCH)
           await Promise.all(chunk.map(async sym => {
             const r = await fetchData(sym, cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, '1wk')
             if (r?.length) semanalPorSimbolo[sym] = r
             else sinSerieSemanal.push(sym)   // fail-open: opera sin filtro, pero se avisa
           }))
-          if (i + BATCH < symbols.length) await sleep(400)
+          if (i + BATCH < simbolosConDatos.length) await sleep(400)
         }
       }
     }
 
     // Capital por slot (base para pnlPct; reescalado en modos con pool compartido)
     const n = symbols.filter(s => allData[s]?.length).length
-    if (!n) return res.status(400).json({ error: 'No se pudieron cargar datos de ningún símbolo' })
+    // Sin ningún activo con datos: se dice por qué (sin velas en el periodo) y, si todo fue fallo de
+    // descarga, el mensaje de siempre.
+    if (!n) return res.status(400).json({ error: _mensajeTodosExcluidos(_activosExcluidos(symbols, descargas), cfg) ?? 'No se pudieron cargar datos de ningún símbolo' })
     const slotCapital = cfg.capitalIni / n
 
     // Ejecutar backtest individual por activo
