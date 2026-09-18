@@ -9,7 +9,11 @@
 //    enseña Mercado más su bloque propio. Nada de "no disponible" repetido por toda la pantalla.
 //  · El ancho es variable (la barra lateral se pliega, pero la ventana puede estrecharse): las tarjetas
 //    fluyen con grid auto-fit y los pares etiqueta-valor se reparten dentro de cada tarjeta.
+import dynamic from 'next/dynamic'
 import { MONO } from '../lib/utils'
+
+// recharts fuera del render de servidor, igual que McMonthlyGainsChart.
+const GraficoAnual = dynamic(() => import('./FundamentalsAnnualChart'), { ssr: false })
 
 // ── Formato ─────────────────────────────────────────────────────────────────
 const MONEDAS = { USD: '$', EUR: '€', GBP: '£', JPY: '¥', CHF: 'CHF', CAD: 'CA$', AUD: 'AU$' }
@@ -25,6 +29,14 @@ function magnitud(v) {
   return { n: v, s: '' }
 }
 const fGrande = (v, moneda) => { if (v == null) return null; const { n, s } = magnitud(v); return `${dec(n, Math.abs(n) >= 100 ? 0 : 2)}${s ? ' ' + s : ''}${simboloMoneda(moneda)}` }
+// Versión corta para el eje del gráfico: ahí conviven varias marcas y los decimales de unas contra los
+// enteros de otras ("55,00 mM$" junto a "220 mM$") ensucian la lectura.
+const fGrandeEje = (v, moneda) => {
+  if (v == null) return ''
+  if (v === 0) return '0'
+  const { n, s } = magnitud(v)
+  return `${dec(n, Math.abs(n) >= 10 ? 0 : 1)}${s ? ' ' + s : ''}${simboloMoneda(moneda)}`
+}
 const fCantidad = (v) => { if (v == null) return null; const { n, s } = magnitud(v); return s ? `${dec(n, Math.abs(n) >= 100 ? 0 : 2)} ${s}` : dec(n, 0) }
 const fPrecio = (v, moneda) => v == null ? null : `${dec(v, Math.abs(v) >= 1000 ? 2 : Math.abs(v) < 1 ? 4 : 2)}${simboloMoneda(moneda)}`
 const fRatio = (v) => v == null ? null : dec(v, 2)
@@ -188,11 +200,15 @@ export default function FundamentalsPanel({ ficha, cargando, error, symbol }) {
         ]} />
       </div>
 
-      {/* ── Histórico anual: tabla compacta (el gráfico de barras llega en el commit siguiente) ── */}
+      {/* ── Histórico anual: barras para ver la forma, tabla para leer las cifras exactas ──
+          Se quedan las dos. El gráfico enseña de un vistazo el crecimiento y la distancia entre
+          ingresos y beneficio; la tabla da el valor exacto de cada año y es el único sitio donde vive
+          el BPA, que no entra en el gráfico porque su escala aplastaría las barras. */}
       {hist?.length > 0 && (
         <div style={{ ...C.tarjeta, marginTop: 14 }}>
           <div style={C.titulo}>Histórico anual</div>
-          <div style={{ overflowX: 'auto' }}>
+          <GraficoAnual datos={hist} fmt={(v) => fGrande(v, moneda)} fmtEje={(v) => fGrandeEje(v, moneda)} />
+          <div style={{ overflowX: 'auto', marginTop: 12 }}>
             {/* Tope de ancho: a pantalla completa, una tabla de 4 columnas al 100 % deja los números
                 tan separados que cuesta seguir la fila. */}
             <table style={{ width: '100%', maxWidth: 760, borderCollapse: 'collapse', fontSize: 12, minWidth: 380 }}>
