@@ -4929,7 +4929,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.744</title>
+        <title>Trading Simulator V9.745</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5007,7 +5007,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.744
+            <span className="dot"/>Trading Simulator V9.745
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5144,9 +5144,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
           </nav>
 
           {/* ── SIDEBAR ── */}
-          {/* La ficha de Fundamentals ocupa la zona principal: el botón del menú es solo el acceso y la
-              barra lateral se pliega, como ya hace el panel de TradeLog en su vista de dashboard. */}
-          <aside className="sidebar" style={{padding:0,gap:0,position:'relative',width:sidePanel==='fundamentals'||(sidePanel==='tradelog'&&tlTab==='dashboard')?0:sidebarW,overflow:'hidden',flexShrink:0,flexGrow:0,transition:'width 0.3s ease'}} onContextMenu={e=>openCtx(e,'sidebar')}
+          <aside className="sidebar" style={{padding:0,gap:0,position:'relative',width:sidePanel==='tradelog'&&tlTab==='dashboard'?0:sidebarW,overflow:'hidden',flexShrink:0,flexGrow:0,transition:'width 0.3s ease'}} onContextMenu={e=>openCtx(e,'sidebar')}
             onWheel={e=>{if(e.ctrlKey){e.preventDefault();handlePanelScaleWheel(sidePanel,e)}}}>
             {/* Resize handle — right edge */}
             <div onMouseDown={e=>{sidebarResizing.current=true;sidebarStartX.current=e.clientX;sidebarStartW.current=sidebarW;document.body.style.cursor='col-resize';document.body.style.userSelect='none'}}
@@ -5282,7 +5280,10 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               </div>
             )}
 
-            {(sidePanel==='watchlist'||sidePanel==='risk')&&(
+            {/* Misma lista de activos —con su buscador y sus filtros— en Watchlist, Risk Mgmt y
+                Fundamentals: pulsar una fila solo cambia `simbolo`, así que cada sección reacciona a su
+                manera (aquí, recargando la ficha) sin que la lista sepa nada de ellas. */}
+            {(sidePanel==='watchlist'||sidePanel==='risk'||sidePanel==='fundamentals')&&(
               <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'visible',minHeight:0}}>
                 {/* ══ Cabecera Watchlist: búsqueda + iconos de filtro ══ */}
                 {(()=>{
