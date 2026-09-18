@@ -11,6 +11,7 @@ import FiltrosPanel from '../components/FiltrosPanel'
 import { supabase } from '../lib/supabaseClient'
 import { fetchConditions, lsGetConds, lsSaveConds, COND_LS_KEY } from '../lib/conditions'
 import CandleChart from '../components/CandleChart'
+import FundamentalsPanel from '../components/FundamentalsPanel'
 import EquityChart from '../components/EquityChart'
 import Tip from '../components/Tip'
 import SettingsModal from '../components/SettingsModal'
@@ -794,6 +795,10 @@ export default function Home() {
     try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.alarmas?.autoRefreshThreshold??50}catch{return 50}
   })
   const [sidePanel,setSidePanel]=useState('watchlist')
+  // Ficha fundamental del símbolo activo. Se pide SOLO con la sección abierta (ver el efecto más abajo).
+  const [fundFicha,setFundFicha]=useState(null)
+  const [fundCargando,setFundCargando]=useState(false)
+  const [fundError,setFundError]=useState(null)
   const [navExpanded,setNavExpanded]=useState(false)
   const [metricsLayout,setMetricsLayout]=useState('panel')
   const [metricsView,setMetricsView]=useState('panel')   // 'multi'=3col | 'single'=one strat per block
@@ -4014,6 +4019,21 @@ export default function Home() {
 
   useEffect(()=>{ if(session?.user?.id) loadTrades() },[loadTrades,session?.user?.id]) // eslint-disable-line
   useEffect(()=>{ if(sidePanel==='tradelog') loadTrades() },[sidePanel,loadTrades])
+  // Fundamentales: se piden al ABRIR la sección y al cambiar de símbolo con ella abierta, nunca antes.
+  // `cancelado` evita que una respuesta lenta de un símbolo anterior pise a la del actual.
+  useEffect(()=>{
+    if(sidePanel!=='fundamentals'){ return }
+    let cancelado=false
+    setFundCargando(true);setFundError(null);setFundFicha(null)
+    apiFetch(`/api/fundamentales?symbol=${encodeURIComponent(simbolo)}`)
+      .then(async r=>{ const j=await r.json().catch(()=>null); return {ok:r.ok,j} })
+      .then(({ok,j})=>{ if(cancelado)return
+        if(!ok||!j||j.error) setFundError(j?.error||`No se pudieron cargar los fundamentales de ${simbolo}`)
+        else setFundFicha(j) })
+      .catch(e=>{ if(!cancelado) setFundError(e.message||'Error de red') })
+      .finally(()=>{ if(!cancelado) setFundCargando(false) })
+    return ()=>{cancelado=true}
+  },[sidePanel,simbolo])
 
   // ── Refresco manual del Dashboard (F5 lógico en caliente, sin recargar la página) ──
   // Re-dispara TODAS las cargas conservando filtros, scroll y toggles. Resetea los refs one-shot
@@ -4909,7 +4929,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.743</title>
+        <title>Trading Simulator V9.744</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -4987,7 +5007,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.743
+            <span className="dot"/>Trading Simulator V9.744
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5097,6 +5117,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               {id:'config',     icon:'📈', label:'Estrategias'},
               {id:'alarms',     icon:'🔔',label:'Alertas',   hasAlerts:alarmActiveCount>0, alertCount:alarmActiveCount},
               {id:'watchlist',  icon:'📋',label:'Watchlist'},
+              {id:'fundamentals',icon:'🏦',label:'Fundamentals'},
               {id:'multi',      icon:'📊',label:'Backtesting'},
               {id:'tradelog',   icon:'📒',label:'TradeLog',  accent:'#9b72ff'},
               {id:'risk',       icon:'⚖️', label:'Risk Mgmt', accent:'#378add'},
@@ -5123,7 +5144,9 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
           </nav>
 
           {/* ── SIDEBAR ── */}
-          <aside className="sidebar" style={{padding:0,gap:0,position:'relative',width:sidePanel==='tradelog'&&tlTab==='dashboard'?0:sidebarW,overflow:'hidden',flexShrink:0,flexGrow:0,transition:'width 0.3s ease'}} onContextMenu={e=>openCtx(e,'sidebar')}
+          {/* La ficha de Fundamentals ocupa la zona principal: el botón del menú es solo el acceso y la
+              barra lateral se pliega, como ya hace el panel de TradeLog en su vista de dashboard. */}
+          <aside className="sidebar" style={{padding:0,gap:0,position:'relative',width:sidePanel==='fundamentals'||(sidePanel==='tradelog'&&tlTab==='dashboard')?0:sidebarW,overflow:'hidden',flexShrink:0,flexGrow:0,transition:'width 0.3s ease'}} onContextMenu={e=>openCtx(e,'sidebar')}
             onWheel={e=>{if(e.ctrlKey){e.preventDefault();handlePanelScaleWheel(sidePanel,e)}}}>
             {/* Resize handle — right edge */}
             <div onMouseDown={e=>{sidebarResizing.current=true;sidebarStartX.current=e.clientX;sidebarStartW.current=sidebarW;document.body.style.cursor='col-resize';document.body.style.userSelect='none'}}
@@ -6815,11 +6838,16 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               />
             )}
 
-            {/* Single-asset view — oculto cuando multicartera activa o editando */}
-            {sidePanel!=='multi'&&sidePanel!=='tradelog'&&!(editingStr&&sidePanel==='config')&&!result&&!error&&currentStratId&&<div className="loading"><div className="spinner"/><div className="loading-text">CARGANDO DATOS...</div></div>}
-            {sidePanel!=='multi'&&sidePanel!=='tradelog'&&!(editingStr&&sidePanel==='config')&&error&&<div className="error-msg">⚠ {error}</div>}
+            {/* ══ FUNDAMENTALS — ficha del símbolo activo, en lugar del gráfico ══ */}
+            {sidePanel==='fundamentals'&&(
+              <FundamentalsPanel ficha={fundFicha} cargando={fundCargando} error={fundError} symbol={simbolo}/>
+            )}
 
-            {sidePanel!=='multi'&&sidePanel!=='tradelog'&&!(editingStr&&sidePanel==='config')&&result&&(
+            {/* Single-asset view — oculto cuando multicartera activa o editando */}
+            {sidePanel!=='multi'&&sidePanel!=='tradelog'&&sidePanel!=='fundamentals'&&!(editingStr&&sidePanel==='config')&&!result&&!error&&currentStratId&&<div className="loading"><div className="spinner"/><div className="loading-text">CARGANDO DATOS...</div></div>}
+            {sidePanel!=='multi'&&sidePanel!=='tradelog'&&sidePanel!=='fundamentals'&&!(editingStr&&sidePanel==='config')&&error&&<div className="error-msg">⚠ {error}</div>}
+
+            {sidePanel!=='multi'&&sidePanel!=='tradelog'&&sidePanel!=='fundamentals'&&!(editingStr&&sidePanel==='config')&&result&&(
               <div style={{display:'flex',flex:1,minHeight:0,overflow:'hidden',height:'100%'}}>
                 {/* Columna principal */}
                 <div ref={contentRef} style={sidePanel==='risk'?{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',height:'calc(100vh - 56px)'}:result.isBareChart?{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',height:'100%'}:{flex:1,minHeight:0,overflowY:'auto'}}>
