@@ -168,6 +168,91 @@ function _sampledWithChanges(filteredDates, step, trades) {
   return [...set].sort()
 }
 
+// ── Contribución por activo y capital no invertido ───────────────────────────
+// Convención (la misma en los cuatro modos): cada línea de activo ARRANCA EN CERO y la caja arranca con
+// el capital inicial completo. Al abrir, el capital de entrada sale de la caja y entra en la línea del
+// activo; al cerrar, ese capital vuelve a la caja y el resultado se queda acumulado en el activo. Así no
+// hay que inventar una porción de capital inicial por activo, que en los modos de pool no existe.
+//
+//   contribución(activo, fecha) = realizado acumulado + coste de lo abierto + P&L no realizado
+//   caja(fecha)                 = capital inicial − coste de lo abierto
+//
+// Con eso, Σ contribuciones + caja == floatCompoundCurve por construcción, porque los conjuntos de
+// operaciones y el cálculo del no realizado son EXACTAMENTE los que ya suman esas curvas.
+// Agrupa por símbolo REAL (_realSymbol): en multicartera el mismo ticker aparece una vez por estrategia.
+const _claveActivo = (t) => t?._realSymbol ?? t?.symbol
+
+// Para los tres modos de pool (compartido, concentrado, position sizing), que comparten estructura:
+// `executedTrades` son las ejecuciones REALES —las descartadas por capital y las de pnlPct no finito ya
+// quedaron fuera— y `capitalAtEntryMap` da el capital asignado en cada entrada.
+function _seriesPorActivoPool(sampledDates, executedTrades, allCandidates, capitalAtEntryMap, symbolDataMap, capitalIni) {
+  const activos = [...new Set([...(executedTrades || []), ...(allCandidates || [])].map(_claveActivo).filter(Boolean))].sort()
+  const series = Object.fromEntries(activos.map(s => [s, []]))
+  const cashCurve = []
+  sampledDates.forEach(date => {
+    const aporte = Object.fromEntries(activos.map(s => [s, 0]))
+    // Realizado: MISMO conjunto que compoundCurve (ejecuciones con exitDate <= date).
+    // La guarda `aporte[clave] == null` descarta una operación sin símbolo, que si no se sumaría a una
+    // clave inexistente y desaparecería de la atribución sin que nadie lo notase.
+    ;(executedTrades || []).forEach(t => {
+      const clave = _claveActivo(t)
+      if (t.exitDate <= date && aporte[clave] != null) aporte[clave] += (t.pnlSimple || 0)
+    })
+    // Abierto: MISMO conjunto y MISMO cálculo que floatCompoundCurve. El `exitDate > date` estricto deja
+    // fuera los cierres virtuales en su propia fecha, que ya están contados arriba como realizado.
+    let costeAbierto = 0
+    ;(allCandidates || []).forEach(t => {
+      if (!(t.entryDate <= date && t.exitDate > date)) return
+      const capEntry = capitalAtEntryMap[`${t.symbol}:${t.entryDate}`]
+      if (capEntry == null) return
+      const clave = _claveActivo(t)
+      if (aporte[clave] == null) return
+      costeAbierto += capEntry
+      aporte[clave] += capEntry
+      const fData = symbolDataMap[t.symbol] || []
+      let closePx = null
+      for (let i = fData.length - 1; i >= 0; i--) { if (fData[i].date <= date) { closePx = fData[i].close; break } }
+      if (closePx != null && t.entryPx) aporte[clave] += (closePx - t.entryPx) / t.entryPx * capEntry
+    })
+    activos.forEach(s => series[s].push({ date, value: aporte[s] }))
+    cashCurve.push({ date, value: capitalIni - costeAbierto })
+  })
+  return { assetCurves: activos.map(symbol => ({ symbol, data: series[symbol] })), cashCurve }
+}
+
+// Comprobación numérica de la identidad, para mirarla desde la respuesta. No lanza ni bloquea nada.
+function _comprobarAssetCurves(curves, capitalIni) {
+  const { assetCurves, cashCurve, floatCompoundCurve } = curves || {}
+  if (!assetCurves?.length || !cashCurve?.length || !floatCompoundCurve?.length) return null
+  const tolerancia = Math.max(0.01, Math.abs(capitalIni || 0) * 1e-9)
+  const cajaPorFecha = new Map(cashCurve.map(p => [p.date, p.value]))
+  let maxDesvio = 0, fechaPeorDesvio = null, desalineadas = 0
+  floatCompoundCurve.forEach((p, i) => {
+    let suma = cajaPorFecha.get(p.date) ?? 0
+    for (const a of assetCurves) {
+      const punto = a.data[i]
+      if (punto?.date !== p.date) { desalineadas++; continue }   // no debería pasar: mismo muestreo
+      suma += punto.value
+    }
+    const desvio = Math.abs(suma - p.value)
+    if (desvio > maxDesvio) { maxDesvio = desvio; fechaPeorDesvio = p.date }
+  })
+  return {
+    ok: maxDesvio <= tolerancia && desalineadas === 0,
+    maxDesvio: Math.round(maxDesvio * 1e6) / 1e6,
+    fechaPeorDesvio,
+    nFechas: floatCompoundCurve.length,
+    tolerancia,
+    ...(desalineadas ? { puntosDesalineados: desalineadas } : {}),
+  }
+}
+
+// Tamaño aproximado de assetCurves: ~40 bytes por punto {date,value} serializado.
+function _tamanoAssetCurves(assetCurves) {
+  const nPuntos = (assetCurves || []).reduce((s, a) => s + (a.data?.length || 0), 0)
+  return { nActivos: (assetCurves || []).length, nPuntos, kbAprox: Math.round(nPuntos * 40 / 1024) }
+}
+
 // ── MODO SLOTS: capital dividido en N partes iguales ─────────
 function buildSlotsCurves(assetResults, capitalIni) {
   const n = assetResults.length
@@ -210,13 +295,24 @@ function buildSlotsCurves(assetResults, capitalIni) {
   })
 
   const simpleCurve=[], compoundCurve=[], bhCurve=[], occupancyCurve=[], floatSimpleCurve=[], floatCompoundCurve=[]
+  // Contribución por activo y caja (ver _seriesPorActivoPool): aquí los tres sumandos ya están calculados
+  // por activo y fecha en assetEquities; el realizado acumulado es `compound − slotCapital`, porque
+  // `compound` arranca en el slot y la línea del activo tiene que arrancar en cero.
+  const clavesSlots = assetResults.map(ar => _claveActivo(ar))
+  const activosSlots = [...new Set(clavesSlots)].sort()
+  const seriesSlots = Object.fromEntries(activosSlots.map(s => [s, []]))
+  const cashCurve = []
   const step = Math.max(1, Math.floor(filteredDates.length / 400))
   _sampledWithChanges(filteredDates, step, assetResults.flatMap(ar=>ar.trades||[])).forEach(date => {
     let totSimple=0, totCompound=0, totBH=0, openSlots=0, totOpenPnl=0, totOpenCost=0
-    assetEquities.forEach(byDate => {
+    const aporte = Object.fromEntries(activosSlots.map(s => [s, 0]))
+    assetEquities.forEach((byDate, i) => {
       const e = byDate[date]
-      if (e) { totSimple+=e.simple; totCompound+=e.compound; totBH+=e.bh; if(e.open)openSlots++; totOpenPnl+=e.openPnl||0; totOpenCost+=e.openCost||0 }
+      if (e) { totSimple+=e.simple; totCompound+=e.compound; totBH+=e.bh; if(e.open)openSlots++; totOpenPnl+=e.openPnl||0; totOpenCost+=e.openCost||0
+        aporte[clavesSlots[i]] += (e.compound - slotCapital) + (e.openCost||0) + (e.openPnl||0) }
     })
+    activosSlots.forEach(s => seriesSlots[s].push({ date, value: aporte[s] }))
+    cashCurve.push({ date, value: capitalIni - totOpenCost })
     simpleCurve.push({ date, value: totSimple })
     compoundCurve.push({ date, value: totCompound })
     bhCurve.push({ date, value: totBH })
@@ -248,7 +344,9 @@ function buildSlotsCurves(assetResults, capitalIni) {
     pfDescartadas:         null,
     pnlHipoteticoDescartadas: 0,
   }
-  return { simpleCurve, compoundCurve, bhCurve, occupancyCurve, startDate, floatSimpleCurve, floatCompoundCurve, tInvEstrategia, avgCapOccupancy, senalStats: senalStatsSlots, ..._calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni), ..._calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni) }
+  return { simpleCurve, compoundCurve, bhCurve, occupancyCurve, startDate, floatSimpleCurve, floatCompoundCurve, tInvEstrategia, avgCapOccupancy, senalStats: senalStatsSlots,
+    assetCurves: activosSlots.map(symbol => ({ symbol, data: seriesSlots[symbol] })), cashCurve,
+    ..._calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni), ..._calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni) }
 }
 
 // ── Stop INICIAL de un trade — fuente ÚNICA para los cuatro modos de asignación ──
@@ -500,6 +598,7 @@ function buildCompartidoCurves(assetResults, capitalIni, symbolOrder = null) {
     simpleCurve, compoundCurve, bhCurve, occupancyCurve, startDate,
     executedTrades, floatSimpleCurve, floatCompoundCurve,
     tInvEstrategia, avgCapOccupancy, senalStats: senalStatsC,
+    ..._seriesPorActivoPool(sampledDates, executedTrades, allCandidates, capitalAtEntryMap, symbolDataMap, capitalIni),
     ..._calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni),
     ..._calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni)
   }
@@ -829,6 +928,7 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
     simpleCurve, compoundCurve, bhCurve, occupancyCurve, startDate,
     executedTrades, floatSimpleCurve, floatCompoundCurve,
     tInvEstrategia, avgCapOccupancy, senalStats,
+    ..._seriesPorActivoPool(sampledDates, executedTrades, allCandidates, capitalAtEntryMap, symbolDataMap, capitalIni),
     ..._calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni),
     ..._calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni)
   }
@@ -1068,6 +1168,7 @@ function buildPositionSizingCurves(assetResults, capitalIni, sizeRules) {
     simpleCurve, compoundCurve, bhCurve, occupancyCurve, startDate,
     executedTrades, floatSimpleCurve, floatCompoundCurve,
     tInvEstrategia, avgCapOccupancy, senalStats: senalStatsPS,
+    ..._seriesPorActivoPool(sampledDates, executedTrades, allCandidates, capitalAtEntryMap, symbolDataMap, capitalIni),
     ..._calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni),
     ..._calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni)
   }
@@ -1698,6 +1799,8 @@ async function handlePortfolioMode(req, res) {
 
     // Cobertura del periodo pedido (ver _coberturaHistorico). Clave por símbolo real, como assetStats aquí.
     const cobertura = _coberturaHistorico(assetResults, curves, cfg, _activosExcluidos(allTickers, descargas))
+    // Diagnóstico de la identidad Σ contribuciones + caja == floatCompoundCurve. Campo temporal.
+    const chequeoActivos = _comprobarAssetCurves(curves, cfg.capitalIni)
 
     return res.status(200).json({
       ...curves,
@@ -1708,6 +1811,9 @@ async function handlePortfolioMode(req, res) {
       // Solo presente si algo no cubre el periodo pedido: activos cortos y/o recorte del modo rango.
       ...(cobertura.avisos ? { avisosHistorico: cobertura.avisos } : {}),
       assetStats: assetStats.map(a => ({ ...a, primeraFecha: cobertura.primera[a.symbol] ?? null })),
+      // Diagnóstico de las series por activo: si la suma cuadra y cuánto ocupan. Campos temporales.
+      ...(chequeoActivos ? { assetCurvesCheck: chequeoActivos } : {}),
+      ...(curves.assetCurves ? { assetCurvesInfo: _tamanoAssetCurves(curves.assetCurves) } : {}),
       allTrades:       sourceTrades,
       avgOccupancy,
       tInvEstrategia:  curves.tInvEstrategia ?? 0,
@@ -2109,6 +2215,8 @@ export default async function handler(req, res) {
 
     // Cobertura del periodo pedido (ver _coberturaHistorico)
     const cobertura = _coberturaHistorico(assetResults, curves, cfg, _activosExcluidos(symbols, descargas))
+    // Diagnóstico de la identidad Σ contribuciones + caja == floatCompoundCurve. Campo temporal.
+    const chequeoActivos = _comprobarAssetCurves(curves, cfg.capitalIni)
 
     res.status(200).json({
       ...curves,
@@ -2119,6 +2227,9 @@ export default async function handler(req, res) {
       // Solo presente si algo no cubre el periodo pedido: activos cortos y/o recorte del modo rango.
       ...(cobertura.avisos ? { avisosHistorico: cobertura.avisos } : {}),
       assetStats: assetStats.map(a => ({ ...a, primeraFecha: cobertura.primera[a.symbol] ?? null })),
+      // Diagnóstico de las series por activo: si la suma cuadra y cuánto ocupan. Campos temporales.
+      ...(chequeoActivos ? { assetCurvesCheck: chequeoActivos } : {}),
+      ...(curves.assetCurves ? { assetCurvesInfo: _tamanoAssetCurves(curves.assetCurves) } : {}),
       allTrades: sourceTrades,
       avgOccupancy,
       tInvEstrategia: curves.tInvEstrategia ?? 0,
