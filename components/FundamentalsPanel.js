@@ -66,7 +66,9 @@ const C = {
   // no aparece barra; al estrecharse se apilan, y entonces es preferible desplazar que dejar el gráfico
   // reducido a una tira de 100 px.
   cuerpo:   { display: 'flex', gap: 12, flex: 1, minHeight: 0, flexWrap: 'wrap', overflowY: 'auto' },
-  tarjeta:  { background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 6, padding: '10px 14px 12px' },
+  // overflow hidden: ninguna tarjeta vuelve a pintar contenido fuera de sus bordes pase lo que pase con
+  // el reparto de espacio. Sin él, un hijo comprimido a cero dejaba su contenido sobre el fondo.
+  tarjeta:  { background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 6, padding: '10px 14px 12px', overflow: 'hidden' },
   seccion:  { fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--text3)', fontWeight: 600, marginBottom: 4 },
   fila:     { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, padding: '2px 0', borderBottom: '1px solid rgba(26,45,69,0.45)' },
   etiqueta: { fontSize: 11, color: 'var(--text2)', whiteSpace: 'nowrap' },
@@ -293,7 +295,10 @@ export default function FundamentalsPanel({ ficha, cargando, error, symbol, seri
                     objetivoMedio={an.objetivoMedio} objetivoMax={an.objetivoMax} objetivoMin={an.objetivoMin} />
                 )}
                 <EscalaConsenso media={an?.consensoMedia} />
-                <div style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center' }}>
+                {/* flex '0 0 auto': la distribución tiene altura fija y reclama la suya. Con flex:1
+                    —base 0 y shrink 1— era la primera a la que el reparto le quitaba el espacio, se
+                    comprimía a cero y su contenido, que no encoge, acababa pintado fuera. */}
+                <div style={{ flex: '0 0 auto', display: 'flex', alignItems: 'center' }}>
                   <div style={{ width: '100%' }}><Distribucion d={an?.distribucion} /></div>
                 </div>
               </div>
