@@ -14,6 +14,7 @@
 //  · Si no hay gráficos —un índice o un futuro solo traen Mercado—, la mitad derecha no existe y la
 //    tarjeta de datos ocupa todo el ancho, repartiendo sus secciones en más columnas. Así no queda
 //    media pantalla vacía.
+import { useEffect, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { MONO } from '../lib/utils'
 
@@ -154,6 +155,26 @@ function EscalaConsenso({ media }) {
 // `alturaUtil`: alto de la sección, que fija quien la coloca. Por defecto '100%' para que el componente
 // siga funcionando suelto, pero index.js le pasa calc(100vh − TAB_H) con la cabecera real de la app.
 export default function FundamentalsPanel({ ficha, cargando, error, symbol, seriePrecios = null, alturaUtil = '100%' }) {
+  // La sección mide SU PROPIO hueco: desde dónde empieza en pantalla hasta el borde inferior de la
+  // ventana. No pregunta a ningún ancestro, que es lo que había fallado: .app tiene min-height, y de ahí
+  // para abajo todo se dimensiona por contenido, así que cualquier porcentaje acababa valiendo "lo que
+  // yo mida". El top del panel no depende de su propia altura, así que medir no se realimenta; aun así
+  // se compara antes de escribir el estado y se descartan medidas absurdas, como en index.js:1411.
+  const refRaiz = useRef(null)
+  const [altoMedido, setAltoMedido] = useState(null)
+  useEffect(() => {
+    const medir = () => {
+      const nodo = refRaiz.current
+      if (!nodo) return
+      const alto = Math.round(window.innerHeight - nodo.getBoundingClientRect().top)
+      if (!Number.isFinite(alto) || alto < 50) return
+      setAltoMedido(prev => prev === alto ? prev : alto)
+    }
+    medir()
+    window.addEventListener('resize', medir)
+    return () => window.removeEventListener('resize', medir)
+  }, [ficha])
+
   if (cargando) return <div className="loading"><div className="spinner" /><div className="loading-text">Cargando fundamentales de {symbol}…</div></div>
   if (error)    return <div className="error-msg">⚠ {error}</div>
   if (!ficha)   return null
@@ -173,7 +194,7 @@ export default function FundamentalsPanel({ ficha, cargando, error, symbol, seri
   const hayProyeccion = seriePrecios?.length >= 2 && an?.objetivoMedio != null && an?.objetivoMax != null && an?.objetivoMin != null
 
   return (
-    <div style={{ ...C.panel, height: alturaUtil }}>
+    <div ref={refRaiz} style={{ ...C.panel, height: altoMedido != null ? altoMedido : alturaUtil }}>
       {/* ── Cabecera: identidad, precio y variación del día ── */}
       <div style={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: '4px 14px', flexShrink: 0 }}>
         <span style={{ fontSize: 20, fontWeight: 700, color: 'var(--accent)', letterSpacing: '0.04em' }}>{ficha.symbol}</span>
