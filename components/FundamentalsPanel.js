@@ -55,11 +55,12 @@ const TIPOS = { accion: 'Acción', etf: 'ETF', fondo: 'Fondo', indice: 'Índice'
 const VERDE = '#00e5a0', ROJO = '#ff5d5d'
 
 const C = {
-  // height 100% + overflow hidden, el mismo ancla que usa el Dashboard en su raíz (pages/index.js:8825).
-  // Sin él, la cadena entera es de altura automática —.app tiene min-height y no height—, así que el alto
-  // del contenido subía hasta .app y hacía crecer la página. Anclado aquí, la sección nunca pasa del alto
-  // de su contenedor y quien desplaza, si hace falta, es la tarjeta de datos con su propio scroll.
-  panel:    { flex: 1, minHeight: 0, height: '100%', display: 'flex', flexDirection: 'column', padding: '12px 16px 14px', gap: 10, fontFamily: MONO, color: 'var(--text)', overflow: 'hidden' },
+  // El alto lo pone la prop `alturaUtil`, que llega de index.js como calc(100vh − TAB_H) y es lo ÚNICO
+  // de la sección que no depende del contenido. Un height:'100%' no servía: se resolvía contra .content,
+  // cuyo alto sale de .main, que sale de su contenido, que es este panel; el 100 % acababa valiendo "lo
+  // que yo mida" y la página crecía. Con overflow hidden y boxSizing border-box, el padding vertical
+  // queda DENTRO de esa altura y quien desplaza, si hace falta, es la tarjeta de datos.
+  panel:    { flex: 1, minHeight: 0, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', padding: '12px 16px 14px', gap: 10, fontFamily: MONO, color: 'var(--text)', overflow: 'hidden' },
   // El cuerpo hace scroll cuando su contenido no cabe. A lo ancho las dos mitades caben en una línea y
   // no aparece barra; al estrecharse se apilan, y entonces es preferible desplazar que dejar el gráfico
   // reducido a una tira de 100 px.
@@ -147,7 +148,9 @@ function EscalaConsenso({ media }) {
   )
 }
 
-export default function FundamentalsPanel({ ficha, cargando, error, symbol }) {
+// `alturaUtil`: alto de la sección, que fija quien la coloca. Por defecto '100%' para que el componente
+// siga funcionando suelto, pero index.js le pasa calc(100vh − TAB_H) con la cabecera real de la app.
+export default function FundamentalsPanel({ ficha, cargando, error, symbol, alturaUtil = '100%' }) {
   if (cargando) return <div className="loading"><div className="spinner" /><div className="loading-text">Cargando fundamentales de {symbol}…</div></div>
   if (error)    return <div className="error-msg">⚠ {error}</div>
   if (!ficha)   return null
@@ -166,7 +169,7 @@ export default function FundamentalsPanel({ ficha, cargando, error, symbol }) {
   const bpaPorAnio = (hist || []).filter(a => a.bpa != null)
 
   return (
-    <div style={C.panel}>
+    <div style={{ ...C.panel, height: alturaUtil }}>
       {/* ── Cabecera: identidad, precio y variación del día ── */}
       <div style={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: '4px 14px', flexShrink: 0 }}>
         <span style={{ fontSize: 20, fontWeight: 700, color: 'var(--accent)', letterSpacing: '0.04em' }}>{ficha.symbol}</span>
