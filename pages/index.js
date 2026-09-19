@@ -566,6 +566,18 @@ function lookupName(sym) {
 
 // ── MultiCartChart ───────────────────────────────────────────
 const STRAT_COMPARE_COLORS=['#00d4ff','#ffd166','#00e5a0','#ff6b9d','#9b72ff','#ff9a3c','#4ecdc4','#c8f7c5']
+// ── Modo Activos del gráfico de equity ──────────────────────────────────────
+// Color estable por activo: sale del propio símbolo, así el mismo activo repite color entre ejecuciones
+// y entre estrategias. Sin el verde de la curva total (#00e5a0) ni el gris de la caja.
+const COLORES_ACTIVO=['#00d4ff','#ff9a3c','#9b72ff','#ffd166','#4ade80','#f472b6','#38bdf8','#fb923c','#a3e635','#c084fc','#2dd4bf','#f87171']
+const colorDeActivo=(sym)=>{let h=0;for(let i=0;i<String(sym).length;i++)h=(h*31+String(sym).charCodeAt(i))>>>0;return COLORES_ACTIVO[h%COLORES_ACTIVO.length]}
+// Saneado antes de entregar una serie a lightweight-charts: fechas únicas y ascendentes y valores
+// finitos. Una sola fecha repetida o un NaN matan la línea en silencio, sin error ni aviso.
+const saneaCurva=(datos)=>{
+  const porFecha=new Map()
+  for(const p of datos||[]) if(p&&typeof p.date==='string'&&Number.isFinite(p.value)) porFecha.set(p.date,p.value)
+  return [...porFecha.entries()].sort((a,b)=>a[0].localeCompare(b[0])).map(([date,value])=>({date,value}))
+}
 
 
 
@@ -1185,8 +1197,45 @@ export default function Home() {
   const [mcFiltrosOpen,setMcFiltrosOpen]=useState(()=>filtrosBoot.restaurado&&hayFiltroActivo(filtrosBoot.filtros,'mercado'))
   const [mcFiltrosActivoOpen,setMcFiltrosActivoOpen]=useState(()=>filtrosBoot.restaurado&&hayFiltroActivo(filtrosBoot.filtros,'activo'))
   const [mcStratVisible,setMcStratVisible]=useState({})     // {id:bool}
+  const [mcPorActivo,setMcPorActivo]=useState(false)        // gráfico de equity: false=Estrategias, true=Activos
   const [mcAssetOpen,setMcAssetOpen]=useState({})           // {stratId:bool} acordeón resumen por activo
   const [mcShowBHCompare,setMcShowBHCompare]=useState(true) // B&H curve toggle in multi-strategy chart
+  // Estrategia vigente en el HISTORIAL de operaciones. Fuente ÚNICA: la usan el propio historial y el
+  // modo Activos del gráfico, para que no puedan divergir. mcHistStratId null = la activa, que con
+  // varias estrategias es la cartera combinada (__portfolio__) y si no, mcResult.
+  const mcHistSel=useMemo(()=>{
+    const isMultiHist=mcMultiResults.length>1
+    const _portfolio=mcMultiResults.find(r=>r.id==='__portfolio__')?.result
+    const histResult=isMultiHist&&mcHistStratId
+      ?(mcMultiResults.find(r=>r.id===mcHistStratId)?.result??mcResult)
+      :(_portfolio??mcResult)
+    const histTitle=isMultiHist&&mcHistStratId
+      ?(mcMultiResults.find(r=>r.id===mcHistStratId)?.name??'Historial')
+      :'Historial Multicartera'
+    return {isMultiHist,histResult,histTitle}
+  },[mcMultiResults,mcHistStratId,mcResult])
+  // Curvas del modo Activos: una por activo, la caja y la curva total como referencia. MEMORIZADO con
+  // dependencias explícitas: con ~20 series, un array recreado en cada render recrea el chart entero
+  // en bucle (ver la nota del gráfico mensual más abajo).
+  const mcCurvasActivos=useMemo(()=>{
+    const r=mcHistSel.histResult
+    if(!r?.assetCurves?.length) return null
+    const series=r.assetCurves.map(a=>({
+      id:`activo__${a.symbol}`,name:a.symbol,color:colorDeActivo(a.symbol),
+      data:saneaCurva(a.data),show:true,maxDD:0,maxDDDate:null,taxByDate:null,
+    }))
+    const caja=saneaCurva(r.cashCurve)
+    // La total va la ÚLTIMA: lightweight-charts dibuja en orden, así queda encima del resto.
+    const total=saneaCurva(r.floatCompoundCurve?.length?r.floatCompoundCurve:r.compoundCurve)
+    const lista=[
+      ...series,
+      ...(caja.length>1?[{id:'__caja__',name:'No invertido',color:'#8aadcc',data:caja,show:true,dashed:true,maxDD:0,maxDDDate:null,taxByDate:null}]:[]),
+      ...(total.length>1?[{id:'__totalEstrategia__',name:'Total estrategia',color:'#00e5a0',data:total,show:true,maxDD:0,maxDDDate:null,taxByDate:null}]:[]),
+    ]
+    // Una serie de un solo punto no se dibuja: no es una línea.
+    const dibujables=lista.filter(c=>c.data.length>1)
+    return dibujables.length?dibujables:null
+  },[mcHistSel])
   // ── Curvas "después de impuestos" (IRPF base del ahorro). Solo modos pool. ──
   // Reemplazan compoundCurve (estrategias activas) y bhCurve cuando mcShowAfterTax está activo.
   const mcAfterTax=useMemo(()=>{
@@ -4500,7 +4549,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
           modeResults.push({id:`${sid||'__single__'}__${modo}`,name:`${stratName} · ${MODE_LABELS[modo]}`,color,result:json,modo})
         }
         const vis={};modeResults.forEach(r=>{vis[r.id]=true});setMcStratVisible(vis)
-        setMcAssetOpen({})
+        setMcAssetOpen({});setMcPorActivo(false)
         const chartsVis={};modeResults.forEach(r=>{chartsVis[r.id]=true});setMcChartsStratVisible(chartsVis)
         setMcResult(modeResults[0].result);setMcMultiResults(modeResults);setMcIsModoCompare(true)
       }catch(e){setMcError(e.message)}finally{setMcLoading(false);setMcProgress(null)}
@@ -4527,7 +4576,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
     const activeResult=results.find(r=>r.id===currentStratId)||results[0]
     setMcResult(activeResult.result);setMcMultiResults(results);setMcIsModoCompare(false)
     const vis={};results.forEach(r=>{vis[r.id]=true});setMcStratVisible(vis)
-    setMcAssetOpen({})
+    setMcAssetOpen({});setMcPorActivo(false)
     const chartsVis={};results.forEach(r=>{chartsVis[r.id]=true});setMcChartsStratVisible(chartsVis)
     // ── Multicartera real (backend portfolioMode) ──────────────────────────────
     if(mcStratSelected.includes('__portfolio__')&&results.length>=2){
@@ -4948,7 +4997,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.760</title>
+        <title>Trading Simulator V9.761</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5026,7 +5075,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.760
+            <span className="dot"/>Trading Simulator V9.761
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -8246,7 +8295,32 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                 <div className="equity-section" data-chart="equity">
                   <div className="section-title" style={{display:'flex',alignItems:'flex-start',flexWrap:'wrap',gap:6,fontSize:14}}>
                     <span>Equity</span>
-                    {mcDisplayResults.length>1?(
+                    {/* Conmutador Estrategias / Activos. En Activos se dibuja la contribución de cada
+                        activo de la estrategia vigente en el historial (mcHistSel), más la caja. Si el
+                        resultado en memoria no trae assetCurves —por ejemplo uno anterior a V9.760— el
+                        conmutador queda deshabilitado y el modo Estrategias sigue igual. */}
+                    <div style={{display:'flex',border:'1px solid #1a2d45',borderRadius:3,overflow:'hidden'}}
+                      title={mcCurvasActivos?'':'Este resultado no trae las series por activo: vuelve a ejecutar el backtest'}>
+                      {[['Estrategias',false],['Activos',true]].map(([etq,val])=>(
+                        <button key={etq} disabled={val&&!mcCurvasActivos}
+                          onClick={()=>setMcPorActivo(val)}
+                          style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',border:'none',
+                            cursor:(val&&!mcCurvasActivos)?'not-allowed':'pointer',
+                            background:mcPorActivo===val?'rgba(0,212,255,0.14)':'transparent',
+                            color:(val&&!mcCurvasActivos)?'#2b4257':(mcPorActivo===val?'#00d4ff':'#3d5a7a')}}>
+                          {etq}
+                        </button>
+                      ))}
+                    </div>
+                    {mcPorActivo?(
+                      // En Activos no hay B&H que comparar ni curva sin flotar: las contribuciones ya van
+                      // a precio de mercado. El botón se deshabilita en vez de desaparecer.
+                      <button disabled title="Las contribuciones por activo ya van a precio de mercado"
+                        style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'not-allowed',
+                          border:'1px solid #24384d',background:'transparent',color:'#2b4257'}}>
+                        Flotante
+                      </button>
+                    ):mcDisplayResults.length>1?(
                       <>
                         {mcDisplayResults.map(r=>(
                           <div key={r.id} style={{display:'flex',flexDirection:'column',alignItems:'center',gap:2}}>
@@ -8310,12 +8384,12 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         </button>
                       ))
                     )}
-                    <button onClick={()=>setMcShowAfterTax(s=>!s)}
-                      title="Simula el IRPF de la base del ahorro. Estrategias: impuesto anual (31 dic) sobre ganancias realizadas. Buy&hold: impuesto único al final. Tramos progresivos 19%-28%. Las pérdidas de un año compensan ganancias de años siguientes."
-                      style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',
-                        border:`1px solid ${mcShowAfterTax?'#e0b341':'#3d5a7a'}`,
-                        background:mcShowAfterTax?'rgba(224,179,65,0.14)':'transparent',
-                        color:mcShowAfterTax?'#e0b341':'#3d5a7a'}}>
+                    <button onClick={()=>setMcShowAfterTax(s=>!s)} disabled={mcPorActivo}
+                      title={mcPorActivo?"El impuesto se simula sobre la curva de la estrategia, no sobre la contribución de cada activo":"Simula el IRPF de la base del ahorro. Estrategias: impuesto anual (31 dic) sobre ganancias realizadas. Buy&hold: impuesto único al final. Tramos progresivos 19%-28%. Las pérdidas de un año compensan ganancias de años siguientes."}
+                      style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:mcPorActivo?'not-allowed':'pointer',
+                        border:`1px solid ${mcPorActivo?'#24384d':(mcShowAfterTax?'#e0b341':'#3d5a7a')}`,
+                        background:(!mcPorActivo&&mcShowAfterTax)?'rgba(224,179,65,0.14)':'transparent',
+                        color:mcPorActivo?'#2b4257':(mcShowAfterTax?'#e0b341':'#3d5a7a')}}>
                       Después de impuestos
                     </button>
                     <button onClick={()=>mcChartApiRef.current?.fitAll()}
@@ -8323,7 +8397,19 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       title="Ver periodo completo">⊠ Periodo completo</button>
                   </div>
                   <div ref={mcEquityContainerRef} style={{position:'relative'}}>
-                  {mcDisplayResults.length>1?(
+                  {/* Modo Activos: una serie por activo, la caja y la total. El array viene memorizado
+                      (mcCurvasActivos) porque el chart se recrea entero cada vez que cambia de identidad. */}
+                  {mcPorActivo&&mcCurvasActivos?(
+                    <StratCompareChart
+                      curves={mcCurvasActivos}
+                      capitalIni={Number(mcCapitalIni||capitalIni)}
+                      showMaxDD={false}
+                      onReady={api=>{mcChartApiRef.current=api}}
+                      onAxisWidth={w=>setMcAxisW(prev=>Math.abs(prev-w)>0.5?w:prev)}
+                      syncRef={chartSyncRef}
+                      chartHeight={mcEquityH}
+                    />
+                  ):mcDisplayResults.length>1?(
                     <StratCompareChart
                       curves={[
                         ...mcDisplayResults.map(r=>({
@@ -8515,17 +8601,10 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
 
                 {/* Historial combinado — same style as individual */}
                 {(()=>{
-                  const isMultiHist=mcMultiResults.length>1
-                  // DEFAULT del historial = resultado del MODO DE ASIGNACIÓN REAL, no el run individual.
-                  // Rama C (multi-estrategia): preferir __portfolio__ (cartera combinada) sobre mcResult (estrategia suelta).
-                  // El selector mcHistStratId sigue permitiendo ver una estrategia individual manualmente.
-                  const _histPortfolioResult=mcMultiResults.find(r=>r.id==='__portfolio__')?.result
-                  const histResult=isMultiHist&&mcHistStratId
-                    ?(mcMultiResults.find(r=>r.id===mcHistStratId)?.result??mcResult)
-                    :(_histPortfolioResult??mcResult)
-                  const histTitle=isMultiHist&&mcHistStratId
-                    ?(mcMultiResults.find(r=>r.id===mcHistStratId)?.name??'Historial')
-                    :'Historial Multicartera'
+                  // Resolución compartida con el modo Activos del gráfico (ver mcHistSel): DEFAULT del
+                  // historial = resultado del MODO DE ASIGNACIÓN REAL, no el run individual. Con varias
+                  // estrategias prefiere __portfolio__ sobre mcResult, y mcHistStratId permite elegir una.
+                  const {isMultiHist,histResult,histTitle}=mcHistSel
                   if(!histResult?.allTrades?.length) return null
                   // Botones Exportar/Gantt — deshabilitados si modo multi sin estrategia seleccionada
                   const histBtnsDisabled=isMultiHist&&!mcHistStratId
