@@ -227,13 +227,6 @@ export default function FundamentalsPanel({ ficha, cargando, error, symbol, altu
             { k: 'Payout', v: fPctFrac(div?.payout) },
           ]} />
 
-          <Seccion titulo="Objetivo de los analistas" filas={[
-            { k: 'Precio objetivo', v: fPrecio(an?.objetivoMedio, moneda) },
-            { k: 'Potencial', v: fPct(potencial, true), color: potencial == null ? undefined : potencial >= 0 ? VERDE : ROJO },
-            { k: 'Rango objetivo', v: an?.objetivoMin != null && an?.objetivoMax != null ? `${fPrecio(an.objetivoMin, moneda)} – ${fPrecio(an.objetivoMax, moneda)}` : null },
-            { k: 'Analistas', v: an?.numAnalistas != null ? String(an.numAnalistas) : null },
-          ]} />
-
           <Seccion titulo="Fondo" filas={[
             { k: 'Patrimonio', v: fGrande(fondo?.patrimonio, moneda) },
             { k: 'Rentabilidad', v: fPctFrac(fondo?.rentabilidad) },
@@ -280,6 +273,15 @@ export default function FundamentalsPanel({ ficha, cargando, error, symbol, altu
                       {CONSENSO[an.consenso] || an.consenso}
                     </span>
                   )}
+                </div>
+                {/* Los datos de objetivo viven aquí, con la recomendación de la que salen, y no sueltos
+                    en la tarjeta de datos. Mismos cuatro campos y mismos formateadores de antes; solo
+                    cambia el reparto, en dos columnas, porque esta tarjeta es más estrecha. */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(165px,1fr))', columnGap: 18 }}>
+                  <Fila k="Precio objetivo" v={fPrecio(an?.objetivoMedio, moneda)} />
+                  <Fila k="Potencial" v={fPct(potencial, true)} color={potencial == null ? undefined : potencial >= 0 ? VERDE : ROJO} />
+                  <Fila k="Rango objetivo" v={an?.objetivoMin != null && an?.objetivoMax != null ? `${fPrecio(an.objetivoMin, moneda)} – ${fPrecio(an.objetivoMax, moneda)}` : null} />
+                  <Fila k="Analistas" v={an?.numAnalistas != null ? String(an.numAnalistas) : null} />
                 </div>
                 <EscalaConsenso media={an?.consensoMedia} />
                 <div style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center' }}>
