@@ -64,16 +64,28 @@ export default function FundamentalsTargetChart({ serie, precioActual, objetivoM
   if (datos.length < 3) return null
 
   const simboloMoneda = moneda === 'USD' ? '$' : moneda === 'EUR' ? '€' : moneda ? ` ${moneda}` : ''
-  const fEje = (v) => finito(v) ? `${dec(v, Math.abs(v) >= 1000 ? 0 : 2)}${simboloMoneda}` : ''
   const fVal = (v) => finito(v) ? `${dec(v, 2)}${simboloMoneda}` : '—'
   const pct = (v) => finito(v) && finito(precioActual) && precioActual !== 0
     ? `${v / precioActual - 1 >= 0 ? '+' : ''}${dec((v / precioActual - 1) * 100, 1)} %` : ''
-  // Etiqueta SOLO en el último punto de cada recta: en el resto devuelve null y recharts no pinta nada.
-  const etiqueta = (color, objetivo) => (props) => {
+  // Las tres etiquetas viven en la banda del eje, a la derecha del trazado: el texto sale del último
+  // punto hacia fuera (textAnchor start y dx positivo) en vez de caer encima de su propia recta.
+  // Si dos quedan a menos de SEPARACION_MIN, la de abajo baja lo justo; el orden de pintado es
+  // alto → medio → bajo, así que se respeta. La posición se memoriza por serie dentro del mismo pase de
+  // render para que un segundo pase no la vuelva a desplazar.
+  const SEPARACION_MIN = 12
+  // Objeto normal, no un ref: se crea en cada render, que es justo el reinicio que hace falta, y así no
+  // hay un hook por debajo del return de arriba.
+  const ysEtiquetas = {}
+  const etiqueta = (clave, color, objetivo) => (props) => {
     const { x, y, index } = props
-    if (index !== datos.length - 1 || !finito(objetivo)) return null
+    if (index !== datos.length - 1 || !finito(objetivo) || !finito(y)) return null
+    if (ysEtiquetas[clave] == null) {
+      let yFinal = y
+      for (const otra of Object.values(ysEtiquetas)) if (Math.abs(yFinal - otra) < SEPARACION_MIN) yFinal = otra + SEPARACION_MIN
+      ysEtiquetas[clave] = yFinal
+    }
     return (
-      <text x={x} y={y} dx={-8} dy={-7} textAnchor="end" fill={color} fontSize={10} fontFamily={MONO} fontWeight={600}>
+      <text x={x} y={ysEtiquetas[clave]} dx={10} dy={3.5} textAnchor="start" fill={color} fontSize={10} fontFamily={MONO} fontWeight={600}>
         {fVal(objetivo)} {pct(objetivo)}
       </text>
     )
@@ -109,23 +121,26 @@ export default function FundamentalsTargetChart({ serie, precioActual, objetivoM
   return (
     <div style={{ height: alto }}>
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={datos} margin={{ top: 12, right: 6, left: 0, bottom: 2 }}>
+        <LineChart data={datos} margin={{ top: 12, right: 2, left: 0, bottom: 2 }}>
           <CartesianGrid vertical={false} stroke={REJILLA} strokeOpacity={0.8} />
           <XAxis dataKey="fecha" ticks={marcas} tickFormatter={fFecha} tick={{ fill: TICK, fontSize: 10, fontFamily: MONO }}
             axisLine={{ stroke: REJILLA }} tickLine={false} />
-          <YAxis orientation="right" tickFormatter={fEje} tickCount={5} width={64}
-            tick={{ fill: TICK, fontSize: 10, fontFamily: MONO }} axisLine={false} tickLine={false} />
+          {/* El eje derecho no pinta cifras: reserva la banda donde van las tres etiquetas. El ancho da
+              para el texto más largo del caso real, "15,00$ -61,6 %" (14 caracteres a 10 px de
+              monoespaciada, ~84 px) más los 10 px que el texto sale del último punto. Sin `domain`, para
+              no tocar el que ya tenía: de 0 al objetivo alto. */}
+          <YAxis orientation="right" width={104} tick={false} axisLine={false} tickLine={false} />
           {finito(precioActual) && <ReferenceLine y={precioActual} stroke="rgba(255,255,255,0.18)" strokeDasharray="2 3" />}
           <Tooltip content={<Globo />} cursor={{ stroke: 'rgba(0,212,255,0.25)' }} />
           <Line type="linear" dataKey="precio" stroke={COLOR_HISTORICO} strokeWidth={1.8} dot={false} connectNulls={false} isAnimationActive={false} />
           <Line type="linear" dataKey="alto" stroke={COLOR_BENEFICIO} strokeWidth={1.4} strokeDasharray="4 3" dot={false} connectNulls={false} isAnimationActive={false}>
-            <LabelList dataKey="alto" content={etiqueta(COLOR_BENEFICIO, objetivoMax)} />
+            <LabelList dataKey="alto" content={etiqueta('alto', COLOR_BENEFICIO, objetivoMax)} />
           </Line>
           <Line type="linear" dataKey="medio" stroke={COLOR_INGRESOS} strokeWidth={1.4} strokeDasharray="4 3" dot={false} connectNulls={false} isAnimationActive={false}>
-            <LabelList dataKey="medio" content={etiqueta(COLOR_INGRESOS, objetivoMedio)} />
+            <LabelList dataKey="medio" content={etiqueta('medio', COLOR_INGRESOS, objetivoMedio)} />
           </Line>
           <Line type="linear" dataKey="bajo" stroke={COLOR_PERDIDA} strokeWidth={1.4} strokeDasharray="4 3" dot={false} connectNulls={false} isAnimationActive={false}>
-            <LabelList dataKey="bajo" content={etiqueta(COLOR_PERDIDA, objetivoMin)} />
+            <LabelList dataKey="bajo" content={etiqueta('bajo', COLOR_PERDIDA, objetivoMin)} />
           </Line>
         </LineChart>
       </ResponsiveContainer>

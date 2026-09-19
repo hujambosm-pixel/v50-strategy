@@ -4045,7 +4045,9 @@ export default function Home() {
     const pedido=simbolo
     fundSerieRef.current=pedido
     setFundSerie(null)
-    apiFetch(`/api/closes?symbol=${encodeURIComponent(simbolo)}&days=365&dates=1`)
+    // Semanal: un año en velas semanales son ~52 puntos, no ~250. Con 12 de proyección, el histórico
+    // deja de comerse el 95 % del ancho y las tres rectas se leen.
+    apiFetch(`/api/closes?symbol=${encodeURIComponent(simbolo)}&days=365&interval=1wk&dates=1`)
       .then(async r=>r.ok?await r.json().catch(()=>null):null)
       .then(j=>{ if(fundSerieRef.current!==pedido) return
         setFundSerie(Array.isArray(j)&&j.length?j:null) })
@@ -4946,7 +4948,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.758</title>
+        <title>Trading Simulator V9.759</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5024,7 +5026,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.758
+            <span className="dot"/>Trading Simulator V9.759
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
