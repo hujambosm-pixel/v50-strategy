@@ -254,13 +254,13 @@ export default function FundamentalsPanel({ ficha, cargando, error, symbol }) {
         {hayGraficos && (
           <div style={{ flex: '1 1 420px', minWidth: 300, display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0 }}>
             {hayHistorico && (
-              // El mínimo manda cuando las mitades se apilan: por debajo de ~250 px el gráfico deja de
-              // leerse. A lo ancho no muerde, porque ahí la tarjeta llena su parte de la columna.
-              <div style={{ ...C.tarjeta, flex: '2 1 0', minHeight: 250, display: 'flex', flexDirection: 'column' }}>
+              // El gráfico tiene alto PROPIO en píxeles (los 230 de siempre): nunca lo pide al contenedor.
+              // Pedirlo creaba una referencia circular —el alto de la tarjeta salía del gráfico y el del
+              // gráfico de la tarjeta— porque .app usa min-height y ningún eslabón de la cadena fija una
+              // altura. Sin equilibrio, recharts se quedaba con la última medida, de hasta 1455 px.
+              <div style={{ ...C.tarjeta, flex: '0 0 auto' }}>
                 <div style={C.seccion}>Ingresos y beneficio por año</div>
-                <div style={{ flex: 1, minHeight: 0 }}>
-                  <GraficoAnual datos={hist} fmt={(x) => fGrande(x, moneda)} fmtEje={(x) => fGrandeEje(x, moneda)} alto="100%" />
-                </div>
+                <GraficoAnual datos={hist} fmt={(x) => fGrande(x, moneda)} fmtEje={(x) => fGrandeEje(x, moneda)} />
               </div>
             )}
             {hayAnalistas && (
