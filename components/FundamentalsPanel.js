@@ -19,6 +19,7 @@ import { MONO } from '../lib/utils'
 
 // recharts fuera del render de servidor, igual que McMonthlyGainsChart.
 const GraficoAnual = dynamic(() => import('./FundamentalsAnnualChart'), { ssr: false })
+const GraficoObjetivo = dynamic(() => import('./FundamentalsTargetChart'), { ssr: false })
 
 // ── Formato ─────────────────────────────────────────────────────────────────
 const MONEDAS = { USD: '$', EUR: '€', GBP: '£', JPY: '¥', CHF: 'CHF', CAD: 'CA$', AUD: 'AU$' }
@@ -150,7 +151,7 @@ function EscalaConsenso({ media }) {
 
 // `alturaUtil`: alto de la sección, que fija quien la coloca. Por defecto '100%' para que el componente
 // siga funcionando suelto, pero index.js le pasa calc(100vh − TAB_H) con la cabecera real de la app.
-export default function FundamentalsPanel({ ficha, cargando, error, symbol, alturaUtil = '100%' }) {
+export default function FundamentalsPanel({ ficha, cargando, error, symbol, seriePrecios = null, alturaUtil = '100%' }) {
   if (cargando) return <div className="loading"><div className="spinner" /><div className="loading-text">Cargando fundamentales de {symbol}…</div></div>
   if (error)    return <div className="error-msg">⚠ {error}</div>
   if (!ficha)   return null
@@ -167,6 +168,7 @@ export default function FundamentalsPanel({ ficha, cargando, error, symbol, altu
   // El BPA por año es lo único del histórico que el gráfico no puede enseñar (su escala aplastaría las
   // barras), así que baja aquí en una línea en vez de sostener una tabla entera al lado del gráfico.
   const bpaPorAnio = (hist || []).filter(a => a.bpa != null)
+  const hayProyeccion = seriePrecios?.length >= 2 && an?.objetivoMedio != null && an?.objetivoMax != null && an?.objetivoMin != null
 
   return (
     <div style={{ ...C.panel, height: alturaUtil }}>
@@ -283,6 +285,13 @@ export default function FundamentalsPanel({ ficha, cargando, error, symbol, altu
                   <Fila k="Rango objetivo" v={an?.objetivoMin != null && an?.objetivoMax != null ? `${fPrecio(an.objetivoMin, moneda)} – ${fPrecio(an.objetivoMax, moneda)}` : null} />
                   <Fila k="Analistas" v={an?.numAnalistas != null ? String(an.numAnalistas) : null} />
                 </div>
+                {/* La proyección solo se monta con los tres objetivos y una serie utilizable: con dos
+                    rectas de tres, el gráfico contaría media historia. Si falta algo, la tarjeta se
+                    queda como está, sin hueco ni aviso. */}
+                {hayProyeccion && (
+                  <GraficoObjetivo serie={seriePrecios} precioActual={m?.precio} moneda={moneda}
+                    objetivoMedio={an.objetivoMedio} objetivoMax={an.objetivoMax} objetivoMin={an.objetivoMin} />
+                )}
                 <EscalaConsenso media={an?.consensoMedia} />
                 <div style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center' }}>
                   <div style={{ width: '100%' }}><Distribucion d={an?.distribucion} /></div>

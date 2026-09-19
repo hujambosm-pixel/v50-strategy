@@ -799,6 +799,10 @@ export default function Home() {
   const [fundFicha,setFundFicha]=useState(null)
   const [fundCargando,setFundCargando]=useState(false)
   const [fundError,setFundError]=useState(null)
+  // Serie de precios del último año para el gráfico de proyección. El ref guarda el símbolo PEDIDO: una
+  // respuesta que llegue tarde y no coincida con él se descarta, en vez de pisar la del símbolo vigente.
+  const [fundSerie,setFundSerie]=useState(null)
+  const fundSerieRef=useRef(null)
   const [navExpanded,setNavExpanded]=useState(false)
   const [metricsLayout,setMetricsLayout]=useState('panel')
   const [metricsView,setMetricsView]=useState('panel')   // 'multi'=3col | 'single'=one strat per block
@@ -4034,6 +4038,19 @@ export default function Home() {
       .finally(()=>{ if(!cancelado) setFundCargando(false) })
     return ()=>{cancelado=true}
   },[sidePanel,simbolo])
+  // Serie de precios para la proyección de objetivos. Solo con la sección abierta, igual que la ficha.
+  // Si falla o no hay datos, se queda en null y el gráfico no se monta: no es un error que mostrar.
+  useEffect(()=>{
+    if(sidePanel!=='fundamentals'){ return }
+    const pedido=simbolo
+    fundSerieRef.current=pedido
+    setFundSerie(null)
+    apiFetch(`/api/closes?symbol=${encodeURIComponent(simbolo)}&days=365&dates=1`)
+      .then(async r=>r.ok?await r.json().catch(()=>null):null)
+      .then(j=>{ if(fundSerieRef.current!==pedido) return
+        setFundSerie(Array.isArray(j)&&j.length?j:null) })
+      .catch(()=>{ if(fundSerieRef.current===pedido) setFundSerie(null) })
+  },[sidePanel,simbolo])
 
   // ── Refresco manual del Dashboard (F5 lógico en caliente, sin recargar la página) ──
   // Re-dispara TODAS las cargas conservando filtros, scroll y toggles. Resetea los refs one-shot
@@ -4929,7 +4946,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.754</title>
+        <title>Trading Simulator V9.755</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5007,7 +5024,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.754
+            <span className="dot"/>Trading Simulator V9.755
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6842,7 +6859,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
             {/* ══ FUNDAMENTALS — ficha del símbolo activo, en lugar del gráfico ══ */}
             {sidePanel==='fundamentals'&&(
               <FundamentalsPanel ficha={fundFicha} cargando={fundCargando} error={fundError} symbol={simbolo}
-                alturaUtil={`calc(100vh - ${TAB_H}px)`}/>
+                seriePrecios={fundSerie} alturaUtil={`calc(100vh - ${TAB_H}px)`}/>
             )}
 
             {/* Single-asset view — oculto cuando multicartera activa o editando */}
