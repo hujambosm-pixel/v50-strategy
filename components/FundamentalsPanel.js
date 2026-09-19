@@ -276,9 +276,12 @@ export default function FundamentalsPanel({ ficha, cargando, error, symbol, seri
           ) : null} />
         </div>
 
-        {/* ── Mitad derecha: los gráficos. No existe si el activo no tiene ninguno ── */}
+        {/* ── Mitad derecha: los gráficos. No existe si el activo no tiene ninguno ──
+            La columna desplaza sus dos tarjetas cuando no caben, en vez de recortarlas. Para que eso
+            ocurra, ninguna de las dos puede encogerse: si una lleva flex con base 0, se aplasta antes
+            de que la columna llegue a desplazarse. */}
         {hayGraficos && (
-          <div style={{ flex: '1 1 420px', minWidth: 300, display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0 }}>
+          <div style={{ flex: '1 1 420px', minWidth: 300, display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0, overflowY: 'auto' }}>
             {hayHistorico && (
               // El gráfico tiene alto PROPIO en píxeles (los 230 de siempre): nunca lo pide al contenedor.
               // Pedirlo creaba una referencia circular —el alto de la tarjeta salía del gráfico y el del
@@ -290,7 +293,7 @@ export default function FundamentalsPanel({ ficha, cargando, error, symbol, seri
               </div>
             )}
             {hayAnalistas && (
-              <div style={{ ...C.tarjeta, flex: '1 1 0', minHeight: 165, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ ...C.tarjeta, flex: '0 0 auto', minHeight: 165, display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
                   <span style={C.seccion}>Recomendación de los analistas</span>
                   {an?.consenso && (
