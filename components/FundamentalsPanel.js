@@ -55,9 +55,11 @@ const TIPOS = { accion: 'Acción', etf: 'ETF', fondo: 'Fondo', indice: 'Índice'
 const VERDE = '#00e5a0', ROJO = '#ff5d5d'
 
 const C = {
-  // overflowY auto, no hidden: a lo ancho cabe todo y no aparece barra, pero cuando la ventana se
-  // estrecha y las dos mitades se apilan, preferimos hacer scroll a aplastar los gráficos.
-  panel:    { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: '12px 16px 14px', gap: 10, fontFamily: MONO, color: 'var(--text)', overflowY: 'auto' },
+  // height 100% + overflow hidden, el mismo ancla que usa el Dashboard en su raíz (pages/index.js:8825).
+  // Sin él, la cadena entera es de altura automática —.app tiene min-height y no height—, así que el alto
+  // del contenido subía hasta .app y hacía crecer la página. Anclado aquí, la sección nunca pasa del alto
+  // de su contenedor y quien desplaza, si hace falta, es la tarjeta de datos con su propio scroll.
+  panel:    { flex: 1, minHeight: 0, height: '100%', display: 'flex', flexDirection: 'column', padding: '12px 16px 14px', gap: 10, fontFamily: MONO, color: 'var(--text)', overflow: 'hidden' },
   // El cuerpo hace scroll cuando su contenido no cabe. A lo ancho las dos mitades caben en una línea y
   // no aparece barra; al estrecharse se apilan, y entonces es preferible desplazar que dejar el gráfico
   // reducido a una tira de 100 px.
