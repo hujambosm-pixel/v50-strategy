@@ -14,7 +14,9 @@ export const COLOR_PERDIDA = '#ff5d5d'
 const TICK = '#7a9bc0'
 const REJILLA = '#1a2d45'
 
-export default function FundamentalsAnnualChart({ datos, fmt, fmtEje }) {
+// `alto`: alto del área de barras. Lo fija quien lo coloca (la ficha le pasa "100%" para que llene su
+// mitad), así que el gráfico no impone altura a la maqueta. No cambia nada de su estética.
+export default function FundamentalsAnnualChart({ datos, fmt, fmtEje, alto = 230 }) {
   const filas = (datos || []).filter(a => a && (a.ingresos != null || a.beneficio != null))
   if (!filas.length) return null
   const hayPerdidas = filas.some(a => a.beneficio < 0)
@@ -44,13 +46,13 @@ export default function FundamentalsAnnualChart({ datos, fmt, fmtEje }) {
   )
 
   return (
-    <div>
-      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 6, fontFamily: MONO }}>
+    <div style={alto === '100%' ? { height: '100%', display: 'flex', flexDirection: 'column' } : undefined}>
+      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 6, fontFamily: MONO, flexShrink: 0 }}>
         <Punto color={COLOR_INGRESOS} texto="Ingresos" />
         <Punto color={COLOR_BENEFICIO} texto="Beneficio neto" />
         {hayPerdidas && <Punto color={COLOR_PERDIDA} texto="Pérdidas" />}
       </div>
-      <div style={{ height: 230 }}>
+      <div style={alto === '100%' ? { flex: 1, minHeight: 0 } : { height: alto }}>
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={filas} margin={{ top: 6, right: 4, left: 0, bottom: 2 }} barCategoryGap="22%" barGap={4}>
             <CartesianGrid vertical={false} stroke={REJILLA} strokeOpacity={0.8} />
