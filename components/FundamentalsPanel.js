@@ -185,8 +185,11 @@ export default function FundamentalsPanel({ ficha, cargando, error, symbol }) {
           hueco al final. Con flex-wrap quien manda en el eje vertical es alignContent, no alignItems. */}
       <div style={{ ...C.cuerpo, alignItems: hayGraficos ? 'stretch' : 'flex-start', alignContent: hayGraficos ? 'stretch' : 'flex-start' }}>
         {/* ── Mitad izquierda: todos los números, en una sola tarjeta ── */}
+        {/* Las secciones van pegadas arriba y el hueco sobrante queda al final. Repartirlas con
+            space-between ataba su separación al alto de la tarjeta: si ese alto se descontrolaba,
+            quedaban a cientos de píxeles unas de otras y solo se veía la primera. */}
         <div style={{ ...C.tarjeta, flex: hayGraficos ? '1 1 380px' : '1 1 100%', minWidth: 290, overflowY: 'auto',
-          display: 'flex', flexDirection: 'column', gap: 8, ...(hayGraficos ? { justifyContent: 'space-between' } : {}) }}>
+          display: 'flex', flexDirection: 'column', gap: 8 }}>
           <Seccion primera titulo="Mercado" filas={[
             { k: 'Apertura', v: fPrecio(m?.apertura, moneda) },
             { k: 'Cierre anterior', v: fPrecio(m?.cierrePrevio, moneda) },
