@@ -169,16 +169,17 @@ function _sampledWithChanges(filteredDates, step, trades) {
 }
 
 // ── Contribución por activo y capital no invertido ───────────────────────────
-// Convención (la misma en los cuatro modos): cada línea de activo ARRANCA EN CERO y la caja arranca con
-// el capital inicial completo. Al abrir, el capital de entrada sale de la caja y entra en la línea del
-// activo; al cerrar, ese capital vuelve a la caja y el resultado se queda acumulado en el activo. Así no
-// hay que inventar una porción de capital inicial por activo, que en los modos de pool no existe.
+// Convención (la misma en los cuatro modos): cada línea de activo ARRANCA EN CERO y mide BENEFICIO, no
+// capital. La caja arranca con el capital inicial completo y sí es capital.
 //
-//   contribución(activo, fecha) = realizado acumulado + coste de lo abierto + P&L no realizado
+//   contribución(activo, fecha) = realizado acumulado + P&L no realizado
 //   caja(fecha)                 = capital inicial − coste de lo abierto
 //
-// Con eso, Σ contribuciones + caja == floatCompoundCurve por construcción, porque los conjuntos de
-// operaciones y el cálculo del no realizado son EXACTAMENTE los que ya suman esas curvas.
+// El coste de lo abierto quedó FUERA de la línea del activo a propósito (V9.762): incluirlo la hacía
+// saltar al abrir la posición y caer al cerrarla, y esos dientes de sierra son capital moviéndose, no
+// resultado. A cambio, Σ contribuciones + caja YA NO reproduce floatCompoundCurve: el capital invertido
+// en cada momento no está en ninguna de las dos series. Es una decisión tomada por legibilidad, no un
+// descuadre; por eso tampoco hay ya comprobación de esa identidad.
 // Agrupa por símbolo REAL (_realSymbol): en multicartera el mismo ticker aparece una vez por estrategia.
 const _claveActivo = (t) => t?._realSymbol ?? t?.symbol
 
@@ -207,8 +208,9 @@ function _seriesPorActivoPool(sampledDates, executedTrades, allCandidates, capit
       if (capEntry == null) return
       const clave = _claveActivo(t)
       if (aporte[clave] == null) return
+      // El coste SOLO va a la caja. En la línea del activo entraría y saldría al abrir y cerrar, y esos
+      // dientes de sierra son capital moviéndose, no beneficio: tapan lo que el gráfico quiere contar.
       costeAbierto += capEntry
-      aporte[clave] += capEntry
       const fData = symbolDataMap[t.symbol] || []
       let closePx = null
       for (let i = fData.length - 1; i >= 0; i--) { if (fData[i].date <= date) { closePx = fData[i].close; break } }
@@ -218,33 +220,6 @@ function _seriesPorActivoPool(sampledDates, executedTrades, allCandidates, capit
     cashCurve.push({ date, value: capitalIni - costeAbierto })
   })
   return { assetCurves: activos.map(symbol => ({ symbol, data: series[symbol] })), cashCurve }
-}
-
-// Comprobación numérica de la identidad, para mirarla desde la respuesta. No lanza ni bloquea nada.
-function _comprobarAssetCurves(curves, capitalIni) {
-  const { assetCurves, cashCurve, floatCompoundCurve } = curves || {}
-  if (!assetCurves?.length || !cashCurve?.length || !floatCompoundCurve?.length) return null
-  const tolerancia = Math.max(0.01, Math.abs(capitalIni || 0) * 1e-9)
-  const cajaPorFecha = new Map(cashCurve.map(p => [p.date, p.value]))
-  let maxDesvio = 0, fechaPeorDesvio = null, desalineadas = 0
-  floatCompoundCurve.forEach((p, i) => {
-    let suma = cajaPorFecha.get(p.date) ?? 0
-    for (const a of assetCurves) {
-      const punto = a.data[i]
-      if (punto?.date !== p.date) { desalineadas++; continue }   // no debería pasar: mismo muestreo
-      suma += punto.value
-    }
-    const desvio = Math.abs(suma - p.value)
-    if (desvio > maxDesvio) { maxDesvio = desvio; fechaPeorDesvio = p.date }
-  })
-  return {
-    ok: maxDesvio <= tolerancia && desalineadas === 0,
-    maxDesvio: Math.round(maxDesvio * 1e6) / 1e6,
-    fechaPeorDesvio,
-    nFechas: floatCompoundCurve.length,
-    tolerancia,
-    ...(desalineadas ? { puntosDesalineados: desalineadas } : {}),
-  }
 }
 
 // Tamaño aproximado de assetCurves: ~40 bytes por punto {date,value} serializado.
@@ -309,7 +284,7 @@ function buildSlotsCurves(assetResults, capitalIni) {
     assetEquities.forEach((byDate, i) => {
       const e = byDate[date]
       if (e) { totSimple+=e.simple; totCompound+=e.compound; totBH+=e.bh; if(e.open)openSlots++; totOpenPnl+=e.openPnl||0; totOpenCost+=e.openCost||0
-        aporte[clavesSlots[i]] += (e.compound - slotCapital) + (e.openCost||0) + (e.openPnl||0) }
+        aporte[clavesSlots[i]] += (e.compound - slotCapital) + (e.openPnl||0) }
     })
     activosSlots.forEach(s => seriesSlots[s].push({ date, value: aporte[s] }))
     cashCurve.push({ date, value: capitalIni - totOpenCost })
@@ -1799,8 +1774,6 @@ async function handlePortfolioMode(req, res) {
 
     // Cobertura del periodo pedido (ver _coberturaHistorico). Clave por símbolo real, como assetStats aquí.
     const cobertura = _coberturaHistorico(assetResults, curves, cfg, _activosExcluidos(allTickers, descargas))
-    // Diagnóstico de la identidad Σ contribuciones + caja == floatCompoundCurve. Campo temporal.
-    const chequeoActivos = _comprobarAssetCurves(curves, cfg.capitalIni)
 
     return res.status(200).json({
       ...curves,
@@ -1811,8 +1784,7 @@ async function handlePortfolioMode(req, res) {
       // Solo presente si algo no cubre el periodo pedido: activos cortos y/o recorte del modo rango.
       ...(cobertura.avisos ? { avisosHistorico: cobertura.avisos } : {}),
       assetStats: assetStats.map(a => ({ ...a, primeraFecha: cobertura.primera[a.symbol] ?? null })),
-      // Diagnóstico de las series por activo: si la suma cuadra y cuánto ocupan. Campos temporales.
-      ...(chequeoActivos ? { assetCurvesCheck: chequeoActivos } : {}),
+      // Tamaño de las series por activo, para vigilar el coste de la respuesta.
       ...(curves.assetCurves ? { assetCurvesInfo: _tamanoAssetCurves(curves.assetCurves) } : {}),
       allTrades:       sourceTrades,
       avgOccupancy,
@@ -2215,8 +2187,6 @@ export default async function handler(req, res) {
 
     // Cobertura del periodo pedido (ver _coberturaHistorico)
     const cobertura = _coberturaHistorico(assetResults, curves, cfg, _activosExcluidos(symbols, descargas))
-    // Diagnóstico de la identidad Σ contribuciones + caja == floatCompoundCurve. Campo temporal.
-    const chequeoActivos = _comprobarAssetCurves(curves, cfg.capitalIni)
 
     res.status(200).json({
       ...curves,
@@ -2227,8 +2197,7 @@ export default async function handler(req, res) {
       // Solo presente si algo no cubre el periodo pedido: activos cortos y/o recorte del modo rango.
       ...(cobertura.avisos ? { avisosHistorico: cobertura.avisos } : {}),
       assetStats: assetStats.map(a => ({ ...a, primeraFecha: cobertura.primera[a.symbol] ?? null })),
-      // Diagnóstico de las series por activo: si la suma cuadra y cuánto ocupan. Campos temporales.
-      ...(chequeoActivos ? { assetCurvesCheck: chequeoActivos } : {}),
+      // Tamaño de las series por activo, para vigilar el coste de la respuesta.
       ...(curves.assetCurves ? { assetCurvesInfo: _tamanoAssetCurves(curves.assetCurves) } : {}),
       allTrades: sourceTrades,
       avgOccupancy,
