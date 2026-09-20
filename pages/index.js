@@ -573,6 +573,11 @@ const COLORES_ACTIVO=['#00d4ff','#ff9a3c','#9b72ff','#ffd166','#4ade80','#f472b6
 const colorDeActivo=(sym)=>{let h=0;for(let i=0;i<String(sym).length;i++)h=(h*31+String(sym).charCodeAt(i))>>>0;return COLORES_ACTIVO[h%COLORES_ACTIVO.length]}
 // Saneado antes de entregar una serie a lightweight-charts: fechas únicas y ascendentes y valores
 // finitos. Una sola fecha repetida o un NaN matan la línea en silencio, sin error ni aviso.
+// Ids de las dos series que no son un activo. Por defecto la caja va OCULTA —es capital, no resultado,
+// y su escala tapa el resto— y todo lo demás visible, así que el estado solo guarda lo que el usuario
+// cambia: `undefined` significa "como viene de fábrica".
+const MC_ID_CAJA='__caja__', MC_ID_TOTAL='__totalEstrategia__'
+const mcVisibleActivo=(estado,id)=>estado[id]!==undefined?estado[id]:id!==MC_ID_CAJA
 const saneaCurva=(datos)=>{
   const porFecha=new Map()
   for(const p of datos||[]) if(p&&typeof p.date==='string'&&Number.isFinite(p.value)) porFecha.set(p.date,p.value)
@@ -1198,6 +1203,7 @@ export default function Home() {
   const [mcFiltrosActivoOpen,setMcFiltrosActivoOpen]=useState(()=>filtrosBoot.restaurado&&hayFiltroActivo(filtrosBoot.filtros,'activo'))
   const [mcStratVisible,setMcStratVisible]=useState({})     // {id:bool}
   const [mcPorActivo,setMcPorActivo]=useState(false)        // gráfico de equity: false=Estrategias, true=Activos
+  const [mcActivoVisible,setMcActivoVisible]=useState({})   // {idSerie:bool} en modo Activos; ver mcVisibleActivo
   const [mcAssetOpen,setMcAssetOpen]=useState({})           // {stratId:bool} acordeón resumen por activo
   const [mcShowBHCompare,setMcShowBHCompare]=useState(true) // B&H curve toggle in multi-strategy chart
   // Estrategia vigente en el HISTORIAL de operaciones. Fuente ÚNICA: la usan el propio historial y el
@@ -1214,28 +1220,33 @@ export default function Home() {
       :'Historial Multicartera'
     return {isMultiHist,histResult,histTitle}
   },[mcMultiResults,mcHistStratId,mcResult])
-  // Curvas del modo Activos: una por activo, la caja y la curva total como referencia. MEMORIZADO con
-  // dependencias explícitas: con ~20 series, un array recreado en cada render recrea el chart entero
-  // en bucle (ver la nota del gráfico mensual más abajo).
-  const mcCurvasActivos=useMemo(()=>{
+  // Series del modo Activos: una por activo, la caja y la curva total como referencia. Este memo hace lo
+  // CARO —sanear cada serie— y depende solo de los datos, así que no se rehace al marcar o desmarcar.
+  const mcSeriesActivos=useMemo(()=>{
     const r=mcHistSel.histResult
     if(!r?.assetCurves?.length) return null
     const series=r.assetCurves.map(a=>({
       id:`activo__${a.symbol}`,name:a.symbol,color:colorDeActivo(a.symbol),
-      data:saneaCurva(a.data),show:true,maxDD:0,maxDDDate:null,taxByDate:null,
+      data:saneaCurva(a.data),maxDD:0,maxDDDate:null,taxByDate:null,
     }))
     const caja=saneaCurva(r.cashCurve)
     // La total va la ÚLTIMA: lightweight-charts dibuja en orden, así queda encima del resto.
     const total=saneaCurva(r.floatCompoundCurve?.length?r.floatCompoundCurve:r.compoundCurve)
     const lista=[
       ...series,
-      ...(caja.length>1?[{id:'__caja__',name:'No invertido',color:'#8aadcc',data:caja,show:true,dashed:true,maxDD:0,maxDDDate:null,taxByDate:null}]:[]),
-      ...(total.length>1?[{id:'__totalEstrategia__',name:'Total estrategia',color:'#00e5a0',data:total,show:true,maxDD:0,maxDDDate:null,taxByDate:null}]:[]),
+      ...(caja.length>1?[{id:MC_ID_CAJA,name:'No invertido',color:'#8aadcc',data:caja,dashed:true,maxDD:0,maxDDDate:null,taxByDate:null}]:[]),
+      ...(total.length>1?[{id:MC_ID_TOTAL,name:'Total estrategia',color:'#00e5a0',data:total,maxDD:0,maxDDDate:null,taxByDate:null}]:[]),
     ]
     // Una serie de un solo punto no se dibuja: no es una línea.
     const dibujables=lista.filter(c=>c.data.length>1)
     return dibujables.length?dibujables:null
   },[mcHistSel])
+  // La visibilidad se superpone aparte: alternar una serie solo rehace este envoltorio, no el saneado.
+  // El array cambia de identidad únicamente cuando cambian los datos o la visibilidad, que es justo
+  // cuando el chart tiene que reconstruirse (su efecto depende de `curves`).
+  const mcCurvasActivos=useMemo(()=>
+    mcSeriesActivos?.map(c=>({...c,show:mcVisibleActivo(mcActivoVisible,c.id)}))??null
+  ,[mcSeriesActivos,mcActivoVisible])
   // ── Curvas "después de impuestos" (IRPF base del ahorro). Solo modos pool. ──
   // Reemplazan compoundCurve (estrategias activas) y bhCurve cuando mcShowAfterTax está activo.
   const mcAfterTax=useMemo(()=>{
@@ -4549,7 +4560,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
           modeResults.push({id:`${sid||'__single__'}__${modo}`,name:`${stratName} · ${MODE_LABELS[modo]}`,color,result:json,modo})
         }
         const vis={};modeResults.forEach(r=>{vis[r.id]=true});setMcStratVisible(vis)
-        setMcAssetOpen({});setMcPorActivo(false)
+        setMcAssetOpen({});setMcPorActivo(false);setMcActivoVisible({})
         const chartsVis={};modeResults.forEach(r=>{chartsVis[r.id]=true});setMcChartsStratVisible(chartsVis)
         setMcResult(modeResults[0].result);setMcMultiResults(modeResults);setMcIsModoCompare(true)
       }catch(e){setMcError(e.message)}finally{setMcLoading(false);setMcProgress(null)}
@@ -4576,7 +4587,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
     const activeResult=results.find(r=>r.id===currentStratId)||results[0]
     setMcResult(activeResult.result);setMcMultiResults(results);setMcIsModoCompare(false)
     const vis={};results.forEach(r=>{vis[r.id]=true});setMcStratVisible(vis)
-    setMcAssetOpen({});setMcPorActivo(false)
+    setMcAssetOpen({});setMcPorActivo(false);setMcActivoVisible({})
     const chartsVis={};results.forEach(r=>{chartsVis[r.id]=true});setMcChartsStratVisible(chartsVis)
     // ── Multicartera real (backend portfolioMode) ──────────────────────────────
     if(mcStratSelected.includes('__portfolio__')&&results.length>=2){
@@ -4997,7 +5008,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.762</title>
+        <title>Trading Simulator V9.763</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5075,7 +5086,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.762
+            <span className="dot"/>Trading Simulator V9.763
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -8474,6 +8485,31 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       syncRef={chartSyncRef}
                       chartHeight={mcEquityH}
                     />
+                  )}
+                  {/* Selector de series del modo Activos. Va DEBAJO del gráfico para no robarle altura
+                      ni competir con la fila de botones, y envuelve en varias filas si hay muchos
+                      activos. Cada elemento lleva el color de su línea: es la única forma de saber qué
+                      curva es cuál. */}
+                  {mcPorActivo&&mcSeriesActivos&&(
+                    <div style={{display:'flex',flexWrap:'wrap',gap:'4px 6px',padding:'6px 2px 0'}}>
+                      {mcSeriesActivos.map(c=>{
+                        const visible=mcVisibleActivo(mcActivoVisible,c.id)
+                        return (
+                          <button key={c.id}
+                            onClick={()=>setMcActivoVisible(v=>({...v,[c.id]:!mcVisibleActivo(v,c.id)}))}
+                            title={visible?`Ocultar ${c.name}`:`Mostrar ${c.name}`}
+                            style={{display:'inline-flex',alignItems:'center',gap:5,fontFamily:MONO,fontSize:10,
+                              padding:'2px 7px',borderRadius:3,cursor:'pointer',
+                              border:`1px solid ${visible?c.color:'#2b4257'}`,
+                              background:visible?`${c.color}18`:'transparent',
+                              color:visible?c.color:'#3d5a7a'}}>
+                            <span style={{width:8,height:8,borderRadius:2,flexShrink:0,
+                              background:visible?c.color:'transparent',border:`1px solid ${visible?c.color:'#3d5a7a'}`}}/>
+                            {c.name}
+                          </button>
+                        )
+                      })}
+                    </div>
                   )}
                   {mcDisplayResults.length<=1&&mcShowAfterTax&&mcAfterTax&&(
                     <div style={{position:'absolute',top:8,left:8,zIndex:5,pointerEvents:'none',background:'rgba(10,20,35,0.82)',border:'1px solid #2a3f55',borderRadius:6,padding:'5px 9px',fontFamily:MONO,fontSize:9,lineHeight:1.5,color:'#aab8c6'}}>
