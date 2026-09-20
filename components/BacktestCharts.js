@@ -296,6 +296,12 @@ export function StratCompareChart({curves,capitalIni,showMaxDD=true,chartHeight=
         }},
       })
       chartRef.current=chart
+      // Línea de referencia: el nivel de "ni gano ni pierdo" de lo que dibujan las series. Con series de
+      // patrimonio es el capital inicial; con series de beneficio, que arrancan en cero, quien llama pasa
+      // un CERO y la línea va en cero, que es igual de válido. La guarda mira solo que haya datos, nunca
+      // el valor: un `if(capitalIni)` trataría ese cero como ausente y se cargaría la referencia.
+      // Ojo: esta línea es una fuente más del price scale, así que el autoescalado obliga al eje a
+      // contenerla. Por eso importa que valga cero y no 10.000 cuando las series son beneficio.
       const base=curves.find(c=>c.data?.length)?.data
       if(base?.length) chart.addLineSeries({color:'#2a3f55',lineWidth:1,lineStyle:LineStyle.Dotted,lastValueVisible:false,priceLineVisible:false})
         .setData([{time:base[0].date,value:capitalIni},{time:base[base.length-1].date,value:capitalIni}])

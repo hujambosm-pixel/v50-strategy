@@ -583,6 +583,16 @@ const saneaCurva=(datos)=>{
   for(const p of datos||[]) if(p&&typeof p.date==='string'&&Number.isFinite(p.value)) porFecha.set(p.date,p.value)
   return [...porFecha.entries()].sort((a,b)=>a[0].localeCompare(b[0])).map(([date,value])=>({date,value}))
 }
+// Capital inicial de UNA respuesta concreta, nunca del formulario: un resultado que lleve rato en
+// memoria pudo ejecutarse con otro capital del que hay tecleado ahora. La fuente buena es n × slotCapital,
+// que es como el motor lo reparte (slotCapital = capitalIni / n, división exacta); si esos dos campos no
+// viajan —respuesta anterior a V9.760— cae al primer punto de la curva compuesta, que arranca en el
+// capital. Devuelve null cuando no hay forma de saberlo, para que quien llame decida.
+const capitalDeRespuesta=(r)=>{
+  if(!r) return null
+  if(Number.isFinite(r.n)&&Number.isFinite(r.slotCapital)) return r.n*r.slotCapital
+  return Number.isFinite(r.compoundCurve?.[0]?.value)?r.compoundCurve[0].value:null
+}
 
 
 
@@ -1233,10 +1243,9 @@ export default function Home() {
     // La total va la ÚLTIMA: lightweight-charts dibuja en orden, así queda encima del resto. Y va como
     // BENEFICIO, restándole el capital inicial: las demás series arrancan en cero, y el patrimonio
     // arrancaría en 10.000, que son dos magnitudes distintas en el mismo eje.
-    // El capital sale de la PROPIA respuesta (n × slotCapital, que es como el motor lo reparte), no del
-    // formulario: un resultado antiguo en memoria no tiene por qué coincidir con lo que hay tecleado.
-    const capBase=(Number.isFinite(r.n)&&Number.isFinite(r.slotCapital))?r.n*r.slotCapital
-      :(Number.isFinite(r.compoundCurve?.[0]?.value)?r.compoundCurve[0].value:null)
+    // El capital sale de la PROPIA respuesta, no del formulario: misma fuente que la línea de referencia
+    // del gráfico (capitalDeRespuesta), para que las dos no puedan discrepar.
+    const capBase=capitalDeRespuesta(r)
     const total=capBase==null?[]
       :saneaCurva((r.floatCompoundCurve?.length?r.floatCompoundCurve:r.compoundCurve)||[])
         .map(p=>({date:p.date,value:p.value-capBase}))
@@ -1255,6 +1264,18 @@ export default function Home() {
   const mcCurvasActivos=useMemo(()=>
     mcSeriesActivos?.map(c=>({...c,show:mcVisibleActivo(mcActivoVisible,c.id)}))??null
   ,[mcSeriesActivos,mcActivoVisible])
+  // Valor de la línea de referencia del gráfico grande: el nivel de "ni gano ni pierdo", que depende de
+  // QUÉ dibujan las series. En Estrategias son patrimonio y ese nivel es el capital inicial; en Activos
+  // son beneficio con origen en cero, así que el nivel es CERO. Poner ahí el capital —lo que se hacía
+  // hasta ahora— metía 10.000 en el rango del eje: la línea es una fuente más del price scale, de modo
+  // que al ocultar la curva total las demás quedaban aplastadas contra el suelo del gráfico.
+  // El capital sale de la respuesta que ya alimenta a ese mismo gráfico (mcResult, de donde salen bhCurve
+  // y sp500BHCurve), no del formulario. Si la respuesta no permite deducirlo, se queda el valor del
+  // formulario, que es el comportamiento anterior.
+  const mcRefEquity=useMemo(()=>{
+    if(mcPorActivo) return 0
+    return capitalDeRespuesta(mcResult)??Number(mcCapitalIni||capitalIni)
+  },[mcPorActivo,mcResult,mcCapitalIni,capitalIni])
   // ── Curvas "después de impuestos" (IRPF base del ahorro). Solo modos pool. ──
   // Reemplazan compoundCurve (estrategias activas) y bhCurve cuando mcShowAfterTax está activo.
   const mcAfterTax=useMemo(()=>{
@@ -5020,7 +5041,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.764</title>
+        <title>Trading Simulator V9.765</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5098,7 +5119,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.764
+            <span className="dot"/>Trading Simulator V9.765
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -8452,7 +8473,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                   {mcPorActivo&&mcCurvasActivos?(
                     <StratCompareChart
                       curves={mcCurvasActivos}
-                      capitalIni={Number(mcCapitalIni||capitalIni)}
+                      capitalIni={mcRefEquity}
                       showMaxDD={false}
                       onReady={api=>{mcChartApiRef.current=api}}
                       onAxisWidth={w=>setMcAxisW(prev=>Math.abs(prev-w)>0.5?w:prev)}
@@ -8491,7 +8512,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         }]:[])
                       ]}
                       afterTax={!!mcAfterTax}
-                      capitalIni={Number(mcCapitalIni||capitalIni)}
+                      capitalIni={mcRefEquity}
                       showMaxDD={mcShowMaxDD}
                       onReady={api=>{mcChartApiRef.current=api}}
                       onAxisWidth={w=>setMcAxisW(prev=>Math.abs(prev-w)>0.5?w:prev)}
