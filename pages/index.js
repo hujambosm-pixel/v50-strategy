@@ -1230,8 +1230,16 @@ export default function Home() {
       data:saneaCurva(a.data),maxDD:0,maxDDDate:null,taxByDate:null,
     }))
     const caja=saneaCurva(r.cashCurve)
-    // La total va la ÚLTIMA: lightweight-charts dibuja en orden, así queda encima del resto.
-    const total=saneaCurva(r.floatCompoundCurve?.length?r.floatCompoundCurve:r.compoundCurve)
+    // La total va la ÚLTIMA: lightweight-charts dibuja en orden, así queda encima del resto. Y va como
+    // BENEFICIO, restándole el capital inicial: las demás series arrancan en cero, y el patrimonio
+    // arrancaría en 10.000, que son dos magnitudes distintas en el mismo eje.
+    // El capital sale de la PROPIA respuesta (n × slotCapital, que es como el motor lo reparte), no del
+    // formulario: un resultado antiguo en memoria no tiene por qué coincidir con lo que hay tecleado.
+    const capBase=(Number.isFinite(r.n)&&Number.isFinite(r.slotCapital))?r.n*r.slotCapital
+      :(Number.isFinite(r.compoundCurve?.[0]?.value)?r.compoundCurve[0].value:null)
+    const total=capBase==null?[]
+      :saneaCurva((r.floatCompoundCurve?.length?r.floatCompoundCurve:r.compoundCurve)||[])
+        .map(p=>({date:p.date,value:p.value-capBase}))
     const lista=[
       ...series,
       ...(caja.length>1?[{id:MC_ID_CAJA,name:'No invertido',color:'#8aadcc',data:caja,dashed:true,maxDD:0,maxDDDate:null,taxByDate:null}]:[]),
@@ -1489,6 +1497,10 @@ export default function Home() {
   // Mide el hueco entre el borde superior del contenedor del gráfico (bajo la fila de botones EQUITY)
   // y el fondo de la ventana, y lo usa como mcEquityH. Recalcula al montar, al hacer resize de la ventana,
   // y cuando cambia mcDisplayResults/mcResult (varía la altura de la tabla comparativa → cambia el hueco).
+  // También al entrar o salir del modo Activos y al cambiar la lista de series: el selector de activos vive
+  // en la fila de botones, así que con ~20 activos ocupa varias líneas y empuja hacia abajo el borde
+  // superior del contenedor. Sin esta dependencia el gráfico conservaría el alto de antes y se saldría
+  // por el fondo de la ventana justo lo que mide el selector.
   // El drag-handle sobrescribe mcEquityH manualmente hasta el próximo recálculo. Cleanup en el return externo.
   useEffect(()=>{
     if(sidePanel!=='multi') return
@@ -1502,7 +1514,7 @@ export default function Home() {
     const raf=requestAnimationFrame(()=>requestAnimationFrame(recompute))
     window.addEventListener('resize',recompute)
     return ()=>{ cancelAnimationFrame(raf); window.removeEventListener('resize',recompute) }
-  },[sidePanel,mcDisplayResults,mcResult])
+  },[sidePanel,mcDisplayResults,mcResult,mcPorActivo,mcSeriesActivos])
 
   // ── Altura del gráfico: 100% CSS puro (sin JS) ──
   // watchlist → chart-wrap height:calc(100vh-64px) dentro de contentRef (scroll-container); el resto
@@ -5008,7 +5020,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.763</title>
+        <title>Trading Simulator V9.764</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5086,7 +5098,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.763
+            <span className="dot"/>Trading Simulator V9.764
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -8305,7 +8317,9 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                 {/* ── Equity — misma estructura que activos individuales ── */}
                 <div className="equity-section" data-chart="equity">
                   <div className="section-title" style={{display:'flex',alignItems:'flex-start',flexWrap:'wrap',gap:6,fontSize:14}}>
-                    <span>Equity</span>
+                    {/* El rótulo lo decide el mismo conmutador: en Activos no se dibuja patrimonio sino
+                        beneficio, empezando todas las series en cero. La clase pone las mayúsculas. */}
+                    <span>{mcPorActivo?'Profit':'Equity'}</span>
                     {/* Conmutador Estrategias / Activos. En Activos se dibuja la contribución de cada
                         activo de la estrategia vigente en el historial (mcHistSel), más la caja. Si el
                         resultado en memoria no trae assetCurves —por ejemplo uno anterior a V9.760— el
@@ -8406,6 +8420,31 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                     <button onClick={()=>mcChartApiRef.current?.fitAll()}
                       style={{marginLeft:'auto',fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',border:'1px solid #1a2d45',background:'rgba(0,212,255,0.07)',color:'#7a9bc0',flexShrink:0}}
                       title="Ver periodo completo">⊠ Periodo completo</button>
+                    {/* Selector de series del modo Activos, en la propia fila de botones: width 100 %
+                        lo hace caer a la línea de abajo, y envuelve en varias filas si hay muchos
+                        activos. Cada elemento lleva el color de su línea: es la única forma de saber
+                        qué curva es cuál en el gráfico. */}
+                    {mcPorActivo&&mcSeriesActivos&&(
+                      <div style={{display:'flex',flexWrap:'wrap',gap:'4px 6px',width:'100%'}}>
+                        {mcSeriesActivos.map(c=>{
+                          const visible=mcVisibleActivo(mcActivoVisible,c.id)
+                          return (
+                            <button key={c.id}
+                              onClick={()=>setMcActivoVisible(v=>({...v,[c.id]:!mcVisibleActivo(v,c.id)}))}
+                              title={visible?`Ocultar ${c.name}`:`Mostrar ${c.name}`}
+                              style={{display:'inline-flex',alignItems:'center',gap:5,fontFamily:MONO,fontSize:10,
+                                padding:'2px 7px',borderRadius:3,cursor:'pointer',
+                                border:`1px solid ${visible?c.color:'#2b4257'}`,
+                                background:visible?`${c.color}18`:'transparent',
+                                color:visible?c.color:'#3d5a7a'}}>
+                              <span style={{width:8,height:8,borderRadius:2,flexShrink:0,
+                                background:visible?c.color:'transparent',border:`1px solid ${visible?c.color:'#3d5a7a'}`}}/>
+                              {c.name}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
                   </div>
                   <div ref={mcEquityContainerRef} style={{position:'relative'}}>
                   {/* Modo Activos: una serie por activo, la caja y la total. El array viene memorizado
@@ -8485,31 +8524,6 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       syncRef={chartSyncRef}
                       chartHeight={mcEquityH}
                     />
-                  )}
-                  {/* Selector de series del modo Activos. Va DEBAJO del gráfico para no robarle altura
-                      ni competir con la fila de botones, y envuelve en varias filas si hay muchos
-                      activos. Cada elemento lleva el color de su línea: es la única forma de saber qué
-                      curva es cuál. */}
-                  {mcPorActivo&&mcSeriesActivos&&(
-                    <div style={{display:'flex',flexWrap:'wrap',gap:'4px 6px',padding:'6px 2px 0'}}>
-                      {mcSeriesActivos.map(c=>{
-                        const visible=mcVisibleActivo(mcActivoVisible,c.id)
-                        return (
-                          <button key={c.id}
-                            onClick={()=>setMcActivoVisible(v=>({...v,[c.id]:!mcVisibleActivo(v,c.id)}))}
-                            title={visible?`Ocultar ${c.name}`:`Mostrar ${c.name}`}
-                            style={{display:'inline-flex',alignItems:'center',gap:5,fontFamily:MONO,fontSize:10,
-                              padding:'2px 7px',borderRadius:3,cursor:'pointer',
-                              border:`1px solid ${visible?c.color:'#2b4257'}`,
-                              background:visible?`${c.color}18`:'transparent',
-                              color:visible?c.color:'#3d5a7a'}}>
-                            <span style={{width:8,height:8,borderRadius:2,flexShrink:0,
-                              background:visible?c.color:'transparent',border:`1px solid ${visible?c.color:'#3d5a7a'}`}}/>
-                            {c.name}
-                          </button>
-                        )
-                      })}
-                    </div>
                   )}
                   {mcDisplayResults.length<=1&&mcShowAfterTax&&mcAfterTax&&(
                     <div style={{position:'absolute',top:8,left:8,zIndex:5,pointerEvents:'none',background:'rgba(10,20,35,0.82)',border:'1px solid #2a3f55',borderRadius:6,padding:'5px 9px',fontFamily:MONO,fontSize:9,lineHeight:1.5,color:'#aab8c6'}}>
