@@ -42,15 +42,18 @@ const NIVELES = { obLevel: 'obLevel', rsiOB: 'obLevel', osLevel: 'osLevel', rsiO
 
 const finito = (v) => typeof v === 'number' && Number.isFinite(v)
 
-// Array por índice → [{date, value}] con las fechas de las barras del MOTOR. Los valores no finitos se
-// caen: lightweight-charts no dibuja una serie con un NaN dentro, y los primeros valores de cualquier
-// media móvil son null hasta que hay periodo suficiente.
+// Array por índice → [{date, value}] con las fechas de las barras del MOTOR.
+// Solo se acepta un array de la MISMA longitud que las barras, que es el contrato que asume datos.js al
+// inyectarlas por índice. Cualquier otra cosa —un escalar, un null, un objeto, un array de otra longitud—
+// se ignora y se anota el motivo: una clave inesperada no puede tumbar la respuesta entera.
+// Los valores no finitos se caen: lightweight-charts no dibuja una serie con un NaN dentro, y los
+// primeros valores de cualquier media móvil son null hasta que hay periodo suficiente.
 function aSerie(arr, fechas) {
-  if (!Array.isArray(arr) || !arr.length) return null
+  if (!Array.isArray(arr)) return { serie: null, motivo: `no es un array (${arr === null ? 'null' : typeof arr})` }
+  if (arr.length !== fechas.length) return { serie: null, motivo: `longitud ${arr.length}, se esperaban ${fechas.length}` }
   const out = []
-  const n = Math.min(arr.length, fechas.length)
-  for (let i = 0; i < n; i++) if (finito(arr[i])) out.push({ date: fechas[i], value: arr[i] })
-  return out.length ? out : null
+  for (let i = 0; i < arr.length; i++) if (finito(arr[i])) out.push({ date: fechas[i], value: arr[i] })
+  return out.length ? { serie: out, motivo: null } : { serie: null, motivo: 'ningún valor finito' }
 }
 
 // Zonas donde el filtro impedía entrar, a partir del mapa fecha → ¿permitido?. Mismo recorrido que hace
@@ -73,8 +76,11 @@ export default async function handler(req, res) {
   const { symbol, strategyId, cfg: cfgInput, intervalo, filtros: filtrosCfg, isNoStrategy = false } = req.body || {}
   if (!symbol) return res.status(400).json({ error: 'symbol requerido' })
   const cfg = cfgInput || {}
+  // Testigo del paso en curso, para que un fallo diga DÓNDE se rompió y no solo qué excepción salió.
+  let paso = 'inicio'
 
   try {
+    paso = 'cargar estrategia'
     // 1. code_js y params de la estrategia, igual que el multibacktest: params de Supabase por encima
     //    del cfg del formulario.
     let codeJs = null, effectiveCfg = cfg
@@ -97,6 +103,7 @@ export default async function handler(req, res) {
     }
     if (!codeJs && !isNoStrategy) return res.status(400).json({ error: 'La estrategia no tiene código ejecutable (code_js)' })
 
+    paso = 'descargar barras'
     // 2. Las MISMAS barras y el MISMO intervalo con los que corrió el backtest.
     const esSemanal = intervalo === 'semanal'
     const assetInterval = esSemanal ? '1wk' : '1d'
@@ -106,12 +113,14 @@ export default async function handler(req, res) {
     let sp500Data = null
     try { sp500Data = await fetchData('^GSPC', cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null) } catch(_) {}
 
+    paso = 'ejecutar estrategia'
     // 3. El sandbox, por el mismo camino que el backtest. El capital solo afecta a los trades, que aquí
     //    se descartan: las series de indicadores no dependen de él.
     const { indicators = {}, filterZones: zonasSandbox = [] } =
       codeJs ? runCodeJsAsset(barras, sp500Data, codeJs, cfg.capitalIni ?? 10000, cfg.years ?? 5, effectiveCfg)
              : { indicators: {}, filterZones: [] }
 
+    paso = 'filtros'
     // 4. Filtros: se rehace el mapa fecha → ¿permitido? de ESTE activo, con las mismas piezas que el
     //    multibacktest. Si no hay ninguno activo, valen las zonas que devuelva la propia estrategia
     //    —algunas se calculan su filtro por dentro—, que es el mismo orden de preferencia de datos.js.
@@ -121,7 +130,10 @@ export default async function handler(req, res) {
     if (anyFiltroOn) {
       const assetDates = barras.map(d => d.date)
       const filterAuxData = {}
-      const auxKeys = clavesAuxiliares(filtrosLista, '1wk', '1d')
+      // clavesAuxiliares devuelve un SET, no un array: multibacktest lo recorre con for...of y aquí se
+      // llamó a .map, que un Set no tiene. De ahí el "l.map is not a function" que tumbaba el endpoint
+      // entero siempre que hubiera un filtro activo. Se convierte explícitamente.
+      const auxKeys = [...clavesAuxiliares(filtrosLista, '1wk', '1d')]
       await Promise.all(auxKeys.map(async akey => {
         const c = akey.lastIndexOf(':')
         const ticker = akey.slice(0, c), iv = akey.slice(c + 1)
@@ -148,16 +160,24 @@ export default async function handler(req, res) {
       filterZones = zonasDeMapa(barras, filtroActivoMap)
     }
 
+    paso = 'convertir series'
     // 5. Series del vocabulario, con las fechas de las barras del motor.
     const fechasMotor = barras.map(d => d.date)
-    const series = {}, niveles = {}
+    const series = {}, niveles = {}, descartadas = {}
     for (const [clave, valor] of Object.entries(indicators || {})) {
       const nivel = NIVELES[clave]
-      if (nivel) { if (finito(valor)) niveles[nivel] = valor; continue }
+      // obLevel/osLevel son ESCALARES por contrato: un número, no una serie. Van aparte.
+      if (nivel) {
+        if (finito(valor)) niveles[nivel] = valor
+        else descartadas[clave] = `nivel no numérico (${typeof valor})`
+        continue
+      }
       const destino = SERIES[clave] ? clave : ALIAS[clave]
-      if (!destino || series[destino]) continue        // fuera del vocabulario, o ya servida por su alias
-      const s = aSerie(valor, fechasMotor)
-      if (s) series[destino] = s
+      if (!destino) { descartadas[clave] = 'fuera del vocabulario'; continue }
+      if (series[destino]) continue                    // ya servida por su alias
+      const { serie, motivo } = aSerie(valor, fechasMotor)
+      if (serie) series[destino] = serie
+      else descartadas[clave] = motivo
     }
 
     // 6. En semanal, las series se proyectan a las fechas DIARIAS del activo con el último valor CERRADO
@@ -166,6 +186,7 @@ export default async function handler(req, res) {
     //    encima de velas diarias sería otra curva: su soporte son ~100 sesiones, no 20.
     //    Las zonas no se proyectan: son rangos de fechas y el rectángulo los abarca igual, solo que con
     //    los bordes a resolución semanal, que es la resolución a la que el filtro decidió.
+    paso = 'proyección semanal'
     let intervaloSalida = esSemanal ? 'semanal' : 'diario'
     if (esSemanal && Object.keys(series).length) {
       const diarias = await fetchData(symbol, cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, '1d')
@@ -189,10 +210,18 @@ export default async function handler(req, res) {
       escalas: Object.fromEntries(Object.keys(series).map(k => [k, SERIES[k]])),
       indicators: series,
       niveles,
+      // Claves que llegaron y no se pudieron usar, con el motivo. Sin esto, una estrategia con un
+      // `indicators` raro se traduce en un gráfico sin líneas y nadie sabe por qué.
+      ...(Object.keys(descartadas).length ? { descartadas } : {}),
       filterZones,
       nBarras: barras.length,
     })
   } catch (e) {
-    return res.status(500).json({ error: e.message || 'Error interno' })
+    // Un error genérico y minificado es lo que ha dejado este fallo invisible: el cliente lo ignoraba en
+    // silencio y no había forma de saber en qué paso se rompía. `paso` se va marcando por el camino.
+    return res.status(500).json({
+      error: `asset-detail (${paso}): ${e?.message || 'error desconocido'}`,
+      paso, symbol: symbol ?? null,
+    })
   }
 }

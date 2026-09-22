@@ -1440,14 +1440,16 @@ export default function Home() {
             filtros:filtrosBackend,isNoStrategy:(_strat?.name||'').includes('No Strategy')})})
         const json=await res.json()
         if(mcDetallePedidoRef.current!==clave) return    // llegó tarde: ya manda otra selección
-        setMcDetalleActivo(res.ok?json:null)
-      }catch(_){ if(mcDetallePedidoRef.current===clave) setMcDetalleActivo(null) }
+        // El error se GUARDA, no se traga: un endpoint que falla siempre y en silencio es lo que dejó
+        // este fallo invisible durante dos versiones.
+        setMcDetalleActivo(res.ok?json:{error:json?.error||`HTTP ${res.status}`})
+      }catch(e){ if(mcDetallePedidoRef.current===clave) setMcDetalleActivo({error:e.message||'sin respuesta'}) }
     })()
   },[mcActivoSel,mcIdStratDetalle,mcIntervalo,mcPeriodMode,mcYears,mcFromDate,mcToDate,mcCapitalIni,strategies,filtrosBackend])
   // Solo las series de escala PRECIO: un RSI de 0 a 100 o un volumen de millones en el eje del precio
   // aplastan las velas contra el suelo. El endpoint manda la escala de cada una para no tener que saberla.
   const mcIndicadoresActivo=useMemo(()=>{
-    if(!mcVerIndicadores||!mcDetalleActivo?.indicators) return null
+    if(!mcVerIndicadores||mcDetalleActivo?.error||!mcDetalleActivo?.indicators) return null
     const COLOR={emaR:'#ffd166',emaL:'#ff4d6d',ema3:'#9C27B0',bbUpper:'#2196F3',bbMid:'#FF6D00',bbLower:'#2196F3'}
     const out=[]
     for(const [clave,serie] of Object.entries(mcDetalleActivo.indicators)){
@@ -1458,7 +1460,7 @@ export default function Home() {
     return out.length?out:null
   },[mcDetalleActivo,mcVerIndicadores])
   const mcZonasActivo=useMemo(()=>{
-    if(!mcVerFranjas) return null
+    if(!mcVerFranjas||mcDetalleActivo?.error) return null
     const z=mcDetalleActivo?.filterZones
     return z?.length?z:null
   },[mcDetalleActivo,mcVerFranjas])
@@ -5257,7 +5259,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.784</title>
+        <title>Trading Simulator V9.785</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5335,7 +5337,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.784
+            <span className="dot"/>Trading Simulator V9.785
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -8623,6 +8625,18 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           </span>
                         )
                       })()}
+                      {/* Si el detalle falló, se dice. Discreto pero visible: las velas y las operaciones
+                          no dependen de esto, así que no hay nada que bloquear, pero tampoco puede
+                          desaparecer sin dejar rastro. */}
+                      {mcDetalleActivo?.error&&(
+                        <span title={mcDetalleActivo.error}
+                          style={{fontFamily:MONO,fontSize:9,fontWeight:400,alignSelf:'center',cursor:'help',
+                            padding:'2px 6px',borderRadius:3,color:'#ffd166',
+                            background:'rgba(255,209,102,0.10)',border:'1px solid rgba(255,209,102,0.3)',
+                            maxWidth:260,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                          ⚠ sin indicadores: {mcDetalleActivo.error}
+                        </span>
+                      )}
                       {/* Los dos interruptores del detalle. Encendidos por defecto; si el detalle no
                           llegó —la fila de Multicartera no tiene UNA estrategia, o la petición falló—
                           se deshabilitan en vez de desaparecer, para que se vea que no hay nada. */}
