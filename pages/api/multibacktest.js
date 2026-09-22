@@ -316,7 +316,8 @@ function buildSlotsCurves(assetResults, capitalIni) {
   const activosSlots = [...new Set(clavesSlots)].sort()
   const cashCurve = []
   // Métricas sobre el eje COMPLETO, antes de muestrear: el muestreo solo decide qué se dibuja.
-  const _met = _metricasEjeCompleto(filteredDates, _posicionesSlots(assetResults, startDate), capitalIni)
+  const _ejeActivos = _ejeDibujoActivos(filteredDates)
+  const _met = _metricasEjeCompleto(filteredDates, _posicionesSlots(assetResults, startDate), capitalIni, _ejeActivos)
   const step = Math.max(1, Math.floor(filteredDates.length / 400))
   _sampledWithChanges(filteredDates, step, assetResults.flatMap(ar=>ar.trades||[]),
     [_met.maxDDFechaPico, _met.maxDDFechaValle]).forEach(date => {
@@ -342,7 +343,7 @@ function buildSlotsCurves(assetResults, capitalIni) {
   // El realizado acumulado es `compound − slotCapital`, porque compound arranca en el slot y la línea del
   // activo tiene que arrancar en cero.
   const seriesSlots = Object.fromEntries(activosSlots.map(s => [s, []]))
-  _ejeDibujoActivos(filteredDates).forEach(date => {
+  _ejeActivos.forEach(date => {
     const aporte = Object.fromEntries(activosSlots.map(s => [s, 0]))
     assetEquities.forEach((byDate, i) => {
       const e = byDate[date]
@@ -367,7 +368,8 @@ function buildSlotsCurves(assetResults, capitalIni) {
   return { simpleCurve, compoundCurve, bhCurve, occupancyCurve, startDate, floatSimpleCurve, floatCompoundCurve, tInvEstrategia, avgCapOccupancy, senalStats: senalStatsSlots,
     assetCurves: activosSlots.map(symbol => ({ symbol, data: seriesSlots[symbol] })), cashCurve,
     ..._calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni), ..._calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni),
-    ..._ddFlotanteCompuesto(_met), avgCapOccupancyEur: _met.capInvEur, metricasActivo: _met.porActivo }
+    ..._ddFlotanteCompuesto(_met), avgCapOccupancyEur: _met.capInvEur, metricasActivo: _met.porActivo,
+    assetTwrCurves: _met.twrPorActivo }
 }
 
 // ── Stop INICIAL de un trade — fuente ÚNICA para los cuatro modos de asignación ──
@@ -538,11 +540,11 @@ function buildCompartidoCurves(assetResults, capitalIni, symbolOrder = null) {
 
   // Construir curvas fecha a fecha
   // Métricas sobre el eje COMPLETO, antes de muestrear: el muestreo solo decide qué se dibuja.
-  const _met = _metricasEjeCompleto(filteredDates, _posicionesPool(executedTrades, symbolDataMap), capitalIni)
+  const _ejeActivos = _ejeDibujoActivos(filteredDates)
+  const _met = _metricasEjeCompleto(filteredDates, _posicionesPool(executedTrades, symbolDataMap), capitalIni, _ejeActivos)
   const step = Math.max(1, Math.floor(filteredDates.length / 400))
   const sampledDates = _sampledWithChanges(filteredDates, step, executedTrades,
     [_met.maxDDFechaPico, _met.maxDDFechaValle])
-  const _ejeActivos = _ejeDibujoActivos(filteredDates)
 
   const simpleCurve = [], compoundCurve = [], floatSimpleCurve = [], floatCompoundCurve = []
 
@@ -623,7 +625,8 @@ function buildCompartidoCurves(assetResults, capitalIni, symbolOrder = null) {
     ..._seriesPorActivoPool(sampledDates, _ejeActivos, executedTrades, allCandidates, capitalAtEntryMap, symbolDataMap, capitalIni),
     ..._calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni),
     ..._calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni),
-    ..._ddFlotanteCompuesto(_met), avgCapOccupancyEur: _met.capInvEur, metricasActivo: _met.porActivo
+    ..._ddFlotanteCompuesto(_met), avgCapOccupancyEur: _met.capInvEur, metricasActivo: _met.porActivo,
+    assetTwrCurves: _met.twrPorActivo
   }
 }
 
@@ -876,11 +879,11 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
   assetResults.forEach(ar => { symbolDataMap[ar.symbol] = ar.data ? ar.data.filter(d => d.date >= startDate) : [] })
 
   // Métricas sobre el eje COMPLETO, antes de muestrear: el muestreo solo decide qué se dibuja.
-  const _met = _metricasEjeCompleto(filteredDates, _posicionesPool(executedTrades, symbolDataMap), capitalIni)
+  const _ejeActivos = _ejeDibujoActivos(filteredDates)
+  const _met = _metricasEjeCompleto(filteredDates, _posicionesPool(executedTrades, symbolDataMap), capitalIni, _ejeActivos)
   const step = Math.max(1, Math.floor(filteredDates.length / 400))
   const sampledDates = _sampledWithChanges(filteredDates, step, executedTrades,
     [_met.maxDDFechaPico, _met.maxDDFechaValle])
-  const _ejeActivos = _ejeDibujoActivos(filteredDates)
 
   const simpleCurve = [], compoundCurve = [], floatSimpleCurve = [], floatCompoundCurve = []
   sampledDates.forEach(date => {
@@ -955,7 +958,8 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
     ..._seriesPorActivoPool(sampledDates, _ejeActivos, executedTrades, allCandidates, capitalAtEntryMap, symbolDataMap, capitalIni),
     ..._calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni),
     ..._calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni),
-    ..._ddFlotanteCompuesto(_met), avgCapOccupancyEur: _met.capInvEur, metricasActivo: _met.porActivo
+    ..._ddFlotanteCompuesto(_met), avgCapOccupancyEur: _met.capInvEur, metricasActivo: _met.porActivo,
+    assetTwrCurves: _met.twrPorActivo
   }
 }
 
@@ -1113,11 +1117,11 @@ function buildPositionSizingCurves(assetResults, capitalIni, sizeRules) {
 
   // ── Construir curvas (mismo patrón que buildCompartidoCurves) ──
   // Métricas sobre el eje COMPLETO, antes de muestrear: el muestreo solo decide qué se dibuja.
-  const _met = _metricasEjeCompleto(filteredDates, _posicionesPool(executedTrades, symbolDataMap), capitalIni)
+  const _ejeActivos = _ejeDibujoActivos(filteredDates)
+  const _met = _metricasEjeCompleto(filteredDates, _posicionesPool(executedTrades, symbolDataMap), capitalIni, _ejeActivos)
   const step = Math.max(1, Math.floor(filteredDates.length / 400))
   const sampledDates = _sampledWithChanges(filteredDates, step, executedTrades,
     [_met.maxDDFechaPico, _met.maxDDFechaValle])
-  const _ejeActivos = _ejeDibujoActivos(filteredDates)
 
   const simpleCurve = [], compoundCurve = [], floatSimpleCurve = [], floatCompoundCurve = []
 
@@ -1197,7 +1201,8 @@ function buildPositionSizingCurves(assetResults, capitalIni, sizeRules) {
     ..._seriesPorActivoPool(sampledDates, _ejeActivos, executedTrades, allCandidates, capitalAtEntryMap, symbolDataMap, capitalIni),
     ..._calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni),
     ..._calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni),
-    ..._ddFlotanteCompuesto(_met), avgCapOccupancyEur: _met.capInvEur, metricasActivo: _met.porActivo
+    ..._ddFlotanteCompuesto(_met), avgCapOccupancyEur: _met.capInvEur, metricasActivo: _met.porActivo,
+    assetTwrCurves: _met.twrPorActivo
   }
 }
 
@@ -1382,7 +1387,10 @@ const _cmpFecha = (a, b) => a < b ? -1 : a > b ? 1 : 0
 function _nuevoEstadoDD(capitalIni, primeraFecha) {
   return { valor: capitalIni, pico: capitalIni, picoFecha: primeraFecha,
     maxDD: 0, maxDDEur: 0, maxDDFechaPico: null, maxDDFechaValle: null,
-    realizado: 0, dias: 0, sumaCoste: 0, sumaPct: 0 }
+    realizado: 0, dias: 0, sumaCoste: 0, sumaPct: 0,
+    // Rendimiento ponderado por tiempo: valor de mercado al cierre de AYER y producto acumulado de los
+    // factores diarios. Arranca en 1, o sea en 0 %.
+    valorPrev: 0, twr: 1, serie: [] }
 }
 // Mismo cálculo de drawdown para la estrategia y para cada activo: esa es toda la gracia de tenerlo en
 // una función. Se llama solo los días en que el valor cambia; un valor que no se mueve no puede crear un
@@ -1415,10 +1423,13 @@ function _resumeEstado(st, nFechas) {
     capInvEur: nFechas ? st.sumaCoste / nFechas : 0,
   }
 }
-function _metricasEjeCompleto(fechas, posiciones, capitalIni) {
+// `ejeDibujo` son las fechas en las que se emite un punto de la curva de rendimiento por activo. El
+// cálculo va siempre sobre el eje COMPLETO; el eje de dibujo solo decide cuándo se anota.
+function _metricasEjeCompleto(fechas, posiciones, capitalIni, ejeDibujo) {
   const nF = fechas?.length || 0
   const vacio = { maxDD:0, maxDDEur:0, maxDDFechaPico:null, maxDDFechaValle:null, tInv:0, capInvPct:0, capInvEur:0 }
-  if (!nF) return { ...vacio, porActivo: {} }
+  if (!nF) return { ...vacio, porActivo: {}, twrPorActivo: {} }
+  const enEjeDibujo = new Set(ejeDibujo && ejeDibujo.length ? ejeDibujo : fechas)
   const primera = fechas[0]
   // Copias propias: el cursor de precio (_i) se guarda en el objeto, y las dos ordenaciones no deben
   // tocar el array de quien llama.
@@ -1442,17 +1453,30 @@ function _metricasEjeCompleto(fechas, posiciones, capitalIni) {
     // 1. Cierres del día: consolidan su resultado. Sus activos quedan "tocados" para que la curva de
     //    contribución de cada uno recoja hoy el salto de no realizado a realizado.
     const tocados = new Set()
+    const salidaAct = new Map(), entradaAct = new Map()
     while (iSal < porSalida.length && (porSalida[iSal].exitDate || _FIN) <= date) {
       const p = porSalida[iSal++]
       realizado += p.realizado
       estadoDe(p.clave).realizado += p.realizado
+      // Valor con el que la posición SALE hoy: lo que costó más lo que dejó. Es el flujo de salida del
+      // rendimiento ponderado por tiempo, porque a partir de mañana ese dinero ya no está invertido.
+      salidaAct.set(p.clave, (salidaAct.get(p.clave) || 0) + p.coste + p.realizado)
       tocados.add(p.clave)
     }
-    // 2. Entradas del día.
-    while (iEnt < porEntrada.length && porEntrada[iEnt].entryDate <= date) abiertas.push(porEntrada[iEnt++])
+    // 2. Entradas del día. Su coste es el flujo de ENTRADA: entra a mitad de camino, así que se suma a la
+    //    base del día y no cuenta como rendimiento.
+    while (iEnt < porEntrada.length && porEntrada[iEnt].entryDate <= date) {
+      const p = porEntrada[iEnt++]
+      abiertas.push(p)
+      entradaAct.set(p.clave, (entradaAct.get(p.clave) || 0) + p.coste)
+    }
     // 3. Las que siguen vivas aportan coste y P&L no realizado; las cerradas salen de la lista.
     let costeDia = 0, noRealDia = 0
     const costeAct = new Map(), flotAct = new Map()
+    // Valor de mercado de lo que sigue ABIERTO al cierre, por activo. Va aparte de costeAct a propósito:
+    // aquel cuenta también las operaciones que abren y cierran hoy —para el Cap.invertido, donde sí
+    // ocuparon capital—, y aquí no deben estar: su dinero ya ha salido y se contabiliza como flujo.
+    const valorAct = new Map()
     const vivas = []
     for (const p of abiertas) {
       if ((p.exitDate || _FIN) <= date) {
@@ -1471,6 +1495,7 @@ function _metricasEjeCompleto(fechas, posiciones, capitalIni) {
       noRealDia += flot
       costeAct.set(p.clave, (costeAct.get(p.clave) || 0) + p.coste)
       flotAct.set(p.clave, (flotAct.get(p.clave) || 0) + flot)
+      valorAct.set(p.clave, (valorAct.get(p.clave) || 0) + p.coste + flot)
     }
     abiertas = vivas
     // 4. Estrategia: patrimonio flotante del día y ocupación sobre ÉL, no sobre la curva realizada.
@@ -1494,10 +1519,38 @@ function _metricasEjeCompleto(fechas, posiciones, capitalIni) {
       const st = estadoDe(k)
       _pasoDD(st, capitalIni + st.realizado + (flotAct.get(k) || 0), date)
     }
+    // 6. Rendimiento PONDERADO POR TIEMPO de cada activo. Es un retorno del dinero invertido, no del
+    //    patrimonio: los días sin posición no rinden nada y la curva se queda plana.
+    //        base = valor de ayer + lo que entra hoy
+    //        fin  = valor de hoy  + lo que sale hoy
+    //        r    = fin/base − 1
+    //    Los flujos del día entran en la base y en el fin sin generar rendimiento por sí mismos, que es
+    //    lo que hace que el resultado no dependa de cuándo se mete o se saca dinero. Con posiciones
+    //    concurrentes del mismo activo —el mismo ticker en dos estrategias de una multicartera— quedan
+    //    ponderadas por su capital de forma automática, porque lo que se suma son euros de valor.
+    const activosHoy = new Set([...valorAct.keys(), ...salidaAct.keys(), ...entradaAct.keys()])
+    for (const k of activosHoy) {
+      const st = estadoDe(k)
+      const V = valorAct.get(k) || 0
+      const base = st.valorPrev + (entradaAct.get(k) || 0)
+      const fin  = V + (salidaAct.get(k) || 0)
+      if (base > 0 && Number.isFinite(base) && Number.isFinite(fin)) {
+        const factor = fin / base
+        // Un factor no finito o negativo sería un dato roto, no una pérdida: se ignora el día antes que
+        // envenenar el producto acumulado. Un factor 0 sí es válido: una pérdida total.
+        if (Number.isFinite(factor) && factor >= 0) st.twr *= factor
+      }
+      st.valorPrev = Number.isFinite(V) ? V : 0
+    }
+    // 7. Punto de la curva, solo en las fechas que se dibujan. Los activos sin actividad hoy conservan su
+    //    acumulado, así que su línea sale plana sin necesidad de tocarlos arriba.
+    if (enEjeDibujo.has(date)) {
+      for (const st of porActivo.values()) st.serie.push({ date, value: _r2((st.twr - 1) * 100) })
+    }
   }
-  const resumenActivos = {}
-  for (const [k, st] of porActivo) resumenActivos[k] = _resumeEstado(st, nF)
-  return { ..._resumeEstado(estrategia, nF), porActivo: resumenActivos }
+  const resumenActivos = {}, twrActivos = {}
+  for (const [k, st] of porActivo) { resumenActivos[k] = _resumeEstado(st, nF); twrActivos[k] = st.serie }
+  return { ..._resumeEstado(estrategia, nF), porActivo: resumenActivos, twrPorActivo: twrActivos }
 }
 // El Max DD flotante de la estrategia sustituye al que _calcFloatDD saca de la curva muestreada,
 // conservando los mismos nombres de campo para que el frontend no tenga que enterarse. Se escribe
