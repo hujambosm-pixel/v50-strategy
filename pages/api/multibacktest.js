@@ -363,6 +363,11 @@ function buildCompartidoCurves(assetResults, capitalIni, symbolOrder = null) {
   const allCandidates = assetResults.flatMap(ar =>
     (ar.trades || []).map(t => ({
       symbol:       ar.symbol,
+      // Símbolo REAL del activo. En multicartera `symbol` es sintético (TICKER#estrategia) y sin esto la
+      // agrupación por activo de _claveActivo se queda con el sintético: un ticker que opera en dos
+      // estrategias saldría partido en dos, y assetStats, que busca por símbolo real, no encontraría sus
+      // métricas. En el handler normal es undefined y _claveActivo cae en `symbol`, como siempre.
+      _realSymbol:  ar._realSymbol,
       entryDate:    t.entryDate,
       exitDate:     t.exitDate,
       pnlPct:       t.pnlPct,
@@ -661,6 +666,11 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
     (ar.trades || []).map(t => {
       const c = {
         symbol:        ar.symbol,
+        // Símbolo REAL del activo. En multicartera `symbol` es sintético (TICKER#estrategia) y sin esto la
+        // agrupación por activo de _claveActivo se queda con el sintético: un ticker que opera en dos
+        // estrategias saldría partido en dos, y assetStats, que busca por símbolo real, no encontraría sus
+        // métricas. En el handler normal es undefined y _claveActivo cae en `symbol`, como siempre.
+        _realSymbol:   ar._realSymbol,
         entryDate:     t.entryDate,
         exitDate:      t.exitDate,
         pnlPct:        t.pnlPct,
@@ -923,6 +933,11 @@ function buildPositionSizingCurves(assetResults, capitalIni, sizeRules) {
   const allCandidates = assetResults.flatMap(ar =>
     (ar.trades || []).map(t => ({
       symbol:        ar.symbol,
+      // Símbolo REAL del activo. En multicartera `symbol` es sintético (TICKER#estrategia) y sin esto la
+      // agrupación por activo de _claveActivo se queda con el sintético: un ticker que opera en dos
+      // estrategias saldría partido en dos, y assetStats, que busca por símbolo real, no encontraría sus
+      // métricas. En el handler normal es undefined y _claveActivo cae en `symbol`, como siempre.
+      _realSymbol:   ar._realSymbol,
       entryDate:     t.entryDate,
       exitDate:      t.exitDate,
       pnlPct:        t.pnlPct,
