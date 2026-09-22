@@ -625,6 +625,9 @@ const asignaColoresActivos=(simbolos)=>{
 // y su escala tapa el resto— y todo lo demás visible, así que el estado solo guarda lo que el usuario
 // cambia: `undefined` significa "como viene de fábrica".
 const MC_ID_CAJA='__caja__', MC_ID_TOTAL='__totalEstrategia__'
+// Alto mínimo del gráfico grande del multibacktest. Por debajo de esto un gráfico de velas con sus
+// operaciones no se lee, y es preferible desplazarse a mirar una franja aplastada.
+const SUELO_EQUITY=420
 const mcVisibleActivo=(estado,id)=>estado[id]!==undefined?estado[id]:id!==MC_ID_CAJA
 const saneaCurva=(datos)=>{
   const porFecha=new Map()
@@ -1787,8 +1790,18 @@ export default function Home() {
       const el=mcEquityContainerRef.current
       if(!el) return
       const top=el.getBoundingClientRect().top
-      const h=Math.round(window.innerHeight - top - 10)  // ~10px de margen inferior
-      if(h>150) setMcEquityH(prev=>prev===h?prev:h)
+      const hueco=Math.round(window.innerHeight - top - 10)  // ~10px de margen inferior
+      // SUELO. Con todas las estrategias desplegadas, la tabla empuja el contenedor hacia abajo y el hueco
+      // se queda en 150-200 px: un gráfico de velas aplastado que no sirve para nada. La guarda anterior
+      // (h>150) no acotaba el valor, solo dejaba de escribirlo, así que el alto se congelaba en lo último
+      // que hubiera. Ahora hay un mínimo de verdad y el gráfico sobresale por debajo del pliegue: el panel
+      // de multicartera tiene su propio contenedor con overflowY:auto, así que se alcanza bajando, igual
+      // que las ganancias mensuales, el historial y la parrilla, que ya viven ahí abajo.
+      // EXCEPCIÓN, pantalla completa: ahí no hay tabla encima y el overlay es overflow:hidden, así que un
+      // suelo mayor que el hueco real desbordaría por abajo y se comería la franja de rendimiento. En ese
+      // caso manda el hueco.
+      const h=mcPantallaCompleta?hueco:Math.max(SUELO_EQUITY,hueco)
+      if(h>80) setMcEquityH(prev=>prev===h?prev:h)
     }
     const raf=requestAnimationFrame(()=>requestAnimationFrame(recompute))
     window.addEventListener('resize',recompute)
@@ -5301,7 +5314,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.789</title>
+        <title>Trading Simulator V9.790</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5379,7 +5392,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.789
+            <span className="dot"/>Trading Simulator V9.790
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
