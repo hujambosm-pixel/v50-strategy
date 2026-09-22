@@ -1264,6 +1264,9 @@ export default function Home() {
   const [mcPorActivo,setMcPorActivo]=useState(false)        // gráfico de equity: false=Estrategias, true=Activos
   const [mcActivoVisible,setMcActivoVisible]=useState({})   // {idSerie:bool} en modo Activos; ver mcVisibleActivo
   const [mcAssetOpen,setMcAssetOpen]=useState({})           // {stratId:bool} acordeón resumen por activo
+  // Activo seleccionado en la tabla comparativa: {stratId,symbol} o null. Manda el símbolo; stratId solo
+  // dice qué fila se resalta y se resincroniza si cambia la estrategia del historial por otra vía.
+  const [mcActivoSel,setMcActivoSel]=useState(null)
   const [mcShowBHCompare,setMcShowBHCompare]=useState(true) // B&H curve toggle in multi-strategy chart
   // Estrategia vigente en el HISTORIAL de operaciones. Fuente ÚNICA: la usan el propio historial y el
   // modo Activos del gráfico, para que no puedan divergir. mcHistStratId null = la activa, que con
@@ -1289,6 +1292,17 @@ export default function Home() {
     ??mcDisplayResults.find(r=>r.result===mcResult)?.id
     ??mcDisplayResults[0]?.id??''
   const mcHistIdVigente=mcHistStratId??mcHistIdPorDefecto
+  // El activo seleccionado vive dentro de una estrategia. Si el historial cambia a otra —desde el selector
+  // del modo Activos o desde sus botones—, hay dos salidas: si esa estrategia también opera el activo, la
+  // selección lo sigue y solo se resincroniza qué fila se resalta; si no lo opera, se limpia, porque no
+  // habría curva que dibujar ni fila que resaltar. La comparación con el id vigente corta la reentrada:
+  // tras igualarlo, el efecto ya no escribe.
+  useEffect(()=>{
+    if(!mcActivoSel) return
+    const hay=(mcHistSel.histResult?.assetStats||[]).some(a=>a.symbol===mcActivoSel.symbol)
+    if(!hay){ setMcActivoSel(null); return }
+    if(mcActivoSel.stratId!==mcHistIdVigente) setMcActivoSel({stratId:mcHistIdVigente,symbol:mcActivoSel.symbol})
+  },[mcHistSel,mcHistIdVigente,mcActivoSel])
   // Series del modo Activos: una por activo, la caja y la curva total como referencia. Este memo hace lo
   // CARO —sanear cada serie— y depende solo de los datos, así que no se rehace al marcar o desmarcar.
   const mcSeriesActivos=useMemo(()=>{
@@ -1329,6 +1343,25 @@ export default function Home() {
   const mcCurvasActivos=useMemo(()=>
     mcSeriesActivos?.map(c=>({...c,show:mcVisibleActivo(mcActivoVisible,c.id)}))??null
   ,[mcSeriesActivos,mcActivoVisible])
+  // Serie del panel de rendimiento: una sola curva, la del activo seleccionado, en el color que ese activo
+  // tiene en el modo Activos para que las dos vistas hablen del mismo. Pasa por saneaCurva como todas.
+  const mcCurvaActivoSel=useMemo(()=>{
+    const sym=mcActivoSel?.symbol
+    if(!sym) return null
+    const datos=mcHistSel.histResult?.assetTwrCurves?.[sym]
+    const data=saneaCurva(datos)
+    if(data.length<2) return null
+    const color=mcSeriesActivos?.find(c=>c.id===`activo__${sym}`)?.color
+      ??asignaColoresActivos(Object.keys(mcHistSel.histResult?.assetTwrCurves||{}))[sym]?.color
+      ??COLORES_ACTIVO[0]
+    return [{id:`twr__${sym}`,name:sym,color,data,show:true,maxDD:0,maxDDDate:null,taxByDate:null}]
+  },[mcActivoSel,mcHistSel,mcSeriesActivos])
+  // Operaciones ejecutadas del activo seleccionado, las mismas que alimentan su fila de la tabla.
+  const mcTradesActivoSel=useMemo(()=>{
+    const sym=mcActivoSel?.symbol
+    if(!sym) return []
+    return (mcHistSel.histResult?.allTrades||[]).filter(t=>t.symbol===sym)
+  },[mcActivoSel,mcHistSel])
   // Valor de la línea de referencia del gráfico grande: el nivel de "ni gano ni pierdo", que depende de
   // QUÉ dibujan las series. En Estrategias son patrimonio y ese nivel es el capital inicial; en Activos
   // son beneficio con origen en cero, así que el nivel es CERO. Poner ahí el capital —lo que se hacía
@@ -4676,7 +4709,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
           modeResults.push({id:`${sid||'__single__'}__${modo}`,name:`${stratName} · ${MODE_LABELS[modo]}`,color,result:json,modo})
         }
         const vis={};modeResults.forEach(r=>{vis[r.id]=true});setMcStratVisible(vis)
-        setMcAssetOpen({});setMcPorActivo(false);setMcActivoVisible({})
+        setMcAssetOpen({});setMcPorActivo(false);setMcActivoVisible({});setMcActivoSel(null)
         const chartsVis={};modeResults.forEach(r=>{chartsVis[r.id]=true});setMcChartsStratVisible(chartsVis)
         setMcResult(modeResults[0].result);setMcMultiResults(modeResults);setMcIsModoCompare(true)
       }catch(e){setMcError(e.message)}finally{setMcLoading(false);setMcProgress(null)}
@@ -4703,7 +4736,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
     const activeResult=results.find(r=>r.id===currentStratId)||results[0]
     setMcResult(activeResult.result);setMcMultiResults(results);setMcIsModoCompare(false)
     const vis={};results.forEach(r=>{vis[r.id]=true});setMcStratVisible(vis)
-    setMcAssetOpen({});setMcPorActivo(false);setMcActivoVisible({})
+    setMcAssetOpen({});setMcPorActivo(false);setMcActivoVisible({});setMcActivoSel(null)
     const chartsVis={};results.forEach(r=>{chartsVis[r.id]=true});setMcChartsStratVisible(chartsVis)
     // ── Multicartera real (backend portfolioMode) ──────────────────────────────
     if(mcStratSelected.includes('__portfolio__')&&results.length>=2){
@@ -5124,7 +5157,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.776</title>
+        <title>Trading Simulator V9.777</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5202,7 +5235,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.776
+            <span className="dot"/>Trading Simulator V9.777
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -8215,7 +8248,13 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                 <Fragment key={r.id}>
                                   {/* ── Fila madre (estrategia) ── */}
                                   <tr
-                                    onClick={()=>rStats.length>0&&setMcAssetOpen(v=>({...v,[r.id]:!isOpen}))}
+                                    onClick={()=>{
+                                      if(!rStats.length) return
+                                      // Al plegar, la fila del activo desaparece: dejar la selección viva
+                                      // sería un panel sin fila que lo explique.
+                                      if(isOpen&&mcActivoSel?.stratId===r.id) setMcActivoSel(null)
+                                      setMcAssetOpen(v=>({...v,[r.id]:!isOpen}))
+                                    }}
                                     style={{borderBottom:'1px solid rgba(255,255,255,0.04)',
                                       background:r.color+'14',
                                       cursor:rStats.length>0?'pointer':'default'}}>
@@ -8301,15 +8340,32 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                     const sumLoss=assetTrades.filter(t=>t.pnlSimple<0).reduce((s,t)=>s+Math.abs(t.pnlSimple),0)
                                     const fBenef=sumLoss>0?sumWin/sumLoss:(sumWin>0?999:0)
                                     const maxDD=a.maxDD||0
+                                    // Seleccionar un activo hace dos cosas a la vez: fija la estrategia del
+                                    // historial a la suya —con la misma regla de siempre, escribir null si es
+                                    // la que ya resuelve "la activa"— y marca el activo, que es lo que dibuja
+                                    // el panel de rendimiento. Segundo clic en la misma fila deselecciona.
+                                    const selecc=mcActivoSel?.symbol===a.symbol
+                                    const fondoFila=selecc?'rgba(0,212,255,0.10)':'rgba(0,0,0,0.12)'
                                     return(
                                       <tr key={a.symbol}
+                                        title={selecc?`Quitar la selección de ${a.symbol}`:`Ver el rendimiento de ${a.symbol} dentro de la cartera`}
                                         style={{borderBottom:'1px solid rgba(255,255,255,0.02)',cursor:'pointer',
-                                          background:'rgba(0,0,0,0.12)'}}
-                                        onClick={()=>{setSimbolo(a.symbol);setSidePanel('watchlist')}}
+                                          background:fondoFila}}
+                                        onClick={()=>{
+                                          if(selecc){setMcActivoSel(null);return}
+                                          setMcActivoSel({stratId:r.id,symbol:a.symbol})
+                                          setMcHistStratId(r.id===mcHistIdPorDefecto?null:r.id)
+                                        }}
                                         onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.04)'}
-                                        onMouseOut={e=>e.currentTarget.style.background='rgba(0,0,0,0.12)'}>
-                                        <td style={{padding:'4px 6px 4px 22px',color:'var(--accent)',borderLeft:`2px solid ${r.color}`}}>
+                                        onMouseOut={e=>e.currentTarget.style.background=fondoFila}>
+                                        <td style={{padding:'4px 6px 4px 22px',color:'var(--accent)',
+                                          borderLeft:`2px solid ${selecc?'#00d4ff':r.color}`}}>
                                           <span style={{marginRight:6}}>{a.symbol}</span>
+                                          {/* Ir al Watchlist: era el clic de toda la fila, que ahora selecciona.
+                                              stopPropagation para que no haga las dos cosas a la vez. */}
+                                          <span role="button" title={`Abrir ${a.symbol} en Watchlist`}
+                                            onClick={e=>{e.stopPropagation();setSimbolo(a.symbol);setSidePanel('watchlist')}}
+                                            style={{marginRight:6,cursor:'pointer',color:'#4a7a9a',fontSize:9}}>↗</span>
                                           {r.id==='__portfolio__'&&Array.isArray(a._stratBreakdown)&&
                                             a._stratBreakdown.map(b=>{
                                               const c=mcDisplayResults.find(x=>x.id===b.id)?.color||'#3d5a7a'
@@ -8387,12 +8443,18 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                     const bhCagr=sc>0&&bhCagrYears>0?(Math.pow((sc+ganBH)/sc,1/bhCagrYears)-1)*100:0
                                     return(
                                       <tr key={a.symbol}
-                                        style={{borderBottom:'1px solid rgba(255,255,255,0.02)',cursor:'pointer',
+                                        style={{borderBottom:'1px solid rgba(255,255,255,0.02)',
                                           background:'rgba(160,180,200,0.02)'}}
-                                        onClick={()=>{setSimbolo(a.symbol);setSidePanel('watchlist')}}
                                         onMouseOver={e=>e.currentTarget.style.background='rgba(160,180,200,0.06)'}
                                         onMouseOut={e=>e.currentTarget.style.background='rgba(160,180,200,0.02)'}>
-                                        <td style={{padding:'4px 6px 4px 22px',color:'#a0b4c8',borderLeft:'2px solid #a0b4c888'}}>{a.symbol}</td>
+                                        <td style={{padding:'4px 6px 4px 22px',color:'#a0b4c8',borderLeft:'2px solid #a0b4c888'}}>
+                                          {a.symbol}
+                                          {/* El B&H no se selecciona —no es una operación de la cartera—, pero
+                                              conserva su ida al Watchlist, ahora en el mismo icono que arriba. */}
+                                          <span role="button" title={`Abrir ${a.symbol} en Watchlist`}
+                                            onClick={e=>{e.stopPropagation();setSimbolo(a.symbol);setSidePanel('watchlist')}}
+                                            style={{marginLeft:6,cursor:'pointer',color:'#4a7a9a',fontSize:9}}>↗</span>
+                                        </td>
                                         <td style={{padding:'4px 6px',color:'#a0b4c8'}}>1</td>
                                         <td style={{padding:'4px 6px',color:bhCagr>=0?'#a0b4c8':'#ff4d6d'}}>{fmt(bhCagr,2,'%')}</td>
                                         <td style={{padding:'4px 6px',color:ganBH>=0?'#a0b4c8':'#ff4d6d'}}>{fmt(ganBH,0,'€')}</td>
@@ -9006,6 +9068,67 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                     </div>
                     )}
                   </div>
+                  )
+                })()}
+                {/* ── Panel del activo seleccionado ─────────────────────────────────────────────
+                    Va ANTES de la parrilla y fuera de su cabecera colapsable: aparece al seleccionar una
+                    fila de activo en la tabla y tiene que verse aunque la parrilla esté plegada.
+                    A la izquierda, el rendimiento del dinero que la cartera tuvo invertido en ese activo:
+                    ponderado por tiempo, plano los días sin posición y a precio de mercado los días con
+                    posición. No es su beneficio en euros —eso es la contribución del modo Activos— ni el
+                    buy and hold del activo. A la derecha, sus velas con las entradas y salidas. */}
+                {mcActivoSel&&mcCurvaActivoSel&&(()=>{
+                  const serie=mcCurvaActivoSel[0]
+                  const final=serie.data[serie.data.length-1]?.value??0
+                  return(
+                    <div style={{borderTop:'1px solid var(--border)',background:'var(--bg2)'}}>
+                      <div style={{padding:'7px 16px',display:'flex',alignItems:'center',gap:8,
+                        borderBottom:'1px solid var(--border)'}}>
+                        <div style={{width:8,height:8,borderRadius:2,background:serie.color,flexShrink:0}}/>
+                        <span style={{fontFamily:MONO,fontSize:11,color:'#c8dff5',fontWeight:600,letterSpacing:'0.05em'}}>
+                          {serie.name} · RENDIMIENTO DENTRO DE LA CARTERA
+                        </span>
+                        <span style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:final>=0?'#00e5a0':'#ff4d6d'}}>
+                          {final>=0?'+':''}{fmt(final,1,'%')}
+                        </span>
+                        <span style={{fontFamily:MONO,fontSize:9,color:'#4a6a88'}}>
+                          solo operaciones ejecutadas · plano fuera de mercado
+                        </span>
+                        <button onClick={()=>setMcActivoSel(null)}
+                          title="Quitar la selección"
+                          style={{marginLeft:'auto',fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,
+                            cursor:'pointer',border:'1px solid #1a2d45',background:'transparent',color:'#7a9bc0',flexShrink:0}}>
+                          ✕ Quitar
+                        </button>
+                      </div>
+                      <div style={{display:'flex',flexWrap:'wrap',gap:10,padding:'10px 16px'}}>
+                        <div style={{flex:'1 1 360px',minWidth:0}}>
+                          {/* Referencia en 0: la curva es rendimiento, no patrimonio. */}
+                          <StratCompareChart curves={mcCurvaActivoSel} capitalIni={0} showMaxDD={false}
+                            chartHeight={320} formato="pct"/>
+                        </div>
+                        <div style={{flex:'1 1 360px',minWidth:0}}>
+                          {/* Sin syncRef ni onReady a propósito: esta instancia NO se registra en los refs
+                              de la parrilla, para no pisar la del mismo símbolo que ya hay allí. */}
+                          <AssetSignalChart symbol={serie.name}
+                            stratSignals={[{
+                              id:'__sel__',name:serie.name,color:serie.color,
+                              entryColor:'#00e5a0',exitColor:'#ff4d6d',
+                              entries:mcTradesActivoSel.map(t=>({date:t.entryDate,price:t.entryPx??t.entryPrice})),
+                              exits:mcTradesActivoSel.map(t=>({date:t.exitDate,price:t.exitPx??t.exitPrice})),
+                              trades:mcTradesActivoSel.map((t,idx)=>({
+                                n:idx+1,
+                                entryDate:t.entryDate,entryPx:t.entryPx??t.entryPrice,
+                                exitDate:t.exitDate,exitPx:t.exitPx??t.exitPrice,
+                                pnlPct:t.pnlPct,pnlSimple:t.pnlSimple,
+                                capital:t.pnlPct!==0?Math.abs(t.pnlSimple/(t.pnlPct/100)):0,
+                              })),
+                            }]}
+                            years={mcAniosVelas}
+                            height={320}/>
+                        </div>
+                      </div>
+                    </div>
                   )
                 })()}
                 {/* ── Vista de gráficos — una o varias estrategias ── */}

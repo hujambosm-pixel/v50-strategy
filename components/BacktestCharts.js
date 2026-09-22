@@ -272,7 +272,11 @@ export function McOccupancyChart({series=[], capitalIni, syncRef, axisWidth=72})
 }
 
 // ── StratCompareChart — multiple strategy equity curves ──────────────────────
-export function StratCompareChart({curves,capitalIni,showMaxDD=true,chartHeight=300,syncRef,onReady,onAxisWidth,afterTax=false}) {
+// `formato` decide cómo se rotulan los valores. 'eur' es lo de siempre —miles como k, millones como M,
+// sin decimales— y es el valor por defecto, así que los usos existentes no cambian ni se enteran. 'pct'
+// rotula porcentajes con un decimal, para curvas que no son dinero sino rendimiento.
+export function StratCompareChart({curves,capitalIni,showMaxDD=true,chartHeight=300,syncRef,onReady,onAxisWidth,afterTax=false,formato='eur'}) {
+  const esPct=formato==='pct'
   const ref=useRef(null),chartRef=useRef(null),roRef=useRef(null)
   useEffect(()=>{
     if(!ref.current||!curves?.length||ref.current.clientWidth<=0) return
@@ -289,6 +293,7 @@ export function StratCompareChart({curves,capitalIni,showMaxDD=true,chartHeight=
         rightPriceScale:{borderColor:'#1a2d45'},
         timeScale:{borderColor:'#1a2d45',timeVisible:false},
         localization:{priceFormatter:(price)=>{
+          if(esPct) return price.toFixed(1)+'%'
           const abs=Math.abs(price)
           if(abs>=1000000) return (price/1000000).toFixed(1)+'M'
           if(abs>=1000)    return (price/1000).toFixed(0)+'k'
@@ -310,7 +315,7 @@ export function StratCompareChart({curves,capitalIni,showMaxDD=true,chartHeight=
         if(!c.show||!c.data?.length) return
         const _s=chart.addLineSeries({color:c.color,lineWidth:2,lastValueVisible:true,priceLineVisible:false,
           lineStyle:c.dashed?LineStyle.Dashed:LineStyle.Solid,
-          priceFormat:{type:'price',precision:0,minMove:1}})
+          priceFormat:esPct?{type:'price',precision:1,minMove:0.1}:{type:'price',precision:0,minMove:1}})
         _s.setData(c.data.map(p=>({time:p.date,value:p.value})))
         _seriesEntries.push({s:_s,color:c.color,name:c.name,taxByDate:afterTax?c.taxByDate:null})
       })
@@ -323,7 +328,7 @@ export function StratCompareChart({curves,capitalIni,showMaxDD=true,chartHeight=
         if(!param.point||!param.seriesData?.size){_tip.style.display='none';return}
         const lines=[]
         const _tk=afterTax?normalizeTime(param.time):''
-        _seriesEntries.forEach(({s,color,name,taxByDate})=>{const d=param.seriesData.get(s);if(d?.value!=null){lines.push(`<span style="color:${color}">${name}: ${Math.round(d.value).toLocaleString('es-ES')}€</span>`);if(_tk)lines.push(...taxTooltipLines(taxByDate,_tk,color))}})
+        _seriesEntries.forEach(({s,color,name,taxByDate})=>{const d=param.seriesData.get(s);if(d?.value!=null){lines.push(`<span style="color:${color}">${name}: ${esPct?d.value.toFixed(1)+'%':Math.round(d.value).toLocaleString('es-ES')+'€'}</span>`);if(_tk)lines.push(...taxTooltipLines(taxByDate,_tk,color))}})
         if(!lines.length){_tip.style.display='none';return}
         _tip.innerHTML=lines.join('<br>');_tip.style.display='block'
         const _cw=ref.current.offsetWidth,_tw=_tip.offsetWidth||160,_goLeft=param.point.x+_tw+20>_cw
@@ -371,7 +376,7 @@ export function StratCompareChart({curves,capitalIni,showMaxDD=true,chartHeight=
       if(roRef.current){try{roRef.current.disconnect()}catch(_){};roRef.current=null}
       if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};try{chartRef.current.remove()}catch(_){};chartRef.current=null}
     }
-  },[curves,capitalIni,showMaxDD,afterTax])
+  },[curves,capitalIni,showMaxDD,afterTax,esPct])
   useEffect(()=>{
     if(chartRef.current) try{chartRef.current.applyOptions({height:chartHeight})}catch(_){}
   },[chartHeight])
