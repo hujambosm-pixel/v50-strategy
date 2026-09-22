@@ -172,6 +172,29 @@ function _sampledWithChanges(filteredDates, step, trades, extra) {
   return [...set].sort()
 }
 
+// Eje de DIBUJO de las series POR ACTIVO. A diferencia de sampledDates, NO fuerza dentro las fechas de
+// entrada y salida: con muchas operaciones aquello se saturaba casi al eje completo y, multiplicado por
+// el número de activos, disparaba el tamaño de la respuesta —~1,4 MB con 20 activos a 10 años y ~15 MB
+// con 40 a 40, por encima del límite de 4,5 MB de Vercel—. Aquí el techo es duro: ~400 fechas
+// equiespaciadas pase lo que pase. La PRIMERA y la ÚLTIMA van siempre, la última porque es el valor final
+// de la serie y tiene que ser exacto, no el de la muestra anterior.
+// Solo afecta al dibujo de esas series: las curvas de la estrategia, la caja y todas las métricas siguen
+// con su propio muestreo y su propio eje.
+const MAX_PUNTOS_ACTIVO = 400
+function _ejeDibujoActivos(filteredDates, max = MAX_PUNTOS_ACTIVO) {
+  const n = filteredDates?.length || 0
+  if (!n) return []
+  if (n <= max) return [...filteredDates]
+  const paso = Math.ceil(n / max)
+  const set = new Set()
+  for (let i = 0; i < n; i += paso) set.add(filteredDates[i])
+  set.add(filteredDates[0])
+  set.add(filteredDates[n - 1])
+  return [...set].sort()
+}
+// Dos decimales bastan para dibujar y recortan ~15 % de cada punto serializado.
+const _r2 = (v) => Number.isFinite(v) ? Math.round(v * 100) / 100 : 0
+
 // ── Contribución por activo y capital no invertido ───────────────────────────
 // Convención (la misma en los cuatro modos): cada línea de activo ARRANCA EN CERO y mide BENEFICIO, no
 // capital. La caja arranca con el capital inicial completo y sí es capital.
@@ -190,11 +213,16 @@ const _claveActivo = (t) => t?._realSymbol ?? t?.symbol
 // Para los tres modos de pool (compartido, concentrado, position sizing), que comparten estructura:
 // `executedTrades` son las ejecuciones REALES —las descartadas por capital y las de pnlPct no finito ya
 // quedaron fuera— y `capitalAtEntryMap` da el capital asignado en cada entrada.
-function _seriesPorActivoPool(sampledDates, executedTrades, allCandidates, capitalAtEntryMap, symbolDataMap, capitalIni) {
+// Dos ejes: las series por activo van en el reducido (_ejeDibujoActivos) y la caja se queda en el de
+// siempre, que es una sola serie y no pesa. Se recorre la unión de ambos una vez, porque el cálculo de
+// cada fecha es lo caro y no se puede repetir dos veces.
+function _seriesPorActivoPool(sampledDates, ejeActivos, executedTrades, allCandidates, capitalAtEntryMap, symbolDataMap, capitalIni) {
   const activos = [...new Set([...(executedTrades || []), ...(allCandidates || [])].map(_claveActivo).filter(Boolean))].sort()
   const series = Object.fromEntries(activos.map(s => [s, []]))
   const cashCurve = []
-  sampledDates.forEach(date => {
+  const enActivos = new Set(ejeActivos || [])
+  const enCaja = new Set(sampledDates || [])
+  ;[...new Set([...(sampledDates || []), ...(ejeActivos || [])])].sort().forEach(date => {
     const aporte = Object.fromEntries(activos.map(s => [s, 0]))
     // Realizado: MISMO conjunto que compoundCurve (ejecuciones con exitDate <= date).
     // La guarda `aporte[clave] == null` descarta una operación sin símbolo, que si no se sumaría a una
@@ -220,16 +248,23 @@ function _seriesPorActivoPool(sampledDates, executedTrades, allCandidates, capit
       for (let i = fData.length - 1; i >= 0; i--) { if (fData[i].date <= date) { closePx = fData[i].close; break } }
       if (closePx != null && t.entryPx) aporte[clave] += (closePx - t.entryPx) / t.entryPx * capEntry
     })
-    activos.forEach(s => series[s].push({ date, value: aporte[s] }))
-    cashCurve.push({ date, value: capitalIni - costeAbierto })
+    if (enActivos.has(date)) activos.forEach(s => series[s].push({ date, value: _r2(aporte[s]) }))
+    if (enCaja.has(date)) cashCurve.push({ date, value: capitalIni - costeAbierto })
   })
   return { assetCurves: activos.map(symbol => ({ symbol, data: series[symbol] })), cashCurve }
 }
 
 // Tamaño aproximado de assetCurves: ~40 bytes por punto {date,value} serializado.
+// `nFechas` es el techo por serie: con el eje reducido no puede pasar de MAX_PUNTOS_ACTIVO + 1, así que
+// el tamaño total crece solo con el número de activos y nunca con el de operaciones.
 function _tamanoAssetCurves(assetCurves) {
   const nPuntos = (assetCurves || []).reduce((s, a) => s + (a.data?.length || 0), 0)
-  return { nActivos: (assetCurves || []).length, nPuntos, kbAprox: Math.round(nPuntos * 40 / 1024) }
+  return {
+    nActivos: (assetCurves || []).length,
+    nFechas: assetCurves?.[0]?.data?.length || 0,
+    nPuntos,
+    kbAprox: Math.round(nPuntos * 34 / 1024),   // ~34 B por punto con el valor ya redondeado a 2 decimales
+  }
 }
 
 // ── MODO SLOTS: capital dividido en N partes iguales ─────────
@@ -279,7 +314,6 @@ function buildSlotsCurves(assetResults, capitalIni) {
   // `compound` arranca en el slot y la línea del activo tiene que arrancar en cero.
   const clavesSlots = assetResults.map(ar => _claveActivo(ar))
   const activosSlots = [...new Set(clavesSlots)].sort()
-  const seriesSlots = Object.fromEntries(activosSlots.map(s => [s, []]))
   const cashCurve = []
   // Métricas sobre el eje COMPLETO, antes de muestrear: el muestreo solo decide qué se dibuja.
   const _met = _metricasEjeCompleto(filteredDates, _posicionesSlots(assetResults, startDate), capitalIni)
@@ -287,13 +321,10 @@ function buildSlotsCurves(assetResults, capitalIni) {
   _sampledWithChanges(filteredDates, step, assetResults.flatMap(ar=>ar.trades||[]),
     [_met.maxDDFechaPico, _met.maxDDFechaValle]).forEach(date => {
     let totSimple=0, totCompound=0, totBH=0, openSlots=0, totOpenPnl=0, totOpenCost=0
-    const aporte = Object.fromEntries(activosSlots.map(s => [s, 0]))
-    assetEquities.forEach((byDate, i) => {
+    assetEquities.forEach((byDate) => {
       const e = byDate[date]
-      if (e) { totSimple+=e.simple; totCompound+=e.compound; totBH+=e.bh; if(e.open)openSlots++; totOpenPnl+=e.openPnl||0; totOpenCost+=e.openCost||0
-        aporte[clavesSlots[i]] += (e.compound - slotCapital) + (e.openPnl||0) }
+      if (e) { totSimple+=e.simple; totCompound+=e.compound; totBH+=e.bh; if(e.open)openSlots++; totOpenPnl+=e.openPnl||0; totOpenCost+=e.openCost||0 }
     })
-    activosSlots.forEach(s => seriesSlots[s].push({ date, value: aporte[s] }))
     cashCurve.push({ date, value: capitalIni - totOpenCost })
     simpleCurve.push({ date, value: totSimple })
     compoundCurve.push({ date, value: totCompound })
@@ -303,6 +334,21 @@ function buildSlotsCurves(assetResults, capitalIni) {
     occupancyCurve.push({ date, value: totOpenCost })
     floatSimpleCurve.push({ date, value: totSimple+totOpenPnl })
     floatCompoundCurve.push({ date, value: totCompound+totOpenPnl })
+  })
+
+  // Series por activo en su PROPIO eje, el reducido: son tantas como activos y son las únicas que pueden
+  // disparar el tamaño de la respuesta. Los sumandos ya están calculados por activo y fecha en
+  // assetEquities, que cubre el eje completo, así que esto es solo releerlos en las fechas que se dibujan.
+  // El realizado acumulado es `compound − slotCapital`, porque compound arranca en el slot y la línea del
+  // activo tiene que arrancar en cero.
+  const seriesSlots = Object.fromEntries(activosSlots.map(s => [s, []]))
+  _ejeDibujoActivos(filteredDates).forEach(date => {
+    const aporte = Object.fromEntries(activosSlots.map(s => [s, 0]))
+    assetEquities.forEach((byDate, i) => {
+      const e = byDate[date]
+      if (e) aporte[clavesSlots[i]] += (e.compound - slotCapital) + (e.openPnl||0)
+    })
+    activosSlots.forEach(s => seriesSlots[s].push({ date, value: _r2(aporte[s]) }))
   })
 
   const tInvEstrategia = _met.tInv
@@ -496,6 +542,7 @@ function buildCompartidoCurves(assetResults, capitalIni, symbolOrder = null) {
   const step = Math.max(1, Math.floor(filteredDates.length / 400))
   const sampledDates = _sampledWithChanges(filteredDates, step, executedTrades,
     [_met.maxDDFechaPico, _met.maxDDFechaValle])
+  const _ejeActivos = _ejeDibujoActivos(filteredDates)
 
   const simpleCurve = [], compoundCurve = [], floatSimpleCurve = [], floatCompoundCurve = []
 
@@ -573,7 +620,7 @@ function buildCompartidoCurves(assetResults, capitalIni, symbolOrder = null) {
     simpleCurve, compoundCurve, bhCurve, occupancyCurve, startDate,
     executedTrades, floatSimpleCurve, floatCompoundCurve,
     tInvEstrategia, avgCapOccupancy, senalStats: senalStatsC,
-    ..._seriesPorActivoPool(sampledDates, executedTrades, allCandidates, capitalAtEntryMap, symbolDataMap, capitalIni),
+    ..._seriesPorActivoPool(sampledDates, _ejeActivos, executedTrades, allCandidates, capitalAtEntryMap, symbolDataMap, capitalIni),
     ..._calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni),
     ..._calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni),
     ..._ddFlotanteCompuesto(_met), avgCapOccupancyEur: _met.capInvEur, metricasActivo: _met.porActivo
@@ -833,6 +880,7 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
   const step = Math.max(1, Math.floor(filteredDates.length / 400))
   const sampledDates = _sampledWithChanges(filteredDates, step, executedTrades,
     [_met.maxDDFechaPico, _met.maxDDFechaValle])
+  const _ejeActivos = _ejeDibujoActivos(filteredDates)
 
   const simpleCurve = [], compoundCurve = [], floatSimpleCurve = [], floatCompoundCurve = []
   sampledDates.forEach(date => {
@@ -904,7 +952,7 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
     simpleCurve, compoundCurve, bhCurve, occupancyCurve, startDate,
     executedTrades, floatSimpleCurve, floatCompoundCurve,
     tInvEstrategia, avgCapOccupancy, senalStats,
-    ..._seriesPorActivoPool(sampledDates, executedTrades, allCandidates, capitalAtEntryMap, symbolDataMap, capitalIni),
+    ..._seriesPorActivoPool(sampledDates, _ejeActivos, executedTrades, allCandidates, capitalAtEntryMap, symbolDataMap, capitalIni),
     ..._calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni),
     ..._calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni),
     ..._ddFlotanteCompuesto(_met), avgCapOccupancyEur: _met.capInvEur, metricasActivo: _met.porActivo
@@ -1069,6 +1117,7 @@ function buildPositionSizingCurves(assetResults, capitalIni, sizeRules) {
   const step = Math.max(1, Math.floor(filteredDates.length / 400))
   const sampledDates = _sampledWithChanges(filteredDates, step, executedTrades,
     [_met.maxDDFechaPico, _met.maxDDFechaValle])
+  const _ejeActivos = _ejeDibujoActivos(filteredDates)
 
   const simpleCurve = [], compoundCurve = [], floatSimpleCurve = [], floatCompoundCurve = []
 
@@ -1145,7 +1194,7 @@ function buildPositionSizingCurves(assetResults, capitalIni, sizeRules) {
     simpleCurve, compoundCurve, bhCurve, occupancyCurve, startDate,
     executedTrades, floatSimpleCurve, floatCompoundCurve,
     tInvEstrategia, avgCapOccupancy, senalStats: senalStatsPS,
-    ..._seriesPorActivoPool(sampledDates, executedTrades, allCandidates, capitalAtEntryMap, symbolDataMap, capitalIni),
+    ..._seriesPorActivoPool(sampledDates, _ejeActivos, executedTrades, allCandidates, capitalAtEntryMap, symbolDataMap, capitalIni),
     ..._calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni),
     ..._calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni),
     ..._ddFlotanteCompuesto(_met), avgCapOccupancyEur: _met.capInvEur, metricasActivo: _met.porActivo
