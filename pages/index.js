@@ -1301,8 +1301,12 @@ export default function Home() {
     if(!mcActivoSel) return
     const hay=(mcHistSel.histResult?.assetStats||[]).some(a=>a.symbol===mcActivoSel.symbol)
     if(!hay){ setMcActivoSel(null); return }
-    if(mcActivoSel.stratId!==mcHistIdVigente) setMcActivoSel({stratId:mcHistIdVigente,symbol:mcActivoSel.symbol})
-  },[mcHistSel,mcHistIdVigente,mcActivoSel])
+    // Resincronizar la fila resaltada solo tiene sentido si la estrategia guardada es una de la lista.
+    // Con una sola estrategia, la fila lleva un id sintético que no está en mcDisplayResults; reescribirlo
+    // al id vigente dejaría el resaltado en una fila que no existe y el segundo clic no deseleccionaría.
+    const _enLista=mcDisplayResults.some(x=>x.id===mcActivoSel.stratId)
+    if(_enLista&&mcActivoSel.stratId!==mcHistIdVigente) setMcActivoSel({stratId:mcHistIdVigente,symbol:mcActivoSel.symbol})
+  },[mcHistSel,mcHistIdVigente,mcActivoSel,mcDisplayResults])
   // Series del modo Activos: una por activo, la caja y la curva total como referencia. Este memo hace lo
   // CARO —sanear cada serie— y depende solo de los datos, así que no se rehace al marcar o desmarcar.
   const mcSeriesActivos=useMemo(()=>{
@@ -5157,7 +5161,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.779</title>
+        <title>Trading Simulator V9.780</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5235,7 +5239,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.779
+            <span className="dot"/>Trading Simulator V9.780
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -8344,7 +8348,10 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                     // historial a la suya —con la misma regla de siempre, escribir null si es
                                     // la que ya resuelve "la activa"— y marca el activo, que es lo que dibuja
                                     // el panel de rendimiento. Segundo clic en la misma fila deselecciona.
-                                    const selecc=mcActivoSel?.symbol===a.symbol
+                                    // Símbolo Y estrategia: el mismo ticker puede estar en dos estrategias
+                                    // desplegadas, y comparando solo el símbolo se resaltaban las dos filas y
+                                    // pulsar la de la otra deseleccionaba en vez de cambiar a esa estrategia.
+                                    const selecc=mcActivoSel?.symbol===a.symbol&&mcActivoSel?.stratId===r.id
                                     const fondoFila=selecc?'rgba(0,212,255,0.10)':'rgba(0,0,0,0.12)'
                                     return(
                                       <tr key={a.symbol}
@@ -8353,8 +8360,15 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                           background:fondoFila}}
                                         onClick={()=>{
                                           if(selecc){setMcActivoSel(null);return}
+                                          // Con una sola estrategia la fila lleva un id sintético
+                                          // ('__single__' o el de la activa) que puede no estar en
+                                          // mcDisplayResults: escribirlo dejaría mcHistStratId apuntando a
+                                          // una fila inexistente. Ahí null, que es "la activa" y es lo que
+                                          // mcHistSel resuelve de todas formas cuando no hay varias.
+                                          const _enLista=mcDisplayResults.some(x=>x.id===r.id)
+                                          const _id=(!_enLista||r.id===mcHistIdPorDefecto)?null:r.id
                                           setMcActivoSel({stratId:r.id,symbol:a.symbol})
-                                          setMcHistStratId(r.id===mcHistIdPorDefecto?null:r.id)
+                                          setMcHistStratId(_id)
                                         }}
                                         onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.04)'}
                                         onMouseOut={e=>e.currentTarget.style.background=fondoFila}>
