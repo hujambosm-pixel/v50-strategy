@@ -1020,6 +1020,7 @@ export default function Home() {
   const EQUITY_CHART_H=190                      // altura FIJA del gráfico de equity del individual
   const [mcEquityH,setMcEquityH]=useState(300) // resizable MC equity chart height
   const mcEquityContainerRef=useRef(null)  // mide el hueco disponible para autoajustar mcEquityH
+  const mcHeaderRef=useRef(null)           // cabecera del gráfico: al envolver cambia de alto y mueve el hueco
   const sidebarResizing=useRef(false), rightResizing=useRef(false)
   const sidebarStartX=useRef(0), sidebarStartW=useRef(0)
   const rightStartX=useRef(0), rightStartW=useRef(0)
@@ -1532,11 +1533,13 @@ export default function Home() {
   // Mide el hueco entre el borde superior del contenedor del gráfico (bajo la fila de botones EQUITY)
   // y el fondo de la ventana, y lo usa como mcEquityH. Recalcula al montar, al hacer resize de la ventana,
   // y cuando cambia mcDisplayResults/mcResult (varía la altura de la tabla comparativa → cambia el hueco).
-  // También al entrar o salir del modo Activos y al cambiar la lista de series: el selector de activos vive
-  // en la fila de botones, así que con ~20 activos ocupa varias líneas y empuja hacia abajo el borde
-  // superior del contenedor. Sin esta dependencia el gráfico conservaría el alto de antes y se saldría
-  // por el fondo de la ventana justo lo que mide el selector.
-  // El drag-handle sobrescribe mcEquityH manualmente hasta el próximo recálculo. Cleanup en el return externo.
+  // Y, sobre todo, cuando cambia el ALTO DE LA CABECERA, que es lo que hay justo encima: los toggles de
+  // series viven en su fila de botones y con muchos activos ocupan varias líneas. Eso no depende solo del
+  // modo y de la lista —al estrechar la ventana la misma lista envuelve distinto—, así que no basta con
+  // ponerlo en las dependencias: un ResizeObserver sobre la cabecera cubre los dos casos, incluido el
+  // reflujo durante un resize. Las dependencias se quedan igualmente para recalcular en el instante del
+  // cambio de modo, sin esperar a que el observador entregue.
+  // El drag-handle sobrescribe mcEquityH manualmente hasta el próximo recálculo. Cleanup en el return.
   useEffect(()=>{
     if(sidePanel!=='multi') return
     const recompute=()=>{
@@ -1548,7 +1551,9 @@ export default function Home() {
     }
     const raf=requestAnimationFrame(()=>requestAnimationFrame(recompute))
     window.addEventListener('resize',recompute)
-    return ()=>{ cancelAnimationFrame(raf); window.removeEventListener('resize',recompute) }
+    const ro=mcHeaderRef.current?new ResizeObserver(()=>recompute()):null
+    if(ro&&mcHeaderRef.current) ro.observe(mcHeaderRef.current)
+    return ()=>{ cancelAnimationFrame(raf); window.removeEventListener('resize',recompute); ro?.disconnect() }
   },[sidePanel,mcDisplayResults,mcResult,mcPorActivo,mcSeriesActivos])
 
   // ── Altura del gráfico: 100% CSS puro (sin JS) ──
@@ -5055,7 +5060,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.771</title>
+        <title>Trading Simulator V9.772</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5133,7 +5138,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.771
+            <span className="dot"/>Trading Simulator V9.772
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -8350,7 +8355,13 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
 
                 {/* ── Equity — misma estructura que activos individuales ── */}
                 <div className="equity-section" data-chart="equity">
-                  <div className="section-title" style={{display:'flex',alignItems:'flex-start',flexWrap:'wrap',gap:6,fontSize:14}}>
+                  {/* Cabecera en DOS grupos. El de fuera NO envuelve: así el botón de periodo completo se
+                      queda siempre en la primera línea, pegado a la derecha, sin necesidad del marginLeft
+                      automático de antes. Todo lo demás vive en el grupo izquierdo, que es quien envuelve
+                      —flex:1 para ocupar el hueco y minWidth:0 para poder encogerse—, de modo que los
+                      toggles de series caen a una segunda línea DENTRO del grupo y no desplazan nada. */}
+                  <div ref={mcHeaderRef} className="section-title" style={{display:'flex',alignItems:'flex-start',gap:6,fontSize:14}}>
+                    <div style={{display:'flex',alignItems:'flex-start',flexWrap:'wrap',gap:6,flex:1,minWidth:0}}>
                     {/* El rótulo lo decide el mismo conmutador: en Activos no se dibuja patrimonio sino
                         beneficio, empezando todas las series en cero. La clase pone las mayúsculas. */}
                     <span>{mcPorActivo?'Profit':'Equity'}</span>
@@ -8470,34 +8481,35 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         color:mcPorActivo?'#2b4257':(mcShowAfterTax?'#e0b341':'#3d5a7a')}}>
                       Después de impuestos
                     </button>
+                    {/* Toggles de series del modo Activos, en la MISMA fila que los botones y detrás de
+                        un separador fino, porque son otra cosa: no cambian qué se calcula sino qué se ve.
+                        Van sueltos, no dentro de un contenedor propio, para que envuelvan en el mismo
+                        flujo que los botones y no se lleven una línea entera cuando caben. Cada uno lleva
+                        el color de su línea: es la única forma de saber qué curva es cuál. */}
+                    {mcPorActivo&&mcSeriesActivos&&(<>
+                      <span style={{width:1,height:16,alignSelf:'center',background:'#1a2d45',margin:'0 2px',flexShrink:0}}/>
+                      {mcSeriesActivos.map(c=>{
+                        const visible=mcVisibleActivo(mcActivoVisible,c.id)
+                        return (
+                          <button key={c.id}
+                            onClick={()=>setMcActivoVisible(v=>({...v,[c.id]:!mcVisibleActivo(v,c.id)}))}
+                            title={visible?`Ocultar ${c.name}`:`Mostrar ${c.name}`}
+                            style={{display:'inline-flex',alignItems:'center',gap:5,fontFamily:MONO,fontSize:10,
+                              padding:'2px 7px',borderRadius:3,cursor:'pointer',
+                              border:`1px solid ${visible?c.color:'#2b4257'}`,
+                              background:visible?`${c.color}18`:'transparent',
+                              color:visible?c.color:'#3d5a7a'}}>
+                            <span style={{width:8,height:8,borderRadius:2,flexShrink:0,
+                              background:visible?c.color:'transparent',border:`1px solid ${visible?c.color:'#3d5a7a'}`}}/>
+                            {c.name}
+                          </button>
+                        )
+                      })}
+                    </>)}
+                    </div>
                     <button onClick={()=>mcChartApiRef.current?.fitAll()}
-                      style={{marginLeft:'auto',fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',border:'1px solid #1a2d45',background:'rgba(0,212,255,0.07)',color:'#7a9bc0',flexShrink:0}}
+                      style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',border:'1px solid #1a2d45',background:'rgba(0,212,255,0.07)',color:'#7a9bc0',flexShrink:0}}
                       title="Ver periodo completo">⊠ Periodo completo</button>
-                    {/* Selector de series del modo Activos, en la propia fila de botones: width 100 %
-                        lo hace caer a la línea de abajo, y envuelve en varias filas si hay muchos
-                        activos. Cada elemento lleva el color de su línea: es la única forma de saber
-                        qué curva es cuál en el gráfico. */}
-                    {mcPorActivo&&mcSeriesActivos&&(
-                      <div style={{display:'flex',flexWrap:'wrap',gap:'4px 6px',width:'100%'}}>
-                        {mcSeriesActivos.map(c=>{
-                          const visible=mcVisibleActivo(mcActivoVisible,c.id)
-                          return (
-                            <button key={c.id}
-                              onClick={()=>setMcActivoVisible(v=>({...v,[c.id]:!mcVisibleActivo(v,c.id)}))}
-                              title={visible?`Ocultar ${c.name}`:`Mostrar ${c.name}`}
-                              style={{display:'inline-flex',alignItems:'center',gap:5,fontFamily:MONO,fontSize:10,
-                                padding:'2px 7px',borderRadius:3,cursor:'pointer',
-                                border:`1px solid ${visible?c.color:'#2b4257'}`,
-                                background:visible?`${c.color}18`:'transparent',
-                                color:visible?c.color:'#3d5a7a'}}>
-                              <span style={{width:8,height:8,borderRadius:2,flexShrink:0,
-                                background:visible?c.color:'transparent',border:`1px solid ${visible?c.color:'#3d5a7a'}`}}/>
-                              {c.name}
-                            </button>
-                          )
-                        })}
-                      </div>
-                    )}
                   </div>
                   <div ref={mcEquityContainerRef} style={{position:'relative'}}>
                   {/* Modo Activos: una serie por activo, la caja y la total. El array viene memorizado
