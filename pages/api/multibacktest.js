@@ -157,7 +157,10 @@ function _inicioSimulacion(data, cfg) {
 // Muestreo de fechas para curvas: intervalos fijos (cada step días) + SIEMPRE las fechas
 // donde cambia la ocupación (entryDate/exitDate de cada operación), para que el "capital empleado"
 // no se pierda picos de posiciones cortas (1-2 días) que caen entre muestras. Dedup + orden asc.
-function _sampledWithChanges(filteredDates, step, trades) {
+// `extra` añade fechas sueltas que el dibujo necesita aunque no caigan en el muestreo: hoy, el pico y el
+// valle del máximo drawdown, que se calculan sobre el eje COMPLETO y podrían quedarse entre dos muestras.
+// Pasan por el mismo Set, así que no duplican ni desordenan.
+function _sampledWithChanges(filteredDates, step, trades, extra) {
   const inAxis = new Set(filteredDates)
   const set = new Set()
   filteredDates.forEach((d, i) => { if (i % step === 0 || i === filteredDates.length - 1) set.add(d) })
@@ -165,6 +168,7 @@ function _sampledWithChanges(filteredDates, step, trades) {
     if (t.entryDate && inAxis.has(t.entryDate)) set.add(t.entryDate)
     if (t.exitDate && inAxis.has(t.exitDate)) set.add(t.exitDate)
   })
+  ;(extra || []).forEach(d => { if (d && inAxis.has(d)) set.add(d) })
   return [...set].sort()
 }
 
@@ -277,8 +281,11 @@ function buildSlotsCurves(assetResults, capitalIni) {
   const activosSlots = [...new Set(clavesSlots)].sort()
   const seriesSlots = Object.fromEntries(activosSlots.map(s => [s, []]))
   const cashCurve = []
+  // Métricas sobre el eje COMPLETO, antes de muestrear: el muestreo solo decide qué se dibuja.
+  const _met = _metricasEjeCompleto(filteredDates, _posicionesSlots(assetResults, startDate), capitalIni)
   const step = Math.max(1, Math.floor(filteredDates.length / 400))
-  _sampledWithChanges(filteredDates, step, assetResults.flatMap(ar=>ar.trades||[])).forEach(date => {
+  _sampledWithChanges(filteredDates, step, assetResults.flatMap(ar=>ar.trades||[]),
+    [_met.maxDDFechaPico, _met.maxDDFechaValle]).forEach(date => {
     let totSimple=0, totCompound=0, totBH=0, openSlots=0, totOpenPnl=0, totOpenCost=0
     const aporte = Object.fromEntries(activosSlots.map(s => [s, 0]))
     assetEquities.forEach((byDate, i) => {
@@ -298,16 +305,8 @@ function buildSlotsCurves(assetResults, capitalIni) {
     floatCompoundCurve.push({ date, value: totCompound+totOpenPnl })
   })
 
-  const tInvEstrategia = occupancyCurve.length
-    ? (occupancyCurve.filter(p => p.value > 0).length / occupancyCurve.length) * 100
-    : 0
-  // Cap.inv% sobre base COSTE: media de (capitalEmpleado_coste / portfolioTotal × 100)
-  const avgCapOccupancy = occupancyCurve.length && compoundCurve.length
-    ? occupancyCurve.reduce((s, p, i) => {
-        const total = compoundCurve[i]?.value || capitalIni
-        return s + (total > 0 ? (p.value / total) * 100 : 0)
-      }, 0) / occupancyCurve.length
-    : 0
+  const tInvEstrategia = _met.tInv
+  const avgCapOccupancy = _met.capInvPct
   const _totalSenalesSlots = assetResults.reduce((s, ar) => s + (ar.trades?.length || 0), 0)
   const senalStatsSlots = {
     generadas:             _totalSenalesSlots,
@@ -321,7 +320,8 @@ function buildSlotsCurves(assetResults, capitalIni) {
   }
   return { simpleCurve, compoundCurve, bhCurve, occupancyCurve, startDate, floatSimpleCurve, floatCompoundCurve, tInvEstrategia, avgCapOccupancy, senalStats: senalStatsSlots,
     assetCurves: activosSlots.map(symbol => ({ symbol, data: seriesSlots[symbol] })), cashCurve,
-    ..._calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni), ..._calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni) }
+    ..._calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni), ..._calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni),
+    ..._ddFlotanteCompuesto(_met) }
 }
 
 // ── Stop INICIAL de un trade — fuente ÚNICA para los cuatro modos de asignación ──
@@ -486,8 +486,11 @@ function buildCompartidoCurves(assetResults, capitalIni, symbolOrder = null) {
   assetResults.forEach(ar => { symbolDataMap[ar.symbol] = ar.data ? ar.data.filter(d => d.date >= startDate) : [] })
 
   // Construir curvas fecha a fecha
+  // Métricas sobre el eje COMPLETO, antes de muestrear: el muestreo solo decide qué se dibuja.
+  const _met = _metricasEjeCompleto(filteredDates, _posicionesPool(executedTrades, symbolDataMap), capitalIni)
   const step = Math.max(1, Math.floor(filteredDates.length / 400))
-  const sampledDates = _sampledWithChanges(filteredDates, step, executedTrades)
+  const sampledDates = _sampledWithChanges(filteredDates, step, executedTrades,
+    [_met.maxDDFechaPico, _met.maxDDFechaValle])
 
   const simpleCurve = [], compoundCurve = [], floatSimpleCurve = [], floatCompoundCurve = []
 
@@ -521,7 +524,6 @@ function buildCompartidoCurves(assetResults, capitalIni, symbolOrder = null) {
   })
 
   // Ocupación: % del capital total desplegado en posiciones abiertas (capital-weighted)
-  let _tInvDays = 0
   const occupancyCurve = sampledDates.map((date, i) => {
     const openTrades = allCandidates.filter(t =>
       capitalAtEntryMap[`${t.symbol}:${t.entryDate}`] != null &&
@@ -529,17 +531,10 @@ function buildCompartidoCurves(assetResults, capitalIni, symbolOrder = null) {
     )
     // CAPITAL EMPLEADO unificado: COSTE de entrada de las posiciones abiertas (Σ capEntry), en EUROS.
     const openCapTotal = openTrades.reduce((s, t) => s + (capitalAtEntryMap[`${t.symbol}:${t.entryDate}`] || 0), 0)
-    if (openTrades.length > 0) _tInvDays++
     return { date, value: openCapTotal }  // euros de coste
   })
-  const tInvEstrategia = sampledDates.length > 0 ? (_tInvDays / sampledDates.length) * 100 : 0
-  // Cap.inv% sobre base COSTE: media de (capitalEmpleado_coste / portfolioTotal × 100)
-  const avgCapOccupancy = occupancyCurve.length && compoundCurve.length
-    ? occupancyCurve.reduce((s, p, i) => {
-        const total = compoundCurve[i]?.value || capitalIni
-        return s + (total > 0 ? (p.value / total) * 100 : 0)
-      }, 0) / occupancyCurve.length
-    : 0
+  const tInvEstrategia = _met.tInv
+  const avgCapOccupancy = _met.capInvPct
 
   // B&H combinado
   const slotBH = capitalIni / n
@@ -575,7 +570,8 @@ function buildCompartidoCurves(assetResults, capitalIni, symbolOrder = null) {
     tInvEstrategia, avgCapOccupancy, senalStats: senalStatsC,
     ..._seriesPorActivoPool(sampledDates, executedTrades, allCandidates, capitalAtEntryMap, symbolDataMap, capitalIni),
     ..._calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni),
-    ..._calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni)
+    ..._calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni),
+    ..._ddFlotanteCompuesto(_met)
   }
 }
 
@@ -822,8 +818,11 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
   const symbolDataMap = {}
   assetResults.forEach(ar => { symbolDataMap[ar.symbol] = ar.data ? ar.data.filter(d => d.date >= startDate) : [] })
 
+  // Métricas sobre el eje COMPLETO, antes de muestrear: el muestreo solo decide qué se dibuja.
+  const _met = _metricasEjeCompleto(filteredDates, _posicionesPool(executedTrades, symbolDataMap), capitalIni)
   const step = Math.max(1, Math.floor(filteredDates.length / 400))
-  const sampledDates = _sampledWithChanges(filteredDates, step, executedTrades)
+  const sampledDates = _sampledWithChanges(filteredDates, step, executedTrades,
+    [_met.maxDDFechaPico, _met.maxDDFechaValle])
 
   const simpleCurve = [], compoundCurve = [], floatSimpleCurve = [], floatCompoundCurve = []
   sampledDates.forEach(date => {
@@ -850,7 +849,6 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
     floatCompoundCurve.push({ date, value: val + openPnlCompound })
   })
 
-  let _tInvDays = 0
   const occupancyCurve = sampledDates.map((date, i) => {
     const openTrades = allCandidates.filter(t =>
       capitalAtEntryMap[`${t.symbol}:${t.entryDate}`] != null &&
@@ -859,17 +857,10 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
     // CAPITAL EMPLEADO unificado: COSTE de entrada de las posiciones abiertas (Σ capEntry), en EUROS.
     // Sin (1+ret): estable, no se mueve con el precio (mismo criterio que Cap. disponible del Dashboard).
     const openCapTotal = openTrades.reduce((s, t) => s + (capitalAtEntryMap[`${t.symbol}:${t.entryDate}`] || 0), 0)
-    if (openTrades.length > 0) _tInvDays++
     return { date, value: openCapTotal }  // euros de coste
   })
-  const tInvEstrategia = sampledDates.length > 0 ? (_tInvDays / sampledDates.length) * 100 : 0
-  // avgCapOccupancy: media de (capitalEmpleado_coste / portfolioTotal × 100) — % para la tabla
-  const avgCapOccupancy = occupancyCurve.length && compoundCurve.length
-    ? occupancyCurve.reduce((s, p, i) => {
-        const total = compoundCurve[i]?.value || capitalIni
-        return s + (total > 0 ? (p.value / total) * 100 : 0)
-      }, 0) / occupancyCurve.length
-    : 0
+  const tInvEstrategia = _met.tInv
+  const avgCapOccupancy = _met.capInvPct
 
   const slotBH = capitalIni / n
   const bhCurve = sampledDates.map(date => {
@@ -905,7 +896,8 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
     tInvEstrategia, avgCapOccupancy, senalStats,
     ..._seriesPorActivoPool(sampledDates, executedTrades, allCandidates, capitalAtEntryMap, symbolDataMap, capitalIni),
     ..._calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni),
-    ..._calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni)
+    ..._calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni),
+    ..._ddFlotanteCompuesto(_met)
   }
 }
 
@@ -1057,8 +1049,11 @@ function buildPositionSizingCurves(assetResults, capitalIni, sizeRules) {
   assetResults.forEach(ar => { symbolDataMap[ar.symbol] = ar.data ? ar.data.filter(d => d.date >= startDate) : [] })
 
   // ── Construir curvas (mismo patrón que buildCompartidoCurves) ──
+  // Métricas sobre el eje COMPLETO, antes de muestrear: el muestreo solo decide qué se dibuja.
+  const _met = _metricasEjeCompleto(filteredDates, _posicionesPool(executedTrades, symbolDataMap), capitalIni)
   const step = Math.max(1, Math.floor(filteredDates.length / 400))
-  const sampledDates = _sampledWithChanges(filteredDates, step, executedTrades)
+  const sampledDates = _sampledWithChanges(filteredDates, step, executedTrades,
+    [_met.maxDDFechaPico, _met.maxDDFechaValle])
 
   const simpleCurve = [], compoundCurve = [], floatSimpleCurve = [], floatCompoundCurve = []
 
@@ -1087,7 +1082,6 @@ function buildPositionSizingCurves(assetResults, capitalIni, sizeRules) {
     floatCompoundCurve.push({ date, value: val + openPnlCompound })
   })
 
-  let _tInvDaysPS = 0
   const occupancyCurve = sampledDates.map((date, i) => {
     const openTrades = allCandidates.filter(t =>
       capitalAtEntryMap[`${t.symbol}:${t.entryDate}`] != null &&
@@ -1095,17 +1089,10 @@ function buildPositionSizingCurves(assetResults, capitalIni, sizeRules) {
     )
     // CAPITAL EMPLEADO unificado: COSTE de entrada de las posiciones abiertas (Σ capEntry), en EUROS.
     const openCapTotal = openTrades.reduce((s, t) => s + (capitalAtEntryMap[`${t.symbol}:${t.entryDate}`] || 0), 0)
-    if (openTrades.length > 0) _tInvDaysPS++
     return { date, value: openCapTotal }  // euros de coste
   })
-  const tInvEstrategia = sampledDates.length > 0 ? (_tInvDaysPS / sampledDates.length) * 100 : 0
-  // Cap.inv% sobre base COSTE: media de (capitalEmpleado_coste / portfolioTotal × 100)
-  const avgCapOccupancy = occupancyCurve.length && compoundCurve.length
-    ? occupancyCurve.reduce((s, p, i) => {
-        const total = compoundCurve[i]?.value || capitalIni
-        return s + (total > 0 ? (p.value / total) * 100 : 0)
-      }, 0) / occupancyCurve.length
-    : 0
+  const tInvEstrategia = _met.tInv
+  const avgCapOccupancy = _met.capInvPct
 
   const slotBH = capitalIni / n
   const bhCurve = sampledDates.map(date => {
@@ -1145,7 +1132,8 @@ function buildPositionSizingCurves(assetResults, capitalIni, sizeRules) {
     tInvEstrategia, avgCapOccupancy, senalStats: senalStatsPS,
     ..._seriesPorActivoPool(sampledDates, executedTrades, allCandidates, capitalAtEntryMap, symbolDataMap, capitalIni),
     ..._calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni),
-    ..._calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni)
+    ..._calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni),
+    ..._ddFlotanteCompuesto(_met)
   }
 }
 
@@ -1301,6 +1289,196 @@ function _calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni) {
   const { maxDD:maxDDFloatSimple, maxDDDate:maxDDFloatSimpleDate, maxDDEur:maxDDFloatSimpleEur } = calcDD(floatSimpleCurve)
   const { maxDD:maxDDFloatCompound, maxDDDate:maxDDFloatCompoundDate, maxDDEur:maxDDFloatCompoundEur } = calcDD(floatCompoundCurve)
   return { maxDDFloatSimple, maxDDFloatSimpleDate, maxDDFloatCompound, maxDDFloatCompoundDate, maxDDFloatSimpleEur, maxDDFloatCompoundEur }
+}
+
+// ── MÉTRICAS SOBRE EL EJE DIARIO COMPLETO ────────────────────────────────────
+// PRINCIPIO: las métricas se miden aquí, barra a barra, sobre TODAS las fechas del periodo. El muestreo
+// (_sampledWithChanges) existe solo para dibujar. Hasta V9.765 el Max DD flotante, el T.invertido y el
+// Cap.invertido% se calculaban sobre las ~400 fechas muestreadas, que además fuerzan dentro todas las
+// entradas y salidas: los días con posición quedaban sobrerrepresentados y las dos ocupaciones salían
+// sesgadas al alza, mientras el Max DD podía saltarse el extremo real por caer entre dos muestras.
+//
+// `posiciones` normaliza los cuatro modos de asignación a una sola forma:
+//   { clave, entryDate, exitDate, coste, realizado, entryPx, precios }
+//   clave     símbolo REAL (_claveActivo), para agrupar por activo
+//   coste     capital que sale de la caja al abrir la posición
+//   realizado resultado en euros que se consolida al cerrarla
+//   precios   barras del activo filtradas desde startDate, ascendentes
+// De ahí salen, con las mismas cuentas para todos los modos:
+//   patrimonio(fecha)   = capital inicial + realizado acumulado + P&L no realizado a precio de mercado
+//   contribución(activo)= realizado acumulado del activo + su P&L no realizado   (arranca en cero)
+//
+// COSTE: una sola pasada por fechas, con punteros incrementales sobre las posiciones ordenadas por
+// entrada y por salida y un cursor de precio por posición. Nunca recorre todas las operaciones en cada
+// día —el patrón O(días × operaciones) de _calcAssetMaxDD—, sino O(días + Σ días abiertos).
+const _FIN = '9999-99-99'   // exitDate ausente = sigue abierta al final del periodo
+const _cmpFecha = (a, b) => a < b ? -1 : a > b ? 1 : 0
+
+function _nuevoEstadoDD(capitalIni, primeraFecha) {
+  return { valor: capitalIni, pico: capitalIni, picoFecha: primeraFecha,
+    maxDD: 0, maxDDEur: 0, maxDDFechaPico: null, maxDDFechaValle: null,
+    realizado: 0, dias: 0, sumaCoste: 0, sumaPct: 0 }
+}
+// Mismo cálculo de drawdown para la estrategia y para cada activo: esa es toda la gracia de tenerlo en
+// una función. Se llama solo los días en que el valor cambia; un valor que no se mueve no puede crear un
+// drawdown nuevo, así que saltárselos no altera el resultado y ahorra el recorrido.
+function _pasoDD(st, valor, date) {
+  st.valor = valor
+  if (valor > st.pico) { st.pico = valor; st.picoFecha = date }
+  if (st.pico > 0) {
+    const dd = (st.pico - valor) / st.pico * 100
+    if (dd > st.maxDD) {
+      st.maxDD = dd; st.maxDDEur = valor - st.pico
+      st.maxDDFechaPico = st.picoFecha; st.maxDDFechaValle = date
+    }
+  }
+}
+function _precioDe(pos, date) {
+  const arr = pos.precios
+  if (!arr || !arr.length) return null
+  let i = pos._i || 0
+  while (i + 1 < arr.length && arr[i + 1].date <= date) i++
+  pos._i = i
+  return arr[i].date <= date ? arr[i].close : null
+}
+function _resumeEstado(st, nFechas) {
+  return {
+    maxDD: st.maxDD, maxDDEur: st.maxDDEur,
+    maxDDFechaPico: st.maxDDFechaPico, maxDDFechaValle: st.maxDDFechaValle,
+    tInv: nFechas ? (st.dias / nFechas) * 100 : 0,
+    capInvPct: nFechas ? st.sumaPct / nFechas : 0,
+    capInvEur: nFechas ? st.sumaCoste / nFechas : 0,
+  }
+}
+function _metricasEjeCompleto(fechas, posiciones, capitalIni) {
+  const nF = fechas?.length || 0
+  const vacio = { maxDD:0, maxDDEur:0, maxDDFechaPico:null, maxDDFechaValle:null, tInv:0, capInvPct:0, capInvEur:0 }
+  if (!nF) return { ...vacio, porActivo: {} }
+  const primera = fechas[0]
+  // Copias propias: el cursor de precio (_i) se guarda en el objeto, y las dos ordenaciones no deben
+  // tocar el array de quien llama.
+  const pos = (posiciones || []).filter(p => p && p.entryDate && Number.isFinite(p.coste) && Number.isFinite(p.realizado))
+    .map(p => ({ ...p, _i: 0 }))
+  const porEntrada = [...pos].sort((a, b) => _cmpFecha(a.entryDate, b.entryDate))
+  const porSalida  = [...pos].sort((a, b) => _cmpFecha(a.exitDate || _FIN, b.exitDate || _FIN))
+
+  const estrategia = _nuevoEstadoDD(capitalIni, primera)
+  const porActivo = new Map()
+  const estadoDe = (k) => {
+    let st = porActivo.get(k)
+    if (!st) { st = _nuevoEstadoDD(capitalIni, primera); porActivo.set(k, st) }
+    return st
+  }
+  ;[...new Set(pos.map(p => p.clave))].forEach(k => estadoDe(k))
+
+  let iEnt = 0, iSal = 0, realizado = 0
+  let abiertas = []
+  for (const date of fechas) {
+    // 1. Cierres del día: consolidan su resultado. Sus activos quedan "tocados" para que la curva de
+    //    contribución de cada uno recoja hoy el salto de no realizado a realizado.
+    const tocados = new Set()
+    while (iSal < porSalida.length && (porSalida[iSal].exitDate || _FIN) <= date) {
+      const p = porSalida[iSal++]
+      realizado += p.realizado
+      estadoDe(p.clave).realizado += p.realizado
+      tocados.add(p.clave)
+    }
+    // 2. Entradas del día.
+    while (iEnt < porEntrada.length && porEntrada[iEnt].entryDate <= date) abiertas.push(porEntrada[iEnt++])
+    // 3. Las que siguen vivas aportan coste y P&L no realizado; las cerradas salen de la lista.
+    let costeDia = 0, noRealDia = 0
+    const costeAct = new Map(), flotAct = new Map()
+    const vivas = []
+    for (const p of abiertas) {
+      if ((p.exitDate || _FIN) <= date) {
+        // Abre y cierra el MISMO día: ocupó capital hoy aunque no llegue a la noche. Sin esto no contaba
+        // para nada, porque el mapa de capital de entrada de los modos de pool no la registra.
+        if (p.entryDate === date) {
+          costeDia += p.coste
+          costeAct.set(p.clave, (costeAct.get(p.clave) || 0) + p.coste)
+        }
+        continue
+      }
+      vivas.push(p)
+      const px = _precioDe(p, date)
+      const flot = (px != null && p.entryPx > 0) ? ((px - p.entryPx) / p.entryPx) * p.coste : 0
+      costeDia += p.coste
+      noRealDia += flot
+      costeAct.set(p.clave, (costeAct.get(p.clave) || 0) + p.coste)
+      flotAct.set(p.clave, (flotAct.get(p.clave) || 0) + flot)
+    }
+    abiertas = vivas
+    // 4. Estrategia: patrimonio flotante del día y ocupación sobre ÉL, no sobre la curva realizada.
+    const patrimonio = capitalIni + realizado + noRealDia
+    _pasoDD(estrategia, patrimonio, date)
+    if (costeDia > 0) {
+      estrategia.dias++
+      estrategia.sumaCoste += costeDia
+      if (patrimonio > 0) estrategia.sumaPct += costeDia / patrimonio * 100
+    }
+    // 5. Activos: mismo denominador que la estrategia, para que los Cap.inv% sumen el suyo.
+    for (const [k, c] of costeAct) {
+      const st = estadoDe(k)
+      st.dias++
+      st.sumaCoste += c
+      if (patrimonio > 0) st.sumaPct += c / patrimonio * 100
+      tocados.add(k)
+    }
+    for (const k of flotAct.keys()) tocados.add(k)
+    for (const k of tocados) {
+      const st = estadoDe(k)
+      _pasoDD(st, capitalIni + st.realizado + (flotAct.get(k) || 0), date)
+    }
+  }
+  const resumenActivos = {}
+  for (const [k, st] of porActivo) resumenActivos[k] = _resumeEstado(st, nF)
+  return { ..._resumeEstado(estrategia, nF), porActivo: resumenActivos }
+}
+// El Max DD flotante de la estrategia sustituye al que _calcFloatDD saca de la curva muestreada,
+// conservando los mismos nombres de campo para que el frontend no tenga que enterarse. Se escribe
+// DESPUÉS de esparcir _calcFloatDD en el objeto de retorno, que es quien pierde con el empate.
+function _ddFlotanteCompuesto(met) {
+  return {
+    maxDDFloatCompound:     met.maxDD,
+    maxDDFloatCompoundDate: met.maxDDFechaValle,
+    maxDDFloatCompoundEur:  met.maxDDEur,
+  }
+}
+// Adaptadores: cada modo entrega sus posiciones en la forma común.
+// Pool (compartido, concentrado, position sizing): executedTrades ya son las ejecuciones reales, con el
+// capital de entrada y el resultado en euros. Incluyen las de entrada y salida el mismo día, que
+// capitalAtEntryMap no registra; por eso se leen de aquí y ese mapa se queda como está.
+function _posicionesPool(executedTrades, symbolDataMap) {
+  return (executedTrades || []).map(t => ({
+    clave:     _claveActivo(t),
+    entryDate: t.entryDate,
+    exitDate:  t.exitDate || null,
+    coste:     t._capitalAtEntry,
+    realizado: t.pnlSimple,
+    entryPx:   t.entryPx ?? t.entryPrice ?? null,
+    precios:   symbolDataMap[t.symbol] || [],
+  }))
+}
+// Slots: cada activo compone dentro de su propio slot, así que el resultado NO es pnlSimple (calculado
+// sobre la asignación fija) sino el incremento compuesto. capitalTras es el capital tras el trade, y
+// deshaciendo su retorno sale el capital con el que entró.
+function _posicionesSlots(assetResults, startDate) {
+  const pos = []
+  ;(assetResults || []).forEach(ar => {
+    const precios = ar.data ? ar.data.filter(d => d.date >= startDate) : []
+    const clave = _claveActivo(ar)
+    ;(ar.trades || []).forEach(t => {
+      if (!isFinite(t.pnlPct) || !Number.isFinite(t.capitalTras)) return
+      const coste = t.capitalTras / (1 + t.pnlPct / 100)
+      if (!Number.isFinite(coste)) return
+      pos.push({
+        clave, entryDate: t.entryDate, exitDate: t.exitDate || null,
+        coste, realizado: t.capitalTras - coste,
+        entryPx: t.entryPx ?? t.entryPrice ?? null, precios,
+      })
+    })
+  })
+  return pos
 }
 
 // ── buildTrades: convierte rawTrades {entryDate,exitDate,entryPrice,exitPrice} a trades enriquecidos ──
