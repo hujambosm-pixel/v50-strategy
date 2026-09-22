@@ -523,13 +523,12 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
       onReady?.({chart,highlightTrade})
 
       // ── Etiquetas compactas de operación ─────────────────────────────────────────────────
-      // Una línea con el porcentaje y nada más, CENTRADA sobre el tramo de la operación: a media distancia
-      // entre la entrada y la salida, y a la altura del precio medio de ese tramo, que es donde está la
-      // línea de color que la etiqueta explica. Lo demás —fechas, precios, euros, duración— vive en el
-      // globo del cursor. Sin línea de unión discontinua: la etiqueta ya está sobre su tramo.
-      // Solapes: se comprueba la CAJA entera, en x y en y, contra las ya colocadas, y la etiqueta se
-      // aparta del tramo en saltos hasta encontrar hueco. Las ganadoras se apartan hacia arriba y las
-      // perdedoras hacia abajo, de modo que el propio tramo nunca queda tapado.
+      // Una línea con el porcentaje y nada más, centrada en horizontal sobre su operación —a media
+      // distancia entre entrada y salida— y colocada en vertical en la BANDA DESPEJADA de arriba, no a la
+      // altura del precio: ahí caía justo encima de las velas y no se distinguía ni la etiqueta ni la
+      // vela. Lo demás —fechas, precios, euros, duración— vive en el globo del cursor.
+      // Solapes: se comprueba la CAJA entera, en x y en y, contra las ya colocadas, y la etiqueta baja en
+      // saltos desde la banda superior hasta encontrar hueco.
       const drawTradeLabels=()=>{
         const svg=svgRef.current
         if(!svg||!candlesRef.current||!chartRef.current) return
@@ -538,9 +537,12 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
         const NS='http://www.w3.org/2000/svg'
         const ts=chartRef.current.timeScale()
         const chartH=chartDivRef.current?.clientHeight||height
-        const chartW=chartDivRef.current?.clientWidth||800
+        // El eje de precios ocupa una franja a la derecha DENTRO del mismo div: sin descontarla, una
+        // etiqueta del final del periodo queda partida por él.
+        const anchoEje=(()=>{try{return chartRef.current.priceScale('right').width()||0}catch(_){return 0}})()
+        const chartW=Math.max(60,(chartDivRef.current?.clientWidth||800)-anchoEje)
         // ALTO_EJE reserva la banda del eje de fechas: una etiqueta ahí abajo se lee encima de los meses.
-        const BOX_H=14, PASO=BOX_H+3, MARGIN=6, ALTO_EJE=26, INTENTOS=4, SEPARACION=10
+        const BOX_H=14, PASO=BOX_H+3, MARGIN=6, ALTO_EJE=26, INTENTOS=4
         const yMin=MARGIN+BOX_H/2, yMax=chartH-ALTO_EJE-BOX_H/2
         const colocadas=[]
         const solapa=(a,b)=>a.x1<b.x2+3&&a.x2>b.x1-3&&a.y1<b.y2+2&&a.y2>b.y1-2
@@ -558,15 +560,11 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
               const w=txt.length*6.2+10            // ancho ajustado al contenido real
               // Acotada a los lados: ni medio cortada por el borde ni pisando el eje de precios.
               const cx=Math.min(Math.max(cxCrudo,w/2+2),chartW-w/2-2)
-              // Altura de partida: el precio medio del tramo, que es donde pasa su línea de color. Si no
-              // se puede calcular —precios ausentes—, se cae a la banda de siempre.
-              const pyMid=(t.entryPx!=null&&t.exitPx!=null)
-                ? candlesRef.current.priceToCoordinate((t.entryPx+t.exitPx)/2) : null
-              const base=pyMid!=null?pyMid:(isWin?yMin:yMax)
-              const dir=isWin?-1:1
+              // Siempre desde la banda de arriba y bajando: es la zona despejada del gráfico, por encima
+              // del recorrido del precio. Ganadoras y perdedoras comparten banda; las distingue el color.
               let caja=null
               for(let i=0;i<INTENTOS;i++){
-                const y=Math.min(Math.max(base+dir*(SEPARACION+i*PASO),yMin),yMax)
+                const y=Math.min(Math.max(yMin+i*PASO,yMin),yMax)
                 const c={x1:cx-w/2,x2:cx+w/2,y1:y-BOX_H/2,y2:y+BOX_H/2,y}
                 if(!colocadas.some(o=>solapa(c,o))){ caja=c; break }
               }
@@ -642,8 +640,10 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
       ;(indicadores||[]).forEach(ind=>{
         if(!ind?.data?.length) return
         try{
+          // Sin `title`: lightweight-charts lo flota junto al último punto de la serie, en medio del
+          // área y encima de las velas. El nombre se pinta en la fila de leyenda de la cabecera.
           const s=chart.addLineSeries({color:ind.color||'#ffd166',lineWidth:ind.lineWidth||1,
-            lastValueVisible:false,priceLineVisible:false,title:ind.name||''})
+            lastValueVisible:false,priceLineVisible:false})
           s.setData(ind.data)
           indSeriesRef.current.push(s)
         }catch(_){}
