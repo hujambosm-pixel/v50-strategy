@@ -1277,6 +1277,8 @@ export default function Home() {
   const [mcDetalleActivo,setMcDetalleActivo]=useState(null)
   const [mcVerIndicadores,setMcVerIndicadores]=useState(true)
   const [mcVerFranjas,setMcVerFranjas]=useState(true)
+  const [mcPantallaCompleta,setMcPantallaCompleta]=useState(false)
+  const [mcAltoVentana,setMcAltoVentana]=useState(0)   // alto útil en pantalla completa
   const mcDetallePedidoRef=useRef(null)   // clave de la última petición lanzada
   const [mcShowBHCompare,setMcShowBHCompare]=useState(true) // B&H curve toggle in multi-strategy chart
   // Estrategia vigente en el HISTORIAL de operaciones. Fuente ÚNICA: la usan el propio historial y el
@@ -1464,6 +1466,21 @@ export default function Home() {
     const z=mcDetalleActivo?.filterZones
     return z?.length?z:null
   },[mcDetalleActivo,mcVerFranjas])
+  // Pantalla completa del panel de operaciones: Escape para salir y el alto de la ventana para repartirlo
+  // entre los dos gráficos. Las dos escuchas se quitan en el return; sin eso quedarían vivas al salir y
+  // Escape seguiría deseleccionando desde cualquier parte de la app.
+  useEffect(()=>{
+    if(!mcPantallaCompleta) return
+    const mide=()=>setMcAltoVentana(prev=>{const h=window.innerHeight;return prev===h?prev:h})
+    const tecla=(e)=>{ if(e.key==='Escape') setMcPantallaCompleta(false) }
+    mide()
+    window.addEventListener('resize',mide)
+    window.addEventListener('keydown',tecla)
+    return ()=>{ window.removeEventListener('resize',mide); window.removeEventListener('keydown',tecla) }
+  },[mcPantallaCompleta])
+  // Salir de pantalla completa al soltar la selección: el panel desaparece y dejar el modo encendido
+  // dejaría la app cubierta por un overlay vacío.
+  useEffect(()=>{ if(!mcActivoSel&&mcPantallaCompleta) setMcPantallaCompleta(false) },[mcActivoSel,mcPantallaCompleta])
   // Valor de la línea de referencia del gráfico grande: el nivel de "ni gano ni pierdo", que depende de
   // QUÉ dibujan las series. En Estrategias son patrimonio y ese nivel es el capital inicial; en Activos
   // son beneficio con origen en cero, así que el nivel es CERO. Poner ahí el capital —lo que se hacía
@@ -1753,7 +1770,7 @@ export default function Home() {
     const ro=mcHeaderRef.current?new ResizeObserver(()=>recompute()):null
     if(ro&&mcHeaderRef.current) ro.observe(mcHeaderRef.current)
     return ()=>{ cancelAnimationFrame(raf); window.removeEventListener('resize',recompute); ro?.disconnect() }
-  },[sidePanel,mcDisplayResults,mcResult,mcPorActivo,mcSeriesActivos])
+  },[sidePanel,mcDisplayResults,mcResult,mcPorActivo,mcSeriesActivos,mcPantallaCompleta])
 
   // ── Altura del gráfico: 100% CSS puro (sin JS) ──
   // watchlist → chart-wrap height:calc(100vh-64px) dentro de contentRef (scroll-container); el resto
@@ -5259,7 +5276,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.785</title>
+        <title>Trading Simulator V9.786</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5337,7 +5354,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.785
+            <span className="dot"/>Trading Simulator V9.786
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -8592,7 +8609,13 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                 })()}
 
                 {/* ── Equity — misma estructura que activos individuales ── */}
-                <div className="equity-section" data-chart="equity">
+                {/* En pantalla completa la sección se saca del flujo y cubre la ventana: se lleva consigo
+                    su cabecera —símbolo, estrategia, rendimiento, interruptores y periodo completo— y los
+                    dos gráficos, que son hijos suyos. Nada se desmonta: solo cambia dónde se dibuja. */}
+                <div className="equity-section" data-chart="equity"
+                  style={(mcPanelActivo&&mcPantallaCompleta)?{position:'fixed',inset:0,zIndex:60,
+                    background:'var(--bg)',padding:'8px 12px',overflow:'hidden',
+                    display:'flex',flexDirection:'column'}:undefined}>
                   {/* Cabecera en DOS grupos. El de fuera NO envuelve: así el botón de periodo completo se
                       queda siempre en la primera línea, pegado a la derecha, sin necesidad del marginLeft
                       automático de antes. Todo lo demás vive en el grupo izquierdo, que es quien envuelve
@@ -8655,6 +8678,14 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           {etq}
                         </button>
                       ))}
+                      <button onClick={()=>setMcPantallaCompleta(v=>!v)}
+                        title={mcPantallaCompleta?'Salir de pantalla completa (Escape)':'Ver a pantalla completa'}
+                        style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',
+                          alignSelf:'center',border:`1px solid ${mcPantallaCompleta?'#00d4ff':'#1a2d45'}`,
+                          background:mcPantallaCompleta?'rgba(0,212,255,0.12)':'transparent',
+                          color:mcPantallaCompleta?'#00d4ff':'#7a9bc0'}}>
+                        {mcPantallaCompleta?'⤡ Salir':'⤢ Pantalla completa'}
+                      </button>
                       <button onClick={()=>setMcActivoSel(null)} title="Volver al gráfico de equity"
                         style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',
                           border:'1px solid #1a2d45',background:'transparent',color:'#7a9bc0',alignSelf:'center'}}>
@@ -8837,7 +8868,12 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                     // Reparto del alto: el header propio de las velas se descuenta primero, y el resto va
                     // 75/25. La suma es exacta, no aproximada, para que no sobre ni falte un píxel.
                     const ALTO_CABECERA_VELAS=30
-                    const util=Math.max(180,mcEquityH-ALTO_CABECERA_VELAS)
+                    // En pantalla completa manda la ventana, descontando la cabecera de la sección; si no,
+                    // el alto que ya calcula el autoajuste de siempre.
+                    const base=mcPantallaCompleta&&mcAltoVentana
+                      ?mcAltoVentana-(mcHeaderRef.current?.offsetHeight||34)-24
+                      :mcEquityH
+                    const util=Math.max(180,base-ALTO_CABECERA_VELAS)
                     const hVelas=Math.round(util*0.75)
                     const hCurva=util-hVelas
                     return(
