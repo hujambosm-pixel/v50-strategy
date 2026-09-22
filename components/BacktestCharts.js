@@ -387,7 +387,10 @@ export function StratCompareChart({curves,capitalIni,showMaxDD=true,chartHeight=
 // stratSignals: [{id, name, color, entries:[{date,price}], exits:[{date,price}]}]
 // syncRef: {isSyncing:bool, charts:[], lastRange} — shared across all instances for logical-range sync
 const _MONO='"Roboto Mono",monospace'
-export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef,onReady}) {
+// `rangoVisible` {from,to} acota el rango que se ve al construir el chart. Sin él se hace fitContent, que
+// es lo de siempre y lo que hace la parrilla. Sirve para dejar fuera las velas posteriores al periodo
+// simulado: /api/chartdata solo sabe descargar hacia atrás desde hoy, así que en modo Fechas trae de más.
+export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef,onReady,rangoVisible=null}) {
   const containerRef=useRef(null)
   const chartDivRef=useRef(null)
   const chartRef=useRef(null)
@@ -564,6 +567,9 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
 
       // ── fitContent first, then apply sync range ──
       chart.timeScale().fitContent()
+      if(rangoVisible?.from&&rangoVisible?.to){
+        try{chart.timeScale().setVisibleRange({from:rangoVisible.from,to:rangoVisible.to})}catch(_){}
+      }
       // ── Logical-range sync — set up AFTER data is loaded ──
       // Uses direct chart instance array + isSyncing flag to avoid callback-chain loops
       if(syncRef?.current){
@@ -608,7 +614,7 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
       tradeSeriesMapRef.current=new Map()
       if(chartRef.current){chartRef.current.__syncCleanup?.();try{chartRef.current.remove()}catch(_){};chartRef.current=null}
     }
-  },[ohlcv,stratSignals,height])
+  },[ohlcv,stratSignals,height,rangoVisible])
 
   return(
     <div ref={containerRef} data-mcsym={symbol} style={{borderBottom:'1px solid var(--border)'}}>

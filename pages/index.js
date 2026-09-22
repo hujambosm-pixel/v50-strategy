@@ -1069,6 +1069,11 @@ export default function Home() {
   const [mcEquityH,setMcEquityH]=useState(300) // resizable MC equity chart height
   const mcEquityContainerRef=useRef(null)  // mide el hueco disponible para autoajustar mcEquityH
   const mcHeaderRef=useRef(null)           // cabecera del gráfico: al envolver cambia de alto y mueve el hueco
+  // Refs LOCALES del panel de operaciones. Deliberadamente fuera de mcChartRefsMap y mcChartsSyncRef: esos
+  // son de la parrilla, y registrar aquí el mismo símbolo pisaría su instancia y mandaría la navegación
+  // desde el historial al gráfico equivocado.
+  const mcPanelVelasRef=useRef(null)       // chart de velas del panel
+  const mcPanelCurvaRef=useRef(null)       // api {fitAll} de la curva del panel
   const sidebarResizing=useRef(false), rightResizing=useRef(false)
   const sidebarStartX=useRef(0), sidebarStartW=useRef(0)
   const rightStartX=useRef(0), rightStartW=useRef(0)
@@ -1360,12 +1365,44 @@ export default function Home() {
       ??COLORES_ACTIVO[0]
     return [{id:`twr__${sym}`,name:sym,color,data,show:true,maxDD:0,maxDDDate:null,taxByDate:null}]
   },[mcActivoSel,mcHistSel,mcSeriesActivos])
+  // ── Panel de operaciones del activo seleccionado ──────────────────────────────────────────────
+  // Manda sobre el área del gráfico grande mientras haya selección. La condición incluye la curva: sin
+  // ella no hay nada que enseñar y es mejor dejar el equity como estaba.
+  const mcPanelActivo=!!(mcActivoSel&&mcCurvaActivoSel)
+  // Nombre de la estrategia que se está mirando, el mismo que rotula el selector y el historial.
+  const mcNombreStratSel=mcDisplayResults.find(r=>r.id===mcHistIdVigente)?.name||mcSingleStratName
+  // Periodo REAL del backtest, tomado de la propia curva del activo: es el eje del motor, no las fechas
+  // tecleadas. Acota lo que se ve en las velas, que llegan hasta hoy aunque el periodo acabara antes.
+  const mcRangoBacktest=useMemo(()=>{
+    const d=mcCurvaActivoSel?.[0]?.data
+    if(!d?.length) return null
+    return {from:d[0].date,to:d[d.length-1].date}
+  },[mcCurvaActivoSel])
   // Operaciones ejecutadas del activo seleccionado, las mismas que alimentan su fila de la tabla.
   const mcTradesActivoSel=useMemo(()=>{
     const sym=mcActivoSel?.symbol
     if(!sym) return []
     return (mcHistSel.histResult?.allTrades||[]).filter(t=>t.symbol===sym)
   },[mcActivoSel,mcHistSel])
+  // Señales para el gráfico de velas: una sola estrategia, la seleccionada. Memorizado porque el efecto
+  // de AssetSignalChart depende de este array por identidad y lo reconstruiría en cada render.
+  const mcSignalsActivoSel=useMemo(()=>{
+    if(!mcActivoSel||!mcCurvaActivoSel) return null
+    const c=mcCurvaActivoSel[0]
+    return [{
+      id:'__sel__',name:mcNombreStratSel,color:c.color,
+      entryColor:'#00e5a0',exitColor:'#ff4d6d',
+      entries:mcTradesActivoSel.map(t=>({date:t.entryDate,price:t.entryPx??t.entryPrice})),
+      exits:mcTradesActivoSel.map(t=>({date:t.exitDate,price:t.exitPx??t.exitPrice})),
+      trades:mcTradesActivoSel.map((t,idx)=>({
+        n:idx+1,
+        entryDate:t.entryDate,entryPx:t.entryPx??t.entryPrice,
+        exitDate:t.exitDate,exitPx:t.exitPx??t.exitPrice,
+        pnlPct:t.pnlPct,pnlSimple:t.pnlSimple,
+        capital:t.pnlPct!==0?Math.abs(t.pnlSimple/(t.pnlPct/100)):0,
+      })),
+    }]
+  },[mcActivoSel,mcCurvaActivoSel,mcTradesActivoSel,mcNombreStratSel])
   // Valor de la línea de referencia del gráfico grande: el nivel de "ni gano ni pierdo", que depende de
   // QUÉ dibujan las series. En Estrategias son patrimonio y ese nivel es el capital inicial; en Activos
   // son beneficio con origen en cero, así que el nivel es CERO. Poner ahí el capital —lo que se hacía
@@ -5161,7 +5198,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.780</title>
+        <title>Trading Simulator V9.781</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5239,7 +5276,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.780
+            <span className="dot"/>Trading Simulator V9.781
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -8502,6 +8539,37 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       toggles de series caen a una segunda línea DENTRO del grupo y no desplazan nada. */}
                   <div ref={mcHeaderRef} className="section-title" style={{display:'flex',alignItems:'flex-start',gap:6,fontSize:14}}>
                     <div style={{display:'flex',alignItems:'flex-start',flexWrap:'wrap',gap:6,flex:1,minWidth:0}}>
+                    {/* Con un activo seleccionado, el área del gráfico grande pasa a ser suya y la cabecera
+                        lo dice. Los controles del equity —conmutador, Flotante, impuestos, toggles— se
+                        ocultan en bloque: no gobiernan nada mientras no se dibuja el equity. Al quitar la
+                        selección vuelven tal cual estaban, en el mismo modo, porque su estado no se toca. */}
+                    {mcPanelActivo?(<>
+                      <span>Operaciones</span>
+                      <span style={{display:'inline-flex',alignItems:'center',gap:5,fontFamily:MONO,fontSize:11,
+                        fontWeight:600,color:mcCurvaActivoSel[0].color}}>
+                        <span style={{width:8,height:8,borderRadius:2,background:mcCurvaActivoSel[0].color}}/>
+                        {mcActivoSel.symbol}
+                      </span>
+                      <span style={{fontFamily:MONO,fontSize:10,fontWeight:400,color:'#8aadcc',alignSelf:'center'}}>
+                        {mcNombreStratSel}
+                      </span>
+                      {(()=>{
+                        const d=mcCurvaActivoSel[0].data
+                        const fin=d[d.length-1]?.value??0
+                        return(
+                          <span title="Rendimiento del dinero que la cartera tuvo invertido en este activo"
+                            style={{fontFamily:MONO,fontSize:12,fontWeight:700,alignSelf:'center',
+                              color:fin>=0?'#00e5a0':'#ff4d6d'}}>
+                            {fin>=0?'+':''}{fmt(fin,1,'%')}
+                          </span>
+                        )
+                      })()}
+                      <button onClick={()=>setMcActivoSel(null)} title="Volver al gráfico de equity"
+                        style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',
+                          border:'1px solid #1a2d45',background:'transparent',color:'#7a9bc0',alignSelf:'center'}}>
+                        ✕
+                      </button>
+                    </>):(<>
                     {/* El rótulo lo decide el mismo conmutador: en Activos no se dibuja patrimonio sino
                         beneficio, empezando todas las series en cero. La clase pone las mayúsculas. */}
                     <span>{mcPorActivo?'Profit':'Equity'}</span>
@@ -8646,15 +8714,56 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         )
                       })}
                     </>)}
+                    </>)}
                     </div>
-                    <button onClick={()=>mcChartApiRef.current?.fitAll()}
+                    {/* El mismo botón sirve a lo que haya: con selección devuelve los dos gráficos del panel
+                        al periodo del backtest, que es su "todo". */}
+                    <button onClick={()=>{
+                        if(mcPanelActivo){
+                          try{ if(mcRangoBacktest) mcPanelVelasRef.current?.timeScale().setVisibleRange(mcRangoBacktest) }catch(_){}
+                          mcPanelCurvaRef.current?.fitAll()
+                        }else{
+                          mcChartApiRef.current?.fitAll()
+                        }
+                      }}
                       style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',border:'1px solid #1a2d45',background:'rgba(0,212,255,0.07)',color:'#7a9bc0',flexShrink:0}}
                       title="Ver periodo completo">⊠ Periodo completo</button>
                   </div>
                   <div ref={mcEquityContainerRef} style={{position:'relative'}}>
-                  {/* Modo Activos: una serie por activo, la caja y la total. El array viene memorizado
-                      (mcCurvasActivos) porque el chart se recrea entero cada vez que cambia de identidad. */}
-                  {mcPorActivo&&mcCurvasActivos?(
+                  {/* Con un activo seleccionado, este hueco es suyo: arriba sus velas con las operaciones
+                      EJECUTADAS por la estrategia, abajo una franja con su rendimiento dentro de la cartera.
+                      Los dos altos se reparten mcEquityH y suman exactamente lo disponible, así que el panel
+                      no desborda y el recálculo de altura existente sigue mandando.
+                      Los dos gráficos NO están sincronizados entre sí, y es una decisión, no un olvido:
+                      AssetSignalChart sincroniza por rango LÓGICO —índices de vela— y StratCompareChart por
+                      rango de FECHAS, y sus ejes no son el mismo: uno tiene una vela diaria por barra y el
+                      otro ~400 fechas muestreadas. El índice 50 no significa lo mismo en los dos, así que
+                      encajarlos exigiría reescribir el protocolo de sincronía de ambos componentes. Y en una
+                      sola dirección tampoco: StratCompareChart no expone su chart —solo fitAll y el ancho del
+                      eje—, así que nada de fuera puede mover su escala de tiempo. En su lugar, los dos
+                      arrancan acotados al periodo del backtest, que es la parte que importa. */}
+                  {mcPanelActivo?(()=>{
+                    // Reparto del alto: el header propio de las velas se descuenta primero, y el resto va
+                    // 75/25. La suma es exacta, no aproximada, para que no sobre ni falte un píxel.
+                    const ALTO_CABECERA_VELAS=30
+                    const util=Math.max(180,mcEquityH-ALTO_CABECERA_VELAS)
+                    const hVelas=Math.round(util*0.75)
+                    const hCurva=util-hVelas
+                    return(
+                      <div>
+                        <AssetSignalChart symbol={mcActivoSel.symbol}
+                          stratSignals={mcSignalsActivoSel}
+                          years={mcAniosVelas}
+                          height={hVelas}
+                          rangoVisible={mcRangoBacktest}
+                          onReady={({chart})=>{mcPanelVelasRef.current=chart}}/>
+                        {/* Referencia en 0: la curva es rendimiento, no patrimonio. */}
+                        <StratCompareChart curves={mcCurvaActivoSel} capitalIni={0} showMaxDD={false}
+                          chartHeight={hCurva} formato="pct"
+                          onReady={api=>{mcPanelCurvaRef.current=api}}/>
+                      </div>
+                    )
+                  })():mcPorActivo&&mcCurvasActivos?(
                     <StratCompareChart
                       curves={mcCurvasActivos}
                       capitalIni={mcRefEquity}
@@ -9102,67 +9211,6 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                     </div>
                     )}
                   </div>
-                  )
-                })()}
-                {/* ── Panel del activo seleccionado ─────────────────────────────────────────────
-                    Va ANTES de la parrilla y fuera de su cabecera colapsable: aparece al seleccionar una
-                    fila de activo en la tabla y tiene que verse aunque la parrilla esté plegada.
-                    A la izquierda, el rendimiento del dinero que la cartera tuvo invertido en ese activo:
-                    ponderado por tiempo, plano los días sin posición y a precio de mercado los días con
-                    posición. No es su beneficio en euros —eso es la contribución del modo Activos— ni el
-                    buy and hold del activo. A la derecha, sus velas con las entradas y salidas. */}
-                {mcActivoSel&&mcCurvaActivoSel&&(()=>{
-                  const serie=mcCurvaActivoSel[0]
-                  const final=serie.data[serie.data.length-1]?.value??0
-                  return(
-                    <div style={{borderTop:'1px solid var(--border)',background:'var(--bg2)'}}>
-                      <div style={{padding:'7px 16px',display:'flex',alignItems:'center',gap:8,
-                        borderBottom:'1px solid var(--border)'}}>
-                        <div style={{width:8,height:8,borderRadius:2,background:serie.color,flexShrink:0}}/>
-                        <span style={{fontFamily:MONO,fontSize:11,color:'#c8dff5',fontWeight:600,letterSpacing:'0.05em'}}>
-                          {serie.name} · RENDIMIENTO DENTRO DE LA CARTERA
-                        </span>
-                        <span style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:final>=0?'#00e5a0':'#ff4d6d'}}>
-                          {final>=0?'+':''}{fmt(final,1,'%')}
-                        </span>
-                        <span style={{fontFamily:MONO,fontSize:9,color:'#4a6a88'}}>
-                          solo operaciones ejecutadas · plano fuera de mercado
-                        </span>
-                        <button onClick={()=>setMcActivoSel(null)}
-                          title="Quitar la selección"
-                          style={{marginLeft:'auto',fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,
-                            cursor:'pointer',border:'1px solid #1a2d45',background:'transparent',color:'#7a9bc0',flexShrink:0}}>
-                          ✕ Quitar
-                        </button>
-                      </div>
-                      <div style={{display:'flex',flexWrap:'wrap',gap:10,padding:'10px 16px'}}>
-                        <div style={{flex:'1 1 360px',minWidth:0}}>
-                          {/* Referencia en 0: la curva es rendimiento, no patrimonio. */}
-                          <StratCompareChart curves={mcCurvaActivoSel} capitalIni={0} showMaxDD={false}
-                            chartHeight={320} formato="pct"/>
-                        </div>
-                        <div style={{flex:'1 1 360px',minWidth:0}}>
-                          {/* Sin syncRef ni onReady a propósito: esta instancia NO se registra en los refs
-                              de la parrilla, para no pisar la del mismo símbolo que ya hay allí. */}
-                          <AssetSignalChart symbol={serie.name}
-                            stratSignals={[{
-                              id:'__sel__',name:serie.name,color:serie.color,
-                              entryColor:'#00e5a0',exitColor:'#ff4d6d',
-                              entries:mcTradesActivoSel.map(t=>({date:t.entryDate,price:t.entryPx??t.entryPrice})),
-                              exits:mcTradesActivoSel.map(t=>({date:t.exitDate,price:t.exitPx??t.exitPrice})),
-                              trades:mcTradesActivoSel.map((t,idx)=>({
-                                n:idx+1,
-                                entryDate:t.entryDate,entryPx:t.entryPx??t.entryPrice,
-                                exitDate:t.exitDate,exitPx:t.exitPx??t.exitPrice,
-                                pnlPct:t.pnlPct,pnlSimple:t.pnlSimple,
-                                capital:t.pnlPct!==0?Math.abs(t.pnlSimple/(t.pnlPct/100)):0,
-                              })),
-                            }]}
-                            years={mcAniosVelas}
-                            height={320}/>
-                        </div>
-                      </div>
-                    </div>
                   )
                 })()}
                 {/* ── Vista de gráficos — una o varias estrategias ── */}
