@@ -5041,7 +5041,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.767</title>
+        <title>Trading Simulator V9.768</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5119,7 +5119,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.767
+            <span className="dot"/>Trading Simulator V9.768
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -8083,16 +8083,16 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               {[
                                 {h:'Estrategia / Activo',t:''},
                                 {h:'Ops',t:'Número total de operaciones cerradas en el período'},
-                                {h:'CAGR',t:'Tasa de crecimiento anual compuesta. Fórmula: (capital_final / capital_inicial)^(1/años) − 1'},
-                                {h:'G.Comp€',t:'Ganancia compuesta en euros. Las ganancias de cada trade se reinvierten en el siguiente'},
-                                {h:'G.Comp%',t:'Ganancia compuesta en porcentaje sobre el capital inicial asignado a este slot'},
+                                {h:'CAGR',t:'Tasa de crecimiento anual compuesta sobre el capital inicial de la estrategia: (capital_inicial + G.Comp€)^(1/años) / capital_inicial^(1/años) − 1. En una fila de activo anualiza su CONTRIBUCIÓN, con los mismos años y la misma base que su estrategia: no es el rendimiento del capital que se le asignó.'},
+                                {h:'G.Comp€',t:'Ganancia compuesta en euros. Las ganancias de cada trade se reinvierten en el siguiente. La suma de las filas de activo da la de su estrategia.'},
+                                {h:'G.Comp%',t:'Ganancia compuesta sobre el CAPITAL INICIAL de la estrategia, la misma base en los cuatro modos de asignación. En una fila de activo es su contribución a la cartera, no el rendimiento del capital que se le asignó; por eso los porcentajes de los activos suman el de la estrategia.'},
                                 {h:'Win%',t:'Porcentaje de operaciones cerradas con ganancia sobre el total'},
                                 {h:'Profit Factor',t:'Factor de Beneficio: suma de ganancias / suma de pérdidas. Por encima de 1 la estrategia es rentable'},
-                                {h:'Max DD',t:'Máxima caída desde un pico hasta el valle siguiente, incluyendo pérdidas no realizadas dentro de cada trade (calculado siempre con P&L flotante)'},
-                                {h:'Max DD €',t:'Importe en euros de la máxima caída: equity en el valle − equity en el pico (mismos dos puntos que el Max DD %). Siempre negativo.'},
-                                {h:'Cap.inv€',t:'Capital total invertido en este activo a lo largo del backtest: suma del capital de entrada de todas sus operaciones ejecutadas.'},
-                                {h:'Cap.inv%',t:'Ocupación media del capital: porcentaje medio diario del capital total desplegado en posiciones abiertas. 100% = todo el capital invertido todos los días.'},
-                                {h:'T.inv%',t:'Tiempo en mercado: porcentaje de días del período con al menos una posición abierta (estrategia) o con ese activo en cartera (por activo).'},
+                                {h:'Max DD',t:'Máxima caída desde un pico hasta el valle siguiente, con P&L flotante y medida día a día sobre TODAS las barras del periodo, no sobre las fechas que se dibujan. En una fila de activo se mide sobre capital inicial + contribución de ese activo, con el mismo cálculo que la estrategia.'},
+                                {h:'Max DD €',t:'Importe en euros de la máxima caída: patrimonio en el valle − patrimonio en el pico (los mismos dos días que el Max DD %). Siempre negativo.'},
+                                {h:'Cap.inv€',t:'Capital medio invertido en euros: media, sobre todos los días del periodo, del coste de las posiciones abiertas. Los días sin posición cuentan como cero. La suma de las filas de activo da la de su estrategia.'},
+                                {h:'Cap.inv%',t:'El mismo capital medio invertido, como porcentaje del patrimonio de la cartera día a día. 100% = todo el capital invertido todos los días. En una fila de activo el denominador sigue siendo el patrimonio de la ESTRATEGIA, así que los porcentajes de los activos suman el de su estrategia.'},
+                                {h:'T.inv%',t:'Tiempo en mercado: porcentaje de días del periodo con al menos una posición abierta (estrategia) o con ese activo en cartera (por activo). Cuenta sobre todas las barras del periodo, incluidas las operaciones que abren y cierran el mismo día.'},
                               ].map(({h,t})=>(
                                 <th key={h} title={t||undefined}
                                   style={{padding:'3px 6px',textAlign:'left',color:'var(--text3)',fontWeight:400,fontSize:9,
@@ -8196,7 +8196,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                     <td style={{padding:'5px 6px',color:pf>=1.5?'#00e5a0':pf>=1?'#ffd166':'#ff4d6d',fontWeight:600}}>{fmt(pf,2,'x')}</td>
                                     <td style={{padding:'5px 6px',color:'#ff4d6d',fontWeight:600}}>-{fmt(r.result.maxDDFloatCompound||r.result.maxDDCompound||0,1,'%')}</td>
                                     <td style={{padding:'5px 6px',color:'#ff4d6d',fontWeight:600}}>{(()=>{const e=r.result.maxDDFloatCompound?r.result.maxDDFloatCompoundEur:r.result.maxDDCompound?r.result.maxDDCompoundEur:0;return e?'-€'+Math.round(Math.abs(e)).toLocaleString('es-ES'):'€0'})()}</td>
-                                    <td style={{padding:'5px 6px',color:'#4a6a88'}}>—</td>
+                                    <td style={{padding:'5px 6px',color:'#7ab3cc',fontWeight:600}}>{r.result.avgCapOccupancyEur!=null?fmt(r.result.avgCapOccupancyEur,0,'€'):'—'}</td>
                                     <td style={{padding:'5px 6px',color:'#00d4ff',fontWeight:600}}>{fmt(avgCapInv,1,'%')}</td>
                                     <td style={{padding:'5px 6px',color:'#00d4ff',fontWeight:600}}>{fmt(avgTInv,1,'%')}</td>
                                   </tr>
@@ -8247,7 +8247,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                         <td style={{padding:'4px 6px',color:fBenef>=1.5?'#00e5a0':fBenef>=1?'#ffd166':'#ff4d6d'}}>{fmt(fBenef,2,'x')}</td>
                                         <td style={{padding:'4px 6px',color:'#ff4d6d'}}>{maxDD>0?'-'+fmt(maxDD,2,'%'):'0,00%'}</td>
                                         <td style={{padding:'4px 6px',color:'#ff4d6d'}}>{a.maxDDEur<0?'-€'+Math.round(Math.abs(a.maxDDEur)).toLocaleString('es-ES'):'€0'}</td>
-                                        <td style={{padding:'4px 6px',color:'#7ab3cc'}}>{a.capInvertidoTotal!=null?fmt(a.capInvertidoTotal,0,'€'):'—'}</td>
+                                        <td style={{padding:'4px 6px',color:'#7ab3cc'}}>{a.capInvMedioEur!=null?fmt(a.capInvMedioEur,0,'€'):'—'}</td>
                                         <td style={{padding:'4px 6px',color:'#9acce0'}}>{fmt(a.capInvMedio??0,1,'%')}</td>
                                         <td style={{padding:'4px 6px',color:'#9acce0'}}>{fmt(a.tInvertido??0,1,'%')}</td>
                                       </tr>

@@ -321,7 +321,7 @@ function buildSlotsCurves(assetResults, capitalIni) {
   return { simpleCurve, compoundCurve, bhCurve, occupancyCurve, startDate, floatSimpleCurve, floatCompoundCurve, tInvEstrategia, avgCapOccupancy, senalStats: senalStatsSlots,
     assetCurves: activosSlots.map(symbol => ({ symbol, data: seriesSlots[symbol] })), cashCurve,
     ..._calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni), ..._calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni),
-    ..._ddFlotanteCompuesto(_met), metricasActivo: _met.porActivo }
+    ..._ddFlotanteCompuesto(_met), avgCapOccupancyEur: _met.capInvEur, metricasActivo: _met.porActivo }
 }
 
 // ── Stop INICIAL de un trade — fuente ÚNICA para los cuatro modos de asignación ──
@@ -571,7 +571,7 @@ function buildCompartidoCurves(assetResults, capitalIni, symbolOrder = null) {
     ..._seriesPorActivoPool(sampledDates, executedTrades, allCandidates, capitalAtEntryMap, symbolDataMap, capitalIni),
     ..._calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni),
     ..._calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni),
-    ..._ddFlotanteCompuesto(_met), metricasActivo: _met.porActivo
+    ..._ddFlotanteCompuesto(_met), avgCapOccupancyEur: _met.capInvEur, metricasActivo: _met.porActivo
   }
 }
 
@@ -897,7 +897,7 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
     ..._seriesPorActivoPool(sampledDates, executedTrades, allCandidates, capitalAtEntryMap, symbolDataMap, capitalIni),
     ..._calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni),
     ..._calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni),
-    ..._ddFlotanteCompuesto(_met), metricasActivo: _met.porActivo
+    ..._ddFlotanteCompuesto(_met), avgCapOccupancyEur: _met.capInvEur, metricasActivo: _met.porActivo
   }
 }
 
@@ -1133,7 +1133,7 @@ function buildPositionSizingCurves(assetResults, capitalIni, sizeRules) {
     ..._seriesPorActivoPool(sampledDates, executedTrades, allCandidates, capitalAtEntryMap, symbolDataMap, capitalIni),
     ..._calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni),
     ..._calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni),
-    ..._ddFlotanteCompuesto(_met), metricasActivo: _met.porActivo
+    ..._ddFlotanteCompuesto(_met), avgCapOccupancyEur: _met.capInvEur, metricasActivo: _met.porActivo
   }
 }
 
@@ -1582,6 +1582,9 @@ function _calcPriceMaxDD(data, startDate) {
 //   T.inv     días del eje COMPLETO con posición abierta en ese activo.
 //   Cap.inv%  media diaria de (coste de lo abierto en el activo / patrimonio flotante de la ESTRATEGIA):
 //             mismo denominador para todos, así que los porcentajes por activo suman el de la estrategia.
+//   Cap.inv€  el mismo capital medio invertido, en euros. Sustituye a capInvertidoTotal, que sumaba el
+//             capital de entrada de todas las operaciones: rotación acumulada, el mismo euro contado
+//             tantas veces como se usara, y por eso salían 599.567 € con una cartera de 10.000 €.
 //   G.Comp€   sin cambios. En los modos de pool es la suma de resultados reales del activo; en Slots, lo
 //             que compuso su slot (capitalReinv − slotCapital). En ambos casos la suma por activos
 //             reproduce el beneficio de la estrategia, que es capitalIni + Σ de esos mismos términos.
@@ -1627,7 +1630,7 @@ function _assetStatsUnificado({ assetResults, ejecucionesPorActivo, metricasActi
         ganBH,
         priceMaxDD,
         priceMaxDDEur: slotCapital * priceMaxDDFactor,
-        capInvertidoTotal: esPool ? ejec.reduce((s, t) => s + (t._capitalAtEntry || 0), 0) : ejec.length * slotCapital,
+        capInvMedioEur: m.capInvEur ?? 0,
         ...(conBreakdown ? { _stratBreakdown: (() => {
           const porStrat = new Map()
           ejec.forEach(t => {
