@@ -390,13 +390,17 @@ const _MONO='"Roboto Mono",monospace'
 // `rangoVisible` {from,to} acota el rango que se ve al construir el chart. Sin él se hace fitContent, que
 // es lo de siempre y lo que hace la parrilla. Sirve para dejar fuera las velas posteriores al periodo
 // simulado: /api/chartdata solo sabe descargar hacia atrás desde hoy, así que en modo Fechas trae de más.
-export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef,onReady,rangoVisible=null}) {
+// `indicadores` [{name,color,lineWidth,data:[{time,value}]}] y `zonasFiltro` [{from,to}] son OPCIONALES:
+// sin ellas el componente hace exactamente lo de siempre, que es lo que sigue haciendo la parrilla.
+export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef,onReady,rangoVisible=null,
+  indicadores=null,zonasFiltro=null}) {
   const containerRef=useRef(null)
   const chartDivRef=useRef(null)
   const chartRef=useRef(null)
   const svgRef=useRef(null)
   const candlesRef=useRef(null)
   const tradeSeriesMapRef=useRef(new Map())
+  const indSeriesRef=useRef([])          // series de indicadores, para soltarlas en la limpieza
   const roRef=useRef(null)
   const pedidoRef=useRef(null)     // clave `símbolo|años` de la última descarga pedida
   const [inView,setInView]=useState(false)
@@ -563,7 +567,49 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
           })
         })
       }
-      const unsubLabels=chart.timeScale().subscribeVisibleTimeRangeChange(()=>setTimeout(drawTradeLabels,30))
+      // ── Indicadores de la estrategia ──────────────────────────────────────────────────────
+      // Series normales de lightweight-charts, no SVG: son datos con su escala, no decoración. Quedan
+      // registradas para soltarlas en la limpieza del efecto, igual que los tramos de operación.
+      indSeriesRef.current=[]
+      ;(indicadores||[]).forEach(ind=>{
+        if(!ind?.data?.length) return
+        try{
+          const s=chart.addLineSeries({color:ind.color||'#ffd166',lineWidth:ind.lineWidth||1,
+            lastValueVisible:false,priceLineVisible:false,title:ind.name||''})
+          s.setData(ind.data)
+          indSeriesRef.current.push(s)
+        }catch(_){}
+      })
+
+      // ── Franjas donde el filtro impedía entrar ────────────────────────────────────────────
+      // Rectángulos en la capa SVG, no series: ocupan todo el alto y no deben participar en la escala de
+      // precios. Mismo patrón que drawFilterZones de CandleChart, incluido el insertBefore para que
+      // queden DETRÁS de marcadores y etiquetas.
+      const drawFilterZones=()=>{
+        const svg=svgRef.current
+        if(!svg||!chartRef.current) return
+        svg.querySelectorAll('.filter-zone').forEach(el=>el.remove())
+        if(!zonasFiltro?.length) return
+        const ts=chartRef.current.timeScale()
+        const w=chartDivRef.current?.clientWidth||800
+        const h=chartDivRef.current?.clientHeight||height
+        const NSZ='http://www.w3.org/2000/svg'
+        zonasFiltro.forEach(z=>{
+          try{
+            const x1=ts.timeToCoordinate(z.from), x2=ts.timeToCoordinate(z.to)
+            if(x1==null&&x2==null) return
+            const left=x1!=null?Math.max(0,x1):0
+            const right=x2!=null?Math.min(w,x2):w
+            if(right<=left) return
+            const rect=document.createElementNS(NSZ,'rect')
+            Object.entries({x:String(left),y:'0',width:String(right-left),height:String(h),
+              fill:'rgba(255,80,80,0.13)',class:'filter-zone','pointer-events':'none'})
+              .forEach(([k,v])=>rect.setAttribute(k,v))
+            svg.insertBefore(rect,svg.firstChild)
+          }catch(_){}
+        })
+      }
+      const unsubLabels=chart.timeScale().subscribeVisibleTimeRangeChange(()=>setTimeout(()=>{drawTradeLabels();drawFilterZones()},30))
 
       // ── fitContent first, then apply sync range ──
       chart.timeScale().fitContent()
@@ -595,12 +641,12 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
           if(syncRef.current) syncRef.current.charts=syncRef.current.charts.filter(c=>c!==chart)
         }
       }
-      setTimeout(drawTradeLabels,100)
+      setTimeout(()=>{drawTradeLabels();drawFilterZones()},100)
       if(roRef.current){try{roRef.current.disconnect()}catch(_){}}
       const ro=new ResizeObserver(()=>{
         if(chartDivRef.current&&chartRef.current){
           try{chart.applyOptions({width:chartDivRef.current.clientWidth})}catch(_){}
-          setTimeout(drawTradeLabels,30)
+          setTimeout(()=>{drawTradeLabels();drawFilterZones()},30)
         }
       })
       ro.observe(chartDivRef.current)
@@ -610,11 +656,13 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
       cancelled=true
       if(roRef.current){try{roRef.current.disconnect()}catch(_){};roRef.current=null}
       svgRef.current?.querySelectorAll('.trade-label').forEach(el=>el.remove())
+      svgRef.current?.querySelectorAll('.filter-zone').forEach(el=>el.remove())
       candlesRef.current=null
       tradeSeriesMapRef.current=new Map()
+      indSeriesRef.current=[]
       if(chartRef.current){chartRef.current.__syncCleanup?.();try{chartRef.current.remove()}catch(_){};chartRef.current=null}
     }
-  },[ohlcv,stratSignals,height,rangoVisible])
+  },[ohlcv,stratSignals,height,rangoVisible,indicadores,zonasFiltro])
 
   return(
     <div ref={containerRef} data-mcsym={symbol} style={{borderBottom:'1px solid var(--border)'}}>

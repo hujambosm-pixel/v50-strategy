@@ -1272,6 +1272,12 @@ export default function Home() {
   // Activo seleccionado en la tabla comparativa: {stratId,symbol} o null. Manda el símbolo; stratId solo
   // dice qué fila se resalta y se resincroniza si cambia la estrategia del historial por otra vía.
   const [mcActivoSel,setMcActivoSel]=useState(null)
+  // Indicadores y franjas del activo seleccionado (/api/asset-detail). Van aparte del resultado del
+  // backtest porque se piden bajo demanda: a resolución diaria no caben los de todos los activos.
+  const [mcDetalleActivo,setMcDetalleActivo]=useState(null)
+  const [mcVerIndicadores,setMcVerIndicadores]=useState(true)
+  const [mcVerFranjas,setMcVerFranjas]=useState(true)
+  const mcDetallePedidoRef=useRef(null)   // clave de la última petición lanzada
   const [mcShowBHCompare,setMcShowBHCompare]=useState(true) // B&H curve toggle in multi-strategy chart
   // Estrategia vigente en el HISTORIAL de operaciones. Fuente ÚNICA: la usan el propio historial y el
   // modo Activos del gráfico, para que no puedan divergir. mcHistStratId null = la activa, que con
@@ -1403,6 +1409,59 @@ export default function Home() {
       })),
     }]
   },[mcActivoSel,mcCurvaActivoSel,mcTradesActivoSel,mcNombreStratSel])
+  // Qué estrategia ejecutar para sacar los indicadores. La fila puede llevar un id que no es una
+  // estrategia: '__portfolio__' agrega varias y no hay UN code_js que la represente, así que ahí no se
+  // piden —dibujar el de una cualquiera sería mentir sobre lo que esa fila resume—. El id sintético del
+  // caso de una sola estrategia se resuelve como en el resto del panel.
+  const mcIdStratDetalle=useMemo(()=>{
+    const sel=mcActivoSel?.stratId
+    if(sel&&strategies.some(s=>s.id===sel)) return sel
+    if(sel==='__portfolio__') return null
+    return (mcStratSelected.filter(Boolean)[0])||currentStratId||null
+  },[mcActivoSel,strategies,mcStratSelected,currentStratId])
+  // Petición del detalle. La clave pedida vive en un ref y no en una variable de cierre: una respuesta
+  // que llega tarde se compara con lo VIGENTE y se descarta si ya manda otro activo u otra estrategia.
+  // Un fallo no bloquea nada: el gráfico se queda sin indicadores y las velas se dibujan igual.
+  useEffect(()=>{
+    const sym=mcActivoSel?.symbol
+    if(!sym||!mcIdStratDetalle){ mcDetallePedidoRef.current=null; setMcDetalleActivo(null); return }
+    const cfg=mcPeriodMode==='range'
+      ?{capitalIni:Number(mcCapitalIni),fromDate:mcFromDate,toDate:mcToDate}
+      :{capitalIni:Number(mcCapitalIni),years:Number(mcYears)}
+    const clave=`${sym}|${mcIdStratDetalle}|${mcIntervalo}|${JSON.stringify(cfg)}`
+    if(mcDetallePedidoRef.current===clave) return
+    mcDetallePedidoRef.current=clave
+    setMcDetalleActivo(null)
+    const _strat=strategies.find(st=>st.id===mcIdStratDetalle)
+    ;(async()=>{
+      try{
+        const res=await apiFetch('/api/asset-detail',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({symbol:sym,strategyId:mcIdStratDetalle,cfg,intervalo:mcIntervalo,
+            filtros:filtrosBackend,isNoStrategy:(_strat?.name||'').includes('No Strategy')})})
+        const json=await res.json()
+        if(mcDetallePedidoRef.current!==clave) return    // llegó tarde: ya manda otra selección
+        setMcDetalleActivo(res.ok?json:null)
+      }catch(_){ if(mcDetallePedidoRef.current===clave) setMcDetalleActivo(null) }
+    })()
+  },[mcActivoSel,mcIdStratDetalle,mcIntervalo,mcPeriodMode,mcYears,mcFromDate,mcToDate,mcCapitalIni,strategies,filtrosBackend])
+  // Solo las series de escala PRECIO: un RSI de 0 a 100 o un volumen de millones en el eje del precio
+  // aplastan las velas contra el suelo. El endpoint manda la escala de cada una para no tener que saberla.
+  const mcIndicadoresActivo=useMemo(()=>{
+    if(!mcVerIndicadores||!mcDetalleActivo?.indicators) return null
+    const COLOR={emaR:'#ffd166',emaL:'#ff4d6d',ema3:'#9C27B0',bbUpper:'#2196F3',bbMid:'#FF6D00',bbLower:'#2196F3'}
+    const out=[]
+    for(const [clave,serie] of Object.entries(mcDetalleActivo.indicators)){
+      if(mcDetalleActivo.escalas?.[clave]!=='precio') continue
+      const data=saneaCurva(serie).map(p=>({time:p.date,value:p.value}))
+      if(data.length>1) out.push({name:clave,color:COLOR[clave]||'#8aadcc',lineWidth:1,data})
+    }
+    return out.length?out:null
+  },[mcDetalleActivo,mcVerIndicadores])
+  const mcZonasActivo=useMemo(()=>{
+    if(!mcVerFranjas) return null
+    const z=mcDetalleActivo?.filterZones
+    return z?.length?z:null
+  },[mcDetalleActivo,mcVerFranjas])
   // Valor de la línea de referencia del gráfico grande: el nivel de "ni gano ni pierdo", que depende de
   // QUÉ dibujan las series. En Estrategias son patrimonio y ese nivel es el capital inicial; en Activos
   // son beneficio con origen en cero, así que el nivel es CERO. Poner ahí el capital —lo que se hacía
@@ -5198,7 +5257,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.783</title>
+        <title>Trading Simulator V9.784</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5276,7 +5335,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.783
+            <span className="dot"/>Trading Simulator V9.784
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -8564,6 +8623,24 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           </span>
                         )
                       })()}
+                      {/* Los dos interruptores del detalle. Encendidos por defecto; si el detalle no
+                          llegó —la fila de Multicartera no tiene UNA estrategia, o la petición falló—
+                          se deshabilitan en vez de desaparecer, para que se vea que no hay nada. */}
+                      {[{on:mcVerIndicadores,set:setMcVerIndicadores,etq:'Indicadores',col:'#ffd166',
+                          hay:!!mcDetalleActivo?.indicators&&Object.keys(mcDetalleActivo.indicators).length>0},
+                        {on:mcVerFranjas,set:setMcVerFranjas,etq:'Filtro',col:'#ff5050',
+                          hay:!!mcDetalleActivo?.filterZones?.length}].map(({on,set,etq,col,hay})=>(
+                        <button key={etq} onClick={()=>hay&&set(v=>!v)} disabled={!hay}
+                          title={hay?(on?`Ocultar ${etq.toLowerCase()}`:`Mostrar ${etq.toLowerCase()}`)
+                            :`Sin ${etq.toLowerCase()} para esta selección`}
+                          style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,alignSelf:'center',
+                            cursor:hay?'pointer':'not-allowed',
+                            border:`1px solid ${hay&&on?col:'#24384d'}`,
+                            background:hay&&on?`${col}18`:'transparent',
+                            color:hay?(on?col:'#3d5a7a'):'#2b4257'}}>
+                          {etq}
+                        </button>
+                      ))}
                       <button onClick={()=>setMcActivoSel(null)} title="Volver al gráfico de equity"
                         style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',
                           border:'1px solid #1a2d45',background:'transparent',color:'#7a9bc0',alignSelf:'center'}}>
@@ -8756,6 +8833,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           years={mcAniosVelas}
                           height={hVelas}
                           rangoVisible={mcRangoBacktest}
+                          indicadores={mcIndicadoresActivo}
+                          zonasFiltro={mcZonasActivo}
                           onReady={({chart})=>{mcPanelVelasRef.current=chart}}/>
                         {/* Referencia en 0: la curva es rendimiento, no patrimonio. */}
                         <StratCompareChart curves={mcCurvaActivoSel} capitalIni={0} showMaxDD={false}
