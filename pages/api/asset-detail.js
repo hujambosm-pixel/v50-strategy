@@ -73,7 +73,7 @@ function zonasDeMapa(barras, filtroActivoMap) {
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
-  const { symbol, strategyId, cfg: cfgInput, intervalo, filtros: filtrosCfg, isNoStrategy = false } = req.body || {}
+  const { symbol, strategyId, cfg: cfgInput, intervalo, intervaloVelas, filtros: filtrosCfg, isNoStrategy = false } = req.body || {}
   if (!symbol) return res.status(400).json({ error: 'symbol requerido' })
   const cfg = cfgInput || {}
   // Testigo del paso en curso, para que un fallo diga DÓNDE se rompió y no solo qué excepción salió.
@@ -187,8 +187,13 @@ export default async function handler(req, res) {
     //    Las zonas no se proyectan: son rangos de fechas y el rectángulo los abarca igual, solo que con
     //    los bordes a resolución semanal, que es la resolución a la que el filtro decidió.
     paso = 'proyección semanal'
+    // La proyección solo hace falta si los dos ejes NO coinciden: con velas semanales encima de barras
+    // semanales, las series se dibujan directamente sobre su propio eje y quedan sin escalones. Esos
+    // escalones eran correctos sobre un eje diario —arrastrar el último valor cerrado— pero no son el
+    // indicador: son la traducción del indicador a otra rejilla.
+    const velasSemanales = (intervaloVelas ?? 'diario') === 'semanal'
     let intervaloSalida = esSemanal ? 'semanal' : 'diario'
-    if (esSemanal && Object.keys(series).length) {
+    if (esSemanal && !velasSemanales && Object.keys(series).length) {
       const diarias = await fetchData(symbol, cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, '1d')
       const fechasDiarias = diarias?.map(d => d.date) || []
       if (fechasDiarias.length) {
@@ -200,6 +205,9 @@ export default async function handler(req, res) {
           for (let i = 0; i < fechasDiarias.length; i++) if (finito(proyectada[i])) out.push({ date: fechasDiarias[i], value: proyectada[i] })
           if (out.length) series[clave] = out
         }
+        // Proyectadas: las fechas de salida ya son diarias, así que el intervalo que se anuncia es el de
+        // las series ENTREGADAS, no el de las barras con las que se calcularon.
+        intervaloSalida = 'diario'
       }
     }
 

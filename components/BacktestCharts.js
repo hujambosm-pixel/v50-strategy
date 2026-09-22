@@ -392,8 +392,10 @@ const _MONO='"Roboto Mono",monospace'
 // simulado: /api/chartdata solo sabe descargar hacia atrás desde hoy, así que en modo Fechas trae de más.
 // `indicadores` [{name,color,lineWidth,data:[{time,value}]}] y `zonasFiltro` [{from,to}] son OPCIONALES:
 // sin ellas el componente hace exactamente lo de siempre, que es lo que sigue haciendo la parrilla.
+// `intervalo` decide en qué marco temporal se piden las velas. 'diario' por defecto, que es lo que sigue
+// pidiendo la parrilla: solo el gráfico del activo seleccionado pide el del backtest.
 export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef,onReady,rangoVisible=null,
-  indicadores=null,zonasFiltro=null}) {
+  indicadores=null,zonasFiltro=null,intervalo='diario'}) {
   const containerRef=useRef(null)
   const chartDivRef=useRef(null)
   const chartRef=useRef(null)
@@ -426,13 +428,13 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
   // que llega tarde compara contra el valor VIGENTE y se descarta si ya manda otro símbolo.
   useEffect(()=>{
     if(!inView) return
-    const clave=`${symbol}|${years}`
+    const clave=`${symbol}|${years}|${intervalo}`
     if(pedidoRef.current===clave) return        // ya pedida: en vuelo o ya servida
     pedidoRef.current=clave
     // Vaciar antes de pedir: el efecto del chart depende de `ohlcv`, así que su limpieza tira el gráfico
     // anterior y la vista pasa a "Cargando". Sin esto quedarían a la vista las velas del símbolo viejo.
     setOhlcv(null); setErr(null); setLoading(true)
-    fetch(`/api/chartdata?symbol=${encodeURIComponent(symbol)}&years=${years}`)
+    fetch(`/api/chartdata?symbol=${encodeURIComponent(symbol)}&years=${years}&intervalo=${encodeURIComponent(intervalo)}`)
       .then(r=>r.json())
       .then(d=>{
         if(pedidoRef.current!==clave) return     // llegó tarde: ya se pidió otro símbolo
@@ -441,7 +443,7 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
         setLoading(false)
       })
       .catch(e=>{ if(pedidoRef.current!==clave) return; setErr(e.message); setLoading(false) })
-  },[inView,symbol,years])
+  },[inView,symbol,years,intervalo])
 
   // Build/rebuild chart when data or signals change
   useEffect(()=>{
