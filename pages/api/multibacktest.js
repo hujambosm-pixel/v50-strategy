@@ -9,7 +9,7 @@ import { fetchAV } from './datos'
 const SUPA_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPA_KEY = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-function calcEMA(values, period) {
+export function calcEMA(values, period) {
   if (!values?.length || period < 1) return []
   const k = 2 / (period + 1)
   const out = new Array(values.length).fill(null)
@@ -24,7 +24,7 @@ function calcEMA(values, period) {
   return out
 }
 // ── Align external close series to asset dates with forward-fill (for market filters) ──
-function buildAlignedCloses(externalData, assetDates) {
+export function buildAlignedCloses(externalData, assetDates) {
   if (!externalData?.length) return assetDates.map(()=>null)
   const closeMap = {}
   externalData.forEach(d => { closeMap[d.date] = d.close })
@@ -38,7 +38,7 @@ function buildAlignedCloses(externalData, assetDates) {
 }
 
 // ── Compute EMA on native weekly series then forward-fill to daily asset dates ──
-function buildAlignedWeekly(weeklyData, assetDates, emaPeriod) {
+export function buildAlignedWeekly(weeklyData, assetDates, emaPeriod) {
   if (!weeklyData?.length || !assetDates?.length)
     return { closes: assetDates.map(()=>null), ema: assetDates.map(()=>null) }
   // La regla de la última semana CERRADA (corregida en V9.709) vive ahora en proyectarSemanal, en
@@ -79,7 +79,7 @@ function rebuildCapitalTras(trades, initCapital) {
 // Adaptador sobre fetchAV (Stooq primario + Yahoo fallback, con timeouts) — MISMA fuente robusta
 // que los gráficos individuales (datos.js). Mantiene la firma de fetchData y el contrato null-on-failure
 // que espera multibacktest.js. Antes usaba solo Yahoo → NVDA y otros llegaban truncados (~21 may).
-async function fetchData(symbol, years=5, fromDate=null, toDate=null, interval='1d') {
+export async function fetchData(symbol, years=5, fromDate=null, toDate=null, interval='1d') {
   return (await fetchDataConMotivo(symbol, years, fromDate, toDate, interval)).data
 }
 // Igual que fetchData, pero sin reducir a null los casos sin velas: dice POR QUÉ no hay datos. Los activos
@@ -1631,7 +1631,7 @@ function buildTrades(rawTrades, capitalIni, allocationPct = 100) {
 
 // ── runCodeJsAsset: ejecuta code_js de una estrategia sobre un activo ──
 // Sandbox idéntica a datos.js. Si falla → { trades:[], indicators:{}, filterZones:[] }
-function runCodeJsAsset(data, sp500Data, codeJs, slotCapital, years, cfg) {
+export function runCodeJsAsset(data, sp500Data, codeJs, slotCapital, years, cfg) {
   try {
     const sp500Map = {}
     if (sp500Data) sp500Data.forEach(d => { sp500Map[d.date] = d.close })
