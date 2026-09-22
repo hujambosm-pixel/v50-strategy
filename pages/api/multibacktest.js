@@ -321,7 +321,7 @@ function buildSlotsCurves(assetResults, capitalIni) {
   return { simpleCurve, compoundCurve, bhCurve, occupancyCurve, startDate, floatSimpleCurve, floatCompoundCurve, tInvEstrategia, avgCapOccupancy, senalStats: senalStatsSlots,
     assetCurves: activosSlots.map(symbol => ({ symbol, data: seriesSlots[symbol] })), cashCurve,
     ..._calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni), ..._calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni),
-    ..._ddFlotanteCompuesto(_met) }
+    ..._ddFlotanteCompuesto(_met), metricasActivo: _met.porActivo }
 }
 
 // ── Stop INICIAL de un trade — fuente ÚNICA para los cuatro modos de asignación ──
@@ -571,7 +571,7 @@ function buildCompartidoCurves(assetResults, capitalIni, symbolOrder = null) {
     ..._seriesPorActivoPool(sampledDates, executedTrades, allCandidates, capitalAtEntryMap, symbolDataMap, capitalIni),
     ..._calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni),
     ..._calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni),
-    ..._ddFlotanteCompuesto(_met)
+    ..._ddFlotanteCompuesto(_met), metricasActivo: _met.porActivo
   }
 }
 
@@ -897,7 +897,7 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
     ..._seriesPorActivoPool(sampledDates, executedTrades, allCandidates, capitalAtEntryMap, symbolDataMap, capitalIni),
     ..._calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni),
     ..._calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni),
-    ..._ddFlotanteCompuesto(_met)
+    ..._ddFlotanteCompuesto(_met), metricasActivo: _met.porActivo
   }
 }
 
@@ -1133,7 +1133,7 @@ function buildPositionSizingCurves(assetResults, capitalIni, sizeRules) {
     ..._seriesPorActivoPool(sampledDates, executedTrades, allCandidates, capitalAtEntryMap, symbolDataMap, capitalIni),
     ..._calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni),
     ..._calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni),
-    ..._ddFlotanteCompuesto(_met)
+    ..._ddFlotanteCompuesto(_met), metricasActivo: _met.porActivo
   }
 }
 
@@ -1310,7 +1310,8 @@ function _calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni) {
 //
 // COSTE: una sola pasada por fechas, con punteros incrementales sobre las posiciones ordenadas por
 // entrada y por salida y un cursor de precio por posición. Nunca recorre todas las operaciones en cada
-// día —el patrón O(días × operaciones) de _calcAssetMaxDD—, sino O(días + Σ días abiertos).
+// día —recorrer todas las operaciones por barra es O(días × operaciones)—, sino O(días + Σ días
+// abiertos), que es lo que aguanta un periodo de 40 años con muchas operaciones.
 const _FIN = '9999-99-99'   // exitDate ausente = sigue abierta al final del periodo
 const _cmpFecha = (a, b) => a < b ? -1 : a > b ? 1 : 0
 
@@ -1570,42 +1571,94 @@ function _calcPriceMaxDD(data, startDate) {
   return { pct: maxDD, factor: p0 > 0 ? (ddValley - ddPeak) / p0 : 0 }
 }
 
-// ── Max Drawdown real + T.invertido + Cap.inv.medio con curva de precio diaria ──
-function _calcAssetMaxDD(trades, data, slotCapital, startDate) {
-  if (!data || data.length === 0) return { maxDD: 0, maxDDDate: null, tInvertido: 0, capInvMedio: 0 }
-  const filteredData = startDate ? data.filter(d => d.date >= startDate) : data
-  if (!filteredData.length) return { maxDD: 0, maxDDDate: null, tInvertido: 0, capInvMedio: 0 }
-  let peak = slotCapital, maxDD = 0, maxDDDate = null, lastCapital = slotCapital
-  let ddPeak = slotCapital, ddValley = slotCapital
-  let daysOpen = 0, sumCapInvRatio = 0, totalBars = 0
-  filteredData.forEach(bar => {
-    const date = bar.date, close = bar.close
-    const closed = trades.filter(t => t.exitDate && t.exitDate <= date)
-    if (closed.length > 0) { lastCapital = closed[closed.length - 1].capitalTras }
-    const open = trades.filter(t => t.entryDate <= date && (!t.exitDate || t.exitDate > date))
-    const openPnl = open.reduce((s, t) => {
-      const ep = t.entryPrice || t.entryPx
-      if (!ep || ep <= 0) return s
-      return s + ((close - ep) / ep) * (t.shares * ep)
-    }, 0)
-    const floatEquity = lastCapital + openPnl
-    if (floatEquity > peak) peak = floatEquity
-    if (peak > 0) { const dd = (peak - floatEquity) / peak * 100; if (dd > maxDD) { maxDD = dd; maxDDDate = date; ddPeak = peak; ddValley = floatEquity } }
-    totalBars++
-    if (open.length > 0) {
-      daysOpen++
-      const capInv = open.reduce((s, t) => s + (t.shares || 0) * close, 0)
-      sumCapInvRatio += slotCapital > 0 ? capInv / slotCapital : 0
-    }
+// ── assetStats: métricas por activo con UNA sola convención en los cuatro modos ───────────────
+// CONTRIBUCIÓN SOBRE EL CAPITAL INICIAL. La fila de un activo responde "cuánto aporta este activo a la
+// cartera", no "cómo le fue al capital que le tocó". Antes cada modo usaba su propia base —slotCapital en
+// Slots, el capital medio de entrada en Concentrado— y la fila del activo no se podía comparar ni con la
+// de su estrategia ni con la del mismo activo en otro modo.
+//   Max DD    sobre la curva `capital inicial + contribución del activo`, con la MISMA función que usa la
+//             estrategia (_metricasEjeCompleto). Con un único activo esa curva ES la de la estrategia,
+//             así que el Max DD sale idéntico por construcción, no por casualidad.
+//   T.inv     días del eje COMPLETO con posición abierta en ese activo.
+//   Cap.inv%  media diaria de (coste de lo abierto en el activo / patrimonio flotante de la ESTRATEGIA):
+//             mismo denominador para todos, así que los porcentajes por activo suman el de la estrategia.
+//   G.Comp€   sin cambios. En los modos de pool es la suma de resultados reales del activo; en Slots, lo
+//             que compuso su slot (capitalReinv − slotCapital). En ambos casos la suma por activos
+//             reproduce el beneficio de la estrategia, que es capitalIni + Σ de esos mismos términos.
+// `soloConEjecuciones` conserva el criterio de cada handler sobre qué filas existen: multicartera lista
+// los activos que han operado; el handler normal lista todos los pedidos.
+function _assetStatsUnificado({ assetResults, ejecucionesPorActivo, metricasActivo, slotCapital, startDate, esPool, pesoDe, conBreakdown, soloConEjecuciones }) {
+  const claves = [], refPorClave = {}
+  ;(assetResults || []).forEach(ar => {
+    const k = _claveActivo(ar)
+    if (!refPorClave[k]) { refPorClave[k] = ar; claves.push(k) }
   })
-  return {
-    maxDD,
-    maxDDDate,
-    maxDDEur: ddValley - ddPeak,
-    tInvertido: totalBars > 0 ? (daysOpen / totalBars) * 100 : 0,
-    capInvMedio: totalBars > 0 ? (sumCapInvRatio / totalBars) * 100 : 0,
-    totalBars,
-  }
+  return claves
+    .filter(k => !soloConEjecuciones || (ejecucionesPorActivo[k] || []).length > 0)
+    .map(clave => {
+      const ar = refPorClave[clave]
+      const ejec = ejecucionesPorActivo[clave] || []
+      const m = metricasActivo?.[clave] || {}
+      const wins   = ejec.filter(t => t.pnlPct >= 0)
+      const losses = ejec.filter(t => t.pnlPct < 0)
+      const ganSimple = ejec.reduce((s, t) => s + (t.pnlSimple || 0), 0)
+      const ganComp = esPool ? ganSimple : (ar.capitalReinv ?? slotCapital) - slotCapital
+      // B&H del activo: intacto, es la fila de comparación, no la de la estrategia.
+      const filtData = ar.data?.filter(d => d.date >= startDate) ?? []
+      const p0 = filtData[0]?.close
+      const pN = filtData[filtData.length - 1]?.close
+      const ganBH = (p0 && pN && p0 > 0) ? slotCapital * (pN / p0 - 1) : 0
+      const { pct: priceMaxDD, factor: priceMaxDDFactor } = _calcPriceMaxDD(ar.data || [], startDate)
+      return {
+        symbol:      clave,
+        trades:      ejec.length,
+        wins:        wins.length,
+        losses:      losses.length,
+        winRate:     ejec.length ? (wins.length / ejec.length) * 100 : 0,
+        ganSimple,
+        ganComp,
+        totalDias:   ejec.reduce((s, t) => s + (t.dias || 0), 0),
+        weight:      pesoDe(clave),
+        maxDD:       m.maxDD ?? 0,
+        maxDDDate:   m.maxDDFechaValle ?? null,
+        maxDDEur:    m.maxDDEur ?? 0,
+        tInvertido:  m.tInv ?? 0,
+        capInvMedio: m.capInvPct ?? 0,
+        ganBH,
+        priceMaxDD,
+        priceMaxDDEur: slotCapital * priceMaxDDFactor,
+        capInvertidoTotal: esPool ? ejec.reduce((s, t) => s + (t._capitalAtEntry || 0), 0) : ejec.length * slotCapital,
+        ...(conBreakdown ? { _stratBreakdown: (() => {
+          const porStrat = new Map()
+          ejec.forEach(t => {
+            if (!porStrat.has(t._stratId)) porStrat.set(t._stratId, { id: t._stratId, name: t._stratName, trades: 0 })
+            porStrat.get(t._stratId).trades++
+          })
+          return [...porStrat.values()].sort((a, b) => b.trades - a.trades)
+        })() } : {}),
+      }
+    })
+}
+// Agrupa por símbolo REAL las ejecuciones que alimentan assetStats. En los modos de pool la clave va en
+// el propio trade; en Slots los trades no llevan símbolo —se lo pone quien los saca de assetResults—, así
+// que la clave sale de su activo.
+function _ejecucionesPorActivo(trades) {
+  const porClave = {}
+  ;(trades || []).forEach(t => {
+    const k = _claveActivo(t)
+    if (!porClave[k]) porClave[k] = []
+    porClave[k].push(t)
+  })
+  return porClave
+}
+function _ejecucionesPorActivoSlots(assetResults) {
+  const porClave = {}
+  ;(assetResults || []).forEach(ar => {
+    const k = _claveActivo(ar)
+    if (!porClave[k]) porClave[k] = []
+    porClave[k].push(...(ar.trades || []))
+  })
+  return porClave
 }
 
 // ── PORTFOLIO MODE: N estrategias × M símbolos, un único pool ────────────────
@@ -1864,64 +1917,12 @@ async function handlePortfolioMode(req, res) {
       ? enrichedExec
       : assetResults.flatMap(ar => ar.trades)
 
-    const execByRealSym = {}
-    execSource.forEach(t => {
-      const real = t._realSymbol || t.symbol.split('#')[0]
-      if (!execByRealSym[real]) execByRealSym[real] = []
-      execByRealSym[real].push(t)
-    })
-
+    const execByRealSym = _ejecucionesPorActivo(execSource)
     const nRealSyms = Object.keys(execByRealSym).length || 1
-    const assetStats = Object.entries(execByRealSym).map(([realSym, execTrades]) => {
-      const wins   = execTrades.filter(t => t.pnlPct >= 0)
-      const losses = execTrades.filter(t => t.pnlPct < 0)
-      const totalDias     = execTrades.reduce((acc, t) => acc + (t.dias || 0), 0)
-      const ganSimple     = execTrades.reduce((acc, t) => acc + (t.pnlSimple || 0), 0)
-      const avgCapAsignado = execTrades.length
-        ? execTrades.reduce((acc, t) => acc + (t._capitalAtEntry ?? 0), 0) / execTrades.length
-        : slotCapital
-      // Datos OHLCV del ticker (cualquier assetResult que lo tenga)
-      const arRef = assetResults.find(a => a._realSymbol === realSym)
-      const { maxDD, maxDDDate, maxDDEur, tInvertido } =
-        _calcAssetMaxDD(execTrades, arRef?.data, avgCapAsignado, curves.startDate)
-      const capInvMedio = execTrades.length
-        ? execTrades.reduce((acc, t) => {
-            const tp = t._totalPortfolioAtEntry || cfg.capitalIni
-            return acc + (t._capitalAtEntry ?? 0) / tp * 100
-          }, 0) / execTrades.length
-        : 0
-      const filtData = arRef?.data?.filter(d => d.date >= curves.startDate) ?? []
-      const p0 = filtData[0]?.close
-      const pN = filtData[filtData.length - 1]?.close
-      const ganBH   = (p0 && pN && p0 > 0) ? slotCapital * (pN / p0 - 1) : 0
-      const { pct: priceMaxDD, factor: priceMaxDDFactor } = _calcPriceMaxDD(arRef?.data || [], curves.startDate)
-      const capInvertidoTotal = execTrades.reduce((acc, t) => acc + (t._capitalAtEntry || 0), 0)
-      return {
-        symbol:   realSym,
-        trades:   execTrades.length,
-        wins:     wins.length,
-        losses:   losses.length,
-        winRate:  execTrades.length ? (wins.length / execTrades.length) * 100 : 0,
-        ganSimple,
-        ganComp:  ganSimple,
-        totalDias,
-        weight:   100 / nRealSyms,
-        maxDD, maxDDDate, maxDDEur,
-        tInvertido, capInvMedio,
-        ganBH, priceMaxDD,
-        priceMaxDDEur:    slotCapital * priceMaxDDFactor,
-        avgCapAsignado,
-        capInvertidoTotal,
-        _stratBreakdown: (()=>{
-          const m = new Map()
-          execTrades.forEach(t => {
-            const k = t._stratId
-            if (!m.has(k)) m.set(k, { id: t._stratId, name: t._stratName, trades: 0 })
-            m.get(k).trades++
-          })
-          return [...m.values()].sort((a, b) => b.trades - a.trades)
-        })(),
-      }
+    const assetStats = _assetStatsUnificado({
+      assetResults, ejecucionesPorActivo: execByRealSym,
+      metricasActivo: curves.metricasActivo, slotCapital, startDate: curves.startDate,
+      esPool: true, pesoDe: () => 100 / nRealSyms, conBreakdown: true, soloConEjecuciones: true,
     })
 
     // 7. allTrades: restaurar symbol = realSymbol para el render de tabla (usa execSource enriquecido)
@@ -1955,6 +1956,8 @@ async function handlePortfolioMode(req, res) {
 
     return res.status(200).json({
       ...curves,
+      // Solo alimenta assetStats aquí arriba; no viaja (JSON.stringify descarta las claves undefined).
+      metricasActivo: undefined,
       sp500BHCurve,
       // Solo presente si hay algo que avisar: símbolos cuya serie semanal no se pudo descargar y
       // que por tanto operaron SIN el filtro de activo en semanal (fail-open silencioso de otro modo).
@@ -2231,95 +2234,24 @@ export default async function handler(req, res) {
       curves = buildSlotsCurves(assetResults, cfg.capitalIni)
     }
 
-    // Métricas por activo (tabla resumen)
-    let assetStats = assetResults.map(ar => {
-      const wins = ar.trades.filter(t=>t.pnlPct>=0)
-      const losses = ar.trades.filter(t=>t.pnlPct<0)
-      const totalDias = ar.trades.reduce((s,t)=>s+t.dias,0)
-      const pct = weights?.[ar.symbol] ?? (100 / n)
-      const { maxDD: assetMaxDD, maxDDDate: assetMaxDDDate, maxDDEur: assetMaxDDEur, tInvertido, capInvMedio } = _calcAssetMaxDD(ar.trades, ar.data, slotCapital, curves.startDate)
-      const filtData = ar.data?.filter(d => d.date >= curves.startDate) ?? []
-      const p0 = filtData[0]?.close
-      const pN = filtData[filtData.length - 1]?.close
-      const ganBH = (p0 && pN && p0 > 0) ? slotCapital * (pN / p0 - 1) : 0
-      const { pct: priceMaxDD, factor: priceMaxDDFactor } = _calcPriceMaxDD(ar.data, curves.startDate)
-      return {
-        symbol: ar.symbol,
-        trades: ar.trades.length,
-        wins: wins.length,
-        losses: losses.length,
-        winRate: ar.trades.length ? (wins.length/ar.trades.length)*100 : 0,
-        ganSimple: ar.gananciaSimple,
-        ganComp: ar.capitalReinv - slotCapital,
-        totalDias,
-        weight: pct,
-        maxDD: assetMaxDD,
-        maxDDDate: assetMaxDDDate,
-        maxDDEur: assetMaxDDEur,
-        tInvertido,
-        capInvMedio,
-        ganBH,
-        priceMaxDD,
-        priceMaxDDEur: slotCapital * priceMaxDDFactor,
-        capInvertidoTotal: ar.trades.length * slotCapital,  // slots: capital fijo por trade
-      }
+    // Métricas por activo (tabla resumen). Una sola convención para los cuatro modos: contribución
+    // sobre el capital inicial, con el Max DD medido por la MISMA función que la estrategia sobre el eje
+    // diario completo. En los modos de pool las filas salen de las ejecuciones reales; en Slots, de los
+    // trades de cada activo, que ahí se ejecutan todos.
+    const _esPool = modoAsig === 'compartido' || modoAsig === 'concentrado' || modoAsig === 'positionsizing'
+    const assetStats = _assetStatsUnificado({
+      assetResults,
+      ejecucionesPorActivo: _esPool
+        ? _ejecucionesPorActivo(curves.executedTrades)
+        : _ejecucionesPorActivoSlots(assetResults),
+      metricasActivo: curves.metricasActivo,
+      slotCapital,
+      startDate: curves.startDate,
+      esPool: _esPool,
+      pesoDe: (clave) => weights?.[clave] ?? (100 / n),
+      conBreakdown: false,
+      soloConEjecuciones: false,
     })
-
-    // En modos compartido/concentrado/positionsizing: recalcular assetStats desde los trades realmente ejecutados
-    if ((modoAsig === 'compartido' || modoAsig === 'concentrado' || modoAsig === 'positionsizing') && curves.executedTrades?.length) {
-      const execBySymbol = {}
-      curves.executedTrades.forEach(t => {
-        if (!execBySymbol[t.symbol]) execBySymbol[t.symbol] = []
-        execBySymbol[t.symbol].push(t)
-      })
-      assetStats = assetResults.map(ar => {
-        const execTrades = execBySymbol[ar.symbol] || []
-        const wins   = execTrades.filter(t => t.pnlPct >= 0)
-        const losses = execTrades.filter(t => t.pnlPct < 0)
-        const totalDias = execTrades.reduce((s,t) => s + (t.dias||0), 0)
-        const ganSimple = execTrades.reduce((s,t) => s + (t.pnlSimple||0), 0)
-        const pct = weights?.[ar.symbol] ?? (100 / n)
-        const avgCapAsignado = execTrades.length
-          ? execTrades.reduce((s,t) => s + (t._capitalAtEntry ?? 0), 0) / execTrades.length
-          : cfg.capitalIni / n
-        const { maxDD: assetMaxDD, maxDDDate: assetMaxDDDate, maxDDEur: assetMaxDDEur, tInvertido } =
-          _calcAssetMaxDD(execTrades, ar.data, avgCapAsignado, curves.startDate)
-        // Cap.Inv% per-asset: avg of (capAtEntry / totalPortfolioAtEntry) × 100
-        const capInvMedio = execTrades.length
-          ? execTrades.reduce((s, t) => {
-              const tp = t._totalPortfolioAtEntry || cfg.capitalIni
-              return s + (t._capitalAtEntry ?? 0) / tp * 100
-            }, 0) / execTrades.length
-          : 0
-        const filtData = ar.data?.filter(d => d.date >= curves.startDate) ?? []
-        const p0 = filtData[0]?.close
-        const pN = filtData[filtData.length - 1]?.close
-        const ganBH = (p0 && pN && p0 > 0) ? (cfg.capitalIni / n) * (pN / p0 - 1) : 0
-        const { pct: priceMaxDD, factor: priceMaxDDFactor } = _calcPriceMaxDD(ar.data, curves.startDate)
-        const capInvertidoTotal = execTrades.reduce((s, t) => s + (t._capitalAtEntry || 0), 0)
-        return {
-          symbol:    ar.symbol,
-          trades:    execTrades.length,
-          wins:      wins.length,
-          losses:    losses.length,
-          winRate:   execTrades.length ? (wins.length / execTrades.length) * 100 : 0,
-          ganSimple,
-          ganComp:   ganSimple,
-          totalDias,
-          weight:    pct,
-          maxDD:     assetMaxDD,
-          maxDDDate: assetMaxDDDate,
-          maxDDEur:  assetMaxDDEur,
-          tInvertido,
-          capInvMedio,
-          ganBH,
-          priceMaxDD,
-          priceMaxDDEur: (cfg.capitalIni / n) * priceMaxDDFactor,
-          avgCapAsignado,     // capital medio real por trade — usado por frontend para CAGR en modo concentrado
-          capInvertidoTotal,  // suma del capital de entrada de todos los trades ejecutados
-        }
-      })
-    }
 
     // % medio de capital invertido (usa avgCapOccupancy capital-weighted si está disponible)
     const avgOccupancy = curves.avgCapOccupancy ?? (
@@ -2368,6 +2300,8 @@ export default async function handler(req, res) {
 
     res.status(200).json({
       ...curves,
+      // Solo alimenta assetStats aquí arriba; no viaja (JSON.stringify descarta las claves undefined).
+      metricasActivo: undefined,
       sp500BHCurve,
       // Solo presente si hay algo que avisar: símbolos cuya serie semanal no se pudo descargar y
       // que por tanto operaron SIN el filtro de activo en semanal (fail-open silencioso de otro modo).

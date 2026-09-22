@@ -5041,7 +5041,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.766</title>
+        <title>Trading Simulator V9.767</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5119,7 +5119,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.766
+            <span className="dot"/>Trading Simulator V9.767
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -8107,8 +8107,12 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               const allT=r.result.allTrades||[]
                               const wins=allT.filter(t=>t.pnlPct>=0),losses=allT.filter(t=>t.pnlPct<0)
                               const winRate=allT.length?wins.length/allT.length*100:0
-                              const lastC=r.result.compoundCurve?.slice(-1)[0]?.value||capIni
-                              const firstC=r.result.compoundCurve?.[0]?.value||capIni
+                              // Capital inicial de ESTA respuesta, no del formulario: un resultado que lleve
+                              // rato en memoria pudo ejecutarse con otro capital del que hay tecleado, y
+                              // entonces el beneficio y todos los porcentajes de la fila saldrían torcidos.
+                              const capIniR=capitalDeRespuesta(r.result)??capIni
+                              const lastC=r.result.compoundCurve?.slice(-1)[0]?.value||capIniR
+                              const firstC=r.result.compoundCurve?.[0]?.value||capIniR
                               const fd=r.result.startDate?new Date(r.result.startDate):null
                               const ld=r.result.compoundCurve?.slice(-1)[0]?.date?new Date(r.result.compoundCurve.slice(-1)[0].date):new Date()
                               // Años sobre el tramo REAL de su curva compuesta, el mismo del que sale `profit`
@@ -8119,9 +8123,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               const grossWin=wins.reduce((s,t)=>s+(t.pnlSimple||0),0)
                               const grossLoss=Math.abs(losses.reduce((s,t)=>s+(t.pnlSimple||0),0))
                               const pf=grossLoss>0?grossWin/grossLoss:grossWin>0?99:0
-                              const profit=lastC-capIni
-                              const profitPct=capIni>0?profit/capIni*100:0
-                              const sc=r.result.slotCapital||capIni
+                              const profit=lastC-capIniR
+                              const profitPct=capIniR>0?profit/capIniR*100:0
                               const rStats=r.result.assetStats||[]
                               const avgCapInv=r.result.avgCapOccupancy??(rStats.length?rStats.reduce((s,a)=>s+(a.capInvMedio||0),0)/rStats.length:0)
                               const avgTInv=r.result.tInvEstrategia??(rStats.length?rStats.reduce((s,a)=>s+(a.tInvertido||0),0)/rStats.length:0)
@@ -8199,21 +8202,17 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                   </tr>
                                   {/* ── Subfilas (activos) ── */}
                                   {isOpen&&rStats.map(a=>{
-                                    // Misma base que la fila madre: primera fecha REAL de la curva (mcInicioReal)
-                                    const _inicio=mcInicioReal(r.result)
-                                    const startMs=_inicio?new Date(_inicio).getTime():0
-                                    const lastCurveDate=r.result.compoundCurve?.slice(-1)[0]?.date
-                                    const endMs=lastCurveDate?new Date(lastCurveDate).getTime():Date.now()
-                                    const yrs=startMs>0
-                                      ?(endMs-startMs)/(365.25*24*3600*1000)
-                                      :mcPeriodMode==='range'&&mcFromDate&&mcToDate
-                                        ?(new Date(mcToDate)-new Date(mcFromDate))/(365.25*24*3600*1000)
-                                        :mcYears
-                                    // En concentrado, usar capital medio real por trade (no slotCapital=capitalIni/n)
-                                    // para evitar denominador incorrecto en G.Comp% y CAGR
-                                    const capBase=(r.result.modoAsig==='concentrado'&&a.avgCapAsignado)?a.avgCapAsignado:sc
-                                    const ganPct=capBase>0?(a.ganComp/capBase)*100:0
-                                    const cagr=capBase>0&&yrs>0?(Math.pow(Math.max((capBase+a.ganComp)/capBase,0.001),1/yrs)-1)*100:0
+                                    // El CAGR del activo anualiza sobre los MISMOS años que la fila madre
+                                    // (`anios`, el tramo real de su curva compuesta): dos filas de la misma
+                                    // tabla que cubren el mismo periodo no pueden usar tramos distintos.
+                                    // CONTRIBUCIÓN SOBRE EL CAPITAL INICIAL, la misma base en los cuatro modos
+                                    // y la misma que la fila madre: la pregunta que responde la fila de un
+                                    // activo es cuánto aporta a la cartera, no cómo le fue al capital que le
+                                    // tocó. Con un único activo, su fila sale idéntica a la de la estrategia;
+                                    // con varios, los porcentajes suman el de la estrategia. Antes cada modo
+                                    // usaba su propia base y ninguna de las dos cosas se cumplía.
+                                    const ganPct=capIniR>0?(a.ganComp/capIniR)*100:0
+                                    const cagr=capIniR>0&&anios>0?(Math.pow(Math.max((capIniR+a.ganComp)/capIniR,0.001),1/anios)-1)*100:0
                                     const assetTrades=allT.filter(t=>t.symbol===a.symbol)
                                     const sumWin=assetTrades.filter(t=>t.pnlSimple>0).reduce((s,t)=>s+t.pnlSimple,0)
                                     const sumLoss=assetTrades.filter(t=>t.pnlSimple<0).reduce((s,t)=>s+Math.abs(t.pnlSimple),0)
