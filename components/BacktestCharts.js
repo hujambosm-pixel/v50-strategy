@@ -395,6 +395,7 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
   const candlesRef=useRef(null)
   const tradeSeriesMapRef=useRef(new Map())
   const roRef=useRef(null)
+  const pedidoRef=useRef(null)     // clave `símbolo|años` de la última descarga pedida
   const [inView,setInView]=useState(false)
   const [ohlcv,setOhlcv]=useState(null)
   const [loading,setLoading]=useState(false)
@@ -410,18 +411,29 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
     return()=>obs.disconnect()
   },[])
 
-  // Fetch OHLCV once visible
+  // Descarga de OHLCV. La carga perezosa solo gobierna la PRIMERA: a partir de ahí, cambiar de símbolo o
+  // de años vuelve a pedir datos. Antes la guarda era `ohlcv!==null`, así que el componente se quedaba con
+  // las velas del primer símbolo que hubiera cargado aunque luego le pasaran otro —y el panel de activo
+  // seleccionado, que reutiliza la misma instancia, enseñaba las velas del activo anterior—.
+  // `pedidoRef` guarda la clave realmente pedida, en un ref y no en una variable de cierre: una respuesta
+  // que llega tarde compara contra el valor VIGENTE y se descarta si ya manda otro símbolo.
   useEffect(()=>{
-    if(!inView||ohlcv!==null||loading) return
-    setLoading(true)
+    if(!inView) return
+    const clave=`${symbol}|${years}`
+    if(pedidoRef.current===clave) return        // ya pedida: en vuelo o ya servida
+    pedidoRef.current=clave
+    // Vaciar antes de pedir: el efecto del chart depende de `ohlcv`, así que su limpieza tira el gráfico
+    // anterior y la vista pasa a "Cargando". Sin esto quedarían a la vista las velas del símbolo viejo.
+    setOhlcv(null); setErr(null); setLoading(true)
     fetch(`/api/chartdata?symbol=${encodeURIComponent(symbol)}&years=${years}`)
       .then(r=>r.json())
       .then(d=>{
+        if(pedidoRef.current!==clave) return     // llegó tarde: ya se pidió otro símbolo
         if(d.error) throw new Error(d.error)
         setOhlcv(Array.isArray(d)?d:[])
         setLoading(false)
       })
-      .catch(e=>{setErr(e.message);setLoading(false)})
+      .catch(e=>{ if(pedidoRef.current!==clave) return; setErr(e.message); setLoading(false) })
   },[inView,symbol,years])
 
   // Build/rebuild chart when data or signals change
@@ -432,6 +444,7 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
       if(cancelled) return
       // Cleanup previous instance and remove from sync group
       if(chartRef.current){chartRef.current.__syncCleanup?.();chartRef.current.remove();chartRef.current=null}
+      tradeSeriesMapRef.current=new Map()   // las series del símbolo anterior ya no existen
       if(!chartDivRef.current||chartDivRef.current.clientWidth<=0) return
       const chart=createChart(chartDivRef.current,{
         width:chartDivRef.current.clientWidth,height,
