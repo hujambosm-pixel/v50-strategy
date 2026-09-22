@@ -420,6 +420,9 @@ function buildCompartidoCurves(assetResults, capitalIni, symbolOrder = null) {
       exitDate:     t.exitDate,
       pnlPct:       t.pnlPct,
       entryPx:      t.entryPrice ?? t.entryPx,
+      // Precio de SALIDA: no se copiaba, y los minigráficos lo necesitan para trazar la línea de entrada
+      // a salida de cada operación. No entra en ningún cálculo, solo viaja para dibujar.
+      exitPx:       t.exitPrice ?? t.exitPx,
       stopPx:       _stopInicial(t),
       dias:         t.dias,
       _virtualClose: !!t._virtualClose,
@@ -725,6 +728,9 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
         exitDate:      t.exitDate,
         pnlPct:        t.pnlPct,
         entryPx:       t.entryPrice ?? t.entryPx,
+        // Precio de SALIDA: no se copiaba, y los minigráficos lo necesitan para trazar la línea de
+        // entrada a salida. No entra en ningún cálculo, solo viaja para dibujar.
+        exitPx:        t.exitPrice ?? t.exitPx,
         stopPx:        _stopInicial(t),
         dias:          t.dias,
         _virtualClose: !!t._virtualClose,
@@ -994,6 +1000,10 @@ function buildPositionSizingCurves(assetResults, capitalIni, sizeRules) {
       exitDate:      t.exitDate,
       pnlPct:        t.pnlPct,
       entryPrice:    t.entryPrice ?? t.entryPx,
+      entryPx:       t.entryPrice ?? t.entryPx,
+      // Precio de SALIDA: no se copiaba, y los minigráficos lo necesitan para trazar la línea de entrada
+      // a salida. No entra en ningún cálculo, solo viaja para dibujar.
+      exitPx:        t.exitPrice ?? t.exitPx,
       stopPx:        _stopInicial(t),
       dias:          Math.round((new Date(t.exitDate) - new Date(t.entryDate)) / 86400000),
       _virtualClose: !!t._virtualClose,

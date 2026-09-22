@@ -1378,6 +1378,16 @@ export default function Home() {
   // pintaba con un decimal y la de activo con dos, siendo la misma columna. El signo lo pone él, así que
   // ningún sitio antepone su propio '-'. Solo formato: ningún cálculo pasa por aquí.
   const fmtDDPct=(v)=>Number(v)>0?'-'+fmt(v,1,'%'):'0,0%'
+  // Años de velas de los minigráficos: los del MULTIBACKTEST, no los del panel individual, que es de otra
+  // pantalla y no tiene por qué coincidir. En modo Fechas no hay "años" que pedir, así que se cuenta desde
+  // la fecha inicial hasta hoy: /api/chartdata solo sabe descargar hacia atrás desde la fecha actual.
+  const mcAniosVelas=(()=>{
+    if(mcPeriodMode==='range'&&mcFromDate){
+      const a=(Date.now()-new Date(mcFromDate).getTime())/(365.25*24*3600*1000)
+      return Number.isFinite(a)&&a>0?Math.ceil(a):5
+    }
+    return Number(mcYears)||5
+  })()
   const mcAniosDeCurva=(curve)=>{
     const fd=curve?.[0]?.date, ld=curve?.[curve.length-1]?.date
     return fd&&ld?(new Date(ld)-new Date(fd))/(365.25*24*3600*1000):null
@@ -5114,7 +5124,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.775</title>
+        <title>Trading Simulator V9.776</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5192,7 +5202,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.775
+            <span className="dot"/>Trading Simulator V9.776
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -9059,12 +9069,15 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                 // Single strategy: green entries, red exits. Multi: strategy color for both.
                                 entryColor:isMulti?r.color:'#00e5a0',
                                 exitColor:isMulti?r.color:'#ff4d6d',
-                                entries:symTrades.map(t=>({date:t.entryDate,price:t.entryPx})),
-                                exits:symTrades.map(t=>({date:t.exitDate,price:t.exitPx})),
+                                // Los dos nombres: los modos de pool traen entryPx/exitPx y Slots, que no
+                                // pasa por sus candidatos, entryPrice/exitPrice. Sin esto la línea de
+                                // entrada a salida no se dibujaba en Slots.
+                                entries:symTrades.map(t=>({date:t.entryDate,price:t.entryPx??t.entryPrice})),
+                                exits:symTrades.map(t=>({date:t.exitDate,price:t.exitPx??t.exitPrice})),
                                 trades:symTrades.map((t,idx)=>({
                                   n:idx+1,
-                                  entryDate:t.entryDate,entryPx:t.entryPx,
-                                  exitDate:t.exitDate,exitPx:t.exitPx,
+                                  entryDate:t.entryDate,entryPx:t.entryPx??t.entryPrice,
+                                  exitDate:t.exitDate,exitPx:t.exitPx??t.exitPrice,
                                   pnlPct:t.pnlPct,pnlSimple:t.pnlSimple,
                                   capital:t.pnlPct!==0?Math.abs(t.pnlSimple/(t.pnlPct/100)):0,
                                 })),
@@ -9073,7 +9086,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                             return(
                               <AssetSignalChart key={sym} symbol={sym}
                                 stratSignals={stratSignals}
-                                years={Number(years)||5}
+                                years={mcAniosVelas}
                                 height={400}
                                 syncRef={mcChartsSyncRef}
                                 onReady={({chart,highlightTrade})=>{mcChartRefsMap.current[sym]={chart,highlightTrade}}}/>
