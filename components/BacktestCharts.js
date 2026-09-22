@@ -523,12 +523,13 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
       onReady?.({chart,highlightTrade})
 
       // ── Etiquetas compactas de operación ─────────────────────────────────────────────────
-      // Una línea con el porcentaje y nada más, pegada a la flecha de SALIDA. Lo demás —fechas, precios,
-      // euros, duración— pasa al globo del cursor: una etiqueta fija de dos líneas con euros tapaba las
-      // velas y repetía siempre en pantalla lo que solo hace falta al mirar una operación concreta. Sin
-      // línea de unión discontinua, por el mismo motivo.
-      // El reparto en filas ya NO es rotatorio por orden de aparición, que no detectaba solapes: cada fila
-      // guarda los tramos de x que ya ocupa y la etiqueta baja de fila hasta encontrar hueco.
+      // Una línea con el porcentaje y nada más, CENTRADA sobre el tramo de la operación: a media distancia
+      // entre la entrada y la salida, y a la altura del precio medio de ese tramo, que es donde está la
+      // línea de color que la etiqueta explica. Lo demás —fechas, precios, euros, duración— vive en el
+      // globo del cursor. Sin línea de unión discontinua: la etiqueta ya está sobre su tramo.
+      // Solapes: se comprueba la CAJA entera, en x y en y, contra las ya colocadas, y la etiqueta se
+      // aparta del tramo en saltos hasta encontrar hueco. Las ganadoras se apartan hacia arriba y las
+      // perdedoras hacia abajo, de modo que el propio tramo nunca queda tapado.
       const drawTradeLabels=()=>{
         const svg=svgRef.current
         if(!svg||!candlesRef.current||!chartRef.current) return
@@ -537,33 +538,51 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
         const NS='http://www.w3.org/2000/svg'
         const ts=chartRef.current.timeScale()
         const chartH=chartDivRef.current?.clientHeight||height
-        const BOX_H=14, BOX_STEP=BOX_H+3, MARGIN=6, FILAS=4
-        const ocupadas={arriba:Array.from({length:FILAS},()=>[]),abajo:Array.from({length:FILAS},()=>[])}
+        const chartW=chartDivRef.current?.clientWidth||800
+        // ALTO_EJE reserva la banda del eje de fechas: una etiqueta ahí abajo se lee encima de los meses.
+        const BOX_H=14, PASO=BOX_H+3, MARGIN=6, ALTO_EJE=26, INTENTOS=4, SEPARACION=10
+        const yMin=MARGIN+BOX_H/2, yMax=chartH-ALTO_EJE-BOX_H/2
+        const colocadas=[]
+        const solapa=(a,b)=>a.x1<b.x2+3&&a.x2>b.x1-3&&a.y1<b.y2+2&&a.y2>b.y1-2
         stratSignals.forEach(s=>{
           ;(s.trades||[]).forEach(t=>{
-            if(!t.exitDate) return
+            if(!t.entryDate||!t.exitDate) return
             try{
-              const x2=ts.timeToCoordinate(t.exitDate)
-              if(x2==null) return
+              const x1=ts.timeToCoordinate(t.entryDate), x2=ts.timeToCoordinate(t.exitDate)
+              // Con el tramo medio fuera de pantalla sigue habiendo etiqueta: se centra en lo que se vea.
+              if(x1==null&&x2==null) return
+              const cxCrudo=(x1!=null&&x2!=null)?(x1+x2)/2:(x1??x2)
               const isWin=t.pnlPct>=0
               const bc=isWin?(s.color||'#00e5a0'):'#ff4d6d'
               const txt=`${t.pnlPct>=0?'+':''}${(t.pnlPct||0).toFixed(1)}%`
               const w=txt.length*6.2+10            // ancho ajustado al contenido real
-              const xIni=x2-w/2, xFin=x2+w/2
-              const banda=isWin?'arriba':'abajo'
-              let fila=ocupadas[banda].findIndex(tramos=>!tramos.some(([a,b])=>xIni<b+4&&xFin>a-4))
-              if(fila<0) fila=FILAS-1
-              ocupadas[banda][fila].push([xIni,xFin])
-              const labelY=isWin?MARGIN+BOX_H/2+fila*BOX_STEP:chartH-MARGIN-BOX_H/2-fila*BOX_STEP
+              // Acotada a los lados: ni medio cortada por el borde ni pisando el eje de precios.
+              const cx=Math.min(Math.max(cxCrudo,w/2+2),chartW-w/2-2)
+              // Altura de partida: el precio medio del tramo, que es donde pasa su línea de color. Si no
+              // se puede calcular —precios ausentes—, se cae a la banda de siempre.
+              const pyMid=(t.entryPx!=null&&t.exitPx!=null)
+                ? candlesRef.current.priceToCoordinate((t.entryPx+t.exitPx)/2) : null
+              const base=pyMid!=null?pyMid:(isWin?yMin:yMax)
+              const dir=isWin?-1:1
+              let caja=null
+              for(let i=0;i<INTENTOS;i++){
+                const y=Math.min(Math.max(base+dir*(SEPARACION+i*PASO),yMin),yMax)
+                const c={x1:cx-w/2,x2:cx+w/2,y1:y-BOX_H/2,y2:y+BOX_H/2,y}
+                if(!colocadas.some(o=>solapa(c,o))){ caja=c; break }
+              }
+              // Sin hueco tras cuatro intentos se omite: apilar cajas ilegibles no informa, y el globo del
+              // cursor sigue teniendo todos los datos de esa operación.
+              if(!caja) return
+              colocadas.push(caja)
               const g=document.createElementNS(NS,'g')
               g.setAttribute('class','trade-label'); g.setAttribute('pointer-events','none')
               const rect=document.createElementNS(NS,'rect')
               const fill=(bc.length===7&&bc.startsWith('#'))?bc+'22':'rgba(0,229,160,0.14)'
-              Object.entries({x:xIni,y:labelY-BOX_H/2,width:w,height:BOX_H,fill,
+              Object.entries({x:caja.x1,y:caja.y1,width:w,height:BOX_H,fill,
                 rx:'3',stroke:bc,'stroke-width':'1'}).forEach(([k,v])=>rect.setAttribute(k,v))
               g.appendChild(rect)
               const el=document.createElementNS(NS,'text')
-              Object.entries({x:x2,y:labelY+3.5,'font-size':'9','font-family':_MONO,
+              Object.entries({x:cx,y:caja.y+3.5,'font-size':'9','font-family':_MONO,
                 'text-anchor':'middle',fill:bc,'font-weight':'700'}).forEach(([k,v])=>el.setAttribute(k,v))
               el.textContent=txt
               g.appendChild(el)
