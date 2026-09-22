@@ -628,6 +628,40 @@ const MC_ID_CAJA='__caja__', MC_ID_TOTAL='__totalEstrategia__'
 // Alto mínimo del gráfico grande del multibacktest. Por debajo de esto un gráfico de velas con sus
 // operaciones no se lee, y es preferible desplazarse a mirar una franja aplastada.
 const SUELO_EQUITY=420
+// ── Nombre legible de un indicador ──────────────────────────────────────────
+// La clave del vocabulario NO describe el indicador: `ema3` es la EMA20 en la estrategia que la usa. El
+// tipo sale de la clave y el PERIODO de los params de la estrategia, que es el único sitio donde está.
+// `params` lleva el nombre del parámetro en cada familia, así que hace falta la tabla: no hay regla.
+const NOMBRE_INDICADOR={
+  emaR:      {tipo:'EMA', periodos:['emaPeriod','emaR','ma_fast','emaFast','emaRapida']},
+  emaL:      {tipo:'EMA', periodos:['emaL','ma_slow','emaSlow','emaLenta']},
+  emaFast:   {tipo:'EMA', periodos:['emaPeriod','ma_fast','emaFast']},
+  emaSlow:   {tipo:'EMA', periodos:['ma_slow','emaSlow']},
+  ema3:      {tipo:'EMA', periodos:['emaPeriod','ema3Period','maPeriod']},
+  bbUpper:   {tipo:'BB sup',   periodos:['bbPeriod'], extra:['bbStdDev']},
+  bbMid:     {tipo:'BB media', periodos:['bbPeriod'], extra:['bbStdDev']},
+  bbLower:   {tipo:'BB inf',   periodos:['bbPeriod'], extra:['bbStdDev']},
+  rsi:       {tipo:'RSI',        periodos:['rsiPeriod']},
+  rsiMA:     {tipo:'MA del RSI', periodos:['maPeriod','rsiMaPeriod']},
+  macdLine:  {tipo:'MACD',        periodos:['macdFast'], extra:['macdSlow','macdSignal']},
+  signalLine:{tipo:'Señal MACD',  periodos:['macdSignal']},
+  histogram: {tipo:'Histograma MACD', periodos:[]},
+  volume:    {tipo:'Volumen',        periodos:[]},
+  volumeAvg: {tipo:'Media de volumen', periodos:['volumePeriod','volPeriod']},
+}
+// Devuelve SIEMPRE algo legible. Si no se encuentra el periodo, se queda el tipo a secas: un nombre
+// incompleto es mejor que uno que engaña, y la clave cruda no sale nunca.
+const nombreIndicador=(clave, params, intervalo) => {
+  const def=NOMBRE_INDICADOR[clave]
+  if(!def) return String(clave)                       // clave fuera de la tabla: al menos no se inventa
+  const num=(k)=>{const v=params?.[k];const n=Number(v);return Number.isFinite(n)&&n>0?n:null}
+  const periodo=(def.periodos||[]).map(num).find(v=>v!=null)??null
+  const extras=(def.extra||[]).map(num).filter(v=>v!=null)
+  let txt=def.tipo
+  if(periodo!=null) txt+=` ${[periodo,...extras].join('·')}`
+  if(intervalo==='semanal'||intervalo==='diario') txt+=` (${intervalo})`
+  return txt
+}
 const mcVisibleActivo=(estado,id)=>estado[id]!==undefined?estado[id]:id!==MC_ID_CAJA
 const saneaCurva=(datos)=>{
   const porFecha=new Map()
@@ -1461,14 +1495,22 @@ export default function Home() {
   const mcIndicadoresActivo=useMemo(()=>{
     if(!mcVerIndicadores||mcDetalleActivo?.error||!mcDetalleActivo?.indicators) return null
     const COLOR={emaR:'#ffd166',emaL:'#ff4d6d',ema3:'#9C27B0',bbUpper:'#2196F3',bbMid:'#FF6D00',bbLower:'#2196F3'}
+    // Los params de la estrategia son la ÚNICA fuente del periodo real: ni la clave ni la respuesta del
+    // endpoint lo llevan. El cliente ya los tiene, porque /api/strategies devuelve la fila entera.
+    const _st=strategies.find(x=>x.id===mcIdStratDetalle)
+    let params={}
+    try{ params=_st?.params?(typeof _st.params==='string'?JSON.parse(_st.params):_st.params):{} }catch(_){}
     const out=[]
     for(const [clave,serie] of Object.entries(mcDetalleActivo.indicators)){
       if(mcDetalleActivo.escalas?.[clave]!=='precio') continue
       const data=saneaCurva(serie).map(p=>({time:p.date,value:p.value}))
-      if(data.length>1) out.push({name:clave,color:COLOR[clave]||'#8aadcc',lineWidth:1,data})
+      if(data.length>1) out.push({
+        name:nombreIndicador(clave,params,mcDetalleActivo.intervalo),
+        color:COLOR[clave]||'#8aadcc',lineWidth:1,data,
+      })
     }
     return out.length?out:null
-  },[mcDetalleActivo,mcVerIndicadores])
+  },[mcDetalleActivo,mcVerIndicadores,strategies,mcIdStratDetalle])
   const mcZonasActivo=useMemo(()=>{
     if(!mcVerFranjas||mcDetalleActivo?.error) return null
     const z=mcDetalleActivo?.filterZones
@@ -5314,7 +5356,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.790</title>
+        <title>Trading Simulator V9.791</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5392,7 +5434,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.790
+            <span className="dot"/>Trading Simulator V9.791
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
