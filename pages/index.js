@@ -1318,6 +1318,7 @@ export default function Home() {
   const [mcDetalleActivo,setMcDetalleActivo]=useState(null)
   const [mcVerIndicadores,setMcVerIndicadores]=useState(true)
   const [mcVerFranjas,setMcVerFranjas]=useState(true)
+  const [mcVerEtiquetas,setMcVerEtiquetas]=useState(true)
   const [mcPantallaCompleta,setMcPantallaCompleta]=useState(false)
   const mcDetallePedidoRef=useRef(null)   // clave de la última petición lanzada
   const [mcShowBHCompare,setMcShowBHCompare]=useState(true) // B&H curve toggle in multi-strategy chart
@@ -5356,7 +5357,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.791</title>
+        <title>Trading Simulator V9.792</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5434,7 +5435,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.791
+            <span className="dot"/>Trading Simulator V9.792
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -8756,7 +8757,11 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       {[{on:mcVerIndicadores,set:setMcVerIndicadores,etq:'Indicadores',col:'#ffd166',
                           hay:!!mcDetalleActivo?.indicators&&Object.keys(mcDetalleActivo.indicators).length>0},
                         {on:mcVerFranjas,set:setMcVerFranjas,etq:'Filtro',col:'#ff5050',
-                          hay:!!mcDetalleActivo?.filterZones?.length}].map(({on,set,etq,col,hay})=>(
+                          hay:!!mcDetalleActivo?.filterZones?.length},
+                        // Las etiquetas no dependen del detalle: salen de las propias operaciones, que
+                        // siempre están, así que este va habilitado mientras haya alguna.
+                        {on:mcVerEtiquetas,set:setMcVerEtiquetas,etq:'Etiquetas',col:'#00d4ff',
+                          hay:mcTradesActivoSel.length>0}].map(({on,set,etq,col,hay})=>(
                         <button key={etq} onClick={()=>hay&&set(v=>!v)} disabled={!hay}
                           title={hay?(on?`Ocultar ${etq.toLowerCase()}`:`Mostrar ${etq.toLowerCase()}`)
                             :`Sin ${etq.toLowerCase()} para esta selección`}
@@ -8968,6 +8973,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           height={hVelas}
                           rangoVisible={mcRangoBacktest}
                           intervalo={mcIntervalo}
+                          verEtiquetas={mcVerEtiquetas}
                           indicadores={mcIndicadoresActivo}
                           zonasFiltro={mcZonasActivo}
                           onReady={({chart})=>{mcPanelVelasRef.current=chart}}/>

@@ -394,8 +394,11 @@ const _MONO='"Roboto Mono",monospace'
 // sin ellas el componente hace exactamente lo de siempre, que es lo que sigue haciendo la parrilla.
 // `intervalo` decide en qué marco temporal se piden las velas. 'diario' por defecto, que es lo que sigue
 // pidiendo la parrilla: solo el gráfico del activo seleccionado pide el del backtest.
+// `verEtiquetas` enciende las etiquetas fijas sobre las operaciones. Se lee por REF dentro del dibujo
+// para que alternarlo no toque la descarga de velas: esa petición depende de symbol, years e intervalo, y
+// de nada más.
 export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef,onReady,rangoVisible=null,
-  indicadores=null,zonasFiltro=null,intervalo='diario'}) {
+  indicadores=null,zonasFiltro=null,intervalo='diario',verEtiquetas=true}) {
   const containerRef=useRef(null)
   const chartDivRef=useRef(null)
   const chartRef=useRef(null)
@@ -403,6 +406,12 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
   const candlesRef=useRef(null)
   const tradeSeriesMapRef=useRef(new Map())
   const indSeriesRef=useRef([])          // series de indicadores, para soltarlas en la limpieza
+  const tipRef=useRef(null)              // globo de la operación señalada
+  const verEtiquetasRef=useRef(verEtiquetas)
+  const redibujaEtiquetasRef=useRef(null)
+  // Alternar las etiquetas NO reconstruye el chart —eso perdería el zoom— ni vuelve a pedir velas: se
+  // actualiza el ref que lee el dibujo y se redibuja la capa SVG, que es lo único que cambia.
+  useEffect(()=>{ verEtiquetasRef.current=verEtiquetas; redibujaEtiquetasRef.current?.() },[verEtiquetas])
   const roRef=useRef(null)
   const pedidoRef=useRef(null)     // clave `símbolo|años` de la última descarga pedida
   const [inView,setInView]=useState(false)
@@ -513,104 +522,101 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
       }
       onReady?.({chart,highlightTrade})
 
-      // ── SVG trade labels (two-line: #N·€cap / X%·€profit) ──
+      // ── Etiquetas compactas de operación ─────────────────────────────────────────────────
+      // Una línea con el porcentaje y nada más, pegada a la flecha de SALIDA. Lo demás —fechas, precios,
+      // euros, duración— pasa al globo del cursor: una etiqueta fija de dos líneas con euros tapaba las
+      // velas y repetía siempre en pantalla lo que solo hace falta al mirar una operación concreta. Sin
+      // línea de unión discontinua, por el mismo motivo.
+      // El reparto en filas ya NO es rotatorio por orden de aparición, que no detectaba solapes: cada fila
+      // guarda los tramos de x que ya ocupa y la etiqueta baja de fila hasta encontrar hueco.
       const drawTradeLabels=()=>{
         const svg=svgRef.current
         if(!svg||!candlesRef.current||!chartRef.current) return
         svg.querySelectorAll('.trade-label').forEach(el=>el.remove())
+        if(!verEtiquetasRef.current) return
         const NS='http://www.w3.org/2000/svg'
         const ts=chartRef.current.timeScale()
         const chartH=chartDivRef.current?.clientHeight||height
-        let winIdx=0,lossIdx=0
-        const ROWS=4
-        stratSignals.forEach((s,stratIdx)=>{
-          winIdx=0;lossIdx=0
+        const BOX_H=14, BOX_STEP=BOX_H+3, MARGIN=6, FILAS=4
+        const ocupadas={arriba:Array.from({length:FILAS},()=>[]),abajo:Array.from({length:FILAS},()=>[])}
+        stratSignals.forEach(s=>{
           ;(s.trades||[]).forEach(t=>{
-            if(!t.entryDate||!t.exitDate) return
+            if(!t.exitDate) return
             try{
-              const x1=ts.timeToCoordinate(t.entryDate),x2=ts.timeToCoordinate(t.exitDate)
-              if(x1==null||x2==null) return
-              const midX=(x1+x2)/2
+              const x2=ts.timeToCoordinate(t.exitDate)
+              if(x2==null) return
               const isWin=t.pnlPct>=0
-              const stratColor=s.color||'#00e5a0'
-              const bc=isWin?stratColor:'#ff4d6d'
-              const iidx=isWin?winIdx++:lossIdx++
-              const row=(iidx%ROWS)+(stratIdx*ROWS)
-              const line1=`#${t.n} · ${t.pnlPct>=0?'+':''}${(t.pnlPct||0).toFixed(1)}%`
-              const profit=t.pnlSimple??0
-              const line2=`${profit>=0?'+':''}€${Math.round(Math.abs(profit))}`
-              const BOX_H=24,BOX_STEP=BOX_H+3,MARGIN=6
-              const w=Math.max(line1.length,line2.length)*7.5+20
-              const labelY=isWin?MARGIN+BOX_H/2+row*BOX_STEP:chartH-MARGIN-BOX_H/2-row*BOX_STEP
+              const bc=isWin?(s.color||'#00e5a0'):'#ff4d6d'
+              const txt=`${t.pnlPct>=0?'+':''}${(t.pnlPct||0).toFixed(1)}%`
+              const w=txt.length*6.2+10            // ancho ajustado al contenido real
+              const xIni=x2-w/2, xFin=x2+w/2
+              const banda=isWin?'arriba':'abajo'
+              let fila=ocupadas[banda].findIndex(tramos=>!tramos.some(([a,b])=>xIni<b+4&&xFin>a-4))
+              if(fila<0) fila=FILAS-1
+              ocupadas[banda][fila].push([xIni,xFin])
+              const labelY=isWin?MARGIN+BOX_H/2+fila*BOX_STEP:chartH-MARGIN-BOX_H/2-fila*BOX_STEP
               const g=document.createElementNS(NS,'g')
               g.setAttribute('class','trade-label'); g.setAttribute('pointer-events','none')
               const rect=document.createElementNS(NS,'rect')
-              const fillWin=(stratColor.length===7&&stratColor.startsWith('#'))?stratColor+'22':'rgba(0,229,160,0.14)'
-              Object.entries({x:midX-w/2,y:labelY-BOX_H/2,width:w,height:BOX_H,
-                fill:isWin?fillWin:'rgba(255,77,109,0.14)',
-                rx:'4',stroke:bc,'stroke-width':'1'}).forEach(([k,v])=>rect.setAttribute(k,v))
+              const fill=(bc.length===7&&bc.startsWith('#'))?bc+'22':'rgba(0,229,160,0.14)'
+              Object.entries({x:xIni,y:labelY-BOX_H/2,width:w,height:BOX_H,fill,
+                rx:'3',stroke:bc,'stroke-width':'1'}).forEach(([k,v])=>rect.setAttribute(k,v))
               g.appendChild(rect)
-              const midPrice=(t.entryPx+t.exitPx)/2
-              const pyBase=candlesRef.current.priceToCoordinate(midPrice)
-              if(pyBase!=null){
-                const cy1=isWin?labelY+BOX_H/2:labelY-BOX_H/2
-                const cy2=isWin?Math.max(cy1+4,pyBase-4):Math.min(cy1-4,pyBase+4)
-                if(Math.abs(cy2-cy1)>4){
-                  const l=document.createElementNS(NS,'line')
-                  Object.entries({x1:midX,y1:cy1,x2:midX,y2:cy2,stroke:bc,'stroke-width':'1','stroke-dasharray':'3,3',opacity:'0.35'}).forEach(([k,v])=>l.setAttribute(k,v))
-                  g.appendChild(l)
-                }
-              }
-              const mkT=(txt,y,sz,fill,fw)=>{const el=document.createElementNS(NS,'text');Object.entries({x:midX,y,'font-size':sz,'font-family':_MONO,'text-anchor':'middle',fill,'font-weight':fw}).forEach(([k,v])=>el.setAttribute(k,v));el.textContent=txt;return el}
-              g.appendChild(mkT(line1,labelY-4,'9','#cde8ff','700'))
-              g.appendChild(mkT(line2,labelY+7,'9',bc,'600'))
+              const el=document.createElementNS(NS,'text')
+              Object.entries({x:x2,y:labelY+3.5,'font-size':'9','font-family':_MONO,
+                'text-anchor':'middle',fill:bc,'font-weight':'700'}).forEach(([k,v])=>el.setAttribute(k,v))
+              el.textContent=txt
+              g.appendChild(el)
               svg.appendChild(g)
             }catch(_){}
           })
         })
       }
-      // ── Indicadores de la estrategia ──────────────────────────────────────────────────────
-      // Series normales de lightweight-charts, no SVG: son datos con su escala, no decoración. Quedan
-      // registradas para soltarlas en la limpieza del efecto, igual que los tramos de operación.
-      indSeriesRef.current=[]
-      ;(indicadores||[]).forEach(ind=>{
-        if(!ind?.data?.length) return
-        try{
-          const s=chart.addLineSeries({color:ind.color||'#ffd166',lineWidth:ind.lineWidth||1,
-            lastValueVisible:false,priceLineVisible:false,title:ind.name||''})
-          s.setData(ind.data)
-          indSeriesRef.current.push(s)
-        }catch(_){}
+
+      // ── Globo de la operación señalada ───────────────────────────────────────────────────
+      // Mismo patrón y mismo estilo que el de CandleChart en la vista de activo: un div absoluto junto al
+      // cursor, con el borde del color del resultado.
+      // CRITERIO con operaciones solapadas: gana la que CONTIENE la fecha del cursor y, entre varias, la
+      // de entrada MÁS RECIENTE, que es la que el usuario acaba de ver abrirse.
+      chartDivRef.current.parentElement?.querySelectorAll('.lw-trade-tip').forEach(el=>el.remove())
+      const _tip=document.createElement('div'); _tip.className='lw-trade-tip'
+      Object.assign(_tip.style,{position:'absolute',display:'none',background:'rgba(8,12,20,0.96)',
+        border:'1px solid #00e5a0',borderRadius:'6px',padding:'8px 12px',fontFamily:_MONO,fontSize:'11px',
+        color:'#e2eaf5',pointerEvents:'none',zIndex:'15',minWidth:'210px',boxShadow:'0 4px 20px rgba(0,0,0,0.5)'})
+      chartDivRef.current.parentElement?.appendChild(_tip)
+      tipRef.current=_tip
+      const _fecha=(d)=>{const p=String(d).split('-');return `${p[2]}/${p[1]}/${p[0]}`}
+      const _dias=(a,b)=>Math.max(1,Math.round((new Date(b)-new Date(a))/86400000))
+      const _num=(v)=>v==null?'—':Number(v).toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2})
+      const _fila=(k,v,col)=>`<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:#7a9bc0">${k}</span><b style="color:${col||'#e2eaf5'}">${v}</b></div>`
+      chart.subscribeCrosshairMove(param=>{
+        if(!param.point||param.time==null){_tip.style.display='none';return}
+        const hoy=normalizeTime(param.time)
+        let mejor=null
+        stratSignals.forEach(s=>{
+          ;(s.trades||[]).forEach(t=>{
+            if(!t.entryDate||!t.exitDate) return
+            if(t.entryDate<=hoy&&hoy<=t.exitDate&&(!mejor||t.entryDate>mejor.entryDate)) mejor=t
+          })
+        })
+        if(!mejor){_tip.style.display='none';return}
+        const bc=mejor.pnlPct>=0?'#00e5a0':'#ff4d6d'
+        const pnl=mejor.pnlSimple??0
+        _tip.style.borderColor=bc
+        _tip.innerHTML=
+          `<div style="font-size:10px;color:#7a9bc0;margin-bottom:5px">#${mejor.n} · ${_fecha(mejor.entryDate)} → ${_fecha(mejor.exitDate)}</div>`+
+          _fila('Entrada',_num(mejor.entryPx))+
+          _fila('Salida',_num(mejor.exitPx))+
+          _fila('Resultado',`${mejor.pnlPct>=0?'+':''}${(mejor.pnlPct||0).toFixed(2)}%`,bc)+
+          _fila('P&L',`${pnl>=0?'+':'-'}€${Math.round(Math.abs(pnl)).toLocaleString('es-ES')}`,bc)+
+          _fila('Días',String(_dias(mejor.entryDate,mejor.exitDate)))
+        const w=chartDivRef.current?.clientWidth||600
+        _tip.style.display='block'
+        _tip.style.left=((param.point.x+230>w)?Math.max(4,param.point.x-236):param.point.x+16)+'px'
+        _tip.style.top=Math.max(4,param.point.y-70)+'px'
       })
 
-      // ── Franjas donde el filtro impedía entrar ────────────────────────────────────────────
-      // Rectángulos en la capa SVG, no series: ocupan todo el alto y no deben participar en la escala de
-      // precios. Mismo patrón que drawFilterZones de CandleChart, incluido el insertBefore para que
-      // queden DETRÁS de marcadores y etiquetas.
-      const drawFilterZones=()=>{
-        const svg=svgRef.current
-        if(!svg||!chartRef.current) return
-        svg.querySelectorAll('.filter-zone').forEach(el=>el.remove())
-        if(!zonasFiltro?.length) return
-        const ts=chartRef.current.timeScale()
-        const w=chartDivRef.current?.clientWidth||800
-        const h=chartDivRef.current?.clientHeight||height
-        const NSZ='http://www.w3.org/2000/svg'
-        zonasFiltro.forEach(z=>{
-          try{
-            const x1=ts.timeToCoordinate(z.from), x2=ts.timeToCoordinate(z.to)
-            if(x1==null&&x2==null) return
-            const left=x1!=null?Math.max(0,x1):0
-            const right=x2!=null?Math.min(w,x2):w
-            if(right<=left) return
-            const rect=document.createElementNS(NSZ,'rect')
-            Object.entries({x:String(left),y:'0',width:String(right-left),height:String(h),
-              fill:'rgba(255,80,80,0.13)',class:'filter-zone','pointer-events':'none'})
-              .forEach(([k,v])=>rect.setAttribute(k,v))
-            svg.insertBefore(rect,svg.firstChild)
-          }catch(_){}
-        })
-      }
+      redibujaEtiquetasRef.current=drawTradeLabels
       const unsubLabels=chart.timeScale().subscribeVisibleTimeRangeChange(()=>setTimeout(()=>{drawTradeLabels();drawFilterZones()},30))
 
       // ── fitContent first, then apply sync range ──
@@ -659,6 +665,8 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
       if(roRef.current){try{roRef.current.disconnect()}catch(_){};roRef.current=null}
       svgRef.current?.querySelectorAll('.trade-label').forEach(el=>el.remove())
       svgRef.current?.querySelectorAll('.filter-zone').forEach(el=>el.remove())
+      if(tipRef.current){try{tipRef.current.remove()}catch(_){};tipRef.current=null}
+      redibujaEtiquetasRef.current=null
       candlesRef.current=null
       tradeSeriesMapRef.current=new Map()
       indSeriesRef.current=[]
