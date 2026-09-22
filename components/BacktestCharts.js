@@ -616,6 +616,48 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
         _tip.style.top=Math.max(4,param.point.y-70)+'px'
       })
 
+      // ── Indicadores de la estrategia ──────────────────────────────────────────────────────
+      // Series normales de lightweight-charts, no SVG: son datos con su escala, no decoración. Quedan
+      // registradas para soltarlas en la limpieza del efecto, igual que los tramos de operación.
+      indSeriesRef.current=[]
+      ;(indicadores||[]).forEach(ind=>{
+        if(!ind?.data?.length) return
+        try{
+          const s=chart.addLineSeries({color:ind.color||'#ffd166',lineWidth:ind.lineWidth||1,
+            lastValueVisible:false,priceLineVisible:false,title:ind.name||''})
+          s.setData(ind.data)
+          indSeriesRef.current.push(s)
+        }catch(_){}
+      })
+
+      // ── Franjas donde el filtro impedía entrar ────────────────────────────────────────────
+      // Rectángulos en la capa SVG, no series: ocupan todo el alto y no deben participar en la escala de
+      // precios. Mismo patrón que drawFilterZones de CandleChart, incluido el insertBefore para que
+      // queden DETRÁS de marcadores y etiquetas.
+      const drawFilterZones=()=>{
+        const svg=svgRef.current
+        if(!svg||!chartRef.current) return
+        svg.querySelectorAll('.filter-zone').forEach(el=>el.remove())
+        if(!zonasFiltro?.length) return
+        const ts=chartRef.current.timeScale()
+        const w=chartDivRef.current?.clientWidth||800
+        const h=chartDivRef.current?.clientHeight||height
+        const NSZ='http://www.w3.org/2000/svg'
+        zonasFiltro.forEach(z=>{
+          try{
+            const x1=ts.timeToCoordinate(z.from), x2=ts.timeToCoordinate(z.to)
+            if(x1==null&&x2==null) return
+            const left=x1!=null?Math.max(0,x1):0
+            const right=x2!=null?Math.min(w,x2):w
+            if(right<=left) return
+            const rect=document.createElementNS(NSZ,'rect')
+            Object.entries({x:String(left),y:'0',width:String(right-left),height:String(h),
+              fill:'rgba(255,80,80,0.13)',class:'filter-zone','pointer-events':'none'})
+              .forEach(([k,v])=>rect.setAttribute(k,v))
+            svg.insertBefore(rect,svg.firstChild)
+          }catch(_){}
+        })
+      }
       redibujaEtiquetasRef.current=drawTradeLabels
       const unsubLabels=chart.timeScale().subscribeVisibleTimeRangeChange(()=>setTimeout(()=>{drawTradeLabels();drawFilterZones()},30))
 
