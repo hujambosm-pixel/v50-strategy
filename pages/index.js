@@ -1319,6 +1319,10 @@ export default function Home() {
   // tecleadas en modo rango, por el mismo motivo: si no hay datos desde el inicio del rango, la curva
   // empieza después.
   // startDate sigue intacto en la respuesta: lo usan la exportación, el Gantt y los filtros de Max DD.
+  // Un ÚNICO formateador para la columna Max DD % de la tabla comparativa. La fila de estrategia la
+  // pintaba con un decimal y la de activo con dos, siendo la misma columna. El signo lo pone él, así que
+  // ningún sitio antepone su propio '-'. Solo formato: ningún cálculo pasa por aquí.
+  const fmtDDPct=(v)=>Number(v)>0?'-'+fmt(v,1,'%'):'0,0%'
   const mcAniosDeCurva=(curve)=>{
     const fd=curve?.[0]?.date, ld=curve?.[curve.length-1]?.date
     return fd&&ld?(new Date(ld)-new Date(fd))/(365.25*24*3600*1000):null
@@ -5051,7 +5055,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.770</title>
+        <title>Trading Simulator V9.771</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5129,7 +5133,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.770
+            <span className="dot"/>Trading Simulator V9.771
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -8204,7 +8208,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                     <td style={{padding:'5px 6px',color:profitPct>=0?'#00e5a0':'#ff4d6d',fontWeight:600}}>{fmt(profitPct,1,'%')}</td>
                                     <td style={{padding:'5px 6px',color:winRate>=50?'#00e5a0':'#ff4d6d',fontWeight:600}}>{fmt(winRate,1,'%')}</td>
                                     <td style={{padding:'5px 6px',color:pf>=1.5?'#00e5a0':pf>=1?'#ffd166':'#ff4d6d',fontWeight:600}}>{fmt(pf,2,'x')}</td>
-                                    <td style={{padding:'5px 6px',color:'#ff4d6d',fontWeight:600}}>-{fmt(r.result.maxDDFloatCompound||r.result.maxDDCompound||0,1,'%')}</td>
+                                    <td style={{padding:'5px 6px',color:'#ff4d6d',fontWeight:600}}>{fmtDDPct(r.result.maxDDFloatCompound||r.result.maxDDCompound||0)}</td>
                                     <td style={{padding:'5px 6px',color:'#ff4d6d',fontWeight:600}}>{(()=>{const e=r.result.maxDDFloatCompound?r.result.maxDDFloatCompoundEur:r.result.maxDDCompound?r.result.maxDDCompoundEur:0;return e?'-€'+Math.round(Math.abs(e)).toLocaleString('es-ES'):'€0'})()}</td>
                                     <td style={{padding:'5px 6px',color:'#7ab3cc',fontWeight:600}}>{r.result.avgCapOccupancyEur!=null?fmt(r.result.avgCapOccupancyEur,0,'€'):'—'}</td>
                                     <td style={{padding:'5px 6px',color:'#00d4ff',fontWeight:600}}>{fmt(avgCapInv,1,'%')}</td>
@@ -8255,7 +8259,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                         <td style={{padding:'4px 6px',color:ganPct>=0?'#00e5a0':'#ff4d6d'}}>{fmt(ganPct,1,'%')}</td>
                                         <td style={{padding:'4px 6px',color:a.winRate>=50?'#00e5a0':'#ff4d6d'}}>{fmt(a.winRate,1,'%')}</td>
                                         <td style={{padding:'4px 6px',color:fBenef>=1.5?'#00e5a0':fBenef>=1?'#ffd166':'#ff4d6d'}}>{fmt(fBenef,2,'x')}</td>
-                                        <td style={{padding:'4px 6px',color:'#ff4d6d'}}>{maxDD>0?'-'+fmt(maxDD,2,'%'):'0,00%'}</td>
+                                        <td style={{padding:'4px 6px',color:'#ff4d6d'}}>{fmtDDPct(maxDD)}</td>
                                         <td style={{padding:'4px 6px',color:'#ff4d6d'}}>{a.maxDDEur<0?'-€'+Math.round(Math.abs(a.maxDDEur)).toLocaleString('es-ES'):'€0'}</td>
                                         <td style={{padding:'4px 6px',color:'#7ab3cc'}}>{a.capInvMedioEur!=null?fmt(a.capInvMedioEur,0,'€'):'—'}</td>
                                         <td style={{padding:'4px 6px',color:'#9acce0'}}>{fmt(a.capInvMedio??0,1,'%')}</td>
@@ -8293,7 +8297,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                     <td style={{padding:'5px 6px',color:bhProfitPct>=0?'#a0b4c8':'#ff4d6d',fontWeight:600}}>{fmt(bhProfitPct,1,'%')}</td>
                                     <td style={{padding:'5px 6px',color:'#4a6a88'}}>—</td>
                                     <td style={{padding:'5px 6px',color:'#4a6a88'}}>—</td>
-                                    <td style={{padding:'5px 6px',color:'#ff9a3c',fontWeight:600}}>-{fmt(mcResult.maxDDBH||0,1,'%')}</td>
+                                    <td style={{padding:'5px 6px',color:'#ff9a3c',fontWeight:600}}>{fmtDDPct(mcResult.maxDDBH||0)}</td>
                                     <td style={{padding:'5px 6px',color:'#ff9a3c',fontWeight:600}}>{mcResult.maxDDBHEur<0?'-€'+Math.round(Math.abs(mcResult.maxDDBHEur)).toLocaleString('es-ES'):'€0'}</td>
                                     <td style={{padding:'5px 6px',color:'#4a6a88'}}>—</td>
                                     <td style={{padding:'5px 6px',color:'#9acce0'}}>100%</td>
@@ -8326,7 +8330,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                         <td style={{padding:'4px 6px',color:ganBHPct>=0?'#a0b4c8':'#ff4d6d'}}>{fmt(ganBHPct,1,'%')}</td>
                                         <td style={{padding:'4px 6px',color:'#4a6a88'}}>—</td>
                                         <td style={{padding:'4px 6px',color:'#4a6a88'}}>—</td>
-                                        <td style={{padding:'4px 6px',color:'#ff9a3c'}}>{a.priceMaxDD>0?'-'+fmt(a.priceMaxDD,2,'%'):'—'}</td>
+                                        <td style={{padding:'4px 6px',color:'#ff9a3c'}}>{a.priceMaxDD>0?fmtDDPct(a.priceMaxDD):'—'}</td>
                                         <td style={{padding:'4px 6px',color:'#ff9a3c'}}>{a.priceMaxDDEur<0?'-€'+Math.round(Math.abs(a.priceMaxDDEur)).toLocaleString('es-ES'):'—'}</td>
                                         <td style={{padding:'4px 6px',color:'#7ab3cc'}}>{fmt(sc,0,'€')}</td>
                                         <td style={{padding:'4px 6px',color:'#9acce0'}}>100%</td>
