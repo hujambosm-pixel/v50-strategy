@@ -5198,7 +5198,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.781</title>
+        <title>Trading Simulator V9.782</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5276,7 +5276,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.781
+            <span className="dot"/>Trading Simulator V9.782
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -9036,7 +9036,14 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                   <div className="trades-section">
                     <div className="section-title" style={{display:'flex',flexDirection:'column',gap:6,fontSize:14}}>
                       <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
-                        <span>{histTitle} — {histResult.allTrades.length} operaciones
+                        {/* Con el historial filtrado por un activo, el total a secas engaña: se lee como si
+                            la estrategia solo hubiera hecho esas operaciones. Se dice cuántas de cuántas. */}
+                        <span>{histTitle} — {(()=>{
+                            const _sym=mcActivoSel?.symbol
+                            if(!_sym) return `${histResult.allTrades.length} operaciones`
+                            const _n=histResult.allTrades.filter(t=>(t.symbol||'')===_sym).length
+                            return `${_n} de ${histResult.allTrades.length} operaciones`
+                          })()}
                           <span style={{fontWeight:400,fontSize:11,color:'#9acce0'}}> · clic activo → ver gráfico</span>
                         </span>
                         {/* Que el historial esté filtrado tiene que verse: si no, se lee como si la
