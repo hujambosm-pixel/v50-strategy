@@ -1074,6 +1074,10 @@ export default function Home() {
   // desde el historial al gráfico equivocado.
   const mcPanelVelasRef=useRef(null)       // chart de velas del panel
   const mcPanelCurvaRef=useRef(null)       // api {fitAll} de la curva del panel
+  // Ref de sincronía propio del panel. StratCompareChart no expone su chart, pero sí registra en este ref
+  // un handler que fija SU rango visible: es la única vía para llevarlo al mismo periodo que las velas.
+  // Local a propósito, nunca el chartSyncRef global: ese arrastraría también a los gráficos del equity.
+  const mcPanelSyncRef=useRef({syncing:false,listeners:[]})
   const sidebarResizing=useRef(false), rightResizing=useRef(false)
   const sidebarStartX=useRef(0), sidebarStartW=useRef(0)
   const rightStartX=useRef(0), rightStartW=useRef(0)
@@ -1278,7 +1282,6 @@ export default function Home() {
   const [mcVerIndicadores,setMcVerIndicadores]=useState(true)
   const [mcVerFranjas,setMcVerFranjas]=useState(true)
   const [mcPantallaCompleta,setMcPantallaCompleta]=useState(false)
-  const [mcAltoVentana,setMcAltoVentana]=useState(0)   // alto útil en pantalla completa
   const mcDetallePedidoRef=useRef(null)   // clave de la última petición lanzada
   const [mcShowBHCompare,setMcShowBHCompare]=useState(true) // B&H curve toggle in multi-strategy chart
   // Estrategia vigente en el HISTORIAL de operaciones. Fuente ÚNICA: la usan el propio historial y el
@@ -1468,21 +1471,41 @@ export default function Home() {
     const z=mcDetalleActivo?.filterZones
     return z?.length?z:null
   },[mcDetalleActivo,mcVerFranjas])
-  // Pantalla completa del panel de operaciones: Escape para salir y el alto de la ventana para repartirlo
-  // entre los dos gráficos. Las dos escuchas se quitan en el return; sin eso quedarían vivas al salir y
-  // Escape seguiría deseleccionando desde cualquier parte de la app.
+  // Pantalla completa del panel: Escape para salir. La escucha se quita en el return; sin eso quedaría
+  // viva al salir y Escape seguiría cerrando el panel desde cualquier parte de la app.
+  // El ALTO no se calcula aquí: el autoajuste de siempre mide el hueco entre el borde superior del
+  // contenedor del gráfico y el fondo de la ventana, y eso vale igual dentro del overlay —el contenedor
+  // sigue siendo hijo suyo y getBoundingClientRect da coordenadas de viewport—. Antes se restaba a mano el
+  // offsetHeight de la cabecera leído en pleno render, que llegaba de la maqueta ANTERIOR y por eso
+  // sobraba altura: el contenido no cabía, el contenedor flex encogía a sus hijos y la cabecera se comía
+  // su propio padding superior. De ahí que apareciera cortada.
   useEffect(()=>{
     if(!mcPantallaCompleta) return
-    const mide=()=>setMcAltoVentana(prev=>{const h=window.innerHeight;return prev===h?prev:h})
     const tecla=(e)=>{ if(e.key==='Escape') setMcPantallaCompleta(false) }
-    mide()
-    window.addEventListener('resize',mide)
     window.addEventListener('keydown',tecla)
-    return ()=>{ window.removeEventListener('resize',mide); window.removeEventListener('keydown',tecla) }
+    return ()=>{ window.removeEventListener('keydown',tecla) }
   },[mcPantallaCompleta])
   // Salir de pantalla completa al soltar la selección: el panel desaparece y dejar el modo encendido
   // dejaría la app cubierta por un overlay vacío.
   useEffect(()=>{ if(!mcActivoSel&&mcPantallaCompleta) setMcPantallaCompleta(false) },[mcActivoSel,mcPantallaCompleta])
+  // Lleva los DOS gráficos del panel al periodo del backtest. Las velas por su chart, que está a mano; la
+  // curva por el handler que ella misma registra en el ref de sincronía. Sin esto, cada una se ajustaba
+  // por su cuenta —las velas al rango pedido y la curva a todo su contenido— y al entrar o salir de
+  // pantalla completa acababan enseñando tramos distintos.
+  const mcAjustaRangoPanel=useCallback(()=>{
+    const r=mcRangoBacktest
+    if(!r?.from||!r?.to) return
+    try{ mcPanelVelasRef.current?.timeScale().setVisibleRange(r) }catch(_){}
+    ;(mcPanelSyncRef.current?.listeners||[]).forEach(l=>{ try{ l.handler(r) }catch(_){} })
+  },[mcRangoBacktest])
+  // Se reaplica cuando cambian el activo, el periodo, la pantalla completa o el alto: los cuatro
+  // reconstruyen algún chart. El retardo espera a esa reconstrucción —los dos cargan lightweight-charts
+  // de forma diferida— y el temporizador se cancela en el return.
+  useEffect(()=>{
+    if(!mcPanelActivo) return
+    const t=setTimeout(mcAjustaRangoPanel,180)
+    return ()=>clearTimeout(t)
+  },[mcPanelActivo,mcAjustaRangoPanel,mcPantallaCompleta,mcEquityH])
   // Valor de la línea de referencia del gráfico grande: el nivel de "ni gano ni pierdo", que depende de
   // QUÉ dibujan las series. En Estrategias son patrimonio y ese nivel es el capital inicial; en Activos
   // son beneficio con origen en cero, así que el nivel es CERO. Poner ahí el capital —lo que se hacía
@@ -5278,7 +5301,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.787</title>
+        <title>Trading Simulator V9.788</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5356,7 +5379,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.787
+            <span className="dot"/>Trading Simulator V9.788
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -8616,14 +8639,19 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                     dos gráficos, que son hijos suyos. Nada se desmonta: solo cambia dónde se dibuja. */}
                 <div className="equity-section" data-chart="equity"
                   style={(mcPanelActivo&&mcPantallaCompleta)?{position:'fixed',inset:0,zIndex:60,
-                    background:'var(--bg)',padding:'8px 12px',overflow:'hidden',
+                    background:'var(--bg)',padding:'0 12px 8px',overflow:'hidden',
                     display:'flex',flexDirection:'column'}:undefined}>
                   {/* Cabecera en DOS grupos. El de fuera NO envuelve: así el botón de periodo completo se
                       queda siempre en la primera línea, pegado a la derecha, sin necesidad del marginLeft
                       automático de antes. Todo lo demás vive en el grupo izquierdo, que es quien envuelve
                       —flex:1 para ocupar el hueco y minWidth:0 para poder encogerse—, de modo que los
                       toggles de series caen a una segunda línea DENTRO del grupo y no desplazan nada. */}
-                  <div ref={mcHeaderRef} className="section-title" style={{display:'flex',alignItems:'flex-start',gap:6,fontSize:14}}>
+                  {/* flexShrink:0 en pantalla completa: el contenedor es flex-column y, si el contenido se
+                      pasa de alto, encogería también la cabecera —que tiene 16 px de padding superior— y
+                      la cortaría por arriba. La cabecera manda su alto; lo que se ajusta son los gráficos. */}
+                  <div ref={mcHeaderRef} className="section-title"
+                    style={{display:'flex',alignItems:'flex-start',gap:6,fontSize:14,
+                      ...((mcPanelActivo&&mcPantallaCompleta)?{flexShrink:0}:{})}}>
                     <div style={{display:'flex',alignItems:'flex-start',flexWrap:'wrap',gap:6,flex:1,minWidth:0}}>
                     {/* Con un activo seleccionado, el área del gráfico grande pasa a ser suya y la cabecera
                         lo dice. Los controles del equity —conmutador, Flotante, impuestos, toggles— se
@@ -8844,8 +8872,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         al periodo del backtest, que es su "todo". */}
                     <button onClick={()=>{
                         if(mcPanelActivo){
-                          try{ if(mcRangoBacktest) mcPanelVelasRef.current?.timeScale().setVisibleRange(mcRangoBacktest) }catch(_){}
-                          mcPanelCurvaRef.current?.fitAll()
+                          mcAjustaRangoPanel()
                         }else{
                           mcChartApiRef.current?.fitAll()
                         }
@@ -8870,12 +8897,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                     // Reparto del alto: el header propio de las velas se descuenta primero, y el resto va
                     // 75/25. La suma es exacta, no aproximada, para que no sobre ni falte un píxel.
                     const ALTO_CABECERA_VELAS=30
-                    // En pantalla completa manda la ventana, descontando la cabecera de la sección; si no,
-                    // el alto que ya calcula el autoajuste de siempre.
-                    const base=mcPantallaCompleta&&mcAltoVentana
-                      ?mcAltoVentana-(mcHeaderRef.current?.offsetHeight||34)-24
-                      :mcEquityH
-                    const util=Math.max(180,base-ALTO_CABECERA_VELAS)
+                    const util=Math.max(180,mcEquityH-ALTO_CABECERA_VELAS)
                     const hVelas=Math.round(util*0.75)
                     const hCurva=util-hVelas
                     return(
@@ -8892,6 +8914,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         {/* Referencia en 0: la curva es rendimiento, no patrimonio. */}
                         <StratCompareChart curves={mcCurvaActivoSel} capitalIni={0} showMaxDD={false}
                           chartHeight={hCurva} formato="pct"
+                          syncRef={mcPanelSyncRef}
                           onReady={api=>{mcPanelCurvaRef.current=api}}/>
                       </div>
                     )
