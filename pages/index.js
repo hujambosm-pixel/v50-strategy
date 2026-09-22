@@ -5157,7 +5157,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.777</title>
+        <title>Trading Simulator V9.778</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5235,7 +5235,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.777
+            <span className="dot"/>Trading Simulator V9.778
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -8916,6 +8916,17 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         <span>{histTitle} — {histResult.allTrades.length} operaciones
                           <span style={{fontWeight:400,fontSize:11,color:'#9acce0'}}> · clic activo → ver gráfico</span>
                         </span>
+                        {/* Que el historial esté filtrado tiene que verse: si no, se lee como si la
+                            estrategia solo hubiera operado ese activo. Y se quita desde aquí. */}
+                        {mcActivoSel&&(
+                          <span onClick={()=>setMcActivoSel(null)}
+                            title={`Quitar el filtro por ${mcActivoSel.symbol}`}
+                            style={{display:'inline-flex',alignItems:'center',gap:5,cursor:'pointer',
+                              fontFamily:MONO,fontSize:10,fontWeight:400,padding:'2px 7px',borderRadius:3,
+                              border:'1px solid #00d4ff',background:'rgba(0,212,255,0.12)',color:'#00d4ff'}}>
+                            Solo {mcActivoSel.symbol} ✕
+                          </span>
+                        )}
                         <div style={{display:'flex',gap:4,marginLeft:'auto',alignItems:'center',flexWrap:'wrap'}}>
                           {!mcShowGantt&&<input value={mcTradeFilter} onChange={e=>setMcTradeFilter(e.target.value)}
                             placeholder="Filtrar activo…"
@@ -8998,9 +9009,18 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         <tbody>
                           {(()=>{
                             const capIni2=Number(mcCapitalIni||capitalIni)
-                            const allT2=(mcTradeFilter
-                              ?histResult.allTrades.filter(t=>(t.symbol||'').toUpperCase().includes(mcTradeFilter.toUpperCase()))
-                              :histResult.allTrades)
+                            // Dos filtros independientes que se combinan. El del activo seleccionado es por
+                            // coincidencia EXACTA: con `includes`, seleccionar V arrastraría NVDA. El del
+                            // buscador sigue siendo por texto, y no se escribe en él: lo que el usuario tenga
+                            // tecleado se respeta y se aplica encima.
+                            const _symSel=mcActivoSel?.symbol||null
+                            const _txt=mcTradeFilter?mcTradeFilter.toUpperCase():''
+                            const allT2=histResult.allTrades.filter(t=>{
+                              const sym=t.symbol||''
+                              if(_symSel&&sym!==_symSel) return false
+                              if(_txt&&!sym.toUpperCase().includes(_txt)) return false
+                              return true
+                            })
                             const curveArr=(histResult.compoundCurve||[]).slice().sort((a,b)=>a.date<b.date?-1:1)
                             const getEquityAt=date=>{
                               if(!curveArr.length)return capIni2
