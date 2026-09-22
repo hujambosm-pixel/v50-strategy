@@ -5301,7 +5301,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.788</title>
+        <title>Trading Simulator V9.789</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5379,7 +5379,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.788
+            <span className="dot"/>Trading Simulator V9.789
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -8636,9 +8636,14 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                 {/* ── Equity — misma estructura que activos individuales ── */}
                 {/* En pantalla completa la sección se saca del flujo y cubre la ventana: se lleva consigo
                     su cabecera —símbolo, estrategia, rendimiento, interruptores y periodo completo— y los
-                    dos gráficos, que son hijos suyos. Nada se desmonta: solo cambia dónde se dibuja. */}
+                    dos gráficos, que son hijos suyos. Nada se desmonta: solo cambia dónde se dibuja.
+                    z-index 150: por ENCIMA de la barra de la aplicación, que es sticky con z-index 100,
+                    fondo casi opaco y backdrop-filter, y tapaba sus 33 px superiores —justo donde cae esta
+                    cabecera, que empieza con 16 px de padding—. Y por DEBAJO de 200, donde empiezan los
+                    diálogos, menús y avisos de la app, que deben seguir apareciendo sobre el overlay.
+                    La franja 100-200 estaba libre. */}
                 <div className="equity-section" data-chart="equity"
-                  style={(mcPanelActivo&&mcPantallaCompleta)?{position:'fixed',inset:0,zIndex:60,
+                  style={(mcPanelActivo&&mcPantallaCompleta)?{position:'fixed',inset:0,zIndex:150,
                     background:'var(--bg)',padding:'0 12px 8px',overflow:'hidden',
                     display:'flex',flexDirection:'column'}:undefined}>
                   {/* Cabecera en DOS grupos. El de fuera NO envuelve: así el botón de periodo completo se
