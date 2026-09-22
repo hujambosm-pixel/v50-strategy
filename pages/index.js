@@ -1230,6 +1230,16 @@ export default function Home() {
       :'Historial Multicartera'
     return {isMultiHist,histResult,histTitle}
   },[mcMultiResults,mcHistStratId,mcResult])
+  // A qué fila de la lista corresponde el `null` de mcHistStratId, para que el selector del gráfico
+  // pueda marcarla sin fijarla: si el usuario elige justo esa, se vuelve a escribir null y "la activa"
+  // sigue siendo dinámica. Réplica exacta de la cascada de mcHistSel —primero la cartera combinada,
+  // luego la fila cuyo resultado ES mcResult—, comparando por identidad de objeto porque mcResult sale
+  // de ese mismo array. Fuera de los memos a propósito: son dos búsquedas y no deben provocar que la
+  // cadena del gráfico se rehaga.
+  const mcHistIdPorDefecto=mcDisplayResults.find(r=>r.id==='__portfolio__')?.id
+    ??mcDisplayResults.find(r=>r.result===mcResult)?.id
+    ??mcDisplayResults[0]?.id??''
+  const mcHistIdVigente=mcHistStratId??mcHistIdPorDefecto
   // Series del modo Activos: una por activo, la caja y la curva total como referencia. Este memo hace lo
   // CARO —sanear cada serie— y depende solo de los datos, así que no se rehace al marcar o desmarcar.
   const mcSeriesActivos=useMemo(()=>{
@@ -5041,7 +5051,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.769</title>
+        <title>Trading Simulator V9.770</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5119,7 +5129,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.769
+            <span className="dot"/>Trading Simulator V9.770
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -8340,6 +8350,25 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                     {/* El rótulo lo decide el mismo conmutador: en Activos no se dibuja patrimonio sino
                         beneficio, empezando todas las series en cero. La clase pone las mayúsculas. */}
                     <span>{mcPorActivo?'Profit':'Equity'}</span>
+                    {/* Qué estrategia se está dibujando. Con varias, la lista es LA MISMA que ofrece el
+                        historial de operaciones (mcDisplayResults) y escribe en el MISMO estado
+                        (mcHistStratId): elegir aquí mueve el historial y elegir allí mueve el gráfico, sin
+                        una segunda lista que pueda divergir. Elegir la que hoy es "la activa" escribe null,
+                        no su id, para no congelar lo que es dinámico. Con una sola estrategia no hay nada
+                        que elegir, así que va el nombre a secas. */}
+                    {mcPorActivo&&(mcHistSel.isMultiHist?(
+                      <select value={mcHistIdVigente}
+                        onChange={e=>setMcHistStratId(e.target.value===mcHistIdPorDefecto?null:e.target.value)}
+                        title="Estrategia que se está dibujando. Es la misma del historial de operaciones."
+                        style={{background:'#0d1520',border:'1px solid #1a2d45',color:'#8aadcc',fontFamily:MONO,
+                          fontSize:10,fontWeight:400,padding:'1px 4px',borderRadius:3,cursor:'pointer',maxWidth:200}}>
+                        {mcDisplayResults.map(r=>(<option key={r.id} value={r.id}>{r.name}</option>))}
+                      </select>
+                    ):(
+                      <span style={{fontFamily:MONO,fontSize:10,fontWeight:400,color:'#8aadcc',alignSelf:'center'}}>
+                        {mcDisplayResults[0]?.name||mcSingleStratName}
+                      </span>
+                    ))}
                     {/* Conmutador Estrategias / Activos. En Activos se dibuja la contribución de cada
                         activo de la estrategia vigente en el historial (mcHistSel), más la caja. Si el
                         resultado en memoria no trae assetCurves —por ejemplo uno anterior a V9.760— el
