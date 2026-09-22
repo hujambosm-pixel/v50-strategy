@@ -565,12 +565,60 @@ function lookupName(sym) {
 
 
 // ── MultiCartChart ───────────────────────────────────────────
-const STRAT_COMPARE_COLORS=['#00d4ff','#ffd166','#00e5a0','#ff6b9d','#9b72ff','#ff9a3c','#4ecdc4','#c8f7c5']
+// ── Colores de las series ───────────────────────────────────────────────────
+// Cada gráfico dibuja a la vez unas series con paleta y otras con color FIJO por significado. Una serie
+// de paleta que repita uno de esos colores fijos se lee como si fuera esa otra cosa, así que cada paleta
+// excluye los fijos con los que convive:
+//   modo Estrategias → B&H Diversificado #a0b4c8, B&H SP500 #9b72ff y la cartera combinada #ffd166
+//   modo Activos     → Total estrategia #00e5a0 y No invertido #8aadcc  (allí no hay B&H, pero se
+//                      excluyen igualmente los suyos para que un activo nunca se disfrace de benchmark)
+const MC_COLOR_TOTAL='#00e5a0', MC_COLOR_CAJA='#8aadcc'
+// Color propio de la fila "◈ Multicartera (N)", FUERA de la paleta de estrategias a propósito: antes era
+// literalmente su segundo color, así que la cartera combinada salía siempre del mismo tono que la segunda
+// estrategia de la lista y en la tabla no se distinguían.
+const MC_COLOR_PORTFOLIO='#ffd166'
+// Estrategias, por orden de ejecución. Ocho tonos sin dos verdes próximos: antes convivían #00e5a0,
+// #4ecdc4 y #c8f7c5, y además #9b72ff era EXACTAMENTE el del B&H SP500.
+const STRAT_COMPARE_COLORS=['#00d4ff','#ff6b9d','#ff9a3c','#00e5a0','#c3e63a','#e879f9','#5ea8ff','#ff5c5c']
 // ── Modo Activos del gráfico de equity ──────────────────────────────────────
-// Color estable por activo: sale del propio símbolo, así el mismo activo repite color entre ejecuciones
-// y entre estrategias. Sin el verde de la curva total (#00e5a0) ni el gris de la caja.
-const COLORES_ACTIVO=['#00d4ff','#ff9a3c','#9b72ff','#ffd166','#4ade80','#f472b6','#38bdf8','#fb923c','#a3e635','#c084fc','#2dd4bf','#f87171']
-const colorDeActivo=(sym)=>{let h=0;for(let i=0;i<String(sym).length;i++)h=(h*31+String(sym).charCodeAt(i))>>>0;return COLORES_ACTIVO[h%COLORES_ACTIVO.length]}
+// Doce tonos repartidos por el círculo cromático, saltándose la banda del verde (la del total) y la del
+// violeta (la del SP500). Los ocho primeros son de familias distintas; los cuatro últimos repiten familia
+// con una luminosidad muy distinta —marrón frente a naranja, oliva frente a lima, petróleo frente a cian,
+// púrpura frente a magenta—, que es lo que se puede hacer con doce colores quitando dos bandas enteras.
+const COLORES_ACTIVO=[
+  '#00d4ff', // cian
+  '#ff9a3c', // naranja
+  '#e879f9', // magenta
+  '#c3e63a', // lima
+  '#5ea8ff', // azul
+  '#ff5c5c', // rojo
+  '#ffd166', // amarillo
+  '#ff6bb5', // rosa
+  '#b5651d', // marrón
+  '#7a9b2e', // oliva
+  '#0090b3', // petróleo
+  '#c04ad6', // púrpura
+]
+// Hash estable del símbolo: el mismo activo pide siempre el mismo color, entre ejecuciones y entre
+// estrategias. No basta por sí solo, porque dos símbolos distintos pueden caer en el mismo índice.
+const _hashSimbolo=(sym)=>{let h=0;const s=String(sym);for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))>>>0;return h}
+// Asignación sin colisiones DENTRO de un mismo gráfico: cada activo pide el color de su hash y, si ya lo
+// tiene otro, se lleva el siguiente libre de la paleta. El orden es alfabético para que el reparto no
+// dependa del orden en que venga la respuesta. A partir del activo número 13 empieza otra vuelta: los
+// mismos colores, pero con trazo discontinuo, que es lo que los separa de la vuelta anterior.
+const asignaColoresActivos=(simbolos)=>{
+  const n=COLORES_ACTIVO.length
+  const usados=new Set()
+  const out={}
+  ;[...simbolos].sort().forEach((sym,i)=>{
+    if(i%n===0) usados.clear()            // cada vuelta reparte la paleta entera otra vez
+    let k=_hashSimbolo(sym)%n
+    for(let j=0;j<n&&usados.has(k);j++) k=(k+1)%n
+    usados.add(k)
+    out[sym]={color:COLORES_ACTIVO[k],dashed:i>=n}
+  })
+  return out
+}
 // Saneado antes de entregar una serie a lightweight-charts: fechas únicas y ascendentes y valores
 // finitos. Una sola fecha repetida o un NaN matan la línea en silencio, sin error ni aviso.
 // Ids de las dos series que no son un activo. Por defecto la caja va OCULTA —es capital, no resultado,
@@ -1246,8 +1294,14 @@ export default function Home() {
   const mcSeriesActivos=useMemo(()=>{
     const r=mcHistSel.histResult
     if(!r?.assetCurves?.length) return null
+    // El reparto de colores se hace AQUÍ, dentro del memo, y sobre la lista completa de activos de este
+    // gráfico: es la única forma de resolver las colisiones, que dependen de con quién le toque convivir.
+    // Calculado fuera habría que rehacerlo por separado y podría desincronizarse de las series.
+    const colores=asignaColoresActivos(r.assetCurves.map(a=>a.symbol))
     const series=r.assetCurves.map(a=>({
-      id:`activo__${a.symbol}`,name:a.symbol,color:colorDeActivo(a.symbol),
+      id:`activo__${a.symbol}`,name:a.symbol,
+      color:colores[a.symbol]?.color??COLORES_ACTIVO[0],
+      dashed:!!colores[a.symbol]?.dashed,
       data:saneaCurva(a.data),maxDD:0,maxDDDate:null,taxByDate:null,
     }))
     const caja=saneaCurva(r.cashCurve)
@@ -1262,8 +1316,8 @@ export default function Home() {
         .map(p=>({date:p.date,value:p.value-capBase}))
     const lista=[
       ...series,
-      ...(caja.length>1?[{id:MC_ID_CAJA,name:'No invertido',color:'#8aadcc',data:caja,dashed:true,maxDD:0,maxDDDate:null,taxByDate:null}]:[]),
-      ...(total.length>1?[{id:MC_ID_TOTAL,name:'Total estrategia',color:'#00e5a0',data:total,maxDD:0,maxDDDate:null,taxByDate:null}]:[]),
+      ...(caja.length>1?[{id:MC_ID_CAJA,name:'No invertido',color:MC_COLOR_CAJA,data:caja,dashed:true,maxDD:0,maxDDDate:null,taxByDate:null}]:[]),
+      ...(total.length>1?[{id:MC_ID_TOTAL,name:'Total estrategia',color:MC_COLOR_TOTAL,data:total,maxDD:0,maxDDDate:null,taxByDate:null}]:[]),
     ]
     // Una serie de un solo punto no se dibuja: no es una línea.
     const dibujables=lista.filter(c=>c.data.length>1)
@@ -4685,7 +4739,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
           if(!portfolioRes.ok) throw new Error(portfolioJson.error||'Error en Multicartera')
           setMcMultiResults([...results,{
             id:'__portfolio__',name:`◈ Multicartera (${results.length})`,
-            color:'#ffd166',result:portfolioJson
+            color:MC_COLOR_PORTFOLIO,result:portfolioJson
           }])
         }catch(e){
           setMcError('Multicartera: '+e.message)  // no aborta: individuales ya están
@@ -5060,7 +5114,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.772</title>
+        <title>Trading Simulator V9.773</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5138,7 +5192,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.772
+            <span className="dot"/>Trading Simulator V9.773
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
