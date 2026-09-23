@@ -1370,7 +1370,7 @@ export default function Home() {
   // ya no indica.
   const mcPonerEstrategia=(id)=>{
     setMcHistStratId(id)
-    if(id===MC_TODAS) setMcActivoSel(null)
+    if(id===MC_TODAS){ setMcActivoSel(null); setMcPorActivo(false) }
   }
   // El activo seleccionado vive dentro de una estrategia. Si el historial cambia a otra —desde el selector
   // del modo Activos o desde sus botones—, hay dos salidas: si esa estrategia también opera el activo, la
@@ -1379,6 +1379,10 @@ export default function Home() {
   // tras igualarlo, el efecto ya no escribe.
   useEffect(()=>{
     if(!mcActivoSel) return
+    // Con "todas" no hay panel del activo: hoy toda ruta hacia TODAS pasa por mcPonerEstrategia y ya lo
+    // suelta, pero si alguna futura no lo hiciera, la resincronización de abajo escribiría el CENTINELA
+    // como stratId de la selección y el resaltado apuntaría a una fila inexistente.
+    if(mcTodasStrats){ setMcActivoSel(null); return }
     const hay=(mcHistSel.histResult?.assetStats||[]).some(a=>a.symbol===mcActivoSel.symbol)
     if(!hay){ setMcActivoSel(null); return }
     // Resincronizar la fila resaltada solo tiene sentido si la estrategia guardada es una de la lista.
@@ -1386,7 +1390,7 @@ export default function Home() {
     // al id vigente dejaría el resaltado en una fila que no existe y el segundo clic no deseleccionaría.
     const _enLista=mcDisplayResults.some(x=>x.id===mcActivoSel.stratId)
     if(_enLista&&mcActivoSel.stratId!==mcHistIdVigente) setMcActivoSel({stratId:mcHistIdVigente,symbol:mcActivoSel.symbol})
-  },[mcHistSel,mcHistIdVigente,mcActivoSel,mcDisplayResults])
+  },[mcHistSel,mcHistIdVigente,mcActivoSel,mcDisplayResults,mcTodasStrats])
   // Series del modo Activos: una por activo, la caja y la curva total como referencia. Este memo hace lo
   // CARO —sanear cada serie— y depende solo de los datos, así que no se rehace al marcar o desmarcar.
   const mcSeriesActivos=useMemo(()=>{
@@ -5449,7 +5453,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.810</title>
+        <title>Trading Simulator V9.811</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5527,7 +5531,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.810
+            <span className="dot"/>Trading Simulator V9.811
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -8556,6 +8560,9 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               const profit=lastC-capIniR
                               const profitPct=capIniR>0?profit/capIniR*100:0
                               const rStats=r.result.assetStats||[]
+                              // ¿Es esta la estrategia a la que está filtrado el panel? La tabla es el
+                              // sitio donde se elige, así que tiene que verse desde aquí qué se eligió.
+                              const rSel=!mcTodasStrats&&mcHistIdVigente===r.id
                               const avgCapInv=r.result.avgCapOccupancy??(rStats.length?rStats.reduce((s,a)=>s+(a.capInvMedio||0),0)/rStats.length:0)
                               const avgTInv=r.result.tInvEstrategia??(rStats.length?rStats.reduce((s,a)=>s+(a.tInvertido||0),0)/rStats.length:0)
                               return(
@@ -8576,8 +8583,9 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                       setMcAssetOpen(v=>({...v,[r.id]:!isOpen}))
                                     }}
                                     style={{borderBottom:'1px solid rgba(255,255,255,0.04)',
-                                      background:r.color+'14',
-                                      cursor:rStats.length>0?'pointer':'default'}}>
+                                      background:r.color+(rSel?'2e':'14'),
+                                      boxShadow:rSel?`inset 3px 0 0 ${r.color}`:undefined,
+                                      cursor:'pointer'}}>
                                     <td style={{padding:'5px 6px'}}>
                                       <div style={{display:'flex',alignItems:'center',gap:5}}>
                                         {rStats.length>0&&<span style={{fontFamily:MONO,fontSize:9,color:'#4a7a9a',width:8,flexShrink:0}}>{isOpen?'▼':'▶'}</span>}
@@ -8933,8 +8941,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         onChange={e=>{
                           const v=e.target.value
                           // Elegir "todas" desde aquí sale del modo Activos, que necesita UNA estrategia.
-                          if(v===MC_TODAS){ setMcPorActivo(false); mcPonerEstrategia(MC_TODAS); return }
-                          mcPonerEstrategia(v===mcHistIdPorDefecto?null:v)
+                          // mcPonerEstrategia ya apaga el modo Activos al volver a TODAS.
+                          mcPonerEstrategia(v===MC_TODAS?MC_TODAS:(v===mcHistIdPorDefecto?null:v))
                         }}
                         title="Estrategia que se está dibujando. Es la misma del historial de operaciones."
                         style={{background:'#0d1520',border:'1px solid #1a2d45',color:'#8aadcc',fontFamily:MONO,
@@ -9384,7 +9392,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                   const {isMultiHist,histResult,histTitle}=mcHistSel
                   if(!histResult?.allTrades?.length) return null
                   // Botones Exportar/Gantt — deshabilitados si modo multi sin estrategia seleccionada
-                  const histBtnsDisabled=isMultiHist&&!mcHistStratId
+                  const histBtnsDisabled=isMultiHist&&(mcTodasStrats||!mcHistStratId)
                   const histBtnTitle=histBtnsDisabled?'Selecciona una estrategia en el historial':''
                   // handleRequestDiscarded para el Gantt de este historial
                   const handleGanttDiscarded=async()=>{
