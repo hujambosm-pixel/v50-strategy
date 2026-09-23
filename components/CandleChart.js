@@ -393,25 +393,8 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         pintarLinea('bbLower', { color: '#2196F3', lineWidth: 1, lastValueVisible: false, priceLineVisible: false, title: 'BB Lower' })
       }
 
-      // ── MAE (Maximum Adverse Excursion) por trade ──
-      const tradeMAEs = trades.map(t => {
-        if(!t.entryDate||!t.exitDate||!t.entryPrice) return { ...t, mae:0, minLow:t.entryPrice, minDate:t.entryDate }
-        const velas = data.filter(d => d && d.date >= t.entryDate && d.date <= t.exitDate)
-        if(!velas.length) return { ...t, mae:0, minLow:t.entryPrice, minDate:t.entryDate }
-        let peak=t.entryPrice, maxDD=0, minDate=null, minLow=t.entryPrice
-        velas.forEach(v=>{
-          if(v.high>peak) peak=v.high
-          const dd=(v.low-peak)/peak*100
-          if(dd<maxDD){maxDD=dd;minDate=v.date;minLow=v.low}
-        })
-        return { ...t, mae:maxDD, minLow, minDate:minDate||t.entryDate }
-      })
-      const worstMAETrade = tradeMAEs.length
-        ? tradeMAEs.reduce((worst, t) => t.mae < worst.mae ? t : worst, tradeMAEs[0])
-        : null
-
       // Líneas de trades — diagonal P&L + horizontales entrada/stop estilo TV
-      tradeMAEs.forEach(t=>{
+      trades.forEach(t=>{
         if(!t.entryDate||!t.exitDate) return
         if(visuals?.lines!==false){
           const ls=chart.addLineSeries({color:t.pnlPct>=0?(visuals?.linesColor||'#00e5a0'):'#ff4d6d',lineWidth:2,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
@@ -454,7 +437,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       const oblMarkers=[]  // emoji ↗/↘ dibujados en SVG overlay, sin shape nativo
       const _isRsiMode=!_indType&&data.some(d=>d.rsiLine!=null)
       if(visuals?.arrows!==false&&!_isRsiMode){
-        tradeMAEs.forEach(t=>{
+        trades.forEach(t=>{
           const _as=visuals?.arrowsShape||'arrowUp'
           const _asExit=_as==='arrowUp'?'arrowDown':_as==='arrowDown'?'arrowUp':_as
           if(_as==='oblicua'){
@@ -785,7 +768,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         const NS='http://www.w3.org/2000/svg'
         // BUG 1 FIX: si ningún trade tiene coordenadas válidas, es un estado transitorio
         // (chart en resize/applyOptions) — no limpiar para evitar que queden vacías
-        const hasValidCoords=tradeMAEs.some(t=>{
+        const hasValidCoords=trades.some(t=>{
           if(!t.entryDate&&!t.exitDate) return false
           const ts=chartRef.current?.timeScale()
           const x1=ts?.timeToCoordinate(t.entryDate)
@@ -794,7 +777,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         })
         // Guard solo cuando labelMode>0: si es transitorio, conservar labels existentes
         // Cuando labelMode===0, SIEMPRE limpiar (nunca dejar residuos de modos anteriores)
-        if(labelMode>0&&tradeMAEs.length>0&&!hasValidCoords) return
+        if(labelMode>0&&trades.length>0&&!hasValidCoords) return
         svg.querySelectorAll('.trade-label').forEach(el=>el.remove())
         svg.querySelectorAll('.obl-marker').forEach(el=>el.remove())
         // Dibujar marcadores oblicuos (independiente del toggle labels)
@@ -816,7 +799,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
           })
         }
         if(visuals?.labels===false) return
-        tradeMAEs.forEach((t,idx)=>{
+        trades.forEach((t,idx)=>{
           if(!t.entryDate||!t.exitDate) return
           try {
             const ts=chartRef.current.timeScale()
@@ -840,9 +823,6 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
               }).forEach(([k,v])=>l.setAttribute(k,v))
               return l
             }
-            // Añadir MAE% al label del peor trade
-            const isWorstMAE=worstMAETrade&&t.entryDate===worstMAETrade.entryDate&&t.exitDate===worstMAETrade.exitDate
-
             // Helpers compartidos CAMBIO 2
             const mkRect=(x,y,w,h,fill,stroke)=>{
               const r=document.createElementNS(NS,'rect')
