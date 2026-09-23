@@ -5423,7 +5423,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.807</title>
+        <title>Trading Simulator V9.808</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5501,7 +5501,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.807
+            <span className="dot"/>Trading Simulator V9.808
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -9200,11 +9200,21 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       <span style={{color:'#00e5a0',fontWeight:600}}>
                         Capital empleado
                       </span>
+                      {/* Este bloque sigue a la estrategia activa pero NO se desglosa por activo: la
+                          ocupación por activo no viaja en la respuesta. Con un activo seleccionado hay
+                          que decirlo, o se leería como si fuera suya. */}
+                      {mcActivoSel&&(
+                        <span title="La ocupación de capital viaja por estrategia, no por activo: este gráfico es el de la cartera completa de la estrategia activa."
+                          style={{fontFamily:MONO,fontSize:9,fontWeight:400,cursor:'help',padding:'1px 6px',
+                            borderRadius:3,color:'#7a9bc0',background:'rgba(122,155,192,0.08)',border:'1px solid #1a2d45'}}>
+                          cartera completa · no filtra por {mcActivoSel.symbol}
+                        </span>
+                      )}
                     </div>
                     <div style={{width:'calc(100% - 21px)',marginLeft:0}}>
                     <McOccupancyChart
                       series={mcDisplayResults.length>0
-                        ?mcDisplayResults.filter(r=>mcStratVisible[r.id]!==false).map(r=>({
+                        ?mcDisplayResults.filter(r=>mcStratVisible[r.id]!==false).filter(r=>mcEsStratActiva(r.id)).map(r=>({
                             id:r.id,color:r.color,
                             occupancyCurve:r.result.occupancyCurve,
                             compoundCurve:r.result.compoundCurve,
