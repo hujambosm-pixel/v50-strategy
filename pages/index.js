@@ -1109,6 +1109,8 @@ export default function Home() {
   const [mcEquityH,setMcEquityH]=useState(300) // resizable MC equity chart height
   const mcEquityContainerRef=useRef(null)  // mide el hueco disponible para autoajustar mcEquityH
   const mcHeaderRef=useRef(null)           // cabecera del gráfico: al envolver cambia de alto y mueve el hueco
+  const mcScrollRef=useRef(null)           // contenedor con scroll del panel: el hueco se mide contra ÉL, no contra la ventana
+  const mcEquityPrevRef=useRef(300)        // alto anterior del equity, para compensar el scroll cuando cambia
   // Refs LOCALES del panel de operaciones. Deliberadamente fuera de mcChartRefsMap y mcChartsSyncRef: esos
   // son de la parrilla, y registrar aquí el mismo símbolo pisaría su instancia y mandaría la navegación
   // desde el historial al gráfico equivocado.
@@ -1934,9 +1936,13 @@ export default function Home() {
     ro.observe(tlInvestContainerRef.current)
     return ()=>ro.disconnect()
   },[])
+  // Cuántas series tiene el modo Activos: es lo que hace crecer la fila de toggles de la cabecera y, con
+  // ella, el hueco del gráfico. Un número, no el array: así el autoajuste no se rehace cuando las mismas
+  // series se recalculan por un cambio de filtro.
+  const mcNSeriesActivos=mcSeriesActivos?.length??0
   // ── Autoajuste de la altura del equity del multibacktest ──
   // Mide el hueco entre el borde superior del contenedor del gráfico (bajo la fila de botones EQUITY)
-  // y el fondo de la ventana, y lo usa como mcEquityH. Recalcula al montar, al hacer resize de la ventana,
+  // y el fondo del PANEL, y lo usa como mcEquityH. Recalcula al montar, al hacer resize de la ventana,
   // y cuando cambia mcDisplayResults/mcResult (varía la altura de la tabla comparativa → cambia el hueco).
   // Y, sobre todo, cuando cambia el ALTO DE LA CABECERA, que es lo que hay justo encima: los toggles de
   // series viven en su fila de botones y con muchos activos ocupan varias líneas. Eso no depende solo del
@@ -1950,8 +1956,21 @@ export default function Home() {
     const recompute=()=>{
       const el=mcEquityContainerRef.current
       if(!el) return
-      const top=el.getBoundingClientRect().top
-      const hueco=Math.round(window.innerHeight - top - 10)  // ~10px de margen inferior
+      // EL HUECO NO PUEDE DEPENDER DEL SCROLL. getBoundingClientRect().top es relativo a la VENTANA: con el
+      // panel bajado, el contenedor del gráfico queda por encima del borde superior y `top` se vuelve
+      // negativo, así que el hueco medido crecía exactamente lo que se hubiera desplazado y el gráfico se
+      // estiraba. Cualquier recálculo disparado mientras se lee más abajo —un ResizeObserver de la
+      // cabecera, un cambio de dependencias— lo estiraba otra vez.
+      // Se mide contra el CONTENEDOR CON SCROLL: distancia desde el principio de su contenido hasta el
+      // gráfico, y el hueco es lo que queda de su alto visible. Restar los dos rects y sumar el scrollTop
+      // cancela el desplazamiento, así que el valor sale igual esté donde esté el scroll.
+      // EXCEPCIÓN, pantalla completa: ahí el gráfico vive en un overlay que no es hijo de ese contenedor,
+      // y el overlay no scrollea, así que la medida contra la ventana es la correcta.
+      const cont=mcPantallaCompleta?null:mcScrollRef.current
+      const hueco=cont
+        ? Math.round(cont.clientHeight
+            - (el.getBoundingClientRect().top - cont.getBoundingClientRect().top + cont.scrollTop) - 10)
+        : Math.round(window.innerHeight - el.getBoundingClientRect().top - 10)  // ~10px de margen inferior
       // SUELO. Con todas las estrategias desplegadas, la tabla empuja el contenedor hacia abajo y el hueco
       // se queda en 150-200 px: un gráfico de velas aplastado que no sirve para nada. La guarda anterior
       // (h>150) no acotaba el valor, solo dejaba de escribirlo, así que el alto se congelaba en lo último
@@ -1966,10 +1985,34 @@ export default function Home() {
     }
     const raf=requestAnimationFrame(()=>requestAnimationFrame(recompute))
     window.addEventListener('resize',recompute)
-    const ro=mcHeaderRef.current?new ResizeObserver(()=>recompute()):null
+    // ResizeObserver entrega SIEMPRE una primera vez al empezar a observar, aunque nada haya cambiado de
+    // tamaño. Con el efecto rehaciéndose, esa entrega era un recálculo garantizado por pulsación; el alto
+    // real ya lo cubre el doble rAF de abajo.
+    let _primeraEntrega=true
+    const ro=mcHeaderRef.current?new ResizeObserver(()=>{
+      if(_primeraEntrega){ _primeraEntrega=false; return }
+      recompute()
+    }):null
     if(ro&&mcHeaderRef.current) ro.observe(mcHeaderRef.current)
     return ()=>{ cancelAnimationFrame(raf); window.removeEventListener('resize',recompute); ro?.disconnect() }
-  },[sidePanel,mcDisplayResults,mcResult,mcPorActivo,mcSeriesActivos,mcPantallaCompleta])
+    // mcSeriesActivos NO entra aquí: es un objeto que se rehace en cada cambio de mcHistSel —o sea, en
+    // cada cambio de filtro por estrategia— y rehacía este efecto entero sin que nada hubiera cambiado de
+    // alto. Lo único que mueve el alto de la cabecera es CUÁNTOS toggles hay, que es un número estable.
+  },[sidePanel,mcDisplayResults,mcResult,mcPorActivo,mcNSeriesActivos,mcPantallaCompleta])
+
+  // ── Conservar la posición de lectura cuando el alto del gráfico cambia de verdad ──
+  // Quedan cambios legítimos: desplegar activos en la tabla, entrar o salir del modo Activos, redimensionar
+  // la ventana. El gráfico está POR ENCIMA del historial y la parrilla, así que crecer Δ empuja todo lo de
+  // abajo Δ. Si el usuario estaba leyendo por debajo del gráfico, devolver ese mismo Δ al scroll deja el
+  // texto donde estaba. Si estaba mirando el gráfico, no se toca: ahí el punto de referencia es el gráfico.
+  useEffect(()=>{
+    const cont=mcScrollRef.current, el=mcEquityContainerRef.current
+    const prev=mcEquityPrevRef.current
+    mcEquityPrevRef.current=mcEquityH
+    if(!cont||!el||prev===mcEquityH||mcPantallaCompleta) return
+    const offset=el.getBoundingClientRect().top-cont.getBoundingClientRect().top+cont.scrollTop
+    if(cont.scrollTop>offset) cont.scrollTop+=(mcEquityH-prev)
+  },[mcEquityH,mcPantallaCompleta])
 
   // ── Altura del gráfico: 100% CSS puro (sin JS) ──
   // watchlist → chart-wrap height:calc(100vh-64px) dentro de contentRef (scroll-container); el resto
@@ -5475,7 +5518,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.812</title>
+        <title>Trading Simulator V9.813</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5553,7 +5596,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.812
+            <span className="dot"/>Trading Simulator V9.813
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -8423,7 +8466,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
             {mcResult&&sidePanel==='multi'&&(
               <div style={{display:'flex',flex:1,minHeight:0,overflow:'hidden',height:'100%'}}>
               {/* Left: scrollable content */}
-              <div style={{flex:1,overflowY:'auto',padding:'0 0 20px 0'}}>
+              <div ref={mcScrollRef} style={{flex:1,overflowY:'auto',padding:'0 0 20px 0'}}>
                 {/* Header resumen */}
                 <div style={{padding:'7px 16px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
                   <span style={{fontFamily:MONO,fontSize:13,color:'var(--accent)',fontWeight:700}}>📊 Multicartera</span>
