@@ -1554,6 +1554,20 @@ export default function Home() {
     const t=setTimeout(mcAjustaRangoPanel,180)
     return ()=>clearTimeout(t)
   },[mcPanelActivo,mcAjustaRangoPanel,mcPantallaCompleta,mcEquityH])
+  // De qué proveedor salió la serie de cada activo. Se muestra siempre, aunque venga todo del mismo: sin
+  // esto no había forma de saber que dos ejecuciones idénticas podían usar series distintas —Stooq sirve
+  // ajustado por dividendos y Yahoo no—, que es lo que hacía invisible un desajuste de precios.
+  const mcProveedores=useMemo(()=>{
+    const m=mcResult?.origenPrecios
+    if(!m||!Object.keys(m).length) return null
+    const cuenta={}
+    for(const v of Object.values(m)) cuenta[v.origen]=(cuenta[v.origen]||0)+1
+    const etiqueta=(o)=>o==='stooq'?'Stooq':o==='yahoo'?'Yahoo':o
+    const resumen=Object.entries(cuenta).sort((a,b)=>b[1]-a[1]).map(([o,n])=>`${n} ${etiqueta(o)}`).join(', ')
+    const detalle=Object.entries(m).sort((a,b)=>a[0].localeCompare(b[0]))
+      .map(([sym,v])=>`${sym}: ${etiqueta(v.origen)}${v.ajustado?' (ajustado por dividendos)':''}`).join(String.fromCharCode(10))
+    return {resumen,detalle,mezcla:Object.keys(cuenta).length>1}
+  },[mcResult])
   // Valor de la línea de referencia del gráfico grande: el nivel de "ni gano ni pierdo", que depende de
   // QUÉ dibujan las series. En Estrategias son patrimonio y ese nivel es el capital inicial; en Activos
   // son beneficio con origen en cero, así que el nivel es CERO. Poner ahí el capital —lo que se hacía
@@ -5359,7 +5373,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.796</title>
+        <title>Trading Simulator V9.797</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5437,7 +5451,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.796
+            <span className="dot"/>Trading Simulator V9.797
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -8311,6 +8325,17 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                 {/* Header resumen */}
                 <div style={{padding:'7px 16px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
                   <span style={{fontFamily:MONO,fontSize:13,color:'var(--accent)',fontWeight:700}}>📊 Multicartera</span>
+                  {/* Procedencia de los precios. En ámbar cuando en una misma ejecución se mezclan
+                      proveedores: ahí no todos los activos se midieron con la misma clase de serie. */}
+                  {mcProveedores&&(
+                    <span title={'Proveedor de precios por activo:'+String.fromCharCode(10)+mcProveedores.detalle}
+                      style={{fontFamily:MONO,fontSize:9,cursor:'help',padding:'1px 6px',borderRadius:3,
+                        color:mcProveedores.mezcla?'#ffd166':'#7a9bc0',
+                        background:mcProveedores.mezcla?'rgba(255,209,102,0.10)':'rgba(122,155,192,0.08)',
+                        border:`1px solid ${mcProveedores.mezcla?'rgba(255,209,102,0.35)':'#1a2d45'}`}}>
+                      precios: {mcProveedores.resumen}
+                    </span>
+                  )}
                   <span style={{fontFamily:MONO,fontSize:11,color:'#8ab8d4'}}>{/* Con excluidos, "N de M": los que entran frente a los pedidos (misma respuesta) */}{mcResult.avisosHistorico?.excluidos?.length?`${mcResult.n} de ${mcResult.n+mcResult.avisosHistorico.excluidos.length}`:mcResult.n} activos · <span style={{color:mcResult.modoAsig==='custom'?'#9b72ff':'#00d4ff'}}>{mcResult.modoAsig==='compartido'?'Capital compartido':mcResult.modoAsig==='concentrado'?'Capital concentrado':'Slots iguales'}</span></span>
                   <span style={{fontFamily:MONO,fontSize:11,color:'#8ab8d4'}}>
                     {/* Fechas REALES de la curva, no las solicitadas (ver mcAniosDeCurva) */}

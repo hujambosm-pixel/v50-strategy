@@ -4,7 +4,7 @@
 import { calcEMA as _libEMA, calcSMA, calcRSI, calcATR as _libATR, calcMACD } from '../../lib/backtester'
 import { normalizaFiltrosEntrada, hayFiltrosActivos, clavesAuxiliares, construirFiltroActivoMap, filtrosActivos,
          requiereSemanalDelActivo, proyectarSemanal } from '../../lib/filtros'
-import { fetchAV } from './datos'
+import { fetchAV, fetchAVDetalle } from './datos'
 
 const SUPA_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPA_KEY = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -97,7 +97,10 @@ async function fetchDataConMotivo(symbol, years=5, fromDate=null, toDate=null, i
     // hay desde fromDate hasta hoy (nunca menos que antes): con solo `years` —5 por defecto, el cliente no
     // lo manda en rango— un rango largo llegaba ya truncado. El modo Años pide exactamente lo mismo.
     const anios = (fromDate && toDate) ? Math.max(years, _aniosHastaHoy(fromDate)) : years
-    const bruto = await fetchAV(symbol, Math.ceil(anios) + 1, avInterval)
+    // `origen` viaja con las barras para poder decir DE DÓNDE salió cada serie: Stooq sirve ajustado por
+    // dividendos y Yahoo no, así que dos ejecuciones que hayan caído en proveedores distintos no son
+    // comparables entre sí, y hasta ahora no había forma de saberlo.
+    const { data: bruto, origen, ajustado } = await fetchAVDetalle(symbol, Math.ceil(anios) + 1, avInterval)
     if (!bruto?.length) return { data: null, motivo: 'descargaFallida' }
     let data
     if (fromDate && toDate) {
@@ -108,9 +111,19 @@ async function fetchDataConMotivo(symbol, years=5, fromDate=null, toDate=null, i
       data = bruto.filter(d => d.date >= cutStr)
     }
     return data.length
-      ? { data }
-      : { data: null, motivo: 'sinVelasEnPeriodo', disponibleDesde: bruto[0].date, disponibleHasta: bruto[bruto.length - 1].date }
+      ? { data, origen, ajustado }
+      : { data: null, motivo: 'sinVelasEnPeriodo', disponibleDesde: bruto[0].date, disponibleHasta: bruto[bruto.length - 1].date, origen, ajustado }
   } catch { return { data: null, motivo: 'descargaFallida' } }
+}
+// Procedencia de cada serie descargada, para la respuesta. Campo nuevo, no sustituye a nada.
+// `ajustado` dice si la serie viene con dividendos y splits incorporados, que es lo que hace que dos
+// proveedores den números distintos para el mismo activo.
+function _origenPrecios(descargas) {
+  const out = {}
+  for (const [sym, r] of Object.entries(descargas || {})) {
+    if (r?.origen) out[sym] = { origen: r.origen, ajustado: !!r.ajustado }
+  }
+  return Object.keys(out).length ? out : undefined
 }
 // Activos pedidos que no llegan a assetResults por no tener velas utilizables, con su motivo (ver
 // fetchDataConMotivo). `descargas`: símbolo → resultado de fetchDataConMotivo.
@@ -2095,6 +2108,8 @@ async function handlePortfolioMode(req, res) {
       // Solo presente si algo no cubre el periodo pedido: activos cortos y/o recorte del modo rango.
       ...(cobertura.avisos ? { avisosHistorico: cobertura.avisos } : {}),
       assetStats: assetStats.map(a => ({ ...a, primeraFecha: cobertura.primera[a.symbol] ?? null })),
+      // De qué proveedor salió la serie de cada activo y si viene ajustada por dividendos.
+      ...(_origenPrecios(descargas) ? { origenPrecios: _origenPrecios(descargas) } : {}),
       // Tamaño de las series por activo, para vigilar el coste de la respuesta.
       ...(curves.assetCurves ? { assetCurvesInfo: _tamanoAssetCurves(curves.assetCurves) } : {}),
       allTrades:       sourceTrades,
@@ -2439,6 +2454,8 @@ export default async function handler(req, res) {
       // Solo presente si algo no cubre el periodo pedido: activos cortos y/o recorte del modo rango.
       ...(cobertura.avisos ? { avisosHistorico: cobertura.avisos } : {}),
       assetStats: assetStats.map(a => ({ ...a, primeraFecha: cobertura.primera[a.symbol] ?? null })),
+      // De qué proveedor salió la serie de cada activo y si viene ajustada por dividendos.
+      ...(_origenPrecios(descargas) ? { origenPrecios: _origenPrecios(descargas) } : {}),
       // Tamaño de las series por activo, para vigilar el coste de la respuesta.
       ...(curves.assetCurves ? { assetCurvesInfo: _tamanoAssetCurves(curves.assetCurves) } : {}),
       allTrades: sourceTrades,

@@ -12,20 +12,35 @@ const SUPA_KEY = process.env.SUPABASE_ANON_KEY || 'sb_publishable_st9QJ3zcQbY5ec
 // Shared across requests within the same Vercel function instance.
 // Avoids redundant Stooq/Yahoo fetches when multiple open positions
 // are fetched sequentially within the same refresh cycle.
-const priceCache = new Map() // key: symbol → { price, date, timestamp }
+// La clave llevaba SOLO el símbolo, así que podía servir a cualquiera el precio que hubiera dejado
+// cualquier otro. Ahora lleva también el intervalo, y el valor guarda de qué proveedor salió.
+// El proveedor NO puede formar parte de la clave de LECTURA —no se sabe hasta después de descargar—, así
+// que va en el valor: quien lea sabe qué está leyendo en vez de recibirlo a ciegas.
+const priceCache = new Map() // key: `símbolo|intervalo` → { price, date, origen, timestamp }
 const CACHE_TTL  = 60 * 1000 // 60 seconds
 
-function getCachedPrice(symbol) {
-  const entry = priceCache.get(symbol)
+const clavePrecio = (symbol, interval='d') => `${symbol}|${interval}`
+function getCachedPrice(symbol, interval='d') {
+  const k = clavePrecio(symbol, interval)
+  const entry = priceCache.get(k)
   if (!entry) return null
-  if (Date.now() - entry.timestamp > CACHE_TTL) { priceCache.delete(symbol); return null }
+  if (Date.now() - entry.timestamp > CACHE_TTL) { priceCache.delete(k); return null }
   return entry
 }
-function setCachedPrice(symbol, price, date) {
-  priceCache.set(symbol, { price, date, timestamp: Date.now() })
+function setCachedPrice(symbol, price, date, origen, interval='d') {
+  priceCache.set(clavePrecio(symbol, interval), { price, date, origen, timestamp: Date.now() })
 }
 
-export async function fetchAV(symbol, years=5, interval='d') {
+// Devuelve las barras Y su procedencia. `fetchAV` sigue existiendo con su firma y su valor de siempre
+// —el array— como envoltorio, así que ningún consumidor cambia.
+//   origen    'stooq' | 'yahoo'
+//   ajustado  true si la serie viene ajustada por dividendos y splits. Stooq sirve ajustado; el cierre de
+//             Yahoo que se lee aquí (indicators.quote[0].close) NO lo está. Dos series del mismo activo
+//             con distinto ajuste dan backtests distintos, así que conviene saber cuál se está usando.
+//   ms        cuánto tardó, para poder medir con qué frecuencia Stooq llega a tiempo.
+export async function fetchAVDetalle(symbol, years=5, interval='d') {
+  const _t0 = Date.now()
+  let origen = null
   // `null` = no hay equivalencia SEGURA en Stooq (ver lib/simbolos.js). Entonces no se le pregunta
   // siquiera: se va directo a Yahoo, que entiende el símbolo canónico. Antes se le mandaba una traducción
   // inventada y, si daba con algo, ese algo podía ser otro instrumento.
@@ -47,6 +62,7 @@ export async function fetchAV(symbol, years=5, interval='d') {
         const [date,open,high,low,close,volume] = l.split(',')
         return { date, open:parseFloat(open), high:parseFloat(high), low:parseFloat(low), close:parseFloat(close), volume:parseFloat(volume)||0 }
       }).filter(d=>d.close&&!isNaN(d.close)).sort((a,b)=>a.date.localeCompare(b.date))
+      if (rawData.length) origen = 'stooq'
     }
   } catch(_) {
     // timeout or network error → fall through to Yahoo Finance
@@ -84,6 +100,7 @@ export async function fetchAV(symbol, years=5, interval='d') {
             close: quotes.close?.[i],
             volume: quotes.volume?.[i] || 0
           })).filter(d=>d.close&&!isNaN(d.close))
+          if (rawData.length) origen = 'yahoo'
         }
       }
     } catch(_) {
@@ -93,8 +110,19 @@ export async function fetchAV(symbol, years=5, interval='d') {
     }
   }
 
-  if (!rawData || rawData.length === 0) throw new Error(`Sin datos para ${symbol}`)
-  return rawData
+  const _ms = Date.now() - _t0
+  if (!rawData || rawData.length === 0) {
+    console.log(`[precios] ${symbol} (${interval}): SIN DATOS tras ${_ms} ms`)
+    throw new Error(`Sin datos para ${symbol}`)
+  }
+  // Una línea por descarga: con esto se puede medir en producción cada cuánto llega Stooq a tiempo, que
+  // es el dato que falta para decidir si sigue siendo el proveedor primario.
+  console.log(`[precios] ${symbol} (${interval}): ${origen} · ${rawData.length} velas · ${_ms} ms`)
+  return { data: rawData, origen, ajustado: origen === 'stooq', ms: _ms }
+}
+// Envoltorio de compatibilidad: mismo nombre, misma firma y mismo valor de retorno de siempre.
+export async function fetchAV(symbol, years=5, interval='d') {
+  return (await fetchAVDetalle(symbol, years, interval)).data
 }
 
 export function calcEquityCurves(trades, data, capitalIni, startDate, sp500Data) {
@@ -244,13 +272,13 @@ export default async function handler(req, res) {
     // Check in-memory cache first (60s TTL) — avoids repeated Stooq/Yahoo hits
     const cached = getCachedPrice(simbolo)
     if (cached !== null) {
-      return res.status(200).json({ meta: { ultimaFecha: cached.date, ultimoPrecio: cached.price, simbolo }, fromCache: true })
+      return res.status(200).json({ meta: { ultimaFecha: cached.date, ultimoPrecio: cached.price, simbolo, origen: cached.origen ?? null }, fromCache: true })
     }
     try {
-      const data = await fetchAV(simbolo, 1)
+      const { data, origen } = await fetchAVDetalle(simbolo, 1)
       const last = data[data.length - 1]
-      setCachedPrice(simbolo, last.close, last.date)
-      return res.status(200).json({ meta: { ultimaFecha: last.date, ultimoPrecio: last.close, simbolo } })
+      setCachedPrice(simbolo, last.close, last.date, origen)
+      return res.status(200).json({ meta: { ultimaFecha: last.date, ultimoPrecio: last.close, simbolo, origen } })
     } catch(e) {
       console.error(`[datos] priceOnly fetch failed for ${simbolo}:`, e.message)
       return res.status(200).json({ error: true, errorMessage: `Sin precio para ${simbolo}: ${e.message}` })
