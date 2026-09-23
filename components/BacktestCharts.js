@@ -759,9 +759,18 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
             <span key={s.id} style={{fontFamily:_MONO,fontSize:10,color:s.color,display:'flex',alignItems:'center',gap:4,flexShrink:0}}>
               <span style={{fontWeight:600}}>{s.name}</span>
               <span style={{opacity:0.5}}>·</span>
-              <span>▲{s.entries?.length||0}</span>
-              <span style={{opacity:0.4}}>·</span>
-              <span>▼{s.exits?.length||0}</span>
+              {/* Operaciones POSITIVAS y NEGATIVAS, no marcadores de entrada y salida: dos contadores de
+                  flechas que siempre dan lo mismo no informan de nada. El dato sale de las operaciones que
+                  el componente ya recibe. Un resultado exactamente cero cuenta como positivo. */}
+              {(()=>{
+                const ops=s.trades||[]
+                const gana=ops.filter(t=>(t?.pnlPct??0)>=0).length
+                return(<>
+                  <span style={{color:'#00e5a0',fontWeight:600}} title={`${gana} operaciones en positivo`}>▲{gana}</span>
+                  <span style={{opacity:0.4}}>·</span>
+                  <span style={{color:'#ff4d6d',fontWeight:600}} title={`${ops.length-gana} operaciones en negativo`}>▼{ops.length-gana}</span>
+                </>)
+              })()}
             </span>
           ))}
         </div>
