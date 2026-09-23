@@ -2,3 +2,19 @@ node_modules/
 .next/
 .env.local
 .env*.local
+
+# ── Ficheros de herramientas y temporales ──────────────────────────────
+# Worktrees que crea Claude Code. Cada uno es un repositorio git completo dentro de este, así que git
+# los ve como submódulos y cualquier `git add -A` los mete como gitlinks que luego nadie puede clonar.
+.claude/worktrees/
+
+# Enlace del proyecto con Vercel (README.txt + repo.json). Lo genera la CLI y es local de la máquina.
+.vercel/
+
+# Logs: dev-server.log y cualquier otro que deje una herramienta.
+*.log
+
+# Volcado de logs de despliegue de Vercel guardado con un nombre corrupto: la ruta de Windows
+# "C:\Temp\vl.json" acabó como nombre de fichero, con el ':' convertido en U+F03A. El patrón lleva un
+# comodín porque ese carácter no es tecleable.
+C*Tempvl.json
