@@ -625,6 +625,9 @@ const asignaColoresActivos=(simbolos)=>{
 // y su escala tapa el resto— y todo lo demás visible, así que el estado solo guarda lo que el usuario
 // cambia: `undefined` significa "como viene de fábrica".
 const MC_ID_CAJA='__caja__', MC_ID_TOTAL='__totalEstrategia__'
+// Centinela de "todas las estrategias" para mcHistStratId. Un id imposible para una estrategia real, que
+// son uuid de Supabase.
+const MC_TODAS='__todas__'
 // Alto mínimo del gráfico grande del multibacktest. Por debajo de esto un gráfico de velas con sus
 // operaciones no se lee, y es preferible desplazarse a mirar una franja aplastada.
 const SUELO_EQUITY=420
@@ -1191,7 +1194,14 @@ export default function Home() {
   const isoToDisplay=s=>s&&/^\d{4}-\d{2}-\d{2}$/.test(s)?s.split('-').reverse().join('/'):s||''
   const [fromDisplay,setFromDisplay]=useState(()=>{const d=new Date();d.setFullYear(d.getFullYear()-5);return d.toISOString().slice(0,10).split('-').reverse().join('/')})
   const [toDisplay,setToDisplay]=useState(()=>new Date().toISOString().slice(0,10).split('-').reverse().join('/'))
-  const [mcHistStratId,setMcHistStratId]=useState(null) // null=estrategia activa, string=id específico
+  // Filtro por estrategia de TODO el panel. Tres significados, y solo estos tres:
+  //   MC_TODAS  → no se filtra: los bloques que admiten varias las pintan todas. Es el valor por defecto
+  //               tras ejecutar un backtest, porque lo esperable al terminar es ver lo que se ha corrido,
+  //               no aparecer ya filtrado a una estrategia que nadie eligió.
+  //   null      → "la activa": la cartera combinada si existe, y si no el resultado activo. Se conserva
+  //               porque es lo que resuelve mcHistSel cuando el usuario elige la fila que YA es la activa.
+  //   '<id>'    → esa estrategia y solo esa.
+  const [mcHistStratId,setMcHistStratId]=useState(MC_TODAS)
   const [mcResult,setMcResult]=useState(null)
   const [mcLoading,setMcLoading]=useState(false)
   const [mcError,setMcError]=useState(null)
@@ -1329,11 +1339,15 @@ export default function Home() {
   const mcHistSel=useMemo(()=>{
     const isMultiHist=mcMultiResults.length>1
     const _portfolio=mcMultiResults.find(r=>r.id==='__portfolio__')?.result
-    const histResult=isMultiHist&&mcHistStratId
-      ?(mcMultiResults.find(r=>r.id===mcHistStratId)?.result??mcResult)
+    // MC_TODAS se resuelve como el null de siempre: la cartera combinada, que ES todas las estrategias en
+    // una sola serie de operaciones, y si no existe —modos comparados— el resultado activo. No hay un
+    // "todas" mejor: las curvas y el capital por fecha de varias estrategias no se suman.
+    const _concreta=mcHistStratId&&mcHistStratId!==MC_TODAS?mcHistStratId:null
+    const histResult=isMultiHist&&_concreta
+      ?(mcMultiResults.find(r=>r.id===_concreta)?.result??mcResult)
       :(_portfolio??mcResult)
-    const histTitle=isMultiHist&&mcHistStratId
-      ?(mcMultiResults.find(r=>r.id===mcHistStratId)?.name??'Historial')
+    const histTitle=isMultiHist&&_concreta
+      ?(mcMultiResults.find(r=>r.id===_concreta)?.name??'Historial')
       :'Historial Multicartera'
     return {isMultiHist,histResult,histTitle}
   },[mcMultiResults,mcHistStratId,mcResult])
@@ -1347,6 +1361,17 @@ export default function Home() {
     ??mcDisplayResults.find(r=>r.result===mcResult)?.id
     ??mcDisplayResults[0]?.id??''
   const mcHistIdVigente=mcHistStratId??mcHistIdPorDefecto
+  // ¿Estamos en "todas"? Lo consultan los bloques que admiten varias estrategias y los dos que no.
+  const mcTodasStrats=mcHistStratId===MC_TODAS
+  // Primera estrategia de la tabla: es a la que se salta cuando algo exige UNA y estamos en "todas".
+  const mcPrimeraStrat=mcDisplayResults[0]?.id??null
+  // Cambiar de estrategia desde cualquier punto pasa por aquí. Al volver a TODAS se suelta el activo
+  // seleccionado: su panel necesita UNA estrategia, y dejarlo vivo mostraría datos de una que el selector
+  // ya no indica.
+  const mcPonerEstrategia=(id)=>{
+    setMcHistStratId(id)
+    if(id===MC_TODAS) setMcActivoSel(null)
+  }
   // El activo seleccionado vive dentro de una estrategia. Si el historial cambia a otra —desde el selector
   // del modo Activos o desde sus botones—, hay dos salidas: si esa estrategia también opera el activo, la
   // selección lo sigue y solo se resincroniza qué fila se resalta; si no lo opera, se limpia, porque no
@@ -1449,7 +1474,8 @@ export default function Home() {
   useEffect(()=>{
     if(!mcHistIdVigente||!mcDisplayResults.length) return
     const vis={}
-    mcDisplayResults.forEach(r=>{ vis[r.id]=r.id===mcHistIdVigente })
+    // Con "todas" se marcan todas: si no, vis quedaría con el centinela y la parrilla no pintaría nada.
+    mcDisplayResults.forEach(r=>{ vis[r.id]=mcTodasStrats||r.id===mcHistIdVigente })
     setMcChartsStratVisible(prev=>{
       const igual=mcDisplayResults.every(r=>!!prev[r.id]===vis[r.id])
       return igual?prev:vis
@@ -1458,7 +1484,7 @@ export default function Home() {
   // ¿Se dibuja esta estrategia? El panel entero sigue a la estrategia ACTIVA del historial —el mismo
   // mcHistStratId que usan el historial y el panel del activo—, así que no hay un segundo estado que
   // pueda desincronizarse. Sin resolución de estrategia vigente, se dibujan todas, que es lo de antes.
-  const mcEsStratActiva=(id)=>!mcHistIdVigente||id===mcHistIdVigente
+  const mcEsStratActiva=(id)=>mcTodasStrats||!mcHistIdVigente||id===mcHistIdVigente
   // Capital de UNA operación, que se calcula distinto según el modo y no admite atajos.
   //   Pool: _capitalAtEntry viaja con la operación, y `entrada + pnlSimple` es el capital de salida por
   //         construcción —el motor define pnlSimple como capFinal − capAsignado—, no por aproximación.
@@ -4975,7 +5001,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
           modeResults.push({id:`${sid||'__single__'}__${modo}`,name:`${stratName} · ${MODE_LABELS[modo]}`,color,result:json,modo})
         }
         const vis={};modeResults.forEach(r=>{vis[r.id]=true});setMcStratVisible(vis)
-        setMcAssetOpen({});setMcPorActivo(false);setMcActivoVisible({});setMcActivoSel(null)
+        setMcAssetOpen({});setMcPorActivo(false);setMcActivoVisible({});setMcActivoSel(null);setMcHistStratId(MC_TODAS)
         const chartsVis={};modeResults.forEach(r=>{chartsVis[r.id]=true});setMcChartsStratVisible(chartsVis)
         setMcResult(modeResults[0].result);setMcMultiResults(modeResults);setMcIsModoCompare(true)
       }catch(e){setMcError(e.message)}finally{setMcLoading(false);setMcProgress(null)}
@@ -5002,7 +5028,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
     const activeResult=results.find(r=>r.id===currentStratId)||results[0]
     setMcResult(activeResult.result);setMcMultiResults(results);setMcIsModoCompare(false)
     const vis={};results.forEach(r=>{vis[r.id]=true});setMcStratVisible(vis)
-    setMcAssetOpen({});setMcPorActivo(false);setMcActivoVisible({});setMcActivoSel(null)
+    setMcAssetOpen({});setMcPorActivo(false);setMcActivoVisible({});setMcActivoSel(null);setMcHistStratId(MC_TODAS)
     const chartsVis={};results.forEach(r=>{chartsVis[r.id]=true});setMcChartsStratVisible(chartsVis)
     // ── Multicartera real (backend portfolioMode) ──────────────────────────────
     if(mcStratSelected.includes('__portfolio__')&&results.length>=2){
@@ -5423,7 +5449,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.809</title>
+        <title>Trading Simulator V9.810</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5501,7 +5527,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.809
+            <span className="dot"/>Trading Simulator V9.810
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -8375,6 +8401,17 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                 {/* Header resumen */}
                 <div style={{padding:'7px 16px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
                   <span style={{fontFamily:MONO,fontSize:13,color:'var(--accent)',fontWeight:700}}>📊 Multicartera</span>
+                  {/* Filtro por estrategia, con el mismo patrón que el "Solo SÍMBOLO ✕" del historial:
+                      si el panel entero está filtrado, tiene que verse, y quitarse desde donde se ve. */}
+                  {!mcTodasStrats&&mcDisplayResults.length>1&&(
+                    <span onClick={()=>mcPonerEstrategia(MC_TODAS)}
+                      title="Ver todas las estrategias"
+                      style={{display:'inline-flex',alignItems:'center',gap:5,cursor:'pointer',
+                        fontFamily:MONO,fontSize:10,fontWeight:400,padding:'2px 7px',borderRadius:3,
+                        border:'1px solid #00d4ff',background:'rgba(0,212,255,0.12)',color:'#00d4ff'}}>
+                      Solo {mcDisplayResults.find(r=>r.id===mcHistIdVigente)?.name||'una estrategia'} ✕
+                    </span>
+                  )}
                   {/* Procedencia de los precios. En ámbar cuando en una misma ejecución se mezclan
                       proveedores: ahí no todos los activos se midieron con la misma clase de serie. */}
                   {mcProveedores&&(
@@ -8526,6 +8563,12 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                   {/* ── Fila madre (estrategia) ── */}
                                   <tr
                                     onClick={()=>{
+                                      // La fila hace dos cosas a la vez, y las dos en el mismo sentido:
+                                      // selecciona su estrategia para TODO el panel y despliega sus activos.
+                                      // El segundo clic sobre la misma fila pliega y vuelve a "todas".
+                                      const _yaEs=!mcTodasStrats&&mcHistIdVigente===r.id
+                                      const _enLista=mcDisplayResults.some(x=>x.id===r.id)
+                                      if(_enLista) mcPonerEstrategia(_yaEs?MC_TODAS:(r.id===mcHistIdPorDefecto?null:r.id))
                                       if(!rStats.length) return
                                       // Al plegar, la fila del activo desaparece: dejar la selección viva
                                       // sería un panel sin fila que lo explique.
@@ -8641,6 +8684,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                           const _enLista=mcDisplayResults.some(x=>x.id===r.id)
                                           const _id=(!_enLista||r.id===mcHistIdPorDefecto)?null:r.id
                                           setMcActivoSel({stratId:r.id,symbol:a.symbol})
+                                          // Nunca MC_TODAS: el panel del activo necesita UNA estrategia.
                                           setMcHistStratId(_id)
                                         }}
                                         onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.04)'}
@@ -8886,10 +8930,16 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         que elegir, así que va el nombre a secas. */}
                     {mcPorActivo&&(mcHistSel.isMultiHist?(
                       <select value={mcHistIdVigente}
-                        onChange={e=>setMcHistStratId(e.target.value===mcHistIdPorDefecto?null:e.target.value)}
+                        onChange={e=>{
+                          const v=e.target.value
+                          // Elegir "todas" desde aquí sale del modo Activos, que necesita UNA estrategia.
+                          if(v===MC_TODAS){ setMcPorActivo(false); mcPonerEstrategia(MC_TODAS); return }
+                          mcPonerEstrategia(v===mcHistIdPorDefecto?null:v)
+                        }}
                         title="Estrategia que se está dibujando. Es la misma del historial de operaciones."
                         style={{background:'#0d1520',border:'1px solid #1a2d45',color:'#8aadcc',fontFamily:MONO,
                           fontSize:10,fontWeight:400,padding:'1px 4px',borderRadius:3,cursor:'pointer',maxWidth:200}}>
+                        <option value={MC_TODAS}>Todas las estrategias</option>
                         {mcDisplayResults.map(r=>(<option key={r.id} value={r.id}>{r.name}</option>))}
                       </select>
                     ):(
@@ -8905,7 +8955,12 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       title={mcCurvasActivos?'':'Este resultado no trae las series por activo: vuelve a ejecutar el backtest'}>
                       {[['Estrategias',false],['Activos',true]].map(([etq,val])=>(
                         <button key={etq} disabled={val&&!mcCurvasActivos}
-                          onClick={()=>setMcPorActivo(val)}
+                          onClick={()=>{
+                            // El modo Activos dibuja la contribución de UNA estrategia. Desde "todas" hay
+                            // que concretar, o el gráfico enseñaría datos de una que el selector no indica.
+                            if(val&&mcTodasStrats&&mcPrimeraStrat) setMcHistStratId(mcPrimeraStrat)
+                            setMcPorActivo(val)
+                          }}
                           style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',border:'none',
                             cursor:(val&&!mcCurvasActivos)?'not-allowed':'pointer',
                             background:mcPorActivo===val?'rgba(0,212,255,0.14)':'transparent',
@@ -9446,11 +9501,21 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       </div>
                       {isMultiHist&&(
                         <div style={{display:'flex',gap:3,alignItems:'center',flexWrap:'wrap'}}>
+                          {/* "Todas" primero: es el valor por defecto tras ejecutar y el que devuelve el
+                              panel a su estado sin filtrar. */}
+                          <button onClick={()=>mcPonerEstrategia(MC_TODAS)}
+                            title="Ver todas las estrategias"
+                            style={{fontSize:9,padding:'2px 8px',borderRadius:3,cursor:'pointer',
+                              border:`1px solid ${mcTodasStrats?'#00d4ff':'#3d5a7a'}`,
+                              background:mcTodasStrats?'rgba(0,212,255,0.12)':'transparent',
+                              color:mcTodasStrats?'#00d4ff':'#4a6a88'}}>
+                            Todas
+                          </button>
                           {mcDisplayResults.map(r=>{
                             // __portfolio__ se resalta también por defecto (mcHistStratId null = historial del portfolio)
-                            const isAct=mcHistStratId===r.id||(mcHistStratId===null&&r.id==='__portfolio__')
+                            const isAct=!mcTodasStrats&&(mcHistStratId===r.id||(mcHistStratId===null&&r.id==='__portfolio__'))
                             return(
-                              <button key={r.id} onClick={()=>setMcHistStratId(isAct?null:r.id)}
+                              <button key={r.id} onClick={()=>mcPonerEstrategia(isAct?MC_TODAS:r.id)}
                                 style={{fontSize:9,padding:'2px 8px',borderRadius:3,cursor:'pointer',
                                   border:`1px solid ${isAct?r.color:'#3d5a7a'}`,
                                   background:isAct?r.color+'18':'transparent',
