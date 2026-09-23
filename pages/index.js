@@ -1442,6 +1442,19 @@ export default function Home() {
     if(!sym||!Array.isArray(trades)) return trades
     return trades.filter(t=>(t?.symbol||'')===sym)
   }
+  // La parrilla arranca en la estrategia ACTIVA y la sigue. Se dispara solo cuando cambia esa estrategia
+  // o cuando llega un backtest nuevo (mcMultiResults), no en cada render: entre medias, lo que el usuario
+  // marque a mano se conserva. Deliberadamente NO depende de mcDisplayResults, cuya identidad cambia
+  // también al refrescar métricas y borraría esa elección manual sin motivo.
+  useEffect(()=>{
+    if(!mcHistIdVigente||!mcDisplayResults.length) return
+    const vis={}
+    mcDisplayResults.forEach(r=>{ vis[r.id]=r.id===mcHistIdVigente })
+    setMcChartsStratVisible(prev=>{
+      const igual=mcDisplayResults.every(r=>!!prev[r.id]===vis[r.id])
+      return igual?prev:vis
+    })
+  },[mcHistIdVigente,mcMultiResults])   // eslint-disable-line react-hooks/exhaustive-deps
   // ¿Se dibuja esta estrategia? El panel entero sigue a la estrategia ACTIVA del historial —el mismo
   // mcHistStratId que usan el historial y el panel del activo—, así que no hay un segundo estado que
   // pueda desincronizarse. Sin resolución de estrategia vigente, se dibujan todas, que es lo de antes.
@@ -5410,7 +5423,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.806</title>
+        <title>Trading Simulator V9.807</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5488,7 +5501,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.806
+            <span className="dot"/>Trading Simulator V9.807
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
