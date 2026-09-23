@@ -1237,66 +1237,9 @@ function buildPositionSizingCurves(assetResults, capitalIni, sizeRules) {
   }
 }
 
-// ── MODO PESOS PERSONALIZADOS: cada activo con su % fijo ─────
-// weights: {symbol: pct}  (pct en 0–100, suma = 100)
-function buildCustomCurves(assetResults, capitalIni, weights) {
-  const n = assetResults.length
-  if (!n) return _emptyCurves()
-  const { filteredDates, startDate } = _commonDates(assetResults)
-  if (!filteredDates.length) return _emptyCurves(startDate)
-
-  // Capital por activo según su peso
-  const assetEquities = assetResults.map(ar => {
-    const pct = weights?.[ar.symbol] ?? (100 / n)
-    const slotCapital = capitalIni * (pct / 100)
-    const { trades, data } = ar
-    const filtData = data ? data.filter(d => d.date >= startDate) : []
-    const p0 = filtData.length ? filtData[0].close : null
-    const byDate = {}
-    filteredDates.forEach(date => {
-      const exitsBefore = trades.filter(t => t.exitDate <= date)
-      // Reescalar pnlSimple al capital real del slot (el backtest usó slotCapital=capitalIni/n)
-      // pnlPct es independiente → recalcular
-      const simple = slotCapital + exitsBefore.reduce((s,t) => s + (slotCapital * t.pnlPct / 100), 0)
-      // Para compuesta: escalar capitalTras (fue calculado con capitalIni/n)
-      const origSlot = capitalIni / n  // capital usado en el backtest original
-      const scale = slotCapital / origSlot
-      const compound = exitsBefore.length
-        ? slotCapital + (exitsBefore[exitsBefore.length-1].capitalTras - origSlot) * scale
-        : slotCapital
-      const openTrades = trades.filter(t => t.entryDate <= date && (!t.exitDate || t.exitDate > date || (t._virtualClose && t.exitDate >= date)))
-      const open = openTrades.length > 0
-      let bh = slotCapital, closePx = null
-      if (p0 && filtData.length) {
-        let bar = null
-        for (let i = filtData.length-1; i>=0; i--) { if (filtData[i].date <= date) { bar=filtData[i]; break } }
-        if (bar) { bh = slotCapital * (bar.close / p0); closePx = bar.close }
-      }
-      const openPnl = openTrades.reduce((s,t) => { if(closePx==null) return s; const ep=t.entryPx??t.entryPrice; return ep!=null ? s+(closePx-ep)/ep*slotCapital : s }, 0)
-      byDate[date] = { simple, compound, open, bh, openPnl }
-    })
-    return { byDate, slotCapital }
-  })
-
-  const simpleCurve=[], compoundCurve=[], bhCurve=[], occupancyCurve=[], floatSimpleCurve=[], floatCompoundCurve=[]
-  const totalSlots = assetResults.length
-  const step = Math.max(1, Math.floor(filteredDates.length / 400))
-  _sampledWithChanges(filteredDates, step, assetResults.flatMap(ar=>ar.trades||[])).forEach(date => {
-    let totSimple=0, totCompound=0, totBH=0, openSlots=0, totOpenPnl=0
-    assetEquities.forEach(({ byDate }) => {
-      const e = byDate[date]
-      if (e) { totSimple+=e.simple; totCompound+=e.compound; totBH+=e.bh; if(e.open)openSlots++; totOpenPnl+=e.openPnl||0 }
-    })
-    simpleCurve.push({ date, value: totSimple })
-    compoundCurve.push({ date, value: totCompound })
-    bhCurve.push({ date, value: totBH })
-    occupancyCurve.push({ date, value: (openSlots/totalSlots)*100 })
-    floatSimpleCurve.push({ date, value: totSimple+totOpenPnl })
-    floatCompoundCurve.push({ date, value: totCompound+totOpenPnl })
-  })
-
-  return { simpleCurve, compoundCurve, bhCurve, occupancyCurve, startDate, floatSimpleCurve, floatCompoundCurve, ..._calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni), ..._calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni) }
-}
+// buildCustomCurves — ELIMINADA. Construia las curvas del modo "pesos personalizados" (cada activo con
+// un % fijo), pero no la llamaba nadie: el modo custom se resuelve por Slots. Sin referencias en todo el
+// repositorio salvo su propia definicion.
 
 // ── Helpers ──────────────────────────────────────────────────
 function _emptyCurves(startDate=null) {
