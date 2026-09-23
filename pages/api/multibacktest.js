@@ -115,6 +115,14 @@ async function fetchDataConMotivo(symbol, years=5, fromDate=null, toDate=null, i
       : { data: null, motivo: 'sinVelasEnPeriodo', disponibleDesde: bruto[0].date, disponibleHasta: bruto[bruto.length - 1].date, origen, ajustado }
   } catch { return { data: null, motivo: 'descargaFallida' } }
 }
+// Añade a una operación su cesión desde el máximo, buscándola por el id con el que la calculó el motor:
+// símbolo SINTÉTICO más fecha de entrada. Hay que llamarlo ANTES de reescribir `symbol` al real, porque
+// en multicartera el mismo ticker puede abrir el mismo día en dos estrategias y por símbolo real
+// chocarían. Si no hay dato, el trade sale tal cual: ningún campo existente se toca nunca.
+function _conCesion(t, cesiones) {
+  const c = cesiones?.[`${t.symbol}:${t.entryDate}`]
+  return c ? { ...t, cesionPct: c.cesionPct, maxPx: c.maxPx, maxFecha: c.maxFecha } : t
+}
 // Procedencia de cada serie descargada, para la respuesta. Campo nuevo, no sustituye a nada.
 // `ajustado` dice si la serie viene con dividendos y splits incorporados, que es lo que hace que dos
 // proveedores den números distintos para el mismo activo.
@@ -382,7 +390,7 @@ function buildSlotsCurves(assetResults, capitalIni) {
     assetCurves: activosSlots.map(symbol => ({ symbol, data: seriesSlots[symbol] })), cashCurve,
     ..._calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni), ..._calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni),
     ..._ddFlotanteCompuesto(_met), avgCapOccupancyEur: _met.capInvEur, metricasActivo: _met.porActivo,
-    assetTwrCurves: _met.twrPorActivo }
+    assetTwrCurves: _met.twrPorActivo, cesiones: _met.cesiones }
 }
 
 // ── Stop INICIAL de un trade — fuente ÚNICA para los cuatro modos de asignación ──
@@ -642,7 +650,7 @@ function buildCompartidoCurves(assetResults, capitalIni, symbolOrder = null) {
     ..._calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni),
     ..._calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni),
     ..._ddFlotanteCompuesto(_met), avgCapOccupancyEur: _met.capInvEur, metricasActivo: _met.porActivo,
-    assetTwrCurves: _met.twrPorActivo
+    assetTwrCurves: _met.twrPorActivo, cesiones: _met.cesiones
   }
 }
 
@@ -978,7 +986,7 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
     ..._calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni),
     ..._calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni),
     ..._ddFlotanteCompuesto(_met), avgCapOccupancyEur: _met.capInvEur, metricasActivo: _met.porActivo,
-    assetTwrCurves: _met.twrPorActivo
+    assetTwrCurves: _met.twrPorActivo, cesiones: _met.cesiones
   }
 }
 
@@ -1225,7 +1233,7 @@ function buildPositionSizingCurves(assetResults, capitalIni, sizeRules) {
     ..._calcDD(simpleCurve, compoundCurve, bhCurve, capitalIni),
     ..._calcFloatDD(floatSimpleCurve, floatCompoundCurve, capitalIni),
     ..._ddFlotanteCompuesto(_met), avgCapOccupancyEur: _met.capInvEur, metricasActivo: _met.porActivo,
-    assetTwrCurves: _met.twrPorActivo
+    assetTwrCurves: _met.twrPorActivo, cesiones: _met.cesiones
   }
 }
 
@@ -1429,13 +1437,19 @@ function _pasoDD(st, valor, date) {
     }
   }
 }
-function _precioDe(pos, date) {
+// Barra vigente en `date`, con su cursor incremental. El cursor solo avanza, y cada posición se consulta
+// en fechas crecientes, así que el coste total es lineal en barras y no en barras × días.
+function _barraDe(pos, date) {
   const arr = pos.precios
   if (!arr || !arr.length) return null
   let i = pos._i || 0
   while (i + 1 < arr.length && arr[i + 1].date <= date) i++
   pos._i = i
-  return arr[i].date <= date ? arr[i].close : null
+  return arr[i].date <= date ? arr[i] : null
+}
+function _precioDe(pos, date) {
+  const b = _barraDe(pos, date)
+  return b ? b.close : null
 }
 function _resumeEstado(st, nFechas) {
   return {
@@ -1451,7 +1465,7 @@ function _resumeEstado(st, nFechas) {
 function _metricasEjeCompleto(fechas, posiciones, capitalIni, ejeDibujo) {
   const nF = fechas?.length || 0
   const vacio = { maxDD:0, maxDDEur:0, maxDDFechaPico:null, maxDDFechaValle:null, tInv:0, capInvPct:0, capInvEur:0 }
-  if (!nF) return { ...vacio, porActivo: {}, twrPorActivo: {} }
+  if (!nF) return { ...vacio, porActivo: {}, twrPorActivo: {}, cesiones: {} }
   const enEjeDibujo = new Set(ejeDibujo && ejeDibujo.length ? ejeDibujo : fechas)
   const primera = fechas[0]
   // Copias propias: el cursor de precio (_i) se guarda en el objeto, y las dos ordenaciones no deben
@@ -1472,6 +1486,7 @@ function _metricasEjeCompleto(fechas, posiciones, capitalIni, ejeDibujo) {
 
   let iEnt = 0, iSal = 0, realizado = 0
   let abiertas = []
+  const cesiones = {}   // id de posición → {cesionPct, maxPx, maxFecha}
   for (const date of fechas) {
     // 1. Cierres del día: consolidan su resultado. Sus activos quedan "tocados" para que la curva de
     //    contribución de cada uno recoja hoy el salto de no realizado a realizado.
@@ -1479,6 +1494,27 @@ function _metricasEjeCompleto(fechas, posiciones, capitalIni, ejeDibujo) {
     const salidaAct = new Map(), entradaAct = new Map()
     while (iSal < porSalida.length && (porSalida[iSal].exitDate || _FIN) <= date) {
       const p = porSalida[iSal++]
+      // CESIÓN DESDE EL MÁXIMO: cuánto se devolvió entre el pico de la operación y su salida. Es cero o
+      // negativa. No es el drawdown clásico: el punto final está FIJADO en la salida, no es el peor valle.
+      // La barra de salida también cuenta —la posición vive ese día hasta el cierre— y el bucle de arriba
+      // no la visita, porque allí ya está cerrada; por eso se pliega aquí.
+      if (p.exitDate) {
+        const bSal = _barraDe(p, p.exitDate)
+        if (bSal) {
+          const altoSal = Number.isFinite(bSal.high) ? bSal.high : bSal.close
+          if (Number.isFinite(altoSal) && (p._max == null || altoSal > p._max)) { p._max = altoSal; p._maxFecha = bSal.date }
+        }
+        const cierre = Number.isFinite(p.exitPx) ? p.exitPx : (bSal && Number.isFinite(bSal.close) ? bSal.close : null)
+        // Guardas: sin máximo finito y positivo no hay porcentaje que calcular, y el campo se queda a null
+        // en vez de inventarse un cero que se leería como "no cedió nada".
+        if (p.id && Number.isFinite(p._max) && p._max > 0 && cierre != null) {
+          cesiones[p.id] = {
+            cesionPct: _r2(((cierre - p._max) / p._max) * 100),
+            maxPx: p._max,
+            maxFecha: p._maxFecha ?? null,
+          }
+        }
+      }
       realizado += p.realizado
       estadoDe(p.clave).realizado += p.realizado
       // Valor con el que la posición SALE hoy: lo que costó más lo que dejó. Es el flujo de salida del
@@ -1512,7 +1548,14 @@ function _metricasEjeCompleto(fechas, posiciones, capitalIni, ejeDibujo) {
         continue
       }
       vivas.push(p)
-      const px = _precioDe(p, date)
+      const barra = _barraDe(p, date)
+      const px = barra ? barra.close : null
+      // Máximo alcanzado durante la operación, con el HIGH de cada barra. Una comparación por posición y
+      // día, dentro del recorrido que ya se hacía: no añade ninguna pasada.
+      if (barra) {
+        const alto = Number.isFinite(barra.high) ? barra.high : barra.close
+        if (Number.isFinite(alto) && (p._max == null || alto > p._max)) { p._max = alto; p._maxFecha = barra.date }
+      }
       const flot = (px != null && p.entryPx > 0) ? ((px - p.entryPx) / p.entryPx) * p.coste : 0
       costeDia += p.coste
       noRealDia += flot
@@ -1573,7 +1616,7 @@ function _metricasEjeCompleto(fechas, posiciones, capitalIni, ejeDibujo) {
   }
   const resumenActivos = {}, twrActivos = {}
   for (const [k, st] of porActivo) { resumenActivos[k] = _resumeEstado(st, nF); twrActivos[k] = st.serie }
-  return { ..._resumeEstado(estrategia, nF), porActivo: resumenActivos, twrPorActivo: twrActivos }
+  return { ..._resumeEstado(estrategia, nF), porActivo: resumenActivos, twrPorActivo: twrActivos, cesiones }
 }
 // El Max DD flotante de la estrategia sustituye al que _calcFloatDD saca de la curva muestreada,
 // conservando los mismos nombres de campo para que el frontend no tenga que enterarse. Se escribe
@@ -1591,12 +1634,16 @@ function _ddFlotanteCompuesto(met) {
 // capitalAtEntryMap no registra; por eso se leen de aquí y ese mapa se queda como está.
 function _posicionesPool(executedTrades, symbolDataMap) {
   return (executedTrades || []).map(t => ({
+    // `id` con el símbolo SINTÉTICO, que es lo único único por posición abierta: en multicartera el mismo
+    // ticker puede abrir el mismo día en dos estrategias, y por símbolo real chocarían.
+    id:        `${t.symbol}:${t.entryDate}`,
     clave:     _claveActivo(t),
     entryDate: t.entryDate,
     exitDate:  t.exitDate || null,
     coste:     t._capitalAtEntry,
     realizado: t.pnlSimple,
     entryPx:   t.entryPx ?? t.entryPrice ?? null,
+    exitPx:    t.exitPx ?? t.exitPrice ?? null,
     precios:   symbolDataMap[t.symbol] || [],
   }))
 }
@@ -1613,9 +1660,14 @@ function _posicionesSlots(assetResults, startDate) {
       const coste = t.capitalTras / (1 + t.pnlPct / 100)
       if (!Number.isFinite(coste)) return
       pos.push({
+        id: `${ar.symbol}:${t.entryDate}`,
         clave, entryDate: t.entryDate, exitDate: t.exitDate || null,
         coste, realizado: t.capitalTras - coste,
-        entryPx: t.entryPx ?? t.entryPrice ?? null, precios,
+        entryPx: t.entryPx ?? t.entryPrice ?? null,
+        exitPx: t.exitPx ?? t.exitPrice ?? null,
+        // Slots no pasa por los candidatos del pool, así que el high sale de la MISMA serie de barras del
+        // activo (ar.data filtrada), que es la que ya se guarda aquí en `precios`.
+        precios,
       })
     })
   })
@@ -2070,6 +2122,7 @@ async function handlePortfolioMode(req, res) {
 
     // 7. allTrades: restaurar symbol = realSymbol para el render de tabla (usa execSource enriquecido)
     const sourceTrades = execSource
+      .map(t => _conCesion(t, curves.cesiones))
       .map(t => ({ ...t, symbol: t._realSymbol || t.symbol.split('#')[0] }))
       .sort((a, b) => (a.exitDate || '').localeCompare(b.exitDate || ''))
 
@@ -2099,8 +2152,10 @@ async function handlePortfolioMode(req, res) {
 
     return res.status(200).json({
       ...curves,
-      // Solo alimenta assetStats aquí arriba; no viaja (JSON.stringify descarta las claves undefined).
+      // Solo alimentan assetStats y allTrades aquí arriba; no viajan sueltos (JSON.stringify descarta las
+      // claves undefined).
       metricasActivo: undefined,
+      cesiones: undefined,
       sp500BHCurve,
       // Solo presente si hay algo que avisar: símbolos cuya serie semanal no se pudo descargar y
       // que por tanto operaron SIN el filtro de activo en semanal (fail-open silencioso de otro modo).
@@ -2407,7 +2462,7 @@ export default async function handler(req, res) {
 
     // Historial combinado ordenado por fecha salida
     const sourceTrades = (modoAsig === 'compartido' || modoAsig === 'concentrado' || modoAsig === 'positionsizing')
-      ? (curves.executedTrades || []).map(t => {
+      ? (curves.executedTrades || []).map(t => _conCesion(t, curves.cesiones)).map(t => {
           if (t.riesgoAcum !== undefined) return t  // positionsizing ya lo tiene
           const ep = t.entryPrice ?? t.entryPx
           const stopIni = _stopInicial(t)
@@ -2419,7 +2474,10 @@ export default async function handler(req, res) {
           const ep = t.entryPrice ?? t.entryPx
           const stopIni = _stopInicial(t)
           const dist = (ep && stopIni && ep > stopIni) ? (ep - stopIni) / ep : null
-          return { ...t, symbol: ar.symbol, riesgoAcum: dist != null ? dist * slotCapital : null }
+          // En Slots el trade no lleva símbolo: se le pone aquí, así que la cesión se busca con el del
+          // activo, que es el mismo con el que la indexó _posicionesSlots.
+          const conSym = { ...t, symbol: ar.symbol, riesgoAcum: dist != null ? dist * slotCapital : null }
+          return _conCesion(conSym, curves.cesiones)
         })).sort((a,b) => a.exitDate.localeCompare(b.exitDate))
 
     // SP500 B&H benchmark
@@ -2445,8 +2503,10 @@ export default async function handler(req, res) {
 
     res.status(200).json({
       ...curves,
-      // Solo alimenta assetStats aquí arriba; no viaja (JSON.stringify descarta las claves undefined).
+      // Solo alimentan assetStats y allTrades aquí arriba; no viajan sueltos (JSON.stringify descarta las
+      // claves undefined).
       metricasActivo: undefined,
+      cesiones: undefined,
       sp500BHCurve,
       // Solo presente si hay algo que avisar: símbolos cuya serie semanal no se pudo descargar y
       // que por tanto operaron SIN el filtro de activo en semanal (fail-open silencioso de otro modo).
