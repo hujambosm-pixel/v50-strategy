@@ -5405,7 +5405,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.803</title>
+        <title>Trading Simulator V9.804</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5483,7 +5483,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.803
+            <span className="dot"/>Trading Simulator V9.804
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -9604,12 +9604,19 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                 // entrada a salida no se dibujaba en Slots.
                                 entries:symTrades.map(t=>({date:t.entryDate,price:t.entryPx??t.entryPrice})),
                                 exits:symTrades.map(t=>({date:t.exitDate,price:t.exitPx??t.exitPrice})),
+                                // Los MISMOS campos que el panel del activo: las etiquetas y el globo del
+                                // cursor son código compartido del componente y ya funcionaban aquí, pero
+                                // sin estos el globo enseñaba guiones donde van la inversión, el resultado
+                                // y la cesión desde el máximo. Todo sale de allTrades, que ya está en
+                                // memoria: ni una descarga más.
                                 trades:symTrades.map((t,idx)=>({
                                   n:idx+1,
                                   entryDate:t.entryDate,entryPx:t.entryPx??t.entryPrice,
                                   exitDate:t.exitDate,exitPx:t.exitPx??t.exitPrice,
                                   pnlPct:t.pnlPct,pnlSimple:t.pnlSimple,
                                   capital:t.pnlPct!==0?Math.abs(t.pnlSimple/(t.pnlPct/100)):0,
+                                  ...mcCapitalDeOperacion(t,r.result.modoAsig),
+                                  cesionPct:t.cesionPct??null,maxPx:t.maxPx??null,maxFecha:t.maxFecha??null,
                                 })),
                               }
                             })
