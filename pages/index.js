@@ -1134,6 +1134,7 @@ export default function Home() {
   const [mcEquityH,setMcEquityH]=useState(300) // resizable MC equity chart height
   const mcEquityContainerRef=useRef(null)  // mide el hueco disponible para autoajustar mcEquityH
   const mcHeaderRef=useRef(null)           // cabecera del gráfico: al envolver cambia de alto y mueve el hueco
+  const mcArribaRef=useRef(null)           // todo lo que hay ENCIMA del gráfico: al cambiar de alto, el gráfico se mueve
   const mcEquityPrevRef=useRef(300)        // alto anterior del equity, para compensar el scroll cuando cambia
   // Refs LOCALES del panel de operaciones. Deliberadamente fuera de mcChartRefsMap y mcChartsSyncRef: esos
   // son de la parrilla, y registrar aquí el mismo símbolo pisaría su instancia y mandaría la navegación
@@ -1997,9 +1998,9 @@ export default function Home() {
       // SUELO. Con todas las estrategias desplegadas, la tabla empuja el contenedor hacia abajo y el hueco
       // se queda en 150-200 px: un gráfico de velas aplastado que no sirve para nada. La guarda anterior
       // (h>150) no acotaba el valor, solo dejaba de escribirlo, así que el alto se congelaba en lo último
-      // que hubiera. Ahora hay un mínimo de verdad y el gráfico sobresale por debajo del pliegue: el panel
-      // de multicartera tiene su propio contenedor con overflowY:auto, así que se alcanza bajando, igual
-      // que las ganancias mensuales, el historial y la parrilla, que ya viven ahí abajo.
+      // que hubiera. Ahora hay un mínimo de verdad y el gráfico sobresale por debajo del pliegue: se alcanza
+      // bajando la página, igual que las ganancias mensuales, el historial y la parrilla, que ya viven ahí
+      // abajo.
       // EXCEPCIÓN, pantalla completa: ahí no hay tabla encima y el overlay es overflow:hidden, así que un
       // suelo mayor que el hueco real desbordaría por abajo y se comería la franja de rendimiento. En ese
       // caso manda el hueco.
@@ -2008,20 +2009,34 @@ export default function Home() {
     }
     const raf=requestAnimationFrame(()=>requestAnimationFrame(recompute))
     window.addEventListener('resize',recompute)
-    // ResizeObserver entrega SIEMPRE una primera vez al empezar a observar, aunque nada haya cambiado de
-    // tamaño. Con el efecto rehaciéndose, esa entrega era un recálculo garantizado por pulsación; el alto
-    // real ya lo cubre el doble rAF de abajo.
-    let _primeraEntrega=true
-    const ro=mcHeaderRef.current?new ResizeObserver(()=>{
-      if(_primeraEntrega){ _primeraEntrega=false; return }
-      recompute()
+    // DOS OBJETIVOS, y los dos por la misma razón: lo que mueve el borde superior del gráfico es lo que hay
+    // por encima. La cabecera del propio gráfico (mcHeaderRef) ya se observaba, pero es CIEGA a todo lo
+    // demás: plegar o desplegar las filas de activo de la tabla, que aparezca o desaparezca un chip de
+    // filtro o un aviso de cobertura, cambiar el número de filas… nada de eso la toca, así que el alto se
+    // quedaba con la última medida, tomada con la tabla en otro estado.
+    // NO SE REALIMENTA: ninguno de los dos objetivos contiene el gráfico, así que su alto no depende de
+    // mcEquityH ni directa ni indirectamente, y recompute mide la POSICIÓN del gráfico, no su tamaño. Un
+    // recálculo no puede provocar otro.
+    // ResizeObserver entrega SIEMPRE una primera vez por cada objetivo al empezar a observarlo, aunque nada
+    // haya cambiado de tamaño. Esas altas se descartan —el alto de partida ya lo pone el doble rAF—, pero
+    // una por una: descartar la primera entrega a secas dejaría fuera un cambio real del segundo objetivo.
+    const _alta=new Set()
+    const objetivos=[mcArribaRef.current,mcHeaderRef.current].filter(Boolean)
+    const ro=objetivos.length?new ResizeObserver(entradas=>{
+      const cambios=entradas.filter(e=>{
+        if(_alta.has(e.target)) return true
+        _alta.add(e.target); return false
+      })
+      if(cambios.length) recompute()
     }):null
-    if(ro&&mcHeaderRef.current) ro.observe(mcHeaderRef.current)
+    objetivos.forEach(o=>ro.observe(o))
     return ()=>{ cancelAnimationFrame(raf); window.removeEventListener('resize',recompute); ro?.disconnect() }
     // mcSeriesActivos NO entra aquí: es un objeto que se rehace en cada cambio de mcHistSel —o sea, en
     // cada cambio de filtro por estrategia— y rehacía este efecto entero sin que nada hubiera cambiado de
     // alto. Lo único que mueve el alto de la cabecera es CUÁNTOS toggles hay, que es un número estable.
-  },[sidePanel,mcDisplayResults,mcResult,mcPorActivo,mcNSeriesActivos,mcPantallaCompleta])
+    // mcLoading entra porque el banner de cálculo se renderiza como HERMANO del panel, por encima de él
+    // (no dentro de mcArribaRef): aparece y desaparece empujando todo el panel, y ningún observador lo ve.
+  },[sidePanel,mcDisplayResults,mcResult,mcPorActivo,mcNSeriesActivos,mcPantallaCompleta,mcLoading])
 
   // ── Conservar la posición de lectura cuando el alto del gráfico cambia de verdad ──
   // Quedan cambios legítimos: desplegar activos en la tabla, entrar o salir del modo Activos, redimensionar
@@ -5548,7 +5563,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.816</title>
+        <title>Trading Simulator V9.817</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5626,7 +5641,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.816
+            <span className="dot"/>Trading Simulator V9.817
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -8497,6 +8512,11 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
               <div style={{display:'flex',flex:1,minHeight:0,overflow:'hidden',height:'100%'}}>
               {/* Left: scrollable content */}
               <div style={{flex:1,overflowY:'auto',padding:'0 0 20px 0'}}>
+                {/* Envoltorio de TODO lo que va encima del gráfico —cabecera resumen con sus avisos y chips,
+                    y la tabla comparativa con sus filas de activo—. Existe solo para poder observarlo: cuando
+                    cambia de alto, el borde superior del gráfico se mueve y su hueco deja de ser el medido.
+                    Es un div de flujo normal, sin estilos: no cambia la maqueta. */}
+                <div ref={mcArribaRef}>
                 {/* Header resumen */}
                 <div style={{padding:'7px 16px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
                   <span style={{fontFamily:MONO,fontSize:13,color:'var(--accent)',fontWeight:700}}>📊 Multicartera</span>
@@ -8919,6 +8939,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                     </div>
                   )
                 })()}
+                </div>{/* ── fin de lo que hay encima del gráfico ── */}
 
                 {/* ── Equity — misma estructura que activos individuales ── */}
                 {/* En pantalla completa la sección se saca del flujo y cubre la ventana: se lleva consigo
