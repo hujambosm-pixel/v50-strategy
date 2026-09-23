@@ -1,68 +1,15 @@
 import { useRef, useEffect, useState } from 'react'
 import { MONO, f2, fmtDate } from '../lib/utils'
-
-// ── Indicator calc functions ───────────────────────────────────────────
-export function calcEMA(closes, period) {
-  if (!closes?.length || period < 1) return []
-  const k = 2 / (period + 1)
-  const out = new Array(closes.length).fill(null)
-  let sum = 0, valid = 0
-  for (let i = 0; i < closes.length; i++) {
-    sum += closes[i]; valid++
-    if (valid < period) continue
-    if (valid === period) { out[i] = sum / period; continue }
-    out[i] = closes[i] * k + out[i - 1] * (1 - k)
-  }
-  return out
-}
-export function calcSMA(closes, period) {
-  if (!closes?.length || period < 1) return []
-  const out = new Array(closes.length).fill(null)
-  for (let i = period - 1; i < closes.length; i++) {
-    let s = 0
-    for (let j = i - period + 1; j <= i; j++) s += closes[j]
-    out[i] = s / period
-  }
-  return out
-}
-export function calcRSI(closes, period = 14) {
-  if (!closes?.length || period < 1) return []
-  const out = new Array(closes.length).fill(null)
-  let gains = 0, losses = 0
-  for (let i = 1; i <= period && i < closes.length; i++) {
-    const d = closes[i] - closes[i - 1]
-    if (d > 0) gains += d; else losses -= d
-  }
-  if (period >= closes.length) return out
-  gains /= period; losses /= period
-  out[period] = losses === 0 ? 100 : 100 - 100 / (1 + gains / losses)
-  for (let i = period + 1; i < closes.length; i++) {
-    const d = closes[i] - closes[i - 1]
-    gains = (gains * (period - 1) + Math.max(d, 0)) / period
-    losses = (losses * (period - 1) + Math.max(-d, 0)) / period
-    out[i] = losses === 0 ? 100 : 100 - 100 / (1 + gains / losses)
-  }
-  return out
-}
-export function calcMACD(closes, fast = 12, slow = 26, signal = 9) {
-  const emaFast = calcEMA(closes, fast)
-  const emaSlow = calcEMA(closes, slow)
-  const macdLine = closes.map((_, i) =>
-    emaFast[i] != null && emaSlow[i] != null ? emaFast[i] - emaSlow[i] : null)
-  // Signal line: EMA of valid MACD values
-  const signalLine = new Array(closes.length).fill(null)
-  const firstIdx = macdLine.findIndex(v => v != null)
-  if (firstIdx >= 0) {
-    const validMacd = []
-    const validIdxs = []
-    macdLine.forEach((v, i) => { if (v != null) { validMacd.push(v); validIdxs.push(i) } })
-    const sigEMA = calcEMA(validMacd, signal)
-    validIdxs.forEach((idx, j) => { signalLine[idx] = sigEMA[j] })
-  }
-  const histogram = closes.map((_, i) =>
-    macdLine[i] != null && signalLine[i] != null ? macdLine[i] - signalLine[i] : null)
-  return { macdLine, signalLine, histogram }
-}
+// ── Indicadores: UNA sola implementación, la de lib/backtester.js ──────
+// Este fichero tenía su propia copia de calcEMA/calcSMA/calcRSI/calcMACD. Con entrada limpia daban
+// exactamente los mismos valores que las de lib —comprobado barra a barra—, pero con nulos no: las de
+// aquí los sumaban como cero y contaminaban el resultado (el RSI se quedaba clavado en 100 con un
+// prefijo de nulos, y la señal del MACD arrancaba pegada a cero). Las de lib los saltan y re-alinean.
+// Además, lib es la que se inyecta en el sandbox del code_js de las estrategias, así que tener dos
+// implementaciones significaba que el gráfico podía dibujar una curva distinta de la que el motor miró.
+// calcMACD de lib devuelve {line, signal} y NO el histograma: se calcula en el punto de uso. No se le
+// añade aquí porque esa función se inyecta en el sandbox de las 77 estrategias y su forma es contrato.
+import { calcEMA, calcSMA, calcRSI, calcMACD } from '../lib/backtester'
 
 // ── Indicator detection helpers ────────────────────────────────────────
 function _blockInd(block) {
@@ -585,7 +532,10 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
 
       if(_indType==='MACD'&&macdContainerRef.current){
         const mp=getMacdParams(definition)
-        const {macdLine,signalLine,histogram}=calcMACD(_closes,mp.fast,mp.slow,mp.signal)
+        // El histograma se deriva aquí: calcMACD de lib entrega línea y señal, que es lo que consume el
+        // motor, y la diferencia entre ambas solo la necesita el dibujo.
+        const {line:macdLine,signal:signalLine}=calcMACD(_closes,mp.fast,mp.slow,mp.signal)
+        const histogram=macdLine.map((v,i)=>(v!=null&&signalLine[i]!=null)?v-signalLine[i]:null)
         if(macdChartRef.current){try{macdChartRef.current.remove()}catch(_){};macdChartRef.current=null}
         if(macdContainerRef.current.clientWidth<=0) return
         console.log('[CHART-DEBUG] CandleChart MACD-indicator',macdContainerRef.current?.clientWidth,macdContainerRef.current?.clientHeight)
