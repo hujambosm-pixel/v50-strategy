@@ -631,6 +631,28 @@ const MC_TODAS='__todas__'
 // Alto mínimo del gráfico grande del multibacktest. Por debajo de esto un gráfico de velas con sus
 // operaciones no se lee, y es preferible desplazarse a mirar una franja aplastada.
 const SUELO_EQUITY=420
+// ── Desplazamiento acumulado por encima de un elemento ──────────────────────
+// Cuánto se ha bajado entre el principio del documento y este nodo, sumando TODOS los contenedores que
+// scrollean por el camino. Sirve para convertir un getBoundingClientRect().top —que es relativo a la
+// VENTANA y por tanto cambia al desplazarse— en la posición que el elemento tendría con todo arriba.
+// Se suma a ciegas: los ancestros que no scrollean tienen scrollTop 0 y no estorban. <html> se excluye
+// porque su scrollTop ES window.scrollY y se contaría dos veces.
+const desplazamientoSobre=(nodo)=>{
+  let s=window.scrollY||0
+  for(let p=nodo?.parentElement;p&&p!==document.documentElement;p=p.parentElement) s+=p.scrollTop||0
+  return s
+}
+// ── Quién scrollea de verdad por encima de un elemento ──────────────────────
+// No se puede dar por supuesto: en esta app el panel de multicartera tiene overflowY:auto pero NO llega a
+// activarse —.main no lleva min-height:0, así que crece con su contenido y el que scrollea es el
+// documento—. Devuelve el primer ancestro que scrollee de verdad, y si no hay ninguno, el documento.
+const scrollerDe=(nodo)=>{
+  for(let p=nodo?.parentElement;p&&p!==document.documentElement;p=p.parentElement){
+    const ov=getComputedStyle(p).overflowY
+    if((ov==='auto'||ov==='scroll')&&p.scrollHeight>p.clientHeight+1) return p
+  }
+  return document.scrollingElement||document.documentElement
+}
 // ── Nombre legible de un indicador ──────────────────────────────────────────
 // La clave del vocabulario NO describe el indicador: `ema3` es la EMA20 en la estrategia que la usa. El
 // tipo sale de la clave y el PERIODO de los params de la estrategia, que es el único sitio donde está.
@@ -1109,7 +1131,6 @@ export default function Home() {
   const [mcEquityH,setMcEquityH]=useState(300) // resizable MC equity chart height
   const mcEquityContainerRef=useRef(null)  // mide el hueco disponible para autoajustar mcEquityH
   const mcHeaderRef=useRef(null)           // cabecera del gráfico: al envolver cambia de alto y mueve el hueco
-  const mcScrollRef=useRef(null)           // contenedor con scroll del panel: el hueco se mide contra ÉL, no contra la ventana
   const mcEquityPrevRef=useRef(300)        // alto anterior del equity, para compensar el scroll cuando cambia
   // Refs LOCALES del panel de operaciones. Deliberadamente fuera de mcChartRefsMap y mcChartsSyncRef: esos
   // son de la parrilla, y registrar aquí el mismo símbolo pisaría su instancia y mandaría la navegación
@@ -1942,7 +1963,7 @@ export default function Home() {
   const mcNSeriesActivos=mcSeriesActivos?.length??0
   // ── Autoajuste de la altura del equity del multibacktest ──
   // Mide el hueco entre el borde superior del contenedor del gráfico (bajo la fila de botones EQUITY)
-  // y el fondo del PANEL, y lo usa como mcEquityH. Recalcula al montar, al hacer resize de la ventana,
+  // y el fondo de la ventana CON LA PÁGINA ARRIBA, y lo usa como mcEquityH. Recalcula al montar, al resize,
   // y cuando cambia mcDisplayResults/mcResult (varía la altura de la tabla comparativa → cambia el hueco).
   // Y, sobre todo, cuando cambia el ALTO DE LA CABECERA, que es lo que hay justo encima: los toggles de
   // series viven en su fila de botones y con muchos activos ocupan varias líneas. Eso no depende solo del
@@ -1950,27 +1971,26 @@ export default function Home() {
   // ponerlo en las dependencias: un ResizeObserver sobre la cabecera cubre los dos casos, incluido el
   // reflujo durante un resize. Las dependencias se quedan igualmente para recalcular en el instante del
   // cambio de modo, sin esperar a que el observador entregue.
-  // El drag-handle sobrescribe mcEquityH manualmente hasta el próximo recálculo. Cleanup en el return.
+  // Es el ÚNICO punto que escribe mcEquityH. Cleanup en el return.
   useEffect(()=>{
     if(sidePanel!=='multi') return
     const recompute=()=>{
       const el=mcEquityContainerRef.current
       if(!el) return
-      // EL HUECO NO PUEDE DEPENDER DEL SCROLL. getBoundingClientRect().top es relativo a la VENTANA: con el
-      // panel bajado, el contenedor del gráfico queda por encima del borde superior y `top` se vuelve
-      // negativo, así que el hueco medido crecía exactamente lo que se hubiera desplazado y el gráfico se
-      // estiraba. Cualquier recálculo disparado mientras se lee más abajo —un ResizeObserver de la
-      // cabecera, un cambio de dependencias— lo estiraba otra vez.
-      // Se mide contra el CONTENEDOR CON SCROLL: distancia desde el principio de su contenido hasta el
-      // gráfico, y el hueco es lo que queda de su alto visible. Restar los dos rects y sumar el scrollTop
-      // cancela el desplazamiento, así que el valor sale igual esté donde esté el scroll.
-      // EXCEPCIÓN, pantalla completa: ahí el gráfico vive en un overlay que no es hijo de ese contenedor,
-      // y el overlay no scrollea, así que la medida contra la ventana es la correcta.
-      const cont=mcPantallaCompleta?null:mcScrollRef.current
-      const hueco=cont
-        ? Math.round(cont.clientHeight
-            - (el.getBoundingClientRect().top - cont.getBoundingClientRect().top + cont.scrollTop) - 10)
-        : Math.round(window.innerHeight - el.getBoundingClientRect().top - 10)  // ~10px de margen inferior
+      // EL HUECO NO PUEDE DEPENDER DEL SCROLL, y tampoco del alto del contenido.
+      // getBoundingClientRect().top es relativo a la VENTANA: con la página bajada, el contenedor del
+      // gráfico queda por encima del borde superior, `top` se vuelve negativo y el hueco medido crece
+      // exactamente lo desplazado. Medirlo contra el contenedor del panel NO lo arregla: ese contenedor
+      // lleva overflowY:auto pero nunca llega a activarse —.main no lleva min-height:0, así que crece con
+      // su contenido—, de modo que su clientHeight ES el alto de todo el contenido y el hueco salía de
+      // miles de píxeles, con la página arriba o abajo.
+      // Lo que se quiere es lo de siempre —del gráfico al fondo de la ventana— pero TOMADO CON TODO
+      // ARRIBA: se le devuelve al rect el desplazamiento acumulado y el valor deja de depender de él.
+      // EXCEPCIÓN, pantalla completa: el overlay es position:fixed, su rect ya es de ventana y sumarle el
+      // desplazamiento de unos ancestros que no le afectan lo falsearía.
+      const rectTop=el.getBoundingClientRect().top
+      const topSinDesplazar=mcPantallaCompleta?rectTop:rectTop+desplazamientoSobre(el)
+      const hueco=Math.round(window.innerHeight - topSinDesplazar - 10)  // ~10px de margen inferior
       // SUELO. Con todas las estrategias desplegadas, la tabla empuja el contenedor hacia abajo y el hueco
       // se queda en 150-200 px: un gráfico de velas aplastado que no sirve para nada. La guarda anterior
       // (h>150) no acotaba el valor, solo dejaba de escribirlo, así que el alto se congelaba en lo último
@@ -2006,12 +2026,19 @@ export default function Home() {
   // abajo Δ. Si el usuario estaba leyendo por debajo del gráfico, devolver ese mismo Δ al scroll deja el
   // texto donde estaba. Si estaba mirando el gráfico, no se toca: ahí el punto de referencia es el gráfico.
   useEffect(()=>{
-    const cont=mcScrollRef.current, el=mcEquityContainerRef.current
+    const el=mcEquityContainerRef.current
     const prev=mcEquityPrevRef.current
     mcEquityPrevRef.current=mcEquityH
-    if(!cont||!el||prev===mcEquityH||mcPantallaCompleta) return
-    const offset=el.getBoundingClientRect().top-cont.getBoundingClientRect().top+cont.scrollTop
-    if(cont.scrollTop>offset) cont.scrollTop+=(mcEquityH-prev)
+    if(!el||prev===mcEquityH||mcPantallaCompleta) return
+    const delta=mcEquityH-prev
+    // ¿Estaba el gráfico ENTERO por encima de lo que se miraba, ANTES del cambio? Su borde inferior de
+    // antes es el de ahora menos el delta. Si se estaba mirando el propio gráfico no se toca nada: ahí el
+    // punto de referencia es él.
+    if(el.getBoundingClientRect().bottom-delta>0) return
+    // Sobre el scroller de verdad, que en esta maqueta es el documento, no el contenedor del panel.
+    const sc=scrollerDe(el)
+    if(sc===document.scrollingElement||sc===document.documentElement) window.scrollBy(0,delta)
+    else sc.scrollTop+=delta
   },[mcEquityH,mcPantallaCompleta])
 
   // ── Altura del gráfico: 100% CSS puro (sin JS) ──
@@ -5518,7 +5545,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.813</title>
+        <title>Trading Simulator V9.814</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5596,7 +5623,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.813
+            <span className="dot"/>Trading Simulator V9.814
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -8466,7 +8493,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
             {mcResult&&sidePanel==='multi'&&(
               <div style={{display:'flex',flex:1,minHeight:0,overflow:'hidden',height:'100%'}}>
               {/* Left: scrollable content */}
-              <div ref={mcScrollRef} style={{flex:1,overflowY:'auto',padding:'0 0 20px 0'}}>
+              <div style={{flex:1,overflowY:'auto',padding:'0 0 20px 0'}}>
                 {/* Header resumen */}
                 <div style={{padding:'7px 16px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
                   <span style={{fontFamily:MONO,fontSize:13,color:'var(--accent)',fontWeight:700}}>📊 Multicartera</span>
