@@ -575,13 +575,18 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
               const g=document.createElementNS(NS,'g')
               g.setAttribute('class','trade-label'); g.setAttribute('pointer-events','none')
               const rect=document.createElementNS(NS,'rect')
-              const fill=(bc.length===7&&bc.startsWith('#'))?bc+'22':'rgba(0,229,160,0.14)'
+              // Relleno al 40 % en vez del 13 %, y borde de 1,5: la caja se separa de las velas sin tapar
+              // el gráfico. `cc` es el hex de 2 dígitos de la opacidad.
+              const fill=(bc.length===7&&bc.startsWith('#'))?bc+'66':'rgba(0,229,160,0.40)'
               Object.entries({x:caja.x1,y:caja.y1,width:w,height:BOX_H,fill,
-                rx:'3',stroke:bc,'stroke-width':'1'}).forEach(([k,v])=>rect.setAttribute(k,v))
+                rx:'3',stroke:bc,'stroke-width':'1.5'}).forEach(([k,v])=>rect.setAttribute(k,v))
               g.appendChild(rect)
               const el=document.createElementNS(NS,'text')
+              // Texto en casi blanco, como hace CandleChart en sus etiquetas. Iba del MISMO color que el
+              // relleno y que el borde, así que el porcentaje se leía mal contra su propia caja. El color
+              // del resultado sigue estando: lo llevan el borde y el fondo.
               Object.entries({x:cx,y:caja.y+3.5,'font-size':'9','font-family':_MONO,
-                'text-anchor':'middle',fill:bc,'font-weight':'700'}).forEach(([k,v])=>el.setAttribute(k,v))
+                'text-anchor':'middle',fill:'#f2f7ff','font-weight':'700'}).forEach(([k,v])=>el.setAttribute(k,v))
               el.textContent=txt
               g.appendChild(el)
               svg.appendChild(g)
