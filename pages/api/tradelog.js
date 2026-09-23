@@ -3,6 +3,7 @@
 // V5.29: arquitectura fill-first (una fila = un fill BUY o SELL)
 // Columnas trades_log: id, symbol, fill_type, date, price, shares, commission,
 //                      currency, fx, broker, strategy, notes, import_source, created_at
+import { stooqSym } from '../../lib/simbolos'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://uqjngxxbdlquiuhywiuc.supabase.co'
 const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY || 'sb_publishable_st9QJ3zcQbY5ec-JhxwqXQ_joy3udz3'
@@ -59,14 +60,12 @@ async function getFxRate(date, fromCur, toCur = 'EUR') {
 }
 
 // ── Precio actual (Stooq) ────────────────────────────────────
-const MAP_STOOQ = {
-  '^GSPC':'spy.us','^NDX':'ndx.us','^IBEX':'ibex.es','^GDAXI':'dax.de',
-  '^FTSE':'ftse.uk','^N225':'n225.jp','BTC-USD':'btc-usd.v','ETH-USD':'eth-usd.v',
-  'GC=F':'gc.f','CL=F':'cl.f',
-}
+// Traducción compartida (lib/simbolos.js). La copia que había aquí no tenía NINGUNA regla: todo lo que no
+// estuviera en su tabla recibía '.us', incluidos índices y futuros.
 async function getCurrentPrice(symbol) {
   try {
-    const sym = MAP_STOOQ[symbol] || (symbol.toLowerCase() + '.us')
+    const sym = stooqSym(symbol)
+    if (!sym) return null   // sin equivalencia segura, mejor sin precio que con el de otro instrumento
     const res = await fetch(`https://stooq.com/q/d/l/?s=${sym}&i=d`)
     const text = await res.text()
     if (!text || text.includes('No data')) return null

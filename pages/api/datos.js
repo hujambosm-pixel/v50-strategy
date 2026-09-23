@@ -3,6 +3,7 @@
 import { calcEMA, calcSMA, calcRSI, calcATR, calcMACD } from '../../lib/backtester'
 import { normalizaFiltrosEntrada, hayFiltrosActivos, clavesAuxiliares, construirFiltroActivoMap, filtrosActivos,
          requiereSemanalDelActivo, proyectarSemanal } from '../../lib/filtros'
+import { stooqSym } from '../../lib/simbolos'
 
 const SUPA_URL = process.env.SUPABASE_URL || 'https://uqjngxxbdlquiuhywiuc.supabase.co'
 const SUPA_KEY = process.env.SUPABASE_ANON_KEY || 'sb_publishable_st9QJ3zcQbY5ec-JhxwqXQ_joy3udz3'
@@ -24,25 +25,13 @@ function setCachedPrice(symbol, price, date) {
   priceCache.set(symbol, { price, date, timestamp: Date.now() })
 }
 
-function stooqSym(symbol) {
-  const MAP={
-    '^GSPC':'spy.us','^NDX':'ndx.us','^IBEX':'ibex.es','^GDAXI':'dax.de',
-    '^FTSE':'ftse.uk','^N225':'n225.jp','BTC-USD':'btc-usd.v','ETH-USD':'eth-usd.v',
-    'GC=F':'gc.f','CL=F':'cl.f',
-    '^IXIC':'ndx.us','^DJI':'dji.us','^FCHI':'cac.fr','^STOXX50E':'sx5e.de','^HSI':'hsi.hk',
-    'SI=F':'si.f',
-  }
-  if(MAP[symbol]) return MAP[symbol]
-  if(symbol.endsWith('=F')) return symbol.replace('=F','').toLowerCase()+'.f'
-  if(symbol.includes('-')) return symbol.toLowerCase()+'.v'
-  if(symbol.startsWith('^')) return symbol.slice(1).toLowerCase()+'.us'
-  return symbol.toLowerCase()+'.us'
-}
-
 export async function fetchAV(symbol, years=5, interval='d') {
+  // `null` = no hay equivalencia SEGURA en Stooq (ver lib/simbolos.js). Entonces no se le pregunta
+  // siquiera: se va directo a Yahoo, que entiende el símbolo canónico. Antes se le mandaba una traducción
+  // inventada y, si daba con algo, ese algo podía ser otro instrumento.
   const sym = stooqSym(symbol)
   const stooqInterval = interval === 'w' ? 'w' : 'd'
-  const url = `https://stooq.com/q/d/l/?s=${sym}&i=${stooqInterval}`
+  const url = sym ? `https://stooq.com/q/d/l/?s=${sym}&i=${stooqInterval}` : null
   let rawData = null
 
   // ── Stooq fetch with 3-second timeout ──
@@ -50,6 +39,7 @@ export async function fetchAV(symbol, years=5, interval='d') {
   const stooqCtrl = new AbortController()
   const stooqTimer = setTimeout(() => stooqCtrl.abort(), 3000)
   try {
+    if (!url) throw new Error('sin equivalencia en Stooq')
     const res = await fetch(url, { signal: stooqCtrl.signal })
     const text = await res.text()
     if (text && !text.includes('No data') && text.trim().length >= 50) {

@@ -9,26 +9,19 @@
 // gráfico. Con periodos cortos daba igual —medido, 0 diferencias con 10/11, RSI 14 y MACD
 // 12/26/9—, pero con una media de 200 el error de siembra llegaba al 12%.
 import { calcEMA, calcRSI, calcMACD } from '../../lib/backtester'
+import { stooqSym } from '../../lib/simbolos'
 
 // ── Stooq fetch ───────────────────────────────────────────────
-function toStooqSym(symbol) {
-  const MAP = {
-    '^GSPC':'spy.us','^NDX':'ndx.us','^IBEX':'ibex.es','^GDAXI':'dax.de',
-    '^FTSE':'ftse.uk','^N225':'n225.jp','BTC-USD':'btc-usd.v','ETH-USD':'eth-usd.v',
-    'GC=F':'gc.f','CL=F':'cl.f'
-  }
-  if (MAP[symbol]) return MAP[symbol]
-  if (symbol.endsWith('=F')) return symbol.replace('=F','').toLowerCase()+'.f'
-  if (symbol.includes('-')) return symbol.toLowerCase()+'.v'
-  if (symbol.startsWith('^')) return symbol.slice(1).toLowerCase()+'.us'
-  return symbol.toLowerCase()+'.us'
-}
+// La traducción es la compartida (lib/simbolos.js). La copia que había aquí tenía seis entradas menos que
+// la del motor, así que un mismo símbolo podía traducirse distinto según quién preguntara.
 
 async function fetchCloses(symbol, bodyCloses) {
   // Prefer closes pre-fetched by the client (Stooq blocks server IPs on Vercel)
   if (bodyCloses?.[symbol]?.length >= 30) return bodyCloses[symbol]
   // Fallback: fetch from Stooq (works locally, may fail on Vercel)
-  const sym = toStooqSym(symbol)
+  const sym = stooqSym(symbol)
+  // Sin equivalencia segura no se pregunta: mejor sin alarma que una alarma sobre otro instrumento.
+  if (!sym) { console.log(`[status] ${symbol}: sin equivalencia en Stooq`); return null }
   const url = `https://stooq.com/q/d/l/?s=${sym}&i=d`
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 15000)
