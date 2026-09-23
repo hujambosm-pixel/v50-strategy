@@ -69,8 +69,13 @@ const TICK_COLOR = '#8899aa'
 const TICK_SIZE  = 11
 const GRID_COLOR = '#1a2a3a'
 
-export default function McMonthlyGainsChart({ series = [], capitalIni, syncRef, axisWidth = Y_AXIS_W_DEFAULT }) {
-  const [showPct, setShowPct] = useState(false)
+// `soloEuros` apaga el conmutador de porcentaje, y `nota` es una advertencia que se pinta junto al
+// título. Los dos existen para el caso de UN activo: su curva es de CONTRIBUCIÓN y arranca en cero, así
+// que el porcentaje mensual se dispara en los primeros meses y responde a otra pregunta.
+// Sin ellos, el componente se comporta exactamente como siempre.
+export default function McMonthlyGainsChart({ series = [], capitalIni, syncRef, axisWidth = Y_AXIS_W_DEFAULT, soloEuros = false, nota = null }) {
+  const [showPctRaw, setShowPct] = useState(false)
+  const showPct = soloEuros ? false : showPctRaw
 
   // FIX (sync): track the visible time range published by the LW sync bus
   const [visibleRange, setVisibleRange] = useState(null)
@@ -173,8 +178,19 @@ export default function McMonthlyGainsChart({ series = [], capitalIni, syncRef, 
         <span style={{ color: '#00e5a0', fontWeight: 600 }}>Ganancias mensuales</span>
         <button style={btnStyle(!showPct)} onClick={() => setShowPct(false)}
           title="Ganancia del mes en euros: diferencia entre el primer día hábil del mes siguiente y el primer día hábil del mes actual">€</button>
-        <button style={btnStyle(showPct)}  onClick={() => setShowPct(true)}
-          title="Ganancia del mes en porcentaje: diferencia entre el primer día hábil del mes siguiente y el primer día hábil del mes actual, dividida entre el valor del primer día hábil del mes actual">%</button>
+        <button style={{ ...btnStyle(showPct), ...(soloEuros ? { opacity: 0.4, cursor: 'not-allowed' } : {}) }}
+          disabled={soloEuros}
+          onClick={() => { if (!soloEuros) setShowPct(true) }}
+          title={soloEuros
+            ? 'No disponible por activo: su curva mide CONTRIBUCIÓN y arranca en cero, así que el porcentaje mensual se dispara en los primeros meses y no es comparable con el de la estrategia'
+            : 'Ganancia del mes en porcentaje: diferencia entre el primer día hábil del mes siguiente y el primer día hábil del mes actual, dividida entre el valor del primer día hábil del mes actual'}>%</button>
+        {nota && (
+          <span title={nota.detalle || ''}
+            style={{ fontSize: 9, color: '#7a9bc0', cursor: nota.detalle ? 'help' : 'default',
+              padding: '1px 6px', borderRadius: 3, border: '1px solid #1a2d45', background: 'rgba(122,155,192,0.08)' }}>
+            {nota.texto}
+          </span>
+        )}
       </div>
       <div style={{ height: 180 }}>
         <ResponsiveContainer width="100%" height="100%">
