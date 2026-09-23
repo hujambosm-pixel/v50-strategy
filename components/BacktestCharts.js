@@ -605,6 +605,8 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
       const _fecha=(d)=>{const p=String(d).split('-');return `${p[2]}/${p[1]}/${p[0]}`}
       const _dias=(a,b)=>Math.max(1,Math.round((new Date(b)-new Date(a))/86400000))
       const _num=(v)=>v==null?'—':Number(v).toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2})
+      // Un guion antes que un número inventado: si falta el capital, se dice que falta.
+      const _eur=(v)=>Number.isFinite(v)?'€'+Math.round(v).toLocaleString('es-ES'):'—'
       const _fila=(k,v,col)=>`<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:#7a9bc0">${k}</span><b style="color:${col||'#e2eaf5'}">${v}</b></div>`
       chart.subscribeCrosshairMove(param=>{
         if(!param.point||param.time==null){_tip.style.display='none';return}
@@ -622,11 +624,17 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
         _tip.style.borderColor=bc
         _tip.innerHTML=
           `<div style="font-size:10px;color:#7a9bc0;margin-bottom:5px">#${mejor.n} · ${_fecha(mejor.entryDate)} → ${_fecha(mejor.exitDate)}</div>`+
-          _fila('Entrada',_num(mejor.entryPx))+
-          _fila('Salida',_num(mejor.exitPx))+
-          _fila('Resultado',`${mejor.pnlPct>=0?'+':''}${(mejor.pnlPct||0).toFixed(2)}%`,bc)+
+          _fila('Inversión',_eur(mejor.inversion))+
+          _fila('Resultado',_eur(mejor.resultado))+
+          _fila('Rendimiento',`${mejor.pnlPct>=0?'+':''}${(mejor.pnlPct||0).toFixed(2)}%`,bc)+
           _fila('P&L',`${pnl>=0?'+':'-'}€${Math.round(Math.abs(pnl)).toLocaleString('es-ES')}`,bc)+
-          _fila('Días',String(_dias(mejor.entryDate,mejor.exitDate)))
+          _fila('Días',String(_dias(mejor.entryDate,mejor.exitDate)))+
+          // "Desde máximo", no "Max DD": esto NO es el drawdown de la tabla. Mide lo que la operación
+          // devolvió entre su pico y su salida, con el punto final fijado en la salida.
+          (Number.isFinite(mejor.cesionPct)
+            ? _fila('Desde máximo',`${mejor.cesionPct.toFixed(2)}%`,mejor.cesionPct<-0.005?'#ff9a3c':'#7a9bc0')
+              +`<div style="font-size:9px;color:#4a6a88;text-align:right;margin-top:1px">máx ${_num(mejor.maxPx)}${mejor.maxFecha?' · '+_fecha(mejor.maxFecha):''}</div>`
+            : '')
         const w=chartDivRef.current?.clientWidth||600
         _tip.style.display='block'
         _tip.style.left=((param.point.x+230>w)?Math.max(4,param.point.x-236):param.point.x+16)+'px'

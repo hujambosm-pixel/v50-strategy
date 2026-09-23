@@ -1433,6 +1433,28 @@ export default function Home() {
     if(!sym) return []
     return (mcHistSel.histResult?.allTrades||[]).filter(t=>t.symbol===sym)
   },[mcActivoSel,mcHistSel])
+  // Capital de UNA operación, que se calcula distinto según el modo y no admite atajos.
+  //   Pool: _capitalAtEntry viaja con la operación, y `entrada + pnlSimple` es el capital de salida por
+  //         construcción —el motor define pnlSimple como capFinal − capAsignado—, no por aproximación.
+  //   Slots: no hay _capitalAtEntry. La entrada se deshace desde capitalTras, y el capital de salida es
+  //         capitalTras DIRECTAMENTE. Sumar pnlSimple ahí daría un número que no cuadra con ninguna curva:
+  //         en Slots pnlSimple se mide sobre la asignación FIJA y capitalTras sobre el capital compuesto,
+  //         que son dos magnitudes distintas conviviendo en el mismo objeto.
+  // Sin datos suficientes se devuelve null y el tooltip pinta un guion, nunca un número inventado.
+  const mcCapitalDeOperacion=(t,modoAsig)=>{
+    const esPool=modoAsig==='compartido'||modoAsig==='concentrado'||modoAsig==='positionsizing'
+    if(esPool){
+      const ent=Number(t?._capitalAtEntry)
+      if(!Number.isFinite(ent)) return {inversion:null,resultado:null}
+      const pnl=Number(t?.pnlSimple)
+      return {inversion:ent,resultado:Number.isFinite(pnl)?ent+pnl:null}
+    }
+    const tras=Number(t?.capitalTras), pct=Number(t?.pnlPct)
+    if(!Number.isFinite(tras)||!Number.isFinite(pct)) return {inversion:null,resultado:null}
+    const factor=1+pct/100
+    // pnlPct = −100 haría factor 0: pérdida total, sin capital de entrada recuperable de esta forma.
+    return {inversion:factor!==0?tras/factor:null,resultado:tras}
+  }
   // Señales para el gráfico de velas: una sola estrategia, la seleccionada. Memorizado porque el efecto
   // de AssetSignalChart depende de este array por identidad y lo reconstruiría en cada render.
   const mcSignalsActivoSel=useMemo(()=>{
@@ -1449,9 +1471,11 @@ export default function Home() {
         exitDate:t.exitDate,exitPx:t.exitPx??t.exitPrice,
         pnlPct:t.pnlPct,pnlSimple:t.pnlSimple,
         capital:t.pnlPct!==0?Math.abs(t.pnlSimple/(t.pnlPct/100)):0,
+        ...mcCapitalDeOperacion(t,mcHistSel.histResult?.modoAsig),
+        cesionPct:t.cesionPct??null,maxPx:t.maxPx??null,maxFecha:t.maxFecha??null,
       })),
     }]
-  },[mcActivoSel,mcCurvaActivoSel,mcTradesActivoSel,mcNombreStratSel])
+  },[mcActivoSel,mcCurvaActivoSel,mcTradesActivoSel,mcNombreStratSel,mcHistSel])
   // Qué estrategia ejecutar para sacar los indicadores. La fila puede llevar un id que no es una
   // estrategia: '__portfolio__' agrega varias y no hay UN code_js que la represente, así que ahí no se
   // piden —dibujar el de una cualquiera sería mentir sobre lo que esa fila resume—. El id sintético del
@@ -5373,7 +5397,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.798</title>
+        <title>Trading Simulator V9.799</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5451,7 +5475,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.798
+            <span className="dot"/>Trading Simulator V9.799
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
