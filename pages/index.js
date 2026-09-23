@@ -5545,7 +5545,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.814</title>
+        <title>Trading Simulator V9.815</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5623,7 +5623,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.814
+            <span className="dot"/>Trading Simulator V9.815
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -8665,13 +8665,20 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                       // La fila hace dos cosas a la vez, y las dos en el mismo sentido:
                                       // selecciona su estrategia para TODO el panel y despliega sus activos.
                                       // El segundo clic sobre la misma fila pliega y vuelve a "todas".
+                                      //
+                                      // EXCEPCIÓN: con un activo de ESTA estrategia seleccionado, la fila SOLO
+                                      // pliega o despliega. Ni suelta la selección ni toca el filtro. Plegar la
+                                      // tabla es lo que se hace para ver mejor el gráfico de velas, así que es
+                                      // justo cuando menos sentido tiene perderlo; y volver a "todas" lo
+                                      // soltaría igual, porque el panel del activo necesita UNA estrategia.
+                                      // La selección se suelta con la ✕ del gráfico, con un segundo clic en la
+                                      // fila del activo, ejecutando otro backtest o volviendo a TODAS desde el
+                                      // chip de la cabecera o el selector.
+                                      const _conActivo=mcActivoSel?.stratId===r.id
                                       const _yaEs=!mcTodasStrats&&mcHistIdVigente===r.id
                                       const _enLista=mcDisplayResults.some(x=>x.id===r.id)
-                                      if(_enLista) mcPonerEstrategia(_yaEs?MC_TODAS:(r.id===mcHistIdPorDefecto?null:r.id))
+                                      if(_enLista&&!_conActivo) mcPonerEstrategia(_yaEs?MC_TODAS:(r.id===mcHistIdPorDefecto?null:r.id))
                                       if(!rStats.length) return
-                                      // Al plegar, la fila del activo desaparece: dejar la selección viva
-                                      // sería un panel sin fila que lo explique.
-                                      if(isOpen&&mcActivoSel?.stratId===r.id) setMcActivoSel(null)
                                       setMcAssetOpen(v=>({...v,[r.id]:!isOpen}))
                                     }}
                                     style={{borderBottom:'1px solid rgba(255,255,255,0.04)',
