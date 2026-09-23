@@ -1372,6 +1372,28 @@ export default function Home() {
     setMcHistStratId(id)
     if(id===MC_TODAS){ setMcActivoSel(null); setMcPorActivo(false) }
   }
+  // ── Historial y Gantt: SIEMPRE una estrategia ──
+  // Los dos enseñan UNA serie de operaciones, con una cabecera, un contador y unos botones que exportan
+  // una. "Todas" no tiene representación ahí: las operaciones de varias estrategias no se funden en una
+  // lista que signifique nada, y la cartera combinada que se enseñaba antes bajo TODAS no es "todas"
+  // —es otra estrategia más—, así que el bloque decía "todas" y mostraba una sin decir cuál.
+  // Bajo TODAS toman la PRIMERA fila de la tabla y lo dicen en su título. No es un segundo estado de
+  // filtrado: es el ÚNICO, mcHistStratId, leído con el único valor que este bloque sabe representar.
+  const mcHistUnoId=mcTodasStrats?mcPrimeraStrat:mcHistStratId
+  // Misma cascada que mcHistSel, con el id ya forzado a concreto. mcHistSel se queda intacto: gobierna el
+  // modo Activos, el panel del activo y las ganancias mensuales, y ahí TODAS sí significa la cartera.
+  const mcHistUno=useMemo(()=>{
+    const isMultiHist=mcMultiResults.length>1
+    const _portfolio=mcMultiResults.find(r=>r.id==='__portfolio__')?.result
+    const _concreta=mcHistUnoId||null
+    const histResult=isMultiHist&&_concreta
+      ?(mcMultiResults.find(r=>r.id===_concreta)?.result??mcResult)
+      :(_portfolio??mcResult)
+    const histTitle=isMultiHist&&_concreta
+      ?(mcMultiResults.find(r=>r.id===_concreta)?.name??'Historial')
+      :'Historial Multicartera'
+    return {isMultiHist,histResult,histTitle}
+  },[mcMultiResults,mcHistUnoId,mcResult])
   // El activo seleccionado vive dentro de una estrategia. Si el historial cambia a otra —desde el selector
   // del modo Activos o desde sus botones—, hay dos salidas: si esa estrategia también opera el activo, la
   // selección lo sigue y solo se resincroniza qué fila se resalta; si no lo opera, se limpia, porque no
@@ -5453,7 +5475,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.811</title>
+        <title>Trading Simulator V9.812</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5531,7 +5553,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.811
+            <span className="dot"/>Trading Simulator V9.812
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -9386,14 +9408,11 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
 
                 {/* Historial combinado — same style as individual */}
                 {(()=>{
-                  // Resolución compartida con el modo Activos del gráfico (ver mcHistSel): DEFAULT del
-                  // historial = resultado del MODO DE ASIGNACIÓN REAL, no el run individual. Con varias
-                  // estrategias prefiere __portfolio__ sobre mcResult, y mcHistStratId permite elegir una.
-                  const {isMultiHist,histResult,histTitle}=mcHistSel
+                  // Resolución PROPIA (ver mcHistUno): este bloque nunca ve TODAS. DEFAULT del historial
+                  // = resultado del MODO DE ASIGNACIÓN REAL, no el run individual. Con varias estrategias
+                  // prefiere __portfolio__ sobre mcResult, y mcHistStratId permite elegir una.
+                  const {isMultiHist,histResult,histTitle}=mcHistUno
                   if(!histResult?.allTrades?.length) return null
-                  // Botones Exportar/Gantt — deshabilitados si modo multi sin estrategia seleccionada
-                  const histBtnsDisabled=isMultiHist&&(mcTodasStrats||!mcHistStratId)
-                  const histBtnTitle=histBtnsDisabled?'Selecciona una estrategia en el historial':''
                   // handleRequestDiscarded para el Gantt de este historial
                   const handleGanttDiscarded=async()=>{
                     setGanttLoadingDisc(true)
@@ -9467,6 +9486,15 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           })()}
                           <span style={{fontWeight:400,fontSize:11,color:'#9acce0'}}> · clic activo → ver gráfico</span>
                         </span>
+                        {/* Con el filtro global en TODAS, el título ya lleva el nombre de la estrategia que
+                            se enseña, pero sin esto se leería como si el usuario la hubiera elegido. */}
+                        {mcTodasStrats&&isMultiHist&&(
+                          <span title="El filtro del panel está en todas las estrategias. El historial y el Gantt enseñan siempre una: aquí, la primera de la tabla. Elige otra abajo."
+                            style={{fontFamily:MONO,fontSize:10,fontWeight:400,padding:'2px 7px',borderRadius:3,
+                              cursor:'help',border:'1px solid #3d5a7a',background:'transparent',color:'#7a9bc0'}}>
+                            filtro en todas · aquí, la primera
+                          </span>
+                        )}
                         {/* Que el historial esté filtrado tiene que verse: si no, se lee como si la
                             estrategia solo hubiera operado ese activo. Y se quita desde aquí. */}
                         {mcActivoSel&&(
@@ -9483,47 +9511,39 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                             placeholder="Filtrar activo…"
                             style={{fontFamily:MONO,fontSize:11,padding:'2px 7px',borderRadius:3,
                               background:'#0d1828',border:'1px solid #274462',color:'#e8f4ff',width:110}}/>}
+                          {/* Sin deshabilitar: el bloque siempre resuelve UNA estrategia concreta, así
+                              que siempre hay algo que exportar y algo que dibujar en el Gantt. */}
                           <button
-                            disabled={histBtnsDisabled||mcExporting}
-                            title={histBtnTitle||(mcShowGantt?'Exportar Gantt semanal a Excel (.xlsx)':'Exportar historial de trades a Excel (.xlsx)')}
+                            disabled={mcExporting}
+                            title={mcShowGantt?'Exportar Gantt semanal a Excel (.xlsx)':'Exportar historial de trades a Excel (.xlsx)'}
                             onClick={handleExport}
                             style={{padding:'2px 8px',fontFamily:MONO,fontSize:10,
                               background:mcExporting?'#1a2d45':'transparent',
-                              color:(histBtnsDisabled||mcExporting)?'#3d5a7a':'#00d4ff',
+                              color:mcExporting?'#3d5a7a':'#00d4ff',
                               border:'1px solid #1a3a5c',borderRadius:3,
-                              cursor:(histBtnsDisabled||mcExporting)?'not-allowed':'pointer',
-                              opacity:(histBtnsDisabled||mcExporting)?0.5:1,flexShrink:0}}
+                              cursor:mcExporting?'not-allowed':'pointer',
+                              opacity:mcExporting?0.5:1,flexShrink:0}}
                           >{mcExporting?'⏳':'📊'} Exportar</button>
                           <button
-                            disabled={histBtnsDisabled}
-                            title={histBtnTitle||(mcShowGantt?'Volver a la tabla':'Mostrar Gantt de operaciones')}
-                            onClick={()=>{if(!histBtnsDisabled){setMcShowGantt(s=>!s)}}}
+                            title={mcShowGantt?'Volver a la tabla':'Mostrar Gantt de operaciones'}
+                            onClick={()=>setMcShowGantt(s=>!s)}
                             style={{padding:'2px 8px',fontFamily:MONO,fontSize:10,
                               background:mcShowGantt?'rgba(0,212,255,0.1)':'transparent',
-                              color:histBtnsDisabled?'#3d5a7a':mcShowGantt?'#00d4ff':'#7a9bc0',
+                              color:mcShowGantt?'#00d4ff':'#7a9bc0',
                               border:`1px solid ${mcShowGantt?'#00d4ff':'#1a3a5c'}`,
-                              borderRadius:3,cursor:histBtnsDisabled?'not-allowed':'pointer',
-                              opacity:histBtnsDisabled?0.5:1,flexShrink:0}}
+                              borderRadius:3,cursor:'pointer',flexShrink:0}}
                           >{mcShowGantt?'← Tabla':'📅 Gantt'}</button>
                         </div>
                       </div>
                       {isMultiHist&&(
                         <div style={{display:'flex',gap:3,alignItems:'center',flexWrap:'wrap'}}>
-                          {/* "Todas" primero: es el valor por defecto tras ejecutar y el que devuelve el
-                              panel a su estado sin filtrar. */}
-                          <button onClick={()=>mcPonerEstrategia(MC_TODAS)}
-                            title="Ver todas las estrategias"
-                            style={{fontSize:9,padding:'2px 8px',borderRadius:3,cursor:'pointer',
-                              border:`1px solid ${mcTodasStrats?'#00d4ff':'#3d5a7a'}`,
-                              background:mcTodasStrats?'rgba(0,212,255,0.12)':'transparent',
-                              color:mcTodasStrats?'#00d4ff':'#4a6a88'}}>
-                            Todas
-                          </button>
+                          {/* Sin botón "Todas": este bloque no sabe representarlo. El resaltado sigue a
+                              mcHistUnoId, así que bajo TODAS marca la primera, que es la que se enseña. */}
                           {mcDisplayResults.map(r=>{
-                            // __portfolio__ se resalta también por defecto (mcHistStratId null = historial del portfolio)
-                            const isAct=!mcTodasStrats&&(mcHistStratId===r.id||(mcHistStratId===null&&r.id==='__portfolio__'))
+                            // __portfolio__ se resalta también por defecto (mcHistUnoId null = historial del portfolio)
+                            const isAct=mcHistUnoId===r.id||(mcHistUnoId===null&&r.id==='__portfolio__')
                             return(
-                              <button key={r.id} onClick={()=>mcPonerEstrategia(isAct?MC_TODAS:r.id)}
+                              <button key={r.id} onClick={()=>mcPonerEstrategia(r.id===mcHistIdPorDefecto?null:r.id)}
                                 style={{fontSize:9,padding:'2px 8px',borderRadius:3,cursor:'pointer',
                                   border:`1px solid ${isAct?r.color:'#3d5a7a'}`,
                                   background:isAct?r.color+'18':'transparent',
