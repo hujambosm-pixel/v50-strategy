@@ -631,6 +631,9 @@ const MC_TODAS='__todas__'
 // Alto mínimo del gráfico grande del multibacktest. Por debajo de esto un gráfico de velas con sus
 // operaciones no se lee, y es preferible desplazarse a mirar una franja aplastada.
 const SUELO_EQUITY=420
+// Alto de la franja de rendimiento del activo cuando va DEBAJO del hueco visible, con alto propio en vez
+// de repartirse mcEquityH con las velas. Suficiente para leer la curva y su eje sin comerse pantalla.
+const ALTO_FRANJA_RENDIMIENTO=200
 // ── Desplazamiento acumulado por encima de un elemento ──────────────────────
 // Cuánto se ha bajado entre el principio del documento y este nodo, sumando TODOS los contenedores que
 // scrollean por el camino. Sirve para convertir un getBoundingClientRect().top —que es relativo a la
@@ -5545,7 +5548,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.815</title>
+        <title>Trading Simulator V9.816</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5623,7 +5626,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.815
+            <span className="dot"/>Trading Simulator V9.816
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -9198,8 +9201,9 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                   <div ref={mcEquityContainerRef} style={{position:'relative'}}>
                   {/* Con un activo seleccionado, este hueco es suyo: arriba sus velas con las operaciones
                       EJECUTADAS por la estrategia, abajo una franja con su rendimiento dentro de la cartera.
-                      Los dos altos se reparten mcEquityH y suman exactamente lo disponible, así que el panel
-                      no desborda y el recálculo de altura existente sigue mandando.
+                      Las velas se llevan el hueco ENTERO —de su borde superior al fondo de la ventana, con su
+                      eje de años abajo del todo— y la franja va después, fuera de la vista inicial, igual que
+                      las ganancias mensuales o el historial: se alcanza bajando.
                       Los dos gráficos NO están sincronizados entre sí, y es una decisión, no un olvido:
                       AssetSignalChart sincroniza por rango LÓGICO —índices de vela— y StratCompareChart por
                       rango de FECHAS, y sus ejes no son el mismo: uno tiene una vela diaria por barra y el
@@ -9209,12 +9213,19 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       eje—, así que nada de fuera puede mover su escala de tiempo. En su lugar, los dos
                       arrancan acotados al periodo del backtest, que es la parte que importa. */}
                   {mcPanelActivo?(()=>{
-                    // Reparto del alto: el header propio de las velas se descuenta primero, y el resto va
-                    // 75/25. La suma es exacta, no aproximada, para que no sobre ni falte un píxel.
+                    // Reparto del alto. El header propio de las velas se descuenta primero: lo que se mide en
+                    // mcEquityH es el hueco desde el borde del contenedor, y ese header está dentro.
+                    // FUERA DE PANTALLA COMPLETA las velas se llevan el hueco entero y la franja va debajo con
+                    // alto propio, así que los dos ya NO suman mcEquityH: el panel sigue hacia abajo a
+                    // propósito. El suelo de SUELO_EQUITY no estorba aquí —solo levanta el valor cuando la
+                    // tabla ha empujado el gráfico hasta dejarlo minúsculo, y nunca lo recorta cuando hay
+                    // sitio, porque es un Math.max—.
+                    // EN PANTALLA COMPLETA se conserva el 75/25: el overlay es overflow:hidden y no hay nada
+                    // debajo a lo que bajar, así que la franja tiene que caber dentro.
                     const ALTO_CABECERA_VELAS=30
                     const util=Math.max(180,mcEquityH-ALTO_CABECERA_VELAS)
-                    const hVelas=Math.round(util*0.75)
-                    const hCurva=util-hVelas
+                    const hVelas=mcPantallaCompleta?Math.round(util*0.75):util
+                    const hCurva=mcPantallaCompleta?util-hVelas:ALTO_FRANJA_RENDIMIENTO
                     return(
                       <div>
                         <AssetSignalChart symbol={mcActivoSel.symbol}
