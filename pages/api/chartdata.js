@@ -1,4 +1,9 @@
 // pages/api/chartdata.js — OHLCV data for a single symbol (used by signal comparison charts)
+//
+// El volumen se pide y se devuelve aunque hoy no lo dibuje nadie: el nombre del endpoint ya decía OHLCV
+// y solo entregaba OHLC, así que AssetSignalChart no podía tener un panel de volumen ni queriendo. Va
+// como `?? null` igual que el resto de campos; una barra sin volumen no se descarta, porque el filtro
+// de barras válidas sigue siendo el cierre.
 
 // `interval` es '1d' o '1wk', y NUNCA llega crudo del cliente: quien llama lo valida antes contra esos
 // dos valores. El diario es el valor por defecto en los dos niveles, así que los usos que no lo pidan
@@ -24,6 +29,7 @@ async function fetchOHLCV(symbol, years = 5, interval = '1d') {
       high:  q?.high?.[i]  ?? null,
       low:   q?.low?.[i]   ?? null,
       close: q?.close?.[i] ?? null,
+      volume: q?.volume?.[i] ?? null,
     })).filter(d => d.close && !isNaN(d.close))
       .sort((a, b) => a.date.localeCompare(b.date))
   } catch { return null }

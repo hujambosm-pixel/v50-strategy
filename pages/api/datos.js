@@ -547,7 +547,13 @@ export default async function handler(req, res) {
       bbUpper:    bbUpperArr?.[i]    ?? null,
       bbMid:      bbMidArr?.[i]      ?? null,
       bbLower:    bbLowerArr?.[i]    ?? null,
-      volume:     volArr?.[i]        ?? null,
+      // EL VOLUMEN DESCARGADO MANDA. Antes era `volArr?.[i] ?? null`, y volArr es indicators.volume del
+      // code_js: una estrategia que no devolviera volumen dejaba la barra SIN volumen aunque la descarga
+      // lo trajera —Stooq lo parsea (l.split) y Yahoo también (quotes.volume)—, y el panel de volumen
+      // del gráfico, que se enciende con `d.volume > 0`, no aparecía nunca. El dato estaba y se tiraba.
+      // El del code_js sigue teniendo preferencia cuando existe: una estrategia puede devolver un
+      // volumen tratado —ajustado, en otra unidad— y ese es el que miró para decidir.
+      volume:     volArr?.[i]        ?? d.volume ?? null,
       volumeAvg:  volAvgArr?.[i]     ?? null,
     }))
     if (indicators?.macdLine) {
