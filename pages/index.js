@@ -1319,6 +1319,7 @@ export default function Home() {
   const [mcVerIndicadores,setMcVerIndicadores]=useState(true)
   const [mcVerFranjas,setMcVerFranjas]=useState(true)
   const [mcVerEtiquetas,setMcVerEtiquetas]=useState(true)
+  const [mcResOpTodas,setMcResOpTodas]=useState(false)   // Resultados por operación: solo la activa (false) o todas
   const [mcPantallaCompleta,setMcPantallaCompleta]=useState(false)
   const mcDetallePedidoRef=useRef(null)   // clave de la última petición lanzada
   const [mcShowBHCompare,setMcShowBHCompare]=useState(true) // B&H curve toggle in multi-strategy chart
@@ -1441,6 +1442,10 @@ export default function Home() {
     if(!sym||!Array.isArray(trades)) return trades
     return trades.filter(t=>(t?.symbol||'')===sym)
   }
+  // ¿Se dibuja esta estrategia? El panel entero sigue a la estrategia ACTIVA del historial —el mismo
+  // mcHistStratId que usan el historial y el panel del activo—, así que no hay un segundo estado que
+  // pueda desincronizarse. Sin resolución de estrategia vigente, se dibujan todas, que es lo de antes.
+  const mcEsStratActiva=(id)=>!mcHistIdVigente||id===mcHistIdVigente
   // Capital de UNA operación, que se calcula distinto según el modo y no admite atajos.
   //   Pool: _capitalAtEntry viaja con la operación, y `entrada + pnlSimple` es el capital de salida por
   //         construcción —el motor define pnlSimple como capFinal − capAsignado—, no por aproximación.
@@ -5405,7 +5410,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.805</title>
+        <title>Trading Simulator V9.806</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5483,7 +5488,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.805
+            <span className="dot"/>Trading Simulator V9.806
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -9209,9 +9214,23 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                 {mcDisplayResults.length>1
                   ? (mcDisplayResults.some(r=>mcStratVisible[r.id]!==false&&r.result.allTrades?.length>0)&&(
                       <div className="equity-section">
-                        <div className="section-title" style={{fontSize:14}}>Resultados por Operación</div>
+                        <div className="section-title" style={{display:'flex',alignItems:'center',gap:8,fontSize:14}}>
+                          <span>Resultados por Operación</span>
+                          {/* Por defecto solo la estrategia activa, como el resto del panel. Pero comparar
+                              cómo le fue a cada una con el MISMO activo es justo lo que este bloque hace
+                              bien, así que el interruptor está a un clic. */}
+                          <button onClick={()=>setMcResOpTodas(v=>!v)}
+                            title={mcResOpTodas?'Ver solo la estrategia activa':'Comparar todas las estrategias'}
+                            style={{fontFamily:MONO,fontSize:10,fontWeight:400,padding:'2px 7px',borderRadius:3,
+                              cursor:'pointer',border:`1px solid ${mcResOpTodas?'#00d4ff':'#1a2d45'}`,
+                              background:mcResOpTodas?'rgba(0,212,255,0.12)':'transparent',
+                              color:mcResOpTodas?'#00d4ff':'#7a9bc0'}}>
+                            {mcResOpTodas?'Todas las estrategias':'Solo la activa'}
+                          </button>
+                        </div>
                         {mcDisplayResults
                           .filter(r=>mcStratVisible[r.id]!==false)
+                          .filter(r=>mcResOpTodas||mcEsStratActiva(r.id))
                           .map(r=>{
                             const trades=mcSoloActivoSel(r.result.allTrades||[])
                             if(!trades.length) return null
