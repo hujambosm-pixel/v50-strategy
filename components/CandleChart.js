@@ -11,7 +11,20 @@ import { MONO, f2, fmtDate } from '../lib/utils'
 // añade aquí porque esa función se inyecta en el sandbox de las 77 estrategias y su forma es contrato.
 import { calcEMA, calcSMA, calcRSI, calcMACD } from '../lib/backtester'
 
-// ── Indicator detection helpers ────────────────────────────────────────
+// ── Detección del indicador de una estrategia ─────────────────────────
+// INALCANZABLE HOY, A PROPÓSITO. Todo este bloque cuelga de la prop `definition`, y los dos únicos
+// puntos de uso del componente la pasan como `definition={null}` literal (pages/index.js, el gráfico de
+// la watchlist y el de pantalla completa). Con definition null, getActiveIndicator devuelve null y las
+// tres ramas de dibujo que dependen de él —RSI en escala secundaria, MACD en panel, VOLUME en el panel
+// de MACD— no se ejecutan nunca. Lo que sí se dibuja hoy son las series que el servidor inyecta en las
+// velas (d.macdLine, d.rsiLine, d.volume, d.bbUpper…), por ramas distintas marcadas más abajo.
+// SE CONSERVA porque contiene los dos patrones que reutilizará el sistema de indicadores propio: la
+// escala de precio secundaria sobre el chart principal (priceScaleId + scaleMargins + series ancla para
+// fijar el rango 0-100) y los charts apilados sincronizados por rango de fechas.
+// QUÉ LO ACTIVARÍA: pasar `definition={estrategiaActiva.definition}` en cualquiera de los dos puntos de
+// uso. Antes de hacerlo, cuenta con que ninguna de las 77 estrategias tiene visuals.indicators relleno,
+// así que la rama de EMA/SMA por visuals tampoco dibujaría nada y se perdería la EMA que hoy sí se ve
+// por la vía legacy (_showEma con !definition).
 function _blockInd(block) {
   if (!block) return null
   if (block.indicator) return String(block.indicator).toUpperCase()
@@ -33,28 +46,6 @@ function getActiveIndicator(definition) {
   if (t.includes('macd'))   return 'MACD'
   if (t.includes('volume')) return 'VOLUME'
   return null
-}
-function getEmaParams(definition, emaRPeriod, emaLPeriod) {
-  for (const role of ['setup','trigger']) {
-    const b = definition?.[role]
-    if (!b || !['EMA','SMA'].includes(_blockInd(b))) continue
-    const maType = b.ma_type || (b.indicator === 'SMA' ? 'SMA' : 'EMA')
-    const t = b.type || ''
-    if (['ema_cross_up','ema_cross_down'].includes(t) || ['crosses_above','crosses_below'].includes(b.condition))
-      return { fast: b.ma_fast ?? b.params?.fast ?? emaRPeriod ?? 10, slow: b.ma_slow ?? b.params?.slow ?? emaLPeriod ?? 20, type: maType }
-    if (['price_above_ma','price_below_ma','close_above_ma','close_below_ma'].includes(t) || ['price_above','price_below'].includes(b.condition))
-      return { fast: b.ma_period ?? b.params?.slow ?? b.params?.fast ?? emaRPeriod ?? 50, slow: null, type: maType }
-  }
-  // FIX 2 — fallback para estrategias antiguas con definition.entry
-  const e = definition?.entry
-  if (e) {
-    const maType = e.ma_type || 'EMA'
-    if (e.ma_fast != null || e.ma_slow != null)
-      return { fast: e.ma_fast ?? emaRPeriod ?? 10, slow: e.ma_slow ?? emaLPeriod ?? 20, type: maType }
-    if (e.ma_period != null)
-      return { fast: e.ma_period ?? emaRPeriod ?? 50, slow: null, type: maType }
-  }
-  return { fast: emaRPeriod ?? 10, slow: emaLPeriod ?? 20, type: 'EMA' }
 }
 function getRsiParams(definition) {
   // Fuente 1: bloques de definición
@@ -487,6 +478,9 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         }
       }
 
+      // ── RSI en escala secundaria — INALCANZABLE (_indType siempre null, ver cabecera del fichero) ──
+      // Patrón a reutilizar: priceScaleId propio + scaleMargins que reparten el alto entre velas y
+      // subventana + dos series ancla transparentes que fijan el rango 0-100 sin distorsionar nada.
       if(_indType==='RSI'){
         rsiChartRef.current=null  // chart es nuevo; series anteriores ya destruidas
         const rp=getRsiParams(definition)
@@ -530,6 +524,9 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         rsiChartRef.current={_isOverlay:true,_series:[rsiS,rsiAnchorMin,rsiAnchorMax]}
       }
 
+      // ── MACD en panel propio — INALCANZABLE (_indType siempre null, ver cabecera del fichero) ──
+      // Patrón a reutilizar: createChart aparte + _panelOpts + _syncPanels. La rama VIVA equivalente es
+      // la de más abajo, que dibuja lo mismo a partir de las barras que inyecta el servidor.
       if(_indType==='MACD'&&macdContainerRef.current){
         const mp=getMacdParams(definition)
         // El histograma se deriva aquí: calcMACD de lib entrega línea y señal, que es lo que consume el
@@ -550,6 +547,8 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         _syncPanels(macdChart,macdS)
       }
 
+      // ── VOLUME en el panel de MACD — INALCANZABLE (_indType siempre null, ver cabecera del fichero) ──
+      // El volumen que sí se ve hoy es el panel propio del final del efecto, que no depende de definition.
       if(_indType==='VOLUME'&&macdContainerRef.current){
         if(macdChartRef.current){try{macdChartRef.current.remove()}catch(_){};macdChartRef.current=null}
         const volData=data.filter(d=>d.volume!=null)
@@ -563,7 +562,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         }
       }
 
-      // ── MACD subpanel from strategy bar data (code_js strategies returning indicators.macdLine) ──
+      // ── MACD desde las barras — RAMA VIVA ──
       // Triggered when bars carry macdLine/signalLine/histogram injected by datos.js.
       // Only fires when definition-based _indType is absent (avoids double-render).
       const _hasMacdBars=!_indType&&data.some(d=>d.macdLine!=null)
@@ -600,7 +599,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         _syncPanels(macdChart,macdS)
       }
 
-      // ── RSI subpanel from strategy bar data (code_js strategies returning indicators.rsi) ──
+      // ── RSI desde las barras — RAMA VIVA ──
       // Triggered when bars carry rsiLine injected by datos.js.
       // Only fires when definition-based _indType is absent (avoids double-render).
       const _hasRsiBars=!_indType&&data.some(d=>d.rsiLine!=null)
@@ -647,7 +646,9 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         _syncPanels(rsiChart,rsiS)
       }
 
-      // ── Volume subpanel — siempre que haya barras con volume > 0, independiente de MACD/RSI ──
+      // ── Volumen en panel propio — RAMA VIVA, independiente de MACD/RSI y de definition ──
+      // Desde que datos.js no pisa el volumen descargado con el del code_js, esta rama se enciende para
+      // cualquier activo, no solo para las estrategias que devolvían indicators.volume.
       const _hasVolume = data.some(d => d.volume > 0)
       if (_hasVolume && volumeContainerRef.current) {
         if (volumeChartRef.current) { try { volumeChartRef.current.remove() } catch(_) {}; volumeChartRef.current = null }
