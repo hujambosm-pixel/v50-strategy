@@ -1433,6 +1433,14 @@ export default function Home() {
     if(!sym) return []
     return (mcHistSel.histResult?.allTrades||[]).filter(t=>t.symbol===sym)
   },[mcActivoSel,mcHistSel])
+  // Filtro por el activo seleccionado, con coincidencia EXACTA de símbolo: es el mismo criterio que la
+  // tabla del historial, y por el mismo motivo —con `includes`, seleccionar V arrastraría NVDA—. Sin
+  // selección devuelve la lista TAL CUAL, así que todo lo que lo use se comporta como antes.
+  const mcSoloActivoSel=(trades)=>{
+    const sym=mcActivoSel?.symbol
+    if(!sym||!Array.isArray(trades)) return trades
+    return trades.filter(t=>(t?.symbol||'')===sym)
+  }
   // Capital de UNA operación, que se calcula distinto según el modo y no admite atajos.
   //   Pool: _capitalAtEntry viaja con la operación, y `entrada + pnlSimple` es el capital de salida por
   //         construcción —el motor define pnlSimple como capFinal − capAsignado—, no por aproximación.
@@ -5397,7 +5405,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.801</title>
+        <title>Trading Simulator V9.802</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5475,7 +5483,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.801
+            <span className="dot"/>Trading Simulator V9.802
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -9186,8 +9194,11 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         {mcDisplayResults
                           .filter(r=>mcStratVisible[r.id]!==false)
                           .map(r=>{
-                            const trades=r.result.allTrades||[]
+                            const trades=mcSoloActivoSel(r.result.allTrades||[])
                             if(!trades.length) return null
+                            // mx SOBRE EL CONJUNTO QUE SE PINTA: con el máximo de la cartera entera, las
+                            // barras de un solo activo saldrían diminutas. La escala deja de ser
+                            // comparable entre activos, que es el precio de que cada una se lea.
                             const mx=Math.max(...trades.map(x=>Math.abs(x.pnlSimple??0)),1)
                             return(
                               <div key={r.id} style={{marginBottom:8}}>
@@ -9224,7 +9235,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         </div>
                         <div className="equity-bars">
                           {(()=>{
-                            const allT=mcResult.allTrades||[]
+                            const allT=mcSoloActivoSel(mcResult.allTrades||[])
+                            // mx sobre el conjunto filtrado, por el mismo motivo que arriba.
                             const mx=Math.max(...allT.map(x=>Math.abs(x.pnlSimple??0)),1)
                             return allT.map((t,i)=>{
                               const pnlS=t.pnlSimple??0
@@ -9392,13 +9404,17 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                     {/* Gantt o Tabla */}
                     {mcShowGantt?(
                       <div style={{height:'min(520px,55vh)',minHeight:280}}>
+                        {/* El Gantt se filtra igual que la tabla de al lado: son dos vistas del MISMO
+                            dato y hasta ahora solo una respetaba la selección. Y las descartadas también,
+                            porque mezclar ejecutadas de un activo con descartadas de todos daría un Gantt
+                            que no es de nada. */}
                         <GanttChart
-                          trades={histResult.allTrades||[]}
+                          trades={mcSoloActivoSel(histResult.allTrades||[])}
                           startDate={histResult.startDate}
                           endDate={ganttEndD}
                           slotCapital={histResult.slotCapital}
                           onRequestDiscarded={handleGanttDiscarded}
-                          discardedTrades={ganttDiscarded}
+                          discardedTrades={ganttDiscarded?mcSoloActivoSel(ganttDiscarded):ganttDiscarded}
                           loadingDiscarded={ganttLoadingDisc}
                         />
                       </div>
