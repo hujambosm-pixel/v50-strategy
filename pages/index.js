@@ -4474,10 +4474,17 @@ export default function Home() {
   }
   const tlGetLS = () => { try{ return (JSON.parse(localStorage.getItem(TL_LS_KEY)||'[]')).map(tlNorm) }catch{ return [] } }
   const tlSetLS = (arr) => localStorage.setItem(TL_LS_KEY, JSON.stringify(arr))
-  const tlUseLocal = () => {
-    try { return !(getSupaUrl().startsWith('https') && getSupaKey().length > 10) }
-    catch { return true }
-  }
+  // ¿Diario de operaciones en modo LOCAL? Es un modo real, no solo un distintivo: cuando no hay
+  // configuracion de Supabase, las operaciones se guardan y se leen de localStorage (tlGetLS) en vez de
+  // la base de datos, y once puntos de este fichero dependen de el.
+  //
+  // Pero NADIE LO ELIGE. Se enciende solo cuando falta la configuracion, asi que es el fallo puesto en
+  // marcha, no una preferencia. Tras leer la configuracion del entorno, en produccion no deberia
+  // encenderse nunca; si se enciende, es que el despliegue salio sin las variables.
+  //
+  // El criterio es UNO, hayConfigSupabase(), y no una copia de la misma condicion: dos copias acaban
+  // discrepando y entonces la cabecera dice una cosa y el diario hace otra.
+  const tlUseLocal = () => !hayConfigSupabase()
 
   // ── Guardar screenshot del gráfico ─────────────────────────
   // ── File System Access API helpers ──
@@ -5791,7 +5798,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.834</title>
+        <title>Trading Simulator V9.835</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5869,7 +5876,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.834
+            <span className="dot"/>Trading Simulator V9.835
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5933,9 +5940,13 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               </div>
             )}
             {tlUseLocal()
-              ? <span style={{fontFamily:MONO,fontSize:9,padding:'3px 8px',borderRadius:4,
+              ? <span title={'Sin configuracion de base de datos. No es un modo que hayas elegido: la aplicacion no sabe a que servidor pedir los datos, '
+                  + 'asi que el diario de operaciones se guarda SOLO en este navegador y no se sincroniza con nada. '
+                  + 'Se arregla definiendo NEXT_PUBLIC_SUPABASE_URL y NEXT_PUBLIC_SUPABASE_ANON_KEY en el entorno y volviendo a desplegar, '
+                  + 'o rellenando la URL y la clave en Ajustes -> Integraciones.'}
+                  style={{fontFamily:MONO,fontSize:9,padding:'3px 8px',borderRadius:4,cursor:'help',
                   background:'rgba(255,209,102,0.1)',border:'1px solid rgba(255,209,102,0.3)',color:'#ffd166'}}>
-                  💾 Local
+                  💾 Sin base de datos
                 </span>
               : <a href={`https://supabase.com/dashboard/project/${(getSupaUrl().match(/https:\/\/([^.]+)\.supabase\.co/)||[])[1]||''}`} target="_blank" rel="noreferrer"
                   style={{fontFamily:MONO,fontSize:11,padding:'3px 9px',borderRadius:4,cursor:'pointer',textDecoration:'none',
@@ -10145,8 +10156,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                   {tlUseLocal()&&(
                     <div style={{padding:'3px 10px',background:'rgba(255,209,102,0.04)',borderBottom:'1px solid rgba(255,209,102,0.1)',
                       fontFamily:MONO,fontSize:9,color:'#7a6a30',display:'flex',alignItems:'center',gap:4,flexShrink:0}}>
-                      💾 <span style={{color:'#ffd166',opacity:0.7}}>Modo local</span>
-                      <span style={{opacity:0.5}}>— Configura Supabase en Settings → Integraciones</span>
+                      💾 <span style={{color:'#ffd166',opacity:0.7}}>Sin base de datos</span>
+                      <span style={{opacity:0.5}}>— estas operaciones se guardan solo en este navegador. Falta la configuracion: variables de entorno del despliegue, o Ajustes → Integraciones</span>
                     </div>
                   )}
                   {/* ── TABS siempre visibles + búsqueda/nueva op ── */}
