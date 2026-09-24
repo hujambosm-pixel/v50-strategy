@@ -1,3 +1,5 @@
+import { auditaAuth } from '../../lib/verificaJwt'
+
 // pages/api/strategies.js — CRUD de estrategias en Supabase
 // Métodos: GET (list) | POST (create) | PUT (update) | DELETE (soft delete)
 
@@ -22,6 +24,10 @@ async function supa(path, options = {}) {
 
 export default async function handler(req, res) {
   _reqJwt = req.headers['x-supa-jwt'] || null
+  // MODO AUDITORÍA. Verifica el JWT y lo registra, pero NO decide nada: la ruta sirve igual que antes,
+  // llegue el token o no. auditaAuth nunca lanza, así que esta línea no puede tumbar la petición.
+  await auditaAuth('strategies', req, req.query?.action)
+
   try {
     switch (req.method) {
 

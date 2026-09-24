@@ -1,6 +1,8 @@
 // pages/api/pending.js — CRUD pending_orders (órdenes pendientes)
 // Patrón idéntico a risk.js: JWT del cliente vía x-supa-jwt, user_id lo rellena
 // la DB (DEFAULT auth.uid()) — nunca se manda en el body. Una orden por (user_id, symbol).
+import { auditaAuth } from '../../lib/verificaJwt'
+
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://uqjngxxbdlquiuhywiuc.supabase.co'
 const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY || 'sb_publishable_st9QJ3zcQbY5ec-JhxwqXQ_joy3udz3'
 
@@ -26,6 +28,10 @@ async function sb(path, opts = {}) {
 
 export default async function handler(req, res) {
   _reqJwt = req.headers['x-supa-jwt'] || null
+  // MODO AUDITORÍA. Verifica el JWT y lo registra, pero NO decide nada: la ruta sirve igual que antes,
+  // llegue el token o no. auditaAuth nunca lanza, así que esta línea no puede tumbar la petición.
+  await auditaAuth('pending', req, req.query?.action)
+
   const { action, id, symbol } = req.query
 
   try {

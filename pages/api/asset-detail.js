@@ -9,6 +9,7 @@
 // el backtest —la descarga, el sandbox y los alineados—, de modo que no puede divergir de él. Si el motor
 // cambia, cambia para los dos a la vez.
 import { fetchData, runCodeJsAsset, buildAlignedCloses, buildAlignedWeekly, calcEMA } from './multibacktest'
+import { auditaAuth } from '../../lib/verificaJwt'
 import { normalizaFiltrosEntrada, hayFiltrosActivos, clavesAuxiliares, construirFiltroActivoMap,
          requiereSemanalDelActivo, proyectarSemanal } from '../../lib/filtros'
 
@@ -73,6 +74,14 @@ function zonasDeMapa(barras, filtroActivoMap) {
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
+  // MODO AUDITORÍA. Verifica el JWT y lo registra, pero NO decide nada: la ruta sirve igual que antes,
+  // llegue el token o no. auditaAuth nunca lanza, así que esta línea no puede tumbar la petición.
+  await auditaAuth('asset-detail', req, req.query?.action)
+  // Esta ruta no miraba la cabecera: leía la estrategia SIEMPRE con la clave anónima, así que la sesión
+  // del usuario no llegaba a Supabase ni aunque el cliente la mandara. Ahora se reenvía cuando llega.
+  // Local a la petición, no en una variable de módulo: dos peticiones a la vez en la misma instancia se
+  // pisarían el token.
+  const _jwt = req.headers['x-supa-jwt'] || null
   const { symbol, strategyId, cfg: cfgInput, intervalo, intervaloVelas, filtros: filtrosCfg, isNoStrategy = false } = req.body || {}
   if (!symbol) return res.status(400).json({ error: 'symbol requerido' })
   const cfg = cfgInput || {}
@@ -88,7 +97,7 @@ export default async function handler(req, res) {
       try {
         const sr = await fetch(
           `${SUPA_URL}/rest/v1/strategies?id=eq.${strategyId}&select=code_js,params`,
-          { headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` } }
+          { headers: { apikey: SUPA_KEY, Authorization: `Bearer ${_jwt || SUPA_KEY}` } }
         )
         if (sr.ok) {
           const row = (await sr.json())?.[0] || {}

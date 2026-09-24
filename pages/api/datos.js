@@ -1,6 +1,7 @@
 // pages/api/datos.js — Motor V50 v3.0 (V9.260)
 
 import { calcEMA, calcSMA, calcRSI, calcATR, calcMACD } from '../../lib/backtester'
+import { auditaAuth } from '../../lib/verificaJwt'
 import { normalizaFiltrosEntrada, hayFiltrosActivos, clavesAuxiliares, construirFiltroActivoMap, filtrosActivos,
          requiereSemanalDelActivo, proyectarSemanal } from '../../lib/filtros'
 import { stooqSym } from '../../lib/simbolos'
@@ -263,6 +264,11 @@ function buildTrades(rawTrades, capitalIni, allocationPct = 100) {
 export default async function handler(req, res) {
   try {
   if (req.method !== 'POST') return res.status(405).end()
+  // MODO AUDITORÍA. Verifica el JWT y lo registra, pero NO decide nada: la ruta sirve igual que antes,
+  // llegue el token o no. auditaAuth nunca lanza, así que esta línea no puede tumbar la petición.
+  await auditaAuth('datos', req, req.query?.action)
+  // Igual que asset-detail: no miraba la cabecera. Local a la petición, no de módulo.
+  const _jwt = req.headers['x-supa-jwt'] || null
 
   const { simbolo, strategyId, capital_ini = 10000, years = 5, allocation_pct = 100, priceOnly, filtros, intervalo } = req.body || {}
   if (!simbolo) return res.status(400).json({ error: 'simbolo requerido' })
@@ -291,7 +297,7 @@ export default async function handler(req, res) {
     try {
       const r = await fetch(
         `${SUPA_URL}/rest/v1/strategies?id=eq.${strategyId}&select=code_js,params,visuals`,
-        { headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` } }
+        { headers: { apikey: SUPA_KEY, Authorization: `Bearer ${_jwt || SUPA_KEY}` } }
       )
       if (r.ok) {
         const row = (await r.json())?.[0] || {}

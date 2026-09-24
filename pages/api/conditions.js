@@ -1,3 +1,5 @@
+import { auditaAuth } from '../../lib/verificaJwt'
+
 // pages/api/conditions.js
 // CRUD para la tabla `conditions` (condiciones globales reutilizables)
 // GET    → lista todas las condiciones activas
@@ -177,6 +179,10 @@ function transformGroqStrategy(parsed) {
 }
 
 export default async function handler(req, res) {
+  // MODO AUDITORÍA. Verifica el JWT y lo registra, pero NO decide nada: la ruta sirve igual que antes,
+  // llegue el token o no. auditaAuth nunca lanza, así que esta línea no puede tumbar la petición.
+  await auditaAuth('conditions', req, req.query?.action)
+
   // ── POST ?action=groq_block — genera un bloque JSON para una sección ──
   if (req.method === 'POST' && req.query.action === 'groq_block') {
     const { text, role } = req.body

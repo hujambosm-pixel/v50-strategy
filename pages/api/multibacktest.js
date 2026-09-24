@@ -5,6 +5,7 @@ import { calcEMA as _libEMA, calcSMA, calcRSI, calcATR as _libATR, calcMACD } fr
 import { normalizaFiltrosEntrada, hayFiltrosActivos, clavesAuxiliares, construirFiltroActivoMap, filtrosActivos,
          requiereSemanalDelActivo, proyectarSemanal } from '../../lib/filtros'
 import { fetchAV, fetchAVDetalle } from './datos'
+import { auditaAuth } from '../../lib/verificaJwt'
 
 const SUPA_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPA_KEY = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -1837,7 +1838,7 @@ async function handlePortfolioMode(req, res) {
       try {
         const sr = await fetch(
           `${SUPA_URL}/rest/v1/strategies?id=eq.${s.id}&select=code_js,params,name`,
-          { headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` } }
+          { headers: { apikey: SUPA_KEY, Authorization: `Bearer ${req.headers['x-supa-jwt'] || SUPA_KEY}` } }
         )
         if (!sr.ok) return base
         const row = (await sr.json())?.[0] || {}
@@ -2130,6 +2131,9 @@ async function handlePortfolioMode(req, res) {
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
+  // MODO AUDITORÍA. Verifica el JWT y lo registra, pero NO decide nada: la ruta sirve igual que antes,
+  // llegue el token o no. auditaAuth nunca lanza, así que esta línea no puede tumbar la petición.
+  await auditaAuth('multibacktest', req, req.query?.action)
   // ── NUEVA RAMA: portfolioMode ─────────────────────────────────────────────
   if (req.body?.portfolioMode) return handlePortfolioMode(req, res)
   // ── PATH EXISTENTE: estrategia única — sin cambio ninguno desde aquí ──────
@@ -2167,7 +2171,7 @@ export default async function handler(req, res) {
     try {
       const sr = await fetch(
         `${SUPA_URL}/rest/v1/strategies?id=eq.${strategyId}&select=code_js,params`,
-        { headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` } }
+        { headers: { apikey: SUPA_KEY, Authorization: `Bearer ${req.headers['x-supa-jwt'] || SUPA_KEY}` } }
       )
       if (sr.ok) {
         const row = (await sr.json())?.[0] || {}

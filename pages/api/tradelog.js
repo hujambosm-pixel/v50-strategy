@@ -1,3 +1,5 @@
+import { auditaAuth } from '../../lib/verificaJwt'
+
 // pages/api/tradelog.js
 // TradeLog API — CRUD fills individuales + FX histórico + parsers importación
 // V5.29: arquitectura fill-first (una fila = un fill BUY o SELL)
@@ -388,6 +390,10 @@ ${text.slice(0, 3500)}`
 // ── Handler principal ────────────────────────────────────────
 export default async function handler(req, res) {
   _reqJwt = req.headers['x-supa-jwt'] || null
+  // MODO AUDITORÍA. Verifica el JWT y lo registra, pero NO decide nada: la ruta sirve igual que antes,
+  // llegue el token o no. auditaAuth nunca lanza, así que esta línea no puede tumbar la petición.
+  await auditaAuth('tradelog', req, req.query?.action)
+
   const { action } = req.query
 
   // ── GET list — devuelve todos los fills + precios actuales por símbolo ──
