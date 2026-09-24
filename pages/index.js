@@ -3,7 +3,7 @@ import Head from 'next/head'
 import { ListFilter, Briefcase, Star, Bell, X as LucideX } from 'lucide-react'
 import { calcMetrics, MONO, fmt, fmtDate, f2, tvSym, pesosScoreHistorico, umbralesDe, scoreHistoricoDe, desgloseScoreHistorico } from '../lib/utils'
 import { WATCHLIST_DEFAULT } from '../lib/constants'
-import { getSupaUrl, getSupaKey, getSupaH, setCurrentJwt, getCurrentJwt } from '../lib/supabase'
+import { getSupaUrl, getSupaKey, getSupaH, setCurrentJwt, getCurrentJwt, fetchConSesion, setOnSesionCaducada } from '../lib/supabase'
 import { loadSettings, saveSettings, saveSettingsRemote, loadSettingsRemote } from '../lib/settings'
 import { mergeFiltros, loadFiltros, guardarFiltros, hayFiltroActivo } from '../lib/filtros'
 import { loadAsignacionMc, guardarAsignacionMc } from '../lib/mcAsignacion'
@@ -729,11 +729,14 @@ const capitalDeRespuesta=(r)=>{
 // Las rutas que NO hablan con Supabase pueden seguir usando fetch a secas: /api/search, /api/markets,
 // /api/chartdata, /api/closes, /api/sp500history, /api/fundamentales y /api/status son proxies a Yahoo
 // sin nada del usuario, y mandarles un JWT no aporta nada.
+// El reintento ante 401/403 lo pone fetchConSesion, compartido con lib/conditions.js: un 401 sin
+// tratar no se ve como error, se ve como una lista vacía.
 function apiFetch(url, opts={}) {
-  const jwt=getCurrentJwt()
-  const headers={...(opts.headers||{})}
-  if(jwt) headers['x-supa-jwt']=jwt
-  return fetch(url,{...opts,headers})
+  return fetchConSesion(url, opts, (jwt)=>{
+    const headers={...(opts.headers||{})}
+    if(jwt) headers['x-supa-jwt']=jwt
+    return headers
+  })
 }
 
 // ── Fuerza relativa (RS) del ranking del watchlist — fuente única compartida ──
@@ -1133,6 +1136,7 @@ export default function Home() {
   const [loginEmail,setLoginEmail]=useState('')
   const [loginPassword,setLoginPassword]=useState('')
   const [loginError,setLoginError]=useState('')
+  const [sesionCaducada,setSesionCaducada]=useState(false)  // true tras un 401/403 que no se pudo refrescar
   const [loginLoading,setLoginLoading]=useState(false)
   // ── Resizable panels ────────────────────────────────────────
   const [sidebarW,setSidebarW]=useState(240)
@@ -1171,9 +1175,17 @@ export default function Home() {
     const {data:{subscription}}=supabase.auth.onAuthStateChange((_e,session)=>{
       setSession(session||null)
       setCurrentJwt(session?.access_token||null)
-      if(session?.access_token){ reloadWatchlist(); refreshWlData() }
+      if(session?.access_token){ setSesionCaducada(false); reloadWatchlist(); refreshWlData() }
     })
-    return ()=>subscription.unsubscribe()
+    // Lo que hace la interfaz cuando una llamada se queda sin sesion (ver fetchConSesion): soltar el
+    // token y volver a la pantalla de login, diciendo por que. Sin esto, un 401 se veria como una lista
+    // vacia y pareceria que los datos se han borrado.
+    setOnSesionCaducada(()=>{
+      setCurrentJwt(null)
+      setSesionCaducada(true)
+      setSession(null)
+    })
+    return ()=>{ subscription.unsubscribe(); setOnSesionCaducada(null) }
   },[]) // eslint-disable-line
 
   useEffect(()=>{
@@ -5534,6 +5546,12 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
           </div>
           <div style={{fontSize:10,color:'#3a5a75',letterSpacing:'0.1em',textTransform:'uppercase'}}>Acceso privado</div>
         </div>
+        {sesionCaducada&&(
+          <div style={{marginBottom:16,padding:'9px 12px',borderRadius:6,fontSize:12,lineHeight:1.45,
+            background:'rgba(255,209,102,0.10)',border:'1px solid rgba(255,209,102,0.45)',color:'#ffd166'}}>
+            Tu sesion ha caducado. Vuelve a entrar para seguir; tus datos estan intactos.
+          </div>
+        )}
         <form onSubmit={handleLogin}>
           <input type="email" value={loginEmail} onChange={e=>setLoginEmail(e.target.value)}
             placeholder="Email" autoFocus required
@@ -5572,7 +5590,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.830</title>
+        <title>Trading Simulator V9.831</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5650,7 +5668,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.830
+            <span className="dot"/>Trading Simulator V9.831
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
