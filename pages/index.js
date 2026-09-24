@@ -3,7 +3,7 @@ import Head from 'next/head'
 import { ListFilter, Briefcase, Star, Bell, X as LucideX } from 'lucide-react'
 import { calcMetrics, MONO, fmt, fmtDate, f2, tvSym, pesosScoreHistorico, umbralesDe, scoreHistoricoDe, desgloseScoreHistorico } from '../lib/utils'
 import { WATCHLIST_DEFAULT } from '../lib/constants'
-import { getSupaUrl, getSupaKey, getSupaH, setCurrentJwt, getCurrentJwt, fetchConSesion, setOnSesionCaducada } from '../lib/supabase'
+import { getSupaUrl, getSupaKey, getSupaH, setCurrentJwt, getCurrentJwt, fetchConSesion, setOnSesionCaducada, hayConfigSupabase } from '../lib/supabase'
 import { loadSettings, saveSettings, saveSettingsRemote, loadSettingsRemote } from '../lib/settings'
 import { mergeFiltros, loadFiltros, guardarFiltros, hayFiltroActivo } from '../lib/filtros'
 import { loadAsignacionMc, guardarAsignacionMc } from '../lib/mcAsignacion'
@@ -5791,7 +5791,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.833</title>
+        <title>Trading Simulator V9.834</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5869,7 +5869,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.833
+            <span className="dot"/>Trading Simulator V9.834
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5969,6 +5969,23 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
             </button>
           </div>
         </header>
+
+        {/* ── Aviso: falta la configuracion de la base de datos ────────────────
+            Sin URL ni clave, las llamadas directas a PostgREST salen como rutas relativas contra el
+            propio dominio y devuelven 404: la aplicacion aparece vacia, sin un solo mensaje. Esto lo
+            dice en voz alta. Solo se monta cuando de verdad falta: con la configuracion puesta —por
+            entorno o por Ajustes— no existe. */}
+        {!hayConfigSupabase()&&(
+          <div style={{padding:'10px 16px',background:'rgba(255,77,109,0.10)',
+            borderBottom:'1px solid rgba(255,77,109,0.45)',color:'#ff8fa3',
+            fontFamily:MONO,fontSize:11,lineHeight:1.55,flexShrink:0}}>
+            <strong style={{color:'#ff4d6d'}}>Falta la configuracion de la base de datos.</strong>{' '}
+            La aplicacion no sabe a que servidor pedir los datos, asi que aparecera vacia aunque tus datos
+            esten intactos. Define <code style={{color:'#ffd166'}}>NEXT_PUBLIC_SUPABASE_URL</code> y{' '}
+            <code style={{color:'#ffd166'}}>NEXT_PUBLIC_SUPABASE_ANON_KEY</code> en el entorno y vuelve a
+            desplegar, o rellena la URL y la clave en Ajustes → Integraciones.
+          </div>
+        )}
 
 
         <div className="main">
