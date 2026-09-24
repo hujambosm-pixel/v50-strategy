@@ -109,8 +109,25 @@ function getMacdParams(definition) {
 // hace falta porque las dos cosas pueden llamarse igual y no serlo: la EMA20 de una estrategia semanal
 // no es la EMA20 sobre las velas diarias de este gráfico. No se usan `title` a propósito:
 // lightweight-charts los flota junto al último punto, encima de las velas.
-const DASH_USUARIO = 2   // LineStyle.Dashed. El enum llega dentro del import dinámico, así que aquí va
-                         // su valor, que es estable en lightweight-charts 4.x.
+// El enum LineStyle llega dentro del import dinámico, así que aquí van sus valores, que son estables en
+// lightweight-charts 4.x.
+const DASH_USUARIO = 2   // LineStyle.Dashed
+const SOLIDO = 0         // LineStyle.Solid
+
+// EL DISCONTINUO SOLO SOBRE EL PRECIO. Ahí es donde los del usuario conviven con los de la estrategia
+// encima de las MISMAS velas y pueden confundirse, y ahí el trazo es lo único que los separa. En un panel
+// propio no hace falta: el color ya distingue, y un discontinuo sobre un RSI que oscila mucho deja de
+// leerse como una línea y pasa a leerse como puntos sueltos.
+const estiloDeTrazo = (destino) => destino === 'precio' ? DASH_USUARIO : SOLIDO
+
+// Escala FIJA de 0 a 100 para el RSI.
+//
+// Este es el mecanismo que usa la rama VIVA del RSI de la estrategia (ver el descriptor 'rsi' de
+// PANELES_INDICADORES): un autoscaleInfoProvider que devuelve el rango, sin series de más.
+// NO es el de las series ancla invisibles —rsiAnchorMin/rsiAnchorMax—: esas viven en la rama INALCANZABLE
+// del RSI en escala secundaria sobre el gráfico principal, donde hacen falta porque la serie comparte la
+// escala con el resto del chart. En un panel propio sobran.
+const ESCALA_0_100 = () => ({ priceRange: { minValue: 0, maxValue: 100 }, margins: { above: 0.05, below: 0.05 } })
 
 // Valores de un array a puntos {time,value}, tirando los nulos y los no finitos. Es lo que separa "el
 // indicador no se pudo calcular" de "el indicador vale 0".
@@ -140,8 +157,22 @@ const TIPOS_INDICADOR = {
       { tipo: 'linea', color: ind.color, puntos: aPuntos(b.lower, data) },
     ]
   } },
-  rsi: { destino: 'rsi', calcula: (data, ind, cierres) =>
-    [{ tipo: 'linea', color: ind.color, puntos: aPuntos(calcRSI(cierres, ind.periodo ?? 14), data) }] },
+  rsi: { destino: 'rsi', calcula: (data, ind, cierres) => [{
+    tipo: 'linea', color: ind.color,
+    puntos: aPuntos(calcRSI(cierres, ind.periodo ?? 14), data),
+    // Mismo eje fijo que el RSI de la estrategia. Sin esto, el panel se autoescala al rango de los datos
+    // y un RSI que se mueve entre 40 y 60 llena la ventana de arriba abajo, que es justo lo que no
+    // interesa de un oscilador acotado.
+    opcionesExtra: { autoscaleInfoProvider: ESCALA_0_100 },
+    // Niveles de referencia, como los de la estrategia. 70/30 son la convención del RSI; la estrategia
+    // usa los que traigan sus barras, con 75/25 por defecto, que es SU criterio y no tiene por qué ser
+    // el de un RSI suelto. Se pueden fijar con sobrecompra/sobreventa.
+    niveles: [
+      { price: ind.sobrecompra ?? 70, color: 'rgba(255,80,80,0.55)', punteado: true },
+      { price: ind.sobreventa  ?? 30, color: 'rgba(80,200,80,0.55)', punteado: true },
+      { price: 50,                    color: 'rgba(120,140,160,0.3)', punteado: false },
+    ],
+  }] },
   macd: { destino: 'macd', calcula: (data, ind, cierres) => {
     const m = calcMACD(cierres, ind.rapido ?? 12, ind.lento ?? 26, ind.senal ?? 9)
     // El histograma se deriva aquí: calcMACD entrega línea y señal, que es lo que mira el motor.
@@ -171,11 +202,13 @@ function calculaIndicadoresUsuario(data, lista) {
         porDestino[tipo.destino].push({
           tipo: linea.tipo,
           puntos: linea.puntos,
+          niveles: linea.niveles || null,
           opciones: {
             color: linea.color || '#8aadcc',
             lineWidth: linea.lineWidth ?? 2,
-            lineStyle: DASH_USUARIO,
+            lineStyle: estiloDeTrazo(tipo.destino),
             lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false,
+            ...(linea.opcionesExtra || {}),
           },
         })
       }
@@ -891,6 +924,14 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
           try{
             const s=spec.tipo==='histograma'?chart.addHistogramSeries(spec.opciones):chart.addLineSeries(spec.opciones)
             s.setData(spec.puntos)
+            // Los niveles de referencia SOLO si el panel es del usuario y de nadie más: si la estrategia
+            // ya lo ocupa, los suyos están dibujados y repetirlos sería pintar dos rayas casi encima.
+            if(!propias&&spec.niveles){
+              for(const n of spec.niveles){
+                s.createPriceLine({price:n.price,color:n.color,lineWidth:1,
+                  lineStyle:n.punteado?LineStyle.Dashed:LineStyle.Solid,axisLabelVisible:false})
+              }
+            }
             if(!serieSync) serieSync=s
           }catch(e){ console.warn('[CandleChart] no se pudo dibujar un indicador de usuario:',e?.message) }
         }
