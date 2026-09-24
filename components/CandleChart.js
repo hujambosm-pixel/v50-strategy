@@ -91,6 +91,141 @@ function getMacdParams(definition) {
   return { fast: 12, slow: 26, signal: 9 }
 }
 
+// ── Paneles de indicadores: una lista, no tres condiciones cableadas ────────
+// Cada entrada describe un panel ENTERO: cuándo aparece, qué alto tiene, qué rótulo lleva y qué series
+// dibuja. El div, la creación del chart, la sincronía y la limpieza salen todos de esta lista, así que
+// añadir un panel es añadir una entrada y no tocar cinco sitios.
+//
+// Los tres de hoy son estas tres entradas, con LAS MISMAS condiciones de aparición que tenían sueltas.
+// Este commit no añade ni quita nada: lo que se ve tiene que ser idéntico.
+//
+// Forma de cada serie:
+//   tipo      'linea' | 'histograma'
+//   nombre    para poder referirse a ella desde `extras`
+//   opciones  se pasan TAL CUAL a addLineSeries/addHistogramSeries
+//   datos     (filas, ctx) => array para setData. El color por barra del histograma vive aquí.
+//   cuando    (filas, ctx) => bool. Series opcionales, como la media del RSI o la del volumen.
+//   sync      la serie que se le pasa a _syncPanels para el crosshair
+//
+// `extras(chart, series, ctx)` es la escotilla para lo que no es declarativo: marcadores y líneas de
+// precio. Meter eso en el descriptor exigiría un lenguaje propio para algo que se usa una vez.
+const PANELES_INDICADORES = [
+  {
+    id: 'macd',
+    alto: 120,
+    etiqueta: null,
+    // El div del MACD lo comparten dos ramas INALCANZABLES (_indType 'MACD' y 'VOLUME', ver la cabecera
+    // del fichero). Su condición de render y su alto se conservan tal cual para no cambiar nada de ellas.
+    divExtra: (ind) => ind === 'MACD' || ind === 'VOLUME',
+    altoDiv: (ind, hay) => hay ? 120 : ind === 'VOLUME' ? 80 : 100,
+    montaje: 'condicional',
+    debug: 'MACD-bars',
+    // Misma condición que tenía _hasMacdBars.
+    hayDatos: (data, ind) => !ind && !!data?.some(d => d.macdLine != null),
+    filas: (data) => data.filter(d => d.macdLine != null && d.signalLine != null && d.histogram != null),
+    series: [
+      { tipo: 'histograma', nombre: 'hist',
+        opciones: { lastValueVisible: false, priceLineVisible: false },
+        // 4 colores estilo TradingView, y si la estrategia trae el suyo en histColor, manda el suyo.
+        datos: (filas, ctx) => filas.map((d, i) => ({ time: d.date, value: d.histogram,
+          color: d.histColor || ctx.histColor(d.histogram, filas[i - 1]?.histogram) })) },
+      { tipo: 'linea', nombre: 'macd', sync: true,
+        opciones: { color: '#2962ff', lineWidth: 1, lastValueVisible: false, priceLineVisible: false },
+        datos: (filas) => filas.map(d => ({ time: d.date, value: d.macdLine })) },
+      { tipo: 'linea', nombre: 'signal',
+        opciones: { color: '#ff6d00', lineWidth: 1, lastValueVisible: false, priceLineVisible: false },
+        datos: (filas) => filas.map(d => ({ time: d.date, value: d.signalLine })) },
+    ],
+    extras: (chart, series, ctx) => {
+      if (ctx.slopeChanges?.length) {
+        series.macd.setMarkers(ctx.slopeChanges.map(sc => ({
+          time: sc.date,
+          position: 'inBar',
+          color: sc.direction === 'up' ? '#26a69a' : '#ef5350',
+          shape: sc.direction === 'up' ? 'arrowUp' : 'arrowDown',
+          text: sc.direction === 'up' ? '↑' : '↓',
+        })))
+      }
+      // La línea de cero se crea AQUÍ, y no como una serie más de la lista, para conservar el orden
+      // EXACTO del código anterior: primero los marcadores, después la línea. El orden de creación de
+      // series es el orden de dibujo, así que no es un detalle cosmético del código.
+      // Se traza sobre el PRIMER y el ÚLTIMO día de `data`, no de las filas válidas, para que cruce el
+      // panel entero.
+      const cero = chart.addLineSeries({ color: 'rgba(120,140,160,0.25)', lineWidth: 1, lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false })
+      cero.setData([{ time: ctx.data[0].date, value: 0 }, { time: ctx.data[ctx.data.length - 1].date, value: 0 }])
+    },
+  },
+  {
+    id: 'rsi',
+    alto: 120,
+    etiqueta: 'RSI',
+    montaje: 'condicional',
+    debug: 'RSI',
+    // Misma condición que tenía _hasRsiBars.
+    hayDatos: (data, ind) => !ind && !!data?.some(d => d.rsiLine != null),
+    filas: (data) => data.filter(d => d.rsiLine != null),
+    series: [
+      // La media va ANTES que el RSI para que el RSI quede encima. El orden de esta lista es el orden
+      // de dibujo.
+      { tipo: 'linea', nombre: 'ma',
+        cuando: (filas) => filas.some(d => d.rsiMA != null),
+        opciones: { color: '#f0c040', lineWidth: 1, lastValueVisible: false, priceLineVisible: false,
+          autoscaleInfoProvider: () => ({ priceRange: { minValue: 0, maxValue: 100 }, margins: { above: 0.05, below: 0.05 } }) },
+        datos: (filas) => filas.filter(d => d.rsiMA != null).map(d => ({ time: d.date, value: d.rsiMA })) },
+      // autoscaleInfoProvider fija la escala en 0-100.
+      { tipo: 'linea', nombre: 'rsi', sync: true,
+        opciones: { color: '#7E57C2', lineWidth: 2, lastValueVisible: false, priceLineVisible: false,
+          autoscaleInfoProvider: () => ({ priceRange: { minValue: 0, maxValue: 100 }, margins: { above: 0.05, below: 0.05 } }) },
+        datos: (filas) => filas.map(d => ({ time: d.date, value: d.rsiLine })) },
+    ],
+    extras: (chart, series, ctx, filas) => {
+      const obLevel = filas[0]?.rsiOB ?? 75
+      const osLevel = filas[0]?.rsiOS ?? 25
+      // Niveles con createPriceLine, que no distorsiona la escala automática.
+      series.rsi.createPriceLine({ price: obLevel, color: 'rgba(255,80,80,0.55)', lineWidth: 1, lineStyle: ctx.LineStyle.Dashed, axisLabelVisible: false })
+      series.rsi.createPriceLine({ price: osLevel, color: 'rgba(80,200,80,0.55)', lineWidth: 1, lineStyle: ctx.LineStyle.Dashed, axisLabelVisible: false })
+      series.rsi.createPriceLine({ price: 50, color: 'rgba(120,140,160,0.3)', lineWidth: 1, lineStyle: ctx.LineStyle.Solid, axisLabelVisible: false })
+      // Cruces ▲/▼ del RSI con su media.
+      const marcas = []
+      for (let i = 1; i < filas.length; i++) {
+        const rP = filas[i - 1].rsiLine, mP = filas[i - 1].rsiMA
+        const rC = filas[i].rsiLine, mC = filas[i].rsiMA
+        if (rP == null || mP == null || rC == null || mC == null) continue
+        if (rP <= mP && rC > mC) marcas.push({ time: filas[i].date, position: 'belowBar', color: '#00e5a0', shape: 'arrowUp', text: '' })
+        if (rP >= mP && rC < mC) marcas.push({ time: filas[i].date, position: 'aboveBar', color: '#ff4d6d', shape: 'arrowDown', text: '' })
+      }
+      if (marcas.length) series.rsi.setMarkers(marcas)
+    },
+  },
+  {
+    id: 'volumen',
+    alto: 80,
+    etiqueta: 'VOL',
+    // Este div se monta SIEMPRE y se oculta con display:none, a diferencia de los otros dos. Se conserva
+    // así: con montaje condicional, el ref sería null en el primer render y el panel llegaría un paso
+    // tarde.
+    montaje: 'siempre',
+    debug: 'Volume-subpanel',
+    // Misma condición que tenía _hasVolume. Ojo: esta NO depende de _indType, y es a propósito —el
+    // volumen no lo dibuja ninguna de las ramas de definition que sí se estorban entre sí—.
+    hayDatos: (data) => !!data?.some(d => d.volume > 0),
+    filas: (data) => data.filter(d => d.volume > 0),
+    ajustes: { localization: { priceFormatter: () => '' } },
+    series: [
+      { tipo: 'histograma', nombre: 'vol', sync: true,
+        opciones: { lastValueVisible: false, priceLineVisible: false, title: 'Vol' },
+        datos: (filas) => filas.map(d => ({ time: d.date, value: d.volume,
+          color: (d.close >= d.open) ? '#26a69a80' : '#ef535080' })) },
+      // La media de volumen se mide sobre TODAS las barras que la traigan, no solo sobre las de volumen
+      // positivo: son dos filtros distintos y mezclarlos cambiaría la curva.
+      { tipo: 'linea', nombre: 'volAvg',
+        cuando: (filas, ctx) => ctx.data.some(d => d.volumeAvg != null),
+        opciones: { color: '#FFB30080', lineWidth: 1, lastValueVisible: false, priceLineVisible: false },
+        datos: (filas, ctx) => ctx.data.filter(d => d.volumeAvg != null).map(d => ({ time: d.date, value: d.volumeAvg })) },
+    ],
+  },
+]
+
 // ── Risk primitive: bands + labels + R:R (TradingView Long Position style) ──
 function createRiskPrimitive(configRef) {
   return {
@@ -186,6 +321,13 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
   // tramosDe—, así que se registran en un array en vez de en refs sueltas.
   const overlaySeriesRef=useRef([])
   const rsiChartRef=useRef(null), macdChartRef=useRef(null), volumeChartRef=useRef(null)
+  // Charts creados por el motor de PANELES_INDICADORES, en el mismo orden que la lista. Sustituye al uso
+  // de los tres refs de arriba para las ramas VIVAS; esos tres siguen ahí porque los necesitan las ramas
+  // inalcanzables y la limpieza grande del efecto.
+  const panelChartsRef=useRef([])
+  // Los divs de los paneles siguen siendo los MISMOS de siempre: el motor los busca por id en vez de
+  // nombrarlos uno a uno, pero no se crea un sistema de refs paralelo.
+  const divDePanel={macd:macdContainerRef,rsi:rsiContainerRef,volumen:volumeContainerRef}
   const rsiContainerRef=useRef(null), macdContainerRef=useRef(null), volumeContainerRef=useRef(null)
   const chartAliveRef=useRef(true)
   const innerCleanupRef=useRef(null)
@@ -562,114 +704,58 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         }
       }
 
-      // ── MACD desde las barras — RAMA VIVA ──
-      // Triggered when bars carry macdLine/signalLine/histogram injected by datos.js.
-      // Only fires when definition-based _indType is absent (avoids double-render).
-      const _hasMacdBars=!_indType&&data.some(d=>d.macdLine!=null)
-      if(_hasMacdBars&&macdContainerRef.current){
-        if(macdChartRef.current){try{macdChartRef.current.remove()}catch(_){};macdChartRef.current=null}
-        if(macdContainerRef.current.clientWidth<=0) return
-        console.log('[CHART-DEBUG] CandleChart MACD-bars',macdContainerRef.current?.clientWidth,macdContainerRef.current?.clientHeight)
-        const macdChart=createChart(macdContainerRef.current,_panelOpts(120))
-        macdChartRef.current=macdChart
-        const validMacdData=data.filter(d=>d.macdLine!=null&&d.signalLine!=null&&d.histogram!=null)
-        // Histogram — 4-color TradingView style; honour d.histColor from strategy if set
-        const histS=macdChart.addHistogramSeries({lastValueVisible:false,priceLineVisible:false})
-        histS.setData(validMacdData.map((d,i)=>({time:d.date,value:d.histogram,color:d.histColor||_histColor(d.histogram,validMacdData[i-1]?.histogram)})))
-        // MACD line — blue
-        const macdS=macdChart.addLineSeries({color:'#2962ff',lineWidth:1,lastValueVisible:false,priceLineVisible:false})
-        macdS.setData(validMacdData.map(d=>({time:d.date,value:d.macdLine})))
-        // Signal line — orange
-        const sigS=macdChart.addLineSeries({color:'#ff6d00',lineWidth:1,lastValueVisible:false,priceLineVisible:false})
-        sigS.setData(validMacdData.map(d=>({time:d.date,value:d.signalLine})))
-        // Slope change markers
-        if(slopeChanges?.length){
-          const markers=slopeChanges.map(sc=>({
-            time:sc.date,
-            position:'inBar',
-            color:sc.direction==='up'?'#26a69a':'#ef5350',
-            shape:sc.direction==='up'?'arrowUp':'arrowDown',
-            text:sc.direction==='up'?'↑':'↓',
-          }))
-          macdS.setMarkers(markers)
-        }
-        // Zero line — subtle gray reference
-        const zeroS=macdChart.addLineSeries({color:'rgba(120,140,160,0.25)',lineWidth:1,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
-        zeroS.setData([{time:data[0].date,value:0},{time:data[data.length-1].date,value:0}])
-        _syncPanels(macdChart,macdS)
+      // ── Paneles de indicadores — RAMAS VIVAS, ahora por lista ──
+      // Antes eran tres bloques cableados (_hasMacdBars, _hasRsiBars, _hasVolume) con tres refs con
+      // nombre. Ahora salen de PANELES_INDICADORES: mismas condiciones, mismos altos, mismos colores,
+      // misma sincronía. Lo único que cambia es de dónde sale la lista.
+
+      // El caso especial _isOverlay: NO se porta al motor. Pertenece a la rama de RSI en escala
+      // secundaria, que es INALCANZABLE (ver la cabecera del fichero), y su limpieza tiene que seguir
+      // existiendo porque rsiChartRef puede guardar ese objeto y no un chart. Se queda aquí, tal cual
+      // estaba, fuera del bucle.
+      if(rsiChartRef.current){
+        if(rsiChartRef.current._isOverlay){
+          try{const c=chartRef.current;if(c){for(const s of rsiChartRef.current._series){c.removeSeries(s)};c.priceScale('rsi').applyOptions({visible:false});c.priceScale('right').applyOptions({scaleMargins:{top:0.02,bottom:0.02}})}}catch(_){}
+        }else{try{rsiChartRef.current.remove()}catch(_){}}
+        rsiChartRef.current=null
       }
 
-      // ── RSI desde las barras — RAMA VIVA ──
-      // Triggered when bars carry rsiLine injected by datos.js.
-      // Only fires when definition-based _indType is absent (avoids double-render).
-      const _hasRsiBars=!_indType&&data.some(d=>d.rsiLine!=null)
-      if(_hasRsiBars&&rsiContainerRef.current){
-        // Cleanup previous chart (overlay or standalone)
-        if(rsiChartRef.current){
-          if(rsiChartRef.current._isOverlay){
-            try{const c=chartRef.current;if(c){for(const s of rsiChartRef.current._series){c.removeSeries(s)};c.priceScale('rsi').applyOptions({visible:false});c.priceScale('right').applyOptions({scaleMargins:{top:0.02,bottom:0.02}})}}catch(_){}
-          }else{try{rsiChartRef.current.remove()}catch(_){}}
-          rsiChartRef.current=null
-        }
-        if(rsiContainerRef.current.clientWidth<=0) return
-        console.log('[CHART-DEBUG] CandleChart RSI',rsiContainerRef.current?.clientWidth,rsiContainerRef.current?.clientHeight)
-        const rsiChart=createChart(rsiContainerRef.current,_panelOpts(120))
-        rsiChartRef.current=rsiChart
-        const validRsiData=data.filter(d=>d.rsiLine!=null)
-        const obLevel=validRsiData[0]?.rsiOB??75
-        const osLevel=validRsiData[0]?.rsiOS??25
-        // RSI MA — yellow (optional, rendered before RSI so RSI is on top)
-        if(validRsiData.some(d=>d.rsiMA!=null)){
-          const maS=rsiChart.addLineSeries({color:'#f0c040',lineWidth:1,lastValueVisible:false,priceLineVisible:false,
-            autoscaleInfoProvider:()=>({priceRange:{minValue:0,maxValue:100},margins:{above:0.05,below:0.05}})})
-          maS.setData(validRsiData.filter(d=>d.rsiMA!=null).map(d=>({time:d.date,value:d.rsiMA})))
-        }
-        // RSI main line — purple #7E57C2
-        // autoscaleInfoProvider forces fixed 0-100 scale (prevents BaselineSeries/distortion issues)
-        const rsiS=rsiChart.addLineSeries({color:'#7E57C2',lineWidth:2,lastValueVisible:false,priceLineVisible:false,
-          autoscaleInfoProvider:()=>({priceRange:{minValue:0,maxValue:100},margins:{above:0.05,below:0.05}})})
-        rsiS.setData(validRsiData.map(d=>({time:d.date,value:d.rsiLine})))
-        // Reference lines via createPriceLine — don't distort auto-scale
-        rsiS.createPriceLine({price:obLevel,color:'rgba(255,80,80,0.55)',lineWidth:1,lineStyle:LineStyle.Dashed,axisLabelVisible:false})
-        rsiS.createPriceLine({price:osLevel,color:'rgba(80,200,80,0.55)',lineWidth:1,lineStyle:LineStyle.Dashed,axisLabelVisible:false})
-        rsiS.createPriceLine({price:50,color:'rgba(120,140,160,0.3)',lineWidth:1,lineStyle:LineStyle.Solid,axisLabelVisible:false})
-        // Cross markers ▲/▼ en el panel RSI (calculados desde los datos de barras)
-        const _rsiCrossMarkers=[]
-        for(let i=1;i<validRsiData.length;i++){
-          const rP=validRsiData[i-1].rsiLine,mP=validRsiData[i-1].rsiMA
-          const rC=validRsiData[i].rsiLine,mC=validRsiData[i].rsiMA
-          if(rP==null||mP==null||rC==null||mC==null) continue
-          if(rP<=mP&&rC>mC) _rsiCrossMarkers.push({time:validRsiData[i].date,position:'belowBar',color:'#00e5a0',shape:'arrowUp',text:''})
-          if(rP>=mP&&rC<mC) _rsiCrossMarkers.push({time:validRsiData[i].date,position:'aboveBar',color:'#ff4d6d',shape:'arrowDown',text:''})
-        }
-        if(_rsiCrossMarkers.length) rsiS.setMarkers(_rsiCrossMarkers)
-        _syncPanels(rsiChart,rsiS)
-      }
+      // Los charts de la vuelta anterior se destruyen ANTES de crear ninguno. Cubre también el caso que
+      // antes necesitaba un `else` propio: un panel que deja de tener datos se queda sin chart, no
+      // huérfano.
+      panelChartsRef.current.forEach(c=>{try{c.remove()}catch(_){}})
+      panelChartsRef.current=[]
+      if(macdChartRef.current){try{macdChartRef.current.remove()}catch(_){};macdChartRef.current=null}
+      if(volumeChartRef.current){try{volumeChartRef.current.remove()}catch(_){};volumeChartRef.current=null}
 
-      // ── Volumen en panel propio — RAMA VIVA, independiente de MACD/RSI y de definition ──
-      // Desde que datos.js no pisa el volumen descargado con el del code_js, esta rama se enciende para
-      // cualquier activo, no solo para las estrategias que devolvían indicators.volume.
-      const _hasVolume = data.some(d => d.volume > 0)
-      if (_hasVolume && volumeContainerRef.current) {
-        if (volumeChartRef.current) { try { volumeChartRef.current.remove() } catch(_) {}; volumeChartRef.current = null }
-        if(volumeContainerRef.current.clientWidth<=0) return
-        console.log('[CHART-DEBUG] CandleChart Volume-subpanel',volumeContainerRef.current?.clientWidth,volumeContainerRef.current?.clientHeight)
-        const volChart = createChart(volumeContainerRef.current, _panelOpts(80))
-        volumeChartRef.current = volChart
-        volChart.applyOptions({ localization: { priceFormatter: () => '' } })
-        const volS = volChart.addHistogramSeries({ lastValueVisible: false, priceLineVisible: false, title: 'Vol' })
-        volS.setData(data.filter(d => d.volume > 0).map(d => ({
-          time: d.date,
-          value: d.volume,
-          color: (d.close >= d.open) ? '#26a69a80' : '#ef535080',
-        })))
-        if (data.some(d => d.volumeAvg != null)) {
-          const volAvgS = volChart.addLineSeries({ color: '#FFB30080', lineWidth: 1, lastValueVisible: false, priceLineVisible: false })
-          volAvgS.setData(data.filter(d => d.volumeAvg != null).map(d => ({ time: d.date, value: d.volumeAvg })))
+      // Contexto común de las series. `histColor` y `LineStyle` viajan aquí para que los descriptores
+      // sean datos y no dependan de qué haya en el ámbito del efecto.
+      const ctxPanel={data,slopeChanges,histColor:_histColor,LineStyle}
+      // for...of y no forEach: el `return` de ancho cero tiene que abortar el EFECTO entero, como hacía
+      // el código de antes, no solo la vuelta del bucle.
+      for(const panel of PANELES_INDICADORES){
+        if(!panel.hayDatos(data,_indType)) continue
+        const div=divDePanel[panel.id]?.current
+        if(!div) continue
+        // Mismo freno de siempre: con ancho 0 el chart nace roto, así que se aborta y se reintenta en el
+        // siguiente pase, cuando la maqueta esté asentada.
+        if(div.clientWidth<=0) return
+        console.log('[CHART-DEBUG] CandleChart '+panel.debug,div.clientWidth,div.clientHeight)
+        const chart=createChart(div,_panelOpts(panel.alto))
+        panelChartsRef.current.push(chart)
+        if(panel.ajustes) chart.applyOptions(panel.ajustes)
+        const filas=panel.filas(data)
+        const creadas={}
+        let serieSync=null
+        for(const spec of panel.series){
+          if(spec.cuando&&!spec.cuando(filas,ctxPanel)) continue
+          const s=spec.tipo==='histograma'?chart.addHistogramSeries(spec.opciones):chart.addLineSeries(spec.opciones)
+          s.setData(spec.datos(filas,ctxPanel))
+          creadas[spec.nombre]=s
+          if(spec.sync) serieSync=s
         }
-        _syncPanels(volChart, volS)
-      } else {
-        if (volumeChartRef.current) { try { volumeChartRef.current.remove() } catch(_) {}; volumeChartRef.current = null }
+        panel.extras?.(chart,creadas,ctxPanel,filas)
+        _syncPanels(chart,serieSync)
       }
 
       // ── Línea amarilla de entrada (tlOpenTrades): gestionada en efecto separado (patrón A.6) ──
@@ -1327,7 +1413,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
 
       innerCleanupRef.current=()=>{disposed=true;chartAliveRef.current=false;try{unsubLabels()}catch(_){};cnt.removeEventListener('mousemove',onMove);cnt.removeEventListener('mousedown',onMouseDown);window.removeEventListener('mouseup',onMouseUp);window.removeEventListener('keydown',onKeyDown);window.removeEventListener('keyup',onKeyUp);ro.disconnect()}
     })
-    return()=>{innerCleanupRef.current?.();innerCleanupRef.current=null;chartAliveRef.current=false;if(rsiChartRef.current){if(rsiChartRef.current._isOverlay){try{const c=chartRef.current;if(c){for(const s of rsiChartRef.current._series){c.removeSeries(s)};c.priceScale('rsi').applyOptions({visible:false});c.priceScale('right').applyOptions({scaleMargins:{top:0.02,bottom:0.02}})}}catch(_){}}else{try{rsiChartRef.current.remove()}catch(_){}};rsiChartRef.current=null};if(macdChartRef.current){try{macdChartRef.current.remove()}catch(_){};macdChartRef.current=null};if(volumeChartRef.current){try{volumeChartRef.current.remove()}catch(_){};volumeChartRef.current=null};overlaySeriesRef.current.forEach(s=>{try{chartRef.current?.removeSeries(s)}catch(_){}});overlaySeriesRef.current=[];if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null};candlesRef.current=null}
+    return()=>{innerCleanupRef.current?.();innerCleanupRef.current=null;chartAliveRef.current=false;if(rsiChartRef.current){if(rsiChartRef.current._isOverlay){try{const c=chartRef.current;if(c){for(const s of rsiChartRef.current._series){c.removeSeries(s)};c.priceScale('rsi').applyOptions({visible:false});c.priceScale('right').applyOptions({scaleMargins:{top:0.02,bottom:0.02}})}}catch(_){}}else{try{rsiChartRef.current.remove()}catch(_){}};rsiChartRef.current=null};if(macdChartRef.current){try{macdChartRef.current.remove()}catch(_){};macdChartRef.current=null};if(volumeChartRef.current){try{volumeChartRef.current.remove()}catch(_){};volumeChartRef.current=null};panelChartsRef.current.forEach(c=>{try{c.remove()}catch(_){}});panelChartsRef.current=[];overlaySeriesRef.current.forEach(s=>{try{chartRef.current?.removeSeries(s)}catch(_){}});overlaySeriesRef.current=[];if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null};candlesRef.current=null}
   },[data,emaRPeriod,emaLPeriod,trades,maxDD,labelMode,definition,isBareChart])
 
   // ── isBareChart: ajustar altura al resize de ventana ──
@@ -1617,9 +1703,9 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
   }, [data])
 
   const activeIndType = definition ? getActiveIndicator(definition) : null
-  const hasMacdBars   = !activeIndType && data?.some(d => d.macdLine != null)
-  const hasRsiBars    = !activeIndType && data?.some(d => d.rsiLine  != null)
-  const hasVolumeBars = data?.some(d => d.volume > 0)
+  // hasMacdBars / hasRsiBars / hasVolumeBars: ELIMINADAS. Eran una segunda copia de las condiciones de
+  // aparición, la del render, frente a la del efecto. Ahora las dos salen de panel.hayDatos, que es lo
+  // que hace imposible que un div aparezca sin su chart o al revés.
   return (
     <div style={{display:'flex',flexDirection:'column',...(fillHeight?{flex:1,minHeight:0}:{})}}>
     <div style={{position:'relative',...(fillHeight?{flex:1,minHeight:0}:{})}}>
@@ -1660,19 +1746,25 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       )}
     </div>
     {/* ── Paneles de indicadores secundarios ── */}
-    {(activeIndType==='MACD'||activeIndType==='VOLUME'||hasMacdBars)&&(
-      <div ref={macdContainerRef} style={{width:'100%',height:hasMacdBars?120:activeIndType==='VOLUME'?80:100,background:'#080c14',borderTop:'1px solid #1a2d45'}}/>
-    )}
-    {hasRsiBars&&(
-      <div style={{position:'relative',width:'100%',background:'#080c14',borderTop:'1px solid #1a2d45'}}>
-        <div ref={rsiContainerRef} style={{width:'100%',height:120}}/>
-        <span style={{position:'absolute',top:4,left:8,fontFamily:MONO,fontSize:9,color:'#7a9bc0',pointerEvents:'none',zIndex:10,letterSpacing:'0.06em',userSelect:'none'}}>RSI</span>
-      </div>
-    )}
-    <div style={{display:hasVolumeBars?'block':'none',position:'relative',width:'100%',background:'#080c14',borderTop:'1px solid #1a2d45'}}>
-      <div ref={volumeContainerRef} style={{width:'100%',height:80}}/>
-      <span style={{position:'absolute',top:4,left:8,fontFamily:MONO,fontSize:9,color:'#7a9bc0',pointerEvents:'none',zIndex:10,letterSpacing:'0.06em',userSelect:'none'}}>VOL</span>
-    </div>
+    {/* En bucle sobre PANELES_INDICADORES, la MISMA lista que usa el efecto para crear los charts: así
+        no puede haber un div sin chart ni un chart sin div. Cada panel decide si se monta condicional o
+        se monta siempre y se oculta con display:none, que es la diferencia que ya tenía el volumen. */}
+    {PANELES_INDICADORES.map(panel=>{
+      const hay=panel.hayDatos(data,activeIndType)
+      const extra=panel.divExtra?.(activeIndType)||false
+      if(panel.montaje==='condicional'&&!hay&&!extra) return null
+      const alto=panel.altoDiv?panel.altoDiv(activeIndType,hay):panel.alto
+      const estiloCaja={position:'relative',width:'100%',background:'#080c14',borderTop:'1px solid #1a2d45',
+        ...(panel.montaje==='siempre'?{display:hay?'block':'none'}:{})}
+      return (
+        <div key={panel.id} style={estiloCaja}>
+          <div ref={divDePanel[panel.id]} style={{width:'100%',height:alto}}/>
+          {panel.etiqueta&&(
+            <span style={{position:'absolute',top:4,left:8,fontFamily:MONO,fontSize:9,color:'#7a9bc0',pointerEvents:'none',zIndex:10,letterSpacing:'0.06em',userSelect:'none'}}>{panel.etiqueta}</span>
+          )}
+        </div>
+      )
+    })}
     </div>
   )
 }
