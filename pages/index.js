@@ -1146,6 +1146,19 @@ export default function Home() {
   const [pwError,setPwError]=useState('')
   const [pwOk,setPwOk]=useState(false)
   const [pwCargando,setPwCargando]=useState(false)
+  // ── Recuperación de contraseña ──
+  // modoRecuperacion NO se persiste, y es deliberado: es el seguro contra el bloqueo. Si algo saliera
+  // mal, recargar la página devuelve al usuario al camino normal. Guardarlo en sessionStorage cerraría
+  // mejor el paso (c) del encargo, pero a cambio un fallo dejaría la aplicación inservible, y la pantalla
+  // de login es la única puerta de entrada. La sesión que deja el enlace es válida de todas formas, así
+  // que recargar no concede nada que Supabase no hubiera concedido ya.
+  const [modoRecuperacion,setModoRecuperacion]=useState(false)
+  const [olvidada,setOlvidada]=useState(false)          // la pantalla de login enseña el formulario de correo
+  const [olvidadaEmail,setOlvidadaEmail]=useState('')
+  const [olvidadaMsg,setOlvidadaMsg]=useState('')       // texto de confirmación
+  const [olvidadaError,setOlvidadaError]=useState('')
+  const [olvidadaCargando,setOlvidadaCargando]=useState(false)
+  const [enlaceError,setEnlaceError]=useState('')       // el enlace del correo venía caducado o usado
   const [loginLoading,setLoginLoading]=useState(false)
   // ── Resizable panels ────────────────────────────────────────
   const [sidebarW,setSidebarW]=useState(240)
@@ -1181,9 +1194,21 @@ export default function Home() {
         refreshWlData()
       }
     })
-    const {data:{subscription}}=supabase.auth.onAuthStateChange((_e,session)=>{
+    // El enlace del correo puede llegar ROTO: Supabase devuelve el motivo en el fragmento de la URL
+    // (#error=access_denied&error_code=otp_expired…) y NO dispara ningún evento, así que si no se mira
+    // aquí el usuario ve la pantalla de login sin saber por qué su enlace no ha hecho nada.
+    try{
+      const h=new URLSearchParams((window.location.hash||'').replace(/^#/,''))
+      const err=h.get('error_description')||h.get('error')
+      if(err) setEnlaceError(decodeURIComponent(String(err).replace(/\+/g,' ')))
+    }catch(_){}
+    const {data:{subscription}}=supabase.auth.onAuthStateChange((evento,session)=>{
       setSession(session||null)
       setCurrentJwt(session?.access_token||null)
+      // PASSWORD_RECOVERY: se ha vuelto desde el enlace del correo. Supabase deja la sesión iniciada,
+      // así que sin esto el usuario entraría en la aplicación y no vería dónde poner la contraseña nueva,
+      // que es justo a lo que venía.
+      if(evento==='PASSWORD_RECOVERY'){ setModoRecuperacion(true); setPwError(''); setPwOk(false) }
       if(session?.access_token){ setSesionCaducada(false); reloadWatchlist(); refreshWlData() }
     })
     // Lo que hace la interfaz cuando una llamada se queda sin sesion (ver fetchConSesion): soltar el
@@ -5554,6 +5579,29 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   }
   function cerrarPw(){ setPwAbierto(false); setPwNueva(''); setPwConfirma(''); setPwError(''); setPwOk(false) }
 
+  // ── Recuperación: pedir el correo ────────────────────────────
+  // redirectTo apunta a la propia aplicación. Tiene que estar dada de alta en Supabase
+  // (Authentication → URL Configuration → Redirect URLs) o el enlace del correo no volverá aquí.
+  async function handleOlvidada(e) {
+    e?.preventDefault?.()
+    setOlvidadaError(''); setOlvidadaMsg('')
+    const correo=olvidadaEmail.trim()
+    if(!correo){ setOlvidadaError('Escribe el correo de tu cuenta.'); return }
+    setOlvidadaCargando(true)
+    const {error}=await supabase.auth.resetPasswordForEmail(correo,{redirectTo:window.location.origin})
+    setOlvidadaCargando(false)
+    if(error){ setOlvidadaError(error.message||'No se ha podido enviar el correo.'); return }
+    // Mensaje deliberadamente neutro: decir "esa cuenta no existe" le confirmaría a cualquiera qué
+    // correos están dados de alta.
+    setOlvidadaMsg('Si esa cuenta existe, te hemos enviado un correo con un enlace para entrar y poner una contraseña nueva. Revisa también la carpeta de no deseado.')
+  }
+  // Salir del modo recuperación sin cambiar nada: cierra la sesión que dejó el enlace y devuelve a la
+  // pantalla de login. Es la salida explícita, para que el modo nunca sea un callejón.
+  async function salirDeRecuperacion() {
+    setModoRecuperacion(false); setPwNueva(''); setPwConfirma(''); setPwError(''); setPwOk(false)
+    try{ await supabase.auth.signOut() }catch(_){}
+  }
+
   // Formulario de contraseña nueva. Es una función que devuelve JSX, no un componente: así comparte el
   // estado de arriba sin pasarlo por props, y el diálogo de la cabecera y la pantalla de recuperación
   // enseñan EXACTAMENTE el mismo formulario, sin dos copias que se separen con el tiempo.
@@ -5593,6 +5641,48 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
 
   // ── Login screen ─────────────────────────────────────────────
   const skipAuth=process.env.NEXT_PUBLIC_SKIP_AUTH==='true'
+
+  // ── Modo recuperación ────────────────────────────────────────
+  // Va DELANTE de las dos puertas de siempre, y por encima de skipAuth: quien llega aquí ha pulsado un
+  // enlace de su correo y viene a poner una contraseña nueva, no a usar la aplicación. Solo se entra por
+  // el evento PASSWORD_RECOVERY, así que ningún arranque normal pasa por aquí.
+  // Mientras dura, la aplicación no se monta. La salida es poner la contraseña —y entonces el botón lleva
+  // dentro— o "Volver al inicio de sesión", que cierra la sesión del enlace.
+  if(modoRecuperacion) return (
+    <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',
+      background:'#080c14',fontFamily:'"JetBrains Mono","Fira Code",monospace'}}>
+      <div style={{width:380,padding:'40px 32px',background:'#0a101a',
+        border:'1px solid #1a2d45',borderRadius:12,boxShadow:'0 8px 40px rgba(0,0,0,0.6)'}}>
+        <div style={{textAlign:'center',marginBottom:24}}>
+          <div style={{fontSize:20,fontWeight:700,color:'#eef5ff',marginBottom:6,letterSpacing:'0.02em'}}>
+            <span style={{color:'#00d4ff'}}>⬡ </span>Trading Simulator
+          </div>
+          <div style={{fontSize:10,color:'#3a5a75',letterSpacing:'0.1em',textTransform:'uppercase'}}>Nueva contraseña</div>
+        </div>
+        <div style={{marginBottom:16,fontSize:12,color:'#7a9bc0',lineHeight:1.5}}>
+          Has entrado desde el enlace de recuperación{session?.user?.email?<> de <span style={{color:'#c8dff5'}}>{session.user.email}</span></>:null}.
+          Elige una contraseña nueva para terminar.
+        </div>
+        {formularioPassword({
+          textoBoton:'Guardar contraseña',
+          mensajeExito:'Contraseña actualizada. Ya puedes entrar en la aplicación; la próxima vez usa la contraseña nueva.',
+        })}
+        {pwOk
+          ? <button onClick={()=>{setModoRecuperacion(false);setPwOk(false)}}
+              style={{width:'100%',marginTop:10,padding:'10px',background:'transparent',
+                border:'1px solid rgba(0,229,160,0.45)',borderRadius:6,color:'#00e5a0',
+                fontSize:12,cursor:'pointer',fontFamily:'inherit'}}>
+              Entrar en la aplicación
+            </button>
+          : <button onClick={salirDeRecuperacion}
+              style={{width:'100%',marginTop:10,padding:'9px',background:'transparent',border:'none',
+                color:'#4a6a88',fontSize:11,cursor:'pointer',fontFamily:'inherit',textDecoration:'underline'}}>
+              Volver al inicio de sesión
+            </button>}
+      </div>
+    </div>
+  )
+
   if(session===undefined&&!skipAuth) return (
     <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',
       background:'#080c14',color:'#5a7a95',fontFamily:'"JetBrains Mono","Fira Code",monospace',fontSize:12}}>
@@ -5616,6 +5706,47 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
             Tu sesion ha caducado. Vuelve a entrar para seguir; tus datos estan intactos.
           </div>
         )}
+        {/* El enlace del correo llegó caducado o ya usado. Supabase no dispara evento en ese caso: el
+            motivo viene en el fragmento de la URL y se lee al montar. */}
+        {enlaceError&&(
+          <div style={{marginBottom:16,padding:'9px 12px',borderRadius:6,fontSize:11,lineHeight:1.45,
+            background:'rgba(255,209,102,0.10)',border:'1px solid rgba(255,209,102,0.45)',color:'#ffd166'}}>
+            El enlace no ha funcionado: {enlaceError}. Pide otro desde «He olvidado la contraseña».
+          </div>
+        )}
+        {olvidada?(
+          /* Formulario de recuperación. Sustituye al de entrada solo mientras el usuario lo pide; el de
+             siempre vuelve intacto al pulsar "Volver". */
+          <div>
+            <div style={{marginBottom:14,fontSize:12,color:'#7a9bc0',lineHeight:1.5}}>
+              Escribe el correo de tu cuenta y te enviaremos un enlace para entrar y poner una contraseña nueva.
+            </div>
+            <form onSubmit={handleOlvidada}>
+              <input type="email" value={olvidadaEmail} onChange={e=>{setOlvidadaEmail(e.target.value);setOlvidadaError('')}}
+                placeholder="Email" autoFocus required
+                style={{display:'block',width:'100%',padding:'10px 12px',marginBottom:16,
+                  background:'#080c14',border:'1px solid #1a2d45',borderRadius:6,
+                  color:'#eef5ff',fontSize:13,fontFamily:'inherit',boxSizing:'border-box',outline:'none'}}/>
+              {olvidadaError&&<div style={{marginBottom:12,padding:'8px 12px',
+                background:'rgba(255,77,109,0.08)',border:'1px solid rgba(255,77,109,0.3)',
+                borderRadius:6,color:'#ff4d6d',fontSize:11,lineHeight:1.45}}>{olvidadaError}</div>}
+              {olvidadaMsg&&<div style={{marginBottom:12,padding:'9px 12px',
+                background:'rgba(0,229,160,0.08)',border:'1px solid rgba(0,229,160,0.35)',
+                borderRadius:6,color:'#00e5a0',fontSize:11,lineHeight:1.5}}>{olvidadaMsg}</div>}
+              <button type="submit" disabled={olvidadaCargando}
+                style={{width:'100%',padding:'11px',background:'#00d4ff',border:'none',borderRadius:6,
+                  color:'#080c14',fontSize:13,fontWeight:700,cursor:olvidadaCargando?'wait':'pointer',
+                  fontFamily:'inherit',opacity:olvidadaCargando?0.6:1,letterSpacing:'0.02em'}}>
+                {olvidadaCargando?'Enviando…':'Enviar enlace'}
+              </button>
+            </form>
+            <button onClick={()=>{setOlvidada(false);setOlvidadaError('');setOlvidadaMsg('')}}
+              style={{width:'100%',marginTop:10,padding:'9px',background:'transparent',border:'none',
+                color:'#4a6a88',fontSize:11,cursor:'pointer',fontFamily:'inherit',textDecoration:'underline'}}>
+              Volver al inicio de sesión
+            </button>
+          </div>
+        ):(
         <form onSubmit={handleLogin}>
           <input type="email" value={loginEmail} onChange={e=>setLoginEmail(e.target.value)}
             placeholder="Email" autoFocus required
@@ -5636,7 +5767,13 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               fontFamily:'inherit',opacity:loginLoading?0.6:1,letterSpacing:'0.02em'}}>
             {loginLoading?'Iniciando sesión…':'Iniciar sesión'}
           </button>
+          <button type="button" onClick={()=>{setOlvidada(true);setOlvidadaEmail(loginEmail);setLoginError('')}}
+            style={{width:'100%',marginTop:10,padding:'9px',background:'transparent',border:'none',
+              color:'#4a6a88',fontSize:11,cursor:'pointer',fontFamily:'inherit',textDecoration:'underline'}}>
+            He olvidado la contraseña
+          </button>
         </form>
+        )}
       </div>
     </div>
   )
@@ -5654,7 +5791,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.832</title>
+        <title>Trading Simulator V9.833</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5732,7 +5869,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.832
+            <span className="dot"/>Trading Simulator V9.833
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
