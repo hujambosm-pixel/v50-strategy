@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from 'react'
+import { useRef, useEffect, useState, useMemo } from 'react'
 import { MONO, f2, fmtDate } from '../lib/utils'
 // ── Indicadores: UNA sola implementación, la de lib/backtester.js ──────
 // Este fichero tenía su propia copia de calcEMA/calcSMA/calcRSI/calcMACD. Con entrada limpia daban
@@ -9,7 +9,7 @@ import { MONO, f2, fmtDate } from '../lib/utils'
 // implementaciones significaba que el gráfico podía dibujar una curva distinta de la que el motor miró.
 // calcMACD de lib devuelve {line, signal} y NO el histograma: se calcula en el punto de uso. No se le
 // añade aquí porque esa función se inyecta en el sandbox de las 77 estrategias y su forma es contrato.
-import { calcEMA, calcSMA, calcRSI, calcMACD } from '../lib/backtester'
+import { calcEMA, calcSMA, calcRSI, calcMACD, calcBollinger, calcVolumeAvg } from '../lib/backtester'
 
 // ── Detección del indicador de una estrategia ─────────────────────────
 // INALCANZABLE HOY, A PROPÓSITO. Todo este bloque cuelga de la prop `definition`, y los dos únicos
@@ -89,6 +89,101 @@ function getMacdParams(definition) {
     return { fast: b.fast ?? b.params?.fast ?? 12, slow: b.slow ?? b.params?.slow ?? 26, signal: b.signal ?? b.params?.signal ?? 9 }
   }
   return { fast: 12, slow: 26, signal: 9 }
+}
+
+// ── Indicadores DEL USUARIO ─────────────────────────────────────────────────
+// Se calculan aquí, en el cliente, sobre las velas que el gráfico ya tiene. No tienen nada que ver con
+// los que vienen del code_js de la estrategia, que llegan calculados dentro de las barras
+// (d.macdLine, d.rsiLine, d.bbUpper…) y pueden estar en otro intervalo.
+//
+// Forma de un indicador de usuario:
+//   { tipo, color, ...parámetros }
+//     tipo          'ema' | 'sma' | 'rsi' | 'macd' | 'bollinger' | 'volumen'
+//     color         color de la línea. Con varias líneas —bollinger, macd— es el de la principal.
+//     periodo       ema, sma, rsi, bollinger, volumen
+//     rapido/lento/senal   macd
+//     desviaciones  bollinger
+//
+// DISTINTIVO VISUAL: los del usuario se dibujan SIEMPRE con TRAZO DISCONTINUO (LineStyle.Dashed); los
+// de la estrategia van continuos. Es la diferencia que se lee de un vistazo sin leer ningún rótulo, y
+// hace falta porque las dos cosas pueden llamarse igual y no serlo: la EMA20 de una estrategia semanal
+// no es la EMA20 sobre las velas diarias de este gráfico. No se usan `title` a propósito:
+// lightweight-charts los flota junto al último punto, encima de las velas.
+const DASH_USUARIO = 2   // LineStyle.Dashed. El enum llega dentro del import dinámico, así que aquí va
+                         // su valor, que es estable en lightweight-charts 4.x.
+
+// Valores de un array a puntos {time,value}, tirando los nulos y los no finitos. Es lo que separa "el
+// indicador no se pudo calcular" de "el indicador vale 0".
+const aPuntos = (valores, data) => {
+  const out = []
+  if (!Array.isArray(valores)) return out
+  for (let i = 0; i < data.length; i++) {
+    const v = valores[i]
+    if (v == null || !Number.isFinite(v)) continue
+    out.push({ time: data[i].date, value: v })
+  }
+  return out
+}
+
+// Catálogo: qué panel le toca a cada tipo y cómo se calcula. `calcula` devuelve una lista de líneas o
+// histogramas listos para dibujar; si devuelve [] el indicador simplemente no se pinta.
+const TIPOS_INDICADOR = {
+  ema: { destino: 'precio', calcula: (data, ind, cierres) =>
+    [{ tipo: 'linea', color: ind.color, puntos: aPuntos(calcEMA(cierres, ind.periodo ?? 20), data) }] },
+  sma: { destino: 'precio', calcula: (data, ind, cierres) =>
+    [{ tipo: 'linea', color: ind.color, puntos: aPuntos(calcSMA(cierres, ind.periodo ?? 20), data) }] },
+  bollinger: { destino: 'precio', calcula: (data, ind, cierres) => {
+    const b = calcBollinger(cierres, ind.periodo ?? 20, ind.desviaciones ?? 2)
+    return [
+      { tipo: 'linea', color: ind.color, puntos: aPuntos(b.upper, data) },
+      { tipo: 'linea', color: ind.color, lineWidth: 1, puntos: aPuntos(b.mid, data) },
+      { tipo: 'linea', color: ind.color, puntos: aPuntos(b.lower, data) },
+    ]
+  } },
+  rsi: { destino: 'rsi', calcula: (data, ind, cierres) =>
+    [{ tipo: 'linea', color: ind.color, puntos: aPuntos(calcRSI(cierres, ind.periodo ?? 14), data) }] },
+  macd: { destino: 'macd', calcula: (data, ind, cierres) => {
+    const m = calcMACD(cierres, ind.rapido ?? 12, ind.lento ?? 26, ind.senal ?? 9)
+    // El histograma se deriva aquí: calcMACD entrega línea y señal, que es lo que mira el motor.
+    const hist = m.line.map((v, i) => (v != null && m.signal[i] != null) ? v - m.signal[i] : null)
+    return [
+      { tipo: 'linea', color: ind.color, puntos: aPuntos(m.line, data) },
+      { tipo: 'linea', color: ind.colorSenal || '#ff8c00', puntos: aPuntos(m.signal, data) },
+      { tipo: 'histograma', color: ind.color, puntos: aPuntos(hist, data) },
+    ]
+  } },
+  volumen: { destino: 'volumen', calcula: (data, ind) =>
+    [{ tipo: 'linea', color: ind.color, puntos: aPuntos(calcVolumeAvg(data.map(d => d.volume), ind.periodo ?? 20), data) }] },
+}
+
+// Calcula TODOS los indicadores del usuario y los agrupa por destino. Cada uno va en su propio try: que
+// uno falle o salga vacío no puede llevarse por delante a los demás ni al gráfico.
+function calculaIndicadoresUsuario(data, lista) {
+  const porDestino = { precio: [], rsi: [], macd: [], volumen: [] }
+  if (!Array.isArray(lista) || !lista.length || !Array.isArray(data) || !data.length) return porDestino
+  const cierres = data.map(d => d.close)
+  for (const ind of lista) {
+    try {
+      const tipo = TIPOS_INDICADOR[ind?.tipo]
+      if (!tipo) continue
+      for (const linea of (tipo.calcula(data, ind, cierres) || [])) {
+        if (!linea?.puntos?.length) continue      // serie vacía: no se dibuja, y no pasa nada
+        porDestino[tipo.destino].push({
+          tipo: linea.tipo,
+          puntos: linea.puntos,
+          opciones: {
+            color: linea.color || '#8aadcc',
+            lineWidth: linea.lineWidth ?? 2,
+            lineStyle: DASH_USUARIO,
+            lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false,
+          },
+        })
+      }
+    } catch (e) {
+      console.warn('[CandleChart] indicador de usuario descartado:', ind?.tipo, e?.message)
+    }
+  }
+  return porDestino
 }
 
 // ── Paneles de indicadores: una lista, no tres condiciones cableadas ────────
@@ -313,7 +408,7 @@ const tramosDe = (bars, campo) => {
 // alterna valor y hueco barra a barra—, y vale más una diagonal que centenares de series.
 const MAX_TRAMOS = 200
 
-export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, isNewResultRef=null, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null, isBareChart=false, visuals=null, filterZones=[], slopeChanges=[], customMarkers=[], pendingOrders=[], simbolo=null, riskPanelOpen=false, onRiskLineFocus=null }) {
+export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, isNewResultRef=null, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null, isBareChart=false, visuals=null, filterZones=[], slopeChanges=[], customMarkers=[], pendingOrders=[], simbolo=null, riskPanelOpen=false, onRiskLineFocus=null, indicadoresUsuario=[] }) {
   const containerRef=useRef(null), svgRef=useRef(null), legendRef=useRef(null), tooltipRef=useRef(null)
   const activeLegendRef = externalLegendRef || legendRef
   const chartRef=useRef(null), candlesRef=useRef(null)
@@ -335,6 +430,14 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
   // aplicación entera. Es exactamente lo que pasó en 10a52520, que hubo que revertir en producción. El
   // build no lo ve, porque sintácticamente es correcto.
   const divDePanel={macd:macdContainerRef,rsi:rsiContainerRef,volumen:volumeContainerRef}
+  // Indicadores del usuario, ya calculados y agrupados por destino. Memorizado porque recalcular seis
+  // series sobre 10.000 velas en cada render sería tirar el trabajo a la basura: depende SOLO de las
+  // velas y de la lista.
+  // Declarado aquí, después de los refs de panel y antes de cualquier uso: el efecto lo consume unas
+  // 400 líneas más abajo y el render unas 1.400.
+  const indicadoresCalculados=useMemo(
+    ()=>calculaIndicadoresUsuario(data,indicadoresUsuario),
+    [data,indicadoresUsuario])
   const chartAliveRef=useRef(true)
   const innerCleanupRef=useRef(null)
   const rulerStart=useRef(null), rulerActiveR=useRef(rulerActive)
@@ -477,6 +580,18 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         pintarLinea('bbUpper', { color: '#2196F3', lineWidth: 1, lastValueVisible: false, priceLineVisible: false, title: 'BB Upper' })
         pintarLinea('bbMid',   { color: '#FF6D00', lineWidth: 1, lastValueVisible: false, priceLineVisible: false, title: 'BB Mid' })
         pintarLinea('bbLower', { color: '#2196F3', lineWidth: 1, lastValueVisible: false, priceLineVisible: false, title: 'BB Lower' })
+      }
+
+      // ── Indicadores del usuario de escala de PRECIO (ema, sma, bollinger) ──
+      // Van DESPUÉS de los de la estrategia para quedar por encima, y quedan registrados en
+      // overlaySeriesRef, que es lo que ya suelta estas series en la limpieza. Con la lista vacía este
+      // bucle no da ni una vuelta y el gráfico es exactamente el de antes.
+      for(const spec of indicadoresCalculados.precio){
+        try{
+          const s=chart.addLineSeries(spec.opciones)
+          s.setData(spec.puntos)
+          overlaySeriesRef.current.push(s)
+        }catch(e){ console.warn('[CandleChart] no se pudo dibujar un indicador de usuario:',e?.message) }
       }
 
       // Líneas de trades — diagonal P&L + horizontales entrada/stop estilo TV
@@ -740,7 +855,12 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       // for...of y no forEach: el `return` de ancho cero tiene que abortar el EFECTO entero, como hacía
       // el código de antes, no solo la vuelta del bucle.
       for(const panel of PANELES_INDICADORES){
-        if(!panel.hayDatos(data,_indType)) continue
+        // El panel existe si lo pide la ESTRATEGIA o si lo pide el USUARIO. Cuando los dos lo piden, es
+        // UN solo panel con las series de ambos: un RSI de la estrategia y otro del usuario comparten
+        // eje, que es justo lo que hace falta para compararlos.
+        const propias=panel.hayDatos(data,_indType)
+        const delUsuario=indicadoresCalculados[panel.id]||[]
+        if(!propias&&!delUsuario.length) continue
         const div=divDePanel[panel.id]?.current
         if(!div) continue
         // Mismo freno de siempre: con ancho 0 el chart nace roto, así que se aborta y se reintenta en el
@@ -753,14 +873,27 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         const filas=panel.filas(data)
         const creadas={}
         let serieSync=null
-        for(const spec of panel.series){
-          if(spec.cuando&&!spec.cuando(filas,ctxPanel)) continue
-          const s=spec.tipo==='histograma'?chart.addHistogramSeries(spec.opciones):chart.addLineSeries(spec.opciones)
-          s.setData(spec.datos(filas,ctxPanel))
-          creadas[spec.nombre]=s
-          if(spec.sync) serieSync=s
+        // Las series de la estrategia solo si es ella quien pide el panel: con `propias` en falso,
+        // `filas` vendría vacío y se crearían series sin un punto.
+        if(propias){
+          for(const spec of panel.series){
+            if(spec.cuando&&!spec.cuando(filas,ctxPanel)) continue
+            const s=spec.tipo==='histograma'?chart.addHistogramSeries(spec.opciones):chart.addLineSeries(spec.opciones)
+            s.setData(spec.datos(filas,ctxPanel))
+            creadas[spec.nombre]=s
+            if(spec.sync) serieSync=s
+          }
+          panel.extras?.(chart,creadas,ctxPanel,filas)
         }
-        panel.extras?.(chart,creadas,ctxPanel,filas)
+        // Y detrás, las del usuario, para que queden por encima. Si el panel es suyo y solo suyo, la
+        // primera de sus series se lleva el crosshair.
+        for(const spec of delUsuario){
+          try{
+            const s=spec.tipo==='histograma'?chart.addHistogramSeries(spec.opciones):chart.addLineSeries(spec.opciones)
+            s.setData(spec.puntos)
+            if(!serieSync) serieSync=s
+          }catch(e){ console.warn('[CandleChart] no se pudo dibujar un indicador de usuario:',e?.message) }
+        }
         _syncPanels(chart,serieSync)
       }
 
@@ -1756,7 +1889,9 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         no puede haber un div sin chart ni un chart sin div. Cada panel decide si se monta condicional o
         se monta siempre y se oculta con display:none, que es la diferencia que ya tenía el volumen. */}
     {PANELES_INDICADORES.map(panel=>{
-      const hay=panel.hayDatos(data,activeIndType)
+      // Mismo criterio que el motor del efecto: estrategia O usuario. Si divergieran, habría un panel
+      // sin div donde dibujarse, o un div vacío.
+      const hay=panel.hayDatos(data,activeIndType)||(indicadoresCalculados[panel.id]||[]).length>0
       const extra=panel.divExtra?.(activeIndType)||false
       if(panel.montaje==='condicional'&&!hay&&!extra) return null
       const alto=panel.altoDiv?panel.altoDiv(activeIndType,hay):panel.alto

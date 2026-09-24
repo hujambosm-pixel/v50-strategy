@@ -630,6 +630,18 @@ const MC_ID_CAJA='__caja__', MC_ID_TOTAL='__totalEstrategia__'
 const MC_TODAS='__todas__'
 // Alto mínimo del gráfico grande del multibacktest. Por debajo de esto un gráfico de velas con sus
 // operaciones no se lee, y es preferible desplazarse a mirar una franja aplastada.
+// ── PROVISIONAL — indicadores de usuario de ejemplo ─────────────────────────
+// Lista fija, aquí y a mano, SOLO para poder ver el motor funcionando. La interfaz para definirlos y su
+// persistencia van en el commit siguiente, y entonces esta constante desaparece.
+// Se declara a nivel de módulo a propósito: su identidad tiene que ser estable entre renders o el memo
+// de CandleChart recalcularía los indicadores en cada uno.
+// Se dibujan con trazo DISCONTINUO para distinguirlos de los de la estrategia, que van continuos.
+const INDICADORES_USUARIO_PROVISIONAL=[
+  {tipo:'ema',       periodo:50,  color:'#00d4ff'},
+  {tipo:'bollinger', periodo:20,  desviaciones:2, color:'#9b72ff'},
+  {tipo:'rsi',       periodo:14,  color:'#00e5a0'},
+]
+
 const SUELO_EQUITY=420
 // Alto de la franja de rendimiento del activo cuando va DEBAJO del hueco visible, con alto propio en vez
 // de repartirse mcEquityH con las velas. Suficiente para leer la curva y su eje sin comerse pantalla.
@@ -5798,7 +5810,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.838</title>
+        <title>Trading Simulator V9.839</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5876,7 +5888,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.838
+            <span className="dot"/>Trading Simulator V9.839
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -8335,6 +8347,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       </div>
                       <CandleChart
                         data={result.chartData} emaRPeriod={emaR} emaLPeriod={emaL} definition={null}
+                        indicadoresUsuario={INDICADORES_USUARIO_PROVISIONAL}
                         visuals={result.visuals??null}
                         slopeChanges={result.slopeChanges??[]}
                         customMarkers={[...(result.customMarkers??[]), ...openEntryMarkers]}
@@ -8491,6 +8504,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       <div style={{flex:1,minHeight:0,position:'relative'}}>
                         <CandleChart
                           data={result.chartData} emaRPeriod={emaR} emaLPeriod={emaL} definition={null}
+                          indicadoresUsuario={INDICADORES_USUARIO_PROVISIONAL}
                           visuals={result.visuals??null}
                           slopeChanges={result.slopeChanges??[]}
                           customMarkers={[...(result.customMarkers??[]), ...openEntryMarkers]}
