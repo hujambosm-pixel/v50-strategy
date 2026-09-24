@@ -161,7 +161,9 @@ const TIPOS_INDICADOR = {
     const b = calcBollinger(cierres, ind.periodo ?? 20, ind.desviaciones ?? 2)
     return [
       { tipo: 'linea', color: ind.color, puntos: aPuntos(b.upper, data) },
-      { tipo: 'linea', color: ind.color, lineWidth: 1, puntos: aPuntos(b.mid, data) },
+      // La banda central es la PRINCIPAL: es la media, y es el valor que tiene sentido leer en la barra
+      // superior. Enseñar las tres llenaría la barra con un solo indicador.
+      { tipo: 'linea', color: ind.color, lineWidth: 1, principal: true, puntos: aPuntos(b.mid, data) },
       { tipo: 'linea', color: ind.color, puntos: aPuntos(b.lower, data) },
     ]
   } },
@@ -197,8 +199,13 @@ const TIPOS_INDICADOR = {
 
 // Calcula TODOS los indicadores del usuario y los agrupa por destino. Cada uno va en su propio try: que
 // uno falle o salga vacío no puede llevarse por delante a los demás ni al gráfico.
+// Cuántos valores de indicador caben en la barra superior antes de que empuje a los OHLC fuera del
+// gráfico. La barra es de una sola línea (whiteSpace: nowrap) a propósito: que crezca hacia abajo taparía
+// las velas, que es lo que se está mirando. Pasado el tope se resume con un "+N".
+const MAX_EN_LEYENDA = 6
+
 function calculaIndicadoresUsuario(data, lista) {
-  const porDestino = { precio: [], rsi: [], macd: [], volumen: [] }
+  const porDestino = { precio: [], rsi: [], macd: [], volumen: [], leyenda: [] }
   if (!Array.isArray(lista) || !lista.length || !Array.isArray(data) || !data.length) return porDestino
   const cierres = data.map(d => d.close)
   for (const ind of lista) {
@@ -208,7 +215,21 @@ function calculaIndicadoresUsuario(data, lista) {
       if (ind?.visible === false) continue
       const tipo = TIPOS_INDICADOR[ind?.tipo]
       if (!tipo) continue
-      for (const linea of (tipo.calcula(data, ind, cierres) || [])) {
+      const lineas = tipo.calcula(data, ind, cierres) || []
+      // Valores en la barra superior. Por defecto SÍ para los de precio y NO para los de panel: los de
+      // precio comparten escala con las velas y su valor se compara de un vistazo con el cierre, mientras
+      // que un RSI o un MACD ya tienen su propio eje a la vista en su panel. Se puede cambiar por
+      // indicador desde su configuración.
+      const enLeyenda = ind.enLeyenda ?? (tipo.destino === 'precio')
+      if (enLeyenda && porDestino.leyenda.length < MAX_EN_LEYENDA) {
+        const principal = lineas.find(l => l?.principal && l?.puntos?.length) || lineas.find(l => l?.puntos?.length)
+        if (principal) {
+          const valores = new Map()
+          for (const p of principal.puntos) valores.set(p.time, p.value)
+          porDestino.leyenda.push({ rotulo: rotuloIndicador(ind), color: ind.color || '#8aadcc', valores })
+        }
+      }
+      for (const linea of lineas) {
         if (!linea?.puntos?.length) continue      // serie vacía: no se dibuja, y no pasa nada
         porDestino[tipo.destino].push({
           tipo: linea.tipo,
@@ -1285,7 +1306,11 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       }
       cnt.addEventListener('mousemove',onMove)
 
-      // ── Leyenda OHLC + EMAs ──
+      // ── Leyenda OHLC + EMAs + indicadores del usuario ──
+      // Se leen aquí, fuera del callback, para no rehacer la lista en cada movimiento del cursor.
+      const legUsuario=indicadoresCalculados.leyenda||[]
+      // Cuántos se han quedado fuera por el tope: se resumen con un "+N" en vez de desbordar la barra.
+      const sobranLeyenda=(indicadoresUsuario||[]).filter(i=>i&&i.visible!==false&&(i.enLeyenda??(CATALOGO_INDICADORES[i.tipo]?.destino==='precio'))).length-legUsuario.length
       chart.subscribeCrosshairMove(param=>{
         const leg=activeLegendRef.current
         if(leg){
@@ -1300,7 +1325,15 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
                 `<span style="margin-right:10px">C <b>${f2(b.close)}</b></span>`+
                 `<span style="color:${cc};margin-right:12px">${chg>=0?'+':''}${f2(chg)} (${pct>=0?'+':''}${pct.toFixed(2)}%)</span>`+
                 (er!=null?`<span style="margin-right:7px">EMA${emaRPeriod} <b style="color:#ffd166">${f2(er)}</b></span>`:'')+
-                (el!=null?`<span>EMA${emaLPeriod} <b style="color:#ff4d6d">${f2(el)}</b></span>`:'')
+                (el!=null?`<span style="margin-right:7px">EMA${emaLPeriod} <b style="color:#ff4d6d">${f2(el)}</b></span>`:'')+
+                // Indicadores del USUARIO, con el color de su línea. Se añaden al mismo innerHTML que ya
+                // construye esta barra: no hay un segundo mecanismo que pueda desincronizarse.
+                // El mapa por fecha lo trae calculado el memo, así que aquí solo hay una búsqueda.
+                legUsuario.map(u=>{
+                  const v=u.valores.get(param.time)
+                  return v==null?'':`<span style="margin-right:7px">${u.rotulo} <b style="color:${u.color}">${f2(v)}</b></span>`
+                }).join('')+
+                (sobranLeyenda>0?`<span style="color:#3d5a7a">+${sobranLeyenda}</span>`:'')
             }
           } else leg.innerHTML=''
         }
