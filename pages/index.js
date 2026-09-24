@@ -719,7 +719,16 @@ const capitalDeRespuesta=(r)=>{
 
 
 
-// apiFetch — wrapper de fetch que añade el JWT activo en x-supa-jwt
+// apiFetch — wrapper de fetch que añade el JWT activo en x-supa-jwt.
+//
+// TODA llamada a una ruta de /api/ que hable con Supabase pasa por aquí. Hoy da igual —el servidor
+// acepta peticiones sin JWT y cae a la clave anónima—, pero en cuanto empiece a exigirlo, una llamada
+// que se haya quedado fuera no falla de forma visible: devuelve 401 y la interfaz enseña una lista
+// vacía, indistinguible de «no hay datos».
+//
+// Las rutas que NO hablan con Supabase pueden seguir usando fetch a secas: /api/search, /api/markets,
+// /api/chartdata, /api/closes, /api/sp500history, /api/fundamentales y /api/status son proxies a Yahoo
+// sin nada del usuario, y mandarles un JWT no aporta nada.
 function apiFetch(url, opts={}) {
   const jwt=getCurrentJwt()
   const headers={...(opts.headers||{})}
@@ -2298,7 +2307,7 @@ export default function Home() {
       for(let i=0;i<syms.length;i+=3){
         const batch=syms.slice(i,i+3)
         await Promise.all(batch.map(sym=>
-          fetch('/api/datos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({simbolo:sym,priceOnly:true})}).catch(()=>{})
+          apiFetch('/api/datos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({simbolo:sym,priceOnly:true})}).catch(()=>{})
         ))
         if(i+3<syms.length) await new Promise(r=>setTimeout(r,200))
       }
@@ -2363,7 +2372,7 @@ export default function Home() {
     if(currencies.length){
       Promise.all(currencies.map(async cur=>{
         try{
-          const r=await fetch(`/api/tradelog?action=fx&currency=${cur}&date=${today}`)
+          const r=await apiFetch(`/api/tradelog?action=fx&currency=${cur}&date=${today}`)
           const j=await r.json()
           if(j.fx) return {cur,fx:parseFloat(j.fx)}
         }catch(_){}
@@ -3043,7 +3052,7 @@ export default function Home() {
     const date = toIsoDate(rawDate) || new Date().toISOString().slice(0,10)
     if(!date || date.length < 8) return
     setTlForm(f=>({...f,_fxLoading:true,fx_manual:false}))
-    fetch(`/api/tradelog?action=fx&currency=${cur}&date=${date}`)
+    apiFetch(`/api/tradelog?action=fx&currency=${cur}&date=${date}`)
       .then(r=>r.json())
       .then(j=>{ if(j.fx) setTlForm(f=>({...f,fx:parseFloat(j.fx).toFixed(4),_fxLoading:false})) })
       .catch(()=>setTlForm(f=>({...f,_fxLoading:false})))
@@ -4355,7 +4364,7 @@ export default function Home() {
   // ── Eliminar estrategia ──
   const deleteStrategy=useCallback(async(id)=>{
     if(!confirm('¿Eliminar esta estrategia?')) return
-    await fetch(`/api/strategies?id=${id}`,{method:'DELETE'})
+    await apiFetch(`/api/strategies?id=${id}`,{method:'DELETE'})
     setStrategies(prev=>prev.filter(s=>s.id!==id))
     if(currentStratId===id){setCurrentStratId(null);refreshWlData();setStratMsg({type:'ok',text:'Estrategia eliminada'})}
   },[currentStratId])
@@ -5563,7 +5572,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.828</title>
+        <title>Trading Simulator V9.829</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5641,7 +5650,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.828
+            <span className="dot"/>Trading Simulator V9.829
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -12471,7 +12480,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                   delete fill._symSearch; delete fill._fxLoading; delete fill.fx_manual
                   if(fill.currency&&fill.currency!=='EUR'&&!fill.fx){
                     try{
-                      const r=await fetch(`/api/tradelog?action=fx&currency=${fill.currency}&date=${isoDate||new Date().toISOString().slice(0,10)}`)
+                      const r=await apiFetch(`/api/tradelog?action=fx&currency=${fill.currency}&date=${isoDate||new Date().toISOString().slice(0,10)}`)
                       const j=await r.json()
                       if(j.fx) fill={...fill,fx:parseFloat(j.fx).toFixed(4)}
                     }catch(_){}
