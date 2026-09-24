@@ -193,8 +193,23 @@ const TIPOS_INDICADOR = {
       { tipo: 'histograma', color: ind.color, puntos: aPuntos(hist, data) },
     ]
   } },
-  volumen: { destino: 'volumen', calcula: (data, ind) =>
-    [{ tipo: 'linea', color: ind.color, puntos: aPuntos(calcVolumeAvg(data.map(d => d.volume), ind.periodo ?? 20), data) }] },
+  // El tipo 'volumen' dibuja las BARRAS, y la media solo si se pide. Las barras van primero para que la
+  // media quede por encima.
+  volumen: { destino: 'volumen', calcula: (data, ind) => {
+    const salida = []
+    const barras = []
+    for (const d of data) {
+      if (d.volume == null || !Number.isFinite(d.volume) || d.volume <= 0) continue
+      barras.push({ time: d.date, value: d.volume,
+        color: (d.close >= d.open) ? (ind.colorSube || '#26a69a80') : (ind.colorBaja || '#ef535080') })
+    }
+    if (barras.length) salida.push({ tipo: 'histograma', puntos: barras, sinTrazo: true })
+    if (ind.media) {
+      salida.push({ tipo: 'linea', color: ind.color, principal: true,
+        puntos: aPuntos(calcVolumeAvg(data.map(d => d.volume), ind.periodo ?? 20), data) })
+    }
+    return salida
+  } },
 }
 
 // Calcula TODOS los indicadores del usuario y los agrupa por destino. Cada uno va en su propio try: que
@@ -236,7 +251,8 @@ function calculaIndicadoresUsuario(data, lista) {
           puntos: linea.puntos,
           niveles: linea.niveles || null,
           opciones: {
-            color: linea.color || '#8aadcc',
+            // Un histograma con color por barra no lleva color global: se lo pondría a todas.
+            ...(linea.sinTrazo ? {} : { color: linea.color || '#8aadcc' }),
             // El grosor propio de la línea manda sobre el del indicador: la banda central de Bollinger
             // va siempre más fina que las exteriores.
             lineWidth: linea.lineWidth ?? ind.grosor ?? 2,
