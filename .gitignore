@@ -14,6 +14,11 @@ node_modules/
 # Logs: dev-server.log y cualquier otro que deje una herramienta.
 *.log
 
+# Copias de seguridad locales. backups/strategies/ contiene el code_js completo de todas las
+# estrategias: la lógica entera de la aplicación. ESTE REPOSITORIO ES PÚBLICO, así que el volcado no
+# sale de tu disco. La regla va antes que el script que lo genera, a propósito.
+backups/
+
 # Volcado de logs de despliegue de Vercel guardado con un nombre corrupto: la ruta de Windows
 # "C:\Temp\vl.json" acabó como nombre de fichero, con el ':' convertido en U+F03A. El patrón lleva un
 # comodín porque ese carácter no es tecleable.
