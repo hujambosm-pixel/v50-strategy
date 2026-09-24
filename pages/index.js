@@ -6,6 +6,7 @@ import { WATCHLIST_DEFAULT } from '../lib/constants'
 import { getSupaUrl, getSupaKey, getSupaH, setCurrentJwt, getCurrentJwt, fetchConSesion, setOnSesionCaducada, hayConfigSupabase } from '../lib/supabase'
 import { loadSettings, saveSettings, saveSettingsRemote, loadSettingsRemote } from '../lib/settings'
 import { mergeFiltros, loadFiltros, guardarFiltros, hayFiltroActivo } from '../lib/filtros'
+import { cargarIndicadores, guardarIndicadores } from '../lib/indicadores'
 import { loadAsignacionMc, guardarAsignacionMc } from '../lib/mcAsignacion'
 import FiltrosPanel from '../components/FiltrosPanel'
 import { supabase } from '../lib/supabaseClient'
@@ -630,18 +631,6 @@ const MC_ID_CAJA='__caja__', MC_ID_TOTAL='__totalEstrategia__'
 const MC_TODAS='__todas__'
 // Alto mínimo del gráfico grande del multibacktest. Por debajo de esto un gráfico de velas con sus
 // operaciones no se lee, y es preferible desplazarse a mirar una franja aplastada.
-// ── PROVISIONAL — indicadores de usuario de ejemplo ─────────────────────────
-// Lista fija, aquí y a mano, SOLO para poder ver el motor funcionando. La interfaz para definirlos y su
-// persistencia van en el commit siguiente, y entonces esta constante desaparece.
-// Se declara a nivel de módulo a propósito: su identidad tiene que ser estable entre renders o el memo
-// de CandleChart recalcularía los indicadores en cada uno.
-// Se dibujan con trazo DISCONTINUO para distinguirlos de los de la estrategia, que van continuos.
-const INDICADORES_USUARIO_PROVISIONAL=[
-  {tipo:'ema',       periodo:50,  color:'#00d4ff'},
-  {tipo:'bollinger', periodo:20,  desviaciones:2, color:'#9b72ff'},
-  {tipo:'rsi',       periodo:14,  color:'#00e5a0'},
-]
-
 const SUELO_EQUITY=420
 // Alto de la franja de rendimiento del activo cuando va DEBAJO del hueco visible, con alto propio en vez
 // de repartirse mcEquityH con las velas. Suficiente para leer la curva y su eje sin comerse pantalla.
@@ -1421,6 +1410,17 @@ export default function Home() {
   // backtest porque se piden bajo demanda: a resolución diaria no caben los de todos los activos.
   const [mcDetalleActivo,setMcDetalleActivo]=useState(null)
   const [mcVerIndicadores,setMcVerIndicadores]=useState(true)
+  // ── Indicadores del usuario ──
+  // GLOBALES: los mismos en cualquier activo, así que no se guardan por símbolo. Arrancan vacíos y se
+  // rellenan en el montaje desde localStorage; leerlos en el useState inicial rompería el render del
+  // servidor, donde no existe localStorage.
+  const [indicadores,setIndicadores]=useState([])
+  useEffect(()=>{ setIndicadores(cargarIndicadores()) },[])
+  // Un solo punto de escritura: cambiar la lista y persistirla van siempre juntos.
+  const ponIndicadores=useCallback((lista)=>{
+    setIndicadores(lista)
+    guardarIndicadores(lista)
+  },[])
   const [mcVerFranjas,setMcVerFranjas]=useState(true)
   const [mcVerEtiquetas,setMcVerEtiquetas]=useState(true)
   const [mcResOpTodas,setMcResOpTodas]=useState(false)   // Resultados por operación: solo la activa (false) o todas
@@ -5810,7 +5810,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.840</title>
+        <title>Trading Simulator V9.841</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5888,7 +5888,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.840
+            <span className="dot"/>Trading Simulator V9.841
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -8347,7 +8347,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       </div>
                       <CandleChart
                         data={result.chartData} emaRPeriod={emaR} emaLPeriod={emaL} definition={null}
-                        indicadoresUsuario={INDICADORES_USUARIO_PROVISIONAL}
+                        indicadoresUsuario={indicadores} onIndicadores={ponIndicadores}
                         visuals={result.visuals??null}
                         slopeChanges={result.slopeChanges??[]}
                         customMarkers={[...(result.customMarkers??[]), ...openEntryMarkers]}
@@ -8504,7 +8504,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       <div style={{flex:1,minHeight:0,position:'relative'}}>
                         <CandleChart
                           data={result.chartData} emaRPeriod={emaR} emaLPeriod={emaL} definition={null}
-                          indicadoresUsuario={INDICADORES_USUARIO_PROVISIONAL}
+                          indicadoresUsuario={indicadores} onIndicadores={ponIndicadores}
                           visuals={result.visuals??null}
                           slopeChanges={result.slopeChanges??[]}
                           customMarkers={[...(result.customMarkers??[]), ...openEntryMarkers]}

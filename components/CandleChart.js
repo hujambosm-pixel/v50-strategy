@@ -10,6 +10,10 @@ import { MONO, f2, fmtDate } from '../lib/utils'
 // calcMACD de lib devuelve {line, signal} y NO el histograma: se calcula en el punto de uso. No se le
 // añade aquí porque esa función se inyecta en el sandbox de las 77 estrategias y su forma es contrato.
 import { calcEMA, calcSMA, calcRSI, calcMACD, calcBollinger, calcVolumeAvg } from '../lib/backtester'
+// Metadatos, valores por defecto y persistencia de los indicadores del usuario. El CÁLCULO se queda
+// aquí (TIPOS_INDICADOR, más abajo); lo que comparten los dos sitios es la cadena `tipo`, así que al
+// añadir un tipo hay que tocar los dos.
+import { CATALOGO_INDICADORES, TIPOS_DISPONIBLES, rotuloIndicador, nuevoIndicador } from '../lib/indicadores'
 
 // ── Detección del indicador de una estrategia ─────────────────────────
 // INALCANZABLE HOY, A PROPÓSITO. Todo este bloque cuelga de la prop `definition`, y los dos únicos
@@ -118,7 +122,11 @@ const SOLIDO = 0         // LineStyle.Solid
 // encima de las MISMAS velas y pueden confundirse, y ahí el trazo es lo único que los separa. En un panel
 // propio no hace falta: el color ya distingue, y un discontinuo sobre un RSI que oscila mucho deja de
 // leerse como una línea y pasa a leerse como puntos sueltos.
-const estiloDeTrazo = (destino) => destino === 'precio' ? DASH_USUARIO : SOLIDO
+// En panel propio SIEMPRE continuo, elija lo que elija el usuario: ahí el color ya distingue y un
+// discontinuo sobre un oscilador se lee como puntos sueltos. Sobre el precio manda su preferencia, que
+// arranca en discontinuo porque es donde conviven con los de la estrategia.
+const estiloDeTrazo = (destino, ind) =>
+  destino === 'precio' ? (ind?.discontinuo === false ? SOLIDO : DASH_USUARIO) : SOLIDO
 
 // Escala FIJA de 0 a 100 para el RSI.
 //
@@ -195,6 +203,9 @@ function calculaIndicadoresUsuario(data, lista) {
   const cierres = data.map(d => d.close)
   for (const ind of lista) {
     try {
+      // Oculto no es borrado: sigue en la lista y se puede volver a mostrar, pero ni se calcula ni se
+      // dibuja. Calcular lo que no se ve sería trabajo tirado.
+      if (ind?.visible === false) continue
       const tipo = TIPOS_INDICADOR[ind?.tipo]
       if (!tipo) continue
       for (const linea of (tipo.calcula(data, ind, cierres) || [])) {
@@ -205,8 +216,10 @@ function calculaIndicadoresUsuario(data, lista) {
           niveles: linea.niveles || null,
           opciones: {
             color: linea.color || '#8aadcc',
-            lineWidth: linea.lineWidth ?? 2,
-            lineStyle: estiloDeTrazo(tipo.destino),
+            // El grosor propio de la línea manda sobre el del indicador: la banda central de Bollinger
+            // va siempre más fina que las exteriores.
+            lineWidth: linea.lineWidth ?? ind.grosor ?? 2,
+            lineStyle: estiloDeTrazo(tipo.destino, ind),
             lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false,
             ...(linea.opcionesExtra || {}),
           },
@@ -441,7 +454,7 @@ const tramosDe = (bars, campo) => {
 // alterna valor y hueco barra a barra—, y vale más una diagonal que centenares de series.
 const MAX_TRAMOS = 200
 
-export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, isNewResultRef=null, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null, isBareChart=false, visuals=null, filterZones=[], slopeChanges=[], customMarkers=[], pendingOrders=[], simbolo=null, riskPanelOpen=false, onRiskLineFocus=null, indicadoresUsuario=[] }) {
+export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, isNewResultRef=null, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null, isBareChart=false, visuals=null, filterZones=[], slopeChanges=[], customMarkers=[], pendingOrders=[], simbolo=null, riskPanelOpen=false, onRiskLineFocus=null, indicadoresUsuario=[], onIndicadores=null, onConfigurarIndicador=null }) {
   const containerRef=useRef(null), svgRef=useRef(null), legendRef=useRef(null), tooltipRef=useRef(null)
   const activeLegendRef = externalLegendRef || legendRef
   const chartRef=useRef(null), candlesRef=useRef(null)
@@ -471,12 +484,27 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
   const indicadoresCalculados=useMemo(
     ()=>calculaIndicadoresUsuario(data,indicadoresUsuario),
     [data,indicadoresUsuario])
+  // Qué indicadores trae la ESTRATEGIA dentro de las barras. Solo para listarlos, separados y sin
+  // controles: se calculan en el servidor y pueden venir en otro intervalo.
+  const indicadoresDeEstrategia=useMemo(()=>{
+    if(!Array.isArray(data)||!data.length) return []
+    const out=[]
+    if(data.some(d=>d.emaR!=null||d.emaL!=null||d.ema3!=null)) out.push('EMA')
+    if(data.some(d=>d.bbUpper!=null)) out.push('Bollinger')
+    if(data.some(d=>d.macdLine!=null)) out.push('MACD')
+    if(data.some(d=>d.rsiLine!=null)) out.push('RSI')
+    if(data.some(d=>d.volumeAvg!=null)) out.push('Vol MA')
+    return out
+  },[data])
   const chartAliveRef=useRef(true)
   const innerCleanupRef=useRef(null)
   const rulerStart=useRef(null), rulerActiveR=useRef(rulerActive)
   const priceAlarmLinesRef=useRef([])    // [{alarmId, priceLine, price}]
   const pendingPriceLinesRef=useRef([])  // price lines de órdenes pendientes (hasta 3 por orden: entrada+stop+TP)
   const openTradeLinesRef=useRef([])     // price lines SÓLIDAS de entrada de posiciones abiertas (tlOpenTrades)
+  // Lista de indicadores sobre el gráfico: fila con el cursor encima, y menú de añadir abierto.
+  const [indHover,setIndHover]=useState(null)
+  const [indMenu,setIndMenu]=useState(false)
   const [chartReadyTick,setChartReadyTick]=useState(0)  // nonce: se incrementa al recrear el chart → re-dibuja pendientes con candlesRef fresco
   const dragRef=useRef(null)             // {lineObj} while dragging
   const priceAlarmTimersRef=useRef([])   // setInterval IDs for blinking
@@ -1890,6 +1918,80 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
     <div style={{display:'flex',flexDirection:'column',...(fillHeight?{flex:1,minHeight:0}:{})}}>
     <div style={{position:'relative',...(fillHeight?{flex:1,minHeight:0}:{})}}>
       <div ref={legendRef} style={{position:'absolute',top:8,left:8,zIndex:10,fontFamily:MONO,fontSize:12,color:'#7a9bc0',background:'rgba(8,12,20,0.82)',padding:'4px 10px',borderRadius:4,pointerEvents:'none',whiteSpace:'nowrap',display:externalLegendRef?'none':'block'}}/>
+      {/* ── Lista de indicadores del usuario, al estilo de TradingView ──────────────
+          Va DEBAJO de la leyenda de OHLC, que ocupa la esquina de arriba del todo. Solo se monta si
+          quien usa el componente pasa onIndicadores: sin ese callback no hay nada que configurar y el
+          gráfico queda exactamente como estaba, sin un píxel de diferencia. */}
+      {onIndicadores&&(
+        <div style={{position:'absolute',top:38,left:8,zIndex:11,fontFamily:MONO,fontSize:11,
+          display:'flex',flexDirection:'column',gap:2,alignItems:'flex-start',userSelect:'none'}}>
+          {/* Se filtra lo que no sea un indicador reconocible ANTES de pintar: una entrada corrupta en
+              localStorage —un null, un tipo que ya no existe— no puede tumbar el gráfico entero. El
+              camino del cálculo ya lo hacía; este no, y la prueba de montaje lo destapó. */}
+          {indicadoresUsuario.filter(ind=>ind&&CATALOGO_INDICADORES[ind.tipo]).map((ind,i)=>{
+            const visible=ind.visible!==false
+            const encima=indHover===ind.id
+            return (
+              <div key={ind.id||i}
+                onMouseEnter={()=>setIndHover(ind.id)} onMouseLeave={()=>setIndHover(null)}
+                onDoubleClick={()=>onConfigurarIndicador?.(ind)}
+                title="Doble clic para configurar"
+                style={{display:'flex',alignItems:'center',gap:6,padding:'2px 8px',borderRadius:4,
+                  background:encima?'rgba(8,12,20,0.94)':'rgba(8,12,20,0.82)',
+                  border:`1px solid ${encima?'#1e3a52':'transparent'}`,
+                  color:visible?'#c8dff5':'#4a6a88',cursor:'default',whiteSpace:'nowrap'}}>
+                <span style={{width:7,height:7,borderRadius:'50%',flexShrink:0,
+                  background:visible?ind.color:'transparent',border:`1px solid ${ind.color}`,
+                  opacity:visible?1:0.45}}/>
+                <span style={{opacity:visible?1:0.55}}>{rotuloIndicador(ind)}</span>
+                {/* Los iconos ocupan sitio siempre, con visibility: si aparecieran y desaparecieran del
+                    flujo, la fila cambiaría de ancho al pasar el cursor y bailaría. */}
+                <span style={{display:'flex',gap:4,marginLeft:2,visibility:encima?'visible':'hidden'}}>
+                  <span onClick={()=>onIndicadores(indicadoresUsuario.map(x=>x.id===ind.id?{...x,visible:!visible}:x))}
+                    title={visible?'Ocultar':'Mostrar'}
+                    style={{cursor:'pointer',color:visible?'#7a9bc0':'#00d4ff'}}>{visible?'◉':'○'}</span>
+                  <span onClick={()=>onConfigurarIndicador?.(ind)} title="Configurar"
+                    style={{cursor:'pointer',color:'#7a9bc0'}}>⚙</span>
+                  <span onClick={()=>onIndicadores(indicadoresUsuario.filter(x=>x.id!==ind.id))}
+                    title="Quitar" style={{cursor:'pointer',color:'#ff4d6d'}}>✕</span>
+                </span>
+              </div>
+            )
+          })}
+          {/* Añadir */}
+          <div style={{position:'relative'}}>
+            <div onClick={()=>setIndMenu(v=>!v)} title="Añadir indicador"
+              style={{display:'inline-flex',alignItems:'center',gap:5,padding:'2px 8px',borderRadius:4,
+                background:'rgba(8,12,20,0.82)',border:'1px solid #1a2d45',color:'#7a9bc0',cursor:'pointer'}}>
+              + Indicador
+            </div>
+            {indMenu&&(
+              <div style={{position:'absolute',top:'100%',left:0,marginTop:3,zIndex:12,
+                background:'#0d1824',border:'1px solid #1e3a52',borderRadius:5,padding:3,
+                boxShadow:'0 6px 24px rgba(0,0,0,0.7)',display:'flex',flexDirection:'column',minWidth:150}}>
+                {TIPOS_DISPONIBLES.map(t=>(
+                  <div key={t} onClick={()=>{setIndMenu(false);const n=nuevoIndicador(t,indicadoresUsuario.length);if(n)onIndicadores([...indicadoresUsuario,n])}}
+                    style={{padding:'5px 9px',borderRadius:3,cursor:'pointer',color:'#c8dff5',whiteSpace:'nowrap'}}
+                    onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.10)'}
+                    onMouseOut={e=>e.currentTarget.style.background='transparent'}>
+                    {CATALOGO_INDICADORES[t].nombre}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          {/* ── De la ESTRATEGIA, separados y sin controles ──
+              Se listan para que se vea de dónde sale cada línea, pero no se configuran desde aquí: vienen
+              calculados dentro de las barras y pueden estar en otro intervalo. */}
+          {indicadoresDeEstrategia.length>0&&(
+            <div style={{marginTop:4,padding:'2px 8px',borderRadius:4,background:'rgba(8,12,20,0.72)',
+              color:'#3d5a7a',fontSize:10,whiteSpace:'nowrap'}}
+              title="Vienen de la estrategia, calculados en el servidor. No se configuran desde aquí.">
+              estrategia · {indicadoresDeEstrategia.join(' · ')}
+            </div>
+          )}
+        </div>
+      )}
       <div ref={containerRef} style={{minHeight:0,...(fillHeight?{height:'100%'}:{})}}/>
       <svg ref={svgRef} style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',pointerEvents:'none',zIndex:5}}/>
       <div ref={tooltipRef} style={{position:'absolute',display:'none',pointerEvents:'none',background:'rgba(8,12,20,0.96)',border:'1px solid #00e5a0',borderRadius:6,padding:'8px 12px',fontFamily:MONO,fontSize:12,color:'#e2eaf5',zIndex:15,minWidth:200,boxShadow:'0 4px 20px rgba(0,0,0,0.5)'}}/>
