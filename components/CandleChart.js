@@ -359,33 +359,6 @@ const PANELES_INDICADORES = [
       if (marcas.length) series.rsi.setMarkers(marcas)
     },
   },
-  {
-    id: 'volumen',
-    alto: 80,
-    etiqueta: 'VOL',
-    // Este div se monta SIEMPRE y se oculta con display:none, a diferencia de los otros dos. Se conserva
-    // así: con montaje condicional, el ref sería null en el primer render y el panel llegaría un paso
-    // tarde.
-    montaje: 'siempre',
-    debug: 'Volume-subpanel',
-    // Misma condición que tenía _hasVolume. Ojo: esta NO depende de _indType, y es a propósito —el
-    // volumen no lo dibuja ninguna de las ramas de definition que sí se estorban entre sí—.
-    hayDatos: (data) => !!data?.some(d => d.volume > 0),
-    filas: (data) => data.filter(d => d.volume > 0),
-    ajustes: { localization: { priceFormatter: () => '' } },
-    series: [
-      { tipo: 'histograma', nombre: 'vol', sync: true,
-        opciones: { lastValueVisible: false, priceLineVisible: false, title: 'Vol' },
-        datos: (filas) => filas.map(d => ({ time: d.date, value: d.volume,
-          color: (d.close >= d.open) ? '#26a69a80' : '#ef535080' })) },
-      // La media de volumen se mide sobre TODAS las barras que la traigan, no solo sobre las de volumen
-      // positivo: son dos filtros distintos y mezclarlos cambiaría la curva.
-      { tipo: 'linea', nombre: 'volAvg',
-        cuando: (filas, ctx) => ctx.data.some(d => d.volumeAvg != null),
-        opciones: { color: '#FFB30080', lineWidth: 1, lastValueVisible: false, priceLineVisible: false },
-        datos: (filas, ctx) => ctx.data.filter(d => d.volumeAvg != null).map(d => ({ time: d.date, value: d.volumeAvg })) },
-    ],
-  },
 ]
 
 // ── Risk primitive: bands + labels + R:R (TradingView Long Position style) ──
@@ -482,12 +455,12 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
   // Series de línea sobre el precio (EMAs y Bollinger). Son VARIAS por campo —una por tramo, ver
   // tramosDe—, así que se registran en un array en vez de en refs sueltas.
   const overlaySeriesRef=useRef([])
-  const rsiChartRef=useRef(null), macdChartRef=useRef(null), volumeChartRef=useRef(null)
+  const rsiChartRef=useRef(null), macdChartRef=useRef(null)
   // Charts creados por el motor de PANELES_INDICADORES, en el mismo orden que la lista. Sustituye al uso
   // de los tres refs de arriba para las ramas VIVAS; esos tres siguen ahí porque los necesitan las ramas
   // inalcanzables y la limpieza grande del efecto.
   const panelChartsRef=useRef([])
-  const rsiContainerRef=useRef(null), macdContainerRef=useRef(null), volumeContainerRef=useRef(null)
+  const rsiContainerRef=useRef(null), macdContainerRef=useRef(null)
   // Los divs de los paneles siguen siendo los MISMOS de siempre: el motor los busca por id en vez de
   // nombrarlos uno a uno, pero no se crea un sistema de refs paralelo.
   //
@@ -496,7 +469,9 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
   // "ReferenceError: Cannot access 'macdContainerRef' before initialization" en CADA render, y tumba la
   // aplicación entera. Es exactamente lo que pasó en 10a52520, que hubo que revertir en producción. El
   // build no lo ve, porque sintácticamente es correcto.
-  const divDePanel={macd:macdContainerRef,rsi:rsiContainerRef,volumen:volumeContainerRef}
+  // Sin 'volumen': ese panel ya no existe. El volumen se dibuja al pie del gráfico de precios, sobre su
+  // propia escala, como en TradingView.
+  const divDePanel={macd:macdContainerRef,rsi:rsiContainerRef}
   // Indicadores del usuario, ya calculados y agrupados por destino. Memorizado porque recalcular seis
   // series sobre 10.000 velas en cada render sería tirar el trabajo a la basura: depende SOLO de las
   // velas y de la lista.
@@ -662,6 +637,26 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         pintarLinea('bbUpper', { color: '#2196F3', lineWidth: 1, lastValueVisible: false, priceLineVisible: false, title: 'BB Upper' })
         pintarLinea('bbMid',   { color: '#FF6D00', lineWidth: 1, lastValueVisible: false, priceLineVisible: false, title: 'BB Mid' })
         pintarLinea('bbLower', { color: '#2196F3', lineWidth: 1, lastValueVisible: false, priceLineVisible: false, title: 'BB Lower' })
+      }
+
+      // ── Volumen del usuario, AL PIE del gráfico de precios ──
+      // Mismo mecanismo que la rama inalcanzable del RSI en escala secundaria: una priceScaleId propia
+      // con sus scaleMargins. El volumen ocupa la franja inferior y las velas se recogen por arriba, que
+      // es como lo hace TradingView. La escala se deja invisible: las cifras de volumen en el eje no
+      // aportan y le robarían sitio al precio.
+      // YA NO HAY PANEL DE VOLUMEN. Antes se encendía solo con que las barras trajeran volumen; ahora
+      // solo aparece si el usuario añade el indicador.
+      if(indicadoresCalculados.volumen.length){
+        chart.priceScale('right').applyOptions({scaleMargins:{top:0.02,bottom:0.22}})
+        for(const spec of indicadoresCalculados.volumen){
+          try{
+            const op={...spec.opciones,priceScaleId:'volumen'}
+            const s=spec.tipo==='histograma'?chart.addHistogramSeries(op):chart.addLineSeries(op)
+            s.setData(spec.puntos)
+            overlaySeriesRef.current.push(s)
+          }catch(e){ console.warn('[CandleChart] no se pudo dibujar el volumen:',e?.message) }
+        }
+        chart.priceScale('volumen').applyOptions({scaleMargins:{top:0.82,bottom:0},visible:false})
       }
 
       // ── Indicadores del usuario de escala de PRECIO (ema, sma, bollinger) ──
@@ -929,7 +924,6 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       panelChartsRef.current.forEach(c=>{try{c.remove()}catch(_){}})
       panelChartsRef.current=[]
       if(macdChartRef.current){try{macdChartRef.current.remove()}catch(_){};macdChartRef.current=null}
-      if(volumeChartRef.current){try{volumeChartRef.current.remove()}catch(_){};volumeChartRef.current=null}
 
       // Contexto común de las series. `histColor` y `LineStyle` viajan aquí para que los descriptores
       // sean datos y no dependan de qué haya en el ámbito del efecto.
@@ -1654,7 +1648,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
 
       innerCleanupRef.current=()=>{disposed=true;chartAliveRef.current=false;try{unsubLabels()}catch(_){};cnt.removeEventListener('mousemove',onMove);cnt.removeEventListener('mousedown',onMouseDown);window.removeEventListener('mouseup',onMouseUp);window.removeEventListener('keydown',onKeyDown);window.removeEventListener('keyup',onKeyUp);ro.disconnect()}
     })
-    return()=>{innerCleanupRef.current?.();innerCleanupRef.current=null;chartAliveRef.current=false;if(rsiChartRef.current){if(rsiChartRef.current._isOverlay){try{const c=chartRef.current;if(c){for(const s of rsiChartRef.current._series){c.removeSeries(s)};c.priceScale('rsi').applyOptions({visible:false});c.priceScale('right').applyOptions({scaleMargins:{top:0.02,bottom:0.02}})}}catch(_){}}else{try{rsiChartRef.current.remove()}catch(_){}};rsiChartRef.current=null};if(macdChartRef.current){try{macdChartRef.current.remove()}catch(_){};macdChartRef.current=null};if(volumeChartRef.current){try{volumeChartRef.current.remove()}catch(_){};volumeChartRef.current=null};panelChartsRef.current.forEach(c=>{try{c.remove()}catch(_){}});panelChartsRef.current=[];overlaySeriesRef.current.forEach(s=>{try{chartRef.current?.removeSeries(s)}catch(_){}});overlaySeriesRef.current=[];if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null};candlesRef.current=null}
+    return()=>{innerCleanupRef.current?.();innerCleanupRef.current=null;chartAliveRef.current=false;if(rsiChartRef.current){if(rsiChartRef.current._isOverlay){try{const c=chartRef.current;if(c){for(const s of rsiChartRef.current._series){c.removeSeries(s)};c.priceScale('rsi').applyOptions({visible:false});c.priceScale('right').applyOptions({scaleMargins:{top:0.02,bottom:0.02}})}}catch(_){}}else{try{rsiChartRef.current.remove()}catch(_){}};rsiChartRef.current=null};if(macdChartRef.current){try{macdChartRef.current.remove()}catch(_){};macdChartRef.current=null};panelChartsRef.current.forEach(c=>{try{c.remove()}catch(_){}});panelChartsRef.current=[];overlaySeriesRef.current.forEach(s=>{try{chartRef.current?.removeSeries(s)}catch(_){}});overlaySeriesRef.current=[];if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null};candlesRef.current=null}
   },[data,emaRPeriod,emaLPeriod,trades,maxDD,labelMode,definition,isBareChart])
 
   // ── isBareChart: ajustar altura al resize de ventana ──
