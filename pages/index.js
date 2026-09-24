@@ -6,7 +6,7 @@ import { WATCHLIST_DEFAULT } from '../lib/constants'
 import { getSupaUrl, getSupaKey, getSupaH, setCurrentJwt, getCurrentJwt, fetchConSesion, setOnSesionCaducada, hayConfigSupabase } from '../lib/supabase'
 import { loadSettings, saveSettings, saveSettingsRemote, loadSettingsRemote } from '../lib/settings'
 import { mergeFiltros, loadFiltros, guardarFiltros, hayFiltroActivo } from '../lib/filtros'
-import { cargarIndicadores, guardarIndicadores } from '../lib/indicadores'
+import { cargarIndicadores, guardarIndicadores, CATALOGO_INDICADORES, validaIndicador, rotuloIndicador } from '../lib/indicadores'
 import { loadAsignacionMc, guardarAsignacionMc } from '../lib/mcAsignacion'
 import FiltrosPanel from '../components/FiltrosPanel'
 import { supabase } from '../lib/supabaseClient'
@@ -1421,6 +1421,22 @@ export default function Home() {
     setIndicadores(lista)
     guardarIndicadores(lista)
   },[])
+  // Indicador en edición: se trabaja sobre una COPIA y solo se vuelca a la lista al aceptar, para que
+  // cancelar deje las cosas como estaban y el gráfico no parpadee con cada tecla.
+  const [indEditando,setIndEditando]=useState(null)
+  const [indError,setIndError]=useState('')
+  const abrirIndicador=useCallback((ind)=>{ setIndError(''); setIndEditando({...ind}) },[])
+  const guardarIndicadorEditado=useCallback(()=>{
+    if(!indEditando) return
+    const problema=validaIndicador(indEditando)
+    if(problema){ setIndError(problema); return }
+    setIndicadores(prev=>{
+      const lista=prev.map(x=>x.id===indEditando.id?indEditando:x)
+      guardarIndicadores(lista)
+      return lista
+    })
+    setIndEditando(null); setIndError('')
+  },[indEditando])
   const [mcVerFranjas,setMcVerFranjas]=useState(true)
   const [mcVerEtiquetas,setMcVerEtiquetas]=useState(true)
   const [mcResOpTodas,setMcResOpTodas]=useState(false)   // Resultados por operación: solo la activa (false) o todas
@@ -5810,7 +5826,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.841</title>
+        <title>Trading Simulator V9.842</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5888,7 +5904,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.841
+            <span className="dot"/>Trading Simulator V9.842
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -8347,7 +8363,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       </div>
                       <CandleChart
                         data={result.chartData} emaRPeriod={emaR} emaLPeriod={emaL} definition={null}
-                        indicadoresUsuario={indicadores} onIndicadores={ponIndicadores}
+                        indicadoresUsuario={indicadores} onIndicadores={ponIndicadores} onConfigurarIndicador={abrirIndicador}
                         visuals={result.visuals??null}
                         slopeChanges={result.slopeChanges??[]}
                         customMarkers={[...(result.customMarkers??[]), ...openEntryMarkers]}
@@ -8504,7 +8520,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       <div style={{flex:1,minHeight:0,position:'relative'}}>
                         <CandleChart
                           data={result.chartData} emaRPeriod={emaR} emaLPeriod={emaL} definition={null}
-                          indicadoresUsuario={indicadores} onIndicadores={ponIndicadores}
+                          indicadoresUsuario={indicadores} onIndicadores={ponIndicadores} onConfigurarIndicador={abrirIndicador}
                           visuals={result.visuals??null}
                           slopeChanges={result.slopeChanges??[]}
                           customMarkers={[...(result.customMarkers??[]), ...openEntryMarkers]}
@@ -12562,6 +12578,67 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
       </div>
     )}
       {/* Alarm popup removed — use alarms panel instead */}
+
+      {/* ══ MODAL CONFIGURAR INDICADOR ══ */}
+      {/* Mismo patrón que el resto de los modales de la aplicación: capa fija con fondo oscuro, cierre
+          al pulsar fuera, caja #0d1824 con borde #1e3a52 y cabecera con la ✕.
+          Los campos salen del catálogo (CATALOGO_INDICADORES[tipo].params), así que añadir un parámetro
+          a un tipo no obliga a tocar este modal. */}
+      {indEditando&&(()=>{
+        const cat=CATALOGO_INDICADORES[indEditando.tipo]
+        if(!cat) return null
+        const pon=(clave,valor)=>{ setIndError(''); setIndEditando(v=>({...v,[clave]:valor})) }
+        const estiloInput={width:'100%',padding:'7px 9px',background:'#080c14',border:'1px solid #1a2d45',
+          borderRadius:5,color:'#eef5ff',fontSize:12,fontFamily:MONO,boxSizing:'border-box',outline:'none'}
+        return (
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.75)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center'}}
+          onClick={e=>{if(e.target===e.currentTarget){setIndEditando(null);setIndError('')}}}>
+          <div style={{background:'#0d1824',border:'1px solid #1e3a52',borderRadius:8,padding:24,width:360,
+            display:'flex',flexDirection:'column',gap:14,fontFamily:MONO,fontSize:13,boxShadow:'0 8px 48px rgba(0,0,0,0.8)'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+              <span style={{fontWeight:700,color:'#c8dff5',fontSize:14}}>
+                <span style={{display:'inline-block',width:8,height:8,borderRadius:'50%',background:indEditando.color,marginRight:8}}/>
+                {cat.nombre}
+              </span>
+              <span onClick={()=>{setIndEditando(null);setIndError('')}} style={{cursor:'pointer',color:'#4a7a95',fontSize:20,lineHeight:1}}>×</span>
+            </div>
+            <div style={{display:'flex',flexDirection:'column',gap:10}}>
+              {cat.params.map(par=>(
+                <label key={par.clave} style={{display:'flex',alignItems:'center',gap:10,fontSize:11,color:'#7a9bc0'}}>
+                  <span style={{width:130,flexShrink:0}}>{par.etiqueta}</span>
+                  {par.tipo==='color'?(
+                    <input type="color" value={indEditando[par.clave]||'#00d4ff'}
+                      onChange={e=>pon(par.clave,e.target.value)}
+                      style={{width:38,height:26,border:'1px solid #1a2d45',borderRadius:4,background:'transparent',cursor:'pointer',padding:1}}/>
+                  ):par.tipo==='bool'?(
+                    <input type="checkbox" checked={indEditando[par.clave]!==false}
+                      onChange={e=>pon(par.clave,e.target.checked)}
+                      style={{width:16,height:16,cursor:'pointer',accentColor:'#00d4ff'}}/>
+                  ):(
+                    <input type="number" value={indEditando[par.clave]??''}
+                      min={par.min} max={par.max} step={par.tipo==='entero'?1:0.1}
+                      onChange={e=>pon(par.clave,e.target.value===''?'':Number(e.target.value))}
+                      style={estiloInput}/>
+                  )}
+                </label>
+              ))}
+            </div>
+            {indError&&(
+              <div style={{padding:'8px 12px',background:'rgba(255,77,109,0.08)',border:'1px solid rgba(255,77,109,0.3)',
+                borderRadius:6,color:'#ff4d6d',fontSize:11,lineHeight:1.45}}>{indError}</div>
+            )}
+            <div style={{display:'flex',gap:8}}>
+              <button onClick={()=>{setIndEditando(null);setIndError('')}}
+                style={{flex:1,padding:'9px',background:'transparent',border:'1px solid #1a2d45',borderRadius:6,
+                  color:'#7a9bc0',fontSize:12,cursor:'pointer',fontFamily:'inherit'}}>Cancelar</button>
+              <button onClick={guardarIndicadorEditado}
+                style={{flex:1,padding:'9px',background:'#00d4ff',border:'none',borderRadius:6,
+                  color:'#080c14',fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>Aceptar</button>
+            </div>
+          </div>
+        </div>
+        )
+      })()}
 
       {/* ══ MODAL CAMBIAR CONTRASEÑA ══ */}
       {/* Solo se monta cuando el usuario lo pide desde la cabecera. No toca en absoluto el camino de
