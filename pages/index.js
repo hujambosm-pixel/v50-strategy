@@ -1137,6 +1137,15 @@ export default function Home() {
   const [loginPassword,setLoginPassword]=useState('')
   const [loginError,setLoginError]=useState('')
   const [sesionCaducada,setSesionCaducada]=useState(false)  // true tras un 401/403 que no se pudo refrescar
+  // ── Cambio de contraseña ──
+  // Un único juego de estado para el formulario, que se usa desde DOS sitios: el diálogo que se abre
+  // desde la cabecera con sesión iniciada, y —en el commit siguiente— la pantalla de recuperación.
+  const [pwAbierto,setPwAbierto]=useState(false)
+  const [pwNueva,setPwNueva]=useState('')
+  const [pwConfirma,setPwConfirma]=useState('')
+  const [pwError,setPwError]=useState('')
+  const [pwOk,setPwOk]=useState(false)
+  const [pwCargando,setPwCargando]=useState(false)
   const [loginLoading,setLoginLoading]=useState(false)
   // ── Resizable panels ────────────────────────────────────────
   const [sidebarW,setSidebarW]=useState(240)
@@ -5527,6 +5536,61 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   }
   async function handleLogout() { await supabase.auth.signOut() }
 
+  // ── Cambio de contraseña ─────────────────────────────────────
+  // updateUser NO pide la contraseña actual: Supabase da por buena la sesión abierta, que es la que
+  // acredita al usuario. Vale tanto con sesión normal como con la que deja un enlace de recuperación.
+  async function handleCambiarPassword(e) {
+    e?.preventDefault?.()
+    setPwError(''); setPwOk(false)
+    if(pwNueva.length<8){ setPwError('La contraseña nueva debe tener al menos 8 caracteres.'); return }
+    if(pwNueva!==pwConfirma){ setPwError('Las dos contraseñas no coinciden.'); return }
+    setPwCargando(true)
+    // El mensaje de Supabase se enseña tal cual: es el único que sabe por qué ha fallado —contraseña
+    // filtrada, igual que la anterior, política del proyecto— y traducirlo sería inventárselo.
+    const {error}=await supabase.auth.updateUser({password:pwNueva})
+    setPwCargando(false)
+    if(error){ setPwError(error.message||'No se ha podido cambiar la contraseña.'); return }
+    setPwNueva(''); setPwConfirma(''); setPwOk(true)
+  }
+  function cerrarPw(){ setPwAbierto(false); setPwNueva(''); setPwConfirma(''); setPwError(''); setPwOk(false) }
+
+  // Formulario de contraseña nueva. Es una función que devuelve JSX, no un componente: así comparte el
+  // estado de arriba sin pasarlo por props, y el diálogo de la cabecera y la pantalla de recuperación
+  // enseñan EXACTAMENTE el mismo formulario, sin dos copias que se separen con el tiempo.
+  function formularioPassword({ textoBoton='Cambiar contraseña', mensajeExito }) {
+    const inputStyle={display:'block',width:'100%',padding:'10px 12px',marginBottom:10,
+      background:'#080c14',border:'1px solid #1a2d45',borderRadius:6,
+      color:'#eef5ff',fontSize:13,fontFamily:'inherit',boxSizing:'border-box',outline:'none'}
+    return (
+      <form onSubmit={handleCambiarPassword}>
+        <input type="password" value={pwNueva} onChange={e=>{setPwNueva(e.target.value);setPwError('')}}
+          placeholder="Contraseña nueva (mínimo 8 caracteres)" autoComplete="new-password" required
+          style={inputStyle}/>
+        <input type="password" value={pwConfirma} onChange={e=>{setPwConfirma(e.target.value);setPwError('')}}
+          placeholder="Repite la contraseña nueva" autoComplete="new-password" required
+          style={{...inputStyle,marginBottom:16}}/>
+        {pwError&&(
+          <div style={{marginBottom:12,padding:'8px 12px',background:'rgba(255,77,109,0.08)',
+            border:'1px solid rgba(255,77,109,0.3)',borderRadius:6,color:'#ff4d6d',fontSize:11,lineHeight:1.45}}>
+            {pwError}
+          </div>
+        )}
+        {pwOk&&(
+          <div style={{marginBottom:12,padding:'9px 12px',background:'rgba(0,229,160,0.08)',
+            border:'1px solid rgba(0,229,160,0.35)',borderRadius:6,color:'#00e5a0',fontSize:11,lineHeight:1.5}}>
+            {mensajeExito}
+          </div>
+        )}
+        <button type="submit" disabled={pwCargando}
+          style={{width:'100%',padding:'11px',background:'#00d4ff',border:'none',borderRadius:6,
+            color:'#080c14',fontSize:13,fontWeight:700,cursor:pwCargando?'wait':'pointer',
+            fontFamily:'inherit',opacity:pwCargando?0.6:1,letterSpacing:'0.02em'}}>
+          {pwCargando?'Guardando…':textoBoton}
+        </button>
+      </form>
+    )
+  }
+
   // ── Login screen ─────────────────────────────────────────────
   const skipAuth=process.env.NEXT_PUBLIC_SKIP_AUTH==='true'
   if(session===undefined&&!skipAuth) return (
@@ -5590,7 +5654,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.831</title>
+        <title>Trading Simulator V9.832</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5668,7 +5732,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.831
+            <span className="dot"/>Trading Simulator V9.832
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5743,6 +5807,12 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   ☁ Supabase ↗
                 </a>
             }
+            <button onClick={()=>{setPwError('');setPwOk(false);setPwAbierto(true)}} title="Cambiar la contraseña de acceso"
+              style={{background:'rgba(0,212,255,0.06)',border:'1px solid rgba(0,212,255,0.25)',color:'#00d4ff',
+                fontFamily:MONO,fontSize:11,padding:'4px 10px',borderRadius:6,cursor:'pointer',
+                display:'flex',alignItems:'center',gap:5}}>
+              🔑 Contraseña
+            </button>
             <button onClick={handleLogout} title={`Cerrar sesión (${session?.user?.email||''})`}
               style={{background:'rgba(255,77,109,0.06)',border:'1px solid rgba(255,77,109,0.2)',color:'#ff4d6d',
                 fontFamily:MONO,fontSize:11,padding:'4px 10px',borderRadius:6,cursor:'pointer',
@@ -12313,6 +12383,30 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
       </div>
     )}
       {/* Alarm popup removed — use alarms panel instead */}
+
+      {/* ══ MODAL CAMBIAR CONTRASEÑA ══ */}
+      {/* Solo se monta cuando el usuario lo pide desde la cabecera. No toca en absoluto el camino de
+          entrada: para verlo hay que estar YA dentro, con sesion iniciada. */}
+      {pwAbierto&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.75)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center'}}
+          onClick={e=>{if(e.target===e.currentTarget)cerrarPw()}}>
+          <div style={{background:'#0d1824',border:'1px solid #1e3a52',borderRadius:8,padding:24,width:380,
+            display:'flex',flexDirection:'column',gap:14,fontFamily:MONO,fontSize:13,boxShadow:'0 8px 48px rgba(0,0,0,0.8)'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+              <span style={{fontWeight:700,color:'#c8dff5',fontSize:14}}>🔑 Cambiar contraseña</span>
+              <span onClick={cerrarPw} style={{cursor:'pointer',color:'#4a7a95',fontSize:20,lineHeight:1}}>×</span>
+            </div>
+            <div style={{fontSize:11,color:'#7a9bc0',lineHeight:1.5}}>
+              Cuenta <span style={{color:'#c8dff5'}}>{session?.user?.email||''}</span>. No hace falta la
+              contraseña actual: basta con la sesión abierta.
+            </div>
+            {formularioPassword({
+              textoBoton:'Cambiar contraseña',
+              mensajeExito:'Contraseña actualizada. Tu sesión sigue activa, así que no tienes que volver a entrar ahora; la próxima vez usa la contraseña nueva.',
+            })}
+          </div>
+        </div>
+      )}
 
       {/* ══ MODAL NUEVA OPERACIÓN ══ */}
       {tlFormOpen&&(
