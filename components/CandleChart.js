@@ -547,6 +547,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
   // Lista de indicadores sobre el gráfico: fila con el cursor encima, y menú de añadir abierto.
   const [indHover,setIndHover]=useState(null)
   const [indMenu,setIndMenu]=useState(false)
+  const indClicRef=useRef(null)   // temporizador del clic simple, para que el doble clic pueda cancelarlo
   const [chartReadyTick,setChartReadyTick]=useState(0)  // nonce: se incrementa al recrear el chart → re-dibuja pendientes con candlesRef fresco
   const dragRef=useRef(null)             // {lineObj} while dragging
   const priceAlarmTimersRef=useRef([])   // setInterval IDs for blinking
@@ -1998,9 +1999,11 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       {/* ── Lista de indicadores del usuario, al estilo de TradingView ──────────────
           Va DEBAJO de la leyenda de OHLC, que ocupa la esquina de arriba del todo. Solo se monta si
           quien usa el componente pasa onIndicadores: sin ese callback no hay nada que configurar y el
-          gráfico queda exactamente como estaba, sin un píxel de diferencia. */}
+          gráfico queda exactamente como estaba, sin un píxel de diferencia.
+          fontSize 10: el mismo de las filas de la estrategia, que van más abajo. Antes iban a 11 y las
+          dos listas no se leían como una sola cosa. */}
       {onIndicadores&&(
-        <div style={{position:'absolute',top:38,left:8,zIndex:11,fontFamily:MONO,fontSize:11,
+        <div style={{position:'absolute',top:38,left:8,zIndex:11,fontFamily:MONO,fontSize:10,
           display:'flex',flexDirection:'column',gap:2,alignItems:'flex-start',userSelect:'none'}}>
           {/* Se filtra lo que no sea un indicador reconocible ANTES de pintar: una entrada corrupta en
               localStorage —un null, un tipo que ya no existe— no puede tumbar el gráfico entero. El
@@ -2011,8 +2014,6 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
             return (
               <div key={ind.id||i}
                 onMouseEnter={()=>setIndHover(ind.id)} onMouseLeave={()=>setIndHover(null)}
-                onDoubleClick={()=>onConfigurarIndicador?.(ind)}
-                title="Doble clic para configurar"
                 style={{display:'flex',alignItems:'center',gap:6,padding:'2px 8px',borderRadius:4,
                   background:encima?'rgba(8,12,20,0.94)':'rgba(8,12,20,0.82)',
                   border:`1px solid ${encima?'#1e3a52':'transparent'}`,
@@ -2020,13 +2021,25 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
                 <span style={{width:7,height:7,borderRadius:'50%',flexShrink:0,
                   background:visible?ind.color:'transparent',border:`1px solid ${ind.color}`,
                   opacity:visible?1:0.45}}/>
-                <span style={{opacity:visible?1:0.55}}>{rotuloIndicador(ind)}</span>
+                {/* EL TEXTO ES EL INTERRUPTOR. Un clic muestra u oculta; un doble clic configura.
+                    Y son dos gestos sobre el MISMO elemento, así que el clic no puede actuar de
+                    inmediato: el navegador dispara dos `click` antes del `dblclick`, y el indicador
+                    acabaría igual que empezó pero habiendo parpadeado dos veces. Se retrasa 220 ms —por
+                    debajo del umbral habitual de doble clic de los sistemas— y el `dblclick` cancela el
+                    temporizador pendiente. El temporizador se guarda en un ref, no en estado, porque
+                    cambiarlo no tiene que redibujar nada. */}
+                <span onClick={()=>{
+                    clearTimeout(indClicRef.current)
+                    indClicRef.current=setTimeout(()=>{
+                      onIndicadores(indicadoresUsuario.map(x=>x.id===ind.id?{...x,visible:!visible}:x))
+                    },220)
+                  }}
+                  onDoubleClick={()=>{ clearTimeout(indClicRef.current); onConfigurarIndicador?.(ind) }}
+                  title={(visible?'Ocultar':'Mostrar')+' · doble clic para configurar'}
+                  style={{opacity:visible?1:0.55,cursor:'pointer'}}>{rotuloIndicador(ind)}</span>
                 {/* Los iconos ocupan sitio siempre, con visibility: si aparecieran y desaparecieran del
                     flujo, la fila cambiaría de ancho al pasar el cursor y bailaría. */}
                 <span style={{display:'flex',gap:4,marginLeft:2,visibility:encima?'visible':'hidden'}}>
-                  <span onClick={()=>onIndicadores(indicadoresUsuario.map(x=>x.id===ind.id?{...x,visible:!visible}:x))}
-                    title={visible?'Ocultar':'Mostrar'}
-                    style={{cursor:'pointer',color:visible?'#7a9bc0':'#00d4ff'}}>{visible?'◉':'○'}</span>
                   <span onClick={()=>onConfigurarIndicador?.(ind)} title="Configurar"
                     style={{cursor:'pointer',color:'#7a9bc0'}}>⚙</span>
                   <span onClick={()=>onIndicadores(indicadoresUsuario.filter(x=>x.id!==ind.id))}
