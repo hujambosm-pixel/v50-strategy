@@ -5843,7 +5843,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.849</title>
+        <title>Trading Simulator V9.850</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5921,7 +5921,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.849
+            <span className="dot"/>Trading Simulator V9.850
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -12618,7 +12618,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
         return (
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.75)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center'}}
           onClick={e=>{if(e.target===e.currentTarget){setIndEditando(null);setIndError('')}}}>
-          <div style={{background:'#0d1824',border:'1px solid #1e3a52',borderRadius:8,padding:24,width:360,
+          <div style={{background:'#0d1824',border:'1px solid #1e3a52',borderRadius:8,padding:24,
+            width:cat.params.some(p=>p.tipo==='medias')?400:360,
             display:'flex',flexDirection:'column',gap:14,fontFamily:MONO,fontSize:13,boxShadow:'0 8px 48px rgba(0,0,0,0.8)'}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
               <span style={{fontWeight:700,color:'#c8dff5',fontSize:14}}>
@@ -12628,7 +12629,51 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
               <span onClick={()=>{setIndEditando(null);setIndError('')}} style={{cursor:'pointer',color:'#4a7a95',fontSize:20,lineHeight:1}}>×</span>
             </div>
             <div style={{display:'flex',flexDirection:'column',gap:10}}>
-              {cat.params.map(par=>(
+              {cat.params.map(par=>par.tipo==='medias'?(
+                /* CINCO BLOQUES, UNA FILA CADA UNO. Cada media cabe en una línea porque sus campos son
+                   estrechos: casilla, tipo, periodo, grosor, color y "en la barra". Apilar cinco
+                   formularios verticales habría dado un modal de dos pantallas; así son cinco filas de
+                   una altura y el modal sigue entrando de una vez. Las apagadas se atenúan para que se
+                   vea de un vistazo cuáles cuentan. */
+                <div key={par.clave} style={{display:'flex',flexDirection:'column',gap:5}}>
+                  <div style={{display:'flex',gap:6,fontSize:9,color:'#31506e',paddingLeft:22}}>
+                    <span style={{width:52}}>tipo</span><span style={{width:56}}>periodo</span>
+                    <span style={{width:46}}>grosor</span><span style={{width:32}}>color</span>
+                    <span>barra</span>
+                  </div>
+                  {(indEditando.medias||[]).map((m,k)=>{
+                    const ponM=(clave,valor)=>{
+                      setIndError('')
+                      setIndEditando(v=>({...v,medias:(v.medias||[]).map((x,j)=>j===k?{...x,[clave]:valor}:x)}))
+                    }
+                    return (
+                      <div key={k} style={{display:'flex',alignItems:'center',gap:6,opacity:m.activa?1:0.45}}>
+                        <input type="checkbox" checked={!!m.activa} onChange={e=>ponM('activa',e.target.checked)}
+                          title={m.activa?'Activa':'Apagada'}
+                          style={{width:16,height:16,cursor:'pointer',accentColor:'#00d4ff',flexShrink:0}}/>
+                        <select value={m.tipoMA||'ema'} onChange={e=>ponM('tipoMA',e.target.value)}
+                          style={{width:52,padding:'4px 3px',background:'#080c14',border:'1px solid #1a2d45',
+                            borderRadius:4,color:'#eef5ff',fontSize:11,fontFamily:MONO,cursor:'pointer'}}>
+                          <option value="ema">EMA</option><option value="sma">SMA</option>
+                        </select>
+                        <input type="number" value={m.periodo??''} min={1} max={2000}
+                          onChange={e=>ponM('periodo',e.target.value===''?'':Number(e.target.value))}
+                          style={{width:56,padding:'4px 5px',background:'#080c14',border:'1px solid #1a2d45',
+                            borderRadius:4,color:'#eef5ff',fontSize:11,fontFamily:MONO,boxSizing:'border-box'}}/>
+                        <input type="number" value={m.grosor??2} min={1} max={4}
+                          onChange={e=>ponM('grosor',Number(e.target.value))}
+                          style={{width:46,padding:'4px 5px',background:'#080c14',border:'1px solid #1a2d45',
+                            borderRadius:4,color:'#eef5ff',fontSize:11,fontFamily:MONO,boxSizing:'border-box'}}/>
+                        <input type="color" value={m.color||'#00d4ff'} onChange={e=>ponM('color',e.target.value)}
+                          style={{width:32,height:24,border:'1px solid #1a2d45',borderRadius:4,background:'transparent',cursor:'pointer',padding:1}}/>
+                        <input type="checkbox" checked={m.enLeyenda!==false} onChange={e=>ponM('enLeyenda',e.target.checked)}
+                          title="Su valor sale en la barra superior"
+                          style={{width:15,height:15,cursor:'pointer',accentColor:'#00d4ff',flexShrink:0}}/>
+                      </div>
+                    )
+                  })}
+                </div>
+              ):(
                 <label key={par.clave} style={{display:'flex',alignItems:'center',gap:10,fontSize:11,color:'#7a9bc0'}}>
                   <span style={{width:130,flexShrink:0}}>{par.etiqueta}</span>
                   {par.tipo==='color'?(

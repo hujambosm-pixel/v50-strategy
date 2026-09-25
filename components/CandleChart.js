@@ -153,10 +153,29 @@ const aPuntos = (valores, data) => {
 // Catálogo: qué panel le toca a cada tipo y cómo se calcula. `calcula` devuelve una lista de líneas o
 // histogramas listos para dibujar; si devuelve [] el indicador simplemente no se pinta.
 const TIPOS_INDICADOR = {
-  ema: { destino: 'precio', calcula: (data, ind, cierres) =>
-    [{ tipo: 'linea', color: ind.color, puntos: aPuntos(calcEMA(cierres, ind.periodo ?? 20), data) }] },
-  sma: { destino: 'precio', calcula: (data, ind, cierres) =>
-    [{ tipo: 'linea', color: ind.color, puntos: aPuntos(calcSMA(cierres, ind.periodo ?? 20), data) }] },
+  // UN indicador, hasta cinco líneas. Cada media lleva su tipo, su periodo, su color, su grosor, su
+  // trazo y si sale en la barra superior, así que la línea trae todo eso y el constructor de opciones de
+  // más abajo lo respeta por encima de lo que diga el indicador.
+  medias: { destino: 'precio', calcula: (data, ind, cierres) => {
+    const lista = Array.isArray(ind.medias) ? ind.medias : []
+    const out = []
+    for (const m of lista) {
+      if (!m?.activa) continue
+      const periodo = Number(m.periodo) || 20
+      const valores = (m.tipoMA === 'sma') ? calcSMA(cierres, periodo) : calcEMA(cierres, periodo)
+      out.push({
+        tipo: 'linea',
+        color: m.color || ind.color,
+        lineWidth: Number(m.grosor) || 2,
+        discontinuo: m.discontinuo !== false,
+        // Cada media pide su sitio en la barra superior por separado, con su propio rótulo: "EMA20" y
+        // "SMA200" son dos cosas distintas y agruparlas bajo "Medias" no diría nada.
+        rotuloLeyenda: m.enLeyenda !== false ? `${(m.tipoMA || 'ema').toUpperCase()}${periodo}` : null,
+        puntos: aPuntos(valores, data),
+      })
+    }
+    return out
+  } },
   bollinger: { destino: 'precio', calcula: (data, ind, cierres) => {
     const b = calcBollinger(cierres, ind.periodo ?? 20, ind.desviaciones ?? 2)
     return [
@@ -235,13 +254,25 @@ function calculaIndicadoresUsuario(data, lista) {
       // precio comparten escala con las velas y su valor se compara de un vistazo con el cierre, mientras
       // que un RSI o un MACD ya tienen su propio eje a la vista en su panel. Se puede cambiar por
       // indicador desde su configuración.
-      const enLeyenda = ind.enLeyenda ?? (tipo.destino === 'precio')
-      if (enLeyenda && porDestino.leyenda.length < MAX_EN_LEYENDA) {
-        const principal = lineas.find(l => l?.principal && l?.puntos?.length) || lineas.find(l => l?.puntos?.length)
-        if (principal) {
+      // Dos caminos. Si alguna línea trae su propio rótulo —las medias—, cada una pide su sitio por
+      // separado. Si no, se usa la principal del indicador con el rótulo del indicador.
+      const conRotuloPropio = lineas.filter(l => l?.rotuloLeyenda && l?.puntos?.length)
+      if (conRotuloPropio.length) {
+        for (const l of conRotuloPropio) {
+          if (porDestino.leyenda.length >= MAX_EN_LEYENDA) break
           const valores = new Map()
-          for (const p of principal.puntos) valores.set(p.time, p.value)
-          porDestino.leyenda.push({ rotulo: rotuloIndicador(ind), color: ind.color || '#8aadcc', valores })
+          for (const p of l.puntos) valores.set(p.time, p.value)
+          porDestino.leyenda.push({ rotulo: l.rotuloLeyenda, color: l.color || '#8aadcc', valores })
+        }
+      } else {
+        const enLeyenda = ind.enLeyenda ?? (tipo.destino === 'precio')
+        if (enLeyenda && porDestino.leyenda.length < MAX_EN_LEYENDA) {
+          const principal = lineas.find(l => l?.principal && l?.puntos?.length) || lineas.find(l => l?.puntos?.length)
+          if (principal) {
+            const valores = new Map()
+            for (const p of principal.puntos) valores.set(p.time, p.value)
+            porDestino.leyenda.push({ rotulo: rotuloIndicador(ind), color: ind.color || '#8aadcc', valores })
+          }
         }
       }
       for (const linea of lineas) {
@@ -256,7 +287,7 @@ function calculaIndicadoresUsuario(data, lista) {
             // El grosor propio de la línea manda sobre el del indicador: la banda central de Bollinger
             // va siempre más fina que las exteriores.
             lineWidth: linea.lineWidth ?? ind.grosor ?? 2,
-            lineStyle: estiloDeTrazo(tipo.destino, ind),
+            lineStyle: estiloDeTrazo(tipo.destino, linea.discontinuo !== undefined ? linea : ind),
             lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false,
             ...(linea.opcionesExtra || {}),
           },
