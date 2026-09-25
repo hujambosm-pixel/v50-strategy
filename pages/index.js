@@ -1437,6 +1437,23 @@ export default function Home() {
     })
     setIndEditando(null); setIndError('')
   },[indEditando])
+  // Nombres con periodo real de los indicadores que dibuja la ESTRATEGIA activa, para la leyenda del
+  // gráfico. El periodo solo está en los params de la estrategia, y nombreIndicador ya sabe sacarlo de
+  // ahí; CandleChart no tiene por qué conocer esa tabla.
+  const nombresIndicadoresEstrategia=useMemo(()=>{
+    const st=strategies.find(x=>x.id===currentStratId)
+    if(!st) return null
+    let params={}
+    try{ params=st.params?(typeof st.params==='string'?JSON.parse(st.params):st.params):{} }catch(_){}
+    const claves=['emaR','emaL','ema3','bbUpper','bbMid','bbLower','macdLine','signalLine','rsi','rsiMA','volumeAvg']
+    const out={}
+    for(const c of claves){
+      try{ out[c]=nombreIndicador(c,params,null)||'' }catch(_){}
+    }
+    // rsiLine es como lo llaman las barras; la tabla de nombres lo tiene como `rsi`.
+    out.rsiLine=out.rsi
+    return out
+  },[strategies,currentStratId])
   const [mcVerFranjas,setMcVerFranjas]=useState(true)
   const [mcVerEtiquetas,setMcVerEtiquetas]=useState(true)
   const [mcResOpTodas,setMcResOpTodas]=useState(false)   // Resultados por operación: solo la activa (false) o todas
@@ -5826,7 +5843,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.846</title>
+        <title>Trading Simulator V9.847</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5904,7 +5921,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.846
+            <span className="dot"/>Trading Simulator V9.847
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -8364,6 +8381,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       <CandleChart
                         data={result.chartData} emaRPeriod={emaR} emaLPeriod={emaL} definition={null}
                         indicadoresUsuario={indicadores} onIndicadores={ponIndicadores} onConfigurarIndicador={abrirIndicador}
+                        nombresIndicadores={nombresIndicadoresEstrategia}
                         visuals={result.visuals??null}
                         slopeChanges={result.slopeChanges??[]}
                         customMarkers={[...(result.customMarkers??[]), ...openEntryMarkers]}
@@ -8521,6 +8539,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         <CandleChart
                           data={result.chartData} emaRPeriod={emaR} emaLPeriod={emaL} definition={null}
                           indicadoresUsuario={indicadores} onIndicadores={ponIndicadores} onConfigurarIndicador={abrirIndicador}
+                          nombresIndicadores={nombresIndicadoresEstrategia}
                           visuals={result.visuals??null}
                           slopeChanges={result.slopeChanges??[]}
                           customMarkers={[...(result.customMarkers??[]), ...openEntryMarkers]}

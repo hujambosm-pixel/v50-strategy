@@ -464,7 +464,7 @@ const tramosDe = (bars, campo) => {
 // alterna valor y hueco barra a barra—, y vale más una diagonal que centenares de series.
 const MAX_TRAMOS = 200
 
-export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, isNewResultRef=null, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null, isBareChart=false, visuals=null, filterZones=[], slopeChanges=[], customMarkers=[], pendingOrders=[], simbolo=null, riskPanelOpen=false, onRiskLineFocus=null, indicadoresUsuario=[], onIndicadores=null, onConfigurarIndicador=null }) {
+export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, isNewResultRef=null, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null, isBareChart=false, visuals=null, filterZones=[], slopeChanges=[], customMarkers=[], pendingOrders=[], simbolo=null, riskPanelOpen=false, onRiskLineFocus=null, indicadoresUsuario=[], onIndicadores=null, onConfigurarIndicador=null, nombresIndicadores=null }) {
   const containerRef=useRef(null), svgRef=useRef(null), legendRef=useRef(null), tooltipRef=useRef(null)
   const activeLegendRef = externalLegendRef || legendRef
   const chartRef=useRef(null), candlesRef=useRef(null)
@@ -506,16 +506,38 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
     [data,firmaIndicadores])
   // Qué indicadores trae la ESTRATEGIA dentro de las barras. Solo para listarlos, separados y sin
   // controles: se calculan en el servidor y pueden venir en otro intervalo.
+  // UNA ENTRADA POR SERIE REALMENTE DIBUJADA, no una por familia.
+  //
+  // Antes esto agrupaba emaR, emaL y ema3 en un único 'EMA', así que una estrategia con tres medias
+  // distintas mostraba "estrategia · EMA" y parecía que dibujaba una sola. La causa NO era
+  // getActiveIndicator —eso ya no se usa aquí—: era esta agrupación.
+  //
+  // La fuente es lo que traen las BARRAS, que es lo único que dice qué se está dibujando de verdad. Y el
+  // color es el MISMO con el que cada serie se pinta más abajo, para que la fila y la línea se
+  // reconozcan entre sí.
+  //
+  // El nombre con su periodo llega en `nombresIndicadores`, que construye quien use el componente a
+  // partir de los params de la estrategia (ver nombreIndicador en pages/index.js): es el único sitio
+  // donde está el periodo real. Sin esa prop se queda el tipo a secas, que sigue siendo honesto.
   const indicadoresDeEstrategia=useMemo(()=>{
     if(!Array.isArray(data)||!data.length) return []
-    const out=[]
-    if(data.some(d=>d.emaR!=null||d.emaL!=null||d.ema3!=null)) out.push('EMA')
-    if(data.some(d=>d.bbUpper!=null)) out.push('Bollinger')
-    if(data.some(d=>d.macdLine!=null)) out.push('MACD')
-    if(data.some(d=>d.rsiLine!=null)) out.push('RSI')
-    if(data.some(d=>d.volumeAvg!=null)) out.push('Vol MA')
-    return out
-  },[data])
+    const SERIES_ESTRATEGIA=[
+      ['emaR',      'EMA',                '#ffd166'],
+      ['emaL',      'EMA',                '#ff4d6d'],
+      ['ema3',      'EMA',                '#9C27B0'],
+      ['bbUpper',   'BB sup',             '#2196F3'],
+      ['bbMid',     'BB media',           '#FF6D00'],
+      ['bbLower',   'BB inf',             '#2196F3'],
+      ['macdLine',  'MACD',               '#2962ff'],
+      ['signalLine','Señal MACD',         '#ff6d00'],
+      ['rsiLine',   'RSI',                '#7E57C2'],
+      ['rsiMA',     'MA del RSI',         '#f0c040'],
+      ['volumeAvg', 'Media de volumen',   '#FFB300'],
+    ]
+    return SERIES_ESTRATEGIA
+      .filter(([clave])=>data.some(d=>d[clave]!=null))
+      .map(([clave,tipo,color])=>({clave,color,rotulo:nombresIndicadores?.[clave]||tipo}))
+  },[data,nombresIndicadores])
   const chartAliveRef=useRef(true)
   const innerCleanupRef=useRef(null)
   const rulerStart=useRef(null), rulerActiveR=useRef(rulerActive)
@@ -2039,10 +2061,18 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
               Se listan para que se vea de dónde sale cada línea, pero no se configuran desde aquí: vienen
               calculados dentro de las barras y pueden estar en otro intervalo. */}
           {indicadoresDeEstrategia.length>0&&(
-            <div style={{marginTop:4,padding:'2px 8px',borderRadius:4,background:'rgba(8,12,20,0.72)',
-              color:'#3d5a7a',fontSize:10,whiteSpace:'nowrap'}}
+            <div style={{marginTop:4,display:'flex',flexDirection:'column',gap:2}}
               title="Vienen de la estrategia, calculados en el servidor. No se configuran desde aquí.">
-              estrategia · {indicadoresDeEstrategia.join(' · ')}
+              <div style={{padding:'1px 8px',color:'#31506e',fontSize:9,letterSpacing:'0.06em'}}>ESTRATEGIA</div>
+              {/* Misma forma que las filas del usuario —punto de color y rótulo— pero sin controles y
+                  apagadas, para que se vea de un golpe cuáles se pueden tocar y cuáles no. */}
+              {indicadoresDeEstrategia.map(ie=>(
+                <div key={ie.clave} style={{display:'flex',alignItems:'center',gap:6,padding:'2px 8px',
+                  borderRadius:4,background:'rgba(8,12,20,0.72)',color:'#5a7a95',fontSize:10,whiteSpace:'nowrap'}}>
+                  <span style={{width:7,height:7,borderRadius:'50%',flexShrink:0,background:ie.color,opacity:0.8}}/>
+                  <span>{ie.rotulo}</span>
+                </div>
+              ))}
             </div>
           )}
         </div>
