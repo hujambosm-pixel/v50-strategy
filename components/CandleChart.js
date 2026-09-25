@@ -493,9 +493,17 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
   // velas y de la lista.
   // Declarado aquí, después de los refs de panel y antes de cualquier uso: el efecto lo consume unas
   // 400 líneas más abajo y el render unas 1.400.
+  // FIRMA DEL CONTENIDO, no la identidad del array. Es lo que decide cuándo se recalcula y cuándo se
+  // redibuja, y hace las dos cosas a prueba de los dos extremos:
+  //   · Si el padre entrega un array nuevo en cada render con el MISMO contenido —un literal en el JSX,
+  //     un map()—, la firma no cambia y no se recalcula nada. Comparar por identidad sí recalcularía.
+  //   · Si cambia un periodo, un color o una casilla, la firma cambia y se recalcula y se redibuja.
+  // Serializar seis objetos pequeños en cada render no cuesta nada medible al lado de rehacer el chart.
+  const firmaIndicadores=JSON.stringify(indicadoresUsuario||[])
   const indicadoresCalculados=useMemo(
     ()=>calculaIndicadoresUsuario(data,indicadoresUsuario),
-    [data,indicadoresUsuario])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [data,firmaIndicadores])
   // Qué indicadores trae la ESTRATEGIA dentro de las barras. Solo para listarlos, separados y sin
   // controles: se calculan en el servidor y pueden venir en otro intervalo.
   const indicadoresDeEstrategia=useMemo(()=>{
@@ -1665,7 +1673,11 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       innerCleanupRef.current=()=>{disposed=true;chartAliveRef.current=false;try{unsubLabels()}catch(_){};cnt.removeEventListener('mousemove',onMove);cnt.removeEventListener('mousedown',onMouseDown);window.removeEventListener('mouseup',onMouseUp);window.removeEventListener('keydown',onKeyDown);window.removeEventListener('keyup',onKeyUp);ro.disconnect()}
     })
     return()=>{innerCleanupRef.current?.();innerCleanupRef.current=null;chartAliveRef.current=false;if(rsiChartRef.current){if(rsiChartRef.current._isOverlay){try{const c=chartRef.current;if(c){for(const s of rsiChartRef.current._series){c.removeSeries(s)};c.priceScale('rsi').applyOptions({visible:false});c.priceScale('right').applyOptions({scaleMargins:{top:0.02,bottom:0.02}})}}catch(_){}}else{try{rsiChartRef.current.remove()}catch(_){}};rsiChartRef.current=null};if(macdChartRef.current){try{macdChartRef.current.remove()}catch(_){};macdChartRef.current=null};panelChartsRef.current.forEach(c=>{try{c.remove()}catch(_){}});panelChartsRef.current=[];overlaySeriesRef.current.forEach(s=>{try{chartRef.current?.removeSeries(s)}catch(_){}});overlaySeriesRef.current=[];if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null};candlesRef.current=null}
-  },[data,emaRPeriod,emaLPeriod,trades,maxDD,labelMode,definition,isBareChart])
+    // firmaIndicadores: SIN ESTO el gráfico no reflejaba los cambios de configuración. El memo se
+    // recalculaba, pero este efecto —el que crea las series— no dependía de él, así que las líneas
+    // seguían siendo las de antes hasta que cambiaba `data`, es decir, hasta cambiar de activo.
+    // Rehacer el chart no pierde el zoom: savedRangeRef guarda el rango visible y se restaura al crearlo.
+  },[data,emaRPeriod,emaLPeriod,trades,maxDD,labelMode,definition,isBareChart,firmaIndicadores])
 
   // ── isBareChart: ajustar altura al resize de ventana ──
   const updateHeightRef=useRef(null)
