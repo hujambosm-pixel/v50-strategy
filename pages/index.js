@@ -5843,7 +5843,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.847</title>
+        <title>Trading Simulator V9.848</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5921,7 +5921,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.847
+            <span className="dot"/>Trading Simulator V9.848
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -8246,12 +8246,18 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                             flexShrink:0,pointerEvents:'all',userSelect:'none'}}>
                           {displayedSimbolo||simbolo}
                         </span>
-                        {/* + añadir a watchlist */}
-                        <button onClick={newItem} title="Añadir a watchlist"
-                          style={{pointerEvents:'all',background:'rgba(0,212,255,0.06)',
-                            border:'1px solid rgba(0,212,255,0.28)',color:'#00d4ff',
-                            fontFamily:MONO,fontSize:11,padding:'0 5px',borderRadius:3,
-                            cursor:'pointer',lineHeight:'18px',flexShrink:0,height:18}}>+</button>
+                        {/* + añadir a watchlist — SOLO si no está ya.
+                            Con el activo ya en la lista no se enseña nada en su lugar: la estrella de
+                            favorito de la izquierda solo aparece cuando el activo pertenece a la
+                            watchlist, así que su presencia ya dice que está, y un segundo distintivo
+                            sin acción sería ruido en una barra que va justa de sitio. */}
+                        {!watchlist.some(w=>w.symbol===simbolo)&&(
+                          <button onClick={newItem} title="Añadir a watchlist"
+                            style={{pointerEvents:'all',background:'rgba(0,212,255,0.06)',
+                              border:'1px solid rgba(0,212,255,0.28)',color:'#00d4ff',
+                              fontFamily:MONO,fontSize:11,padding:'0 5px',borderRadius:3,
+                              cursor:'pointer',lineHeight:'18px',flexShrink:0,height:18}}>+</button>
+                        )}
                         {/* OHLC dinámico — CandleChart escribe aquí via externalLegendRef */}
                         <span ref={chartLegendRef} style={{flex:1,minWidth:0,overflow:'hidden',
                           whiteSpace:'nowrap',textOverflow:'ellipsis'}}/>
