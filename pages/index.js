@@ -5843,7 +5843,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.852</title>
+        <title>Trading Simulator V9.853</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5921,7 +5921,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
           <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.852
+            <span className="dot"/>Trading Simulator V9.853
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -8384,6 +8384,16 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                           )
                         })()}
                       </div>
+                      {/* fillHeight: el gráfico llena el hueco en vez de quedarse en los 480 px fijos de
+                          candleH, cuyo setState no llama nadie. El contenedor de arriba ya es una columna
+                          flex acotada —chart-wrap a calc(100vh - 64px) y un div interior con flex:1—, así
+                          que basta con que el componente pida flex:1 y se mida contra su contenedor.
+                          Por qué esta vía y no medir con getBoundingClientRect como en multicartera: el
+                          alto sale del PADRE por CSS, así que es invariante al desplazamiento por
+                          construcción y no puede realimentarse — el alto del gráfico no participa en su
+                          propia medida. Y al encender o apagar un panel de RSI o MACD, que son hermanos
+                          suyos con alto propio, el reparto flex lo recalcula solo.
+                          En modo bare no se toca: ahí manda bareChartHeight, como hasta ahora. */}
                       <CandleChart
                         data={result.chartData} emaRPeriod={emaR} emaLPeriod={emaL} definition={null}
                         indicadoresUsuario={indicadores} onIndicadores={ponIndicadores} onConfigurarIndicador={abrirIndicador}
@@ -8396,6 +8406,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         trades={result.isBareChart?[]:result.trades||[]} maxDD={result.isBareChart?0:metrics?.ddSimple||0}
                         isBareChart={result.isBareChart??false}
                         chartHeight={result.isBareChart?bareChartHeight:candleH}
+                        fillHeight={!result.isBareChart}
                         labelMode={labelMode} rulerActive={rulerOn}
                         onChartReady={api=>{chartApiRef.current=api}}
                         onPriceAlarm={sidePanel!=='watchlist'&&sidePanel!=='risk'?price=>setPriceAlarmDlg({price,symbol:simbolo}):null}
