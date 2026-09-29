@@ -633,6 +633,12 @@ const MC_TODAS='__todas__'
 // operaciones no se lee, y es preferible desplazarse a mirar una franja aplastada.
 // Activo al que vuelve el título cuando ya se está en el Dashboard.
 const SIMBOLO_INICIO='^GSPC'
+// Mismo tope que impone /api/precios (TOPE_SIMBOLOS). Se repite aquí en vez de importarlo para no
+// arrastrar una ruta de API al bundle del cliente; si allí cambia, aquí también.
+const TOPE_PRECIOS=40
+// Hueco reservado para el precio en la fila de la watchlist. Fijo desde el primer render para que la
+// fila no salte cuando llegue el dato.
+const ANCHO_PRECIO=96
 
 const SUELO_EQUITY=420
 // Alto de la franja de rendimiento del activo cuando va DEBAJO del hueco visible, con alto propio en vez
@@ -2239,6 +2245,11 @@ export default function Home() {
   }
 
   // ── tlFifo: FIFO grouping sobre todos los fills (sin filtros) ──
+  // ── Precios de la watchlist ──
+  // {SYM: {precio, anterior, fecha, origen}} o {SYM: {sinDato:true}}. Los pide /api/precios por lotes:
+  // 163 activos en cinco llamadas en vez de 163.
+  const [preciosWl,setPreciosWl]=useState({})
+  const preciosPedidosRef=useRef(0)   // cuándo se pidieron por última vez, para no repetir dentro de la caché
   const [tlLivePrices,setTlLivePrices]=useState({})
   const [tlLiveFx,setTlLiveFx]=useState({})
   const tlFifo = useMemo(()=>computeFifo(tlTrades, tlLivePrices), [tlTrades, tlLivePrices])
@@ -2386,27 +2397,50 @@ export default function Home() {
     return pendingOrders.filter(o=>(o.symbol||'').toUpperCase()===symUp)
   },[pendingOrders, simbolo])
 
-  // ── Background cache warm: fire priceOnly requests in parallel batches when Dashboard opens ──
-  // Warms the server-side 60s cache so the subsequent sequential fetch hits cache (near-instant).
+  // ── Precios por lotes ──
+  // Trocea por el tope del endpoint y lanza las llamadas EN SERIE: cinco peticiones a la vez contra el
+  // mismo proveedor es justo el cuidado que el proyecto lleva teniendo desde el principio. Cada trozo que
+  // llega se vuelca al estado, así que las filas se van rellenando en vez de esperar a la última.
+  const cargarPrecios=useCallback(async(simbolos)=>{
+    const lista=[...new Set((simbolos||[]).filter(Boolean))]
+    if(!lista.length) return
+    for(let i=0;i<lista.length;i+=TOPE_PRECIOS){
+      const trozo=lista.slice(i,i+TOPE_PRECIOS)
+      try{
+        const r=await apiFetch('/api/precios',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({simbolos:trozo})})
+        const j=await r.json()
+        if(j?.precios) setPreciosWl(prev=>({...prev,...j.precios}))
+      }catch(_){ /* un trozo que falla no impide los siguientes */ }
+    }
+  },[])
+
+  // ── Precios de la watchlist, y de paso el precalentamiento de la caché ──
+  // ESTE EFECTO ERA UN PRECALENTAMIENTO QUE TIRABA LO QUE PEDÍA: disparaba priceOnly para 50 símbolos y
+  // descartaba las respuestas, solo para que la caché de 60 s del servidor estuviera caliente cuando el
+  // Dashboard pidiera luego los precios de las posiciones abiertas, uno a uno. Pagaba el coste sin
+  // quedarse el dato.
+  // Ahora pide lo mismo por /api/precios y SE LO QUEDA. Sigue sirviendo de precalentamiento —la caché es
+  // la misma, así que la carga secuencial de las abiertas la encuentra caliente igual— y además deja los
+  // precios listos para la watchlist.
+  // Y deja de estar limitado a 50: se piden TODOS los de la watchlist, que es lo que hace falta para
+  // ponerle precio a cada fila.
   useEffect(()=>{
-    if(tlTab!=='dashboard') return
-    const {openPositions} = computeFifo(tlTrades, {})
-    const openSymbols = [...new Set(openPositions.map(p=>p.symbol).filter(Boolean))]
-    // Fill remaining slots (up to 50) with watchlist symbols not already in open positions
-    const otherSymbols = watchlist.map(w=>w.symbol).filter(s=>s&&!openSymbols.includes(s))
-    // MAX 50 symbols preloaded — increase limit cautiously (Yahoo Finance rate limiting)
-    const syms = [...openSymbols, ...otherSymbols].slice(0, 50)
+    const enWatchlist=sidePanel==='watchlist'
+    const enDashboard=sidePanel==='tradelog'&&tlTab==='dashboard'
+    if(!enWatchlist&&!enDashboard) return
+    const {openPositions}=computeFifo(tlTrades,{})
+    const abiertos=[...new Set(openPositions.map(p=>p.symbol).filter(Boolean))]
+    const syms=[...abiertos,...watchlist.map(w=>w.symbol).filter(s=>s&&!abiertos.includes(s))]
     if(!syms.length) return
-    ;(async()=>{
-      for(let i=0;i<syms.length;i+=3){
-        const batch=syms.slice(i,i+3)
-        await Promise.all(batch.map(sym=>
-          apiFetch('/api/datos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({simbolo:sym,priceOnly:true})}).catch(()=>{})
-        ))
-        if(i+3<syms.length) await new Promise(r=>setTimeout(r,200))
-      }
-    })()
-  },[tlTab,tlTrades]) // eslint-disable-line
+    // SIN TEMPORIZADOR, a propósito: refrescar 163 símbolos cada minuto serían 163 descargas por minuto
+    // contra el proveedor, para siempre. Se piden al entrar en la watchlist o en el Dashboard, y no se
+    // repiten si hace menos de 60 s —que es justo lo que dura la caché del servidor, así que repetir
+    // antes no traería nada nuevo—. Cambiar de sección y volver refresca.
+    if(Date.now()-preciosPedidosRef.current<60000) return
+    preciosPedidosRef.current=Date.now()
+    cargarPrecios(syms)
+  },[sidePanel,tlTab,tlTrades,watchlist,cargarPrecios]) // eslint-disable-line
 
   // ── Carga ligera de históricos SOLO de las posiciones abiertas (Nivel 1 del gráfico P&L) ──
   // Permite distribuir el flotante de las ~9 abiertas día a día sin cargar los símbolos de las cerradas.
@@ -5846,7 +5880,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.857</title>
+        <title>Trading Simulator V9.858</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5935,7 +5969,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             }} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.857
+            <span className="dot"/>Trading Simulator V9.858
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6588,7 +6622,32 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                           const pctStr=`${Math.round(pnlPct)}%`
                           return(
                             <div onClick={()=>setSimbolo(w.symbol)} style={{flex:1,cursor:'pointer',minWidth:0}}>
-                              <div style={{fontFamily:MONO,fontSize:11,color:simbolo===w.symbol?'var(--accent)':'#d0e8fa',fontWeight:600}}>{w.symbol}</div>
+                              {/* Ticker y precio en la MISMA línea. El precio va a la derecha con
+                                  marginLeft auto y flexShrink 0, y el ticker se recorta con puntos
+                                  suspensivos si hiciera falta, así que nada de lo que ya había se
+                                  desplaza. El hueco del precio está reservado con minWidth desde el
+                                  primer render: mientras carga se pinta un punto tenue y la fila NO
+                                  salta cuando llega el dato. */}
+                              <div style={{display:'flex',alignItems:'baseline',gap:6,fontFamily:MONO,fontSize:11}}>
+                                <span style={{color:simbolo===w.symbol?'var(--accent)':'#d0e8fa',fontWeight:600,
+                                  overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{w.symbol}</span>
+                                {(()=>{
+                                  const pr=preciosWl[w.symbol]
+                                  const caja={marginLeft:'auto',flexShrink:0,minWidth:ANCHO_PRECIO,textAlign:'right',
+                                    fontSize:10,whiteSpace:'nowrap'}
+                                  if(!pr||pr.sinDato||pr.precio==null) return (
+                                    <span style={{...caja,color:'#2a4055'}} title={pr?.sinDato?'Sin precio disponible':'Cargando precio…'}>·</span>
+                                  )
+                                  const varPct=(pr.anterior!=null&&pr.anterior!==0)?((pr.precio-pr.anterior)/pr.anterior)*100:null
+                                  const col=varPct==null?'#7a9bc0':varPct>=0?'#00e5a0':'#ff4d6d'
+                                  return (
+                                    <span style={caja} title={`${pr.precio} · ${pr.fecha||''}${pr.origen?' · '+pr.origen:''}`}>
+                                      <span style={{color:'#9fc3dc'}}>{f2(pr.precio)}</span>
+                                      {varPct!=null&&<span style={{color:col,marginLeft:4}}>{varPct>=0?'+':''}{varPct.toFixed(2)}%</span>}
+                                    </span>
+                                  )
+                                })()}
+                              </div>
                               {(()=>{
                                 const rdSym=rankingData[(w.symbol||'').toUpperCase()]
                                 if(openPos&&hasLive) return(
