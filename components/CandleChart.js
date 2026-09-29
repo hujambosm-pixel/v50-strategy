@@ -749,7 +749,17 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
       // YA NO HAY PANEL DE VOLUMEN. Antes se encendía solo con que las barras trajeran volumen; ahora
       // solo aparece si el usuario añade el indicador.
       if(indicadoresCalculados.volumen.length){
-        chart.priceScale('right').applyOptions({scaleMargins:{top:0.02,bottom:0.22}})
+        // MÁRGENES.
+        // `bottom: 0.12` en vez de 0.22: el volumen se aplana al pie y las velas pierden la mitad de
+        // sitio que antes, que es como se ve en TradingView.
+        // `top: 0.2` y NO 0.02, que es lo que había: 0.02 lo copié del RSI overlay sin caer en que el
+        // margen superior POR DEFECTO de lightweight-charts es 0.2. Subirlo a 0.02 pegaba las velas al
+        // borde de arriba y las mechas más altas salían cortadas — el fallo de las velas cortadas. Al
+        // dejarlo en el valor por defecto, encender el volumen ya no mueve nada por arriba.
+        // Cuando el volumen NO está activo no se toca la escala en absoluto, así que se queda con los
+        // márgenes de fábrica: el chart se recrea entero en cada pasada del efecto, de modo que no hay
+        // nada que restaurar a mano.
+        chart.priceScale('right').applyOptions({scaleMargins:{top:0.2,bottom:0.12}})
         for(const spec of indicadoresCalculados.volumen){
           try{
             const op={...spec.opciones,priceScaleId:'volumen'}
@@ -758,7 +768,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
             overlaySeriesRef.current.push(s)
           }catch(e){ console.warn('[CandleChart] no se pudo dibujar el volumen:',e?.message) }
         }
-        chart.priceScale('volumen').applyOptions({scaleMargins:{top:0.82,bottom:0},visible:false})
+        chart.priceScale('volumen').applyOptions({scaleMargins:{top:0.88,bottom:0},visible:false})
       }
 
       // ── Indicadores del usuario de escala de PRECIO (ema, sma, bollinger) ──
