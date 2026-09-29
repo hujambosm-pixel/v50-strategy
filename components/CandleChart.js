@@ -208,10 +208,15 @@ const TIPOS_INDICADOR = {
     // Niveles de referencia, como los de la estrategia. 70/30 son la convención del RSI; la estrategia
     // usa los que traigan sus barras, con 75/25 por defecto, que es SU criterio y no tiene por qué ser
     // el de un RSI suelto. Se pueden fijar con sobrecompra/sobreventa.
+    // Las tres comparten grosor y estilo, configurables. `punteado` por defecto en las de sobrecompra y
+    // sobreventa y no en la del 50, que es el mismo criterio del RSI de la estrategia.
     niveles: [
-      { price: ind.sobrecompra ?? 70, color: 'rgba(255,80,80,0.55)', punteado: true },
-      { price: ind.sobreventa  ?? 30, color: 'rgba(80,200,80,0.55)', punteado: true },
-      { price: 50,                    color: 'rgba(120,140,160,0.3)', punteado: false },
+      { price: ind.sobrecompra ?? 70, color: 'rgba(255,80,80,0.55)',
+        grosor: ind.grosorNiveles ?? 1, punteado: ind.nivelesPunteados !== false },
+      { price: ind.sobreventa  ?? 30, color: 'rgba(80,200,80,0.55)',
+        grosor: ind.grosorNiveles ?? 1, punteado: ind.nivelesPunteados !== false },
+      { price: 50,                    color: 'rgba(120,140,160,0.3)',
+        grosor: ind.grosorNiveles ?? 1, punteado: ind.nivelesPunteados !== false },
     ],
   }] },
   macd: { destino: 'macd', calcula: (data, ind, cierres) => {
@@ -1080,7 +1085,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
             // ya lo ocupa, los suyos están dibujados y repetirlos sería pintar dos rayas casi encima.
             if(!propias&&spec.niveles){
               for(const n of spec.niveles){
-                s.createPriceLine({price:n.price,color:n.color,lineWidth:1,
+                s.createPriceLine({price:n.price,color:n.color,lineWidth:n.grosor??1,
                   lineStyle:n.punteado?LineStyle.Dashed:LineStyle.Solid,axisLabelVisible:false})
               }
             }
