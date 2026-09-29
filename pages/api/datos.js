@@ -21,15 +21,19 @@ const priceCache = new Map() // key: `símbolo|intervalo` → { price, date, ori
 const CACHE_TTL  = 60 * 1000 // 60 seconds
 
 const clavePrecio = (symbol, interval='d') => `${symbol}|${interval}`
-function getCachedPrice(symbol, interval='d') {
+// Exportadas para que /api/precios use ESTA caché y no una paralela: un símbolo que acabe de pedir el
+// Dashboard llega allí ya resuelto. El valor guarda además el cierre ANTERIOR (`prev`), que es lo que
+// permite calcular la variación diaria sin una segunda ronda de descargas. Es un campo más en un valor
+// interno: la respuesta de esta ruta no cambia.
+export function getCachedPrice(symbol, interval='d') {
   const k = clavePrecio(symbol, interval)
   const entry = priceCache.get(k)
   if (!entry) return null
   if (Date.now() - entry.timestamp > CACHE_TTL) { priceCache.delete(k); return null }
   return entry
 }
-function setCachedPrice(symbol, price, date, origen, interval='d') {
-  priceCache.set(clavePrecio(symbol, interval), { price, date, origen, timestamp: Date.now() })
+export function setCachedPrice(symbol, price, date, origen, interval='d', prev=null) {
+  priceCache.set(clavePrecio(symbol, interval), { price, date, origen, prev, timestamp: Date.now() })
 }
 
 // Devuelve las barras Y su procedencia. `fetchAV` sigue existiendo con su firma y su valor de siempre
@@ -283,7 +287,10 @@ export default async function handler(req, res) {
     try {
       const { data, origen } = await fetchAVDetalle(simbolo, 1)
       const last = data[data.length - 1]
-      setCachedPrice(simbolo, last.close, last.date, origen)
+      // Se guarda también el cierre anterior, que ya está aquí a mano: así una llamada de priceOnly deja
+      // la caché completa para /api/precios y no hace falta volver a descargar para la variación diaria.
+      const prev = data.length > 1 ? data[data.length - 2]?.close ?? null : null
+      setCachedPrice(simbolo, last.close, last.date, origen, 'd', prev)
       return res.status(200).json({ meta: { ultimaFecha: last.date, ultimoPrecio: last.close, simbolo, origen } })
     } catch(e) {
       console.error(`[datos] priceOnly fetch failed for ${simbolo}:`, e.message)
