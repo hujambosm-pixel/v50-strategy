@@ -137,6 +137,18 @@ const estiloDeTrazo = (destino, ind) =>
 // escala con el resto del chart. En un panel propio sobran.
 const ESCALA_0_100 = () => ({ priceRange: { minValue: 0, maxValue: 100 }, margins: { above: 0.05, below: 0.05 } })
 
+// Color de cada barra del histograma del MACD, en cuatro tonos al estilo de TradingView: fuerte cuando
+// la barra crece en su signo, apagado cuando decrece. Vivía dentro del efecto, usada solo por el MACD de
+// la ESTRATEGIA; sube aquí para que el del usuario pinte igual en vez de inventarse una paleta.
+// `sube` y `baja` son opcionales: sin ellos devuelve EXACTAMENTE los cuatro colores de siempre, así que
+// el MACD de la estrategia no cambia ni un tono. Con ellos, el apagado se deriva por transparencia.
+const colorHistograma = (val, prev, sube, baja) => {
+  if (val == null) return sube || '#26a69a'
+  const crece = (prev == null) || (val >= 0 ? val > prev : val < prev)
+  if (val >= 0) return sube ? (crece ? sube : sube + '66') : (crece ? '#26a69a' : '#b2dfdb')
+  return baja ? (crece ? baja : baja + '66') : (crece ? '#ef5350' : '#ffcdd2')
+}
+
 // Valores de un array a puntos {time,value}, tirando los nulos y los no finitos. Es lo que separa "el
 // indicador no se pudo calcular" de "el indicador vale 0".
 const aPuntos = (valores, data) => {
@@ -206,10 +218,22 @@ const TIPOS_INDICADOR = {
     const m = calcMACD(cierres, ind.rapido ?? 12, ind.lento ?? 26, ind.senal ?? 9)
     // El histograma se deriva aquí: calcMACD entrega línea y señal, que es lo que mira el motor.
     const hist = m.line.map((v, i) => (v != null && m.signal[i] != null) ? v - m.signal[i] : null)
+    // El histograma va PRIMERO para que las dos líneas queden por encima, igual que en el MACD de la
+    // estrategia. Y con color POR BARRA, no uno plano: es lo que distingue un impulso que crece de uno
+    // que se está agotando.
+    const puntosHist = []
+    const validos = hist.filter(v => v != null)
+    let anterior = null
+    for (let i = 0; i < data.length; i++) {
+      const v = hist[i]
+      if (v == null || !Number.isFinite(v)) continue
+      puntosHist.push({ time: data[i].date, value: v, color: colorHistograma(v, anterior, ind.colorSube, ind.colorBaja) })
+      anterior = v
+    }
     return [
-      { tipo: 'linea', color: ind.color, puntos: aPuntos(m.line, data) },
-      { tipo: 'linea', color: ind.colorSenal || '#ff8c00', puntos: aPuntos(m.signal, data) },
-      { tipo: 'histograma', color: ind.color, puntos: aPuntos(hist, data) },
+      { tipo: 'histograma', puntos: puntosHist, sinTrazo: true },
+      { tipo: 'linea', color: ind.color, principal: true, puntos: aPuntos(m.line, data) },
+      { tipo: 'linea', color: ind.colorSenal, puntos: aPuntos(m.signal, data) },
     ]
   } },
   // El tipo 'volumen' dibuja las BARRAS, y la media solo si se pide. Las barras van primero para que la
@@ -865,12 +889,9 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
         crosshair:{mode:CrosshairMode.Normal},
         handleScroll:false,handleScale:false,
       })
-      // 4-color TradingView-style histogram coloring
-      const _histColor=(val,prev)=>{
-        if(val==null) return '#26a69a'
-        if(val>=0) return (prev==null||val>prev)?'#26a69a':'#b2dfdb'
-        return (prev==null||val<prev)?'#ef5350':'#ffcdd2'
-      }
+      // Alias de la de módulo: la usan las ramas de MACD de la estrategia, y ahora también el MACD del
+      // usuario a través del catálogo. Una sola definición, un solo criterio de color.
+      const _histColor=colorHistograma
       const _syncPanels=(panelChart,panelSeries)=>{
         // Sync visible range (zoom / scroll)
         chart.timeScale().subscribeVisibleTimeRangeChange(range=>{
