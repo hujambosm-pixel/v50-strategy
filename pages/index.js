@@ -631,6 +631,9 @@ const MC_ID_CAJA='__caja__', MC_ID_TOTAL='__totalEstrategia__'
 const MC_TODAS='__todas__'
 // Alto mínimo del gráfico grande del multibacktest. Por debajo de esto un gráfico de velas con sus
 // operaciones no se lee, y es preferible desplazarse a mirar una franja aplastada.
+// Activo al que vuelve el título cuando ya se está en el Dashboard.
+const SIMBOLO_INICIO='^GSPC'
+
 const SUELO_EQUITY=420
 // Alto de la franja de rendimiento del activo cuando va DEBAJO del hueco visible, con alto propio en vez
 // de repartirse mcEquityH con las velas. Suficiente para leer la curva y su eje sin comerse pantalla.
@@ -5843,7 +5846,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.854</title>
+        <title>Trading Simulator V9.855</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5920,8 +5923,19 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         {/* ── HEADER ── */}
         <header className="header" style={{display:'flex',alignItems:'stretch',padding:0,height:TAB_H}} onContextMenu={e=>openCtx(e,'header')}>
           {/* Logo */}
-          <div className="header-logo" onClick={()=>{setSidePanel('tradelog');setTlTab('dashboard')}} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.854
+          {/* El título alterna. Desde cualquier sección lleva al Dashboard, como siempre; estando YA en el
+              Dashboard lleva a la Watchlist con ^GSPC seleccionado, que es el gráfico al que se vuelve
+              más a menudo. Así el mismo botón sirve de ida y de vuelta.
+              Si ^GSPC no estuviera en la watchlist se va a la Watchlist SIN tocar el símbolo, que deja lo
+              último que se estuviera mirando: seleccionar un activo que no está en la lista dejaría el
+              gráfico cargado y ninguna fila resaltada, y eso se lee como un fallo. */}
+          <div className="header-logo" onClick={()=>{
+              const enDashboard=sidePanel==='tradelog'&&tlTab==='dashboard'
+              if(!enDashboard){ setSidePanel('tradelog'); setTlTab('dashboard'); return }
+              setSidePanel('watchlist')
+              if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
+            }} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
+            <span className="dot"/>Trading Simulator V9.855
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
