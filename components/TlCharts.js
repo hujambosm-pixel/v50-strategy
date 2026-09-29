@@ -352,7 +352,11 @@ export function TlInvestChart({ investData, syncRef, patrimonyCurve, compact, he
   // compact=true: no header/legend, chart fills container height (used in Dashboard mini view)
   const ref = useRef(null), chartRef = useRef(null), investTooltipRef = useRef(null)
   const roRef = useRef(null)
-  const [showPatrimony, setShowPatrimony] = useState(false)
+  // Encendido por defecto: el patrimonio es la cifra que se mira primero al abrir el Dashboard, y tenerlo
+  // apagado obligaba a pulsar cada vez. NO se persiste en ningún sitio —es estado local de este
+  // componente, no está en v50_settings ni en localStorage—, así que esto es puramente el valor inicial:
+  // lo que el usuario apague dentro de la sesión sigue apagado hasta que recargue.
+  const [showPatrimony, setShowPatrimony] = useState(true)
 
   useEffect(()=>{
     if(!ref.current||!investData?.length||ref.current.clientWidth<=0) return
