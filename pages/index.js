@@ -635,7 +635,9 @@ const MC_TODAS='__todas__'
 const SIMBOLO_INICIO='^GSPC'
 // Mismo tope que impone /api/precios (TOPE_SIMBOLOS). Se repite aquí en vez de importarlo para no
 // arrastrar una ruta de API al bundle del cliente; si allí cambia, aquí también.
-const TOPE_PRECIOS=40
+// Bajó de 40 a 20: no por tiempo —los plazos del servidor corren en paralelo— sino por no lanzar 40
+// peticiones simultáneas al mismo proveedor.
+const TOPE_PRECIOS=20
 // Hueco reservado para el precio en la fila de la watchlist. Fijo desde el primer render para que la
 // fila no salte cuando llegue el dato.
 const ANCHO_PRECIO=96
@@ -2404,15 +2406,35 @@ export default function Home() {
   const cargarPrecios=useCallback(async(simbolos)=>{
     const lista=[...new Set((simbolos||[]).filter(Boolean))]
     if(!lista.length) return
-    for(let i=0;i<lista.length;i+=TOPE_PRECIOS){
-      const trozo=lista.slice(i,i+TOPE_PRECIOS)
-      try{
-        const r=await apiFetch('/api/precios',{method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({simbolos:trozo})})
-        const j=await r.json()
-        if(j?.precios) setPreciosWl(prev=>({...prev,...j.precios}))
-      }catch(_){ /* un trozo que falla no impide los siguientes */ }
+    // Una pasada: trocea por el tope y lanza las llamadas EN SERIE. Devuelve los que se han quedado sin
+    // precio, para poder reintentarlos.
+    const pasada=async(syms)=>{
+      const faltan=[]
+      for(let i=0;i<syms.length;i+=TOPE_PRECIOS){
+        const trozo=syms.slice(i,i+TOPE_PRECIOS)
+        try{
+          const r=await apiFetch('/api/precios',{method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({simbolos:trozo})})
+          const j=await r.json()
+          if(j?.precios){
+            setPreciosWl(prev=>({...prev,...j.precios}))
+            for(const s of trozo) if(j.precios[s]?.precio==null) faltan.push(s)
+          } else faltan.push(...trozo)
+        }catch(_){ faltan.push(...trozo) }   // un trozo que falla no impide los siguientes
+      }
+      return faltan
     }
+    // REINTENTO: UNO, y solo de los que faltan.
+    // Antes había que salir de la sección y volver pasados 60 s para recuperar un símbolo que se quedó
+    // sin precio, así que la lista se llenaba a trozos y por accidente. Ahora se reintenta solo.
+    // Cinco segundos de espera, no cero: lo que suele faltar son símbolos que agotaron el plazo del
+    // proveedor, y volver a preguntar en el mismo instante es pedirle lo mismo al mismo sitio ocupado.
+    // Y UNA sola vez: si a la segunda tampoco está, es que ese símbolo no se resuelve hoy, e insistir en
+    // bucle contra el proveedor es justo lo que este proyecto lleva evitando desde el principio.
+    const faltan=await pasada(lista)
+    if(!faltan.length) return
+    await new Promise(r=>setTimeout(r,5000))
+    await pasada(faltan)
   },[])
 
   // ── Precios de la watchlist, y de paso el precalentamiento de la caché ──
@@ -5880,7 +5902,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.858</title>
+        <title>Trading Simulator V9.859</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5969,7 +5991,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             }} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.858
+            <span className="dot"/>Trading Simulator V9.859
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}

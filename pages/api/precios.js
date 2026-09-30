@@ -17,27 +17,29 @@
 
 import { fetchAVDetalle, getCachedPrice, setCachedPrice } from './datos'
 
-// ── Tope de símbolos por llamada ────────────────────────────────────────────
-// 40. El precalentamiento que ya existía en el cliente se puso un tope de 50 "cautiously (Yahoo Finance
-// rate limiting)", así que 40 se queda por debajo de lo que el proyecto ya consideraba prudente, y deja
-// los 163 de la watchlist en cinco llamadas. Más alto no ahorraría gran cosa —el trabajo de red es el
-// mismo— y alargaría cada respuesta.
-export const TOPE_SIMBOLOS = 40
+// ── Tope de símbolos por llamada, y por qué 20 ──────────────────────────────
+// EL COSTE DE UN SÍMBOLO NO CACHEADO NO ES "LO QUE TARDE LA RED": está fijado por los dos plazos de
+// fetchAVDetalle. Desde Vercel, Stooq cuelga 10-12 s y se aborta a los 3 (ver datos.js, "Stooq hangs
+// 10-12s from Vercel IPs"), y después Yahoo tiene otros 4. Peor caso por símbolo: 3 + 4 = 7 segundos.
+//
+// De ahí sale todo lo demás:
+//   · Una función de Vercel en plan Hobby se corta a los 10 s. Ese es el techo que no se puede rozar.
+//   · Si los símbolos se resuelven en RONDAS sucesivas, cada ronda suma 7 s y a la segunda se pasa del
+//     límite. Por eso ya no hay rondas: los pendientes de una llamada se lanzan TODOS A LA VEZ.
+//   · Con una sola ronda, el peor caso de la llamada entera es 7 s, y NO depende de cuántos símbolos
+//     lleve: los plazos corren en paralelo. Quedan ~3 s de margen sobre los 10.
+//
+// El tope baja de 40 a 20 y el reparto pasa de 5 llamadas a 9 para los 163 de la watchlist. No es por
+// tiempo —20 o 40 tardarían lo mismo— sino por no lanzar 40 peticiones simultáneas al mismo proveedor:
+// 20 a la vez, y el cliente espera la respuesta antes del siguiente trozo, deja el ritmo en unas 3
+// peticiones por segundo sostenidas.
+export const TOPE_SIMBOLOS = 20
 
-// ── Ritmo ───────────────────────────────────────────────────────────────────
-// Lotes de 4 en paralelo con 200 ms de pausa entre lotes, que es el mismo cuidado que ya se tenía en el
-// cliente (lotes de 3 con 200 ms). Con la caché caliente no se descarga nada y el ritmo no se nota.
-const POR_LOTE = 4
-const PAUSA_MS = 200
-
-// ── Presupuesto de tiempo ───────────────────────────────────────────────────
-// Una función de Vercel tiene un límite de ejecución, y 40 símbolos con la caché fría y un proveedor
-// lento podrían rozarlo. En vez de arriesgarse a que la respuesta entera se pierda por plazo, se trabaja
-// hasta agotar el presupuesto y lo que no dé tiempo vuelve marcado como sin dato: el cliente lo
-// reintentará en la siguiente carga, ya con la caché caliente. Media respuesta útil es mejor que ninguna.
-const PRESUPUESTO_MS = 8000
-
-const espera = (ms) => new Promise(r => setTimeout(r, ms))
+// ── Presupuesto ─────────────────────────────────────────────────────────────
+// Red de seguridad, no el mecanismo principal. Con una sola ronda el peor caso ya está acotado en 7 s;
+// esto solo cubre que el reparto de cacheados se alargue por lo que sea. Si se agota, lo que quede vuelve
+// marcado sin dato y el cliente lo reintenta, en vez de arriesgar la respuesta entera al corte de los 10.
+const PRESUPUESTO_MS = 7500
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
@@ -62,15 +64,12 @@ export default async function handler(req, res) {
     }
   }
 
-  for (let i = 0; i < pendientes.length; i += POR_LOTE) {
-    // Presupuesto agotado: el resto vuelve sin dato en vez de arriesgar la respuesta entera.
-    if (Date.now() - t0 > PRESUPUESTO_MS) {
-      for (const sim of pendientes.slice(i)) salida[sim] = { sinDato: true, motivo: 'plazo' }
-      break
-    }
-    const lote = pendientes.slice(i, i + POR_LOTE)
+  if (pendientes.length && Date.now() - t0 <= PRESUPUESTO_MS) {
+    // TODOS A LA VEZ, no por rondas. Los plazos de Stooq y Yahoo corren en paralelo, así que veinte
+    // símbolos cuestan lo mismo que uno en el peor caso: 7 s. Encadenarlos en rondas era lo que hacía que
+    // solo entraran ocho de cuarenta.
     // UN SÍMBOLO QUE FALLA NO SE LLEVA A LOS DEMÁS: cada uno va en su try y devuelve su propio motivo.
-    await Promise.all(lote.map(async (sim) => {
+    await Promise.all(pendientes.map(async (sim) => {
       try {
         const { data, origen } = await fetchAVDetalle(sim, 1)
         if (!Array.isArray(data) || !data.length) { salida[sim] = { sinDato: true, motivo: 'sin barras' }; return }
@@ -82,7 +81,8 @@ export default async function handler(req, res) {
         salida[sim] = { sinDato: true, motivo: (e?.message || 'error').slice(0, 80) }
       }
     }))
-    if (i + POR_LOTE < pendientes.length) await espera(PAUSA_MS)
+  } else if (pendientes.length) {
+    for (const sim of pendientes) salida[sim] = { sinDato: true, motivo: 'plazo' }
   }
 
   return res.status(200).json({ precios: salida, pedidos: simbolos.length, ms: Date.now() - t0 })
