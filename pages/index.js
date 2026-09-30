@@ -638,9 +638,12 @@ const SIMBOLO_INICIO='^GSPC'
 // Bajó de 40 a 20: no por tiempo —los plazos del servidor corren en paralelo— sino por no lanzar 40
 // peticiones simultáneas al mismo proveedor.
 const TOPE_PRECIOS=20
-// Hueco reservado para el precio en la fila de la watchlist. Fijo desde el primer render para que la
-// fila no salte cuando llegue el dato.
-const ANCHO_PRECIO=96
+// Hueco reservado para la variación diaria en la fila de la watchlist. Fijo desde el primer render para
+// que la fila no salte cuando llegue el dato.
+// 42 px: "-12.34%" son 7 caracteres a fontSize 10, unos 6 px cada uno. Ajustado al milímetro a propósito,
+// porque cada píxel que se reserve aquí se le quita al ticker: con las seis condiciones activas a la vez
+// —el peor caso— 46 px dejaban un ticker de 5 letras a dos píxeles de recortarse.
+const ANCHO_VARIACION=42
 
 const SUELO_EQUITY=420
 // Alto de la franja de rendimiento del activo cuando va DEBAJO del hueco visible, con alto propio en vez
@@ -5902,7 +5905,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.860</title>
+        <title>Trading Simulator V9.861</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5991,7 +5994,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             }} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.860
+            <span className="dot"/>Trading Simulator V9.861
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6654,18 +6657,23 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                 <span style={{color:simbolo===w.symbol?'var(--accent)':'#d0e8fa',fontWeight:600,
                                   overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{w.symbol}</span>
                                 {(()=>{
+                                  // SOLO LA VARIACIÓN. El precio absoluto ocupaba 96 px en una barra donde
+                                  // al bloque central le quedaban 29, y el ticker se recortaba a una o dos
+                                  // letras. En una lista de seguimiento, CUÁNTO SE MUEVE HOY es lo que se
+                                  // compara entre filas; a cuánto cotiza se mira de uno en uno, y para eso
+                                  // está el tooltip, donde ahora aparece.
                                   const pr=preciosWl[w.symbol]
-                                  const caja={marginLeft:'auto',flexShrink:0,minWidth:ANCHO_PRECIO,textAlign:'right',
+                                  const caja={marginLeft:'auto',flexShrink:0,minWidth:ANCHO_VARIACION,textAlign:'right',
                                     fontSize:10,whiteSpace:'nowrap'}
-                                  if(!pr||pr.sinDato||pr.precio==null) return (
-                                    <span style={{...caja,color:'#2a4055'}} title={pr?.sinDato?'Sin precio disponible':'Cargando precio…'}>·</span>
+                                  const varPct=(pr&&pr.precio!=null&&pr.anterior!=null&&pr.anterior!==0)
+                                    ?((pr.precio-pr.anterior)/pr.anterior)*100:null
+                                  if(varPct==null) return (
+                                    <span style={{...caja,color:'#2a4055'}}
+                                      title={pr?.sinDato?'Sin precio disponible':(pr?.precio!=null?'Sin cierre anterior':'Cargando precio…')}>·</span>
                                   )
-                                  const varPct=(pr.anterior!=null&&pr.anterior!==0)?((pr.precio-pr.anterior)/pr.anterior)*100:null
-                                  const col=varPct==null?'#7a9bc0':varPct>=0?'#00e5a0':'#ff4d6d'
                                   return (
-                                    <span style={caja} title={`${pr.precio} · ${pr.fecha||''}${pr.origen?' · '+pr.origen:''}`}>
-                                      <span style={{color:'#9fc3dc'}}>{f2(pr.precio)}</span>
-                                      {varPct!=null&&<span style={{color:col,marginLeft:4}}>{varPct>=0?'+':''}{varPct.toFixed(2)}%</span>}
+                                    <span style={{...caja,color:varPct>=0?'#00e5a0':'#ff4d6d'}}>
+                                      {varPct>=0?'+':''}{varPct.toFixed(2)}%
                                     </span>
                                   )
                                 })()}
@@ -12530,6 +12538,24 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
           {/* Encabezado */}
           <div style={{fontWeight:700,fontSize:13,color:'#e8f4ff',marginBottom:1}}>{tItem?.name||wlTooltip.symbol}</div>
           <div style={{fontSize:10,color:'#4a7a95',marginBottom:8}}>{wlTooltip.symbol}</div>
+          {/* Precio de cierre. Vive aquí desde que la fila enseña solo la variación: el importe exacto se
+              mira de uno en uno, y este es el sitio donde ya se mira de uno en uno. */}
+          {(()=>{
+            const pr=preciosWl[tItem?.symbol||wlTooltip.symbol]
+            if(!pr||pr.precio==null) return null
+            const vp=(pr.anterior!=null&&pr.anterior!==0)?((pr.precio-pr.anterior)/pr.anterior)*100:null
+            return (
+              <div style={{display:'flex',alignItems:'baseline',gap:8,marginBottom:8,paddingBottom:8,borderBottom:'1px solid #1a2d40'}}>
+                <span style={{fontSize:15,fontWeight:700,color:'#e8f4ff'}}>{f2(pr.precio)}</span>
+                {vp!=null&&<span style={{fontSize:12,fontWeight:600,color:vp>=0?'#00e5a0':'#ff4d6d'}}>
+                  {vp>=0?'+':''}{vp.toFixed(2)}%
+                </span>}
+                <span style={{marginLeft:'auto',fontSize:9,color:'#3d5a7a'}}>
+                  {pr.fecha||''}{pr.origen?' · '+pr.origen:''}
+                </span>
+              </div>
+            )
+          })()}
           {/* Tabla comparativa */}
           {(tAct||tTop)&&(
             <div style={{borderTop:'1px solid #1a2d40',paddingTop:8}}>
