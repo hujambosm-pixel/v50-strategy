@@ -5902,7 +5902,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.859</title>
+        <title>Trading Simulator V9.860</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5991,7 +5991,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             }} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.859
+            <span className="dot"/>Trading Simulator V9.860
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6590,7 +6590,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       const wListNames=(w.list_ids||[]).map(lid=>wlLists.find(l=>l.id===lid)?.name).filter(Boolean)
                       return(
                       <div key={w.id||`${w.symbol}-${wIdx}`}
-                        style={{padding:'6px 10px',display:'flex',alignItems:'center',gap:6,borderBottom:'1px solid var(--border)',
+                        style={{padding:'6px 10px',display:'flex',alignItems:'center',gap:3,borderBottom:'1px solid var(--border)',
                           background:simbolo===w.symbol?'rgba(0,212,255,0.07)':'transparent',
                           borderLeft:`3px solid ${openSymbols.has((w.symbol||'').toUpperCase())?'#ffe500':(pendingSet.has((w.symbol||'').toUpperCase())?'#8b5a2b':'transparent')}`,
                           transition:'border-color 0.2s'}}
@@ -6696,7 +6696,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         {(()=>{
                           if(!conditions.length){
                             // Sin condiciones configuradas — placeholder gris
-                            return <span title="Sin alertas de condiciones configuradas" style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:10,height:10,borderRadius:'50%',flexShrink:0,background:'rgba(42,63,85,0.35)',border:'1px solid #1e3a52',cursor:'default'}}/>
+                            return <span title="Sin alertas de condiciones configuradas" style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:6,height:6,borderRadius:'50%',flexShrink:0,background:'rgba(42,63,85,0.35)',border:'1px solid #1e3a52',cursor:'default'}}/>
                           }
                           const visibleConds = conditions.filter(c=>c.active!==false)
                           if(!visibleConds.length) return null
@@ -6718,17 +6718,27 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                               <span key={c.id} title={tooltip}
                                 onClick={e=>{e.stopPropagation();const r=e.currentTarget.getBoundingClientRect();setCondColorPicker(prev=>prev?.condId===c.id?null:{condId:c.id,x:r.left,y:r.bottom+4})}}
                                 style={{
+                                  // COMPACTOS. Eran 16 px con 6 de gap: seis condiciones se llevaban 132
+                                  // px de una barra de 240, más que el ticker y el precio juntos, y cada
+                                  // condición nueva sumaba 22. Ahora el ACTIVO mide 13 y el INACTIVO 6:
+                                  // un inactivo no lleva número, solo dice "esta condición existe y no se
+                                  // cumple", y eso cabe en un punto. Con el gap a 3, seis condiciones
+                                  // pasan de 132 px a 66 si están todas activas, y a 40 en el caso
+                                  // habitual de tenerlas casi todas apagadas.
+                                  // No se pierde nada: el color es el mismo, el tamaño distingue activo de
+                                  // inactivo mejor que antes, y el title sigue igual.
                                   display:'inline-flex',alignItems:'center',justifyContent:'center',
-                                  width:16,height:16,minWidth:16,borderRadius:'50%',flexShrink:0,
+                                  width:active?13:6,height:active?13:6,minWidth:active?13:6,
+                                  borderRadius:'50%',flexShrink:0,
                                   background:active?col:'rgba(42,63,85,0.5)',
-                                  border:`1.5px solid ${active?col:'#2a3f55'}`,
+                                  border:active?`1.5px solid ${col}`:`1px solid #2a3f55`,
                                   color:active?'#080c14':'#3d5a7a',
                                   boxShadow:active?`0 0 6px ${col}55`:undefined,
                                   cursor:'pointer',overflow:'hidden',
                                   opacity:!checked?0.4:1,
                                   animation:shouldBlink?`alarmPulse 1s ease-in-out infinite`:undefined,
                                 }}>
-                                {active&&<span style={{fontFamily:MONO,fontSize:10,fontWeight:800,lineHeight:1,
+                                {active&&<span style={{fontFamily:MONO,fontSize:9,fontWeight:800,lineHeight:1,
                                   letterSpacing:'-0.5px',display:'inline-block',
                                   whiteSpace:'nowrap'}}>
                                   {label}
