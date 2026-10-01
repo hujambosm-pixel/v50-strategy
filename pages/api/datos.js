@@ -1,7 +1,7 @@
 // pages/api/datos.js — Motor V50 v3.0 (V9.260)
 
 import { calcEMA, calcSMA, calcRSI, calcATR, calcMACD } from '../../lib/backtester'
-import { auditaAuth } from '../../lib/verificaJwt'
+import { exigeAuth } from '../../lib/verificaJwt'
 import { normalizaFiltrosEntrada, hayFiltrosActivos, clavesAuxiliares, construirFiltroActivoMap, filtrosActivos,
          requiereSemanalDelActivo, proyectarSemanal } from '../../lib/filtros'
 import { stooqSym } from '../../lib/simbolos'
@@ -268,9 +268,12 @@ function buildTrades(rawTrades, capitalIni, allocationPct = 100) {
 export default async function handler(req, res) {
   try {
   if (req.method !== 'POST') return res.status(405).end()
-  // MODO AUDITORÍA. Verifica el JWT y lo registra, pero NO decide nada: la ruta sirve igual que antes,
-  // llegue el token o no. auditaAuth nunca lanza, así que esta línea no puede tumbar la petición.
-  await auditaAuth('datos', req, req.query?.action)
+  // AUTENTICACIÓN OBLIGATORIA. Sin JWT válido no se sirve nada: 401 antes de tocar Supabase o
+  // cualquier proveedor. Incluye las acciones que no hablan con la base de datos, a propósito.
+  // La única excepción es que el verificador no haya podido comprobar el token (JWKS caído): ahí
+  // exigeAuth deja pasar con el token del cliente y lo registra. Ver lib/verificaJwt.js.
+  const auth = await exigeAuth('datos', req, req.query?.action)
+  if (!auth.ok) return res.status(401).json({ error: 'no autenticado' })
   // Igual que asset-detail: no miraba la cabecera. Local a la petición, no de módulo.
   const _jwt = req.headers['x-supa-jwt'] || null
 
@@ -304,7 +307,7 @@ export default async function handler(req, res) {
     try {
       const r = await fetch(
         `${SUPA_URL}/rest/v1/strategies?id=eq.${strategyId}&select=code_js,params,visuals`,
-        { headers: { apikey: SUPA_KEY, Authorization: `Bearer ${_jwt || SUPA_KEY}` } }
+        { headers: { apikey: SUPA_KEY, Authorization: `Bearer ${_jwt}` } }
       )
       if (r.ok) {
         const row = (await r.json())?.[0] || {}

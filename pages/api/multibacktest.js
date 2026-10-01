@@ -5,7 +5,7 @@ import { calcEMA as _libEMA, calcSMA, calcRSI, calcATR as _libATR, calcMACD } fr
 import { normalizaFiltrosEntrada, hayFiltrosActivos, clavesAuxiliares, construirFiltroActivoMap, filtrosActivos,
          requiereSemanalDelActivo, proyectarSemanal } from '../../lib/filtros'
 import { fetchAV, fetchAVDetalle } from './datos'
-import { auditaAuth } from '../../lib/verificaJwt'
+import { exigeAuth } from '../../lib/verificaJwt'
 
 const SUPA_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPA_KEY = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -1838,7 +1838,7 @@ async function handlePortfolioMode(req, res) {
       try {
         const sr = await fetch(
           `${SUPA_URL}/rest/v1/strategies?id=eq.${s.id}&select=code_js,params,name`,
-          { headers: { apikey: SUPA_KEY, Authorization: `Bearer ${req.headers['x-supa-jwt'] || SUPA_KEY}` } }
+          { headers: { apikey: SUPA_KEY, Authorization: `Bearer ${req.headers['x-supa-jwt']}` } }
         )
         if (!sr.ok) return base
         const row = (await sr.json())?.[0] || {}
@@ -2131,9 +2131,12 @@ async function handlePortfolioMode(req, res) {
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
-  // MODO AUDITORÍA. Verifica el JWT y lo registra, pero NO decide nada: la ruta sirve igual que antes,
-  // llegue el token o no. auditaAuth nunca lanza, así que esta línea no puede tumbar la petición.
-  await auditaAuth('multibacktest', req, req.query?.action)
+  // AUTENTICACIÓN OBLIGATORIA. Sin JWT válido no se sirve nada: 401 antes de tocar Supabase o
+  // cualquier proveedor. Incluye las acciones que no hablan con la base de datos, a propósito.
+  // La única excepción es que el verificador no haya podido comprobar el token (JWKS caído): ahí
+  // exigeAuth deja pasar con el token del cliente y lo registra. Ver lib/verificaJwt.js.
+  const auth = await exigeAuth('multibacktest', req, req.query?.action)
+  if (!auth.ok) return res.status(401).json({ error: 'no autenticado' })
   // ── NUEVA RAMA: portfolioMode ─────────────────────────────────────────────
   if (req.body?.portfolioMode) return handlePortfolioMode(req, res)
   // ── PATH EXISTENTE: estrategia única — sin cambio ninguno desde aquí ──────
@@ -2171,7 +2174,7 @@ export default async function handler(req, res) {
     try {
       const sr = await fetch(
         `${SUPA_URL}/rest/v1/strategies?id=eq.${strategyId}&select=code_js,params`,
-        { headers: { apikey: SUPA_KEY, Authorization: `Bearer ${req.headers['x-supa-jwt'] || SUPA_KEY}` } }
+        { headers: { apikey: SUPA_KEY, Authorization: `Bearer ${req.headers['x-supa-jwt']}` } }
       )
       if (sr.ok) {
         const row = (await sr.json())?.[0] || {}

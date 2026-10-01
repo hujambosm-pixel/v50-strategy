@@ -1,5 +1,5 @@
 // pages/api/risk.js — CRUD risk_profiles
-import { auditaAuth } from '../../lib/verificaJwt'
+import { exigeAuth } from '../../lib/verificaJwt'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://uqjngxxbdlquiuhywiuc.supabase.co'
 const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY || 'sb_publishable_st9QJ3zcQbY5ec-JhxwqXQ_joy3udz3'
@@ -17,7 +17,7 @@ async function sbCon(jwt, path, opts = {}) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1${path}`, {
     headers: {
       apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${jwt || SUPABASE_KEY}`,
+      Authorization: `Bearer ${jwt}`,
       'Content-Type': 'application/json',
       Prefer: opts.prefer || 'return=representation',
     },
@@ -34,9 +34,12 @@ async function sbCon(jwt, path, opts = {}) {
 export default async function handler(req, res) {
   const jwt = req.headers['x-supa-jwt'] || null
   const sb = (path, opts) => sbCon(jwt, path, opts)
-  // MODO AUDITORÍA. Verifica el JWT y lo registra, pero NO decide nada: la ruta sirve igual que antes,
-  // llegue el token o no. auditaAuth nunca lanza, así que esta línea no puede tumbar la petición.
-  await auditaAuth('risk', req, req.query?.action)
+  // AUTENTICACIÓN OBLIGATORIA. Sin JWT válido no se sirve nada: 401 antes de tocar Supabase o
+  // cualquier proveedor. Incluye las acciones que no hablan con la base de datos, a propósito.
+  // La única excepción es que el verificador no haya podido comprobar el token (JWKS caído): ahí
+  // exigeAuth deja pasar con el token del cliente y lo registra. Ver lib/verificaJwt.js.
+  const auth = await exigeAuth('risk', req, req.query?.action)
+  if (!auth.ok) return res.status(401).json({ error: 'no autenticado' })
 
   const { action, id } = req.query
 

@@ -1,4 +1,4 @@
-import { auditaAuth } from '../../lib/verificaJwt'
+import { exigeAuth } from '../../lib/verificaJwt'
 
 // pages/api/conditions.js
 // CRUD para la tabla `conditions` (condiciones globales reutilizables)
@@ -9,12 +9,14 @@ import { auditaAuth } from '../../lib/verificaJwt'
 // POST ?action=groq → pide a Groq que traduzca lenguaje natural → JSON de condición
 
 // Supabase credentials: env vars take priority, client headers as fallback
-// JWT from x-supa-jwt header takes precedence over anon key for Authorization
+// El Authorization lleva SOLO el JWT del usuario: ya no hay respaldo a la clave anónima. La clave sigue
+// usándose como `apikey`, que es lo que PostgREST pide para identificar al proyecto, no al usuario.
+// Si no hay JWT, el handler ya ha devuelto 401 y esta función no llega a llamarse.
 function getSupaCreds(req) {
   const url = process.env.SUPABASE_URL || req?.headers?.['x-supa-url'] || ''
   const key = process.env.SUPABASE_ANON_KEY || req?.headers?.['x-supa-key'] || ''
   const jwt = req?.headers?.['x-supa-jwt'] || null
-  const h = { 'Content-Type':'application/json', apikey: key, Authorization:`Bearer ${jwt || key}` }
+  const h = { 'Content-Type':'application/json', apikey: key, Authorization:`Bearer ${jwt}` }
   return { url, key, h }
 }
 
@@ -179,9 +181,12 @@ function transformGroqStrategy(parsed) {
 }
 
 export default async function handler(req, res) {
-  // MODO AUDITORÍA. Verifica el JWT y lo registra, pero NO decide nada: la ruta sirve igual que antes,
-  // llegue el token o no. auditaAuth nunca lanza, así que esta línea no puede tumbar la petición.
-  await auditaAuth('conditions', req, req.query?.action)
+  // AUTENTICACIÓN OBLIGATORIA. Sin JWT válido no se sirve nada: 401 antes de tocar Supabase o
+  // cualquier proveedor. Incluye las acciones que no hablan con la base de datos, a propósito.
+  // La única excepción es que el verificador no haya podido comprobar el token (JWKS caído): ahí
+  // exigeAuth deja pasar con el token del cliente y lo registra. Ver lib/verificaJwt.js.
+  const auth = await exigeAuth('conditions', req, req.query?.action)
+  if (!auth.ok) return res.status(401).json({ error: 'no autenticado' })
 
   // ── POST ?action=groq_block — genera un bloque JSON para una sección ──
   if (req.method === 'POST' && req.query.action === 'groq_block') {

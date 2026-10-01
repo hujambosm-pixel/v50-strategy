@@ -9,7 +9,7 @@
 // el backtest —la descarga, el sandbox y los alineados—, de modo que no puede divergir de él. Si el motor
 // cambia, cambia para los dos a la vez.
 import { fetchData, runCodeJsAsset, buildAlignedCloses, buildAlignedWeekly, calcEMA } from './multibacktest'
-import { auditaAuth } from '../../lib/verificaJwt'
+import { exigeAuth } from '../../lib/verificaJwt'
 import { normalizaFiltrosEntrada, hayFiltrosActivos, clavesAuxiliares, construirFiltroActivoMap,
          requiereSemanalDelActivo, proyectarSemanal } from '../../lib/filtros'
 
@@ -74,9 +74,12 @@ function zonasDeMapa(barras, filtroActivoMap) {
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
-  // MODO AUDITORÍA. Verifica el JWT y lo registra, pero NO decide nada: la ruta sirve igual que antes,
-  // llegue el token o no. auditaAuth nunca lanza, así que esta línea no puede tumbar la petición.
-  await auditaAuth('asset-detail', req, req.query?.action)
+  // AUTENTICACIÓN OBLIGATORIA. Sin JWT válido no se sirve nada: 401 antes de tocar Supabase o
+  // cualquier proveedor. Incluye las acciones que no hablan con la base de datos, a propósito.
+  // La única excepción es que el verificador no haya podido comprobar el token (JWKS caído): ahí
+  // exigeAuth deja pasar con el token del cliente y lo registra. Ver lib/verificaJwt.js.
+  const auth = await exigeAuth('asset-detail', req, req.query?.action)
+  if (!auth.ok) return res.status(401).json({ error: 'no autenticado' })
   // Esta ruta no miraba la cabecera: leía la estrategia SIEMPRE con la clave anónima, así que la sesión
   // del usuario no llegaba a Supabase ni aunque el cliente la mandara. Ahora se reenvía cuando llega.
   // Local a la petición, no en una variable de módulo: dos peticiones a la vez en la misma instancia se
@@ -97,7 +100,7 @@ export default async function handler(req, res) {
       try {
         const sr = await fetch(
           `${SUPA_URL}/rest/v1/strategies?id=eq.${strategyId}&select=code_js,params`,
-          { headers: { apikey: SUPA_KEY, Authorization: `Bearer ${_jwt || SUPA_KEY}` } }
+          { headers: { apikey: SUPA_KEY, Authorization: `Bearer ${_jwt}` } }
         )
         if (sr.ok) {
           const row = (await sr.json())?.[0] || {}
