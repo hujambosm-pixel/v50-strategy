@@ -6,13 +6,20 @@ import { auditaAuth } from '../../lib/verificaJwt'
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://uqjngxxbdlquiuhywiuc.supabase.co'
 const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY || 'sb_publishable_st9QJ3zcQbY5ec-JhxwqXQ_joy3udz3'
 
-let _reqJwt = null
-
-async function sb(path, opts = {}) {
+// EL TOKEN VA POR PETICIÓN, NO POR MÓDULO.
+// Antes esto era un `let _reqJwt` de módulo: el handler lo asignaba al entrar y sb() lo leía
+// después de varios await. En un contenedor caliente de Vercel dos peticiones concurrentes comparten
+// el módulo, así que la segunda pisaba el token de la primera y las consultas de una salían firmadas
+// con el JWT de la otra. Con RLS activado eso no es un fallo que la base de datos pueda atrapar: el
+// token es válido, solo que de otra persona.
+//
+// Ahora el token entra por argumento y el handler se queda un alias atado al suyo, que vive en su
+// propio ámbito y nadie puede pisar. Los puntos de llamada no cambian.
+async function sbCon(jwt, path, opts = {}) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1${path}`, {
     headers: {
       apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${_reqJwt || SUPABASE_KEY}`,
+      Authorization: `Bearer ${jwt || SUPABASE_KEY}`,
       'Content-Type': 'application/json',
       Prefer: opts.prefer || 'return=representation',
     },
@@ -27,7 +34,8 @@ async function sb(path, opts = {}) {
 }
 
 export default async function handler(req, res) {
-  _reqJwt = req.headers['x-supa-jwt'] || null
+  const jwt = req.headers['x-supa-jwt'] || null
+  const sb = (path, opts) => sbCon(jwt, path, opts)
   // MODO AUDITORÍA. Verifica el JWT y lo registra, pero NO decide nada: la ruta sirve igual que antes,
   // llegue el token o no. auditaAuth nunca lanza, así que esta línea no puede tumbar la petición.
   await auditaAuth('pending', req, req.query?.action)

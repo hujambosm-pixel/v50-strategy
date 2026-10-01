@@ -10,19 +10,26 @@ import { stooqSym } from '../../lib/simbolos'
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://uqjngxxbdlquiuhywiuc.supabase.co'
 const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY || 'sb_publishable_st9QJ3zcQbY5ec-JhxwqXQ_joy3udz3'
 
-// JWT inyectado por el cliente en cada request (set en handler, leído por sb())
-let _reqJwt = null
+// EL TOKEN VA POR PETICIÓN, NO POR MÓDULO.
+// Antes esto era un `let _reqJwt` de módulo: el handler lo asignaba al entrar y sb() lo leía
+// después de varios await. En un contenedor caliente de Vercel dos peticiones concurrentes comparten
+// el módulo, así que la segunda pisaba el token de la primera y las consultas de una salían firmadas
+// con el JWT de la otra. Con RLS activado eso no es un fallo que la base de datos pueda atrapar: el
+// token es válido, solo que de otra persona.
+//
+// Ahora el token entra por argumento y el handler se queda un alias atado al suyo, que vive en su
+// propio ámbito y nadie puede pisar. Los puntos de llamada no cambian.
 
 const ALLOWED_COLS = new Set([
   'id','symbol','fill_type','date','price','shares',
   'commission','currency','fx','broker','strategy','notes','import_source',
 ])
 
-async function sb(path, opts = {}) {
+async function sbCon(jwt, path, opts = {}) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1${path}`, {
     headers: {
       apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${_reqJwt || SUPABASE_KEY}`,
+      Authorization: `Bearer ${jwt || SUPABASE_KEY}`,
       'Content-Type': 'application/json',
       Prefer: opts.prefer || 'return=representation',
     },
@@ -37,7 +44,8 @@ async function sb(path, opts = {}) {
 }
 
 // ── FX: tipo de cambio histórico (frankfurter.app) ───────────
-async function getFxRate(date, fromCur, toCur = 'EUR') {
+// sb entra por argumento porque ya no hay helper de módulo: el de cada petición lo crea su handler.
+async function getFxRate(sb, date, fromCur, toCur = 'EUR') {
   if (fromCur === toCur) return 1.0
   const baseCur = toCur, quoteCur = fromCur
   try {
@@ -389,7 +397,8 @@ ${text.slice(0, 3500)}`
 
 // ── Handler principal ────────────────────────────────────────
 export default async function handler(req, res) {
-  _reqJwt = req.headers['x-supa-jwt'] || null
+  const jwt = req.headers['x-supa-jwt'] || null
+  const sb = (path, opts) => sbCon(jwt, path, opts)
   // MODO AUDITORÍA. Verifica el JWT y lo registra, pero NO decide nada: la ruta sirve igual que antes,
   // llegue el token o no. auditaAuth nunca lanza, así que esta línea no puede tumbar la petición.
   await auditaAuth('tradelog', req, req.query?.action)
@@ -428,12 +437,12 @@ export default async function handler(req, res) {
       const toCur   = req.query.to || 'EUR'
       let dateStr = req.query.date || new Date().toISOString().slice(0,10)
       if (fromCur === toCur) return res.status(200).json({ fx: 1, rate: 1, date: dateStr, from: fromCur })
-      let rate = await getFxRate(dateStr, fromCur, toCur)
+      let rate = await getFxRate(sb, dateStr, fromCur, toCur)
       if (!rate) {
         for (let i = 1; i <= 3; i++) {
           const d = new Date(dateStr); d.setDate(d.getDate()-i)
           const ds = d.toISOString().slice(0,10)
-          rate = await getFxRate(ds, fromCur, toCur)
+          rate = await getFxRate(sb, ds, fromCur, toCur)
           if (rate) { dateStr = ds; break }
         }
       }
@@ -461,7 +470,7 @@ export default async function handler(req, res) {
 
       // Auto-fetch FX si no viene provisto
       if (fill.date && fill.currency && fill.currency !== 'EUR' && !fill.fx) {
-        fill.fx = await getFxRate(fill.date, fill.currency) || null
+        fill.fx = await getFxRate(sb, fill.date, fill.currency) || null
       } else if (fill.currency === 'EUR') {
         fill.fx = 1.0
       }
@@ -526,7 +535,7 @@ export default async function handler(req, res) {
       // Enriquecer con FX automático
       for (const t of parsed) {
         if (t.date && t.currency && t.currency !== 'EUR') {
-          t.fx = await getFxRate(t.date, t.currency) || null
+          t.fx = await getFxRate(sb, t.date, t.currency) || null
         } else {
           t.fx = 1.0
         }
