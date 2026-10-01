@@ -3345,12 +3345,16 @@ export default function Home() {
   }
 
   // Cargar datos al montar
+  // GATE DE SESIÓN: sin JWT estas cuatro cargas salían con la clave anónima, y con RLS activado
+  // volverían vacías. session?.user?.id va en las dependencias a propósito: con [] y el gate, el
+  // efecto no se repetiría cuando la sesión llega y la aplicación se quedaría vacía para siempre.
   useEffect(()=>{
+    if(!session?.user?.id) return
     reloadWatchlist()
     reloadStrategies(true)  // true = apply default strategy from settings
     reloadAlarms()
     reloadConditions()
-  },[])
+  },[session?.user?.id])
 
   // Abrir editor watchlist
   const openEditItem=(item)=>{
@@ -3584,11 +3588,12 @@ export default function Home() {
   },[]) // currentStratId y strategies leídos via ref — función estable, no se recrea
 
   // useEffect aquí, DESPUÉS de la declaración de refreshBestStratPerSymbol para evitar TDZ
-  useEffect(()=>{ refreshBestStratPerSymbol() },[refreshBestStratPerSymbol])
-  useEffect(()=>{ refreshWlData() },[]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(()=>{ if(!session?.user?.id) return; refreshBestStratPerSymbol() },[refreshBestStratPerSymbol,session?.user?.id])
+  useEffect(()=>{ if(!session?.user?.id) return; refreshWlData() },[session?.user?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Limpieza única al inicio: eliminar filas corruptas (score sin métricas)
-  useEffect(()=>{ cleanCorruptRankingRows() },[]) // eslint-disable-line
+  // Sin sesión NO se lanza: es un DELETE, y con la clave anónima borraría de verdad.
+  useEffect(()=>{ if(!session?.user?.id) return; cleanCorruptRankingRows() },[session?.user?.id]) // eslint-disable-line
 
   // ── Auto-refresh Score mét.+señales al cargar (una sola vez cuando wlData tiene datos) ──
   const autoRefreshTriggered = useRef(false)
@@ -4806,7 +4811,7 @@ export default function Home() {
   },[tlFilterBroker])
 
   useEffect(()=>{ if(session?.user?.id) loadTrades() },[loadTrades,session?.user?.id]) // eslint-disable-line
-  useEffect(()=>{ if(sidePanel==='tradelog') loadTrades() },[sidePanel,loadTrades])
+  useEffect(()=>{ if(!session?.user?.id) return; if(sidePanel==='tradelog') loadTrades() },[sidePanel,loadTrades,session?.user?.id])
   // Fundamentales: se piden al ABRIR la sección y al cambiar de símbolo con ella abierta, nunca antes.
   // `cancelado` evita que una respuesta lenta de un símbolo anterior pise a la del actual.
   useEffect(()=>{
@@ -5454,6 +5459,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   // Load settings from Supabase on mount (overrides localStorage if newer)
   // Also apply ui defaults from localStorage (safe: runs client-side only)
   useEffect(()=>{
+    if(!session?.user?.id) return
     // Restore ui defaults from localStorage (client-only, avoids SSR mismatch)
     try{
       const s=JSON.parse(localStorage.getItem('v50_settings')||'{}')
@@ -5477,7 +5483,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         }catch(_){}
       }
     })
-  },[])
+  },[session?.user?.id])
 
   // Apply tema font settings per section via <style> injection
   const [temaKey, setTemaKey] = useState(0)
@@ -5905,7 +5911,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.862</title>
+        <title>Trading Simulator V9.864</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5994,7 +6000,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             }} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.862
+            <span className="dot"/>Trading Simulator V9.864
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
