@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { MONO } from '../lib/utils'
+import { validaCodeJs } from '../lib/validaCodeJs'
 
 const SUMMARY_SYSTEM_PROMPT = `You are a professional quantitative trading analyst. Analyze the following JavaScript backtesting strategy code and its JSON parameters. Generate a concise summary in Spanish (max 300 words) with these sections. Use only bullet points and plain text — no markdown bold (**text**), no ### headers:
 
@@ -38,10 +39,26 @@ function hexRgb(hex) {
 
 export default function StrategyEditorPanel({ strForm, setStrForm, strategy, onSave, onCancel, onDelete, onClone, saving }) {
   const [paramsError, setParamsError] = useState(null)
+  const [codeError, setCodeError] = useState(null)
   const [summaryLoading, setSummaryLoading] = useState(false)
 
   const upd = (k, v) => setStrForm(f => ({ ...f, [k]: v }))
   const isNew = !strategy?.id
+
+  // El código se revisa ANTES de guardar. Un code_js que no compila se guarda igual de bien en la
+  // base y el fallo no aparece hasta que el backtest devuelve un 500 que el cliente rotula como
+  // «fallo de descarga»: así se perdieron cuatro días. Ver lib/validaCodeJs.js.
+  //
+  // El código limpio se devuelve a quien guarda COMO ARGUMENTO, no por setStrForm: setStrForm no
+  // ha surtido efecto todavía cuando onSave lee strForm en el mismo tick, y se guardaría el texto
+  // viejo con la valla dentro. El setStrForm se hace además, para que el usuario vea el limpio.
+  const revisaCodigo = () => {
+    const v = validaCodeJs(strForm.code_js)
+    if (!v.ok) { setCodeError(v.error); return null }
+    setCodeError(null)
+    if (v.limpiado) upd('code_js', v.codigo)
+    return v.codigo
+  }
 
   const handleSave = () => {
     const raw = (strForm.params || '').trim()
@@ -49,7 +66,15 @@ export default function StrategyEditorPanel({ strForm, setStrForm, strategy, onS
       try { JSON.parse(raw) } catch (_) { setParamsError('JSON inválido'); return }
     }
     setParamsError(null)
-    onSave()
+    const limpio = revisaCodigo()
+    if (limpio === null) return
+    onSave(limpio)
+  }
+
+  const handleClone = () => {
+    const limpio = revisaCodigo()
+    if (limpio === null) return
+    onClone(limpio)
   }
 
   const handleSummary = async () => {
@@ -164,7 +189,7 @@ export default function StrategyEditorPanel({ strForm, setStrForm, strategy, onS
             {saving ? 'Guardando…' : '💾 Guardar'}
           </button>
           {!isNew && onClone && (
-            <button style={S.btn('#ffd166', saving)} onClick={onClone} disabled={saving} title="Duplicar esta estrategia">
+            <button style={S.btn('#ffd166', saving)} onClick={handleClone} disabled={saving} title="Duplicar esta estrategia">
               📋 Clonar
             </button>
           )}
@@ -279,6 +304,7 @@ export default function StrategyEditorPanel({ strForm, setStrForm, strategy, onS
         {/* ── COLUMNA DERECHA: Código JS llena todo ── */}
         <div style={{display:'flex', flexDirection:'column', minHeight:0}}>
           <label style={S.label}>Código JS</label>
+          {codeError && <span style={{fontSize:11, color:'#ff4d6d', marginBottom:3}}>⚠ {codeError}</span>}
           <textarea
             style={{...S.textarea, flex:1, resize:'none', minHeight:0, fontFamily:MONO}}
             value={strForm.code_js||''}

@@ -3420,7 +3420,10 @@ export default function Home() {
     if(stratManagerReturn){setShowStratManager(true);setStratManagerReturn(false)}
     setEditingStr(null);setStrForm({})
   }
-  const saveEditStr=async()=>{
+  // codeLimpio llega del editor cuando ha quitado una valla de Markdown del código (ver
+  // lib/validaCodeJs.js). Viene por argumento y no por strForm porque setStrForm no ha surtido
+  // efecto todavía en este tick. Si no llega, se guarda strForm tal cual, como siempre.
+  const saveEditStr=async(codeLimpio)=>{
     setStrSaving(true)
     try{
       // Restaurar meta-params (intervalo) desde editingStr antes de guardar
@@ -3434,6 +3437,7 @@ export default function Home() {
       }catch(_){}
       const payload={
         ...strForm,
+        ...(codeLimpio!=null?{code_js:codeLimpio}:{}),
         params:mergedParams,
         id:editingStr?.id||undefined,
         years:Number(strForm.years||5),
@@ -3446,7 +3450,7 @@ export default function Home() {
     }catch(e){alert('Error: '+e.message)}
     finally{setStrSaving(false)}
   }
-  const cloneEditStr=async()=>{
+  const cloneEditStr=async(codeLimpio)=>{
     setStrSaving(true)
     try{
       let mergedParams=strForm.params||''
@@ -3459,6 +3463,7 @@ export default function Home() {
       }catch(_){}
       const payload={
         ...strForm,
+        ...(codeLimpio!=null?{code_js:codeLimpio}:{}),
         params:mergedParams,
         id:undefined,
         name:'Copia de '+(strForm.name||'estrategia'),
@@ -5911,7 +5916,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.866</title>
+        <title>Trading Simulator V9.867</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6000,7 +6005,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             }} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.866
+            <span className="dot"/>Trading Simulator V9.867
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}

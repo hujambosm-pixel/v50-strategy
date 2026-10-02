@@ -1,4 +1,5 @@
 import { exigeAuth } from '../../lib/verificaJwt'
+import { validaCodeJs } from '../../lib/validaCodeJs'
 
 // pages/api/strategies.js — CRUD de estrategias en Supabase
 // Métodos: GET (list) | POST (create) | PUT (update) | DELETE (soft delete)
@@ -38,6 +39,16 @@ export default async function handler(req, res) {
   // exigeAuth deja pasar con el token del cliente y lo registra. Ver lib/verificaJwt.js.
   const auth = await exigeAuth('strategies', req, req.query?.action)
   if (!auth.ok) return res.status(401).json({ error: 'no autenticado' })
+
+  // CÓDIGO DE ESTRATEGIA: solo se revisa si VIENE en el cuerpo. Las actualizaciones parciales —el
+  // interruptor de habilitada, el intervalo del badge D/W— no mandan code_js y siguen pasando sin
+  // tocar nada. Si viene y no compila, 422 ANTES de hablar con Supabase, y con un tipo propio para
+  // que el cliente pueda distinguirlo de un fallo de descarga.
+  if (req.body && req.body.code_js != null) {
+    const v = validaCodeJs(req.body.code_js)
+    if (!v.ok) return res.status(422).json({ error: v.error, tipo: 'codigo_estrategia' })
+    req.body.code_js = v.codigo
+  }
 
   try {
     switch (req.method) {
