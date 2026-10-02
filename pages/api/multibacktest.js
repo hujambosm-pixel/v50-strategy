@@ -6,6 +6,7 @@ import { normalizaFiltrosEntrada, hayFiltrosActivos, clavesAuxiliares, construir
          requiereSemanalDelActivo, proyectarSemanal } from '../../lib/filtros'
 import { fetchAV, fetchAVDetalle } from './datos'
 import { exigeAuth } from '../../lib/verificaJwt'
+import { operacionesPorFiltro, esNoStrategyPorNombre } from '../../lib/operacionesPorFiltro'
 
 const SUPA_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPA_KEY = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -2169,16 +2170,18 @@ export default async function handler(req, res) {
 
   // Fetch code_js y params desde Supabase si se proporcionó strategyId
   let codeJs = null
+  let _stratNameMb = null
   let effectiveCfg = cfg
   if (strategyId && SUPA_URL && SUPA_KEY) {
     try {
       const sr = await fetch(
-        `${SUPA_URL}/rest/v1/strategies?id=eq.${strategyId}&select=code_js,params`,
+        `${SUPA_URL}/rest/v1/strategies?id=eq.${strategyId}&select=code_js,params,name`,
         { headers: { apikey: SUPA_KEY, Authorization: `Bearer ${req.headers['x-supa-jwt']}` } }
       )
       if (sr.ok) {
         const row = (await sr.json())?.[0] || {}
         codeJs = row.code_js || null
+        _stratNameMb = row.name || null
         let stratParams = {}
         try {
           stratParams = row.params
@@ -2321,30 +2324,18 @@ export default async function handler(req, res) {
           if (zoneStart !== null) filterZones.push({ from: zoneStart, to: ar.data[ar.data.length-1].date })
         }
 
-        // "0 No Strategy": generar trades desde transiciones del filtro (solo si isNoStrategy)
-        if (isNoStrategy && ar.trades.length === 0) {
-          const genRaw = []
-          let entryPx = null, entryDate = null
-          const startDateStr = ar.startDate
-          for (let i = 0; i < ar.data.length; i++) {
-            const bar = ar.data[i]
-            if (bar.date < startDateStr) continue
-            const active = filtroActivoMap[bar.date] !== false
-            const prevActive = i > 0 ? filtroActivoMap[ar.data[i-1].date] !== false : false
-            if (!prevActive && active && i + 1 < ar.data.length) {
-              // Entry at next bar's open (no look-ahead): price AND date from bar[i+1]
-              // Consistent with datos.js filter path (entryIdx = i+1, date = data[i+1].date)
-              entryPx = ar.data[i+1].open; entryDate = ar.data[i+1].date
-            }
-            if (prevActive && !active && entryPx != null) {
-              genRaw.push({ entryDate, exitDate: bar.date, entryPrice: entryPx, exitPrice: bar.close })
-              entryPx = null; entryDate = null
-            }
-          }
-          if (entryPx != null) {
-            const lastBar = ar.data[ar.data.length-1]
-            genRaw.push({ entryDate, exitDate: lastBar.date, entryPrice: entryPx, exitPrice: lastBar.close, _virtualClose: true })
-          }
+        // «0 No Strategy»: las operaciones las fabrica el filtro. La regla vive en una sola
+        // función compartida con datos.js (lib/operacionesPorFiltro.js); aquí estaba duplicada y
+        // las dos copias ya habían divergido.
+        //
+        // Se decide por el NOMBRE de la fila y no por la bandera del cliente, que es una pista y
+        // puede venir de una lista obsoleta. Si no coinciden, manda el servidor y se registra.
+        const _esNS = esNoStrategyPorNombre(_stratNameMb)
+        if (isNoStrategy !== _esNS) {
+          console.warn(`[multibacktest] isNoStrategy del cliente (${isNoStrategy}) no coincide con el nombre de la fila ("${_stratNameMb}"): manda el servidor (${_esNS})`)
+        }
+        if (_esNS && ar.trades.length === 0) {
+          const genRaw = operacionesPorFiltro(ar.data, (f) => filtroActivoMap[f] !== false, { desde: ar.startDate })
           if (genRaw.length) {
             ar.trades = buildTrades(genRaw, slotCapital)
             ar.capitalReinv = ar.trades[ar.trades.length-1].capitalTras

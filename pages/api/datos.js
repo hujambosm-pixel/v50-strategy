@@ -2,6 +2,7 @@
 
 import { calcEMA, calcSMA, calcRSI, calcATR, calcMACD } from '../../lib/backtester'
 import { exigeAuth } from '../../lib/verificaJwt'
+import { operacionesPorFiltro, esNoStrategyPorNombre } from '../../lib/operacionesPorFiltro'
 import { normalizaFiltrosEntrada, hayFiltrosActivos, clavesAuxiliares, construirFiltroActivoMap, filtrosActivos,
          requiereSemanalDelActivo, proyectarSemanal } from '../../lib/filtros'
 import { stooqSym } from '../../lib/simbolos'
@@ -492,45 +493,15 @@ export default async function handler(req, res) {
 
     // ── Aplicar filtros de mercado ──
     if (anyFiltroOn) {
-      const isZeroStrategy = rawTrades.length === 0 && !openPos
-
-      if (isZeroStrategy) {
-        // "0 No Strategy": generar trades a partir de transiciones del filtro
-        // Señal al cierre de bar[i] → entrada al open de bar[i+1]
-        // Salida al cierre de bar[i] cuando el filtro se pone en rojo
-        let inPosition = false, entryIdx = -1
-        for (let i = 0; i < data.length; i++) {
-          const curr = filtroActivoMap[data[i].date] ?? true
-          const prev = i === 0 ? false : (filtroActivoMap[data[i - 1].date] ?? true)
-
-          // Transición false→true: entrada al open del día SIGUIENTE
-          if (!prev && curr && !inPosition && i + 1 < data.length) {
-            inPosition = true
-            entryIdx   = i + 1
-          }
-          // Transición true→false: salida al cierre de este día
-          if (prev && !curr && inPosition && entryIdx >= 0) {
-            rawTrades.push({
-              entryDate:  data[entryIdx].date,
-              exitDate:   data[i].date,
-              entryPrice: data[entryIdx].open,
-              exitPrice:  data[i].close,
-              exitReason: 'filter_exit',
-            })
-            inPosition = false
-            entryIdx   = -1
-          }
-        }
-        // Cierre virtual si el periodo termina con filtro verde
-        if (inPosition && entryIdx >= 0 && entryIdx < data.length) {
-          rawTrades.push({
-            entryDate:  data[entryIdx].date,
-            exitDate:   lastBar.date,
-            entryPrice: data[entryIdx].open,
-            exitPrice:  lastBar.close,
-            exitReason: 'virtual_close',
-            _virtualClose: true,
-          })
+      // SOLO «0 No Strategy» recibe operaciones fabricadas a partir de los filtros, y se decide
+      // por el NOMBRE de la fila, no por la bandera del cliente: esta ruta nunca la ha recibido.
+      // Antes la condición era `rawTrades.length === 0 && !openPos`, sin mirar de qué estrategia
+      // se trataba, así que CUALQUIERA que no generara señales en el periodo recibía operaciones
+      // inventadas por el filtro y firmadas con su nombre. «28 Rebote RS» se llevaba 53 en ^GSPC
+      // y 43 en AAPL, y acababan en ranking_results como si fueran su rendimiento.
+      if (esNoStrategyPorNombre(stratName)) {
+        if (rawTrades.length === 0 && !openPos) {
+          rawTrades.push(...operacionesPorFiltro(data, (f) => filtroActivoMap[f] !== false))
         }
       } else {
         // Estrategia normal: descartar trades cuya entrada fue bloqueada por el filtro
