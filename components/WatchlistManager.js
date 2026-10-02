@@ -654,11 +654,39 @@ export default function WatchlistManager({
             <div style={{ fontSize: 12, color: P.textSec, marginBottom: 8 }}>
               {(() => {
                 const parts = []
+                if (errorModal.codigo?.length) parts.push(`${errorModal.codigo.length} estrategia${errorModal.codigo.length > 1 ? 's' : ''} con error de código`)
                 if (errorModal.symConErrores > 0) parts.push(`${errorModal.symConErrores} con errores de descarga`)
                 if (errorModal.symSinMet > 0) parts.push(`${errorModal.symSinMet} sin métricas`)
                 return parts.length ? `${parts.join(' · ')} (de ${errorModal.symTotal} activos).` : 'Hubo incidencias generales durante la actualización.'
               })()}
             </div>
+
+            {/* Estrategias con error de código — va PRIMERA porque no se arregla reintentando */}
+            {errorModal.codigo?.length > 0 && (
+              <>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#8b1a1a', marginBottom: 4 }}>Estrategias con error de código</div>
+                <div style={{ fontSize: 11, color: P.textMuted, lineHeight: 1.5, marginBottom: 8 }}>
+                  Su código no compila o falla al ejecutarse, así que no es un problema de datos y volver a
+                  actualizar no lo arregla. Falla en todos los activos por igual.
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginBottom: 12 }}>
+                  {errorModal.codigo.map(c => (
+                    <div key={c.estrategia} style={{
+                      padding: '5px 8px', borderRadius: 4,
+                      background: 'rgba(184,26,26,0.10)', border: '1px solid rgba(184,26,26,0.4)',
+                    }}>
+                      <div style={{ fontWeight: 700, fontSize: 12, color: '#8b1a1a' }}>{c.estrategia}</div>
+                      {c.mensaje && (
+                        <div style={{ fontSize: 10, color: P.textSec, marginTop: 2, wordBreak: 'break-word' }}>{c.mensaje}</div>
+                      )}
+                      <div style={{ fontSize: 10, color: P.textMuted, marginTop: 2 }}>
+                        Revisa el código de esta estrategia en el editor.
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
 
             {/* Fallos de descarga */}
             {errorModal.rows.length > 0 && (
@@ -1065,8 +1093,17 @@ export default function WatchlistManager({
                   const errs = updateErrorsRef?.current || []
                   if (errs.length) {
                     const enabledCount = (strategies || []).filter(s => s.enabled !== false).length
-                    const bySym = {}, global = []
+                    const bySym = {}, global = [], porCodigo = {}
                     errs.forEach(e => {
+                      // Error de CÓDIGO de una estrategia: se agrupa por ESTRATEGIA, no por activo.
+                      // Falla igual en todos, así que repetirlo activo por activo solo hacía ruido y
+                      // lo disfrazaba de problema de datos.
+                      if (e.tipo === 'codigo') {
+                        const k = e.estrategia || '(estrategia sin identificar)'
+                        if (!porCodigo[k]) porCodigo[k] = { estrategia: k, mensaje: e.detalle || '', activos: 0 }
+                        porCodigo[k].activos++
+                        return
+                      }
                       const s = e.symbol
                       if (!s || s === '^GSPC') { global.push(e); return }  // wipe / errores de estrategia / SP500 = globales
                       if (!bySym[s]) bySym[s] = { symbol: s, descarga: 0, excepcion: 0, wipe: 0, sin_metricas: 0, stratErrs: 0 }
@@ -1082,8 +1119,9 @@ export default function WatchlistManager({
                     const sinMet = all.filter(r => (r.descarga + r.excepcion) === 0 && r.sin_metricas > 0)
                       .map(r => ({ symbol: r.symbol }))
                       .sort((a, b) => a.symbol.localeCompare(b.symbol))
-                    if (rows.length || sinMet.length || global.length) {
-                      setErrorModal({ rows, sinMet, global, symConErrores: rows.length, symSinMet: sinMet.length, symTotal: sel.length })
+                    const codigo = Object.values(porCodigo).sort((a, b) => a.estrategia.localeCompare(b.estrategia))
+                    if (rows.length || sinMet.length || global.length || codigo.length) {
+                      setErrorModal({ rows, sinMet, global, codigo, symConErrores: rows.length, symSinMet: sinMet.length, symTotal: sel.length })
                     }
                   }
                 } catch(_) {}

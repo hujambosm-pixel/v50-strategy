@@ -4202,7 +4202,14 @@ export default function Home() {
           const res=await apiFetch('/api/datos',{method:'POST',headers:{'Content-Type':'application/json'},
             body:JSON.stringify({simbolo:sym,strategyId:currentStratId,capital_ini:Number(capitalIni),years:Number(years),allocation_pct:100,filtros:filtrosBackend,intervalo:estrategiaIntervalo})})
           const json=await res.json()
-          if(!res.ok||!json.trades?.length){ if(!res.ok) logUpdateError(sym,'descarga',res.status,null); return }
+          if(!res.ok||!json.trades?.length){
+            // 422 con tipo 'codigo_estrategia' = el code_js no compila o revienta. No es un fallo de
+            // descarga y no se cuenta como tal: el aviso lo lista aparte, por estrategia.
+            if(!res.ok) logUpdateError(sym,
+              json?.tipo==='codigo_estrategia'?'codigo':'descarga',
+              json?.tipo==='codigo_estrategia'?json.error:res.status,
+              json?.estrategia||null)
+            return }
           const trades=json.trades; if(trades.length<minTrades) return
           const wins=trades.filter(t=>t.pnlPct>=0), winRate=(wins.length/trades.length)*100
           const totalDiasNat=json.startDate?(new Date(json.meta?.ultimaFecha)-new Date(json.startDate))/86400000:365*Number(years)
@@ -4255,7 +4262,12 @@ export default function Home() {
                 const res=await apiFetch('/api/datos',{method:'POST',headers:{'Content-Type':'application/json'},
                   body:JSON.stringify({simbolo:sym,strategyId:stratId,capital_ini:stratCap,years:stratYears,allocation_pct:100,filtros:filtrosBackend,intervalo:stratIntv})})
                 const json=await res.json()
-                if(!res.ok||!json.trades?.length){ if(!res.ok) logUpdateError(sym,'descarga',res.status,strat.name); return }
+                if(!res.ok||!json.trades?.length){
+                  if(!res.ok) logUpdateError(sym,
+                    json?.tipo==='codigo_estrategia'?'codigo':'descarga',
+                    json?.tipo==='codigo_estrategia'?json.error:res.status,
+                    json?.estrategia||strat.name)
+                  return }
                 const trades=json.trades; if(trades.length<minTrades) return
                 const wins=trades.filter(t=>t.pnlPct>=0), winRate=(wins.length/trades.length)*100
                 const totalDiasNat=json.startDate?(new Date(json.meta?.ultimaFecha)-new Date(json.startDate))/86400000:365*stratYears
@@ -5916,7 +5928,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.867</title>
+        <title>Trading Simulator V9.868</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6005,7 +6017,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             }} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.867
+            <span className="dot"/>Trading Simulator V9.868
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}

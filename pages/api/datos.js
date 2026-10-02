@@ -302,11 +302,11 @@ export default async function handler(req, res) {
   }
 
   // ── Fetch code_js from Supabase ──
-  let codeJs = null, stratParams = null, stratVisuals = null
+  let codeJs = null, stratParams = null, stratVisuals = null, stratName = null
   if (strategyId) {
     try {
       const r = await fetch(
-        `${SUPA_URL}/rest/v1/strategies?id=eq.${strategyId}&select=code_js,params,visuals`,
+        `${SUPA_URL}/rest/v1/strategies?id=eq.${strategyId}&select=code_js,params,visuals,name`,
         { headers: { apikey: SUPA_KEY, Authorization: `Bearer ${_jwt}` } }
       )
       if (r.ok) {
@@ -314,6 +314,7 @@ export default async function handler(req, res) {
         codeJs       = row.code_js || null
         stratParams  = row.params  || null
         stratVisuals = row.visuals || null
+        stratName    = row.name    || null
       }
     } catch (_) {}
   }
@@ -437,11 +438,25 @@ export default async function handler(req, res) {
     })
 
     // ── Execute strategy in sandbox ──
+    // COMPILAR y EJECUTAR el code_js van en su propio try, y no por capricho: hasta ahora un fallo
+    // aquí caía en el MISMO catch que una descarga que no llega o un cálculo que revienta, salía
+    // como 500 y el cliente lo apuntaba como «fallo de descarga». Así se perdieron cuatro días
+    // buscando un problema de red que era una valla de Markdown en el código de una estrategia.
+    //
+    // El orden se conserva exactamente —compilar, leer los params, ejecutar— para no cambiar qué
+    // error gana cuando hay varios. Y JSON.parse de los params se queda FUERA: unos params rotos
+    // no son un error de código y siguen saliendo como 500, igual que antes.
     const wrappedCode = `"use strict";\n${codeJs}\nreturn run;`
-    const getRunFn = new Function('calcEMA','calcSMA','calcRSI','calcATR','calcMACD', wrappedCode)
-    const runFn    = getRunFn(calcEMA, calcSMA, calcRSI, calcATR, calcMACD)
+    let runFn
+    try {
+      const getRunFn = new Function('calcEMA','calcSMA','calcRSI','calcATR','calcMACD', wrappedCode)
+      runFn = getRunFn(calcEMA, calcSMA, calcRSI, calcATR, calcMACD)
+    } catch (e) { e._tipoFallo = 'codigo_estrategia'; throw e }
     const userParams = stratParams ? JSON.parse(stratParams) : {}
-    const _result = runFn(data, { capital_ini, years, allocation_pct, ...userParams })
+    let _result
+    try {
+      _result = runFn(data, { capital_ini, years, allocation_pct, ...userParams })
+    } catch (e) { e._tipoFallo = 'codigo_estrategia'; throw e }
     let rawTrades        = _result.trades       ?? []
     const indicators     = _result.indicators   ?? {}
     const rawFilterZones = _result.filterZones  ?? []
@@ -627,7 +642,16 @@ export default async function handler(req, res) {
       meta: { ultimaFecha: data[data.length - 1].date, ultimoPrecio: data[data.length - 1].close, simbolo },
     })
   } catch (e) {
-    console.error(`[datos] strategy execution error for ${req.body?.simbolo}:`, e.message, e.stack)
+    // El código de la estrategia es lo ÚNICO que se separa: 422 y un tipo propio, para que el
+    // cliente no lo confunda con un fallo de descarga. Todo lo demás sale igual que siempre —500 y
+    // el mismo cuerpo—, solo con la etiqueta del registro corregida: antes TODO se anotaba como
+    // «strategy execution error», incluida una descarga que no llega.
+    if (e && e._tipoFallo === 'codigo_estrategia') {
+      const quien = stratName || strategyId || '(sin identificar)'
+      console.error(`[datos] error en el code_js de la estrategia "${quien}" para ${req.body?.simbolo}:`, e.message, e.stack)
+      return res.status(422).json({ error: e.message, tipo: 'codigo_estrategia', estrategia: quien })
+    }
+    console.error(`[datos] fallo al calcular ${req.body?.simbolo}:`, e.message, e.stack)
     return res.status(500).json({ error: e.message })
   }
 
