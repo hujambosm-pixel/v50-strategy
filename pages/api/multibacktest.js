@@ -7,6 +7,7 @@ import { normalizaFiltrosEntrada, hayFiltrosActivos, clavesAuxiliares, construir
 import { fetchAV, fetchAVDetalle } from './datos'
 import { exigeAuth } from '../../lib/verificaJwt'
 import { operacionesPorFiltro, esNoStrategyPorNombre } from '../../lib/operacionesPorFiltro'
+import { ajustaPreciosAVela, cuentaAjustados } from '../../lib/precioEnVela'
 
 const SUPA_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPA_KEY = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -1621,10 +1622,14 @@ function _posicionesSlots(assetResults, startDate) {
 
 // ── buildTrades: convierte rawTrades {entryDate,exitDate,entryPrice,exitPrice} a trades enriquecidos ──
 // Copia exacta de datos.js para mantener formato compatible con curvas de equity
-function buildTrades(rawTrades, capitalIni, allocationPct = 100) {
+// REALISMO DEL PRECIO. `barras` llega para poder comprobar que el precio declarado por la
+// estrategia existió en su vela. Si no, la operación se ejecuta en la apertura: el hueco de
+// apertura disparó la orden al abrir. Ver lib/precioEnVela.js. Sin `barras` no se toca nada,
+// así que una llamada antigua se comporta igual que siempre.
+function buildTrades(rawTrades, capitalIni, allocationPct = 100, barras = null) {
   const fixedAlloc = capitalIni * (allocationPct / 100)
   let compoundCapital = capitalIni
-  return rawTrades
+  return (barras ? ajustaPreciosAVela(rawTrades, barras) : rawTrades)
     .filter(t => t.entryDate && t.exitDate && t.entryPrice > 0 && t.exitPrice > 0)
     .map(t => {
       const sharesSimple   = fixedAlloc / t.entryPrice
@@ -1684,7 +1689,7 @@ export function runCodeJsAsset(data, sp500Data, codeJs, slotCapital, years, cfg)
         }
       }
     }
-    const trades = buildTrades(rawTrades, slotCapital)
+    const trades = buildTrades(rawTrades, slotCapital, 100, data)
     return { trades, indicators, filterZones }
   } catch(e) {
     console.error('[runCodeJsAsset] error:', e.message)
@@ -2112,6 +2117,10 @@ async function handlePortfolioMode(req, res) {
       ...(_origenPrecios(descargas) ? { origenPrecios: _origenPrecios(descargas) } : {}),
       // Tamaño de las series por activo, para vigilar el coste de la respuesta.
       ...(curves.assetCurves ? { assetCurvesInfo: _tamanoAssetCurves(curves.assetCurves) } : {}),
+      // Solo si hubo alguna corrección de precio: sin correcciones la respuesta es idéntica
+      // a la de antes de este cambio. Ver lib/precioEnVela.js.
+      ...(sourceTrades.filter(t => t && t.precioAjustado).length
+        ? { preciosAjustados: sourceTrades.filter(t => t && t.precioAjustado).length } : {}),
       allTrades:       sourceTrades,
       avgOccupancy,
       tInvEstrategia:  curves.tInvEstrategia ?? 0,
@@ -2337,7 +2346,7 @@ export default async function handler(req, res) {
         if (_esNS && ar.trades.length === 0) {
           const genRaw = operacionesPorFiltro(ar.data, (f) => filtroActivoMap[f] !== false, { desde: ar.startDate })
           if (genRaw.length) {
-            ar.trades = buildTrades(genRaw, slotCapital)
+            ar.trades = buildTrades(genRaw, slotCapital, 100, ar.data)
             ar.capitalReinv = ar.trades[ar.trades.length-1].capitalTras
             ar.gananciaSimple = ar.trades.reduce((s,t) => s + t.pnlSimple, 0)
           }
@@ -2459,6 +2468,10 @@ export default async function handler(req, res) {
       ...(_origenPrecios(descargas) ? { origenPrecios: _origenPrecios(descargas) } : {}),
       // Tamaño de las series por activo, para vigilar el coste de la respuesta.
       ...(curves.assetCurves ? { assetCurvesInfo: _tamanoAssetCurves(curves.assetCurves) } : {}),
+      // Solo si hubo alguna corrección de precio: sin correcciones la respuesta es idéntica
+      // a la de antes de este cambio. Ver lib/precioEnVela.js.
+      ...(sourceTrades.filter(t => t && t.precioAjustado).length
+        ? { preciosAjustados: sourceTrades.filter(t => t && t.precioAjustado).length } : {}),
       allTrades: sourceTrades,
       avgOccupancy,
       tInvEstrategia: curves.tInvEstrategia ?? 0,

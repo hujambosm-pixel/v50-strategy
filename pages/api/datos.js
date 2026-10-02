@@ -3,6 +3,7 @@
 import { calcEMA, calcSMA, calcRSI, calcATR, calcMACD } from '../../lib/backtester'
 import { exigeAuth } from '../../lib/verificaJwt'
 import { operacionesPorFiltro, esNoStrategyPorNombre } from '../../lib/operacionesPorFiltro'
+import { ajustaPreciosAVela, cuentaAjustados } from '../../lib/precioEnVela'
 import { normalizaFiltrosEntrada, hayFiltrosActivos, clavesAuxiliares, construirFiltroActivoMap, filtrosActivos,
          requiereSemanalDelActivo, proyectarSemanal } from '../../lib/filtros'
 import { stooqSym } from '../../lib/simbolos'
@@ -243,10 +244,14 @@ function buildAlignedWeekly(weeklyData, assetDates, emaPeriod) {
 }
 
 // ── Build full trade objects from raw { entryDate, exitDate, entryPrice, exitPrice } ──
-function buildTrades(rawTrades, capitalIni, allocationPct = 100) {
+// REALISMO DEL PRECIO. `barras` llega para poder comprobar que el precio declarado por la
+// estrategia existió en su vela. Si no, la operación se ejecuta en la apertura: el hueco de
+// apertura disparó la orden al abrir. Ver lib/precioEnVela.js. Sin `barras` no se toca nada,
+// así que una llamada antigua se comporta igual que siempre.
+function buildTrades(rawTrades, capitalIni, allocationPct = 100, barras = null) {
   const fixedAlloc = capitalIni * (allocationPct / 100)
   let compoundCapital = capitalIni
-  return rawTrades
+  return (barras ? ajustaPreciosAVela(rawTrades, barras) : rawTrades)
     .filter(t => t.entryDate && t.exitDate && t.entryPrice > 0 && t.exitPrice > 0)
     .map(t => {
       const sharesSimple   = fixedAlloc / t.entryPrice
@@ -510,7 +515,8 @@ export default async function handler(req, res) {
     }
 
     // ── Enrich trades ──
-    const trades = buildTrades(rawTrades, capital_ini, allocation_pct)
+    const trades = buildTrades(rawTrades, capital_ini, allocation_pct, data)
+    const _nAjustados = cuentaAjustados(trades)
 
     // ── Inject indicators into chartData bars ──
     const emaRArr      = indicators.emaR       || indicators.emaFast  || null
@@ -596,6 +602,9 @@ export default async function handler(req, res) {
       chartData,
       // Solo presente si el activo no cubre el periodo pedido (se omite en otro caso, como avisosFiltros)
       ...(avisosHistorico ? { avisosHistorico } : {}),
+      // Solo si hubo alguna corrección, igual que avisosHistorico y avisosFiltros: así una
+      // respuesta sin correcciones sigue siendo idéntica a la de antes de este cambio.
+      ...(_nAjustados ? { preciosAjustados: _nAjustados } : {}),
       trades,
       filterZones: anyFiltroOn ? filterZonesFromFiltros : (Array.isArray(rawFilterZones) ? rawFilterZones : []),
       // Solo presente si hay algo que avisar: símbolos cuya serie semanal no se pudo descargar y
