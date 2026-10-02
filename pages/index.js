@@ -8,6 +8,7 @@ import { loadSettings, saveSettings, saveSettingsRemote, loadSettingsRemote } fr
 import { mergeFiltros, loadFiltros, guardarFiltros, hayFiltroActivo } from '../lib/filtros'
 import { cargarIndicadores, guardarIndicadores, CATALOGO_INDICADORES, validaIndicador, rotuloIndicador } from '../lib/indicadores'
 import { loadAsignacionMc, guardarAsignacionMc } from '../lib/mcAsignacion'
+import { capitalDeOperacion } from '../lib/capitalOperacion'
 import FiltrosPanel from '../components/FiltrosPanel'
 import { supabase } from '../lib/supabaseClient'
 import { fetchConditions, lsGetConds, lsSaveConds, COND_LS_KEY } from '../lib/conditions'
@@ -1652,28 +1653,11 @@ export default function Home() {
   // mcHistStratId que usan el historial y el panel del activo—, así que no hay un segundo estado que
   // pueda desincronizarse. Sin resolución de estrategia vigente, se dibujan todas, que es lo de antes.
   const mcEsStratActiva=(id)=>mcTodasStrats||!mcHistIdVigente||id===mcHistIdVigente
-  // Capital de UNA operación, que se calcula distinto según el modo y no admite atajos.
-  //   Pool: _capitalAtEntry viaja con la operación, y `entrada + pnlSimple` es el capital de salida por
-  //         construcción —el motor define pnlSimple como capFinal − capAsignado—, no por aproximación.
-  //   Slots: no hay _capitalAtEntry. La entrada se deshace desde capitalTras, y el capital de salida es
-  //         capitalTras DIRECTAMENTE. Sumar pnlSimple ahí daría un número que no cuadra con ninguna curva:
-  //         en Slots pnlSimple se mide sobre la asignación FIJA y capitalTras sobre el capital compuesto,
-  //         que son dos magnitudes distintas conviviendo en el mismo objeto.
-  // Sin datos suficientes se devuelve null y el tooltip pinta un guion, nunca un número inventado.
-  const mcCapitalDeOperacion=(t,modoAsig)=>{
-    const esPool=modoAsig==='compartido'||modoAsig==='concentrado'||modoAsig==='positionsizing'
-    if(esPool){
-      const ent=Number(t?._capitalAtEntry)
-      if(!Number.isFinite(ent)) return {inversion:null,resultado:null}
-      const pnl=Number(t?.pnlSimple)
-      return {inversion:ent,resultado:Number.isFinite(pnl)?ent+pnl:null}
-    }
-    const tras=Number(t?.capitalTras), pct=Number(t?.pnlPct)
-    if(!Number.isFinite(tras)||!Number.isFinite(pct)) return {inversion:null,resultado:null}
-    const factor=1+pct/100
-    // pnlPct = −100 haría factor 0: pérdida total, sin capital de entrada recuperable de esta forma.
-    return {inversion:factor!==0?tras/factor:null,resultado:tras}
-  }
+  // Capital de UNA operación: la regla vive ahora en lib/capitalOperacion.js, compartida con las
+  // etiquetas de los gráficos. Dos copias de esta regla son dos etiquetas capaces de decir cosas
+  // distintas de la misma operación, que es justo el fallo que este cambio arregla. Se conserva el
+  // nombre local para no tocar sus puntos de uso.
+  const mcCapitalDeOperacion=(t,modoAsig)=>capitalDeOperacion(t,modoAsig)
   // Señales para el gráfico de velas: una sola estrategia, la seleccionada. Memorizado porque el efecto
   // de AssetSignalChart depende de este array por identidad y lo reconstruiría en cada render.
   const mcSignalsActivoSel=useMemo(()=>{
@@ -5928,7 +5912,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.870</title>
+        <title>Trading Simulator V9.871</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6017,7 +6001,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             }} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.870
+            <span className="dot"/>Trading Simulator V9.871
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -8539,7 +8523,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         customMarkers={[...(result.customMarkers??[]), ...openEntryMarkers]}
                         pendingOrders={pendingOrdersForSym}
                         simbolo={simbolo}
-                        trades={result.isBareChart?[]:result.trades||[]} maxDD={result.isBareChart?0:metrics?.ddSimple||0}
+                        trades={result.isBareChart?[]:result.trades||[]} maxDD={result.isBareChart?0:metrics?.ddComp||0}
                         isBareChart={result.isBareChart??false}
                         chartHeight={result.isBareChart?bareChartHeight:candleH}
                         fillHeight={!result.isBareChart}
@@ -8698,7 +8682,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         pendingOrders={pendingOrdersForSym}
                         simbolo={simbolo}
                           trades={result.isBareChart?[]:result.trades||[]}
-                          maxDD={result.isBareChart?0:metrics?.ddSimple||0}
+                          maxDD={result.isBareChart?0:metrics?.ddComp||0}
                           isBareChart={result.isBareChart??false}
                           fillHeight={true}
                           labelMode={labelMode} rulerActive={rulerOn}
@@ -10141,6 +10125,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           startDate={histResult.startDate}
                           endDate={ganttEndD}
                           slotCapital={histResult.slotCapital}
+                          modoAsig={histResult.modoAsig}
                           onRequestDiscarded={handleGanttDiscarded}
                           discardedTrades={ganttDiscarded?mcSoloActivoSel(ganttDiscarded):ganttDiscarded}
                           loadingDiscarded={ganttLoadingDisc}

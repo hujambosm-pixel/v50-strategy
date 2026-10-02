@@ -1,5 +1,6 @@
 import { useRef, useEffect, useState, useMemo } from 'react'
 import { MONO, f2, fmtDate } from '../lib/utils'
+import { capitalDeOperacion } from '../lib/capitalOperacion'
 // ── Indicadores: UNA sola implementación, la de lib/backtester.js ──────
 // Este fichero tenía su propia copia de calcEMA/calcSMA/calcRSI/calcMACD. Con entrada limpia daban
 // exactamente los mismos valores que las de lib —comprobado barra a barra—, pero con nulos no: las de
@@ -1217,12 +1218,20 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
 
             if(labelMode===2){
               // ── Modo completo: caja multi-línea compacta ──
-              const cap=t.capitalTras!=null?`€${Math.round(t.capitalTras).toLocaleString('es-ES')}`:'-'
+              // TODO en capital COMPUESTO y de la MISMA fuente que el historial. Esta caja enseñaba
+              // capitalTras (compuesto) junto a pnlSimple (simple): dos magnitudes que no describen
+              // la misma operación, así que la etiqueta y el historial decían cosas distintas de
+              // ella. El por qué y la regla, en lib/capitalOperacion.js.
+              const {inversion:capIni,resultado:capFin}=capitalDeOperacion(t)
+              const pnlComp=(capIni!=null&&capFin!=null)?capFin-capIni:null
+              const eur=v=>v==null?'-':`€${Math.round(v).toLocaleString('es-ES')}`
+              const eurFirmado=v=>v==null?'-':`€${v<0?'-':'+'}${Math.abs(Math.round(v)).toLocaleString('es-ES')}`
               const lines=[
                 `#${idx+1}`,
-                `Capital: ${cap}`,
+                `Cap.ini: ${eur(capIni)}`,
+                `Cap.fin: ${eur(capFin)}`,
                 `Profit:  ${t.pnlPct.toFixed(2)}%`,
-                `P&L:     €${t.pnlSimple<0?'-':''}${Math.abs(Math.round(t.pnlSimple)).toLocaleString('es-ES')}`,
+                `P&L:     ${eurFirmado(pnlComp)}`,
                 `${t.dias}d`,
               ]
               const W=Math.max(...lines.map(l=>l.length))*5.8+20
@@ -1451,6 +1460,9 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
           if(!param.time||!param.point){tt.style.display='none';return}
           const trade=trades.find(t=>t.entryDate<=param.time&&param.time<=t.exitDate)
           if(!trade){tt.style.display='none';return}
+          // El mismo capital compuesto que la caja de etiquetas y que el historial.
+          const {inversion:capIni,resultado:capFin}=capitalDeOperacion(trade)
+          const pnlComp=(capIni!=null&&capFin!=null)?capFin-capIni:null
           const bc=trade.pnlPct>=0?'#00e5a0':'#ff4d6d'
           const w=containerRef.current?.clientWidth||600
           tt.style.display='block'
@@ -1459,11 +1471,17 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
           tt.style.borderColor=bc
           tt.innerHTML=
             `<div style="font-size:10px;color:#7a9bc0;margin-bottom:4px">${fmtDate(trade.entryDate)} → ${fmtDate(trade.exitDate)}</div>`+
-            `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:#7a9bc0">Capital</span><b style="color:#e2eaf5">€${f2(trade.capitalTras)}</b></div>`+
+            `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:#7a9bc0">Capital inicial</span><b style="color:#e2eaf5">${capIni==null?'-':'€'+f2(capIni)}</b></div>`+
+            `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:#7a9bc0">Capital final</span><b style="color:#e2eaf5">${capFin==null?'-':'€'+f2(capFin)}</b></div>`+
             `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:#7a9bc0">Profit</span><b style="color:${bc}">${trade.pnlPct>=0?'+':''}${trade.pnlPct.toFixed(2)}%</b></div>`+
-            `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:#7a9bc0">P&L</span><b style="color:${bc}">${trade.pnlSimple>=0?'€+':'€-'}${f2(Math.abs(trade.pnlSimple))}</b></div>`+
+            `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:#7a9bc0">P&L</span><b style="color:${bc}">${pnlComp==null?'-':(pnlComp>=0?'€+':'€-')+f2(Math.abs(pnlComp))}</b></div>`+
             `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:#7a9bc0">Días</span><span>${trade.dias}</span></div>`+
-            `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:#7a9bc0">Max DD</span><span style="color:#ff4d6d">${maxDD.toFixed(2)}%</span></div>`
+            // «Max DD estrategia», no «Max DD»: este número NUNCA fue de la operación. Es el
+            // drawdown máximo de la curva ENTERA de la estrategia, idéntico en las etiquetas de
+            // todas las operaciones. Se mantiene porque sirve de referencia, pero con el nombre que
+            // le corresponde; y ahora llega en compuesto (ddComp), no en simple, para no volver a
+            // mezclar modos dentro de la misma etiqueta.
+            `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:#7a9bc0">Max DD estrategia</span><span style="color:#ff4d6d">${maxDD.toFixed(2)}%</span></div>`
         }
       })
 

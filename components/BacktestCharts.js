@@ -625,14 +625,17 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
         })
         if(!mejor){_tip.style.display='none';return}
         const bc=mejor.pnlPct>=0?'#00e5a0':'#ff4d6d'
-        const pnl=mejor.pnlSimple??0
+        // P&L en compuesto: capital final − capital inicial. Antes era pnlSimple, medido sobre la
+        // asignación fija, mientras las dos filas de arriba ya venían en compuesto.
+        const pnlComp=(Number.isFinite(mejor.inversion)&&Number.isFinite(mejor.resultado))
+          ? mejor.resultado-mejor.inversion : null
         _tip.style.borderColor=bc
         _tip.innerHTML=
           `<div style="font-size:10px;color:#7a9bc0;margin-bottom:5px">#${mejor.n} · ${_fecha(mejor.entryDate)} → ${_fecha(mejor.exitDate)}</div>`+
-          _fila('Inversión',_eur(mejor.inversion))+
-          _fila('Resultado',_eur(mejor.resultado))+
+          _fila('Capital inicial',_eur(mejor.inversion))+
+          _fila('Capital final',_eur(mejor.resultado))+
           _fila('Rendimiento',`${mejor.pnlPct>=0?'+':''}${(mejor.pnlPct||0).toFixed(2)}%`,bc)+
-          _fila('P&L',`${pnl>=0?'+':'-'}€${Math.round(Math.abs(pnl)).toLocaleString('es-ES')}`,bc)+
+          _fila('P&L',pnlComp==null?'-':`${pnlComp>=0?'+':'-'}€${Math.round(Math.abs(pnlComp)).toLocaleString('es-ES')}`,bc)+
           _fila('Días',String(_dias(mejor.entryDate,mejor.exitDate)))+
           // "Desde máximo", no "Max DD": esto NO es el drawdown de la tabla. Mide lo que la operación
           // devolvió entre su pico y su salida, con el punto final fijado en la salida.

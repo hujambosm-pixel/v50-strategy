@@ -2,6 +2,7 @@
 // SVG + HTML. Zoom/scroll custom; sin overflow-x nativo.
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { capitalDeOperacion } from '../lib/capitalOperacion'
 
 const MONO = "'JetBrains Mono', 'Fira Mono', 'Cascadia Code', monospace"
 
@@ -90,12 +91,19 @@ function groupByYear(monthMarkers) {
 // ══════════════════════════════════════════════════════════════════════════════
 // TOOLTIP — trade individual
 // ══════════════════════════════════════════════════════════════════════════════
-function GanttTooltip({ trade, mouseX, mouseY, isDiscarded, slotCapital }) {
+function GanttTooltip({ trade, mouseX, mouseY, isDiscarded, slotCapital, modoAsig }) {
   const t = trade
-  const capInv = t._capitalAtEntry != null ? t._capitalAtEntry : slotCapital
-  const pnlEur = t.pnlSimple != null
-    ? t.pnlSimple
-    : capInv != null ? capInv * (t.pnlPct || 0) / 100 : null
+  // Capital inicial y final de la MISMA fuente que el historial y que las demás etiquetas de la
+  // app (lib/capitalOperacion.js), y en compuesto. En Slots el capital inicial era el de la
+  // asignación fija mientras el historial enseñaba el compuesto: dos cifras para la misma
+  // operación. El P&L pasa a ser final − inicial, que es lo que de verdad cambió el capital.
+  const cap = capitalDeOperacion(t, modoAsig)
+  const capInv = cap.inversion != null ? cap.inversion : slotCapital
+  const capFin = cap.resultado
+  const pnlEur = (cap.inversion != null && cap.resultado != null)
+    ? cap.resultado - cap.inversion
+    : (t.pnlSimple != null ? t.pnlSimple
+       : capInv != null ? capInv * (t.pnlPct || 0) / 100 : null)
   const dias = t.dias != null
     ? t.dias
     : (t.entryDate && t.exitDate
@@ -103,7 +111,7 @@ function GanttTooltip({ trade, mouseX, mouseY, isDiscarded, slotCapital }) {
         : null)
 
   const W   = 235
-  const H   = (capInv != null ? 195 : 175) + (isDiscarded ? 30 : 0)
+  const H   = (capInv != null ? 195 : 175) + (capFin != null ? 17 : 0) + (isDiscarded ? 30 : 0)
   const left = mouseX + 14 + W > (typeof window !== 'undefined' ? window.innerWidth  : 1200) ? mouseX - W - 10 : mouseX + 14
   const top  = mouseY + 14 + H > (typeof window !== 'undefined' ? window.innerHeight : 800)  ? mouseY - H - 10 : mouseY + 14
   const pct  = t.pnlPct || 0
@@ -135,8 +143,12 @@ function GanttTooltip({ trade, mouseX, mouseY, isDiscarded, slotCapital }) {
           <span style={{color:'#a8c4dc'}}>{dias}</span>
         </>}
         {capInv != null && <>
-          <span style={{color:'#4a6a8a'}}>Capital inv.:</span>
+          <span style={{color:'#4a6a8a'}}>Capital inicial:</span>
           <span style={{color:'#c8dff5'}}>{fmtEur(capInv)}</span>
+        </>}
+        {capFin != null && <>
+          <span style={{color:'#4a6a8a'}}>Capital final:</span>
+          <span style={{color:'#c8dff5'}}>{fmtEur(capFin)}</span>
         </>}
         <span style={{color:'#4a6a8a'}}>P&amp;L%:</span>
         <span style={{color:posColor, fontWeight:600}}>{fmtPct(pct)}</span>
@@ -199,6 +211,9 @@ export default function GanttChart({
   startDate,
   endDate,
   slotCapital,
+  // El modo de asignación llega desde fuera porque es el que decide de dónde sale el capital de
+  // cada operación (lib/capitalOperacion.js); deducirlo de los campos del trade sería adivinar.
+  modoAsig,
   onRequestDiscarded,
   discardedTrades = null,
   loadingDiscarded = false,
@@ -311,11 +326,16 @@ export default function GanttChart({
   // ── Compute symbol stats for label tooltip ────────────────────────────────
   function getSymStats(sym) {
     const closed = trades.filter(t => t.symbol === sym && !t._virtualClose && t.exitDate)
-    const totalCapInv = closed.reduce((s, t) => s + (t._capitalAtEntry != null ? t._capitalAtEntry : (slotCapital || 0)), 0)
-    const totalPnlEur = closed.reduce((s, t) => {
-      const cap = t._capitalAtEntry != null ? t._capitalAtEntry : (slotCapital || 0)
-      return s + (t.pnlSimple != null ? t.pnlSimple : cap * (t.pnlPct || 0) / 100)
-    }, 0)
+    // Mismo capital compuesto que las etiquetas de cada operación, sumado: si el detalle va en
+    // compuesto y el total en simple, los dos no cuadran y uno de los dos miente.
+    const porOp = closed.map(t => {
+      const c = capitalDeOperacion(t, modoAsig)
+      const ini = c.inversion != null ? c.inversion : (slotCapital || 0)
+      return { ini, pnl: (c.inversion != null && c.resultado != null) ? c.resultado - c.inversion
+                    : (t.pnlSimple != null ? t.pnlSimple : ini * (t.pnlPct || 0) / 100) }
+    })
+    const totalCapInv = porOp.reduce((s, o) => s + o.ini, 0)
+    const totalPnlEur = porOp.reduce((s, o) => s + (o.pnl || 0), 0)
     return {
       ops:    closed.length,
       capInv: totalCapInv,
@@ -553,7 +573,7 @@ export default function GanttChart({
       {/* TOOLTIPS */}
       {tooltip && (
         <GanttTooltip trade={tooltip.trade} mouseX={tooltip.mouseX} mouseY={tooltip.mouseY}
-          isDiscarded={tooltip.isDiscarded} slotCapital={slotCapital} />
+          isDiscarded={tooltip.isDiscarded} slotCapital={slotCapital} modoAsig={modoAsig} />
       )}
       {symTooltip && !tooltip && (
         <SymTooltip sym={symTooltip.sym} stats={symTooltip.stats}
