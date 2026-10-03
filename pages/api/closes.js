@@ -1,18 +1,23 @@
 // pages/api/closes.js — últimos N closes de cualquier ticker via Yahoo Finance
 // ?dates=1 → devuelve [{date, close}] en lugar de array plano (retrocompatible)
+import { semanalesDesdeDiarias } from '../../lib/velasSemanales'
 export default async function handler(req, res) {
   const { symbol, days = '300', dates, interval } = req.query
   if (!symbol) return res.status(400).json({ error: 'symbol required' })
 
   // interval: '1d' (default, retrocompatible) | '1wk'. El cap de días solo se eleva en semanal
   // (para cubrir la ventana en velas); en diario queda en 1500 → el tradelog (days=1800→1500) no cambia.
+  //
+  // A Yahoo se le pide SIEMPRE diario y las semanales se agregan aquí (lib/velasSemanales.js): en
+  // semanal, Yahoo devuelve dos velas para la última semana y la de más entraba en la ventana del RS
+  // como si fuera una semana entera.
   const iv = interval === '1wk' ? '1wk' : '1d'
   const cap = iv === '1wk' ? 4000 : 1500
   const nDays = Math.min(Math.max(Number(days) || 300, 30), cap)
   const period1 = Math.floor(Date.now() / 1000) - nDays * 24 * 3600
   const period2 = Math.floor(Date.now() / 1000)
 
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?period1=${period1}&period2=${period2}&interval=${iv}`
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?period1=${period1}&period2=${period2}&interval=1d`
   try {
     const r = await fetch(url, {
       headers: {
@@ -25,14 +30,27 @@ export default async function handler(req, res) {
     const json = await r.json()
     const result = json?.chart?.result?.[0]
     const timestamps = result?.timestamp || []
-    const rawCloses = result?.indicators?.quote?.[0]?.close || []
+    const rawClosesDiarios = result?.indicators?.quote?.[0]?.close || []
+    // Si se piden semanales, se agregan desde las diarias y se vuelve a la forma {date, close}.
+    let fechas = timestamps.map(t => new Date(t * 1000).toISOString().slice(0, 10))
+    let rawCloses = rawClosesDiarios
+    if (iv === '1wk') {
+      const diarias = []
+      for (let i = 0; i < timestamps.length; i++) {
+        if (rawClosesDiarios[i] == null || isNaN(rawClosesDiarios[i])) continue
+        diarias.push({ date: fechas[i], close: rawClosesDiarios[i] })
+      }
+      const semanales = semanalesDesdeDiarias(diarias)
+      fechas = semanales.map(s => s.date)
+      rawCloses = semanales.map(s => s.close)
+    }
 
     if (dates) {
       // Return [{date, close}] pairs for historical float curve construction
       const pairs = []
-      for (let i = 0; i < timestamps.length; i++) {
+      for (let i = 0; i < fechas.length; i++) {
         if (rawCloses[i] != null && !isNaN(rawCloses[i])) {
-          pairs.push({ date: new Date(timestamps[i] * 1000).toISOString().slice(0, 10), close: rawCloses[i] })
+          pairs.push({ date: fechas[i], close: rawCloses[i] })
         }
       }
       if (pairs.length < 10) return res.status(404).json({ error: `Sin datos para ${symbol}` })

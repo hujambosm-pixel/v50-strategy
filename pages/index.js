@@ -1782,18 +1782,22 @@ export default function Home() {
     const t=setTimeout(mcAjustaRangoPanel,180)
     return ()=>clearTimeout(t)
   },[mcPanelActivo,mcAjustaRangoPanel,mcPantallaCompleta,mcEquityH])
-  // De qué proveedor salió la serie de cada activo. Se muestra siempre, aunque venga todo del mismo: sin
-  // esto no había forma de saber que dos ejecuciones idénticas podían usar series distintas —Stooq sirve
-  // ajustado por dividendos y Yahoo no—, que es lo que hacía invisible un desajuste de precios.
+  // De qué proveedor salió la serie de cada activo. Hoy es siempre Yahoo —Stooq se retiró porque
+  // respondía 403 a todo—, pero el distintivo se queda: el día que haya un segundo proveedor, saber de
+  // dónde salió cada serie vuelve a importar, y mientras tanto confirma que no hay mezcla.
+  // `ajustadoDividendos` es el campo que antes se llamaba `ajustado`: las series de Yahoo están
+  // ajustadas por splits y NO por dividendos, y el nombre viejo se leía como «sin ajustar de ninguna
+  // manera», que no era verdad.
   const mcProveedores=useMemo(()=>{
     const m=mcResult?.origenPrecios
     if(!m||!Object.keys(m).length) return null
     const cuenta={}
     for(const v of Object.values(m)) cuenta[v.origen]=(cuenta[v.origen]||0)+1
-    const etiqueta=(o)=>o==='stooq'?'Stooq':o==='yahoo'?'Yahoo':o
+    const etiqueta=(o)=>o==='yahoo'?'Yahoo':o
     const resumen=Object.entries(cuenta).sort((a,b)=>b[1]-a[1]).map(([o,n])=>`${n} ${etiqueta(o)}`).join(', ')
+    const ajuste=(v)=>v.ajustadoDividendos?' (ajustado por dividendos)':' (ajustado por splits, no por dividendos)'
     const detalle=Object.entries(m).sort((a,b)=>a[0].localeCompare(b[0]))
-      .map(([sym,v])=>`${sym}: ${etiqueta(v.origen)}${v.ajustado?' (ajustado por dividendos)':''}`).join(String.fromCharCode(10))
+      .map(([sym,v])=>`${sym}: ${etiqueta(v.origen)}${ajuste(v)}`).join(String.fromCharCode(10))
     return {resumen,detalle,mezcla:Object.keys(cuenta).length>1}
   },[mcResult])
   // Valor de la línea de referencia del gráfico grande: el nivel de "ni gano ni pierdo", que depende de
@@ -5913,7 +5917,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.875</title>
+        <title>Trading Simulator V9.876</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6002,7 +6006,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             }} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.875
+            <span className="dot"/>Trading Simulator V9.876
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}

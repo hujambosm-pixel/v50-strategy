@@ -5,7 +5,6 @@ import { exigeAuth } from '../../lib/verificaJwt'
 // V5.29: arquitectura fill-first (una fila = un fill BUY o SELL)
 // Columnas trades_log: id, symbol, fill_type, date, price, shares, commission,
 //                      currency, fx, broker, strategy, notes, import_source, created_at
-import { stooqSym } from '../../lib/simbolos'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://uqjngxxbdlquiuhywiuc.supabase.co'
 const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY || 'sb_publishable_st9QJ3zcQbY5ec-JhxwqXQ_joy3udz3'
@@ -69,21 +68,31 @@ async function getFxRate(sb, date, fromCur, toCur = 'EUR') {
   return null
 }
 
-// ── Precio actual (Stooq) ────────────────────────────────────
-// Traducción compartida (lib/simbolos.js). La copia que había aquí no tenía NINGUNA regla: todo lo que no
-// estuviera en su tabla recibía '.us', incluidos índices y futuros.
+// ── Precio actual (Yahoo) ────────────────────────────────────
+// Pedía a Stooq, que responde 403 a todo, y SIN tiempo de espera: una llamada que no vuelve dejaba
+// colgada la petición entera del tradelog. Ahora Yahoo, con el símbolo canónico —el mismo que guarda
+// la cartera— y 4 segundos de tope, que es lo que usa el resto de la aplicación.
 async function getCurrentPrice(symbol) {
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 4000)
   try {
-    const sym = stooqSym(symbol)
-    if (!sym) return null   // sin equivalencia segura, mejor sin precio que con el de otro instrumento
-    const res = await fetch(`https://stooq.com/q/d/l/?s=${sym}&i=d`)
-    const text = await res.text()
-    if (!text || text.includes('No data')) return null
-    const lines = text.trim().split('\n').slice(1).filter(l => l.trim())
-    if (!lines.length) return null
-    const last = lines[lines.length - 1].split(',')
-    return { price: parseFloat(last[4]), date: last[0] }
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=5d`
+    const res = await fetch(url, {
+      signal: ctrl.signal,
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', 'Accept': 'application/json' },
+    })
+    if (!res.ok) return null
+    const json = await res.json()
+    const ts = json?.chart?.result?.[0]?.timestamp || []
+    const closes = json?.chart?.result?.[0]?.indicators?.quote?.[0]?.close || []
+    for (let i = closes.length - 1; i >= 0; i--) {
+      if (closes[i] != null && !isNaN(closes[i])) {
+        return { price: closes[i], date: new Date(ts[i] * 1000).toISOString().slice(0, 10) }
+      }
+    }
+    return null
   } catch { return null }
+  finally { clearTimeout(timer) }
 }
 
 // ── Parsers de importación ───────────────────────────────────

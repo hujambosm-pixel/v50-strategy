@@ -1,4 +1,5 @@
 // pages/api/chartdata.js — OHLCV data for a single symbol (used by signal comparison charts)
+import { semanalesDesdeDiarias } from '../../lib/velasSemanales'
 //
 // El volumen se pide y se devuelve aunque hoy no lo dibuje nadie: el nombre del endpoint ya decía OHLCV
 // y solo entregaba OHLC, así que AssetSignalChart no podía tener un panel de volumen ni queriendo. Va
@@ -8,10 +9,15 @@
 // `interval` es '1d' o '1wk', y NUNCA llega crudo del cliente: quien llama lo valida antes contra esos
 // dos valores. El diario es el valor por defecto en los dos niveles, así que los usos que no lo pidan
 // —la parrilla de minigráficos y el backtest individual— no cambian en nada.
+//
+// A Yahoo se le pide SIEMPRE diario: en semanal devuelve dos velas para la última semana —la del lunes
+// y otra con solo el último día— y el gráfico pintaba esa de más como una semana. Se agregan aquí con
+// la misma función que usa el motor (lib/velasSemanales.js), así que el gráfico y el backtest ven
+// exactamente las mismas velas.
 async function fetchOHLCV(symbol, years = 5, interval = '1d') {
   try {
     const encoded = encodeURIComponent(symbol)
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encoded}?interval=${interval}&range=${Math.min(years, 20)}y`
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encoded}?interval=1d&range=${Math.min(years, 20)}y`
     const res = await fetch(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -23,7 +29,7 @@ async function fetchOHLCV(symbol, years = 5, interval = '1d') {
     const timestamps = json?.chart?.result?.[0]?.timestamp
     const q = json?.chart?.result?.[0]?.indicators?.quote?.[0]
     if (!timestamps?.length) return null
-    return timestamps.map((ts, i) => ({
+    const diarias = timestamps.map((ts, i) => ({
       date: new Date(ts * 1000).toISOString().slice(0, 10),
       open:  q?.open?.[i]  ?? null,
       high:  q?.high?.[i]  ?? null,
@@ -32,6 +38,7 @@ async function fetchOHLCV(symbol, years = 5, interval = '1d') {
       volume: q?.volume?.[i] ?? null,
     })).filter(d => d.close && !isNaN(d.close))
       .sort((a, b) => a.date.localeCompare(b.date))
+    return interval === '1wk' ? semanalesDesdeDiarias(diarias) : diarias
   } catch { return null }
 }
 

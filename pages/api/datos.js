@@ -8,7 +8,7 @@ import { ddPctDeOperacion, indicePorFecha } from '../../lib/ddOperacion'
 import { filtraPorEntrada } from '../../lib/filtroEntrada'
 import { normalizaFiltrosEntrada, hayFiltrosActivos, clavesAuxiliares, construirFiltroActivoMap, filtrosActivos,
          requiereSemanalDelActivo, proyectarSemanal, fuerzaFiltrosSemanales } from '../../lib/filtros'
-import { stooqSym } from '../../lib/simbolos'
+import { semanalesDesdeDiarias } from '../../lib/velasSemanales'
 
 const SUPA_URL = process.env.SUPABASE_URL || 'https://uqjngxxbdlquiuhywiuc.supabase.co'
 const SUPA_KEY = process.env.SUPABASE_ANON_KEY || 'sb_publishable_st9QJ3zcQbY5ec-JhxwqXQ_joy3udz3'
@@ -42,48 +42,36 @@ export function setCachedPrice(symbol, price, date, origen, interval='d', prev=n
 
 // Devuelve las barras Y su procedencia. `fetchAV` sigue existiendo con su firma y su valor de siempre
 // —el array— como envoltorio, así que ningún consumidor cambia.
-//   origen    'stooq' | 'yahoo'
-//   ajustado  true si la serie viene ajustada por dividendos y splits. Stooq sirve ajustado; el cierre de
-//             Yahoo que se lee aquí (indicators.quote[0].close) NO lo está. Dos series del mismo activo
-//             con distinto ajuste dan backtests distintos, así que conviene saber cuál se está usando.
-//   ms        cuánto tardó, para poder medir con qué frecuencia Stooq llega a tiempo.
+//   origen              'yahoo', siempre. Se conserva el campo porque la cabecera del multiactivo lo
+//                       muestra, y porque el día que haya un segundo proveedor hará falta otra vez.
+//   ajustadoDividendos  SIEMPRE false, y por eso se llama así. El campo se llamaba `ajustado` y valía
+//                       `origen === 'stooq'`, lo que insinuaba que lo de Yahoo no estaba ajustado de
+//                       ninguna manera. Sí lo está por SPLITS —el cierre de indicators.quote[0] los
+//                       incorpora, comprobado con NVDA— y no lo está por DIVIDENDOS. El nombre nuevo
+//                       dice exactamente eso y no deja sitio a la duda.
+//   ms                  cuánto tardó.
+//
+// STOOQ, FUERA. Respondía 403 «Access denied» a todas las peticiones y se gastaba hasta 3 segundos de
+// espera antes de caer a Yahoo, en cada símbolo y cada intervalo. El 100 % de los datos venía ya de
+// Yahoo, así que lo único que aportaba era latencia y una rama de código que nadie recorría.
+//
+// SEMANALES: se descarga SIEMPRE en diario y se agregan aquí (lib/velasSemanales.js). Yahoo devuelve
+// dos velas para la última semana —la del lunes y otra con solo el último día— y el motor tomaba la
+// segunda como una semana más.
 export async function fetchAVDetalle(symbol, years=5, interval='d') {
   const _t0 = Date.now()
   let origen = null
-  // `null` = no hay equivalencia SEGURA en Stooq (ver lib/simbolos.js). Entonces no se le pregunta
-  // siquiera: se va directo a Yahoo, que entiende el símbolo canónico. Antes se le mandaba una traducción
-  // inventada y, si daba con algo, ese algo podía ser otro instrumento.
-  const sym = stooqSym(symbol)
-  const stooqInterval = interval === 'w' ? 'w' : 'd'
-  const url = sym ? `https://stooq.com/q/d/l/?s=${sym}&i=${stooqInterval}` : null
   let rawData = null
+  const semanal = interval === 'w'
 
-  // ── Stooq fetch with 3-second timeout ──
-  // Stooq hangs 10-12s from Vercel IPs; abort early so Yahoo fallback runs immediately
-  const stooqCtrl = new AbortController()
-  const stooqTimer = setTimeout(() => stooqCtrl.abort(), 3000)
-  try {
-    if (!url) throw new Error('sin equivalencia en Stooq')
-    const res = await fetch(url, { signal: stooqCtrl.signal })
-    const text = await res.text()
-    if (text && !text.includes('No data') && text.trim().length >= 50) {
-      rawData = text.trim().split('\n').slice(1).filter(l=>l.trim()).map(l=>{
-        const [date,open,high,low,close,volume] = l.split(',')
-        return { date, open:parseFloat(open), high:parseFloat(high), low:parseFloat(low), close:parseFloat(close), volume:parseFloat(volume)||0 }
-      }).filter(d=>d.close&&!isNaN(d.close)).sort((a,b)=>a.date.localeCompare(b.date))
-      if (rawData.length) origen = 'stooq'
-    }
-  } catch(_) {
-    // timeout or network error → fall through to Yahoo Finance
-  } finally {
-    clearTimeout(stooqTimer)
-  }
-
-  // ── Yahoo Finance fallback with 4-second timeout ──
-  if (!rawData || rawData.length === 0) {
-    const yfInterval = interval === 'w' ? '1wk' : '1d'
-    // Se piden los años solicitados, sin tope: range=Ny sirve velas diarias/semanales hasta toda la historia
-    // del activo (si se pide más, Yahoo devuelve lo que hay). NO usar range=max: degrada a velas trimestrales.
+  // ── Yahoo Finance, con 4 segundos de espera ──
+  {
+    // Siempre diario: las semanales se construyen después a partir de estas mismas velas.
+    const yfInterval = '1d'
+    // Se piden los años solicitados, sin tope: range=Ny sirve velas diarias hasta toda la historia
+    // del activo (si se pide más, Yahoo devuelve lo que hay). NO usar range=max: degrada a velas
+    // trimestrales. En semanal NO hace falta pedir más: la diaria a 20 años son ~5.031 velas sin un
+    // solo hueco de más de 5 días, así que el mismo rango de calendario cubre las mismas semanas.
     const yfYears = Math.max(Math.ceil(years), 1)
     const yfUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=${yfInterval}&range=${yfYears}y`
     const yfCtrl = new AbortController()
@@ -124,10 +112,13 @@ export async function fetchAVDetalle(symbol, years=5, interval='d') {
     console.log(`[precios] ${symbol} (${interval}): SIN DATOS tras ${_ms} ms`)
     throw new Error(`Sin datos para ${symbol}`)
   }
-  // Una línea por descarga: con esto se puede medir en producción cada cuánto llega Stooq a tiempo, que
-  // es el dato que falta para decidir si sigue siendo el proveedor primario.
-  console.log(`[precios] ${symbol} (${interval}): ${origen} · ${rawData.length} velas · ${_ms} ms`)
-  return { data: rawData, origen, ajustado: origen === 'stooq', ms: _ms }
+  // En semanal, las velas que salen de aquí son las construidas, no las de Yahoo.
+  const data = semanal ? semanalesDesdeDiarias(rawData) : rawData
+  // Una línea por descarga, con las dos cifras cuando hay agregación: así en el log se ve de cuántas
+  // velas diarias salió cada serie semanal.
+  console.log(`[precios] ${symbol} (${interval}): ${origen} · ${data.length} velas
+    ${semanal ? `(de ${rawData.length} diarias) ` : ''}· ${_ms} ms`.replace(/\s+/g, ' '))
+  return { data, origen, ajustadoDividendos: false, ms: _ms }
 }
 // Envoltorio de compatibilidad: mismo nombre, misma firma y mismo valor de retorno de siempre.
 export async function fetchAV(symbol, years=5, interval='d') {

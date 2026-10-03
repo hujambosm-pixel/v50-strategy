@@ -9,33 +9,29 @@
 // gráfico. Con periodos cortos daba igual —medido, 0 diferencias con 10/11, RSI 14 y MACD
 // 12/26/9—, pero con una media de 200 el error de siembra llegaba al 12%.
 import { calcEMA, calcRSI, calcMACD } from '../../lib/backtester'
-import { stooqSym } from '../../lib/simbolos'
-
-// ── Stooq fetch ───────────────────────────────────────────────
-// La traducción es la compartida (lib/simbolos.js). La copia que había aquí tenía seis entradas menos que
-// la del motor, así que un mismo símbolo podía traducirse distinto según quién preguntara.
-
+// ── Precios: Yahoo ───────────────────────────────────────────
+// Esto pedía a Stooq, que responde 403 a todo y se comía 15 segundos de espera por símbolo antes de
+// devolver null: con varias alarmas, la ruta entera se quedaba colgada y las alarmas no se evaluaban.
+// Ahora va a Yahoo, el mismo proveedor y el mismo símbolo canónico que usa el resto de la aplicación,
+// así que una alarma y el gráfico ven los mismos cierres. Se mantiene la preferencia por los cierres
+// que trae el cliente: si ya los ha descargado, no se vuelve a pedir nada.
 async function fetchCloses(symbol, bodyCloses) {
-  // Prefer closes pre-fetched by the client (Stooq blocks server IPs on Vercel)
   if (bodyCloses?.[symbol]?.length >= 30) return bodyCloses[symbol]
-  // Fallback: fetch from Stooq (works locally, may fail on Vercel)
-  const sym = stooqSym(symbol)
-  // Sin equivalencia segura no se pregunta: mejor sin alarma que una alarma sobre otro instrumento.
-  if (!sym) { console.log(`[status] ${symbol}: sin equivalencia en Stooq`); return null }
-  const url = `https://stooq.com/q/d/l/?s=${sym}&i=d`
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=2y`
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), 15000)
+  const timer = setTimeout(() => controller.abort(), 4000)
   try {
-    const res = await fetch(url, { signal: controller.signal })
-    const text = await res.text()
-    if (!text || text.includes('No data') || text.trim().length < 50) {
-      console.log(`[status] ${symbol}: sin datos de Stooq (${sym})`)
-      return null
-    }
-    const closes = text.trim().split('\n').slice(1)
-      .filter(l => l.trim())
-      .map(l => parseFloat(l.split(',')[4]))
-      .filter(v => !isNaN(v))
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'application/json',
+      },
+    })
+    if (!res.ok) { console.log(`[status] ${symbol}: Yahoo HTTP ${res.status}`); return null }
+    const json = await res.json()
+    const crudos = json?.chart?.result?.[0]?.indicators?.quote?.[0]?.close || []
+    const closes = crudos.filter(v => v != null && !isNaN(v))
     if (closes.length < 30) {
       console.log(`[status] ${symbol}: solo ${closes.length} velas`)
       return null

@@ -10,6 +10,7 @@ import { operacionesPorFiltro, esNoStrategyPorNombre } from '../../lib/operacion
 import { ajustaPreciosAVela, cuentaAjustados } from '../../lib/precioEnVela'
 import { ddPctDeOperacion, indicePorFecha } from '../../lib/ddOperacion'
 import { filtraPorEntrada } from '../../lib/filtroEntrada'
+import { semanalesDesdeDiarias } from '../../lib/velasSemanales'
 
 const SUPA_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPA_KEY = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -102,10 +103,10 @@ async function fetchDataConMotivo(symbol, years=5, fromDate=null, toDate=null, i
     // hay desde fromDate hasta hoy (nunca menos que antes): con solo `years` —5 por defecto, el cliente no
     // lo manda en rango— un rango largo llegaba ya truncado. El modo Años pide exactamente lo mismo.
     const anios = (fromDate && toDate) ? Math.max(years, _aniosHastaHoy(fromDate)) : years
-    // `origen` viaja con las barras para poder decir DE DÓNDE salió cada serie: Stooq sirve ajustado por
-    // dividendos y Yahoo no, así que dos ejecuciones que hayan caído en proveedores distintos no son
-    // comparables entre sí, y hasta ahora no había forma de saberlo.
-    const { data: bruto, origen, ajustado } = await fetchAVDetalle(symbol, Math.ceil(anios) + 1, avInterval)
+    // `origen` viaja con las barras para poder decir DE DÓNDE salió cada serie. Hoy siempre es Yahoo,
+    // y `ajustadoDividendos` siempre false: están ajustadas por splits y no por dividendos. El campo se
+    // llamaba `ajustado` a secas y se leía como «no ajustada de ninguna manera», que no es el caso.
+    const { data: bruto, origen, ajustadoDividendos } = await fetchAVDetalle(symbol, Math.ceil(anios) + 1, avInterval)
     if (!bruto?.length) return { data: null, motivo: 'descargaFallida' }
     let data
     if (fromDate && toDate) {
@@ -116,8 +117,8 @@ async function fetchDataConMotivo(symbol, years=5, fromDate=null, toDate=null, i
       data = bruto.filter(d => d.date >= cutStr)
     }
     return data.length
-      ? { data, origen, ajustado }
-      : { data: null, motivo: 'sinVelasEnPeriodo', disponibleDesde: bruto[0].date, disponibleHasta: bruto[bruto.length - 1].date, origen, ajustado }
+      ? { data, origen, ajustadoDividendos }
+      : { data: null, motivo: 'sinVelasEnPeriodo', disponibleDesde: bruto[0].date, disponibleHasta: bruto[bruto.length - 1].date, origen, ajustadoDividendos }
   } catch { return { data: null, motivo: 'descargaFallida' } }
 }
 // Añade a una operación su cesión desde el máximo, buscándola por el id con el que la calculó el motor:
@@ -128,13 +129,13 @@ function _conCesion(t, cesiones) {
   const c = cesiones?.[`${t.symbol}:${t.entryDate}`]
   return c ? { ...t, cesionPct: c.cesionPct, maxPx: c.maxPx, maxFecha: c.maxFecha } : t
 }
-// Procedencia de cada serie descargada, para la respuesta. Campo nuevo, no sustituye a nada.
-// `ajustado` dice si la serie viene con dividendos y splits incorporados, que es lo que hace que dos
-// proveedores den números distintos para el mismo activo.
+// Procedencia de cada serie descargada, para la respuesta.
+// `ajustadoDividendos` dice si la serie trae los dividendos incorporados. Hoy es siempre false: los
+// cierres de Yahoo que se leen aquí están ajustados por splits y no por dividendos.
 function _origenPrecios(descargas) {
   const out = {}
   for (const [sym, r] of Object.entries(descargas || {})) {
-    if (r?.origen) out[sym] = { origen: r.origen, ajustado: !!r.ajustado }
+    if (r?.origen) out[sym] = { origen: r.origen, ajustadoDividendos: !!r.ajustadoDividendos }
   }
   return Object.keys(out).length ? out : undefined
 }
