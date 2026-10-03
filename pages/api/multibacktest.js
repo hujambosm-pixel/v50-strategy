@@ -9,6 +9,7 @@ import { exigeAuth } from '../../lib/verificaJwt'
 import { operacionesPorFiltro, esNoStrategyPorNombre } from '../../lib/operacionesPorFiltro'
 import { ajustaPreciosAVela, cuentaAjustados } from '../../lib/precioEnVela'
 import { ddPctDeOperacion, indicePorFecha } from '../../lib/ddOperacion'
+import { filtraPorEntrada } from '../../lib/filtroEntrada'
 
 const SUPA_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPA_KEY = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -1933,6 +1934,10 @@ async function handlePortfolioMode(req, res) {
         assetResults.push({
           symbol:      synSym,
           _realSymbol: ticker,
+          // Lo declara la estrategia en sus params. Lo necesita el descarte por filtro: una
+          // estrategia que entra al cierre decide CON ese cierre, asi que ahi el estado de su
+          // propia vela si esta disponible. Ver lib/filtroEntrada.js.
+          _entradaAlCierre: s.effectiveCfg?.entradaAlCierre === true,
           _stratId:    s.id,
           _stratName:  s.name,
           _stratOrder: s.stratOrder,
@@ -2005,7 +2010,8 @@ async function handlePortfolioMode(req, res) {
           resolveSemanalActivo: (sym) => semanalPorSimbolo[sym] ?? null,
         })
 
-        const filtered = ar.trades.filter(t => filtroActivoMap[t.entryDate] !== false)
+        const filtered = filtraPorEntrada(ar.trades, filtroActivoMap, assetDates,
+          { entradaAlCierre: ar._entradaAlCierre === true })
         if (filtered.length !== ar.trades.length) {
           // rebuildCapitalTras hace {...t} → _stratId/_stratName/_realSymbol se preservan
           const rebuilt = rebuildCapitalTras(filtered, slotCapital)
@@ -2359,8 +2365,10 @@ export default async function handler(req, res) {
             ar.gananciaSimple = ar.trades.reduce((s,t) => s + t.pnlSimple, 0)
           }
         } else {
-          // Filtrar trades existentes por filtroActivoMap
-          const filtered = ar.trades.filter(t => filtroActivoMap[t.entryDate] !== false)
+          // Filtrar trades existentes por filtroActivoMap. El estado que decide es el del cierre
+          // ANTERIOR al inicio de la vela de entrada; ver lib/filtroEntrada.js.
+          const filtered = filtraPorEntrada(ar.trades, filtroActivoMap, assetDates,
+            { entradaAlCierre: effectiveCfg?.entradaAlCierre === true })
           if (filtered.length !== ar.trades.length) {
             const rebuilt = rebuildCapitalTras(filtered, slotCapital)
             ar.trades = rebuilt

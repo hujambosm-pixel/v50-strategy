@@ -5,6 +5,7 @@ import { exigeAuth } from '../../lib/verificaJwt'
 import { operacionesPorFiltro, esNoStrategyPorNombre } from '../../lib/operacionesPorFiltro'
 import { ajustaPreciosAVela, cuentaAjustados } from '../../lib/precioEnVela'
 import { ddPctDeOperacion, indicePorFecha } from '../../lib/ddOperacion'
+import { filtraPorEntrada } from '../../lib/filtroEntrada'
 import { normalizaFiltrosEntrada, hayFiltrosActivos, clavesAuxiliares, construirFiltroActivoMap, filtrosActivos,
          requiereSemanalDelActivo, proyectarSemanal } from '../../lib/filtros'
 import { stooqSym } from '../../lib/simbolos'
@@ -518,8 +519,12 @@ export default async function handler(req, res) {
           rawTrades.push(...operacionesPorFiltro(data, (f) => filtroActivoMap[f] !== false))
         }
       } else {
-        // Estrategia normal: descartar trades cuya entrada fue bloqueada por el filtro
-        rawTrades = rawTrades.filter(t => filtroActivoMap[t.entryDate] !== false)
+        // Estrategia normal: descartar trades cuya entrada fue bloqueada por el filtro.
+        // El estado que decide es el del CIERRE ANTERIOR al inicio de la vela de entrada, no el
+        // de esa vela: cuando la orden se llena —en la apertura o al tocar un nivel— el cierre
+        // de ese dia todavia no existe. Ver lib/filtroEntrada.js.
+        rawTrades = filtraPorEntrada(rawTrades, filtroActivoMap, assetDates,
+          { entradaAlCierre: userParams.entradaAlCierre === true })
       }
     }
 
