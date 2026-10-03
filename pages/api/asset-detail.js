@@ -8,7 +8,8 @@
 // REGLA: este endpoint NO reimplementa el motor. Importa de multibacktest.js las mismas funciones que usa
 // el backtest —la descarga, el sandbox y los alineados—, de modo que no puede divergir de él. Si el motor
 // cambia, cambia para los dos a la vez.
-import { fetchData, runCodeJsAsset, buildAlignedCloses, buildAlignedWeekly, calcEMA } from './multibacktest'
+import { fetchData, fetchDataConMotivo, runCodeJsAsset, buildAlignedCloses, buildAlignedWeekly, calcEMA } from './multibacktest'
+import { velasCalentamiento } from '../../lib/periodo'
 import { exigeAuth } from '../../lib/verificaJwt'
 import { normalizaFiltrosEntrada, hayFiltrosActivos, clavesAuxiliares, construirFiltroActivoMap,
          requiereSemanalDelActivo, proyectarSemanal, fuerzaFiltrosSemanales } from '../../lib/filtros'
@@ -95,7 +96,9 @@ export default async function handler(req, res) {
     paso = 'cargar estrategia'
     // 1. code_js y params de la estrategia, igual que el multibacktest: params de Supabase por encima
     //    del cfg del formulario.
-    let codeJs = null, effectiveCfg = cfg
+    // `stratParams` aparte de `effectiveCfg`: el calentamiento se calcula con los periodos de la
+    // ESTRATEGIA, no con las claves del cfg del formulario.
+    let codeJs = null, effectiveCfg = cfg, paramsEstrategia = {}
     if (strategyId && SUPA_URL && SUPA_KEY) {
       try {
         const sr = await fetch(
@@ -109,6 +112,7 @@ export default async function handler(req, res) {
           try {
             stratParams = row.params ? (typeof row.params === 'string' ? JSON.parse(row.params) : row.params) : {}
           } catch(_) {}
+          paramsEstrategia = stratParams
           effectiveCfg = { ...cfg, ...stratParams }
         }
       } catch(_) { codeJs = null }
@@ -116,34 +120,48 @@ export default async function handler(req, res) {
     if (!codeJs && !isNoStrategy) return res.status(400).json({ error: 'La estrategia no tiene código ejecutable (code_js)' })
 
     paso = 'descargar barras'
-    // 2. Las MISMAS barras y el MISMO intervalo con los que corrió el backtest.
+    // 2. Las MISMAS barras, el MISMO intervalo y el MISMO calentamiento con los que corrió el
+    //    backtest. Si aqui el calentamiento fuera otro, las curvas de este panel no serian las que
+    //    miró la estrategia y el panel diria una cosa y el backtest otra.
     const esSemanal = intervalo === 'semanal'
     const assetInterval = esSemanal ? '1wk' : '1d'
-    const barras = await fetchData(symbol, cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, assetInterval)
+    // El filtro es la ventana operativa: en semanal no puede ser diario (lib/filtros.js). Se
+    // normaliza AQUI, antes de descargar, porque sus periodos cuentan para el calentamiento.
+    const _ff = fuerzaFiltrosSemanales(normalizaFiltrosEntrada(filtrosCfg), esSemanal)
+    const filtrosLista = _ff.lista
+    if (_ff.forzados.length) console.log(`[filtros] ${symbol}: estrategia semanal, filtros forzados a semanal: ${_ff.forzados.join(', ')}`)
+    const nCal = velasCalentamiento(paramsEstrategia, filtrosLista, esSemanal ? 'semanal' : 'diario')
+    const _cal = { calentamiento: nCal, conCalentamiento: true }
+    const _d = await fetchDataConMotivo(symbol, cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, assetInterval, nCal)
+    // `barras` es el PERIODO (las fechas que se devuelven); `barrasConCal` lleva el calentamiento y
+    // es lo unico que ve la estrategia.
+    const barras = _d.data
     if (!barras?.length) return res.status(404).json({ error: `Sin datos para ${symbol}` })
+    const barrasConCal = _d.dataConCal ?? barras
     // SP500 diario: es lo que el motor inyecta como sp500Close en cada barra, en los dos intervalos.
     let sp500Data = null
-    try { sp500Data = await fetchData('^GSPC', cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null) } catch(_) {}
+    try { sp500Data = await fetchData('^GSPC', cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, '1d', _cal) } catch(_) {}
 
     paso = 'ejecutar estrategia'
     // 3. El sandbox, por el mismo camino que el backtest. El capital solo afecta a los trades, que aquí
     //    se descartan: las series de indicadores no dependen de él.
+    // Los indicadores vuelven ya en la rejilla del PERIODO: runCodeJsAsset los recorta con `iDesde`.
     const { indicators = {}, filterZones: zonasSandbox = [] } =
-      codeJs ? runCodeJsAsset(barras, sp500Data, codeJs, cfg.capitalIni ?? 10000, cfg.years ?? 5, effectiveCfg)
+      codeJs ? runCodeJsAsset(barrasConCal, sp500Data, codeJs, cfg.capitalIni ?? 10000, cfg.years ?? 5, effectiveCfg,
+                              { desde: _d.periodo.desde, iDesde: _d.iDesde ?? 0 })
              : { indicators: {}, filterZones: [] }
 
     paso = 'filtros'
     // 4. Filtros: se rehace el mapa fecha → ¿permitido? de ESTE activo, con las mismas piezas que el
     //    multibacktest. Si no hay ninguno activo, valen las zonas que devuelva la propia estrategia
     //    —algunas se calculan su filtro por dentro—, que es el mismo orden de preferencia de datos.js.
-    // El filtro es la ventana operativa: en semanal no puede ser diario (lib/filtros.js).
-    const _ff = fuerzaFiltrosSemanales(normalizaFiltrosEntrada(filtrosCfg), esSemanal)
-    const filtrosLista = _ff.lista
-    if (_ff.forzados.length) console.log(`[filtros] ${symbol}: estrategia semanal, filtros forzados a semanal: ${_ff.forzados.join(', ')}`)
+    // `filtrosLista` se calcula antes de la descarga: sus periodos cuentan para el calentamiento.
     const anyFiltroOn = hayFiltrosActivos(filtrosLista)
     let filterZones = Array.isArray(zonasSandbox) ? zonasSandbox : []
     if (anyFiltroOn) {
-      const assetDates = barras.map(d => d.date)
+      // Fechas de la serie CON calentamiento: la EMA del filtro tiene que llegar convergida al primer
+      // dia del periodo, igual que en el backtest.
+      const assetDates = barrasConCal.map(d => d.date)
       const filterAuxData = {}
       // clavesAuxiliares devuelve un SET, no un array: multibacktest lo recorre con for...of y aquí se
       // llamó a .map, que un Set no tiene. De ahí el "l.map is not a function" que tumbaba el endpoint
@@ -152,13 +170,13 @@ export default async function handler(req, res) {
       await Promise.all(auxKeys.map(async akey => {
         const c = akey.lastIndexOf(':')
         const ticker = akey.slice(0, c), iv = akey.slice(c + 1)
-        try { filterAuxData[akey] = await fetchData(ticker, cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, iv) } catch(_) {}
+        try { filterAuxData[akey] = await fetchData(ticker, cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, iv, _cal) } catch(_) {}
       }))
       // Serie semanal del propio activo, solo si algún filtro de ámbito activo la pide y corremos en
       // diario: en semanal las barras YA son esas.
       let semanalActivo = null
       if (requiereSemanalDelActivo(filtrosLista) && !esSemanal) {
-        try { semanalActivo = await fetchData(symbol, cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, '1wk') } catch(_) {}
+        try { semanalActivo = await fetchData(symbol, cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, '1wk', _cal) } catch(_) {}
       }
       const resolveFilterData = (ticker, iv) =>
         (ticker === '^GSPC' && iv !== '1wk') ? sp500Data : (filterAuxData[`${ticker}:${iv}`] ?? sp500Data)
@@ -166,7 +184,7 @@ export default async function handler(req, res) {
         ? buildAlignedWeekly(src, assetDates, periodo)
         : (() => { const closes = buildAlignedCloses(src, assetDates); return { closes, ema: calcEMA(closes, periodo) } })()
       const filtroActivoMap = construirFiltroActivoMap(filtrosLista, {
-        assetBars: barras, assetDates, alineado,
+        assetBars: barrasConCal, assetDates, alineado,
         assetSymbol: symbol,
         assetInterval: esSemanal ? 'semanal' : 'diario',
         resolveMercado: (ticker, semanal) => resolveFilterData(ticker, semanal ? '1wk' : '1d'),
@@ -229,6 +247,10 @@ export default async function handler(req, res) {
     return res.status(200).json({
       symbol, strategyId: strategyId ?? null,
       intervalo: intervaloSalida,
+      // El mismo campo que devuelven datos.js y multibacktest, para que las tres rutas digan en que
+      // periodo y con cuanto calentamiento han corrido, y se pueda comprobar que es el mismo.
+      periodo: { desde: _d.periodo.desde, hasta: _d.periodo.hasta, modo: _d.periodo.modo,
+                 calentamiento: _d.periodo.calentamiento, calentamientoPedido: nCal },
       // Sobre qué eje vive cada serie, para que el cliente no tenga que saberlo.
       escalas: Object.fromEntries(Object.keys(series).map(k => [k, SERIES[k]])),
       indicators: series,

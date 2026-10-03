@@ -10,6 +10,7 @@ import { cargarIndicadores, guardarIndicadores, CATALOGO_INDICADORES, validaIndi
 import { loadAsignacionMc, guardarAsignacionMc } from '../lib/mcAsignacion'
 import { capitalDeOperacion } from '../lib/capitalOperacion'
 import FiltrosPanel from '../components/FiltrosPanel'
+import SelectorPeriodo, { rangoDePeriodo, periodoInicial } from '../components/SelectorPeriodo'
 import { supabase } from '../lib/supabaseClient'
 import { fetchConditions, lsGetConds, lsSaveConds, COND_LS_KEY } from '../lib/conditions'
 import CandleChart from '../components/CandleChart'
@@ -928,6 +929,12 @@ export default function Home() {
   const symSearchInputRef=useRef(null)
   const [emaR,setEmaR]=useState(10),[emaL,setEmaL]=useState(11)
   const [years,setYears]=useState(5),[capitalIni,setCapitalIni]=useState(10000)
+  // Periodo del backtest INDIVIDUAL. Estado propio: el componente SelectorPeriodo es compartido con
+  // el multibacktest, el estado no, asi que cambiar el periodo de una pantalla no mueve el de la
+  // otra. `years` es el de la estrategia (columna `years`), que es el que ya se guardaba.
+  const [indPeriodMode,setIndPeriodMode]=useState('years') // 'years' | 'range'
+  const [indDesde,setIndDesde]=useState(()=>periodoInicial(5).desde)
+  const [indHasta,setIndHasta]=useState(()=>periodoInicial(5).hasta)
   const [tipoStop,setTipoStop]=useState('tecnico'),[atrP,setAtrP]=useState(14),[atrM,setAtrM]=useState(1.0)
   const [sinPerdidas,setSinPerdidas]=useState(true),[reentry,setReentry]=useState(true)
   const [tipoFiltro,setTipoFiltro]=useState('none'),[sp500EmaR,setSp500EmaR]=useState(10),[sp500EmaL,setSp500EmaL]=useState(11)
@@ -1285,13 +1292,12 @@ export default function Home() {
   const [mcProxGateThr,setMcProxGateThr]=useState(10)       // umbral gate proximidad (% bajo el máximo 52s)
   const [mcCapital,setMcCapital]=useState('compound')    // 'simple' | 'compound'
   const [mcCapitalIni,setMcCapitalIni]=useState(10000)
+  // Periodo del MULTIBACKTEST. Las cajas dd/mm/yyyy —antes fromDisplay/toDisplay aqui— son ahora
+  // estado interno de SelectorPeriodo: son presentacion, y lo que viaja es siempre ISO.
   const [mcPeriodMode,setMcPeriodMode]=useState('years') // 'years' | 'range'
   const [mcYears,setMcYears]=useState(5)
-  const [mcFromDate,setMcFromDate]=useState(()=>{const d=new Date();d.setFullYear(d.getFullYear()-5);return d.toISOString().slice(0,10)})
-  const [mcToDate,setMcToDate]=useState(()=>new Date().toISOString().slice(0,10))
-  const isoToDisplay=s=>s&&/^\d{4}-\d{2}-\d{2}$/.test(s)?s.split('-').reverse().join('/'):s||''
-  const [fromDisplay,setFromDisplay]=useState(()=>{const d=new Date();d.setFullYear(d.getFullYear()-5);return d.toISOString().slice(0,10).split('-').reverse().join('/')})
-  const [toDisplay,setToDisplay]=useState(()=>new Date().toISOString().slice(0,10).split('-').reverse().join('/'))
+  const [mcFromDate,setMcFromDate]=useState(()=>periodoInicial(5).desde)
+  const [mcToDate,setMcToDate]=useState(()=>periodoInicial(5).hasta)
   // Filtro por estrategia de TODO el panel. Tres significados, y solo estos tres:
   //   MC_TODAS  → no se filtra: los bloques que admiten varias las pintan todas. Es el valor por defecto
   //               tras ejecutar un backtest, porque lo esperable al terminar es ver lo que se ha corrido,
@@ -1696,9 +1702,9 @@ export default function Home() {
   useEffect(()=>{
     const sym=mcActivoSel?.symbol
     if(!sym||!mcIdStratDetalle){ mcDetallePedidoRef.current=null; setMcDetalleActivo(null); return }
-    const cfg=mcPeriodMode==='range'
-      ?{capitalIni:Number(mcCapitalIni),fromDate:mcFromDate,toDate:mcToDate}
-      :{capitalIni:Number(mcCapitalIni),years:Number(mcYears)}
+    const _per=rangoDePeriodo({modo:mcPeriodMode,years:mcYears,desde:mcFromDate,hasta:mcToDate})
+    const cfg={capitalIni:Number(mcCapitalIni),fromDate:_per.fromDate,toDate:_per.toDate,
+      ...(mcPeriodMode==='years'?{years:Number(mcYears)}:{})}
     const clave=`${sym}|${mcIdStratDetalle}|${mcIntervalo}|${JSON.stringify(cfg)}`
     if(mcDetallePedidoRef.current===clave) return
     mcDetallePedidoRef.current=clave
@@ -4430,9 +4436,12 @@ export default function Home() {
   const run=useCallback(async(sym,payload)=>{
     setLoading(true);setError(null)
     try{
+      // fromDate/toDate van SIEMPRE: «ultimos N años» ya viene traducido a un rango desde el
+      // selector, asi que el servidor recibe el mismo periodo exacto que el multibacktest.
       const body = payload.strategyId
-        ? { simbolo:sym, strategyId:payload.strategyId, capital_ini:payload.capital_ini, years:payload.years, allocation_pct:payload.allocation_pct, filtros:payload.filtros||{}, intervalo:payload.intervalo||'diario' }
-        : { simbolo:sym, cfg:payload.cfg||payload }
+        ? { simbolo:sym, strategyId:payload.strategyId, capital_ini:payload.capital_ini, years:payload.years, allocation_pct:payload.allocation_pct, filtros:payload.filtros||{}, intervalo:payload.intervalo||'diario',
+            fromDate:payload.fromDate??null, toDate:payload.toDate??null }
+        : { simbolo:sym, cfg:payload.cfg||payload, fromDate:payload.fromDate??null, toDate:payload.toDate??null }
       const res=await apiFetch('/api/datos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
       const json=await res.json()
       if(!res.ok)throw new Error(json.error||'Error')
@@ -4538,15 +4547,19 @@ export default function Home() {
     if(skipNextRunRef.current){skipNextRunRef.current=false;return}
     if(!currentStratId&&sidePanel!=='strats')return
     if(debounceRef.current)clearTimeout(debounceRef.current)
+    const _iPer=rangoDePeriodo({modo:indPeriodMode,years:years,desde:indDesde,hasta:indHasta})
     const payload = currentStratId
-      ? { strategyId:currentStratId, capital_ini:Number(capitalIni), years:Number(years), allocation_pct:100, filtros:filtrosBackend, intervalo:estrategiaIntervalo }
-      : { cfg:{emaR:Number(emaR),emaL:Number(emaL),years:Number(years),capitalIni:Number(capitalIni),
+      ? { strategyId:currentStratId, capital_ini:Number(capitalIni), years:Number(years), allocation_pct:100, filtros:filtrosBackend, intervalo:estrategiaIntervalo,
+          fromDate:_iPer.fromDate, toDate:_iPer.toDate }
+      : { fromDate:_iPer.fromDate, toDate:_iPer.toDate,
+          cfg:{emaR:Number(emaR),emaL:Number(emaL),years:Number(years),capitalIni:Number(capitalIni),
               tipoStop,atrPeriod:Number(atrP),atrMult:Number(atrM),sinPerdidas,reentry,
               tipoFiltro,sp500EmaR:Number(sp500EmaR),sp500EmaL:Number(sp500EmaL)} }
     debounceRef.current=setTimeout(()=>run(simbolo, payload),800)
     return()=>clearTimeout(debounceRef.current)
   },[simbolo,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,
-     sp500EmaR,sp500EmaL,sidePanel,currentStratId,filtrosBackend,estrategiaIntervalo,run])
+     sp500EmaR,sp500EmaL,sidePanel,currentStratId,filtrosBackend,estrategiaIntervalo,
+     indPeriodMode,indDesde,indHasta,run])
 
   // ── TradeLog helpers ────────────────────────────────────────
   // ── TradeLog: storage mode (local vs supabase) ──────────────
@@ -5223,9 +5236,13 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
       const total=mcSelected.reduce((s,sym)=>s+(Number(mcWeights[sym])||0),0)
       mcSelected.forEach(sym=>{weightsNorm[sym]=total>0?(Number(mcWeights[sym])||0)/total*100:100/mcSelected.length})
     }
+    // El periodo viaja SIEMPRE como desde/hasta: «ultimos N años» se traduce aqui, en el cliente,
+    // para que el servidor tenga un solo camino. `years` se sigue mandando solo en modo Años, que es
+    // lo que distingue «he pedido 5 años» de «he pedido este rango» en los avisos de histórico.
+    const _mcPer=rangoDePeriodo({modo:mcPeriodMode,years:mcYears,desde:mcFromDate,hasta:mcToDate})
     const _mcYears=mcPeriodMode==='years'?mcYears:null
-    const _mcFrom=mcPeriodMode==='range'?mcFromDate:null
-    const _mcTo=mcPeriodMode==='range'?mcToDate:null
+    const _mcFrom=_mcPer.fromDate
+    const _mcTo=_mcPer.toDate
     const baseCfg={emaR:Number(emaR),emaL:Number(emaL),years:_mcYears,capitalIni:mcCapitalIni,
       fromDate:_mcFrom,toDate:_mcTo,
       tipoStop,atrPeriod:Number(atrP),atrMult:Number(atrM),sinPerdidas,reentry,
@@ -5336,9 +5353,9 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
       }else{
         try{
           setMcProgress({current:results.length+1,total:results.length+1,name:'◈ Multicartera'})
-          const _pCfg=mcPeriodMode==='range'
-            ?{capitalIni:mcCapitalIni,fromDate:mcFromDate,toDate:mcToDate}
-            :{capitalIni:mcCapitalIni,years:mcYears}
+          const _pPer=rangoDePeriodo({modo:mcPeriodMode,years:mcYears,desde:mcFromDate,hasta:mcToDate})
+          const _pCfg={capitalIni:mcCapitalIni,fromDate:_pPer.fromDate,toDate:_pPer.toDate,
+            ...(mcPeriodMode==='years'?{years:mcYears}:{})}
           const portfolioRes=await apiFetch('/api/multibacktest',{
             method:'POST',headers:{'Content-Type':'application/json'},
             body:JSON.stringify({
@@ -5917,7 +5934,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.877</title>
+        <title>Trading Simulator V9.878</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6006,7 +6023,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             }} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.877
+            <span className="dot"/>Trading Simulator V9.878
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6204,6 +6221,13 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       style={{position:'absolute',right:6,top:'50%',transform:'translateY(-50%)',cursor:'pointer',color:'#a8ccdf',fontSize:11}}>✕</span>}
                   </div>
                 </div>
+
+                {/* ── Periodo del backtest individual ── */}
+                <SelectorPeriodo variant="panel"
+                  modo={indPeriodMode} setModo={setIndPeriodMode}
+                  years={years} setYears={setYears}
+                  desde={indDesde} setDesde={setIndDesde}
+                  hasta={indHasta} setHasta={setIndHasta}/>
 
                 {/* ── Filtros: mercado (serie externa) y activo (serie del propio símbolo) ── */}
                 <FiltrosPanel ambito="mercado" titulo="FILTROS DE MERCADO"
@@ -7128,50 +7152,11 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       style={{flex:1,fontFamily:MONO,fontSize:11,background:'var(--bg2)',border:'1px solid var(--border)',borderRadius:3,padding:'3px 6px',color:'var(--fg)',textAlign:'right'}}/>
                     <span style={{fontFamily:MONO,fontSize:11,color:'#4a6a88'}}>€</span>
                   </div>
-                  <div style={{display:'flex',alignItems:'center',gap:6}}>
-                    <span style={{fontFamily:MONO,fontSize:11,color:'#7aabc8',whiteSpace:'nowrap'}}>Período</span>
-                    <div style={{display:'flex',gap:4,marginLeft:'auto'}}>
-                      {[{id:'years',label:'Años'},{id:'range',label:'Fechas'}].map(opt=>(
-                        <button key={opt.id} onClick={()=>setMcPeriodMode(opt.id)}
-                          style={{fontFamily:MONO,fontSize:10,padding:'2px 8px',borderRadius:3,cursor:'pointer',
-                            border:`1px solid ${mcPeriodMode===opt.id?'var(--accent)':'var(--border)'}`,
-                            background:mcPeriodMode===opt.id?'rgba(0,212,255,0.12)':'transparent',
-                            color:mcPeriodMode===opt.id?'var(--accent)':'#7aabc8'}}>
-                          {opt.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  {mcPeriodMode==='years'?(
-                    <div style={{display:'flex',alignItems:'center',gap:8}}>
-                      <span style={{fontFamily:MONO,fontSize:11,color:'#4a6a88',whiteSpace:'nowrap'}}>Años</span>
-                      <input type="number" min={1} max={20} step={1} value={mcYears}
-                        onChange={e=>setMcYears(Number(e.target.value))}
-                        style={{flex:1,fontFamily:MONO,fontSize:11,background:'var(--bg2)',border:'1px solid var(--border)',borderRadius:3,padding:'3px 6px',color:'var(--fg)',textAlign:'right'}}/>
-                    </div>
-                  ):(()=>{
-                      const disp2int=s=>{if(s&&/^\d{2}\/\d{2}\/\d{4}$/.test(s)){const[d,m,y]=s.split('/');const iso=`${y}-${m}-${d}`;if(!isNaN(new Date(iso)))return iso}return null}
-                      const inputStyle={width:'100%',fontFamily:MONO,fontSize:11,background:'var(--bg2)',border:'1px solid var(--border)',borderRadius:3,padding:'3px 6px',color:'var(--fg)'}
-                      return(
-                        <div style={{display:'flex',flexDirection:'column',gap:5}}>
-                          <div style={{display:'flex',alignItems:'center',gap:8}}>
-                            <span style={{fontFamily:MONO,fontSize:11,color:'#4a6a88',whiteSpace:'nowrap',width:32}}>Desde</span>
-                            <input type="text" placeholder="dd/mm/yyyy" value={fromDisplay}
-                              onChange={e=>setFromDisplay(e.target.value)}
-                              onBlur={e=>{const v=disp2int(e.target.value);if(v){setMcFromDate(v)}else{setFromDisplay(isoToDisplay(mcFromDate))}}}
-                              style={inputStyle}/>
-                          </div>
-                          <div style={{display:'flex',alignItems:'center',gap:8}}>
-                            <span style={{fontFamily:MONO,fontSize:11,color:'#4a6a88',whiteSpace:'nowrap',width:32}}>Hasta</span>
-                            <input type="text" placeholder="dd/mm/yyyy" value={toDisplay}
-                              onChange={e=>setToDisplay(e.target.value)}
-                              onBlur={e=>{const v=disp2int(e.target.value);if(v){setMcToDate(v)}else{setToDisplay(isoToDisplay(mcToDate))}}}
-                              style={inputStyle}/>
-                          </div>
-                        </div>
-                      )
-                    })()
-                  }
+                  <SelectorPeriodo
+                    modo={mcPeriodMode} setModo={setMcPeriodMode}
+                    years={mcYears} setYears={setMcYears}
+                    desde={mcFromDate} setDesde={setMcFromDate}
+                    hasta={mcToDate} setHasta={setMcToDate}/>
                 </div>
 
                 {/* INTERVALO */}
@@ -9982,9 +9967,13 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                     setGanttLoadingDisc(true)
                     try{
                       const allTH=histResult.allTrades||[]
+                      // El periodo viaja SIEMPRE como desde/hasta: «ultimos N años» se traduce aqui, en el cliente,
+                      // para que el servidor tenga un solo camino. `years` se sigue mandando solo en modo Años, que es
+                      // lo que distingue «he pedido 5 años» de «he pedido este rango» en los avisos de histórico.
+                      const _mcPer=rangoDePeriodo({modo:mcPeriodMode,years:mcYears,desde:mcFromDate,hasta:mcToDate})
                       const _mcYears=mcPeriodMode==='years'?mcYears:null
-                      const _mcFrom=mcPeriodMode==='range'?mcFromDate:null
-                      const _mcTo=mcPeriodMode==='range'?mcToDate:null
+                      const _mcFrom=_mcPer.fromDate
+                      const _mcTo=_mcPer.toDate
                       const unlimCfg={emaR:Number(emaR),emaL:Number(emaL),years:_mcYears,capitalIni:mcCapitalIni,
                         fromDate:_mcFrom,toDate:_mcTo,tipoStop,atrPeriod:Number(atrP),atrMult:Number(atrM),
                         sinPerdidas,reentry,tipoFiltro,sp500EmaR:Number(sp500EmaR),sp500EmaL:Number(sp500EmaL),
@@ -10014,9 +10003,13 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                   const handleExport=async()=>{
                     setMcExporting(true)
                     try{
+                      // El periodo viaja SIEMPRE como desde/hasta: «ultimos N años» se traduce aqui, en el cliente,
+                      // para que el servidor tenga un solo camino. `years` se sigue mandando solo en modo Años, que es
+                      // lo que distingue «he pedido 5 años» de «he pedido este rango» en los avisos de histórico.
+                      const _mcPer=rangoDePeriodo({modo:mcPeriodMode,years:mcYears,desde:mcFromDate,hasta:mcToDate})
                       const _mcYears=mcPeriodMode==='years'?mcYears:null
-                      const _mcFrom=mcPeriodMode==='range'?mcFromDate:null
-                      const _mcTo=mcPeriodMode==='range'?mcToDate:null
+                      const _mcFrom=_mcPer.fromDate
+                      const _mcTo=_mcPer.toDate
                       const baseCfg={emaR:Number(emaR),emaL:Number(emaL),years:_mcYears,capitalIni:mcCapitalIni,
                         fromDate:_mcFrom,toDate:_mcTo,tipoStop,atrPeriod:Number(atrP),atrMult:Number(atrM),
                         sinPerdidas,reentry,tipoFiltro,sp500EmaR:Number(sp500EmaR),sp500EmaL:Number(sp500EmaL),

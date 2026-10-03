@@ -12,6 +12,8 @@ import { ddPctDeOperacion, indicePorFecha } from '../../lib/ddOperacion'
 import { filtraPorEntrada } from '../../lib/filtroEntrada'
 import { semanalesDesdeDiarias } from '../../lib/velasSemanales'
 import { soloCerradas } from '../../lib/sesion'
+import { normalizaPeriodo, velasCalentamiento, recortaConCalentamiento, recortaIndicadores,
+         posicionesHeredadas } from '../../lib/periodo'
 
 const SUPA_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPA_KEY = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -86,8 +88,15 @@ function rebuildCapitalTras(trades, initCapital) {
 // Adaptador sobre fetchAV (Stooq primario + Yahoo fallback, con timeouts) — MISMA fuente robusta
 // que los gráficos individuales (datos.js). Mantiene la firma de fetchData y el contrato null-on-failure
 // que espera multibacktest.js. Antes usaba solo Yahoo → NVDA y otros llegaban truncados (~21 may).
-export async function fetchData(symbol, years=5, fromDate=null, toDate=null, interval='1d') {
-  return (await fetchDataConMotivo(symbol, years, fromDate, toDate, interval)).data
+// `opciones.calentamiento`: velas previas a la fecha de inicio que hay que traer para que los
+// indicadores lleguen convergidos al primer dia del periodo (ver lib/periodo.js).
+// `opciones.conCalentamiento`: devuelve la serie CON esas velas previas, no solo el periodo. Las
+// series auxiliares de los filtros la necesitan: su EMA se calcula sobre la serie entera y luego se
+// proyecta sobre las fechas del activo, asi que una serie que empiece en la primera vela del periodo
+// deja la EMA del filtro en null justo donde tenia que estar convergida.
+export async function fetchData(symbol, years=5, fromDate=null, toDate=null, interval='1d', opciones=null) {
+  const r = await fetchDataConMotivo(symbol, years, fromDate, toDate, interval, opciones?.calentamiento ?? 0)
+  return (opciones?.conCalentamiento && r.dataConCal) ? r.dataConCal : r.data
 }
 // Igual que fetchData, pero sin reducir a null los casos sin velas: dice POR QUÉ no hay datos. Los activos
 // pedidos se descargan con esta para poder avisar de los que se quedan fuera; las series auxiliares siguen
@@ -97,28 +106,33 @@ export async function fetchData(symbol, years=5, fromDate=null, toDate=null, int
 //                                                                  o fallo del proveedor (no se distingue)
 //   { data: null, motivo: 'sinVelasEnPeriodo', disponibleDesde, disponibleHasta }
 //                                                               → hay datos, pero ninguno en el periodo pedido
-async function fetchDataConMotivo(symbol, years=5, fromDate=null, toDate=null, interval='1d') {
+// Se exporta porque asset-detail necesita las DOS series —la del periodo y la del calentamiento— y
+// el iDesde que las relaciona: con fetchData solo tendria una de las dos.
+export async function fetchDataConMotivo(symbol, years=5, fromDate=null, toDate=null, interval='1d', calentamiento=0) {
   try {
     const avInterval = (interval === '1wk' || interval === 'w') ? 'w' : 'd'
-    // +1 año de buffer para warm-up de la EMA (igual que datos.js). En modo Fechas se piden los años que
-    // hay desde fromDate hasta hoy (nunca menos que antes): con solo `years` —5 por defecto, el cliente no
-    // lo manda en rango— un rango largo llegaba ya truncado. El modo Años pide exactamente lo mismo.
-    const anios = (fromDate && toDate) ? Math.max(years, _aniosHastaHoy(fromDate)) : years
+    // «Ultimos N años» es un caso particular de desde/hasta, asi que a partir de aqui hay UN solo
+    // camino, el mismo que datos.js. Ver lib/periodo.js.
+    const { desde, hasta, modo } = normalizaPeriodo({ years, fromDate, toDate })
+    // Años que hay que pedir: los que van de hoy a la fecha de inicio, mas el calentamiento traducido
+    // a años, mas uno de margen por festivos y por activos que empiezan tarde. El `+ 1` de antes
+    // decia ser «buffer para warm-up de la EMA», pero se descargaba y se TIRABA: el recorte pasaba
+    // antes de que la estrategia viera los datos, asi que el code_js calculaba sus EMAs sobre el
+    // array ya recortado y arrancaba en frio.
+    const porAnio = avInterval === 'w' ? 52 : 252
+    const aniosPedir = Math.ceil(Math.max(0, _aniosHastaHoy(desde)) + calentamiento / porAnio) + 1
     // `origen` viaja con las barras para poder decir DE DÓNDE salió cada serie. Hoy siempre es Yahoo,
     // y `ajustadoDividendos` siempre false: están ajustadas por splits y no por dividendos. El campo se
     // llamaba `ajustado` a secas y se leía como «no ajustada de ninguna manera», que no es el caso.
-    const { data: bruto, origen, ajustadoDividendos } = await fetchAVDetalle(symbol, Math.ceil(anios) + 1, avInterval)
+    const { data: bruto, origen, ajustadoDividendos } = await fetchAVDetalle(symbol, aniosPedir, avInterval)
     if (!bruto?.length) return { data: null, motivo: 'descargaFallida' }
-    let data
-    if (fromDate && toDate) {
-      data = bruto.filter(d => d.date >= fromDate && d.date <= toDate)
-    } else {
-      const cut = new Date(); cut.setFullYear(cut.getFullYear() - Math.ceil(years))
-      const cutStr = cut.toISOString().slice(0, 10)
-      data = bruto.filter(d => d.date >= cutStr)
-    }
-    return data.length
-      ? { data, origen, ajustadoDividendos }
+    // `data` es el PERIODO —grafico, curvas, metricas—; `dataConCal` lleva ademas el calentamiento y
+    // es lo unico que ve la estrategia. `iDesde` es donde empieza el periodo dentro de la segunda.
+    const c = recortaConCalentamiento(bruto, desde, hasta, calentamiento)
+    return c.periodo.length
+      ? { data: c.periodo, dataConCal: c.conCalentamiento, iDesde: c.iDesde,
+          periodo: { desde, hasta, modo, calentamiento: c.calentamientoReal, calentamientoPedido: calentamiento },
+          origen, ajustadoDividendos }
       : { data: null, motivo: 'sinVelasEnPeriodo', disponibleDesde: bruto[0].date, disponibleHasta: bruto[bruto.length - 1].date, origen, ajustadoDividendos }
   } catch { return { data: null, motivo: 'descargaFallida' } }
 }
@@ -139,6 +153,22 @@ function _origenPrecios(descargas) {
     if (r?.origen) out[sym] = { origen: r.origen, ajustadoDividendos: !!r.ajustadoDividendos }
   }
   return Object.keys(out).length ? out : undefined
+}
+// «El periodo empieza con N posiciones abiertas», por activo: operaciones que entraron antes de la
+// fecha de inicio y seguian vivas. Con el calentamiento la estrategia llega «dentro» y no puede
+// entrar hasta que salga, asi que esto es lo que explica un arranque sin operar. undefined si no hay
+// ninguna: la respuesta omite entonces el campo.
+function _heredadasPorActivo(assetResults) {
+  const out = {}
+  for (const ar of assetResults || []) if (ar?._heredadas?.length) out[ar.symbol] = ar._heredadas
+  return Object.keys(out).length ? out : undefined
+}
+// El calentamiento que se ha podido poner de verdad: el MENOR de los activos, porque es el que
+// limita. Un activo que cotiza desde hace poco no tiene velas previas que darle a sus indicadores,
+// y eso hay que poder verlo en la respuesta y no deducirlo.
+function _calentamientoReal(descargas) {
+  const v = Object.values(descargas || {}).filter(d => d?.periodo).map(d => d.periodo.calentamiento)
+  return v.length ? Math.min(...v) : 0
 }
 // Activos pedidos que no llegan a assetResults por no tener velas utilizables, con su motivo (ver
 // fetchDataConMotivo). `descargas`: símbolo → resultado de fetchDataConMotivo.
@@ -175,11 +205,11 @@ const _aniosHastaHoy = (fecha) => (Date.now() - new Date(fecha)) / (365.25 * 864
 
 // Inicio de la simulación de un activo (ar.startDate). En modo Fechas es fromDate: la curva arranca en la
 // primera vela ≥ fromDate, o en la primera disponible si es posterior. En modo Años, última vela − años.
-function _inicioSimulacion(data, cfg) {
-  if (cfg?.fromDate && cfg?.toDate) return cfg.fromDate
-  const cutoff = new Date(data[data.length - 1].date)
-  cutoff.setFullYear(cutoff.getFullYear() - (cfg.years ?? 5))
-  return cutoff.toISOString().split('T')[0]
+// El inicio de la simulacion ES la fecha de inicio del periodo, tambien en modo Años: «ultimos N
+// años» se traduce a desde/hasta en normalizaPeriodo antes de descargar. Antes se recalculaba aqui
+// restando los años a la ULTIMA vela, que daba un dia distinto del que habia usado la descarga.
+function _inicioSimulacion(data, cfg, per) {
+  return per?.desde ?? cfg?.fromDate ?? data[0].date
 }
 
 // Muestreo de fechas para curvas: intervalos fijos (cada step días) + SIEMPRE las fechas
@@ -1657,8 +1687,12 @@ function buildTrades(rawTrades, capitalIni, allocationPct = 100, barras = null) 
 
 // ── runCodeJsAsset: ejecuta code_js de una estrategia sobre un activo ──
 // Sandbox idéntica a datos.js. Si falla → { trades:[], indicators:{}, filterZones:[] }
-export function runCodeJsAsset(data, sp500Data, codeJs, slotCapital, years, cfg) {
+// `per` = { desde, iDesde }: `data` llega CON calentamiento y `per` dice donde empieza el periodo.
+// Sin `per` se comporta como antes (todo es periodo), para que ninguna llamada antigua cambie.
+export function runCodeJsAsset(data, sp500Data, codeJs, slotCapital, years, cfg, per = null) {
   try {
+    const iDesde = Math.max(0, Math.floor(per?.iDesde ?? 0) || 0)
+    const desde  = per?.desde ?? null
     // LAS ESTRATEGIAS SOLO VEN VELAS CERRADAS. La vela en curso no entra en run(): su cierre todavía
     // va a cambiar. Ver lib/sesion.js. Los indicadores se devuelven con la longitud de `data`,
     // rellenando esa última posición, porque quien los consume los alinea por índice con las barras
@@ -1679,10 +1713,15 @@ export function runCodeJsAsset(data, sp500Data, codeJs, slotCapital, years, cfg)
     })
     const rawTrades   = result.trades      ?? []
     const indicatorsCrudos = result.indicators  ?? {}
-    const indicators  = faltan
-      ? Object.fromEntries(Object.entries(indicatorsCrudos).map(([k, v]) =>
-          [k, Array.isArray(v) ? v.concat(new Array(faltan).fill(null)) : v]))
-      : indicatorsCrudos
+    // Primero se tapa la vela en curso, que run() no vio y el grafico si pinta; despues se recorta a
+    // la rejilla del PERIODO, porque quien los consume los alinea por indice con las barras del
+    // periodo y asset-detail rechaza cualquier otra longitud. Ver lib/periodo.js.
+    const indicators  = recortaIndicadores(
+      faltan
+        ? Object.fromEntries(Object.entries(indicatorsCrudos).map(([k, v]) =>
+            [k, Array.isArray(v) ? v.concat(new Array(faltan).fill(null)) : v]))
+        : indicatorsCrudos,
+      iDesde, data.length - iDesde)
     const filterZones = result.filterZones ?? []
     // Flush virtual: posición abierta al final del periodo. La última vela CERRADA, no la última
     // que llegó: el cierre por fin de periodo tampoco puede usar una vela a medias.
@@ -1711,11 +1750,19 @@ export function runCodeJsAsset(data, sp500Data, codeJs, slotCapital, years, cfg)
         }
       }
     }
-    const trades = buildTrades(rawTrades, slotCapital, 100, cerradas)
-    return { trades, indicators, filterZones }
+    // SOLO cuentan las operaciones cuya ENTRADA esta dentro del periodo. La estrategia ha visto el
+    // calentamiento y puede haber abierto antes: esas no son del periodo. Se descartan ANTES de
+    // buildTrades para que el capital compuesto arranque en la primera operacion del periodo, que es
+    // lo que significa «el capital inicial empieza en la fecha de inicio».
+    const heredadas  = desde ? posicionesHeredadas(rawTrades, desde) : []
+    const delPeriodo = desde ? rawTrades.filter(t => t.entryDate >= desde) : rawTrades
+    const trades = buildTrades(delPeriodo, slotCapital, 100, cerradas)
+    // Las zonas del calentamiento existen pero no son del backtest y el grafico no las puede pintar.
+    const zonas = desde ? filterZones.filter(z => !z?.from || z.from >= desde) : filterZones
+    return { trades, indicators, filterZones: zonas, heredadas }
   } catch(e) {
     console.error('[runCodeJsAsset] error:', e.message)
-    return { trades: [], indicators: {}, filterZones: [] }
+    return { trades: [], indicators: {}, filterZones: [], heredadas: [] }
   }
 }
 
@@ -1861,7 +1908,9 @@ async function handlePortfolioMode(req, res) {
   try {
     // 1. Cargar code_js + params de cada estrategia desde Supabase (en paralelo)
     const stratMeta = await Promise.all(strategies.map(async (s, stratOrder) => {
-      const base = { ...s, stratOrder, codeJs: null, effectiveCfg: cfg }
+      // `stratParams` aparte de `effectiveCfg`: el calentamiento se calcula con los periodos de la
+      // ESTRATEGIA, no con las claves del cfg del formulario.
+      const base = { ...s, stratOrder, codeJs: null, stratParams: {}, effectiveCfg: cfg }
       if (!SUPA_URL || !SUPA_KEY) return base
       try {
         const sr = await fetch(
@@ -1877,32 +1926,55 @@ async function handlePortfolioMode(req, res) {
           stratOrder,
           name:        s.name || row.name || s.id,
           codeJs:      row.code_js || null,
+          stratParams,
           effectiveCfg: { ...cfg, ...stratParams },
         }
       } catch(_) { return base }
     }))
 
-    // 2. Descargar OHLCV con cache por ticker (cada ticker solo una vez)
+    // 2. Periodo, calentamiento y descarga de OHLCV con cache por ticker (cada ticker una sola vez)
+    // La lista de filtros se normaliza AQUI, antes de descargar, porque sus periodos cuentan para el
+    // calentamiento. El filtro es la ventana operativa: en semanal no puede ser diario (lib/filtros.js).
+    const _ffP = fuerzaFiltrosSemanales(normalizaFiltrosEntrada(filtrosCfg), assetInterval === '1wk')
+    const filtrosLista = _ffP.lista
+    if (_ffP.forzados.length) console.log(`[filtros] cartera: estrategia semanal, filtros forzados a semanal: ${_ffP.forzados.join(', ')}`)
+    const anyFiltroOn = hayFiltrosActivos(filtrosLista)
+    // UN calentamiento para toda la corrida: el mayor de los que piden las estrategias y los filtros.
+    // Las estrategias COMPARTEN la descarga por ticker, asi que no puede ser uno por estrategia; y
+    // darle a una estrategia mas calentamiento del que necesita no cambia su resultado, solo hace que
+    // sus indicadores lleguen aun mas convergidos. Ver lib/periodo.js.
+    const per = normalizaPeriodo({ years: cfg.years ?? 5, fromDate: cfg.fromDate ?? null, toDate: cfg.toDate ?? null })
+    const _ivCal = assetInterval === '1wk' ? 'semanal' : 'diario'
+    const nCal = Math.max(velasCalentamiento({}, filtrosLista, _ivCal),
+      ...stratMeta.map(s => velasCalentamiento(s.stratParams, filtrosLista, _ivCal)))
+    const _cal = { calentamiento: nCal, conCalentamiento: true }
+    console.log(`[periodo] cartera (${assetInterval}): ${per.modo} ${per.desde}→${per.hasta} · calentamiento ${nCal}`)
     const allTickers = [...new Set(stratMeta.flatMap(s => s.symbols || []))]
-    const tickerCache = {}
+    const tickerCache = {}      // ticker → velas del PERIODO (grafico, curvas, metricas)
+    const tickerCacheCal = {}   // ticker → velas con CALENTAMIENTO (lo unico que ve la estrategia)
     const descargas = {}   // ticker → resultado de fetchDataConMotivo, para avisar de los excluidos
     const BATCH = 4
     for (let i = 0; i < allTickers.length; i += BATCH) {
       const chunk = allTickers.slice(i, i + BATCH)
       await Promise.all(chunk.map(async ticker => {
-        descargas[ticker] = await fetchDataConMotivo(ticker, cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, assetInterval)
+        descargas[ticker] = await fetchDataConMotivo(ticker, cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, assetInterval, nCal)
         tickerCache[ticker] = descargas[ticker].data
+        tickerCacheCal[ticker] = descargas[ticker].dataConCal ?? descargas[ticker].data
       }))
       if (i + BATCH < allTickers.length) await sleep(400)
     }
 
     let sp500Data = null
-    try { sp500Data = await fetchData('^GSPC', cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null) } catch(_) {}
+    try { sp500Data = await fetchData('^GSPC', cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, '1d', _cal) } catch(_) {}
     // Fase 2B: SP500 en el timeframe del activo, SOLO para el gate de fuerza relativa.
     // Los demás consumidores (inyección a codeJs, filtros, B&H) siguen usando sp500Data diaria.
     // En diario, sp500DataTf === sp500Data (sin doble descarga).
+    // Con calentamiento: todos los consumidores de estas series las buscan POR FECHA —un mapa, un
+    // find(d => d.date >= x) o una busqueda hacia atras—, asi que unas velas de mas por delante no
+    // cambian ningun resultado, y en cambio arreglan el lookback de fuerza relativa, que al principio
+    // del periodo se quedaba sin velas detras.
     let sp500DataTf = sp500Data
-    if (assetInterval === '1wk') { try { sp500DataTf = await fetchData('^GSPC', cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, assetInterval) } catch(_) {} }
+    if (assetInterval === '1wk') { try { sp500DataTf = await fetchData('^GSPC', cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, assetInterval, _cal) } catch(_) {} }
 
     // 3. Pre-contar pares válidos → slotCapital correcto antes de runCodeJsAsset
     let nPairs = 0
@@ -1933,8 +2005,11 @@ async function handlePortfolioMode(req, res) {
       for (const ticker of (s.symbols || [])) {
         const data = tickerCache[ticker]
         if (!data?.length) continue
+        const dataCal = tickerCacheCal[ticker]
         const synSym = `${ticker}#${orderTag}`
-        const { trades: rawTrades } = runCodeJsAsset(data, sp500Data, s.codeJs, slotCapital, cfg.years ?? 5, s.effectiveCfg)
+        // La estrategia ve la serie CON calentamiento; solo cuentan las entradas dentro del periodo.
+        const { trades: rawTrades, heredadas } = runCodeJsAsset(dataCal, sp500Data, s.codeJs, slotCapital, cfg.years ?? 5, s.effectiveCfg,
+          { desde: per.desde, iDesde: descargas[ticker].iDesde ?? 0 })
         // Enriquecer cada trade con metadata de estrategia
         const trades = rawTrades.map(t => ({
           ...t,
@@ -1943,10 +2018,14 @@ async function handlePortfolioMode(req, res) {
           _stratOrder: s.stratOrder,
           _realSymbol: ticker,
         }))
-        const startDate = _inicioSimulacion(data, cfg)
+        const startDate = _inicioSimulacion(data, cfg, per)
         assetResults.push({
           symbol:      synSym,
           _realSymbol: ticker,
+          // Serie con calentamiento, para el mapa de filtros y para la regla del «cierre anterior»:
+          // el primer dia del periodo tiene que poder mirar la vela de antes.
+          dataCal,
+          _heredadas: heredadas ?? [],
           // Lo declara la estrategia en sus params. Lo necesita el descarte por filtro: una
           // estrategia que entra al cierre decide CON ese cierre, asi que ahi el estado de su
           // propia vela si esta disponible. Ver lib/filtroEntrada.js.
@@ -1970,11 +2049,8 @@ async function handlePortfolioMode(req, res) {
     // 4b. Filtros de mercado — portar el mismo bloque del path único
     //     Se ejecuta DESPUÉS de runCodeJsAsset (assetResults ya tiene trades con metadata)
     //     y ANTES de construir curvas. Los datos auxiliares se descargan UNA sola vez.
-    // El filtro es la ventana operativa: en semanal no puede ser diario (lib/filtros.js).
-    const _ffP = fuerzaFiltrosSemanales(normalizaFiltrosEntrada(filtrosCfg), assetInterval === '1wk')
-    const filtrosLista = _ffP.lista
-    if (_ffP.forzados.length) console.log(`[filtros] cartera: estrategia semanal, filtros forzados a semanal: ${_ffP.forzados.join(', ')}`)
-    const anyFiltroOn = hayFiltrosActivos(filtrosLista)
+    //     `filtrosLista` y `anyFiltroOn` se calculan en el paso 2: sus periodos cuentan para el
+    //     calentamiento, asi que hay que conocerlos antes de descargar.
     const semanalPorSimbolo = {}   // ticker → serie semanal, solo si algún filtro de activo la pide
     const sinSerieSemanal = []     // tickers cuya serie semanal falló → operan sin ese filtro
     if (anyFiltroOn) {
@@ -1986,7 +2062,7 @@ async function handlePortfolioMode(req, res) {
       for (const akey of auxKeys) {
         const colonIdx = akey.lastIndexOf(':')
         const ticker = akey.slice(0, colonIdx), iv = akey.slice(colonIdx + 1)
-        filterFetchJobs.push(fetchData(ticker, cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, iv).then(r => { filterAuxData[akey] = r }).catch(() => {}))
+        filterFetchJobs.push(fetchData(ticker, cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, iv, _cal).then(r => { filterAuxData[akey] = r }).catch(() => {}))
       }
       if (filterFetchJobs.length) await Promise.all(filterFetchJobs)
 
@@ -1999,7 +2075,7 @@ async function handlePortfolioMode(req, res) {
         for (let i = 0; i < tickersEnBacktest.length; i += BATCH) {
           const chunk = tickersEnBacktest.slice(i, i + BATCH)
           await Promise.all(chunk.map(async ticker => {
-            const r = await fetchData(ticker, cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, '1wk')
+            const r = await fetchData(ticker, cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, '1wk', _cal)
             if (r?.length) semanalPorSimbolo[ticker] = r
             else sinSerieSemanal.push(ticker)   // fail-open: opera sin filtro, pero se avisa
           }))
@@ -2013,12 +2089,15 @@ async function handlePortfolioMode(req, res) {
       // Aplicar filtro por activo — ar.data = tickerCache[ar._realSymbol]
       // rebuildCapitalTras usa {...t} → preserva _stratId/_stratName/_realSymbol
       for (const ar of assetResults) {
-        const assetDates = ar.data.map(d => d.date)
+        // Fechas de la serie CON calentamiento: la EMA del filtro tiene que llegar convergida al
+        // primer dia del periodo, y asi la regla del «cierre anterior» tiene un cierre anterior de
+        // verdad el primer dia, en vez de caer en el fail-open de la primera vela.
+        const assetDates = (ar.dataCal ?? ar.data).map(d => d.date)
         const alineado = (src, semanal, periodo) => semanal
           ? buildAlignedWeekly(src, assetDates, periodo)
           : (() => { const closes = buildAlignedCloses(src, assetDates); return { closes, ema: calcEMA(closes, periodo) } })()
         const filtroActivoMap = construirFiltroActivoMap(filtrosLista, {
-          assetBars: ar.data, assetDates, alineado,
+          assetBars: ar.dataCal ?? ar.data, assetDates, alineado,
           // Aquí ar.symbol es el símbolo SINTÉTICO (`ticker#orden`); el real es _realSymbol.
           assetSymbol: ar._realSymbol ?? ar.symbol,
           assetInterval: assetInterval === '1wk' ? 'semanal' : 'diario',
@@ -2159,6 +2238,11 @@ async function handlePortfolioMode(req, res) {
       slotCapital,
       modoAsig,
       startDate:       curves.startDate,
+      // «El periodo empieza con N posiciones abiertas»: con el calentamiento la estrategia puede llegar
+      // ya DENTRO de una operacion, y entonces no puede entrar hasta que salga. Solo viaja si hay alguna.
+      ...(_heredadasPorActivo(assetResults) ? { posicionesHeredadas: _heredadasPorActivo(assetResults) } : {}),
+      periodo: { desde: per.desde, hasta: per.hasta, modo: per.modo,
+                 calentamiento: _calentamientoReal(descargas), calentamientoPedido: nCal },
       senalStats:      curves.senalStats ?? null,
       portfolioMode:   true,
       strategyCount:   strategies.length,
@@ -2210,6 +2294,9 @@ export default async function handler(req, res) {
   // Fetch code_js y params desde Supabase si se proporcionó strategyId
   let codeJs = null
   let _stratNameMb = null
+  // Los params de la fila, aparte de effectiveCfg: el calentamiento se calcula con los periodos de
+  // la ESTRATEGIA, no con las claves del cfg del formulario.
+  let _stratParamsMb = {}
   let effectiveCfg = cfg
   if (strategyId && SUPA_URL && SUPA_KEY) {
     try {
@@ -2228,6 +2315,7 @@ export default async function handler(req, res) {
             : {}
         } catch(_) {}
         // cfg del frontend + params de Supabase (stratParams tiene prioridad)
+        _stratParamsMb = stratParams
         effectiveCfg = { ...cfg, ...stratParams }
       }
     } catch(_) { codeJs = null }
@@ -2238,35 +2326,45 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Descargar datos en batches para no saturar el proveedor
+    // Periodo, calentamiento y descarga en lotes para no saturar al proveedor.
     const assetInterval = intervalo === 'semanal' ? '1wk' : '1d'
-    const BATCH = 4
-    const allData = {}
-    const descargas = {}   // símbolo → resultado de fetchDataConMotivo, para avisar de los excluidos
-    for (let i = 0; i < symbols.length; i += BATCH) {
-      const chunk = symbols.slice(i, i+BATCH)
-      await Promise.all(chunk.map(async sym => {
-        descargas[sym] = await fetchDataConMotivo(sym, cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, assetInterval)
-        allData[sym] = descargas[sym].data
-      }))
-      if (i+BATCH < symbols.length) await sleep(400)
-    }
-
-    // SP500 para el filtro (siempre diario)
-    let sp500Data = null
-    try { sp500Data = await fetchData('^GSPC', cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null) } catch(_) {}
-    // Fase 2B: SP500 en el timeframe del activo, SOLO para el gate de fuerza relativa.
-    // Filtros de mercado, curva B&H y sp500Close inyectado al codeJs siguen usando sp500Data diaria.
-    // En diario, sp500DataTf === sp500Data (sin doble descarga).
-    let sp500DataTf = sp500Data
-    if (assetInterval === '1wk') { try { sp500DataTf = await fetchData('^GSPC', cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, assetInterval) } catch(_) {} }
-
-    // ── Fetch datos auxiliares para filtros de mercado ──
-    // El filtro es la ventana operativa: en semanal no puede ser diario (lib/filtros.js).
+    // La lista de filtros se normaliza AQUI, antes de descargar, porque sus periodos cuentan para el
+    // calentamiento. El filtro es la ventana operativa: en semanal no puede ser diario (lib/filtros.js).
     const _ffU = fuerzaFiltrosSemanales(normalizaFiltrosEntrada(filtrosCfg), assetInterval === '1wk')
     const filtrosLista = _ffU.lista
     if (_ffU.forzados.length) console.log(`[filtros] ${_stratNameMb ?? strategyId}: estrategia semanal, filtros forzados a semanal: ${_ffU.forzados.join(', ')}`)
     const anyFiltroOn = hayFiltrosActivos(filtrosLista)
+    const per = normalizaPeriodo({ years: cfg.years ?? 5, fromDate: cfg.fromDate ?? null, toDate: cfg.toDate ?? null })
+    const nCal = velasCalentamiento(_stratParamsMb, filtrosLista, assetInterval === '1wk' ? 'semanal' : 'diario')
+    const _cal = { calentamiento: nCal, conCalentamiento: true }
+    console.log(`[periodo] ${_stratNameMb ?? strategyId} (${assetInterval}): ${per.modo} ${per.desde}→${per.hasta} · calentamiento ${nCal}`)
+    const BATCH = 4
+    const allData = {}      // símbolo → velas del PERIODO
+    const allDataCal = {}   // símbolo → velas con CALENTAMIENTO (lo unico que ve la estrategia)
+    const descargas = {}   // símbolo → resultado de fetchDataConMotivo, para avisar de los excluidos
+    for (let i = 0; i < symbols.length; i += BATCH) {
+      const chunk = symbols.slice(i, i+BATCH)
+      await Promise.all(chunk.map(async sym => {
+        descargas[sym] = await fetchDataConMotivo(sym, cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, assetInterval, nCal)
+        allData[sym] = descargas[sym].data
+        allDataCal[sym] = descargas[sym].dataConCal ?? descargas[sym].data
+      }))
+      if (i+BATCH < symbols.length) await sleep(400)
+    }
+
+    // SP500 para el filtro (siempre diario). Con calentamiento: sus consumidores la buscan por
+    // FECHA, asi que unas velas de mas por delante no cambian ningun resultado.
+    let sp500Data = null
+    try { sp500Data = await fetchData('^GSPC', cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, '1d', _cal) } catch(_) {}
+    // Fase 2B: SP500 en el timeframe del activo, SOLO para el gate de fuerza relativa.
+    // Filtros de mercado, curva B&H y sp500Close inyectado al codeJs siguen usando sp500Data diaria.
+    // En diario, sp500DataTf === sp500Data (sin doble descarga).
+    let sp500DataTf = sp500Data
+    if (assetInterval === '1wk') { try { sp500DataTf = await fetchData('^GSPC', cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, assetInterval, _cal) } catch(_) {} }
+
+    // ── Fetch datos auxiliares para filtros de mercado ──
+    // `filtrosLista` y `anyFiltroOn` se calculan antes de la descarga: sus periodos cuentan para el
+    // calentamiento, asi que hay que conocerlos antes de pedir las velas.
     const filterAuxData = {} // key: `${ticker}:${iv}` → data
     const semanalPorSimbolo = {}   // símbolo → serie semanal, solo si algún filtro de activo la pide
     const sinSerieSemanal = []     // símbolos cuya serie semanal falló → operan sin ese filtro
@@ -2279,7 +2377,7 @@ export default async function handler(req, res) {
         const colonIdx = akey.lastIndexOf(':')
         const ticker = akey.slice(0, colonIdx), iv = akey.slice(colonIdx + 1)
         filterFetchJobs.push(
-          fetchData(ticker, cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, iv)
+          fetchData(ticker, cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, iv, _cal)
             .then(r => { filterAuxData[akey] = r }).catch(() => {})
         )
       }
@@ -2295,7 +2393,7 @@ export default async function handler(req, res) {
         for (let i = 0; i < simbolosConDatos.length; i += BATCH) {
           const chunk = simbolosConDatos.slice(i, i + BATCH)
           await Promise.all(chunk.map(async sym => {
-            const r = await fetchData(sym, cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, '1wk')
+            const r = await fetchData(sym, cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, '1wk', _cal)
             if (r?.length) semanalPorSimbolo[sym] = r
             else sinSerieSemanal.push(sym)   // fail-open: opera sin filtro, pero se avisa
           }))
@@ -2315,17 +2413,20 @@ export default async function handler(req, res) {
     const assetResults = symbols.map(sym => {
       const data = allData[sym]
       if (!data?.length) return null
+      // Serie con calentamiento: la ve la estrategia, y tambien el mapa de filtros y la regla del
+      // «cierre anterior», que el primer dia del periodo tiene que poder mirar la vela de antes.
+      const dataCal = allDataCal[sym] ?? data
+      const startDate = _inicioSimulacion(data, cfg, per)
       if (codeJs) {
         // Motor code_js: sandbox por activo con slotCapital = capital total / nº activos
-        const { trades } = runCodeJsAsset(data, sp500Data, codeJs, slotCapital, cfg.years ?? 5, effectiveCfg)
+        const { trades, heredadas } = runCodeJsAsset(dataCal, sp500Data, codeJs, slotCapital, cfg.years ?? 5, effectiveCfg,
+          { desde: per.desde, iDesde: descargas[sym].iDesde ?? 0 })
         const capitalReinv = trades.length ? trades[trades.length-1].capitalTras : slotCapital
         const gananciaSimple = trades.reduce((s,t) => s + t.pnlSimple, 0)
-        const startDate = _inicioSimulacion(data, cfg)
-        return { symbol: sym, data, trades, capitalReinv, gananciaSimple, startDate, blockEvents: {} }
+        return { symbol: sym, data, dataCal, _heredadas: heredadas ?? [], trades, capitalReinv, gananciaSimple, startDate, blockEvents: {} }
       }
       // isNoStrategy: sin código → trades vacíos; los filtros los poblarán si están activos
-      const startDate = _inicioSimulacion(data, cfg)
-      return { symbol: sym, data, trades: [], capitalReinv: slotCapital, gananciaSimple: 0, startDate, blockEvents: {} }
+      return { symbol: sym, data, dataCal, _heredadas: [], trades: [], capitalReinv: slotCapital, gananciaSimple: 0, startDate, blockEvents: {} }
     }).filter(Boolean)
 
     // ── Aplicar filtros de mercado a trades por activo ──
@@ -2337,7 +2438,10 @@ export default async function handler(req, res) {
     const zonasRepresentativas = filtrosActivos(filtrosLista).every(f => f.ambito === 'mercado')
     if (anyFiltroOn) {
       for (const ar of assetResults) {
-        const assetDates = ar.data.map(d => d.date)
+        // Fechas de la serie CON calentamiento: la EMA del filtro tiene que llegar convergida al
+        // primer dia del periodo, y asi la regla del «cierre anterior» tiene un cierre anterior de
+        // verdad el primer dia, en vez de caer en el fail-open de la primera vela.
+        const assetDates = (ar.dataCal ?? ar.data).map(d => d.date)
 
         // Resuelve dataset para ticker+interval (^GSPC diario → sp500Data)
         const resolveFilterData = (ticker, iv) =>
@@ -2348,7 +2452,7 @@ export default async function handler(req, res) {
           : (() => { const closes = buildAlignedCloses(src, assetDates); return { closes, ema: calcEMA(closes, periodo) } })()
 
         const filtroActivoMap = construirFiltroActivoMap(filtrosLista, {
-          assetBars: ar.data, assetDates, alineado,
+          assetBars: ar.dataCal ?? ar.data, assetDates, alineado,
           assetSymbol: ar.symbol,
           assetInterval: assetInterval === '1wk' ? 'semanal' : 'diario',
           resolveMercado: (ticker, semanal) => resolveFilterData(ticker, semanal ? '1wk' : '1d'),
@@ -2515,6 +2619,11 @@ export default async function handler(req, res) {
       slotCapital,
       modoAsig,
       startDate: curves.startDate,
+      // «El periodo empieza con N posiciones abiertas»: con el calentamiento la estrategia puede llegar
+      // ya DENTRO de una operacion, y entonces no puede entrar hasta que salga. Solo viaja si hay alguna.
+      ...(_heredadasPorActivo(assetResults) ? { posicionesHeredadas: _heredadasPorActivo(assetResults) } : {}),
+      periodo: { desde: per.desde, hasta: per.hasta, modo: per.modo,
+                 calentamiento: _calentamientoReal(descargas), calentamientoPedido: nCal },
       blockEventsBySymbol: Object.fromEntries(assetResults.map(ar => [ar.symbol, ar.blockEvents])),
       senalStats: curves.senalStats ?? null,
       filterZones: filterZones.length ? filterZones : undefined,
