@@ -525,7 +525,7 @@ const tramosDe = (bars, campo) => {
 // alterna valor y hueco barra a barra—, y vale más una diagonal que centenares de series.
 const MAX_TRAMOS = 200
 
-export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxDD, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, isNewResultRef=null, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null, isBareChart=false, visuals=null, filterZones=[], slopeChanges=[], customMarkers=[], pendingOrders=[], simbolo=null, riskPanelOpen=false, onRiskLineFocus=null, indicadoresUsuario=[], onIndicadores=null, onConfigurarIndicador=null, nombresIndicadores=null }) {
+export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, isNewResultRef=null, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null, isBareChart=false, visuals=null, filterZones=[], slopeChanges=[], customMarkers=[], pendingOrders=[], simbolo=null, riskPanelOpen=false, onRiskLineFocus=null, indicadoresUsuario=[], onIndicadores=null, onConfigurarIndicador=null, nombresIndicadores=null }) {
   const containerRef=useRef(null), svgRef=useRef(null), legendRef=useRef(null), tooltipRef=useRef(null)
   const activeLegendRef = externalLegendRef || legendRef
   const chartRef=useRef(null), candlesRef=useRef(null)
@@ -1226,12 +1226,16 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
               const pnlComp=(capIni!=null&&capFin!=null)?capFin-capIni:null
               const eur=v=>v==null?'-':`€${Math.round(v).toLocaleString('es-ES')}`
               const eurFirmado=v=>v==null?'-':`€${v<0?'-':'+'}${Math.abs(Math.round(v)).toLocaleString('es-ES')}`
+              // Drawdown DE ESTA OPERACION, calculado en el servidor (lib/ddOperacion.js). Un guion
+              // si no se pudo calcular: inventarse un cero diría que la operación no sufrió nada.
+              const pct=v=>v==null?'-':`${v.toFixed(2)}%`
               const lines=[
                 `#${idx+1}`,
                 `Cap.ini: ${eur(capIni)}`,
                 `Cap.fin: ${eur(capFin)}`,
                 `Profit:  ${t.pnlPct.toFixed(2)}%`,
                 `P&L:     ${eurFirmado(pnlComp)}`,
+                `DD oper: ${pct(t.ddOperacion)}`,
                 `${t.dias}d`,
               ]
               const W=Math.max(...lines.map(l=>l.length))*5.8+20
@@ -1476,12 +1480,12 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
             `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:#7a9bc0">Profit</span><b style="color:${bc}">${trade.pnlPct>=0?'+':''}${trade.pnlPct.toFixed(2)}%</b></div>`+
             `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:#7a9bc0">P&L</span><b style="color:${bc}">${pnlComp==null?'-':(pnlComp>=0?'€+':'€-')+f2(Math.abs(pnlComp))}</b></div>`+
             `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:#7a9bc0">Días</span><span>${trade.dias}</span></div>`+
-            // «Max DD estrategia», no «Max DD»: este número NUNCA fue de la operación. Es el
-            // drawdown máximo de la curva ENTERA de la estrategia, idéntico en las etiquetas de
-            // todas las operaciones. Se mantiene porque sirve de referencia, pero con el nombre que
-            // le corresponde; y ahora llega en compuesto (ddComp), no en simple, para no volver a
-            // mezclar modos dentro de la misma etiqueta.
-            `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:#7a9bc0">Max DD estrategia</span><span style="color:#ff4d6d">${maxDD.toFixed(2)}%</span></div>`
+            // DD DE LA OPERACIÓN, no de la estrategia. Aquí había un «Max DD estrategia» que era el
+            // drawdown de la curva ENTERA: el mismo número en la etiqueta de todas las operaciones,
+            // que no decía nada de la que el cursor estaba señalando. Ese sigue en el resumen, que
+            // es su sitio. Esto es lo que llegó a sufrir ESTA operación mientras estaba abierta:
+            // desde su máximo hasta el mínimo posterior. La regla, en lib/ddOperacion.js.
+            `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:#7a9bc0">DD operación</span><span style="color:#ff4d6d">${trade.ddOperacion==null?'-':trade.ddOperacion.toFixed(2)+'%'}</span></div>`
         }
       })
 
@@ -1785,7 +1789,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, maxD
     // recalculaba, pero este efecto —el que crea las series— no dependía de él, así que las líneas
     // seguían siendo las de antes hasta que cambiaba `data`, es decir, hasta cambiar de activo.
     // Rehacer el chart no pierde el zoom: savedRangeRef guarda el rango visible y se restaura al crearlo.
-  },[data,emaRPeriod,emaLPeriod,trades,maxDD,labelMode,definition,isBareChart,firmaIndicadores])
+  },[data,emaRPeriod,emaLPeriod,trades,labelMode,definition,isBareChart,firmaIndicadores])
 
   // ── isBareChart: ajustar altura al resize de ventana ──
   const updateHeightRef=useRef(null)

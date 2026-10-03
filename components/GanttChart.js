@@ -111,7 +111,8 @@ function GanttTooltip({ trade, mouseX, mouseY, isDiscarded, slotCapital, modoAsi
         : null)
 
   const W   = 235
-  const H   = (capInv != null ? 195 : 175) + (capFin != null ? 17 : 0) + (isDiscarded ? 30 : 0)
+  const H   = (capInv != null ? 195 : 175) + (capFin != null ? 17 : 0) +
+              (t.ddOperacion != null ? 17 : 0) + (isDiscarded ? 30 : 0)
   const left = mouseX + 14 + W > (typeof window !== 'undefined' ? window.innerWidth  : 1200) ? mouseX - W - 10 : mouseX + 14
   const top  = mouseY + 14 + H > (typeof window !== 'undefined' ? window.innerHeight : 800)  ? mouseY - H - 10 : mouseY + 14
   const pct  = t.pnlPct || 0
@@ -149,6 +150,12 @@ function GanttTooltip({ trade, mouseX, mouseY, isDiscarded, slotCapital, modoAsi
         {capFin != null && <>
           <span style={{color:'#4a6a8a'}}>Capital final:</span>
           <span style={{color:'#c8dff5'}}>{fmtEur(capFin)}</span>
+        </>}
+        {/* Drawdown DE ESTA OPERACIÓN (lib/ddOperacion.js): lo que llegó a sufrir mientras estaba
+            abierta. Con coma decimal, como el resto de los números de este globo. */}
+        {t.ddOperacion != null && <>
+          <span style={{color:'#4a6a8a'}}>DD oper.:</span>
+          <span style={{color:'#f87171'}}>{t.ddOperacion.toFixed(2).replace('.', ',')}%</span>
         </>}
         <span style={{color:'#4a6a8a'}}>P&amp;L%:</span>
         <span style={{color:posColor, fontWeight:600}}>{fmtPct(pct)}</span>

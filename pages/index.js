@@ -1676,6 +1676,7 @@ export default function Home() {
         capital:t.pnlPct!==0?Math.abs(t.pnlSimple/(t.pnlPct/100)):0,
         ...mcCapitalDeOperacion(t,mcHistSel.histResult?.modoAsig),
         cesionPct:t.cesionPct??null,maxPx:t.maxPx??null,maxFecha:t.maxFecha??null,
+        ddOperacion:t.ddOperacion??null,
       })),
     }]
   },[mcActivoSel,mcCurvaActivoSel,mcTradesActivoSel,mcNombreStratSel,mcHistSel])
@@ -5912,7 +5913,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.871</title>
+        <title>Trading Simulator V9.872</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6001,7 +6002,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             }} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.871
+            <span className="dot"/>Trading Simulator V9.872
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -8523,7 +8524,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         customMarkers={[...(result.customMarkers??[]), ...openEntryMarkers]}
                         pendingOrders={pendingOrdersForSym}
                         simbolo={simbolo}
-                        trades={result.isBareChart?[]:result.trades||[]} maxDD={result.isBareChart?0:metrics?.ddComp||0}
+                        trades={result.isBareChart?[]:result.trades||[]}
                         isBareChart={result.isBareChart??false}
                         chartHeight={result.isBareChart?bareChartHeight:candleH}
                         fillHeight={!result.isBareChart}
@@ -8682,7 +8683,6 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         pendingOrders={pendingOrdersForSym}
                         simbolo={simbolo}
                           trades={result.isBareChart?[]:result.trades||[]}
-                          maxDD={result.isBareChart?0:metrics?.ddComp||0}
                           isBareChart={result.isBareChart??false}
                           fillHeight={true}
                           labelMode={labelMode} rulerActive={rulerOn}
@@ -10311,6 +10311,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                   capital:t.pnlPct!==0?Math.abs(t.pnlSimple/(t.pnlPct/100)):0,
                                   ...mcCapitalDeOperacion(t,r.result.modoAsig),
                                   cesionPct:t.cesionPct??null,maxPx:t.maxPx??null,maxFecha:t.maxFecha??null,
+                                  ddOperacion:t.ddOperacion??null,
                                 })),
                               }
                             })

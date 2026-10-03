@@ -4,6 +4,7 @@ import { calcEMA, calcSMA, calcRSI, calcATR, calcMACD } from '../../lib/backtest
 import { exigeAuth } from '../../lib/verificaJwt'
 import { operacionesPorFiltro, esNoStrategyPorNombre } from '../../lib/operacionesPorFiltro'
 import { ajustaPreciosAVela, cuentaAjustados } from '../../lib/precioEnVela'
+import { ddPctDeOperacion, indicePorFecha } from '../../lib/ddOperacion'
 import { normalizaFiltrosEntrada, hayFiltrosActivos, clavesAuxiliares, construirFiltroActivoMap, filtrosActivos,
          requiereSemanalDelActivo, proyectarSemanal } from '../../lib/filtros'
 import { stooqSym } from '../../lib/simbolos'
@@ -251,6 +252,9 @@ function buildAlignedWeekly(weeklyData, assetDates, emaPeriod) {
 function buildTrades(rawTrades, capitalIni, allocationPct = 100, barras = null) {
   const fixedAlloc = capitalIni * (allocationPct / 100)
   let compoundCapital = capitalIni
+  // Indice fecha -> vela UNA vez para toda la serie: con un find por operacion esto seria
+  // cuadratico, y hay estrategias con cientos de operaciones sobre miles de velas.
+  const idxBarras = barras ? indicePorFecha(barras) : null
   return (barras ? ajustaPreciosAVela(rawTrades, barras) : rawTrades)
     .filter(t => t.entryDate && t.exitDate && t.entryPrice > 0 && t.exitPrice > 0)
     .map(t => {
@@ -265,8 +269,13 @@ function buildTrades(rawTrades, capitalIni, allocationPct = 100, barras = null) 
 
       const dias = Math.max(1, Math.round((new Date(t.exitDate) - new Date(t.entryDate)) / 86400000))
 
+      // DRAWDOWN DE LA OPERACION. Se calcula aqui, en el servidor, y no en cada grafico: por aqui
+      // pasan TODAS las operaciones de todas las rutas, y el Gantt no tiene velas con las que
+      // calcularlo. Las velas del panel del activo son ademas una descarga distinta de la que vio
+      // el motor, asi que calcularlo alli podria dar dos drawdowns para la misma operacion.
       return { ...t, shares: sharesSimple, pnlSimple, pnlPct, capitalTras: compoundCapital, dias,
-        entryPx: t.entryPrice, exitPx: t.exitPrice, tipo: t.exitReason ?? null }
+        entryPx: t.entryPrice, exitPx: t.exitPrice, tipo: t.exitReason ?? null,
+        ddOperacion: barras ? ddPctDeOperacion(t, barras, idxBarras) : null }
     })
 }
 

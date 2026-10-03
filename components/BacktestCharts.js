@@ -637,6 +637,12 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
           _fila('Rendimiento',`${mejor.pnlPct>=0?'+':''}${(mejor.pnlPct||0).toFixed(2)}%`,bc)+
           _fila('P&L',pnlComp==null?'-':`${pnlComp>=0?'+':'-'}€${Math.round(Math.abs(pnlComp)).toLocaleString('es-ES')}`,bc)+
           _fila('Días',String(_dias(mejor.entryDate,mejor.exitDate)))+
+          // DRAWDOWN DE LA OPERACIÓN: lo que llegó a sufrir mientras estaba abierta, del máximo al
+          // mínimo POSTERIOR a ese máximo (lib/ddOperacion.js). Es otra cosa que la cesión de abajo,
+          // y por eso van las dos: una dice cuánto se sufrió y la otra cuánto se dejó sin cobrar.
+          (Number.isFinite(mejor.ddOperacion)
+            ? _fila('DD operación',`${mejor.ddOperacion.toFixed(2)}%`,mejor.ddOperacion<-0.005?'#ff4d6d':'#7a9bc0')
+            : '')+
           // "Desde máximo", no "Max DD": esto NO es el drawdown de la tabla. Mide lo que la operación
           // devolvió entre su pico y su salida, con el punto final fijado en la salida.
           (Number.isFinite(mejor.cesionPct)

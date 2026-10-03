@@ -8,6 +8,7 @@ import { fetchAV, fetchAVDetalle } from './datos'
 import { exigeAuth } from '../../lib/verificaJwt'
 import { operacionesPorFiltro, esNoStrategyPorNombre } from '../../lib/operacionesPorFiltro'
 import { ajustaPreciosAVela, cuentaAjustados } from '../../lib/precioEnVela'
+import { ddPctDeOperacion, indicePorFecha } from '../../lib/ddOperacion'
 
 const SUPA_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPA_KEY = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -1629,6 +1630,8 @@ function _posicionesSlots(assetResults, startDate) {
 function buildTrades(rawTrades, capitalIni, allocationPct = 100, barras = null) {
   const fixedAlloc = capitalIni * (allocationPct / 100)
   let compoundCapital = capitalIni
+  // Mismo indice que en datos.js: una sola pasada por serie, no un find por operacion.
+  const idxBarras = barras ? indicePorFecha(barras) : null
   return (barras ? ajustaPreciosAVela(rawTrades, barras) : rawTrades)
     .filter(t => t.entryDate && t.exitDate && t.entryPrice > 0 && t.exitPrice > 0)
     .map(t => {
@@ -1640,7 +1643,12 @@ function buildTrades(rawTrades, capitalIni, allocationPct = 100, barras = null) 
       const pnlCompound    = (t.exitPrice - t.entryPrice) * sharesCompound
       compoundCapital     += pnlCompound
       const dias = Math.max(1, Math.round((new Date(t.exitDate) - new Date(t.entryDate)) / 86400000))
-      return { ...t, shares: sharesSimple, pnlSimple, pnlPct, capitalTras: compoundCapital, dias }
+      // El MISMO drawdown por operacion que datos.js, de la misma funcion y con las mismas velas,
+      // para que una operacion no cambie de drawdown segun la pantalla desde la que se mire. Los
+      // modos de pool copian la operacion con ...trade, asi que el campo llega tambien a la
+      // cartera y al Gantt sin tocar nada mas.
+      return { ...t, shares: sharesSimple, pnlSimple, pnlPct, capitalTras: compoundCapital, dias,
+        ddOperacion: barras ? ddPctDeOperacion(t, barras, idxBarras) : null }
     })
 }
 
