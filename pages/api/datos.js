@@ -9,6 +9,7 @@ import { filtraPorEntrada } from '../../lib/filtroEntrada'
 import { normalizaFiltrosEntrada, hayFiltrosActivos, clavesAuxiliares, construirFiltroActivoMap, filtrosActivos,
          requiereSemanalDelActivo, proyectarSemanal, fuerzaFiltrosSemanales } from '../../lib/filtros'
 import { semanalesDesdeDiarias } from '../../lib/velasSemanales'
+import { marcaDiariaEnCurso, semanaEnCurso, soloCerradas } from '../../lib/sesion'
 
 const SUPA_URL = process.env.SUPABASE_URL || 'https://uqjngxxbdlquiuhywiuc.supabase.co'
 const SUPA_KEY = process.env.SUPABASE_ANON_KEY || 'sb_publishable_st9QJ3zcQbY5ec-JhxwqXQ_joy3udz3'
@@ -62,6 +63,7 @@ export async function fetchAVDetalle(symbol, years=5, interval='d') {
   const _t0 = Date.now()
   let origen = null
   let rawData = null
+  let metaSesion = null, tsUltima = null
   const semanal = interval === 'w'
 
   // ── Yahoo Finance, con 4 segundos de espera ──
@@ -88,7 +90,11 @@ export async function fetchAVDetalle(symbol, years=5, interval='d') {
         const yfJson = await yfR.json()
         const timestamps = yfJson?.chart?.result?.[0]?.timestamp
         const quotes = yfJson?.chart?.result?.[0]?.indicators?.quote?.[0]
+        // El meta trae el periodo regular de la sesión: con él se sabe si la última vela está
+        // cerrada. Ver lib/sesion.js.
+        metaSesion = yfJson?.chart?.result?.[0]?.meta ?? null
         if (timestamps && quotes) {
+          tsUltima = Number(timestamps[timestamps.length - 1])
           rawData = timestamps.map((t,i) => ({
             date: new Date(t*1000).toISOString().slice(0,10),
             open:  quotes.open?.[i]  || quotes.close?.[i],
@@ -112,8 +118,16 @@ export async function fetchAVDetalle(symbol, years=5, interval='d') {
     console.log(`[precios] ${symbol} (${interval}): SIN DATOS tras ${_ms} ms`)
     throw new Error(`Sin datos para ${symbol}`)
   }
+  // ¿Está abierta la sesión de la última vela? Si no hay información de sesión se trata como
+  // cerrada —el comportamiento de siempre— y se deja dicho en el log: tratarla como abierta
+  // descartaría la última vela de todos los símbolos cuyo meta venga incompleto.
+  const marcada = marcaDiariaEnCurso(rawData, tsUltima, metaSesion)
+  if (marcada.sinDato) console.log(`[precios] ${symbol}: sin currentTradingPeriod en el meta; la última vela se trata como CERRADA`)
+  rawData = marcada.barras
   // En semanal, las velas que salen de aquí son las construidas, no las de Yahoo.
-  const data = semanal ? semanalesDesdeDiarias(rawData) : rawData
+  const data = semanal
+    ? semanalesDesdeDiarias(rawData, { semanaEnCurso: (lunes) => semanaEnCurso(lunes, metaSesion) })
+    : rawData
   // Una línea por descarga, con las dos cifras cuando hay agregación: así en el log se ve de cuántas
   // velas diarias salió cada serie semanal.
   console.log(`[precios] ${symbol} (${interval}): ${origen} · ${data.length} velas
@@ -464,9 +478,13 @@ export default async function handler(req, res) {
       runFn = getRunFn(calcEMA, calcSMA, calcRSI, calcATR, calcMACD)
     } catch (e) { e._tipoFallo = 'codigo_estrategia'; throw e }
     const userParams = stratParams ? JSON.parse(stratParams) : {}
+    // LAS ESTRATEGIAS SOLO VEN VELAS CERRADAS. La vela en curso se queda fuera de run(): su cierre
+    // todavía va a cambiar, así que cualquier decisión tomada con ella es provisional. `data` sigue
+    // completo para el gráfico y las curvas, que sí deben pintarla. Ver lib/sesion.js.
+    const dataCerradas = soloCerradas(data)
     let _result
     try {
-      _result = runFn(data, { capital_ini, years, allocation_pct, ...userParams })
+      _result = runFn(dataCerradas, { capital_ini, years, allocation_pct, ...userParams })
     } catch (e) { e._tipoFallo = 'codigo_estrategia'; throw e }
     let rawTrades        = _result.trades       ?? []
     const indicators     = _result.indicators   ?? {}
@@ -511,7 +529,7 @@ export default async function handler(req, res) {
       // y 43 en AAPL, y acababan en ranking_results como si fueran su rendimiento.
       if (esNoStrategyPorNombre(stratName)) {
         if (rawTrades.length === 0 && !openPos) {
-          rawTrades.push(...operacionesPorFiltro(data, (f) => filtroActivoMap[f] !== false))
+          rawTrades.push(...operacionesPorFiltro(dataCerradas, (f) => filtroActivoMap[f] !== false))
         }
       } else {
         // Estrategia normal: descartar trades cuya entrada fue bloqueada por el filtro.
@@ -524,7 +542,7 @@ export default async function handler(req, res) {
     }
 
     // ── Enrich trades ──
-    const trades = buildTrades(rawTrades, capital_ini, allocation_pct, data)
+    const trades = buildTrades(rawTrades, capital_ini, allocation_pct, dataCerradas)
     const _nAjustados = cuentaAjustados(trades)
 
     // ── Inject indicators into chartData bars ──

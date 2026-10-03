@@ -11,6 +11,7 @@ import { ajustaPreciosAVela, cuentaAjustados } from '../../lib/precioEnVela'
 import { ddPctDeOperacion, indicePorFecha } from '../../lib/ddOperacion'
 import { filtraPorEntrada } from '../../lib/filtroEntrada'
 import { semanalesDesdeDiarias } from '../../lib/velasSemanales'
+import { soloCerradas } from '../../lib/sesion'
 
 const SUPA_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPA_KEY = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -1658,9 +1659,15 @@ function buildTrades(rawTrades, capitalIni, allocationPct = 100, barras = null) 
 // Sandbox idéntica a datos.js. Si falla → { trades:[], indicators:{}, filterZones:[] }
 export function runCodeJsAsset(data, sp500Data, codeJs, slotCapital, years, cfg) {
   try {
+    // LAS ESTRATEGIAS SOLO VEN VELAS CERRADAS. La vela en curso no entra en run(): su cierre todavía
+    // va a cambiar. Ver lib/sesion.js. Los indicadores se devuelven con la longitud de `data`,
+    // rellenando esa última posición, porque quien los consume los alinea por índice con las barras
+    // (asset-detail los rechaza si la longitud no cuadra) y el gráfico sí pinta la vela en curso.
+    const cerradas = soloCerradas(data)
+    const faltan = data.length - cerradas.length
     const sp500Map = {}
     if (sp500Data) sp500Data.forEach(d => { sp500Map[d.date] = d.close })
-    const enrichedData = data.map(d => ({ ...d, sp500Close: sp500Map[d.date] ?? null }))
+    const enrichedData = cerradas.map(d => ({ ...d, sp500Close: sp500Map[d.date] ?? null }))
     const wrappedCode = `"use strict";\n${codeJs}\nreturn run;`
     const getRunFn = new Function('calcEMA','calcSMA','calcRSI','calcATR','calcMACD', wrappedCode)
     const runFn = getRunFn(_libEMA, calcSMA, calcRSI, _libATR, calcMACD)
@@ -1671,10 +1678,15 @@ export function runCodeJsAsset(data, sp500Data, codeJs, slotCapital, years, cfg)
       allocation_pct: 100,
     })
     const rawTrades   = result.trades      ?? []
-    const indicators  = result.indicators  ?? {}
+    const indicatorsCrudos = result.indicators  ?? {}
+    const indicators  = faltan
+      ? Object.fromEntries(Object.entries(indicatorsCrudos).map(([k, v]) =>
+          [k, Array.isArray(v) ? v.concat(new Array(faltan).fill(null)) : v]))
+      : indicatorsCrudos
     const filterZones = result.filterZones ?? []
-    // Flush virtual: posición abierta al final del periodo
-    const lastBar = data[data.length - 1]
+    // Flush virtual: posición abierta al final del periodo. La última vela CERRADA, no la última
+    // que llegó: el cierre por fin de periodo tampoco puede usar una vela a medias.
+    const lastBar = cerradas[cerradas.length - 1]
     const openPos = result.openPosition ?? null
     if (openPos && openPos.entryDate && openPos.entryPrice > 0) {
       // Convención nueva: la estrategia expone openPosition explícitamente
@@ -1699,7 +1711,7 @@ export function runCodeJsAsset(data, sp500Data, codeJs, slotCapital, years, cfg)
         }
       }
     }
-    const trades = buildTrades(rawTrades, slotCapital, 100, data)
+    const trades = buildTrades(rawTrades, slotCapital, 100, cerradas)
     return { trades, indicators, filterZones }
   } catch(e) {
     console.error('[runCodeJsAsset] error:', e.message)
