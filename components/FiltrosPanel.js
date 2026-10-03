@@ -38,7 +38,11 @@ const lbl = (active) => ({ fontFamily:MONO, fontSize:11, color:active?'var(--tex
 // Ahora cuelga del título de la sección como tooltip.
 const AYUDA_AND = 'AND — todos los filtros activos en verde para permitir entrada. Zonas bloqueadas en rojo en el gráfico.'
 
-const ivBtn = (on, semanal=false) => ({ fontFamily:MONO, fontSize:9, padding:'1px 3px', borderRadius:3, cursor:'pointer',
+// Texto del toggle bloqueado. Va aquí, junto al estilo, porque es parte del mismo mensaje.
+const AYUDA_SEMANAL = 'En estrategias semanales los filtros son siempre semanales'
+
+const ivBtn = (on, semanal=false, bloqueado=false) => ({ fontFamily:MONO, fontSize:9, padding:'1px 3px', borderRadius:3,
+  cursor:bloqueado?'not-allowed':'pointer', opacity:bloqueado&&!on?0.45:1,
   border:`1px solid ${on?(semanal?'#a07820':'#2d6e4e'):'#1a3d5a'}`,
   background:on?(semanal?'rgba(240,192,64,0.12)':'rgba(76,175,130,0.12)'):'transparent',
   color:on?(semanal?'#f0c040':'#4caf82'):'var(--text2)' })
@@ -97,7 +101,7 @@ function CampoNumero({ campo: c, valor, onCommit, style }) {
 
 // Una sección de filtros: un ámbito, en un sitio. Se instancia cuatro veces (mercado y activo, en
 // el panel de estrategias y en el de multicartera), y las cuatro comparten el mismo estado `filtros`.
-export default function FiltrosPanel({ ambito, titulo, filtros, setFiltros, open, setOpen, variant='panel', aviso=null }) {
+export default function FiltrosPanel({ ambito, titulo, filtros, setFiltros, open, setOpen, variant='panel', aviso=null, forzarSemanal=false }) {
   const V = VARIANTES[variant] || VARIANTES.panel
   const items = filtrosDe(filtros, ambito)
   const onCnt = cuentaActivos(filtros, ambito)
@@ -233,9 +237,15 @@ export default function FiltrosPanel({ ambito, titulo, filtros, setFiltros, open
                       </span>
                     ))}
                     {def.intervaloConfigurable&&(
-                      <span style={{display:'inline-flex',alignItems:'center',gap:3,flexShrink:0}}>
-                        <button style={ivBtn(p.intervalo!=='semanal',false)} onClick={()=>setParam(f.id,'intervalo','diario')}>D</button>
-                        <button style={ivBtn(p.intervalo==='semanal',true)} onClick={()=>setParam(f.id,'intervalo','semanal')}>S</button>
+                      /* Con la estrategia en semanal el intervalo se muestra en S y bloqueado, pero
+                         NO se escribe en el estado: así, al volver a diario, cada filtro recupera el
+                         valor que tenía. El servidor fuerza lo mismo por su cuenta. */
+                      <span style={{display:'inline-flex',alignItems:'center',gap:3,flexShrink:0}}
+                        title={forzarSemanal?AYUDA_SEMANAL:undefined}>
+                        <button style={ivBtn(!forzarSemanal&&p.intervalo!=='semanal',false,forzarSemanal)}
+                          disabled={forzarSemanal} onClick={()=>!forzarSemanal&&setParam(f.id,'intervalo','diario')}>D</button>
+                        <button style={ivBtn(forzarSemanal||p.intervalo==='semanal',true,forzarSemanal)}
+                          disabled={forzarSemanal} onClick={()=>!forzarSemanal&&setParam(f.id,'intervalo','semanal')}>S</button>
                       </span>
                     )}
                   </div>

@@ -5913,7 +5913,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.873</title>
+        <title>Trading Simulator V9.874</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6002,7 +6002,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             }} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.873
+            <span className="dot"/>Trading Simulator V9.874
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6204,9 +6204,11 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 {/* ── Filtros: mercado (serie externa) y activo (serie del propio símbolo) ── */}
                 <FiltrosPanel ambito="mercado" titulo="FILTROS DE MERCADO"
                   filtros={filtrosSafe} setFiltros={setFiltros}
+                  forzarSemanal={estrategiaIntervalo==='semanal'}
                   open={filtrosOpen} setOpen={setFiltrosOpen} variant="panel"/>
                 <FiltrosPanel ambito="activo" titulo="FILTROS DEL ACTIVO"
                   filtros={filtrosSafe} setFiltros={setFiltros} aviso={avisoFiltrosIndiv}
+                  forzarSemanal={estrategiaIntervalo==='semanal'}
                   open={filtrosActivoOpen} setOpen={setFiltrosActivoOpen} variant="panel"/>
 
                 {/* ── Lista ── */}
@@ -7189,9 +7191,11 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 {/* FILTROS — colapsables (MC) */}
                 <FiltrosPanel ambito="mercado" titulo="FILTROS DE MERCADO"
                   filtros={filtrosSafe} setFiltros={setFiltros}
+                  forzarSemanal={mcIntervalo==='semanal'}
                   open={mcFiltrosOpen} setOpen={setMcFiltrosOpen} variant="mc"/>
                 <FiltrosPanel ambito="activo" titulo="FILTROS DEL ACTIVO"
                   filtros={filtrosSafe} setFiltros={setFiltros} aviso={avisoFiltrosMc}
+                  forzarSemanal={mcIntervalo==='semanal'}
                   open={mcFiltrosActivoOpen} setOpen={setMcFiltrosActivoOpen} variant="mc"/>
 
                 {/* MODO DE ASIGNACIÓN — colapsable */}

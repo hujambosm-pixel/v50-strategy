@@ -7,7 +7,7 @@ import { ajustaPreciosAVela, cuentaAjustados } from '../../lib/precioEnVela'
 import { ddPctDeOperacion, indicePorFecha } from '../../lib/ddOperacion'
 import { filtraPorEntrada } from '../../lib/filtroEntrada'
 import { normalizaFiltrosEntrada, hayFiltrosActivos, clavesAuxiliares, construirFiltroActivoMap, filtrosActivos,
-         requiereSemanalDelActivo, proyectarSemanal } from '../../lib/filtros'
+         requiereSemanalDelActivo, proyectarSemanal, fuerzaFiltrosSemanales } from '../../lib/filtros'
 import { stooqSym } from '../../lib/simbolos'
 
 const SUPA_URL = process.env.SUPABASE_URL || 'https://uqjngxxbdlquiuhywiuc.supabase.co'
@@ -348,7 +348,11 @@ export default async function handler(req, res) {
     if (!data.length) throw new Error('Sin datos para ' + simbolo)
 
     // ── Fetch SP500 + filtro auxiliares en paralelo ──
-    const filtrosLista = normalizaFiltrosEntrada(filtros)
+    // El filtro es la ventana operativa: en semanal no puede ser diario. Ver fuerzaFiltrosSemanales
+    // en lib/filtros.js. No se rechaza la peticion: se corrige y se deja dicho en el log.
+    const _ff = fuerzaFiltrosSemanales(normalizaFiltrosEntrada(filtros), assetInterval === 'w')
+    const filtrosLista = _ff.lista
+    if (_ff.forzados.length) console.log(`[filtros] ${simbolo}: estrategia semanal, filtros forzados a semanal: ${_ff.forzados.join(', ')}`)
     const anyFiltroOn = hayFiltrosActivos(filtrosLista)
     let sp500Data = null
     const sp500Map = {}

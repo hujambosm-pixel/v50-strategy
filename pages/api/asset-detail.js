@@ -11,7 +11,7 @@
 import { fetchData, runCodeJsAsset, buildAlignedCloses, buildAlignedWeekly, calcEMA } from './multibacktest'
 import { exigeAuth } from '../../lib/verificaJwt'
 import { normalizaFiltrosEntrada, hayFiltrosActivos, clavesAuxiliares, construirFiltroActivoMap,
-         requiereSemanalDelActivo, proyectarSemanal } from '../../lib/filtros'
+         requiereSemanalDelActivo, proyectarSemanal, fuerzaFiltrosSemanales } from '../../lib/filtros'
 
 const SUPA_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPA_KEY = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -136,7 +136,10 @@ export default async function handler(req, res) {
     // 4. Filtros: se rehace el mapa fecha → ¿permitido? de ESTE activo, con las mismas piezas que el
     //    multibacktest. Si no hay ninguno activo, valen las zonas que devuelva la propia estrategia
     //    —algunas se calculan su filtro por dentro—, que es el mismo orden de preferencia de datos.js.
-    const filtrosLista = normalizaFiltrosEntrada(filtrosCfg)
+    // El filtro es la ventana operativa: en semanal no puede ser diario (lib/filtros.js).
+    const _ff = fuerzaFiltrosSemanales(normalizaFiltrosEntrada(filtrosCfg), esSemanal)
+    const filtrosLista = _ff.lista
+    if (_ff.forzados.length) console.log(`[filtros] ${symbol}: estrategia semanal, filtros forzados a semanal: ${_ff.forzados.join(', ')}`)
     const anyFiltroOn = hayFiltrosActivos(filtrosLista)
     let filterZones = Array.isArray(zonasSandbox) ? zonasSandbox : []
     if (anyFiltroOn) {

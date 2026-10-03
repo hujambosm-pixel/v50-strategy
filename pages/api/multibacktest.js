@@ -3,7 +3,7 @@
 
 import { calcEMA as _libEMA, calcSMA, calcRSI, calcATR as _libATR, calcMACD } from '../../lib/backtester'
 import { normalizaFiltrosEntrada, hayFiltrosActivos, clavesAuxiliares, construirFiltroActivoMap, filtrosActivos,
-         requiereSemanalDelActivo, proyectarSemanal } from '../../lib/filtros'
+         requiereSemanalDelActivo, proyectarSemanal, fuerzaFiltrosSemanales } from '../../lib/filtros'
 import { fetchAV, fetchAVDetalle } from './datos'
 import { exigeAuth } from '../../lib/verificaJwt'
 import { operacionesPorFiltro, esNoStrategyPorNombre } from '../../lib/operacionesPorFiltro'
@@ -1957,7 +1957,10 @@ async function handlePortfolioMode(req, res) {
     // 4b. Filtros de mercado — portar el mismo bloque del path único
     //     Se ejecuta DESPUÉS de runCodeJsAsset (assetResults ya tiene trades con metadata)
     //     y ANTES de construir curvas. Los datos auxiliares se descargan UNA sola vez.
-    const filtrosLista = normalizaFiltrosEntrada(filtrosCfg)
+    // El filtro es la ventana operativa: en semanal no puede ser diario (lib/filtros.js).
+    const _ffP = fuerzaFiltrosSemanales(normalizaFiltrosEntrada(filtrosCfg), assetInterval === '1wk')
+    const filtrosLista = _ffP.lista
+    if (_ffP.forzados.length) console.log(`[filtros] cartera: estrategia semanal, filtros forzados a semanal: ${_ffP.forzados.join(', ')}`)
     const anyFiltroOn = hayFiltrosActivos(filtrosLista)
     const semanalPorSimbolo = {}   // ticker → serie semanal, solo si algún filtro de activo la pide
     const sinSerieSemanal = []     // tickers cuya serie semanal falló → operan sin ese filtro
@@ -2246,7 +2249,10 @@ export default async function handler(req, res) {
     if (assetInterval === '1wk') { try { sp500DataTf = await fetchData('^GSPC', cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, assetInterval) } catch(_) {} }
 
     // ── Fetch datos auxiliares para filtros de mercado ──
-    const filtrosLista = normalizaFiltrosEntrada(filtrosCfg)
+    // El filtro es la ventana operativa: en semanal no puede ser diario (lib/filtros.js).
+    const _ffU = fuerzaFiltrosSemanales(normalizaFiltrosEntrada(filtrosCfg), assetInterval === '1wk')
+    const filtrosLista = _ffU.lista
+    if (_ffU.forzados.length) console.log(`[filtros] ${_stratNameMb ?? strategyId}: estrategia semanal, filtros forzados a semanal: ${_ffU.forzados.join(', ')}`)
     const anyFiltroOn = hayFiltrosActivos(filtrosLista)
     const filterAuxData = {} // key: `${ticker}:${iv}` → data
     const semanalPorSimbolo = {}   // símbolo → serie semanal, solo si algún filtro de activo la pide
