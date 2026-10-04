@@ -86,7 +86,8 @@ export default async function handler(req, res) {
   // Local a la petición, no en una variable de módulo: dos peticiones a la vez en la misma instancia se
   // pisarían el token.
   const _jwt = req.headers['x-supa-jwt'] || null
-  const { symbol, strategyId, cfg: cfgInput, intervalo, intervaloVelas, filtros: filtrosCfg, isNoStrategy = false } = req.body || {}
+  const { symbol, strategyId, cfg: cfgInput, intervalo, intervaloVelas, filtros: filtrosCfg, isNoStrategy = false,
+          comisiones = null } = req.body || {}
   if (!symbol) return res.status(400).json({ error: 'symbol requerido' })
   const cfg = cfgInput || {}
   // Testigo del paso en curso, para que un fallo diga DÓNDE se rompió y no solo qué excepción salió.
@@ -147,8 +148,12 @@ export default async function handler(req, res) {
     //    se descartan: las series de indicadores no dependen de él.
     // Los indicadores vuelven ya en la rejilla del PERIODO: runCodeJsAsset los recorta con `iDesde`.
     const { indicators = {}, filterZones: zonasSandbox = [] } =
+      // Esta ruta descarta las operaciones y solo usa las series de indicadores, asi que la
+      // comision no cambia nada de lo que devuelve. Se pasa igual para que el sandbox corra con la
+      // MISMA configuracion que el backtest: si algun dia esta ruta devolviera las operaciones,
+      // no habria que acordarse de esto.
       codeJs ? runCodeJsAsset(barrasConCal, sp500Data, codeJs, cfg.capitalIni ?? 10000, cfg.years ?? 5, effectiveCfg,
-                              { desde: _d.periodo.desde, iDesde: _d.iDesde ?? 0 })
+                              { desde: _d.periodo.desde, iDesde: _d.iDesde ?? 0 }, comisiones)
              : { indicators: {}, filterZones: [] }
 
     paso = 'filtros'

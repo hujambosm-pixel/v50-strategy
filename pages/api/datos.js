@@ -12,6 +12,7 @@ import { semanalesDesdeDiarias } from '../../lib/velasSemanales'
 import { marcaDiariaEnCurso, semanaEnCurso, soloCerradas } from '../../lib/sesion'
 import { normalizaPeriodo, velasCalentamiento, recortaConCalentamiento, posicionesHeredadas,
          recortaIndicadores, marcasDelPeriodo } from '../../lib/periodo'
+import { comisionDe, normalizaComisiones, sinComisiones } from '../../lib/comisiones'
 
 const SUPA_URL = process.env.SUPABASE_URL || 'https://uqjngxxbdlquiuhywiuc.supabase.co'
 const SUPA_KEY = process.env.SUPABASE_ANON_KEY || 'sb_publishable_st9QJ3zcQbY5ec-JhxwqXQ_joy3udz3'
@@ -257,23 +258,43 @@ function buildAlignedWeekly(weeklyData, assetDates, emaPeriod) {
 // estrategia existió en su vela. Si no, la operación se ejecuta en la apertura: el hueco de
 // apertura disparó la orden al abrir. Ver lib/precioEnVela.js. Sin `barras` no se toca nada,
 // así que una llamada antigua se comporta igual que siempre.
-function buildTrades(rawTrades, capitalIni, allocationPct = 100, barras = null) {
+function buildTrades(rawTrades, capitalIni, allocationPct = 100, barras = null, comisiones = null) {
   const fixedAlloc = capitalIni * (allocationPct / 100)
   let compoundCapital = capitalIni
+  const conCom = !sinComisiones(comisiones)
   // Indice fecha -> vela UNA vez para toda la serie: con un find por operacion esto seria
   // cuadratico, y hay estrategias con cientos de operaciones sobre miles de velas.
   const idxBarras = barras ? indicePorFecha(barras) : null
   return (barras ? ajustaPreciosAVela(rawTrades, barras) : rawTrades)
     .filter(t => t.entryDate && t.exitDate && t.entryPrice > 0 && t.exitPrice > 0)
     .map(t => {
-      const sharesSimple   = fixedAlloc / t.entryPrice
-      const pnlSimple      = (t.exitPrice - t.entryPrice) * sharesSimple
+      // COMISIONES. La de COMPRA se paga ANTES de comprar, asi que reduce el capital que entra en el
+      // mercado y con el las acciones; la de VENTA sale del importe que se recupera. Es la regla de
+      // Sergi: capital invertido = asignado − comision de compra, capital final = invertido ×
+      // (1 + pnlPct/100) − comision de venta. Restarla del RESULTADO en vez del capital invertido
+      // daria `comision × pnlPct` de mas, y la comprobacion a mano de tres operaciones lo cazo.
+      //
+      // La cuenta sigue partiendo de los PRECIOS y las acciones, no de netoDeOperacion: esa funcion
+      // parte de pnlPct, y rehacerla desde el porcentaje cambiaria el orden de las operaciones en
+      // coma flotante y moveria los resultados de hoy en los ultimos digitos. Con comision cero cada
+      // resta es de 0 exacto, asi que esta funcion devuelve lo mismo que siempre, bit a bit.
       const pnlPct         = (t.exitPrice / t.entryPrice - 1) * 100
+      const comCompraS     = conCom ? comisionDe({ importeCompra: fixedAlloc }, comisiones).compra : 0
+      const invSimple      = fixedAlloc - comCompraS
+      const sharesSimple   = invSimple / t.entryPrice
+      const brutoSimple    = (t.exitPrice - t.entryPrice) * sharesSimple
+      const comVentaS      = conCom ? comisionDe({ importeVenta: invSimple + brutoSimple }, comisiones).venta : 0
+      const comSimple      = comCompraS + comVentaS
+      const pnlSimple      = brutoSimple - comCompraS - comVentaS
 
       const compAlloc      = compoundCapital * (allocationPct / 100)
-      const sharesCompound = compAlloc / t.entryPrice
-      const pnlCompound    = (t.exitPrice - t.entryPrice) * sharesCompound
-      compoundCapital     += pnlCompound
+      const comCompraC     = conCom ? comisionDe({ importeCompra: compAlloc }, comisiones).compra : 0
+      const invCompound    = compAlloc - comCompraC
+      const sharesCompound = invCompound / t.entryPrice
+      const brutoCompound  = (t.exitPrice - t.entryPrice) * sharesCompound
+      const comVentaC      = conCom ? comisionDe({ importeVenta: invCompound + brutoCompound }, comisiones).venta : 0
+      const comComp        = comCompraC + comVentaC
+      compoundCapital     += brutoCompound - comCompraC - comVentaC
 
       const dias = Math.max(1, Math.round((new Date(t.exitDate) - new Date(t.entryDate)) / 86400000))
 
@@ -283,6 +304,15 @@ function buildTrades(rawTrades, capitalIni, allocationPct = 100, barras = null) 
       // el motor, asi que calcularlo alli podria dar dos drawdowns para la misma operacion.
       return { ...t, shares: sharesSimple, pnlSimple, pnlPct, capitalTras: compoundCapital, dias,
         entryPx: t.entryPrice, exitPx: t.exitPrice, tipo: t.exitReason ?? null,
+        // Los campos de la comision SOLO viajan cuando hay comision: con comision cero la respuesta
+        // tiene que ser identica byte a byte a la de antes de este cambio. Quien los lee lo hace con
+        // `campo ?? la expresion de siempre`, asi que el camino viejo sigue siendo el camino por
+        // defecto. `_capitalAtEntry` es el capital compuesto asignado a la operacion: con comision,
+        // `capitalTras / (1 + pnlPct/100)` ya no lo recupera.
+        ...(conCom ? { pnlNeto: pnlSimple,
+                       pnlPctNeto: fixedAlloc > 0 ? pnlSimple / fixedAlloc * 100 : pnlPct,
+                       comision: comSimple, comisionCompuesta: comComp,
+                       _capitalAtEntry: compAlloc } : {}),
         ddOperacion: barras ? ddPctDeOperacion(t, barras, idxBarras) : null }
     })
 }
@@ -301,7 +331,9 @@ export default async function handler(req, res) {
   const _jwt = req.headers['x-supa-jwt'] || null
 
   const { simbolo, strategyId, capital_ini = 10000, years = 5, allocation_pct = 100, priceOnly, filtros, intervalo,
-          fromDate = null, toDate = null } = req.body || {}
+          fromDate = null, toDate = null, comisiones = null } = req.body || {}
+  // Si no llegan, todo a cero: el cliente todavia no las manda. Ver lib/comisiones.js.
+  const _com = normalizaComisiones(comisiones)
   if (!simbolo) return res.status(400).json({ error: 'simbolo requerido' })
 
   // ── Price-only mode: last close, no strategy execution ──
@@ -592,7 +624,7 @@ export default async function handler(req, res) {
     // es lo que significa «el capital inicial empieza en la fecha de inicio».
     const _heredadas = posicionesHeredadas(rawTrades, desde)
     rawTrades = rawTrades.filter(t => t.entryDate >= desde)
-    const trades = buildTrades(rawTrades, capital_ini, allocation_pct, dataCerradas)
+    const trades = buildTrades(rawTrades, capital_ini, allocation_pct, dataCerradas, _com)
     const _nAjustados = cuentaAjustados(trades)
 
     // ── Inject indicators into chartData bars ──

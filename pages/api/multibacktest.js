@@ -14,6 +14,8 @@ import { semanalesDesdeDiarias } from '../../lib/velasSemanales'
 import { soloCerradas } from '../../lib/sesion'
 import { normalizaPeriodo, velasCalentamiento, recortaConCalentamiento, recortaIndicadores,
          posicionesHeredadas } from '../../lib/periodo'
+import { COMISIONES_CERO, comisionDe, netoDeOperacion, normalizaComisiones,
+         sinComisiones } from '../../lib/comisiones'
 
 const SUPA_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPA_KEY = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -75,13 +77,24 @@ export function buildAlignedWeekly(weeklyData, assetDates, emaPeriod) {
 // La guarda restante es defensiva —buildTrades ya exige entryPrice>0 && exitPrice>0— pero debe
 // arrastrar el capital acumulado en curso: devolver el trade tal cual filtraría el mismo valor
 // obsoleto que causaba el bug.
-function rebuildCapitalTras(trades, initCapital) {
+function rebuildCapitalTras(trades, initCapital, comisiones = null) {
+  const conCom = !sinComisiones(comisiones)
   let capital = initCapital
   return trades.map(t => {
     if (!t.exitPrice || !t.entryPrice) return { ...t, capitalTras: capital }
-    const pnlComp = capital * ((t.exitPrice - t.entryPrice) / t.entryPrice)
-    capital += pnlComp
-    return { ...t, capitalTras: capital }
+    // La comision se descuenta aqui tambien: esta funcion rehace la cadena compuesta cuando el
+    // filtro descarta operaciones, y si se la saltara el capital compuesto saldria sin comisiones
+    // en cuanto hubiera un filtro activo. Misma regla que buildTrades: la de compra reduce el
+    // capital invertido. Con comision cero resta exactamente 0.
+    const asignado = capital
+    const comCompra = conCom ? comisionDe({ importeCompra: asignado }, comisiones).compra : 0
+    const invertido = asignado - comCompra
+    const pnlComp = invertido * ((t.exitPrice - t.entryPrice) / t.entryPrice)
+    const comVenta = conCom ? comisionDe({ importeVenta: invertido + pnlComp }, comisiones).venta : 0
+    const com = comCompra + comVenta
+    capital += pnlComp - comCompra - comVenta
+    return { ...t, capitalTras: capital,
+      ...(conCom ? { comisionCompuesta: com, _capitalAtEntry: asignado } : {}) }
   })
 }
 
@@ -326,7 +339,7 @@ function _tamanoAssetCurves(assetCurves) {
 }
 
 // ── MODO SLOTS: capital dividido en N partes iguales ─────────
-function buildSlotsCurves(assetResults, capitalIni) {
+function buildSlotsCurves(assetResults, capitalIni, comisiones = COMISIONES_CERO) {
   const n = assetResults.length
   if (!n) return _emptyCurves()
   const slotCapital = capitalIni / n
@@ -353,14 +366,18 @@ function buildSlotsCurves(assetResults, capitalIni) {
       // openPnl SOLO sobre posiciones estrictamente abiertas (exitDate > date o sin exitDate).
       // Las ya realizadas en `compound` (incl. cierres virtuales en su exitDate) se excluyen para
       // no contar su ganancia dos veces. `open`/ocupación siguen usando openTrades (sin tocar).
-      const openPnl = openTrades.reduce((s,t) => { if(closePx==null) return s; if(t.exitDate && t.exitDate <= date) return s; const ep=t.entryPx??t.entryPrice; const capAtEntry=t.capitalTras/(1+t.pnlPct/100); return ep!=null ? s+(closePx-ep)/ep*capAtEntry : s }, 0)
+      // `_capitalAtEntry` lo pone buildTrades cuando hay comision. Deshacer el retorno
+      // (`capitalTras / (1 + pnlPct/100)`) solo recupera el capital de entrada si no se ha pagado
+      // nada: con comision, capitalTras ya la lleva descontada y la division daria otro numero.
+      // Sin comision el campo no existe y se usa la division de siempre, bit a bit.
+      const openPnl = openTrades.reduce((s,t) => { if(closePx==null) return s; if(t.exitDate && t.exitDate <= date) return s; const ep=t.entryPx??t.entryPrice; const capAtEntry=t._capitalAtEntry??t.capitalTras/(1+t.pnlPct/100); return ep!=null ? s+(closePx-ep)/ep*capAtEntry : s }, 0)
       // COSTE de las posiciones abiertas: capital compuesto realmente asignado al entrar
       // (capitalTras deshaciendo el retorno del propio trade), sobre el MISMO conjunto y con el
       // MISMO filtro de exitDate que openPnl, para que ambos hablen siempre de las mismas
       // posiciones. Sustituye a `openSlots × slotCapital`: aquel numerador quedaba anclado al
       // capital INICIAL mientras el denominador de Cap.inv% (compoundCurve) sí crecía con los
       // beneficios, así que la ocupación se infravaloraba más cuanto mejor iba la estrategia.
-      const openCost = openTrades.reduce((s,t) => { if(t.exitDate && t.exitDate <= date) return s; return s + t.capitalTras/(1+t.pnlPct/100) }, 0)
+      const openCost = openTrades.reduce((s,t) => { if(t.exitDate && t.exitDate <= date) return s; return s + (t._capitalAtEntry??t.capitalTras/(1+t.pnlPct/100)) }, 0)
       byDate[date] = { simple, compound, open, bh, openPnl, openCost }
     })
     return byDate
@@ -459,7 +476,7 @@ function _stopInicial(t) {
 // symbolOrder: array opcional de símbolos para desempate en entradas simultáneas
 //   null → desempate alfabético (modo compartido estándar)
 //   array → desempate por posición en la lista (modo ranking)
-function buildCompartidoCurves(assetResults, capitalIni, symbolOrder = null) {
+function buildCompartidoCurves(assetResults, capitalIni, symbolOrder = null, comisiones = COMISIONES_CERO) {
   const n = assetResults.length
   if (!n) return _emptyCurves()
   const { startDate, filteredDates } = _commonDates(assetResults)
@@ -492,7 +509,7 @@ function buildCompartidoCurves(assetResults, capitalIni, symbolOrder = null) {
     return a.symbol < b.symbol ? -1 : 1
   })
 
-  if (!allCandidates.length) return buildSlotsCurves(assetResults, capitalIni)
+  if (!allCandidates.length) return buildSlotsCurves(assetResults, capitalIni, comisiones)
 
   const senalesGeneradasC = allCandidates.length
   let cntEjecutadasC = 0, cntDescCapitalC = 0
@@ -524,7 +541,11 @@ function buildCompartidoCurves(assetResults, capitalIni, symbolOrder = null) {
     toClose.forEach(symbol => {
       const { trade, capAsignado, totalPortfolioAtEntry: _tpAtEntry } = openSlots[symbol]
       if (!isFinite(trade.pnlPct)) { poolLibre += capAsignado; delete openSlots[symbol]; return }  // skip NaN/Infinity
-      const capFinal = capAsignado * (1 + trade.pnlPct / 100)
+      // El capital que vuelve al pool es el NETO: la comision se paga al comprar y al vender, y
+      // este modo calcula el dinero desde pnlPct, no desde los euros de buildTrades. Con comision
+      // cero netoDeOperacion devuelve exactamente `capAsignado * (1 + pnlPct/100)`.
+      const _netoC = netoDeOperacion(capAsignado, trade.pnlPct, comisiones)
+      const capFinal = _netoC.capitalFinal
       poolLibre += capFinal
       const _distC = (trade.stopPx && trade.entryPx && trade.entryPx > trade.stopPx)
         ? (trade.entryPx - trade.stopPx) / trade.entryPx : null
@@ -563,7 +584,7 @@ function buildCompartidoCurves(assetResults, capitalIni, symbolOrder = null) {
         // para evitar que quede bloqueado en openSlots sin salida
         if (t.exitDate === date) {
           if (isFinite(t.pnlPct)) {
-            const capFinal = capPorSlot * (1 + t.pnlPct / 100)
+            const capFinal = netoDeOperacion(capPorSlot, t.pnlPct, comisiones).capitalFinal
             poolLibre += capFinal
             const _distSD = (t.stopPx && t.entryPx && t.entryPx > t.stopPx)
               ? (t.entryPx - t.stopPx) / t.entryPx : null
@@ -616,7 +637,9 @@ function buildCompartidoCurves(assetResults, capitalIni, symbolOrder = null) {
     const val = capitalIni + closedSoFar.reduce((s, t) => s + t.pnlSimple, 0)
     compoundCurve.push({ date, value: val })
     // Simple: base fija = capitalIni
-    const simpleVal = capitalIni + closedSoFar.reduce((s, t) => s + capitalIni * (t.pnlPct / 100), 0)
+    // Con comision, el resultado de la operacion sobre la base fija ya no es `capitalIni × pnlPct/100`:
+    // hay que descontarla. Con comision cero netoDeOperacion devuelve exactamente esa multiplicacion.
+    const simpleVal = capitalIni + closedSoFar.reduce((s, t) => s + netoDeOperacion(capitalIni, t.pnlPct, comisiones).pnlNeto, 0)
     simpleCurve.push({ date, value: simpleVal })
 
     // Float: P&L no realizado de todos los trades activos
@@ -697,7 +720,7 @@ function buildCompartidoCurves(assetResults, capitalIni, symbolOrder = null) {
 // sp500Data: array de barras del SP500 (para fuerza_relativa)
 // symbolsList: array ordenado de símbolos del watchlist (para score_metricas legacy)
 // scoreMap: {symbol: scoreMetricas} para prioridad 'score_metricas'
-function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, prioridad = 'alfabetico', momentumN = 20, sp500Data = null, symbolsList = null, scoreMap = null, criterioUso = 'desempate', rsGateThr = 0, momGateThr = 10, proxGateThr = 10, rsWindow = 63) {
+function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, prioridad = 'alfabetico', momentumN = 20, sp500Data = null, symbolsList = null, scoreMap = null, criterioUso = 'desempate', rsGateThr = 0, momGateThr = 10, proxGateThr = 10, rsWindow = 63, comisiones = COMISIONES_CERO) {
   const n = assetResults.length
   if (!n) return _emptyCurves()
   const { startDate, filteredDates } = _commonDates(assetResults)
@@ -806,7 +829,7 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
     return ((a._ps ?? 0) - (b._ps ?? 0)) || (a.symbol < b.symbol ? -1 : a.symbol > b.symbol ? 1 : 0)
   })
 
-  if (!allCandidates.length) return buildSlotsCurves(assetResults, capitalIni)
+  if (!allCandidates.length) return buildSlotsCurves(assetResults, capitalIni, comisiones)
 
   const senalesGeneradas = allCandidates.length
   let cntEjecutadas = 0, cntDescSlots = 0, cntDescCapital = 0, cntDescGate = 0
@@ -835,7 +858,7 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
     toClose.forEach(symbol => {
       const { trade, capAsignado, totalPortfolioAtEntry: _tpAtEntry } = openSlots[symbol]
       if (!isFinite(trade.pnlPct)) { poolLibre += capAsignado; delete openSlots[symbol]; return }
-      const capFinal = capAsignado * (1 + trade.pnlPct / 100)
+      const capFinal = netoDeOperacion(capAsignado, trade.pnlPct, comisiones).capitalFinal
       poolLibre += capFinal
       const _dist = (trade.stopPx && trade.entryPx && trade.entryPx > trade.stopPx)
         ? (trade.entryPx - trade.stopPx) / trade.entryPx : null
@@ -897,7 +920,7 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
         const totalPortfolio = capitalTotal
         if (t.exitDate === date) {
           if (isFinite(t.pnlPct)) {
-            const capFinal = capPorEntrada * (1 + t.pnlPct / 100)
+            const capFinal = netoDeOperacion(capPorEntrada, t.pnlPct, comisiones).capitalFinal
             poolLibre += capFinal
             const _dist = (t.stopPx && t.entryPx && t.entryPx > t.stopPx)
               ? (t.entryPx - t.stopPx) / t.entryPx : null
@@ -954,7 +977,9 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
     const closedSoFar = executedTrades.filter(t => t.exitDate <= date)
     const val = capitalIni + closedSoFar.reduce((s, t) => s + t.pnlSimple, 0)
     compoundCurve.push({ date, value: val })
-    const simpleVal = capitalIni + closedSoFar.reduce((s, t) => s + capitalIni * (t.pnlPct / 100), 0)
+    // Con comision, el resultado de la operacion sobre la base fija ya no es `capitalIni × pnlPct/100`:
+    // hay que descontarla. Con comision cero netoDeOperacion devuelve exactamente esa multiplicacion.
+    const simpleVal = capitalIni + closedSoFar.reduce((s, t) => s + netoDeOperacion(capitalIni, t.pnlPct, comisiones).pnlNeto, 0)
     simpleCurve.push({ date, value: simpleVal })
     const activeNow = allCandidates.filter(t => t.entryDate <= date && t.exitDate > date)
     let openPnlSimple = 0, openPnlCompound = 0
@@ -1028,7 +1053,7 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
 }
 
 // ── MODO POSITION SIZING: tamaño variable basado en stop loss ──
-function buildPositionSizingCurves(assetResults, capitalIni, sizeRules) {
+function buildPositionSizingCurves(assetResults, capitalIni, sizeRules, comisiones = COMISIONES_CERO) {
   const { riskPerTrade=5, maxPortfolioPct=20, maxAccumRisk=20, assumedStopPct=20 } = sizeRules || {}
   const riskPct   = riskPerTrade / 100
   const maxPctCap = maxPortfolioPct / 100
@@ -1068,7 +1093,7 @@ function buildPositionSizingCurves(assetResults, capitalIni, sizeRules) {
     }))
   ).sort((a, b) => a.entryDate < b.entryDate ? -1 : a.entryDate > b.entryDate ? 1 : a.symbol < b.symbol ? -1 : 1)
 
-  if (!allCandidates.length) return buildSlotsCurves(assetResults, capitalIni)
+  if (!allCandidates.length) return buildSlotsCurves(assetResults, capitalIni, comisiones)
 
   const senalesGeneradasPS = allCandidates.length
   let cntEjecutadasPS = 0, cntDescRiesgoPS = 0, cntDescCapitalPS = 0
@@ -1105,7 +1130,7 @@ function buildPositionSizingCurves(assetResults, capitalIni, sizeRules) {
         delete openSlots[symbol]
         return
       }
-      const capFinal = capAsignado * (1 + trade.pnlPct / 100)
+      const capFinal = netoDeOperacion(capAsignado, trade.pnlPct, comisiones).capitalFinal
       poolLibre += capFinal
       const riesgoAntes = riesgoAcumulado
       riesgoAcumulado -= riesgoAsignado
@@ -1158,7 +1183,7 @@ function buildPositionSizingCurves(assetResults, capitalIni, sizeRules) {
       if (_sinStop) cntSinStopPS++
 
       if (t.exitDate === date) {
-        const capFinal = capAsignado * (1 + t.pnlPct / 100)
+        const capFinal = netoDeOperacion(capAsignado, t.pnlPct, comisiones).capitalFinal
         poolLibre -= capAsignado
         poolLibre += capFinal
         executedTrades.push({
@@ -1197,7 +1222,9 @@ function buildPositionSizingCurves(assetResults, capitalIni, sizeRules) {
     const closedSoFar = executedTrades.filter(t => t.exitDate <= date)
     const val = capitalIni + closedSoFar.reduce((s, t) => s + t.pnlSimple, 0)
     compoundCurve.push({ date, value: val })
-    const simpleVal = capitalIni + closedSoFar.reduce((s, t) => s + capitalIni * (t.pnlPct / 100), 0)
+    // Con comision, el resultado de la operacion sobre la base fija ya no es `capitalIni × pnlPct/100`:
+    // hay que descontarla. Con comision cero netoDeOperacion devuelve exactamente esa multiplicacion.
+    const simpleVal = capitalIni + closedSoFar.reduce((s, t) => s + netoDeOperacion(capitalIni, t.pnlPct, comisiones).pnlNeto, 0)
     simpleCurve.push({ date, value: simpleVal })
 
     const activeNow = allCandidates.filter(t => t.entryDate <= date && t.exitDate > date)
@@ -1637,7 +1664,9 @@ function _posicionesSlots(assetResults, startDate) {
     const clave = _claveActivo(ar)
     ;(ar.trades || []).forEach(t => {
       if (!isFinite(t.pnlPct) || !Number.isFinite(t.capitalTras)) return
-      const coste = t.capitalTras / (1 + t.pnlPct / 100)
+      // Igual que en buildSlotsCurves: con comision, deshacer el retorno no da el capital de
+      // entrada. `_capitalAtEntry` lo trae la operacion cuando hay comision.
+      const coste = t._capitalAtEntry ?? t.capitalTras / (1 + t.pnlPct / 100)
       if (!Number.isFinite(coste)) return
       pos.push({
         id: `${ar.symbol}:${t.entryDate}`,
@@ -1660,27 +1689,58 @@ function _posicionesSlots(assetResults, startDate) {
 // estrategia existió en su vela. Si no, la operación se ejecuta en la apertura: el hueco de
 // apertura disparó la orden al abrir. Ver lib/precioEnVela.js. Sin `barras` no se toca nada,
 // así que una llamada antigua se comporta igual que siempre.
-function buildTrades(rawTrades, capitalIni, allocationPct = 100, barras = null) {
+function buildTrades(rawTrades, capitalIni, allocationPct = 100, barras = null, comisiones = null) {
   const fixedAlloc = capitalIni * (allocationPct / 100)
   let compoundCapital = capitalIni
+  const conCom = !sinComisiones(comisiones)
   // Mismo indice que en datos.js: una sola pasada por serie, no un find por operacion.
   const idxBarras = barras ? indicePorFecha(barras) : null
   return (barras ? ajustaPreciosAVela(rawTrades, barras) : rawTrades)
     .filter(t => t.entryDate && t.exitDate && t.entryPrice > 0 && t.exitPrice > 0)
     .map(t => {
-      const sharesSimple   = fixedAlloc / t.entryPrice
-      const pnlSimple      = (t.exitPrice - t.entryPrice) * sharesSimple
+      // COMISIONES. La de COMPRA se paga ANTES de comprar, asi que reduce el capital que entra en el
+      // mercado y con el las acciones; la de VENTA sale del importe que se recupera. Es la regla de
+      // Sergi: capital invertido = asignado − comision de compra, capital final = invertido ×
+      // (1 + pnlPct/100) − comision de venta. Restarla del RESULTADO en vez del capital invertido
+      // daria `comision × pnlPct` de mas, y la comprobacion a mano de tres operaciones lo cazo.
+      //
+      // La cuenta sigue partiendo de los PRECIOS y las acciones, no de netoDeOperacion: esa funcion
+      // parte de pnlPct, y rehacerla desde el porcentaje cambiaria el orden de las operaciones en
+      // coma flotante y moveria los resultados de hoy en los ultimos digitos. Con comision cero cada
+      // resta es de 0 exacto, asi que esta funcion devuelve lo mismo que siempre, bit a bit.
       const pnlPct         = (t.exitPrice / t.entryPrice - 1) * 100
+      const comCompraS     = conCom ? comisionDe({ importeCompra: fixedAlloc }, comisiones).compra : 0
+      const invSimple      = fixedAlloc - comCompraS
+      const sharesSimple   = invSimple / t.entryPrice
+      const brutoSimple    = (t.exitPrice - t.entryPrice) * sharesSimple
+      const comVentaS      = conCom ? comisionDe({ importeVenta: invSimple + brutoSimple }, comisiones).venta : 0
+      const comSimple      = comCompraS + comVentaS
+      const pnlSimple      = brutoSimple - comCompraS - comVentaS
+
       const compAlloc      = compoundCapital * (allocationPct / 100)
-      const sharesCompound = compAlloc / t.entryPrice
-      const pnlCompound    = (t.exitPrice - t.entryPrice) * sharesCompound
-      compoundCapital     += pnlCompound
+      const comCompraC     = conCom ? comisionDe({ importeCompra: compAlloc }, comisiones).compra : 0
+      const invCompound    = compAlloc - comCompraC
+      const sharesCompound = invCompound / t.entryPrice
+      const brutoCompound  = (t.exitPrice - t.entryPrice) * sharesCompound
+      const comVentaC      = conCom ? comisionDe({ importeVenta: invCompound + brutoCompound }, comisiones).venta : 0
+      const comComp        = comCompraC + comVentaC
+      compoundCapital     += brutoCompound - comCompraC - comVentaC
+
       const dias = Math.max(1, Math.round((new Date(t.exitDate) - new Date(t.entryDate)) / 86400000))
       // El MISMO drawdown por operacion que datos.js, de la misma funcion y con las mismas velas,
       // para que una operacion no cambie de drawdown segun la pantalla desde la que se mire. Los
       // modos de pool copian la operacion con ...trade, asi que el campo llega tambien a la
       // cartera y al Gantt sin tocar nada mas.
       return { ...t, shares: sharesSimple, pnlSimple, pnlPct, capitalTras: compoundCapital, dias,
+        // Los campos de la comision SOLO viajan cuando hay comision: con comision cero la respuesta
+        // tiene que ser identica byte a byte a la de antes de este cambio. Quien los lee lo hace con
+        // `campo ?? la expresion de siempre`, asi que el camino viejo sigue siendo el camino por
+        // defecto. `_capitalAtEntry` es el capital compuesto asignado a la operacion: con comision,
+        // `capitalTras / (1 + pnlPct/100)` ya no lo recupera.
+        ...(conCom ? { pnlNeto: pnlSimple,
+                       pnlPctNeto: fixedAlloc > 0 ? pnlSimple / fixedAlloc * 100 : pnlPct,
+                       comision: comSimple, comisionCompuesta: comComp,
+                       _capitalAtEntry: compAlloc } : {}),
         ddOperacion: barras ? ddPctDeOperacion(t, barras, idxBarras) : null }
     })
 }
@@ -1689,7 +1749,7 @@ function buildTrades(rawTrades, capitalIni, allocationPct = 100, barras = null) 
 // Sandbox idéntica a datos.js. Si falla → { trades:[], indicators:{}, filterZones:[] }
 // `per` = { desde, iDesde }: `data` llega CON calentamiento y `per` dice donde empieza el periodo.
 // Sin `per` se comporta como antes (todo es periodo), para que ninguna llamada antigua cambie.
-export function runCodeJsAsset(data, sp500Data, codeJs, slotCapital, years, cfg, per = null) {
+export function runCodeJsAsset(data, sp500Data, codeJs, slotCapital, years, cfg, per = null, comisiones = null) {
   try {
     const iDesde = Math.max(0, Math.floor(per?.iDesde ?? 0) || 0)
     const desde  = per?.desde ?? null
@@ -1756,7 +1816,7 @@ export function runCodeJsAsset(data, sp500Data, codeJs, slotCapital, years, cfg,
     // lo que significa «el capital inicial empieza en la fecha de inicio».
     const heredadas  = desde ? posicionesHeredadas(rawTrades, desde) : []
     const delPeriodo = desde ? rawTrades.filter(t => t.entryDate >= desde) : rawTrades
-    const trades = buildTrades(delPeriodo, slotCapital, 100, cerradas)
+    const trades = buildTrades(delPeriodo, slotCapital, 100, cerradas, comisiones)
     // Las zonas del calentamiento existen pero no son del backtest y el grafico no las puede pintar.
     const zonas = desde ? filterZones.filter(z => !z?.from || z.from >= desde) : filterZones
     return { trades, indicators, filterZones: zonas, heredadas }
@@ -1895,7 +1955,10 @@ async function handlePortfolioMode(req, res) {
     sizeRules: sizeRulesBody = null,
     filtros: filtrosCfg,
     intervalo,
+    comisiones = null,
   } = req.body
+  // Si no llegan, todo a cero: el cliente todavia no las manda. Ver lib/comisiones.js.
+  const _com = normalizaComisiones(comisiones)
 
   if (!Array.isArray(strategies) || strategies.length < 2)
     return res.status(400).json({ error: 'portfolioMode requiere strategies[] con ≥2 entradas' })
@@ -2009,7 +2072,7 @@ async function handlePortfolioMode(req, res) {
         const synSym = `${ticker}#${orderTag}`
         // La estrategia ve la serie CON calentamiento; solo cuentan las entradas dentro del periodo.
         const { trades: rawTrades, heredadas } = runCodeJsAsset(dataCal, sp500Data, s.codeJs, slotCapital, cfg.years ?? 5, s.effectiveCfg,
-          { desde: per.desde, iDesde: descargas[ticker].iDesde ?? 0 })
+          { desde: per.desde, iDesde: descargas[ticker].iDesde ?? 0 }, _com)
         // Enriquecer cada trade con metadata de estrategia
         const trades = rawTrades.map(t => ({
           ...t,
@@ -2109,7 +2172,7 @@ async function handlePortfolioMode(req, res) {
           { entradaAlCierre: ar._entradaAlCierre === true })
         if (filtered.length !== ar.trades.length) {
           // rebuildCapitalTras hace {...t} → _stratId/_stratName/_realSymbol se preservan
-          const rebuilt = rebuildCapitalTras(filtered, slotCapital)
+          const rebuilt = rebuildCapitalTras(filtered, slotCapital, _com)
           ar.trades = rebuilt
           ar.capitalReinv = rebuilt.length ? rebuilt[rebuilt.length - 1].capitalTras : slotCapital
           ar.gananciaSimple = rebuilt.reduce((s, t) => s + t.pnlSimple, 0)
@@ -2124,12 +2187,12 @@ async function handlePortfolioMode(req, res) {
     const synList   = assetResults.map(ar => ar.symbol)
     let curves
     if (modoAsig === 'compartido') {
-      curves = buildCompartidoCurves(assetResults, cfg.capitalIni)
+      curves = buildCompartidoCurves(assetResults, cfg.capitalIni, null, _com)
     } else if (modoAsig === 'positionsizing') {
       // positionsizing: sizing por riesgo desde stopPx — slotCapital=capitalIni/nPairs es inocuo
       // (igual que concentrado: pool recalcula todo desde pnlPct × capAsignado)
       // executedTrades tendrá mismo problema de pérdida de metadata → cubierto por enrichedExec
-      curves = buildPositionSizingCurves(assetResults, cfg.capitalIni, sizeRules || {})
+      curves = buildPositionSizingCurves(assetResults, cfg.capitalIni, sizeRules || {}, _com)
     } else {
       // concentrado — Fase 3: desempate/gate por el criterio del usuario (fuerza_relativa/momentum),
       // reutilizando el mismo motor que el path normal. sp500DataTf ya en timeframe activo.
@@ -2145,7 +2208,7 @@ async function handlePortfolioMode(req, res) {
       curves = buildConcentradoCurves(
         assetResults, cfg.capitalIni, _maxPos,
         _prior, _momentN, sp500DataTf, synList, null,
-        _criterio, _rsThr, _momThr, _proxThr, _rsWindow
+        _criterio, _rsThr, _momThr, _proxThr, _rsWindow, _com
       )
     }
 
@@ -2264,7 +2327,9 @@ export default async function handler(req, res) {
   // ── NUEVA RAMA: portfolioMode ─────────────────────────────────────────────
   if (req.body?.portfolioMode) return handlePortfolioMode(req, res)
   // ── PATH EXISTENTE: estrategia única — sin cambio ninguno desde aquí ──────
-  const { symbols, cfg: cfgInput, definition, modoAsig = 'slots', weights = {}, sizeRules: sizeRulesBody = null, strategyId = null, isNoStrategy = false, filtros: filtrosCfg, intervalo } = req.body
+  const { symbols, cfg: cfgInput, definition, modoAsig = 'slots', weights = {}, sizeRules: sizeRulesBody = null, strategyId = null, isNoStrategy = false, filtros: filtrosCfg, intervalo, comisiones = null } = req.body
+  // Si no llegan, todo a cero: el cliente todavia no las manda. Ver lib/comisiones.js.
+  const _com = normalizaComisiones(comisiones)
   const sizeRules = sizeRulesBody || cfgInput?.sizeRules || {}
   if (!Array.isArray(symbols) || !symbols.length) return res.status(400).json({ error: 'symbols requerido' })
   let cfg = cfgInput
@@ -2420,7 +2485,7 @@ export default async function handler(req, res) {
       if (codeJs) {
         // Motor code_js: sandbox por activo con slotCapital = capital total / nº activos
         const { trades, heredadas } = runCodeJsAsset(dataCal, sp500Data, codeJs, slotCapital, cfg.years ?? 5, effectiveCfg,
-          { desde: per.desde, iDesde: descargas[sym].iDesde ?? 0 })
+          { desde: per.desde, iDesde: descargas[sym].iDesde ?? 0 }, _com)
         const capitalReinv = trades.length ? trades[trades.length-1].capitalTras : slotCapital
         const gananciaSimple = trades.reduce((s,t) => s + t.pnlSimple, 0)
         return { symbol: sym, data, dataCal, _heredadas: heredadas ?? [], trades, capitalReinv, gananciaSimple, startDate, blockEvents: {} }
@@ -2483,7 +2548,7 @@ export default async function handler(req, res) {
         if (_esNS && ar.trades.length === 0) {
           const genRaw = operacionesPorFiltro(ar.data, (f) => filtroActivoMap[f] !== false, { desde: ar.startDate })
           if (genRaw.length) {
-            ar.trades = buildTrades(genRaw, slotCapital, 100, ar.data)
+            ar.trades = buildTrades(genRaw, slotCapital, 100, ar.data, _com)
             ar.capitalReinv = ar.trades[ar.trades.length-1].capitalTras
             ar.gananciaSimple = ar.trades.reduce((s,t) => s + t.pnlSimple, 0)
           }
@@ -2493,7 +2558,7 @@ export default async function handler(req, res) {
           const filtered = filtraPorEntrada(ar.trades, filtroActivoMap, assetDates,
             { entradaAlCierre: effectiveCfg?.entradaAlCierre === true })
           if (filtered.length !== ar.trades.length) {
-            const rebuilt = rebuildCapitalTras(filtered, slotCapital)
+            const rebuilt = rebuildCapitalTras(filtered, slotCapital, _com)
             ar.trades = rebuilt
             ar.capitalReinv = rebuilt.length ? rebuilt[rebuilt.length-1].capitalTras : slotCapital
             ar.gananciaSimple = rebuilt.reduce((s,t) => s + t.pnlSimple, 0)
@@ -2505,7 +2570,7 @@ export default async function handler(req, res) {
     // Calcular curvas según modo de asignación
     let curves
     if (modoAsig === 'compartido') {
-      curves = buildCompartidoCurves(assetResults, cfg.capitalIni)
+      curves = buildCompartidoCurves(assetResults, cfg.capitalIni, null, _com)
     } else if (modoAsig === 'concentrado') {
       const _prior    = sizeRules.prioridad  ?? 'alfabetico'
       const _momentN  = sizeRules.momentumN  ?? 20
@@ -2515,12 +2580,12 @@ export default async function handler(req, res) {
       const _momThr  = sizeRules.momGateThr  ?? 10
       const _proxThr = sizeRules.proxGateThr ?? 10
       const _rsWindow = sizeRules.rsWindow   ?? 63   // ventana del gate RS en velas (default 63)
-      curves = buildConcentradoCurves(assetResults, cfg.capitalIni, sizeRules.maxPosiciones ?? 5, _prior, _momentN, sp500DataTf, symbols, _scoreMap, _criterio, _rsThr, _momThr, _proxThr, _rsWindow)
+      curves = buildConcentradoCurves(assetResults, cfg.capitalIni, sizeRules.maxPosiciones ?? 5, _prior, _momentN, sp500DataTf, symbols, _scoreMap, _criterio, _rsThr, _momThr, _proxThr, _rsWindow, _com)
     } else if (modoAsig === 'positionsizing') {
-      curves = buildPositionSizingCurves(assetResults, cfg.capitalIni, sizeRules)
+      curves = buildPositionSizingCurves(assetResults, cfg.capitalIni, sizeRules, _com)
     } else {
       // 'slots' por defecto — también maneja legacy 'custom'
-      curves = buildSlotsCurves(assetResults, cfg.capitalIni)
+      curves = buildSlotsCurves(assetResults, cfg.capitalIni, _com)
     }
 
     // Métricas por activo (tabla resumen). Una sola convención para los cuatro modos: contribución
