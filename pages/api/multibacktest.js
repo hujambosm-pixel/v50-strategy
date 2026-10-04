@@ -477,6 +477,7 @@ function _stopInicial(t) {
 //   null → desempate alfabético (modo compartido estándar)
 //   array → desempate por posición en la lista (modo ranking)
 function buildCompartidoCurves(assetResults, capitalIni, symbolOrder = null, comisiones = COMISIONES_CERO) {
+  const conCom = !sinComisiones(comisiones)
   const n = assetResults.length
   if (!n) return _emptyCurves()
   const { startDate, filteredDates } = _commonDates(assetResults)
@@ -556,6 +557,12 @@ function buildCompartidoCurves(assetResults, capitalIni, symbolOrder = null, com
         _totalPortfolioAtEntry: _tpAtEntry || capitalIni,
         capitalTras: capFinal,
         pnlSimple: capFinal - capAsignado,
+        // La comision REALMENTE pagada por esta operacion, con los mismos nombres que usa
+        // buildTrades. Sale de la MISMA llamada a netoDeOperacion que ya decidia el capital, asi
+        // que publicarla no puede moverlo. Solo viaja cuando hay comision: con comision cero la
+        // respuesta tiene que seguir siendo identica byte a byte.
+        ...(conCom ? { comision: _netoC.comisionTotal, pnlNeto: _netoC.pnlNeto,
+                       pnlPctNeto: _netoC.pnlPctNeto } : {}),
         riesgoAcum: _riesgoC,
       })
       delete openSlots[symbol]
@@ -584,7 +591,8 @@ function buildCompartidoCurves(assetResults, capitalIni, symbolOrder = null, com
         // para evitar que quede bloqueado en openSlots sin salida
         if (t.exitDate === date) {
           if (isFinite(t.pnlPct)) {
-            const capFinal = netoDeOperacion(capPorSlot, t.pnlPct, comisiones).capitalFinal
+            const _netoSD = netoDeOperacion(capPorSlot, t.pnlPct, comisiones)
+            const capFinal = _netoSD.capitalFinal
             poolLibre += capFinal
             const _distSD = (t.stopPx && t.entryPx && t.entryPx > t.stopPx)
               ? (t.entryPx - t.stopPx) / t.entryPx : null
@@ -595,6 +603,12 @@ function buildCompartidoCurves(assetResults, capitalIni, symbolOrder = null, com
               _totalPortfolioAtEntry: totalPortfolio,
               capitalTras: capFinal,
               pnlSimple: capFinal - capPorSlot,
+              // La comision REALMENTE pagada por esta operacion, con los mismos nombres que usa
+              // buildTrades. Sale de la MISMA llamada a netoDeOperacion que ya decidia el capital, asi
+              // que publicarla no puede moverlo. Solo viaja cuando hay comision: con comision cero la
+              // respuesta tiene que seguir siendo identica byte a byte.
+              ...(conCom ? { comision: _netoSD.comisionTotal, pnlNeto: _netoSD.pnlNeto,
+                             pnlPctNeto: _netoSD.pnlPctNeto } : {}),
               riesgoAcum: _riesgoSD,
             })
           } else {
@@ -721,6 +735,7 @@ function buildCompartidoCurves(assetResults, capitalIni, symbolOrder = null, com
 // symbolsList: array ordenado de símbolos del watchlist (para score_metricas legacy)
 // scoreMap: {symbol: scoreMetricas} para prioridad 'score_metricas'
 function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, prioridad = 'alfabetico', momentumN = 20, sp500Data = null, symbolsList = null, scoreMap = null, criterioUso = 'desempate', rsGateThr = 0, momGateThr = 10, proxGateThr = 10, rsWindow = 63, comisiones = COMISIONES_CERO) {
+  const conCom = !sinComisiones(comisiones)
   const n = assetResults.length
   if (!n) return _emptyCurves()
   const { startDate, filteredDates } = _commonDates(assetResults)
@@ -858,7 +873,8 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
     toClose.forEach(symbol => {
       const { trade, capAsignado, totalPortfolioAtEntry: _tpAtEntry } = openSlots[symbol]
       if (!isFinite(trade.pnlPct)) { poolLibre += capAsignado; delete openSlots[symbol]; return }
-      const capFinal = netoDeOperacion(capAsignado, trade.pnlPct, comisiones).capitalFinal
+      const _netoK = netoDeOperacion(capAsignado, trade.pnlPct, comisiones)
+      const capFinal = _netoK.capitalFinal
       poolLibre += capFinal
       const _dist = (trade.stopPx && trade.entryPx && trade.entryPx > trade.stopPx)
         ? (trade.entryPx - trade.stopPx) / trade.entryPx : null
@@ -868,6 +884,12 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
         _totalPortfolioAtEntry: _tpAtEntry || capitalIni,
         capitalTras: capFinal,
         pnlSimple: capFinal - capAsignado,
+        // La comision REALMENTE pagada por esta operacion, con los mismos nombres que usa
+        // buildTrades. Sale de la MISMA llamada a netoDeOperacion que ya decidia el capital, asi
+        // que publicarla no puede moverlo. Solo viaja cuando hay comision: con comision cero la
+        // respuesta tiene que seguir siendo identica byte a byte.
+        ...(conCom ? { comision: _netoK.comisionTotal, pnlNeto: _netoK.pnlNeto,
+                       pnlPctNeto: _netoK.pnlPctNeto } : {}),
         riesgoAcum: _dist ? capAsignado * _dist : capAsignado * 0.05,
       })
       delete openSlots[symbol]
@@ -920,7 +942,8 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
         const totalPortfolio = capitalTotal
         if (t.exitDate === date) {
           if (isFinite(t.pnlPct)) {
-            const capFinal = netoDeOperacion(capPorEntrada, t.pnlPct, comisiones).capitalFinal
+            const _netoKD = netoDeOperacion(capPorEntrada, t.pnlPct, comisiones)
+            const capFinal = _netoKD.capitalFinal
             poolLibre += capFinal
             const _dist = (t.stopPx && t.entryPx && t.entryPx > t.stopPx)
               ? (t.entryPx - t.stopPx) / t.entryPx : null
@@ -930,6 +953,12 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
               _totalPortfolioAtEntry: totalPortfolio,
               capitalTras: capFinal,
               pnlSimple: capFinal - capPorEntrada,
+              // La comision REALMENTE pagada por esta operacion, con los mismos nombres que usa
+              // buildTrades. Sale de la MISMA llamada a netoDeOperacion que ya decidia el capital, asi
+              // que publicarla no puede moverlo. Solo viaja cuando hay comision: con comision cero la
+              // respuesta tiene que seguir siendo identica byte a byte.
+              ...(conCom ? { comision: _netoKD.comisionTotal, pnlNeto: _netoKD.pnlNeto,
+                             pnlPctNeto: _netoKD.pnlPctNeto } : {}),
               riesgoAcum: _dist ? capPorEntrada * _dist : capPorEntrada * 0.05,
             })
           } else { poolLibre += capPorEntrada }
@@ -947,6 +976,11 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
   // y assetStats los contabilicen correctamente
   Object.entries(openSlots).forEach(([, slot]) => {
     const { trade, capAsignado, totalPortfolioAtEntry } = slot
+    // ESTE CIERRE NO COBRA COMISION, y es un agujero conocido: a diferencia de los otros seis
+    // puntos de este fichero, no pasa por netoDeOperacion. Son las posiciones que siguen abiertas
+    // al acabar el periodo, que compraron de verdad y por tanto pagaron de verdad su comision de
+    // compra. Arreglarlo cambia el capital final, asi que no entra en este commit, que es solo de
+    // publicacion; se informa y se mide. La comision que se publica es la que se cobra: ninguna.
     const capFinal = capAsignado * (1 + (trade.pnlPct || 0) / 100)
     poolLibre += capFinal
     const _dist = (trade.stopPx && trade.entryPx && trade.entryPx > trade.stopPx)
@@ -1054,6 +1088,7 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
 
 // ── MODO POSITION SIZING: tamaño variable basado en stop loss ──
 function buildPositionSizingCurves(assetResults, capitalIni, sizeRules, comisiones = COMISIONES_CERO) {
+  const conCom = !sinComisiones(comisiones)
   const { riskPerTrade=5, maxPortfolioPct=20, maxAccumRisk=20, assumedStopPct=20 } = sizeRules || {}
   const riskPct   = riskPerTrade / 100
   const maxPctCap = maxPortfolioPct / 100
@@ -1130,7 +1165,8 @@ function buildPositionSizingCurves(assetResults, capitalIni, sizeRules, comision
         delete openSlots[symbol]
         return
       }
-      const capFinal = netoDeOperacion(capAsignado, trade.pnlPct, comisiones).capitalFinal
+      const _netoP = netoDeOperacion(capAsignado, trade.pnlPct, comisiones)
+      const capFinal = _netoP.capitalFinal
       poolLibre += capFinal
       const riesgoAntes = riesgoAcumulado
       riesgoAcumulado -= riesgoAsignado
@@ -1140,6 +1176,12 @@ function buildPositionSizingCurves(assetResults, capitalIni, sizeRules, comision
         _totalPortfolioAtEntry: _tpAtEntryPS || capitalIni,
         capitalTras: capFinal,
         pnlSimple: capFinal - capAsignado,
+        // La comision REALMENTE pagada por esta operacion, con los mismos nombres que usa
+        // buildTrades. Sale de la MISMA llamada a netoDeOperacion que ya decidia el capital, asi
+        // que publicarla no puede moverlo. Solo viaja cuando hay comision: con comision cero la
+        // respuesta tiene que seguir siendo identica byte a byte.
+        ...(conCom ? { comision: _netoP.comisionTotal, pnlNeto: _netoP.pnlNeto,
+                       pnlPctNeto: _netoP.pnlPctNeto } : {}),
         riesgoAcum: riesgoAntes,
       })
       delete openSlots[symbol]
@@ -1183,7 +1225,8 @@ function buildPositionSizingCurves(assetResults, capitalIni, sizeRules, comision
       if (_sinStop) cntSinStopPS++
 
       if (t.exitDate === date) {
-        const capFinal = netoDeOperacion(capAsignado, t.pnlPct, comisiones).capitalFinal
+        const _netoPD = netoDeOperacion(capAsignado, t.pnlPct, comisiones)
+        const capFinal = _netoPD.capitalFinal
         poolLibre -= capAsignado
         poolLibre += capFinal
         executedTrades.push({
@@ -1192,6 +1235,12 @@ function buildPositionSizingCurves(assetResults, capitalIni, sizeRules, comision
           _totalPortfolioAtEntry: _totalPortfolioPS,
           capitalTras: capFinal,
           pnlSimple: capFinal - capAsignado,
+          // La comision REALMENTE pagada por esta operacion, con los mismos nombres que usa
+          // buildTrades. Sale de la MISMA llamada a netoDeOperacion que ya decidia el capital, asi
+          // que publicarla no puede moverlo. Solo viaja cuando hay comision: con comision cero la
+          // respuesta tiene que seguir siendo identica byte a byte.
+          ...(conCom ? { comision: _netoPD.comisionTotal, pnlNeto: _netoPD.pnlNeto,
+                         pnlPctNeto: _netoPD.pnlPctNeto } : {}),
           riesgoAcum: riesgoAcumulado,
         })
         return
