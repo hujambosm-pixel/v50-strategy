@@ -12,7 +12,7 @@ import { capitalDeOperacion } from '../lib/capitalOperacion'
 import FiltrosPanel from '../components/FiltrosPanel'
 import { rangoDePeriodo, periodoInicial } from '../components/SelectorPeriodo'
 import CondicionesSimulacion from '../components/CondicionesSimulacion'
-import { CONDICIONES_DEFAULT, condicionesIniciales, temporalidadDeEstrategia } from '../lib/condicionesSimulacion'
+import { condicionesIniciales, temporalidadDeEstrategia } from '../lib/condicionesSimulacion'
 import { supabase } from '../lib/supabaseClient'
 import { fetchConditions, lsGetConds, lsSaveConds, COND_LS_KEY } from '../lib/conditions'
 import CandleChart from '../components/CandleChart'
@@ -937,9 +937,6 @@ export default function Home() {
   const [indPeriodMode,setIndPeriodMode]=useState('years') // 'years' | 'range'
   const [indDesde,setIndDesde]=useState(()=>periodoInicial(5).desde)
   const [indHasta,setIndHasta]=useState(()=>periodoInicial(5).hasta)
-  // Capital por operacion (el `allocation_pct` que el motor ya recibe). Arranca en 100, que es lo
-  // que mandaban todas las llamadas de esta pantalla, asi que la peticion no cambia.
-  const [indCapitalPorOp,setIndCapitalPorOp]=useState(CONDICIONES_DEFAULT.capitalPorOperacion)
   const [tipoStop,setTipoStop]=useState('tecnico'),[atrP,setAtrP]=useState(14),[atrM,setAtrM]=useState(1.0)
   const [sinPerdidas,setSinPerdidas]=useState(true),[reentry,setReentry]=useState(true)
   const [tipoFiltro,setTipoFiltro]=useState('none'),[sp500EmaR,setSp500EmaR]=useState(10),[sp500EmaL,setSp500EmaL]=useState(11)
@@ -3706,7 +3703,6 @@ export default function Home() {
     const _cond=condicionesIniciales(s)
     setYears(_cond.years)
     setCapitalIni(_cond.capitalIni)
-    setIndCapitalPorOp(_cond.capitalPorOperacion)
     setTipoStop(stop.type === 'atr_based' ? 'atr' : stop.type === 'none' ? 'none' : 'tecnico')
     setAtrP(stop.atr_period || 14)
     setAtrM(stop.atr_mult || 1.0)
@@ -4545,7 +4541,7 @@ export default function Home() {
     if(debounceRef.current)clearTimeout(debounceRef.current)
     const _iPer=rangoDePeriodo({modo:indPeriodMode,years:years,desde:indDesde,hasta:indHasta})
     const payload = currentStratId
-      ? { strategyId:currentStratId, capital_ini:Number(capitalIni), years:Number(years), allocation_pct:Number(indCapitalPorOp), filtros:filtrosBackend, intervalo:estrategiaIntervalo,
+      ? { strategyId:currentStratId, capital_ini:Number(capitalIni), years:Number(years), allocation_pct:100, filtros:filtrosBackend, intervalo:estrategiaIntervalo,
           fromDate:_iPer.fromDate, toDate:_iPer.toDate }
       : { fromDate:_iPer.fromDate, toDate:_iPer.toDate,
           cfg:{emaR:Number(emaR),emaL:Number(emaL),years:Number(years),capitalIni:Number(capitalIni),
@@ -4555,7 +4551,7 @@ export default function Home() {
     return()=>clearTimeout(debounceRef.current)
   },[simbolo,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,
      sp500EmaR,sp500EmaL,sidePanel,currentStratId,filtrosBackend,estrategiaIntervalo,
-     indPeriodMode,indDesde,indHasta,indCapitalPorOp,run])
+     indPeriodMode,indDesde,indHasta,run])
 
   // ── TradeLog helpers ────────────────────────────────────────
   // ── TradeLog: storage mode (local vs supabase) ──────────────
@@ -5930,7 +5926,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.881</title>
+        <title>Trading Simulator V9.882</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6019,7 +6015,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             }} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.881
+            <span className="dot"/>Trading Simulator V9.882
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6228,7 +6224,6 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   desde={indDesde} setDesde={setIndDesde}
                   hasta={indHasta} setHasta={setIndHasta}
                   capitalIni={capitalIni} setCapitalIni={setCapitalIni}
-                  capitalPorOperacion={indCapitalPorOp} setCapitalPorOperacion={setIndCapitalPorOp}
                   temporalidad={estrategiaIntervalo} setTemporalidad={setEstrategiaIntervalo}
                   temporalidadEstrategia={temporalidadEstrategia}/>
 

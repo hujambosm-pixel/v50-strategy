@@ -1,22 +1,20 @@
 import SelectorPeriodo from './SelectorPeriodo'
 import { MONO } from '../lib/utils'
-import { TEMPORALIDADES, saneaCapital, saneaPorcentaje } from '../lib/condicionesSimulacion'
+import { TEMPORALIDADES, saneaCapital } from '../lib/condicionesSimulacion'
 
 // components/CondicionesSimulacion.js — el panel de las condiciones de la simulación.
 //
-// Reúne en un sitio los cuatro campos que dicen CÓMO se mide una estrategia —periodo, capital inicial,
-// capital por operación y temporalidad— y que estaban repartidos entre las columnas de la tabla
-// `strategies`, un distintivo en la cabecera del gráfico y un bloque suelto del multibacktest. Ver
-// lib/condicionesSimulacion.js para el modelo y el por qué.
+// Reúne en un sitio los tres campos que dicen CÓMO se mide una estrategia —periodo, capital inicial y
+// temporalidad— y que estaban repartidos entre las columnas de la tabla `strategies`, un distintivo en
+// la cabecera del gráfico y un bloque suelto del multibacktest. Ver lib/condicionesSimulacion.js para
+// el modelo y el por qué.
 //
 // NO GUARDA NADA: recibe cada valor y su setter, igual que SelectorPeriodo, y el periodo lo delega en
 // ese mismo componente en vez de reimplementarlo. Cada pantalla conserva su estado, así que cambiar el
 // capital del multibacktest no toca el del backtest individual.
 //
-// CADA CAMPO ES OPCIONAL y se pinta solo si llega su setter. El multibacktest no ofrece «capital por
-// operación» porque ahí lo decide su modo de asignación —slots, pool compartido, concentrado o position
-// sizing—, que ya reparte el capital y tiene su propio panel. Ofrecerlo sería un segundo mando sobre lo
-// mismo.
+// CADA CAMPO ES OPCIONAL y se pinta solo si llega su setter. El multibacktest pasa la temporalidad
+// por `cambiarMcIntervalo`, que además resetea su ventana RS: llamar al setter a pelo se lo saltaría.
 //
 // Las comisiones entran aquí en un commit posterior: son la quinta condición y el motor todavía no las
 // conoce.
@@ -44,7 +42,6 @@ export default function CondicionesSimulacion({
   modo, setModo, years, setYears, desde, setDesde, hasta, setHasta,
   // el resto de condiciones; cada una se pinta solo si llega su setter
   capitalIni, setCapitalIni,
-  capitalPorOperacion, setCapitalPorOperacion,
   temporalidad, setTemporalidad,
   // La temporalidad que declara la estrategia (su valor por defecto, y el que usa el ranking). Si se
   // pasa y no coincide con la de la simulación, se avisa: se está explorando, no se ha cambiado la
@@ -78,19 +75,6 @@ export default function CondicionesSimulacion({
         years={years} setYears={setYears}
         desde={desde} setDesde={setDesde}
         hasta={hasta} setHasta={setHasta} />
-
-      {setCapitalPorOperacion && (
-        <Fila>
-          {/* Es el `allocation_pct` que el motor ya recibe: el porcentaje del capital disponible que se
-              pone en cada operación. Con 100 se invierte todo, que es lo que hacen hoy todas las
-              corridas (las 78 filas de la tabla valen 100). */}
-          <span style={sLbl}>Capital por operación</span>
-          <input type="number" min={1} max={100} step={1} value={capitalPorOperacion}
-            onChange={e => setCapitalPorOperacion(saneaPorcentaje(e.target.value))}
-            style={sNum} />
-          <span style={sUnid}>%</span>
-        </Fila>
-      )}
 
       {setTemporalidad && (
         <Fila>
