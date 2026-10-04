@@ -938,6 +938,11 @@ export default function Home() {
   // Comisiones de la SIMULACION. Arrancan con las de Ajustes (efecto de abajo) y se pueden cambiar
   // en el panel sin tocar los Ajustes, igual que la temporalidad. Estado propio por pantalla.
   const [indComisiones,setIndComisiones]=useState(()=>({...COMISIONES_DEFECTO}))
+  // ¿Ha tocado el usuario la comision en ESTA sesion? Si lo ha hecho, los Ajustes que lleguen
+  // despues (los remotos tardan lo que tarde la red) no se la pisan: el panel es para explorar, y
+  // perder lo que acabas de escribir porque ha llegado una respuesta es peor que no cargarla.
+  const indComTocadaRef=useRef(false)
+  const setIndComisionesUsuario=(v)=>{indComTocadaRef.current=true;setIndComisiones(v)}
   const [indPeriodMode,setIndPeriodMode]=useState('years') // 'years' | 'range'
   const [indDesde,setIndDesde]=useState(()=>periodoInicial(5).desde)
   const [indHasta,setIndHasta]=useState(()=>periodoInicial(5).hasta)
@@ -1293,6 +1298,8 @@ export default function Home() {
   // Periodo del MULTIBACKTEST. Las cajas dd/mm/yyyy —antes fromDisplay/toDisplay aqui— son ahora
   // estado interno de SelectorPeriodo: son presentacion, y lo que viaja es siempre ISO.
   const [mcComisiones,setMcComisiones]=useState(()=>({...COMISIONES_DEFECTO}))
+  const mcComTocadaRef=useRef(false)
+  const setMcComisionesUsuario=(v)=>{mcComTocadaRef.current=true;setMcComisiones(v)}
   const [mcPeriodMode,setMcPeriodMode]=useState('years') // 'years' | 'range'
   const [mcYears,setMcYears]=useState(5)
   const [mcFromDate,setMcFromDate]=useState(()=>periodoInicial(5).desde)
@@ -5490,7 +5497,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
       // Las dos pantallas arrancan con las comisiones de Ajustes. Cambiarlas en un panel NO las
       // guarda: al recargar vuelven estas. Ver lib/comisiones.js.
       const _comAj=comisionesDeAjustes(s)
-      setIndComisiones({..._comAj}); setMcComisiones({..._comAj})
+      if(!indComTocadaRef.current) setIndComisiones({..._comAj})
+      if(!mcComTocadaRef.current)  setMcComisiones({..._comAj})
     }catch(_){}
     // Restore acknowledged alarms
     try{
@@ -5499,14 +5507,28 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
     }catch(_){}
     loadSettingsRemote().then(remote=>{
       if(remote){
-        saveSettings(remote) // update local cache
+        // FUSION, no reemplazo. `saveSettings` escribe la clave entera de localStorage, asi que
+        // `saveSettings(remote)` borraba de local cualquier ajuste que NO estuviera en la fila
+        // remota. Y la escritura remota de saveSettingsRemote va en un catch silencioso: si falla,
+        // el ajuste solo existe en local, y la siguiente recarga lo borraba. Medido con los datos
+        // reales: la fila de user_settings es del 2026-08-26 y no tiene la clave `comisiones`, asi
+        // que cualquier comision guardada despues solo podia estar en local — y desaparecia.
+        try{
+          const _local=JSON.parse(localStorage.getItem('v50_settings')||'{}')
+          saveSettings({...(_local&&typeof _local==='object'?_local:{}),...remote})
+        }catch(_){ saveSettings(remote) }
         setTemaKey(k=>k+1)  // re-apply tema
         // Re-apply ui defaults from remote settings
         try{
           if(remote.ui?.defaultLabelMode!=null) setLabelMode(remote.ui.defaultLabelMode)
           if(remote.ui?.defaultMetricsLayout){ setMetricsLayout(remote.ui.defaultMetricsLayout) }
-          const _comRe=comisionesDeAjustes(remote)
-          setIndComisiones({..._comRe}); setMcComisiones({..._comRe})
+          // Los Ajustes que valen son los FUSIONADOS, no solo los remotos: si la comision solo
+          // esta en local, la fila remota no la trae y leer `remote` a secas la perderia.
+          const _fus=(()=>{try{const l=JSON.parse(localStorage.getItem('v50_settings')||'{}')
+            return {...(l&&typeof l==='object'?l:{}),...remote}}catch(_){return remote}})()
+          const _comRe=comisionesDeAjustes(_fus)
+          if(!indComTocadaRef.current) setIndComisiones({..._comRe})
+          if(!mcComTocadaRef.current)  setMcComisiones({..._comRe})
         }catch(_){}
       }
     })
@@ -5938,7 +5960,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.885</title>
+        <title>Trading Simulator V9.886</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6027,7 +6049,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             }} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.885
+            <span className="dot"/>Trading Simulator V9.886
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6238,7 +6260,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   capitalIni={capitalIni} setCapitalIni={setCapitalIni}
                   temporalidad={estrategiaIntervalo} setTemporalidad={setEstrategiaIntervalo}
                   temporalidadEstrategia={temporalidadEstrategia}
-                  comisiones={indComisiones} setComisiones={setIndComisiones}/>
+                  comisiones={indComisiones} setComisiones={setIndComisionesUsuario}/>
 
                 {/* ── Filtros: mercado (serie externa) y activo (serie del propio símbolo) ── */}
                 <FiltrosPanel ambito="mercado" titulo="FILTROS DE MERCADO"
@@ -7162,7 +7184,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   hasta={mcToDate} setHasta={setMcToDate}
                   capitalIni={mcCapitalIni} setCapitalIni={setMcCapitalIni}
                   temporalidad={mcIntervalo} setTemporalidad={cambiarMcIntervalo}
-                  comisiones={mcComisiones} setComisiones={setMcComisiones}/>
+                  comisiones={mcComisiones} setComisiones={setMcComisionesUsuario}/>
 
                 {/* FILTROS — colapsables (MC) */}
                 <FiltrosPanel ambito="mercado" titulo="FILTROS DE MERCADO"
