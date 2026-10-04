@@ -976,12 +976,14 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
   // y assetStats los contabilicen correctamente
   Object.entries(openSlots).forEach(([, slot]) => {
     const { trade, capAsignado, totalPortfolioAtEntry } = slot
-    // ESTE CIERRE NO COBRA COMISION, y es un agujero conocido: a diferencia de los otros seis
-    // puntos de este fichero, no pasa por netoDeOperacion. Son las posiciones que siguen abiertas
-    // al acabar el periodo, que compraron de verdad y por tanto pagaron de verdad su comision de
-    // compra. Arreglarlo cambia el capital final, asi que no entra en este commit, que es solo de
-    // publicacion; se informa y se mide. La comision que se publica es la que se cobra: ninguna.
-    const capFinal = capAsignado * (1 + (trade.pnlPct || 0) / 100)
+    // El SEPTIMO punto donde este fichero cierra una operacion, y el ultimo que faltaba: son las
+    // posiciones que siguen abiertas al acabar el periodo —su exitDate cae mas alla de la ultima
+    // fecha comun a todos los activos, asi que el bucle nunca llega a cerrarlas—. Compraron de
+    // verdad, asi que pagaron de verdad su comision de compra, y hasta ahora era el unico cierre
+    // que no pasaba por netoDeOperacion y por tanto no cobraba nada. Con comision cero devuelve
+    // exactamente `capAsignado * (1 + pnlPct/100)`, que es lo que habia aqui escrito a mano.
+    const _netoF = netoDeOperacion(capAsignado, trade.pnlPct || 0, comisiones)
+    const capFinal = _netoF.capitalFinal
     poolLibre += capFinal
     const _dist = (trade.stopPx && trade.entryPx && trade.entryPx > trade.stopPx)
       ? (trade.entryPx - trade.stopPx) / trade.entryPx : null
@@ -991,6 +993,9 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
       _totalPortfolioAtEntry: totalPortfolioAtEntry || capitalIni,
       capitalTras: capFinal,
       pnlSimple: capFinal - capAsignado,
+      // La comision REALMENTE pagada, igual que en los otros seis cierres.
+      ...(conCom ? { comision: _netoF.comisionTotal, pnlNeto: _netoF.pnlNeto,
+                     pnlPctNeto: _netoF.pnlPctNeto } : {}),
       riesgoAcum: _dist ? capAsignado * _dist : capAsignado * 0.05,
     })
   })
