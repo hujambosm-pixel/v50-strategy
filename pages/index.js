@@ -5960,7 +5960,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.886</title>
+        <title>Trading Simulator V9.887</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6049,7 +6049,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             }} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.886
+            <span className="dot"/>Trading Simulator V9.887
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6260,7 +6260,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   capitalIni={capitalIni} setCapitalIni={setCapitalIni}
                   temporalidad={estrategiaIntervalo} setTemporalidad={setEstrategiaIntervalo}
                   temporalidadEstrategia={temporalidadEstrategia}
-                  comisiones={indComisiones} setComisiones={setIndComisionesUsuario}/>
+                  comisiones={indComisiones} setComisiones={setIndComisionesUsuario}
+                  claveLs="v50_cond_abierto_ind"/>
 
                 {/* ── Filtros: mercado (serie externa) y activo (serie del propio símbolo) ── */}
                 <FiltrosPanel ambito="mercado" titulo="FILTROS DE MERCADO"
@@ -7184,7 +7185,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   hasta={mcToDate} setHasta={setMcToDate}
                   capitalIni={mcCapitalIni} setCapitalIni={setMcCapitalIni}
                   temporalidad={mcIntervalo} setTemporalidad={cambiarMcIntervalo}
-                  comisiones={mcComisiones} setComisiones={setMcComisionesUsuario}/>
+                  comisiones={mcComisiones} setComisiones={setMcComisionesUsuario}
+                  claveLs="v50_cond_abierto_mc"/>
 
                 {/* FILTROS — colapsables (MC) */}
                 <FiltrosPanel ambito="mercado" titulo="FILTROS DE MERCADO"

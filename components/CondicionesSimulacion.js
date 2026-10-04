@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import SelectorPeriodo from './SelectorPeriodo'
-import { MONO, numeroEs, textoEs } from '../lib/utils'
+import { MONO, fmt, fmtDate, numeroEs, textoEs } from '../lib/utils'
 import { TEMPORALIDADES, saneaCapital } from '../lib/condicionesSimulacion'
 
 // components/CondicionesSimulacion.js — el panel de las condiciones de la simulación.
@@ -16,6 +16,14 @@ import { TEMPORALIDADES, saneaCapital } from '../lib/condicionesSimulacion'
 //
 // CADA CAMPO ES OPCIONAL y se pinta solo si llega su setter. El multibacktest pasa la temporalidad
 // por `cambiarMcIntervalo`, que además resetea su ventana RS: llamar al setter a pelo se lo saltaría.
+//
+// SE MUESTRA CONTRAIDO. Son cuatro condiciones con siete campos, y lo normal es no tocarlas: una
+// vez puestas, lo que hace falta es poder LEERLAS de un vistazo, no editarlas. Contraido deja una
+// linea con el resumen de lo que se está aplicando —«10.000 € · 5 años · Diario · Comisión 0,36 €»—
+// y devuelve el alto al resto del panel, donde están los filtros y la lista de estrategias.
+// El estado abierto/cerrado se recuerda por PANTALLA en su propia clave de localStorage, igual que
+// los ajustes de asignación (lib/mcAsignacion.js) y por el mismo motivo: v50_settings se reescribe
+// entero al guardar, así que un dato que cambia a cada clic no puede vivir ahí.
 //
 // LAS COMISIONES son la cuarta condición. Sus tres campos arrancan con los valores de Ajustes y se
 // pueden cambiar para la simulación en curso sin tocarlos, igual que la temporalidad. Los decimales
@@ -36,6 +44,39 @@ const TEMPO_OPC = [
   { id: 'diario',  label: 'Diario',  activeColor: '#4caf82', activeBorder: '#2d6e4e', activeBg: 'rgba(76,175,130,0.12)' },
   { id: 'semanal', label: 'Semanal', activeColor: '#f0c040', activeBorder: '#a07820', activeBg: 'rgba(240,192,64,0.12)' },
 ]
+
+// El resumen de una linea. Solo lo que se está aplicando de verdad: si una condición no se pasa al
+// componente, no aparece. Las comisiones se resumen a lo que no es cero, y «Sin comisión» cuando
+// no hay ninguna, que es un dato tan relevante como el contrario.
+export function resumenCondiciones({ modo, years, desde, hasta, capitalIni, temporalidad, comisiones }) {
+  const p = []
+  if (capitalIni != null) p.push(fmt(capitalIni, 0) + ' €')
+  if (modo === 'range') p.push(fmtDate(desde) + ' – ' + fmtDate(hasta))
+  else if (years != null) p.push(years + (Number(years) === 1 ? ' año' : ' años'))
+  if (temporalidad) p.push(temporalidad === 'semanal' ? 'Semanal' : 'Diario')
+  if (comisiones) {
+    const c = []
+    // Los importes del resumen van con DOS decimales fijos, que es como se lee un precio: «0,20 €»
+    // y no «0,2 €». En los campos de edicion es lo contrario —textoEs sin relleno—, porque ahi se
+    // escribe y los ceros de mas estorban.
+    if (comisiones.compra > 0) c.push(fmt(comisiones.compra, 2) + ' €')
+    if (comisiones.venta > 0) c.push(fmt(comisiones.venta, 2) + ' €')
+    if (comisiones.porcentaje > 0) c.push(textoEs(comisiones.porcentaje, 3) + ' %')
+    p.push(c.length ? 'Comisión ' + c.join(' / ') : 'Sin comisión')
+  }
+  return p.join(' · ')
+}
+
+// Memoria del plegado. Una clave por pantalla, y si no llega ninguna no se recuerda nada: un
+// componente sin clave no debe compartir la de otro.
+const leeAbierto = (clave) => {
+  if (!clave) return false
+  try { return window.localStorage.getItem(clave) === '1' } catch (_) { return false }
+}
+const guardaAbierto = (clave, v) => {
+  if (!clave) return
+  try { window.localStorage.setItem(clave, v ? '1' : '0') } catch (_) {}
+}
 
 const Fila = ({ children }) => (
   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>{children}</div>
@@ -67,18 +108,45 @@ export default function CondicionesSimulacion({
   // estrategia. Sin ese aviso un backtest en semanal sobre una estrategia diaria parece ser la
   // estrategia, que es justo la confusión que este panel viene a quitar.
   temporalidadEstrategia = null,
-  titulo = 'CONDICIONES DE LA SIMULACIÓN', variant = 'mc',
+  titulo = 'CONDICIONES DE LA SIMULACIÓN', variant = 'mc', claveLs = null,
 }) {
   const padX = variant === 'panel' ? 10 : 12
   const explorando = !!(temporalidadEstrategia && temporalidad && temporalidadEstrategia !== temporalidad)
+  // En el primer render SIEMPRE contraido, aunque localStorage diga lo contrario: el servidor no
+  // tiene localStorage, y arrancar con un valor distinto del suyo rompe la hidratación de React.
+  // El efecto lo abre justo después si estaba abierto.
+  const [abierto, setAbierto] = useState(false)
+  useEffect(() => { if (leeAbierto(claveLs)) setAbierto(true) }, [claveLs])
+  const pliega = () => { const v = !abierto; setAbierto(v); guardaAbierto(claveLs, v) }
+  const resumen = resumenCondiciones({ modo, years, desde, hasta, capitalIni, temporalidad, comisiones })
   return (
     <div style={{ flexShrink: 0, borderBottom: '1px solid var(--border)',
                   padding: `10px ${padX}px`, display: 'flex', flexDirection: 'column', gap: 8 }}>
-      {titulo && (
-        <span style={{ fontFamily: MONO, fontSize: 12, color: '#c8dff5', fontWeight: 600,
-                       letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>{titulo}</span>
-      )}
+      <div onClick={pliega}
+        title={abierto ? 'Pulsar para contraer' : 'Pulsar para desplegar y cambiar las condiciones'}
+        style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', minWidth: 0 }}>
+        <span style={{ fontFamily: MONO, fontSize: 9, color: '#4a7a9a', width: 10, flexShrink: 0 }}>
+          {abierto ? '▼' : '▶'}</span>
+        {titulo && (
+          <span style={{ fontFamily: MONO, fontSize: 12, color: '#c8dff5', fontWeight: 600,
+                         letterSpacing: '0.05em', whiteSpace: 'nowrap', flexShrink: 0 }}>{titulo}</span>
+        )}
+        {/* El resumen solo contraido: desplegado lo dicen los campos, y repetirlo sobra. En ámbar
+            cuando la temporalidad de la simulación no es la de la estrategia, que es el único dato
+            del resumen que puede sorprender. */}
+        {!abierto && resumen && (
+          <span title={explorando
+              ? 'Temporalidad de la estrategia: ' + temporalidadEstrategia + '. Aquí solo cambia la simulación en curso.'
+              : resumen}
+            style={{ fontFamily: MONO, fontSize: 10, marginLeft: 'auto', overflow: 'hidden',
+              textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0,
+              color: explorando ? '#ffd166' : '#7a9bc0' }}>
+            {resumen}
+          </span>
+        )}
+      </div>
 
+      {abierto && (<>
       {setCapitalIni && (
         <Fila>
           <span style={sLbl}>Capital inicial</span>
@@ -143,6 +211,7 @@ export default function CondicionesSimulacion({
           </div>
         </Fila>
       )}
+      </>)}
     </div>
   )
 }
