@@ -12,7 +12,8 @@ import { capitalDeOperacion } from '../lib/capitalOperacion'
 import FiltrosPanel from '../components/FiltrosPanel'
 import { rangoDePeriodo, periodoInicial } from '../components/SelectorPeriodo'
 import CondicionesSimulacion from '../components/CondicionesSimulacion'
-import { COMISIONES_DEFECTO, comisionesDeAjustes } from '../lib/comisiones'
+import { COMISIONES_DEFECTO, comisionesDeAjustes, comisionesDelRanking } from '../lib/comisiones'
+import { condicionesDelRanking } from '../lib/condicionesSimulacion'
 import { condicionesIniciales, temporalidadDeEstrategia } from '../lib/condicionesSimulacion'
 import { supabase } from '../lib/supabaseClient'
 import { fetchConditions, lsGetConds, lsSaveConds, COND_LS_KEY } from '../lib/conditions'
@@ -412,6 +413,11 @@ async function upsertScoreCompletoRemote(scoreMap, stratId) {
 // (La antigua cagr_robusto se conserva como histórico pero ya NO se escribe ni se lee.)
 let _robustezOk = true
 const _sinRobustez = (b)=>b.map(r=>{const o={...r}; delete o.robustez_pct; return o})
+// Igual que _robustezOk, para las cinco columnas de las condiciones: si la base de datos todavia no
+// las tiene, el upsert las quita y lo recuerda. Asi la app funciona antes y despues del ALTER.
+let _condOk = true
+const _COND_COLS = ['intervalo','periodo_desde','periodo_hasta','capital_ini','comisiones']
+const _sinCond = (b)=>b.map(r=>{const o={...r}; for(const k of _COND_COLS) delete o[k]; return o})
 
 // -99 es el CENTINELA de "CAGR no calculable" (capital final ≤ 0), no una rentabilidad real.
 // Se persiste como NULL para que no entre en los percentiles y destroce la escala del score.
@@ -419,7 +425,11 @@ const _sinRobustez = (b)=>b.map(r=>{const o={...r}; delete o.robustez_pct; retur
 const _sinCentinela = (v)=>(v==null||v<=-99)?null:v
 
 // Upsert parcial: actualiza SOLO métricas (sin tocar score_historico ni score_completo)
-async function upsertMetricsRemote(metricsMap, stratId) {
+// `cond` son las condiciones con las que se midieron esas metricas: temporalidad, periodo, capital
+// y comisiones. Se guardan EN LA FILA porque sin ellas una fila de ranking_results no significa
+// nada: no se puede saber si es comparable con la de al lado. Las 5.791 filas que ya existian se
+// quedan con esas columnas a null, que es la verdad — no se sabe con que se calcularon.
+async function upsertMetricsRemote(metricsMap, stratId, cond) {
   if (!getSupaUrl()) return
   const rows = Object.entries(metricsMap).map(([symbol, m]) => ({
     symbol, strategy_id: stratId||null,
@@ -427,6 +437,9 @@ async function upsertMetricsRemote(metricsMap, stratId) {
     robustez_pct: m.robustez??null,
     max_drawdown: m.maxDD??null, total_trades: m.trades??null,
     profit_simple: m.profit??null, updated_at: new Date().toISOString(),
+    ...(cond ? { intervalo: cond.intervalo??null, periodo_desde: cond.desde??null,
+                 periodo_hasta: cond.hasta??null, capital_ini: cond.capitalIni??null,
+                 comisiones: cond.comisiones??null } : {}),
     ...(getUidFromJwt() ? { user_id: getUidFromJwt() } : {})
   }))
   const post = (batch) => fetch(`${getSupaUrl()}/rest/v1/ranking_results?on_conflict=symbol,strategy_id`, {
@@ -436,10 +449,17 @@ async function upsertMetricsRemote(metricsMap, stratId) {
   }).catch(()=>null)
   for (let i=0; i<rows.length; i+=20) {
     const batch = rows.slice(i, i+20)
-    let res = await post(_robustezOk ? batch : _sinRobustez(batch))
+    const _prep = (b) => { const x = _robustezOk ? b : _sinRobustez(b); return _condOk ? x : _sinCond(x) }
+    let res = await post(_prep(batch))
     if (res && !res.ok) {
       const text = await res.text()
-      if (_robustezOk && text.includes('robustez_pct')) {
+      // Mismo apaño que con robustez_pct: si las columnas de las condiciones todavia no existen en
+      // la base de datos, se reintenta sin ellas. Asi la app funciona antes y despues del ALTER.
+      if (_condOk && /intervalo|periodo_desde|periodo_hasta|capital_ini|comisiones/.test(text)) {
+        _condOk = false
+        res = await post(_sinCond(_robustezOk ? batch : _sinRobustez(batch)))
+        if (res && !res.ok) console.error('[UPSERT-METRICS ERROR]', res.status, await res.text())
+      } else if (_robustezOk && text.includes('robustez_pct')) {
         // La columna aún no existe → reintentar sin ella y recordarlo (no rompe nada)
         _robustezOk = false
         res = await post(_sinRobustez(batch))
@@ -4165,13 +4185,28 @@ export default function Home() {
   const calcMetricas = useCallback(async (rankSymbols=null) => {
     const syms = (rankSymbols || watchlist).map(w=>w.symbol)
     const sett=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')}catch(_){return {}}})()
-    const minTrades=sett.ranking?.minTrades??3
+    // LAS MISMAS CONDICIONES PARA TODAS. El ranking compara estrategias entre si, asi que medirlas
+    // con el `years` y el `capital_ini` de cada fila no significaba nada: «23.0 EMA20 breakouts
+    // (open)» llevaba 20 años frente a los 5 de las otras 43. Periodo, capital y comisiones salen
+    // de Ajustes → Ajustes del ranking; la temporalidad NO, porque la pone cada estrategia.
+    const _rk=condicionesDelRanking(sett)
+    const _rkCom=comisionesDelRanking(sett)
+    const _rkPer=rangoDePeriodo({modo:'years',years:_rk.years})
+    const minTrades=_rk.minTrades
+    // Las condiciones que se guardan en cada fila de ranking_results. La temporalidad se añade
+    // por estrategia, que es lo unico que no es comun.
+    const _rkCond=(intervalo)=>({intervalo, desde:_rkPer.fromDate, hasta:_rkPer.toDate,
+      capitalIni:_rk.capitalIni, comisiones:_rkCom})
     const BATCH=4
 
     // ── Fase 1: Métricas de la estrategia activa ──
     setRankingRunning(true); setRankingError(null)
     setRankingProgress({done:0, total:syms.length})
     const activeMetrics={}
+    // La temporalidad declarada por la estrategia activa (sus params), no `estrategiaIntervalo`,
+    // que es la de la simulacion y puede estar explorando otra.
+    const _estrActivaRk=currentStratId?(strategies||[]).find(s=>s.id===currentStratId):null
+    const _ivActiva=_estrActivaRk?temporalidadDeEstrategia(_estrActivaRk):'diario'
 
     // Reset de errores: cada corrida empieza limpia (calcMetricas es la primera fase del botón ↻).
     updateErrorsRef.current=[]
@@ -4199,7 +4234,11 @@ export default function Home() {
       await Promise.allSettled(batch.map(async sym=>{
         try{
           const res=await apiFetch('/api/datos',{method:'POST',headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({simbolo:sym,strategyId:currentStratId,capital_ini:Number(capitalIni),years:Number(years),allocation_pct:100,filtros:filtrosBackend,intervalo:estrategiaIntervalo})})
+            // La temporalidad es la que DECLARA la estrategia, no la de la simulacion en curso: si
+            // estas explorando en semanal, el ranking no debe medirse en semanal.
+            body:JSON.stringify({simbolo:sym,strategyId:currentStratId,capital_ini:_rk.capitalIni,
+              allocation_pct:100,filtros:filtrosBackend,intervalo:_ivActiva,
+              fromDate:_rkPer.fromDate,toDate:_rkPer.toDate,comisiones:_rkCom})})
           const json=await res.json()
           if(!res.ok||!json.trades?.length){
             // 422 con tipo 'codigo_estrategia' = el code_js no compila o revienta. No es un fallo de
@@ -4211,10 +4250,10 @@ export default function Home() {
             return }
           const trades=json.trades; if(trades.length<minTrades) return
           const wins=trades.filter(t=>t.pnlPct>=0), winRate=(wins.length/trades.length)*100
-          const totalDiasNat=json.startDate?(new Date(json.meta?.ultimaFecha)-new Date(json.startDate))/86400000:365*Number(years)
+          const totalDiasNat=json.startDate?(new Date(json.meta?.ultimaFecha)-new Date(json.startDate))/86400000:365*_rk.years
           const anios=Math.max(totalDiasNat/365.25,0.01)
-          const capFinal=Number(capitalIni)+json.gananciaSimple
-          const cagr=capFinal>0?(Math.pow(capFinal/Number(capitalIni),1/anios)-1)*100:-99
+          const capFinal=_rk.capitalIni+json.gananciaSimple
+          const cagr=capFinal>0?(Math.pow(capFinal/_rk.capitalIni,1/anios)-1)*100:-99
           // ROBUSTEZ: qué % de las ganancias NO depende del mejor trade. Denominador = beneficio
           // BRUTO (suma de ganadoras), siempre >= el mejor trade → cae solo en [0,100), sin clamps
           // ni centinelas. Beneficio NETO <= 0 → 0 (una estrategia perdedora no es robusta).
@@ -4227,7 +4266,7 @@ export default function Home() {
       }))
       setRankingProgress({done:Math.min(i+BATCH,syms.length),total:syms.length})
     }
-    await upsertMetricsRemote(activeMetrics,currentStratId||null)
+    await upsertMetricsRemote(activeMetrics,currentStratId||null,_rkCond(_ivActiva))
     setRankingData(prev=>{const next={...prev};Object.entries(activeMetrics).forEach(([sym,m])=>{next[sym]={...(next[sym]||{}),metrics:m}});return next})
     setRankingStratId(currentStratId); setRankingStratName(stratName||'')
     setRankingRunning(false); setRankingProgress({done:0,total:0})
@@ -4235,7 +4274,7 @@ export default function Home() {
       const next={...prev}
       Object.entries(activeMetrics).forEach(([sym,m])=>{
         next[sym]={...(next[sym]||{}),
-          active:{...(next[sym]?.active||{}),cagr:m.cagr??null,robustez:m.robustez??null,profit:m.profit??null,winRate:m.winRate??null,maxDD:m.maxDD??null,ops:m.trades??null,stratName:stratName||'',stratId:currentStratId,intervalo:estrategiaIntervalo}
+          active:{...(next[sym]?.active||{}),cagr:m.cagr??null,robustez:m.robustez??null,profit:m.profit??null,winRate:m.winRate??null,maxDD:m.maxDD??null,ops:m.trades??null,stratName:stratName||'',stratId:currentStratId,intervalo:_ivActiva}
         }
       })
       return next
@@ -4250,8 +4289,9 @@ export default function Home() {
         const strat=enabledStrats[si]
         setTopStratProgress({current:si+1,total:enabledStrats.length})
         const stratId=strat.id
-        const stratYears=strat.years||Number(years), stratCap=strat.capital_ini||Number(capitalIni)
-        const stratIntv=(()=>{try{const p=typeof strat?.params==='string'?JSON.parse(strat.params||'{}'):(strat?.params||{});return p.intervalo||'diario'}catch(_){return 'diario'}})()
+        // Ni `strat.years` ni `strat.capital_ini`: el periodo y el capital son los del ranking para
+        // todas. De la estrategia solo sale su temporalidad.
+        const stratIntv=temporalidadDeEstrategia(strat)
         const stratMetrics={}
         try{
           for(let i=0;i<syms.length;i+=BATCH){
@@ -4259,7 +4299,9 @@ export default function Home() {
             await Promise.allSettled(batch.map(async sym=>{
               try{
                 const res=await apiFetch('/api/datos',{method:'POST',headers:{'Content-Type':'application/json'},
-                  body:JSON.stringify({simbolo:sym,strategyId:stratId,capital_ini:stratCap,years:stratYears,allocation_pct:100,filtros:filtrosBackend,intervalo:stratIntv})})
+                  body:JSON.stringify({simbolo:sym,strategyId:stratId,capital_ini:_rk.capitalIni,
+                    allocation_pct:100,filtros:filtrosBackend,intervalo:stratIntv,
+                    fromDate:_rkPer.fromDate,toDate:_rkPer.toDate,comisiones:_rkCom})})
                 const json=await res.json()
                 if(!res.ok||!json.trades?.length){
                   if(!res.ok) logUpdateError(sym,
@@ -4269,10 +4311,10 @@ export default function Home() {
                   return }
                 const trades=json.trades; if(trades.length<minTrades) return
                 const wins=trades.filter(t=>t.pnlPct>=0), winRate=(wins.length/trades.length)*100
-                const totalDiasNat=json.startDate?(new Date(json.meta?.ultimaFecha)-new Date(json.startDate))/86400000:365*stratYears
+                const totalDiasNat=json.startDate?(new Date(json.meta?.ultimaFecha)-new Date(json.startDate))/86400000:365*_rk.years
                 const anios=Math.max(totalDiasNat/365.25,0.01)
-                const capFinal=stratCap+json.gananciaSimple
-                const cagr=capFinal>0?(Math.pow(capFinal/stratCap,1/anios)-1)*100:-99
+                const capFinal=_rk.capitalIni+json.gananciaSimple
+                const cagr=capFinal>0?(Math.pow(capFinal/_rk.capitalIni,1/anios)-1)*100:-99
                 // ROBUSTEZ — misma definición que en la Fase 1 (ver comentario allí)
                 const ganadoras=trades.filter(t=>t.pnlSimple>0).reduce((s,t)=>s+t.pnlSimple,0)
                 const mejor=trades.length?Math.max(...trades.map(t=>t.pnlSimple)):0
@@ -4282,7 +4324,7 @@ export default function Home() {
               }catch(e){logUpdateError(sym,'excepcion',e?.message,strat.name);console.error('[calcMetricas-all]',sym,e)}
             }))
           }
-          await upsertMetricsRemote(stratMetrics,stratId)
+          await upsertMetricsRemote(stratMetrics,stratId,_rkCond(stratIntv))
           allStratMetricsMap[stratId]=stratMetrics
         }catch(e){logUpdateError(null,'excepcion',e?.message,strat.name);console.error('[calcMetricas] Error estrategia:',stratId,strat.name,stratIntv,e)}
       }
@@ -5960,7 +6002,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.888</title>
+        <title>Trading Simulator V9.889</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6049,7 +6091,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             }} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.888
+            <span className="dot"/>Trading Simulator V9.889
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}

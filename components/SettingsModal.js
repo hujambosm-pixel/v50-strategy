@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { MONO, pctOf, numeroEs, textoEs } from '../lib/utils'
-import { COMISIONES_DEFECTO, comisionesDeAjustes } from '../lib/comisiones'
+import { COMISIONES_DEFECTO, comisionesDeAjustes, comisionesDelRanking } from '../lib/comisiones'
+import { condicionesDelRanking } from '../lib/condicionesSimulacion'
 import { getSupaUrl, getSupaKey } from '../lib/supabase'
 import { loadSettings, saveSettingsRemote } from '../lib/settings'
 import { fetchConditions, saveCondition, deleteCondition, groqParseCondition, lsGetConds, lsSaveConds } from '../lib/conditions'
@@ -935,14 +936,69 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                 </div>
               </div>
 
-              {/* ── Otras opciones ── */}
-              {sep('Otras opciones')}
-              <div style={{display:'flex',alignItems:'center',gap:10}}>
-                <span style={{fontFamily:MONO,fontSize:12,color:'#cce0f5',flex:1}}>Mínimo de trades para incluir en ranking</span>
-                <input type="number" value={settings.ranking?.minTrades??3} min={1} max={50}
-                  onChange={e=>upd('ranking.minTrades',Number(e.target.value))}
-                  style={{width:60,background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,
-                    color:'#e2eaf5',fontFamily:MONO,fontSize:12,padding:'4px 8px',textAlign:'center'}}/>
+              {/* ── Ajustes del ranking ── */}
+              {sep('Ajustes del ranking')}
+              <div style={{marginBottom:16}}>
+                <div style={{fontSize:10,color:'#5a7a95',marginBottom:10,lineHeight:1.6}}>
+                  El ranking compara estrategias entre sí, así que las mide a TODAS en estas mismas
+                  condiciones. La temporalidad es la excepción: la pone cada estrategia, porque una
+                  estrategia semanal ejecutada en diario es otra estrategia.
+                </div>
+                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+                  <span style={{fontFamily:MONO,fontSize:10,color:'#cce0f5',flex:1}}>Periodo (últimos N años)</span>
+                  <input type="number" min={1} max={20} step={1}
+                    value={settings.ranking?.rankingYears??5}
+                    onChange={e=>upd('ranking.rankingYears',Number(e.target.value))}
+                    style={{width:90,background:'#080c14',border:'1px solid #1a2d45',color:'#e2eaf5',
+                      fontFamily:MONO,fontSize:11,padding:'4px 6px',borderRadius:4,textAlign:'right'}}/>
+                  <span style={{fontFamily:MONO,fontSize:11,color:'#4a6a85',width:12}}>a</span>
+                </div>
+                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+                  <span style={{fontFamily:MONO,fontSize:10,color:'#cce0f5',flex:1}}>Capital inicial</span>
+                  <input type="number" min={100} max={1000000} step={100}
+                    value={settings.ranking?.rankingCapital??10000}
+                    onChange={e=>upd('ranking.rankingCapital',Number(e.target.value))}
+                    style={{width:90,background:'#080c14',border:'1px solid #1a2d45',color:'#e2eaf5',
+                      fontFamily:MONO,fontSize:11,padding:'4px 6px',borderRadius:4,textAlign:'right'}}/>
+                  <span style={{fontFamily:MONO,fontSize:11,color:'#4a6a85',width:12}}>€</span>
+                </div>
+                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+                  <span style={{fontFamily:MONO,fontSize:10,color:'#cce0f5',flex:1}}>Mínimo de operaciones para contar</span>
+                  <input type="number" min={1} max={50} step={1}
+                    value={settings.ranking?.minTrades??3}
+                    onChange={e=>upd('ranking.minTrades',Number(e.target.value))}
+                    style={{width:90,background:'#080c14',border:'1px solid #1a2d45',color:'#e2eaf5',
+                      fontFamily:MONO,fontSize:11,padding:'4px 6px',borderRadius:4,textAlign:'right'}}/>
+                  <span style={{fontFamily:MONO,fontSize:11,color:'#4a6a85',width:12}}>ops</span>
+                </div>
+                <label style={{display:'flex',alignItems:'center',gap:8,marginBottom:8,cursor:'pointer'}}>
+                  <input type="checkbox" checked={!!settings.ranking?.rankingComisionesPropias}
+                    onChange={e=>upd('ranking.rankingComisionesPropias',e.target.checked)}/>
+                  <span style={{fontFamily:MONO,fontSize:10,color:'#cce0f5'}}>
+                    Usar otras comisiones solo para el ranking
+                  </span>
+                </label>
+                {settings.ranking?.rankingComisionesPropias ? (
+                  [{k:'compra',et:'Fija por compra',u:'€',dec:2},
+                   {k:'venta', et:'Fija por venta', u:'€',dec:2},
+                   {k:'porcentaje',et:'Por operación',u:'%',dec:3}].map(c=>(
+                    <div key={c.k} style={{display:'flex',alignItems:'center',gap:8,marginBottom:8,paddingLeft:22}}>
+                      <span style={{fontFamily:MONO,fontSize:10,color:'#8aadcc',flex:1}}>{c.et}</span>
+                      <CampoComision valor={comisionesDelRanking(settings)[c.k]} dec={c.dec}
+                        alCambiar={v=>upd('ranking.rankingComisiones.'+c.k,v)}/>
+                      <span style={{fontFamily:MONO,fontSize:11,color:'#4a6a85',width:12}}>{c.u}</span>
+                    </div>
+                  ))
+                ) : (
+                  <div style={{fontFamily:MONO,fontSize:10,color:'#5a7a95',paddingLeft:22}}>
+                    Usa las de «Comisiones por defecto»: {(()=>{const c=comisionesDeAjustes(settings)
+                      return textoEs(c.compra)+' € compra · '+textoEs(c.venta)+' € venta · '+textoEs(c.porcentaje,3)+' %'})()}
+                  </div>
+                )}
+                <div style={{fontFamily:MONO,fontSize:10,color:'#4a6a85',marginTop:10}}>
+                  Al cambiar cualquiera de estos valores, el ranking guardado deja de ser comparable:
+                  hay que volver a pulsar ↻ Actualizar.
+                </div>
               </div>
               {/* ── Visor de distribución (colapsado: en reposo solo el botón) ── */}
               <div style={{marginTop:10}}>
