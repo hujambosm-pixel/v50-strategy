@@ -10,7 +10,9 @@ import { cargarIndicadores, guardarIndicadores, CATALOGO_INDICADORES, validaIndi
 import { loadAsignacionMc, guardarAsignacionMc } from '../lib/mcAsignacion'
 import { capitalDeOperacion } from '../lib/capitalOperacion'
 import FiltrosPanel from '../components/FiltrosPanel'
-import SelectorPeriodo, { rangoDePeriodo, periodoInicial } from '../components/SelectorPeriodo'
+import { rangoDePeriodo, periodoInicial } from '../components/SelectorPeriodo'
+import CondicionesSimulacion from '../components/CondicionesSimulacion'
+import { CONDICIONES_DEFAULT, condicionesIniciales, temporalidadDeEstrategia } from '../lib/condicionesSimulacion'
 import { supabase } from '../lib/supabaseClient'
 import { fetchConditions, lsGetConds, lsSaveConds, COND_LS_KEY } from '../lib/conditions'
 import CandleChart from '../components/CandleChart'
@@ -935,6 +937,9 @@ export default function Home() {
   const [indPeriodMode,setIndPeriodMode]=useState('years') // 'years' | 'range'
   const [indDesde,setIndDesde]=useState(()=>periodoInicial(5).desde)
   const [indHasta,setIndHasta]=useState(()=>periodoInicial(5).hasta)
+  // Capital por operacion (el `allocation_pct` que el motor ya recibe). Arranca en 100, que es lo
+  // que mandaban todas las llamadas de esta pantalla, asi que la peticion no cambia.
+  const [indCapitalPorOp,setIndCapitalPorOp]=useState(CONDICIONES_DEFAULT.capitalPorOperacion)
   const [tipoStop,setTipoStop]=useState('tecnico'),[atrP,setAtrP]=useState(14),[atrM,setAtrM]=useState(1.0)
   const [sinPerdidas,setSinPerdidas]=useState(true),[reentry,setReentry]=useState(true)
   const [tipoFiltro,setTipoFiltro]=useState('none'),[sp500EmaR,setSp500EmaR]=useState(10),[sp500EmaL,setSp500EmaL]=useState(11)
@@ -3475,11 +3480,6 @@ export default function Home() {
     if(!confirm('¿Eliminar esta estrategia?')) return
     await deleteStrategy(id); reloadStrategies()
   }
-  // Lee intervalo guardado en stratParams de una estrategia; default 'diario'
-  const readStratIntervalo=(s)=>{
-    try{const p=typeof s?.params==='string'?JSON.parse(s.params||'{}'):(s?.params||{});return p.intervalo||'diario'}
-    catch{return 'diario'}
-  }
 
   // Carga todos los rankings de Supabase y calcula la mejor estrategia por símbolo
   const refreshBestStratPerSymbol=useCallback(async()=>{
@@ -3709,8 +3709,12 @@ export default function Home() {
     const filt  = def.filters?.market?.[0] || {}
     setEmaR(entry.ma_fast || entry.ma_period || 10)
     setEmaL(entry.ma_slow || 11)
-    setYears(s.years || 5)
-    setCapitalIni(s.capital_ini || 10000)
+    // Las condiciones con las que arranca el panel son LAS MISMAS que este codigo leia de la fila
+    // antes de que el panel existiera, para que la primera corrida tras cargar no se mueva.
+    const _cond=condicionesIniciales(s)
+    setYears(_cond.years)
+    setCapitalIni(_cond.capitalIni)
+    setIndCapitalPorOp(_cond.capitalPorOperacion)
     setTipoStop(stop.type === 'atr_based' ? 'atr' : stop.type === 'none' ? 'none' : 'tecnico')
     setAtrP(stop.atr_period || 14)
     setAtrM(stop.atr_mult || 1.0)
@@ -3723,7 +3727,7 @@ export default function Home() {
     setStratName(s.name||'')
     setCurrentStratId(s.id||null)
     refreshWlData()
-    setEstrategiaIntervalo(readStratIntervalo(s))
+    setEstrategiaIntervalo(temporalidadDeEstrategia(s))
     if(navigateToConfig) setSidePanel('config')
     setRankingData({});setRankingStratId(null);setRankingStratName('')
     if(s.id){
@@ -4499,7 +4503,7 @@ export default function Home() {
     setStratColor(strat.color||'#00d4ff')
     setCurrentStratId(strat.id)
     refreshWlData()
-    setEstrategiaIntervalo(readStratIntervalo(strat))
+    setEstrategiaIntervalo(temporalidadDeEstrategia(strat))
     // symbol intentionally not stored in strategy (apply to any asset separately)
     setStratTab('build')
     setStratMsg({type:'ok',text:`Cargada: ${strat.name}`})
@@ -4549,7 +4553,7 @@ export default function Home() {
     if(debounceRef.current)clearTimeout(debounceRef.current)
     const _iPer=rangoDePeriodo({modo:indPeriodMode,years:years,desde:indDesde,hasta:indHasta})
     const payload = currentStratId
-      ? { strategyId:currentStratId, capital_ini:Number(capitalIni), years:Number(years), allocation_pct:100, filtros:filtrosBackend, intervalo:estrategiaIntervalo,
+      ? { strategyId:currentStratId, capital_ini:Number(capitalIni), years:Number(years), allocation_pct:Number(indCapitalPorOp), filtros:filtrosBackend, intervalo:estrategiaIntervalo,
           fromDate:_iPer.fromDate, toDate:_iPer.toDate }
       : { fromDate:_iPer.fromDate, toDate:_iPer.toDate,
           cfg:{emaR:Number(emaR),emaL:Number(emaL),years:Number(years),capitalIni:Number(capitalIni),
@@ -4559,7 +4563,7 @@ export default function Home() {
     return()=>clearTimeout(debounceRef.current)
   },[simbolo,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,
      sp500EmaR,sp500EmaL,sidePanel,currentStratId,filtrosBackend,estrategiaIntervalo,
-     indPeriodMode,indDesde,indHasta,run])
+     indPeriodMode,indDesde,indHasta,indCapitalPorOp,run])
 
   // ── TradeLog helpers ────────────────────────────────────────
   // ── TradeLog: storage mode (local vs supabase) ──────────────
@@ -5934,7 +5938,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.879</title>
+        <title>Trading Simulator V9.880</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6023,7 +6027,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             }} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.879
+            <span className="dot"/>Trading Simulator V9.880
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6222,12 +6226,18 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   </div>
                 </div>
 
-                {/* ── Periodo del backtest individual ── */}
-                <SelectorPeriodo variant="panel"
+                {/* ── Condiciones de la simulacion del backtest individual ── */}
+                {/* La temporalidad de aqui es LOCAL: explora sin tocar la estrategia. El distintivo
+                    D/W de la cabecera sigue persistiendo en `params`, y eso se unifica en el
+                    commit siguiente; de momento conviven a proposito. */}
+                <CondicionesSimulacion variant="panel"
                   modo={indPeriodMode} setModo={setIndPeriodMode}
                   years={years} setYears={setYears}
                   desde={indDesde} setDesde={setIndDesde}
-                  hasta={indHasta} setHasta={setIndHasta}/>
+                  hasta={indHasta} setHasta={setIndHasta}
+                  capitalIni={capitalIni} setCapitalIni={setCapitalIni}
+                  capitalPorOperacion={indCapitalPorOp} setCapitalPorOperacion={setIndCapitalPorOp}
+                  temporalidad={estrategiaIntervalo} setTemporalidad={setEstrategiaIntervalo}/>
 
                 {/* ── Filtros: mercado (serie externa) y activo (serie del propio símbolo) ── */}
                 <FiltrosPanel ambito="mercado" titulo="FILTROS DE MERCADO"
@@ -6259,7 +6269,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     return list.map(s=>{
                       const isActive=currentStratId===s.id
                       const col=s.color||'#00d4ff'
-                      const sIv=readStratIntervalo(s)
+                      const sIv=temporalidadDeEstrategia(s)
                       const sIsSemanal=sIv==='semanal'
                       const toggleSIv=async(e)=>{
                         e.stopPropagation()
@@ -7143,39 +7153,19 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   {mcError&&<div style={{fontFamily:MONO,fontSize:12,color:'#ff4d6d',marginTop:5}}>⚠ {mcError}</div>}
                 </div>
 
-                {/* CAPITAL Y PERÍODO */}
-                <div style={{flexShrink:0,borderBottom:'1px solid var(--border)',padding:'10px 12px',display:'flex',flexDirection:'column',gap:8}}>
-                  <div style={{display:'flex',alignItems:'center',gap:8}}>
-                    <span style={{fontFamily:MONO,fontSize:11,color:'#7aabc8',whiteSpace:'nowrap'}}>Capital inicial</span>
-                    <input type="number" min={100} max={1000000} step={100} value={mcCapitalIni}
-                      onChange={e=>setMcCapitalIni(Number(e.target.value))}
-                      style={{flex:1,fontFamily:MONO,fontSize:11,background:'var(--bg2)',border:'1px solid var(--border)',borderRadius:3,padding:'3px 6px',color:'var(--fg)',textAlign:'right'}}/>
-                    <span style={{fontFamily:MONO,fontSize:11,color:'#4a6a88'}}>€</span>
-                  </div>
-                  <SelectorPeriodo
-                    modo={mcPeriodMode} setModo={setMcPeriodMode}
-                    years={mcYears} setYears={setMcYears}
-                    desde={mcFromDate} setDesde={setMcFromDate}
-                    hasta={mcToDate} setHasta={setMcToDate}/>
-                </div>
-
-                {/* INTERVALO */}
-                <div style={{flexShrink:0,borderBottom:'1px solid var(--border)',padding:'8px 12px'}}>
-                  <div style={{display:'flex',alignItems:'center',gap:8}}>
-                    <span style={{fontFamily:MONO,fontSize:11,color:'#7aabc8',whiteSpace:'nowrap'}}>Intervalo</span>
-                    <div style={{display:'flex',gap:4,marginLeft:'auto'}}>
-                      {[{id:'diario',label:'Diario',activeColor:'#4caf82',activeBorder:'#2d6e4e',activeBg:'rgba(76,175,130,0.12)'},{id:'semanal',label:'Semanal',activeColor:'#f0c040',activeBorder:'#a07820',activeBg:'rgba(240,192,64,0.12)'}].map(opt=>(
-                        <button key={opt.id} onClick={()=>cambiarMcIntervalo(opt.id)}
-                          style={{fontFamily:MONO,fontSize:10,padding:'2px 8px',borderRadius:3,cursor:'pointer',
-                            border:`1px solid ${mcIntervalo===opt.id?opt.activeBorder:'var(--border)'}`,
-                            background:mcIntervalo===opt.id?opt.activeBg:'transparent',
-                            color:mcIntervalo===opt.id?opt.activeColor:'#7aabc8'}}>
-                          {opt.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
+                {/* CONDICIONES DE LA SIMULACIÓN — el mismo panel que el backtest individual, con el
+                    estado que ya existia (mcCapitalIni, mcPeriodMode, mcYears, mcFromDate, mcToDate,
+                    mcIntervalo): no se duplica ninguno. Sin «capital por operacion», porque aqui lo
+                    decide el MODO DE ASIGNACION y tiene su propio panel.
+                    La temporalidad pasa por cambiarMcIntervalo, que ademas resetea la ventana RS al
+                    default de su timeframe: llamar a setMcIntervalo a pelo se lo saltaria. */}
+                <CondicionesSimulacion
+                  modo={mcPeriodMode} setModo={setMcPeriodMode}
+                  years={mcYears} setYears={setMcYears}
+                  desde={mcFromDate} setDesde={setMcFromDate}
+                  hasta={mcToDate} setHasta={setMcToDate}
+                  capitalIni={mcCapitalIni} setCapitalIni={setMcCapitalIni}
+                  temporalidad={mcIntervalo} setTemporalidad={cambiarMcIntervalo}/>
 
                 {/* FILTROS — colapsables (MC) */}
                 <FiltrosPanel ambito="mercado" titulo="FILTROS DE MERCADO"
