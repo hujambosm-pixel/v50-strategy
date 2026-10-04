@@ -8,6 +8,14 @@ node_modules/
 # los ve como submódulos y cualquier `git add -A` los mete como gitlinks que luego nadie puede clonar.
 .claude/worktrees/
 
+# Permisos locales de Claude Code. Son de ESTA máquina: llevan rutas absolutas con el nombre de
+# usuario y la lista de comandos que se aprobaron aquí, que no le sirve de nada a nadie más. ESTE
+# REPOSITORIO ES PÚBLICO. El fichero estuvo versionado hasta V9.879; sacarlo del índice no lo quita
+# del historial, y no se reescribe el historial a propósito, así que las 177 reglas que llegaron a
+# publicarse siguen siendo visibles ahí. No había ninguna clave ni token dentro.
+# .claude/launch.json SÍ se versiona: define cómo arrancar el dev server y es igual para todos.
+.claude/settings.local.json
+
 # Enlace del proyecto con Vercel (README.txt + repo.json). Lo genera la CLI y es local de la máquina.
 .vercel/
 
