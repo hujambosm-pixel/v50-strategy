@@ -46,9 +46,15 @@ export default function CondicionesSimulacion({
   capitalIni, setCapitalIni,
   capitalPorOperacion, setCapitalPorOperacion,
   temporalidad, setTemporalidad,
+  // La temporalidad que declara la estrategia (su valor por defecto, y el que usa el ranking). Si se
+  // pasa y no coincide con la de la simulación, se avisa: se está explorando, no se ha cambiado la
+  // estrategia. Sin ese aviso un backtest en semanal sobre una estrategia diaria parece ser la
+  // estrategia, que es justo la confusión que este panel viene a quitar.
+  temporalidadEstrategia = null,
   titulo = 'CONDICIONES DE LA SIMULACIÓN', variant = 'mc',
 }) {
   const padX = variant === 'panel' ? 10 : 12
+  const explorando = !!(temporalidadEstrategia && temporalidad && temporalidadEstrategia !== temporalidad)
   return (
     <div style={{ flexShrink: 0, borderBottom: '1px solid var(--border)',
                   padding: `10px ${padX}px`, display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -89,6 +95,15 @@ export default function CondicionesSimulacion({
       {setTemporalidad && (
         <Fila>
           <span style={sLbl}>Temporalidad</span>
+          {explorando && (
+            <span title={'Temporalidad de la estrategia: ' + temporalidadEstrategia +
+                         '. Aquí solo cambia la simulación en curso; la estrategia se edita en su editor.'}
+              style={{ fontFamily: MONO, fontSize: 9, color: '#ffd166',
+                background: 'rgba(255,209,102,0.12)', border: '1px solid rgba(255,209,102,0.3)',
+                borderRadius: 2, padding: '0 4px', lineHeight: '14px', flexShrink: 0, cursor: 'help' }}>
+              explorando
+            </span>
+          )}
           <div style={{ display: 'flex', gap: 4, marginLeft: 'auto' }}>
             {TEMPO_OPC.filter(o => TEMPORALIDADES.includes(o.id)).map(opt => (
               <button key={opt.id} onClick={() => setTemporalidad(opt.id)}

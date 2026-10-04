@@ -1044,29 +1044,21 @@ export default function Home() {
     const def = estrategiaIntervalo==='semanal' ? 13 : 63
     setRsVisualWindow(def); setRsWinText(String(def))
   },[estrategiaIntervalo])
-  // Persiste el intervalo ('diario'|'semanal') en los params de una estrategia (local + Supabase).
-  // Mecanismo único compartido por el toggle lateral por-estrategia y el badge D/W de la cabecera.
-  const persistStratIntervalo = async (strat, newIv) => {
-    if(!strat) return
-    setStrategies(prev=>prev.map(st=>{
-      if(st.id!==strat.id)return st
-      try{const p=typeof st.params==='string'?JSON.parse(st.params||'{}'):(st.params||{});return{...st,params:JSON.stringify({...p,intervalo:newIv})}}
-      catch{return{...st,params:JSON.stringify({intervalo:newIv})}}
-    }))
-    try{
-      const p=typeof strat.params==='string'?JSON.parse(strat.params||'{}'):(strat.params||{})
-      await apiFetch('/api/strategies',{method:'PUT',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({id:strat.id,params:JSON.stringify({...p,intervalo:newIv})})})
-    }catch(_){}
+  // EL DISTINTIVO D/W ALTERNA LA SIMULACION EN CURSO, NO LA ESTRATEGIA. Antes pasaba por un
+  // `persistStratIntervalo` que escribia `params.intervalo` en Supabase: explorar un rato en
+  // semanal dejaba la estrategia convertida en semanal para siempre, tambien para el ranking, y
+  // nada lo avisaba. Esa funcion ya no existe, asi que no queda ningun camino por el que explorar
+  // modifique una estrategia: la unica forma de cambiar su temporalidad es su editor.
+  // `estrategiaIntervalo` es el MISMO estado que lee el campo Temporalidad del panel de
+  // condiciones, asi que el distintivo y el panel se mueven juntos sin nada que sincronizar.
+  const toggleHeaderIntervalo = () => {
+    setEstrategiaIntervalo(estrategiaIntervalo==='semanal' ? 'diario' : 'semanal')
   }
-  // Badge D/W de la cabecera: alterna el intervalo del gráfico usando el mismo mecanismo que el
-  // toggle lateral (persiste en la estrategia activa + setEstrategiaIntervalo → dispara la recarga).
-  const toggleHeaderIntervalo = async () => {
-    const newIv = estrategiaIntervalo==='semanal' ? 'diario' : 'semanal'
-    const active = strategies.find(st=>st.id===currentStratId)
-    if(active) await persistStratIntervalo(active, newIv)
-    setEstrategiaIntervalo(newIv)
-  }
+  // La temporalidad que DECLARA la estrategia activa: su valor por defecto y el que usa el
+  // ranking. Solo sirve para avisar de que la simulacion esta explorando otra distinta.
+  const _estrActiva = currentStratId ? strategies.find(st=>st.id===currentStratId) : null
+  const temporalidadEstrategia = _estrActiva ? temporalidadDeEstrategia(_estrActiva) : null
+  const explorandoTemporalidad = !!(temporalidadEstrategia && temporalidadEstrategia !== estrategiaIntervalo)
   const [stratMsg, setStratMsg]       = useState(null)
   const [stratTab, setStratTab]       = useState('build')
   // Alertas
@@ -5938,7 +5930,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.880</title>
+        <title>Trading Simulator V9.881</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6027,7 +6019,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             }} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.880
+            <span className="dot"/>Trading Simulator V9.881
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6237,7 +6229,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   hasta={indHasta} setHasta={setIndHasta}
                   capitalIni={capitalIni} setCapitalIni={setCapitalIni}
                   capitalPorOperacion={indCapitalPorOp} setCapitalPorOperacion={setIndCapitalPorOp}
-                  temporalidad={estrategiaIntervalo} setTemporalidad={setEstrategiaIntervalo}/>
+                  temporalidad={estrategiaIntervalo} setTemporalidad={setEstrategiaIntervalo}
+                  temporalidadEstrategia={temporalidadEstrategia}/>
 
                 {/* ── Filtros: mercado (serie externa) y activo (serie del propio símbolo) ── */}
                 <FiltrosPanel ambito="mercado" titulo="FILTROS DE MERCADO"
@@ -6271,14 +6264,6 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       const col=s.color||'#00d4ff'
                       const sIv=temporalidadDeEstrategia(s)
                       const sIsSemanal=sIv==='semanal'
-                      const toggleSIv=async(e)=>{
-                        e.stopPropagation()
-                        const newIv=sIsSemanal?'diario':'semanal'
-                        // Mecanismo compartido: persiste params (local + Supabase)
-                        await persistStratIntervalo(s, newIv)
-                        // Re-ejecutar si es la estrategia activa
-                        if(isActive)setEstrategiaIntervalo(newIv)
-                      }
                       const isDisabled = s.enabled === false
                       return (
                         <div key={s.id}
@@ -6306,14 +6291,17 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                             </div>
                             <div style={{fontFamily:MONO,fontSize:9,color:'#5a7a95',marginTop:1,display:'flex',alignItems:'center',gap:4}}>
                               <span>{s.years||'?'}a · {s.definition?.setup?.ma_fast||s.ema_r||'?'}/{s.definition?.setup?.ma_slow||s.ema_l||'?'}</span>
-                              <span onClick={toggleSIv}
-                                title={sIsSemanal?'Semanal — pulsar para cambiar a diario':'Diario — pulsar para cambiar a semanal'}
+                              {/* La temporalidad DE LA ESTRATEGIA. Antes este distintivo la
+                                  cambiaba y la escribia en Supabase, para cualquier estrategia de
+                                  la lista y con un clic. Ahora solo la ensena: se cambia en el
+                                  editor, que es lo que abre el clic en la fila. */}
+                              <span
+                                title={(sIsSemanal?'Semanal':'Diario')+' — temporalidad de la estrategia. Se cambia en su editor.'}
                                 style={{fontFamily:MONO,fontSize:9,padding:'0 4px',borderRadius:3,
                                   border:`1px solid ${sIsSemanal?'#a07820':'#2d6e4e'}`,
                                   background:sIsSemanal?'rgba(240,192,64,0.12)':'rgba(76,175,130,0.12)',
                                   color:sIsSemanal?'#f0c040':'#4caf82',
-                                  lineHeight:'14px',flexShrink:0,cursor:'pointer',userSelect:'none',
-                                  transition:'background 0.15s,border-color 0.15s,color 0.15s'}}>
+                                  lineHeight:'14px',flexShrink:0,userSelect:'none',cursor:'help'}}>
                                 {sIsSemanal?'S':'D'}
                               </span>
                             </div>
@@ -8366,15 +8354,19 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         <span ref={chartLegendRef} style={{flex:1,minWidth:0,overflow:'hidden',
                           whiteSpace:'nowrap',textOverflow:'ellipsis'}}/>
                         {/* ── RS visual (timeframe D/W + RS vs SP500 + ventana) — zona derecha, junto a estrategia ── */}
-                        {/* Timeframe activo (D/W) — clic alterna diario/semanal (mismo mecanismo que el toggle lateral) */}
+                        {/* Timeframe activo (D/W) — clic alterna la temporalidad de la SIMULACION. No toca la estrategia. */}
                         <span onClick={toggleHeaderIntervalo}
-                          title={estrategiaIntervalo==='semanal'?'Semanal — pulsar para cambiar a diario':'Diario — pulsar para cambiar a semanal'}
+                          title={(estrategiaIntervalo==='semanal'?'Semanal':'Diario')
+                            +' — temporalidad de la SIMULACION; pulsar para cambiarla. No modifica la estrategia.'
+                            +(explorandoTemporalidad?' Temporalidad de la estrategia: '+temporalidadEstrategia+'.':'')}
                           onMouseOver={e=>e.currentTarget.style.background='rgba(255,255,255,0.08)'}
                           onMouseOut={e=>e.currentTarget.style.background='rgba(13,21,32,0.85)'}
-                          style={{pointerEvents:'all',cursor:'pointer',flexShrink:0,color:'#7a9bc0',fontSize:11,fontWeight:600,
-                            userSelect:'none',background:'rgba(13,21,32,0.85)',border:'1px solid #1a2d45',borderRadius:3,
+                          style={{pointerEvents:'all',cursor:'pointer',flexShrink:0,color:explorandoTemporalidad?'#ffd166':'#7a9bc0',fontSize:11,fontWeight:600,
+                            userSelect:'none',background:'rgba(13,21,32,0.85)',border:`1px solid ${explorandoTemporalidad?'rgba(255,209,102,0.45)':'#1a2d45'}`,borderRadius:3,
                             padding:'1px 6px',height:18,lineHeight:'16px',transition:'background 0.1s'}}>
                           {estrategiaIntervalo==='semanal'?'W':'D'}
+                          {/* Punto discreto: la simulacion no corre en la temporalidad de la estrategia. */}
+                          {explorandoTemporalidad&&<span style={{color:'#ffd166'}}>·</span>}
                         </span>
                         {/* RS visual vs SP500 (indicador de cabecera, independiente de estrategias) */}
                         {(()=>{
