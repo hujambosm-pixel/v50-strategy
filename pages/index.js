@@ -12,6 +12,7 @@ import { capitalDeOperacion } from '../lib/capitalOperacion'
 import FiltrosPanel from '../components/FiltrosPanel'
 import { rangoDePeriodo, periodoInicial } from '../components/SelectorPeriodo'
 import CondicionesSimulacion from '../components/CondicionesSimulacion'
+import { COMISIONES_DEFECTO, comisionesDeAjustes } from '../lib/comisiones'
 import { condicionesIniciales, temporalidadDeEstrategia } from '../lib/condicionesSimulacion'
 import { supabase } from '../lib/supabaseClient'
 import { fetchConditions, lsGetConds, lsSaveConds, COND_LS_KEY } from '../lib/conditions'
@@ -934,6 +935,9 @@ export default function Home() {
   // Periodo del backtest INDIVIDUAL. Estado propio: el componente SelectorPeriodo es compartido con
   // el multibacktest, el estado no, asi que cambiar el periodo de una pantalla no mueve el de la
   // otra. `years` es el de la estrategia (columna `years`), que es el que ya se guardaba.
+  // Comisiones de la SIMULACION. Arrancan con las de Ajustes (efecto de abajo) y se pueden cambiar
+  // en el panel sin tocar los Ajustes, igual que la temporalidad. Estado propio por pantalla.
+  const [indComisiones,setIndComisiones]=useState(()=>({...COMISIONES_DEFECTO}))
   const [indPeriodMode,setIndPeriodMode]=useState('years') // 'years' | 'range'
   const [indDesde,setIndDesde]=useState(()=>periodoInicial(5).desde)
   const [indHasta,setIndHasta]=useState(()=>periodoInicial(5).hasta)
@@ -1288,6 +1292,7 @@ export default function Home() {
   const [mcCapitalIni,setMcCapitalIni]=useState(10000)
   // Periodo del MULTIBACKTEST. Las cajas dd/mm/yyyy —antes fromDisplay/toDisplay aqui— son ahora
   // estado interno de SelectorPeriodo: son presentacion, y lo que viaja es siempre ISO.
+  const [mcComisiones,setMcComisiones]=useState(()=>({...COMISIONES_DEFECTO}))
   const [mcPeriodMode,setMcPeriodMode]=useState('years') // 'years' | 'range'
   const [mcYears,setMcYears]=useState(5)
   const [mcFromDate,setMcFromDate]=useState(()=>periodoInicial(5).desde)
@@ -1699,7 +1704,7 @@ export default function Home() {
     const _per=rangoDePeriodo({modo:mcPeriodMode,years:mcYears,desde:mcFromDate,hasta:mcToDate})
     const cfg={capitalIni:Number(mcCapitalIni),fromDate:_per.fromDate,toDate:_per.toDate,
       ...(mcPeriodMode==='years'?{years:Number(mcYears)}:{})}
-    const clave=`${sym}|${mcIdStratDetalle}|${mcIntervalo}|${JSON.stringify(cfg)}`
+    const clave=`${sym}|${mcIdStratDetalle}|${mcIntervalo}|${JSON.stringify(cfg)}|${JSON.stringify(mcComisiones)}`
     if(mcDetallePedidoRef.current===clave) return
     mcDetallePedidoRef.current=clave
     setMcDetalleActivo(null)
@@ -1709,7 +1714,7 @@ export default function Home() {
         const res=await apiFetch('/api/asset-detail',{method:'POST',headers:{'Content-Type':'application/json'},
           body:JSON.stringify({symbol:sym,strategyId:mcIdStratDetalle,cfg,intervalo:mcIntervalo,
             // Las velas van ahora en el MISMO intervalo, así que el endpoint no tiene que proyectar nada.
-            intervaloVelas:mcIntervalo,
+            intervaloVelas:mcIntervalo,comisiones:mcComisiones,
             filtros:filtrosBackend,isNoStrategy:(_strat?.name||'').includes('No Strategy')})})
         const json=await res.json()
         if(mcDetallePedidoRef.current!==clave) return    // llegó tarde: ya manda otra selección
@@ -1718,7 +1723,7 @@ export default function Home() {
         setMcDetalleActivo(res.ok?json:{error:json?.error||`HTTP ${res.status}`})
       }catch(e){ if(mcDetallePedidoRef.current===clave) setMcDetalleActivo({error:e.message||'sin respuesta'}) }
     })()
-  },[mcActivoSel,mcIdStratDetalle,mcIntervalo,mcPeriodMode,mcYears,mcFromDate,mcToDate,mcCapitalIni,strategies,filtrosBackend])
+  },[mcActivoSel,mcIdStratDetalle,mcIntervalo,mcPeriodMode,mcYears,mcFromDate,mcToDate,mcCapitalIni,mcComisiones,strategies,filtrosBackend])
   // Solo las series de escala PRECIO: un RSI de 0 a 100 o un volumen de millones en el eje del precio
   // aplastan las velas contra el suelo. El endpoint manda la escala de cada una para no tener que saberla.
   const mcIndicadoresActivo=useMemo(()=>{
@@ -4432,8 +4437,8 @@ export default function Home() {
       // selector, asi que el servidor recibe el mismo periodo exacto que el multibacktest.
       const body = payload.strategyId
         ? { simbolo:sym, strategyId:payload.strategyId, capital_ini:payload.capital_ini, years:payload.years, allocation_pct:payload.allocation_pct, filtros:payload.filtros||{}, intervalo:payload.intervalo||'diario',
-            fromDate:payload.fromDate??null, toDate:payload.toDate??null }
-        : { simbolo:sym, cfg:payload.cfg||payload, fromDate:payload.fromDate??null, toDate:payload.toDate??null }
+            fromDate:payload.fromDate??null, toDate:payload.toDate??null, comisiones:payload.comisiones??null }
+        : { simbolo:sym, cfg:payload.cfg||payload, fromDate:payload.fromDate??null, toDate:payload.toDate??null, comisiones:payload.comisiones??null }
       const res=await apiFetch('/api/datos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
       const json=await res.json()
       if(!res.ok)throw new Error(json.error||'Error')
@@ -4542,7 +4547,7 @@ export default function Home() {
     const _iPer=rangoDePeriodo({modo:indPeriodMode,years:years,desde:indDesde,hasta:indHasta})
     const payload = currentStratId
       ? { strategyId:currentStratId, capital_ini:Number(capitalIni), years:Number(years), allocation_pct:100, filtros:filtrosBackend, intervalo:estrategiaIntervalo,
-          fromDate:_iPer.fromDate, toDate:_iPer.toDate }
+          fromDate:_iPer.fromDate, toDate:_iPer.toDate, comisiones:indComisiones }
       : { fromDate:_iPer.fromDate, toDate:_iPer.toDate,
           cfg:{emaR:Number(emaR),emaL:Number(emaL),years:Number(years),capitalIni:Number(capitalIni),
               tipoStop,atrPeriod:Number(atrP),atrMult:Number(atrM),sinPerdidas,reentry,
@@ -4551,7 +4556,7 @@ export default function Home() {
     return()=>clearTimeout(debounceRef.current)
   },[simbolo,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,
      sp500EmaR,sp500EmaL,sidePanel,currentStratId,filtrosBackend,estrategiaIntervalo,
-     indPeriodMode,indDesde,indHasta,run])
+     indPeriodMode,indDesde,indHasta,indComisiones,run])
 
   // ── TradeLog helpers ────────────────────────────────────────
   // ── TradeLog: storage mode (local vs supabase) ──────────────
@@ -5278,7 +5283,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
           const _strat1=strategies.find(s=>s.id===stratIds[0])
           const isNoStrategy=(_strat1?.name||'').includes('No Strategy')
           const res=await apiFetch('/api/multibacktest',{method:'POST',headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({symbols:mcSelected,modoAsig:modesToRun[0],weights:weightsNorm,cfg:baseCfg,strategyId:stratIds[0]||null,isNoStrategy,filtros:filtrosBackend,intervalo:mcIntervalo})})
+            body:JSON.stringify({symbols:mcSelected,modoAsig:modesToRun[0],weights:weightsNorm,cfg:baseCfg,strategyId:stratIds[0]||null,isNoStrategy,filtros:filtrosBackend,intervalo:mcIntervalo,comisiones:mcComisiones})})
           const json=await res.json()
           if(!res.ok) throw new Error(json.error||'Error')
           setMcResult(json);setMcMultiResults([]);setMcIsModoCompare(false)
@@ -5298,7 +5303,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
           setMcProgress({current:i+1,total:modesToRun.length,name:MODE_LABELS[modo]||modo})
           const color=STRAT_COMPARE_COLORS[i%STRAT_COMPARE_COLORS.length]
           const res=await apiFetch('/api/multibacktest',{method:'POST',headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({symbols:mcSelected,modoAsig:modo,weights:weightsNorm,cfg:baseCfg,strategyId:sid,isNoStrategy:isNoStrategyMode,filtros:filtrosBackend,intervalo:mcIntervalo})})
+            body:JSON.stringify({symbols:mcSelected,modoAsig:modo,weights:weightsNorm,cfg:baseCfg,strategyId:sid,isNoStrategy:isNoStrategyMode,filtros:filtrosBackend,intervalo:mcIntervalo,comisiones:mcComisiones})})
           const json=await res.json()
           if(!res.ok) throw new Error(json.error||'Error en '+MODE_LABELS[modo])
           modeResults.push({id:`${sid||'__single__'}__${modo}`,name:`${stratName} · ${MODE_LABELS[modo]}`,color,result:json,modo})
@@ -5322,7 +5327,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
       try{
         const cfg=buildCfgFromStrat(strat)
         const res=await apiFetch('/api/multibacktest',{method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({symbols:mcSelected,modoAsig:mcMode,weights:weightsNorm,cfg,strategyId:sid,isNoStrategy:(strat?.name||'').includes('No Strategy'),filtros:filtrosBackend,intervalo:mcIntervalo})})
+          body:JSON.stringify({symbols:mcSelected,modoAsig:mcMode,weights:weightsNorm,cfg,strategyId:sid,isNoStrategy:(strat?.name||'').includes('No Strategy'),filtros:filtrosBackend,intervalo:mcIntervalo,comisiones:mcComisiones})})
         const json=await res.json()
         if(!res.ok) throw new Error(json.error||'Error en '+name)
         results.push({id:sid,name,color,result:json})
@@ -5354,6 +5359,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               portfolioMode:true,
               strategies:results.map(r=>({id:r.id,name:r.name,symbols:mcSelected})),
               cfg:_pCfg,
+              comisiones:mcComisiones,
               modoAsig:mcMode,
               sizeRules:{
                 maxPosiciones:mcMaxPosiciones,
@@ -5385,7 +5391,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
       }
     }
     setMcLoading(false);setMcProgress(null)
-  },[mcSelected,mcMode,selectedModos,mcWeights,mcCapital,mcCapitalIni,mcYears,mcPeriodMode,mcFromDate,mcToDate,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL,rankingData,mcStratSelected,strategies,currentStratId,mcRiskPerTrade,mcMaxPortfolioPct,mcMaxAccumRisk,mcAssumedStopPct,mcMaxPosiciones,mcPrioridad,mcCriterioUso,mcMomentumN,mcRsWindow,mcRsGateThr,mcMomGateThr,mcProxGateThr,filtrosBackend,mcIntervalo])
+  },[mcSelected,mcMode,selectedModos,mcWeights,mcCapital,mcCapitalIni,mcYears,mcPeriodMode,mcFromDate,mcToDate,mcComisiones,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL,rankingData,mcStratSelected,strategies,currentStratId,mcRiskPerTrade,mcMaxPortfolioPct,mcMaxAccumRisk,mcAssumedStopPct,mcMaxPosiciones,mcPrioridad,mcCriterioUso,mcMomentumN,mcRsWindow,mcRsGateThr,mcMomGateThr,mcProxGateThr,filtrosBackend,mcIntervalo])
 
   // Auto-inicializar pesos iguales cuando cambian activos seleccionados (modo custom)
   useEffect(()=>{
@@ -5481,6 +5487,10 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
       if(s.ui?.defaultLabelMode!=null) setLabelMode(s.ui.defaultLabelMode)
       if(s.ui?.defaultMetricsLayout){ setMetricsLayout(s.ui.defaultMetricsLayout) }
       if(s.defaultCapital!=null)       setCapitalIni(s.defaultCapital)
+      // Las dos pantallas arrancan con las comisiones de Ajustes. Cambiarlas en un panel NO las
+      // guarda: al recargar vuelven estas. Ver lib/comisiones.js.
+      const _comAj=comisionesDeAjustes(s)
+      setIndComisiones({..._comAj}); setMcComisiones({..._comAj})
     }catch(_){}
     // Restore acknowledged alarms
     try{
@@ -5495,6 +5505,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         try{
           if(remote.ui?.defaultLabelMode!=null) setLabelMode(remote.ui.defaultLabelMode)
           if(remote.ui?.defaultMetricsLayout){ setMetricsLayout(remote.ui.defaultMetricsLayout) }
+          const _comRe=comisionesDeAjustes(remote)
+          setIndComisiones({..._comRe}); setMcComisiones({..._comRe})
         }catch(_){}
       }
     })
@@ -5926,7 +5938,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.883</title>
+        <title>Trading Simulator V9.884</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6015,7 +6027,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             }} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.883
+            <span className="dot"/>Trading Simulator V9.884
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6225,7 +6237,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   hasta={indHasta} setHasta={setIndHasta}
                   capitalIni={capitalIni} setCapitalIni={setCapitalIni}
                   temporalidad={estrategiaIntervalo} setTemporalidad={setEstrategiaIntervalo}
-                  temporalidadEstrategia={temporalidadEstrategia}/>
+                  temporalidadEstrategia={temporalidadEstrategia}
+                  comisiones={indComisiones} setComisiones={setIndComisiones}/>
 
                 {/* ── Filtros: mercado (serie externa) y activo (serie del propio símbolo) ── */}
                 <FiltrosPanel ambito="mercado" titulo="FILTROS DE MERCADO"
@@ -7148,7 +7161,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   desde={mcFromDate} setDesde={setMcFromDate}
                   hasta={mcToDate} setHasta={setMcToDate}
                   capitalIni={mcCapitalIni} setCapitalIni={setMcCapitalIni}
-                  temporalidad={mcIntervalo} setTemporalidad={cambiarMcIntervalo}/>
+                  temporalidad={mcIntervalo} setTemporalidad={cambiarMcIntervalo}
+                  comisiones={mcComisiones} setComisiones={setMcComisiones}/>
 
                 {/* FILTROS — colapsables (MC) */}
                 <FiltrosPanel ambito="mercado" titulo="FILTROS DE MERCADO"
@@ -9966,7 +9980,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       }
                       const res=await apiFetch('/api/multibacktest',{method:'POST',headers:{'Content-Type':'application/json'},
                         body:JSON.stringify({symbols:mcSelected,modoAsig:histResult.modoAsig==='concentrado'?'concentrado':'compartido',
-                          weights:weightsNorm,cfg:unlimCfg,strategyId:sid,isNoStrategy:isNoStrategyG,filtros:filtrosBackend,intervalo:mcIntervalo})})
+                          weights:weightsNorm,cfg:unlimCfg,strategyId:sid,isNoStrategy:isNoStrategyG,filtros:filtrosBackend,intervalo:mcIntervalo,comisiones:mcComisiones})})
                       if(res.ok){
                         const json=await res.json()
                         const unlimTrades=json.allTrades||[]

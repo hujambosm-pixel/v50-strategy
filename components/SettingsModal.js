@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
-import { MONO, pctOf } from '../lib/utils'
+import { MONO, pctOf, numeroEs, textoEs } from '../lib/utils'
+import { COMISIONES_DEFECTO, comisionesDeAjustes } from '../lib/comisiones'
 import { getSupaUrl, getSupaKey } from '../lib/supabase'
 import { loadSettings, saveSettingsRemote } from '../lib/settings'
 import { fetchConditions, saveCondition, deleteCondition, groqParseCondition, lsGetConds, lsSaveConds } from '../lib/conditions'
@@ -156,6 +157,21 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
       {children}
     </div>
   )
+
+  // Campo de texto con coma decimal, igual que el del panel de condiciones: un
+  // <input type="number"> no acepta la coma en todos los navegadores y «0,36» dejaría el campo
+  // vacío. El texto a medio escribir es estado suyo; al salir del campo se confirma.
+  const CampoComision = ({ valor, alCambiar, dec = 2 }) => {
+    const [txt, setTxt] = useState(() => textoEs(valor, dec))
+    useEffect(() => { setTxt(textoEs(valor, dec)) }, [valor, dec])
+    return (
+      <input type="text" inputMode="decimal" value={txt}
+        onChange={e => setTxt(e.target.value)}
+        onBlur={() => { const n = numeroEs(txt); if (n != null && n >= 0) alCambiar(n); else setTxt(textoEs(valor, dec)) }}
+        style={{width:90,background:'#080c14',border:'1px solid #1a2d45',color:'#e2eaf5',
+          fontFamily:MONO,fontSize:11,padding:'4px 6px',borderRadius:4,textAlign:'right'}}/>
+    )
+  }
 
   const sep = (title) => (
     <div style={{fontFamily:MONO,fontSize:10,color:'#4a6a85',letterSpacing:'0.10em',textTransform:'uppercase',
@@ -588,6 +604,29 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                   onChange={e=>upd('defaultCapital',Number(e.target.value))}
                   style={{width:90,background:'#080c14',border:'1px solid #1a2d45',color:'#e2eaf5',
                     fontFamily:MONO,fontSize:11,padding:'4px 6px',borderRadius:4}}/>
+              </div>
+              {sep('Comisiones por defecto')}
+              <div style={{marginBottom:16}}>
+                <div style={{fontSize:10,color:'#5a7a95',marginBottom:8,lineHeight:1.6}}>
+                  Lo que cobra tu bróker. Se aplican a todos los backtests y se pueden cambiar sin tocar esto
+                  en el panel «Condiciones de la simulación» de cada pantalla. Un backtest sin comisiones es
+                  el que miente, así que aquí no hay un cero por defecto.
+                </div>
+                {[{k:'compra',et:'Fija por compra',u:'€',dec:2},
+                  {k:'venta', et:'Fija por venta', u:'€',dec:2},
+                  {k:'porcentaje',et:'Por operación',u:'%',dec:3}].map(c=>(
+                  <div key={c.k} style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+                    <span style={{fontFamily:MONO,fontSize:10,color:'#cce0f5',flex:1}}>{c.et}</span>
+                    <CampoComision valor={comisionesDeAjustes(settings)[c.k]} dec={c.dec}
+                      alCambiar={v=>upd('comisiones.'+c.k,v)}/>
+                    <span style={{fontFamily:MONO,fontSize:11,color:'#4a6a85',width:12}}>{c.u}</span>
+                  </div>
+                ))}
+                <button onClick={()=>upd('comisiones',{...COMISIONES_DEFECTO})}
+                  style={{fontFamily:MONO,fontSize:10,background:'rgba(0,212,255,0.08)',
+                    border:'1px solid #1a2d45',color:'#8aadcc',padding:'3px 8px',borderRadius:4,cursor:'pointer'}}>
+                  Restaurar 0,36 / 0 / 0
+                </button>
               </div>
               {sep('Estrategia por defecto')}
               <div style={{marginBottom:16}}>                <div style={{fontSize:10,color:'#5a7a95',marginBottom:8,lineHeight:1.6}}>

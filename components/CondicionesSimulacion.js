@@ -1,5 +1,6 @@
+import { useState, useEffect } from 'react'
 import SelectorPeriodo from './SelectorPeriodo'
-import { MONO } from '../lib/utils'
+import { MONO, numeroEs, textoEs } from '../lib/utils'
 import { TEMPORALIDADES, saneaCapital } from '../lib/condicionesSimulacion'
 
 // components/CondicionesSimulacion.js — el panel de las condiciones de la simulación.
@@ -16,8 +17,11 @@ import { TEMPORALIDADES, saneaCapital } from '../lib/condicionesSimulacion'
 // CADA CAMPO ES OPCIONAL y se pinta solo si llega su setter. El multibacktest pasa la temporalidad
 // por `cambiarMcIntervalo`, que además resetea su ventana RS: llamar al setter a pelo se lo saltaría.
 //
-// Las comisiones entran aquí en un commit posterior: son la quinta condición y el motor todavía no las
-// conoce.
+// LAS COMISIONES son la cuarta condición. Sus tres campos arrancan con los valores de Ajustes y se
+// pueden cambiar para la simulación en curso sin tocarlos, igual que la temporalidad. Los decimales
+// se escriben con COMA: un <input type="number"> no la acepta en todos los navegadores y «0,36»
+// dejaría el campo vacío, así que van por un campo de TEXTO con numeroEs/textoEs (lib/utils.js).
+// El cálculo vive en lib/comisiones.js; aquí solo se recogen.
 
 const sLbl   = { fontFamily: MONO, fontSize: 11, color: '#7aabc8', whiteSpace: 'nowrap' }
 const sUnid  = { fontFamily: MONO, fontSize: 11, color: '#4a6a88' }
@@ -37,12 +41,27 @@ const Fila = ({ children }) => (
   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>{children}</div>
 )
 
+// Campo de texto con coma decimal. El texto que se está escribiendo es estado SUYO: mientras el
+// usuario teclea «0,» no hay número válido todavía, y convertirlo en 0 a cada pulsación borraría lo
+// que acaba de escribir. Al salir del campo se confirma; si no hay número, vuelve al valor anterior.
+function CampoDecimal({ valor, alCambiar, dec = 2 }) {
+  const [txt, setTxt] = useState(() => textoEs(valor, dec))
+  useEffect(() => { setTxt(textoEs(valor, dec)) }, [valor, dec])
+  return (
+    <input type="text" inputMode="decimal" value={txt}
+      onChange={e => setTxt(e.target.value)}
+      onBlur={() => { const n = numeroEs(txt); if (n != null && n >= 0) alCambiar(n); else setTxt(textoEs(valor, dec)) }}
+      style={sNum} />
+  )
+}
+
 export default function CondicionesSimulacion({
   // periodo (se delega en SelectorPeriodo)
   modo, setModo, years, setYears, desde, setDesde, hasta, setHasta,
   // el resto de condiciones; cada una se pinta solo si llega su setter
   capitalIni, setCapitalIni,
   temporalidad, setTemporalidad,
+  comisiones, setComisiones,
   // La temporalidad que declara la estrategia (su valor por defecto, y el que usa el ranking). Si se
   // pasa y no coincide con la de la simulación, se avisa: se está explorando, no se ha cambiado la
   // estrategia. Sin ese aviso un backtest en semanal sobre una estrategia diaria parece ser la
@@ -75,6 +94,29 @@ export default function CondicionesSimulacion({
         years={years} setYears={setYears}
         desde={desde} setDesde={setDesde}
         hasta={hasta} setHasta={setHasta} />
+
+      {setComisiones && comisiones && (
+        <>
+          <Fila>
+            <span style={sLbl}>Comisión compra</span>
+            <CampoDecimal valor={comisiones.compra}
+              alCambiar={v => setComisiones({ ...comisiones, compra: v })} />
+            <span style={sUnid}>€</span>
+          </Fila>
+          <Fila>
+            <span style={sLbl}>Comisión venta</span>
+            <CampoDecimal valor={comisiones.venta}
+              alCambiar={v => setComisiones({ ...comisiones, venta: v })} />
+            <span style={sUnid}>€</span>
+          </Fila>
+          <Fila>
+            <span style={sLbl}>Comisión por operación</span>
+            <CampoDecimal valor={comisiones.porcentaje} dec={3}
+              alCambiar={v => setComisiones({ ...comisiones, porcentaje: v })} />
+            <span style={sUnid}>%</span>
+          </Fila>
+        </>
+      )}
 
       {setTemporalidad && (
         <Fila>
