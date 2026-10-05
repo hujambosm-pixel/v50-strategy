@@ -585,22 +585,11 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
           {/* ── GRÁFICO ── */}
           {tab==='grafico'&&(
             <div>
-              {sep('Colores de velas')}
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:16}}>
-                {[
-                  ['chart.upColor',   'Vela alcista',  '#00e5a0'],
-                  ['chart.downColor', 'Vela bajista',  '#ff4d6d'],
-                ].map(([key,label,def])=>(
-                  <div key={key} style={{display:'flex',alignItems:'center',gap:8}}>
-                    <input type="color" value={settings[key.split('.')[0]]?.[key.split('.')[1]]||def}
-                      onChange={e=>upd(key,e.target.value)}
-                      style={{width:28,height:28,borderRadius:4,border:'1px solid #1a2d45',
-                        cursor:'pointer',background:'none',padding:1}}/>
-                    <span style={{fontSize:11,color:'#cce0f5'}}>{label}</span>
-                  </div>
-                ))}
-              </div>
-
+              {/* NO HAY «Colores de velas». Se configuraban y no pintaban nada: las velas las
+                  dibujan CandleChart.js y BacktestCharts.js con `#00e5a0` y `#ff4d6d` escritos
+                  a mano, sin leer los ajustes. Igual que «Auto-ajustar al cargar» y «Calidad de
+                  curvas equity», que tambien estaban aqui. Lo que quede guardado en
+                  user_settings o en localStorage se ignora: nadie lo lee. */}
               {/* «Capital por defecto» y «Comisiones por defecto» se han ido: el capital, el
                   periodo y las comisiones se configuran en el panel «Condiciones simulación» de
                   cada pantalla, que es donde se usan, y alli se recuerdan. Lo que hubiera guardado
@@ -659,26 +648,6 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                   El botón ⊡ muestra los últimos N meses. ⊞ muestra todo el periodo del backtest.
                 </div>
               </div>
-              {sep('Visualización')}
-              <label style={{display:'flex',alignItems:'center',gap:8,marginBottom:8,cursor:'pointer'}}>
-                <input type="checkbox"
-                  checked={settings.chart?.autoFitOnLoad??true}
-                  onChange={e=>upd('chart.autoFitOnLoad',e.target.checked)}
-                  style={{accentColor:'#00d4ff',width:13,height:13}}/>
-                <span style={{fontSize:11,color:'#cce0f5'}}>Auto-ajustar al cargar</span>
-              </label>
-
-              {sep('Rendimiento')}
-              {row('Calidad de curvas equity','(más puntos = más lento)',
-                <select value={settings.chart?.equityQuality||'normal'}
-                  onChange={e=>upd('chart.equityQuality',e.target.value)}
-                  style={{background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,
-                    color:'#e2eaf5',fontFamily:MONO,fontSize:12,padding:'6px 10px',width:'100%'}}>
-                  <option value="fast">Rápido (100 pts)</option>
-                  <option value="normal">Normal (300 pts)</option>
-                  <option value="hq">Alta calidad (600 pts)</option>
-                </select>
-              )}
             </div>
           )}
 
