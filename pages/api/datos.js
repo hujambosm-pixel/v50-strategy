@@ -14,8 +14,8 @@ import { normalizaPeriodo, velasCalentamiento, recortaConCalentamiento, posicion
          recortaIndicadores, marcasDelPeriodo } from '../../lib/periodo'
 import { comisionDe, normalizaComisiones, sinComisiones } from '../../lib/comisiones'
 
-const SUPA_URL = process.env.SUPABASE_URL || 'https://uqjngxxbdlquiuhywiuc.supabase.co'
-const SUPA_KEY = process.env.SUPABASE_ANON_KEY || 'sb_publishable_st9QJ3zcQbY5ec-JhxwqXQ_joy3udz3'
+const SUPA_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
+const SUPA_KEY = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
 // ── In-memory price cache (priceOnly mode) — 60s TTL ──────────
 // Shared across requests within the same Vercel function instance.

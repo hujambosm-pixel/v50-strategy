@@ -4,8 +4,8 @@ import { validaCodeJs } from '../../lib/validaCodeJs'
 // pages/api/strategies.js — CRUD de estrategias en Supabase
 // Métodos: GET (list) | POST (create) | PUT (update) | DELETE (soft delete)
 
-const SUPA_URL = process.env.SUPABASE_URL || 'https://uqjngxxbdlquiuhywiuc.supabase.co'
-const SUPA_KEY = process.env.SUPABASE_ANON_KEY || 'sb_publishable_st9QJ3zcQbY5ec-JhxwqXQ_joy3udz3'
+const SUPA_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
+const SUPA_KEY = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 // EL TOKEN VA POR PETICIÓN, NO POR MÓDULO.
 // Antes esto era un `let _reqJwt` de módulo: el handler lo asignaba al entrar y supa() lo leía
 // después de varios await. En un contenedor caliente de Vercel dos peticiones concurrentes comparten
