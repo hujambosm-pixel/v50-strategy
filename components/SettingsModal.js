@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { MONO, pctOf, numeroEs, textoEs } from '../lib/utils'
-import { COMISIONES_DEFECTO, comisionesDeAjustes, comisionesDelRanking } from '../lib/comisiones'
+import { comisionesDelRanking } from '../lib/comisiones'
 import { condicionesDelRanking } from '../lib/condicionesSimulacion'
 import { getSupaUrl, getSupaKey } from '../lib/supabase'
 import { loadSettings, saveSettingsRemote } from '../lib/settings'
@@ -584,8 +584,6 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                 {[
                   ['chart.upColor',   'Vela alcista',  '#00e5a0'],
                   ['chart.downColor', 'Vela bajista',  '#ff4d6d'],
-                  ['chart.emaRColor', 'EMA Rápida',    '#ffd166'],
-                  ['chart.emaLColor', 'EMA Lenta',     '#ff4d6d'],
                 ].map(([key,label,def])=>(
                   <div key={key} style={{display:'flex',alignItems:'center',gap:8}}>
                     <input type="color" value={settings[key.split('.')[0]]?.[key.split('.')[1]]||def}
@@ -597,40 +595,14 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                 ))}
               </div>
 
-              {sep('Capital por defecto')}
-              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:16}}>
-                <span style={{fontFamily:MONO,fontSize:10,color:'#cce0f5',flex:1}}>Capital inicial por defecto para nuevas estrategias</span>
-                <span style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:'#00d4ff',minWidth:54,textAlign:'right'}}>€{(settings.defaultCapital??1000).toLocaleString('es-ES')}</span>
-                <input type="number" min={100} step={100} value={settings.defaultCapital??1000}
-                  onChange={e=>upd('defaultCapital',Number(e.target.value))}
-                  style={{width:90,background:'#080c14',border:'1px solid #1a2d45',color:'#e2eaf5',
-                    fontFamily:MONO,fontSize:11,padding:'4px 6px',borderRadius:4}}/>
-              </div>
-              {sep('Comisiones por defecto')}
+              {/* «Capital por defecto» y «Comisiones por defecto» se han ido: el capital, el
+                  periodo y las comisiones se configuran en el panel «Condiciones simulación» de
+                  cada pantalla, que es donde se usan, y alli se recuerdan. Lo que hubiera guardado
+                  en esos dos ajustes se sigue leyendo como valor inicial la primera vez: ver
+                  condicionesGuardadas en lib/condicionesSimulacion.js. */}
+              {sep('Estrategia por defecto')}
               <div style={{marginBottom:16}}>
                 <div style={{fontSize:10,color:'#5a7a95',marginBottom:8,lineHeight:1.6}}>
-                  Lo que cobra tu bróker. Se aplican a todos los backtests y se pueden cambiar sin tocar esto
-                  en el panel «Condiciones de la simulación» de cada pantalla. Un backtest sin comisiones es
-                  el que miente, así que aquí no hay un cero por defecto.
-                </div>
-                {[{k:'compra',et:'Fija por compra',u:'€',dec:2},
-                  {k:'venta', et:'Fija por venta', u:'€',dec:2},
-                  {k:'porcentaje',et:'Por operación',u:'%',dec:3}].map(c=>(
-                  <div key={c.k} style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
-                    <span style={{fontFamily:MONO,fontSize:10,color:'#cce0f5',flex:1}}>{c.et}</span>
-                    <CampoComision valor={comisionesDeAjustes(settings)[c.k]} dec={c.dec}
-                      alCambiar={v=>upd('comisiones.'+c.k,v)}/>
-                    <span style={{fontFamily:MONO,fontSize:11,color:'#4a6a85',width:12}}>{c.u}</span>
-                  </div>
-                ))}
-                <button onClick={()=>upd('comisiones',{...COMISIONES_DEFECTO})}
-                  style={{fontFamily:MONO,fontSize:10,background:'rgba(0,212,255,0.08)',
-                    border:'1px solid #1a2d45',color:'#8aadcc',padding:'3px 8px',borderRadius:4,cursor:'pointer'}}>
-                  Restaurar 0,36 / 0 / 0
-                </button>
-              </div>
-              {sep('Estrategia por defecto')}
-              <div style={{marginBottom:16}}>                <div style={{fontSize:10,color:'#5a7a95',marginBottom:8,lineHeight:1.6}}>
                   La estrategia seleccionada se cargará automáticamente al abrir la app.
                 </div>
                 <div style={{display:'flex',alignItems:'center',gap:8}}>
@@ -703,7 +675,6 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
               )}
             </div>
           )}
-        </div>
 
           {/* ── WATCHLIST ── */}
           {tab==='watchlist'&&(
@@ -971,30 +942,20 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                       fontFamily:MONO,fontSize:11,padding:'4px 6px',borderRadius:4,textAlign:'right'}}/>
                   <span style={{fontFamily:MONO,fontSize:11,color:'#4a6a85',width:12}}>ops</span>
                 </div>
-                <label style={{display:'flex',alignItems:'center',gap:8,marginBottom:8,cursor:'pointer'}}>
-                  <input type="checkbox" checked={!!settings.ranking?.rankingComisionesPropias}
-                    onChange={e=>upd('ranking.rankingComisionesPropias',e.target.checked)}/>
-                  <span style={{fontFamily:MONO,fontSize:10,color:'#cce0f5'}}>
-                    Usar otras comisiones solo para el ranking
-                  </span>
-                </label>
-                {settings.ranking?.rankingComisionesPropias ? (
-                  [{k:'compra',et:'Fija por compra',u:'€',dec:2},
-                   {k:'venta', et:'Fija por venta', u:'€',dec:2},
-                   {k:'porcentaje',et:'Por operación',u:'%',dec:3}].map(c=>(
-                    <div key={c.k} style={{display:'flex',alignItems:'center',gap:8,marginBottom:8,paddingLeft:22}}>
-                      <span style={{fontFamily:MONO,fontSize:10,color:'#8aadcc',flex:1}}>{c.et}</span>
-                      <CampoComision valor={comisionesDelRanking(settings)[c.k]} dec={c.dec}
-                        alCambiar={v=>upd('ranking.rankingComisiones.'+c.k,v)}/>
-                      <span style={{fontFamily:MONO,fontSize:11,color:'#4a6a85',width:12}}>{c.u}</span>
-                    </div>
-                  ))
-                ) : (
-                  <div style={{fontFamily:MONO,fontSize:10,color:'#5a7a95',paddingLeft:22}}>
-                    Usa las de «Comisiones por defecto»: {(()=>{const c=comisionesDeAjustes(settings)
-                      return textoEs(c.compra)+' € compra · '+textoEs(c.venta)+' € venta · '+textoEs(c.porcentaje,3)+' %'})()}
+                {/* El ranking tiene sus PROPIAS comisiones, sin depender de nada. Antes caian a
+                    «Comisiones por defecto», que ya no existe: el capital, el periodo y las
+                    comisiones de los backtests se configuran en el panel de cada pantalla, y el
+                    ranking no es una pantalla, es una medida comun. */}
+                {[{k:'compra',et:'Comisión fija por compra',u:'€',dec:2},
+                  {k:'venta', et:'Comisión fija por venta', u:'€',dec:2},
+                  {k:'porcentaje',et:'Comisión por operación',u:'%',dec:3}].map(c=>(
+                  <div key={c.k} style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+                    <span style={{fontFamily:MONO,fontSize:10,color:'#cce0f5',flex:1}}>{c.et}</span>
+                    <CampoComision valor={comisionesDelRanking(settings)[c.k]} dec={c.dec}
+                      alCambiar={v=>upd('ranking.rankingComisiones.'+c.k,v)}/>
+                    <span style={{fontFamily:MONO,fontSize:11,color:'#4a6a85',width:12}}>{c.u}</span>
                   </div>
-                )}
+                ))}
                 <div style={{fontFamily:MONO,fontSize:10,color:'#4a6a85',marginTop:10}}>
                   Al cambiar cualquiera de estos valores, el ranking guardado deja de ser comparable:
                   hay que volver a pulsar ↻ Actualizar.
@@ -1206,6 +1167,12 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
               </div>
             </div>
           )}
+        {/* AQUI se cierra el cuerpo con scroll que abre arriba (overflowY + padding). Estaba
+            cerrandose justo despues de la pestaña «Gráfico», asi que Watchlist, Ranking y
+            TradeLog quedaban FUERA: sin su padding y debajo del hueco que dejaba el cuerpo
+            vacio, que se lleva todo el alto con flex:1. De ahi el espacio en blanco de arriba y
+            la maquetacion descolocada de esas tres. */}
+        </div>
         {/* Sin footer: Cancelar/Guardar están arriba, en la fila de pestañas */}
       </div>
     </div>

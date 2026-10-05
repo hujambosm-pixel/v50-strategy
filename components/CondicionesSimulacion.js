@@ -108,7 +108,8 @@ export default function CondicionesSimulacion({
   // estrategia. Sin ese aviso un backtest en semanal sobre una estrategia diaria parece ser la
   // estrategia, que es justo la confusión que este panel viene a quitar.
   temporalidadEstrategia = null,
-  titulo = 'CONDICIONES DE LA SIMULACIÓN', variant = 'mc', claveLs = null,
+  // «CONDICIONES DE LA SIMULACIÓN» no cabe en la barra lateral y se cortaba.
+  titulo = 'CONDICIONES SIMULACIÓN', variant = 'mc', claveLs = null,
 }) {
   const padX = variant === 'panel' ? 10 : 12
   const explorando = !!(temporalidadEstrategia && temporalidad && temporalidadEstrategia !== temporalidad)

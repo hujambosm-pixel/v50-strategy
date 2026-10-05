@@ -13,8 +13,8 @@ import FiltrosPanel from '../components/FiltrosPanel'
 import { rangoDePeriodo, periodoInicial } from '../components/SelectorPeriodo'
 import CondicionesSimulacion from '../components/CondicionesSimulacion'
 import { COMISIONES_DEFECTO, comisionesDeAjustes, comisionesDelRanking } from '../lib/comisiones'
-import { condicionesDelRanking } from '../lib/condicionesSimulacion'
-import { condicionesIniciales, temporalidadDeEstrategia } from '../lib/condicionesSimulacion'
+import { condicionesDelRanking, condicionesGuardadas, conCondiciones, conComisiones } from '../lib/condicionesSimulacion'
+import { temporalidadDeEstrategia } from '../lib/condicionesSimulacion'
 import { supabase } from '../lib/supabaseClient'
 import { fetchConditions, lsGetConds, lsSaveConds, COND_LS_KEY } from '../lib/conditions'
 import CandleChart from '../components/CandleChart'
@@ -962,7 +962,13 @@ export default function Home() {
   // despues (los remotos tardan lo que tarde la red) no se la pisan: el panel es para explorar, y
   // perder lo que acabas de escribir porque ha llegado una respuesta es peor que no cargarla.
   const indComTocadaRef=useRef(false)
-  const setIndComisionesUsuario=(v)=>{indComTocadaRef.current=true;setIndComisiones(v)}
+  // El setter de la comision es COMUN a las dos pantallas y esta mas abajo, con el estado del
+  // multibacktest: escribe los dos, y aqui no puede declararse porque setMcComisiones no existe
+  // todavia.
+  //
+  // ¿Y ha tocado el usuario el capital o el periodo en ESTA sesion? Misma razon que con las
+  // comisiones, y ademas decide QUE se guarda: ver el efecto de guardado.
+  const indCondTocadaRef=useRef(false)
   const [indPeriodMode,setIndPeriodMode]=useState('years') // 'years' | 'range'
   const [indDesde,setIndDesde]=useState(()=>periodoInicial(5).desde)
   const [indHasta,setIndHasta]=useState(()=>periodoInicial(5).hasta)
@@ -1319,7 +1325,15 @@ export default function Home() {
   // estado interno de SelectorPeriodo: son presentacion, y lo que viaja es siempre ISO.
   const [mcComisiones,setMcComisiones]=useState(()=>({...COMISIONES_DEFECTO}))
   const mcComTocadaRef=useRef(false)
-  const setMcComisionesUsuario=(v)=>{mcComTocadaRef.current=true;setMcComisiones(v)}
+  const mcCondTocadaRef=useRef(false)
+  // LAS COMISIONES SON COMUNES A LAS DOS PANTALLAS. Son lo que cobra el broker: no cambian
+  // segun la pantalla desde la que mires. Siguen siendo dos estados porque cada pantalla arma
+  // su peticion con el suyo, pero el unico setter que toca el usuario escribe los dos, asi que
+  // no pueden separarse. Ver lib/condicionesSimulacion.js.
+  const setComisionesUsuario=(v)=>{
+    indComTocadaRef.current=true; mcComTocadaRef.current=true
+    setIndComisiones(v); setMcComisiones(v)
+  }
   const [mcPeriodMode,setMcPeriodMode]=useState('years') // 'years' | 'range'
   const [mcYears,setMcYears]=useState(5)
   const [mcFromDate,setMcFromDate]=useState(()=>periodoInicial(5).desde)
@@ -3730,11 +3744,10 @@ export default function Home() {
     const filt  = def.filters?.market?.[0] || {}
     setEmaR(entry.ma_fast || entry.ma_period || 10)
     setEmaL(entry.ma_slow || 11)
-    // Las condiciones con las que arranca el panel son LAS MISMAS que este codigo leia de la fila
-    // antes de que el panel existiera, para que la primera corrida tras cargar no se mueva.
-    const _cond=condicionesIniciales(s)
-    setYears(_cond.years)
-    setCapitalIni(_cond.capitalIni)
+    // AQUI NO SE TOCAN EL CAPITAL NI EL PERIODO. Son del panel «Condiciones simulación», que los
+    // recuerda entre sesiones: si cargar una estrategia los devolviera a los de su fila, lo que el
+    // usuario hubiera puesto en el panel duraria hasta la siguiente estrategia que abriese.
+    // La temporalidad SI vuelve a ser la de la estrategia, mas abajo: ver setEstrategiaIntervalo.
     setTipoStop(stop.type === 'atr_based' ? 'atr' : stop.type === 'none' ? 'none' : 'tecnico')
     setAtrP(stop.atr_period || 14)
     setAtrM(stop.atr_mult || 1.0)
@@ -5535,12 +5548,16 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
       const s=JSON.parse(localStorage.getItem('v50_settings')||'{}')
       if(s.ui?.defaultLabelMode!=null) setLabelMode(s.ui.defaultLabelMode)
       if(s.ui?.defaultMetricsLayout){ setMetricsLayout(s.ui.defaultMetricsLayout) }
-      if(s.defaultCapital!=null)       setCapitalIni(s.defaultCapital)
-      // Las dos pantallas arrancan con las comisiones de Ajustes. Cambiarlas en un panel NO las
-      // guarda: al recargar vuelven estas. Ver lib/comisiones.js.
-      const _comAj=comisionesDeAjustes(s)
+      // Las condiciones que el usuario dejo puestas en cada panel. Las comisiones son COMUNES a
+      // las dos pantallas; el capital y el periodo, de cada una. Ver lib/condicionesSimulacion.js.
+      const _ci=condicionesGuardadas(s,'ind'), _cm=condicionesGuardadas(s,'mc')
+      const _comAj=comisionesDeAjustes({comisiones:_ci.comisiones})
       if(!indComTocadaRef.current) setIndComisiones({..._comAj})
       if(!mcComTocadaRef.current)  setMcComisiones({..._comAj})
+      setCapitalIni(_ci.capitalIni); setYears(_ci.years); setIndPeriodMode(_ci.modo)
+      if(_ci.desde) setIndDesde(_ci.desde); if(_ci.hasta) setIndHasta(_ci.hasta)
+      setMcCapitalIni(_cm.capitalIni); setMcYears(_cm.years); setMcPeriodMode(_cm.modo)
+      if(_cm.desde) setMcFromDate(_cm.desde); if(_cm.hasta) setMcToDate(_cm.hasta)
     }catch(_){}
     // Restore acknowledged alarms
     try{
@@ -5568,13 +5585,56 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
           // esta en local, la fila remota no la trae y leer `remote` a secas la perderia.
           const _fus=(()=>{try{const l=JSON.parse(localStorage.getItem('v50_settings')||'{}')
             return {...(l&&typeof l==='object'?l:{}),...remote}}catch(_){return remote}})()
-          const _comRe=comisionesDeAjustes(_fus)
+          const _ciR=condicionesGuardadas(_fus,'ind'), _cmR=condicionesGuardadas(_fus,'mc')
+          const _comRe=comisionesDeAjustes({comisiones:_ciR.comisiones})
           if(!indComTocadaRef.current) setIndComisiones({..._comRe})
           if(!mcComTocadaRef.current)  setMcComisiones({..._comRe})
+          // Lo mismo que con las comisiones: si el usuario ya ha tocado el panel en esta sesion,
+          // una respuesta de red que llega tarde no se lo pisa.
+          if(!indCondTocadaRef.current){
+            setCapitalIni(_ciR.capitalIni); setYears(_ciR.years); setIndPeriodMode(_ciR.modo)
+            if(_ciR.desde) setIndDesde(_ciR.desde); if(_ciR.hasta) setIndHasta(_ciR.hasta)
+          }
+          if(!mcCondTocadaRef.current){
+            setMcCapitalIni(_cmR.capitalIni); setMcYears(_cmR.years); setMcPeriodMode(_cmR.modo)
+            if(_cmR.desde) setMcFromDate(_cmR.desde); if(_cmR.hasta) setMcToDate(_cmR.hasta)
+          }
         }catch(_){}
       }
     })
   },[session?.user?.id])
+
+  // GUARDAR LO QUE HAY EN EL PANEL, con el mismo mecanismo que el resto de los ajustes
+  // (localStorage + user_settings via saveSettingsRemote, que escribe los dos).
+  //
+  // SOLO SE ESCRIBE LO QUE EL USUARIO HA TOCADO. Si el panel no se ha tocado no se guarda nada:
+  // guardar en el montaje escribiria los valores por defecto encima de los guardados, porque los
+  // ajustes remotos tardan lo que tarde la red y hasta que llegan el estado son los defectos.
+  // Por lo mismo, cada pantalla se escribe por separado: tocar la comision en el individual no
+  // debe escribir el capital del multibacktest tal y como este en ese momento.
+  //
+  // Y con 800 ms de retardo: sin el, cada tecla del campo del capital seria una peticion.
+  const guardaCondRef=useRef(null)
+  useEffect(()=>{
+    if(!session?.user?.id) return
+    const tocado=indCondTocadaRef.current||mcCondTocadaRef.current||indComTocadaRef.current
+    if(!tocado) return
+    if(guardaCondRef.current) clearTimeout(guardaCondRef.current)
+    guardaCondRef.current=setTimeout(()=>{
+      try{
+        const s=JSON.parse(localStorage.getItem('v50_settings')||'{}')
+        let n=s
+        if(indComTocadaRef.current) n=conComisiones(n,indComisiones)
+        if(indCondTocadaRef.current) n=conCondiciones(n,'ind',{capitalIni:Number(capitalIni),
+          modo:indPeriodMode,years:Number(years),desde:indDesde,hasta:indHasta})
+        if(mcCondTocadaRef.current) n=conCondiciones(n,'mc',{capitalIni:Number(mcCapitalIni),
+          modo:mcPeriodMode,years:Number(mcYears),desde:mcFromDate,hasta:mcToDate})
+        saveSettingsRemote(n)
+      }catch(_){}
+    },800)
+    return()=>{ if(guardaCondRef.current) clearTimeout(guardaCondRef.current) }
+  },[session?.user?.id,capitalIni,years,indPeriodMode,indDesde,indHasta,indComisiones,
+     mcCapitalIni,mcYears,mcPeriodMode,mcFromDate,mcToDate])
 
   // Apply tema font settings per section via <style> injection
   const [temaKey, setTemaKey] = useState(0)
@@ -6002,7 +6062,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.889</title>
+        <title>Trading Simulator V9.890</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6091,7 +6151,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             }} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.889
+            <span className="dot"/>Trading Simulator V9.890
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6295,14 +6355,14 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     D/W de la cabecera sigue persistiendo en `params`, y eso se unifica en el
                     commit siguiente; de momento conviven a proposito. */}
                 <CondicionesSimulacion variant="panel"
-                  modo={indPeriodMode} setModo={setIndPeriodMode}
-                  years={years} setYears={setYears}
-                  desde={indDesde} setDesde={setIndDesde}
-                  hasta={indHasta} setHasta={setIndHasta}
-                  capitalIni={capitalIni} setCapitalIni={setCapitalIni}
+                  modo={indPeriodMode} setModo={v=>{indCondTocadaRef.current=true;setIndPeriodMode(v)}}
+                  years={years} setYears={v=>{indCondTocadaRef.current=true;setYears(v)}}
+                  desde={indDesde} setDesde={v=>{indCondTocadaRef.current=true;setIndDesde(v)}}
+                  hasta={indHasta} setHasta={v=>{indCondTocadaRef.current=true;setIndHasta(v)}}
+                  capitalIni={capitalIni} setCapitalIni={v=>{indCondTocadaRef.current=true;setCapitalIni(v)}}
                   temporalidad={estrategiaIntervalo} setTemporalidad={setEstrategiaIntervalo}
                   temporalidadEstrategia={temporalidadEstrategia}
-                  comisiones={indComisiones} setComisiones={setIndComisionesUsuario}
+                  comisiones={indComisiones} setComisiones={setComisionesUsuario}
                   claveLs="v50_cond_abierto_ind"/>
 
                 {/* ── Filtros: mercado (serie externa) y activo (serie del propio símbolo) ── */}
@@ -7221,13 +7281,13 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     La temporalidad pasa por cambiarMcIntervalo, que ademas resetea la ventana RS al
                     default de su timeframe: llamar a setMcIntervalo a pelo se lo saltaria. */}
                 <CondicionesSimulacion
-                  modo={mcPeriodMode} setModo={setMcPeriodMode}
-                  years={mcYears} setYears={setMcYears}
-                  desde={mcFromDate} setDesde={setMcFromDate}
-                  hasta={mcToDate} setHasta={setMcToDate}
-                  capitalIni={mcCapitalIni} setCapitalIni={setMcCapitalIni}
+                  modo={mcPeriodMode} setModo={v=>{mcCondTocadaRef.current=true;setMcPeriodMode(v)}}
+                  years={mcYears} setYears={v=>{mcCondTocadaRef.current=true;setMcYears(v)}}
+                  desde={mcFromDate} setDesde={v=>{mcCondTocadaRef.current=true;setMcFromDate(v)}}
+                  hasta={mcToDate} setHasta={v=>{mcCondTocadaRef.current=true;setMcToDate(v)}}
+                  capitalIni={mcCapitalIni} setCapitalIni={v=>{mcCondTocadaRef.current=true;setMcCapitalIni(v)}}
                   temporalidad={mcIntervalo} setTemporalidad={cambiarMcIntervalo}
-                  comisiones={mcComisiones} setComisiones={setMcComisionesUsuario}
+                  comisiones={mcComisiones} setComisiones={setComisionesUsuario}
                   claveLs="v50_cond_abierto_mc"/>
 
                 {/* FILTROS — colapsables (MC) */}
