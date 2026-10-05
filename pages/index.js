@@ -15,6 +15,7 @@ import CondicionesSimulacion from '../components/CondicionesSimulacion'
 import { COMISIONES_DEFECTO, comisionesDeAjustes, comisionesDelRanking } from '../lib/comisiones'
 import { condicionesDelRanking, condicionesGuardadas, conCondiciones, conComisiones } from '../lib/condicionesSimulacion'
 import { temporalidadDeEstrategia } from '../lib/condicionesSimulacion'
+import { filtrosDelRanking, tandaDelRanking, diasToleranciaDelRanking, activosPendientes, enTandas } from '../lib/rankingRecalculo'
 import { supabase } from '../lib/supabaseClient'
 import { fetchConditions, lsGetConds, lsSaveConds, COND_LS_KEY } from '../lib/conditions'
 import CandleChart from '../components/CandleChart'
@@ -416,7 +417,7 @@ const _sinRobustez = (b)=>b.map(r=>{const o={...r}; delete o.robustez_pct; retur
 // Igual que _robustezOk, para las cinco columnas de las condiciones: si la base de datos todavia no
 // las tiene, el upsert las quita y lo recuerda. Asi la app funciona antes y despues del ALTER.
 let _condOk = true
-const _COND_COLS = ['intervalo','periodo_desde','periodo_hasta','capital_ini','comisiones']
+const _COND_COLS = ['intervalo','periodo_desde','periodo_hasta','capital_ini','comisiones','filtros']
 const _sinCond = (b)=>b.map(r=>{const o={...r}; for(const k of _COND_COLS) delete o[k]; return o})
 
 // -99 es el CENTINELA de "CAGR no calculable" (capital final ≤ 0), no una rentabilidad real.
@@ -439,7 +440,11 @@ async function upsertMetricsRemote(metricsMap, stratId, cond) {
     profit_simple: m.profit??null, updated_at: new Date().toISOString(),
     ...(cond ? { intervalo: cond.intervalo??null, periodo_desde: cond.desde??null,
                  periodo_hasta: cond.hasta??null, capital_ini: cond.capitalIni??null,
-                 comisiones: cond.comisiones??null } : {}),
+                 comisiones: cond.comisiones??null,
+                 // Lista, no null: `null` significa «no se sabe» —las 5.792 filas de antes— y
+                 // la lista vacia significa «sin filtros», que es lo que mide el ranking por
+                 // defecto. Son cosas distintas y la deteccion de pendientes las distingue.
+                 filtros: cond.filtros??[] } : {}),
     ...(getUidFromJwt() ? { user_id: getUidFromJwt() } : {})
   }))
   const post = (batch) => fetch(`${getSupaUrl()}/rest/v1/ranking_results?on_conflict=symbol,strategy_id`, {
@@ -455,7 +460,7 @@ async function upsertMetricsRemote(metricsMap, stratId, cond) {
       const text = await res.text()
       // Mismo apaño que con robustez_pct: si las columnas de las condiciones todavia no existen en
       // la base de datos, se reintenta sin ellas. Asi la app funciona antes y despues del ALTER.
-      if (_condOk && /intervalo|periodo_desde|periodo_hasta|capital_ini|comisiones/.test(text)) {
+      if (_condOk && /intervalo|periodo_desde|periodo_hasta|capital_ini|comisiones|filtros/.test(text)) {
         _condOk = false
         res = await post(_sinCond(_robustezOk ? batch : _sinRobustez(batch)))
         if (res && !res.ok) console.error('[UPSERT-METRICS ERROR]', res.status, await res.text())
@@ -4206,10 +4211,14 @@ export default function Home() {
     const _rkCom=comisionesDelRanking(sett)
     const _rkPer=rangoDePeriodo({modo:'years',years:_rk.years})
     const minTrades=_rk.minTrades
+    // LOS FILTROS SON LOS DEL RANKING, NO LOS DE LA PANTALLA. Antes iba `filtrosBackend`: con
+    // `indiceEma` encendido para explorar, todo el ranking salia filtrado, y la fila no guardaba
+    // con que. Por defecto el ranking no lleva ninguno. Ver lib/rankingRecalculo.js.
+    const _rkFlt=filtrosDelRanking(sett)
     // Las condiciones que se guardan en cada fila de ranking_results. La temporalidad se añade
     // por estrategia, que es lo unico que no es comun.
     const _rkCond=(intervalo)=>({intervalo, desde:_rkPer.fromDate, hasta:_rkPer.toDate,
-      capitalIni:_rk.capitalIni, comisiones:_rkCom})
+      capitalIni:_rk.capitalIni, comisiones:_rkCom, filtros:_rkFlt})
     const BATCH=4
 
     // ── Fase 1: Métricas de la estrategia activa ──
@@ -4250,7 +4259,7 @@ export default function Home() {
             // La temporalidad es la que DECLARA la estrategia, no la de la simulacion en curso: si
             // estas explorando en semanal, el ranking no debe medirse en semanal.
             body:JSON.stringify({simbolo:sym,strategyId:currentStratId,capital_ini:_rk.capitalIni,
-              allocation_pct:100,filtros:filtrosBackend,intervalo:_ivActiva,
+              allocation_pct:100,filtros:_rkFlt,intervalo:_ivActiva,
               fromDate:_rkPer.fromDate,toDate:_rkPer.toDate,comisiones:_rkCom})})
           const json=await res.json()
           if(!res.ok||!json.trades?.length){
@@ -4313,7 +4322,7 @@ export default function Home() {
               try{
                 const res=await apiFetch('/api/datos',{method:'POST',headers:{'Content-Type':'application/json'},
                   body:JSON.stringify({simbolo:sym,strategyId:stratId,capital_ini:_rk.capitalIni,
-                    allocation_pct:100,filtros:filtrosBackend,intervalo:stratIntv,
+                    allocation_pct:100,filtros:_rkFlt,intervalo:stratIntv,
                     fromDate:_rkPer.fromDate,toDate:_rkPer.toDate,comisiones:_rkCom})})
                 const json=await res.json()
                 if(!res.ok||!json.trades?.length){
@@ -4394,8 +4403,86 @@ export default function Home() {
     }
     return { ok: true, topMetricsMap: {}, activeMetricsMap: activeMetrics }
 
-  },[watchlist,years,capitalIni,currentStratId,stratName,filtrosBackend,estrategiaIntervalo,strategies,refreshBestStratPerSymbol,logUpdateError])
+    // Ni `filtrosBackend` ni `years`/`capitalIni`: el ranking no depende de nada de la pantalla.
+    // Sus condiciones salen de los Ajustes, que se leen de localStorage en cada corrida.
+  },[watchlist,currentStratId,stratName,strategies,refreshBestStratPerSymbol,logUpdateError])
 
+
+  // ── RECALCULO POR TANDAS ─────────────────────────────────────────────────────────────────
+  //
+  // Recalcular los 163 activos de una vez son 163 x (1 activa + 56 habilitadas) = 9.291 peticiones
+  // en una sola corrida. Si se corta a la mitad —se cierra la pestaña, se va la red— no queda
+  // rastro de por donde iba, y lo peor: `calcMetricas` BORRA las filas de los activos que va a
+  // recalcular antes de empezar, asi que una interrupcion deja activos sin ninguna fila.
+  //
+  // Por eso va en tandas. Cada tanda es una corrida completa de la cadena de tres fases del boton
+  // ↻ Actualizar sobre un trozo de la watchlist, y entre tandas queda todo guardado y consistente.
+  // Detener solo se mira ENTRE tandas, nunca a mitad: parar dentro de una dejaria justo el agujero
+  // que esto viene a evitar.
+  const [recalc,setRecalc]=useState(null)   // null = en reposo
+  const recalcPararRef=useRef(false)
+  const recalcularPorTandas=useCallback(async(modo)=>{
+    if(recalc) return
+    if(!currentStratId){ alert('Selecciona una estrategia activa antes de recalcular'); return }
+    const sett=(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')}catch(_){return {}}})()
+    const tam=tandaDelRanking(sett)
+    let activos=watchlist||[]
+    if(modo==='pendientes'){
+      // QUE ES «PENDIENTE»: un activo sin ninguna fila calculada con las condiciones de HOY. Se
+      // lee ranking_results y se compara columna a columna; la temporalidad de cada fila tiene que
+      // ser la que declara SU estrategia, asi que se pasa el mapa. Ver lib/rankingRecalculo.js.
+      setRecalc({modo,fase:'leyendo',tanda:0,tandas:0,hechos:0,total:0,parando:false})
+      let filas=[]
+      try{
+        // PAGINADO en bloques de 1.000. Supabase corta en max_rows=1000 e IGNORA un `limit`
+        // mayor, asi que pedir 20.000 devuelve 1.000 de las 5.792 SIN avisar — y entonces casi
+        // todo saldria «pendiente» por no haberlo leido. Mismo patron que
+        // loadAllRankingsWithMetrics en components/WatchlistManager.js.
+        const PAG=1000
+        const SEL='symbol,strategy_id,intervalo,periodo_desde,periodo_hasta,capital_ini,comisiones,filtros'
+        for(let off=0;;off+=PAG){
+          const res=await fetch(`${getSupaUrl()}/rest/v1/ranking_results?select=${SEL}&offset=${off}&limit=${PAG}`,{headers:getSupaH()})
+          if(!res.ok){ setRecalc(null); alert('No se pudo leer el ranking guardado ('+res.status+')'); return }
+          const pag=await res.json()
+          if(!Array.isArray(pag)||!pag.length) break
+          filas=filas.concat(pag)
+          if(pag.length<PAG) break
+        }
+      }catch(e){ setRecalc(null); alert('No se pudo leer el ranking guardado: '+(e?.message||'error')); return }
+      const _ivPorId=new Map((strategies||[]).filter(s=>s.enabled!==false).map(s=>[s.id,temporalidadDeEstrategia(s)]))
+      const _rk=condicionesDelRanking(sett)
+      const cond={years:_rk.years,capitalIni:_rk.capitalIni,
+        comisiones:comisionesDelRanking(sett),filtros:filtrosDelRanking(sett)}
+      const pend=new Set(activosPendientes(filas,(watchlist||[]).map(w=>w.symbol),cond,{
+        diasTolerancia:diasToleranciaDelRanking(sett),
+        intervaloDe:(id)=>_ivPorId.has(id)?_ivPorId.get(id):null,
+      }).map(s=>(s||'').toUpperCase()))
+      activos=(watchlist||[]).filter(w=>pend.has((w.symbol||'').toUpperCase()))
+      if(!activos.length){ setRecalc(null); alert('No hay pendientes: todos los activos estan calculados con las condiciones actuales.'); return }
+    }
+    const tandas=enTandas(activos,tam)
+    recalcPararRef.current=false
+    autoRefreshTriggered.current=true   // igual que onDisableAutoRefresh: no colisionar con el de scores
+    updateErrorsRef.current=[]
+    let hechos=0, detenido=false
+    for(let t=0;t<tandas.length;t++){
+      const lote=tandas[t]
+      setRecalc({modo,fase:'calculando',tanda:t+1,tandas:tandas.length,hechos,total:activos.length,
+        enTanda:0,tandaTam:lote.length,parando:recalcPararRef.current})
+      try{
+        const r1=await calcMetricas(lote)
+        const r2=await calcScoreMetricas(lote,r1?.topMetricsMap??null,r1?.activeMetricsMap??null)
+        await calcScoreMetSen(lote,r2?.activeScoreMap??null,r2?.topScoreMap??null,r1?.topMetricsMap??null)
+        await refreshWlData()
+      }catch(e){ console.error('[recalculo] tanda',t+1,e) }
+      hechos+=lote.length
+      // Detener se mira AQUI, con la tanda ya terminada y guardada.
+      if(recalcPararRef.current&&t<tandas.length-1){ detenido=true; break }
+    }
+    const conIncidencias=new Set((updateErrorsRef.current||[]).map(e=>e.symbol).filter(Boolean)).size
+    setRecalc({modo,fase:'hecho',tanda:tandas.length,tandas:tandas.length,hechos,total:activos.length,
+      detenido,incidencias:conIncidencias,parando:false})
+  },[recalc,watchlist,strategies,currentStratId,calcMetricas,calcScoreMetricas,calcScoreMetSen,refreshWlData])
   // ── Borrar scores (score_historico + score_completo) de símbolos seleccionados ──
   const deleteScores = useCallback(async (symbols) => {
     if (!symbols?.length) return
@@ -6062,7 +6149,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.890</title>
+        <title>Trading Simulator V9.891</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6151,7 +6238,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             }} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.890
+            <span className="dot"/>Trading Simulator V9.891
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -7933,6 +8020,10 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 onCalcScoreMetricas={calcScoreMetricas}
                 onCalcScoreMetSen={calcScoreMetSen}
                 onCalcMetricas={calcMetricas}
+                recalc={recalc}
+                onRecalcular={recalcularPorTandas}
+                onRecalcParar={()=>{recalcPararRef.current=true;setRecalc(r=>r?{...r,parando:true}:r)}}
+                onRecalcCerrar={()=>setRecalc(null)}
                 rankingRunning={rankingRunning}
                 rankingProgress={rankingProgress}
                 rankingStratName={rankingStratName}

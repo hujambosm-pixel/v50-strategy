@@ -2,6 +2,8 @@ import { useState, useRef, useEffect } from 'react'
 import { MONO, pctOf, numeroEs, textoEs } from '../lib/utils'
 import { comisionesDelRanking } from '../lib/comisiones'
 import { condicionesDelRanking } from '../lib/condicionesSimulacion'
+import { filtrosDelRanking, tandaDelRanking, diasToleranciaDelRanking } from '../lib/rankingRecalculo'
+import FiltrosPanel from './FiltrosPanel'
 import { getSupaUrl, getSupaKey } from '../lib/supabase'
 import { loadSettings, saveSettingsRemote } from '../lib/settings'
 import { fetchConditions, saveCondition, deleteCondition, groqParseCondition, lsGetConds, lsSaveConds } from '../lib/conditions'
@@ -14,6 +16,10 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
   const [dirty, setDirty] = useState(false)
   // ── Visor de distribución (pestaña Ranking) — bajo demanda, no altera ningún cálculo ──
   const [distrib, setDistrib] = useState(null)   // null = colapsado
+  // Plegado de los dos paneles de filtros del ranking. Abiertos: si los has desplegado es
+  // porque quieres verlos, y aqui no hay sitio donde se estorben.
+  const [fltRankOpen, setFltRankOpen] = useState(true)
+  const [fltRankActOpen, setFltRankActOpen] = useState(true)
   // Percentiles reales de las cuatro métricas del score en las DOS poblaciones que ordenan el
   // watchlist: la estrategia ACTIVA de cada activo y su TOP estrategia (~160 filas cada una).
   // Filtrado: se descartan los null y, en cagr, el centinela -99 ("no calculable"),
@@ -956,6 +962,53 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                     <span style={{fontFamily:MONO,fontSize:11,color:'#4a6a85',width:12}}>{c.u}</span>
                   </div>
                 ))}
+                {/* ── Filtros del ranking ── */}
+                {/* Por defecto NINGUNO: el ranking usaba los de la pantalla, asi que bastaba
+                    tener indiceEma encendido para explorar y todo el ranking salia filtrado.
+                    Y un filtro de mercado no resta lo mismo a todas las estrategias, asi que
+                    deja de ser una condicion comun. Ver lib/rankingRecalculo.js. */}
+                <label style={{display:'flex',alignItems:'center',gap:8,marginTop:12,marginBottom:4,cursor:'pointer'}}>
+                  <input type="checkbox" checked={!!settings.ranking?.rankingFiltrosPropios}
+                    onChange={e=>upd('ranking.rankingFiltrosPropios',e.target.checked)}
+                    style={{accentColor:'#00d4ff',width:13,height:13}}/>
+                  <span style={{fontFamily:MONO,fontSize:10,color:'#cce0f5'}}>Usar filtros propios en el ranking</span>
+                </label>
+                <div style={{fontFamily:MONO,fontSize:10,color:'#5a7a95',paddingLeft:21,marginBottom:8}}>
+                  {settings.ranking?.rankingFiltrosPropios
+                    ? 'Solo estos. Los de la pantalla no entran en el ranking.'
+                    : 'El ranking mide SIN filtros. Los de la pantalla no entran.'}
+                </div>
+                {settings.ranking?.rankingFiltrosPropios&&(
+                  <div style={{border:'1px solid #1a2d45',borderRadius:4,marginBottom:10,background:'#080c14'}}>
+                    <FiltrosPanel ambito="mercado" titulo="FILTROS DE MERCADO (RANKING)" variant="mc"
+                      filtros={filtrosDelRanking(settings)}
+                      setFiltros={f=>upd('ranking.rankingFiltros',typeof f==='function'?f(filtrosDelRanking(settings)):f)}
+                      open={fltRankOpen} setOpen={setFltRankOpen}/>
+                    <FiltrosPanel ambito="activo" titulo="FILTROS DEL ACTIVO (RANKING)" variant="mc"
+                      filtros={filtrosDelRanking(settings)}
+                      setFiltros={f=>upd('ranking.rankingFiltros',typeof f==='function'?f(filtrosDelRanking(settings)):f)}
+                      open={fltRankActOpen} setOpen={setFltRankActOpen}/>
+                  </div>
+                )}
+                {/* ── Recalculo por tandas ── */}
+                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+                  <span title="El recálculo completo recorre toda la watchlist en tandas de este tamaño, una tras otra. Tandas pequeñas = más puntos donde detener sin perder trabajo." style={{fontFamily:MONO,fontSize:10,color:'#cce0f5',flex:1,cursor:'help'}}>Activos por tanda (recálculo)</span>
+                  <input type="number" min={1} max={200} step={1}
+                    value={tandaDelRanking(settings)}
+                    onChange={e=>upd('ranking.rankingTandaTam',Number(e.target.value))}
+                    style={{width:90,background:'#080c14',border:'1px solid #1a2d45',color:'#e2eaf5',
+                      fontFamily:MONO,fontSize:11,padding:'4px 6px',borderRadius:4,textAlign:'right'}}/>
+                  <span style={{fontFamily:MONO,fontSize:11,color:'#4a6a85',width:12}}>act</span>
+                </div>
+                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+                  <span title="«Recalcular pendientes» mira el periodo guardado en cada fila. Como el periodo se calcula desde HOY, una fila de ayer trae el periodo de ayer: este es el desfase que se tolera antes de considerarla pendiente." style={{fontFamily:MONO,fontSize:10,color:'#cce0f5',flex:1,cursor:'help'}}>Desfase tolerado (pendientes)</span>
+                  <input type="number" min={0} max={365} step={1}
+                    value={diasToleranciaDelRanking(settings)}
+                    onChange={e=>upd('ranking.rankingPendientesDias',Number(e.target.value))}
+                    style={{width:90,background:'#080c14',border:'1px solid #1a2d45',color:'#e2eaf5',
+                      fontFamily:MONO,fontSize:11,padding:'4px 6px',borderRadius:4,textAlign:'right'}}/>
+                  <span style={{fontFamily:MONO,fontSize:11,color:'#4a6a85',width:12}}>d</span>
+                </div>
                 <div style={{fontFamily:MONO,fontSize:10,color:'#4a6a85',marginTop:10}}>
                   Al cambiar cualquiera de estos valores, el ranking guardado deja de ser comparable:
                   hay que volver a pulsar ↻ Actualizar.

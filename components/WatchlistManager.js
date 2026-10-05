@@ -144,6 +144,11 @@ export default function WatchlistManager({
   onCalcScoreMetricas,   // solo score_historico (activa + top)
   onCalcScoreMetSen,     // solo score_completo  (activa + top)
   onCalcMetricas,        // solo métricas: CAGR, Profit, Win%, MaxDD, Ops
+  // Recalculo por tandas de TODA la watchlist (pages/index.js: recalcularPorTandas)
+  recalc,                // null = en reposo; si no, {modo,fase,tanda,tandas,hechos,total,…}
+  onRecalcular,          // ('todo'|'pendientes') => void
+  onRecalcParar,         // detener AL TERMINAR la tanda en curso
+  onRecalcCerrar,        // descartar el resumen final
   // Ranking
   onClearRanking,
   hasRanking,
@@ -206,6 +211,7 @@ export default function WatchlistManager({
   const [renameValue, setRenameValue]     = useState('')
   const [listOpLoading, setListOpLoading] = useState(false)
   const [calcStep, setCalcStep]                    = useState(null)  // null | 1|2|3 (fase encadenada del botón ↻ Actualizar)
+  const [recalcMenu, setRecalcMenu]                = useState(false) // desplegable de ⟳ Recalcular
   const [errorModal, setErrorModal]                = useState(null)  // null | { rows:[], sinMet:[], global:[], symConErrores, symSinMet, symTotal }
   const [metricsView, setMetricsView]             = useState('top') // 'active' | 'top'
   const [rankingDoneFlash, setRankingDoneFlash]   = useState(false)
@@ -217,6 +223,7 @@ export default function WatchlistManager({
   const prevTopStratRunning = useRef(false)
   const addDropRef      = useRef(null)
   const listFilterRef   = useRef(null)
+  const recalcRef       = useRef(null)
   const headerScrollRef = useRef(null)
   const bodyScrollRef   = useRef(null)
 
@@ -268,6 +275,7 @@ export default function WatchlistManager({
         setDropdownMode(null)
         setNewListName('')
       }
+      if (recalcRef.current && !recalcRef.current.contains(e.target)) setRecalcMenu(false)
     }
     document.addEventListener('mousedown', h)
     return () => document.removeEventListener('mousedown', h)
@@ -1146,6 +1154,115 @@ export default function WatchlistManager({
               return `⟳ ${calcStep}/3${cnt ? ` · ${cnt}` : ''}`
             })() : '↻ Actualizar'}
           </button>
+          {/* ── Recalculo por tandas ── */}
+          {/* Al lado de ↻ Actualizar y no en una pantalla propia: es la MISMA cadena de tres
+              fases, sobre toda la watchlist en vez de sobre lo seleccionado. Lo unico que cambia
+              es que va por tandas y se puede detener. Ver recalcularPorTandas en pages/index.js. */}
+          <div ref={recalcRef} style={{ position: 'relative', flexShrink: 0 }}>
+            <button
+              disabled={!!calcStep || !!recalc}
+              onClick={() => setRecalcMenu(o => !o)}
+              title="Recalcula el ranking de TODA la watchlist, en tandas, con progreso y sin perder lo ya hecho si lo detienes"
+              style={{
+                background: recalc ? 'rgba(0,212,255,0.18)' : 'rgba(26,107,58,0.10)',
+                border: `1px solid ${recalc ? '#00d4ff' : '#1a6b3a'}`,
+                color: recalc ? '#00d4ff' : '#1a6b3a',
+                fontFamily: MONO, fontSize: 11, fontWeight: 600,
+                padding: '5px 10px', borderRadius: 5,
+                cursor: (calcStep || recalc) ? 'not-allowed' : 'pointer',
+                flexShrink: 0, whiteSpace: 'nowrap',
+              }}>
+              {recalc
+                ? (recalc.fase === 'leyendo' ? '⟳ Buscando pendientes…'
+                  : recalc.fase === 'hecho' ? (recalc.detenido ? '⏸ Detenido' : '✓ Recálculo hecho')
+                  : `⟳ tanda ${recalc.tanda} de ${recalc.tandas}`)
+                : '⟳ Recalcular ▾'}
+            </button>
+            {recalcMenu && !recalc && (
+              <div style={{
+                position: 'absolute', top: 'calc(100% + 4px)', right: 0, zIndex: 60,
+                background: '#0b1623', border: `1px solid ${P.borderStrong}`, borderRadius: 6,
+                minWidth: 290, padding: 6, boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
+              }}>
+                {[
+                  ['todo', 'Recalcular todo el ranking',
+                    `Las ${watchlist.length} de la watchlist, en tandas. Borra y recalcula.`],
+                  ['pendientes', 'Recalcular pendientes',
+                    'Solo los que no están calculados con las condiciones de ahora. Para reanudar.'],
+                ].map(([modo, et, ayuda]) => (
+                  <div key={modo} onClick={() => { setRecalcMenu(false); onRecalcular?.(modo) }}
+                    style={{ padding: '7px 9px', borderRadius: 4, cursor: 'pointer' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,212,255,0.08)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                    <div style={{ fontFamily: MONO, fontSize: 11, color: '#cce0f5', fontWeight: 600 }}>{et}</div>
+                    <div style={{ fontFamily: MONO, fontSize: 9, color: '#5a7a95', marginTop: 2, lineHeight: 1.45 }}>{ayuda}</div>
+                  </div>
+                ))}
+                <div style={{ fontFamily: MONO, fontSize: 9, color: '#4a6a85', padding: '6px 9px 2px', lineHeight: 1.45, borderTop: `1px solid ${P.border}`, marginTop: 4 }}>
+                  Mide con las condiciones de Ajustes → Ranking, no con las de la pantalla.
+                </div>
+              </div>
+            )}
+            {recalc && recalc.fase !== 'hecho' && (
+              <div style={{
+                position: 'absolute', top: 'calc(100% + 4px)', right: 0, zIndex: 60,
+                background: '#0b1623', border: '1px solid #00d4ff', borderRadius: 6,
+                minWidth: 290, padding: '8px 10px', boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
+              }}>
+                <div style={{ fontFamily: MONO, fontSize: 11, color: '#cce0f5' }}>
+                  {recalc.fase === 'leyendo'
+                    ? 'Leyendo el ranking guardado…'
+                    : `tanda ${recalc.tanda} de ${recalc.tandas} · activo ${rankingProgress?.done ?? 0} de ${rankingProgress?.total ?? recalc.tandaTam ?? 0}`}
+                </div>
+                {recalc.fase !== 'leyendo' && (
+                  <div style={{ fontFamily: MONO, fontSize: 9, color: '#5a7a95', marginTop: 3 }}>
+                    {recalc.hechos} de {recalc.total} activos terminados
+                    {topStratRunning && topStratProgress?.total ? ` · estrategia ${topStratProgress.current || 0}/${topStratProgress.total}` : ''}
+                  </div>
+                )}
+                {recalc.parando
+                  ? <div style={{ fontFamily: MONO, fontSize: 10, color: '#f0c040', marginTop: 6 }}>
+                      Se detendrá al terminar esta tanda.
+                    </div>
+                  : <button onClick={() => onRecalcParar?.()}
+                      title="Termina la tanda en curso y para. Nunca corta a mitad de tanda: eso dejaría activos sin filas."
+                      style={{ marginTop: 6, background: 'transparent', border: '1px solid #8b3030',
+                        color: '#c05050', fontFamily: MONO, fontSize: 10, padding: '4px 10px',
+                        borderRadius: 4, cursor: 'pointer' }}>
+                      ⏸ Detener al terminar la tanda
+                    </button>}
+              </div>
+            )}
+            {recalc && recalc.fase === 'hecho' && (
+              <div style={{
+                position: 'absolute', top: 'calc(100% + 4px)', right: 0, zIndex: 60,
+                background: '#0b1623', border: `1px solid ${recalc.detenido ? '#f0c040' : '#1a6b3a'}`,
+                borderRadius: 6, minWidth: 290, padding: '8px 10px', boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
+              }}>
+                <div style={{ fontFamily: MONO, fontSize: 11, color: '#cce0f5' }}>
+                  {recalc.detenido
+                    ? `Detenido tras la tanda ${recalc.tanda}: ${recalc.hechos} de ${recalc.total} activos.`
+                    : `${recalc.hechos} activos recalculados en ${recalc.tandas} tanda${recalc.tandas === 1 ? '' : 's'}.`}
+                </div>
+                {!!recalc.incidencias && (
+                  <div style={{ fontFamily: MONO, fontSize: 9, color: '#f0c040', marginTop: 3 }}>
+                    {recalc.incidencias} activo{recalc.incidencias === 1 ? '' : 's'} con incidencias.
+                  </div>
+                )}
+                {recalc.detenido && (
+                  <div style={{ fontFamily: MONO, fontSize: 9, color: '#5a7a95', marginTop: 3, lineHeight: 1.45 }}>
+                    Lo que falta sigue ahí: «Recalcular pendientes» lo reanuda.
+                  </div>
+                )}
+                <button onClick={() => onRecalcCerrar?.()}
+                  style={{ marginTop: 6, background: 'transparent', border: `1px solid ${P.borderStrong}`,
+                    color: '#7a9bc0', fontFamily: MONO, fontSize: 10, padding: '4px 10px',
+                    borderRadius: 4, cursor: 'pointer' }}>
+                  Cerrar
+                </button>
+              </div>
+            )}
+          </div>
           <button onClick={onClose}
             title="Cerrar el panel de gestión y volver a la vista del gráfico"
             style={{
