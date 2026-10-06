@@ -9,10 +9,11 @@
 // el backtest —la descarga, el sandbox y los alineados—, de modo que no puede divergir de él. Si el motor
 // cambia, cambia para los dos a la vez.
 import { fetchData, fetchDataConMotivo, runCodeJsAsset, buildAlignedCloses, buildAlignedWeekly, calcEMA } from './multibacktest'
+import { marcaBloqueadas } from '../../lib/graficoEstrategia'
 import { velasCalentamiento } from '../../lib/periodo'
 import { exigeAuth } from '../../lib/verificaJwt'
 import { normalizaFiltrosEntrada, hayFiltrosActivos, clavesAuxiliares, construirFiltroActivoMap,
-         requiereSemanalDelActivo, proyectarSemanal, fuerzaFiltrosSemanales } from '../../lib/filtros'
+         requiereSemanalDelActivo, proyectarSemanal, fuerzaFiltrosSemanales, motivosDeBloqueo } from '../../lib/filtros'
 
 const SUPA_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPA_KEY = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -193,14 +194,19 @@ export default async function handler(req, res) {
       const alineado = (src, semanal, periodo) => semanal
         ? buildAlignedWeekly(src, assetDates, periodo)
         : (() => { const closes = buildAlignedCloses(src, assetDates); return { closes, ema: calcEMA(closes, periodo) } })()
-      const filtroActivoMap = construirFiltroActivoMap(filtrosLista, {
+      const optsFiltro = {
         assetBars: barrasConCal, assetDates, alineado,
         assetSymbol: symbol,
         assetInterval: esSemanal ? 'semanal' : 'diario',
         resolveMercado: (ticker, semanal) => resolveFilterData(ticker, semanal ? '1wk' : '1d'),
         resolveSemanalActivo: () => semanalActivo,
-      })
+      }
+      const filtroActivoMap = construirFiltroActivoMap(filtrosLista, optsFiltro)
       filterZones = zonasDeMapa(barras, filtroActivoMap)
+      // Las órdenes de `grafico` cuya entrada no permite el filtro, como bloqueadas: la misma regla con la
+      // que el backtest descarta esas operaciones (entradaAlCierre como en multibacktest).
+      if (grafico) marcaBloqueadas(grafico, { filtroActivoMap, assetDates,
+        entradaAlCierre: effectiveCfg?.entradaAlCierre === true, motivos: motivosDeBloqueo(filtrosLista, optsFiltro) })
     }
 
     paso = 'convertir series'

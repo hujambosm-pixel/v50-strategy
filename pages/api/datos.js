@@ -7,13 +7,13 @@ import { ajustaPreciosAVela, cuentaAjustados } from '../../lib/precioEnVela'
 import { ddPctDeOperacion, indicePorFecha } from '../../lib/ddOperacion'
 import { filtraPorEntrada } from '../../lib/filtroEntrada'
 import { normalizaFiltrosEntrada, hayFiltrosActivos, clavesAuxiliares, construirFiltroActivoMap, filtrosActivos,
-         requiereSemanalDelActivo, proyectarSemanal, fuerzaFiltrosSemanales } from '../../lib/filtros'
+         requiereSemanalDelActivo, proyectarSemanal, fuerzaFiltrosSemanales, motivosDeBloqueo } from '../../lib/filtros'
 import { semanalesDesdeDiarias } from '../../lib/velasSemanales'
 import { marcaDiariaEnCurso, semanaEnCurso, soloCerradas } from '../../lib/sesion'
 import { normalizaPeriodo, velasCalentamiento, recortaConCalentamiento, posicionesHeredadas,
          recortaIndicadores, marcasDelPeriodo } from '../../lib/periodo'
 import { comisionDe, normalizaComisiones, sinComisiones } from '../../lib/comisiones'
-import { normalizaGrafico } from '../../lib/graficoEstrategia'
+import { normalizaGrafico, marcaBloqueadas } from '../../lib/graficoEstrategia'
 
 const SUPA_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPA_KEY = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -477,6 +477,9 @@ export default async function handler(req, res) {
     // anterior de verdad el primer día, en vez de caer en el fail-open de la primera vela.
     const assetDates = dataConCal.map(d => d.date)
     const filtroActivoMap = {} // date -> boolean (true = entrada permitida)
+    // Las opciones con las que se construye el mapa, guardadas para poder explicar después qué filtro
+    // bloqueaba cada entrada de `grafico` (motivosDeBloqueo), con las mismas series.
+    let _optsFiltro = null
     let filterZonesFromFiltros = []
 
     if (anyFiltroOn) {
@@ -490,7 +493,7 @@ export default async function handler(req, res) {
         ? buildAlignedWeekly(src, assetDates, periodo)
         : (() => { const closes = buildAlignedCloses(src, assetDates); return { closes, ema: calcEMA(closes, periodo) } })()
 
-      Object.assign(filtroActivoMap, construirFiltroActivoMap(filtrosLista, {
+      _optsFiltro = {
         // `dataConCal`, no `data`: un filtro de ambito activo en diario se evalua sobre ESTA serie,
         // y alineada sobre `assetDates` (calentamiento incluido) una serie que empiece en la primera
         // vela del periodo deja la EMA del filtro en null justo donde tenia que estar convergida.
@@ -499,7 +502,8 @@ export default async function handler(req, res) {
         assetInterval: assetInterval === 'w' ? 'semanal' : 'diario',
         resolveMercado: (ticker, semanal) => resolveData(ticker, semanal ? 'w' : 'd'),
         resolveSemanalActivo: () => activoSemanal,
-      }))
+      }
+      Object.assign(filtroActivoMap, construirFiltroActivoMap(filtrosLista, _optsFiltro))
 
       // Serie de visualización del índice: la del primer filtro de mercado que la use.
       const fIndice = filtrosActivos(filtrosLista).find(f => f.tipo === 'indiceEma' && f.ambito === 'mercado')
@@ -630,6 +634,10 @@ export default async function handler(req, res) {
         // de ese dia todavia no existe. Ver lib/filtroEntrada.js.
         rawTrades = filtraPorEntrada(rawTrades, filtroActivoMap, assetDates,
           { entradaAlCierre: userParams.entradaAlCierre === true })
+        // Las órdenes de `grafico` cuya entrada acaba de descartar el filtro, marcadas como bloqueadas y
+        // con el filtro que lo hizo. Solo si la estrategia devuelve `grafico`. Ver lib/graficoEstrategia.js.
+        if (grafico) marcaBloqueadas(grafico, { filtroActivoMap, assetDates,
+          entradaAlCierre: userParams.entradaAlCierre === true, motivos: motivosDeBloqueo(filtrosLista, _optsFiltro) })
       }
     }
 
