@@ -866,6 +866,18 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labe
         }
       })
 
+      // ── Órdenes pendientes de la ESTRATEGIA (grafico.ordenes), con el botón Razonamiento ──
+      // Escalonadas como el stop, pero discontinuas y naranjas; la abierta lleva su etiqueta en el eje
+      // («orden estrategia» y su nivel). Las órdenes reales del usuario van por su efecto propio y no
+      // cambian. Sin órdenes, o con el botón apagado, la lista viene vacía. Ver lib/graficoPaneles.js.
+      for(const o of marcasRazon.ordenes){
+        try{
+          const s=chart.addLineSeries({color:o.color,lineWidth:2,lineStyle:LineStyle.Dashed,lineType:1,
+            lastValueVisible:o.abierta,priceLineVisible:false,crosshairMarkerVisible:false,title:o.titulo})
+          s.setData(o.puntos)
+        }catch(e){ console.warn('[CandleChart] no se pudo dibujar una orden de la estrategia:',o.id,e?.message) }
+      }
+
       // ── Marcadores: flechas entrada/salida + círculos cruces EMA ──
       const allMarkers=[]
       const oblMarkers=[]  // emoji ↗/↘ dibujados en SVG overlay, sin shape nativo
