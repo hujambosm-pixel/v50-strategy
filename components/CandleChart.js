@@ -15,7 +15,8 @@ import { calcEMA, calcSMA, calcRSI, calcMACD, calcBollinger, calcVolumeAvg } fro
 // aquí (TIPOS_INDICADOR, más abajo); lo que comparten los dos sitios es la cadena `tipo`, así que al
 // añadir un tipo hay que tocar los dos.
 import { CATALOGO_INDICADORES, TIPOS_DISPONIBLES, rotuloIndicador, nuevoIndicador } from '../lib/indicadores'
-import { planDeclarado, planPaneles, flechasDeOperaciones, marcasRazonamiento } from '../lib/graficoPaneles'
+import { planDeclarado, planPaneles, flechasDeOperaciones, marcasRazonamiento, quitaDuplicados, campoEnVela,
+         etiquetasDeNiveles, altoPanelDe, ALTO_PANEL_MIN, ALTO_PANEL_MAX, coma } from '../lib/graficoPaneles'
 
 // ── Detección del indicador de una estrategia ─────────────────────────
 // INALCANZABLE HOY, A PROPÓSITO. Todo este bloque cuelga de la prop `definition`, y los dos únicos
@@ -493,7 +494,7 @@ function createRiskPrimitive(configRef) {
                   ctx.fillStyle = 'rgba(0,229,160,0.85)'
                   ctx.textAlign = 'center'
                   ctx.textBaseline = 'middle'
-                  ctx.fillText(`R:R  1 : ${rrRatio.toFixed(2)}`, W*0.38, my)
+                  ctx.fillText(`R:R  1 : ${coma(rrRatio,2)}`, W*0.38, my)
                 }
               })
             }
@@ -560,6 +561,37 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labe
   // Divs de los paneles que crea la ESTRATEGIA con `grafico` (cualquier panel que no sea macd ni rsi). No
   // se sabe cuántos hay hasta tener los datos, así que van por id en un objeto y no en refs con nombre.
   const divsDeclaradosRef=useRef({})
+  // ALTO DE CADA PANEL, por tipo ('rsi', 'macd' o el id de un panel propio). Arranca vacío —todos al alto
+  // por defecto— y se rellena en el montaje desde localStorage, como los indicadores: en el servidor no
+  // hay localStorage. Se cambia arrastrando el borde superior del panel.
+  const [altosPanel,setAltosPanel]=useState({})
+  const altosPanelRef=useRef({})
+  const panelesPorIdRef=useRef({})   // id → chart del panel, para cambiarle el alto sin rehacerlo
+  useEffect(()=>{ try{ const g=JSON.parse(localStorage.getItem('v50_altos_panel')||'{}'); if(g&&typeof g==='object') setAltosPanel(g) }catch(_){} },[])
+  // Declarado ANTES del efecto que crea los charts, para que este lea ya el alto bueno en el ref.
+  useEffect(()=>{
+    altosPanelRef.current=altosPanel
+    for(const [id,c] of Object.entries(panelesPorIdRef.current)){ try{ c.applyOptions({height:altoPanelDe(altosPanel,id)}) }catch(_){} }
+  },[altosPanel])
+  const empiezaArrastrePanel=(e,id)=>{
+    e.preventDefault()
+    const y0=e.clientY, h0=altoPanelDe(altosPanelRef.current,id)
+    // Hacia arriba crece: el borde que se arrastra es el de arriba.
+    const mueve=ev=>{
+      const h=Math.round(Math.min(ALTO_PANEL_MAX,Math.max(ALTO_PANEL_MIN,h0+(y0-ev.clientY))))
+      setAltosPanel(p=>p[id]===h?p:{...p,[id]:h})
+    }
+    const suelta=()=>{
+      window.removeEventListener('mousemove',mueve); window.removeEventListener('mouseup',suelta)
+      try{ localStorage.setItem('v50_altos_panel',JSON.stringify(altosPanelRef.current)) }catch(_){}
+    }
+    window.addEventListener('mousemove',mueve); window.addEventListener('mouseup',suelta)
+  }
+  // Asa para arrastrar: una franja de 7 px sobre el borde superior del panel.
+  const asaPanel=(id)=>(
+    <div onMouseDown={e=>empiezaArrastrePanel(e,id)} title="Arrastra para cambiar la altura del panel"
+      style={{position:'absolute',top:-3,left:0,right:0,height:7,cursor:'ns-resize',zIndex:11}}/>
+  )
   // Indicadores del usuario, ya calculados y agrupados por destino. Memorizado porque recalcular seis
   // series sobre 10.000 velas en cada render sería tirar el trabajo a la basura: depende SOLO de las
   // velas y de la lista.
@@ -572,10 +604,17 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labe
   //   · Si cambia un periodo, un color o una casilla, la firma cambia y se recalcula y se redibuja.
   // Serializar seis objetos pequeños en cada render no cuesta nada medible al lado de rehacer el chart.
   const firmaIndicadores=JSON.stringify(indicadoresUsuario||[])
-  const indicadoresCalculados=useMemo(
-    ()=>calculaIndicadoresUsuario(data,indicadoresUsuario),
+  // DUPLICADOS. Si la estrategia declara en `grafico` un indicador que el usuario también tiene activado
+  // —mismo tipo, parámetros e intervalo—, se dibuja solo el suyo: el del usuario se quita de la lista que se
+  // CALCULA, no de la suya, que sigue igual. Sin `grafico`, la lista es la misma. Ver lib/graficoPaneles.js.
+  const duplicados=useMemo(
+    ()=>quitaDuplicados(indicadoresUsuario,grafico,data),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [data,firmaIndicadores])
+    [data,firmaIndicadores,grafico])
+  const indicadoresCalculados=useMemo(
+    ()=>calculaIndicadoresUsuario(data,duplicados.lista),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [data,firmaIndicadores,duplicados])
   // Series que declara la estrategia en `grafico`, ya repartidas por panel (ver lib/graficoPaneles.js).
   // `grafico` llega con el resultado y no cambia de identidad mientras no cambie el resultado. Sin él, el
   // plan sale vacío y nada de lo que sigue cambia.
@@ -623,8 +662,12 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labe
     // hay ninguna y la lista es la de siempre.
     const declaradas=[...planGrafico.precio,...planGrafico.paneles.flatMap(p=>p.series)]
       .map(s=>({clave:'g:'+s.clave,color:s.color,rotulo:s.nombre}))
-    return declaradas.length?[...deSiempre,...declaradas]:deSiempre
-  },[data,nombresIndicadores,planGrafico])
+    const filas=declaradas.length?[...deSiempre,...declaradas]:deSiempre
+    // Las que el usuario también tenía activadas lo dicen: la suya está oculta en este gráfico.
+    if(!duplicados.tambien.size) return filas
+    const marcadas=new Set([...duplicados.tambien].flatMap(c=>['g:'+c,campoEnVela(c)].filter(Boolean)))
+    return filas.map(f=>marcadas.has(f.clave)?{...f,rotulo:f.rotulo+' · estrategia (también activado por ti)'}:f)
+  },[data,nombresIndicadores,planGrafico,duplicados])
   const chartAliveRef=useRef(true)
   const innerCleanupRef=useRef(null)
   const rulerStart=useRef(null), rulerActiveR=useRef(rulerActive)
@@ -698,6 +741,8 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labe
         crosshair:{mode:CrosshairMode.Normal},
         rightPriceScale:{borderColor:'#1a2d45',minimumWidth:70},
         timeScale:{borderColor:'#1a2d45',timeVisible:true},
+        // Coma decimal en el eje, en el cursor y en las etiquetas de las líneas de precio.
+        localization:{priceFormatter:p=>coma(p,2)},
       })
       chartRef.current=chart
 
@@ -951,6 +996,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labe
         timeScale:{borderColor:'#1a2d45',timeVisible:true,visible:false},
         crosshair:{mode:CrosshairMode.Normal},
         handleScroll:false,handleScale:false,
+        localization:{priceFormatter:p=>coma(p,2)},
       })
       // Alias de la de módulo: la usan las ramas de MACD de la estrategia, y ahora también el MACD del
       // usuario a través del catálogo. Una sola definición, un solo criterio de color.
@@ -1095,6 +1141,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labe
       // El PLAN dice qué paneles hay: los de siempre (MACD y RSI) y, detrás, los propios que declare la
       // estrategia en `grafico`. El render recorre el mismo plan, así que no puede haber un div sin chart
       // ni un chart sin div. Sin `grafico` son exactamente los paneles y las condiciones de antes.
+      panelesPorIdRef.current={}
       for(const pp of planPaneles(PANELES_INDICADORES,data,_indType,planGrafico,indicadoresCalculados)){
         // El panel existe si lo pide la ESTRATEGIA —con sus series de siempre o con las declaradas— o si
         // lo pide el USUARIO. Cuando lo piden varios, es UN solo panel con las series de todos: un RSI de
@@ -1110,8 +1157,10 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labe
         // siguiente pase, cuando la maqueta esté asentada.
         if(div.clientWidth<=0) return
         console.log('[CHART-DEBUG] CandleChart '+(panel?panel.debug:pp.id),div.clientWidth,div.clientHeight)
-        const chart=createChart(div,_panelOpts(panel?panel.alto:pp.alto))
+        const altoEste=altoPanelDe(altosPanelRef.current,pp.id)
+        const chart=createChart(div,_panelOpts(altoEste))
         panelChartsRef.current.push(chart)
+        panelesPorIdRef.current[pp.id]=chart
         if(panel?.ajustes) chart.applyOptions(panel.ajustes)
         const filas=panel?panel.filas(data):[]
         const creadas={}
@@ -1163,10 +1212,13 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labe
           }catch(e){ console.warn('[CandleChart] no se pudo dibujar un indicador de usuario:',e?.message) }
         }
         // Niveles declarados por la estrategia: líneas horizontales con su texto en el eje.
-        for(const n of (anclaNiveles&&dec?.niveles)||[]){
+        // Si dos caerían a menos de 16 px en el eje, solo el primero —el que la estrategia pone antes— lleva
+        // etiqueta y texto; los demás se quedan en la línea. Ver etiquetasDeNiveles.
+        const conEtiqueta=etiquetasDeNiveles(dec?.niveles,dec?.escala,altoEste)
+        ;((anclaNiveles&&dec?.niveles)||[]).forEach((n,k)=>{
           try{ anclaNiveles.createPriceLine({price:n.valor,color:n.color||'rgba(240,192,64,0.85)',lineWidth:1,
-            lineStyle:LineStyle.Dashed,axisLabelVisible:true,title:n.texto||''}) }catch(_){}
-        }
+            lineStyle:LineStyle.Dashed,axisLabelVisible:conEtiqueta[k],title:conEtiqueta[k]?(n.texto||''):''}) }catch(_){}
+        })
         // Eventos de la estrategia en ESTE panel. Se SUMAN a los marcadores que ya tenga la serie —el RSI
         // de siempre pone los cruces con su media—: setMarkers sustituye, así que se leen antes.
         const marcasPanel=marcasRazon.paneles[pp.id]
@@ -1311,12 +1363,12 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labe
               const eurFirmado=v=>v==null?'-':`€${v<0?'-':'+'}${Math.abs(Math.round(v)).toLocaleString('es-ES')}`
               // Drawdown DE ESTA OPERACION, calculado en el servidor (lib/ddOperacion.js). Un guion
               // si no se pudo calcular: inventarse un cero diría que la operación no sufrió nada.
-              const pct=v=>v==null?'-':`${v.toFixed(2)}%`
+              const pct=v=>v==null?'-':`${coma(v,2)}%`
               const lines=[
                 `#${idx+1}`,
                 `Cap.ini: ${eur(capIni)}`,
                 `Cap.fin: ${eur(capFin)}`,
-                `Profit:  ${t.pnlPct.toFixed(2)}%`,
+                `Profit:  ${coma(t.pnlPct,2)}%`,
                 `P&L:     ${eurFirmado(pnlComp)}`,
                 `DD oper: ${pct(t.ddOperacion)}`,
                 `${t.dias}d`,
@@ -1330,7 +1382,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labe
 
             } else if(labelMode===1){
               // ── Modo solo %: caja simple compacta ──
-              const lbl=`#${idx+1} ${t.pnlPct.toFixed(1)}%`
+              const lbl=`#${idx+1} ${coma(t.pnlPct,1)}%`
               const W=lbl.length*6.2+16, BOX_H=18
               const boxY=BAND_TOP+(idx%5)*(BAND_H/5)
               g.appendChild(mkRect(midX-W/2,boxY,W,BOX_H,fillC,strokeC))
@@ -1403,7 +1455,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labe
         // Label: 26px perpendicular above the midpoint of the line
         const perp = lineAngle - Math.PI/2
         const lx = mx + Math.cos(perp)*26, ly = (y1+y2)/2 + Math.sin(perp)*26
-        const label=`${days}d  ${diff>=0?'+':''}${pct.toFixed(2)}%`
+        const label=`${days}d  ${diff>=0?'+':''}${coma(pct,2)}%`
         const bw=label.length*7+14
         addC(mk('rect',{x:lx-bw/2,y:ly-10,width:bw,height:16,fill:'rgba(8,12,20,0.96)',rx:'3',stroke:'#ffd166','stroke-width':'0.8'}))
         const txt=addC(mk('text',{x:lx,y:ly+1,fill:'#ffd166','font-size':'10','font-family':MONO,'text-anchor':'middle','dominant-baseline':'middle'}))
@@ -1514,7 +1566,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labe
       // Se leen aquí, fuera del callback, para no rehacer la lista en cada movimiento del cursor.
       const legUsuario=indicadoresCalculados.leyenda||[]
       // Cuántos se han quedado fuera por el tope: se resumen con un "+N" en vez de desbordar la barra.
-      const sobranLeyenda=(indicadoresUsuario||[]).filter(i=>i&&i.visible!==false&&(i.enLeyenda??(CATALOGO_INDICADORES[i.tipo]?.destino==='precio'))).length-legUsuario.length
+      const sobranLeyenda=(duplicados.lista||[]).filter(i=>i&&i.visible!==false&&(i.enLeyenda??(CATALOGO_INDICADORES[i.tipo]?.destino==='precio'))).length-legUsuario.length
       chart.subscribeCrosshairMove(param=>{
         const leg=activeLegendRef.current
         if(leg){
@@ -1527,7 +1579,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labe
                 `<span style="margin-right:7px">H <b style="color:#00e5a0">${f2(b.high)}</b></span>`+
                 `<span style="margin-right:7px">L <b style="color:#ff4d6d">${f2(b.low)}</b></span>`+
                 `<span style="margin-right:10px">C <b>${f2(b.close)}</b></span>`+
-                `<span style="color:${cc};margin-right:12px">${chg>=0?'+':''}${f2(chg)} (${pct>=0?'+':''}${pct.toFixed(2)}%)</span>`+
+                `<span style="color:${cc};margin-right:12px">${chg>=0?'+':''}${f2(chg)} (${pct>=0?'+':''}${coma(pct,2)}%)</span>`+
                 (er!=null?`<span style="margin-right:7px">EMA${emaRPeriod} <b style="color:#ffd166">${f2(er)}</b></span>`:'')+
                 (el!=null?`<span style="margin-right:7px">EMA${emaLPeriod} <b style="color:#ff4d6d">${f2(el)}</b></span>`:'')+
                 // Indicadores del USUARIO, con el color de su línea. Se añaden al mismo innerHTML que ya
@@ -1576,7 +1628,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labe
             `<div style="font-size:10px;color:#7a9bc0;margin-bottom:4px">${fmtDate(trade.entryDate)} → ${fmtDate(trade.exitDate)}</div>`+
             `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:#7a9bc0">Capital inicial</span><b style="color:#e2eaf5">${capIni==null?'-':'€'+f2(capIni)}</b></div>`+
             `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:#7a9bc0">Capital final</span><b style="color:#e2eaf5">${capFin==null?'-':'€'+f2(capFin)}</b></div>`+
-            `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:#7a9bc0">Profit</span><b style="color:${bc}">${trade.pnlPct>=0?'+':''}${trade.pnlPct.toFixed(2)}%</b></div>`+
+            `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:#7a9bc0">Profit</span><b style="color:${bc}">${trade.pnlPct>=0?'+':''}${coma(trade.pnlPct,2)}%</b></div>`+
             `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:#7a9bc0">P&L</span><b style="color:${bc}">${pnlComp==null?'-':(pnlComp>=0?'€+':'€-')+f2(Math.abs(pnlComp))}</b></div>`+
             `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:#7a9bc0">Días</span><span>${trade.dias}</span></div>`+
             // DD DE LA OPERACIÓN, no de la estrategia. Aquí había un «Max DD estrategia» que era el
@@ -1584,7 +1636,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labe
             // que no decía nada de la que el cursor estaba señalando. Ese sigue en el resumen, que
             // es su sitio. Esto es lo que llegó a sufrir ESTA operación mientras estaba abierta:
             // desde su máximo hasta el mínimo posterior. La regla, en lib/ddOperacion.js.
-            `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:#7a9bc0">DD operación</span><span style="color:#ff4d6d">${trade.ddOperacion==null?'-':trade.ddOperacion.toFixed(2)+'%'}</span></div>`+
+            `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:#7a9bc0">DD operación</span><span style="color:#ff4d6d">${trade.ddOperacion==null?'-':coma(trade.ddOperacion,2)+'%'}</span></div>`+
             htmlNotas
         }
       })
@@ -1698,12 +1750,12 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labe
               const dateEnd = symEnd + ctx.measureText(lastBar.date || '').width + 14
               ctx.font = '11px "JetBrains Mono", monospace'
               const chg = lastBar.close - lastBar.open
-              const pct = (chg / lastBar.open * 100).toFixed(2)
+              const pct = coma(chg / lastBar.open * 100, 2)
               const ohlc = [
-                ['O', lastBar.open?.toFixed(2), '#e2eaf5'],
-                ['H', lastBar.high?.toFixed(2), '#00e5a0'],
-                ['L', lastBar.low?.toFixed(2),  '#ff4d6d'],
-                ['C', lastBar.close?.toFixed(2),'#e2eaf5'],
+                ['O', coma(lastBar.open, 2), '#e2eaf5'],
+                ['H', coma(lastBar.high, 2), '#00e5a0'],
+                ['L', coma(lastBar.low, 2),  '#ff4d6d'],
+                ['C', coma(lastBar.close, 2),'#e2eaf5'],
                 [chg>=0?`+${pct}%`:`${pct}%`, '', chg>=0?'#00e5a0':'#ff4d6d'],
               ]
               let x = dateEnd + 8
@@ -1742,7 +1794,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labe
                   ctx.setLineDash([])
                   // Etiqueta precio
                   ctx.font = 'bold 10px "JetBrains Mono", monospace'
-                  const priceLabel = entryPrice.toFixed(2)
+                  const priceLabel = coma(entryPrice, 2)
                   const lw = ctx.measureText(priceLabel).width + 8
                   ctx.fillStyle = 'rgba(255,209,102,0.18)'
                   ctx.fillRect(4, lineY - 9, lw, 13)
@@ -1836,7 +1888,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labe
                 lineWidth: 1,
                 lineStyle: 0,
                 axisLabelVisible: true,
-                title: `${sym} ${ep.toFixed(2)} ●`,
+                title: `${sym} ${coma(ep,2)} ●`,
               })
             }catch(_){ return null }
           }).filter(Boolean)
@@ -2226,6 +2278,10 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labe
                   onDoubleClick={()=>{ clearTimeout(indClicRef.current); onConfigurarIndicador?.(ind) }}
                   title={(visible?'Ocultar':'Mostrar')+' · doble clic para configurar'}
                   style={{opacity:visible?1:0.55,cursor:'pointer'}}>{rotuloIndicador(ind)}</span>
+                {duplicados.ocultos.has(ind.id)&&(
+                  <span title="La estrategia ya lo dibuja con los mismos parámetros: el tuyo se oculta en este gráfico, sin quitarlo de tu lista"
+                    style={{color:'#5a7a95',fontSize:9}}>· {duplicados.ocultos.get(ind.id).join(', ')} lo dibuja la estrategia</span>
+                )}
                 {/* Los iconos ocupan sitio siempre, con visibility: si aparecieran y desaparecieran del
                     flujo, la fila cambiaría de ancho al pasar el cursor y bailaría. */}
                 <span style={{display:'flex',gap:4,marginLeft:2,visibility:encima?'visible':'hidden'}}>
@@ -2322,7 +2378,8 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labe
       // Panel propio de la estrategia (`grafico`): caja con su div y su rótulo, como el del RSI.
       if(!pp.base) return (
         <div key={'g:'+pp.id} style={{position:'relative',width:'100%',background:'#080c14',borderTop:'1px solid #1a2d45'}}>
-          <div ref={el=>{divsDeclaradosRef.current[pp.id]=el}} style={{width:'100%',height:pp.alto}}/>
+          <div ref={el=>{divsDeclaradosRef.current[pp.id]=el}} style={{width:'100%',height:altoPanelDe(altosPanel,pp.id)}}/>
+          {asaPanel(pp.id)}
           <span style={{position:'absolute',top:4,left:8,fontFamily:MONO,fontSize:9,color:'#7a9bc0',pointerEvents:'none',zIndex:10,letterSpacing:'0.06em',userSelect:'none'}}>{pp.etiqueta}</span>
         </div>
       )
@@ -2332,7 +2389,9 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labe
       const hay=pp.hay
       const extra=panel.divExtra?.(activeIndType)||false
       if(panel.montaje==='condicional'&&!hay&&!extra) return null
-      const alto=panel.altoDiv?panel.altoDiv(activeIndType,hay):panel.alto
+      // Con datos, el alto recordado de ese tipo de panel (o el de por defecto). El caso sin datos es el de las
+      // ramas inalcanzables de `divExtra`, que se queda como estaba.
+      const alto=hay?altoPanelDe(altosPanel,panel.id):(panel.altoDiv?panel.altoDiv(activeIndType,hay):panel.alto)
       // `display` va PRIMERO, como estaba: el orden de las propiedades no cambia lo que se ve, pero así
       // el HTML sale carácter por carácter igual que antes y la comprobación de equivalencia puede
       // compararlo sin excepciones que haya que explicar.
@@ -2342,15 +2401,19 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labe
       // queda: el envoltorio solo existe para poder colocar el rótulo en posición absoluta encima. Meter
       // uno donde no hacía falta cambiaría el DOM sin cambiar nada de lo que se ve, y este fichero acaba
       // de costar una caída en producción: cuanto menos se mueva, mejor.
+      // Ahora SÍ lleva envoltorio: el asa para cambiar el alto se coloca encima en posición absoluta, igual
+      // que el rótulo en los demás. El chart sigue naciendo en el mismo div, con el mismo alto.
       if(!panel.etiqueta) return (
-        <div key={panel.id} ref={divDePanel[panel.id]}
-          style={{...(panel.montaje==='siempre'?{display:hay?'block':'none'}:{}),
-            width:'100%',height:alto,background:'#080c14',borderTop:'1px solid #1a2d45'}}/>
+        <div key={panel.id} style={estiloCaja}>
+          <div ref={divDePanel[panel.id]} style={{width:'100%',height:alto}}/>
+          {hay&&asaPanel(panel.id)}
+        </div>
       )
       return (
         <div key={panel.id} style={estiloCaja}>
           <div ref={divDePanel[panel.id]} style={{width:'100%',height:alto}}/>
           <span style={{position:'absolute',top:4,left:8,fontFamily:MONO,fontSize:9,color:'#7a9bc0',pointerEvents:'none',zIndex:10,letterSpacing:'0.06em',userSelect:'none'}}>{panel.etiqueta}</span>
+          {hay&&asaPanel(panel.id)}
         </div>
       )
     })}
