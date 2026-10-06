@@ -15,7 +15,7 @@ import { calcEMA, calcSMA, calcRSI, calcMACD, calcBollinger, calcVolumeAvg } fro
 // aquí (TIPOS_INDICADOR, más abajo); lo que comparten los dos sitios es la cadena `tipo`, así que al
 // añadir un tipo hay que tocar los dos.
 import { CATALOGO_INDICADORES, TIPOS_DISPONIBLES, rotuloIndicador, nuevoIndicador } from '../lib/indicadores'
-import { planDeclarado, planPaneles, flechasDeOperaciones } from '../lib/graficoPaneles'
+import { planDeclarado, planPaneles, flechasDeOperaciones, marcasRazonamiento } from '../lib/graficoPaneles'
 
 // ── Detección del indicador de una estrategia ─────────────────────────
 // INALCANZABLE HOY, A PROPÓSITO. Todo este bloque cuelga de la prop `definition`, y los dos únicos
@@ -530,7 +530,10 @@ const tramosDe = (bars, campo) => {
 // alterna valor y hueco barra a barra—, y vale más una diagonal que centenares de series.
 const MAX_TRAMOS = 200
 
-export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, isNewResultRef=null, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null, isBareChart=false, visuals=null, filterZones=[], slopeChanges=[], customMarkers=[], pendingOrders=[], simbolo=null, riskPanelOpen=false, onRiskLineFocus=null, indicadoresUsuario=[], onIndicadores=null, onConfigurarIndicador=null, nombresIndicadores=null, grafico=null }) {
+// Los textos del razonamiento los escribe el code_js de cada estrategia y acaban en innerHTML: se escapan.
+const escapaHtml = (s) => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
+
+export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, isNewResultRef=null, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null, isBareChart=false, visuals=null, filterZones=[], slopeChanges=[], customMarkers=[], pendingOrders=[], simbolo=null, riskPanelOpen=false, onRiskLineFocus=null, indicadoresUsuario=[], onIndicadores=null, onConfigurarIndicador=null, nombresIndicadores=null, grafico=null, razonamiento=true }) {
   const containerRef=useRef(null), svgRef=useRef(null), legendRef=useRef(null), tooltipRef=useRef(null)
   const activeLegendRef = externalLegendRef || legendRef
   const chartRef=useRef(null), candlesRef=useRef(null)
@@ -577,6 +580,12 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labe
   // `grafico` llega con el resultado y no cambia de identidad mientras no cambie el resultado. Sin él, el
   // plan sale vacío y nada de lo que sigue cambia.
   const planGrafico=useMemo(()=>planDeclarado(data,grafico),[data,grafico])
+  // Razonamiento (botón de la barra): eventos de la estrategia por panel, cambios de stop y motivo de
+  // salida, más el texto completo de cada vela para el tooltip. Apagado, todo vacío. Ver
+  // lib/graficoPaneles.js.
+  const marcasRazon=useMemo(
+    ()=>marcasRazonamiento(data,trades,grafico,razonamiento,new Set(planGrafico.paneles.map(p=>p.id))),
+    [data,trades,grafico,razonamiento,planGrafico])
   // Qué indicadores trae la ESTRATEGIA dentro de las barras. Solo para listarlos, separados y sin
   // controles: se calculan en el servidor y pueden venir en otro intervalo.
   // UNA ENTRADA POR SERIE REALMENTE DIBUJADA, no una por familia.
@@ -865,9 +874,12 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labe
       // RSI/media, que ya se marcan con ↗/↘ a partir de slopeChanges, y se quitaron para no repetir marca.
       // Pero así cualquier estrategia con RSI se quedaba sin saber dónde entró y dónde salió, que es lo
       // primero que hay que poder comprobar. El cálculo vive en lib/graficoPaneles.js, igual que antes.
-      const _flechas=flechasDeOperaciones(trades,visuals)
+      // Con el Razonamiento encendido, la flecha de salida lleva su motivo en corto.
+      const _flechas=flechasDeOperaciones(trades,visuals,razonamiento)
       allMarkers.push(..._flechas.nativas)
       oblMarkers.push(..._flechas.oblicuas)
+      // Eventos de la estrategia sobre el precio y marcas de cambio de stop. Vacío con el botón apagado.
+      allMarkers.push(...marcasRazon.precio)
       for(let j=1;j<data.length;j++){
         const er=data[j].emaR,el=data[j].emaL,erP=data[j-1].emaR,elP=data[j-1].emaL
         if(er==null||el==null||erP==null||elP==null) continue
@@ -1142,6 +1154,15 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labe
         for(const n of (anclaNiveles&&dec?.niveles)||[]){
           try{ anclaNiveles.createPriceLine({price:n.valor,color:n.color||'rgba(240,192,64,0.85)',lineWidth:1,
             lineStyle:LineStyle.Dashed,axisLabelVisible:true,title:n.texto||''}) }catch(_){}
+        }
+        // Eventos de la estrategia en ESTE panel. Se SUMAN a los marcadores que ya tenga la serie —el RSI
+        // de siempre pone los cruces con su media—: setMarkers sustituye, así que se leen antes.
+        const marcasPanel=marcasRazon.paneles[pp.id]
+        if(marcasPanel?.length&&anclaNiveles){
+          try{
+            const previas=typeof anclaNiveles.markers==='function'?anclaNiveles.markers():[]
+            anclaNiveles.setMarkers([...previas,...marcasPanel].sort((a,b)=>a.time<b.time?-1:a.time>b.time?1:0))
+          }catch(e){ console.warn('[CandleChart] no se pudieron marcar los eventos del panel',pp.id,e?.message) }
         }
         _syncPanels(chart,serieSync)
       }
@@ -1513,6 +1534,22 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labe
         if(tt){
           if(!param.time||!param.point){tt.style.display='none';return}
           const trade=trades.find(t=>t.entryDate<=param.time&&param.time<=t.exitDate)
+          // Razonamiento de esta vela (eventos, stops, motivo de salida), con el texto completo: en la
+          // marca va cortado si no cabe. Sin notas —o con el botón apagado— el tooltip es el de siempre.
+          const notas=marcasRazon.notas.get(param.time)
+          const htmlNotas=notas?.length
+            ?`<div style="margin-top:6px;padding-top:5px;border-top:1px solid #1a2d45">`+
+              notas.map(n=>`<div style="color:${n.color};font-size:11px;white-space:nowrap">${escapaHtml(n.texto)}</div>`).join('')+`</div>`
+            :''
+          if(!trade&&htmlNotas){
+            const w=containerRef.current?.clientWidth||600
+            tt.style.display='block'
+            tt.style.left=((param.point.x+210>w)?param.point.x-220:param.point.x+16)+'px'
+            tt.style.top=Math.max(8,param.point.y-40)+'px'
+            tt.style.borderColor='#2a3d55'
+            tt.innerHTML=`<div style="font-size:10px;color:#7a9bc0">${fmtDate(param.time)}</div>`+htmlNotas
+            return
+          }
           if(!trade){tt.style.display='none';return}
           // El mismo capital compuesto que la caja de etiquetas y que el historial.
           const {inversion:capIni,resultado:capFin}=capitalDeOperacion(trade)
@@ -1535,7 +1572,8 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labe
             // que no decía nada de la que el cursor estaba señalando. Ese sigue en el resumen, que
             // es su sitio. Esto es lo que llegó a sufrir ESTA operación mientras estaba abierta:
             // desde su máximo hasta el mínimo posterior. La regla, en lib/ddOperacion.js.
-            `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:#7a9bc0">DD operación</span><span style="color:#ff4d6d">${trade.ddOperacion==null?'-':trade.ddOperacion.toFixed(2)+'%'}</span></div>`
+            `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:#7a9bc0">DD operación</span><span style="color:#ff4d6d">${trade.ddOperacion==null?'-':trade.ddOperacion.toFixed(2)+'%'}</span></div>`+
+            htmlNotas
         }
       })
 
@@ -1839,7 +1877,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labe
     // recalculaba, pero este efecto —el que crea las series— no dependía de él, así que las líneas
     // seguían siendo las de antes hasta que cambiaba `data`, es decir, hasta cambiar de activo.
     // Rehacer el chart no pierde el zoom: savedRangeRef guarda el rango visible y se restaura al crearlo.
-  },[data,emaRPeriod,emaLPeriod,trades,labelMode,definition,isBareChart,firmaIndicadores,planGrafico])
+  },[data,emaRPeriod,emaLPeriod,trades,labelMode,definition,isBareChart,firmaIndicadores,planGrafico,marcasRazon])
 
   // ── isBareChart: ajustar altura al resize de ventana ──
   const updateHeightRef=useRef(null)

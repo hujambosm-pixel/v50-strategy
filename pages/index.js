@@ -1482,6 +1482,15 @@ export default function Home() {
   // servidor, donde no existe localStorage.
   const [indicadores,setIndicadores]=useState([])
   useEffect(()=>{ setIndicadores(cargarIndicadores()) },[])
+  // ── Botón «Razonamiento» del gráfico ──
+  // Muestra u oculta los eventos de la estrategia y las marcas deducidas de sus operaciones (cambios de
+  // stop, motivo de salida). Encendido por defecto y recordado en este navegador. Igual que los
+  // indicadores, se lee en el montaje y no en el useState inicial: en el servidor no hay localStorage.
+  const [razonamiento,setRazonamiento]=useState(true)
+  useEffect(()=>{ try{ if(localStorage.getItem('v50_razonamiento')==='0') setRazonamiento(false) }catch(_){} },[])
+  const alternaRazonamiento=useCallback(()=>{
+    setRazonamiento(r=>{ const n=!r; try{ localStorage.setItem('v50_razonamiento',n?'1':'0') }catch(_){}; return n })
+  },[])
   // Un solo punto de escritura: cambiar la lista y persistirla van siempre juntos.
   const ponIndicadores=useCallback((lista)=>{
     setIndicadores(lista)
@@ -6149,7 +6158,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.896</title>
+        <title>Trading Simulator V9.897</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6238,7 +6247,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             }} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.896
+            <span className="dot"/>Trading Simulator V9.897
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -8705,6 +8714,17 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                             </button>
                           )
                         })()}
+                        {/* Razonamiento: eventos de la estrategia y cambios de stop */}
+                        <button onClick={alternaRazonamiento}
+                          title={razonamiento?'Ocultar el razonamiento: eventos de la estrategia, cambios de stop y motivo de salida':'Mostrar el razonamiento: eventos de la estrategia, cambios de stop y motivo de salida'}
+                          style={{pointerEvents:'all',
+                            background:razonamiento?'rgba(192,132,252,0.15)':'rgba(8,12,20,0.7)',
+                            border:`1px solid ${razonamiento?'rgba(192,132,252,0.6)':'#2a3d55'}`,
+                            color:razonamiento?'#c084fc':'#5a7a95',
+                            fontFamily:MONO,fontSize:10,padding:'2px 5px',borderRadius:3,cursor:'pointer',
+                            lineHeight:1,flexShrink:0}}>
+                          Razonamiento
+                        </button>
                       </div>
                       {/* fillHeight: el gráfico llena el hueco en vez de quedarse en los 480 px fijos de
                           candleH, cuyo setState no llama nadie. El contenedor de arriba ya es una columna
@@ -8723,6 +8743,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         visuals={result.visuals??null}
                         slopeChanges={result.slopeChanges??[]}
                         grafico={result.grafico??null}
+                        razonamiento={razonamiento}
                         customMarkers={[...(result.customMarkers??[]), ...openEntryMarkers]}
                         pendingOrders={pendingOrdersForSym}
                         simbolo={simbolo}
@@ -8872,6 +8893,17 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                             </button>
                           )
                         })()}
+                        {/* Razonamiento: eventos de la estrategia y cambios de stop */}
+                        <button onClick={alternaRazonamiento}
+                          title={razonamiento?'Ocultar el razonamiento: eventos de la estrategia, cambios de stop y motivo de salida':'Mostrar el razonamiento: eventos de la estrategia, cambios de stop y motivo de salida'}
+                          style={{pointerEvents:'all',
+                            background:razonamiento?'rgba(192,132,252,0.15)':'rgba(8,12,20,0.7)',
+                            border:`1px solid ${razonamiento?'rgba(192,132,252,0.6)':'#2a3d55'}`,
+                            color:razonamiento?'#c084fc':'#5a7a95',
+                            fontFamily:MONO,fontSize:10,padding:'2px 5px',borderRadius:3,cursor:'pointer',
+                            lineHeight:1,flexShrink:0}}>
+                          Razonamiento
+                        </button>
                       </div>
                       {/* Gráfico */}
                       <div style={{flex:1,minHeight:0,position:'relative'}}>
@@ -8882,6 +8914,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           visuals={result.visuals??null}
                           slopeChanges={result.slopeChanges??[]}
                           grafico={result.grafico??null}
+                          razonamiento={razonamiento}
                           customMarkers={[...(result.customMarkers??[]), ...openEntryMarkers]}
                         pendingOrders={pendingOrdersForSym}
                         simbolo={simbolo}
