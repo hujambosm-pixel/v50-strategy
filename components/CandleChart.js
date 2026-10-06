@@ -15,6 +15,7 @@ import { calcEMA, calcSMA, calcRSI, calcMACD, calcBollinger, calcVolumeAvg } fro
 // aquí (TIPOS_INDICADOR, más abajo); lo que comparten los dos sitios es la cadena `tipo`, así que al
 // añadir un tipo hay que tocar los dos.
 import { CATALOGO_INDICADORES, TIPOS_DISPONIBLES, rotuloIndicador, nuevoIndicador } from '../lib/indicadores'
+import { planDeclarado, planPaneles, flechasDeOperaciones } from '../lib/graficoPaneles'
 
 // ── Detección del indicador de una estrategia ─────────────────────────
 // INALCANZABLE HOY, A PROPÓSITO. Todo este bloque cuelga de la prop `definition`, y los dos únicos
@@ -348,7 +349,7 @@ function calculaIndicadoresUsuario(data, lista) {
 //
 // `extras(chart, series, ctx)` es la escotilla para lo que no es declarativo: marcadores y líneas de
 // precio. Meter eso en el descriptor exigiría un lenguaje propio para algo que se usa una vez.
-const PANELES_INDICADORES = [
+export const PANELES_INDICADORES = [
   {
     id: 'macd',
     alto: 120,
@@ -421,9 +422,13 @@ const PANELES_INDICADORES = [
       const obLevel = filas[0]?.rsiOB ?? 75
       const osLevel = filas[0]?.rsiOS ?? 25
       // Niveles con createPriceLine, que no distorsiona la escala automática.
-      series.rsi.createPriceLine({ price: obLevel, color: 'rgba(255,80,80,0.55)', lineWidth: 1, lineStyle: ctx.LineStyle.Dashed, axisLabelVisible: false })
-      series.rsi.createPriceLine({ price: osLevel, color: 'rgba(80,200,80,0.55)', lineWidth: 1, lineStyle: ctx.LineStyle.Dashed, axisLabelVisible: false })
-      series.rsi.createPriceLine({ price: 50, color: 'rgba(120,140,160,0.3)', lineWidth: 1, lineStyle: ctx.LineStyle.Solid, axisLabelVisible: false })
+      // Si la estrategia declara niveles para este panel en `grafico`, mandan los suyos y estos no se
+      // pintan (ver lib/graficoPaneles.js). Sin `grafico`, nivelesDeclarados no existe y todo sigue igual.
+      if (!ctx.nivelesDeclarados) {
+        series.rsi.createPriceLine({ price: obLevel, color: 'rgba(255,80,80,0.55)', lineWidth: 1, lineStyle: ctx.LineStyle.Dashed, axisLabelVisible: false })
+        series.rsi.createPriceLine({ price: osLevel, color: 'rgba(80,200,80,0.55)', lineWidth: 1, lineStyle: ctx.LineStyle.Dashed, axisLabelVisible: false })
+        series.rsi.createPriceLine({ price: 50, color: 'rgba(120,140,160,0.3)', lineWidth: 1, lineStyle: ctx.LineStyle.Solid, axisLabelVisible: false })
+      }
       // Cruces ▲/▼ del RSI con su media.
       const marcas = []
       for (let i = 1; i < filas.length; i++) {
@@ -525,7 +530,7 @@ const tramosDe = (bars, campo) => {
 // alterna valor y hueco barra a barra—, y vale más una diagonal que centenares de series.
 const MAX_TRAMOS = 200
 
-export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, isNewResultRef=null, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null, isBareChart=false, visuals=null, filterZones=[], slopeChanges=[], customMarkers=[], pendingOrders=[], simbolo=null, riskPanelOpen=false, onRiskLineFocus=null, indicadoresUsuario=[], onIndicadores=null, onConfigurarIndicador=null, nombresIndicadores=null }) {
+export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, isNewResultRef=null, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null, isBareChart=false, visuals=null, filterZones=[], slopeChanges=[], customMarkers=[], pendingOrders=[], simbolo=null, riskPanelOpen=false, onRiskLineFocus=null, indicadoresUsuario=[], onIndicadores=null, onConfigurarIndicador=null, nombresIndicadores=null, grafico=null }) {
   const containerRef=useRef(null), svgRef=useRef(null), legendRef=useRef(null), tooltipRef=useRef(null)
   const activeLegendRef = externalLegendRef || legendRef
   const chartRef=useRef(null), candlesRef=useRef(null)
@@ -549,6 +554,9 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labe
   // Sin 'volumen': ese panel ya no existe. El volumen se dibuja al pie del gráfico de precios, sobre su
   // propia escala, como en TradingView.
   const divDePanel={macd:macdContainerRef,rsi:rsiContainerRef}
+  // Divs de los paneles que crea la ESTRATEGIA con `grafico` (cualquier panel que no sea macd ni rsi). No
+  // se sabe cuántos hay hasta tener los datos, así que van por id en un objeto y no en refs con nombre.
+  const divsDeclaradosRef=useRef({})
   // Indicadores del usuario, ya calculados y agrupados por destino. Memorizado porque recalcular seis
   // series sobre 10.000 velas en cada render sería tirar el trabajo a la basura: depende SOLO de las
   // velas y de la lista.
@@ -565,6 +573,10 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labe
     ()=>calculaIndicadoresUsuario(data,indicadoresUsuario),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [data,firmaIndicadores])
+  // Series que declara la estrategia en `grafico`, ya repartidas por panel (ver lib/graficoPaneles.js).
+  // `grafico` llega con el resultado y no cambia de identidad mientras no cambie el resultado. Sin él, el
+  // plan sale vacío y nada de lo que sigue cambia.
+  const planGrafico=useMemo(()=>planDeclarado(data,grafico),[data,grafico])
   // Qué indicadores trae la ESTRATEGIA dentro de las barras. Solo para listarlos, separados y sin
   // controles: se calculan en el servidor y pueden venir en otro intervalo.
   // UNA ENTRADA POR SERIE REALMENTE DIBUJADA, no una por familia.
@@ -595,10 +607,15 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labe
       ['rsiMA',     'MA del RSI',         '#f0c040'],
       ['volumeAvg', 'Media de volumen',   '#FFB300'],
     ]
-    return SERIES_ESTRATEGIA
+    const deSiempre=SERIES_ESTRATEGIA
       .filter(([clave])=>data.some(d=>d[clave]!=null))
       .map(([clave,tipo,color])=>({clave,color,rotulo:nombresIndicadores?.[clave]||tipo}))
-  },[data,nombresIndicadores])
+    // Más las que declara en `grafico` y se dibujan aparte, con su nombre y su color. Sin `grafico` no
+    // hay ninguna y la lista es la de siempre.
+    const declaradas=[...planGrafico.precio,...planGrafico.paneles.flatMap(p=>p.series)]
+      .map(s=>({clave:'g:'+s.clave,color:s.color,rotulo:s.nombre}))
+    return declaradas.length?[...deSiempre,...declaradas]:deSiempre
+  },[data,nombresIndicadores,planGrafico])
   const chartAliveRef=useRef(true)
   const innerCleanupRef=useRef(null)
   const rulerStart=useRef(null), rulerActiveR=useRef(rulerActive)
@@ -747,6 +764,18 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labe
         pintarLinea('bbLower', { color: '#2196F3', lineWidth: 1, lastValueVisible: false, priceLineVisible: false, title: 'BB Lower' })
       }
 
+      // ── Series de la ESTRATEGIA declaradas en `grafico` sobre el precio ──
+      // Después de las de siempre y antes de las del usuario, que así quedan por encima. Continuas: sobre
+      // el precio, el discontinuo es la marca de las del usuario. Sin `grafico` no da ni una vuelta.
+      for(const s of planGrafico.precio){
+        try{
+          const op={color:s.color,lineWidth:2,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false}
+          const serie=s.tipo==='histograma'?chart.addHistogramSeries(op):chart.addLineSeries(op)
+          serie.setData(s.puntos)
+          overlaySeriesRef.current.push(serie)
+        }catch(e){ console.warn('[CandleChart] no se pudo dibujar una serie declarada:',s.clave,e?.message) }
+      }
+
       // ── Volumen del usuario, AL PIE del gráfico de precios ──
       // Mismo mecanismo que la rama inalcanzable del RSI en escala secundaria: una priceScaleId propia
       // con sus scaleMargins. El volumen ocupa la franja inferior y las velas se recogen por arriba, que
@@ -831,20 +860,14 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labe
       // ── Marcadores: flechas entrada/salida + círculos cruces EMA ──
       const allMarkers=[]
       const oblMarkers=[]  // emoji ↗/↘ dibujados en SVG overlay, sin shape nativo
-      const _isRsiMode=!_indType&&data.some(d=>d.rsiLine!=null)
-      if(visuals?.arrows!==false&&!_isRsiMode){
-        trades.forEach(t=>{
-          const _as=visuals?.arrowsShape||'arrowUp'
-          const _asExit=_as==='arrowUp'?'arrowDown':_as==='arrowDown'?'arrowUp':_as
-          if(_as==='oblicua'){
-            if(t.entryDate) oblMarkers.push({date:t.entryDate,anchor:'low', text:'↗',color:visuals?.arrowsColor||'#00d4ff'})
-            if(t.exitDate)  oblMarkers.push({date:t.exitDate, anchor:'high',text:'↘',color:t.pnlPct>=0?'#00e5a0':'#ff4d6d'})
-          } else {
-            if(t.entryDate) allMarkers.push({time:t.entryDate,position:'belowBar',color:visuals?.arrowsColor||'#00d4ff',shape:_as,text:''})
-            if(t.exitDate)  allMarkers.push({time:t.exitDate, position:'aboveBar',color:t.pnlPct>=0?'#00e5a0':'#ff4d6d',shape:_asExit,text:''})
-          }
-        })
-      }
+      // Flechas de entrada y salida, SIEMPRE que visuals no las apague. Hasta ahora se suprimían si las
+      // velas traían un RSI (`_isRsiMode`, V9.279): en «13 RSI 9 (cruces)» las entradas caen en los cruces
+      // RSI/media, que ya se marcan con ↗/↘ a partir de slopeChanges, y se quitaron para no repetir marca.
+      // Pero así cualquier estrategia con RSI se quedaba sin saber dónde entró y dónde salió, que es lo
+      // primero que hay que poder comprobar. El cálculo vive en lib/graficoPaneles.js, igual que antes.
+      const _flechas=flechasDeOperaciones(trades,visuals)
+      allMarkers.push(..._flechas.nativas)
+      oblMarkers.push(..._flechas.oblicuas)
       for(let j=1;j<data.length;j++){
         const er=data[j].emaR,el=data[j].emaL,erP=data[j-1].emaR,elP=data[j-1].emaL
         if(er==null||el==null||erP==null||elP==null) continue
@@ -1045,25 +1068,32 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labe
       const ctxPanel={data,slopeChanges,histColor:_histColor,LineStyle}
       // for...of y no forEach: el `return` de ancho cero tiene que abortar el EFECTO entero, como hacía
       // el código de antes, no solo la vuelta del bucle.
-      for(const panel of PANELES_INDICADORES){
-        // El panel existe si lo pide la ESTRATEGIA o si lo pide el USUARIO. Cuando los dos lo piden, es
-        // UN solo panel con las series de ambos: un RSI de la estrategia y otro del usuario comparten
-        // eje, que es justo lo que hace falta para compararlos.
-        const propias=panel.hayDatos(data,_indType)
-        const delUsuario=indicadoresCalculados[panel.id]||[]
-        if(!propias&&!delUsuario.length) continue
-        const div=divDePanel[panel.id]?.current
+      // El PLAN dice qué paneles hay: los de siempre (MACD y RSI) y, detrás, los propios que declare la
+      // estrategia en `grafico`. El render recorre el mismo plan, así que no puede haber un div sin chart
+      // ni un chart sin div. Sin `grafico` son exactamente los paneles y las condiciones de antes.
+      for(const pp of planPaneles(PANELES_INDICADORES,data,_indType,planGrafico,indicadoresCalculados)){
+        // El panel existe si lo pide la ESTRATEGIA —con sus series de siempre o con las declaradas— o si
+        // lo pide el USUARIO. Cuando lo piden varios, es UN solo panel con las series de todos: un RSI de
+        // la estrategia y otro del usuario comparten eje, que es justo lo que hace falta para compararlos.
+        const panel=pp.base
+        const propias=pp.propias
+        const delUsuario=pp.usuario
+        const dec=pp.declarado
+        if(!pp.hay) continue
+        const div=panel?divDePanel[panel.id]?.current:divsDeclaradosRef.current[pp.id]
         if(!div) continue
         // Mismo freno de siempre: con ancho 0 el chart nace roto, así que se aborta y se reintenta en el
         // siguiente pase, cuando la maqueta esté asentada.
         if(div.clientWidth<=0) return
-        console.log('[CHART-DEBUG] CandleChart '+panel.debug,div.clientWidth,div.clientHeight)
-        const chart=createChart(div,_panelOpts(panel.alto))
+        console.log('[CHART-DEBUG] CandleChart '+(panel?panel.debug:pp.id),div.clientWidth,div.clientHeight)
+        const chart=createChart(div,_panelOpts(panel?panel.alto:pp.alto))
         panelChartsRef.current.push(chart)
-        if(panel.ajustes) chart.applyOptions(panel.ajustes)
-        const filas=panel.filas(data)
+        if(panel?.ajustes) chart.applyOptions(panel.ajustes)
+        const filas=panel?panel.filas(data):[]
         const creadas={}
         let serieSync=null
+        // Series a las que colgar los niveles declarados: la primera que exista en el panel.
+        let anclaNiveles=null
         // Las series de la estrategia solo si es ella quien pide el panel: con `propias` en falso,
         // `filas` vendría vacío y se crearían series sin un punto.
         if(propias){
@@ -1073,8 +1103,21 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labe
             s.setData(spec.datos(filas,ctxPanel))
             creadas[spec.nombre]=s
             if(spec.sync) serieSync=s
+            if(!anclaNiveles) anclaNiveles=s
           }
-          panel.extras?.(chart,creadas,ctxPanel,filas)
+          panel.extras?.(chart,creadas,pp.nivelesDeclarados?{...ctxPanel,nivelesDeclarados:true}:ctxPanel,filas)
+        }
+        // Las declaradas en `grafico`, detrás de las de siempre y delante de las del usuario. Con su escala
+        // fija si la traen —un RSI de 0 a 100—, igual que el RSI de siempre.
+        for(const s of dec?.series||[]){
+          try{
+            const op={color:s.color,lineWidth:2,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false,
+              ...(s.escala?{autoscaleInfoProvider:()=>({priceRange:{minValue:s.escala.min,maxValue:s.escala.max},margins:{above:0.05,below:0.05}})}:{})}
+            const serie=s.tipo==='histograma'?chart.addHistogramSeries(op):chart.addLineSeries(op)
+            serie.setData(s.puntos)
+            if(!serieSync) serieSync=serie
+            if(!anclaNiveles) anclaNiveles=serie
+          }catch(e){ console.warn('[CandleChart] no se pudo dibujar una serie declarada:',s.clave,e?.message) }
         }
         // Y detrás, las del usuario, para que queden por encima. Si el panel es suyo y solo suyo, la
         // primera de sus series se lleva el crosshair.
@@ -1084,14 +1127,21 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labe
             s.setData(spec.puntos)
             // Los niveles de referencia SOLO si el panel es del usuario y de nadie más: si la estrategia
             // ya lo ocupa, los suyos están dibujados y repetirlos sería pintar dos rayas casi encima.
-            if(!propias&&spec.niveles){
+            // Y tampoco si la estrategia declara niveles para el panel: los suyos mandan.
+            if(!propias&&!pp.nivelesDeclarados&&spec.niveles){
               for(const n of spec.niveles){
                 s.createPriceLine({price:n.price,color:n.color,lineWidth:n.grosor??1,
                   lineStyle:n.punteado?LineStyle.Dashed:LineStyle.Solid,axisLabelVisible:false})
               }
             }
             if(!serieSync) serieSync=s
+            if(!anclaNiveles) anclaNiveles=s
           }catch(e){ console.warn('[CandleChart] no se pudo dibujar un indicador de usuario:',e?.message) }
+        }
+        // Niveles declarados por la estrategia: líneas horizontales con su texto en el eje.
+        for(const n of (anclaNiveles&&dec?.niveles)||[]){
+          try{ anclaNiveles.createPriceLine({price:n.valor,color:n.color||'rgba(240,192,64,0.85)',lineWidth:1,
+            lineStyle:LineStyle.Dashed,axisLabelVisible:true,title:n.texto||''}) }catch(_){}
         }
         _syncPanels(chart,serieSync)
       }
@@ -1789,7 +1839,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labe
     // recalculaba, pero este efecto —el que crea las series— no dependía de él, así que las líneas
     // seguían siendo las de antes hasta que cambiaba `data`, es decir, hasta cambiar de activo.
     // Rehacer el chart no pierde el zoom: savedRangeRef guarda el rango visible y se restaura al crearlo.
-  },[data,emaRPeriod,emaLPeriod,trades,labelMode,definition,isBareChart,firmaIndicadores])
+  },[data,emaRPeriod,emaLPeriod,trades,labelMode,definition,isBareChart,firmaIndicadores,planGrafico])
 
   // ── isBareChart: ajustar altura al resize de ventana ──
   const updateHeightRef=useRef(null)
@@ -2218,10 +2268,18 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labe
     {/* En bucle sobre PANELES_INDICADORES, la MISMA lista que usa el efecto para crear los charts: así
         no puede haber un div sin chart ni un chart sin div. Cada panel decide si se monta condicional o
         se monta siempre y se oculta con display:none, que es la diferencia que ya tenía el volumen. */}
-    {PANELES_INDICADORES.map(panel=>{
-      // Mismo criterio que el motor del efecto: estrategia O usuario. Si divergieran, habría un panel
-      // sin div donde dibujarse, o un div vacío.
-      const hay=panel.hayDatos(data,activeIndType)||(indicadoresCalculados[panel.id]||[]).length>0
+    {planPaneles(PANELES_INDICADORES,data,activeIndType,planGrafico,indicadoresCalculados).map(pp=>{
+      // Panel propio de la estrategia (`grafico`): caja con su div y su rótulo, como el del RSI.
+      if(!pp.base) return (
+        <div key={'g:'+pp.id} style={{position:'relative',width:'100%',background:'#080c14',borderTop:'1px solid #1a2d45'}}>
+          <div ref={el=>{divsDeclaradosRef.current[pp.id]=el}} style={{width:'100%',height:pp.alto}}/>
+          <span style={{position:'absolute',top:4,left:8,fontFamily:MONO,fontSize:9,color:'#7a9bc0',pointerEvents:'none',zIndex:10,letterSpacing:'0.06em',userSelect:'none'}}>{pp.etiqueta}</span>
+        </div>
+      )
+      const panel=pp.base
+      // Mismo criterio que el motor del efecto, y del mismo plan: estrategia (de siempre o declarada) O
+      // usuario. Si divergieran, habría un panel sin div donde dibujarse, o un div vacío.
+      const hay=pp.hay
       const extra=panel.divExtra?.(activeIndType)||false
       if(panel.montaje==='condicional'&&!hay&&!extra) return null
       const alto=panel.altoDiv?panel.altoDiv(activeIndType,hay):panel.alto
