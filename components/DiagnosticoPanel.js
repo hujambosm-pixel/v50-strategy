@@ -6,9 +6,22 @@
 // localStorage.
 import { useState, useEffect, useMemo } from 'react'
 import { MONO } from '../lib/utils'
-import { diagnostico } from '../lib/diagnostico'
+import { diagnostico, resumenSinOperaciones } from '../lib/diagnostico'
 
 const CLAVE = 'v50_diagnostico_abierto'
+
+// Línea que explica un resumen sin operaciones (las métricas salen a cero): «Ninguna operación en el
+// periodo» y, si los filtros bloquearon entradas, cuántas y por qué filtros. Mismo chip ámbar que el
+// aviso de cobertura del histórico.
+export function AvisoSinOperaciones({ result }) {
+  const lineas = resumenSinOperaciones(result)
+  return (
+    <div style={{ fontFamily: MONO, fontSize: 10, background: 'rgba(255,209,102,0.12)', color: '#ffd166', padding: '4px 10px',
+      borderBottom: '1px solid var(--border)', lineHeight: 1.45 }}>
+      {lineas.map((l, i) => <div key={i}>{i === 0 ? '⚠ ' : ''}{l}</div>)}
+    </div>
+  )
+}
 const AMBAR = '#ffd166'
 
 export default function DiagnosticoPanel({ result, abiertoInicial = false }) {

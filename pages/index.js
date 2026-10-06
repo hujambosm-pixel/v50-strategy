@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo, Fragment } from 'react'
 import Head from 'next/head'
 import { ListFilter, Briefcase, Star, Bell, X as LucideX } from 'lucide-react'
-import { calcMetrics, MONO, fmt, fmtDate, f2, tvSym, pesosScoreHistorico, umbralesDe, scoreHistoricoDe, desgloseScoreHistorico } from '../lib/utils'
+import { calcMetrics, metricasSinOperaciones, MONO, fmt, fmtDate, f2, tvSym, pesosScoreHistorico, umbralesDe, scoreHistoricoDe, desgloseScoreHistorico } from '../lib/utils'
 import { WATCHLIST_DEFAULT } from '../lib/constants'
 import { getSupaUrl, getSupaKey, getSupaH, setCurrentJwt, getCurrentJwt, fetchConSesion, setOnSesionCaducada, hayConfigSupabase } from '../lib/supabase'
 import { loadSettings, saveSettings, saveSettingsRemote, loadSettingsRemote } from '../lib/settings'
@@ -32,7 +32,7 @@ import ContextThemeMenu, { applyTema } from '../components/ContextThemeMenu'
 import { exportTimeline, exportGantt, exportHistorial } from '../lib/exportTimeline'
 import GanttChart from '../components/GanttChart'
 import MetricRow from '../components/MetricRow'
-import DiagnosticoPanel from '../components/DiagnosticoPanel'
+import DiagnosticoPanel, { AvisoSinOperaciones } from '../components/DiagnosticoPanel'
 import PriceAlarmQuickForm from '../components/PriceAlarmQuickForm'
 import StrategiesManager from '../components/StrategiesManager'
 import StrategyEditorPanel from '../components/StrategyEditorPanel'
@@ -5597,6 +5597,10 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   },[simbolo, tlTrades, tlFifo, result])
 
   const metrics=result?calcMetrics(result.trades,Number(capitalIni),result.capitalReinv,result.gananciaSimple,result.ganBH||0,result.startDate,result.meta?.ultimaFecha,Number(years)):null
+  // SIN OPERACIONES el resumen no desaparece: se enseña con las métricas a cero y una línea que lo explica
+  // (AvisoSinOperaciones). `metrics` sigue siendo null en ese caso para todo lo demás que lo consulta.
+  const sinOperaciones=!!result&&!result.isBareChart&&Array.isArray(result.trades)&&result.trades.length===0
+  const metricsResumen=metrics||(sinOperaciones?metricasSinOperaciones(Number(capitalIni),result.ganBH||0,result.startDate,result.meta?.ultimaFecha,Number(years)):null)
 
   // ── Backtest float equity curve — simple curve + open-trade unrealized P&L ──
   const backtestFloatCurve = useMemo(()=>{
@@ -6159,7 +6163,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.901</title>
+        <title>Trading Simulator V9.902</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6248,7 +6252,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             }} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.901
+            <span className="dot"/>Trading Simulator V9.902
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -8937,7 +8941,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                   )}
 
                   {/* Métricas en cuadrícula (si layout=grid) — oculto en Risk y bare chart */}
-                  {!result.isBareChart&&sidePanel!=='risk'&&metricsLayout==='grid'&&metrics&&(
+                  {!result.isBareChart&&sidePanel!=='risk'&&metricsLayout==='grid'&&metricsResumen&&(
                     <div style={{border:'1px solid var(--border)',borderRadius:4,margin:'8px 0',overflow:'hidden'}}>
                       <div style={{display:'flex',alignItems:'center',gap:6,padding:'4px 10px 0'}}>
                         <button onClick={()=>setMetricsView(v=>v==='multi'?'single':'multi')}
@@ -8951,8 +8955,9 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         style={{fontFamily:MONO,fontSize:10,background:'rgba(255,209,102,0.12)',color:'#ffd166',padding:'3px 10px',cursor:'help',borderBottom:'1px solid var(--border)'}}>
                         ⚠ Datos desde {fmtDate(avisoHistoricoIndiv.realDesde)} · se pidió desde {fmtDate(avisoHistoricoIndiv.solicitadoDesde)}
                       </div>}
+                      {sinOperaciones&&<AvisoSinOperaciones result={result}/>}
                       <StratSelector strats={metricsStrats} setStrats={setMetricsStrats}/>
-                      <MetricsWrapper rows={buildUnifiedRows(metrics,result?.maxDDBH||0)} strats={metricsStrats}/>
+                      <MetricsWrapper rows={buildUnifiedRows(metricsResumen,result?.maxDDBH||0)} strats={metricsStrats}/>
                       {/* Diagnóstico de la estrategia: plegable, calculado en el cliente con lib/diagnostico.js */}
                       <DiagnosticoPanel result={result}/>
                     </div>
@@ -9149,7 +9154,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                 </div>
 
                 {/* Panel derecho de métricas */}
-                {!result.isBareChart&&sidePanel!=='multi'&&sidePanel!=='risk'&&(metricsLayout==='panel'||metricsLayout==='multi')&&metrics&&(
+                {!result.isBareChart&&sidePanel!=='multi'&&sidePanel!=='risk'&&(metricsLayout==='panel'||metricsLayout==='multi')&&metricsResumen&&(
                   <div style={{width:rightPanelW,flexShrink:0,borderLeft:'1px solid var(--border)',background:'var(--bg2)',overflowY:'auto',position:'relative'}} onContextMenu={e=>openCtx(e,'metrics')}>
                     {/* Resize handle — left edge */}
                     <div onMouseDown={e=>{rightResizing.current=true;rightStartX.current=e.clientX;rightStartW.current=rightPanelW;document.body.style.cursor='col-resize';document.body.style.userSelect='none'}}
@@ -9165,9 +9170,10 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       style={{fontFamily:MONO,fontSize:10,background:'rgba(255,209,102,0.12)',color:'#ffd166',padding:'3px 10px',cursor:'help',borderBottom:'1px solid var(--border)'}}>
                       ⚠ Datos desde {fmtDate(avisoHistoricoIndiv.realDesde)} · se pidió desde {fmtDate(avisoHistoricoIndiv.solicitadoDesde)}
                     </div>}
+                    {sinOperaciones&&<AvisoSinOperaciones result={result}/>}
                     <StratSelector strats={metricsStrats} setStrats={setMetricsStrats}/>
                     {(()=>{
-                      const rows = buildUnifiedRows(metrics, result?.maxDDBH||0)
+                      const rows = buildUnifiedRows(metricsResumen, result?.maxDDBH||0)
                       return <SingleColumnTable rows={rows} strats={metricsStrats}/>
                     })()}
                     {/* Diagnóstico de la estrategia: plegable, calculado en el cliente con lib/diagnostico.js */}
@@ -12432,7 +12438,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         <div style={{padding:'4px 6px 4px 10px',borderBottom:'1px solid var(--border)',fontFamily:MONO,fontSize:8,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
                           <span>Resumen</span>
                           <div style={{display:'flex',gap:4,alignItems:'center'}}>
-                            {result&&metrics&&sidePanel!=='multi'&&sidePanel!=='tradelog'&&(
+                            {result&&metricsResumen&&sidePanel!=='multi'&&sidePanel!=='tradelog'&&(
                               <button onClick={()=>setMetricsLayout(l=>l==='grid'?'panel':l==='panel'?'multi':'grid')}
                                 title={metricsLayout==='grid'?'Panel simple':metricsLayout==='panel'?'Multi-columna':'Grid'}
                                 style={{background:'transparent',border:'1px solid #1a2d45',color:'#3d5a7a',fontFamily:MONO,fontSize:9,
