@@ -32,6 +32,7 @@ import ContextThemeMenu, { applyTema } from '../components/ContextThemeMenu'
 import { exportTimeline, exportGantt, exportHistorial } from '../lib/exportTimeline'
 import GanttChart from '../components/GanttChart'
 import MetricRow from '../components/MetricRow'
+import DiagnosticoPanel from '../components/DiagnosticoPanel'
 import PriceAlarmQuickForm from '../components/PriceAlarmQuickForm'
 import StrategiesManager from '../components/StrategiesManager'
 import StrategyEditorPanel from '../components/StrategyEditorPanel'
@@ -6158,7 +6159,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.900</title>
+        <title>Trading Simulator V9.901</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6247,7 +6248,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             }} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.900
+            <span className="dot"/>Trading Simulator V9.901
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -8952,6 +8953,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       </div>}
                       <StratSelector strats={metricsStrats} setStrats={setMetricsStrats}/>
                       <MetricsWrapper rows={buildUnifiedRows(metrics,result?.maxDDBH||0)} strats={metricsStrats}/>
+                      {/* Diagnóstico de la estrategia: plegable, calculado en el cliente con lib/diagnostico.js */}
+                      <DiagnosticoPanel result={result}/>
                     </div>
                   )}
 
@@ -9167,6 +9170,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       const rows = buildUnifiedRows(metrics, result?.maxDDBH||0)
                       return <SingleColumnTable rows={rows} strats={metricsStrats}/>
                     })()}
+                    {/* Diagnóstico de la estrategia: plegable, calculado en el cliente con lib/diagnostico.js */}
+                    <DiagnosticoPanel result={result}/>
                   </div>
                 )}
               </div>
