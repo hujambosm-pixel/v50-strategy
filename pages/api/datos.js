@@ -13,6 +13,7 @@ import { marcaDiariaEnCurso, semanaEnCurso, soloCerradas } from '../../lib/sesio
 import { normalizaPeriodo, velasCalentamiento, recortaConCalentamiento, posicionesHeredadas,
          recortaIndicadores, marcasDelPeriodo } from '../../lib/periodo'
 import { comisionDe, normalizaComisiones, sinComisiones } from '../../lib/comisiones'
+import { normalizaGrafico } from '../../lib/graficoEstrategia'
 
 const SUPA_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPA_KEY = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -317,6 +318,12 @@ function buildTrades(rawTrades, capitalIni, allocationPct = 100, barras = null, 
     })
 }
 
+// Claves de `indicators` que viajan dentro de cada vela de chartData (ver «Inject indicators»), alias
+// incluidos. Si la estrategia declara una de estas en `grafico.series`, sus valores no se copian otra
+// vez: el gráfico los lee de las velas.
+const CLAVES_EN_VELAS = new Set(['emaR', 'emaFast', 'emaL', 'emaSlow', 'ema3', 'macdLine', 'signalLine', 'histogram',
+  'rsi', 'rsiLine', 'rsiMA', 'bbUpper', 'bbMid', 'bbLower', 'volume', 'volumeAvg'])
+
 // ── Handler ──────────────────────────────────────────────────
 export default async function handler(req, res) {
   try {
@@ -564,6 +571,15 @@ export default async function handler(req, res) {
     const rawFilterZones = _result.filterZones  ?? []
     const slopeChanges   = _result.slopeChanges   ?? []
     const customMarkers  = _result.customMarkers  ?? []
+    // Lo que la estrategia quiere que se VEA (sus series, sus eventos y sus órdenes). Opcional: sin él,
+    // normalizaGrafico devuelve null y la respuesta no cambia en nada. Se normaliza con los indicadores
+    // CRUDOS, porque la longitud que hay que comprobar es la de las velas que vio run(), no la del
+    // periodo. Las claves que ya viajan dentro de cada vela no se copian. Ver lib/graficoEstrategia.js.
+    const grafico = normalizaGrafico(_result.grafico, {
+      fechasVistas: dataCerradas.map(d => d.date), iDesde: _corte.iDesde, n: data.length, desde, hasta,
+      fechaEnCurso: dataConCal.length > dataCerradas.length ? dataConCal[dataConCal.length - 1].date : null,
+      indicators: _result.indicators, conocidas: CLAVES_EN_VELAS,
+    })
 
     // ── Flush virtual: posición abierta al final del periodo ──
     // La ultima vela CERRADA que no pasa de la fecha de fin, no la ultima que llego: el cierre por
@@ -737,6 +753,8 @@ export default async function handler(req, res) {
       ...curves,
       visuals: stratVisuals ? JSON.parse(stratVisuals) : null,
       meta: { ultimaFecha: data[data.length - 1].date, ultimoPrecio: data[data.length - 1].close, simbolo },
+      // Solo si la estrategia lo devuelve, y al final: sin él la respuesta es la de siempre, byte a byte.
+      ...(grafico ? { grafico } : {}),
     })
   } catch (e) {
     // El código de la estrategia es lo ÚNICO que se separa: 422 y un tipo propio, para que el

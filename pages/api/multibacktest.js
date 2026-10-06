@@ -12,6 +12,7 @@ import { ddPctDeOperacion, indicePorFecha } from '../../lib/ddOperacion'
 import { filtraPorEntrada } from '../../lib/filtroEntrada'
 import { semanalesDesdeDiarias } from '../../lib/velasSemanales'
 import { soloCerradas } from '../../lib/sesion'
+import { normalizaGrafico } from '../../lib/graficoEstrategia'
 import { normalizaPeriodo, velasCalentamiento, recortaConCalentamiento, recortaIndicadores,
          posicionesHeredadas } from '../../lib/periodo'
 import { COMISIONES_CERO, comisionDe, netoDeOperacion, normalizaComisiones,
@@ -1803,6 +1804,9 @@ function buildTrades(rawTrades, capitalIni, allocationPct = 100, barras = null, 
 // Sandbox idéntica a datos.js. Si falla → { trades:[], indicators:{}, filterZones:[] }
 // `per` = { desde, iDesde }: `data` llega CON calentamiento y `per` dice donde empieza el periodo.
 // Sin `per` se comporta como antes (todo es periodo), para que ninguna llamada antigua cambie.
+// `per.grafico`: true para normalizar y devolver el `grafico` de la estrategia. Solo lo pide asset-detail;
+// la cartera no lo envía —por tamaño, el mismo motivo por el que existe asset-detail— y así ni lo calcula.
+// `per.hasta` y `per.conocidasGrafico` solo cuentan para ese `grafico`. Ver lib/graficoEstrategia.js.
 export function runCodeJsAsset(data, sp500Data, codeJs, slotCapital, years, cfg, per = null, comisiones = null) {
   try {
     const iDesde = Math.max(0, Math.floor(per?.iDesde ?? 0) || 0)
@@ -1873,7 +1877,15 @@ export function runCodeJsAsset(data, sp500Data, codeJs, slotCapital, years, cfg,
     const trades = buildTrades(delPeriodo, slotCapital, 100, cerradas, comisiones)
     // Las zonas del calentamiento existen pero no son del backtest y el grafico no las puede pintar.
     const zonas = desde ? filterZones.filter(z => !z?.from || z.from >= desde) : filterZones
-    return { trades, indicators, filterZones: zonas, heredadas }
+    // Calculado sobre los indicadores CRUDOS: la longitud que se comprueba es la de las velas vistas.
+    const grafico = per?.grafico === true
+      ? normalizaGrafico(result.grafico, {
+          fechasVistas: cerradas.map(d => d.date), iDesde, n: data.length - iDesde, desde, hasta: per?.hasta ?? null,
+          fechaEnCurso: faltan ? data[data.length - 1].date : null,
+          indicators: indicatorsCrudos, conocidas: per?.conocidasGrafico,
+        })
+      : null
+    return { trades, indicators, filterZones: zonas, heredadas, ...(grafico ? { grafico } : {}) }
   } catch(e) {
     console.error('[runCodeJsAsset] error:', e.message)
     return { trades: [], indicators: {}, filterZones: [], heredadas: [] }

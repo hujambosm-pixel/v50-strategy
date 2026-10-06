@@ -41,6 +41,10 @@ const SERIES = {
 const ALIAS = { emaFast: 'emaR', emaSlow: 'emaL', rsiLine: 'rsi' }
 // Los dos únicos escalares del vocabulario: niveles de sobrecompra y sobreventa del RSI.
 const NIVELES = { obLevel: 'obLevel', rsiOB: 'obLevel', osLevel: 'osLevel', rsiOS: 'osLevel' }
+// Claves que esta ruta ya transporta en `indicators`. Una serie que la estrategia declare en
+// `grafico.series` con OTRA clave entra también en `indicators`, con su panel como escala: así pasa por
+// la misma conversión y la misma proyección semanal que las demás. Ver lib/graficoEstrategia.js.
+const CONOCIDAS_GRAFICO = new Set([...Object.keys(SERIES), ...Object.keys(ALIAS), ...Object.keys(NIVELES)])
 
 const finito = (v) => typeof v === 'number' && Number.isFinite(v)
 
@@ -147,13 +151,14 @@ export default async function handler(req, res) {
     // 3. El sandbox, por el mismo camino que el backtest. El capital solo afecta a los trades, que aquí
     //    se descartan: las series de indicadores no dependen de él.
     // Los indicadores vuelven ya en la rejilla del PERIODO: runCodeJsAsset los recorta con `iDesde`.
-    const { indicators = {}, filterZones: zonasSandbox = [] } =
+    const { indicators = {}, filterZones: zonasSandbox = [], grafico = null } =
       // Esta ruta descarta las operaciones y solo usa las series de indicadores, asi que la
       // comision no cambia nada de lo que devuelve. Se pasa igual para que el sandbox corra con la
       // MISMA configuracion que el backtest: si algun dia esta ruta devolviera las operaciones,
       // no habria que acordarse de esto.
       codeJs ? runCodeJsAsset(barrasConCal, sp500Data, codeJs, cfg.capitalIni ?? 10000, cfg.years ?? 5, effectiveCfg,
-                              { desde: _d.periodo.desde, iDesde: _d.iDesde ?? 0 }, comisiones)
+                              { desde: _d.periodo.desde, iDesde: _d.iDesde ?? 0, hasta: _d.periodo.hasta,
+                                grafico: true, conocidasGrafico: CONOCIDAS_GRAFICO }, comisiones)
              : { indicators: {}, filterZones: [] }
 
     paso = 'filtros'
@@ -217,6 +222,18 @@ export default async function handler(req, res) {
       if (serie) series[destino] = serie
       else descartadas[clave] = motivo
     }
+    // Series declaradas en `grafico` con una clave fuera del vocabulario: sus valores llegan ya en la
+    // rejilla del periodo, que es la de `fechasMotor`. Se mueven a `series` con su panel como escala y se
+    // quitan de `grafico`, para no mandarlos dos veces.
+    const escalasDeclaradas = {}
+    for (const s of grafico?.series || []) {
+      if (!Array.isArray(s.valores)) continue
+      const { serie, motivo } = aSerie(s.valores, fechasMotor)
+      // El bucle de arriba la habrá anotado como «fuera del vocabulario»: declarada, ya no lo está.
+      if (serie) { series[s.clave] = serie; escalasDeclaradas[s.clave] = s.panel; delete descartadas[s.clave] }
+      else descartadas[s.clave] = motivo
+      delete s.valores
+    }
 
     // 6. En semanal, las series se proyectan a las fechas DIARIAS del activo con el último valor CERRADO
     //    (proyectarSemanal). No se recalcula nada en diario a propósito: hay que dibujar lo que la
@@ -257,7 +274,7 @@ export default async function handler(req, res) {
       periodo: { desde: _d.periodo.desde, hasta: _d.periodo.hasta, modo: _d.periodo.modo,
                  calentamiento: _d.periodo.calentamiento, calentamientoPedido: nCal },
       // Sobre qué eje vive cada serie, para que el cliente no tenga que saberlo.
-      escalas: Object.fromEntries(Object.keys(series).map(k => [k, SERIES[k]])),
+      escalas: Object.fromEntries(Object.keys(series).map(k => [k, SERIES[k] ?? escalasDeclaradas[k]])),
       indicators: series,
       niveles,
       // Claves que llegaron y no se pudieron usar, con el motivo. Sin esto, una estrategia con un
@@ -265,6 +282,9 @@ export default async function handler(req, res) {
       ...(Object.keys(descartadas).length ? { descartadas } : {}),
       filterZones,
       nBarras: barras.length,
+      // Solo si la estrategia lo devuelve, y al final: sin él la respuesta es la de siempre, byte a byte.
+      // Sus eventos y órdenes van con las fechas del motor: en semanal sobre velas diarias no se proyectan.
+      ...(grafico ? { grafico } : {}),
     })
   } catch (e) {
     // Un error genérico y minificado es lo que ha dejado este fallo invisible: el cliente lo ignoraba en
