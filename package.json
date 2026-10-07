@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "backup": "node scripts/backup.js"
+    "backup": "node scripts/backup.js",
+    "guardian": "node scripts/guardian.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.100.0",

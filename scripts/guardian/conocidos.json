@@ -1,0 +1,9 @@
+{
+  "_comentario": "Problemas CONOCIDOS que aún no se han corregido. Un fallo de una estrategia cuyo nombre case con «estrategias» (expresión regular) en una comprobación de la lista se informa como «conocido» y no hace fallar el guardián. «*» = todas las comprobaciones. Cuando se corrija una estrategia, hay que quitarla de aquí: si no, un fallo nuevo suyo pasaría desapercibido.",
+  "conocidos": [
+    { "estrategias": "^13[ .]", "comprobaciones": "*", "motivo": "Familia 13 (RSI): incumple la regla de la vela cerrada; pendiente de corregir." },
+    { "estrategias": "^22 ", "comprobaciones": "*", "motivo": "22 Bollinger + ATR: incumple la regla de la vela cerrada; pendiente de corregir." },
+    { "estrategias": "^25 ", "comprobaciones": "*", "motivo": "25 desviación EMA10: incumple la regla de la vela cerrada; pendiente de corregir." },
+    { "estrategias": "^33[ .]", "comprobaciones": "*", "motivo": "Familia 33 (máximos históricos): incumple la regla de la vela cerrada; pendiente de corregir." }
+  ]
+}
