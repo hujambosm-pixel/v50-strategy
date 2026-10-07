@@ -148,12 +148,17 @@ $$;
 -- Devuelve UN objeto JSON por columnas —{ fecha: [...], open: [...], high, low, close, volumen }—, que
 -- ocupa la mitad que una fila por vela y es lo que se transfiere en cada backtest. SECURITY INVOKER: la
 -- lectura pasa por la política de RLS de la tabla.
+-- extra_float_digits = 1: el servidor de Supabase tiene extra_float_digits = 0, y con eso un double sale
+-- en el JSON redondeado a 15 cifras (2.63571405410767 en vez de 2.635714054107666). Con 1 sale el valor
+-- guardado exacto, idéntico (===) al de Yahoo. Se añadió después con
+--   ALTER FUNCTION public.leer_velas(text, date, date) SET extra_float_digits = 1;
 CREATE FUNCTION public.leer_velas(p_simbolo text, p_desde date DEFAULT NULL, p_hasta date DEFAULT NULL)
 RETURNS jsonb
 LANGUAGE sql
 STABLE
 SECURITY INVOKER
 SET search_path = public, pg_temp
+SET extra_float_digits = 1
 AS $$
   SELECT jsonb_build_object(
     'simbolo', p_simbolo,
