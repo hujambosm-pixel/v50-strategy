@@ -1,9 +1,25 @@
 {
-  "_comentario": "Problemas CONOCIDOS que aún no se han corregido. Un fallo de una estrategia cuyo nombre case con «estrategias» (expresión regular) en una comprobación de la lista se informa como «conocido» y no hace fallar el guardián. «*» = todas las comprobaciones. Cuando se corrija una estrategia, hay que quitarla de aquí: si no, un fallo nuevo suyo pasaría desapercibido.",
+  "_comentario": "Problemas CONOCIDOS que aún no se han corregido. Un fallo de una estrategia cuyo nombre case con «estrategias» (expresión regular) en una comprobación de la lista se informa como «conocido» y no hace fallar el guardián; un fallo en OTRA comprobación sí. «*» = todas. El resumen distingue «conocido (detectado)» —el guardián ve el fallo— de «conocido (no detectable por el guardián)» —el problema existe pero estas comprobaciones no lo ven—. Cuando se corrija una estrategia, hay que quitarla de aquí.",
   "conocidos": [
-    { "estrategias": "^13[ .]", "comprobaciones": "*", "motivo": "Familia 13 (RSI): incumple la regla de la vela cerrada; pendiente de corregir." },
-    { "estrategias": "^22 ", "comprobaciones": "*", "motivo": "22 Bollinger + ATR: incumple la regla de la vela cerrada; pendiente de corregir." },
-    { "estrategias": "^25 ", "comprobaciones": "*", "motivo": "25 desviación EMA10: incumple la regla de la vela cerrada; pendiente de corregir." },
-    { "estrategias": "^33[ .]", "comprobaciones": "*", "motivo": "Familia 33 (máximos históricos): incumple la regla de la vela cerrada; pendiente de corregir." }
+    { "estrategias": "^1\\.3 V50", "comprobaciones": ["a"],
+      "motivo": "Entra en la apertura y la salida de emergencia, decidida ya con el cierre anterior, la saca en esa misma apertura. Corregir: no colocar la entrada si el cruce bajista ya se ha producido." },
+    { "estrategias": "^14 Trend", "comprobaciones": ["c"],
+      "motivo": "No comprueba el stop en la vela en que lo sube: ese día el precio puede perforar el stop vigente sin salir. Corregir: comprobar el stop en todas las velas, también en la del ajuste." },
+    { "estrategias": "^29\\.1 ", "comprobaciones": ["a"],
+      "motivo": "El objetivo 1:1 se cumple en la vela de entrada sin un stop que lo explique; dentro de una vela no se sabe si el máximo llegó antes que la entrada. Corregir: evaluar el objetivo desde la vela siguiente." },
+    { "estrategias": "^3 V50f2", "comprobaciones": ["b"],
+      "motivo": "La salida de emergencia se ejecuta a bPrev.close, el cierre de la vela que la decide. Corregir: salir en la apertura de la vela siguiente (b.open), como la 1 V50." },
+    { "estrategias": "^4 V50", "comprobaciones": ["b"],
+      "motivo": "La salida de emergencia se ejecuta a bPrev.close, el cierre de la vela que la decide. Corregir: salir en la apertura de la vela siguiente (b.open), como la 1 V50." },
+    { "estrategias": "^Copia2 ", "comprobaciones": ["b"],
+      "motivo": "Sale al cierre de la vela del cruce bajista (b.close), la misma que lo decide. Corregir: salir en la apertura de la vela siguiente." },
+    { "estrategias": "^13[ .]", "comprobaciones": "*",
+      "motivo": "Su stop, conocido desde la vela de señal, no se aplica el día de la entrada. Pendiente de decisión de Sergi." },
+    { "estrategias": "^22 ", "comprobaciones": "*",
+      "motivo": "Calcula el stop con el ATR de la vela en curso, que incluye su cierre." },
+    { "estrategias": "^25 ", "comprobaciones": "*",
+      "motivo": "Stop móvil con la EMA100 de la vela en curso, que incluye su cierre." },
+    { "estrategias": "^33[ .]", "comprobaciones": "*",
+      "motivo": "Resultado dependiente del inicio de la serie: usa el máximo acumulado desde la primera vela descargada." }
   ]
 }

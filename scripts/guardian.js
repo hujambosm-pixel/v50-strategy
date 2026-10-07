@@ -242,6 +242,9 @@ function compruebaRespuesta(R, intervalo, anota) {
   const esConocido = (nombre, comp) => conocidos.find(c => c.re.test(nombre) && (c.comprobaciones === '*' || c.comprobaciones.includes(comp)))
 
   const tabla = [], detalles = [], notas = []
+  // Conocidos que el guardián HA VISTO fallar: estrategia → { motivo, columnas }. Los demás conocidos
+  // que estén en la lista de estrategias se informan como «no detectables por el guardián».
+  const conocidosVistos = new Map()
   console.log(`Guardián: ${lista.length} estrategias × ${SIMBOLOS.length} símbolos, periodo ${DESDE} → ${HASTA}, fixture de ${FIXTURE.generado}`)
   for (const est of lista) {
     let params = {}; try { params = typeof est.params === 'string' ? JSON.parse(est.params || '{}') : (est.params || {}) } catch (_) {}
@@ -252,7 +255,14 @@ function compruebaRespuesta(R, intervalo, anota) {
       if (estado === 'n/a') { if (estados[comp] === 'ok') estados[comp] = 'n/a'; return }
       if (estados[comp] === 'n/a') estados[comp] = 'ok'
       let e = estado
-      if (e === 'FALLO') { const k = esConocido(est.name, comp); if (k) e = 'conocido' }
+      if (e === 'FALLO') {
+        const k = esConocido(est.name, comp)
+        if (k) {
+          e = 'conocido'
+          if (!conocidosVistos.has(est.name)) conocidosVistos.set(est.name, { motivo: k.motivo, columnas: new Set() })
+          conocidosVistos.get(est.name).columnas.add(comp)
+        }
+      }
       const rango = { ok: 0, 'n/a': 0, ambiguo: 1, conocido: 2, FALLO: 3 }
       if (rango[e] > rango[estados[comp]]) estados[comp] = e
       if (e === 'FALLO') {
@@ -352,8 +362,22 @@ function compruebaRespuesta(R, intervalo, anota) {
   const fallos = tabla.filter(f => Object.values(f.estados).includes('FALLO'))
   if (notas.length) { console.log('\nNOTAS (stopHistory y casos ambiguos):'); [...new Set(notas)].slice(0, 40).forEach(n => console.log('  · ' + n)) }
   if (detalles.length) { console.log('\nFALLOS:'); detalles.forEach(d => console.log('  ' + d)) }
-  const conocidas = tabla.filter(f => Object.values(f.estados).includes('conocido')).length
-  console.log(`\n${tabla.length} estrategias · ${fallos.length} con FALLO · ${conocidas} con problemas conocidos · ${((Date.now() - t0) / 1000).toFixed(0)} s`)
+  // Conocidos: los detectados (con sus columnas) y los que estas comprobaciones no ven, con su nota.
+  const detectados = [], noDetectables = []
+  for (const f of tabla) {
+    const k = conocidos.find(c => c.re.test(f.nombre))
+    if (!k) continue
+    const visto = conocidosVistos.get(f.nombre)
+    if (visto) detectados.push(`${f.nombre} — conocido (detectado en ${[...visto.columnas].sort().join(', ')}): ${k.motivo}`)
+    else noDetectables.push(`${f.nombre} — conocido (no detectable por el guardián): ${k.motivo}`)
+  }
+  if (detectados.length || noDetectables.length) {
+    console.log('\nCONOCIDOS:')
+    detectados.forEach(c => console.log('  · ' + c))
+    noDetectables.forEach(c => console.log('  · ' + c))
+  }
+  console.log(`\n${tabla.length} estrategias · ${fallos.length} con FALLO · ${detectados.length + noDetectables.length} conocidas `
+    + `(${detectados.length} detectadas, ${noDetectables.length} no detectables por el guardián) · ${((Date.now() - t0) / 1000).toFixed(0)} s`)
   global.fetch = fetchReal
   if (fallos.length) { console.log('GUARDIÁN: FALLO'); process.exit(1) }
   console.log('GUARDIÁN: OK')
