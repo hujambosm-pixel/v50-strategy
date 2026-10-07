@@ -14,6 +14,7 @@ import { normalizaPeriodo, velasCalentamiento, recortaConCalentamiento, posicion
          recortaIndicadores, marcasDelPeriodo } from '../../lib/periodo'
 import { comisionDe, normalizaComisiones, sinComisiones } from '../../lib/comisiones'
 import { normalizaGrafico, marcaBloqueadas } from '../../lib/graficoEstrategia'
+import { conCachePrecios, cacheDeLaPeticion, diariasConCache } from '../../lib/cachePreciosServidor'
 
 const SUPA_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPA_KEY = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -45,10 +46,59 @@ export function setCachedPrice(symbol, price, date, origen, interval='d', prev=n
   priceCache.set(clavePrecio(symbol, interval), { price, date, origen, prev, timestamp: Date.now() })
 }
 
+// Una descarga de Yahoo con 4 segundos de espera, parseada como la ha usado siempre el motor. La usan la
+// descarga de siempre (range=Ny) y la caché de precios (period1/period2), para que las dos den los
+// mismos números. estado: 'ok' (hay velas), 'sin-datos' (Yahoo responde que no hay nada en ese tramo)
+// o 'error' (red, espera agotada u otra respuesta).
+export async function descargaYahoo(yfUrl) {
+  let rawData = null, metaSesion = null, tsUltima = null, estado = 'error'
+  const yfCtrl = new AbortController()
+  const yfTimer = setTimeout(() => yfCtrl.abort(), 4000)
+  try {
+    const yfR = await fetch(yfUrl, {
+      signal: yfCtrl.signal,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'application/json'
+      }
+    })
+    if (yfR.ok) {
+      const yfJson = await yfR.json()
+      const timestamps = yfJson?.chart?.result?.[0]?.timestamp
+      const quotes = yfJson?.chart?.result?.[0]?.indicators?.quote?.[0]
+      // El meta trae el periodo regular de la sesión: con él se sabe si la última vela está
+      // cerrada. Ver lib/sesion.js.
+      metaSesion = yfJson?.chart?.result?.[0]?.meta ?? null
+      estado = 'sin-datos'
+      if (timestamps && quotes) {
+        tsUltima = Number(timestamps[timestamps.length - 1])
+        rawData = timestamps.map((t,i) => ({
+          date: new Date(t*1000).toISOString().slice(0,10),
+          open:  quotes.open?.[i]  || quotes.close?.[i],
+          high:  quotes.high?.[i]  || quotes.close?.[i],
+          low:   quotes.low?.[i]   || quotes.close?.[i],
+          close: quotes.close?.[i],
+          volume: quotes.volume?.[i] || 0
+        })).filter(d=>d.close&&!isNaN(d.close))
+        if (rawData.length) estado = 'ok'
+      }
+    } else if (yfR.status === 400) {
+      // «Data doesn't exist for startDate…»: un tramo anterior a la salida a bolsa.
+      const txt = await yfR.text().catch(() => '')
+      if (/Data doesn't exist/i.test(txt)) estado = 'sin-datos'
+    }
+  } catch(_) {
+    // timeout or network error → rawData stays null
+  } finally {
+    clearTimeout(yfTimer)
+  }
+  return { rawData, metaSesion, tsUltima, estado }
+}
+
 // Devuelve las barras Y su procedencia. `fetchAV` sigue existiendo con su firma y su valor de siempre
 // —el array— como envoltorio, así que ningún consumidor cambia.
-//   origen              'yahoo', siempre. Se conserva el campo porque la cabecera del multiactivo lo
-//                       muestra, y porque el día que haya un segundo proveedor hará falta otra vez.
+//   origen              'yahoo', o 'cache' si las velas han salido de la caché de precios (el interruptor
+//                       de Ajustes; ver lib/cachePreciosServidor.js). La cabecera del multiactivo lo muestra.
 //   ajustadoDividendos  SIEMPRE false, y por eso se llama así. El campo se llamaba `ajustado` y valía
 //                       `origen === 'stooq'`, lo que insinuaba que lo de Yahoo no estaba ajustado de
 //                       ninguna manera. Sí lo está por SPLITS —el cierre de indicators.quote[0] los
@@ -69,52 +119,33 @@ export async function fetchAVDetalle(symbol, years=5, interval='d') {
   let rawData = null
   let metaSesion = null, tsUltima = null
   const semanal = interval === 'w'
+  // Siempre diario: las semanales se construyen después a partir de estas mismas velas.
+  const yfInterval = '1d'
+  // Se piden los años solicitados, sin tope: range=Ny sirve velas diarias hasta toda la historia
+  // del activo (si se pide más, Yahoo devuelve lo que hay). NO usar range=max: degrada a velas
+  // trimestrales. En semanal NO hace falta pedir más: la diaria a 20 años son ~5.031 velas sin un
+  // solo hueco de más de 5 días, así que el mismo rango de calendario cubre las mismas semanas.
+  const yfYears = Math.max(Math.ceil(years), 1)
+  const yfUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=${yfInterval}&range=${yfYears}y`
+
+  // ── Caché de precios, si la petición la pide (ver lib/cachePreciosServidor.js) ──
+  // Devuelve la misma ventana que range=Ny. Si falla cualquier paso, se sigue con la descarga de siempre.
+  const _cache = cacheDeLaPeticion()
+  if (_cache) {
+    try {
+      ;({ rawData, metaSesion, tsUltima } = await diariasConCache(symbol, yfYears,
+        { jwt: _cache.jwt, descarga: descargaYahoo, urlRango: yfUrl }))
+      origen = 'cache'
+    } catch (e) {
+      console.log(`[cache-precios] ${symbol}: ${e.message}; se sigue con la descarga de Yahoo`)
+      rawData = null; metaSesion = null; tsUltima = null
+    }
+  }
 
   // ── Yahoo Finance, con 4 segundos de espera ──
-  {
-    // Siempre diario: las semanales se construyen después a partir de estas mismas velas.
-    const yfInterval = '1d'
-    // Se piden los años solicitados, sin tope: range=Ny sirve velas diarias hasta toda la historia
-    // del activo (si se pide más, Yahoo devuelve lo que hay). NO usar range=max: degrada a velas
-    // trimestrales. En semanal NO hace falta pedir más: la diaria a 20 años son ~5.031 velas sin un
-    // solo hueco de más de 5 días, así que el mismo rango de calendario cubre las mismas semanas.
-    const yfYears = Math.max(Math.ceil(years), 1)
-    const yfUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=${yfInterval}&range=${yfYears}y`
-    const yfCtrl = new AbortController()
-    const yfTimer = setTimeout(() => yfCtrl.abort(), 4000)
-    try {
-      const yfR = await fetch(yfUrl, {
-        signal: yfCtrl.signal,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          'Accept': 'application/json'
-        }
-      })
-      if (yfR.ok) {
-        const yfJson = await yfR.json()
-        const timestamps = yfJson?.chart?.result?.[0]?.timestamp
-        const quotes = yfJson?.chart?.result?.[0]?.indicators?.quote?.[0]
-        // El meta trae el periodo regular de la sesión: con él se sabe si la última vela está
-        // cerrada. Ver lib/sesion.js.
-        metaSesion = yfJson?.chart?.result?.[0]?.meta ?? null
-        if (timestamps && quotes) {
-          tsUltima = Number(timestamps[timestamps.length - 1])
-          rawData = timestamps.map((t,i) => ({
-            date: new Date(t*1000).toISOString().slice(0,10),
-            open:  quotes.open?.[i]  || quotes.close?.[i],
-            high:  quotes.high?.[i]  || quotes.close?.[i],
-            low:   quotes.low?.[i]   || quotes.close?.[i],
-            close: quotes.close?.[i],
-            volume: quotes.volume?.[i] || 0
-          })).filter(d=>d.close&&!isNaN(d.close))
-          if (rawData.length) origen = 'yahoo'
-        }
-      }
-    } catch(_) {
-      // timeout or network error → rawData stays null
-    } finally {
-      clearTimeout(yfTimer)
-    }
+  if (!rawData) {
+    ;({ rawData, metaSesion, tsUltima } = await descargaYahoo(yfUrl))
+    if (rawData?.length) origen = 'yahoo'
   }
 
   const _ms = Date.now() - _t0
@@ -325,7 +356,13 @@ const CLAVES_EN_VELAS = new Set(['emaR', 'emaFast', 'emaL', 'emaSlow', 'ema3', '
   'rsi', 'rsiLine', 'rsiMA', 'bbUpper', 'bbMid', 'bbLower', 'volume', 'volumeAvg'])
 
 // ── Handler ──────────────────────────────────────────────────
-export default async function handler(req, res) {
+// La caché de precios va en un contexto por petición (lib/cachePreciosServidor.js). priceOnly queda
+// fuera: es una consulta de un año para el último precio y la descarga de siempre es más rápida.
+export default function handler(req, res) {
+  if (req.body?.priceOnly) return handlerDatos(req, res)
+  return conCachePrecios(req, () => handlerDatos(req, res))
+}
+async function handlerDatos(req, res) {
   try {
   if (req.method !== 'POST') return res.status(405).end()
   // AUTENTICACIÓN OBLIGATORIA. Sin JWT válido no se sirve nada: 401 antes de tocar Supabase o

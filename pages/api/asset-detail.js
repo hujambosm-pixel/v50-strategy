@@ -12,6 +12,7 @@ import { fetchData, fetchDataConMotivo, runCodeJsAsset, buildAlignedCloses, buil
 import { marcaBloqueadas } from '../../lib/graficoEstrategia'
 import { velasCalentamiento } from '../../lib/periodo'
 import { exigeAuth } from '../../lib/verificaJwt'
+import { conCachePrecios } from '../../lib/cachePreciosServidor'
 import { normalizaFiltrosEntrada, hayFiltrosActivos, clavesAuxiliares, construirFiltroActivoMap,
          requiereSemanalDelActivo, proyectarSemanal, fuerzaFiltrosSemanales, motivosDeBloqueo } from '../../lib/filtros'
 
@@ -78,7 +79,12 @@ function zonasDeMapa(barras, filtroActivoMap) {
   return zonas
 }
 
-export default async function handler(req, res) {
+// La caché de precios va en un contexto por petición (lib/cachePreciosServidor.js): con el interruptor
+// de Ajustes encendido, fetchAVDetalle lee de la caché en todas las descargas del panel del activo.
+export default function handler(req, res) {
+  return conCachePrecios(req, () => handlerAssetDetail(req, res))
+}
+async function handlerAssetDetail(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
   // AUTENTICACIÓN OBLIGATORIA. Sin JWT válido no se sirve nada: 401 antes de tocar Supabase o
   // cualquier proveedor. Incluye las acciones que no hablan con la base de datos, a propósito.

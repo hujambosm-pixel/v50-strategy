@@ -276,6 +276,21 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
               <div style={{fontSize:10,color:'#3d5a7a',lineHeight:1.6,marginTop:-6}}>
                 La clave se almacena únicamente en localStorage de tu navegador. Obtén una clave gratuita en <a href="https://console.groq.com" target="_blank" rel="noreferrer" style={{color:'#4a9fd4'}}>console.groq.com</a>
               </div>
+
+              {sep('Caché de precios')}
+              <label style={{display:'flex',alignItems:'center',gap:8,marginBottom:8,cursor:'pointer'}}>
+                <input type="checkbox"
+                  checked={settings.precios?.usarCache===true}
+                  onChange={e=>upd('precios.usarCache',e.target.checked)}
+                  style={{accentColor:'#00d4ff',width:13,height:13}}/>
+                <span style={{fontSize:11,color:'#cce0f5'}}>Usar caché de precios</span>
+              </label>
+              <div style={{fontSize:10,color:'#3d5a7a',lineHeight:1.6}}>
+                Los backtests, el multiactivo, el panel del activo y el ranking leen las velas diarias ya cerradas
+                de la caché de Supabase y solo piden a Yahoo las últimas, la vela en curso y lo que falte. Los
+                resultados son los mismos. Si la caché falla o tarda más de 2 segundos, se descarga de Yahoo como
+                siempre. Apagada por defecto.
+              </div>
             </div>
           )}
 

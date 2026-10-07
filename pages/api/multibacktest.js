@@ -6,6 +6,7 @@ import { normalizaFiltrosEntrada, hayFiltrosActivos, clavesAuxiliares, construir
          requiereSemanalDelActivo, proyectarSemanal, fuerzaFiltrosSemanales } from '../../lib/filtros'
 import { fetchAV, fetchAVDetalle } from './datos'
 import { exigeAuth } from '../../lib/verificaJwt'
+import { conCachePrecios } from '../../lib/cachePreciosServidor'
 import { operacionesPorFiltro, esNoStrategyPorNombre } from '../../lib/operacionesPorFiltro'
 import { ajustaPreciosAVela, cuentaAjustados } from '../../lib/precioEnVela'
 import { ddPctDeOperacion, indicePorFecha } from '../../lib/ddOperacion'
@@ -2382,7 +2383,12 @@ async function handlePortfolioMode(req, res) {
   }
 }
 
-export default async function handler(req, res) {
+// La caché de precios va en un contexto por petición (lib/cachePreciosServidor.js): con el interruptor
+// de Ajustes encendido, fetchAVDetalle lee de la caché en todas las descargas del multiactivo.
+export default function handler(req, res) {
+  return conCachePrecios(req, () => handlerMultibacktest(req, res))
+}
+async function handlerMultibacktest(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
   // AUTENTICACIÓN OBLIGATORIA. Sin JWT válido no se sirve nada: 401 antes de tocar Supabase o
   // cualquier proveedor. Incluye las acciones que no hablan con la base de datos, a propósito.
