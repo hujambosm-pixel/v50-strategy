@@ -55,6 +55,11 @@
 //     _politicas_rls.json       las políticas de cada tabla, con su USING y su WITH CHECK
 //     _resumen.json             tabla, filas, recuento real, estado y tamaño
 //
+// LO QUE NO GUARDA, A PROPÓSITO: las filas de precios_diarios, la caché de precios de Yahoo. Ocupa más
+// que todo lo demás junto, no es información tuya y se reconstruye desde Yahoo en unos minutos con
+// `node scripts/llenaCachePrecios.js`. Su recuento sí se anota, y precios_simbolos, la definición de
+// la tabla y sus políticas siguen en la copia. `npm run backup -- --con-cache` la incluye.
+//
 // RESTAURAR sigue siendo a mano, y es deliberado: importar es escribir, y un script que escribe en
 // estas tablas es justo lo que no conviene tener a mano. Los JSON llevan las filas tal cual salieron.
 
@@ -65,6 +70,12 @@ const { spawnSync } = require('child_process')
 const NL = String.fromCharCode(10)
 const ROJO = '\x1b[31m', VERDE = '\x1b[32m', AMBAR = '\x1b[33m', GRIS = '\x1b[90m', FIN = '\x1b[0m'
 const err = (...a) => console.error(ROJO + a.join(' ') + FIN)
+
+// Tablas cuyas filas se dejan fuera por defecto, con el motivo y cómo se reconstruyen.
+const CON_CACHE = process.argv.includes('--con-cache')
+const EXCLUIDAS = CON_CACHE ? {} : {
+  precios_diarios: 'caché de precios de Yahoo: se reconstruye con node scripts/llenaCachePrecios.js',
+}
 
 // ── Token ────────────────────────────────────────────────────────────────────
 // Se lee con CredRead, la misma API que usa la CLI de Supabase para guardarlo. El script de
@@ -212,6 +223,17 @@ async function main() {
   let bytes = 0
   for (const t of tablas) {
     const nombre = t.tabla
+    if (EXCLUIDAS[nombre]) {
+      // Solo el recuento, para dejar constancia de qué se ha dejado fuera.
+      try {
+        const total = Number((await lista(`SELECT count(*)::bigint AS d FROM public."${nombre}";`)))
+        resumen.push({ tabla: nombre, filas: null, recuentoReal: total, rls: t.rls, bytes, estado: 'excluida', motivo: EXCLUIDAS[nombre] })
+      } catch (e) {
+        resumen.push({ tabla: nombre, filas: null, recuentoReal: null, rls: t.rls, bytes, estado: 'error', motivo: e.message })
+        err(`  ✗ ${nombre}: ${e.message}`)
+      }
+      continue
+    }
     try {
       const r = await sql(`SELECT (SELECT count(*)::bigint FROM public."${nombre}") AS total,
         coalesce(json_agg(x),'[]'::json) AS filas FROM (SELECT * FROM public."${nombre}") x;`)
@@ -300,7 +322,7 @@ async function main() {
   }
 
   // 6. Resumen
-  const jsonResumen = JSON.stringify({ _copia: { exportadoEn, proyecto: REF, destino: DESTINO }, tablas: resumen, extras, estrategias: nEstrategias }, null, 2)
+  const jsonResumen = JSON.stringify({ _copia: { exportadoEn, proyecto: REF, destino: DESTINO, conCache: CON_CACHE }, tablas: resumen, extras, estrategias: nEstrategias }, null, 2)
   fs.writeFileSync(path.join(DESTINO, '_resumen.json'), jsonResumen, 'utf8')
   bytes += Buffer.byteLength(jsonResumen, 'utf8')
 
@@ -311,6 +333,7 @@ async function main() {
   for (const r of resumen) {
     const tam = r.bytes - prev; prev = r.bytes
     const estado = r.estado === 'ok' ? VERDE + '✓' + FIN
+      : r.estado === 'excluida' ? AMBAR + 'excluida a propósito' + FIN
       : r.estado === 'descuadre' ? ROJO + '✗ DESCUADRE' + FIN
       : ROJO + '✗ ' + (r.motivo || 'error') + FIN
     console.log('  ' + r.tabla.padEnd(26) + String(r.filas ?? '-').padStart(8) + String(r.recuentoReal ?? '-').padStart(10) +
@@ -323,11 +346,14 @@ async function main() {
   }
   if (nEstrategias) console.log('  ' + 'estrategias, una por fichero'.padEnd(26) + String(nEstrategias).padStart(8) + ' ficheros')
 
-  const malas = resumen.filter(r => r.estado !== 'ok')
+  const malas = resumen.filter(r => r.estado !== 'ok' && r.estado !== 'excluida')
+  const excluidas = resumen.filter(r => r.estado === 'excluida')
+  const copiadas = resumen.length - excluidas.length
   const extrasMal = extras.filter(e => e.estado !== 'ok')
   const filasTotal = resumen.reduce((s, r) => s + (r.filas || 0), 0)
   console.log('')
-  console.log('  ' + resumen.length + ' tablas · ' + filasTotal + ' filas · ' + kb(bytes))
+  console.log('  ' + copiadas + ' tablas copiadas' + (excluidas.length ? ' (+' + excluidas.length + ' excluida a propósito)' : '') +
+    ' · ' + filasTotal + ' filas · ' + kb(bytes))
   console.log('  Copia en: ' + DESTINO)
   console.log('')
   console.log(AMBAR + '  ⚠ user_settings lleva claves de integración EN CLARO (Groq incluida), trades_log es tu' + FIN)
@@ -347,7 +373,12 @@ async function main() {
     process.exit(1)
   }
   console.log('')
-  console.log(VERDE + '  ✓ Copia completa: las ' + resumen.length + ' tablas cuadran con su recuento real.' + FIN)
+  console.log(VERDE + '  ✓ Copia completa: las ' + copiadas + ' tablas copiadas cuadran con su recuento real.' + FIN)
+  for (const r of excluidas) {
+    console.log(AMBAR + '  ℹ ' + r.tabla + ' (' + r.recuentoReal + ' filas) excluida a propósito: ' + r.motivo + '.' + FIN)
+    console.log(AMBAR + '    Su definición y sus políticas sí están en la copia. Para incluir sus filas:' + FIN)
+    console.log(AMBAR + '    npm run backup -- --con-cache' + FIN)
+  }
   console.log('══════════════════════════════════════════════════════════════════════')
   console.log('')
 }
