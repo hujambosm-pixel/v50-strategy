@@ -39,7 +39,8 @@ CREATE TABLE public.precios_simbolos (
   revisado_en     timestamptz,
   recargado_en    timestamptz,
   motivo_recarga  text,
-  velas_anomalas  integer NOT NULL DEFAULT 0   -- velas que Yahoo sirve incoherentes (ver guardar_velas)
+  velas_anomalas  integer NOT NULL DEFAULT 0,  -- velas que Yahoo sirve incoherentes (ver guardar_velas)
+  sesion          jsonb                        -- la sesión que anunciaba Yahoo al revisar (ver marcar_revisado)
 );
 
 -- ── RLS: lectura para usuarios autenticados; ninguna escritura directa ───────────────────────────────
@@ -188,8 +189,43 @@ AS $$
     AND (p_hasta IS NULL OR d.fecha <= p_hasta);
 $$;
 
+-- ── marcar_revisado: «comprobado contra Yahoo, sin nada nuevo» y la sesión que Yahoo anunciaba ────────
+-- La usa la caché de precios de los backtests (lib/cachePreciosServidor.js). Con la sesión guardada, otra
+-- instancia del servidor puede servir el símbolo SOLO desde la caché, sin pedir a Yahoo el último mes,
+-- durante 15 minutos y mientras no empiece la sesión anunciada: hasta entonces Yahoo no tiene ninguna vela
+-- más y devolvería lo mismo. p_sesion = { inicio, fin, tsUltima (segundos epoch), fechaUltima (la fecha de
+-- su última vela), firstTradeDate }; se le añade «en» con la hora del servidor. Solo se anota si la caché
+-- ya llega a esa fecha (ultima_fecha = fechaUltima). Devuelve si se ha anotado.
+CREATE FUNCTION public.marcar_revisado(p_simbolo text, p_sesion jsonb)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'marcar_revisado: hace falta un usuario autenticado';
+  END IF;
+  -- IS DISTINCT FROM y no <>: si falta una clave, jsonb_typeof da NULL y <> no la rechazaría.
+  IF p_sesion IS NULL OR jsonb_typeof(p_sesion) IS DISTINCT FROM 'object'
+     OR jsonb_typeof(p_sesion->'inicio') IS DISTINCT FROM 'number' OR jsonb_typeof(p_sesion->'fin') IS DISTINCT FROM 'number'
+     OR jsonb_typeof(p_sesion->'tsUltima') IS DISTINCT FROM 'number' OR jsonb_typeof(p_sesion->'fechaUltima') IS DISTINCT FROM 'string'
+     OR (p_sesion->>'fin')::numeric <= (p_sesion->>'inicio')::numeric THEN
+    RAISE EXCEPTION 'marcar_revisado: sesión incompleta (%)', p_sesion;
+  END IF;
+  UPDATE public.precios_simbolos
+     SET revisado_en = now(),
+         sesion = p_sesion || jsonb_build_object('en', now())
+   WHERE simbolo = p_simbolo
+     AND ultima_fecha = (p_sesion->>'fechaUltima')::date;
+  RETURN FOUND;
+END;
+$$;
+
 -- ── Permisos de las funciones: solo usuarios autenticados ────────────────────────────────────────────
 REVOKE ALL ON FUNCTION public.guardar_velas(text, jsonb, boolean, text) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.leer_velas(text, date, date)             FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.guardar_velas(text, jsonb, boolean, text) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.leer_velas(text, date, date)             TO authenticated;
+REVOKE ALL ON FUNCTION public.marcar_revisado(text, jsonb)                FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.marcar_revisado(text, jsonb)             TO authenticated;
