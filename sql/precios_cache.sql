@@ -38,7 +38,8 @@ CREATE TABLE public.precios_simbolos (
   velas           integer NOT NULL DEFAULT 0,
   revisado_en     timestamptz,
   recargado_en    timestamptz,
-  motivo_recarga  text
+  motivo_recarga  text,
+  velas_anomalas  integer NOT NULL DEFAULT 0   -- velas que Yahoo sirve incoherentes (ver guardar_velas)
 );
 
 -- ── RLS: lectura para usuarios autenticados; ninguna escritura directa ───────────────────────────────
@@ -58,9 +59,14 @@ REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER
 -- p_filas: [{ "fecha": "2024-06-07", "open": …, "high": …, "low": …, "close": …, "volumen": … }, …]
 -- Valida TODAS las velas antes de escribir ninguna (todo o nada):
 --   · usuario autenticado (auth.uid() no nulo);
---   · fecha, open, high, low y close presentes; precios positivos; low <= open, close <= high;
+--   · fecha, open, high, low y close presentes y finitos;
 --   · fecha ANTERIOR a hoy (UTC): ni la vela de hoy ni una futura, que pueden no haber cerrado;
 --   · sin fechas repetidas.
+-- NO exige que la vela sea coherente: la caché es una copia EXACTA de lo que usa el motor, y Yahoo sirve
+-- velas con algún precio no positivo (CL=F, petróleo negativo en abril de 2020) o con el open o el
+-- close fuera de [low, high] (cierres de liquidación de GC=F y SI=F, cierres de subasta de XSPS.L).
+-- Se guardan tal cual y se cuentan en precios_simbolos.velas_anomalas: velas del símbolo con algún
+-- precio <= 0, low > high, u open o close fuera de [low, high]. Sirve para avisar de su baja calidad.
 -- p_reemplazar = true borra antes todas las velas del símbolo (recarga completa tras un split) y anota
 -- recargado_en y p_motivo. Con p_filas vacío solo marca revisado_en (comprobado contra Yahoo, sin
 -- cambios). Devuelve cuántas velas se han escrito.
@@ -101,8 +107,12 @@ BEGIN
     IF v.fecha >= (now() AT TIME ZONE 'UTC')::date THEN
       RAISE EXCEPTION 'guardar_velas: la vela del % es de hoy o futura: solo se guardan velas cerradas', v.fecha;
     END IF;
-    IF v.low <= 0 OR NOT (v.low <= v.open AND v.open <= v.high AND v.low <= v.close AND v.close <= v.high) THEN
-      RAISE EXCEPTION 'guardar_velas: vela del % incoherente (open %, high %, low %, close %)',
+    -- Finitos: NaN es mayor que todo en PostgreSQL, así que también queda fuera.
+    IF NOT (v.open  > '-Infinity'::float8 AND v.open  < 'Infinity'::float8 AND
+            v.high  > '-Infinity'::float8 AND v.high  < 'Infinity'::float8 AND
+            v.low   > '-Infinity'::float8 AND v.low   < 'Infinity'::float8 AND
+            v.close > '-Infinity'::float8 AND v.close < 'Infinity'::float8) THEN
+      RAISE EXCEPTION 'guardar_velas: vela del % con precios no finitos (open %, high %, low %, close %)',
         v.fecha, v.open, v.high, v.low, v.close;
     END IF;
   END LOOP;
@@ -127,15 +137,19 @@ BEGIN
         close = EXCLUDED.close, volumen = EXCLUDED.volumen;
   GET DIAGNOSTICS n = ROW_COUNT;
 
-  INSERT INTO public.precios_simbolos AS s (simbolo, primera_fecha, ultima_fecha, velas, revisado_en,
-                                           recargado_en, motivo_recarga)
-  SELECT p_simbolo, min(d.fecha), max(d.fecha), count(*), now(),
+  INSERT INTO public.precios_simbolos AS s (simbolo, primera_fecha, ultima_fecha, velas, velas_anomalas,
+                                           revisado_en, recargado_en, motivo_recarga)
+  SELECT p_simbolo, min(d.fecha), max(d.fecha), count(*),
+         count(*) FILTER (WHERE d.open <= 0 OR d.high <= 0 OR d.low <= 0 OR d.close <= 0 OR d.low > d.high
+                             OR d.open < d.low OR d.open > d.high OR d.close < d.low OR d.close > d.high),
+         now(),
          CASE WHEN p_reemplazar THEN now() END, CASE WHEN p_reemplazar THEN p_motivo END
     FROM public.precios_diarios d WHERE d.simbolo = p_simbolo
   ON CONFLICT (simbolo) DO UPDATE
     SET primera_fecha  = EXCLUDED.primera_fecha,
         ultima_fecha   = EXCLUDED.ultima_fecha,
         velas          = EXCLUDED.velas,
+        velas_anomalas = EXCLUDED.velas_anomalas,
         revisado_en    = now(),
         recargado_en   = CASE WHEN p_reemplazar THEN now() ELSE s.recargado_en END,
         motivo_recarga = CASE WHEN p_reemplazar THEN p_motivo ELSE s.motivo_recarga END;

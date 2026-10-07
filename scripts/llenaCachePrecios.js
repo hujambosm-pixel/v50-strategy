@@ -15,7 +15,8 @@
 //      velas trimestrales— y las parsea EXACTAMENTE como fetchAVDetalle (pages/api/datos.js), para que los
 //      números sean los que hoy usa el motor.
 //   2. Se queda con las velas cerradas (velasCerradas de lib/cachePrecios.js): fuera la de hoy, las
-//      futuras y las incoherentes. Las descartadas se cuentan con su motivo.
+//      futuras y las incompletas. Las descartadas se cuentan con su motivo. Las incoherentes se guardan
+//      tal cual (la caché es una copia exacta de lo que usa el motor) y se cuentan como anómalas.
 //   3. Las escribe con guardar_velas, NUNCA con un INSERT directo, para que pasen sus validaciones, en una
 //      transacción por símbolo.
 // Reanudable: salta los símbolos cuya ultima_fecha en precios_simbolos ya está al día.
@@ -143,7 +144,6 @@ async function descargaYahoo(simbolo) {
 function motivoDescarte(v, hoy, vistas) {
   if (v.enCurso || v.date >= hoy) return 'de hoy o futura'
   if (!['open', 'high', 'low', 'close'].every(c => typeof v[c] === 'number' && Number.isFinite(v[c]))) return 'incompleta'
-  if (!(v.low > 0 && v.low <= v.open && v.open <= v.high && v.low <= v.close && v.close <= v.high)) return 'incoherente (low/high)'
   if (vistas.has(v.date)) return 'fecha repetida'
   return 'otro'
 }
@@ -154,7 +154,7 @@ const pausa = (ms) => new Promise(r => setTimeout(r, ms))
   if (!TOKEN) { console.error('No hay sesión con Supabase: ejecuta «npx.cmd supabase login» o define SUPABASE_ACCESS_TOKEN.'); process.exit(1) }
   if (!REF) { console.error('No sé a qué proyecto conectarme: define SUPABASE_URL o deja NEXT_PUBLIC_SUPABASE_URL en .env.local.'); process.exit(1) }
   await preparaEsm()
-  const { velasCerradas, aFilasBd } = require(path.join(RAIZ, 'lib', 'cachePrecios.js'))
+  const { velasCerradas, esAnomala, aFilasBd } = require(path.join(RAIZ, 'lib', 'cachePrecios.js'))
   const { FILTROS_CATALOGO } = require(path.join(RAIZ, 'lib', 'filtros.js'))
   const t0 = Date.now()
 
@@ -218,13 +218,14 @@ SELECT public.guardar_velas(${lit(s)}, ${ETIQUETA}${json}${ETIQUETA}::jsonb) AS 
 COMMIT;`)
       fila.guardadas = Number(r?.[0]?.escritas ?? cerradas.length)
       fila.primera = cerradas[0].date; fila.ultima = cerradas[cerradas.length - 1].date
+      fila.anomalas = cerradas.filter(esAnomala).length
       fila.estado = 'ok'
     } catch (e) {
       fila.estado = 'ERROR: ' + String(e.message).replace(/\s+/g, ' ').slice(0, 160)
     }
     fila.ms = Date.now() - ts
     filas.push(fila)
-    console.log(`  ${s.padEnd(10)} ${fila.estado === 'ok' ? `${fila.guardadas} velas ${fila.primera} → ${fila.ultima}` : fila.estado}${fila.rechazadas ? ` · descartadas ${fila.rechazadas} (${fila.motivos})` : ''} · ${(fila.ms / 1000).toFixed(1)} s`)
+    console.log(`  ${s.padEnd(10)} ${fila.estado === 'ok' ? `${fila.guardadas} velas ${fila.primera} → ${fila.ultima}${fila.anomalas ? ` (${fila.anomalas} anómalas)` : ''}` : fila.estado}${fila.rechazadas ? ` · descartadas ${fila.rechazadas} (${fila.motivos})` : ''} · ${(fila.ms / 1000).toFixed(1)} s`)
   }
 
   // ── Resumen ──
