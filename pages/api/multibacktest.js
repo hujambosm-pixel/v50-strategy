@@ -14,6 +14,7 @@ import { filtraPorEntrada } from '../../lib/filtroEntrada'
 import { semanalesDesdeDiarias } from '../../lib/velasSemanales'
 import { soloCerradas } from '../../lib/sesion'
 import { normalizaGrafico } from '../../lib/graficoEstrategia'
+import { esquemaDeCodigo, paramsEfectivos, ventanasDeclaradas, cfgConParams } from '../../lib/parametrosEstrategia'
 import { normalizaPeriodo, velasCalentamiento, recortaConCalentamiento, recortaIndicadores,
          posicionesHeredadas } from '../../lib/periodo'
 import { COMISIONES_CERO, comisionDe, netoDeOperacion, normalizaComisiones,
@@ -1827,7 +1828,7 @@ export function runCodeJsAsset(data, sp500Data, codeJs, slotCapital, years, cfg,
     const result = runFn(enrichedData, {
       ...(cfg || {}),
       capital_ini:    slotCapital,
-      years:          cfg?.years ?? 5,
+      years:          years ?? 5,   // el de la simulación: los params de la estrategia no lo pisan
       allocation_pct: 100,
     })
     const rawTrades   = result.trades      ?? []
@@ -2029,6 +2030,11 @@ async function handlePortfolioMode(req, res) {
 
   if (!Array.isArray(strategies) || strategies.length < 2)
     return res.status(400).json({ error: 'portfolioMode requiere strategies[] con ≥2 entradas' })
+  // Con varias estrategias, unos cambios de parámetros no dicen a cuál se aplican: aquí no se admiten.
+  if (req.body?.params != null) {
+    const msg = 'En el modo cartera no se pueden cambiar los parámetros: cámbialos en cada estrategia.'
+    return res.status(422).json({ error: 'Parámetros no válidos: ' + msg, tipo: 'parametros', errores: [msg] })
+  }
   if (!cfg?.capitalIni)
     return res.status(400).json({ error: 'cfg.capitalIni requerido' })
 
@@ -2057,7 +2063,7 @@ async function handlePortfolioMode(req, res) {
           name:        s.name || row.name || s.id,
           codeJs:      row.code_js || null,
           stratParams,
-          effectiveCfg: { ...cfg, ...stratParams },
+          effectiveCfg: cfgConParams(cfg, stratParams),
         }
       } catch(_) { return base }
     }))
@@ -2075,8 +2081,10 @@ async function handlePortfolioMode(req, res) {
     // sus indicadores lleguen aun mas convergidos. Ver lib/periodo.js.
     const per = normalizaPeriodo({ years: cfg.years ?? 5, fromDate: cfg.fromDate ?? null, toDate: cfg.toDate ?? null })
     const _ivCal = assetInterval === '1wk' ? 'semanal' : 'diario'
+    const _esquemas = stratMeta.map(s => esquemaDeCodigo(s.codeJs))
     const nCal = Math.max(velasCalentamiento({}, filtrosLista, _ivCal),
-      ...stratMeta.map(s => velasCalentamiento(s.stratParams, filtrosLista, _ivCal)))
+      ...stratMeta.map((s, k) => velasCalentamiento(s.stratParams, filtrosLista, _ivCal,
+        _esquemas[k] ? ventanasDeclaradas(_esquemas[k], s.stratParams) : null)))
     const _cal = { calentamiento: nCal, conCalentamiento: true }
     console.log(`[periodo] cartera (${assetInterval}): ${per.modo} ${per.desde}→${per.hasta} · calentamiento ${nCal}`)
     const allTickers = [...new Set(stratMeta.flatMap(s => s.symbols || []))]
@@ -2399,7 +2407,7 @@ async function handlerMultibacktest(req, res) {
   // ── NUEVA RAMA: portfolioMode ─────────────────────────────────────────────
   if (req.body?.portfolioMode) return handlePortfolioMode(req, res)
   // ── PATH EXISTENTE: estrategia única — sin cambio ninguno desde aquí ──────
-  const { symbols, cfg: cfgInput, definition, modoAsig = 'slots', weights = {}, sizeRules: sizeRulesBody = null, strategyId = null, isNoStrategy = false, filtros: filtrosCfg, intervalo, comisiones = null } = req.body
+  const { symbols, cfg: cfgInput, definition, modoAsig = 'slots', weights = {}, sizeRules: sizeRulesBody = null, strategyId = null, isNoStrategy = false, filtros: filtrosCfg, intervalo, comisiones = null, params: cambiosParams = null } = req.body
   // Si no llegan, todo a cero: el cliente todavia no las manda. Ver lib/comisiones.js.
   const _com = normalizaComisiones(comisiones)
   const sizeRules = sizeRulesBody || cfgInput?.sizeRules || {}
@@ -2451,15 +2459,25 @@ async function handlerMultibacktest(req, res) {
             ? (typeof row.params === 'string' ? JSON.parse(row.params) : row.params)
             : {}
         } catch(_) {}
-        // cfg del frontend + params de Supabase (stratParams tiene prioridad)
+        // cfg del frontend + params de Supabase (stratParams tiene prioridad, salvo en las condiciones)
         _stratParamsMb = stratParams
-        effectiveCfg = { ...cfg, ...stratParams }
+        effectiveCfg = cfgConParams(cfg, stratParams)
       }
     } catch(_) { codeJs = null }
   }
   // Guard: sin code_js y no es "0 No Strategy" → error claro, nunca ejecutar estrategia hardcoded
   if (!codeJs && !isNoStrategy) {
     return res.status(400).json({ error: 'La estrategia no tiene código ejecutable (code_js). Comprueba que la estrategia esté guardada correctamente en Supabase.' })
+  }
+  // Parámetros: la declaración run.parametros y los CAMBIOS de la petición (campo `params`), mezclados
+  // ANTES del calentamiento y de run(). Sin cambios ni declaración, todo como siempre. Los params nunca
+  // pisan las condiciones de la simulación (cfgConParams). Ver lib/parametrosEstrategia.js.
+  const _esquemaMb = esquemaDeCodigo(codeJs)
+  if (cambiosParams != null) {
+    const r = paramsEfectivos(_stratParamsMb, cambiosParams, _esquemaMb)
+    if (!r.ok) return res.status(422).json({ error: 'Parámetros no válidos: ' + r.errores.join(' '), tipo: 'parametros', errores: r.errores })
+    _stratParamsMb = r.params
+    effectiveCfg = cfgConParams(cfg, _stratParamsMb)
   }
 
   try {
@@ -2472,7 +2490,8 @@ async function handlerMultibacktest(req, res) {
     if (_ffU.forzados.length) console.log(`[filtros] ${_stratNameMb ?? strategyId}: estrategia semanal, filtros forzados a semanal: ${_ffU.forzados.join(', ')}`)
     const anyFiltroOn = hayFiltrosActivos(filtrosLista)
     const per = normalizaPeriodo({ years: cfg.years ?? 5, fromDate: cfg.fromDate ?? null, toDate: cfg.toDate ?? null })
-    const nCal = velasCalentamiento(_stratParamsMb, filtrosLista, assetInterval === '1wk' ? 'semanal' : 'diario')
+    const nCal = velasCalentamiento(_stratParamsMb, filtrosLista, assetInterval === '1wk' ? 'semanal' : 'diario',
+      _esquemaMb ? ventanasDeclaradas(_esquemaMb, _stratParamsMb) : null)
     const _cal = { calentamiento: nCal, conCalentamiento: true }
     console.log(`[periodo] ${_stratNameMb ?? strategyId} (${assetInterval}): ${per.modo} ${per.desde}→${per.hasta} · calentamiento ${nCal}`)
     const BATCH = 4

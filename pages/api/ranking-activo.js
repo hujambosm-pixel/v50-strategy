@@ -11,14 +11,17 @@
 // llamadas que haría /api/datos, así que cada estrategia ve exactamente las mismas velas. Con el interruptor
 // de la caché de precios encendido, además, salen de la caché (ver lib/cachePreciosServidor.js).
 //
-// Petición: { simbolo, estrategias: [{ id, intervalo }], capitalIni, aniosRanking, minTrades, fromDate,
+// Petición: { simbolo, estrategias: [{ id, intervalo, params? }], capitalIni, aniosRanking, minTrades, fromDate,
 //             toDate, comisiones, filtros } — las condiciones del ranking, las mismas para todas; la
 //             temporalidad, la de cada estrategia.
 // Respuesta: { simbolo, resultados: { [id]: r } }, con r =
 //   { status: 200, metricas: {…} | null, condiciones }  métricas como las guarda calcMetricas (null si no hay
 //                                                      operaciones o no llega a minTrades: no se escribe fila)
-//   { status: 400 | 422 | 500, error, tipo?, estrategia? }  el error de ESA estrategia, igual que lo daría
-//                                                      /api/datos; las demás siguen.
+//   { status: 400 | 422 | 500, error, tipo?, estrategia?, errores? }  el error de ESA estrategia, igual que
+//                                                      lo daría /api/datos; las demás siguen. `params` en una
+//                                                      estrategia son CAMBIOS a sus params guardados (como el
+//                                                      campo params de /api/datos); si no valen, 422 con tipo
+//                                                      'parametros' y la lista de errores.
 
 import { exigeAuth } from '../../lib/verificaJwt'
 import { conCachePrecios } from '../../lib/cachePreciosServidor'
@@ -64,7 +67,7 @@ async function handlerRankingActivo(req, res) {
     const lista = [], vistos = new Set()
     for (const e of estrategias) {
       if (!e || typeof e.id !== 'string' || !RE_ID.test(e.id)) return res.status(400).json({ error: 'id de estrategia no válido' })
-      if (!vistos.has(e.id)) { vistos.add(e.id); lista.push({ id: e.id, intervalo: e.intervalo }) }
+      if (!vistos.has(e.id)) { vistos.add(e.id); lista.push({ id: e.id, intervalo: e.intervalo, params: e.params ?? null }) }
     }
     const _com = normalizaComisiones(comisiones)
 
@@ -78,7 +81,7 @@ async function handlerRankingActivo(req, res) {
 
     const fetchCompartido = descargaCompartida()
     const resultados = {}
-    for (const { id, intervalo } of lista) {
+    for (const { id, intervalo, params } of lista) {
       const row = filas.get(id) || {}
       const codeJs = row.code_js || null, stratName = row.name || null
       if (!codeJs) {
@@ -89,7 +92,7 @@ async function handlerRankingActivo(req, res) {
         // El mismo cuerpo que mandaba calcMetricas a /api/datos: sin `years` (vale 5 por defecto, y con
         // fromDate/toDate no se usa para el periodo) y con allocation_pct 100.
         const b = await backtestActivo({ simbolo, codeJs, stratParams: row.params || null, stratName,
-          capital_ini: capitalIni, years: 5, allocation_pct: 100, filtros, intervalo, fromDate, toDate, comisiones: _com },
+          capital_ini: capitalIni, years: 5, allocation_pct: 100, filtros, intervalo, fromDate, toDate, comisiones: _com, params },
           { fetchAV: fetchCompartido, grafico: false })
         const m = b._nucleo.metricas
         resultados[id] = {
@@ -100,7 +103,9 @@ async function handlerRankingActivo(req, res) {
           condiciones: { intervalo, desde: fromDate, hasta: toDate, capitalIni, comisiones, filtros: filtros ?? [] },
         }
       } catch (e) {
-        if (e && e._tipoFallo === 'codigo_estrategia') {
+        if (e && e._tipoFallo === 'parametros') {
+          resultados[id] = { status: 422, error: e.message, tipo: 'parametros', errores: e.errores }
+        } else if (e && e._tipoFallo === 'codigo_estrategia') {
           const quien = stratName || id
           console.error(`[ranking-activo] error en el code_js de la estrategia "${quien}" para ${simbolo}:`, e.message)
           resultados[id] = { status: 422, error: e.message, tipo: 'codigo_estrategia', estrategia: quien }

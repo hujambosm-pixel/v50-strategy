@@ -11,6 +11,7 @@
 import { fetchData, fetchDataConMotivo, runCodeJsAsset, buildAlignedCloses, buildAlignedWeekly, calcEMA } from './multibacktest'
 import { marcaBloqueadas } from '../../lib/graficoEstrategia'
 import { velasCalentamiento } from '../../lib/periodo'
+import { esquemaDeCodigo, paramsEfectivos, ventanasDeclaradas, cfgConParams } from '../../lib/parametrosEstrategia'
 import { exigeAuth } from '../../lib/verificaJwt'
 import { conCachePrecios } from '../../lib/cachePreciosServidor'
 import { normalizaFiltrosEntrada, hayFiltrosActivos, clavesAuxiliares, construirFiltroActivoMap,
@@ -98,7 +99,7 @@ async function handlerAssetDetail(req, res) {
   // pisarían el token.
   const _jwt = req.headers['x-supa-jwt'] || null
   const { symbol, strategyId, cfg: cfgInput, intervalo, intervaloVelas, filtros: filtrosCfg, isNoStrategy = false,
-          comisiones = null } = req.body || {}
+          comisiones = null, params: cambiosParams = null } = req.body || {}
   if (!symbol) return res.status(400).json({ error: 'symbol requerido' })
   const cfg = cfgInput || {}
   // Testigo del paso en curso, para que un fallo diga DÓNDE se rompió y no solo qué excepción salió.
@@ -125,11 +126,21 @@ async function handlerAssetDetail(req, res) {
             stratParams = row.params ? (typeof row.params === 'string' ? JSON.parse(row.params) : row.params) : {}
           } catch(_) {}
           paramsEstrategia = stratParams
-          effectiveCfg = { ...cfg, ...stratParams }
+          effectiveCfg = cfgConParams(cfg, stratParams)
         }
       } catch(_) { codeJs = null }
     }
     if (!codeJs && !isNoStrategy) return res.status(400).json({ error: 'La estrategia no tiene código ejecutable (code_js)' })
+    // Parámetros: la declaración run.parametros y los CAMBIOS de la petición (campo `params`), mezclados
+    // ANTES del calentamiento y de run(). Sin cambios ni declaración, todo como siempre. Los params nunca
+    // pisan las condiciones de la simulación (cfgConParams). Ver lib/parametrosEstrategia.js.
+    const _esquemaAd = esquemaDeCodigo(codeJs)
+    if (cambiosParams != null) {
+      const r = paramsEfectivos(paramsEstrategia, cambiosParams, _esquemaAd)
+      if (!r.ok) return res.status(422).json({ error: 'Parámetros no válidos: ' + r.errores.join(' '), tipo: 'parametros', errores: r.errores })
+      paramsEstrategia = r.params
+      effectiveCfg = cfgConParams(cfg, paramsEstrategia)
+    }
 
     paso = 'descargar barras'
     // 2. Las MISMAS barras, el MISMO intervalo y el MISMO calentamiento con los que corrió el
@@ -142,7 +153,8 @@ async function handlerAssetDetail(req, res) {
     const _ff = fuerzaFiltrosSemanales(normalizaFiltrosEntrada(filtrosCfg), esSemanal)
     const filtrosLista = _ff.lista
     if (_ff.forzados.length) console.log(`[filtros] ${symbol}: estrategia semanal, filtros forzados a semanal: ${_ff.forzados.join(', ')}`)
-    const nCal = velasCalentamiento(paramsEstrategia, filtrosLista, esSemanal ? 'semanal' : 'diario')
+    const nCal = velasCalentamiento(paramsEstrategia, filtrosLista, esSemanal ? 'semanal' : 'diario',
+      _esquemaAd ? ventanasDeclaradas(_esquemaAd, paramsEstrategia) : null)
     const _cal = { calentamiento: nCal, conCalentamiento: true }
     const _d = await fetchDataConMotivo(symbol, cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, assetInterval, nCal)
     // `barras` es el PERIODO (las fechas que se devuelven); `barrasConCal` lleva el calentamiento y
