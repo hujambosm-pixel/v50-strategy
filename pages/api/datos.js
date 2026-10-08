@@ -190,7 +190,7 @@ async function handlerDatos(req, res) {
   const _jwt = req.headers['x-supa-jwt'] || null
 
   const { simbolo, strategyId, capital_ini = 10000, years = 5, allocation_pct = 100, priceOnly, filtros, intervalo,
-          fromDate = null, toDate = null, comisiones = null, params = null } = req.body || {}
+          fromDate = null, toDate = null, comisiones = null, params = null, calentamiento = null } = req.body || {}
   // Si no llegan, todo a cero: el cliente todavia no las manda. Ver lib/comisiones.js.
   const _com = normalizaComisiones(comisiones)
   if (!simbolo) return res.status(400).json({ error: 'simbolo requerido' })
@@ -243,7 +243,7 @@ async function handlerDatos(req, res) {
     // que comparte /api/ranking-activo. Aquí se construye la respuesta con lo que devuelve.
     const { desde, hasta, modo, nCal, data, _corte, anyFiltroOn, filterZonesFromFiltros, sinSerieSemanal, _nucleo } =
       await backtestActivo({ simbolo, codeJs, stratParams, stratName, capital_ini, years, allocation_pct, filtros,
-        intervalo, fromDate, toDate, comisiones: _com, params }, { fetchAV, grafico: true })
+        intervalo, fromDate, toDate, comisiones: _com, params, calentamiento }, { fetchAV, grafico: true })
     const _result = _nucleo.resultado
     // Calculados sobre la serie con calentamiento y consumidos por indice contra las velas del
     // periodo: hay que devolverlos a esa rejilla o salen desplazados. Ver lib/periodo.js.

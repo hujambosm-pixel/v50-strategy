@@ -26,7 +26,7 @@
 import { exigeAuth } from '../../lib/verificaJwt'
 import { conCachePrecios } from '../../lib/cachePreciosServidor'
 import { normalizaComisiones } from '../../lib/comisiones'
-import { backtestActivo } from '../../lib/backtestActivo'
+import { backtestActivo, descargaCompartida } from '../../lib/backtestActivo'
 import { metricasRanking } from '../../lib/metricasRanking'
 import { fetchAV } from './datos'
 
@@ -42,15 +42,6 @@ export default function handler(req, res) {
   return conCachePrecios(req, () => handlerRankingActivo(req, res))
 }
 
-// Cada descarga, una vez por petición; a cada estrategia, una copia.
-function descargaCompartida() {
-  const descargas = new Map()
-  return (symbol, years = 5, interval = 'd') => {
-    const k = `${symbol}|${years}|${interval}`
-    if (!descargas.has(k)) descargas.set(k, fetchAV(symbol, years, interval))
-    return descargas.get(k).then(barras => barras.map(v => ({ ...v })))
-  }
-}
 
 async function handlerRankingActivo(req, res) {
   try {
@@ -79,7 +70,7 @@ async function handlerRankingActivo(req, res) {
       if (r.ok) for (const f of (await r.json()) || []) filas.set(f.id, f)
     } catch (_) {}
 
-    const fetchCompartido = descargaCompartida()
+    const fetchCompartido = descargaCompartida(fetchAV)
     const resultados = {}
     for (const { id, intervalo, params } of lista) {
       const row = filas.get(id) || {}
