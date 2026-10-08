@@ -4265,42 +4265,55 @@ export default function Home() {
       }
     }catch(e){ logUpdateError(null,'wipe',e?.message,null); console.error('[calcMetricas] fallo al limpiar ranking_results', e) }
 
+    // UNA PETICIÓN POR ACTIVO con todas sus estrategias (/api/ranking-activo): el servidor hace el backtest
+    // de cada una con el mismo código que /api/datos y devuelve solo las métricas que se guardan. Antes
+    // eran 1 + N peticiones a /api/datos por activo (1.400 por tanda de 25). Las fases 1 y 2 de abajo
+    // reparten esos resultados como antes: la activa y luego cada estrategia, con su upsert y sus avisos.
+    // Concurrencia 4. Sin pausa con la caché de precios encendida (las velas salen de la caché); con ella
+    // apagada, 250 ms entre grupos, porque entonces cada petición descarga de Yahoo.
+    const _habilitadasRk=(strategies||[]).filter(s=>s.enabled!==false)
+    const _estrRk=[...new Map([
+      ...(currentStratId?[[currentStratId,{id:currentStratId,intervalo:_ivActiva}]]:[]),
+      ..._habilitadasRk.map(s=>[s.id,{id:s.id,intervalo:temporalidadDeEstrategia(s)}])]).values()]
+    const _pausaRk=loadSettings()?.precios?.usarCache===true?0:250
+    const porSimboloRk={}   // símbolo → { resultados } | { status, json } | { excepcion }
     for(let i=0;i<syms.length;i+=BATCH){
       const batch=syms.slice(i,i+BATCH)
       await Promise.allSettled(batch.map(async sym=>{
+        if(!_estrRk.length) return
         try{
-          const res=await apiFetch('/api/datos',{method:'POST',headers:{'Content-Type':'application/json'},
-            // La temporalidad es la que DECLARA la estrategia, no la de la simulacion en curso: si
-            // estas explorando en semanal, el ranking no debe medirse en semanal.
-            body:JSON.stringify({simbolo:sym,strategyId:currentStratId,capital_ini:_rk.capitalIni,
-              allocation_pct:100,filtros:_rkFlt,intervalo:_ivActiva,
-              fromDate:_rkPer.fromDate,toDate:_rkPer.toDate,comisiones:_rkCom})})
-          const json=await res.json()
-          if(!res.ok||!json.trades?.length){
-            // 422 con tipo 'codigo_estrategia' = el code_js no compila o revienta. No es un fallo de
-            // descarga y no se cuenta como tal: el aviso lo lista aparte, por estrategia.
-            if(!res.ok) logUpdateError(sym,
-              json?.tipo==='codigo_estrategia'?'codigo':'descarga',
-              json?.tipo==='codigo_estrategia'?json.error:res.status,
-              json?.estrategia||null)
-            return }
-          const trades=json.trades; if(trades.length<minTrades) return
-          const wins=trades.filter(t=>t.pnlPct>=0), winRate=(wins.length/trades.length)*100
-          const totalDiasNat=json.startDate?(new Date(json.meta?.ultimaFecha)-new Date(json.startDate))/86400000:365*_rk.years
-          const anios=Math.max(totalDiasNat/365.25,0.01)
-          const capFinal=_rk.capitalIni+json.gananciaSimple
-          const cagr=capFinal>0?(Math.pow(capFinal/_rk.capitalIni,1/anios)-1)*100:-99
-          // ROBUSTEZ: qué % de las ganancias NO depende del mejor trade. Denominador = beneficio
-          // BRUTO (suma de ganadoras), siempre >= el mejor trade → cae solo en [0,100), sin clamps
-          // ni centinelas. Beneficio NETO <= 0 → 0 (una estrategia perdedora no es robusta).
-          const ganadoras=trades.filter(t=>t.pnlSimple>0).reduce((s,t)=>s+t.pnlSimple,0)
-          const mejor=trades.length?Math.max(...trades.map(t=>t.pnlSimple)):0
-          const robustez=((json.gananciaSimple??0)<=0||ganadoras<=0)?0:Math.max(0,100-(mejor/ganadoras)*100)
-          const maxDD=json.maxDDStrategyFloat??json.maxDDStrategy??0
-          activeMetrics[sym.toUpperCase()]={winRate,cagr,robustez,maxDD,trades:trades.length,profit:json.gananciaSimple??null}
-        }catch(e){logUpdateError(sym,'excepcion',e?.message,null);console.error('[calcMetricas-activa]',sym,e)}
+          const res=await apiFetch('/api/ranking-activo',{method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({simbolo:sym,estrategias:_estrRk,capitalIni:_rk.capitalIni,aniosRanking:_rk.years,
+              minTrades,fromDate:_rkPer.fromDate,toDate:_rkPer.toDate,comisiones:_rkCom,filtros:_rkFlt})})
+          const json=await res.json().catch(()=>null)
+          porSimboloRk[sym]=res.ok&&json?.resultados?{resultados:json.resultados}:{status:res.status,json}
+        }catch(e){porSimboloRk[sym]={excepcion:e}}
       }))
       setRankingProgress({done:Math.min(i+BATCH,syms.length),total:syms.length})
+      if(_pausaRk&&i+BATCH<syms.length) await new Promise(r=>setTimeout(r,_pausaRk))
+    }
+    // El resultado de una estrategia en un activo, con los MISMOS avisos que daba /api/datos: 422 con tipo
+    // 'codigo_estrategia' = el code_js no compila o revienta, que no es un fallo de descarga y el aviso lo
+    // lista aparte, por estrategia. Devuelve las métricas o null (sin fila: sin operaciones o < minTrades).
+    const metricaRk=(sym,stratId,nombreRespaldo,etiqueta)=>{
+      const r=porSimboloRk[sym]
+      if(!r) return null
+      if(r.excepcion){logUpdateError(sym,'excepcion',r.excepcion?.message,nombreRespaldo);console.error(etiqueta,sym,r.excepcion);return null}
+      const x=r.resultados?r.resultados[stratId]:{status:r.status,...(r.json||{})}
+      if(!x) return null
+      if(x.status!==200){
+        logUpdateError(sym,
+          x.tipo==='codigo_estrategia'?'codigo':'descarga',
+          x.tipo==='codigo_estrategia'?x.error:x.status,
+          x.estrategia||nombreRespaldo)
+        return null }
+      return x.metricas||null
+    }
+    for(const sym of syms){
+      // Sin estrategia activa no hay nada que pedir para la fase 1: /api/datos respondía 400 a cada activo.
+      if(!currentStratId){ logUpdateError(sym,'descarga',400,null); continue }
+      const m=metricaRk(sym,currentStratId,null,'[calcMetricas-activa]')
+      if(m) activeMetrics[sym.toUpperCase()]=m
     }
     await upsertMetricsRemote(activeMetrics,currentStratId||null,_rkCond(_ivActiva))
     setRankingData(prev=>{const next={...prev};Object.entries(activeMetrics).forEach(([sym,m])=>{next[sym]={...(next[sym]||{}),metrics:m}});return next})
@@ -4330,35 +4343,11 @@ export default function Home() {
         const stratIntv=temporalidadDeEstrategia(strat)
         const stratMetrics={}
         try{
-          for(let i=0;i<syms.length;i+=BATCH){
-            const batch=syms.slice(i,i+BATCH)
-            await Promise.allSettled(batch.map(async sym=>{
-              try{
-                const res=await apiFetch('/api/datos',{method:'POST',headers:{'Content-Type':'application/json'},
-                  body:JSON.stringify({simbolo:sym,strategyId:stratId,capital_ini:_rk.capitalIni,
-                    allocation_pct:100,filtros:_rkFlt,intervalo:stratIntv,
-                    fromDate:_rkPer.fromDate,toDate:_rkPer.toDate,comisiones:_rkCom})})
-                const json=await res.json()
-                if(!res.ok||!json.trades?.length){
-                  if(!res.ok) logUpdateError(sym,
-                    json?.tipo==='codigo_estrategia'?'codigo':'descarga',
-                    json?.tipo==='codigo_estrategia'?json.error:res.status,
-                    json?.estrategia||strat.name)
-                  return }
-                const trades=json.trades; if(trades.length<minTrades) return
-                const wins=trades.filter(t=>t.pnlPct>=0), winRate=(wins.length/trades.length)*100
-                const totalDiasNat=json.startDate?(new Date(json.meta?.ultimaFecha)-new Date(json.startDate))/86400000:365*_rk.years
-                const anios=Math.max(totalDiasNat/365.25,0.01)
-                const capFinal=_rk.capitalIni+json.gananciaSimple
-                const cagr=capFinal>0?(Math.pow(capFinal/_rk.capitalIni,1/anios)-1)*100:-99
-                // ROBUSTEZ — misma definición que en la Fase 1 (ver comentario allí)
-                const ganadoras=trades.filter(t=>t.pnlSimple>0).reduce((s,t)=>s+t.pnlSimple,0)
-                const mejor=trades.length?Math.max(...trades.map(t=>t.pnlSimple)):0
-                const robustez=((json.gananciaSimple??0)<=0||ganadoras<=0)?0:Math.max(0,100-(mejor/ganadoras)*100)
-                const maxDD=json.maxDDStrategyFloat??json.maxDDStrategy??0
-                stratMetrics[sym.toUpperCase()]={winRate,cagr,robustez,maxDD,trades:trades.length,profit:json.gananciaSimple??null}
-              }catch(e){logUpdateError(sym,'excepcion',e?.message,strat.name);console.error('[calcMetricas-all]',sym,e)}
-            }))
+          // Los resultados ya están: los trajo la petición por activo de arriba. Las métricas se
+          // calculan en el servidor con lib/metricasRanking.js, la misma cuenta que se hacía aquí.
+          for(const sym of syms){
+            const m=metricaRk(sym,stratId,strat.name,'[calcMetricas-all]')
+            if(m) stratMetrics[sym.toUpperCase()]=m
           }
           await upsertMetricsRemote(stratMetrics,stratId,_rkCond(stratIntv))
           allStratMetricsMap[stratId]=stratMetrics
@@ -6167,7 +6156,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.915</title>
+        <title>Trading Simulator V9.916</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6256,7 +6245,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             }} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.915
+            <span className="dot"/>Trading Simulator V9.916
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
