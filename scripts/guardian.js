@@ -32,6 +32,12 @@
 //          completa (nada mira el futuro).
 //   g      coherencia: mismas operaciones en datos.js y en multibacktest (slots, una estrategia).
 //   h      serie semanal: un solo día de la semana y 7 días entre velas, como el fixture.
+// PARÁMETROS DECLARADOS (fuera de la tabla, solo avisa): en las estrategias que declaran run.parametros
+// (lib/parametrosEstrategia.js), cada parámetro, cambiado dentro de su rango —los extremos de su rejilla
+// sugerida y de su rango, un paso arriba y abajo, el otro sí/no o las otras opciones, siempre que cumplan las
+// restricciones con los demás valores guardados—, tiene que cambiar las operaciones en al menos un símbolo
+// del fixture (sin filtros). Si ninguno las cambia, AVISO: el parámetro está declarado pero run() no lo usa,
+// o no se nota con estos precios. No hace fallar al guardián.
 //
 // Estados: ok · n/a (no aplica) · ambiguo (no se puede decidir; se explica) · conocido (fallo en la lista de
 // scripts/guardian/conocidos.json) · FALLO. Cualquier FALLO termina con código de salida 1.
@@ -237,6 +243,35 @@ function compruebaRespuesta(R, intervalo, anota) {
   global.fetch = fetchSimulado
   const datos = require(path.join(RAIZ, 'pages', 'api', 'datos.js')).default
   const multi = require(path.join(RAIZ, 'pages', 'api', 'multibacktest.js')).default
+  const { esquemaDeCodigo, validaCombinacion } = require(path.join(RAIZ, 'lib', 'parametrosEstrategia.js'))
+  const parametros = []      // { nombre, lista: [{ nombre, usado, probados }] } de las que declaran
+  // ¿Cambia algo cada parámetro declarado? Ver la cabecera. `base`: las operaciones sin filtros por símbolo.
+  const compruebaParametros = async (est, intervalo, base) => {
+    const esquema = esquemaDeCodigo(est.code_js)
+    if (!esquema || !esquema.lista.length) return null
+    let guardados = {}; try { guardados = typeof est.params === 'string' ? JSON.parse(est.params || '{}') : (est.params || {}) } catch (_) {}
+    const lista = []
+    for (const p of esquema.lista) {
+      const actual = Object.prototype.hasOwnProperty.call(guardados, p.nombre) ? guardados[p.nombre] : p.defecto
+      const candidatos = p.tipo === 'sino' ? [!actual] : p.tipo === 'opcion' ? p.opciones.filter(o => o !== actual)
+        : [p.sugerido?.min, p.sugerido?.max, p.min, p.max, actual + p.paso, actual - p.paso].filter(v => v != null)
+      const validos = [...new Set(candidatos)].filter(v => v !== actual && validaCombinacion(esquema, { [p.nombre]: v }, guardados).ok)
+      let usado = false
+      const probados = []
+      for (const v of validos) {
+        probados.push(v)
+        for (const sym of SIMBOLOS) {
+          const r = await llama(datos, { simbolo: sym, strategyId: est.id, years: 5, fromDate: DESDE, toDate: HASTA, capital_ini: 10000,
+            allocation_pct: 100, intervalo, filtros: [], params: { [p.nombre]: v } })
+          if (r.status !== 200 || !base[`${sym} sin filtros`]) continue
+          if ((r.cuerpo.trades || []).map(clave).join('\n') !== base[`${sym} sin filtros`].map(clave).join('\n')) { usado = true; break }
+        }
+        if (usado) break
+      }
+      lista.push({ nombre: p.nombre, usado, probados })
+    }
+    return lista
+  }
   const conocidos = JSON.parse(fs.readFileSync(path.join(__dirname, 'guardian', 'conocidos.json'), 'utf8')).conocidos
     .map(c => ({ ...c, re: new RegExp(c.estrategias) }))
   const esConocido = (nombre, comp) => conocidos.find(c => c.re.test(nombre) && (c.comprobaciones === '*' || c.comprobaciones.includes(comp)))
@@ -312,6 +347,9 @@ function compruebaRespuesta(R, intervalo, anota) {
         }
       }
     }
+    // Parámetros declarados: ¿cambia algo cada uno? (solo avisa; ver la cabecera)
+    const usoParametros = await compruebaParametros(est, intervalo, tradesDatos)
+    if (usoParametros) parametros.push({ nombre: est.name, lista: usoParametros })
     // c) Se deduce la lectura de la fecha de stopHistory de ESTA estrategia, con las incoherencias que no
     //    son ambiguas. Las ambiguas no deciden nada: se informan.
     const ambiguasC = { decide: violC.decide.filter(v => v.ambiguo), rige: violC.rige.filter(v => v.ambiguo) }
@@ -362,6 +400,12 @@ function compruebaRespuesta(R, intervalo, anota) {
   const fallos = tabla.filter(f => Object.values(f.estados).includes('FALLO'))
   if (notas.length) { console.log('\nNOTAS (stopHistory y casos ambiguos):'); [...new Set(notas)].slice(0, 40).forEach(n => console.log('  · ' + n)) }
   if (detalles.length) { console.log('\nFALLOS:'); detalles.forEach(d => console.log('  ' + d)) }
+  if (parametros.length) {
+    console.log('\nPARÁMETROS DECLARADOS (¿cambia algo cada uno dentro de su rango?):')
+    for (const e of parametros) console.log(`  · ${e.nombre}: ${e.lista.map(p => `${p.nombre} ${p.usado ? 'sí' : 'NO'}`).join(', ')}`)
+    const avisos = parametros.flatMap(e => e.lista.filter(p => !p.usado).map(p => `AVISO · ${e.nombre} · «${p.nombre}»: ningún valor probado (${p.probados.length ? p.probados.join(', ') : 'ninguno válido'}) cambia las operaciones en ${SIMBOLOS.join(', ')}; o run() no lo usa o no se nota con estos precios`))
+    avisos.forEach(a => console.log('  ' + a))
+  }
   // Conocidos: los detectados (con sus columnas) y los que estas comprobaciones no ven, con su nota.
   const detectados = [], noDetectables = []
   for (const f of tabla) {
