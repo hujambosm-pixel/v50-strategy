@@ -8,7 +8,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { MONO, fmt, numeroEs, textoEs } from '../lib/utils'
 import { esquemaDeCodigo } from '../lib/parametrosEstrategia'
 import { generaRejilla, rejillaSugerida } from '../lib/rejillaParametros'
-import { periodoPorDefecto, estimaOptimizacion, divideEnPeticiones, agregaOptimizacion, ordenaFilas, claveCombinacion,
+import { periodoPorDefecto, estimaOptimizacion, divideEnPeticiones, agregaOptimizacion, ordenaFilas, claveCombinacion, mapaColores, estabilidad,
          CONCURRENCIA, MIN_TOTAL, MIN_POR_ACTIVO } from '../lib/optimizacion'
 import { COMISIONES_DEFECTO } from '../lib/comisiones'
 import { temporalidadDeEstrategia } from '../lib/condicionesSimulacion'
@@ -274,8 +274,92 @@ export function ResultadosOptimizacion({ res, onProbar = null, seleccionInicial 
               <TablaFilas filas={apartadas.slice(0, 50)} COLS={COLS} orden={orden} setOrden={setOrden} textoParams={textoParams}
                 claveActual={claveActual} seleccionada={seleccionada} setSeleccionada={setSeleccionada} conMotivo />
             </div></>)}
+          <MapaDeColores filas={filas} res={res} variados={variados} claveActual={claveActual} seleccionada={seleccionada} setSeleccionada={setSeleccionada}
+            textoParams={textoParams} />
           {filaSel && <DetalleSeleccion fila={filaSel} filas={filas} res={res} textoParams={textoParams} onProbar={onProbar} />}
   </>)
+}
+
+// Métricas del mapa de colores y de la estabilidad: [clave, título, formato, ¿mejor cuanto más alta?].
+const METRICAS = [['cagrMediana', 'CAGR mediana', (v) => pct(v), true], ['cagrMedia', 'CAGR media', (v) => pct(v), true],
+  ['ddMediana', 'DD mediana', (v) => pct(v), false], ['ddPeor', 'DD peor', (v) => pct(v), false],
+  ['factorBeneficio', 'F. benef.', (v) => num(v), true], ['operaciones', 'Ops.', (v) => num(v, 0), true]]
+const textoValor = (v) => typeof v === 'number' ? textoEs(v, 6) : v === true ? 'sí' : v === false ? 'no' : String(v)
+// Rojo (peor) → amarillo → verde (mejor), con t de 0 a 1.
+const colorEscala = (t) => `hsl(${Math.round(120 * Math.min(1, Math.max(0, t)))}, 55%, 30%)`
+
+// (b) Mapa de colores: dos parámetros en los ejes, el resto fijados (por defecto en la configuración guardada).
+// Cada celda ES la fila de la tabla de esa combinación (mismas cifras); pulsarla la selecciona.
+function MapaDeColores({ filas, res, variados, claveActual, seleccionada, setSeleccionada, textoParams }) {
+  const [ejes, setEjes] = useState({ x: variados[0], y: variados[1] })
+  const [metrica, setMetrica] = useState('cagrMediana')
+  const [fijosElegidos, setFijosElegidos] = useState({})
+  if (variados.length < 2) return (
+    <div style={{ ...caja, marginTop: 14, fontSize: 11, color: 'var(--text3)' }}>Mapa de colores: hace falta variar al menos dos parámetros en la rejilla.</div>)
+  const ejeX = variados.includes(ejes.x) ? ejes.x : variados[0]
+  const ejeY = variados.includes(ejes.y) && ejes.y !== ejeX ? ejes.y : variados.find(k => k !== ejeX)
+  // Los demás parámetros, fijados: lo elegido, o el valor guardado si está en la rejilla, o el primero.
+  const fijos = {}
+  for (const k of Object.keys(res.valores)) {
+    if (k === ejeX || k === ejeY) continue
+    const lista = res.valores[k]
+    fijos[k] = fijosElegidos[k] !== undefined && lista.includes(fijosElegidos[k]) ? fijosElegidos[k]
+      : lista.includes(res.guardados[k]) ? res.guardados[k] : lista[0]
+  }
+  const mapa = mapaColores(filas, res.valores, { ejeX, ejeY, fijos })
+  const [, tituloM, formatoM, masEsMejor] = METRICAS.find(m => m[0] === metrica)
+  const enEscala = mapa.celdas.flat().filter(c => c && c.cuenta && c[metrica] != null).map(c => c[metrica])
+  const lo = Math.min(...enEscala), hi = Math.max(...enEscala)
+  const t = (v) => hi > lo ? (masEsMejor ? (v - lo) / (hi - lo) : (hi - v) / (hi - lo)) : 0.5
+  const guardadaEnRejilla = filas.some(f => claveCombinacion(f.params) === claveActual)
+  const celda = { padding: '4px 6px', textAlign: 'center', whiteSpace: 'nowrap', fontSize: 10, minWidth: 54 }
+  return (
+    <div style={{ ...caja, marginTop: 14 }}>
+      <div style={etiqueta}>Mapa de colores</div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', fontSize: 10, marginBottom: 8, alignItems: 'center' }}>
+        <label>Eje X <select value={ejeX} onChange={e => setEjes({ x: e.target.value, y: e.target.value === ejeY ? ejeX : ejeY })} style={entrada}>
+          {variados.map(k => <option key={k} value={k}>{k}</option>)}</select></label>
+        <label>Eje Y <select value={ejeY} onChange={e => setEjes({ y: e.target.value, x: e.target.value === ejeX ? ejeY : ejeX })} style={entrada}>
+          {variados.map(k => <option key={k} value={k}>{k}</option>)}</select></label>
+        <label>Color <select value={metrica} onChange={e => setMetrica(e.target.value)} style={entrada}>
+          {METRICAS.map(([k, tt]) => <option key={k} value={k}>{tt}</option>)}</select></label>
+        {Object.keys(fijos).filter(k => res.valores[k].length > 1).map(k => (
+          <label key={k}>{k} <select value={String(fijos[k])} style={entrada}
+            onChange={e => setFijosElegidos(f => ({ ...f, [k]: res.valores[k].find(v => String(v) === e.target.value) }))}>
+            {res.valores[k].map(v => <option key={String(v)} value={String(v)}>{textoValor(v)}{v === res.guardados[k] ? ' ★' : ''}</option>)}</select></label>))}
+      </div>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ borderCollapse: 'separate', borderSpacing: 2 }}>
+          <thead><tr>
+            <th style={{ ...celda, color: 'var(--text3)', fontWeight: 400 }}>{ejeY} ↓ · {ejeX} →</th>
+            {mapa.xs.map(x => <th key={String(x)} style={{ ...celda, color: 'var(--text3)', fontWeight: 400 }}>{textoValor(x)}</th>)}
+          </tr></thead>
+          <tbody>{mapa.ys.map((y, j) => (
+            <tr key={String(y)}>
+              <th style={{ ...celda, color: 'var(--text3)', fontWeight: 400, textAlign: 'right' }}>{textoValor(y)}</th>
+              {mapa.xs.map((x, i) => {
+                const c = mapa.celdas[j][i]
+                if (!c) return <td key={String(x)} style={{ ...celda, color: 'var(--text3)' }} title="Combinación no probada (no está en la rejilla o no cumple las restricciones)">·</td>
+                const actual = claveCombinacion(c.params) === claveActual
+                return (
+                  <td key={String(x)} onClick={() => setSeleccionada(c.indice)}
+                    title={`${textoParams(c.params)} — ${tituloM} ${formatoM(c[metrica])}${c.cuenta ? '' : ` — apartada: ${c.motivo}`}`}
+                    style={{ ...celda, cursor: 'pointer', color: '#e8eef5', borderRadius: 3,
+                      background: c.cuenta && c[metrica] != null ? colorEscala(t(c[metrica])) : 'var(--bg3)', opacity: c.cuenta ? 1 : 0.5,
+                      outline: seleccionada === c.indice ? '2px solid var(--accent)' : actual ? '2px solid #ffd166' : 'none' }}>
+                    {actual ? '★ ' : ''}{formatoM(c[metrica])}
+                  </td>)
+              })}
+            </tr>))}
+          </tbody>
+        </table>
+      </div>
+      <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 6 }}>
+        Verde = mejor {tituloM} entre las celdas que cuentan; en gris, las apartadas. ★ (borde amarillo) = la configuración guardada
+        {guardadaEnRejilla ? '' : ' — no está en esta rejilla'}. Pulsa una celda para seleccionarla.
+      </div>
+    </div>
+  )
 }
 
 function TablaFilas({ filas, COLS, orden, setOrden, textoParams, claveActual, seleccionada, setSeleccionada, conMotivo = false }) {
@@ -302,9 +386,51 @@ function TablaFilas({ filas, COLS, orden, setOrden, textoParams, claveActual, se
   )
 }
 
-// La combinación seleccionada: por ahora, su resultado por activo. (El mapa de colores, la estabilidad y
-// «Probar en backtest» llegan en los commits siguientes.)
-function DetalleSeleccion({ fila, textoParams }) {
+// La combinación seleccionada: su resultado por activo, (c) su estabilidad frente a las vecinas (un paso arriba
+// y abajo en cada parámetro de la rejilla) y año a año. («Probar en backtest» llega en el commit siguiente.)
+function DetalleSeleccion({ fila, filas, res, textoParams }) {
+  const [metrica, setMetrica] = useState('cagrMediana')
+  const est = estabilidad(fila, filas, res.valores, metrica)
+  const [, tituloM, formatoM, masEsMejor] = METRICAS.find(m => m[0] === metrica)
+  const dif = est.diferencia, peor = dif != null && (masEsMejor ? dif < 0 : dif > 0)
+  const th = { padding: '3px 8px', color: 'var(--text3)', fontWeight: 400, textAlign: 'right' }, td = { padding: '3px 8px', textAlign: 'right' }
+  return (<>
+    <div style={{ ...caja, marginTop: 14 }}>
+      <div style={etiqueta}>Estabilidad de la combinación seleccionada</div>
+      <div style={{ fontSize: 11, marginBottom: 6 }}>{textoParams(fila.params)}
+        <label style={{ fontSize: 10, marginLeft: 10 }}>Métrica <select value={metrica} onChange={e => setMetrica(e.target.value)} style={entrada}>
+          {METRICAS.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select></label></div>
+      {est.vecinas.length ? (<>
+        <div style={{ fontSize: 11, lineHeight: 1.6, marginBottom: 6 }}>
+          {tituloM}: la combinación <b>{formatoM(est.propia)}</b> · media de sus {est.vecinas.length} vecinas <b>{formatoM(est.mediaVecinas)}</b>
+          {dif != null && <span style={{ color: peor ? '#ff4d6d' : '#06d6a0' }}> ({dif >= 0 ? '+' : '−'}{num(Math.abs(dif))}{metrica === 'factorBeneficio' || metrica === 'operaciones' ? '' : ' puntos'})</span>}
+          <div style={{ fontSize: 10, color: 'var(--text3)' }}>Si las vecinas caen mucho, el resultado es un pico aislado y no una zona estable.</div>
+        </div>
+        <table style={{ borderCollapse: 'collapse', fontSize: 11 }}>
+          <thead><tr><th style={{ ...th, textAlign: 'left' }}>Vecina</th><th style={th}>{tituloM}</th><th style={{ ...th, textAlign: 'left' }}>Cuenta</th></tr></thead>
+          <tbody>{est.vecinas.map(v => (
+            <tr key={v.parametro + String(v.valor)} style={{ opacity: v.fila.cuenta ? 1 : 0.55 }}>
+              <td style={{ ...td, textAlign: 'left' }}>{v.parametro} {textoValor(fila.params[v.parametro])} → {textoValor(v.valor)}</td>
+              <td style={td}>{formatoM(v.valorMetrica)}</td>
+              <td style={{ ...td, textAlign: 'left', color: 'var(--text3)' }}>{v.fila.cuenta ? 'sí' : `no: ${v.fila.motivo}`}</td></tr>))}
+          </tbody>
+        </table></>)
+        : <div style={{ fontSize: 11, color: 'var(--text3)' }}>Sin vecinas en la rejilla (ningún parámetro tiene un valor contiguo probado).</div>}
+      <div style={{ ...etiqueta, marginTop: 12 }}>Año a año (beneficio del año sobre el capital inicial, en cada activo)</div>
+      <table style={{ borderCollapse: 'collapse', fontSize: 11 }}>
+        <thead><tr>{['Año', 'Mediana', 'Media', 'Ops. cerradas'].map(t => <th key={t} style={th}>{t}</th>)}</tr></thead>
+        <tbody>{fila.porAnio.map(a => (
+          <tr key={a.anio}><td style={td}>{a.anio}</td>
+            <td style={{ ...td, color: a.mediana == null ? undefined : a.mediana >= 0 ? '#06d6a0' : '#ff4d6d' }}>{pct(a.mediana)}</td>
+            <td style={td}>{pct(a.media)}</td><td style={td}>{a.operaciones}</td></tr>))}
+        </tbody>
+      </table>
+    </div>
+    <DetalleActivos fila={fila} textoParams={textoParams} />
+  </>)
+}
+
+function DetalleActivos({ fila, textoParams }) {
   return (
     <div style={{ ...caja, marginTop: 14 }}>
       <div style={etiqueta}>Combinación seleccionada</div>
