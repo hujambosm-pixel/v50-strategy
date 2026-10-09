@@ -427,10 +427,18 @@ function MapaDeColores({ filas, res, variados, claveActual, seleccionada, setSel
           <label key={k}>{k} <select value={String(fijos[k])} style={entrada}
             onChange={e => setFijosElegidos(f => ({ ...f, [k]: res.valores[k].find(v => String(v) === e.target.value) }))}>
             {res.valores[k].map(v => <option key={String(v)} value={String(v)}>{textoValor(v)}{v === res.guardados[k] ? ' ★' : ''}</option>)}</select></label>))}
-        {Object.keys(fijos).some(k => res.valores[k].length > 1) && (
-          <button disabled={!filaSel} title={filaSel ? textoParams(filaSel.params) : 'Selecciona antes una combinación en la tabla'}
+        {/* «Volver a la seleccionada»: solo si su celda no se ve (los desplegables no tienen sus valores). */}
+        {filaSel && Object.keys(fijos).some(k => fijos[k] !== filaSel.params[k]) && (
+          <button title="Pone los parámetros que no están en los ejes con los valores de la combinación seleccionada, para verla en el mapa"
             onClick={() => setFijosElegidos(Object.fromEntries(Object.keys(fijos).map(k => [k, filaSel.params[k]])))}
-            style={{ ...entrada, cursor: filaSel ? 'pointer' : 'not-allowed', color: filaSel ? 'var(--accent)' : GRIS }}>Fijar como la combinación seleccionada</button>)}
+            style={{ ...entrada, cursor: 'pointer', color: GRIS, fontSize: TAM }}>↺ Volver a la seleccionada</button>)}
+        <button title="Selecciona la configuración guardada de la estrategia y muestra su zona en el mapa"
+          onClick={() => {
+            const guardada = filas.find(f => claveCombinacion(f.params) === claveActual)
+            if (guardada) setSeleccionada(guardada.indice)
+            setFijosElegidos(Object.fromEntries(Object.keys(fijos).map(k => [k, res.guardados[k] ?? fijos[k]])))
+          }}
+          style={{ ...entrada, cursor: 'pointer', color: GRIS, fontSize: TAM }}>★ Ver mi configuración guardada</button>
       </div>
       <div style={{ overflowX: 'auto' }}>
         <table style={{ borderCollapse: 'separate', borderSpacing: 2 }}>
