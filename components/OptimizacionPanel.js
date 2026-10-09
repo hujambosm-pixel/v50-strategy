@@ -5,7 +5,8 @@
 // agregados sobre todos los activos (lib/optimizacion.js). NO escribe nada en la base de datos. La
 // configuración se recuerda en el navegador; los resultados, no (todavía).
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { MONO, fmt, numeroEs, textoEs } from '../lib/utils'
+import { MONO, fmt, fmtDate, numeroEs, textoEs } from '../lib/utils'
+import CampoFecha from './CampoFecha'
 import { esquemaDeCodigo } from '../lib/parametrosEstrategia'
 import { generaRejilla, rejillaSugerida, valoresDeRango } from '../lib/rejillaParametros'
 import { periodoPorDefecto, estimaOptimizacion, divideEnPeticiones, agregaOptimizacion, ordenaFilas, claveCombinacion, mapaColores, estabilidad,
@@ -87,6 +88,9 @@ export default function OptimizacionPanel({ strategies = [], watchlist = [], wlL
   const estimacion = gen?.combinaciones.length && activos.length ? estimaOptimizacion(gen.combinaciones.length, activos.length) : null
   const temporalidad = cfg.temporalidad || (est ? temporalidadDeEstrategia(est.s) : 'diario')
   const [filtroSel, setFiltroSel] = useState('')
+  // Lo escrito en Desde / Hasta es una fecha posible (CampoFecha); si no, no se deja lanzar.
+  const [fechaOk, setFechaOk] = useState({ desde: true, hasta: true })
+  const fechasOk = fechaOk.desde && fechaOk.hasta
 
   // ── Lanzamiento por tandas ──
   const [ejec, setEjec] = useState(null)        // { hechas, total, parando }
@@ -131,7 +135,7 @@ export default function OptimizacionPanel({ strategies = [], watchlist = [], wlL
     setEjec(null)
   }
 
-  const puedeLanzar = !!(est && gen?.combinaciones.length && activos.length && !ejec && cfg.desde < cfg.hasta)
+  const puedeLanzar = !!(est && gen?.combinaciones.length && activos.length && !ejec && fechasOk && cfg.desde < cfg.hasta)
 
   return (
     <div style={{ display: 'flex', flex: 1, minHeight: 0, height: '100%', overflow: 'hidden', fontFamily: MONO, color: 'var(--text)' }}>
@@ -178,8 +182,11 @@ export default function OptimizacionPanel({ strategies = [], watchlist = [], wlL
         <div style={caja}>
           <div style={etiqueta}>Condiciones</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, fontSize: TAM }}>
-            <label>Desde<input type="date" value={cfg.desde} onChange={e => pon('desde', e.target.value)} style={{ ...entrada, width: '100%' }} /></label>
-            <label>Hasta<input type="date" value={cfg.hasta} onChange={e => pon('hasta', e.target.value)} style={{ ...entrada, width: '100%' }} /></label>
+            <label>Desde<CampoFecha valor={cfg.desde} onCambio={v => pon('desde', v)} onValidez={v => setFechaOk(o => ({ ...o, desde: v }))}
+              style={{ ...entrada, width: '100%' }} avisoStyle={{ fontSize: TAM }} /></label>
+            <label>Hasta<CampoFecha valor={cfg.hasta} onCambio={v => pon('hasta', v)} onValidez={v => setFechaOk(o => ({ ...o, hasta: v }))}
+              style={{ ...entrada, width: '100%' }} avisoStyle={{ fontSize: TAM }} /></label>
+            {fechasOk && !(cfg.desde < cfg.hasta) && <div style={{ gridColumn: '1 / -1', color: '#ff4d6d' }}>«Desde» tiene que ser anterior a «Hasta».</div>}
             <label>Capital (€)<input type="text" inputMode="decimal" defaultValue={textoEs(cfg.capital, 2)} key={'cap' + cfg.capital}
               onBlur={e => { const n = numeroEs(e.target.value); if (n > 0) pon('capital', n) }} style={{ ...entrada, width: '100%' }} /></label>
             <label>Temporalidad<select value={cfg.temporalidad} onChange={e => pon('temporalidad', e.target.value)} style={{ ...entrada, width: '100%' }}>
@@ -249,14 +256,14 @@ export default function OptimizacionPanel({ strategies = [], watchlist = [], wlL
             background: puedeLanzar ? 'var(--accent)' : 'var(--bg3)', color: puedeLanzar ? '#080c14' : GRIS }}>
           {ejec ? 'Optimizando…' : '▶ Lanzar optimización'}
         </button>
-        <EstadoEjecucion ejec={ejec} fin={fin} ahora={ahora} onDetener={() => { pararRef.current = true; setEjec(e => e && ({ ...e, parando: true })) }} />
         <div style={{ fontSize: TAM, color: GRIS, marginTop: 8, lineHeight: 1.5 }}>No se guarda nada en la base de datos. La configuración se recuerda en este navegador.</div>
       </div>
 
       {/* ── Resultados ── */}
       <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: 12 }}>
         {!res && <div style={{ color: GRIS, fontSize: 12, marginTop: 40, textAlign: 'center' }}>Elige estrategia, activos y rejilla, y lanza la optimización.</div>}
-        {res && <ResultadosOptimizacion res={res} onProbar={onProbar} />}
+        {res && <ResultadosOptimizacion res={res} onProbar={onProbar}
+          estado={<EstadoEjecucion ejec={ejec} fin={fin} ahora={ahora} onDetener={() => { pararRef.current = true; setEjec(e => e && ({ ...e, parando: true })) }} />} />}
       </div>
     </div>
   )
@@ -296,7 +303,8 @@ export function EstadoEjecucion({ ejec, fin, ahora, onDetener }) {
 
 // Los resultados de una optimización (res: combos, valores, porActivo, condiciones…). Aparte de la pantalla para
 // poder montarlos con resultados ya hechos (y comprobarlos).
-export function ResultadosOptimizacion({ res, onProbar = null, seleccionInicial = null }) {
+// `estado`: el progreso de la ejecución o el aviso de terminada/detenida, arriba, junto a los avisos.
+export function ResultadosOptimizacion({ res, onProbar = null, seleccionInicial = null, estado = null }) {
   // ── Resultados ──
   const [orden, setOrden] = useState({ col: 'cagrMediana', desc: true })
   const [seleccionada, setSeleccionada] = useState(seleccionInicial)
@@ -340,13 +348,14 @@ export function ResultadosOptimizacion({ res, onProbar = null, seleccionInicial 
             ⚠ <b>Resultados dentro de muestra.</b> La mejor combinación se ha elegido mirando estos mismos datos, así que tenderá a parecer
             mejor de lo que será. La validación fuera de muestra es la siguiente fase.
           </div>
+          {estado}
           {!res.terminado && (
             <div role="status" style={{ ...caja, borderColor: GRIS, borderStyle: 'dashed', color: GRIS, fontSize: TAM, lineHeight: 1.6 }}>
               ⏳ <b>Resultados parciales: {calc.completos} de {calc.total} activos calculados — pueden cambiar.</b> La tabla, el mapa, la estabilidad y el
               desglose por activo se rehacen con cada tanda; las cifras definitivas, al terminar.
             </div>)}
           <div style={{ fontSize: TAM, color: GRIS, marginBottom: 8 }}>
-            {res.nombre} · {res.condiciones.intervalo} · {res.condiciones.desde} → {res.condiciones.hasta} · {res.activos.length} activos · {res.combos.length.toLocaleString('es-ES')} combinaciones
+            {res.nombre} · {res.condiciones.intervalo} · {fmtDate(res.condiciones.desde)} → {fmtDate(res.condiciones.hasta)} · {res.activos.length} activos · {res.combos.length.toLocaleString('es-ES')} combinaciones
             {res.interrumpida ? ` · DETENIDA: resultados parciales, ${calc.completos} de ${calc.total} activos calculados y ${calc.sinCalcular} sin calcular${calc.aMedias ? ` (${calc.aMedias} a medias)` : ''}`
               : res.terminado ? '' : ' · en curso…'}
             {' · '}cuenta una combinación con al menos {MIN_TOTAL} operaciones en total y {MIN_POR_ACTIVO} en cada activo · ★ = la configuración guardada
@@ -565,7 +574,7 @@ function ProbarEnBacktest({ fila, res, textoParams, onProbar }) {
         <button onClick={() => onProbar({ ...prueba, modo: 'multi' })} style={boton}>▶ Multibacktest ({res.activos.length} activos)</button>
       </div>
       <div style={{ fontSize: TAM, color: GRIS, marginTop: 6, lineHeight: 1.5 }}>
-        Con estos params ({textoParams(fila.params)}), {res.condiciones.desde} → {res.condiciones.hasta}, {res.condiciones.intervalo}, capital {textoEs(res.condiciones.capitalIni, 2)} €,
+        Con estos params ({textoParams(fila.params)}), {fmtDate(res.condiciones.desde)} → {fmtDate(res.condiciones.hasta)}, {res.condiciones.intervalo}, capital {textoEs(res.condiciones.capitalIni, 2)} €,
         sus comisiones, sin filtros y el calentamiento de la optimización{prueba.calentamiento != null ? ` (${prueba.calentamiento} velas)` : ''}. La estrategia guardada no cambia.
         El individual da las mismas cifras que la fila en ese activo; el multibacktest reparte el capital entre los activos, así que solo coinciden las operaciones.
       </div>

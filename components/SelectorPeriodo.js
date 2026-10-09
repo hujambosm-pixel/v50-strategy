@@ -18,9 +18,9 @@ import { MONO } from '../lib/utils'
 // caer en días distintos según cuándo llegara cada petición.
 
 const esISO = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s)
-const isoAMostrar = (s) => esISO(s) ? s.split('-').reverse().join('/') : (s || '')
+export const isoAMostrar = (s) => esISO(s) ? s.split('-').reverse().join('/') : (s || '')
 // dd/mm/yyyy → ISO. Devuelve null si no es una fecha válida, y entonces la caja vuelve a su valor.
-const mostradoAIso = (s) => {
+export const mostradoAIso = (s) => {
   if (!s || !/^\d{2}\/\d{2}\/\d{4}$/.test(s)) return null
   const [d, m, y] = s.split('/')
   const iso = `${y}-${m}-${d}`
