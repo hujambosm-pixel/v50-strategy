@@ -9,7 +9,7 @@ import { MONO, fmt, numeroEs, textoEs } from '../lib/utils'
 import { esquemaDeCodigo } from '../lib/parametrosEstrategia'
 import { generaRejilla, rejillaSugerida } from '../lib/rejillaParametros'
 import { periodoPorDefecto, estimaOptimizacion, divideEnPeticiones, agregaOptimizacion, ordenaFilas, claveCombinacion, mapaColores, estabilidad,
-         CONCURRENCIA, MIN_TOTAL, MIN_POR_ACTIVO } from '../lib/optimizacion'
+         pruebaDeFila, CONCURRENCIA, MIN_TOTAL, MIN_POR_ACTIVO } from '../lib/optimizacion'
 import { COMISIONES_DEFECTO } from '../lib/comisiones'
 import { temporalidadDeEstrategia } from '../lib/condicionesSimulacion'
 
@@ -82,10 +82,11 @@ export default function OptimizacionPanel({ strategies = [], watchlist = [], wlL
     const combos = gen.combinaciones
     const tareas = activos.flatMap(sym => divideEnPeticiones(combos).map(t => ({ sym, ...t })))
     const porActivo = Object.fromEntries(activos.map(s => [s, new Array(combos.length).fill(null)]))
+    const calentamientos = new Array(combos.length).fill(null)   // el común de cada petición, para «Probar en backtest»
     const condiciones = { estrategia: est.s.id, intervalo: temporalidad, desde: cfg.desde, hasta: cfg.hasta, capitalIni: Number(cfg.capital) || 10000, comisiones: cfg.comisiones, filtros: [] }
     pararRef.current = false
     setEjec({ hechas: 0, total: tareas.length, parando: false })
-    setRes({ combos, valores: gen.valores, porActivo, nombre: est.s.name, estrategiaId: est.s.id, guardados, condiciones, activos: [...activos], terminado: false, interrumpida: false })
+    setRes({ combos, valores: gen.valores, porActivo, calentamientos, nombre: est.s.name, estrategiaId: est.s.id, guardados, condiciones, activos: [...activos], terminado: false, interrumpida: false })
     let hechas = 0, interrumpida = false
     for (let i = 0; i < tareas.length; i += CONCURRENCIA) {
       await Promise.all(tareas.slice(i, i + CONCURRENCIA).map(async t => {
@@ -93,7 +94,7 @@ export default function OptimizacionPanel({ strategies = [], watchlist = [], wlL
           const r = await apiFetch('/api/optimiza', { method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ...condiciones, simbolo: t.sym, combinaciones: t.combinaciones }) })
           const j = await r.json().catch(() => null)
-          if (r.ok && Array.isArray(j?.resultados)) j.resultados.forEach((x, k) => { porActivo[t.sym][t.desde + k] = x })
+          if (r.ok && Array.isArray(j?.resultados)) j.resultados.forEach((x, k) => { porActivo[t.sym][t.desde + k] = x; calentamientos[t.desde + k] = j.calentamiento ?? null })
           else t.combinaciones.forEach((_, k) => { porActivo[t.sym][t.desde + k] = { status: r.status, error: j?.errores?.join(' ') || j?.error || `HTTP ${r.status}` } })
         } catch (e) { t.combinaciones.forEach((_, k) => { porActivo[t.sym][t.desde + k] = { status: 0, error: e?.message || 'error de red' } }) }
         hechas++
@@ -387,8 +388,8 @@ function TablaFilas({ filas, COLS, orden, setOrden, textoParams, claveActual, se
 }
 
 // La combinación seleccionada: su resultado por activo, (c) su estabilidad frente a las vecinas (un paso arriba
-// y abajo en cada parámetro de la rejilla) y año a año. («Probar en backtest» llega en el commit siguiente.)
-function DetalleSeleccion({ fila, filas, res, textoParams }) {
+// y abajo en cada parámetro de la rejilla), año a año y (d) «Probar en backtest».
+function DetalleSeleccion({ fila, filas, res, textoParams, onProbar }) {
   const [metrica, setMetrica] = useState('cagrMediana')
   const est = estabilidad(fila, filas, res.valores, metrica)
   const [, tituloM, formatoM, masEsMejor] = METRICAS.find(m => m[0] === metrica)
@@ -427,6 +428,7 @@ function DetalleSeleccion({ fila, filas, res, textoParams }) {
       </table>
     </div>
     <DetalleActivos fila={fila} textoParams={textoParams} />
+    {onProbar && <ProbarEnBacktest fila={fila} res={res} textoParams={textoParams} onProbar={onProbar} />}
   </>)
 }
 
@@ -444,6 +446,33 @@ function DetalleActivos({ fila, textoParams }) {
         </tbody>
       </table>
       {fila.errores.length > 0 && <div style={{ fontSize: 10, color: '#ff4d6d', marginTop: 6 }}>Sin resultado: {fila.errores.map(e => `${e.sym} (${e.error})`).join(' · ')}</div>}
+    </div>
+  )
+}
+
+// (d) «Probar en backtest»: abre la combinación en el backtest individual (un activo) o en el multibacktest (los
+// activos de la optimización) con sus params, las mismas condiciones y el mismo calentamiento. NO guarda nada
+// en la estrategia: los params viajan solo en esa petición.
+function ProbarEnBacktest({ fila, res, textoParams, onProbar }) {
+  const conResultado = Object.keys(fila.porActivo)
+  const [elegido, setSym] = useState(conResultado[0] || '')
+  const sym = conResultado.includes(elegido) ? elegido : (conResultado[0] || '')
+  const prueba = { ...pruebaDeFila(res, fila), etiqueta: textoParams(fila.params) }
+  const boton = { ...entrada, cursor: 'pointer', padding: '5px 10px', color: 'var(--accent)' }
+  return (
+    <div style={{ ...caja, marginTop: 14 }}>
+      <div style={etiqueta}>Probar en backtest</div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', fontSize: 11 }}>
+        <select value={sym} onChange={e => setSym(e.target.value)} style={entrada}>
+          {conResultado.map(s => <option key={s} value={s}>{s}</option>)}</select>
+        <button disabled={!sym} onClick={() => onProbar({ ...prueba, modo: 'individual', simbolo: sym })} style={boton}>▶ Backtest individual</button>
+        <button onClick={() => onProbar({ ...prueba, modo: 'multi' })} style={boton}>▶ Multibacktest ({res.activos.length} activos)</button>
+      </div>
+      <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 6, lineHeight: 1.5 }}>
+        Con estos params ({textoParams(fila.params)}), {res.condiciones.desde} → {res.condiciones.hasta}, {res.condiciones.intervalo}, capital {textoEs(res.condiciones.capitalIni, 2)} €,
+        sus comisiones, sin filtros y el calentamiento de la optimización{prueba.calentamiento != null ? ` (${prueba.calentamiento} velas)` : ''}. La estrategia guardada no cambia.
+        El individual da las mismas cifras que la fila en ese activo; el multibacktest reparte el capital entre los activos, así que solo coinciden las operaciones.
+      </div>
     </div>
   )
 }

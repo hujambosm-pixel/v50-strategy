@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo, Fragment } from 'react'
 import Head from 'next/head'
 import { ListFilter, Briefcase, Star, Bell, X as LucideX } from 'lucide-react'
-import { calcMetrics, metricasSinOperaciones, MONO, fmt, fmtDate, f2, tvSym, pesosScoreHistorico, umbralesDe, scoreHistoricoDe, desgloseScoreHistorico } from '../lib/utils'
+import { calcMetrics, metricasSinOperaciones, MONO, fmt, fmtDate, f2, tvSym, pesosScoreHistorico, umbralesDe, scoreHistoricoDe, desgloseScoreHistorico, textoEs } from '../lib/utils'
 import { WATCHLIST_DEFAULT } from '../lib/constants'
 import { getSupaUrl, getSupaKey, getSupaH, setCurrentJwt, getCurrentJwt, fetchConSesion, setOnSesionCaducada, hayConfigSupabase } from '../lib/supabase'
 import { loadSettings, saveSettings, saveSettingsRemote, loadSettingsRemote } from '../lib/settings'
@@ -24,6 +24,7 @@ import EquityChart from '../components/EquityChart'
 import Tip from '../components/Tip'
 import SettingsModal from '../components/SettingsModal'
 import OptimizacionPanel from '../components/OptimizacionPanel'
+import { payloadPrueba } from '../lib/optimizacion'
 import { MultiCartChart, OccupancyBarChart, McOccupancyChart, StratCompareChart, AssetSignalChart } from '../components/BacktestCharts'
 import dynamic from 'next/dynamic'
 const McMonthlyGainsChart = dynamic(() => import('../components/McMonthlyGainsChart'), { ssr: false })
@@ -1053,6 +1054,11 @@ export default function Home() {
   const [stratDesc, setStratDesc]     = useState('')
   const [stratColor, setStratColor]   = useState('#00d4ff')
   const [currentStratId, setCurrentStratId] = useState(null)
+  // «Probar en backtest» desde la Optimización: una combinación de params con las condiciones de la
+  // optimización (lib/optimizacion.js, payloadPrueba). Solo viaja en la petición; la estrategia guardada no
+  // cambia. Se aplica mientras la estrategia activa sea la suya.
+  const [pruebaParams,setPruebaParams]=useState(null)
+  useEffect(()=>{ if(pruebaParams&&pruebaParams.estrategiaId!==currentStratId) setPruebaParams(null) },[currentStratId])
   const currentStratIdRef=useRef(null)
   useEffect(()=>{currentStratIdRef.current=currentStratId},[currentStratId])
   const [estrategiaIntervalo, setEstrategiaIntervalo] = useState('diario') // 'diario'|'semanal' — intervalo del activo en backtest individual
@@ -1405,6 +1411,7 @@ export default function Home() {
   const mcChartApiRef=useRef(null)
   const [mcAxisW,setMcAxisW]=useState(72)   // measured equity rightPriceScale width, shared with occupancy & monthly charts
   const [indivAxisW,setIndivAxisW]=useState(72)   // measured individual EquityChart rightPriceScale width, shared with its monthly chart
+  const [mcPrueba,setMcPrueba]=useState(null)   // «Probar en backtest» desde la Optimización, en el multibacktest
   const [mcStratSelected,setMcStratSelected]=useState([])   // strategy IDs selected for comparison
   const [mcMultiResults,setMcMultiResults]=useState([])     // [{id,name,color,result}]
   const [mcPortfolioIds,setMcPortfolioIds]=useState([])     // IDs marcados "Incluir en Multicartera"
@@ -4590,7 +4597,8 @@ export default function Home() {
       // selector, asi que el servidor recibe el mismo periodo exacto que el multibacktest.
       const body = payload.strategyId
         ? { simbolo:sym, strategyId:payload.strategyId, capital_ini:payload.capital_ini, years:payload.years, allocation_pct:payload.allocation_pct, filtros:payload.filtros||{}, intervalo:payload.intervalo||'diario',
-            fromDate:payload.fromDate??null, toDate:payload.toDate??null, comisiones:payload.comisiones??null }
+            fromDate:payload.fromDate??null, toDate:payload.toDate??null, comisiones:payload.comisiones??null,
+            ...(payload.params!=null?{params:payload.params,...(payload.calentamiento!=null?{calentamiento:payload.calentamiento}:{})}:{}) }
         : { simbolo:sym, cfg:payload.cfg||payload, fromDate:payload.fromDate??null, toDate:payload.toDate??null, comisiones:payload.comisiones??null }
       const res=await apiFetch('/api/datos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
       const json=await res.json()
@@ -4698,7 +4706,8 @@ export default function Home() {
     if(!currentStratId&&sidePanel!=='strats')return
     if(debounceRef.current)clearTimeout(debounceRef.current)
     const _iPer=rangoDePeriodo({modo:indPeriodMode,years:years,desde:indDesde,hasta:indHasta})
-    const payload = currentStratId
+    const payload = pruebaParams&&pruebaParams.estrategiaId===currentStratId ? payloadPrueba(pruebaParams)
+      : currentStratId
       ? { strategyId:currentStratId, capital_ini:Number(capitalIni), years:Number(years), allocation_pct:100, filtros:filtrosBackend, intervalo:estrategiaIntervalo,
           fromDate:_iPer.fromDate, toDate:_iPer.toDate, comisiones:indComisiones }
       : { fromDate:_iPer.fromDate, toDate:_iPer.toDate,
@@ -4709,7 +4718,7 @@ export default function Home() {
     return()=>clearTimeout(debounceRef.current)
   },[simbolo,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,
      sp500EmaR,sp500EmaL,sidePanel,currentStratId,filtrosBackend,estrategiaIntervalo,
-     indPeriodMode,indDesde,indHasta,indComisiones,run])
+     indPeriodMode,indDesde,indHasta,indComisiones,run,pruebaParams])
 
   // ── TradeLog helpers ────────────────────────────────────────
   // ── TradeLog: storage mode (local vs supabase) ──────────────
@@ -5428,6 +5437,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
       setMcLoading(false)
       return
     }
+    const _prueba=mcPrueba&&stratIds.length===1&&stratIds[0]===mcPrueba.estrategiaId
+      ?{filtros:[],params:mcPrueba.params,...(mcPrueba.calentamiento!=null?{calentamiento:mcPrueba.calentamiento}:{})}:{}
     if(stratIds.length<=1){
       const modesToRun=selectedModos.length>0?selectedModos:['slots']
       if(modesToRun.length===1){
@@ -5436,7 +5447,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
           const _strat1=strategies.find(s=>s.id===stratIds[0])
           const isNoStrategy=(_strat1?.name||'').includes('No Strategy')
           const res=await apiFetch('/api/multibacktest',{method:'POST',headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({symbols:mcSelected,modoAsig:modesToRun[0],weights:weightsNorm,cfg:baseCfg,strategyId:stratIds[0]||null,isNoStrategy,filtros:filtrosBackend,intervalo:mcIntervalo,comisiones:mcComisiones})})
+            body:JSON.stringify({symbols:mcSelected,modoAsig:modesToRun[0],weights:weightsNorm,cfg:baseCfg,strategyId:stratIds[0]||null,isNoStrategy,filtros:filtrosBackend,intervalo:mcIntervalo,comisiones:mcComisiones,..._prueba})})
           const json=await res.json()
           if(!res.ok) throw new Error(json.error||'Error')
           setMcResult(json);setMcMultiResults([]);setMcIsModoCompare(false)
@@ -5456,7 +5467,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
           setMcProgress({current:i+1,total:modesToRun.length,name:MODE_LABELS[modo]||modo})
           const color=STRAT_COMPARE_COLORS[i%STRAT_COMPARE_COLORS.length]
           const res=await apiFetch('/api/multibacktest',{method:'POST',headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({symbols:mcSelected,modoAsig:modo,weights:weightsNorm,cfg:baseCfg,strategyId:sid,isNoStrategy:isNoStrategyMode,filtros:filtrosBackend,intervalo:mcIntervalo,comisiones:mcComisiones})})
+            body:JSON.stringify({symbols:mcSelected,modoAsig:modo,weights:weightsNorm,cfg:baseCfg,strategyId:sid,isNoStrategy:isNoStrategyMode,filtros:filtrosBackend,intervalo:mcIntervalo,comisiones:mcComisiones,..._prueba})})
           const json=await res.json()
           if(!res.ok) throw new Error(json.error||'Error en '+MODE_LABELS[modo])
           modeResults.push({id:`${sid||'__single__'}__${modo}`,name:`${stratName} · ${MODE_LABELS[modo]}`,color,result:json,modo})
@@ -5544,7 +5555,23 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
       }
     }
     setMcLoading(false);setMcProgress(null)
-  },[mcSelected,mcMode,selectedModos,mcWeights,mcCapital,mcCapitalIni,mcYears,mcPeriodMode,mcFromDate,mcToDate,mcComisiones,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL,rankingData,mcStratSelected,strategies,currentStratId,mcRiskPerTrade,mcMaxPortfolioPct,mcMaxAccumRisk,mcAssumedStopPct,mcMaxPosiciones,mcPrioridad,mcCriterioUso,mcMomentumN,mcRsWindow,mcRsGateThr,mcMomGateThr,mcProxGateThr,filtrosBackend,mcIntervalo])
+  },[mcSelected,mcMode,selectedModos,mcWeights,mcCapital,mcCapitalIni,mcYears,mcPeriodMode,mcFromDate,mcToDate,mcComisiones,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL,rankingData,mcStratSelected,strategies,currentStratId,mcRiskPerTrade,mcMaxPortfolioPct,mcMaxAccumRisk,mcAssumedStopPct,mcMaxPosiciones,mcPrioridad,mcCriterioUso,mcMomentumN,mcRsWindow,mcRsGateThr,mcMomGateThr,mcProxGateThr,filtrosBackend,mcIntervalo,mcPrueba])
+  // «Probar en backtest» (components/OptimizacionPanel.js): abre la combinación en el backtest individual
+  // (la estrategia, el activo y el payload de la prueba) o en el multibacktest (la estrategia, los activos y
+  // las condiciones de la optimización, y lo lanza). Nada se guarda en la estrategia.
+  const probarOptimizacion=(p)=>{
+    const s=strategies.find(x=>x.id===p.estrategiaId)
+    if(!s) return
+    if(p.modo==='multi'){
+      setMcStratSelected([s.id]);setMcSelected([...p.activos])
+      setMcPeriodMode('range');setMcFromDate(p.desde);setMcToDate(p.hasta)
+      setMcCapitalIni(p.capitalIni);setMcComisiones(p.comisiones);cambiarMcIntervalo(p.intervalo)
+      setMcPrueba({...p,lanzar:Date.now()});setSidePanel('multi')
+    }else{
+      loadStrategyLegacy(s);setSimbolo(p.simbolo);setPruebaParams(p)
+    }
+  }
+  useEffect(()=>{ if(mcPrueba?.lanzar) runBacktesting() },[mcPrueba?.lanzar])
 
   // Auto-inicializar pesos iguales cuando cambian activos seleccionados (modo custom)
   useEffect(()=>{
@@ -6157,7 +6184,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.922</title>
+        <title>Trading Simulator V9.923</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6246,7 +6273,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             }} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.922
+            <span className="dot"/>Trading Simulator V9.923
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -8114,6 +8141,11 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
             )}
 
             {/* Single-asset view — oculto cuando multicartera activa o editando */}
+            {sidePanel!=='optimiza'&&sidePanel!=='multi'&&sidePanel!=='tradelog'&&sidePanel!=='fundamentals'&&!(editingStr&&sidePanel==='config')&&pruebaParams&&pruebaParams.estrategiaId===currentStratId&&(
+              <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',margin:'8px 12px',padding:'7px 10px',borderRadius:6,border:'1px solid rgba(0,212,255,0.4)',background:'rgba(0,212,255,0.07)',fontFamily:MONO,fontSize:11,color:'var(--text)'}}>
+                <span>🎯 Probando <b>{pruebaParams.etiqueta}</b> de la Optimización: {pruebaParams.desde} → {pruebaParams.hasta}, {pruebaParams.intervalo}, capital {textoEs(pruebaParams.capitalIni,2)} €, sus comisiones, sin filtros{pruebaParams.calentamiento!=null?`, calentamiento ${pruebaParams.calentamiento} velas`:''}. La estrategia guardada no cambia.</span>
+                <button onClick={()=>setPruebaParams(null)} style={{background:'transparent',border:'1px solid var(--border)',borderRadius:4,color:'var(--text3)',fontFamily:MONO,fontSize:10,padding:'2px 8px',cursor:'pointer'}}>Quitar</button>
+              </div>)}
             {sidePanel!=='optimiza'&&sidePanel!=='multi'&&sidePanel!=='tradelog'&&sidePanel!=='fundamentals'&&!(editingStr&&sidePanel==='config')&&!result&&!error&&currentStratId&&<div className="loading"><div className="spinner"/><div className="loading-text">CARGANDO DATOS...</div></div>}
             {sidePanel!=='optimiza'&&sidePanel!=='multi'&&sidePanel!=='tradelog'&&sidePanel!=='fundamentals'&&!(editingStr&&sidePanel==='config')&&error&&<div className="error-msg">⚠ {error}</div>}
 
@@ -9199,9 +9231,14 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
             {/* ══ OPTIMIZACIÓN (components/OptimizacionPanel.js): a ancho completo, sin panel lateral ══ */}
             {sidePanel==='optimiza'&&(
               <OptimizacionPanel strategies={strategies} watchlist={watchlist} wlLists={wlLists} apiFetch={apiFetch}
-                capitalInicial={Number(capitalIni)||10000} comisionesIniciales={indComisiones}/>
+                capitalInicial={Number(capitalIni)||10000} comisionesIniciales={indComisiones} onProbar={probarOptimizacion}/>
             )}
 
+            {sidePanel==='multi'&&mcPrueba&&(
+              <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',margin:'8px 12px',padding:'7px 10px',borderRadius:6,border:'1px solid rgba(0,212,255,0.4)',background:'rgba(0,212,255,0.07)',fontFamily:MONO,fontSize:11,color:'var(--text)'}}>
+                <span>🎯 Probando <b>{mcPrueba.etiqueta}</b> de la Optimización en {mcPrueba.nombre}: con esa estrategia sola, se mandan sus params, sin filtros{mcPrueba.calentamiento!=null?` y calentamiento ${mcPrueba.calentamiento} velas`:''}. La estrategia guardada no cambia.</span>
+                <button onClick={()=>setMcPrueba(null)} style={{background:'transparent',border:'1px solid var(--border)',borderRadius:4,color:'var(--text3)',fontFamily:MONO,fontSize:10,padding:'2px 8px',cursor:'pointer'}}>Quitar</button>
+              </div>)}
             {/* ══ MULTICARTERA RESULTS ══ */}
             {mcResult&&sidePanel==='multi'&&(
               <div style={{display:'flex',flex:1,minHeight:0,overflow:'hidden',height:'100%'}}>

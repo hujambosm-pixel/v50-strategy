@@ -2407,7 +2407,7 @@ async function handlerMultibacktest(req, res) {
   // ── NUEVA RAMA: portfolioMode ─────────────────────────────────────────────
   if (req.body?.portfolioMode) return handlePortfolioMode(req, res)
   // ── PATH EXISTENTE: estrategia única — sin cambio ninguno desde aquí ──────
-  const { symbols, cfg: cfgInput, definition, modoAsig = 'slots', weights = {}, sizeRules: sizeRulesBody = null, strategyId = null, isNoStrategy = false, filtros: filtrosCfg, intervalo, comisiones = null, params: cambiosParams = null } = req.body
+  const { symbols, cfg: cfgInput, definition, modoAsig = 'slots', weights = {}, sizeRules: sizeRulesBody = null, strategyId = null, isNoStrategy = false, filtros: filtrosCfg, intervalo, comisiones = null, params: cambiosParams = null, calentamiento: calPedido = null } = req.body
   // Si no llegan, todo a cero: el cliente todavia no las manda. Ver lib/comisiones.js.
   const _com = normalizaComisiones(comisiones)
   const sizeRules = sizeRulesBody || cfgInput?.sizeRules || {}
@@ -2479,6 +2479,13 @@ async function handlerMultibacktest(req, res) {
     _stratParamsMb = r.params
     effectiveCfg = cfgConParams(cfg, _stratParamsMb)
   }
+  // `calentamiento` (opcional, entero de 0 a 5000): las velas de calentamiento que se piden, en lugar de las
+  // calculadas, como en /api/datos. Lo manda «Probar en backtest» desde la Optimización, para repetir el
+  // backtest con el calentamiento común de su petición. Sin el campo, todo como siempre.
+  if (calPedido != null && !(Number.isInteger(calPedido) && calPedido >= 0 && calPedido <= 5000)) {
+    const errores = ['«calentamiento» tiene que ser un número entero de velas entre 0 y 5000.']
+    return res.status(422).json({ error: 'Parámetros no válidos: ' + errores[0], tipo: 'parametros', errores })
+  }
 
   try {
     // Periodo, calentamiento y descarga en lotes para no saturar al proveedor.
@@ -2490,7 +2497,7 @@ async function handlerMultibacktest(req, res) {
     if (_ffU.forzados.length) console.log(`[filtros] ${_stratNameMb ?? strategyId}: estrategia semanal, filtros forzados a semanal: ${_ffU.forzados.join(', ')}`)
     const anyFiltroOn = hayFiltrosActivos(filtrosLista)
     const per = normalizaPeriodo({ years: cfg.years ?? 5, fromDate: cfg.fromDate ?? null, toDate: cfg.toDate ?? null })
-    const nCal = velasCalentamiento(_stratParamsMb, filtrosLista, assetInterval === '1wk' ? 'semanal' : 'diario',
+    const nCal = calPedido != null ? calPedido : velasCalentamiento(_stratParamsMb, filtrosLista, assetInterval === '1wk' ? 'semanal' : 'diario',
       _esquemaMb ? ventanasDeclaradas(_esquemaMb, _stratParamsMb) : null)
     const _cal = { calentamiento: nCal, conCalentamiento: true }
     console.log(`[periodo] ${_stratNameMb ?? strategyId} (${assetInterval}): ${per.modo} ${per.desde}→${per.hasta} · calentamiento ${nCal}`)
