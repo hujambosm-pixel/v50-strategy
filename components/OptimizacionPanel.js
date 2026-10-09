@@ -10,7 +10,7 @@ import CampoFecha from './CampoFecha'
 import { esquemaDeCodigo } from '../lib/parametrosEstrategia'
 import { generaRejilla, rejillaSugerida, valoresDeRango } from '../lib/rejillaParametros'
 import { periodoPorDefecto, estimaOptimizacion, divideEnPeticiones, agregaOptimizacion, ordenaFilas, claveCombinacion, mapaColores, estabilidad,
-         pruebaDeFila, activosCalculados, CONCURRENCIA, MIN_TOTAL, MIN_POR_ACTIVO } from '../lib/optimizacion'
+         pruebaDeFila, activosCalculados, NOMBRES_CAGR, cagrDeMetricas, CONCURRENCIA, MIN_TOTAL, MIN_POR_ACTIVO } from '../lib/optimizacion'
 import { COMISIONES_DEFECTO } from '../lib/comisiones'
 import { temporalidadDeEstrategia } from '../lib/condicionesSimulacion'
 
@@ -309,7 +309,10 @@ export function ResultadosOptimizacion({ res, onProbar = null, seleccionInicial 
   const [orden, setOrden] = useState({ col: 'cagrMediana', desc: true })
   const [seleccionada, setSeleccionada] = useState(seleccionInicial)
   const [verTodas, setVerTodas] = useState(false)
-  const filas = useMemo(() => res ? agregaOptimizacion(res.combos, res.porActivo) : [], [res])
+  // El CAGR que manda en la tabla, el mapa, la estabilidad y el desglose (ver lib/optimizacion.js).
+  const [tipoCagr, setTipoCagr] = useState('simple')
+  const nombreCagr = NOMBRES_CAGR[tipoCagr], metricas = metricasDe(tipoCagr)
+  const filas = useMemo(() => res ? agregaOptimizacion(res.combos, res.porActivo, { cagr: tipoCagr }) : [], [res, tipoCagr])
   const ordenadas = useMemo(() => ordenaFilas(filas, orden.col, orden.desc), [filas, orden])
   const cuentan = ordenadas.filter(f => f.cuenta), apartadas = ordenadas.filter(f => !f.cuenta)
   const variados = res ? Object.keys(res.valores).filter(k => res.valores[k].length > 1) : []
@@ -338,7 +341,7 @@ export function ResultadosOptimizacion({ res, onProbar = null, seleccionInicial 
     const guardada = filas.find(f => claveCombinacion(f.params) === claveActual)
     if (guardada) setSeleccionada(guardada.indice)
   }, [res.terminado, filas])
-  const COLS = [['cagrMediana', 'CAGR mediana', (v) => pct(v)], ['cagrMedia', 'CAGR media', (v) => pct(v)], ['ddMediana', 'DD mediana', (v) => pct(v)], ['ddPeor', 'DD peor', (v) => pct(v)],
+  const COLS = [['cagrMediana', `${nombreCagr} · mediana`, (v) => pct(v)], ['cagrMedia', `${nombreCagr} · media`, (v) => pct(v)], ['ddMediana', 'DD mediana', (v) => pct(v)], ['ddPeor', 'DD peor', (v) => pct(v)],
     ['operaciones', 'Ops.', (v) => num(v, 0)], ['activosPositivos', 'Activos +', (v, f) => `${v}/${f.activos}`], ['factorBeneficio', 'F. benef.', (v) => num(v)],
     ['tiempoInvertido', 'T. invert.', (v) => pct(v, 0)]]
   const textoParams = (p) => (variados.length ? variados : Object.keys(p)).map(k => `${k} ${typeof p[k] === 'number' ? textoEs(p[k], 6) : p[k] === true ? 'sí' : p[k] === false ? 'no' : p[k]}`).join(' · ')
@@ -360,11 +363,22 @@ export function ResultadosOptimizacion({ res, onProbar = null, seleccionInicial 
               : res.terminado ? '' : ' · en curso…'}
             {' · '}cuenta una combinación con al menos {MIN_TOTAL} operaciones en total y {MIN_POR_ACTIVO} en cada activo · ★ = la configuración guardada
           </div>
+          <div style={{ ...caja, display: 'flex', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+            <label style={{ flexDirection: 'row', alignItems: 'center', gap: 6, fontSize: TAM, color: GRIS, whiteSpace: 'nowrap' }}>Métrica principal
+              <select value={tipoCagr} onChange={e => setTipoCagr(e.target.value)} style={entrada}>
+                <option value="simple">CAGR simple (sin reinvertir)</option>
+                <option value="compuesto">CAGR compuesto (reinvirtiendo)</option></select></label>
+            <div style={{ flex: 1, minWidth: 260, fontSize: TAM, color: GRIS, lineHeight: 1.5 }}>
+              <b>Simple</b>: cada operación con el capital inicial, sin reinvertir lo ganado (como el ranking). <b>Compuesto</b>: reinvirtiendo
+              todo (como el resumen del backtest y el multibacktest); sale mucho más alto en activos que suben fuerte. Para comparar parámetros
+              entre sí es mejor el simple: mide la ventaja de cada operación sin que el interés compuesto amplifique la suerte de la secuencia.
+            </div>
+          </div>
           {/* Orden: mapa → la combinación seleccionada (estabilidad, año a año, desglose, probar) → tabla. */}
           <MapaDeColores filas={filas} res={res} variados={variados} claveActual={claveActual} seleccionada={seleccionada} setSeleccionada={setSeleccionada} filaSel={filaSel}
-            textoParams={textoParams} fijarCon={fijarMapa} />
+            textoParams={textoParams} fijarCon={fijarMapa} metricas={metricas} />
           <div ref={detalleRef} style={{ scrollMarginTop: 96 }}>
-            {filaSel && <DetalleSeleccion fila={filaSel} filas={filas} res={res} textoParams={textoParams} onProbar={onProbar} />}
+            {filaSel && <DetalleSeleccion fila={filaSel} filas={filas} res={res} textoParams={textoParams} onProbar={onProbar} metricas={metricas} tipoCagr={tipoCagr} />}
           </div>
           <TablaFilas filas={verTodas ? cuentan : cuentan.slice(0, 100)} COLS={COLS} orden={orden} setOrden={setOrden} textoParams={textoParams}
             claveActual={claveActual} seleccionada={seleccionada} setSeleccionada={seleccionaDesdeTabla} />
@@ -382,13 +396,15 @@ export function ResultadosOptimizacion({ res, onProbar = null, seleccionInicial 
 const METRICAS = [['cagrMediana', 'CAGR mediana', (v) => pct(v), true], ['cagrMedia', 'CAGR media', (v) => pct(v), true],
   ['ddMediana', 'DD mediana', (v) => pct(v), false], ['ddPeor', 'DD peor', (v) => pct(v), false],
   ['factorBeneficio', 'F. benef.', (v) => num(v), true], ['operaciones', 'Ops.', (v) => num(v, 0), true]]
+// Las mismas, con el rótulo del CAGR elegido («CAGR simple · mediana»).
+const metricasDe = (tipo) => METRICAS.map(([k, t, f, b]) => [k, k === 'cagrMediana' ? `${NOMBRES_CAGR[tipo]} · mediana` : k === 'cagrMedia' ? `${NOMBRES_CAGR[tipo]} · media` : t, f, b])
 const textoValor = (v) => typeof v === 'number' ? textoEs(v, 6) : v === true ? 'sí' : v === false ? 'no' : String(v)
 // Rojo (peor) → amarillo → verde (mejor), con t de 0 a 1.
 const colorEscala = (t) => `hsl(${Math.round(120 * Math.min(1, Math.max(0, t)))}, 55%, 30%)`
 
 // (b) Mapa de colores: dos parámetros en los ejes, el resto fijados (por defecto en la configuración guardada).
 // Cada celda ES la fila de la tabla de esa combinación (mismas cifras); pulsarla la selecciona.
-function MapaDeColores({ filas, res, variados, claveActual, seleccionada, setSeleccionada, filaSel, textoParams, fijarCon = null }) {
+function MapaDeColores({ filas, res, variados, claveActual, seleccionada, setSeleccionada, filaSel, textoParams, fijarCon = null, metricas = METRICAS }) {
   const [ejes, setEjes] = useState({ x: variados[0], y: variados[1] })
   const [metrica, setMetrica] = useState('cagrMediana')
   const [fijosElegidos, setFijosElegidos] = useState({})
@@ -407,7 +423,7 @@ function MapaDeColores({ filas, res, variados, claveActual, seleccionada, setSel
       : lista.includes(res.guardados[k]) ? res.guardados[k] : lista[0]
   }
   const mapa = mapaColores(filas, res.valores, { ejeX, ejeY, fijos })
-  const [, tituloM, formatoM, masEsMejor] = METRICAS.find(m => m[0] === metrica)
+  const [, tituloM, formatoM, masEsMejor] = metricas.find(m => m[0] === metrica)
   const enEscala = mapa.celdas.flat().filter(c => c && c.cuenta && c[metrica] != null).map(c => c[metrica])
   const lo = Math.min(...enEscala), hi = Math.max(...enEscala)
   const t = (v) => hi > lo ? (masEsMejor ? (v - lo) / (hi - lo) : (hi - v) / (hi - lo)) : 0.5
@@ -422,7 +438,7 @@ function MapaDeColores({ filas, res, variados, claveActual, seleccionada, setSel
         <label>Eje Y <select value={ejeY} onChange={e => setEjes({ y: e.target.value, x: e.target.value === ejeX ? ejeY : ejeX })} style={entrada}>
           {variados.map(k => <option key={k} value={k}>{k}</option>)}</select></label>
         <label>Color <select value={metrica} onChange={e => setMetrica(e.target.value)} style={entrada}>
-          {METRICAS.map(([k, tt]) => <option key={k} value={k}>{tt}</option>)}</select></label>
+          {metricas.map(([k, tt]) => <option key={k} value={k}>{tt}</option>)}</select></label>
         {Object.keys(fijos).filter(k => res.valores[k].length > 1).map(k => (
           <label key={k}>{k} <select value={String(fijos[k])} style={entrada}
             onChange={e => setFijosElegidos(f => ({ ...f, [k]: res.valores[k].find(v => String(v) === e.target.value) }))}>
@@ -500,10 +516,10 @@ function TablaFilas({ filas, COLS, orden, setOrden, textoParams, claveActual, se
 
 // La combinación seleccionada: su resultado por activo, (c) su estabilidad frente a las vecinas (un paso arriba
 // y abajo en cada parámetro de la rejilla), año a año y (d) «Probar en backtest».
-function DetalleSeleccion({ fila, filas, res, textoParams, onProbar }) {
+function DetalleSeleccion({ fila, filas, res, textoParams, onProbar, metricas = METRICAS, tipoCagr = 'simple' }) {
   const [metrica, setMetrica] = useState('cagrMediana')
   const est = estabilidad(fila, filas, res.valores, metrica)
-  const [, tituloM, formatoM, masEsMejor] = METRICAS.find(m => m[0] === metrica)
+  const [, tituloM, formatoM, masEsMejor] = metricas.find(m => m[0] === metrica)
   const dif = est.diferencia, peor = dif != null && (masEsMejor ? dif < 0 : dif > 0)
   const th = { padding: '3px 8px', color: GRIS, fontWeight: 400, textAlign: 'right' }, td = { padding: '3px 8px', textAlign: 'right' }
   return (<>
@@ -511,7 +527,7 @@ function DetalleSeleccion({ fila, filas, res, textoParams, onProbar }) {
       <div style={etiqueta}>Estabilidad de la combinación seleccionada</div>
       <div style={{ fontSize: TAM, marginBottom: 6 }}>{textoParams(fila.params)}
         <label style={{ fontSize: TAM, marginLeft: 10 }}>Métrica <select value={metrica} onChange={e => setMetrica(e.target.value)} style={entrada}>
-          {METRICAS.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select></label></div>
+          {metricas.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select></label></div>
       {est.vecinas.length ? (<>
         <div style={{ fontSize: TAM, lineHeight: 1.6, marginBottom: 6 }}>
           {tituloM}: la combinación <b>{formatoM(est.propia)}</b> · media de sus {est.vecinas.length} vecinas <b>{formatoM(est.mediaVecinas)}</b>
@@ -538,22 +554,25 @@ function DetalleSeleccion({ fila, filas, res, textoParams, onProbar }) {
         </tbody>
       </table>
     </div>
-    <DetalleActivos fila={fila} textoParams={textoParams} />
+    <DetalleActivos fila={fila} textoParams={textoParams} tipoCagr={tipoCagr} />
     {onProbar && <ProbarEnBacktest fila={fila} res={res} textoParams={textoParams} onProbar={onProbar} />}
   </>)
 }
 
-// Desglose por activo de la combinación seleccionada, de PEOR a MEJOR CAGR: qué activos arrastran la media.
-function DetalleActivos({ fila, textoParams }) {
-  const orden = Object.entries(fila.porActivo).sort(([a, x], [b, y]) => (x.cagr <= -99 ? -100 : x.cagr) - (y.cagr <= -99 ? -100 : y.cagr) || a.localeCompare(b))
+// Desglose por activo de la combinación seleccionada, de PEOR a MEJOR según el CAGR elegido: qué activos arrastran
+// la media. Enseña los dos CAGR, el simple y el compuesto.
+function DetalleActivos({ fila, textoParams, tipoCagr = 'simple' }) {
+  const c = (m) => { const v = cagrDeMetricas(m, tipoCagr); return v == null ? -Infinity : v <= -99 ? -100 : v }
+  const orden = Object.entries(fila.porActivo).sort(([a, x], [b, y]) => c(x) - c(y) || a.localeCompare(b))
   return (
     <div style={{ ...caja, marginTop: 14 }}>
-      <div style={etiqueta}>Desglose por activo (de peor a mejor CAGR)</div>
+      <div style={etiqueta}>Desglose por activo (de peor a mejor {NOMBRES_CAGR[tipoCagr]})</div>
       <div style={{ fontSize: TAM, marginBottom: 6 }}>{textoParams(fila.params)}</div>
       <table style={{ borderCollapse: 'collapse', fontSize: TAM }}>
-        <thead><tr>{['Activo', 'CAGR', 'DD máx.', 'Ops.', 'F. benef.', 'Beneficio'].map(t => <th key={t} style={{ padding: '3px 8px', color: GRIS, fontWeight: 400, textAlign: 'right' }}>{t}</th>)}</tr></thead>
+        <thead><tr>{['Activo', 'CAGR simple', 'CAGR compuesto', 'DD máx.', 'Ops.', 'F. benef.', 'Benef. simple'].map(t => <th key={t} style={{ padding: '3px 8px', color: GRIS, fontWeight: 400, textAlign: 'right' }}>{t}</th>)}</tr></thead>
         <tbody>{orden.map(([sym, m]) => (
           <tr key={sym}><td style={{ padding: '3px 8px' }}>{sym}</td><td style={{ padding: '3px 8px', textAlign: 'right' }}>{pct(m.cagr)}</td>
+            <td style={{ padding: '3px 8px', textAlign: 'right' }}>{pct(m.cagrCompuesto)}</td>
             <td style={{ padding: '3px 8px', textAlign: 'right' }}>{pct(m.maxDD)}</td><td style={{ padding: '3px 8px', textAlign: 'right' }}>{m.operaciones}</td>
             <td style={{ padding: '3px 8px', textAlign: 'right' }}>{num(m.factorBeneficio)}</td><td style={{ padding: '3px 8px', textAlign: 'right' }}>{num(m.beneficioSimple)} €</td></tr>))}
         </tbody>
