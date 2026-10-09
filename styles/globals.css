@@ -4,6 +4,9 @@
   --bg:#080c14; --bg2:#0d1520; --bg3:#111d2e;
   --border:#1a2d45; --border2:#243d5c;
   --text:#e2eaf5; --text2:#7a9bc0; --text3:#3d5a7a;
+  /* Texto secundario LEGIBLE: 7,6:1 sobre --bg, 7,1:1 sobre --bg2 y 6,6:1 sobre --bg3 (WCAG AA pide 4,5:1).
+     De momento solo lo usa la pantalla Optimización; la idea es llevarlo a toda la app en lugar de --text3. */
+  --text-legible:#8aa4c2;
   --accent:#00d4ff; --accent2:#0099cc;
   --green:#00e5a0; --red:#ff4d6d; --yellow:#ffd166;
   --orange:#ff9a3c; --purple:#9b72ff;

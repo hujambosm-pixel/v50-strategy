@@ -7,7 +7,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { MONO, fmt, numeroEs, textoEs } from '../lib/utils'
 import { esquemaDeCodigo } from '../lib/parametrosEstrategia'
-import { generaRejilla, rejillaSugerida } from '../lib/rejillaParametros'
+import { generaRejilla, rejillaSugerida, valoresDeRango } from '../lib/rejillaParametros'
 import { periodoPorDefecto, estimaOptimizacion, divideEnPeticiones, agregaOptimizacion, ordenaFilas, claveCombinacion, mapaColores, estabilidad,
          pruebaDeFila, CONCURRENCIA, MIN_TOTAL, MIN_POR_ACTIVO } from '../lib/optimizacion'
 import { COMISIONES_DEFECTO } from '../lib/comisiones'
@@ -18,33 +18,48 @@ const leeGuardado = () => { try { return JSON.parse(localStorage.getItem(CLAVE_L
 const parseaParams = (p) => { try { return typeof p === 'string' ? JSON.parse(p || '{}') : (p || {}) } catch (_) { return {} } }
 const pct = (v, dec = 2) => v == null ? '—' : fmt(v, dec, ' %')
 const num = (v, dec = 2) => v == null ? '—' : fmt(v, dec)
+// Texto secundario de esta pantalla: legible (--text-legible en styles/globals.css, ≥ 6,6:1 sobre sus fondos)
+// y nunca por debajo de 12 px.
+const GRIS = 'var(--text-legible)'
+const TAM = 12
 
-// La rejilla de la pantalla (textos editables) a partir de la declaración: la sugerida ya rellena.
+// La rejilla de la pantalla (textos editables) a partir de la declaración: la sugerida ya rellena, y con el
+// valor GUARDADO de cada parámetro siempre dentro aunque no caiga en el paso (si no, nunca se probaría y no
+// habría ★ con la que comparar). Se puede quitar a mano; entonces se avisa junto al parámetro.
 function rejillaInicial(esquema, guardados) {
   const sug = rejillaSugerida(esquema), ui = {}
   for (const p of esquema.lista) {
     if (p.tipo === 'entero' || p.tipo === 'decimal') {
       const s = sug[p.nombre] || { min: guardados[p.nombre] ?? p.defecto, max: guardados[p.nombre] ?? p.defecto, paso: p.paso }
-      ui[p.nombre] = { desde: textoEs(s.min, 6), hasta: textoEs(s.max, 6), paso: textoEs(s.paso, 6) }
-    } else ui[p.nombre] = { valores: [...(sug[p.nombre] || [p.defecto])] }
+      ui[p.nombre] = { desde: textoEs(s.min, 6), hasta: textoEs(s.max, 6), paso: textoEs(s.paso, 6), conGuardado: true }
+    } else {
+      const g = guardados[p.nombre] ?? p.defecto, v = [...(sug[p.nombre] || [p.defecto])]
+      ui[p.nombre] = { valores: v.includes(g) ? v : [...v, g] }
+    }
   }
   return ui
 }
-// De los textos de la pantalla a la rejilla de lib/rejillaParametros.js.
-function rejillaDeUi(esquema, ui) {
+const rangoDeUi = (u) => ({ min: numeroEs(u.desde), max: numeroEs(u.hasta), paso: numeroEs(u.paso) })
+const enRango = (u, g) => (valoresDeRango(rangoDeUi(u)) || []).includes(g)
+// De los textos de la pantalla a la rejilla de lib/rejillaParametros.js. En los numéricos, el valor guardado se
+// añade a la lista del rango (salvo que se haya quitado: conGuardado === false).
+function rejillaDeUi(esquema, ui, guardados = {}) {
   const r = {}
   for (const p of esquema.lista) {
     const u = ui?.[p.nombre]
     if (!u) continue
-    if (p.tipo === 'entero' || p.tipo === 'decimal') r[p.nombre] = { min: numeroEs(u.desde), max: numeroEs(u.hasta), paso: numeroEs(u.paso) }
+    if (p.tipo === 'entero' || p.tipo === 'decimal') {
+      const rango = rangoDeUi(u), lista = valoresDeRango(rango), g = guardados[p.nombre] ?? p.defecto
+      r[p.nombre] = lista && u.conGuardado !== false && typeof g === 'number' && !lista.includes(g) ? [...lista, g].sort((a, b) => a - b) : rango
+    }
     else r[p.nombre] = u.valores || []
   }
   return r
 }
 
 const caja = { background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 6, padding: '10px 12px', marginBottom: 10 }
-const etiqueta = { fontFamily: MONO, fontSize: 10, color: 'var(--text3)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 6 }
-const entrada = { background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontFamily: MONO, fontSize: 11, padding: '4px 6px' }
+const etiqueta = { fontFamily: MONO, fontSize: TAM, color: GRIS, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 6 }
+const entrada = { background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontFamily: MONO, fontSize: TAM, padding: '4px 6px' }
 
 export default function OptimizacionPanel({ strategies = [], watchlist = [], wlLists = [], apiFetch, capitalInicial = 10000,
                                              comisionesIniciales = null, onProbar = null }) {
@@ -62,7 +77,7 @@ export default function OptimizacionPanel({ strategies = [], watchlist = [], wlL
   const guardados = useMemo(() => est ? parseaParams(est.s.params) : {}, [est])
   const rejillaUi = est ? (cfg.rejillas[est.s.id] || rejillaInicial(est.esquema, guardados)) : null
   const ponRejilla = (nombre, valor) => setCfg(c => ({ ...c, rejillas: { ...c.rejillas, [est.s.id]: { ...rejillaUi, [nombre]: valor } } }))
-  const gen = useMemo(() => est ? generaRejilla(est.esquema, rejillaDeUi(est.esquema, rejillaUi), { base: guardados, max: 100000 }) : null, [est, rejillaUi, guardados])
+  const gen = useMemo(() => est ? generaRejilla(est.esquema, rejillaDeUi(est.esquema, rejillaUi, guardados), { base: guardados, max: 100000 }) : null, [est, rejillaUi, guardados])
 
   // Activos.
   const activosWl = (watchlist || []).filter(w => w.active !== false)
@@ -76,6 +91,9 @@ export default function OptimizacionPanel({ strategies = [], watchlist = [], wlL
   // ── Lanzamiento por tandas ──
   const [ejec, setEjec] = useState(null)        // { hechas, total, parando }
   const [res, setRes] = useState(null)          // { combos, valores, porActivo, … } — solo en memoria
+  const [fin, setFin] = useState(null)          // el aviso final: se queda hasta el siguiente lanzamiento
+  const [ahora, setAhora] = useState(0)         // reloj del tiempo transcurrido, cada segundo mientras corre
+  useEffect(() => { if (!ejec) return; const id = setInterval(() => setAhora(Date.now()), 1000); return () => clearInterval(id) }, [!!ejec])
   const pararRef = useRef(false)
   const lanzar = async () => {
     if (!est || !gen?.combinaciones.length || !activos.length || ejec) return
@@ -85,11 +103,15 @@ export default function OptimizacionPanel({ strategies = [], watchlist = [], wlL
     const calentamientos = new Array(combos.length).fill(null)   // el común de cada petición, para «Probar en backtest»
     const condiciones = { estrategia: est.s.id, intervalo: temporalidad, desde: cfg.desde, hasta: cfg.hasta, capitalIni: Number(cfg.capital) || 10000, comisiones: cfg.comisiones, filtros: [] }
     pararRef.current = false
-    setEjec({ hechas: 0, total: tareas.length, parando: false })
+    const inicio = Date.now()
+    setFin(null); setAhora(inicio)
+    setEjec({ hechas: 0, total: tareas.length, parando: false, inicio, enCurso: [] })
     setRes({ combos, valores: gen.valores, porActivo, calentamientos, nombre: est.s.name, estrategiaId: est.s.id, guardados, condiciones, activos: [...activos], terminado: false, interrumpida: false })
     let hechas = 0, interrumpida = false
     for (let i = 0; i < tareas.length; i += CONCURRENCIA) {
-      await Promise.all(tareas.slice(i, i + CONCURRENCIA).map(async t => {
+      const tanda = tareas.slice(i, i + CONCURRENCIA)
+      setEjec(e => e && ({ ...e, enCurso: [...new Set(tanda.map(t => t.sym))] }))
+      await Promise.all(tanda.map(async t => {
         try {
           const r = await apiFetch('/api/optimiza', { method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ...condiciones, simbolo: t.sym, combinaciones: t.combinaciones }) })
@@ -104,8 +126,11 @@ export default function OptimizacionPanel({ strategies = [], watchlist = [], wlL
       if (pararRef.current) { interrumpida = i + CONCURRENCIA < tareas.length; break }
     }
     setRes(r => r && ({ ...r, porActivo: { ...porActivo }, terminado: true, interrumpida }))
+    setFin({ ms: Date.now() - inicio, combinaciones: combos.length, activos: activos.length, interrumpida, hechas, total: tareas.length })
     setEjec(null)
   }
+
+  const puedeLanzar = !!(est && gen?.combinaciones.length && activos.length && !ejec && cfg.desde < cfg.hasta)
 
   return (
     <div style={{ display: 'flex', flex: 1, minHeight: 0, height: '100%', overflow: 'hidden', fontFamily: MONO, color: 'var(--text)' }}>
@@ -118,18 +143,18 @@ export default function OptimizacionPanel({ strategies = [], watchlist = [], wlL
           <select value={cfg.estrategiaId} onChange={e => pon('estrategiaId', e.target.value)} style={{ ...entrada, width: '100%' }}>
             <option value="">Elige una estrategia…</option>
             {estrategias.map(e => (
-              <option key={e.s.id} value={e.s.id} disabled={!e.esquema} style={{ color: e.esquema ? undefined : '#5a7a95' }}>
+              <option key={e.s.id} value={e.s.id} disabled={!e.esquema} style={{ color: e.esquema ? undefined : GRIS }}>
                 {e.s.name}{e.esquema ? '' : ' — ' + e.motivo}
               </option>))}
           </select>
-          {est && <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 6 }}>{est.esquema.lista.length} parámetros declarados · temporalidad de la estrategia: {temporalidadDeEstrategia(est.s)}</div>}
+          {est && <div style={{ fontSize: TAM, color: GRIS, marginTop: 6 }}>{est.esquema.lista.length} parámetros declarados · temporalidad de la estrategia: {temporalidadDeEstrategia(est.s)}</div>}
         </div>
 
         <div style={caja}>
           <div style={etiqueta}>Activos</div>
           <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
             {[['lista', 'Una lista'], ['todos', 'Toda la watchlist'], ['seleccion', 'Selección']].map(([v, t]) => (
-              <button key={v} onClick={() => pon('modoActivos', v)} style={{ ...entrada, cursor: 'pointer', background: cfg.modoActivos === v ? 'var(--bg3)' : 'var(--bg)', color: cfg.modoActivos === v ? 'var(--accent)' : 'var(--text3)' }}>{t}</button>))}
+              <button key={v} onClick={() => pon('modoActivos', v)} style={{ ...entrada, cursor: 'pointer', background: cfg.modoActivos === v ? 'var(--bg3)' : 'var(--bg)', color: cfg.modoActivos === v ? 'var(--accent)' : GRIS }}>{t}</button>))}
           </div>
           {cfg.modoActivos === 'lista' && (
             <select value={cfg.listaId} onChange={e => pon('listaId', e.target.value)} style={{ ...entrada, width: '100%' }}>
@@ -140,18 +165,18 @@ export default function OptimizacionPanel({ strategies = [], watchlist = [], wlL
             <input placeholder="Buscar…" value={filtroSel} onChange={e => setFiltroSel(e.target.value)} style={{ ...entrada, width: '100%', marginBottom: 4 }} />
             <div style={{ maxHeight: 160, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 4, padding: 4 }}>
               {activosWl.filter(w => !filtroSel || w.symbol.toLowerCase().includes(filtroSel.toLowerCase())).map(w => (
-                <label key={w.symbol} style={{ display: 'flex', gap: 6, fontSize: 11, cursor: 'pointer' }}>
+                <label key={w.symbol} style={{ display: 'flex', gap: 6, fontSize: TAM, cursor: 'pointer' }}>
                   <input type="checkbox" checked={(cfg.seleccion || []).includes(w.symbol)}
                     onChange={e => pon('seleccion', e.target.checked ? [...(cfg.seleccion || []), w.symbol] : (cfg.seleccion || []).filter(s => s !== w.symbol))} />
                   {w.symbol}
                 </label>))}
             </div></>)}
-          <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 6 }}>{activos.length} activos</div>
+          <div style={{ fontSize: TAM, color: GRIS, marginTop: 6 }}>{activos.length} activos</div>
         </div>
 
         <div style={caja}>
           <div style={etiqueta}>Condiciones</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, fontSize: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, fontSize: TAM }}>
             <label>Desde<input type="date" value={cfg.desde} onChange={e => pon('desde', e.target.value)} style={{ ...entrada, width: '100%' }} /></label>
             <label>Hasta<input type="date" value={cfg.hasta} onChange={e => pon('hasta', e.target.value)} style={{ ...entrada, width: '100%' }} /></label>
             <label>Capital (€)<input type="text" inputMode="decimal" defaultValue={textoEs(cfg.capital, 2)} key={'cap' + cfg.capital}
@@ -163,26 +188,26 @@ export default function OptimizacionPanel({ strategies = [], watchlist = [], wlL
               <label key={k}>{t}<input type="text" inputMode="decimal" defaultValue={textoEs(cfg.comisiones?.[k] ?? 0, 4)} key={k + (cfg.comisiones?.[k] ?? 0)}
                 onBlur={e => { const n = numeroEs(e.target.value); if (n != null && n >= 0) pon('comisiones', { ...cfg.comisiones, [k]: n }) }} style={{ ...entrada, width: '100%' }} /></label>))}
           </div>
-          <button onClick={() => setCfg(c => ({ ...c, ...periodoPorDefecto() }))} style={{ ...entrada, marginTop: 6, cursor: 'pointer', fontSize: 10 }}>Últimos 5 años completos</button>
+          <button onClick={() => setCfg(c => ({ ...c, ...periodoPorDefecto() }))} style={{ ...entrada, marginTop: 6, cursor: 'pointer', fontSize: TAM }}>Últimos 5 años completos</button>
         </div>
 
         {est && (
           <div style={caja}>
             <div style={etiqueta}>Rejilla</div>
             {est.esquema.lista.map(p => {
-              const u = rejillaUi[p.nombre]
+              const u = rejillaUi[p.nombre], g = guardados[p.nombre] ?? p.defecto
               return (
                 <div key={p.nombre} style={{ marginBottom: 8 }}>
-                  <div style={{ fontSize: 11, color: 'var(--text)' }} title={p.descripcion || ''}>{p.nombre}
-                    <span style={{ color: 'var(--text3)', fontSize: 10 }}> · guardado: {String(guardados[p.nombre] ?? p.defecto)}</span></div>
+                  <div style={{ fontSize: TAM, color: 'var(--text)' }} title={p.descripcion || ''}>{p.nombre}
+                    <span style={{ color: GRIS, fontSize: TAM }}> · guardado: {String(guardados[p.nombre] ?? p.defecto)}</span></div>
                   {(p.tipo === 'entero' || p.tipo === 'decimal') ? (
-                    <div style={{ display: 'flex', gap: 4, fontSize: 10, alignItems: 'center' }}>
+                    <div style={{ display: 'flex', gap: 4, fontSize: TAM, alignItems: 'center' }}>
                       {['desde', 'hasta', 'paso'].map(k => (
                         <label key={k} style={{ flex: 1 }}>{k}<input type="text" inputMode="decimal" value={u[k]} onChange={e => ponRejilla(p.nombre, { ...u, [k]: e.target.value })}
                           style={{ ...entrada, width: '100%' }} /></label>))}
                     </div>
                   ) : (
-                    <div style={{ display: 'flex', gap: 10, fontSize: 11, flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', gap: 10, fontSize: TAM, flexWrap: 'wrap' }}>
                       {(p.tipo === 'sino' ? [true, false] : p.opciones).map(v => (
                         <label key={String(v)} style={{ cursor: 'pointer' }}>
                           <input type="checkbox" checked={(u.valores || []).includes(v)}
@@ -190,52 +215,81 @@ export default function OptimizacionPanel({ strategies = [], watchlist = [], wlL
                           {' '}{p.tipo === 'sino' ? (v ? 'sí' : 'no') : v}
                         </label>))}
                     </div>)}
+                  {(p.tipo === 'entero' || p.tipo === 'decimal') && u.desde != null && !enRango(u, g) && (
+                    <label style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 6, fontSize: TAM, color: GRIS, marginTop: 4, cursor: 'pointer' }}>
+                      <input type="checkbox" checked={u.conGuardado !== false} onChange={e => ponRejilla(p.nombre, { ...u, conGuardado: e.target.checked })} />
+                      añadir el guardado ({textoValor(g)}), que no cae en el paso</label>)}
+                  {!gen.errores.length && gen.valores[p.nombre] && !gen.valores[p.nombre].includes(g) && (
+                    <div style={{ fontSize: TAM, color: '#ffd166', marginTop: 4 }}>⚠ El valor guardado ({textoValor(g)}) no se prueba: no habrá ★ con la que comparar.</div>)}
                 </div>)
             })}
-            <button onClick={() => setCfg(c => { const r = { ...c.rejillas }; delete r[est.s.id]; return { ...c, rejillas: r } })} style={{ ...entrada, cursor: 'pointer', fontSize: 10 }}>Volver a la rejilla sugerida</button>
-            <div style={{ fontSize: 11, marginTop: 8 }}>
+            <button onClick={() => setCfg(c => { const r = { ...c.rejillas }; delete r[est.s.id]; return { ...c, rejillas: r } })} style={{ ...entrada, cursor: 'pointer', fontSize: TAM }}>Volver a la rejilla sugerida</button>
+            <div style={{ fontSize: TAM, marginTop: 8 }}>
               {gen.errores.length
                 ? <span style={{ color: '#ff4d6d' }}>{gen.errores.join(' ')}</span>
                 : <>{gen.combinaciones.length.toLocaleString('es-ES')} combinaciones
-                    {gen.porRestriccion ? <span style={{ color: 'var(--text3)' }}> ({gen.total.toLocaleString('es-ES')} − {gen.porRestriccion.toLocaleString('es-ES')} que no cumplen las restricciones)</span> : null}</>}
+                    {gen.porRestriccion ? <span style={{ color: GRIS }}> ({gen.total.toLocaleString('es-ES')} − {gen.porRestriccion.toLocaleString('es-ES')} que no cumplen las restricciones)</span> : null}</>}
             </div>
           </div>)}
 
         {estimacion && (
           <div style={caja}>
             <div style={etiqueta}>Antes de lanzar</div>
-            <div style={{ fontSize: 11, lineHeight: 1.6 }}>
+            <div style={{ fontSize: TAM, lineHeight: 1.6 }}>
               {gen.combinaciones.length.toLocaleString('es-ES')} combinaciones × {activos.length} activos = <b>{estimacion.backtests.toLocaleString('es-ES')}</b> backtests<br />
               {estimacion.peticiones.toLocaleString('es-ES')} peticiones de hasta 300, de {CONCURRENCIA} en {CONCURRENCIA}<br />
               Tiempo estimado: ~{estimacion.segundos < 90 ? `${Math.round(estimacion.segundos)} s` : `${Math.round(estimacion.segundos / 60)} min`}
             </div>
-            {estimacion.avisos.length > 0 && <div style={{ fontSize: 10, color: '#ffd166', marginTop: 6 }}>⚠ Es grande: {estimacion.avisos.join('; ')}. Considera menos activos o una rejilla más gruesa.</div>}
+            {estimacion.avisos.length > 0 && <div style={{ fontSize: TAM, color: '#ffd166', marginTop: 6 }}>⚠ Es grande: {estimacion.avisos.join('; ')}. Considera menos activos o una rejilla más gruesa.</div>}
           </div>)}
 
-        <button onClick={lanzar} disabled={!est || !gen?.combinaciones.length || !activos.length || !!ejec || !(cfg.desde < cfg.hasta)}
-          style={{ width: '100%', padding: '9px 0', borderRadius: 6, border: 'none', fontFamily: MONO, fontWeight: 700, cursor: 'pointer',
-            background: !est || !gen?.combinaciones.length || !activos.length || ejec ? 'var(--bg3)' : 'var(--accent)', color: !est || !gen?.combinaciones.length || !activos.length || ejec ? 'var(--text3)' : '#080c14' }}>
+        <button onClick={lanzar} disabled={!puedeLanzar}
+          style={{ width: '100%', padding: '9px 0', borderRadius: 6, border: 'none', fontFamily: MONO, fontWeight: 700, cursor: puedeLanzar ? 'pointer' : 'not-allowed',
+            background: puedeLanzar ? 'var(--accent)' : 'var(--bg3)', color: puedeLanzar ? '#080c14' : GRIS }}>
           {ejec ? 'Optimizando…' : '▶ Lanzar optimización'}
         </button>
-        {ejec && (
-          <div style={{ marginTop: 8 }}>
-            <div style={{ height: 6, background: 'var(--bg3)', borderRadius: 3, overflow: 'hidden' }}>
-              <div style={{ width: `${Math.round(ejec.hechas / ejec.total * 100)}%`, height: '100%', background: 'var(--accent)', transition: 'width 0.2s' }} />
-            </div>
-            <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 4 }}>{ejec.hechas} de {ejec.total} peticiones</div>
-            <button onClick={() => { pararRef.current = true; setEjec(e => e && ({ ...e, parando: true })) }} disabled={ejec.parando}
-              style={{ ...entrada, marginTop: 6, cursor: 'pointer', width: '100%' }}>{ejec.parando ? 'Se detendrá al terminar la tanda…' : '■ Detener al terminar la tanda'}</button>
-          </div>)}
-        <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 8, lineHeight: 1.5 }}>No se guarda nada en la base de datos. La configuración se recuerda en este navegador.</div>
+        <EstadoEjecucion ejec={ejec} fin={fin} ahora={ahora} onDetener={() => { pararRef.current = true; setEjec(e => e && ({ ...e, parando: true })) }} />
+        <div style={{ fontSize: TAM, color: GRIS, marginTop: 8, lineHeight: 1.5 }}>No se guarda nada en la base de datos. La configuración se recuerda en este navegador.</div>
       </div>
 
       {/* ── Resultados ── */}
       <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: 12 }}>
-        {!res && <div style={{ color: 'var(--text3)', fontSize: 12, marginTop: 40, textAlign: 'center' }}>Elige estrategia, activos y rejilla, y lanza la optimización.</div>}
+        {!res && <div style={{ color: GRIS, fontSize: 12, marginTop: 40, textAlign: 'center' }}>Elige estrategia, activos y rejilla, y lanza la optimización.</div>}
         {res && <ResultadosOptimizacion res={res} onProbar={onProbar} />}
       </div>
     </div>
   )
+}
+
+const duracion = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return s < 90 ? `${s} s` : `${Math.floor(s / 60)} min ${s % 60} s` }
+// Mientras corre: barra, peticiones hechas / total, activo(s) en curso y tiempo transcurrido. Al terminar: un aviso
+// que se queda hasta el siguiente lanzamiento («terminada» o «detenida»). Aparte para poder montarlo.
+export function EstadoEjecucion({ ejec, fin, ahora, onDetener }) {
+  if (ejec) {
+    const hecho = ejec.total ? Math.round(ejec.hechas / ejec.total * 100) : 0
+    return (
+      <div role="status" style={{ ...caja, marginTop: 8, borderColor: 'rgba(0,212,255,0.45)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: TAM, marginBottom: 6 }}>
+          <b>Optimizando… {hecho} %</b><span style={{ color: GRIS }}>{duracion(ahora - ejec.inicio)}</span></div>
+        <div style={{ height: 8, background: 'var(--bg3)', borderRadius: 4, overflow: 'hidden' }}>
+          <div style={{ width: `${hecho}%`, height: '100%', background: 'var(--accent)', transition: 'width 0.2s' }} /></div>
+        <div style={{ fontSize: TAM, color: GRIS, marginTop: 6, lineHeight: 1.6 }}>
+          {ejec.hechas.toLocaleString('es-ES')} de {ejec.total.toLocaleString('es-ES')} peticiones<br />
+          En curso: {ejec.enCurso?.length ? ejec.enCurso.join(', ') : '—'}<br />
+          Tiempo transcurrido: {duracion(ahora - ejec.inicio)}
+        </div>
+        <button onClick={onDetener} disabled={ejec.parando}
+          style={{ ...entrada, marginTop: 8, cursor: ejec.parando ? 'not-allowed' : 'pointer', width: '100%' }}>{ejec.parando ? 'Se detendrá al terminar la tanda…' : '■ Detener al terminar la tanda'}</button>
+      </div>)
+  }
+  if (!fin) return null
+  const color = fin.interrumpida ? '255,209,102' : '0,229,160'
+  return (
+    <div role="status" style={{ ...caja, marginTop: 8, fontSize: TAM, lineHeight: 1.6, borderColor: `rgba(${color},0.6)`, background: `rgba(${color},0.08)` }}>
+      {fin.interrumpida
+        ? <>■ <b>Detenida tras {duracion(fin.ms)}</b> · {fin.hechas.toLocaleString('es-ES')} de {fin.total.toLocaleString('es-ES')} peticiones · resultados parciales de {fin.combinaciones.toLocaleString('es-ES')} combinaciones × {fin.activos} activos</>
+        : <>✓ <b>Optimización terminada en {duracion(fin.ms)}</b> · {fin.combinaciones.toLocaleString('es-ES')} combinaciones × {fin.activos} activos</>}
+    </div>)
 }
 
 // Los resultados de una optimización (res: combos, valores, porActivo, condiciones…). Aparte de la pantalla para
@@ -257,11 +311,11 @@ export function ResultadosOptimizacion({ res, onProbar = null, seleccionInicial 
   const textoParams = (p) => (variados.length ? variados : Object.keys(p)).map(k => `${k} ${typeof p[k] === 'number' ? textoEs(p[k], 6) : p[k] === true ? 'sí' : p[k] === false ? 'no' : p[k]}`).join(' · ')
 
   return (<>
-          <div style={{ ...caja, borderColor: 'rgba(255,209,102,0.5)', background: 'rgba(255,209,102,0.08)', fontSize: 11, lineHeight: 1.6, position: 'sticky', top: 0, zIndex: 2 }}>
+          <div style={{ ...caja, borderColor: 'rgba(255,209,102,0.5)', background: 'rgba(255,209,102,0.08)', fontSize: TAM, lineHeight: 1.6, position: 'sticky', top: 0, zIndex: 2 }}>
             ⚠ <b>Resultados dentro de muestra.</b> La mejor combinación se ha elegido mirando estos mismos datos, así que tenderá a parecer
             mejor de lo que será. La validación fuera de muestra es la siguiente fase.
           </div>
-          <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 8 }}>
+          <div style={{ fontSize: TAM, color: GRIS, marginBottom: 8 }}>
             {res.nombre} · {res.condiciones.intervalo} · {res.condiciones.desde} → {res.condiciones.hasta} · {res.activos.length} activos · {res.combos.length.toLocaleString('es-ES')} combinaciones
             {res.interrumpida ? ' · DETENIDA: resultados parciales' : res.terminado ? '' : ' · en curso…'}
             {' · '}cuenta una combinación con al menos {MIN_TOTAL} operaciones en total y {MIN_POR_ACTIVO} en cada activo · ★ = la configuración guardada
@@ -275,7 +329,7 @@ export function ResultadosOptimizacion({ res, onProbar = null, seleccionInicial 
               <TablaFilas filas={apartadas.slice(0, 50)} COLS={COLS} orden={orden} setOrden={setOrden} textoParams={textoParams}
                 claveActual={claveActual} seleccionada={seleccionada} setSeleccionada={setSeleccionada} conMotivo />
             </div></>)}
-          <MapaDeColores filas={filas} res={res} variados={variados} claveActual={claveActual} seleccionada={seleccionada} setSeleccionada={setSeleccionada}
+          <MapaDeColores filas={filas} res={res} variados={variados} claveActual={claveActual} seleccionada={seleccionada} setSeleccionada={setSeleccionada} filaSel={filaSel}
             textoParams={textoParams} />
           {filaSel && <DetalleSeleccion fila={filaSel} filas={filas} res={res} textoParams={textoParams} onProbar={onProbar} />}
   </>)
@@ -291,12 +345,12 @@ const colorEscala = (t) => `hsl(${Math.round(120 * Math.min(1, Math.max(0, t)))}
 
 // (b) Mapa de colores: dos parámetros en los ejes, el resto fijados (por defecto en la configuración guardada).
 // Cada celda ES la fila de la tabla de esa combinación (mismas cifras); pulsarla la selecciona.
-function MapaDeColores({ filas, res, variados, claveActual, seleccionada, setSeleccionada, textoParams }) {
+function MapaDeColores({ filas, res, variados, claveActual, seleccionada, setSeleccionada, filaSel, textoParams }) {
   const [ejes, setEjes] = useState({ x: variados[0], y: variados[1] })
   const [metrica, setMetrica] = useState('cagrMediana')
   const [fijosElegidos, setFijosElegidos] = useState({})
   if (variados.length < 2) return (
-    <div style={{ ...caja, marginTop: 14, fontSize: 11, color: 'var(--text3)' }}>Mapa de colores: hace falta variar al menos dos parámetros en la rejilla.</div>)
+    <div style={{ ...caja, marginTop: 14, fontSize: TAM, color: GRIS }}>Mapa de colores: hace falta variar al menos dos parámetros en la rejilla.</div>)
   const ejeX = variados.includes(ejes.x) ? ejes.x : variados[0]
   const ejeY = variados.includes(ejes.y) && ejes.y !== ejeX ? ejes.y : variados.find(k => k !== ejeX)
   // Los demás parámetros, fijados: lo elegido, o el valor guardado si está en la rejilla, o el primero.
@@ -313,11 +367,11 @@ function MapaDeColores({ filas, res, variados, claveActual, seleccionada, setSel
   const lo = Math.min(...enEscala), hi = Math.max(...enEscala)
   const t = (v) => hi > lo ? (masEsMejor ? (v - lo) / (hi - lo) : (hi - v) / (hi - lo)) : 0.5
   const guardadaEnRejilla = filas.some(f => claveCombinacion(f.params) === claveActual)
-  const celda = { padding: '4px 6px', textAlign: 'center', whiteSpace: 'nowrap', fontSize: 10, minWidth: 54 }
+  const celda = { padding: '4px 6px', textAlign: 'center', whiteSpace: 'nowrap', fontSize: TAM, minWidth: 54 }
   return (
     <div style={{ ...caja, marginTop: 14 }}>
       <div style={etiqueta}>Mapa de colores</div>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', fontSize: 10, marginBottom: 8, alignItems: 'center' }}>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', fontSize: TAM, marginBottom: 8, alignItems: 'center' }}>
         <label>Eje X <select value={ejeX} onChange={e => setEjes({ x: e.target.value, y: e.target.value === ejeY ? ejeX : ejeY })} style={entrada}>
           {variados.map(k => <option key={k} value={k}>{k}</option>)}</select></label>
         <label>Eje Y <select value={ejeY} onChange={e => setEjes({ y: e.target.value, x: e.target.value === ejeX ? ejeY : ejeX })} style={entrada}>
@@ -328,19 +382,23 @@ function MapaDeColores({ filas, res, variados, claveActual, seleccionada, setSel
           <label key={k}>{k} <select value={String(fijos[k])} style={entrada}
             onChange={e => setFijosElegidos(f => ({ ...f, [k]: res.valores[k].find(v => String(v) === e.target.value) }))}>
             {res.valores[k].map(v => <option key={String(v)} value={String(v)}>{textoValor(v)}{v === res.guardados[k] ? ' ★' : ''}</option>)}</select></label>))}
+        {Object.keys(fijos).some(k => res.valores[k].length > 1) && (
+          <button disabled={!filaSel} title={filaSel ? textoParams(filaSel.params) : 'Selecciona antes una combinación en la tabla'}
+            onClick={() => setFijosElegidos(Object.fromEntries(Object.keys(fijos).map(k => [k, filaSel.params[k]])))}
+            style={{ ...entrada, cursor: filaSel ? 'pointer' : 'not-allowed', color: filaSel ? 'var(--accent)' : GRIS }}>Fijar como la combinación seleccionada</button>)}
       </div>
       <div style={{ overflowX: 'auto' }}>
         <table style={{ borderCollapse: 'separate', borderSpacing: 2 }}>
           <thead><tr>
-            <th style={{ ...celda, color: 'var(--text3)', fontWeight: 400 }}>{ejeY} ↓ · {ejeX} →</th>
-            {mapa.xs.map(x => <th key={String(x)} style={{ ...celda, color: 'var(--text3)', fontWeight: 400 }}>{textoValor(x)}</th>)}
+            <th style={{ ...celda, color: GRIS, fontWeight: 400 }}>{ejeY} ↓ · {ejeX} →</th>
+            {mapa.xs.map(x => <th key={String(x)} style={{ ...celda, color: GRIS, fontWeight: 400 }}>{textoValor(x)}</th>)}
           </tr></thead>
           <tbody>{mapa.ys.map((y, j) => (
             <tr key={String(y)}>
-              <th style={{ ...celda, color: 'var(--text3)', fontWeight: 400, textAlign: 'right' }}>{textoValor(y)}</th>
+              <th style={{ ...celda, color: GRIS, fontWeight: 400, textAlign: 'right' }}>{textoValor(y)}</th>
               {mapa.xs.map((x, i) => {
                 const c = mapa.celdas[j][i]
-                if (!c) return <td key={String(x)} style={{ ...celda, color: 'var(--text3)' }} title="Combinación no probada (no está en la rejilla o no cumple las restricciones)">·</td>
+                if (!c) return <td key={String(x)} style={{ ...celda, color: GRIS }} title="Combinación no probada (no está en la rejilla o no cumple las restricciones)">·</td>
                 const actual = claveCombinacion(c.params) === claveActual
                 return (
                   <td key={String(x)} onClick={() => setSeleccionada(c.indice)}
@@ -355,7 +413,7 @@ function MapaDeColores({ filas, res, variados, claveActual, seleccionada, setSel
           </tbody>
         </table>
       </div>
-      <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 6 }}>
+      <div style={{ fontSize: TAM, color: GRIS, marginTop: 6 }}>
         Verde = mejor {tituloM} entre las celdas que cuentan; en gris, las apartadas. ★ (borde amarillo) = la configuración guardada
         {guardadaEnRejilla ? '' : ' — no está en esta rejilla'}. Pulsa una celda para seleccionarla.
       </div>
@@ -364,9 +422,9 @@ function MapaDeColores({ filas, res, variados, claveActual, seleccionada, setSel
 }
 
 function TablaFilas({ filas, COLS, orden, setOrden, textoParams, claveActual, seleccionada, setSeleccionada, conMotivo = false }) {
-  const th = { position: 'sticky', top: 0, background: 'var(--bg2)', padding: '5px 6px', textAlign: 'right', cursor: 'pointer', whiteSpace: 'nowrap', fontWeight: 400, color: 'var(--text3)' }
+  const th = { position: 'sticky', top: 0, background: 'var(--bg2)', padding: '5px 6px', textAlign: 'right', cursor: 'pointer', whiteSpace: 'nowrap', fontWeight: 400, color: GRIS }
   return (
-    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: TAM }}>
       <thead><tr>
         <th style={{ ...th, textAlign: 'left', cursor: 'default' }}>Combinación</th>
         {COLS.map(([k, t]) => (
@@ -380,7 +438,7 @@ function TablaFilas({ filas, COLS, orden, setOrden, textoParams, claveActual, se
             style={{ cursor: 'pointer', background: seleccionada === f.indice ? 'var(--bg3)' : 'transparent', borderBottom: '1px solid var(--border)' }}>
             <td style={{ padding: '4px 6px', whiteSpace: 'nowrap' }}>{claveCombinacion(f.params) === claveActual ? '★ ' : ''}{textoParams(f.params)}</td>
             {COLS.map(([k, , formato]) => <td key={k} style={{ padding: '4px 6px', textAlign: 'right', whiteSpace: 'nowrap' }}>{formato(f[k], f)}</td>)}
-            {conMotivo && <td style={{ padding: '4px 6px', color: 'var(--text3)' }}>{f.motivo}</td>}
+            {conMotivo && <td style={{ padding: '4px 6px', color: GRIS }}>{f.motivo}</td>}
           </tr>))}
       </tbody>
     </table>
@@ -394,31 +452,31 @@ function DetalleSeleccion({ fila, filas, res, textoParams, onProbar }) {
   const est = estabilidad(fila, filas, res.valores, metrica)
   const [, tituloM, formatoM, masEsMejor] = METRICAS.find(m => m[0] === metrica)
   const dif = est.diferencia, peor = dif != null && (masEsMejor ? dif < 0 : dif > 0)
-  const th = { padding: '3px 8px', color: 'var(--text3)', fontWeight: 400, textAlign: 'right' }, td = { padding: '3px 8px', textAlign: 'right' }
+  const th = { padding: '3px 8px', color: GRIS, fontWeight: 400, textAlign: 'right' }, td = { padding: '3px 8px', textAlign: 'right' }
   return (<>
     <div style={{ ...caja, marginTop: 14 }}>
       <div style={etiqueta}>Estabilidad de la combinación seleccionada</div>
-      <div style={{ fontSize: 11, marginBottom: 6 }}>{textoParams(fila.params)}
-        <label style={{ fontSize: 10, marginLeft: 10 }}>Métrica <select value={metrica} onChange={e => setMetrica(e.target.value)} style={entrada}>
+      <div style={{ fontSize: TAM, marginBottom: 6 }}>{textoParams(fila.params)}
+        <label style={{ fontSize: TAM, marginLeft: 10 }}>Métrica <select value={metrica} onChange={e => setMetrica(e.target.value)} style={entrada}>
           {METRICAS.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select></label></div>
       {est.vecinas.length ? (<>
-        <div style={{ fontSize: 11, lineHeight: 1.6, marginBottom: 6 }}>
+        <div style={{ fontSize: TAM, lineHeight: 1.6, marginBottom: 6 }}>
           {tituloM}: la combinación <b>{formatoM(est.propia)}</b> · media de sus {est.vecinas.length} vecinas <b>{formatoM(est.mediaVecinas)}</b>
           {dif != null && <span style={{ color: peor ? '#ff4d6d' : '#06d6a0' }}> ({dif >= 0 ? '+' : '−'}{num(Math.abs(dif))}{metrica === 'factorBeneficio' || metrica === 'operaciones' ? '' : ' puntos'})</span>}
-          <div style={{ fontSize: 10, color: 'var(--text3)' }}>Si las vecinas caen mucho, el resultado es un pico aislado y no una zona estable.</div>
+          <div style={{ fontSize: TAM, color: GRIS }}>Si las vecinas caen mucho, el resultado es un pico aislado y no una zona estable.</div>
         </div>
-        <table style={{ borderCollapse: 'collapse', fontSize: 11 }}>
+        <table style={{ borderCollapse: 'collapse', fontSize: TAM }}>
           <thead><tr><th style={{ ...th, textAlign: 'left' }}>Vecina</th><th style={th}>{tituloM}</th><th style={{ ...th, textAlign: 'left' }}>Cuenta</th></tr></thead>
           <tbody>{est.vecinas.map(v => (
             <tr key={v.parametro + String(v.valor)} style={{ opacity: v.fila.cuenta ? 1 : 0.55 }}>
               <td style={{ ...td, textAlign: 'left' }}>{v.parametro} {textoValor(fila.params[v.parametro])} → {textoValor(v.valor)}</td>
               <td style={td}>{formatoM(v.valorMetrica)}</td>
-              <td style={{ ...td, textAlign: 'left', color: 'var(--text3)' }}>{v.fila.cuenta ? 'sí' : `no: ${v.fila.motivo}`}</td></tr>))}
+              <td style={{ ...td, textAlign: 'left', color: GRIS }}>{v.fila.cuenta ? 'sí' : `no: ${v.fila.motivo}`}</td></tr>))}
           </tbody>
         </table></>)
-        : <div style={{ fontSize: 11, color: 'var(--text3)' }}>Sin vecinas en la rejilla (ningún parámetro tiene un valor contiguo probado).</div>}
+        : <div style={{ fontSize: TAM, color: GRIS }}>Sin vecinas en la rejilla (ningún parámetro tiene un valor contiguo probado).</div>}
       <div style={{ ...etiqueta, marginTop: 12 }}>Año a año (beneficio del año sobre el capital inicial, en cada activo)</div>
-      <table style={{ borderCollapse: 'collapse', fontSize: 11 }}>
+      <table style={{ borderCollapse: 'collapse', fontSize: TAM }}>
         <thead><tr>{['Año', 'Mediana', 'Media', 'Ops. cerradas'].map(t => <th key={t} style={th}>{t}</th>)}</tr></thead>
         <tbody>{fila.porAnio.map(a => (
           <tr key={a.anio}><td style={td}>{a.anio}</td>
@@ -432,20 +490,22 @@ function DetalleSeleccion({ fila, filas, res, textoParams, onProbar }) {
   </>)
 }
 
+// Desglose por activo de la combinación seleccionada, de PEOR a MEJOR CAGR: qué activos arrastran la media.
 function DetalleActivos({ fila, textoParams }) {
+  const orden = Object.entries(fila.porActivo).sort(([a, x], [b, y]) => (x.cagr <= -99 ? -100 : x.cagr) - (y.cagr <= -99 ? -100 : y.cagr) || a.localeCompare(b))
   return (
     <div style={{ ...caja, marginTop: 14 }}>
-      <div style={etiqueta}>Combinación seleccionada</div>
-      <div style={{ fontSize: 11, marginBottom: 6 }}>{textoParams(fila.params)}</div>
-      <table style={{ borderCollapse: 'collapse', fontSize: 11 }}>
-        <thead><tr>{['Activo', 'CAGR', 'DD', 'Ops.', 'F. benef.', 'Beneficio'].map(t => <th key={t} style={{ padding: '3px 8px', color: 'var(--text3)', fontWeight: 400, textAlign: 'right' }}>{t}</th>)}</tr></thead>
-        <tbody>{Object.entries(fila.porActivo).map(([sym, m]) => (
+      <div style={etiqueta}>Desglose por activo (de peor a mejor CAGR)</div>
+      <div style={{ fontSize: TAM, marginBottom: 6 }}>{textoParams(fila.params)}</div>
+      <table style={{ borderCollapse: 'collapse', fontSize: TAM }}>
+        <thead><tr>{['Activo', 'CAGR', 'DD máx.', 'Ops.', 'F. benef.', 'Beneficio'].map(t => <th key={t} style={{ padding: '3px 8px', color: GRIS, fontWeight: 400, textAlign: 'right' }}>{t}</th>)}</tr></thead>
+        <tbody>{orden.map(([sym, m]) => (
           <tr key={sym}><td style={{ padding: '3px 8px' }}>{sym}</td><td style={{ padding: '3px 8px', textAlign: 'right' }}>{pct(m.cagr)}</td>
             <td style={{ padding: '3px 8px', textAlign: 'right' }}>{pct(m.maxDD)}</td><td style={{ padding: '3px 8px', textAlign: 'right' }}>{m.operaciones}</td>
             <td style={{ padding: '3px 8px', textAlign: 'right' }}>{num(m.factorBeneficio)}</td><td style={{ padding: '3px 8px', textAlign: 'right' }}>{num(m.beneficioSimple)} €</td></tr>))}
         </tbody>
       </table>
-      {fila.errores.length > 0 && <div style={{ fontSize: 10, color: '#ff4d6d', marginTop: 6 }}>Sin resultado: {fila.errores.map(e => `${e.sym} (${e.error})`).join(' · ')}</div>}
+      {fila.errores.length > 0 && <div style={{ fontSize: TAM, color: '#ff4d6d', marginTop: 6 }}>Sin resultado: {fila.errores.map(e => `${e.sym} (${e.error})`).join(' · ')}</div>}
     </div>
   )
 }
@@ -462,13 +522,13 @@ function ProbarEnBacktest({ fila, res, textoParams, onProbar }) {
   return (
     <div style={{ ...caja, marginTop: 14 }}>
       <div style={etiqueta}>Probar en backtest</div>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', fontSize: 11 }}>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', fontSize: TAM }}>
         <select value={sym} onChange={e => setSym(e.target.value)} style={entrada}>
           {conResultado.map(s => <option key={s} value={s}>{s}</option>)}</select>
         <button disabled={!sym} onClick={() => onProbar({ ...prueba, modo: 'individual', simbolo: sym })} style={boton}>▶ Backtest individual</button>
         <button onClick={() => onProbar({ ...prueba, modo: 'multi' })} style={boton}>▶ Multibacktest ({res.activos.length} activos)</button>
       </div>
-      <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 6, lineHeight: 1.5 }}>
+      <div style={{ fontSize: TAM, color: GRIS, marginTop: 6, lineHeight: 1.5 }}>
         Con estos params ({textoParams(fila.params)}), {res.condiciones.desde} → {res.condiciones.hasta}, {res.condiciones.intervalo}, capital {textoEs(res.condiciones.capitalIni, 2)} €,
         sus comisiones, sin filtros y el calentamiento de la optimización{prueba.calentamiento != null ? ` (${prueba.calentamiento} velas)` : ''}. La estrategia guardada no cambia.
         El individual da las mismas cifras que la fila en ese activo; el multibacktest reparte el capital entre los activos, así que solo coinciden las operaciones.
