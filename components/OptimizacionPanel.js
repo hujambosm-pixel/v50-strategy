@@ -9,7 +9,7 @@ import { MONO, fmt, numeroEs, textoEs } from '../lib/utils'
 import { esquemaDeCodigo } from '../lib/parametrosEstrategia'
 import { generaRejilla, rejillaSugerida, valoresDeRango } from '../lib/rejillaParametros'
 import { periodoPorDefecto, estimaOptimizacion, divideEnPeticiones, agregaOptimizacion, ordenaFilas, claveCombinacion, mapaColores, estabilidad,
-         pruebaDeFila, CONCURRENCIA, MIN_TOTAL, MIN_POR_ACTIVO } from '../lib/optimizacion'
+         pruebaDeFila, activosCalculados, CONCURRENCIA, MIN_TOTAL, MIN_POR_ACTIVO } from '../lib/optimizacion'
 import { COMISIONES_DEFECTO } from '../lib/comisiones'
 import { temporalidadDeEstrategia } from '../lib/condicionesSimulacion'
 
@@ -126,7 +126,8 @@ export default function OptimizacionPanel({ strategies = [], watchlist = [], wlL
       if (pararRef.current) { interrumpida = i + CONCURRENCIA < tareas.length; break }
     }
     setRes(r => r && ({ ...r, porActivo: { ...porActivo }, terminado: true, interrumpida }))
-    setFin({ ms: Date.now() - inicio, combinaciones: combos.length, activos: activos.length, interrumpida, hechas, total: tareas.length })
+    setFin({ ms: Date.now() - inicio, combinaciones: combos.length, activos: activos.length, interrumpida, hechas, total: tareas.length,
+      calculados: activosCalculados(activos, porActivo) })
     setEjec(null)
   }
 
@@ -287,7 +288,8 @@ export function EstadoEjecucion({ ejec, fin, ahora, onDetener }) {
   return (
     <div role="status" style={{ ...caja, marginTop: 8, fontSize: TAM, lineHeight: 1.6, borderColor: `rgba(${color},0.6)`, background: `rgba(${color},0.08)` }}>
       {fin.interrumpida
-        ? <>■ <b>Detenida tras {duracion(fin.ms)}</b> · {fin.hechas.toLocaleString('es-ES')} de {fin.total.toLocaleString('es-ES')} peticiones · resultados parciales de {fin.combinaciones.toLocaleString('es-ES')} combinaciones × {fin.activos} activos</>
+        ? <>■ <b>Detenida tras {duracion(fin.ms)}</b> · {fin.hechas.toLocaleString('es-ES')} de {fin.total.toLocaleString('es-ES')} peticiones · resultados parciales de {fin.combinaciones.toLocaleString('es-ES')} combinaciones × {fin.activos} activos
+          {fin.calculados ? <> · <b>{fin.calculados.sinCalcular} {fin.calculados.sinCalcular === 1 ? 'activo' : 'activos'} sin calcular</b>{fin.calculados.aMedias ? ` (${fin.calculados.aMedias} a medias)` : ''}</> : null}</>
         : <>✓ <b>Optimización terminada en {duracion(fin.ms)}</b> · {fin.combinaciones.toLocaleString('es-ES')} combinaciones × {fin.activos} activos</>}
     </div>)
 }
@@ -305,6 +307,7 @@ export function ResultadosOptimizacion({ res, onProbar = null, seleccionInicial 
   const variados = res ? Object.keys(res.valores).filter(k => res.valores[k].length > 1) : []
   const claveActual = res ? claveCombinacion(Object.fromEntries(Object.keys(res.valores).map(k => [k, res.guardados[k] ?? res.combos[0]?.[k]]))) : null
   const filaSel = filas.find(f => f.indice === seleccionada) || null
+  const calc = activosCalculados(res.activos, res.porActivo)
   const COLS = [['cagrMediana', 'CAGR mediana', (v) => pct(v)], ['cagrMedia', 'CAGR media', (v) => pct(v)], ['ddMediana', 'DD mediana', (v) => pct(v)], ['ddPeor', 'DD peor', (v) => pct(v)],
     ['operaciones', 'Ops.', (v) => num(v, 0)], ['activosPositivos', 'Activos +', (v, f) => `${v}/${f.activos}`], ['factorBeneficio', 'F. benef.', (v) => num(v)],
     ['tiempoInvertido', 'T. invert.', (v) => pct(v, 0)]]
@@ -315,9 +318,15 @@ export function ResultadosOptimizacion({ res, onProbar = null, seleccionInicial 
             ⚠ <b>Resultados dentro de muestra.</b> La mejor combinación se ha elegido mirando estos mismos datos, así que tenderá a parecer
             mejor de lo que será. La validación fuera de muestra es la siguiente fase.
           </div>
+          {!res.terminado && (
+            <div role="status" style={{ ...caja, borderColor: GRIS, borderStyle: 'dashed', color: GRIS, fontSize: TAM, lineHeight: 1.6 }}>
+              ⏳ <b>Resultados parciales: {calc.completos} de {calc.total} activos calculados — pueden cambiar.</b> La tabla, el mapa, la estabilidad y el
+              desglose por activo se rehacen con cada tanda; las cifras definitivas, al terminar.
+            </div>)}
           <div style={{ fontSize: TAM, color: GRIS, marginBottom: 8 }}>
             {res.nombre} · {res.condiciones.intervalo} · {res.condiciones.desde} → {res.condiciones.hasta} · {res.activos.length} activos · {res.combos.length.toLocaleString('es-ES')} combinaciones
-            {res.interrumpida ? ' · DETENIDA: resultados parciales' : res.terminado ? '' : ' · en curso…'}
+            {res.interrumpida ? ` · DETENIDA: resultados parciales, ${calc.completos} de ${calc.total} activos calculados y ${calc.sinCalcular} sin calcular${calc.aMedias ? ` (${calc.aMedias} a medias)` : ''}`
+              : res.terminado ? '' : ' · en curso…'}
             {' · '}cuenta una combinación con al menos {MIN_TOTAL} operaciones en total y {MIN_POR_ACTIVO} en cada activo · ★ = la configuración guardada
           </div>
           <TablaFilas filas={verTodas ? cuentan : cuentan.slice(0, 100)} COLS={COLS} orden={orden} setOrden={setOrden} textoParams={textoParams}
