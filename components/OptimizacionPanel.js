@@ -308,6 +308,28 @@ export function ResultadosOptimizacion({ res, onProbar = null, seleccionInicial 
   const claveActual = res ? claveCombinacion(Object.fromEntries(Object.keys(res.valores).map(k => [k, res.guardados[k] ?? res.combos[0]?.[k]]))) : null
   const filaSel = filas.find(f => f.indice === seleccionada) || null
   const calc = activosCalculados(res.activos, res.porActivo)
+  // Pulsar una fila de la tabla (que está al final) lleva al bloque de la combinación seleccionada, bajo el
+  // mapa; pulsar una celda del mapa no desplaza: el bloque ya está justo debajo.
+  // Y el mapa fija los parámetros que no están en los ejes con los de esa fila, para que su celda se vea marcada.
+  const detalleRef = useRef(null), desplazar = useRef(false)
+  const [fijarMapa, setFijarMapa] = useState(null)
+  const seleccionaDesdeTabla = (i) => {
+    desplazar.current = true; setSeleccionada(i)
+    const f = filas.find(x => x.indice === i)
+    if (f) setFijarMapa({ params: f.params, n: (fijarMapa?.n || 0) + 1 })
+  }
+  useEffect(() => {
+    if (!desplazar.current) return
+    desplazar.current = false
+    detalleRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
+  }, [seleccionada])
+  // Al terminar, si no hay ninguna seleccionada, la configuración guardada (★): su estabilidad y su desglose
+  // salen directamente bajo el mapa.
+  useEffect(() => {
+    if (!res.terminado || seleccionada != null) return
+    const guardada = filas.find(f => claveCombinacion(f.params) === claveActual)
+    if (guardada) setSeleccionada(guardada.indice)
+  }, [res.terminado, filas])
   const COLS = [['cagrMediana', 'CAGR mediana', (v) => pct(v)], ['cagrMedia', 'CAGR media', (v) => pct(v)], ['ddMediana', 'DD mediana', (v) => pct(v)], ['ddPeor', 'DD peor', (v) => pct(v)],
     ['operaciones', 'Ops.', (v) => num(v, 0)], ['activosPositivos', 'Activos +', (v, f) => `${v}/${f.activos}`], ['factorBeneficio', 'F. benef.', (v) => num(v)],
     ['tiempoInvertido', 'T. invert.', (v) => pct(v, 0)]]
@@ -329,18 +351,21 @@ export function ResultadosOptimizacion({ res, onProbar = null, seleccionInicial 
               : res.terminado ? '' : ' · en curso…'}
             {' · '}cuenta una combinación con al menos {MIN_TOTAL} operaciones en total y {MIN_POR_ACTIVO} en cada activo · ★ = la configuración guardada
           </div>
+          {/* Orden: mapa → la combinación seleccionada (estabilidad, año a año, desglose, probar) → tabla. */}
+          <MapaDeColores filas={filas} res={res} variados={variados} claveActual={claveActual} seleccionada={seleccionada} setSeleccionada={setSeleccionada} filaSel={filaSel}
+            textoParams={textoParams} fijarCon={fijarMapa} />
+          <div ref={detalleRef} style={{ scrollMarginTop: 96 }}>
+            {filaSel && <DetalleSeleccion fila={filaSel} filas={filas} res={res} textoParams={textoParams} onProbar={onProbar} />}
+          </div>
           <TablaFilas filas={verTodas ? cuentan : cuentan.slice(0, 100)} COLS={COLS} orden={orden} setOrden={setOrden} textoParams={textoParams}
-            claveActual={claveActual} seleccionada={seleccionada} setSeleccionada={setSeleccionada} />
+            claveActual={claveActual} seleccionada={seleccionada} setSeleccionada={seleccionaDesdeTabla} />
           {cuentan.length > 100 && <button onClick={() => setVerTodas(v => !v)} style={{ ...entrada, cursor: 'pointer', margin: '6px 0' }}>{verTodas ? 'Ver solo las 100 primeras' : `Ver las ${cuentan.length}`}</button>}
           {apartadas.length > 0 && (<>
             <div style={{ ...etiqueta, marginTop: 14 }}>Apartadas ({apartadas.length}): no llegan al mínimo de operaciones o no tienen resultado</div>
             <div style={{ opacity: 0.55 }}>
               <TablaFilas filas={apartadas.slice(0, 50)} COLS={COLS} orden={orden} setOrden={setOrden} textoParams={textoParams}
-                claveActual={claveActual} seleccionada={seleccionada} setSeleccionada={setSeleccionada} conMotivo />
+                claveActual={claveActual} seleccionada={seleccionada} setSeleccionada={seleccionaDesdeTabla} conMotivo />
             </div></>)}
-          <MapaDeColores filas={filas} res={res} variados={variados} claveActual={claveActual} seleccionada={seleccionada} setSeleccionada={setSeleccionada} filaSel={filaSel}
-            textoParams={textoParams} />
-          {filaSel && <DetalleSeleccion fila={filaSel} filas={filas} res={res} textoParams={textoParams} onProbar={onProbar} />}
   </>)
 }
 
@@ -354,10 +379,12 @@ const colorEscala = (t) => `hsl(${Math.round(120 * Math.min(1, Math.max(0, t)))}
 
 // (b) Mapa de colores: dos parámetros en los ejes, el resto fijados (por defecto en la configuración guardada).
 // Cada celda ES la fila de la tabla de esa combinación (mismas cifras); pulsarla la selecciona.
-function MapaDeColores({ filas, res, variados, claveActual, seleccionada, setSeleccionada, filaSel, textoParams }) {
+function MapaDeColores({ filas, res, variados, claveActual, seleccionada, setSeleccionada, filaSel, textoParams, fijarCon = null }) {
   const [ejes, setEjes] = useState({ x: variados[0], y: variados[1] })
   const [metrica, setMetrica] = useState('cagrMediana')
   const [fijosElegidos, setFijosElegidos] = useState({})
+  // Una fila pulsada en la tabla: los parámetros fuera de los ejes, con sus valores (como «Fijar como…»).
+  useEffect(() => { if (fijarCon) setFijosElegidos({ ...fijarCon.params }) }, [fijarCon?.n])
   if (variados.length < 2) return (
     <div style={{ ...caja, marginTop: 14, fontSize: TAM, color: GRIS }}>Mapa de colores: hace falta variar al menos dos parámetros en la rejilla.</div>)
   const ejeX = variados.includes(ejes.x) ? ejes.x : variados[0]
