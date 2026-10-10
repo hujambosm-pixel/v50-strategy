@@ -98,7 +98,7 @@ async function handlerOptimiza(req, res) {
         r.status = 200
         r.metricas = metricasOptimizacion({ trades: b._nucleo.trades, capitalReinv: m.capitalReinv, gananciaSimple: m.gananciaSimple,
           ganBH: m.ganBH, startDate: b.data[0].date, ultimaFecha: b.data[b.data.length - 1].date,
-          maxDDStrategyFloat: m.maxDDStrategyFloat, maxDDStrategy: m.curves.maxDDStrategy }, { capitalIni, years: 5, desde, hasta })
+          maxDDStrategyFloat: m.maxDDStrategyFloat, maxDDStrategy: m.curves.maxDDStrategy, barras: b.data }, { capitalIni, years: 5, desde, hasta })
       } catch (e) {
         if (e && e._tipoFallo === 'parametros') Object.assign(r, { status: 422, tipo: 'parametros', errores: e.errores })
         else if (e && e._tipoFallo === 'codigo_estrategia') Object.assign(r, { status: 422, tipo: 'codigo_estrategia', error: e.message })

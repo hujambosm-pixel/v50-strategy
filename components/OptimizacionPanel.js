@@ -606,7 +606,9 @@ function DetalleSeleccion({ fila, filas, res, textoParams, onProbar, metricas = 
           </tbody>
         </table></>)
         : <div style={{ fontSize: TAM, color: GRIS }}>Sin vecinas en la rejilla (ningún parámetro tiene un valor contiguo probado).</div>}
-      <div style={{ ...etiqueta, marginTop: 12 }}>Año a año (beneficio del año sobre el capital inicial, en cada activo)</div>
+      <div style={{ ...etiqueta, marginTop: 12 }}>Año a año (lo ganado dentro de cada año sobre el capital inicial, en cada activo)</div>
+      <div style={{ fontSize: TAM, color: GRIS, marginBottom: 4, lineHeight: 1.5 }}>Las posiciones abiertas se valoran al cierre de la última vela
+        de cada año (como la curva con flotante); «Ops. cerradas» son las que se cerraron ese año.</div>
       <table style={{ borderCollapse: 'collapse', fontSize: TAM }}>
         <thead><tr>{['Año', 'Mediana', 'Media', 'Ops. cerradas'].map(t => <th key={t} style={th}>{t}</th>)}</tr></thead>
         <tbody>{fila.porAnio.map(a => (
