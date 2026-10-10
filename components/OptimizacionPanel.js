@@ -10,7 +10,7 @@ import CampoFecha from './CampoFecha'
 import { esquemaDeCodigo } from '../lib/parametrosEstrategia'
 import { generaRejilla, rejillaSugerida, valoresDeRango } from '../lib/rejillaParametros'
 import { periodoPorDefecto, estimaOptimizacion, divideEnPeticiones, agregaOptimizacion, ordenaFilas, claveCombinacion, mapaColores, estabilidad,
-         pruebaDeFila, activosCalculados, NOMBRES_CAGR, cagrDeMetricas, CONCURRENCIA, MIN_TOTAL, MIN_POR_ACTIVO } from '../lib/optimizacion'
+         pruebaDeFila, activosCalculados, NOMBRES_CAGR, cagrDeMetricas, serieUnParametro, CONCURRENCIA, MIN_TOTAL, MIN_POR_ACTIVO } from '../lib/optimizacion'
 import { COMISIONES_DEFECTO } from '../lib/comisiones'
 import { temporalidadDeEstrategia } from '../lib/condicionesSimulacion'
 
@@ -410,8 +410,12 @@ function MapaDeColores({ filas, res, variados, claveActual, seleccionada, setSel
   const [fijosElegidos, setFijosElegidos] = useState({})
   // Una fila pulsada en la tabla: los parámetros fuera de los ejes, con sus valores (como «Fijar como…»).
   useEffect(() => { if (fijarCon) setFijosElegidos({ ...fijarCon.params }) }, [fijarCon?.n])
-  if (variados.length < 2) return (
-    <div style={{ ...caja, marginTop: 14, fontSize: TAM, color: GRIS }}>Mapa de colores: hace falta variar al menos dos parámetros en la rejilla.</div>)
+  // Un solo parámetro variado: un gráfico de línea en lugar del mapa.
+  if (variados.length === 1) return (
+    <GraficoUnParametro filas={filas} res={res} param={variados[0]} claveActual={claveActual} seleccionada={seleccionada}
+      setSeleccionada={setSeleccionada} textoParams={textoParams} metricas={metricas} />)
+  if (variados.length < 1) return (
+    <div style={{ ...caja, marginTop: 14, fontSize: TAM, color: GRIS }}>Mapa de colores: hace falta variar al menos un parámetro en la rejilla.</div>)
   const ejeX = variados.includes(ejes.x) ? ejes.x : variados[0]
   const ejeY = variados.includes(ejes.y) && ejes.y !== ejeX ? ejes.y : variados.find(k => k !== ejeX)
   // Los demás parámetros, fijados: lo elegido, o el valor guardado si está en la rejilla, o el primero.
@@ -486,6 +490,64 @@ function MapaDeColores({ filas, res, variados, claveActual, seleccionada, setSel
         Verde = mejor {tituloM} entre las celdas que cuentan; en gris, las apartadas. ★ (borde amarillo) = la configuración guardada
         {guardadaEnRejilla ? '' : ' — no está en esta rejilla'}. Pulsa una celda para seleccionarla.
       </div>
+    </div>
+  )
+}
+
+// Gráfico de un parámetro: el parámetro en el eje X y la métrica principal (mediana, línea continua; media, línea
+// discontinua) en el eje Y. Cada punto ES la fila de la tabla; las apartadas, atenuadas; la guardada, con ★.
+// Pulsar un punto la selecciona (estabilidad, año a año y desglose debajo, como con el mapa).
+function GraficoUnParametro({ filas, res, param, claveActual, seleccionada, setSeleccionada, textoParams, metricas }) {
+  const serie = serieUnParametro(filas, res.valores, param).filter(p => p.fila)
+  const [, tMed] = metricas.find(m => m[0] === 'cagrMediana'), [, tMedia] = metricas.find(m => m[0] === 'cagrMedia')
+  const W = 640, H = 250, L = 64, Rm = 16, T = 22, B = 36
+  const numerico = serie.every(p => typeof p.x === 'number')
+  const xs = serie.map(p => p.x), x0 = numerico ? Math.min(...xs) : 0, x1 = numerico ? Math.max(...xs) : Math.max(serie.length - 1, 1)
+  const px = (p, i) => L + ((numerico ? p.x : i) - x0) / ((x1 - x0) || 1) * (W - L - Rm)
+  const ys = serie.flatMap(p => [p.fila.cagrMediana, p.fila.cagrMedia]).filter(v => v != null)
+  let y0 = Math.min(0, ...ys), y1 = Math.max(0, ...ys)
+  if (y1 === y0) { y0 -= 1; y1 += 1 }
+  const pad = (y1 - y0) * 0.06; y0 -= pad; y1 += pad
+  const py = (v) => T + (y1 - v) / (y1 - y0) * (H - T - B)
+  const linea = (k) => serie.filter(p => p.fila[k] != null).map((p) => `${px(p, serie.indexOf(p)).toFixed(1)},${py(p.fila[k]).toFixed(1)}`).join(' ')
+  const ticksY = Array.from({ length: 5 }, (_, i) => y0 + (y1 - y0) * i / 4)
+  const cadaX = Math.max(1, Math.ceil(serie.length / 16))
+  const texto = { fill: GRIS, fontSize: TAM, fontFamily: MONO }
+  const guardada = filas.find(f => claveCombinacion(f.params) === claveActual)
+  return (
+    <div style={{ ...caja, marginTop: 14 }}>
+      <div style={etiqueta}>Gráfico por {param} (solo varía este parámetro)</div>
+      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center', fontSize: TAM, color: GRIS, marginBottom: 6 }}>
+        <span><span style={{ color: 'var(--accent)' }}>━</span> {tMed}</span>
+        <span><span style={{ color: '#ffd166' }}>╌</span> {tMedia}</span>
+        <span>● atenuado = apartada</span><span style={{ color: '#ffd166' }}>★</span><span style={{ marginLeft: -10 }}>= configuración guardada</span>
+        <button title="Selecciona la configuración guardada de la estrategia" disabled={!guardada} onClick={() => guardada && setSeleccionada(guardada.indice)}
+          style={{ ...entrada, cursor: guardada ? 'pointer' : 'not-allowed', color: GRIS, fontSize: TAM }}>★ Ver mi configuración guardada</button>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', maxWidth: 900, display: 'block' }} role="img" aria-label={`${tMed} y ${tMedia} según ${param}`}>
+        {ticksY.map((v, i) => (
+          <g key={i}><line x1={L} x2={W - Rm} y1={py(v)} y2={py(v)} stroke="var(--border)" strokeWidth="1" />
+            <text x={L - 6} y={py(v) + 4} textAnchor="end" style={texto}>{pct(v, 1)}</text></g>))}
+        {y0 < 0 && y1 > 0 && <line x1={L} x2={W - Rm} y1={py(0)} y2={py(0)} stroke={GRIS} strokeWidth="1" strokeDasharray="2 3" />}
+        {serie.map((p, i) => i % cadaX === 0 || i === serie.length - 1
+          ? <text key={'x' + i} x={px(p, i)} y={H - B + 18} textAnchor="middle" style={texto}>{textoValor(p.x)}</text> : null)}
+        <text x={(L + W - Rm) / 2} y={H - 4} textAnchor="middle" style={texto}>{param}</text>
+        <polyline points={linea('cagrMedia')} fill="none" stroke="#ffd166" strokeWidth="1.5" strokeDasharray="5 4" />
+        <polyline points={linea('cagrMediana')} fill="none" stroke="var(--accent)" strokeWidth="2" />
+        {serie.map((p, i) => {
+          const f = p.fila, cx = px(p, i), sel = seleccionada === f.indice, actual = claveCombinacion(f.params) === claveActual
+          return (
+            <g key={'p' + i} onClick={() => setSeleccionada(f.indice)} style={{ cursor: 'pointer' }} opacity={f.cuenta ? 1 : 0.35}>
+              <title>{`${textoParams(f.params)} — ${tMed} ${pct(f.cagrMediana)} · ${tMedia} ${pct(f.cagrMedia)}${f.cuenta ? '' : ` — apartada: ${f.motivo}`}`}</title>
+              <circle cx={cx} cy={py(f.cagrMediana ?? 0)} r="11" fill="transparent" />
+              {f.cagrMedia != null && <circle cx={cx} cy={py(f.cagrMedia)} r="2.5" fill="#ffd166" />}
+              {f.cagrMediana != null && <circle cx={cx} cy={py(f.cagrMediana)} r={sel ? 6 : 4} fill={f.cuenta ? 'var(--accent)' : GRIS}
+                stroke={sel ? '#ffffff' : 'none'} strokeWidth="2" />}
+              {actual && <text x={cx} y={py(f.cagrMediana ?? 0) - 9} textAnchor="middle" style={{ fill: '#ffd166', fontSize: 14 }}>★</text>}
+            </g>)
+        })}
+      </svg>
+      <div style={{ fontSize: TAM, color: GRIS, marginTop: 4 }}>Pulsa un punto para ver esa combinación debajo.</div>
     </div>
   )
 }
