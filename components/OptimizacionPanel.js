@@ -698,6 +698,11 @@ function RobustezPanel({ filas, res, variados, textoParams, ajustes, setAjuste, 
           <div style={{ fontSize: TAM, marginBottom: 6 }}>
             <button onClick={() => setSeleccionada(f.indice)} title="Seleccionarla arriba" style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--accent)', fontFamily: MONO, fontSize: TAM }}>★ {textoParams(f.params)}</button>
             {r.criterio === 'meseta' && <span style={{ color: GRIS }}> · media de su vecindario dentro {pct(r.elegida.puntuacion)}</span>}</div>
+          {(r.zona.bordes.length > 0 || r.zona.diagonal) && (
+            <div style={{ fontSize: TAM, color: '#ffd166', marginBottom: 6, lineHeight: 1.5 }}>⚠ La zona elegida toca el borde de la rejilla por {[
+              ...r.zona.bordes.map(b => `${b.parametro} ${b.lado === 'bajo' ? 'por abajo' : 'por arriba'} (${textoValor(b.valor)})`),
+              ...(r.zona.diagonal ? ['la diagonal imposible (combinaciones que no cumplen las restricciones)'] : [])].join(' y ')}: amplía la rejilla en esa
+              dirección para confirmar que es una meseta.</div>)}
           <table style={{ borderCollapse: 'collapse', fontSize: TAM }}>
             <thead><tr>{['', `Dentro (${txtDentro})`, `Fuera (${txtFuera})`].map(t => <th key={t} style={{ ...celda, color: GRIS, fontWeight: 400 }}>{t}</th>)}</tr></thead>
             <tbody>
@@ -710,10 +715,15 @@ function RobustezPanel({ filas, res, variados, textoParams, ajustes, setAjuste, 
           <div style={{ fontSize: TAM, marginTop: 8 }}>Degradación (fuera / dentro): <b>{f.degradacion == null ? '—' : pct(f.degradacion, 0)}</b>
             {f.degradacion == null && <span style={{ color: GRIS }}> (sin sentido si dentro no gana)</span>}</div>
           <div style={comoLeer}>Cómo leer esto: lo normal es perder algo fuera; perder casi todo indica sobreajuste.</div>
-        </div>) : <div style={{ fontSize: TAM, color: GRIS, marginTop: 10 }}>Ninguna combinación es válida dentro de muestra: no hay nada que elegir.</div>}
+        </div>) : <div style={{ fontSize: TAM, color: GRIS, marginTop: 10 }}>{r.rejillaPequena
+          ? 'La rejilla es demasiado pequeña para medir meseta: amplíala o usa el criterio Máximo.'
+          : 'Ninguna combinación es válida dentro de muestra: no hay nada que elegir.'}</div>}
       <div style={{ marginTop: 12, fontSize: TAM }}>
-        <div>Correlación de Spearman dentro / fuera: <b>{m.rho == null ? '—' : num(m.rho)}</b> <span style={{ color: GRIS }}>({m.n} combinaciones válidas en los dos bloques)</span></div>
-        <div style={comoLeer}>Cómo leer esto: cercano a 1 = lo que gana dentro tiende a ganar fuera; cercano a 0 = optimizar no predice nada (ruido); negativo = señal de sobreajuste.</div>
+        <div>Correlación de Spearman dentro / fuera: <b>{m.rho == null ? '—' : num(m.rho)}</b> <span style={{ color: GRIS }}>({m.n} combinaciones válidas en los dos bloques)</span>
+          {' · '}Rango fuera (P10–P90): <b>{pct(m.p10Fuera)} – {pct(m.p90Fuera)}</b></div>
+        <div style={comoLeer}>Cómo leer esto: Spearman cercano a 1: lo que gana dentro tiende a ganar fuera; optimizar ayuda.<br />
+          Cercano a 0 o negativo con un rango estrecho: casi todas las combinaciones rinden parecido; la estrategia es robusta a los parámetros y da igual cuál elijas.<br />
+          Cercano a 0 o negativo con un rango amplio: la elección importa pero lo mejor dentro no predice lo mejor fuera; señal de sobreajuste.</div>
         <div style={{ marginTop: 8 }}>10 % mejor de dentro ({m.nTop} combinaciones), mediana fuera: <b>{pct(m.medianaFueraTop)}</b> · todas las válidas: <b>{pct(m.medianaFueraTodas)}</b></div>
         <div style={comoLeer}>Cómo leer esto: si su mediana fuera no supera a la del total, elegir los mejores no aporta.</div>
       </div>
