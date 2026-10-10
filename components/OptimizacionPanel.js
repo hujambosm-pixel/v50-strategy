@@ -698,6 +698,9 @@ function RobustezPanel({ filas, res, variados, textoParams, ajustes, setAjuste, 
           <div style={{ fontSize: TAM, marginBottom: 6 }}>
             <button onClick={() => setSeleccionada(f.indice)} title="Seleccionarla arriba" style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--accent)', fontFamily: MONO, fontSize: TAM }}>★ {textoParams(f.params)}</button>
             {r.criterio === 'meseta' && <span style={{ color: GRIS }}> · media de su vecindario dentro {pct(r.elegida.puntuacion)}</span>}</div>
+          {r.criterio === 'meseta' && r.elegida.candidatas <= 4 && (
+            <div style={{ fontSize: TAM, color: '#ffd166', marginBottom: 6, lineHeight: 1.5 }}>⚠ Solo {r.elegida.candidatas} {r.elegida.candidatas === 1 ? 'combinación tiene' : 'combinaciones tienen'} vecindario
+              completo: la meseta es poco fiable; amplía la rejilla.</div>)}
           {(r.zona.bordes.length > 0 || r.zona.diagonal) && (
             <div style={{ fontSize: TAM, color: '#ffd166', marginBottom: 6, lineHeight: 1.5 }}>⚠ La zona elegida toca el borde de la rejilla por {[
               ...r.zona.bordes.map(b => `${b.parametro} ${b.lado === 'bajo' ? 'por abajo' : 'por arriba'} (${textoValor(b.valor)})`),
@@ -720,10 +723,11 @@ function RobustezPanel({ filas, res, variados, textoParams, ajustes, setAjuste, 
           : 'Ninguna combinación es válida dentro de muestra: no hay nada que elegir.'}</div>}
       <div style={{ marginTop: 12, fontSize: TAM }}>
         <div>Correlación de Spearman dentro / fuera: <b>{m.rho == null ? '—' : num(m.rho)}</b> <span style={{ color: GRIS }}>({m.n} combinaciones válidas en los dos bloques)</span>
-          {' · '}Rango fuera (P10–P90): <b>{pct(m.p10Fuera)} – {pct(m.p90Fuera)}</b></div>
+          {' · '}Rango fuera (P10–P90): <b>{pct(m.p10Fuera)} – {pct(m.p90Fuera)}</b> (relativo: {m.rangoRelativo == null ? '—' : num(m.rangoRelativo)})</div>
         <div style={comoLeer}>Cómo leer esto: Spearman cercano a 1: lo que gana dentro tiende a ganar fuera; optimizar ayuda.<br />
           Cercano a 0 o negativo con un rango estrecho: casi todas las combinaciones rinden parecido; la estrategia es robusta a los parámetros y da igual cuál elijas.<br />
-          Cercano a 0 o negativo con un rango amplio: la elección importa pero lo mejor dentro no predice lo mejor fuera; señal de sobreajuste.</div>
+          Cercano a 0 o negativo con un rango amplio: la elección importa pero lo mejor dentro no predice lo mejor fuera; señal de sobreajuste.<br />
+          El rango relativo compara la dispersión con el nivel: el mismo rango en puntos pesa más en una estrategia que gana poco.</div>
         <div style={{ marginTop: 8 }}>10 % mejor de dentro ({m.nTop} combinaciones), mediana fuera: <b>{pct(m.medianaFueraTop)}</b> · todas las válidas: <b>{pct(m.medianaFueraTodas)}</b></div>
         <div style={comoLeer}>Cómo leer esto: si su mediana fuera no supera a la del total, elegir los mejores no aporta.</div>
       </div>
