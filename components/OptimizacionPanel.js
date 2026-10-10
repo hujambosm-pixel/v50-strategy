@@ -10,7 +10,8 @@ import CampoFecha from './CampoFecha'
 import { esquemaDeCodigo } from '../lib/parametrosEstrategia'
 import { generaRejilla, rejillaSugerida, valoresDeRango } from '../lib/rejillaParametros'
 import { periodoPorDefecto, estimaOptimizacion, divideEnPeticiones, agregaOptimizacion, ordenaFilas, claveCombinacion, mapaColores, estabilidad,
-         pruebaDeFila, activosCalculados, NOMBRES_CAGR, cagrDeMetricas, serieUnParametro, CONCURRENCIA, MIN_TOTAL, MIN_POR_ACTIVO } from '../lib/optimizacion'
+         pruebaDeFila, activosCalculados, NOMBRES_CAGR, cagrDeMetricas, serieUnParametro, TEMPORALIDADES_COMPARAR, agregaPorTemporalidad,
+         porActivoUnido, resumenTemporalidad, mediana, CONCURRENCIA, MIN_TOTAL, MIN_POR_ACTIVO } from '../lib/optimizacion'
 import { COMISIONES_DEFECTO } from '../lib/comisiones'
 import { temporalidadDeEstrategia } from '../lib/condicionesSimulacion'
 
@@ -85,8 +86,11 @@ export default function OptimizacionPanel({ strategies = [], watchlist = [], wlL
   const activos = cfg.modoActivos === 'todos' ? activosWl.map(w => w.symbol)
     : cfg.modoActivos === 'lista' ? activosWl.filter(w => (w.list_ids || []).includes(cfg.listaId)).map(w => w.symbol)
     : (cfg.seleccion || []).filter(s => activosWl.some(w => w.symbol === s))
-  const estimacion = gen?.combinaciones.length && activos.length ? estimaOptimizacion(gen.combinaciones.length, activos.length) : null
-  const temporalidad = cfg.temporalidad || (est ? temporalidadDeEstrategia(est.s) : 'diario')
+  // «Comparar diario y semanal»: la misma rejilla en las dos temporalidades.
+  const comparar = cfg.temporalidad === 'comparar'
+  const temporalidad = comparar ? TEMPORALIDADES_COMPARAR.join(' y ') : (cfg.temporalidad || (est ? temporalidadDeEstrategia(est.s) : 'diario'))
+  const temporalidades = comparar ? TEMPORALIDADES_COMPARAR : [temporalidad]
+  const estimacion = gen?.combinaciones.length && activos.length ? estimaOptimizacion(gen.combinaciones.length, activos.length, temporalidades.length) : null
   const [filtroSel, setFiltroSel] = useState('')
   // Lo escrito en Desde / Hasta es una fecha posible (CampoFecha); si no, no se deja lanzar.
   const [fechaOk, setFechaOk] = useState({ desde: true, hasta: true })
@@ -102,27 +106,32 @@ export default function OptimizacionPanel({ strategies = [], watchlist = [], wlL
   const lanzar = async () => {
     if (!est || !gen?.combinaciones.length || !activos.length || ejec) return
     const combos = gen.combinaciones
-    const tareas = activos.flatMap(sym => divideEnPeticiones(combos).map(t => ({ sym, ...t })))
-    const porActivo = Object.fromEntries(activos.map(s => [s, new Array(combos.length).fill(null)]))
-    const calentamientos = new Array(combos.length).fill(null)   // el común de cada petición, para «Probar en backtest»
+    // Con «Comparar», la misma rejilla en cada temporalidad: cada tarea lleva la suya.
+    const tareas = temporalidades.flatMap(tp => activos.flatMap(sym => divideEnPeticiones(combos).map(t => ({ tp, sym, ...t }))))
+    const porTemporalidad = Object.fromEntries(temporalidades.map(tp => [tp, {
+      porActivo: Object.fromEntries(activos.map(s => [s, new Array(combos.length).fill(null)])),
+      calentamientos: new Array(combos.length).fill(null) }]))   // el común de cada petición, para «Probar en backtest»
+    const { porActivo, calentamientos } = porTemporalidad[temporalidades[0]]
     const condiciones = { estrategia: est.s.id, intervalo: temporalidad, desde: cfg.desde, hasta: cfg.hasta, capitalIni: Number(cfg.capital) || 10000, comisiones: cfg.comisiones, filtros: [] }
     pararRef.current = false
     const inicio = Date.now()
     setFin(null); setAhora(inicio)
     setEjec({ hechas: 0, total: tareas.length, parando: false, inicio, enCurso: [] })
-    setRes({ combos, valores: gen.valores, porActivo, calentamientos, nombre: est.s.name, estrategiaId: est.s.id, guardados, condiciones, activos: [...activos], terminado: false, interrumpida: false })
+    setRes({ combos, valores: gen.valores, porActivo, calentamientos, nombre: est.s.name, estrategiaId: est.s.id, guardados, condiciones, activos: [...activos], terminado: false, interrumpida: false,
+      ...(comparar ? { comparar: true, temporalidades: [...temporalidades], porTemporalidad } : {}) })
     let hechas = 0, interrumpida = false
     for (let i = 0; i < tareas.length; i += CONCURRENCIA) {
       const tanda = tareas.slice(i, i + CONCURRENCIA)
-      setEjec(e => e && ({ ...e, enCurso: [...new Set(tanda.map(t => t.sym))] }))
+      setEjec(e => e && ({ ...e, enCurso: [...new Set(tanda.map(t => comparar ? `${t.sym} (${t.tp})` : t.sym))] }))
       await Promise.all(tanda.map(async t => {
         try {
           const r = await apiFetch('/api/optimiza', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ...condiciones, simbolo: t.sym, combinaciones: t.combinaciones }) })
+            body: JSON.stringify({ ...condiciones, ...(comparar ? { intervalo: t.tp } : {}), simbolo: t.sym, combinaciones: t.combinaciones }) })
           const j = await r.json().catch(() => null)
-          if (r.ok && Array.isArray(j?.resultados)) j.resultados.forEach((x, k) => { porActivo[t.sym][t.desde + k] = x; calentamientos[t.desde + k] = j.calentamiento ?? null })
-          else t.combinaciones.forEach((_, k) => { porActivo[t.sym][t.desde + k] = { status: r.status, error: j?.errores?.join(' ') || j?.error || `HTTP ${r.status}` } })
-        } catch (e) { t.combinaciones.forEach((_, k) => { porActivo[t.sym][t.desde + k] = { status: 0, error: e?.message || 'error de red' } }) }
+          const dest = porTemporalidad[t.tp]
+          if (r.ok && Array.isArray(j?.resultados)) j.resultados.forEach((x, k) => { dest.porActivo[t.sym][t.desde + k] = x; dest.calentamientos[t.desde + k] = j.calentamiento ?? null })
+          else t.combinaciones.forEach((_, k) => { dest.porActivo[t.sym][t.desde + k] = { status: r.status, error: j?.errores?.join(' ') || j?.error || `HTTP ${r.status}` } })
+        } catch (e) { t.combinaciones.forEach((_, k) => { porTemporalidad[t.tp].porActivo[t.sym][t.desde + k] = { status: 0, error: e?.message || 'error de red' } }) }
         hechas++
       }))
       setEjec(e => e && ({ ...e, hechas }))
@@ -131,7 +140,7 @@ export default function OptimizacionPanel({ strategies = [], watchlist = [], wlL
     }
     setRes(r => r && ({ ...r, porActivo: { ...porActivo }, terminado: true, interrumpida }))
     setFin({ ms: Date.now() - inicio, combinaciones: combos.length, activos: activos.length, interrumpida, hechas, total: tareas.length,
-      calculados: activosCalculados(activos, porActivo) })
+      calculados: activosCalculados(activos, comparar ? porActivoUnido({ comparar, temporalidades, porTemporalidad, activos }) : porActivo) })
     setEjec(null)
   }
 
@@ -191,7 +200,8 @@ export default function OptimizacionPanel({ strategies = [], watchlist = [], wlL
               onBlur={e => { const n = numeroEs(e.target.value); if (n > 0) pon('capital', n) }} style={{ ...entrada, width: '100%' }} /></label>
             <label>Temporalidad<select value={cfg.temporalidad} onChange={e => pon('temporalidad', e.target.value)} style={{ ...entrada, width: '100%' }}>
               <option value="">La de la estrategia{est ? ` (${temporalidadDeEstrategia(est.s)})` : ''}</option>
-              <option value="diario">Diario</option><option value="semanal">Semanal</option></select></label>
+              <option value="diario">Diario</option><option value="semanal">Semanal</option>
+              <option value="comparar">Comparar diario y semanal</option></select></label>
             {[['compra', 'Comisión compra (€)'], ['venta', 'Comisión venta (€)'], ['porcentaje', 'Comisión (%)']].map(([k, t]) => (
               <label key={k}>{t}<input type="text" inputMode="decimal" defaultValue={textoEs(cfg.comisiones?.[k] ?? 0, 4)} key={k + (cfg.comisiones?.[k] ?? 0)}
                 onBlur={e => { const n = numeroEs(e.target.value); if (n != null && n >= 0) pon('comisiones', { ...cfg.comisiones, [k]: n }) }} style={{ ...entrada, width: '100%' }} /></label>))}
@@ -244,7 +254,7 @@ export default function OptimizacionPanel({ strategies = [], watchlist = [], wlL
           <div style={caja}>
             <div style={etiqueta}>Antes de lanzar</div>
             <div style={{ fontSize: TAM, lineHeight: 1.6 }}>
-              {gen.combinaciones.length.toLocaleString('es-ES')} combinaciones × {activos.length} activos = <b>{estimacion.backtests.toLocaleString('es-ES')}</b> backtests<br />
+              {gen.combinaciones.length.toLocaleString('es-ES')} combinaciones × {activos.length}{comparar ? ' activos × 2 temporalidades = ' : ' activos = '}<b>{estimacion.backtests.toLocaleString('es-ES')}</b> backtests<br />
               {estimacion.peticiones.toLocaleString('es-ES')} peticiones de hasta 300, de {CONCURRENCIA} en {CONCURRENCIA}<br />
               Tiempo estimado: ~{estimacion.segundos < 90 ? `${Math.round(estimacion.segundos)} s` : `${Math.round(estimacion.segundos / 60)} min`}
             </div>
@@ -312,13 +322,18 @@ export function ResultadosOptimizacion({ res, onProbar = null, seleccionInicial 
   // El CAGR que manda en la tabla, el mapa, la estabilidad y el desglose (ver lib/optimizacion.js).
   const [tipoCagr, setTipoCagr] = useState('simple')
   const nombreCagr = NOMBRES_CAGR[tipoCagr], metricas = metricasDe(tipoCagr)
-  const filas = useMemo(() => res ? agregaOptimizacion(res.combos, res.porActivo, { cagr: tipoCagr }) : [], [res, tipoCagr])
-  const ordenadas = useMemo(() => ordenaFilas(filas, orden.col, orden.desc), [filas, orden])
+  const filas = useMemo(() => agregaPorTemporalidad(res, { cagr: tipoCagr }), [res, tipoCagr])
+  // Comparando temporalidades: la tabla se puede filtrar por una, y el mapa (o el gráfico) enseña una.
+  const [filtroTp, setFiltroTp] = useState('')
+  const [tpMapa, setTpMapa] = useState(res?.temporalidades?.[0] || null)
+  const tpVista = res?.comparar ? (res.temporalidades.includes(tpMapa) ? tpMapa : res.temporalidades[0]) : null
+  const filasMapa = res?.comparar ? filas.filter(f => f.temporalidad === tpVista) : filas
+  const ordenadas = useMemo(() => ordenaFilas(filtroTp ? filas.filter(f => f.temporalidad === filtroTp) : filas, orden.col, orden.desc), [filas, orden, filtroTp])
   const cuentan = ordenadas.filter(f => f.cuenta), apartadas = ordenadas.filter(f => !f.cuenta)
   const variados = res ? Object.keys(res.valores).filter(k => res.valores[k].length > 1) : []
   const claveActual = res ? claveCombinacion(Object.fromEntries(Object.keys(res.valores).map(k => [k, res.guardados[k] ?? res.combos[0]?.[k]]))) : null
   const filaSel = filas.find(f => f.indice === seleccionada) || null
-  const calc = activosCalculados(res.activos, res.porActivo)
+  const calc = activosCalculados(res.activos, porActivoUnido(res))
   // Pulsar una fila de la tabla (que está al final) lleva al bloque de la combinación seleccionada, bajo el
   // mapa; pulsar una celda del mapa no desplaza: el bloque ya está justo debajo.
   // Y el mapa fija los parámetros que no están en los ejes con los de esa fila, para que su celda se vea marcada.
@@ -328,6 +343,7 @@ export function ResultadosOptimizacion({ res, onProbar = null, seleccionInicial 
     desplazar.current = true; setSeleccionada(i)
     const f = filas.find(x => x.indice === i)
     if (f) setFijarMapa({ params: f.params, n: (fijarMapa?.n || 0) + 1 })
+    if (f?.temporalidad) setTpMapa(f.temporalidad)
   }
   useEffect(() => {
     if (!desplazar.current) return
@@ -338,7 +354,7 @@ export function ResultadosOptimizacion({ res, onProbar = null, seleccionInicial 
   // salen directamente bajo el mapa.
   useEffect(() => {
     if (!res.terminado || seleccionada != null) return
-    const guardada = filas.find(f => claveCombinacion(f.params) === claveActual)
+    const guardada = filasMapa.find(f => claveCombinacion(f.params) === claveActual)
     if (guardada) setSeleccionada(guardada.indice)
   }, [res.terminado, filas])
   const COLS = [['cagrMediana', `${nombreCagr} · mediana`, (v) => pct(v)], ['cagrMedia', `${nombreCagr} · media`, (v) => pct(v)], ['ddMediana', 'DD mediana', (v) => pct(v)], ['ddPeor', 'DD peor', (v) => pct(v)],
@@ -374,19 +390,29 @@ export function ResultadosOptimizacion({ res, onProbar = null, seleccionInicial 
               entre sí es mejor el simple: mide la ventaja de cada operación sin que el interés compuesto amplifique la suerte de la secuencia.
             </div>
           </div>
+          {res.comparar && <ResumenTemporalidades res={res} filas={filas} claveActual={claveActual} metricas={metricas} textoParams={textoParams}
+            onSelecciona={(f) => seleccionaDesdeTabla(f.indice)} />}
+          {res.comparar && (
+            <label style={{ flexDirection: 'row', alignItems: 'center', gap: 6, fontSize: TAM, color: GRIS, marginTop: 4 }}>Temporalidad del {variados.length === 1 ? 'gráfico' : 'mapa'}
+              <select value={tpVista || ''} onChange={e => setTpMapa(e.target.value)} style={entrada}>
+                {res.temporalidades.map(tp => <option key={tp} value={tp}>{tp}</option>)}</select></label>)}
           {/* Orden: mapa → la combinación seleccionada (estabilidad, año a año, desglose, probar) → tabla. */}
-          <MapaDeColores filas={filas} res={res} variados={variados} claveActual={claveActual} seleccionada={seleccionada} setSeleccionada={setSeleccionada} filaSel={filaSel}
+          <MapaDeColores filas={filasMapa} res={res} variados={variados} claveActual={claveActual} seleccionada={seleccionada} setSeleccionada={setSeleccionada} filaSel={filaSel}
             textoParams={textoParams} fijarCon={fijarMapa} metricas={metricas} />
           <div ref={detalleRef} style={{ scrollMarginTop: 96 }}>
-            {filaSel && <DetalleSeleccion fila={filaSel} filas={filas} res={res} textoParams={textoParams} onProbar={onProbar} metricas={metricas} tipoCagr={tipoCagr} />}
+            {filaSel && <DetalleSeleccion fila={filaSel} filas={filaSel.temporalidad ? filas.filter(f => f.temporalidad === filaSel.temporalidad) : filas} res={res} textoParams={textoParams} onProbar={onProbar} metricas={metricas} tipoCagr={tipoCagr} />}
           </div>
-          <TablaFilas filas={verTodas ? cuentan : cuentan.slice(0, 100)} COLS={COLS} orden={orden} setOrden={setOrden} textoParams={textoParams}
+          {res.comparar && (
+            <label style={{ flexDirection: 'row', alignItems: 'center', gap: 6, fontSize: TAM, color: GRIS, margin: '10px 0 4px' }}>Filtrar la tabla por temporalidad
+              <select value={filtroTp} onChange={e => setFiltroTp(e.target.value)} style={entrada}>
+                <option value="">Todas</option>{res.temporalidades.map(tp => <option key={tp} value={tp}>{tp}</option>)}</select></label>)}
+          <TablaFilas filas={verTodas ? cuentan : cuentan.slice(0, 100)} COLS={COLS} orden={orden} setOrden={setOrden} textoParams={textoParams} conTemporalidad={!!res.comparar}
             claveActual={claveActual} seleccionada={seleccionada} setSeleccionada={seleccionaDesdeTabla} />
           {cuentan.length > 100 && <button onClick={() => setVerTodas(v => !v)} style={{ ...entrada, cursor: 'pointer', margin: '6px 0' }}>{verTodas ? 'Ver solo las 100 primeras' : `Ver las ${cuentan.length}`}</button>}
           {apartadas.length > 0 && (<>
             <div style={{ ...etiqueta, marginTop: 14 }}>Apartadas ({apartadas.length}): no llegan al mínimo de operaciones o no tienen resultado</div>
             <div style={{ opacity: 0.55 }}>
-              <TablaFilas filas={apartadas.slice(0, 50)} COLS={COLS} orden={orden} setOrden={setOrden} textoParams={textoParams}
+              <TablaFilas filas={apartadas.slice(0, 50)} COLS={COLS} orden={orden} setOrden={setOrden} textoParams={textoParams} conTemporalidad={!!res.comparar}
                 claveActual={claveActual} seleccionada={seleccionada} setSeleccionada={seleccionaDesdeTabla} conMotivo />
             </div></>)}
   </>)
@@ -552,12 +578,46 @@ function GraficoUnParametro({ filas, res, param, claveActual, seleccionada, setS
   )
 }
 
-function TablaFilas({ filas, COLS, orden, setOrden, textoParams, claveActual, seleccionada, setSeleccionada, conMotivo = false }) {
+// Comparando temporalidades, arriba de los resultados: por temporalidad, la mejor combinación válida (métrica
+// principal), su estabilidad frente a sus vecinas, la configuración guardada (★) y la mediana de las válidas.
+function ResumenTemporalidades({ res, filas, claveActual, metricas, textoParams, onSelecciona }) {
+  const [, tMed, fM] = metricas.find(m => m[0] === 'cagrMediana')
+  const dif = (d) => d == null ? '' : ` (${d >= 0 ? '+' : '−'}${num(Math.abs(d))} puntos)`
+  return (
+    <div style={{ ...caja }}>
+      <div style={etiqueta}>Comparación de temporalidades · {tMed}</div>
+      <div style={{ fontSize: TAM, color: GRIS, lineHeight: 1.5, marginBottom: 8 }}>
+        ⚠ Un mismo número de velas no abarca el mismo tiempo en cada temporalidad (20 velas semanales son unas 20 semanas; 20 diarias,
+        unas 4), así que lo que se compara son las mejores zonas de cada temporalidad, no los mismos valores.
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${res.temporalidades.length}, minmax(0, 1fr))`, gap: 10 }}>
+        {res.temporalidades.map(tp => {
+          const r = resumenTemporalidad(filas.filter(f => f.temporalidad === tp), res.valores, claveActual)
+          return (
+            <div key={tp} style={{ border: '1px solid var(--border)', borderRadius: 6, padding: '8px 10px', fontSize: TAM, lineHeight: 1.7 }}>
+              <div style={{ fontWeight: 700, textTransform: 'capitalize', marginBottom: 2 }}>{tp}</div>
+              <div><span style={{ color: GRIS }}>Mejor válida: </span>{r.mejor
+                ? <button onClick={() => onSelecciona(r.mejor)} title="Seleccionarla" style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--accent)', fontFamily: MONO, fontSize: TAM, textAlign: 'left' }}>
+                    {textoParams(r.mejor.params)} · <b>{fM(r.mejor.cagrMediana)}</b></button> : '—'}</div>
+              <div><span style={{ color: GRIS }}>Sus vecinas, de media: </span>{r.estabilidad?.vecinas.length ? <>{fM(r.estabilidad.mediaVecinas)}<span style={{ color: GRIS }}>{dif(r.estabilidad.diferencia)}</span></> : '—'}</div>
+              <div><span style={{ color: GRIS }}>★ Guardada: </span>{r.guardada
+                ? <button onClick={() => onSelecciona(r.guardada)} title="Seleccionarla" style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--text)', fontFamily: MONO, fontSize: TAM }}>
+                    {fM(r.guardada.cagrMediana)}{r.guardada.cuenta ? '' : ' (apartada)'}</button> : 'no está en la rejilla'}</div>
+              <div><span style={{ color: GRIS }}>Mediana de las {r.validas} válidas: </span>{fM(r.medianaValidas)}</div>
+            </div>)
+        })}
+      </div>
+    </div>
+  )
+}
+
+function TablaFilas({ filas, COLS, orden, setOrden, textoParams, claveActual, seleccionada, setSeleccionada, conMotivo = false, conTemporalidad = false }) {
   const th = { position: 'sticky', top: 0, background: 'var(--bg2)', padding: '5px 6px', textAlign: 'right', cursor: 'pointer', whiteSpace: 'nowrap', fontWeight: 400, color: GRIS }
   return (
     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: TAM }}>
       <thead><tr>
         <th style={{ ...th, textAlign: 'left', cursor: 'default' }}>Combinación</th>
+        {conTemporalidad && <th style={{ ...th, textAlign: 'left', cursor: 'default' }}>Temporalidad</th>}
         {COLS.map(([k, t]) => (
           <th key={k} style={{ ...th, color: orden.col === k ? 'var(--accent)' : th.color }}
             onClick={() => setOrden(o => ({ col: k, desc: o.col === k ? !o.desc : true }))}>{t}{orden.col === k ? (orden.desc ? ' ▼' : ' ▲') : ''}</th>))}
@@ -568,6 +628,7 @@ function TablaFilas({ filas, COLS, orden, setOrden, textoParams, claveActual, se
           <tr key={f.indice} onClick={() => setSeleccionada(f.indice)}
             style={{ cursor: 'pointer', background: seleccionada === f.indice ? 'var(--bg3)' : 'transparent', borderBottom: '1px solid var(--border)' }}>
             <td style={{ padding: '4px 6px', whiteSpace: 'nowrap' }}>{claveCombinacion(f.params) === claveActual ? '★ ' : ''}{textoParams(f.params)}</td>
+            {conTemporalidad && <td style={{ padding: '4px 6px', whiteSpace: 'nowrap' }}>{f.temporalidad}</td>}
             {COLS.map(([k, , formato]) => <td key={k} style={{ padding: '4px 6px', textAlign: 'right', whiteSpace: 'nowrap' }}>{formato(f[k], f)}</td>)}
             {conMotivo && <td style={{ padding: '4px 6px', color: GRIS }}>{f.motivo}</td>}
           </tr>))}
@@ -587,7 +648,7 @@ function DetalleSeleccion({ fila, filas, res, textoParams, onProbar, metricas = 
   return (<>
     <div style={{ ...caja, marginTop: 14 }}>
       <div style={etiqueta}>Estabilidad de la combinación seleccionada</div>
-      <div style={{ fontSize: TAM, marginBottom: 6 }}>{textoParams(fila.params)}
+      <div style={{ fontSize: TAM, marginBottom: 6 }}>{textoParams(fila.params)}{fila.temporalidad ? ` · ${fila.temporalidad}` : ''}
         <label style={{ fontSize: TAM, marginLeft: 10 }}>Métrica <select value={metrica} onChange={e => setMetrica(e.target.value)} style={entrada}>
           {metricas.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select></label></div>
       {est.vecinas.length ? (<>
@@ -665,7 +726,7 @@ function ProbarEnBacktest({ fila, res, textoParams, onProbar }) {
         <button onClick={() => onProbar({ ...prueba, modo: 'multi' })} style={boton}>▶ Multibacktest ({res.activos.length} activos)</button>
       </div>
       <div style={{ fontSize: TAM, color: GRIS, marginTop: 6, lineHeight: 1.5 }}>
-        Con estos params ({textoParams(fila.params)}), {fmtDate(res.condiciones.desde)} → {fmtDate(res.condiciones.hasta)}, {res.condiciones.intervalo}, capital {textoEs(res.condiciones.capitalIni, 2)} €,
+        Con estos params ({textoParams(fila.params)}), {fmtDate(res.condiciones.desde)} → {fmtDate(res.condiciones.hasta)}, {prueba.intervalo}, capital {textoEs(res.condiciones.capitalIni, 2)} €,
         sus comisiones, sin filtros y el calentamiento de la optimización{prueba.calentamiento != null ? ` (${prueba.calentamiento} velas)` : ''}. La estrategia guardada no cambia.
         El individual da las mismas cifras que la fila en ese activo; el multibacktest reparte el capital entre los activos, así que solo coinciden las operaciones.
       </div>
