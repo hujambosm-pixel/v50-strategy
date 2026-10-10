@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useMemo, Fragment } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo, Fragment, memo } from 'react'
 import Head from 'next/head'
 import { ListFilter, Briefcase, Star, Bell, X as LucideX } from 'lucide-react'
 import { calcMetrics, metricasSinOperaciones, MONO, fmt, fmtDate, f2, tvSym, pesosScoreHistorico, umbralesDe, scoreHistoricoDe, desgloseScoreHistorico, textoEs, AYUDA_CAGR } from '../lib/utils'
@@ -24,6 +24,9 @@ import EquityChart from '../components/EquityChart'
 import Tip from '../components/Tip'
 import SettingsModal from '../components/SettingsModal'
 import OptimizacionPanel from '../components/OptimizacionPanel'
+// memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
+// con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
+const OptimizacionPanelMemo = memo(OptimizacionPanel)
 import { payloadPrueba } from '../lib/optimizacion'
 import { MultiCartChart, OccupancyBarChart, McOccupancyChart, StratCompareChart, AssetSignalChart } from '../components/BacktestCharts'
 import dynamic from 'next/dynamic'
@@ -1019,6 +1022,11 @@ export default function Home() {
     try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.alarmas?.autoRefreshThreshold??50}catch{return 50}
   })
   const [sidePanel,setSidePanel]=useState('watchlist')
+  // La sección 🎯 se monta en su PRIMERA visita y ya no se desmonta: al salir se oculta (display:none). Así sus
+  // resultados (estado de OptimizacionPanel, solo en memoria) sobreviven a cambiar de sección —también a «Probar en
+  // backtest»— y una ejecución en curso sigue avanzando. Antes de la primera visita no se monta nada.
+  const [optimizaVisitado,setOptimizaVisitado]=useState(false)
+  useEffect(()=>{ if(sidePanel==='optimiza') setOptimizaVisitado(true) },[sidePanel])
   // Ficha fundamental del símbolo activo. Se pide SOLO con la sección abierta (ver el efecto más abajo).
   const [fundFicha,setFundFicha]=useState(null)
   const [fundCargando,setFundCargando]=useState(false)
@@ -5572,6 +5580,10 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
     }
   }
   useEffect(()=>{ if(mcPrueba?.lanzar) runBacktesting() },[mcPrueba?.lanzar])
+  // onProbar estable para la pantalla 🎯 (memo): siempre llama a la versión actual de probarOptimizacion.
+  const probarOptimizacionRef=useRef(null)
+  probarOptimizacionRef.current=probarOptimizacion
+  const onProbarOptimiza=useCallback((p)=>probarOptimizacionRef.current(p),[])
 
   // Auto-inicializar pesos iguales cuando cambian activos seleccionados (modo custom)
   useEffect(()=>{
@@ -6184,7 +6196,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.934</title>
+        <title>Trading Simulator V9.935</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6273,7 +6285,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             }} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.934
+            <span className="dot"/>Trading Simulator V9.935
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -9229,9 +9241,13 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
             )}
 
             {/* ══ OPTIMIZACIÓN (components/OptimizacionPanel.js): a ancho completo, sin panel lateral ══ */}
-            {sidePanel==='optimiza'&&(
-              <OptimizacionPanel strategies={strategies} watchlist={watchlist} wlLists={wlLists} apiFetch={apiFetch}
-                capitalInicial={Number(capitalIni)||10000} comisionesIniciales={indComisiones} onProbar={probarOptimizacion}/>
+            {/* Montada desde la primera visita; oculta (display:none) fuera de la sección. Visible, display:contents: el
+                contenedor no genera caja, así que la maquetación (flex, alturas, scroll) es la de siempre. */}
+            {(optimizaVisitado||sidePanel==='optimiza')&&(
+              <div style={{display:sidePanel==='optimiza'?'contents':'none'}}>
+                <OptimizacionPanelMemo strategies={strategies} watchlist={watchlist} wlLists={wlLists} apiFetch={apiFetch}
+                  capitalInicial={Number(capitalIni)||10000} comisionesIniciales={indComisiones} onProbar={onProbarOptimiza}/>
+              </div>
             )}
 
             {sidePanel==='multi'&&mcPrueba&&(
