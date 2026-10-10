@@ -7,6 +7,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { MONO, fmt, fmtDate, numeroEs, textoEs } from '../lib/utils'
 import CampoFecha from './CampoFecha'
+import { robustez as calculaRobustez, MIN_ANIOS_ROBUSTEZ } from '../lib/robustez'
 import { esquemaDeCodigo } from '../lib/parametrosEstrategia'
 import { generaRejilla, rejillaSugerida, valoresDeRango } from '../lib/rejillaParametros'
 import { periodoPorDefecto, estimaOptimizacion, divideEnPeticiones, agregaOptimizacion, ordenaFilas, claveCombinacion, mapaColores, estabilidad,
@@ -273,6 +274,7 @@ export default function OptimizacionPanel({ strategies = [], watchlist = [], wlL
       <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: 12 }}>
         {!res && <div style={{ color: GRIS, fontSize: 12, marginTop: 40, textAlign: 'center' }}>Elige estrategia, activos y rejilla, y lanza la optimización.</div>}
         {res && <ResultadosOptimizacion res={res} onProbar={onProbar}
+          ajustesRobustez={{ corteRobustez: cfg.corteRobustez ?? null, criterioRobustez: cfg.criterioRobustez || 'meseta' }} setAjusteRobustez={pon}
           estado={<EstadoEjecucion ejec={ejec} fin={fin} ahora={ahora} onDetener={() => { pararRef.current = true; setEjec(e => e && ({ ...e, parando: true })) }} />} />}
       </div>
     </div>
@@ -314,7 +316,7 @@ export function EstadoEjecucion({ ejec, fin, ahora, onDetener }) {
 // Los resultados de una optimización (res: combos, valores, porActivo, condiciones…). Aparte de la pantalla para
 // poder montarlos con resultados ya hechos (y comprobarlos).
 // `estado`: el progreso de la ejecución o el aviso de terminada/detenida, arriba, junto a los avisos.
-export function ResultadosOptimizacion({ res, onProbar = null, seleccionInicial = null, estado = null }) {
+export function ResultadosOptimizacion({ res, onProbar = null, seleccionInicial = null, estado = null, ajustesRobustez = null, setAjusteRobustez = null }) {
   // ── Resultados ──
   const [orden, setOrden] = useState({ col: 'cagrMediana', desc: true })
   const [seleccionada, setSeleccionada] = useState(seleccionInicial)
@@ -415,6 +417,8 @@ export function ResultadosOptimizacion({ res, onProbar = null, seleccionInicial 
               <TablaFilas filas={apartadas.slice(0, 50)} COLS={COLS} orden={orden} setOrden={setOrden} textoParams={textoParams} conTemporalidad={!!res.comparar}
                 claveActual={claveActual} seleccionada={seleccionada} setSeleccionada={seleccionaDesdeTabla} conMotivo />
             </div></>)}
+          <RobustezPanel filas={filas} res={res} variados={variados} textoParams={textoParams} ajustes={ajustesRobustez} setAjuste={setAjusteRobustez}
+            setSeleccionada={seleccionaDesdeTabla} />
   </>)
 }
 
@@ -531,7 +535,7 @@ function MapaDeColores({ filas, res, variados, claveActual, seleccionada, setSel
 // discontinua) en el eje Y. Cada punto ES la fila de la tabla; las apartadas, atenuadas; la guardada, con ★.
 // Pulsar un punto la selecciona (estabilidad, año a año y desglose debajo, como con el mapa). El selector cambia la
 // métrica del eje Y: la principal (mediana y media) o el % de acierto (mediana).
-function GraficoUnParametro({ filas, res, param, claveActual, seleccionada, setSeleccionada, textoParams, metricas }) {
+function GraficoUnParametro({ filas, res, param, claveActual, seleccionada, setSeleccionada, textoParams, metricas, robustez = false }) {
   const serie = serieUnParametro(filas, res.valores, param).filter(p => p.fila)
   const [vista, setVista] = useState('cagr')
   const kMed = vista === 'cagr' ? 'cagrMediana' : 'winRateMediana', kMedia = vista === 'cagr' ? 'cagrMedia' : null
@@ -552,17 +556,17 @@ function GraficoUnParametro({ filas, res, param, claveActual, seleccionada, setS
   const guardada = filas.find(f => claveCombinacion(f.params) === claveActual)
   return (
     <div style={{ ...caja, marginTop: 14 }}>
-      <div style={etiqueta}>Gráfico por {param} (solo varía este parámetro)</div>
+      <div style={etiqueta}>{robustez ? `Por ${param}: dentro y fuera de muestra` : `Gráfico por ${param} (solo varía este parámetro)`}</div>
       <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center', fontSize: TAM, color: GRIS, marginBottom: 6 }}>
         <span><span style={{ color: 'var(--accent)' }}>━</span> {tMed}</span>
         {kMedia && <span><span style={{ color: '#ffd166' }}>╌</span> {tMedia}</span>}
-        <span>● atenuado = apartada</span><span style={{ color: '#ffd166' }}>★</span><span style={{ marginLeft: -10 }}>= configuración guardada</span>
-        <label style={{ flexDirection: 'row', alignItems: 'center', gap: 6, fontSize: TAM, color: GRIS }}>Eje Y
+        <span>{robustez ? '● atenuado = no válida dentro' : '● atenuado = apartada'}</span><span style={{ color: '#ffd166' }}>★</span><span style={{ marginLeft: -10 }}>{robustez ? '= combinación elegida' : '= configuración guardada'}</span>
+        {!robustez && <label style={{ flexDirection: 'row', alignItems: 'center', gap: 6, fontSize: TAM, color: GRIS }}>Eje Y
           <select value={vista} onChange={e => setVista(e.target.value)} style={entrada}>
             <option value="cagr">{metricas.find(m => m[0] === 'cagrMediana')[1]} y media</option>
-            <option value="acierto">% acierto · mediana</option></select></label>
-        <button title="Selecciona la configuración guardada de la estrategia" disabled={!guardada} onClick={() => guardada && setSeleccionada(guardada.indice)}
-          style={{ ...entrada, cursor: guardada ? 'pointer' : 'not-allowed', color: GRIS, fontSize: TAM }}>★ Ver mi configuración guardada</button>
+            <option value="acierto">% acierto · mediana</option></select></label>}
+        {!robustez && <button title="Selecciona la configuración guardada de la estrategia" disabled={!guardada} onClick={() => guardada && setSeleccionada(guardada.indice)}
+          style={{ ...entrada, cursor: guardada ? 'pointer' : 'not-allowed', color: GRIS, fontSize: TAM }}>★ Ver mi configuración guardada</button>}
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', maxWidth: 900, display: 'block' }} role="img" aria-label={`${tMed}${kMedia ? ` y ${tMedia}` : ''} según ${param}`}>
         {ticksY.map((v, i) => (
@@ -622,6 +626,137 @@ function ResumenTemporalidades({ res, filas, claveActual, metricas, textoParams,
             </div>)
         })}
       </div>
+    </div>
+  )
+}
+
+// ── Fase 2: DENTRO / FUERA DE MUESTRA (lib/robustez.js) ────────────────────────────────────────────────────────
+// Posprocesado del año a año que ya trae cada combinación: ningún backtest nuevo. Plegada por defecto (cerrada, no
+// calcula nada). El corte y el criterio se guardan con la configuración. Comparando diario y semanal, se analiza UNA
+// temporalidad (selector): cada una es una optimización distinta y mezclarlas en una elección o una correlación no
+// tiene sentido.
+const anioIni = (a) => `${a.anio}${a.parcial && a.primeraVela ? ` (parcial, desde ${ddmm(a.primeraVela)})` : ''}`
+const anioFin = (a) => `${a.anio}${a.parcial && a.ultimaVela ? ` (parcial, hasta ${ddmm(a.ultimaVela)})` : ''}`
+const tramo = (a, b) => a.anio === b.anio ? `${a.anio}${(a.parcial && (a.primeraVela || a.ultimaVela)) ? ` (parcial${a.primeraVela ? `, desde ${ddmm(a.primeraVela)}` : ''}${a.ultimaVela ? `, hasta ${ddmm(a.ultimaVela)}` : ''})` : ''}` : `${anioIni(a)}–${anioFin(b)}`
+const comoLeer = { fontSize: TAM, color: GRIS, lineHeight: 1.5, marginTop: 2 }
+
+function RobustezPanel({ filas, res, variados, textoParams, ajustes, setAjuste, setSeleccionada }) {
+  const [abierta, setAbierta] = useState(false)
+  const [tp, setTp] = useState(null)
+  const [local, setLocal] = useState({ corteRobustez: null, criterioRobustez: 'meseta' })
+  const aj = ajustes || local
+  const pon = setAjuste || ((k, v) => setLocal(x => ({ ...x, [k]: v })))
+  const tpEf = res.comparar ? (res.temporalidades.includes(tp) ? tp : res.temporalidades[0]) : null
+  const filasR = useMemo(() => res.comparar ? filas.filter(f => f.temporalidad === tpEf) : filas, [filas, tpEf])
+  const ejes = variados.slice(0, 2)
+  const r = useMemo(() => abierta ? calculaRobustez(filasR, { corte: aj.corteRobustez ?? null, criterio: aj.criterioRobustez || 'meseta',
+    capitalIni: res.condiciones.capitalIni || 10000, valores: res.valores, ejes }) : null, [abierta, filasR, aj.corteRobustez, aj.criterioRobustez])
+  const cabecera = (
+    <button onClick={() => setAbierta(a => !a)} aria-expanded={abierta} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--text)', fontFamily: MONO, fontSize: TAM, fontWeight: 700 }}>
+      {abierta ? '▾ Dentro / fuera de muestra (robustez)' : '▸ Dentro / fuera de muestra (robustez)'}</button>)
+  if (!abierta) return <div style={{ ...caja, marginTop: 14 }}>{cabecera}</div>
+  const selTp = res.comparar && (
+    <label style={{ flexDirection: 'row', alignItems: 'center', gap: 6, fontSize: TAM, color: GRIS }}>Temporalidad
+      <select value={tpEf} onChange={e => setTp(e.target.value)} style={entrada}>{res.temporalidades.map(t => <option key={t} value={t}>{t}</option>)}</select></label>)
+  if (r.insuficiente) return (
+    <div style={{ ...caja, marginTop: 14 }}>{cabecera}{selTp && <div style={{ marginTop: 8 }}>{selTp}</div>}
+      <div style={{ fontSize: TAM, color: GRIS, marginTop: 8 }}>Hacen falta al menos {MIN_ANIOS_ROBUSTEZ} años con datos para partir el periodo en dos bloques; este tiene {r.anios.length}.</div></div>)
+  const dentro = r.anios.filter(a => a.anio < r.corte), fuera = r.anios.filter(a => a.anio >= r.corte)
+  const txtDentro = tramo(dentro[0], dentro[dentro.length - 1]), txtFuera = tramo(fuera[0], fuera[fuera.length - 1])
+  const f = r.ficha, m = r.metricas
+  const claveEl = r.elegida ? claveCombinacion(r.elegida.params) : null
+  const celda = { padding: '3px 8px', textAlign: 'right', fontSize: TAM }
+  const puesto = (p, b) => p.puesto ? `${p.puesto} de ${p.de}` : `no válida (${b.motivo})`
+  return (
+    <div style={{ ...caja, marginTop: 14 }}>
+      {cabecera}
+      <div style={{ fontSize: TAM, marginTop: 8, fontWeight: 700 }}>Dentro de muestra {txtDentro} · Fuera de muestra {txtFuera}</div>
+      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center', margin: '8px 0', fontSize: TAM, color: GRIS }}>
+        <label style={{ flexDirection: 'row', alignItems: 'center', gap: 6, fontSize: TAM, color: GRIS }}>Año de corte (primer año fuera)
+          <select value={r.corte} onChange={e => pon('corteRobustez', Number(e.target.value))} style={entrada}>
+            {r.posibles.map(y => <option key={y} value={y}>{y}{y === r.sugerido ? ' (70 % dentro)' : ''}</option>)}</select></label>
+        <label style={{ flexDirection: 'row', alignItems: 'center', gap: 6, fontSize: TAM, color: GRIS }}>Criterio
+          <select value={r.criterio} onChange={e => pon('criterioRobustez', e.target.value)} style={entrada}>
+            <option value="meseta">Meseta (mejor media del vecindario)</option>
+            <option value="maximo">Máximo (mejor mediana)</option></select></label>
+        {selTp}
+      </div>
+      <div style={{ ...caja, borderColor: 'rgba(255,209,102,0.5)', background: 'rgba(255,209,102,0.08)', fontSize: TAM, lineHeight: 1.5 }}>
+        Fija el criterio antes de mirar el bloque de fuera. Si cambias de criterio o de corte hasta que salga bien, el bloque de fuera deja de ser una prueba.
+      </div>
+      <div style={{ fontSize: TAM, color: GRIS, marginBottom: 8 }}>
+        Válidas dentro: {r.items.length - m.excluidasDentro} de {r.items.length} (excluidas {m.excluidasDentro}) · fuera: {r.items.length - m.excluidasFuera} de {r.items.length} (excluidas {m.excluidasFuera}).
+        Cuenta una combinación con al menos {MIN_TOTAL} operaciones en el bloque y {MIN_POR_ACTIVO} en cada activo. Solo CAGR simple: el compuesto por bloque no está disponible.
+      </div>
+      {ejes.length >= 2 ? <MapasRobustez r={r} res={res} ejes={ejes} claveEl={claveEl} textoParams={textoParams} />
+        : ejes.length === 1 ? <GraficoUnParametro robustez filas={r.items.map(it => ({ params: it.params, indice: it.indice, cuenta: it.dentro.cuenta, motivo: it.dentro.motivo, cagrMediana: it.dentro.cagrMediana, cagrMedia: it.fuera.cagrMediana }))}
+            res={res} param={ejes[0]} claveActual={claveEl} seleccionada={r.elegida?.indice ?? null} setSeleccionada={setSeleccionada} textoParams={textoParams}
+            metricas={[['cagrMediana', 'CAGR simple · dentro (mediana)', (v) => pct(v), true], ['cagrMedia', 'CAGR simple · fuera (mediana)', (v) => pct(v), true]]} /> : null}
+      {f ? (
+        <div style={{ marginTop: 12 }}>
+          <div style={etiqueta}>Combinación elegida con los datos de dentro ({r.criterio === 'meseta' ? 'meseta' : 'máximo'})</div>
+          <div style={{ fontSize: TAM, marginBottom: 6 }}>
+            <button onClick={() => setSeleccionada(f.indice)} title="Seleccionarla arriba" style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--accent)', fontFamily: MONO, fontSize: TAM }}>★ {textoParams(f.params)}</button>
+            {r.criterio === 'meseta' && <span style={{ color: GRIS }}> · media de su vecindario dentro {pct(r.elegida.puntuacion)}</span>}</div>
+          <table style={{ borderCollapse: 'collapse', fontSize: TAM }}>
+            <thead><tr>{['', `Dentro (${txtDentro})`, `Fuera (${txtFuera})`].map(t => <th key={t} style={{ ...celda, color: GRIS, fontWeight: 400 }}>{t}</th>)}</tr></thead>
+            <tbody>
+              <tr><td style={{ ...celda, textAlign: 'left', color: GRIS }}>CAGR simple · mediana</td><td style={celda}>{pct(f.dentro.cagrMediana)}</td><td style={celda}>{pct(f.fuera.cagrMediana)}</td></tr>
+              <tr><td style={{ ...celda, textAlign: 'left', color: GRIS }}>Puesto</td><td style={celda}>{puesto(f.puestoDentro, f.dentro)}</td><td style={celda}>{puesto(f.puestoFuera, f.fuera)}</td></tr>
+              <tr><td style={{ ...celda, textAlign: 'left', color: GRIS }}>Operaciones (todos los activos)</td><td style={celda}>{f.dentro.operaciones}</td><td style={celda}>{f.fuera.operaciones}</td></tr>
+              <tr><td style={{ ...celda, textAlign: 'left', color: GRIS }}>% acierto · mediana</td><td style={celda}>{pct(f.dentro.winRateMediana, 1)}</td><td style={celda}>{pct(f.fuera.winRateMediana, 1)}</td></tr>
+            </tbody>
+          </table>
+          <div style={{ fontSize: TAM, marginTop: 8 }}>Degradación (fuera / dentro): <b>{f.degradacion == null ? '—' : pct(f.degradacion, 0)}</b>
+            {f.degradacion == null && <span style={{ color: GRIS }}> (sin sentido si dentro no gana)</span>}</div>
+          <div style={comoLeer}>Cómo leer esto: lo normal es perder algo fuera; perder casi todo indica sobreajuste.</div>
+        </div>) : <div style={{ fontSize: TAM, color: GRIS, marginTop: 10 }}>Ninguna combinación es válida dentro de muestra: no hay nada que elegir.</div>}
+      <div style={{ marginTop: 12, fontSize: TAM }}>
+        <div>Correlación de Spearman dentro / fuera: <b>{m.rho == null ? '—' : num(m.rho)}</b> <span style={{ color: GRIS }}>({m.n} combinaciones válidas en los dos bloques)</span></div>
+        <div style={comoLeer}>Cómo leer esto: cercano a 1 = lo que gana dentro tiende a ganar fuera; cercano a 0 = optimizar no predice nada (ruido); negativo = señal de sobreajuste.</div>
+        <div style={{ marginTop: 8 }}>10 % mejor de dentro ({m.nTop} combinaciones), mediana fuera: <b>{pct(m.medianaFueraTop)}</b> · todas las válidas: <b>{pct(m.medianaFueraTodas)}</b></div>
+        <div style={comoLeer}>Cómo leer esto: si su mediana fuera no supera a la del total, elegir los mejores no aporta.</div>
+      </div>
+    </div>
+  )
+}
+
+// Dos mapas lado a lado (Dentro | Fuera) con la MISMA escala de color, calculada sobre los dos. Los parámetros que no
+// están en los ejes, fijados en los de la elegida. ★ = la elegida.
+function MapasRobustez({ r, res, ejes, claveEl, textoParams }) {
+  const fijos = Object.fromEntries(Object.keys(res.valores).filter(k => !ejes.includes(k)).map(k => [k, r.elegida ? r.elegida.params[k] : res.valores[k][0]]))
+  const filasDe = (b) => r.items.map(it => ({ params: it.params, indice: it.indice, cuenta: it[b].cuenta, motivo: it[b].motivo, v: it[b].cagrMediana }))
+  const mapas = [['Dentro de muestra', mapaColores(filasDe('dentro'), res.valores, { ejeX: ejes[0], ejeY: ejes[1], fijos })],
+                 ['Fuera de muestra', mapaColores(filasDe('fuera'), res.valores, { ejeX: ejes[0], ejeY: ejes[1], fijos })]]
+  const vals = mapas.flatMap(([, mp]) => mp.celdas.flat()).filter(c => c && c.cuenta && c.v != null).map(c => c.v)
+  const lo = Math.min(...vals), hi = Math.max(...vals)
+  const t = (v) => hi > lo ? (v - lo) / (hi - lo) : 0.5
+  const celda = { padding: '3px 5px', textAlign: 'center', whiteSpace: 'nowrap', fontSize: TAM, minWidth: 50 }
+  const otros = Object.keys(fijos).filter(k => res.valores[k].length > 1)
+  return (
+    <div>
+      {otros.length > 0 && <div style={{ fontSize: TAM, color: GRIS, marginBottom: 6 }}>Resto de parámetros, los de la elegida: {otros.map(k => `${k} ${textoValor(fijos[k])}`).join(' · ')}</div>}
+      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+        {mapas.map(([titulo, mp]) => (
+          <div key={titulo} style={{ overflowX: 'auto' }}>
+            <div style={{ ...etiqueta, marginBottom: 4 }}>{titulo} · CAGR simple (mediana)</div>
+            <table style={{ borderCollapse: 'separate', borderSpacing: 2 }}>
+              <thead><tr><th style={{ ...celda, color: GRIS, fontWeight: 400 }}>{ejes[1]} ↓ · {ejes[0]} →</th>
+                {mp.xs.map(x => <th key={String(x)} style={{ ...celda, color: GRIS, fontWeight: 400 }}>{textoValor(x)}</th>)}</tr></thead>
+              <tbody>{mp.ys.map((y, j) => (
+                <tr key={String(y)}><th style={{ ...celda, color: GRIS, fontWeight: 400, textAlign: 'right' }}>{textoValor(y)}</th>
+                  {mp.xs.map((x, i) => {
+                    const c = mp.celdas[j][i]
+                    if (!c) return <td key={String(x)} style={{ ...celda, color: GRIS }}>·</td>
+                    const el = claveCombinacion(c.params) === claveEl
+                    return <td key={String(x)} title={`${textoParams(c.params)} — ${pct(c.v)}${c.cuenta ? '' : ` — no válida: ${c.motivo}`}`}
+                      style={{ ...celda, color: '#e8eef5', borderRadius: 3, background: c.cuenta && c.v != null ? colorEscala(t(c.v)) : 'var(--bg3)', opacity: c.cuenta ? 1 : 0.5,
+                        outline: el ? '2px solid #ffd166' : 'none' }}>{el ? '★ ' : ''}{pct(c.v, 1)}</td>
+                  })}</tr>))}</tbody>
+            </table>
+          </div>))}
+      </div>
+      <div style={{ fontSize: TAM, color: GRIS, marginTop: 4 }}>Misma escala de color en los dos (de {pct(lo, 1)} a {pct(hi, 1)}); en gris, las no válidas en ese bloque.</div>
     </div>
   )
 }
