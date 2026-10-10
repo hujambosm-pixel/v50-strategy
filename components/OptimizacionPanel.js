@@ -425,6 +425,12 @@ const METRICAS = [['cagrMediana', 'CAGR mediana', (v) => pct(v), true], ['cagrMe
   ['winRateMediana', '% acierto · mediana', (v) => pct(v, 1), true]]
 // Las mismas, con el rótulo del CAGR elegido («CAGR simple · mediana»).
 const metricasDe = (tipo) => METRICAS.map(([k, t, f, b]) => [k, k === 'cagrMediana' ? `${NOMBRES_CAGR[tipo]} · mediana` : k === 'cagrMedia' ? `${NOMBRES_CAGR[tipo]} · media` : t, f, b])
+// El año de la tabla año a año, con su marca si está incompleto: «2026 (sin datos)», «2025 (parcial, hasta 30/06)».
+// Un año completo devuelve el número tal cual (mismo HTML que antes).
+const ddmm = (iso) => `${String(iso).slice(8, 10)}/${String(iso).slice(5, 7)}`
+const rotuloAnio = (a) => a.sinDatos ? `${a.anio} (sin datos)`
+  : !a.parcial ? a.anio
+  : `${a.anio} (parcial, ${a.primeraVela && a.ultimaVela ? `${ddmm(a.primeraVela)}–${ddmm(a.ultimaVela)}` : a.ultimaVela ? `hasta ${ddmm(a.ultimaVela)}` : a.primeraVela ? `desde ${ddmm(a.primeraVela)}` : 'incompleto'})`
 const textoValor = (v) => typeof v === 'number' ? textoEs(v, 6) : v === true ? 'sí' : v === false ? 'no' : String(v)
 // Rojo (peor) → amarillo → verde (mejor), con t de 0 a 1.
 const colorEscala = (t) => `hsl(${Math.round(120 * Math.min(1, Math.max(0, t)))}, 55%, 30%)`
@@ -682,7 +688,7 @@ function DetalleSeleccion({ fila, filas, res, textoParams, onProbar, metricas = 
       <table style={{ borderCollapse: 'collapse', fontSize: TAM }}>
         <thead><tr>{['Año', 'Mediana', 'Media', 'Ops. cerradas'].map(t => <th key={t} style={th}>{t}</th>)}</tr></thead>
         <tbody>{fila.porAnio.map(a => (
-          <tr key={a.anio}><td style={td}>{a.anio}</td>
+          <tr key={a.anio}><td style={td}>{rotuloAnio(a)}</td>
             <td style={{ ...td, color: a.mediana == null ? undefined : a.mediana >= 0 ? '#06d6a0' : '#ff4d6d' }}>{pct(a.mediana)}</td>
             <td style={td}>{pct(a.media)}</td><td style={td}>{a.operaciones}</td></tr>))}
         </tbody>
