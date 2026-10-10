@@ -7,7 +7,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { MONO, fmt, fmtDate, numeroEs, textoEs } from '../lib/utils'
 import CampoFecha from './CampoFecha'
-import { robustez as calculaRobustez, MIN_ANIOS_ROBUSTEZ } from '../lib/robustez'
+import { robustez as calculaRobustez, MIN_ANIOS_ROBUSTEZ, aniosConDatos, resultadosAnuales, walkForward, WF_VENTANAS, WF_VENTANA_DEFECTO } from '../lib/robustez'
 import { esquemaDeCodigo } from '../lib/parametrosEstrategia'
 import { generaRejilla, rejillaSugerida, valoresDeRango } from '../lib/rejillaParametros'
 import { periodoPorDefecto, estimaOptimizacion, divideEnPeticiones, agregaOptimizacion, ordenaFilas, claveCombinacion, mapaColores, estabilidad,
@@ -119,6 +119,7 @@ export default function OptimizacionPanel({ strategies = [], watchlist = [], wlL
     setFin(null); setAhora(inicio)
     setEjec({ hechas: 0, total: tareas.length, parando: false, inicio, enCurso: [] })
     setRes({ combos, valores: gen.valores, porActivo, calentamientos, nombre: est.s.name, estrategiaId: est.s.id, guardados, condiciones, activos: [...activos], terminado: false, interrumpida: false,
+      defectos: Object.fromEntries(est.esquema.lista.map(p => [p.nombre, p.defecto])),
       ...(comparar ? { comparar: true, temporalidades: [...temporalidades], porTemporalidad } : {}) })
     let hechas = 0, interrumpida = false
     for (let i = 0; i < tareas.length; i += CONCURRENCIA) {
@@ -274,7 +275,8 @@ export default function OptimizacionPanel({ strategies = [], watchlist = [], wlL
       <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: 12 }}>
         {!res && <div style={{ color: GRIS, fontSize: 12, marginTop: 40, textAlign: 'center' }}>Elige estrategia, activos y rejilla, y lanza la optimización.</div>}
         {res && <ResultadosOptimizacion res={res} onProbar={onProbar}
-          ajustesRobustez={{ corteRobustez: cfg.corteRobustez ?? null, criterioRobustez: cfg.criterioRobustez || 'meseta' }} setAjusteRobustez={pon}
+          ajustesRobustez={{ corteRobustez: cfg.corteRobustez ?? null, criterioRobustez: cfg.criterioRobustez || 'meseta',
+            wfVentana: cfg.wfVentana ?? null, wfModo: cfg.wfModo || 'rodante', wfReferencia: cfg.wfReferencia ?? null }} setAjusteRobustez={pon}
           estado={<EstadoEjecucion ejec={ejec} fin={fin} ahora={ahora} onDetener={() => { pararRef.current = true; setEjec(e => e && ({ ...e, parando: true })) }} />} />}
       </div>
     </div>
@@ -418,6 +420,8 @@ export function ResultadosOptimizacion({ res, onProbar = null, seleccionInicial 
                 claveActual={claveActual} seleccionada={seleccionada} setSeleccionada={seleccionaDesdeTabla} conMotivo />
             </div></>)}
           <RobustezPanel filas={filas} res={res} variados={variados} textoParams={textoParams} ajustes={ajustesRobustez} setAjuste={setAjusteRobustez}
+            setSeleccionada={seleccionaDesdeTabla} />
+          <WalkForwardPanel filas={filas} res={res} variados={variados} textoParams={textoParams} ajustes={ajustesRobustez} setAjuste={setAjusteRobustez}
             setSeleccionada={seleccionaDesdeTabla} />
   </>)
 }
@@ -731,6 +735,167 @@ function RobustezPanel({ filas, res, variados, textoParams, ajustes, setAjuste, 
         <div style={{ marginTop: 8 }}>10 % mejor de dentro ({m.nTop} combinaciones), mediana fuera: <b>{pct(m.medianaFueraTop)}</b> · todas las válidas: <b>{pct(m.medianaFueraTodas)}</b></div>
         <div style={comoLeer}>Cómo leer esto: si su mediana fuera no supera a la del total, elegir los mejores no aporta.</div>
       </div>
+    </div>
+  )
+}
+
+// ── Fase 2, pieza 2: WALK-FORWARD (lib/robustez.js: walkForward) ─────────────────────────────────────────────────
+// Plegada por defecto (cerrada, no calcula). El criterio es el MISMO que el de dentro / fuera (una sola decisión: cómo
+// eliges una combinación); la ventana, el modo y la referencia se guardan con la configuración. Comparando diario y
+// semanal, una temporalidad, con su selector (como dentro / fuera).
+function WalkForwardPanel({ filas, res, variados, textoParams, ajustes, setAjuste, setSeleccionada }) {
+  const [abierta, setAbierta] = useState(false)
+  const [tp, setTp] = useState(null)
+  const [local, setLocal] = useState({ criterioRobustez: 'meseta', wfVentana: null, wfModo: 'rodante', wfReferencia: null })
+  const aj = ajustes || local
+  const pon = setAjuste || ((k, v) => setLocal(x => ({ ...x, [k]: v })))
+  const tpEf = res.comparar ? (res.temporalidades.includes(tp) ? tp : res.temporalidades[0]) : null
+  const filasR = useMemo(() => res.comparar ? filas.filter(f => f.temporalidad === tpEf) : filas, [filas, tpEf])
+  const ejes = variados.slice(0, 2), cap = res.condiciones.capitalIni || 10000
+  const ventana = WF_VENTANAS.includes(aj.wfVentana) ? aj.wfVentana : WF_VENTANA_DEFECTO
+  const modo = aj.wfModo === 'anclado' ? 'anclado' : 'rodante', criterio = aj.criterioRobustez || 'meseta'
+  // La referencia: la guardada si sigue en la rejilla; si no, los valores por defecto que declara la estrategia.
+  const defecto = Object.fromEntries(Object.keys(res.valores).map(k => [k, (res.defectos || res.guardados || {})[k]]))
+  const claveDefecto = claveCombinacion(defecto)
+  const filaDefecto = filasR.find(f => claveCombinacion(f.params) === claveDefecto) || null
+  const filaRef = (aj.wfReferencia && filasR.find(f => claveCombinacion(f.params) === aj.wfReferencia)) || filaDefecto
+  const anios = useMemo(() => abierta ? aniosConDatos(filasR) : [], [abierta, filasR])
+  // Caché de bloques por tramo (lib/robustez.js), nueva cada vez que cambian los resultados.
+  const cache = useMemo(() => new Map(), [filasR])
+  const anuales = useMemo(() => abierta ? resultadosAnuales(filasR, anios, cap, cache) : null, [abierta, filasR, anios, cache])
+  const claveRef = filaRef ? claveCombinacion(filaRef.params) : null
+  const wf = useMemo(() => abierta ? walkForward(filasR, { anios, anuales, ventana, modo, criterio, capitalIni: cap, valores: res.valores, ejes, referencia: filaRef?.params || null, cache }) : null,
+    [abierta, filasR, anios, anuales, ventana, modo, criterio, claveRef])
+  const cabecera = (
+    <button onClick={() => setAbierta(a => !a)} aria-expanded={abierta} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--text)', fontFamily: MONO, fontSize: TAM, fontWeight: 700 }}>
+      {abierta ? '▾ Walk-forward (cada año se elige solo con el pasado)' : '▸ Walk-forward (cada año se elige solo con el pasado)'}</button>)
+  if (!abierta) return <div style={{ ...caja, marginTop: 14 }}>{cabecera}</div>
+  const lab = { flexDirection: 'row', alignItems: 'center', gap: 6, fontSize: TAM, color: GRIS }
+  const opciones = [...filasR].sort((a, b) => a.indice - b.indice)
+  return (
+    <div style={{ ...caja, marginTop: 14 }}>
+      {cabecera}
+      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center', margin: '8px 0', fontSize: TAM, color: GRIS }}>
+        <label style={lab}>Entrenamiento
+          <select value={ventana} onChange={e => pon('wfVentana', Number(e.target.value))} style={entrada}>{WF_VENTANAS.map(n => <option key={n} value={n}>{n} años</option>)}</select></label>
+        <label style={lab}>Modo
+          <select value={modo} onChange={e => pon('wfModo', e.target.value)} style={entrada}>
+            <option value="rodante">Rodante (los N años anteriores)</option><option value="anclado">Anclado (desde el primer año)</option></select></label>
+        <label style={lab}>Criterio (el mismo que dentro / fuera)
+          <select value={criterio} onChange={e => pon('criterioRobustez', e.target.value)} style={entrada}>
+            <option value="meseta">Meseta (mejor media del vecindario)</option><option value="maximo">Máximo (mejor mediana)</option></select></label>
+        <label style={lab}>Referencia
+          <select value={claveRef || ''} onChange={e => pon('wfReferencia', e.target.value || null)} style={{ ...entrada, maxWidth: 360 }}>
+            {!filaDefecto && <option value="">— elige una —</option>}
+            {opciones.map(f => { const k = claveCombinacion(f.params); return <option key={k} value={k}>{textoParams(f.params)}{k === claveDefecto ? ' (por defecto de la estrategia)' : ''}</option> })}</select></label>
+        {res.comparar && <label style={lab}>Temporalidad
+          <select value={tpEf} onChange={e => setTp(e.target.value)} style={entrada}>{res.temporalidades.map(t => <option key={t} value={t}>{t}</option>)}</select></label>}
+      </div>
+      {!filaDefecto && <div style={{ fontSize: TAM, color: '#ffd166', marginBottom: 8 }}>⚠ Los valores por defecto que declara la estrategia ({textoParams(defecto)}) no están en la rejilla: elige una referencia.</div>}
+      <div style={{ ...caja, borderColor: 'rgba(255,209,102,0.5)', background: 'rgba(255,209,102,0.08)', fontSize: TAM, lineHeight: 1.5 }}>
+        El walk-forward imita usar el optimizador en la vida real: cada año eliges solo con el pasado. Es la prueba más honesta de si optimizar te sirve.
+      </div>
+      <div style={{ fontSize: TAM, color: GRIS, marginBottom: 8, lineHeight: 1.5 }}>
+        Al cambiar de combinación el 1 de enero, el cálculo supone que la nueva combinación ya venía operando (sus posiciones abiertas siguen). Es una aproximación: en la realidad cerrarías y reabrirías.
+      </div>
+      {wf.insuficiente ? <div style={{ fontSize: TAM, color: GRIS }}>Con {ventana} años de entrenamiento hacen falta al menos {wf.necesarios} años con datos (uno de prueba); este periodo tiene {wf.hay}.</div> : <>
+        <TablaWalkForward wf={wf} textoParams={textoParams} setSeleccionada={setSeleccionada} />
+        <GraficoAcumulado wf={wf} />
+        <ResumenWalkForward wf={wf} />
+      </>}
+    </div>
+  )
+}
+
+const avisoFilaWF = (f) => [
+  ...(f.zona.bordes.length || f.zona.diagonal ? [`La zona elegida toca el borde de la rejilla por ${[...f.zona.bordes.map(b => `${b.parametro} ${b.lado === 'bajo' ? 'por abajo' : 'por arriba'} (${textoValor(b.valor)})`), ...(f.zona.diagonal ? ['la diagonal imposible'] : [])].join(' y ')}: amplía la rejilla en esa dirección para confirmar que es una meseta.`] : []),
+  ...(f.elegida && f.criterio === 'meseta' && f.elegida.candidatas <= 4 ? [`Solo ${f.elegida.candidatas} ${f.elegida.candidatas === 1 ? 'combinación tiene' : 'combinaciones tienen'} vecindario completo: la meseta es poco fiable; amplía la rejilla.`] : [])].join(' ')
+
+function TablaWalkForward({ wf, textoParams, setSeleccionada }) {
+  const c = { padding: '3px 6px', textAlign: 'right', whiteSpace: 'nowrap', fontSize: TAM }
+  const pu = (p) => p && p.puesto ? `${p.puesto} de ${p.de}` : '—'
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <table style={{ borderCollapse: 'collapse', fontSize: TAM, width: '100%' }}>
+        <thead><tr>{['Año', 'Entrenamiento', 'Elegida', 'WF', 'Referencia', 'Mediana rejilla', 'Oráculo', 'Puesto elegida', 'Puesto referencia', 'Ops · acierto elegida'].map((t, i) =>
+          <th key={t} style={{ ...c, color: GRIS, fontWeight: 400, textAlign: i < 3 ? 'left' : 'right' }}>{t}</th>)}</tr></thead>
+        <tbody>{wf.anios.map(f => {
+          const aviso = avisoFilaWF(f)
+          return (
+            <tr key={f.anio.anio} style={{ borderBottom: '1px solid var(--border)' }}>
+              <td style={{ ...c, textAlign: 'left' }}>{tramo(f.anio, f.anio)}</td>
+              <td style={{ ...c, textAlign: 'left', color: GRIS }}>{tramo(f.entrenamiento[0], f.entrenamiento[f.entrenamiento.length - 1])}</td>
+              <td style={{ ...c, textAlign: 'left' }}>{f.elegida
+                ? <><button onClick={() => setSeleccionada(f.elegida.indice)} title="Seleccionarla arriba" style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--accent)', fontFamily: MONO, fontSize: TAM }}>{textoParams(f.elegida.params)}</button>
+                    {aviso && <span title={aviso} style={{ color: '#ffd166', cursor: 'help' }}> ⚠</span>}</>
+                : <span style={{ color: GRIS }}>sin elección: {f.sinEleccion}</span>}</td>
+              <td style={c}>{pct(f.wf)}</td><td style={c}>{pct(f.referencia)}</td><td style={c}>{pct(f.mediana)}</td>
+              <td style={c} title={f.oraculoParams ? textoParams(f.oraculoParams) : ''}>{pct(f.oraculo)}</td>
+              <td style={c}>{pu(f.puestoElegida)}</td><td style={c}>{pu(f.puestoReferencia)}</td>
+              <td style={c}>{f.elegida ? `${f.operaciones} · ${pct(f.acierto, 1)}` : '—'}</td>
+            </tr>)
+        })}</tbody>
+      </table>
+      <div style={{ fontSize: TAM, color: GRIS, marginTop: 4 }}>Resultado de cada año = mediana entre activos de lo ganado ese año, en % del capital inicial (un año parcial, por sus fechas). En el año de prueba cuenta toda combinación con resultado; el oráculo es la mejor de ese año (pasa el ratón para verla).</div>
+    </div>
+  )
+}
+
+// Resultado simple ACUMULADO (suma de los resultados anuales) de WF, la referencia y la mediana de la rejilla.
+function GraficoAcumulado({ wf }) {
+  const series = [['wf', 'WF (elegida cada año)', 'var(--accent)', null], ['referencia', 'Referencia', '#ffd166', '5 4'], ['mediana', 'Mediana de la rejilla', GRIS, '2 3']]
+  const W = 640, H = 230, L = 64, Rm = 16, T = 18, B = 34
+  const n = wf.anios.length
+  // Una serie a la que le falta algún año (p. ej. la referencia sin elegir) no se dibuja; WF sí (un año sin elección es 0 %).
+  const visibles = series.filter(([k]) => k === 'wf' || wf.anios.every(f => f[k] != null))
+  const acum = Object.fromEntries(visibles.map(([k]) => { let s = 0; return [k, [0, ...wf.anios.map(f => (s += (f[k] ?? 0)))]] }))
+  const vals = visibles.flatMap(([k]) => acum[k])
+  let y0 = Math.min(0, ...vals), y1 = Math.max(0, ...vals)
+  if (y1 === y0) { y0 -= 1; y1 += 1 }
+  const pad = (y1 - y0) * 0.06; y0 -= pad; y1 += pad
+  const px = (i) => L + i / n * (W - L - Rm), py = (v) => T + (y1 - v) / (y1 - y0) * (H - T - B)
+  const texto = { fill: GRIS, fontSize: TAM, fontFamily: MONO }
+  const ticksY = Array.from({ length: 5 }, (_, i) => y0 + (y1 - y0) * i / 4)
+  return (
+    <div style={{ marginTop: 12 }}>
+      <div style={etiqueta}>Resultado simple acumulado en los años de prueba</div>
+      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: TAM, color: GRIS, marginBottom: 4 }}>
+        {visibles.map(([k, t, col, dash]) => <span key={k}><span style={{ color: col }}>{dash ? '╌' : '━'}</span> {t}</span>)}</div>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', maxWidth: 900, display: 'block' }} role="img" aria-label="Resultado simple acumulado: WF, referencia y mediana de la rejilla">
+        {ticksY.map((v, i) => <g key={i}><line x1={L} x2={W - Rm} y1={py(v)} y2={py(v)} stroke="var(--border)" strokeWidth="1" />
+          <text x={L - 6} y={py(v) + 4} textAnchor="end" style={texto}>{pct(v, 0)}</text></g>)}
+        {y0 < 0 && y1 > 0 && <line x1={L} x2={W - Rm} y1={py(0)} y2={py(0)} stroke={GRIS} strokeWidth="1" strokeDasharray="2 3" />}
+        {wf.anios.map((f, i) => <text key={f.anio.anio} x={px(i + 1)} y={H - B + 18} textAnchor="middle" style={texto}>{f.anio.anio}</text>)}
+        {visibles.map(([k, t, col, dash]) => <polyline key={k} points={acum[k].map((v, i) => `${px(i).toFixed(1)},${py(v).toFixed(1)}`).join(' ')}
+          fill="none" stroke={col} strokeWidth={k === 'wf' ? 2 : 1.5} strokeDasharray={dash || undefined} />)}
+        {visibles.map(([k, t, col]) => acum[k].slice(1).map((v, i) => <circle key={k + i} cx={px(i + 1)} cy={py(v)} r="3" fill={col}><title>{`${t}, ${wf.anios[i].anio.anio}: ${pct(v)} acumulado`}</title></circle>))}
+      </svg>
+      {wf.sinEleccion > 0 && <div style={{ fontSize: TAM, color: GRIS }}>Los años sin elección cuentan como 0 % (ese año no se opera).</div>}
+    </div>
+  )
+}
+
+function ResumenWalkForward({ wf }) {
+  const r = wf.resumen, c = { padding: '3px 8px', textAlign: 'right', fontSize: TAM }
+  const prueba = tramo(wf.prueba[0], wf.prueba[wf.prueba.length - 1])
+  const frac = (x) => x.de ? `${x.gana} de ${x.de} (${pct(x.gana / x.de * 100, 0)})` : '—'
+  return (
+    <div style={{ marginTop: 12 }}>
+      <div style={etiqueta}>Resumen del periodo de prueba ({prueba})</div>
+      <table style={{ borderCollapse: 'collapse', fontSize: TAM }}>
+        <tbody>
+          {[['WF (elegida cada año)', r.wf], ['Referencia', r.referencia], ['Mediana de la rejilla (elegir al azar)', r.mediana], ['Oráculo (la mejor de cada año, imposible)', r.oraculo]].map(([t, v]) =>
+            <tr key={t}><td style={{ ...c, textAlign: 'left', color: GRIS }}>CAGR simple encadenado · {t}</td><td style={c}><b>{pct(v)}</b></td></tr>)}
+          <tr><td style={{ ...c, textAlign: 'left', color: GRIS }}>Años en que WF supera a la referencia</td><td style={c}>{frac(r.superaReferencia)}</td></tr>
+          <tr><td style={{ ...c, textAlign: 'left', color: GRIS }}>Años en que WF supera a la mediana de la rejilla</td><td style={c}>{frac(r.superaMediana)}</td></tr>
+          <tr><td style={{ ...c, textAlign: 'left', color: GRIS }}>Eficiencia (CAGR WF / media del CAGR de entrenamiento de las elegidas, {pct(r.mediaEntrenamiento)})</td><td style={c}><b>{r.eficiencia == null ? '—' : num(r.eficiencia)}</b></td></tr>
+        </tbody>
+      </table>
+      <div style={comoLeer}>Cómo leer esto:<br />
+        · WF frente a la mediana de la rejilla: si WF no la supera, optimizar cada año no aporta frente a elegir al azar.<br />
+        · WF frente a la referencia: si la referencia fija iguala o supera a WF, quédate con la fija; reoptimizar solo añade ruido.<br />
+        · Oráculo: es inalcanzable; solo sirve para ver cuánto margen hay.<br />
+        · Eficiencia: cerca de 1 = lo que se ve al optimizar se mantiene al operar; muy por debajo = el optimizador promete más de lo que da.</div>
     </div>
   )
 }
