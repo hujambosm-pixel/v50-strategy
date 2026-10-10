@@ -359,7 +359,7 @@ export function ResultadosOptimizacion({ res, onProbar = null, seleccionInicial 
   }, [res.terminado, filas])
   const COLS = [['cagrMediana', `${nombreCagr} · mediana`, (v) => pct(v)], ['cagrMedia', `${nombreCagr} · media`, (v) => pct(v)], ['ddMediana', 'DD mediana', (v) => pct(v)], ['ddPeor', 'DD peor', (v) => pct(v)],
     ['operaciones', 'Ops.', (v) => num(v, 0)], ['activosPositivos', 'Activos +', (v, f) => `${v}/${f.activos}`], ['factorBeneficio', 'F. benef.', (v) => num(v)],
-    ['tiempoInvertido', 'T. invert.', (v) => pct(v, 0)]]
+    ['tiempoInvertido', 'T. invert.', (v) => pct(v, 0)], ['winRateMediana', '% acierto · mediana', (v) => pct(v, 1)]]
   const textoParams = (p) => (variados.length ? variados : Object.keys(p)).map(k => `${k} ${typeof p[k] === 'number' ? textoEs(p[k], 6) : p[k] === true ? 'sí' : p[k] === false ? 'no' : p[k]}`).join(' · ')
 
   return (<>
@@ -421,7 +421,8 @@ export function ResultadosOptimizacion({ res, onProbar = null, seleccionInicial 
 // Métricas del mapa de colores y de la estabilidad: [clave, título, formato, ¿mejor cuanto más alta?].
 const METRICAS = [['cagrMediana', 'CAGR mediana', (v) => pct(v), true], ['cagrMedia', 'CAGR media', (v) => pct(v), true],
   ['ddMediana', 'DD mediana', (v) => pct(v), false], ['ddPeor', 'DD peor', (v) => pct(v), false],
-  ['factorBeneficio', 'F. benef.', (v) => num(v), true], ['operaciones', 'Ops.', (v) => num(v, 0), true]]
+  ['factorBeneficio', 'F. benef.', (v) => num(v), true], ['operaciones', 'Ops.', (v) => num(v, 0), true],
+  ['winRateMediana', '% acierto · mediana', (v) => pct(v, 1), true]]
 // Las mismas, con el rótulo del CAGR elegido («CAGR simple · mediana»).
 const metricasDe = (tipo) => METRICAS.map(([k, t, f, b]) => [k, k === 'cagrMediana' ? `${NOMBRES_CAGR[tipo]} · mediana` : k === 'cagrMedia' ? `${NOMBRES_CAGR[tipo]} · media` : t, f, b])
 const textoValor = (v) => typeof v === 'number' ? textoEs(v, 6) : v === true ? 'sí' : v === false ? 'no' : String(v)
@@ -522,15 +523,18 @@ function MapaDeColores({ filas, res, variados, claveActual, seleccionada, setSel
 
 // Gráfico de un parámetro: el parámetro en el eje X y la métrica principal (mediana, línea continua; media, línea
 // discontinua) en el eje Y. Cada punto ES la fila de la tabla; las apartadas, atenuadas; la guardada, con ★.
-// Pulsar un punto la selecciona (estabilidad, año a año y desglose debajo, como con el mapa).
+// Pulsar un punto la selecciona (estabilidad, año a año y desglose debajo, como con el mapa). El selector cambia la
+// métrica del eje Y: la principal (mediana y media) o el % de acierto (mediana).
 function GraficoUnParametro({ filas, res, param, claveActual, seleccionada, setSeleccionada, textoParams, metricas }) {
   const serie = serieUnParametro(filas, res.valores, param).filter(p => p.fila)
-  const [, tMed] = metricas.find(m => m[0] === 'cagrMediana'), [, tMedia] = metricas.find(m => m[0] === 'cagrMedia')
+  const [vista, setVista] = useState('cagr')
+  const kMed = vista === 'cagr' ? 'cagrMediana' : 'winRateMediana', kMedia = vista === 'cagr' ? 'cagrMedia' : null
+  const [, tMed] = metricas.find(m => m[0] === kMed), [, tMedia] = kMedia ? metricas.find(m => m[0] === kMedia) : [null, null]
   const W = 640, H = 250, L = 64, Rm = 16, T = 22, B = 36
   const numerico = serie.every(p => typeof p.x === 'number')
   const xs = serie.map(p => p.x), x0 = numerico ? Math.min(...xs) : 0, x1 = numerico ? Math.max(...xs) : Math.max(serie.length - 1, 1)
   const px = (p, i) => L + ((numerico ? p.x : i) - x0) / ((x1 - x0) || 1) * (W - L - Rm)
-  const ys = serie.flatMap(p => [p.fila.cagrMediana, p.fila.cagrMedia]).filter(v => v != null)
+  const ys = serie.flatMap(p => [p.fila[kMed], kMedia ? p.fila[kMedia] : null]).filter(v => v != null)
   let y0 = Math.min(0, ...ys), y1 = Math.max(0, ...ys)
   if (y1 === y0) { y0 -= 1; y1 += 1 }
   const pad = (y1 - y0) * 0.06; y0 -= pad; y1 += pad
@@ -545,12 +549,16 @@ function GraficoUnParametro({ filas, res, param, claveActual, seleccionada, setS
       <div style={etiqueta}>Gráfico por {param} (solo varía este parámetro)</div>
       <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center', fontSize: TAM, color: GRIS, marginBottom: 6 }}>
         <span><span style={{ color: 'var(--accent)' }}>━</span> {tMed}</span>
-        <span><span style={{ color: '#ffd166' }}>╌</span> {tMedia}</span>
+        {kMedia && <span><span style={{ color: '#ffd166' }}>╌</span> {tMedia}</span>}
         <span>● atenuado = apartada</span><span style={{ color: '#ffd166' }}>★</span><span style={{ marginLeft: -10 }}>= configuración guardada</span>
+        <label style={{ flexDirection: 'row', alignItems: 'center', gap: 6, fontSize: TAM, color: GRIS }}>Eje Y
+          <select value={vista} onChange={e => setVista(e.target.value)} style={entrada}>
+            <option value="cagr">{metricas.find(m => m[0] === 'cagrMediana')[1]} y media</option>
+            <option value="acierto">% acierto · mediana</option></select></label>
         <button title="Selecciona la configuración guardada de la estrategia" disabled={!guardada} onClick={() => guardada && setSeleccionada(guardada.indice)}
           style={{ ...entrada, cursor: guardada ? 'pointer' : 'not-allowed', color: GRIS, fontSize: TAM }}>★ Ver mi configuración guardada</button>
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', maxWidth: 900, display: 'block' }} role="img" aria-label={`${tMed} y ${tMedia} según ${param}`}>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', maxWidth: 900, display: 'block' }} role="img" aria-label={`${tMed}${kMedia ? ` y ${tMedia}` : ''} según ${param}`}>
         {ticksY.map((v, i) => (
           <g key={i}><line x1={L} x2={W - Rm} y1={py(v)} y2={py(v)} stroke="var(--border)" strokeWidth="1" />
             <text x={L - 6} y={py(v) + 4} textAnchor="end" style={texto}>{pct(v, 1)}</text></g>))}
@@ -558,18 +566,18 @@ function GraficoUnParametro({ filas, res, param, claveActual, seleccionada, setS
         {serie.map((p, i) => i % cadaX === 0 || i === serie.length - 1
           ? <text key={'x' + i} x={px(p, i)} y={H - B + 18} textAnchor="middle" style={texto}>{textoValor(p.x)}</text> : null)}
         <text x={(L + W - Rm) / 2} y={H - 4} textAnchor="middle" style={texto}>{param}</text>
-        <polyline points={linea('cagrMedia')} fill="none" stroke="#ffd166" strokeWidth="1.5" strokeDasharray="5 4" />
-        <polyline points={linea('cagrMediana')} fill="none" stroke="var(--accent)" strokeWidth="2" />
+        {kMedia && <polyline points={linea(kMedia)} fill="none" stroke="#ffd166" strokeWidth="1.5" strokeDasharray="5 4" />}
+        <polyline points={linea(kMed)} fill="none" stroke="var(--accent)" strokeWidth="2" />
         {serie.map((p, i) => {
           const f = p.fila, cx = px(p, i), sel = seleccionada === f.indice, actual = claveCombinacion(f.params) === claveActual
           return (
             <g key={'p' + i} onClick={() => setSeleccionada(f.indice)} style={{ cursor: 'pointer' }} opacity={f.cuenta ? 1 : 0.35}>
-              <title>{`${textoParams(f.params)} — ${tMed} ${pct(f.cagrMediana)} · ${tMedia} ${pct(f.cagrMedia)}${f.cuenta ? '' : ` — apartada: ${f.motivo}`}`}</title>
-              <circle cx={cx} cy={py(f.cagrMediana ?? 0)} r="11" fill="transparent" />
-              {f.cagrMedia != null && <circle cx={cx} cy={py(f.cagrMedia)} r="2.5" fill="#ffd166" />}
-              {f.cagrMediana != null && <circle cx={cx} cy={py(f.cagrMediana)} r={sel ? 6 : 4} fill={f.cuenta ? 'var(--accent)' : GRIS}
+              <title>{`${textoParams(f.params)} — ${tMed} ${pct(f[kMed], kMedia ? 2 : 1)}${kMedia ? ` · ${tMedia} ${pct(f[kMedia])}` : ''}${f.cuenta ? '' : ` — apartada: ${f.motivo}`}`}</title>
+              <circle cx={cx} cy={py(f[kMed] ?? 0)} r="11" fill="transparent" />
+              {kMedia && f[kMedia] != null && <circle cx={cx} cy={py(f[kMedia])} r="2.5" fill="#ffd166" />}
+              {f[kMed] != null && <circle cx={cx} cy={py(f[kMed])} r={sel ? 6 : 4} fill={f.cuenta ? 'var(--accent)' : GRIS}
                 stroke={sel ? '#ffffff' : 'none'} strokeWidth="2" />}
-              {actual && <text x={cx} y={py(f.cagrMediana ?? 0) - 9} textAnchor="middle" style={{ fill: '#ffd166', fontSize: 14 }}>★</text>}
+              {actual && <text x={cx} y={py(f[kMed] ?? 0) - 9} textAnchor="middle" style={{ fill: '#ffd166', fontSize: 14 }}>★</text>}
             </g>)
         })}
       </svg>
@@ -604,6 +612,7 @@ function ResumenTemporalidades({ res, filas, claveActual, metricas, textoParams,
                 ? <button onClick={() => onSelecciona(r.guardada)} title="Seleccionarla" style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--text)', fontFamily: MONO, fontSize: TAM }}>
                     {fM(r.guardada.cagrMediana)}{r.guardada.cuenta ? '' : ' (apartada)'}</button> : 'no está en la rejilla'}</div>
               <div><span style={{ color: GRIS }}>Mediana de las {r.validas} válidas: </span>{fM(r.medianaValidas)}</div>
+              <div><span style={{ color: GRIS }}>% acierto · mediana: </span>mejor {pct(r.mejor?.winRateMediana, 1)}<span style={{ color: GRIS }}> · ★ </span>{pct(r.guardada?.winRateMediana, 1)}</div>
             </div>)
         })}
       </div>
@@ -694,11 +703,12 @@ function DetalleActivos({ fila, textoParams, tipoCagr = 'simple' }) {
       <div style={etiqueta}>Desglose por activo (de peor a mejor {NOMBRES_CAGR[tipoCagr]})</div>
       <div style={{ fontSize: TAM, marginBottom: 6 }}>{textoParams(fila.params)}</div>
       <table style={{ borderCollapse: 'collapse', fontSize: TAM }}>
-        <thead><tr>{['Activo', 'CAGR simple', 'CAGR compuesto', 'DD máx.', 'Ops.', 'F. benef.', 'Benef. simple'].map(t => <th key={t} style={{ padding: '3px 8px', color: GRIS, fontWeight: 400, textAlign: 'right' }}>{t}</th>)}</tr></thead>
+        <thead><tr>{['Activo', 'CAGR simple', 'CAGR compuesto', 'DD máx.', 'Ops.', '% acierto', 'F. benef.', 'Benef. simple'].map(t => <th key={t} style={{ padding: '3px 8px', color: GRIS, fontWeight: 400, textAlign: 'right' }}>{t}</th>)}</tr></thead>
         <tbody>{orden.map(([sym, m]) => (
           <tr key={sym}><td style={{ padding: '3px 8px' }}>{sym}</td><td style={{ padding: '3px 8px', textAlign: 'right' }}>{pct(m.cagr)}</td>
             <td style={{ padding: '3px 8px', textAlign: 'right' }}>{pct(m.cagrCompuesto)}</td>
             <td style={{ padding: '3px 8px', textAlign: 'right' }}>{pct(m.maxDD)}</td><td style={{ padding: '3px 8px', textAlign: 'right' }}>{m.operaciones}</td>
+            <td style={{ padding: '3px 8px', textAlign: 'right' }}>{pct(m.winRate, 1)}</td>
             <td style={{ padding: '3px 8px', textAlign: 'right' }}>{num(m.factorBeneficio)}</td><td style={{ padding: '3px 8px', textAlign: 'right' }}>{num(m.beneficioSimple)} €</td></tr>))}
         </tbody>
       </table>
