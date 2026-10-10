@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { MONO, fmt, pesosScoreHistorico, umbralesDe, scoreHistoricoDe } from '../lib/utils'
+import { MONO, fmt, pesosScoreHistorico, umbralesDe, scoreHistoricoDe, AYUDA_CAGR } from '../lib/utils'
 import { getSupaUrl, getSupaH } from '../lib/supabase'
 
 // ── Supabase helpers ─────────────────────────────────────────
@@ -1341,7 +1341,7 @@ export default function WatchlistManager({
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: MONO, fontSize: 10 }}>
                     <thead>
                       <tr style={{ borderBottom: '1px solid #1a2d45' }}>
-                        {[['Ticker', null], ['CAGR', null], ['WR%', null],
+                        {[['Ticker', null], ['CAGR simp.', AYUDA_CAGR.simple], ['WR%', null],
                           ['PF', null], ['MaxDD', null], ['Ops', null], ['', null]]
                           .map(([h, tip]) => (
                             <th key={h} title={tip || undefined}
@@ -1613,14 +1613,14 @@ export default function WatchlistManager({
 
               {/* Métricas de favorita */}
               {[
-                ['cagr',    'CAGR%',  false],
+                ['cagr',    'CAGR simple %', false],
                 ['profit',  'PROFIT €', false],
                 ['winRate', 'Win%',   false],
                 ['maxDD',   'MaxDD%', false],
                 ['trades',  'Ops',    true],
               ].map(([metric, label, isLast]) => (
                 <th key={metric} onClick={() => handleSort(metric)}
-                  title={metric === 'profit' ? 'Ganancia/pérdida simple total acumulada en € con esta estrategia sobre este activo.\nCalculado con capital inicial de 10.000€ en modo Simple (sin reinversión).\nUn CAGR alto con Profit bajo puede indicar pocas operaciones o período corto.' : undefined}
+                  title={metric === 'profit' ? 'Ganancia/pérdida simple total acumulada en € con esta estrategia sobre este activo.\nCalculado con capital inicial de 10.000€ en modo Simple (sin reinversión).\nUn CAGR alto con Profit bajo puede indicar pocas operaciones o período corto.' : metric === 'cagr' ? AYUDA_CAGR.simple : undefined}
                   style={{
                     ...TH2(),
                     cursor: 'pointer', textAlign: 'right',

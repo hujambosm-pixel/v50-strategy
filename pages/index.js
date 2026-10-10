@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo, Fragment } from 'react'
 import Head from 'next/head'
 import { ListFilter, Briefcase, Star, Bell, X as LucideX } from 'lucide-react'
-import { calcMetrics, metricasSinOperaciones, MONO, fmt, fmtDate, f2, tvSym, pesosScoreHistorico, umbralesDe, scoreHistoricoDe, desgloseScoreHistorico, textoEs } from '../lib/utils'
+import { calcMetrics, metricasSinOperaciones, MONO, fmt, fmtDate, f2, tvSym, pesosScoreHistorico, umbralesDe, scoreHistoricoDe, desgloseScoreHistorico, textoEs, AYUDA_CAGR } from '../lib/utils'
 import { WATCHLIST_DEFAULT } from '../lib/constants'
 import { getSupaUrl, getSupaKey, getSupaH, setCurrentJwt, getCurrentJwt, fetchConSesion, setOnSesionCaducada, hayConfigSupabase } from '../lib/supabase'
 import { loadSettings, saveSettings, saveSettingsRemote, loadSettingsRemote } from '../lib/settings'
@@ -6184,7 +6184,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.929</title>
+        <title>Trading Simulator V9.930</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6273,7 +6273,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             }} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.929
+            <span className="dot"/>Trading Simulator V9.930
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -9364,7 +9364,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               {[
                                 {h:'Estrategia / Activo',t:''},
                                 {h:'Ops',t:'Número total de operaciones cerradas en el período'},
-                                {h:'CAGR',t:'Tasa de crecimiento anual compuesta sobre el capital inicial de la estrategia: (capital_inicial + G.Comp€)^(1/años) / capital_inicial^(1/años) − 1. En una fila de activo anualiza su CONTRIBUCIÓN, con los mismos años y la misma base que su estrategia: no es el rendimiento del capital que se le asignó.'},
+                                {h:'CAGR comp.',t:AYUDA_CAGR.compuesto+'. Tasa de crecimiento anual compuesta sobre el capital inicial de la estrategia: (capital_inicial + G.Comp€)^(1/años) / capital_inicial^(1/años) − 1. En una fila de activo anualiza su CONTRIBUCIÓN, con los mismos años y la misma base que su estrategia: no es el rendimiento del capital que se le asignó.'},
                                 {h:'G.Comp€',t:'Ganancia compuesta en euros. Las ganancias de cada trade se reinvierten en el siguiente. La suma de las filas de activo da la de su estrategia.'},
                                 {h:'G.Comp%',t:'Ganancia compuesta sobre el CAPITAL INICIAL de la estrategia, la misma base en los cuatro modos de asignación. En una fila de activo es su contribución a la cartera, no el rendimiento del capital que se le asignó; por eso los porcentajes de los activos suman el de la estrategia.'},
                                 {h:'Win%',t:'Porcentaje de operaciones cerradas con ganancia sobre el total'},
@@ -12822,7 +12822,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
       const rows=[
         ['Estrategia', tAct?.stratName||null, tTop?.stratName||null, s=>s, ()=>'#ffd166'],
         ['Temporalidad', tAct?.intervalo||null, tTop?.intervalo||null, s=>s==='semanal'?'Semanal':'Diario', ()=>'#8aadcc'],
-        ['CAGR', tAct?.cagr??null, tTop?.cagr??null, v=>fv(v,1)+'%', cagrColor],
+        ['CAGR simple', tAct?.cagr??null, tTop?.cagr??null, v=>fv(v,1)+'%', cagrColor],
         // Componente de MAYOR peso del score (34% por defecto). Se muestra siempre (6º flag) aunque
         // aún no esté persistido: en ese caso sale "—" y el desglose avisa de que se usó el CAGR normal.
         ['Robustez', tAct?.robustez??null, tTop?.robustez??null, v=>fv(v,1)+'%', ()=>'#8aadcc', true],
@@ -12875,7 +12875,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                 if(!aStr&&!tStr&&!siempre) return null
                 return(
                   <div key={label} style={{display:'grid',gridTemplateColumns:'70px 1fr'+(sameStrat?'':' 1fr'),gap:4,marginBottom:3,alignItems:'start'}}>
-                    <span style={{color:'#3d5a7a',fontSize:10}}>{label}</span>
+                    <span style={{color:'#3d5a7a',fontSize:10}} title={label==='CAGR simple'?AYUDA_CAGR.simple:undefined}>{label}</span>
                     {sameStrat
                       ? <span style={{color:colorFn(vAct),fontWeight:600,textAlign:'right',wordBreak:'break-word'}}>{aStr||'—'}</span>
                       : <>
@@ -12899,7 +12899,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                 const G='62px 46px 30px 1fr'
                 const comps=[
                   ['Win rate',     d.winRate,    v=>fv(v,0)+'%'],
-                  ['CAGR',         d.cagr,       v=>fv(v,1)+'%'],
+                  ['CAGR simp.',   d.cagr,       v=>fv(v,1)+'%'],
                   ['Robustez',     d.robustez,   v=>fv(v,1)+'%'],
                   ['Max DD',       d.maxDD,      v=>'-'+fv(Math.abs(v),1)+'%'],
                 ]
@@ -12914,7 +12914,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                     </div>
                     {comps.map(([label,c,f])=>(
                       <div key={label} style={{display:'grid',gridTemplateColumns:G,gap:3,marginBottom:1,fontSize:10}}>
-                        <span style={{color:'#3d5a7a'}}>{label}</span>
+                        <span style={{color:'#3d5a7a'}} title={label==='CAGR simp.'?AYUDA_CAGR.simple:undefined}>{label}</span>
                         <span style={{color:'#8aadcc',textAlign:'right'}}>{c.valor!=null?f(c.valor):'—'}</span>
                         <span style={{color:'#5a8aaa',textAlign:'right'}}>{fv(c.norm,0)}</span>
                         <span style={{color:c.puntos<0?'#ff7eb3':'#c8dff5',fontWeight:600,textAlign:'right'}}>

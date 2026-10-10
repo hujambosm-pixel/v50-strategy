@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { MONO, fmt } from '../lib/utils'
+import { MONO, fmt, AYUDA_CAGR } from '../lib/utils'
 import { getSupaUrl, getSupaH } from '../lib/supabase'
 
 // ── Carga métricas de ranking_results agrupadas por strategy_id ──
@@ -398,8 +398,8 @@ export default function StrategyManager({
                 Asig.%{sortIcon('alloc')}
               </th>
               <th style={TH({ cursor: 'pointer', textAlign: 'right', background: '#c8d4b0', width: 88 })} onClick={() => handleSort('cagr')}
-                title="CAGR medio (%) · modo Simple">
-                CAGR med.{sortIcon('cagr')}
+                title={`${AYUDA_CAGR.simple}. Media sobre los activos con datos de ranking`}>
+                CAGR simple med.{sortIcon('cagr')}
               </th>
               <th style={TH({ cursor: 'pointer', textAlign: 'right', background: '#c8d4b0', width: 88 })} onClick={() => handleSort('ganancia')}
                 title="Ganancia anual media estimada en € = CAGR% × capital inicial · modo Simple">
