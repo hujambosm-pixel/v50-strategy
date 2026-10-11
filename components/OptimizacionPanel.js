@@ -349,7 +349,7 @@ export function ResultadosOptimizacion({ res, onProbar = null, seleccionInicial 
   const wfVista = wfCalculados.res === res ? wfCalculados.porTp[tpVista || 'única'] || null : null
   const [verConclusiones, setVerConclusiones] = useState(true)
   const conclusiones = useMemo(() => !res.terminado ? null : calculaConclusiones({ filas: filasMapa, valores: res.valores, claveGuardada: claveActual,
-    seleccionada: filaSel, tipoCagr, walkForward: wfVista,
+    seleccionada: filaSel, tipoCagr, walkForward: wfVista, periodo: { desde: res.condiciones.desde, hasta: res.condiciones.hasta },
     comparar: res.comparar ? { tp: tpVista, porTemporalidad: Object.fromEntries(res.temporalidades.map(tp => [tp, filas.filter(f => f.temporalidad === tp)])) } : null }),
   [res, filas, filasMapa, claveActual, filaSel, tipoCagr, wfVista, tpVista])
   // Pulsar una fila de la tabla (que está al final) lleva al bloque de la combinación seleccionada, bajo el
@@ -826,7 +826,9 @@ function WalkForwardPanel({ filas, temporalidad = null, res, variados, textoPara
   const claveRef = filaRef ? claveCombinacion(filaRef.params) : null
   const wf = useMemo(() => abierta ? walkForward(filasR, { anios, anuales, ventana, modo, criterio, capitalIni: cap, valores: res.valores, ejes, referencia: filaRef?.params || null, cache }) : null,
     [abierta, filasR, anios, anuales, ventana, modo, criterio, claveRef])
-  useEffect(() => { if (wf && onResultado) onResultado(temporalidad || 'única', wf) }, [wf])
+  const claveGuardada = claveCombinacion(Object.fromEntries(Object.keys(res.valores).map(k => [k, res.guardados?.[k] ?? res.combos[0]?.[k]])))
+  const origenReferencia = !claveRef ? null : claveRef === claveGuardada ? 'guardada' : claveRef === claveDefecto ? 'defecto' : 'otra'
+  useEffect(() => { if (wf && onResultado) onResultado(temporalidad || 'única', { ...wf, origenReferencia, referenciaParams: filaRef?.params || null }) }, [wf])
   const cabecera = (
     <button onClick={() => setAbierta(a => !a)} aria-expanded={abierta} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--text)', fontFamily: MONO, fontSize: TAM, fontWeight: 700 }}>
       {abierta ? '▾ Walk-forward (cada año se elige solo con el pasado)' : '▸ Walk-forward (cada año se elige solo con el pasado)'}</button>)
