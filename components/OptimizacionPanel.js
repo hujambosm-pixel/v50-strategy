@@ -119,7 +119,7 @@ export default function OptimizacionPanel({ strategies = [], watchlist = [], wlL
     setFin(null); setAhora(inicio)
     setEjec({ hechas: 0, total: tareas.length, parando: false, inicio, enCurso: [] })
     setRes({ combos, valores: gen.valores, porActivo, calentamientos, nombre: est.s.name, estrategiaId: est.s.id, guardados, condiciones, activos: [...activos], terminado: false, interrumpida: false,
-      defectos: Object.fromEntries(est.esquema.lista.map(p => [p.nombre, p.defecto])),
+      defectos: Object.fromEntries(est.esquema.lista.map(p => [p.nombre, p.defecto])), temporalidadEstrategia: temporalidadDeEstrategia(est.s),
       ...(comparar ? { comparar: true, temporalidades: [...temporalidades], porTemporalidad } : {}) })
     let hechas = 0, interrumpida = false
     for (let i = 0; i < tareas.length; i += CONCURRENCIA) {
@@ -328,15 +328,18 @@ export function ResultadosOptimizacion({ res, onProbar = null, seleccionInicial 
   const nombreCagr = NOMBRES_CAGR[tipoCagr], metricas = metricasDe(tipoCagr)
   const filas = useMemo(() => agregaPorTemporalidad(res, { cagr: tipoCagr }), [res, tipoCagr])
   // Comparando temporalidades: la tabla se puede filtrar por una, y el mapa (o el gráfico) enseña una.
-  const [filtroTp, setFiltroTp] = useState('')
-  const [tpMapa, setTpMapa] = useState(res?.temporalidades?.[0] || null)
-  const tpVista = res?.comparar ? (res.temporalidades.includes(tpMapa) ? tpMapa : res.temporalidades[0]) : null
-  const filasMapa = res?.comparar ? filas.filter(f => f.temporalidad === tpVista) : filas
-  const ordenadas = useMemo(() => ordenaFilas(filtroTp ? filas.filter(f => f.temporalidad === filtroTp) : filas, orden.col, orden.desc), [filas, orden, filtroTp])
+  // Comparando diario y semanal, UN selector («Ver resultados en») manda sobre todo lo de debajo del resumen por
+  // temporalidad: mapa o gráfico, tabla, la combinación seleccionada (estabilidad, año a año, desglose, % de acierto,
+  // «Probar en backtest»), dentro / fuera y walk-forward. Por defecto, la temporalidad de la estrategia.
+  const [tpVer, setTpVer] = useState(null)
+  const tpVista = res?.comparar ? (res.temporalidades.includes(tpVer) ? tpVer
+    : res.temporalidades.includes(res.temporalidadEstrategia) ? res.temporalidadEstrategia : res.temporalidades[0]) : null
+  const filasMapa = useMemo(() => res?.comparar ? filas.filter(f => f.temporalidad === tpVista) : filas, [filas, tpVista])
+  const ordenadas = useMemo(() => ordenaFilas(filasMapa, orden.col, orden.desc), [filasMapa, orden])
   const cuentan = ordenadas.filter(f => f.cuenta), apartadas = ordenadas.filter(f => !f.cuenta)
   const variados = res ? Object.keys(res.valores).filter(k => res.valores[k].length > 1) : []
   const claveActual = res ? claveCombinacion(Object.fromEntries(Object.keys(res.valores).map(k => [k, res.guardados[k] ?? res.combos[0]?.[k]]))) : null
-  const filaSel = filas.find(f => f.indice === seleccionada) || null
+  const filaSel = filasMapa.find(f => f.indice === seleccionada) || null
   const calc = activosCalculados(res.activos, porActivoUnido(res))
   // Pulsar una fila de la tabla (que está al final) lleva al bloque de la combinación seleccionada, bajo el
   // mapa; pulsar una celda del mapa no desplaza: el bloque ya está justo debajo.
@@ -347,7 +350,16 @@ export function ResultadosOptimizacion({ res, onProbar = null, seleccionInicial 
     desplazar.current = true; setSeleccionada(i)
     const f = filas.find(x => x.indice === i)
     if (f) setFijarMapa({ params: f.params, n: (fijarMapa?.n || 0) + 1 })
-    if (f?.temporalidad) setTpMapa(f.temporalidad)
+    if (f?.temporalidad && f.temporalidad !== tpVista) setTpVer(f.temporalidad)   // desde el resumen, otra temporalidad
+  }
+  // Al cambiar de temporalidad: la misma combinación (mismos valores) si existe; si no, la mejor válida.
+  const cambiaTemporalidad = (tp) => {
+    setTpVer(tp)
+    const otra = filas.filter(f => f.temporalidad === tp)
+    const misma = filaSel && otra.find(f => f.activos > 0 && claveCombinacion(f.params) === claveCombinacion(filaSel.params))   // con resultado
+    const nueva = misma || ordenaFilas(otra, 'cagrMediana', true).find(f => f.cuenta) || null
+    setSeleccionada(nueva ? nueva.indice : null)
+    if (nueva) setFijarMapa({ params: nueva.params, n: (fijarMapa?.n || 0) + 1 })
   }
   useEffect(() => {
     if (!desplazar.current) return
@@ -397,31 +409,30 @@ export function ResultadosOptimizacion({ res, onProbar = null, seleccionInicial 
           {res.comparar && <ResumenTemporalidades res={res} filas={filas} claveActual={claveActual} metricas={metricas} textoParams={textoParams}
             onSelecciona={(f) => seleccionaDesdeTabla(f.indice)} />}
           {res.comparar && (
-            <label style={{ flexDirection: 'row', alignItems: 'center', gap: 6, fontSize: TAM, color: GRIS, marginTop: 4 }}>Temporalidad del {variados.length === 1 ? 'gráfico' : 'mapa'}
-              <select value={tpVista || ''} onChange={e => setTpMapa(e.target.value)} style={entrada}>
-                {res.temporalidades.map(tp => <option key={tp} value={tp}>{tp}</option>)}</select></label>)}
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', margin: '4px 0 10px' }}>
+              <label style={{ flexDirection: 'row', alignItems: 'center', gap: 6, fontSize: TAM, color: 'var(--text)', fontWeight: 700 }}>Ver resultados en:
+                <select value={tpVista || ''} onChange={e => cambiaTemporalidad(e.target.value)} style={entrada}>
+                  {res.temporalidades.map(tp => <option key={tp} value={tp}>{tp === 'diario' ? 'Diario' : tp === 'semanal' ? 'Semanal' : tp}</option>)}</select></label>
+              <span style={{ fontSize: TAM, color: GRIS }}>Todo lo que ves debajo corresponde a la temporalidad elegida.</span>
+            </div>)}
           {/* Orden: mapa → la combinación seleccionada (estabilidad, año a año, desglose, probar) → tabla. */}
           <MapaDeColores filas={filasMapa} res={res} variados={variados} claveActual={claveActual} seleccionada={seleccionada} setSeleccionada={setSeleccionada} filaSel={filaSel}
             textoParams={textoParams} fijarCon={fijarMapa} metricas={metricas} />
           <div ref={detalleRef} style={{ scrollMarginTop: 96 }}>
-            {filaSel && <DetalleSeleccion fila={filaSel} filas={filaSel.temporalidad ? filas.filter(f => f.temporalidad === filaSel.temporalidad) : filas} res={res} textoParams={textoParams} onProbar={onProbar} metricas={metricas} tipoCagr={tipoCagr} />}
+            {filaSel && <DetalleSeleccion fila={filaSel} filas={filasMapa} res={res} textoParams={textoParams} onProbar={onProbar} metricas={metricas} tipoCagr={tipoCagr} />}
           </div>
-          {res.comparar && (
-            <label style={{ flexDirection: 'row', alignItems: 'center', gap: 6, fontSize: TAM, color: GRIS, margin: '10px 0 4px' }}>Filtrar la tabla por temporalidad
-              <select value={filtroTp} onChange={e => setFiltroTp(e.target.value)} style={entrada}>
-                <option value="">Todas</option>{res.temporalidades.map(tp => <option key={tp} value={tp}>{tp}</option>)}</select></label>)}
-          <TablaFilas filas={verTodas ? cuentan : cuentan.slice(0, 100)} COLS={COLS} orden={orden} setOrden={setOrden} textoParams={textoParams} conTemporalidad={!!res.comparar}
+          <TablaFilas filas={verTodas ? cuentan : cuentan.slice(0, 100)} COLS={COLS} orden={orden} setOrden={setOrden} textoParams={textoParams}
             claveActual={claveActual} seleccionada={seleccionada} setSeleccionada={seleccionaDesdeTabla} />
           {cuentan.length > 100 && <button onClick={() => setVerTodas(v => !v)} style={{ ...entrada, cursor: 'pointer', margin: '6px 0' }}>{verTodas ? 'Ver solo las 100 primeras' : `Ver las ${cuentan.length}`}</button>}
           {apartadas.length > 0 && (<>
             <div style={{ ...etiqueta, marginTop: 14 }}>Apartadas ({apartadas.length}): no llegan al mínimo de operaciones o no tienen resultado</div>
             <div style={{ opacity: 0.55 }}>
-              <TablaFilas filas={apartadas.slice(0, 50)} COLS={COLS} orden={orden} setOrden={setOrden} textoParams={textoParams} conTemporalidad={!!res.comparar}
+              <TablaFilas filas={apartadas.slice(0, 50)} COLS={COLS} orden={orden} setOrden={setOrden} textoParams={textoParams}
                 claveActual={claveActual} seleccionada={seleccionada} setSeleccionada={seleccionaDesdeTabla} conMotivo />
             </div></>)}
-          <RobustezPanel filas={filas} res={res} variados={variados} textoParams={textoParams} ajustes={ajustesRobustez} setAjuste={setAjusteRobustez}
+          <RobustezPanel filas={filasMapa} temporalidad={tpVista} res={res} variados={variados} textoParams={textoParams} ajustes={ajustesRobustez} setAjuste={setAjusteRobustez}
             setSeleccionada={seleccionaDesdeTabla} />
-          <WalkForwardPanel filas={filas} res={res} variados={variados} textoParams={textoParams} ajustes={ajustesRobustez} setAjuste={setAjusteRobustez}
+          <WalkForwardPanel filas={filasMapa} temporalidad={tpVista} res={res} variados={variados} textoParams={textoParams} ajustes={ajustesRobustez} setAjuste={setAjusteRobustez}
             setSeleccionada={seleccionaDesdeTabla} />
   </>)
 }
@@ -667,14 +678,12 @@ const anioFin = (a) => `${a.anio}${a.parcial && a.ultimaVela ? ` (parcial, hasta
 const tramo = (a, b) => a.anio === b.anio ? `${a.anio}${(a.parcial && (a.primeraVela || a.ultimaVela)) ? ` (parcial${a.primeraVela ? `, desde ${ddmm(a.primeraVela)}` : ''}${a.ultimaVela ? `, hasta ${ddmm(a.ultimaVela)}` : ''})` : ''}` : `${anioIni(a)}–${anioFin(b)}`
 const comoLeer = { fontSize: TAM, color: GRIS, lineHeight: 1.5, marginTop: 2 }
 
-function RobustezPanel({ filas, res, variados, textoParams, ajustes, setAjuste, setSeleccionada }) {
+function RobustezPanel({ filas, temporalidad = null, res, variados, textoParams, ajustes, setAjuste, setSeleccionada }) {
   const [abierta, setAbierta] = useState(false)
-  const [tp, setTp] = useState(null)
   const [local, setLocal] = useState({ corteRobustez: null, criterioRobustez: 'meseta' })
   const aj = ajustes || local
   const pon = setAjuste || ((k, v) => setLocal(x => ({ ...x, [k]: v })))
-  const tpEf = res.comparar ? (res.temporalidades.includes(tp) ? tp : res.temporalidades[0]) : null
-  const filasR = useMemo(() => res.comparar ? filas.filter(f => f.temporalidad === tpEf) : filas, [filas, tpEf])
+  const filasR = filas   // ya de la temporalidad elegida («Ver resultados en»)
   const ejes = variados.slice(0, 2)
   const r = useMemo(() => abierta ? calculaRobustez(filasR, { corte: aj.corteRobustez ?? null, criterio: aj.criterioRobustez || 'meseta',
     capitalIni: res.condiciones.capitalIni || 10000, valores: res.valores, ejes }) : null, [abierta, filasR, aj.corteRobustez, aj.criterioRobustez])
@@ -682,11 +691,8 @@ function RobustezPanel({ filas, res, variados, textoParams, ajustes, setAjuste, 
     <button onClick={() => setAbierta(a => !a)} aria-expanded={abierta} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--text)', fontFamily: MONO, fontSize: TAM, fontWeight: 700 }}>
       {abierta ? '▾ Dentro / fuera de muestra (robustez)' : '▸ Dentro / fuera de muestra (robustez)'}</button>)
   if (!abierta) return <div style={{ ...caja, marginTop: 14 }}>{cabecera}</div>
-  const selTp = res.comparar && (
-    <label style={{ flexDirection: 'row', alignItems: 'center', gap: 6, fontSize: TAM, color: GRIS }}>Temporalidad
-      <select value={tpEf} onChange={e => setTp(e.target.value)} style={entrada}>{res.temporalidades.map(t => <option key={t} value={t}>{t}</option>)}</select></label>)
   if (r.insuficiente) return (
-    <div style={{ ...caja, marginTop: 14 }}>{cabecera}{selTp && <div style={{ marginTop: 8 }}>{selTp}</div>}
+    <div style={{ ...caja, marginTop: 14 }}>{cabecera}
       <div style={{ fontSize: TAM, color: GRIS, marginTop: 8 }}>Hacen falta al menos {MIN_ANIOS_ROBUSTEZ} años con datos para partir el periodo en dos bloques; este tiene {r.anios.length}.</div></div>)
   const dentro = r.anios.filter(a => a.anio < r.corte), fuera = r.anios.filter(a => a.anio >= r.corte)
   const txtDentro = tramo(dentro[0], dentro[dentro.length - 1]), txtFuera = tramo(fuera[0], fuera[fuera.length - 1])
@@ -706,7 +712,6 @@ function RobustezPanel({ filas, res, variados, textoParams, ajustes, setAjuste, 
           <select value={r.criterio} onChange={e => pon('criterioRobustez', e.target.value)} style={entrada}>
             <option value="meseta">Meseta (mejor media del vecindario)</option>
             <option value="maximo">Máximo (mejor mediana)</option></select></label>
-        {selTp}
       </div>
       <div style={{ ...caja, borderColor: 'rgba(255,209,102,0.5)', background: 'rgba(255,209,102,0.08)', fontSize: TAM, lineHeight: 1.5 }}>
         Fija el criterio antes de mirar el bloque de fuera. Si cambias de criterio o de corte hasta que salga bien, el bloque de fuera deja de ser una prueba.
@@ -766,14 +771,12 @@ function RobustezPanel({ filas, res, variados, textoParams, ajustes, setAjuste, 
 // Plegada por defecto (cerrada, no calcula). El criterio es el MISMO que el de dentro / fuera (una sola decisión: cómo
 // eliges una combinación); la ventana, el modo y la referencia se guardan con la configuración. Comparando diario y
 // semanal, una temporalidad, con su selector (como dentro / fuera).
-function WalkForwardPanel({ filas, res, variados, textoParams, ajustes, setAjuste, setSeleccionada }) {
+function WalkForwardPanel({ filas, temporalidad = null, res, variados, textoParams, ajustes, setAjuste, setSeleccionada }) {
   const [abierta, setAbierta] = useState(false)
-  const [tp, setTp] = useState(null)
   const [local, setLocal] = useState({ criterioRobustez: 'meseta', wfVentana: null, wfModo: 'rodante', wfReferencia: null })
   const aj = ajustes || local
   const pon = setAjuste || ((k, v) => setLocal(x => ({ ...x, [k]: v })))
-  const tpEf = res.comparar ? (res.temporalidades.includes(tp) ? tp : res.temporalidades[0]) : null
-  const filasR = useMemo(() => res.comparar ? filas.filter(f => f.temporalidad === tpEf) : filas, [filas, tpEf])
+  const filasR = filas   // ya de la temporalidad elegida («Ver resultados en»)
   const ejes = variados.slice(0, 2), cap = res.condiciones.capitalIni || 10000
   const ventana = WF_VENTANAS.includes(aj.wfVentana) ? aj.wfVentana : WF_VENTANA_DEFECTO
   const modo = aj.wfModo === 'anclado' ? 'anclado' : 'rodante', criterio = aj.criterioRobustez || 'meseta'
@@ -783,8 +786,10 @@ function WalkForwardPanel({ filas, res, variados, textoParams, ajustes, setAjust
   const filaDefecto = filasR.find(f => claveCombinacion(f.params) === claveDefecto) || null
   const filaRef = (aj.wfReferencia && filasR.find(f => claveCombinacion(f.params) === aj.wfReferencia)) || filaDefecto
   const anios = useMemo(() => abierta ? aniosConDatos(filasR) : [], [abierta, filasR])
-  // Caché de bloques por tramo (lib/robustez.js), nueva cada vez que cambian los resultados.
-  const cache = useMemo(() => new Map(), [filasR])
+  // Caché de bloques por tramo (lib/robustez.js): una POR TEMPORALIDAD (no se mezclan diario y semanal; al volver a una
+  // ya vista se reutiliza), y todas nuevas cada vez que cambian los resultados.
+  const almacen = useMemo(() => new Map(), [res])
+  const cache = useMemo(() => { const k = temporalidad || 'única'; if (!almacen.has(k)) almacen.set(k, new Map()); return almacen.get(k) }, [almacen, temporalidad])
   const anuales = useMemo(() => abierta ? resultadosAnuales(filasR, anios, cap, cache) : null, [abierta, filasR, anios, cache])
   const claveRef = filaRef ? claveCombinacion(filaRef.params) : null
   const wf = useMemo(() => abierta ? walkForward(filasR, { anios, anuales, ventana, modo, criterio, capitalIni: cap, valores: res.valores, ejes, referencia: filaRef?.params || null, cache }) : null,
@@ -811,8 +816,6 @@ function WalkForwardPanel({ filas, res, variados, textoParams, ajustes, setAjust
           <select value={claveRef || ''} onChange={e => pon('wfReferencia', e.target.value || null)} style={{ ...entrada, maxWidth: 360 }}>
             {!filaDefecto && <option value="">— elige una —</option>}
             {opciones.map(f => { const k = claveCombinacion(f.params); return <option key={k} value={k}>{textoParams(f.params)}{k === claveDefecto ? ' (por defecto de la estrategia)' : ''}</option> })}</select></label>
-        {res.comparar && <label style={lab}>Temporalidad
-          <select value={tpEf} onChange={e => setTp(e.target.value)} style={entrada}>{res.temporalidades.map(t => <option key={t} value={t}>{t}</option>)}</select></label>}
       </div>
       {!filaDefecto && <div style={{ fontSize: TAM, color: '#ffd166', marginBottom: 8 }}>⚠ Los valores por defecto que declara la estrategia ({textoParams(defecto)}) no están en la rejilla: elige una referencia.</div>}
       <div style={{ ...caja, borderColor: 'rgba(255,209,102,0.5)', background: 'rgba(255,209,102,0.08)', fontSize: TAM, lineHeight: 1.5 }}>
