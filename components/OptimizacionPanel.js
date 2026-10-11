@@ -4,9 +4,10 @@
 // a /api/optimiza (un activo × hasta 300 combinaciones por petición, de 4 en 4, como el ranking) → resultados
 // agregados sobre todos los activos (lib/optimizacion.js). NO escribe nada en la base de datos. La
 // configuración se recuerda en el navegador; los resultados, no (todavía).
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { MONO, fmt, fmtDate, numeroEs, textoEs } from '../lib/utils'
 import CampoFecha from './CampoFecha'
+import { conclusiones as calculaConclusiones } from '../lib/conclusiones'
 import { robustez as calculaRobustez, MIN_ANIOS_ROBUSTEZ, aniosConDatos, resultadosAnuales, walkForward, WF_VENTANAS, WF_VENTANA_DEFECTO } from '../lib/robustez'
 import { esquemaDeCodigo } from '../lib/parametrosEstrategia'
 import { generaRejilla, rejillaSugerida, valoresDeRango } from '../lib/rejillaParametros'
@@ -341,6 +342,16 @@ export function ResultadosOptimizacion({ res, onProbar = null, seleccionInicial 
   const claveActual = res ? claveCombinacion(Object.fromEntries(Object.keys(res.valores).map(k => [k, res.guardados[k] ?? res.combos[0]?.[k]]))) : null
   const filaSel = filasMapa.find(f => f.indice === seleccionada) || null
   const calc = activosCalculados(res.activos, porActivoUnido(res))
+  // Conclusiones automáticas (lib/conclusiones.js) de la temporalidad elegida y con la métrica principal elegida. El
+  // walk-forward entra si ya se calculó en esa temporalidad (lo comunica WalkForwardPanel; se olvida con resultados nuevos).
+  const [wfCalculados, setWfCalculados] = useState({ res: null, porTp: {} })
+  const anotaWalkForward = useCallback((tp, wf) => setWfCalculados(x => ({ res, porTp: { ...(x.res === res ? x.porTp : {}), [tp]: wf } })), [res])
+  const wfVista = wfCalculados.res === res ? wfCalculados.porTp[tpVista || 'única'] || null : null
+  const [verConclusiones, setVerConclusiones] = useState(true)
+  const conclusiones = useMemo(() => !res.terminado ? null : calculaConclusiones({ filas: filasMapa, valores: res.valores, claveGuardada: claveActual,
+    seleccionada: filaSel, tipoCagr, walkForward: wfVista,
+    comparar: res.comparar ? { tp: tpVista, porTemporalidad: Object.fromEntries(res.temporalidades.map(tp => [tp, filas.filter(f => f.temporalidad === tp)])) } : null }),
+  [res, filas, filasMapa, claveActual, filaSel, tipoCagr, wfVista, tpVista])
   // Pulsar una fila de la tabla (que está al final) lleva al bloque de la combinación seleccionada, bajo el
   // mapa; pulsar una celda del mapa no desplaza: el bloque ya está justo debajo.
   // Y el mapa fija los parámetros que no están en los ejes con los de esa fila, para que su celda se vea marcada.
@@ -415,6 +426,7 @@ export function ResultadosOptimizacion({ res, onProbar = null, seleccionInicial 
                   {res.temporalidades.map(tp => <option key={tp} value={tp}>{tp === 'diario' ? 'Diario' : tp === 'semanal' ? 'Semanal' : tp}</option>)}</select></label>
               <span style={{ fontSize: TAM, color: GRIS }}>Todo lo que ves debajo corresponde a la temporalidad elegida.</span>
             </div>)}
+          {conclusiones && <TarjetaConclusiones c={conclusiones} abierta={verConclusiones} setAbierta={setVerConclusiones} />}
           {/* Orden: mapa → la combinación seleccionada (estabilidad, año a año, desglose, probar) → tabla. */}
           <MapaDeColores filas={filasMapa} res={res} variados={variados} claveActual={claveActual} seleccionada={seleccionada} setSeleccionada={setSeleccionada} filaSel={filaSel}
             textoParams={textoParams} fijarCon={fijarMapa} metricas={metricas} />
@@ -433,8 +445,28 @@ export function ResultadosOptimizacion({ res, onProbar = null, seleccionInicial 
           <RobustezPanel filas={filasMapa} temporalidad={tpVista} res={res} variados={variados} textoParams={textoParams} ajustes={ajustesRobustez} setAjuste={setAjusteRobustez}
             setSeleccionada={seleccionaDesdeTabla} />
           <WalkForwardPanel filas={filasMapa} temporalidad={tpVista} res={res} variados={variados} textoParams={textoParams} ajustes={ajustesRobustez} setAjuste={setAjusteRobustez}
-            setSeleccionada={seleccionaDesdeTabla} />
+            setSeleccionada={seleccionaDesdeTabla} onResultado={anotaWalkForward} />
   </>)
+}
+
+// «Conclusiones»: lo que dicen estos resultados según reglas fijas (lib/conclusiones.js). Desplegada por defecto.
+const ICONO_CONCLUSION = { info: 'ℹ', aviso: '⚠', bien: '✓' }
+function TarjetaConclusiones({ c, abierta, setAbierta }) {
+  return (
+    <div style={{ ...caja, fontSize: TAM, lineHeight: 1.6, color: GRIS }}>
+      <button onClick={() => setAbierta(a => !a)} aria-expanded={abierta} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--text)', fontFamily: MONO, fontSize: TAM, fontWeight: 700 }}>
+        {abierta ? '▾ CONCLUSIONES' : '▸ CONCLUSIONES'}</button>
+      {abierta && (<>
+        <div style={{ marginTop: 6 }}>Análisis automático de estos resultados (dentro de muestra). Los umbrales son provisionales.</div>
+        {c.lista.map(x => (
+          <div key={x.id} style={{ marginTop: 10 }}>
+            <div style={{ color: 'var(--text)' }}>{`${ICONO_CONCLUSION[x.tipo]} `}<b>{x.titulo}</b></div>
+            {x.puntos.length > 0 && <ul style={{ margin: '2px 0 0', paddingLeft: 22 }}>{x.puntos.map((p, i) => <li key={i}>{p}</li>)}</ul>}
+            <div style={{ fontSize: 11, marginLeft: 22 }}>{x.umbral}</div>
+          </div>))}
+        <div style={{ marginTop: 12, paddingTop: 8, borderTop: '1px solid var(--border)', color: 'var(--text)' }}><b>En la práctica:</b> {c.enLaPractica.texto}</div>
+      </>)}
+    </div>)
 }
 
 // Métricas del mapa de colores y de la estabilidad: [clave, título, formato, ¿mejor cuanto más alta?].
@@ -771,7 +803,7 @@ function RobustezPanel({ filas, temporalidad = null, res, variados, textoParams,
 // Plegada por defecto (cerrada, no calcula). El criterio es el MISMO que el de dentro / fuera (una sola decisión: cómo
 // eliges una combinación); la ventana, el modo y la referencia se guardan con la configuración. Comparando diario y
 // semanal, una temporalidad, con su selector (como dentro / fuera).
-function WalkForwardPanel({ filas, temporalidad = null, res, variados, textoParams, ajustes, setAjuste, setSeleccionada }) {
+function WalkForwardPanel({ filas, temporalidad = null, res, variados, textoParams, ajustes, setAjuste, setSeleccionada, onResultado = null }) {
   const [abierta, setAbierta] = useState(false)
   const [local, setLocal] = useState({ criterioRobustez: 'meseta', wfVentana: null, wfModo: 'rodante', wfReferencia: null })
   const aj = ajustes || local
@@ -794,6 +826,7 @@ function WalkForwardPanel({ filas, temporalidad = null, res, variados, textoPara
   const claveRef = filaRef ? claveCombinacion(filaRef.params) : null
   const wf = useMemo(() => abierta ? walkForward(filasR, { anios, anuales, ventana, modo, criterio, capitalIni: cap, valores: res.valores, ejes, referencia: filaRef?.params || null, cache }) : null,
     [abierta, filasR, anios, anuales, ventana, modo, criterio, claveRef])
+  useEffect(() => { if (wf && onResultado) onResultado(temporalidad || 'única', wf) }, [wf])
   const cabecera = (
     <button onClick={() => setAbierta(a => !a)} aria-expanded={abierta} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--text)', fontFamily: MONO, fontSize: TAM, fontWeight: 700 }}>
       {abierta ? '▾ Walk-forward (cada año se elige solo con el pasado)' : '▸ Walk-forward (cada año se elige solo con el pasado)'}</button>)
