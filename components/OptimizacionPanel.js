@@ -535,6 +535,26 @@ function MapaDeColores({ filas, res, variados, claveActual, seleccionada, setSel
   )
 }
 
+// El ancho real de un contenedor, para dibujar los gráficos SVG a todo su ancho SIN escalarlos (el viewBox usa ese mismo
+// ancho: las letras no crecen ni se deforman). ResizeObserver, desconectado al desmontar. Con el panel oculto (la
+// sección 🎯 sigue montada con display:none, V9.935) el contenedor mide 0: se conserva el último ancho válido y, al
+// mostrarse, el observador vuelve a medir. Mínimo `minimo` px para que en móvil no se rompa; antes de medir (y en el
+// servidor), `inicial`.
+function useAnchoContenedor(minimo = 320, inicial = 640) {
+  const ref = useRef(null)
+  const [ancho, setAncho] = useState(inicial)
+  useEffect(() => {
+    const el = ref.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const mide = () => { const w = Math.floor(el.clientWidth); if (w > 0) setAncho(Math.max(minimo, w)) }
+    mide()
+    const ro = new ResizeObserver(mide)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+  return [ref, ancho]
+}
+
 // Gráfico de un parámetro: el parámetro en el eje X y la métrica principal (mediana, línea continua; media, línea
 // discontinua) en el eje Y. Cada punto ES la fila de la tabla; las apartadas, atenuadas; la guardada, con ★.
 // Pulsar un punto la selecciona (estabilidad, año a año y desglose debajo, como con el mapa). El selector cambia la
@@ -544,7 +564,8 @@ function GraficoUnParametro({ filas, res, param, claveActual, seleccionada, setS
   const [vista, setVista] = useState('cagr')
   const kMed = vista === 'cagr' ? 'cagrMediana' : 'winRateMediana', kMedia = vista === 'cagr' ? 'cagrMedia' : null
   const [, tMed] = metricas.find(m => m[0] === kMed), [, tMedia] = kMedia ? metricas.find(m => m[0] === kMedia) : [null, null]
-  const W = 640, H = 250, L = 64, Rm = 16, T = 22, B = 36
+  const [refAncho, W] = useAnchoContenedor()
+  const H = 250, L = 64, Rm = 16, T = 22, B = 36
   const numerico = serie.every(p => typeof p.x === 'number')
   const xs = serie.map(p => p.x), x0 = numerico ? Math.min(...xs) : 0, x1 = numerico ? Math.max(...xs) : Math.max(serie.length - 1, 1)
   const px = (p, i) => L + ((numerico ? p.x : i) - x0) / ((x1 - x0) || 1) * (W - L - Rm)
@@ -555,7 +576,7 @@ function GraficoUnParametro({ filas, res, param, claveActual, seleccionada, setS
   const py = (v) => T + (y1 - v) / (y1 - y0) * (H - T - B)
   const linea = (k) => serie.filter(p => p.fila[k] != null).map((p) => `${px(p, serie.indexOf(p)).toFixed(1)},${py(p.fila[k]).toFixed(1)}`).join(' ')
   const ticksY = Array.from({ length: 5 }, (_, i) => y0 + (y1 - y0) * i / 4)
-  const cadaX = Math.max(1, Math.ceil(serie.length / 16))
+  const cadaX = Math.max(1, Math.ceil(serie.length / Math.max(4, Math.floor((W - L - Rm) / 40))))   // una etiqueta cada ~40 px
   const texto = { fill: GRIS, fontSize: TAM, fontFamily: MONO }
   const guardada = filas.find(f => claveCombinacion(f.params) === claveActual)
   return (
@@ -572,12 +593,13 @@ function GraficoUnParametro({ filas, res, param, claveActual, seleccionada, setS
         {!robustez && <button title="Selecciona la configuración guardada de la estrategia" disabled={!guardada} onClick={() => guardada && setSeleccionada(guardada.indice)}
           style={{ ...entrada, cursor: guardada ? 'pointer' : 'not-allowed', color: GRIS, fontSize: TAM }}>★ Ver mi configuración guardada</button>}
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', maxWidth: 900, display: 'block' }} role="img" aria-label={`${tMed}${kMedia ? ` y ${tMedia}` : ''} según ${param}`}>
+      <div ref={refAncho} style={{ width: '100%' }}>
+      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }} role="img" aria-label={`${tMed}${kMedia ? ` y ${tMedia}` : ''} según ${param}`}>
         {ticksY.map((v, i) => (
           <g key={i}><line x1={L} x2={W - Rm} y1={py(v)} y2={py(v)} stroke="var(--border)" strokeWidth="1" />
             <text x={L - 6} y={py(v) + 4} textAnchor="end" style={texto}>{pct(v, 1)}</text></g>))}
         {y0 < 0 && y1 > 0 && <line x1={L} x2={W - Rm} y1={py(0)} y2={py(0)} stroke={GRIS} strokeWidth="1" strokeDasharray="2 3" />}
-        {serie.map((p, i) => i % cadaX === 0 || i === serie.length - 1
+        {serie.map((p, i) => (i % cadaX === 0 && (cadaX === 1 || serie.length - 1 - i >= cadaX)) || i === serie.length - 1   // sin pisar la última
           ? <text key={'x' + i} x={px(p, i)} y={H - B + 18} textAnchor="middle" style={texto}>{textoValor(p.x)}</text> : null)}
         <text x={(L + W - Rm) / 2} y={H - 4} textAnchor="middle" style={texto}>{param}</text>
         {kMedia && <polyline points={linea(kMedia)} fill="none" stroke="#ffd166" strokeWidth="1.5" strokeDasharray="5 4" />}
@@ -595,6 +617,7 @@ function GraficoUnParametro({ filas, res, param, claveActual, seleccionada, setS
             </g>)
         })}
       </svg>
+      </div>
       <div style={{ fontSize: TAM, color: GRIS, marginTop: 4 }}>Pulsa un punto para ver esa combinación debajo.</div>
     </div>
   )
@@ -844,7 +867,8 @@ function TablaWalkForward({ wf, textoParams, setSeleccionada }) {
 // Resultado simple ACUMULADO (suma de los resultados anuales) de WF, la referencia y la mediana de la rejilla.
 function GraficoAcumulado({ wf }) {
   const series = [['wf', 'WF (elegida cada año)', 'var(--accent)', null], ['referencia', 'Referencia', '#ffd166', '5 4'], ['mediana', 'Mediana de la rejilla', GRIS, '2 3']]
-  const W = 640, H = 230, L = 64, Rm = 16, T = 18, B = 34
+  const [refAncho, W] = useAnchoContenedor()
+  const H = 230, L = 64, Rm = 16, T = 18, B = 34
   const n = wf.anios.length
   // Una serie a la que le falta algún año (p. ej. la referencia sin elegir) no se dibuja; WF sí (un año sin elección es 0 %).
   const visibles = series.filter(([k]) => k === 'wf' || wf.anios.every(f => f[k] != null))
@@ -861,7 +885,8 @@ function GraficoAcumulado({ wf }) {
       <div style={etiqueta}>Resultado simple acumulado en los años de prueba</div>
       <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: TAM, color: GRIS, marginBottom: 4 }}>
         {visibles.map(([k, t, col, dash]) => <span key={k}><span style={{ color: col }}>{dash ? '╌' : '━'}</span> {t}</span>)}</div>
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', maxWidth: 900, display: 'block' }} role="img" aria-label="Resultado simple acumulado: WF, referencia y mediana de la rejilla">
+      <div ref={refAncho} style={{ width: '100%' }}>
+      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }} role="img" aria-label="Resultado simple acumulado: WF, referencia y mediana de la rejilla">
         {ticksY.map((v, i) => <g key={i}><line x1={L} x2={W - Rm} y1={py(v)} y2={py(v)} stroke="var(--border)" strokeWidth="1" />
           <text x={L - 6} y={py(v) + 4} textAnchor="end" style={texto}>{pct(v, 0)}</text></g>)}
         {y0 < 0 && y1 > 0 && <line x1={L} x2={W - Rm} y1={py(0)} y2={py(0)} stroke={GRIS} strokeWidth="1" strokeDasharray="2 3" />}
@@ -870,6 +895,7 @@ function GraficoAcumulado({ wf }) {
           fill="none" stroke={col} strokeWidth={k === 'wf' ? 2 : 1.5} strokeDasharray={dash || undefined} />)}
         {visibles.map(([k, t, col]) => acum[k].slice(1).map((v, i) => <circle key={k + i} cx={px(i + 1)} cy={py(v)} r="3" fill={col}><title>{`${t}, ${wf.anios[i].anio.anio}: ${pct(v)} acumulado`}</title></circle>))}
       </svg>
+      </div>
       {wf.sinEleccion > 0 && <div style={{ fontSize: TAM, color: GRIS }}>Los años sin elección cuentan como 0 % (ese año no se opera).</div>}
     </div>
   )
