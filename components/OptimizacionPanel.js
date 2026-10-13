@@ -7,12 +7,13 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { MONO, fmt, fmtDate, numeroEs, textoEs } from '../lib/utils'
 import CampoFecha from './CampoFecha'
-import { conclusiones as calculaConclusiones } from '../lib/conclusiones'
+import { conclusiones as calculaConclusiones, activosPocaHistoria } from '../lib/conclusiones'
+import { AZAR, TEXTO_VEREDICTO, semillaDe, semillaDeActivo, simulaActivo, porActivoAzar, combinaGlobal, datosDeRespuesta } from '../lib/azar'
 import { robustez as calculaRobustez, MIN_ANIOS_ROBUSTEZ, aniosConDatos, resultadosAnuales, walkForward, WF_VENTANAS, WF_VENTANA_DEFECTO } from '../lib/robustez'
 import { esquemaDeCodigo } from '../lib/parametrosEstrategia'
 import { generaRejilla, rejillaSugerida, valoresDeRango } from '../lib/rejillaParametros'
 import { periodoPorDefecto, estimaOptimizacion, divideEnPeticiones, agregaOptimizacion, ordenaFilas, claveCombinacion, mapaColores, estabilidad,
-         pruebaDeFila, activosCalculados, NOMBRES_CAGR, cagrDeMetricas, serieUnParametro, TEMPORALIDADES_COMPARAR, agregaPorTemporalidad,
+         pruebaDeFila, payloadPrueba, activosCalculados, NOMBRES_CAGR, cagrDeMetricas, serieUnParametro, TEMPORALIDADES_COMPARAR, agregaPorTemporalidad,
          porActivoUnido, resumenTemporalidad, mediana, CONCURRENCIA, MIN_TOTAL, MIN_POR_ACTIVO } from '../lib/optimizacion'
 import { COMISIONES_DEFECTO } from '../lib/comisiones'
 import { temporalidadDeEstrategia } from '../lib/condicionesSimulacion'
@@ -275,7 +276,7 @@ export default function OptimizacionPanel({ strategies = [], watchlist = [], wlL
       {/* ── Resultados ── */}
       <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: 12 }}>
         {!res && <div style={{ color: GRIS, fontSize: 12, marginTop: 40, textAlign: 'center' }}>Elige estrategia, activos y rejilla, y lanza la optimización.</div>}
-        {res && <ResultadosOptimizacion res={res} onProbar={onProbar}
+        {res && <ResultadosOptimizacion res={res} onProbar={onProbar} apiFetch={apiFetch}
           ajustesRobustez={{ corteRobustez: cfg.corteRobustez ?? null, criterioRobustez: cfg.criterioRobustez || 'meseta',
             wfVentana: cfg.wfVentana ?? null, wfModo: cfg.wfModo || 'rodante', wfReferencia: cfg.wfReferencia ?? null }} setAjusteRobustez={pon}
           estado={<EstadoEjecucion ejec={ejec} fin={fin} ahora={ahora} onDetener={() => { pararRef.current = true; setEjec(e => e && ({ ...e, parando: true })) }} />} />}
@@ -319,7 +320,7 @@ export function EstadoEjecucion({ ejec, fin, ahora, onDetener }) {
 // Los resultados de una optimización (res: combos, valores, porActivo, condiciones…). Aparte de la pantalla para
 // poder montarlos con resultados ya hechos (y comprobarlos).
 // `estado`: el progreso de la ejecución o el aviso de terminada/detenida, arriba, junto a los avisos.
-export function ResultadosOptimizacion({ res, onProbar = null, seleccionInicial = null, estado = null, ajustesRobustez = null, setAjusteRobustez = null }) {
+export function ResultadosOptimizacion({ res, onProbar = null, seleccionInicial = null, estado = null, ajustesRobustez = null, setAjusteRobustez = null, apiFetch = null }) {
   // ── Resultados ──
   const [orden, setOrden] = useState({ col: 'cagrMediana', desc: true })
   const [seleccionada, setSeleccionada] = useState(seleccionInicial)
@@ -347,11 +348,16 @@ export function ResultadosOptimizacion({ res, onProbar = null, seleccionInicial 
   const [wfCalculados, setWfCalculados] = useState({ res: null, porTp: {} })
   const anotaWalkForward = useCallback((tp, wf) => setWfCalculados(x => ({ res, porTp: { ...(x.res === res ? x.porTp : {}), [tp]: wf } })), [res])
   const wfVista = wfCalculados.res === res ? wfCalculados.porTp[tpVista || 'única'] || null : null
+  // La prueba contra el azar de la seleccionada en esta temporalidad, si ya está calculada (la comunica AzarPanel).
+  const [azarCalculados, setAzarCalculados] = useState({ res: null, porClave: {} })
+  const anotaAzar = useCallback((clave, r) => setAzarCalculados(x => ({ res, porClave: { ...(x.res === res ? x.porClave : {}), [clave]: r } })), [res])
+  const claveAzar = filaSel ? `${tpVista || 'única'}|${claveCombinacion(filaSel.params)}` : null
+  const azarVista = azarCalculados.res === res && claveAzar ? azarCalculados.porClave[claveAzar] || null : null
   const [verConclusiones, setVerConclusiones] = useState(true)
   const conclusiones = useMemo(() => !res.terminado ? null : calculaConclusiones({ filas: filasMapa, valores: res.valores, claveGuardada: claveActual,
-    seleccionada: filaSel, tipoCagr, walkForward: wfVista, periodo: { desde: res.condiciones.desde, hasta: res.condiciones.hasta },
+    seleccionada: filaSel, tipoCagr, walkForward: wfVista, periodo: { desde: res.condiciones.desde, hasta: res.condiciones.hasta }, azar: azarVista,
     comparar: res.comparar ? { tp: tpVista, porTemporalidad: Object.fromEntries(res.temporalidades.map(tp => [tp, filas.filter(f => f.temporalidad === tp)])) } : null }),
-  [res, filas, filasMapa, claveActual, filaSel, tipoCagr, wfVista, tpVista])
+  [res, filas, filasMapa, claveActual, filaSel, tipoCagr, wfVista, tpVista, azarVista])
   // Pulsar una fila de la tabla (que está al final) lleva al bloque de la combinación seleccionada, bajo el
   // mapa; pulsar una celda del mapa no desplaza: el bloque ya está justo debajo.
   // Y el mapa fija los parámetros que no están en los ejes con los de esa fila, para que su celda se vea marcada.
@@ -446,7 +452,146 @@ export function ResultadosOptimizacion({ res, onProbar = null, seleccionInicial 
             setSeleccionada={seleccionaDesdeTabla} />
           <WalkForwardPanel filas={filasMapa} temporalidad={tpVista} res={res} variados={variados} textoParams={textoParams} ajustes={ajustesRobustez} setAjuste={setAjusteRobustez}
             setSeleccionada={seleccionaDesdeTabla} onResultado={anotaWalkForward} />
+          {res.terminado && <AzarPanel res={res} fila={filaSel} temporalidad={tpVista} apiFetch={apiFetch} textoParams={textoParams} onResultado={anotaAzar} />}
   </>)
+}
+
+// «Prueba contra el azar» (lib/azar.js) de la combinación seleccionada en la temporalidad elegida. Se calcula al
+// desplegarla: pide a /api/datos (la llamada de «Probar en backtest»: mismos params, periodo, comisiones y calentamiento
+// que el optimizador) las operaciones y las velas de cada activo y simula, un activo cada vez para no bloquear la
+// pantalla. Caché por combinación y temporalidad (las descargas) y por número de simulaciones (los resultados).
+function AzarPanel({ res, fila, temporalidad = null, apiFetch, textoParams, onResultado = null }) {
+  const [abierta, setAbierta] = useState(false)
+  const [nSim, setNSim] = useState(AZAR.simulaciones)
+  const [textoN, setTextoN] = useState(String(AZAR.simulaciones))
+  const [progreso, setProgreso] = useState(null)
+  const [, setVersion] = useState(0)
+  const almacen = useMemo(() => new Map(), [res])
+  const clave = fila ? `${temporalidad || 'única'}|${claveCombinacion(fila.params)}` : null
+  const entrada = clave ? almacen.get(clave) : null
+  const resultado = entrada?.resultados?.[nSim] || null
+  const aplicaN = () => { const v = Math.round(numeroEs(textoN)); const n = Number.isFinite(v) ? Math.min(AZAR.maxSimulaciones, Math.max(AZAR.minSimulaciones, v)) : AZAR.simulaciones; setNSim(n); setTextoN(String(n)) }
+  useEffect(() => {
+    if (!abierta || !fila || !apiFetch || !clave || resultado) return
+    let e = almacen.get(clave)
+    if (!e) { e = { datos: null, resultados: {}, enCurso: {} }; almacen.set(clave, e) }
+    if (e.enCurso[nSim]) return
+    e.enCurso[nSim] = true
+    const filaC = fila, n = nSim, cap = res.condiciones.capitalIni || 10000
+    ;(async () => {
+      const t0 = Date.now(), syms = Object.keys(filaC.porActivo || {}).sort()
+      if (!e.datos) {
+        const p = pruebaDeFila(res, filaC), datos = {}
+        setProgreso({ clave, texto: `Descargando las operaciones: 0 de ${syms.length} activos…` })
+        for (let i = 0; i < syms.length; i += CONCURRENCIA) {
+          await Promise.all(syms.slice(i, i + CONCURRENCIA).map(async sym => {
+            try {
+              const r = await apiFetch('/api/datos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payloadPrueba(p), simbolo: sym }) })
+              const j = await r.json().catch(() => null)
+              datos[sym] = r.ok && j && !j.error ? datosDeRespuesta(j) : { error: j?.errorMessage || j?.error || `HTTP ${r.status}` }
+            } catch (err) { datos[sym] = { error: err?.message || 'error de red' } }
+          }))
+          setProgreso({ clave, texto: `Descargando las operaciones: ${Math.min(i + CONCURRENCIA, syms.length)} de ${syms.length} activos…` })
+        }
+        e.datos = datos; e.msDatos = Date.now() - t0
+      }
+      // Semilla fija: estrategia + parámetros + lista + periodo + temporalidad (mismo resultado siempre).
+      const base = semillaDe([res.estrategiaId, claveCombinacion(filaC.params), [...res.activos].sort().join(','), res.condiciones.desde, res.condiciones.hasta, temporalidad || res.condiciones.intervalo].join('|'))
+      const t1 = Date.now(), sims = {}, porActivo = {}
+      for (let i = 0; i < syms.length; i++) {
+        const sym = syms[i], d = e.datos[sym]
+        if (d.error) { porActivo[sym] = { error: d.error, sinVeredicto: true, veredicto: null }; continue }
+        sims[sym] = simulaActivo({ ...d, capitalIni: cap, comisiones: res.condiciones.comisiones, nSim: n, semilla: semillaDeActivo(base, sym) })
+        porActivo[sym] = porActivoAzar(d, sims[sym])
+        setProgreso({ clave, texto: `Simulando: ${i + 1} de ${syms.length} activos…` })
+        await new Promise(r => setTimeout(r, 0))   // cede el hilo entre activos
+      }
+      const global = combinaGlobal(sims, n)
+      const r = { nSim: n, global, porActivo, msDatos: e.msDatos || 0, msSimulacion: Date.now() - t1 }
+      e.resultados[n] = r; delete e.enCurso[n]
+      setProgreso(null); setVersion(v => v + 1)
+      if (onResultado) onResultado(clave, r)
+    })()
+  }, [abierta, clave, nSim])
+  const cabecera = (
+    <button onClick={() => setAbierta(a => !a)} aria-expanded={abierta} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--text)', fontFamily: MONO, fontSize: TAM, fontWeight: 700 }}>
+      {abierta ? '▾ Prueba contra el azar' : '▸ Prueba contra el azar'}</button>)
+  if (!abierta) return <div style={{ ...caja, marginTop: 14 }}>{cabecera}</div>
+  const poca = fila ? activosPocaHistoria({ seleccionada: fila, periodo: { desde: res.condiciones.desde, hasta: res.condiciones.hasta } }) : []
+  const g = resultado?.global
+  const c = { padding: '3px 8px', textAlign: 'right', fontSize: TAM }
+  const filasT = resultado ? Object.entries(resultado.porActivo).sort((a, b) => (b[1].percentil ?? -1) - (a[1].percentil ?? -1) || a[0].localeCompare(b[0])) : []
+  return (
+    <div style={{ ...caja, marginTop: 14 }}>{cabecera}
+      <div style={{ fontSize: TAM, color: GRIS, lineHeight: 1.6, marginTop: 6 }}>
+        {fila ? `Combinación seleccionada: ${textoParams(fila.params)}${temporalidad ? ` · ${temporalidad}` : ''}. Cada activo repite sus operaciones reales (mismo número y mismas duraciones en velas) en fechas al azar, sin solaparse, con las mismas comisiones; métrica: CAGR simple, y la mediana entre activos como el optimizador.` : 'Selecciona una combinación (en el mapa, el gráfico o la tabla).'}</div>
+      <div style={{ fontSize: TAM, color: GRIS }}>Aproximación: el azar entra y sale en aperturas; la estrategia real puede salir por stop dentro de la vela.</div>
+      <label style={{ flexDirection: 'row', alignItems: 'center', gap: 6, fontSize: TAM, color: GRIS, marginTop: 6 }}>Simulaciones
+        <input value={textoN} onChange={e => setTextoN(e.target.value)} onBlur={aplicaN} onKeyDown={e => { if (e.key === 'Enter') aplicaN() }} style={{ ...entrada, width: 70 }} inputMode="numeric" />
+        <span>({fmt(AZAR.minSimulaciones, 0)}–{fmt(AZAR.maxSimulaciones, 0)})</span></label>
+      {!apiFetch && <div style={{ fontSize: TAM, color: GRIS, marginTop: 6 }}>No disponible aquí.</div>}
+      {fila && !resultado && progreso?.clave === clave && <div role="status" style={{ fontSize: TAM, color: GRIS, marginTop: 8 }}>⏳ {progreso.texto}</div>}
+      {g && (<>
+        <div style={{ ...caja, marginTop: 10, marginBottom: 6, fontSize: TAM, lineHeight: 1.7 }}>
+          <div><b style={{ color: g.veredicto === 'supera' ? 'var(--accent)' : g.veredicto === 'algo' ? '#ffd166' : 'var(--text)' }}>{TEXTO_VEREDICTO[g.veredicto] || 'Sin veredicto'}</b>{g.percentil != null ? ` · percentil ${fmt(g.percentil, 1)}` : ''}</div>
+          <div style={{ color: GRIS }}>{`Real (mediana entre activos): ${pct(g.real)} · mediana del azar: ${pct(g.mediana)} · banda P5–P95 del azar: ${pct(g.p5)} a ${pct(g.p95)} · ${fmt(resultado.nSim, 0)} simulaciones con ${g.activos} activos`}</div>
+          <div style={{ color: GRIS }}>{`Tiempo: descarga de las operaciones ${fmt(resultado.msDatos / 1000, 1)} s · simulación ${fmt(resultado.msSimulacion / 1000, 1)} s`}</div>
+        </div>
+        <HistogramaAzar sims={g.sims} real={g.real} p5={g.p5} p95={g.p95} />
+        <div style={{ overflowX: 'auto', marginTop: 8 }}>
+          <table style={{ borderCollapse: 'collapse', fontSize: TAM }}>
+            <thead><tr style={{ color: GRIS }}>{['Activo', 'Ops.', 'Real', 'Mediana del azar', 'Percentil', 'Veredicto'].map((t, i) => <th key={t} style={{ ...c, textAlign: i === 0 || i === 5 ? 'left' : 'right', fontWeight: 400 }}>{t}</th>)}</tr></thead>
+            <tbody>{filasT.map(([sym, x]) => (
+              <tr key={sym} style={{ borderTop: '1px solid var(--border)' }}>
+                <td style={{ ...c, textAlign: 'left', whiteSpace: 'nowrap' }}>{poca.some(p => p.s === sym) ? `${sym} (poca historia)` : sym}</td>
+                <td style={c}>{x.error ? '—' : num(x.k, 0)}</td><td style={c}>{x.error ? '—' : pct(x.real)}</td><td style={c}>{x.error ? '—' : pct(x.mediana)}</td>
+                <td style={c}>{x.percentil == null ? '—' : fmt(x.percentil, 1)}</td>
+                <td style={{ ...c, textAlign: 'left' }}>{x.error ? `Sin datos: ${x.error}` : x.veredicto ? TEXTO_VEREDICTO[x.veredicto] : x.k ? `Sin veredicto (menos de ${AZAR.minOperaciones} operaciones)` : 'Sin operaciones'}</td>
+              </tr>))}</tbody>
+          </table>
+        </div>
+        <div style={comoLeer}>Cómo leer esto: se compara la estrategia con entrar al azar en los mismos activos y fechas. El azar hace el mismo número de
+          operaciones con las mismas duraciones, así que pasa el mismo tiempo dentro del mercado: la única diferencia es CUÁNDO entra. El percentil es el % de
+          simulaciones que quedan por debajo del resultado real (≥ {AZAR.supera}: supera al azar; {AZAR.algoMejor}–{AZAR.supera}: algo mejor, no concluyente; por debajo
+          de {AZAR.algoMejor}: no se distingue; por debajo de {AZAR.peor}: peor). En valores muy alcistas el azar también gana mucho: por eso se compara contra él y
+          no contra cero.</div>
+      </>)}
+    </div>)
+}
+
+// Histograma de las medianas del azar (una por simulación) con una línea vertical en el resultado real; a todo el ancho.
+function HistogramaAzar({ sims, real, p5, p95 }) {
+  const [refAncho, W] = useAnchoContenedor()
+  const H = 200, L = 40, Rm = 16, T = 18, B = 30, NB = 40
+  const v = Array.from(sims || [])
+  if (!v.length) return null
+  let x0 = Math.min(...v, real ?? Infinity), x1 = Math.max(...v, real ?? -Infinity)
+  if (x1 === x0) { x0 -= 1; x1 += 1 }
+  const pad = (x1 - x0) * 0.03; x0 -= pad; x1 += pad
+  const ancho = (x1 - x0) / NB, cuenta = new Array(NB).fill(0)
+  for (const x of v) cuenta[Math.min(NB - 1, Math.floor((x - x0) / ancho))]++
+  const max = Math.max(...cuenta)
+  const px = (x) => L + (x - x0) / (x1 - x0) * (W - L - Rm), alto = (k) => k / max * (H - T - B)
+  const texto = { fill: GRIS, fontSize: TAM, fontFamily: MONO }
+  const ticks = Array.from({ length: 5 }, (_, i) => x0 + (x1 - x0) * i / 4)
+  return (
+    <div style={{ marginTop: 6 }}>
+      <div style={etiqueta}>Medianas del azar (una por simulación) y el resultado real</div>
+      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: TAM, color: GRIS, marginBottom: 4 }}>
+        <span><span style={{ color: GRIS }}>▮</span> Azar</span><span><span style={{ color: '#ffd166' }}>╌</span> P5 y P95 del azar</span><span><span style={{ color: 'var(--accent)' }}>━</span> Real</span></div>
+      <div ref={refAncho} style={{ width: '100%' }}>
+      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }} role="img" aria-label="Histograma de las medianas del azar con el resultado real">
+        {cuenta.map((k, i) => k > 0 && <rect key={i} x={px(x0 + i * ancho) + 0.5} y={H - B - alto(k)} width={Math.max(1, px(x0 + (i + 1) * ancho) - px(x0 + i * ancho) - 1)} height={alto(k)} fill={GRIS} opacity="0.55">
+          <title>{`${pct(x0 + i * ancho)} a ${pct(x0 + (i + 1) * ancho)}: ${k} simulaciones`}</title></rect>)}
+        <line x1={L} x2={W - Rm} y1={H - B} y2={H - B} stroke="var(--border)" strokeWidth="1" />
+        {ticks.map((x, i) => <text key={i} x={px(x)} y={H - B + 18} textAnchor="middle" style={texto}>{pct(x, 1)}</text>)}
+        {[p5, p95].filter(x => x != null).map((x, i) => <line key={i} x1={px(x)} x2={px(x)} y1={T} y2={H - B} stroke="#ffd166" strokeWidth="1" strokeDasharray="4 3" />)}
+        {real != null && <g><line x1={px(real)} x2={px(real)} y1={T - 6} y2={H - B} stroke="var(--accent)" strokeWidth="2" />
+          <text x={px(real)} y={T - 8} textAnchor={px(real) > W - 80 ? 'end' : 'middle'} style={{ ...texto, fill: 'var(--accent)' }}>{`real ${pct(real)}`}</text></g>}
+      </svg>
+      </div>
+    </div>
+  )
 }
 
 // «Conclusiones»: lo que dicen estos resultados según reglas fijas (lib/conclusiones.js). Desplegada por defecto.
