@@ -11,6 +11,18 @@ const PETICIONES = new WeakMap()
 export function anotaPeticionMc(resultado, cuerpo) { if (resultado && typeof resultado === 'object') PETICIONES.set(resultado, cuerpo) }
 // Caché por configuración (la petición) y número de simulaciones; vive mientras la página siga abierta.
 const CACHE = new Map()
+export const peticionMcDe = (resultado) => (resultado && PETICIONES.get(resultado)) || null
+// Para «Copiar para Claude»: la prueba ya calculada (la última, con su número de simulaciones) de cada resultado, o por
+// qué no está. No calcula nada.
+export function pruebasCalculadas(resultados = []) {
+  return resultados.filter(r => r && r.result && r.id !== '__portfolio__').map(r => {
+    const pet = PETICIONES.get(r.result) || null, motivo = motivoNoAdmitida(pet, 'A')
+    if (motivo) return { nombre: r.name, motivo }
+    const pref = `${JSON.stringify(pet)}|`
+    const e = [...CACHE.entries()].filter(([k, v]) => k.startsWith(pref) && v.estado === 'hecho').map(([, v]) => v).pop()
+    return e ? { nombre: r.name, nSim: e.n, semilla: semillaCartera(pet), bh: e.bh, A: e.res.A, B: e.res.B, motivoB: e.motivoB } : { nombre: r.name, motivo: 'no calculada' }
+  })
+}
 
 const GRIS = 'var(--text-legible)', TAM = 12
 const caja = { background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 6, padding: '10px 12px', margin: '10px 16px' }

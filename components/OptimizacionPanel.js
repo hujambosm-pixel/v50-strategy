@@ -9,6 +9,8 @@ import { MONO, fmt, fmtDate, numeroEs, textoEs } from '../lib/utils'
 import CampoFecha from './CampoFecha'
 import { conclusiones as calculaConclusiones, activosPocaHistoria } from '../lib/conclusiones'
 import { edgeContraAzar, EDGE_N, EDGE_CORTO_MAX } from '../lib/edge'
+import { textoOptimizacion, textoParams as textoParamsExp, textoPeriodo, textoComisiones } from '../lib/exportaTexto'
+import BotonCopiar from './BotonCopiar'
 import { AZAR, TEXTO_VEREDICTO, TEXTO_VEREDICTO_CAIDA, semillaDe, semillaDeActivo, simulaActivo, porActivoAzar, combinaGlobal, datosDeRespuesta } from '../lib/azar'
 import { robustez as calculaRobustez, MIN_ANIOS_ROBUSTEZ, aniosConDatos, resultadosAnuales, walkForward, WF_VENTANAS, WF_VENTANA_DEFECTO } from '../lib/robustez'
 import { esquemaDeCodigo } from '../lib/parametrosEstrategia'
@@ -68,7 +70,7 @@ const etiqueta = { fontFamily: MONO, fontSize: TAM, color: GRIS, letterSpacing: 
 const entrada = { background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontFamily: MONO, fontSize: TAM, padding: '4px 6px' }
 
 export default function OptimizacionPanel({ strategies = [], watchlist = [], wlLists = [], apiFetch, capitalInicial = 10000,
-                                             comisionesIniciales = null, onProbar = null }) {
+                                             comisionesIniciales = null, onProbar = null, version = null }) {
   const [cfg, setCfg] = useState(() => ({ estrategiaId: '', modoActivos: 'lista', listaId: '', seleccion: [], ...periodoPorDefecto(),
     capital: capitalInicial, comisiones: comisionesIniciales || { ...COMISIONES_DEFECTO }, temporalidad: '', rejillas: {}, ...leeGuardado() }))
   useEffect(() => { try { localStorage.setItem(CLAVE_LS, JSON.stringify(cfg)) } catch (_) {} }, [cfg])
@@ -122,6 +124,7 @@ export default function OptimizacionPanel({ strategies = [], watchlist = [], wlL
     setFin(null); setAhora(inicio)
     setEjec({ hechas: 0, total: tareas.length, parando: false, inicio, enCurso: [] })
     setRes({ combos, valores: gen.valores, porActivo, calentamientos, nombre: est.s.name, estrategiaId: est.s.id, guardados, condiciones, activos: [...activos], terminado: false, interrumpida: false,
+      lista: cfg.modoActivos === 'lista' ? (wlLists.find(l => l.id === cfg.listaId)?.name || null) : cfg.modoActivos === 'todos' ? 'toda la watchlist' : 'selección manual',
       defectos: Object.fromEntries(est.esquema.lista.map(p => [p.nombre, p.defecto])), temporalidadEstrategia: temporalidadDeEstrategia(est.s),
       ...(comparar ? { comparar: true, temporalidades: [...temporalidades], porTemporalidad } : {}) })
     let hechas = 0, interrumpida = false
@@ -277,7 +280,7 @@ export default function OptimizacionPanel({ strategies = [], watchlist = [], wlL
       {/* ── Resultados ── */}
       <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: 12 }}>
         {!res && <div style={{ color: GRIS, fontSize: 12, marginTop: 40, textAlign: 'center' }}>Elige estrategia, activos y rejilla, y lanza la optimización.</div>}
-        {res && <ResultadosOptimizacion res={res} onProbar={onProbar} apiFetch={apiFetch}
+        {res && <ResultadosOptimizacion res={res} onProbar={onProbar} apiFetch={apiFetch} version={version}
           ajustesRobustez={{ corteRobustez: cfg.corteRobustez ?? null, criterioRobustez: cfg.criterioRobustez || 'meseta',
             wfVentana: cfg.wfVentana ?? null, wfModo: cfg.wfModo || 'rodante', wfReferencia: cfg.wfReferencia ?? null }} setAjusteRobustez={pon}
           estado={<EstadoEjecucion ejec={ejec} fin={fin} ahora={ahora} onDetener={() => { pararRef.current = true; setEjec(e => e && ({ ...e, parando: true })) }} />} />}
@@ -321,7 +324,7 @@ export function EstadoEjecucion({ ejec, fin, ahora, onDetener }) {
 // Los resultados de una optimización (res: combos, valores, porActivo, condiciones…). Aparte de la pantalla para
 // poder montarlos con resultados ya hechos (y comprobarlos).
 // `estado`: el progreso de la ejecución o el aviso de terminada/detenida, arriba, junto a los avisos.
-export function ResultadosOptimizacion({ res, onProbar = null, seleccionInicial = null, estado = null, ajustesRobustez = null, setAjusteRobustez = null, apiFetch = null }) {
+export function ResultadosOptimizacion({ res, onProbar = null, seleccionInicial = null, estado = null, ajustesRobustez = null, setAjusteRobustez = null, apiFetch = null, version = null }) {
   // ── Resultados ──
   const [orden, setOrden] = useState({ col: 'cagrMediana', desc: true })
   const [seleccionada, setSeleccionada] = useState(seleccionInicial)
@@ -348,6 +351,8 @@ export function ResultadosOptimizacion({ res, onProbar = null, seleccionInicial 
   // walk-forward entra si ya se calculó en esa temporalidad (lo comunica WalkForwardPanel; se olvida con resultados nuevos).
   const [wfCalculados, setWfCalculados] = useState({ res: null, porTp: {} })
   const anotaWalkForward = useCallback((tp, wf) => setWfCalculados(x => ({ res, porTp: { ...(x.res === res ? x.porTp : {}), [tp]: wf } })), [res])
+  const [robCalculados, setRobCalculados] = useState({ res: null, porTp: {} })
+  const anotaRobustez = useCallback((tp, r) => setRobCalculados(x => ({ res, porTp: { ...(x.res === res ? x.porTp : {}), [tp]: r } })), [res])
   const wfVista = wfCalculados.res === res ? wfCalculados.porTp[tpVista || 'única'] || null : null
   // La prueba contra el azar de la seleccionada en esta temporalidad, si ya está calculada (la comunica AzarPanel).
   const [azarCalculados, setAzarCalculados] = useState({ res: null, porClave: {} })
@@ -400,8 +405,34 @@ export function ResultadosOptimizacion({ res, onProbar = null, seleccionInicial 
     ['operaciones', 'Ops.', (v) => num(v, 0)], ['activosPositivos', 'Activos +', (v, f) => `${v}/${f.activos}`], ['factorBeneficio', 'F. benef.', (v) => num(v)],
     ['tiempoInvertido', 'T. invert.', (v) => pct(v, 0)], ['winRateMediana', '% acierto · mediana', (v) => pct(v, 1)]]
   const textoParams = (p) => (variados.length ? variados : Object.keys(p)).map(k => `${k} ${typeof p[k] === 'number' ? textoEs(p[k], 6) : p[k] === true ? 'sí' : p[k] === false ? 'no' : p[k]}`).join(' · ')
+  // «Copiar para Claude»: el texto de lo que hay calculado (lib/exportaTexto.js), con los mismos objetos que pinta la pantalla.
+  const robVista = robCalculados.res === res ? robCalculados.porTp[tpVista || 'única'] || null : null
+  const textoParaClaude = () => {
+    const c = res.condiciones
+    const poca = filaSel ? activosPocaHistoria({ seleccionada: filaSel, periodo: { desde: c.desde, hasta: c.hasta } }).map(x => x.s) : []
+    const semilla = filaSel ? semillaBase(res, filaSel, tpVista) : null
+    return textoOptimizacion({
+      cabecera: { titulo: 'Optimizador', version, fecha: new Date().toLocaleString('es-ES'), datos: [
+        ['Estrategia', `${res.nombre} · parámetros guardados: ${textoParamsExp(res.guardados)}`],
+        ['Activos', `${res.activos.length}${res.lista ? ` (${res.lista})` : ''}: ${res.activos.join(', ')}`],
+        ['Activos sin calcular', calc.sinCalcular ? `${calc.sinCalcular} de ${calc.total}` : null],
+        ['Activos con poca historia (seleccionada)', poca.length ? poca.join(', ') : null],
+        ['Periodo', textoPeriodo(c.desde, c.hasta)],
+        ['Temporalidad', res.comparar ? `${res.temporalidades.join(' y ')} (lo de abajo es de: ${tpVista})` : c.intervalo],
+        ['Capital', `${fmt(c.capitalIni || 10000, 0)} €`],
+        ['Comisiones', textoComisiones(c.comisiones)],
+        ['Estado', res.interrumpida ? 'DETENIDA: resultados parciales' : res.terminado ? 'terminada' : 'en curso: resultados parciales'],
+        ['Pruebas contra el azar', azarVista || edgeVista ? `${azarVista ? `azar ${azarVista.nSim} simulaciones` : ''}${azarVista && edgeVista ? ' · ' : ''}${edgeVista ? `Edge Ratio ${edgeVista.nSim} simulaciones` : ''} · semilla ${semilla}` : null],
+      ] },
+      rejilla: res.valores, combinaciones: res.combos.length, metrica: nombreCagr,
+      comparacion: res.comparar ? res.temporalidades.map(tp => ({ tp, resumen: resumenTemporalidad(filas.filter(f => f.temporalidad === tp), res.valores, claveActual) })) : null,
+      conclusiones, seleccionada: filaSel, esGuardada: !!filaSel && claveCombinacion(filaSel.params) === claveActual,
+      robustez: robVista, walkForward: wfVista, azar: azarVista ? { ...azarVista, semilla, pocaHistoria: poca } : null, edge: edgeVista ? { ...edgeVista, semilla } : null,
+    })
+  }
 
   return (<>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}><BotonCopiar obtenerTexto={textoParaClaude} /></div>
           <div style={{ ...caja, borderColor: 'rgba(255,209,102,0.5)', background: 'rgba(255,209,102,0.08)', fontSize: TAM, lineHeight: 1.6, position: 'sticky', top: 0, zIndex: 2 }}>
             ⚠ <b>Resultados dentro de muestra.</b> La mejor combinación se ha elegido mirando estos mismos datos, así que tenderá a parecer
             mejor de lo que será. La validación fuera de muestra es la siguiente fase.
@@ -455,7 +486,7 @@ export function ResultadosOptimizacion({ res, onProbar = null, seleccionInicial 
                 claveActual={claveActual} seleccionada={seleccionada} setSeleccionada={seleccionaDesdeTabla} conMotivo />
             </div></>)}
           <RobustezPanel filas={filasMapa} temporalidad={tpVista} res={res} variados={variados} textoParams={textoParams} ajustes={ajustesRobustez} setAjuste={setAjusteRobustez}
-            setSeleccionada={seleccionaDesdeTabla} />
+            setSeleccionada={seleccionaDesdeTabla} onResultado={anotaRobustez} />
           <WalkForwardPanel filas={filasMapa} temporalidad={tpVista} res={res} variados={variados} textoParams={textoParams} ajustes={ajustesRobustez} setAjuste={setAjusteRobustez}
             setSeleccionada={seleccionaDesdeTabla} onResultado={anotaWalkForward} />
           {res.terminado && <AzarPanel res={res} fila={filaSel} temporalidad={tpVista} apiFetch={apiFetch} textoParams={textoParams} onResultado={anotaAzar} almacen={almacenDatos} />}
@@ -984,7 +1015,7 @@ const anioFin = (a) => `${a.anio}${a.parcial && a.ultimaVela ? ` (parcial, hasta
 const tramo = (a, b) => a.anio === b.anio ? `${a.anio}${(a.parcial && (a.primeraVela || a.ultimaVela)) ? ` (parcial${a.primeraVela ? `, desde ${ddmm(a.primeraVela)}` : ''}${a.ultimaVela ? `, hasta ${ddmm(a.ultimaVela)}` : ''})` : ''}` : `${anioIni(a)}–${anioFin(b)}`
 const comoLeer = { fontSize: TAM, color: GRIS, lineHeight: 1.5, marginTop: 2 }
 
-function RobustezPanel({ filas, temporalidad = null, res, variados, textoParams, ajustes, setAjuste, setSeleccionada }) {
+function RobustezPanel({ filas, temporalidad = null, res, variados, textoParams, ajustes, setAjuste, setSeleccionada, onResultado = null }) {
   const [abierta, setAbierta] = useState(false)
   const [local, setLocal] = useState({ corteRobustez: null, criterioRobustez: 'meseta' })
   const aj = ajustes || local
@@ -993,6 +1024,7 @@ function RobustezPanel({ filas, temporalidad = null, res, variados, textoParams,
   const ejes = variados.slice(0, 2)
   const r = useMemo(() => abierta ? calculaRobustez(filasR, { corte: aj.corteRobustez ?? null, criterio: aj.criterioRobustez || 'meseta',
     capitalIni: res.condiciones.capitalIni || 10000, valores: res.valores, ejes }) : null, [abierta, filasR, aj.corteRobustez, aj.criterioRobustez])
+  useEffect(() => { if (r && onResultado) onResultado(temporalidad || 'única', r) }, [r])
   const cabecera = (
     <button onClick={() => setAbierta(a => !a)} aria-expanded={abierta} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--text)', fontFamily: MONO, fontSize: TAM, fontWeight: 700 }}>
       {abierta ? '▾ Dentro / fuera de muestra (robustez)' : '▸ Dentro / fuera de muestra (robustez)'}</button>)

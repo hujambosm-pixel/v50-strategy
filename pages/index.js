@@ -24,7 +24,11 @@ import EquityChart from '../components/EquityChart'
 import Tip from '../components/Tip'
 import SettingsModal from '../components/SettingsModal'
 import OptimizacionPanel from '../components/OptimizacionPanel'
-import AzarCarteraPanel, { anotaPeticionMc } from '../components/AzarCarteraPanel'
+import AzarCarteraPanel, { anotaPeticionMc, peticionMcDe, pruebasCalculadas } from '../components/AzarCarteraPanel'
+import BotonCopiar, { leeTabla } from '../components/BotonCopiar'
+import { textoMulticartera, datosCabeceraMulticartera } from '../lib/exportaTexto'
+// La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
+const VERSION_APP='Trading Simulator V9.951'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -6204,7 +6208,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.950</title>
+        <title>Trading Simulator V9.951</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6293,7 +6297,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             }} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.950
+            <span className="dot"/>Trading Simulator V9.951
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -9253,7 +9257,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                 contenedor no genera caja, así que la maquetación (flex, alturas, scroll) es la de siempre. */}
             {(optimizaVisitado||sidePanel==='optimiza')&&(
               <div style={{display:sidePanel==='optimiza'?'contents':'none'}}>
-                <OptimizacionPanelMemo strategies={strategies} watchlist={watchlist} wlLists={wlLists} apiFetch={apiFetch}
+                <OptimizacionPanelMemo strategies={strategies} watchlist={watchlist} wlLists={wlLists} apiFetch={apiFetch} version={VERSION_APP}
                   capitalInicial={Number(capitalIni)||10000} comisionesIniciales={indComisiones} onProbar={onProbarOptimiza}/>
               </div>
             )}
@@ -9276,6 +9280,21 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                 {/* Header resumen */}
                 <div style={{padding:'7px 16px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
                   <span style={{fontFamily:MONO,fontSize:13,color:'var(--accent)',fontWeight:700}}>📊 Multicartera</span>
+                  <BotonCopiar obtenerTexto={()=>{
+                    // «Copiar para Claude»: la comparativa tal como está pintada (con las filas por activo desplegadas) y la
+                    // prueba contra el azar de la cartera ya calculada (lib/exportaTexto.js). No recalcula nada.
+                    const lista=mcMultiResults.length?mcMultiResults:[{id:currentStratId||'__single__',name:mcSingleStratName,result:mcResult}]
+                    const pets=lista.map(r=>peticionMcDe(r.result)).filter(Boolean)
+                    const pruebas=pruebasCalculadas(lista)
+                    const tabla=leeTabla(mcArribaRef.current)
+                    return textoMulticartera({
+                      cabecera:{titulo:'Multibacktest',version:VERSION_APP,fecha:new Date().toLocaleString('es-ES'),
+                        datos:datosCabeceraMulticartera({peticiones:[peticionMcDe(mcResult),...pets].filter((p,i,a)=>p&&a.indexOf(p)===i),estrategias:strategies,
+                          lista:mcListFilter,avisos:mcResult?.avisosHistorico,periodo:mcResult?.periodo,pruebas})},
+                      tabla:tabla?{...tabla,titulo:mcIsModoCompare?'Comparativa de modos':'Comparativa de estrategias'}:null,
+                      azar:pruebas,
+                    })
+                  }}/>
                   {/* Filtro por estrategia, con el mismo patrón que el "Solo SÍMBOLO ✕" del historial:
                       si el panel entero está filtrado, tiene que verse, y quitarse desde donde se ve. */}
                   {!mcTodasStrats&&mcDisplayResults.length>1&&(
