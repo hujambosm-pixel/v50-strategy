@@ -11,7 +11,8 @@ import { operacionesPorFiltro, esNoStrategyPorNombre } from '../../lib/operacion
 import { ajustaPreciosAVela, cuentaAjustados } from '../../lib/precioEnVela'
 import { ddPctDeOperacion, indicePorFecha } from '../../lib/ddOperacion'
 import { filtraPorEntrada } from '../../lib/filtroEntrada'
-import { asignaCartera } from '../../lib/asignaCartera'
+import { asignaCartera, bloqueaPuerta } from '../../lib/asignaCartera'
+import { stopInicial as _stopInicial, candidatoDe, creaPuntuador } from '../../lib/prioridadCartera'
 import { semanalesDesdeDiarias } from '../../lib/velasSemanales'
 import { soloCerradas } from '../../lib/sesion'
 import { normalizaGrafico } from '../../lib/graficoEstrategia'
@@ -466,15 +467,6 @@ function buildSlotsCurves(assetResults, capitalIni, comisiones = COMISIONES_CERO
 //      se cae a stopPx: en ese escenario stopPx es también un nivel posterior (el último), así
 //      que usarlo reintroduciría el mismo look-ahead que estamos corrigiendo.
 // null = el trade se abrió sin stop conocido.
-function _stopInicial(t) {
-  if (!t) return null
-  const h = Array.isArray(t.stopHistory) ? t.stopHistory[0] : null
-  if (h && h.stopPx != null) {
-    if (h.date == null || t.entryDate == null || h.date <= t.entryDate) return h.stopPx
-    return null
-  }
-  return t.stopPx ?? null
-}
 
 // ── MODO CAPITAL COMPARTIDO: pool libre repartido entre slots activos ──
 // symbolOrder: array opcional de símbolos para desempate en entradas simultáneas
@@ -487,27 +479,8 @@ function buildCompartidoCurves(assetResults, capitalIni, symbolOrder = null, com
   const { startDate, filteredDates } = _commonDates(assetResults)
   if (!filteredDates.length) return _emptyCurves(startDate)
 
-  // Recopilar todos los trades de todos los activos con pnlPct pre-calculado
-  const allCandidates = assetResults.flatMap(ar =>
-    (ar.trades || []).map(t => ({
-      symbol:       ar.symbol,
-      // Símbolo REAL del activo. En multicartera `symbol` es sintético (TICKER#estrategia) y sin esto la
-      // agrupación por activo de _claveActivo se queda con el sintético: un ticker que opera en dos
-      // estrategias saldría partido en dos, y assetStats, que busca por símbolo real, no encontraría sus
-      // métricas. En el handler normal es undefined y _claveActivo cae en `symbol`, como siempre.
-      _realSymbol:  ar._realSymbol,
-      entryDate:    t.entryDate,
-      exitDate:     t.exitDate,
-      pnlPct:       t.pnlPct,
-      entryPx:      t.entryPrice ?? t.entryPx,
-      // Precio de SALIDA: no se copiaba, y los minigráficos lo necesitan para trazar la línea de entrada
-      // a salida de cada operación. No entra en ningún cálculo, solo viaja para dibujar.
-      exitPx:       t.exitPrice ?? t.exitPx,
-      stopPx:       _stopInicial(t),
-      dias:         t.dias,
-      _virtualClose: !!t._virtualClose,
-    }))
-  )   // el orden (fecha y símbolo) lo pone asignaCartera
+  // Recopilar todos los trades de todos los activos (candidatoDe, lib/prioridadCartera.js)
+  const allCandidates = assetResults.flatMap(ar => (ar.trades || []).map(t => candidatoDe(ar, t)))   // el orden (fecha y símbolo) lo pone asignaCartera
 
   if (!allCandidates.length) return buildSlotsCurves(assetResults, capitalIni, comisiones)
 
@@ -639,86 +612,11 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
     _dateIdxMap[ar.symbol] = m
   })
 
-  // ── Función de score: menor score = mayor prioridad (entra antes) ──────────
-  function _priorityScore(t) {
-    if (prioridad === 'alfabetico') return null  // handled inline in sort
-    if (prioridad === 'score_metricas' || prioridad === 'ranking') {
-      // 'ranking' mantenido como alias legacy — ambos usan scoreMap si disponible
-      if (scoreMap) {
-        const s = scoreMap[t.symbol] ?? null
-        return s != null ? -s : 999  // mayor score → entra antes
-      }
-      // fallback: orden por symbolsList
-      const ri = symbolsList ? symbolsList.indexOf(t.symbol) : -1
-      return ri >= 0 ? ri : (symbolsList ? symbolsList.length : 999)
-    }
-    // Campos CRUDOS + flag de validez por candidato (para gates con umbral, sin la ambigüedad de _ps=0).
-    // _psValid se refiere a la métrica ACTIVA (prioridad). El _ps devuelto NO cambia (orden idéntico).
-    const data = _dataMap[t.symbol] || []
-    const idx  = _dateIdxMap[t.symbol]?.[t.entryDate]
-    if (idx == null || data.length === 0) { t._psValid = false; return 0 }
-
-    if (prioridad === 'momentum') {
-      const N = Math.max(1, momentumN || 20)
-      if (idx < N) { t._psValid = false; return 0 }   // sin historial suficiente
-      const ret = (data[idx].close - data[idx - N].close) / data[idx - N].close
-      t._momRaw = ret; t._psValid = true
-      return -ret  // mayor retorno → score más bajo → entra antes
-    }
-    if (prioridad === 'fuerza_relativa') {
-      const LB = Math.max(2, Math.trunc(rsWindow) || 63)  // ventana en VELAS (configurable, default 63)
-      if (idx < LB) { t._psValid = false; return 0 }  // sin historial suficiente del activo
-      const retAsset = (data[idx].close - data[idx - LB].close) / data[idx - LB].close
-      if (!sp500Data || !sp500Data.length) {
-        console.warn('[concentrado] fuerza_relativa: sp500Data no disponible, usando momentum N=63')
-        t._psValid = false; return -retAsset  // sin SP500 → RS no calculable → no válido (gate deja pasar)
-      }
-      let spIdx = -1
-      for (let i = sp500Data.length - 1; i >= 0; i--) {
-        if (sp500Data[i].date <= t.entryDate) { spIdx = i; break }
-      }
-      if (spIdx < LB) { t._psValid = false; return -retAsset }  // SP500 sin 63 barras en esa fecha
-      const retSP = (sp500Data[spIdx].close - sp500Data[spIdx - LB].close) / sp500Data[spIdx - LB].close
-      const rs = retAsset - retSP
-      t._rsRaw = rs; t._psValid = true
-      return -rs  // mayor alfa vs SP500 → entra antes
-    }
-    if (prioridad === 'max52') {
-      const LB = Math.min(idx, 251)
-      let max252 = -Infinity
-      for (let i = idx - LB; i <= idx; i++) {
-        const h = (data[i].high != null ? data[i].high : data[i].close)
-        if (h > max252) max252 = h
-      }
-      if (max252 <= 0 || max252 === -Infinity) { t._psValid = false; return 0 }
-      const ratio = data[idx].close / max252
-      t._proxRaw = ratio                 // 1.0 = en el máximo; 0.9 = 10% por debajo
-      t._psValid = idx >= 251            // válido solo con la ventana completa de 252 barras
-      return -ratio  // más cercano al máximo → entra antes
-    }
-    return 0
-  }
-
+  // ── Prioridad (menor = entra antes) y candidatos: lib/prioridadCartera.js, compartido con el navegador ──
+  const _priorityScore = creaPuntuador({ prioridad, momentumN, rsWindow, scoreMap, symbolsList, sp500Data, dataMap: _dataMap, dateIdxMap: _dateIdxMap })
   const allCandidates = assetResults.flatMap(ar =>
     (ar.trades || []).map(t => {
-      const c = {
-        symbol:        ar.symbol,
-        // Símbolo REAL del activo. En multicartera `symbol` es sintético (TICKER#estrategia) y sin esto la
-        // agrupación por activo de _claveActivo se queda con el sintético: un ticker que opera en dos
-        // estrategias saldría partido en dos, y assetStats, que busca por símbolo real, no encontraría sus
-        // métricas. En el handler normal es undefined y _claveActivo cae en `symbol`, como siempre.
-        _realSymbol:   ar._realSymbol,
-        entryDate:     t.entryDate,
-        exitDate:      t.exitDate,
-        pnlPct:        t.pnlPct,
-        entryPx:       t.entryPrice ?? t.entryPx,
-        // Precio de SALIDA: no se copiaba, y los minigráficos lo necesitan para trazar la línea de
-        // entrada a salida. No entra en ningún cálculo, solo viaja para dibujar.
-        exitPx:        t.exitPrice ?? t.exitPx,
-        stopPx:        _stopInicial(t),
-        dias:          t.dias,
-        _virtualClose: !!t._virtualClose,
-      }
+      const c = candidatoDe(ar, t)
       c._ps = _priorityScore(c)
       return c
     })
@@ -1743,6 +1641,35 @@ function _ejecucionesPorActivoSlots(assetResults) {
 // Símbolo sintético: `${ticker}#${stratOrder.padStart(3,'0')}`
 // → orden alfabético del sintético = (ticker, orden_estrategia)  → desempate determinista
 // → buildConcentradoCurves no se modifica; ve N activos "distintos"
+// Lo que necesita el navegador para la prueba contra el azar de la cartera (lib/azarCartera.js), en formato compacto:
+// las opciones del reparto; por activo, sus velas del periodo (fechas, aperturas, máximos, cierres) y TODOS sus candidatos
+// (candidatoDe, con su prioridad real, su duración en velas y si pasa la puerta; en Slots, también su capital); y las
+// velas del S&P 500 en la temporalidad del activo, para la fuerza relativa. Solo se calcula con conCandidatos.
+function _candidatosParaAzar({ assetResults, sp500DataTf, modoAsig, sizeRules, symbols, capitalIni, comisiones, startDate }) {
+  const opciones = { modo: modoAsig, capitalIni, n: assetResults.length, startDate,
+    maxPosiciones: sizeRules.maxPosiciones ?? 5, prioridad: sizeRules.prioridad ?? 'alfabetico', momentumN: sizeRules.momentumN ?? 20,
+    rsWindow: sizeRules.rsWindow ?? 63, criterioUso: sizeRules.criterioUso ?? 'desempate', rsGateThr: sizeRules.rsGateThr ?? 0,
+    momGateThr: sizeRules.momGateThr ?? 10, proxGateThr: sizeRules.proxGateThr ?? 10, comisiones,
+    scoreMap: sizeRules.scoreMap ?? null, symbolsList: symbols }
+  const dataMap = {}, dateIdxMap = {}
+  assetResults.forEach(ar => { dataMap[ar.symbol] = ar.data || []; const m = {}; (ar.data || []).forEach((d, i) => { m[d.date] = i }); dateIdxMap[ar.symbol] = m })
+  const puntua = modoAsig === 'concentrado' ? creaPuntuador({ ...opciones, sp500Data: sp500DataTf, dataMap, dateIdxMap }) : null
+  const activos = assetResults.map(ar => {
+    const d = ar.data || [], idx = dateIdxMap[ar.symbol]
+    return { symbol: ar.symbol, fechas: d.map(b => b.date), abre: d.map(b => b.open), cierra: d.map(b => b.close),
+      ...(opciones.prioridad === 'max52' ? { altos: d.map(b => b.high ?? null) } : {}),
+      candidatos: (ar.trades || []).map(t => {
+        const c = candidatoDe(ar, t)
+        if (puntua) c._ps = puntua(c)
+        return { ...c, velas: idx[t.entryDate] != null && idx[t.exitDate] != null ? idx[t.exitDate] - idx[t.entryDate] : null,
+          pasaPuerta: modoAsig === 'concentrado' ? !bloqueaPuerta(c, opciones) : true,
+          ...(modoAsig === 'slots' ? { capitalTras: t.capitalTras, _capitalAtEntry: t._capitalAtEntry ?? null } : {}) }
+      }) }
+  })
+  return { version: 1, opciones, activos,
+    sp500: sp500DataTf?.length ? { fechas: sp500DataTf.map(b => b.date), cierres: sp500DataTf.map(b => b.close) } : null }
+}
+
 async function handlePortfolioMode(req, res) {
   const {
     strategies,
@@ -2476,6 +2403,16 @@ async function handlerMultibacktest(req, res) {
           return spBar ? { date, value: cfg.capitalIni * (spBar.close / sp0Close) } : null
         }).filter(Boolean)
       }
+    }
+
+    // Prueba contra el azar de la cartera (V9.950): SOLO si la petición trae conCandidatos: true, una respuesta reducida
+    // con los candidatos y lo justo para comprobar la recomposición y dibujar el B&H. Sin el campo, todo como siempre.
+    if (req.body?.conCandidatos === true) {
+      return res.status(200).json({
+        candidatosAzar: _candidatosParaAzar({ assetResults, sp500DataTf, modoAsig, sizeRules, symbols, capitalIni: cfg.capitalIni, comisiones: _com, startDate: curves.startDate }),
+        startDate: curves.startDate, compoundCurve: curves.compoundCurve, maxDDFloatCompound: curves.maxDDFloatCompound,
+        avgCapOccupancy: curves.avgCapOccupancy ?? avgOccupancy, bhCurve: curves.bhCurve, maxDDBH: curves.maxDDBH,
+      })
     }
 
     // Cobertura del periodo pedido (ver _coberturaHistorico)

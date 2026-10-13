@@ -24,6 +24,7 @@ import EquityChart from '../components/EquityChart'
 import Tip from '../components/Tip'
 import SettingsModal from '../components/SettingsModal'
 import OptimizacionPanel from '../components/OptimizacionPanel'
+import AzarCarteraPanel, { anotaPeticionMc } from '../components/AzarCarteraPanel'
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -5454,9 +5455,12 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         try{
           const _strat1=strategies.find(s=>s.id===stratIds[0])
           const isNoStrategy=(_strat1?.name||'').includes('No Strategy')
+          // La petición se anota junto al resultado (sin tocarlo): la necesita la prueba contra el azar de la cartera.
+          const _cuerpoMc={symbols:mcSelected,modoAsig:modesToRun[0],weights:weightsNorm,cfg:baseCfg,strategyId:stratIds[0]||null,isNoStrategy,filtros:filtrosBackend,intervalo:mcIntervalo,comisiones:mcComisiones,..._prueba}
           const res=await apiFetch('/api/multibacktest',{method:'POST',headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({symbols:mcSelected,modoAsig:modesToRun[0],weights:weightsNorm,cfg:baseCfg,strategyId:stratIds[0]||null,isNoStrategy,filtros:filtrosBackend,intervalo:mcIntervalo,comisiones:mcComisiones,..._prueba})})
+            body:JSON.stringify(_cuerpoMc)})
           const json=await res.json()
+          anotaPeticionMc(json,_cuerpoMc)
           if(!res.ok) throw new Error(json.error||'Error')
           setMcResult(json);setMcMultiResults([]);setMcIsModoCompare(false)
         }catch(e){setMcError(e.message)}finally{setMcLoading(false);setMcProgress(null)}
@@ -5474,9 +5478,11 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
           const modo=modesToRun[i]
           setMcProgress({current:i+1,total:modesToRun.length,name:MODE_LABELS[modo]||modo})
           const color=STRAT_COMPARE_COLORS[i%STRAT_COMPARE_COLORS.length]
+          const _cuerpoMc={symbols:mcSelected,modoAsig:modo,weights:weightsNorm,cfg:baseCfg,strategyId:sid,isNoStrategy:isNoStrategyMode,filtros:filtrosBackend,intervalo:mcIntervalo,comisiones:mcComisiones,..._prueba}
           const res=await apiFetch('/api/multibacktest',{method:'POST',headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({symbols:mcSelected,modoAsig:modo,weights:weightsNorm,cfg:baseCfg,strategyId:sid,isNoStrategy:isNoStrategyMode,filtros:filtrosBackend,intervalo:mcIntervalo,comisiones:mcComisiones,..._prueba})})
+            body:JSON.stringify(_cuerpoMc)})
           const json=await res.json()
+          anotaPeticionMc(json,_cuerpoMc)
           if(!res.ok) throw new Error(json.error||'Error en '+MODE_LABELS[modo])
           modeResults.push({id:`${sid||'__single__'}__${modo}`,name:`${stratName} · ${MODE_LABELS[modo]}`,color,result:json,modo})
         }
@@ -5498,9 +5504,11 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
       setMcProgress({current:i+1,total:realStratIds.length,name})
       try{
         const cfg=buildCfgFromStrat(strat)
+        const _cuerpoMc={symbols:mcSelected,modoAsig:mcMode,weights:weightsNorm,cfg,strategyId:sid,isNoStrategy:(strat?.name||'').includes('No Strategy'),filtros:filtrosBackend,intervalo:mcIntervalo,comisiones:mcComisiones}
         const res=await apiFetch('/api/multibacktest',{method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({symbols:mcSelected,modoAsig:mcMode,weights:weightsNorm,cfg,strategyId:sid,isNoStrategy:(strat?.name||'').includes('No Strategy'),filtros:filtrosBackend,intervalo:mcIntervalo,comisiones:mcComisiones})})
+          body:JSON.stringify(_cuerpoMc)})
         const json=await res.json()
+        anotaPeticionMc(json,_cuerpoMc)
         if(!res.ok) throw new Error(json.error||'Error en '+name)
         results.push({id:sid,name,color,result:json})
       }catch(e){setMcError(e.message);setMcLoading(false);setMcProgress(null);return}
@@ -6196,7 +6204,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.949</title>
+        <title>Trading Simulator V9.950</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6285,7 +6293,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             }} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.949
+            <span className="dot"/>Trading Simulator V9.950
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -10541,6 +10549,9 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                   </div>
                   )
                 })()}
+                {/* ── Prueba contra el azar de la cartera (components/AzarCarteraPanel.js): cada estrategia (o modo) por separado ── */}
+                {mcResult&&<AzarCarteraPanel apiFetch={apiFetch}
+                  resultados={mcMultiResults.length?mcMultiResults:[{id:currentStratId||'__single__',name:mcSingleStratName,result:mcResult}]} />}
                 {/* ── Vista de gráficos — una o varias estrategias ── */}
                 {mcResult&&(()=>{
                   const MAX_SYMS=10,MAX_STRATS=3
