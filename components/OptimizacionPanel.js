@@ -559,8 +559,8 @@ function AzarPanel({ res, fila, temporalidad = null, apiFetch, textoParams, onRe
         </div>
         <div style={comoLeer}>Cómo leer esto: se compara la estrategia con entrar al azar en los mismos activos y fechas. El azar hace el mismo número de
           operaciones con las mismas duraciones, así que pasa el mismo tiempo dentro del mercado: la única diferencia es CUÁNDO entra. El percentil es el % de
-          simulaciones que quedan por debajo del resultado real (≥ {AZAR.supera}: supera al azar; {AZAR.algoMejor}–{AZAR.supera}: algo mejor, no concluyente; por debajo
-          de {AZAR.algoMejor}: no se distingue; por debajo de {AZAR.peor}: peor). En valores muy alcistas el azar también gana mucho: por eso se compara contra él y
+          simulaciones que quedan por debajo del resultado real (≥ {AZAR.supera}: supera al azar; {AZAR.algoMejor}–{AZAR.supera}: algo mejor, no concluyente;
+          {AZAR.algoPeor}–{AZAR.algoMejor}: no se distingue; {AZAR.peor}–{AZAR.algoPeor}: algo peor, no concluyente; por debajo de {AZAR.peor}: peor). En valores muy alcistas el azar también gana mucho: por eso se compara contra él y
           no contra cero. La caída máxima se compara igual: el percentil es el % de simulaciones que caen más que la estrategia. Como el azar también está fuera del
           mercado el mismo tiempo, caer menos que el comprar y mantener no basta: hay que caer menos que el azar.</div>
       </>)}
