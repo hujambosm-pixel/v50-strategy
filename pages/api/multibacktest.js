@@ -11,6 +11,7 @@ import { operacionesPorFiltro, esNoStrategyPorNombre } from '../../lib/operacion
 import { ajustaPreciosAVela, cuentaAjustados } from '../../lib/precioEnVela'
 import { ddPctDeOperacion, indicePorFecha } from '../../lib/ddOperacion'
 import { filtraPorEntrada } from '../../lib/filtroEntrada'
+import { asignaCartera } from '../../lib/asignaCartera'
 import { semanalesDesdeDiarias } from '../../lib/velasSemanales'
 import { soloCerradas } from '../../lib/sesion'
 import { normalizaGrafico } from '../../lib/graficoEstrategia'
@@ -506,132 +507,16 @@ function buildCompartidoCurves(assetResults, capitalIni, symbolOrder = null, com
       dias:         t.dias,
       _virtualClose: !!t._virtualClose,
     }))
-  ).sort((a, b) => {
-    if (a.entryDate < b.entryDate) return -1
-    if (a.entryDate > b.entryDate) return 1
-    if (symbolOrder) return symbolOrder.indexOf(a.symbol) - symbolOrder.indexOf(b.symbol)
-    return a.symbol < b.symbol ? -1 : 1
-  })
+  )   // el orden (fecha y símbolo) lo pone asignaCartera
 
   if (!allCandidates.length) return buildSlotsCurves(assetResults, capitalIni, comisiones)
 
-  const senalesGeneradasC = allCandidates.length
-  let cntEjecutadasC = 0, cntDescCapitalC = 0
-  let pnlHipEurC = 0
-  const pnlDescartadosC = []
-
-  // Pool de capital libre y slots abiertos
-  let poolLibre = capitalIni
-  const openSlots = {}          // { symbol: { trade, capAsignado } }
-  const executedTrades = []
-  const capitalAtEntryMap = {}  // `${symbol}:${entryDate}` → capAsignado
-
-  // Agrupar entradas por fecha
-  const entriesByDate = {}
-  allCandidates.forEach(t => {
-    if (!entriesByDate[t.entryDate]) entriesByDate[t.entryDate] = []
-    entriesByDate[t.entryDate].push(t)
-  })
-
-  // Timeline: todas las fechas de entrada y salida relevantes
-  const eventDates = [...new Set([
-    ...allCandidates.map(t => t.entryDate),
-    ...allCandidates.map(t => t.exitDate).filter(d => d != null),
-  ])].sort()
-
-  eventDates.forEach(date => {
-    // 1. Cerrar primero (libera capital para nuevas entradas del mismo día)
-    const toClose = Object.keys(openSlots).filter(sym => openSlots[sym].trade.exitDate === date)
-    toClose.forEach(symbol => {
-      const { trade, capAsignado, totalPortfolioAtEntry: _tpAtEntry } = openSlots[symbol]
-      if (!isFinite(trade.pnlPct)) { poolLibre += capAsignado; delete openSlots[symbol]; return }  // skip NaN/Infinity
-      // El capital que vuelve al pool es el NETO: la comision se paga al comprar y al vender, y
-      // este modo calcula el dinero desde pnlPct, no desde los euros de buildTrades. Con comision
-      // cero netoDeOperacion devuelve exactamente `capAsignado * (1 + pnlPct/100)`.
-      const _netoC = netoDeOperacion(capAsignado, trade.pnlPct, comisiones)
-      const capFinal = _netoC.capitalFinal
-      poolLibre += capFinal
-      const _distC = (trade.stopPx && trade.entryPx && trade.entryPx > trade.stopPx)
-        ? (trade.entryPx - trade.stopPx) / trade.entryPx : null
-      const _riesgoC = _distC ? capAsignado * _distC : capAsignado * 0.05
-      executedTrades.push({
-        ...trade,
-        _capitalAtEntry: capAsignado,
-        _totalPortfolioAtEntry: _tpAtEntry || capitalIni,
-        capitalTras: capFinal,
-        pnlSimple: capFinal - capAsignado,
-        // La comision REALMENTE pagada por esta operacion, con los mismos nombres que usa
-        // buildTrades. Sale de la MISMA llamada a netoDeOperacion que ya decidia el capital, asi
-        // que publicarla no puede moverlo. Solo viaja cuando hay comision: con comision cero la
-        // respuesta tiene que seguir siendo identica byte a byte.
-        ...(conCom ? { comision: _netoC.comisionTotal, pnlNeto: _netoC.pnlNeto,
-                       pnlPctNeto: _netoC.pnlPctNeto } : {}),
-        riesgoAcum: _riesgoC,
-      })
-      delete openSlots[symbol]
-    })
-
-    // 2. Abrir entradas del día (solo activos sin posición abierta)
-    const entries = (entriesByDate[date] || []).filter(t => !openSlots[t.symbol])
-    if (entries.length > 0 && poolLibre <= 0) {
-      const _openCapsBlkC = Object.values(openSlots).reduce((s, slot) => s + (slot.capAsignado || 0), 0)
-      const _capMaxBlkC = (poolLibre + _openCapsBlkC) / n
-      entries.forEach(t => {
-        cntDescCapitalC++
-        if (isFinite(t.pnlPct)) { pnlDescartadosC.push(t.pnlPct); pnlHipEurC += _capMaxBlkC * t.pnlPct / 100 }
-      })
-    }
-    if (entries.length > 0 && poolLibre > 0) {
-      entries.forEach(t => {
-        // Recalculate per entrant: poolLibre and openSlots change with each iteration
-        const openCapsTotal = Object.values(openSlots).reduce((s, slot) => s + (slot.capAsignado || 0), 0)
-        const totalPortfolio = poolLibre + openCapsTotal
-        const capPorSlot = Math.min(totalPortfolio / n, poolLibre)
-        if (capPorSlot < 0.01) { cntDescCapitalC++; if (isFinite(t.pnlPct)) { pnlDescartadosC.push(t.pnlPct); pnlHipEurC += (totalPortfolio / n) * t.pnlPct / 100 } return }
-        cntEjecutadasC++
-        poolLibre -= capPorSlot
-        // Same-day trade (entryDate === exitDate): abrir y cerrar atómicamente
-        // para evitar que quede bloqueado en openSlots sin salida
-        if (t.exitDate === date) {
-          if (isFinite(t.pnlPct)) {
-            const _netoSD = netoDeOperacion(capPorSlot, t.pnlPct, comisiones)
-            const capFinal = _netoSD.capitalFinal
-            poolLibre += capFinal
-            const _distSD = (t.stopPx && t.entryPx && t.entryPx > t.stopPx)
-              ? (t.entryPx - t.stopPx) / t.entryPx : null
-            const _riesgoSD = _distSD ? capPorSlot * _distSD : capPorSlot * 0.05
-            executedTrades.push({
-              ...t,
-              _capitalAtEntry: capPorSlot,
-              _totalPortfolioAtEntry: totalPortfolio,
-              capitalTras: capFinal,
-              pnlSimple: capFinal - capPorSlot,
-              // La comision REALMENTE pagada por esta operacion, con los mismos nombres que usa
-              // buildTrades. Sale de la MISMA llamada a netoDeOperacion que ya decidia el capital, asi
-              // que publicarla no puede moverlo. Solo viaja cuando hay comision: con comision cero la
-              // respuesta tiene que seguir siendo identica byte a byte.
-              ...(conCom ? { comision: _netoSD.comisionTotal, pnlNeto: _netoSD.pnlNeto,
-                             pnlPctNeto: _netoSD.pnlPctNeto } : {}),
-              riesgoAcum: _riesgoSD,
-            })
-          } else {
-            poolLibre += capPorSlot  // NaN: devolver capital sin P&L
-          }
-          // NO añadir a openSlots — se resuelve inmediatamente
-        } else {
-          openSlots[t.symbol] = { trade: t, capAsignado: capPorSlot, totalPortfolioAtEntry: totalPortfolio }
-          capitalAtEntryMap[`${t.symbol}:${t.entryDate}`] = capPorSlot
-        }
-      })
-    }
-  })
-
-  // Cerrar posiciones que quedaron abiertas al final (exitDate: null — trade abierto al cierre del periodo)
-  Object.entries(openSlots).forEach(([sym, slot]) => {
-    const capFinal = slot.capAsignado * (1 + (slot.trade.pnlPct || 0) / 100)
-    poolLibre += capFinal
-    delete openSlots[sym]
-  })
+  // El reparto —orden por fecha y símbolo, capital por posición = mín(patrimonio / n, pool libre), comisiones, descartes
+  // por capital y cierre al final del periodo— vive en lib/asignaCartera.js (las mismas cuentas que había aquí).
+  const { ejecutadas: executedTrades, capitalAtEntryMap, contadores: _cntC } = asignaCartera(allCandidates, {
+    modo: 'compartido', capitalIni, n, symbolOrder, comisiones })
+  const { generadas: senalesGeneradasC, ejecutadas: cntEjecutadasC, descartadasPorCapital: cntDescCapitalC,
+    pnlHipEur: pnlHipEurC, pnlDescartados: pnlDescartadosC } = _cntC
 
   // Build symbol → filtered OHLCV map para curva flotante
   const symbolDataMap = {}
@@ -838,171 +723,14 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
       return c
     })
   )
-  allCandidates.sort((a, b) => {
-    if (a.entryDate < b.entryDate) return -1
-    if (a.entryDate > b.entryDate) return 1
-    if (prioridad === 'alfabetico') return a.symbol < b.symbol ? -1 : a.symbol > b.symbol ? 1 : 0
-    // Desempate final alfabético por símbolo cuando el score de prioridad empata (p.ej. mismo ticker
-    // en dos estrategias → RS idéntico) → orden determinista y reproducible.
-    return ((a._ps ?? 0) - (b._ps ?? 0)) || (a.symbol < b.symbol ? -1 : a.symbol > b.symbol ? 1 : 0)
-  })
-
   if (!allCandidates.length) return buildSlotsCurves(assetResults, capitalIni, comisiones)
 
-  const senalesGeneradas = allCandidates.length
-  let cntEjecutadas = 0, cntDescSlots = 0, cntDescCapital = 0, cntDescGate = 0
-  let pnlHipEur = 0
-  const pnlDescartados = []
-
-  let poolLibre = capitalIni
-  const openSlots = {}
-  const executedTrades = []
-  const capitalAtEntryMap = {}
-
-  const entriesByDate = {}
-  allCandidates.forEach(t => {
-    if (!entriesByDate[t.entryDate]) entriesByDate[t.entryDate] = []
-    entriesByDate[t.entryDate].push(t)
-  })
-
-  const eventDates = [...new Set([
-    ...allCandidates.map(t => t.entryDate),
-    ...allCandidates.map(t => t.exitDate).filter(d => d != null),
-  ])].sort()
-
-  eventDates.forEach(date => {
-    // 1. Cerrar primero (libera capital)
-    const toClose = Object.keys(openSlots).filter(sym => openSlots[sym].trade.exitDate === date)
-    toClose.forEach(symbol => {
-      const { trade, capAsignado, totalPortfolioAtEntry: _tpAtEntry } = openSlots[symbol]
-      if (!isFinite(trade.pnlPct)) { poolLibre += capAsignado; delete openSlots[symbol]; return }
-      const _netoK = netoDeOperacion(capAsignado, trade.pnlPct, comisiones)
-      const capFinal = _netoK.capitalFinal
-      poolLibre += capFinal
-      const _dist = (trade.stopPx && trade.entryPx && trade.entryPx > trade.stopPx)
-        ? (trade.entryPx - trade.stopPx) / trade.entryPx : null
-      executedTrades.push({
-        ...trade,
-        _capitalAtEntry: capAsignado,
-        _totalPortfolioAtEntry: _tpAtEntry || capitalIni,
-        capitalTras: capFinal,
-        pnlSimple: capFinal - capAsignado,
-        // La comision REALMENTE pagada por esta operacion, con los mismos nombres que usa
-        // buildTrades. Sale de la MISMA llamada a netoDeOperacion que ya decidia el capital, asi
-        // que publicarla no puede moverlo. Solo viaja cuando hay comision: con comision cero la
-        // respuesta tiene que seguir siendo identica byte a byte.
-        ...(conCom ? { comision: _netoK.comisionTotal, pnlNeto: _netoK.pnlNeto,
-                       pnlPctNeto: _netoK.pnlPctNeto } : {}),
-        riesgoAcum: _dist ? capAsignado * _dist : capAsignado * 0.05,
-      })
-      delete openSlots[symbol]
-    })
-
-    // 2. Abrir entradas: cada una calcula su tamaño dinámicamente
-    const entries = (entriesByDate[date] || []).filter(t => !openSlots[t.symbol])
-    if (entries.length > 0 && poolLibre <= 0.01) {
-      const _openCapsBlk = Object.values(openSlots).reduce((s, sl) => s + (sl.capAsignado || 0), 0)
-      const _capMaxBlk = (poolLibre + _openCapsBlk) / Math.min(maxPosiciones, n)
-      entries.forEach(t => {
-        cntDescCapital++
-        if (isFinite(t.pnlPct)) { pnlDescartados.push(t.pnlPct); pnlHipEur += _capMaxBlk * t.pnlPct / 100 }
-      })
-    }
-    if (entries.length > 0 && poolLibre > 0.01) {
-      // BUG B fix: contador de same-day trades abiertos en este batch
-      // (no añaden a openSlots, así que slotsLibres debe compensarlo manualmente)
-      let sameDayOpen = 0
-      entries.forEach(t => {
-        const posicionesAbiertas = Object.keys(openSlots).length
-        // BUG B fix: descontar same-day trades del mismo batch para no superar maxPosiciones
-        const slotsLibresEfectivos = maxPosiciones - posicionesAbiertas - sameDayOpen
-        const openCapsTotal = Object.values(openSlots).reduce((s, sl) => s + (sl.capAsignado || 0), 0)
-        const capitalTotal = poolLibre + openCapsTotal
-        // Techo por posición: dividir entre el mínimo real de slots disponibles
-        // (si hay menos activos que maxPosiciones, cada activo recibe mayor fracción)
-        const slotsEfectivos = Math.min(maxPosiciones, n)
-        const capMaxPorPosicion = capitalTotal / slotsEfectivos
-        if (slotsLibresEfectivos <= 0) { cntDescSlots++; if (isFinite(t.pnlPct)) { pnlDescartados.push(t.pnlPct); pnlHipEur += capMaxPorPosicion * t.pnlPct / 100 } return }
-        // GATE (filtro de entrada): activo si criterioUso==='filtro' y la métrica activa es gateable.
-        // Vía limpia con valor CRUDO + flag de validez (sin la ambigüedad de _ps=0). _momRaw/_rsRaw son
-        // FRACCIONES (0.10 = 10%); los umbrales llegan en % → se dividen por 100. _proxRaw es ratio close/max252.
-        // Si _psValid===false (sin historial/SP500) DEJA PASAR (no filtra ante la duda).
-        if (criterioUso === 'filtro' && (prioridad === 'fuerza_relativa' || prioridad === 'momentum' || prioridad === 'max52') && t._psValid === true) {
-          let _gateBloquea = false
-          if (prioridad === 'fuerza_relativa')  _gateBloquea = t._rsRaw  <= rsGateThr  / 100   // RS <= umbral% (default 0 → ≡ gate actual)
-          else if (prioridad === 'momentum')    _gateBloquea = t._momRaw <= momGateThr / 100    // subió menos del umbral% → fuera
-          else if (prioridad === 'max52')       _gateBloquea = t._proxRaw < (1 - proxGateThr / 100) // más lejos del X% del máximo → fuera
-          if (_gateBloquea) {
-            cntDescGate++
-            if (isFinite(t.pnlPct)) { pnlDescartados.push(t.pnlPct); pnlHipEur += capMaxPorPosicion * t.pnlPct / 100 }
-            return
-          }
-        }
-        const capPorEntrada = Math.min(poolLibre, capMaxPorPosicion)
-        if (capPorEntrada < 0.01) { cntDescCapital++; if (isFinite(t.pnlPct)) { pnlDescartados.push(t.pnlPct); pnlHipEur += capMaxPorPosicion * t.pnlPct / 100 } return }
-        cntEjecutadas++
-        poolLibre -= capPorEntrada
-        const totalPortfolio = capitalTotal
-        if (t.exitDate === date) {
-          if (isFinite(t.pnlPct)) {
-            const _netoKD = netoDeOperacion(capPorEntrada, t.pnlPct, comisiones)
-            const capFinal = _netoKD.capitalFinal
-            poolLibre += capFinal
-            const _dist = (t.stopPx && t.entryPx && t.entryPx > t.stopPx)
-              ? (t.entryPx - t.stopPx) / t.entryPx : null
-            executedTrades.push({
-              ...t,
-              _capitalAtEntry: capPorEntrada,
-              _totalPortfolioAtEntry: totalPortfolio,
-              capitalTras: capFinal,
-              pnlSimple: capFinal - capPorEntrada,
-              // La comision REALMENTE pagada por esta operacion, con los mismos nombres que usa
-              // buildTrades. Sale de la MISMA llamada a netoDeOperacion que ya decidia el capital, asi
-              // que publicarla no puede moverlo. Solo viaja cuando hay comision: con comision cero la
-              // respuesta tiene que seguir siendo identica byte a byte.
-              ...(conCom ? { comision: _netoKD.comisionTotal, pnlNeto: _netoKD.pnlNeto,
-                             pnlPctNeto: _netoKD.pnlPctNeto } : {}),
-              riesgoAcum: _dist ? capPorEntrada * _dist : capPorEntrada * 0.05,
-            })
-          } else { poolLibre += capPorEntrada }
-          sameDayOpen++  // BUG B fix: contabilizar slot consumido aunque no esté en openSlots
-        } else {
-          openSlots[t.symbol] = { trade: t, capAsignado: capPorEntrada, totalPortfolioAtEntry: totalPortfolio }
-          capitalAtEntryMap[`${t.symbol}:${t.entryDate}`] = capPorEntrada
-        }
-      })
-    }
-  })
-
-  // Cerrar posiciones abiertas al final del periodo (exitDate null o futuro)
-  // BUG C fix: también registrar en executedTrades para que la compoundCurve
-  // y assetStats los contabilicen correctamente
-  Object.entries(openSlots).forEach(([, slot]) => {
-    const { trade, capAsignado, totalPortfolioAtEntry } = slot
-    // El SEPTIMO punto donde este fichero cierra una operacion, y el ultimo que faltaba: son las
-    // posiciones que siguen abiertas al acabar el periodo —su exitDate cae mas alla de la ultima
-    // fecha comun a todos los activos, asi que el bucle nunca llega a cerrarlas—. Compraron de
-    // verdad, asi que pagaron de verdad su comision de compra, y hasta ahora era el unico cierre
-    // que no pasaba por netoDeOperacion y por tanto no cobraba nada. Con comision cero devuelve
-    // exactamente `capAsignado * (1 + pnlPct/100)`, que es lo que habia aqui escrito a mano.
-    const _netoF = netoDeOperacion(capAsignado, trade.pnlPct || 0, comisiones)
-    const capFinal = _netoF.capitalFinal
-    poolLibre += capFinal
-    const _dist = (trade.stopPx && trade.entryPx && trade.entryPx > trade.stopPx)
-      ? (trade.entryPx - trade.stopPx) / trade.entryPx : null
-    executedTrades.push({
-      ...trade,
-      _capitalAtEntry: capAsignado,
-      _totalPortfolioAtEntry: totalPortfolioAtEntry || capitalIni,
-      capitalTras: capFinal,
-      pnlSimple: capFinal - capAsignado,
-      // La comision REALMENTE pagada, igual que en los otros seis cierres.
-      ...(conCom ? { comision: _netoF.comisionTotal, pnlNeto: _netoF.pnlNeto,
-                     pnlPctNeto: _netoF.pnlPctNeto } : {}),
-      riesgoAcum: _dist ? capAsignado * _dist : capAsignado * 0.05,
-    })
-  })
-  Object.keys(openSlots).forEach(sym => { delete openSlots[sym] })
+  // El reparto —orden (entryDate, _ps, símbolo), puerta en modo «Filtro», máximo de posiciones, capital, comisiones,
+  // descartes y cierre al final del periodo— vive en lib/asignaCartera.js (las mismas cuentas que había aquí).
+  const { ejecutadas: executedTrades, capitalAtEntryMap, contadores: _cnt } = asignaCartera(allCandidates, {
+    modo: 'concentrado', capitalIni, n, maxPosiciones, prioridad, criterioUso, rsGateThr, momGateThr, proxGateThr, comisiones })
+  const { generadas: senalesGeneradas, ejecutadas: cntEjecutadas, descartadasPorSlots: cntDescSlots, descartadasPorCapital: cntDescCapital,
+    descartadasPorGate: cntDescGate, pnlHipEur, pnlDescartados } = _cnt
 
   const symbolDataMap = {}
   assetResults.forEach(ar => { symbolDataMap[ar.symbol] = ar.data ? ar.data.filter(d => d.date >= startDate) : [] })
