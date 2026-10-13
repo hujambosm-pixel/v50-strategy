@@ -8,6 +8,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { MONO, fmt, fmtDate, numeroEs, textoEs } from '../lib/utils'
 import CampoFecha from './CampoFecha'
 import { conclusiones as calculaConclusiones, activosPocaHistoria } from '../lib/conclusiones'
+import { edgeContraAzar, EDGE_N, EDGE_CORTO_MAX } from '../lib/edge'
 import { AZAR, TEXTO_VEREDICTO, TEXTO_VEREDICTO_CAIDA, semillaDe, semillaDeActivo, simulaActivo, porActivoAzar, combinaGlobal, datosDeRespuesta } from '../lib/azar'
 import { robustez as calculaRobustez, MIN_ANIOS_ROBUSTEZ, aniosConDatos, resultadosAnuales, walkForward, WF_VENTANAS, WF_VENTANA_DEFECTO } from '../lib/robustez'
 import { esquemaDeCodigo } from '../lib/parametrosEstrategia'
@@ -353,11 +354,16 @@ export function ResultadosOptimizacion({ res, onProbar = null, seleccionInicial 
   const anotaAzar = useCallback((clave, r) => setAzarCalculados(x => ({ res, porClave: { ...(x.res === res ? x.porClave : {}), [clave]: r } })), [res])
   const claveAzar = filaSel ? `${tpVista || 'única'}|${claveCombinacion(filaSel.params)}` : null
   const azarVista = azarCalculados.res === res && claveAzar ? azarCalculados.porClave[claveAzar] || null : null
+  // Las descargas de /api/datos, compartidas por «Prueba contra el azar» y «Calidad de las entradas» (nuevas con cada resultado).
+  const almacenDatos = useMemo(() => new Map(), [res])
+  const [edgeCalculados, setEdgeCalculados] = useState({ res: null, porClave: {} })
+  const anotaEdge = useCallback((clave, r) => setEdgeCalculados(x => ({ res, porClave: { ...(x.res === res ? x.porClave : {}), [clave]: r } })), [res])
+  const edgeVista = edgeCalculados.res === res && claveAzar ? edgeCalculados.porClave[claveAzar] || null : null
   const [verConclusiones, setVerConclusiones] = useState(true)
   const conclusiones = useMemo(() => !res.terminado ? null : calculaConclusiones({ filas: filasMapa, valores: res.valores, claveGuardada: claveActual,
-    seleccionada: filaSel, tipoCagr, walkForward: wfVista, periodo: { desde: res.condiciones.desde, hasta: res.condiciones.hasta }, azar: azarVista,
+    seleccionada: filaSel, tipoCagr, walkForward: wfVista, periodo: { desde: res.condiciones.desde, hasta: res.condiciones.hasta }, azar: azarVista, edge: edgeVista,
     comparar: res.comparar ? { tp: tpVista, porTemporalidad: Object.fromEntries(res.temporalidades.map(tp => [tp, filas.filter(f => f.temporalidad === tp)])) } : null }),
-  [res, filas, filasMapa, claveActual, filaSel, tipoCagr, wfVista, tpVista, azarVista])
+  [res, filas, filasMapa, claveActual, filaSel, tipoCagr, wfVista, tpVista, azarVista, edgeVista])
   // Pulsar una fila de la tabla (que está al final) lleva al bloque de la combinación seleccionada, bajo el
   // mapa; pulsar una celda del mapa no desplaza: el bloque ya está justo debajo.
   // Y el mapa fija los parámetros que no están en los ejes con los de esa fila, para que su celda se vea marcada.
@@ -452,7 +458,8 @@ export function ResultadosOptimizacion({ res, onProbar = null, seleccionInicial 
             setSeleccionada={seleccionaDesdeTabla} />
           <WalkForwardPanel filas={filasMapa} temporalidad={tpVista} res={res} variados={variados} textoParams={textoParams} ajustes={ajustesRobustez} setAjuste={setAjusteRobustez}
             setSeleccionada={seleccionaDesdeTabla} onResultado={anotaWalkForward} />
-          {res.terminado && <AzarPanel res={res} fila={filaSel} temporalidad={tpVista} apiFetch={apiFetch} textoParams={textoParams} onResultado={anotaAzar} />}
+          {res.terminado && <AzarPanel res={res} fila={filaSel} temporalidad={tpVista} apiFetch={apiFetch} textoParams={textoParams} onResultado={anotaAzar} almacen={almacenDatos} />}
+          {res.terminado && <EdgePanel res={res} fila={filaSel} temporalidad={tpVista} apiFetch={apiFetch} textoParams={textoParams} onResultado={anotaEdge} almacen={almacenDatos} />}
   </>)
 }
 
@@ -460,43 +467,57 @@ export function ResultadosOptimizacion({ res, onProbar = null, seleccionInicial 
 // desplegarla: pide a /api/datos (la llamada de «Probar en backtest»: mismos params, periodo, comisiones y calentamiento
 // que el optimizador) las operaciones y las velas de cada activo y simula, un activo cada vez para no bloquear la
 // pantalla. Caché por combinación y temporalidad (las descargas) y por número de simulaciones (los resultados).
-function AzarPanel({ res, fila, temporalidad = null, apiFetch, textoParams, onResultado = null }) {
+// La entrada de la caché compartida de una combinación y temporalidad: { datos, msDatos, descarga, resultados (azar),
+// enCurso, edge, enCursoEdge }.
+function entradaDe(almacen, clave) {
+  let e = almacen.get(clave)
+  if (!e) { e = { datos: null, resultados: {}, enCurso: {}, edge: {}, enCursoEdge: {} }; almacen.set(clave, e) }
+  return e
+}
+// Descarga UNA vez (aunque la pidan las dos secciones a la vez) las operaciones y velas de cada activo de la fila.
+function descargaDatos(e, { res, fila, apiFetch, alProgreso = () => {} }) {
+  if (e.datos) return Promise.resolve(e.datos)
+  if (!e.descarga) e.descarga = (async () => {
+    const t0 = Date.now(), syms = Object.keys(fila.porActivo || {}).sort(), p = pruebaDeFila(res, fila), datos = {}
+    alProgreso(`Descargando las operaciones: 0 de ${syms.length} activos…`)
+    for (let i = 0; i < syms.length; i += CONCURRENCIA) {
+      await Promise.all(syms.slice(i, i + CONCURRENCIA).map(async sym => {
+        try {
+          const r = await apiFetch('/api/datos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payloadPrueba(p), simbolo: sym }) })
+          const j = await r.json().catch(() => null)
+          datos[sym] = r.ok && j && !j.error ? datosDeRespuesta(j) : { error: j?.errorMessage || j?.error || `HTTP ${r.status}` }
+        } catch (err) { datos[sym] = { error: err?.message || 'error de red' } }
+      }))
+      alProgreso(`Descargando las operaciones: ${Math.min(i + CONCURRENCIA, syms.length)} de ${syms.length} activos…`)
+    }
+    e.datos = datos; e.msDatos = Date.now() - t0
+    return datos
+  })()
+  return e.descarga
+}
+// Semilla fija: estrategia + parámetros + lista + periodo + temporalidad (mismo resultado siempre).
+const semillaBase = (res, fila, temporalidad) => semillaDe([res.estrategiaId, claveCombinacion(fila.params), [...res.activos].sort().join(','), res.condiciones.desde, res.condiciones.hasta, temporalidad || res.condiciones.intervalo].join('|'))
+
+function AzarPanel({ res, fila, temporalidad = null, apiFetch, textoParams, onResultado = null, almacen }) {
   const [abierta, setAbierta] = useState(false)
   const [nSim, setNSim] = useState(AZAR.simulaciones)
   const [textoN, setTextoN] = useState(String(AZAR.simulaciones))
   const [progreso, setProgreso] = useState(null)
   const [, setVersion] = useState(0)
-  const almacen = useMemo(() => new Map(), [res])
   const clave = fila ? `${temporalidad || 'única'}|${claveCombinacion(fila.params)}` : null
   const entrada = clave ? almacen.get(clave) : null
   const resultado = entrada?.resultados?.[nSim] || null
   const aplicaN = () => { const v = Math.round(numeroEs(textoN)); const n = Number.isFinite(v) ? Math.min(AZAR.maxSimulaciones, Math.max(AZAR.minSimulaciones, v)) : AZAR.simulaciones; setNSim(n); setTextoN(String(n)) }
   useEffect(() => {
     if (!abierta || !fila || !apiFetch || !clave || resultado) return
-    let e = almacen.get(clave)
-    if (!e) { e = { datos: null, resultados: {}, enCurso: {} }; almacen.set(clave, e) }
+    const e = entradaDe(almacen, clave)
     if (e.enCurso[nSim]) return
     e.enCurso[nSim] = true
     const filaC = fila, n = nSim, cap = res.condiciones.capitalIni || 10000
     ;(async () => {
-      const t0 = Date.now(), syms = Object.keys(filaC.porActivo || {}).sort()
-      if (!e.datos) {
-        const p = pruebaDeFila(res, filaC), datos = {}
-        setProgreso({ clave, texto: `Descargando las operaciones: 0 de ${syms.length} activos…` })
-        for (let i = 0; i < syms.length; i += CONCURRENCIA) {
-          await Promise.all(syms.slice(i, i + CONCURRENCIA).map(async sym => {
-            try {
-              const r = await apiFetch('/api/datos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payloadPrueba(p), simbolo: sym }) })
-              const j = await r.json().catch(() => null)
-              datos[sym] = r.ok && j && !j.error ? datosDeRespuesta(j) : { error: j?.errorMessage || j?.error || `HTTP ${r.status}` }
-            } catch (err) { datos[sym] = { error: err?.message || 'error de red' } }
-          }))
-          setProgreso({ clave, texto: `Descargando las operaciones: ${Math.min(i + CONCURRENCIA, syms.length)} de ${syms.length} activos…` })
-        }
-        e.datos = datos; e.msDatos = Date.now() - t0
-      }
-      // Semilla fija: estrategia + parámetros + lista + periodo + temporalidad (mismo resultado siempre).
-      const base = semillaDe([res.estrategiaId, claveCombinacion(filaC.params), [...res.activos].sort().join(','), res.condiciones.desde, res.condiciones.hasta, temporalidad || res.condiciones.intervalo].join('|'))
+      const syms = Object.keys(filaC.porActivo || {}).sort()
+      await descargaDatos(e, { res, fila: filaC, apiFetch, alProgreso: (texto) => setProgreso({ clave, texto }) })
+      const base = semillaBase(res, filaC, temporalidad)
       const t1 = Date.now(), sims = {}, porActivo = {}
       for (let i = 0; i < syms.length; i++) {
         const sym = syms[i], d = e.datos[sym]
@@ -596,6 +617,106 @@ function HistogramaAzar({ sims, real, p5, p95 }) {
         {[p5, p95].filter(x => x != null).map((x, i) => <line key={i} x1={px(x)} x2={px(x)} y1={T} y2={H - B} stroke="#ffd166" strokeWidth="1" strokeDasharray="4 3" />)}
         {real != null && <g><line x1={px(real)} x2={px(real)} y1={T - 6} y2={H - B} stroke="var(--accent)" strokeWidth="2" />
           <text x={px(real)} y={T - 8} textAnchor={px(real) > W - 80 ? 'end' : 'middle'} style={{ ...texto, fill: 'var(--accent)' }}>{`real ${pct(real)}`}</text></g>}
+      </svg>
+      </div>
+    </div>
+  )
+}
+
+// «Calidad de las entradas (Edge Ratio)» (lib/edge.js) de la combinación seleccionada en la temporalidad elegida, contra
+// entradas al azar. Usa las mismas descargas que «Prueba contra el azar» (caché compartida). Se calcula al desplegarla.
+function EdgePanel({ res, fila, temporalidad = null, apiFetch, textoParams, onResultado = null, almacen }) {
+  const [abierta, setAbierta] = useState(false)
+  const [nSim, setNSim] = useState(AZAR.simulaciones)
+  const [textoN, setTextoN] = useState(String(AZAR.simulaciones))
+  const [progreso, setProgreso] = useState(null)
+  const [, setVersion] = useState(0)
+  const clave = fila ? `${temporalidad || 'única'}|${claveCombinacion(fila.params)}` : null
+  const resultado = clave ? almacen.get(clave)?.edge?.[nSim] || null : null
+  const aplicaN = () => { const v = Math.round(numeroEs(textoN)); const n = Number.isFinite(v) ? Math.min(AZAR.maxSimulaciones, Math.max(AZAR.minSimulaciones, v)) : AZAR.simulaciones; setNSim(n); setTextoN(String(n)) }
+  useEffect(() => {
+    if (!abierta || !fila || !apiFetch || !clave || resultado) return
+    const e = entradaDe(almacen, clave)
+    if (e.enCursoEdge[nSim]) return
+    e.enCursoEdge[nSim] = true
+    const filaC = fila, n = nSim
+    ;(async () => {
+      const datos = await descargaDatos(e, { res, fila: filaC, apiFetch, alProgreso: (texto) => setProgreso({ clave, texto }) })
+      setProgreso({ clave, texto: 'Calculando el Edge Ratio…' })
+      await new Promise(r => setTimeout(r, 0))   // deja pintar el aviso antes del cálculo
+      const t1 = Date.now()
+      const activos = Object.fromEntries(Object.entries(datos).filter(([, d]) => !d.error))
+      const r = { ...edgeContraAzar({ activos, nSim: n, semilla: semillaBase(res, filaC, temporalidad) }), msDatos: e.msDatos || 0, msCalculo: Date.now() - t1,
+        errores: Object.entries(datos).filter(([, d]) => d.error).map(([s]) => s) }
+      e.edge[n] = r; delete e.enCursoEdge[n]
+      setProgreso(null); setVersion(v => v + 1)
+      if (onResultado) onResultado(clave, r)
+    })()
+  }, [abierta, clave, nSim])
+  const cabecera = (
+    <button onClick={() => setAbierta(a => !a)} aria-expanded={abierta} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--text)', fontFamily: MONO, fontSize: TAM, fontWeight: 700 }}>
+      {abierta ? '▾ Calidad de las entradas (Edge Ratio)' : '▸ Calidad de las entradas (Edge Ratio)'}</button>)
+  if (!abierta) return <div style={{ ...caja, marginTop: 14 }}>{cabecera}</div>
+  const c = { padding: '3px 8px', textAlign: 'right', fontSize: TAM }
+  return (
+    <div style={{ ...caja, marginTop: 14 }}>{cabecera}
+      <div style={{ fontSize: TAM, color: GRIS, lineHeight: 1.6, marginTop: 6 }}>
+        {fila ? `Combinación seleccionada: ${textoParams(fila.params)}${temporalidad ? ` · ${temporalidad}` : ''}. Para cada entrada real (a su precio real, huecos incluidos), lo máximo a favor (MFE) y en contra (MAE) en las N velas desde la de entrada, en ATR14 de las velas anteriores; Edge Ratio = media(MFE) / media(MAE), con las entradas de todos los activos. El azar entra el mismo número de veces por activo, en velas al azar, en la apertura.` : 'Selecciona una combinación (en el mapa, el gráfico o la tabla).'}</div>
+      <label style={{ flexDirection: 'row', alignItems: 'center', gap: 6, fontSize: TAM, color: GRIS, marginTop: 6 }}>Simulaciones
+        <input value={textoN} onChange={e => setTextoN(e.target.value)} onBlur={aplicaN} onKeyDown={e => { if (e.key === 'Enter') aplicaN() }} style={{ ...entrada, width: 70 }} inputMode="numeric" />
+        <span>({fmt(AZAR.minSimulaciones, 0)}–{fmt(AZAR.maxSimulaciones, 0)})</span></label>
+      {!apiFetch && <div style={{ fontSize: TAM, color: GRIS, marginTop: 6 }}>No disponible aquí.</div>}
+      {fila && !resultado && progreso?.clave === clave && <div role="status" style={{ fontSize: TAM, color: GRIS, marginTop: 8 }}>⏳ {progreso.texto}</div>}
+      {resultado && (<>
+        <div style={{ fontSize: TAM, color: GRIS, marginTop: 8 }}>{`${fmt(resultado.entradas, 0)} entradas con ATR en ${resultado.activos} activos${resultado.sinAtr ? ` (${resultado.sinAtr} sin ATR14 previo, fuera)` : ''}${resultado.errores.length ? ` · sin datos: ${resultado.errores.join(', ')}` : ''} · ${fmt(resultado.nSim, 0)} simulaciones · tiempo: descarga ${fmt(resultado.msDatos / 1000, 1)} s, cálculo ${fmt(resultado.msCalculo / 1000, 1)} s`}</div>
+        <GraficoEdge filas={resultado.filas} />
+        <div style={{ overflowX: 'auto', marginTop: 8 }}>
+          <table style={{ borderCollapse: 'collapse', fontSize: TAM }}>
+            <thead><tr style={{ color: GRIS }}>{['N', 'Entradas usadas', 'Real', 'Mediana del azar', 'P5–P95 del azar', 'Percentil', 'Veredicto'].map((t, i) => <th key={t} style={{ ...c, textAlign: i === 6 ? 'left' : 'right', fontWeight: 400 }}>{t}</th>)}</tr></thead>
+            <tbody>{resultado.filas.map(f => (
+              <tr key={f.N} style={{ borderTop: '1px solid var(--border)' }}>
+                <td style={c}>{f.N}</td><td style={c}>{num(f.usadas, 0)}</td><td style={c}>{f.real == null ? '—' : num(f.real)}</td><td style={c}>{f.mediana == null ? '—' : num(f.mediana)}</td>
+                <td style={c}>{f.p5 == null ? '—' : `${num(f.p5)} – ${num(f.p95)}`}</td><td style={c}>{f.percentil == null ? '—' : fmt(f.percentil, 1)}</td>
+                <td style={{ ...c, textAlign: 'left' }}>{f.veredicto ? TEXTO_VEREDICTO[f.veredicto] : 'Sin entradas suficientes'}</td>
+              </tr>))}</tbody>
+          </table>
+        </div>
+        <div style={comoLeer}>Cómo leer esto: por encima de 1, las entradas tienden a ir más a favor que en contra. En valores alcistas el azar también da más
+          de 1, por eso se compara con la banda del azar y no con 1. N corto (≤ {EDGE_CORTO_MAX}) mide el momento exacto de la entrada; N largo, si engancha
+          tendencias. No depende de cómo se sale. Una entrada sin N velas por delante no cuenta para ese N.</div>
+      </>)}
+    </div>)
+}
+
+// Edge Ratio por N: real (línea), mediana del azar (discontinua) y banda P5–P95 sombreada; referencia en 1. A todo el ancho.
+function GraficoEdge({ filas }) {
+  const [refAncho, W] = useAnchoContenedor()
+  const H = 220, L = 48, Rm = 16, T = 14, B = 30
+  const f = filas.filter(x => x.real != null && x.mediana != null)
+  if (!f.length) return null
+  const vals = f.flatMap(x => [x.real, x.p5, x.p95, x.mediana]).filter(v => v != null)
+  let y0 = Math.min(1, ...vals), y1 = Math.max(1, ...vals)
+  const pad = (y1 - y0) * 0.08 || 0.1; y0 -= pad; y1 += pad
+  const px = (i) => L + (f.length === 1 ? 0.5 : i / (f.length - 1)) * (W - L - Rm), py = (v) => T + (y1 - v) / (y1 - y0) * (H - T - B)
+  const texto = { fill: GRIS, fontSize: TAM, fontFamily: MONO }
+  const linea = (k) => f.map((x, i) => `${px(i).toFixed(1)},${py(x[k]).toFixed(1)}`).join(' ')
+  const banda = [...f.map((x, i) => `${px(i).toFixed(1)},${py(x.p95).toFixed(1)}`), ...f.map((x, i) => [i, x]).reverse().map(([i, x]) => `${px(i).toFixed(1)},${py(x.p5).toFixed(1)}`)].join(' ')
+  const ticksY = Array.from({ length: 5 }, (_, i) => y0 + (y1 - y0) * i / 4)
+  return (
+    <div style={{ marginTop: 8 }}>
+      <div style={etiqueta}>Edge Ratio por N (velas desde la entrada)</div>
+      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: TAM, color: GRIS, marginBottom: 4 }}>
+        <span><span style={{ color: 'var(--accent)' }}>━</span> Real</span><span><span style={{ color: GRIS }}>╌</span> Mediana del azar</span><span><span style={{ color: GRIS, opacity: 0.5 }}>▮</span> Azar P5–P95</span><span><span style={{ color: '#ffd166' }}>┄</span> 1</span></div>
+      <div ref={refAncho} style={{ width: '100%' }}>
+      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }} role="img" aria-label="Edge Ratio real y del azar por número de velas">
+        {ticksY.map((v, i) => <g key={i}><line x1={L} x2={W - Rm} y1={py(v)} y2={py(v)} stroke="var(--border)" strokeWidth="1" />
+          <text x={L - 6} y={py(v) + 4} textAnchor="end" style={texto}>{num(v)}</text></g>)}
+        <polygon points={banda} fill={GRIS} opacity="0.2" />
+        <line x1={L} x2={W - Rm} y1={py(1)} y2={py(1)} stroke="#ffd166" strokeWidth="1" strokeDasharray="2 3" />
+        <polyline points={linea('mediana')} fill="none" stroke={GRIS} strokeWidth="1.5" strokeDasharray="5 4" />
+        <polyline points={linea('real')} fill="none" stroke="var(--accent)" strokeWidth="2" />
+        {f.map((x, i) => <g key={x.N}><circle cx={px(i)} cy={py(x.real)} r="3" fill="var(--accent)"><title>{`N ${x.N}: real ${num(x.real)} · mediana del azar ${num(x.mediana)} (P5–P95 ${num(x.p5)}–${num(x.p95)}) · percentil ${fmt(x.percentil, 1)}`}</title></circle>
+          <text x={px(i)} y={H - B + 18} textAnchor="middle" style={texto}>{`N ${x.N}`}</text></g>)}
       </svg>
       </div>
     </div>
