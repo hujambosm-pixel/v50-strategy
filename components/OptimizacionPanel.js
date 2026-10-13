@@ -8,7 +8,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { MONO, fmt, fmtDate, numeroEs, textoEs } from '../lib/utils'
 import CampoFecha from './CampoFecha'
 import { conclusiones as calculaConclusiones, activosPocaHistoria } from '../lib/conclusiones'
-import { AZAR, TEXTO_VEREDICTO, semillaDe, semillaDeActivo, simulaActivo, porActivoAzar, combinaGlobal, datosDeRespuesta } from '../lib/azar'
+import { AZAR, TEXTO_VEREDICTO, TEXTO_VEREDICTO_CAIDA, semillaDe, semillaDeActivo, simulaActivo, porActivoAzar, combinaGlobal, datosDeRespuesta } from '../lib/azar'
 import { robustez as calculaRobustez, MIN_ANIOS_ROBUSTEZ, aniosConDatos, resultadosAnuales, walkForward, WF_VENTANAS, WF_VENTANA_DEFECTO } from '../lib/robustez'
 import { esquemaDeCodigo } from '../lib/parametrosEstrategia'
 import { generaRejilla, rejillaSugerida, valoresDeRango } from '../lib/rejillaParametros'
@@ -535,18 +535,25 @@ function AzarPanel({ res, fila, temporalidad = null, apiFetch, textoParams, onRe
         <div style={{ ...caja, marginTop: 10, marginBottom: 6, fontSize: TAM, lineHeight: 1.7 }}>
           <div><b style={{ color: g.veredicto === 'supera' ? 'var(--accent)' : g.veredicto === 'algo' ? '#ffd166' : 'var(--text)' }}>{TEXTO_VEREDICTO[g.veredicto] || 'Sin veredicto'}</b>{g.percentil != null ? ` · percentil ${fmt(g.percentil, 1)}` : ''}</div>
           <div style={{ color: GRIS }}>{`Real (mediana entre activos): ${pct(g.real)} · mediana del azar: ${pct(g.mediana)} · banda P5–P95 del azar: ${pct(g.p5)} a ${pct(g.p95)} · ${fmt(resultado.nSim, 0)} simulaciones con ${g.activos} activos`}</div>
+          {g.caida?.percentil != null && (<>
+            <div style={{ marginTop: 6 }}>Caída máxima: <b style={{ color: g.caida.veredicto === 'supera' ? 'var(--accent)' : g.caida.veredicto === 'algo' ? '#ffd166' : 'var(--text)' }}>{TEXTO_VEREDICTO_CAIDA[g.caida.veredicto]}</b>{` · percentil ${fmt(g.caida.percentil, 1)}`}</div>
+            <div style={{ color: GRIS }}>{`Real (mediana entre activos): ${pct(g.caida.real)} · mediana del azar: ${pct(g.caida.mediana)} · banda P5–P95 del azar: ${pct(g.caida.p5)} a ${pct(g.caida.p95)}`}</div>
+            <div style={{ color: GRIS }}>La caída se mide igual para la estrategia y para el azar (curva simple al cierre de cada vela); puede diferir algo de la del backtest.</div>
+          </>)}
           <div style={{ color: GRIS }}>{`Tiempo: descarga de las operaciones ${fmt(resultado.msDatos / 1000, 1)} s · simulación ${fmt(resultado.msSimulacion / 1000, 1)} s`}</div>
         </div>
         <HistogramaAzar sims={g.sims} real={g.real} p5={g.p5} p95={g.p95} />
         <div style={{ overflowX: 'auto', marginTop: 8 }}>
           <table style={{ borderCollapse: 'collapse', fontSize: TAM }}>
-            <thead><tr style={{ color: GRIS }}>{['Activo', 'Ops.', 'Real', 'Mediana del azar', 'Percentil', 'Veredicto'].map((t, i) => <th key={t} style={{ ...c, textAlign: i === 0 || i === 5 ? 'left' : 'right', fontWeight: 400 }}>{t}</th>)}</tr></thead>
+            <thead><tr style={{ color: GRIS }}>{['Activo', 'Ops.', 'Real', 'Mediana del azar', 'Percentil', 'Veredicto', 'Caída real', 'Caída del azar', 'Percentil caída'].map((t, i) => <th key={t} style={{ ...c, textAlign: i === 0 || i === 5 ? 'left' : 'right', fontWeight: 400 }}>{t}</th>)}</tr></thead>
             <tbody>{filasT.map(([sym, x]) => (
               <tr key={sym} style={{ borderTop: '1px solid var(--border)' }}>
                 <td style={{ ...c, textAlign: 'left', whiteSpace: 'nowrap' }}>{poca.some(p => p.s === sym) ? `${sym} (poca historia)` : sym}</td>
                 <td style={c}>{x.error ? '—' : num(x.k, 0)}</td><td style={c}>{x.error ? '—' : pct(x.real)}</td><td style={c}>{x.error ? '—' : pct(x.mediana)}</td>
                 <td style={c}>{x.percentil == null ? '—' : fmt(x.percentil, 1)}</td>
                 <td style={{ ...c, textAlign: 'left' }}>{x.error ? `Sin datos: ${x.error}` : x.veredicto ? TEXTO_VEREDICTO[x.veredicto] : x.k ? `Sin veredicto (menos de ${AZAR.minOperaciones} operaciones)` : 'Sin operaciones'}</td>
+                <td style={c}>{x.caida?.real == null ? '—' : pct(x.caida.real)}</td><td style={c}>{x.caida?.mediana == null ? '—' : pct(x.caida.mediana)}</td>
+                <td style={c}>{x.caida?.percentil == null ? '—' : fmt(x.caida.percentil, 1)}</td>
               </tr>))}</tbody>
           </table>
         </div>
@@ -554,7 +561,8 @@ function AzarPanel({ res, fila, temporalidad = null, apiFetch, textoParams, onRe
           operaciones con las mismas duraciones, así que pasa el mismo tiempo dentro del mercado: la única diferencia es CUÁNDO entra. El percentil es el % de
           simulaciones que quedan por debajo del resultado real (≥ {AZAR.supera}: supera al azar; {AZAR.algoMejor}–{AZAR.supera}: algo mejor, no concluyente; por debajo
           de {AZAR.algoMejor}: no se distingue; por debajo de {AZAR.peor}: peor). En valores muy alcistas el azar también gana mucho: por eso se compara contra él y
-          no contra cero.</div>
+          no contra cero. La caída máxima se compara igual: el percentil es el % de simulaciones que caen más que la estrategia. Como el azar también está fuera del
+          mercado el mismo tiempo, caer menos que el comprar y mantener no basta: hay que caer menos que el azar.</div>
       </>)}
     </div>)
 }
