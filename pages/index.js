@@ -27,8 +27,10 @@ import OptimizacionPanel from '../components/OptimizacionPanel'
 import AzarCarteraPanel, { anotaPeticionMc, peticionMcDe, pruebasCalculadas } from '../components/AzarCarteraPanel'
 import BotonCopiar, { leeTabla } from '../components/BotonCopiar'
 import { textoMulticartera, datosCabeceraMulticartera } from '../lib/exportaTexto'
+import { universoDePeriodo } from '../lib/screener'
+import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.960'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.961'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -1389,6 +1391,11 @@ export default function Home() {
   const [mcShowOccupancy,setMcShowOccupancy]=useState(true)
   const [mcOccMode,setMcOccMode]=useState('compound')  // own filter for MC capital chart
   const [mcIntervalo,setMcIntervalo]=useState(mcAsigBoot.intervalo)  // 'diario' | 'semanal' — intervalo de datos MC
+  // Universo del multibacktest (Fase 8a): 'manual' (la lista seleccionada, lo de siempre) o 'ndx_vol_N' (Nasdaq-100, los
+  // N más volátiles del año anterior: public.universo_screener). No se guarda entre sesiones.
+  const [mcUniverso,setMcUniverso]=useState('manual')
+  const [mcShowQQQ,setMcShowQQQ]=useState(true)
+  const [mcShowBHUniv,setMcShowBHUniv]=useState(true)
   // Cambiar de intervalo resetea la ventana RS del multibacktest al default de su timeframe —63 diario,
   // 13 semanal—, pisando el valor manual del input. Solo setState → no dispara backtest (manual).
   // Vive en este handler y NO en un efecto sobre mcIntervalo, por dos motivos. Un efecto corre también
@@ -1477,6 +1484,13 @@ export default function Home() {
       excluidos:[...excluidos.values()].sort((a,b)=>a.symbol.localeCompare(b.symbol)),
       recorteRango:base.recorteRango||conAviso.find(a=>a.recorteRango)?.recorteRango||null}
   },[mcResult,mcMultiResults])
+  // Universo dinámico: las dos referencias del gráfico (B&H de QQQ y del universo), memorizadas para no rehacer el gráfico
+  // en cada render, y su resumen para la cabecera.
+  const mcCurvasUniverso=useMemo(()=>mcResult?.universo?[
+    {data:mcResult.universo.qqqBHCurve,color:'#ffd166',name:'B&H QQQ',show:mcShowQQQ},
+    {data:mcResult.universo.bhUniversoCurve,color:'#ff7eb6',name:'B&H universo',show:mcShowBHUniv},
+  ].filter(c=>c.show&&c.data?.length):null,[mcResult,mcShowQQQ,mcShowBHUniv])
+  const mcResumenUniverso=useMemo(()=>mcResult?.universo?{qqq:resumenCurva(mcResult.universo.qqqBHCurve),universo:resumenCurva(mcResult.universo.bhUniversoCurve)}:null,[mcResult])
   const avisoHistoricoIndiv=result?.avisosHistorico||null
   // Nombre con el que ROTULAR el resultado cuando no viaja dentro de una lista con nombre propio:
   // con UNA estrategia y UN modo, el runner hace una llamada única, guarda en mcResult y deja
@@ -5394,7 +5408,9 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
     // Mínimo 1: con un solo activo los cuatro modos degradan a "todo el capital en la única
     // posición" y el endpoint ya acepta un símbolo. Permite comparar varias estrategias sobre
     // el mismo valor, que antes no tenía vía en la app.
-    if(mcSelected.length<1){setMcError('Selecciona al menos un activo');return}
+    // Universo dinámico: los activos salen de la máscara del periodo, no de la selección.
+    const _nUniv=mcUniverso==='manual'?null:Number(mcUniverso.split('_').pop())
+    if(!_nUniv&&mcSelected.length<1){setMcError('Selecciona al menos un activo');return}
     if(mcMode==='custom'){
       const total=mcSelected.reduce((s,sym)=>s+(Number(mcWeights[sym])||0),0)
       if(Math.abs(total-100)>0.5){setMcError(`Los pesos suman ${total.toFixed(1)}% — deben sumar 100%`);return}
@@ -5452,6 +5468,32 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
     }
     const _prueba=mcPrueba&&stratIds.length===1&&stratIds[0]===mcPrueba.estrategiaId
       ?{filtros:[],params:mcPrueba.params,...(mcPrueba.calentamiento!=null?{calentamiento:mcPrueba.calentamiento}:{})}:{}
+    // ── Universo dinámico: Nasdaq-100 · N más volátiles ──
+    // Una estrategia, capital concentrado. La máscara (qué símbolo puede recibir ENTRADAS y cuándo) se reconstruye aquí con
+    // lib/screener.js a partir de public.universo_screener y public.universo_miembros; el servidor la aplica.
+    if(_nUniv){
+      if(stratIds.length!==1||stratIds[0]==='__portfolio__'){setMcError('El universo dinámico se ejecuta con una sola estrategia (sin ◈ Multicartera).');setMcLoading(false);return}
+      if(!_mcFrom||_mcFrom<'2016-01-01'){setMcError('El universo dinámico empieza el 01/01/2016: elige un periodo que empiece en esa fecha o después.');setMcLoading(false);return}
+      try{
+        setMcProgress({current:1,total:1,name:`Nasdaq-100 · ${_nUniv} más volátiles`})
+        const [rf,rm]=await Promise.all([
+          fetch(`${getSupaUrl()}/rest/v1/universo_screener?regla=eq.volatilidad&n=eq.${_nUniv}&select=regla,n,anio,simbolo_yahoo,posicion,volatilidad`,{headers:getSupaH()}),
+          fetch(`${getSupaUrl()}/rest/v1/universo_miembros?indice=eq.NDX&select=simbolo,simbolo_yahoo,nombre,desde,hasta,excluido_motivo`,{headers:getSupaH()}),
+        ])
+        if(!rf.ok||!rm.ok) throw new Error('No se pudo leer el universo de la base de datos.')
+        const u=universoDePeriodo(await rf.json(),await rm.json(),_mcFrom,_mcTo||'9999-12-31')
+        if(!u.simbolos.length) throw new Error('No hay selección del universo para ese periodo.')
+        const _strat1=strategies.find(s=>s.id===stratIds[0])
+        const _cuerpoMc={symbols:u.simbolos,modoAsig:'concentrado',weights:{},cfg:baseCfg,strategyId:stratIds[0],isNoStrategy:(_strat1?.name||'').includes('No Strategy'),filtros:filtrosBackend,intervalo:mcIntervalo,comisiones:mcComisiones,..._prueba,
+          universo:{regla:'volatilidad',n:_nUniv,mascara:u.mascara,elegidos:u.elegidos}}
+        const res=await apiFetch('/api/multibacktest',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(_cuerpoMc)})
+        const json=await leeRespuestaMc(res)
+        anotaPeticionMc(json,_cuerpoMc)
+        if(!res.ok) throw new Error(json.error||'Error')
+        setMcResult(json);setMcMultiResults([]);setMcIsModoCompare(false)
+      }catch(e){setMcError(e.message)}finally{setMcLoading(false);setMcProgress(null)}
+      return
+    }
     if(stratIds.length<=1){
       const modesToRun=selectedModos.length>0?selectedModos:['slots']
       if(modesToRun.length===1){
@@ -5463,7 +5505,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
           const _cuerpoMc={symbols:mcSelected,modoAsig:modesToRun[0],weights:weightsNorm,cfg:baseCfg,strategyId:stratIds[0]||null,isNoStrategy,filtros:filtrosBackend,intervalo:mcIntervalo,comisiones:mcComisiones,..._prueba}
           const res=await apiFetch('/api/multibacktest',{method:'POST',headers:{'Content-Type':'application/json'},
             body:JSON.stringify(_cuerpoMc)})
-          const json=await res.json()
+          const json=await leeRespuestaMc(res)
           anotaPeticionMc(json,_cuerpoMc)
           if(!res.ok) throw new Error(json.error||'Error')
           setMcResult(json);setMcMultiResults([]);setMcIsModoCompare(false)
@@ -5485,7 +5527,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
           const _cuerpoMc={symbols:mcSelected,modoAsig:modo,weights:weightsNorm,cfg:baseCfg,strategyId:sid,isNoStrategy:isNoStrategyMode,filtros:filtrosBackend,intervalo:mcIntervalo,comisiones:mcComisiones,..._prueba}
           const res=await apiFetch('/api/multibacktest',{method:'POST',headers:{'Content-Type':'application/json'},
             body:JSON.stringify(_cuerpoMc)})
-          const json=await res.json()
+          const json=await leeRespuestaMc(res)
           anotaPeticionMc(json,_cuerpoMc)
           if(!res.ok) throw new Error(json.error||'Error en '+MODE_LABELS[modo])
           modeResults.push({id:`${sid||'__single__'}__${modo}`,name:`${stratName} · ${MODE_LABELS[modo]}`,color,result:json,modo})
@@ -5511,7 +5553,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         const _cuerpoMc={symbols:mcSelected,modoAsig:mcMode,weights:weightsNorm,cfg,strategyId:sid,isNoStrategy:(strat?.name||'').includes('No Strategy'),filtros:filtrosBackend,intervalo:mcIntervalo,comisiones:mcComisiones}
         const res=await apiFetch('/api/multibacktest',{method:'POST',headers:{'Content-Type':'application/json'},
           body:JSON.stringify(_cuerpoMc)})
-        const json=await res.json()
+        const json=await leeRespuestaMc(res)
         anotaPeticionMc(json,_cuerpoMc)
         if(!res.ok) throw new Error(json.error||'Error en '+name)
         results.push({id:sid,name,color,result:json})
@@ -5575,7 +5617,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
       }
     }
     setMcLoading(false);setMcProgress(null)
-  },[mcSelected,mcMode,selectedModos,mcWeights,mcCapital,mcCapitalIni,mcYears,mcPeriodMode,mcFromDate,mcToDate,mcComisiones,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL,rankingData,mcStratSelected,strategies,currentStratId,mcRiskPerTrade,mcMaxPortfolioPct,mcMaxAccumRisk,mcAssumedStopPct,mcMaxPosiciones,mcPrioridad,mcCriterioUso,mcMomentumN,mcRsWindow,mcRsGateThr,mcMomGateThr,mcProxGateThr,filtrosBackend,mcIntervalo,mcPrueba])
+  },[mcSelected,mcMode,selectedModos,mcWeights,mcCapital,mcCapitalIni,mcYears,mcPeriodMode,mcFromDate,mcToDate,mcComisiones,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL,rankingData,mcStratSelected,strategies,currentStratId,mcRiskPerTrade,mcMaxPortfolioPct,mcMaxAccumRisk,mcAssumedStopPct,mcMaxPosiciones,mcPrioridad,mcCriterioUso,mcMomentumN,mcRsWindow,mcRsGateThr,mcMomGateThr,mcProxGateThr,filtrosBackend,mcIntervalo,mcPrueba,mcUniverso])
   // «Probar en backtest» (components/OptimizacionPanel.js): abre la combinación en el backtest individual
   // (la estrategia, el activo y el payload de la prueba) o en el multibacktest (la estrategia, los activos y
   // las condiciones de la optimización, y lo lanza). Nada se guarda en la estrategia.
@@ -6208,7 +6250,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.960</title>
+        <title>Trading Simulator V9.961</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6297,7 +6339,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             }} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.960
+            <span className="dot"/>Trading Simulator V9.961
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -7482,8 +7524,10 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       ].map(m=>{
                         const isCheckbox=mcStratSelected.length<=1
                         const isActive=isCheckbox?selectedModos.includes(m.id):mcMode===m.id
+                        // Universo dinámico: solo capital concentrado (el resto se ve desactivado, con el aviso de abajo).
+                        const _soloConc=mcUniverso!=='manual'&&m.id!=='concentrado'
                         const handleClick=()=>{
-                          if(!m.ready) return
+                          if(!m.ready||_soloConc) return
                           if(isCheckbox){
                             setSelectedModos(prev=>
                               prev.includes(m.id)
@@ -7500,7 +7544,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                               style={{display:'flex',alignItems:'center',gap:8,padding:'6px 8px',borderRadius:4,
                                 background:isActive?'rgba(0,212,255,0.08)':'transparent',
                                 border:`1px solid ${isActive?'var(--accent)':'var(--border)'}`,
-                                cursor:m.ready?'pointer':'not-allowed',opacity:m.ready?1:0.45}}>
+                                cursor:(m.ready&&!_soloConc)?'pointer':'not-allowed',opacity:(m.ready&&!_soloConc)?1:0.45}}>
                               {isCheckbox
                                 ?<div style={{width:14,height:14,borderRadius:3,border:`2px solid ${isActive?'var(--accent)':'#3d5a7a'}`,
                                     background:isActive?'var(--accent)':'transparent',flexShrink:0,
@@ -7515,6 +7559,11 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                           </div>
                         )
                       })}
+                      {mcUniverso!=='manual'&&(
+                        <div style={{fontFamily:MONO,fontSize:10,color:'#ffd166',lineHeight:1.5,marginTop:4}}>
+                          Con universo dinámico solo se admite Capital concentrado: los demás modos quedan desactivados y se ejecuta Concentrado.
+                        </div>
+                      )}
                     </div>
                   )}
                   {(mcStratSelected.length<=1?selectedModos.includes('concentrado'):mcMode==='concentrado')&&(
@@ -7811,8 +7860,30 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   )
                 })()}
 
+                {/* Universo: la lista manual de siempre o el Nasdaq-100 con los N más volátiles del año anterior */}
+                <div style={{padding:'5px 8px',borderBottom:'1px solid var(--border)',flexShrink:0,display:'flex',flexDirection:'column',gap:4}}>
+                  <label style={{display:'flex',alignItems:'center',gap:6,fontFamily:MONO,fontSize:10,color:'#7aabc8'}}>
+                    Universo
+                    <select value={mcUniverso} onChange={e=>setMcUniverso(e.target.value)}
+                      style={{flex:1,background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:10,padding:'3px 5px',borderRadius:4,minWidth:0}}>
+                      <option value="manual">Lista manual</option>
+                      {[10,20,30].map(n=><option key={n} value={`ndx_vol_${n}`}>Nasdaq-100 · {n} más volátiles</option>)}
+                    </select>
+                  </label>
+                  {mcUniverso!=='manual'&&(
+                    <div style={{fontFamily:MONO,fontSize:10,color:'#a8ccdf',lineHeight:1.5}}>
+                      Cada 1 de enero, los {mcUniverso.split('_').pop()} miembros del Nasdaq-100 con mayor volatilidad del año anterior. Solo pueden recibir
+                      ENTRADAS mientras están en el universo; las posiciones abiertas siguen hasta su salida normal. Los activos son los del universo
+                      en el periodo elegido. Solo con Capital concentrado y una estrategia.
+                      <div style={{color:'#ffd166',marginTop:3}}>
+                        El universo empieza el 01/01/2016. En 2016–2018, entre el 14 % y el 22 % de los miembros elegibles no tienen datos de precios
+                        (deslistados): no se pueden medir ni elegir, así que esos años salen sesgados.
+                      </div>
+                    </div>
+                  )}
+                </div>
                 {/* Selector de activos */}
-                <div style={{display:'flex',flexDirection:'column',flex:1,minHeight:0}}>
+                <div style={{display:mcUniverso==='manual'?'flex':'none',flexDirection:'column',flex:1,minHeight:0}}>
                   {/* Filtros */}
                   <div style={{padding:'5px 8px',borderBottom:'1px solid var(--border)',flexShrink:0,display:'flex',gap:4,alignItems:'center'}}>
                     <input type="text" placeholder="🔍 Buscar..." value={mcSearch||''} onChange={e=>setMcSearch(e.target.value)}
@@ -9290,7 +9361,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                     return textoMulticartera({
                       cabecera:{titulo:'Multibacktest',version:VERSION_APP,fecha:new Date().toLocaleString('es-ES'),
                         datos:datosCabeceraMulticartera({peticiones:[peticionMcDe(mcResult),...pets].filter((p,i,a)=>p&&a.indexOf(p)===i),estrategias:strategies,
-                          lista:mcListFilter,avisos:mcResult?.avisosHistorico,periodo:mcResult?.periodo,pruebas})},
+                          lista:mcListFilter,avisos:mcResult?.avisosHistorico,periodo:mcResult?.periodo,pruebas,universo:mcResult?.universo})},
                       tabla:tabla?{...tabla,titulo:mcIsModoCompare?'Comparativa de modos':'Comparativa de estrategias'}:null,
                       azar:pruebas,
                     })
@@ -9318,6 +9389,17 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                     </span>
                   )}
                   <span style={{fontFamily:MONO,fontSize:11,color:'#8ab8d4'}}>{/* Con excluidos, "N de M": los que entran frente a los pedidos (misma respuesta) */}{mcResult.avisosHistorico?.excluidos?.length?`${mcResult.n} de ${mcResult.n+mcResult.avisosHistorico.excluidos.length}`:mcResult.n} activos · <span style={{color:mcResult.modoAsig==='custom'?'#9b72ff':'#00d4ff'}}>{mcResult.modoAsig==='compartido'?'Capital compartido':mcResult.modoAsig==='concentrado'?'Capital concentrado':'Slots iguales'}</span></span>
+                  {/* Universo dinámico: qué universo, cuánto ha recortado y las dos referencias. */}
+                  {mcResult.universo&&(
+                    <span title={'Las entradas fuera del universo se descartan en su fecha de ejecución; las posiciones abiertas siguen hasta su salida normal.'+String.fromCharCode(10)
+                      +'Cierres por dejar de cotizar: posiciones cerradas en la última vela de un valor que deja de cotizar antes del final del periodo.'+String.fromCharCode(10)
+                      +'B&H universo: reparto igual entre los elegidos de cada año, rebalanceado cada 1 de enero; quien sale del índice se mantiene hasta el rebalanceo y quien deja de cotizar pasa a liquidez.'}
+                      style={{fontFamily:MONO,fontSize:10,color:'#ffd166',background:'rgba(255,209,102,0.10)',border:'1px solid rgba(255,209,102,0.35)',borderRadius:3,padding:'1px 6px',cursor:'help'}}>
+                      Universo: Nasdaq-100 · {mcResult.universo.n} más volátiles · {mcResult.universo.descartadasPorUniverso} entradas descartadas por universo · {mcResult.universo.cierresSinCotizacion} cierres por dejar de cotizar
+                      {mcResumenUniverso?.qqq?` · B&H QQQ ${fmt(mcResumenUniverso.qqq.cagr,2,' %')} CAGR (caída ${fmt(mcResumenUniverso.qqq.maxDD,1,' %')})`:''}
+                      {mcResumenUniverso?.universo?` · B&H universo ${fmt(mcResumenUniverso.universo.cagr,2,' %')} CAGR (caída ${fmt(mcResumenUniverso.universo.maxDD,1,' %')})`:''}
+                    </span>
+                  )}
                   <span style={{fontFamily:MONO,fontSize:11,color:'#8ab8d4'}}>
                     {/* Fechas REALES de la curva, no las solicitadas (ver mcAniosDeCurva) */}
                     {mcPeriodMode==='range'&&mcFromDate&&mcToDate
@@ -9938,6 +10020,10 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         {key:'compound',label:(mcSingleStratName||(mcDisplayResults[0]?.name||'').split(' · ')[0]||'Compuesto'),color:'#00e5a0',state:mcShowCompound,set:setMcShowCompound},
                         {key:'bh',      label:'B&H Diversificado',color:'#a0b4c8',state:mcShowBH,      set:setMcShowBH},
                         {key:'sp500',   label:'B&H SP500',        color:'#9b72ff',state:mcShowSP500,   set:setMcShowSP500},
+                        ...(mcResult.universo?[
+                          {key:'qqq',label:'B&H QQQ',color:'#ffd166',state:mcShowQQQ,set:setMcShowQQQ},
+                          {key:'bhu',label:'B&H universo',color:'#ff7eb6',state:mcShowBHUniv,set:setMcShowBHUniv},
+                        ]:[]),
                         {key:'fl',      label:'Flotante',         color:'#ff9a3c',state:showMultiFloat, set:setShowMultiFloat},
                       ].map(({key,label,color,state,set})=>(
                         <button key={key} onClick={()=>set(s=>!s)}
@@ -10099,6 +10185,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       taxByDateCompound={mcAfterTax?.taxByDateById['__single__']||null}
                       taxByDateBH={mcAfterTax?.bhTaxByDate||null}
                       sp500BHCurve={mcResult.sp500BHCurve||[]}
+                      extraCurves={mcCurvasUniverso}
                       capitalIni={Number(mcCapitalIni||capitalIni)}
                       maxDDSimple={mcResult.maxDDSimple}   maxDDSimpleDate={mcResult.maxDDSimpleDate}
                       maxDDCompound={mcResult.maxDDCompound} maxDDCompoundDate={mcResult.maxDDCompoundDate}

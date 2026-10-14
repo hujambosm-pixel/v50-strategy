@@ -21,6 +21,7 @@ import { normalizaPeriodo, velasCalentamiento, recortaConCalentamiento, recortaI
          posicionesHeredadas } from '../../lib/periodo'
 import { COMISIONES_CERO, comisionDe, netoDeOperacion, normalizaComisiones,
          sinComisiones } from '../../lib/comisiones'
+import { admiteEntrada, bhUniverso } from '../../lib/screener'
 
 const SUPA_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPA_KEY = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -1645,7 +1646,56 @@ function _ejecucionesPorActivoSlots(assetResults) {
 // las opciones del reparto; por activo, sus velas del periodo (fechas, aperturas, máximos, cierres) y TODOS sus candidatos
 // (candidatoDe, con su prioridad real, su duración en velas y si pasa la puerta; en Slots, también su capital); y las
 // velas del S&P 500 en la temporalidad del activo, para la fuerza relativa. Solo se calcula con conCandidatos.
-function _candidatosParaAzar({ assetResults, sp500DataTf, modoAsig, sizeRules, symbols, capitalIni, comisiones, startDate }) {
+// ── Universo dinámico (Fase 8a) ─────────────────────────────────────────────────────────────────────────────────────
+// Campo `universo` de la petición: { regla, n, mascara: { símbolo: [[desde, hasta), …] }, elegidos: { año: [símbolo] } }
+// (lo arma el cliente con universoDePeriodo de lib/screener.js a partir de public.universo_screener). La máscara solo
+// limita ENTRADAS, en la fecha de ejecución de la entrada (entryDate: la vela en la que se llena la orden, igual en diario
+// y en semanal), después de los filtros; las posiciones abiertas siguen hasta su salida normal. Solo con capital
+// concentrado. Sin el campo, nada de esto se ejecuta y la respuesta es la de siempre.
+const _FECHA_ISO = /^\d{4}-\d{2}-\d{2}$/
+function _validaUniverso(u, modoAsig) {
+  if (!u || typeof u !== 'object') return { error: '«universo» no es válido.' }
+  if (modoAsig !== 'concentrado') return { error: 'Con universo dinámico solo se admite capital concentrado.' }
+  const m = u.mascara
+  if (!m || typeof m !== 'object' || Array.isArray(m)) return { error: '«universo.mascara» no es válida.' }
+  for (const [sym, tramos] of Object.entries(m)) {
+    if (!Array.isArray(tramos) || !tramos.every(t => Array.isArray(t) && t.length === 2 && _FECHA_ISO.test(t[0]) && _FECHA_ISO.test(t[1]) && t[0] < t[1]))
+      return { error: `«universo.mascara» de ${sym} no es una lista de intervalos [desde, hasta).` }
+  }
+  const e = u.elegidos && typeof u.elegidos === 'object' ? u.elegidos : {}
+  if (!Object.values(e).every(l => Array.isArray(l) && l.every(x => typeof x === 'string'))) return { error: '«universo.elegidos» no es válido.' }
+  return { universo: { regla: String(u.regla || ''), n: Number(u.n) || null, mascara: m, elegidos: e } }
+}
+// Curva B&H de una serie sobre las fechas de las curvas, normalizada al capital inicial en la primera vela >= startD
+// (la misma cuenta que el B&H del S&P 500 de la respuesta).
+function _curvaBHSobre(serie, fechas, startD, capitalIni) {
+  if (!serie?.length || !fechas.length) return []
+  const v0 = serie.find(d => d.date >= startD)
+  if (!v0) return []
+  let j = -1
+  return fechas.map(date => {
+    while (j + 1 < serie.length && serie[j + 1].date <= date) j++
+    return j >= 0 ? { date, value: capitalIni * (serie[j].close / v0.close) } : null
+  }).filter(Boolean)
+}
+// Las referencias y recuentos del universo para la respuesta: B&H de QQQ, B&H del universo (lib/screener.js: reparto
+// igual entre los elegidos de cada año, rebalanceo cada 1 de enero, calculado en el eje completo y leído en las fechas
+// de las curvas) y cuántas posiciones ejecutadas se cerraron en la última vela de un activo que deja de cotizar antes del
+// final del periodo.
+function _referenciasUniverso({ universo, assetResults, curves, qqqData, capitalIni, descartadas }) {
+  const fechas = curves.simpleCurve.map(p => p.date), startD = curves.startDate
+  const ultimaDe = Object.fromEntries(assetResults.map(ar => [ar.symbol, ar.data?.length ? ar.data[ar.data.length - 1].date : null]))
+  const ultimaGlobal = Object.values(ultimaDe).filter(Boolean).sort().pop() ?? null
+  const cierresSinCotizacion = (curves.executedTrades || []).filter(t => t._virtualClose && ultimaDe[t.symbol] && t.exitDate === ultimaDe[t.symbol] && ultimaDe[t.symbol] < ultimaGlobal).length
+  const eje = [...new Set(assetResults.flatMap(ar => (ar.data || []).map(d => d.date)))].filter(d => d >= startD).sort()
+  const series = Object.fromEntries(assetResults.map(ar => [ar.symbol, ar.data || []]))
+  const completa = bhUniverso(universo.elegidos, series, eje, capitalIni)
+  const bhUniversoCurve = _curvaBHSobre(completa.map(p => ({ date: p.date, close: p.value })), fechas, startD, capitalIni)
+  return { regla: universo.regla, n: universo.n, descartadasPorUniverso: descartadas, cierresSinCotizacion,
+    qqqBHCurve: _curvaBHSobre(qqqData, fechas, startD, capitalIni), bhUniversoCurve }
+}
+
+function _candidatosParaAzar({ assetResults, sp500DataTf, modoAsig, sizeRules, symbols, capitalIni, comisiones, startDate, soloSimbolos = null }) {
   const opciones = { modo: modoAsig, capitalIni, n: assetResults.length, startDate,
     maxPosiciones: sizeRules.maxPosiciones ?? 5, prioridad: sizeRules.prioridad ?? 'alfabetico', momentumN: sizeRules.momentumN ?? 20,
     rsWindow: sizeRules.rsWindow ?? 63, criterioUso: sizeRules.criterioUso ?? 'desempate', rsGateThr: sizeRules.rsGateThr ?? 0,
@@ -1654,7 +1704,9 @@ function _candidatosParaAzar({ assetResults, sp500DataTf, modoAsig, sizeRules, s
   const dataMap = {}, dateIdxMap = {}
   assetResults.forEach(ar => { dataMap[ar.symbol] = ar.data || []; const m = {}; (ar.data || []).forEach((d, i) => { m[d.date] = i }); dateIdxMap[ar.symbol] = m })
   const puntua = modoAsig === 'concentrado' ? creaPuntuador({ ...opciones, sp500Data: sp500DataTf, dataMap, dateIdxMap }) : null
-  const activos = assetResults.map(ar => {
+  // soloSimbolos (candidatosDe de la petición): solo esos activos, para pedir los candidatos por tandas sin pasar del
+  // límite de tamaño de la respuesta. Las opciones, la prioridad y el resto de la respuesta no cambian.
+  const activos = (soloSimbolos ? assetResults.filter(ar => soloSimbolos.has(ar.symbol)) : assetResults).map(ar => {
     const d = ar.data || [], idx = dateIdxMap[ar.symbol]
     return { symbol: ar.symbol, fechas: d.map(b => b.date), abre: d.map(b => b.open), cierra: d.map(b => b.close),
       ...(opciones.prioridad === 'max52' ? { altos: d.map(b => b.high ?? null) } : {}),
@@ -2060,6 +2112,7 @@ async function handlerMultibacktest(req, res) {
   const auth = await exigeAuth('multibacktest', req, req.query?.action)
   if (!auth.ok) return res.status(401).json({ error: 'no autenticado' })
   // ── NUEVA RAMA: portfolioMode ─────────────────────────────────────────────
+  if (req.body?.portfolioMode && req.body?.universo != null) return res.status(400).json({ error: 'El universo dinámico no admite la multicartera de varias estrategias.' })
   if (req.body?.portfolioMode) return handlePortfolioMode(req, res)
   // ── PATH EXISTENTE: estrategia única — sin cambio ninguno desde aquí ──────
   const { symbols, cfg: cfgInput, definition, modoAsig = 'slots', weights = {}, sizeRules: sizeRulesBody = null, strategyId = null, isNoStrategy = false, filtros: filtrosCfg, intervalo, comisiones = null, params: cambiosParams = null, calentamiento: calPedido = null } = req.body
@@ -2067,6 +2120,8 @@ async function handlerMultibacktest(req, res) {
   const _com = normalizaComisiones(comisiones)
   const sizeRules = sizeRulesBody || cfgInput?.sizeRules || {}
   if (!Array.isArray(symbols) || !symbols.length) return res.status(400).json({ error: 'symbols requerido' })
+  const _univ = req.body?.universo != null ? _validaUniverso(req.body.universo, modoAsig) : null
+  if (_univ?.error) return res.status(400).json({ error: _univ.error })
   let cfg = cfgInput
   if (!cfg && definition) {
     const entry = definition.entry || {}
@@ -2179,6 +2234,9 @@ async function handlerMultibacktest(req, res) {
     // En diario, sp500DataTf === sp500Data (sin doble descarga).
     let sp500DataTf = sp500Data
     if (assetInterval === '1wk') { try { sp500DataTf = await fetchData('^GSPC', cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, assetInterval, _cal) } catch(_) {} }
+    // Universo dinámico: QQQ diario para su B&H de referencia.
+    let qqqData = null
+    if (_univ) { try { qqqData = await fetchData('QQQ', cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, '1d', _cal) } catch(_) {} }
 
     // ── Fetch datos auxiliares para filtros de mercado ──
     // `filtrosLista` y `anyFiltroOn` se calculan antes de la descarga: sus periodos cuentan para el
@@ -2320,6 +2378,21 @@ async function handlerMultibacktest(req, res) {
       }
     }
 
+    // ── Universo dinámico: la máscara descarta las ENTRADAS fuera del universo (después de los filtros) ──
+    let _descartadasUniverso = 0
+    if (_univ) {
+      for (const ar of assetResults) {
+        const dentro = ar.trades.filter(t => admiteEntrada(_univ.universo.mascara, ar.symbol, t.entryDate))
+        if (dentro.length !== ar.trades.length) {
+          _descartadasUniverso += ar.trades.length - dentro.length
+          const rebuilt = rebuildCapitalTras(dentro, slotCapital, _com)
+          ar.trades = rebuilt
+          ar.capitalReinv = rebuilt.length ? rebuilt[rebuilt.length-1].capitalTras : slotCapital
+          ar.gananciaSimple = rebuilt.reduce((s,t) => s + t.pnlSimple, 0)
+        }
+      }
+    }
+
     // Calcular curvas según modo de asignación
     let curves
     if (modoAsig === 'compartido') {
@@ -2407,11 +2480,17 @@ async function handlerMultibacktest(req, res) {
 
     // Prueba contra el azar de la cartera (V9.950): SOLO si la petición trae conCandidatos: true, una respuesta reducida
     // con los candidatos y lo justo para comprobar la recomposición y dibujar el B&H. Sin el campo, todo como siempre.
+    // Universo dinámico: referencias (B&H de QQQ y del universo) y recuentos. Solo con el campo `universo`.
+    const _refsUniverso = _univ ? _referenciasUniverso({ universo: _univ.universo, assetResults, curves, qqqData, capitalIni: cfg.capitalIni, descartadas: _descartadasUniverso }) : null
+
     if (req.body?.conCandidatos === true) {
+      // candidatosDe (opcional): los candidatos solo de esos símbolos, para pedirlos por tandas (components/AzarCarteraPanel.js).
+      const _soloCand = Array.isArray(req.body?.candidatosDe) ? new Set(req.body.candidatosDe) : null
       return res.status(200).json({
-        candidatosAzar: _candidatosParaAzar({ assetResults, sp500DataTf, modoAsig, sizeRules, symbols, capitalIni: cfg.capitalIni, comisiones: _com, startDate: curves.startDate }),
+        candidatosAzar: _candidatosParaAzar({ assetResults, sp500DataTf, modoAsig, sizeRules, symbols, capitalIni: cfg.capitalIni, comisiones: _com, startDate: curves.startDate, soloSimbolos: _soloCand }),
         startDate: curves.startDate, compoundCurve: curves.compoundCurve, maxDDFloatCompound: curves.maxDDFloatCompound,
         avgCapOccupancy: curves.avgCapOccupancy ?? avgOccupancy, bhCurve: curves.bhCurve, maxDDBH: curves.maxDDBH,
+        ...(_refsUniverso ? { universo: _refsUniverso } : {}),
       })
     }
 
@@ -2455,6 +2534,7 @@ async function handlerMultibacktest(req, res) {
       blockEventsBySymbol: Object.fromEntries(assetResults.map(ar => [ar.symbol, ar.blockEvents])),
       senalStats: curves.senalStats ?? null,
       filterZones: filterZones.length ? filterZones : undefined,
+      ...(_refsUniverso ? { universo: _refsUniverso } : {}),
     })
   } catch(err) {
     console.error(err)

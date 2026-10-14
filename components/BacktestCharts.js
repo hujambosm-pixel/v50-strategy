@@ -29,7 +29,7 @@ export function MultiCartChart({simpleCurve,compoundCurve,bhCurve,sp500BHCurve,c
   floatSimpleCurve,floatCompoundCurve,showFloat,
   maxDDFloatSimple,maxDDFloatSimpleDate,maxDDFloatCompound,maxDDFloatCompoundDate,
   showSimple,showCompound,showBH,showSP500,onReady,onAxisWidth,syncRef,chartHeight=300,
-  afterTax=false,taxByDateCompound=null,taxByDateBH=null}) {
+  afterTax=false,taxByDateCompound=null,taxByDateBH=null,extraCurves=null}) {
   const ref=useRef(null),chartRef=useRef(null),roRef=useRef(null)
 
   useEffect(()=>{
@@ -69,6 +69,8 @@ export function MultiCartChart({simpleCurve,compoundCurve,bhCurve,sp500BHCurve,c
       if(showCompound&&coCurve?.length){const _s=chart.addLineSeries({color:'#00e5a0',lineWidth:2,lastValueVisible:true,priceLineVisible:false,priceFormat:{type:'price',precision:0,minMove:1}});_s.setData(coCurve.map(p=>({time:p.date,value:p.value})));_seriesEntries.push({s:_s,color:'#00e5a0',name:'Compuesto',taxByDate:afterTax?taxByDateCompound:null})}
       if(showBH&&bhCurve?.length){const _s=chart.addLineSeries({color:'#a0b4c8',lineWidth:2,lineStyle:LineStyle.Dashed,lastValueVisible:true,priceLineVisible:false,priceFormat:{type:'price',precision:0,minMove:1}});_s.setData(bhCurve.map(p=>({time:p.date,value:p.value})));_seriesEntries.push({s:_s,color:'#a0b4c8',name:'B&H',taxByDate:afterTax?taxByDateBH:null})}
       if(showSP500&&sp500BHCurve?.length){const _s=chart.addLineSeries({color:'#9b72ff',lineWidth:2,lineStyle:LineStyle.Dotted,lastValueVisible:true,priceLineVisible:false,priceFormat:{type:'price',precision:0,minMove:1}});_s.setData(sp500BHCurve.map(p=>({time:p.date,value:p.value})));_seriesEntries.push({s:_s,color:'#9b72ff',name:'SP500'})}
+      // Referencias adicionales (universo dinámico: B&H de QQQ y del universo), discontinuas. Quien las pasa las memoriza.
+      for(const c of (extraCurves||[])){if(!c?.data?.length)continue;const _s=chart.addLineSeries({color:c.color,lineWidth:2,lineStyle:LineStyle.Dashed,lastValueVisible:true,priceLineVisible:false,priceFormat:{type:'price',precision:0,minMove:1}});_s.setData(c.data.map(p=>({time:p.date,value:p.value})));_seriesEntries.push({s:_s,color:c.color,name:c.name})}
       // Tooltip crosshair: muestra valor exacto sin decimales al hacer hover
       ref.current.querySelectorAll('.lw-eq-tip').forEach(el=>el.remove())
       const _tip=document.createElement('div');_tip.className='lw-eq-tip'
@@ -125,7 +127,7 @@ export function MultiCartChart({simpleCurve,compoundCurve,bhCurve,sp500BHCurve,c
       if(roRef.current){try{roRef.current.disconnect()}catch(_){};roRef.current=null}
       if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};try{chartRef.current.remove()}catch(_){};chartRef.current=null}
     }
-  },[simpleCurve,compoundCurve,bhCurve,sp500BHCurve,capitalIni,maxDDSimple,maxDDSimpleDate,maxDDCompound,maxDDCompoundDate,maxDDBH,maxDDBHDate,maxDDSP500,maxDDSP500Date,floatSimpleCurve,floatCompoundCurve,showFloat,maxDDFloatSimple,maxDDFloatSimpleDate,maxDDFloatCompound,maxDDFloatCompoundDate,showSimple,showCompound,showBH,showSP500,afterTax,taxByDateCompound,taxByDateBH])
+  },[simpleCurve,compoundCurve,bhCurve,sp500BHCurve,capitalIni,maxDDSimple,maxDDSimpleDate,maxDDCompound,maxDDCompoundDate,maxDDBH,maxDDBHDate,maxDDSP500,maxDDSP500Date,floatSimpleCurve,floatCompoundCurve,showFloat,maxDDFloatSimple,maxDDFloatSimpleDate,maxDDFloatCompound,maxDDFloatCompoundDate,showSimple,showCompound,showBH,showSP500,afterTax,taxByDateCompound,taxByDateBH,extraCurves])
 
   useEffect(()=>{
     if(chartRef.current) try{chartRef.current.applyOptions({height:chartHeight})}catch(_){}
