@@ -1,10 +1,43 @@
 // «Prueba contra el azar (cartera)» en los resultados de la multicartera (lib/azarCartera.js). Se calcula al desplegarla:
 // repite la petición de la ejecución con conCandidatos: true, recompone la cartera real (tiene que dar lo mismo que el
 // servidor; si no, no sigue) y simula en el navegador, por tandas, las pruebas A (señal al azar) y B (orden al azar).
+// Con más de TANDA_MAX símbolos los candidatos se piden por tandas de símbolos (candidatosDe) para no pasar del límite de
+// tamaño de la respuesta de Vercel, y se juntan en el orden de los activos. Con universo dinámico (Fase 8a), A coloca al
+// azar dentro de la máscara (lib/azarCartera.js, colocaPorTramos) y se dan también las referencias del universo.
 import { useState, useEffect, useRef } from 'react'
 import { MONO, fmt } from '../lib/utils'
 import { AZAR, TEXTO_VEREDICTO, TEXTO_VEREDICTO_CAIDA } from '../lib/azar'
 import { motivoNoAdmitida, semillaCartera, preparaCartera, realCartera, comparaConServidor, creaPrueba, resumenPrueba, bhDe } from '../lib/azarCartera'
+import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
+
+// Tandas de candidatos: de TANDA símbolos cuando hay más de TANDA_MAX.
+export const TANDA = 28, TANDA_MAX = 30
+export function tandasDe(simbolos) {
+  if (!Array.isArray(simbolos) || simbolos.length <= TANDA_MAX) return null
+  const out = []
+  for (let i = 0; i < simbolos.length; i += TANDA) out.push(simbolos.slice(i, i + TANDA))
+  return out
+}
+// Junta las respuestas de las tandas: la primera da todo lo común (opciones, curvas para comprobar, S&P 500, universo) y
+// los activos se encadenan en el orden de las tandas, que es el de los símbolos de la petición (el del servidor).
+export function juntaTandas(respuestas) {
+  const [p] = respuestas
+  return { ...p, candidatosAzar: { ...p.candidatosAzar, activos: respuestas.flatMap(r => r.candidatosAzar.activos) } }
+}
+// Pide los candidatos (con tandas si hacen falta). Devuelve la respuesta completa, como si fuera una sola.
+export async function pideCandidatos(apiFetch, peticion) {
+  const una = async (extra) => {
+    const r = await apiFetch('/api/multibacktest', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...peticion, conCandidatos: true, ...extra }) })
+    const j = await leeRespuestaMc(r)
+    if (!r.ok || !j?.candidatosAzar) throw new Error(j?.error || `HTTP ${r.status}`)
+    return j
+  }
+  const tandas = tandasDe(peticion.symbols)
+  return tandas ? juntaTandas(await Promise.all(tandas.map(t => una({ candidatosDe: t })))) : una({})
+}
+// Las referencias del universo de la misma ejecución (B&H de QQQ y del universo), si las hay.
+const refsDe = (j) => j?.universo ? { qqq: resumenCurva(j.universo.qqqBHCurve), universo: resumenCurva(j.universo.bhUniversoCurve) } : null
+export const AVISO_UNIVERSO = 'Universo dinámico (Nasdaq-100, los N más volátiles del año anterior): empieza el 01/01/2016, y en 2016–2018 entre el 14 % y el 22 % de los miembros elegibles no tienen datos de precios, así que esos años salen sesgados. En A, cada activo repite sus operaciones al azar DENTRO de cada tramo en que está en el universo; en B, las señales son las que ya pasaron el universo.'
 
 // La petición de cada resultado, sin tocar el resultado: pages/index.js la anota al recibirlo.
 const PETICIONES = new WeakMap()
@@ -20,7 +53,8 @@ export function pruebasCalculadas(resultados = []) {
     if (motivo) return { nombre: r.name, motivo }
     const pref = `${JSON.stringify(pet)}|`
     const e = [...CACHE.entries()].filter(([k, v]) => k.startsWith(pref) && v.estado === 'hecho').map(([, v]) => v).pop()
-    return e ? { nombre: r.name, nSim: e.n, semilla: semillaCartera(pet), bh: e.bh, A: e.res.A, B: e.res.B, motivoB: e.motivoB } : { nombre: r.name, motivo: 'no calculada' }
+    return e ? { nombre: r.name, nSim: e.n, semilla: semillaCartera(pet), bh: e.bh, A: e.res.A, B: e.res.B, motivoB: e.motivoB,
+      ...(e.refs ? { refs: e.refs, aviso: AVISO_UNIVERSO, sinColocar: e.sinColocar } : {}) } : { nombre: r.name, motivo: 'no calculada' }
   })
 }
 
@@ -133,18 +167,18 @@ export default function AzarCarteraPanel({ resultados = [], apiFetch = null }) {
     ;(async () => {
       try {
         const t0 = Date.now()
-        setProgreso({ clave, texto: 'Pidiendo los candidatos al servidor…' })
-        const r = await apiFetch('/api/multibacktest', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...peticion, conCandidatos: true }) })
-        const j = await r.json().catch(() => null)
-        if (!r.ok || !j?.candidatosAzar) throw new Error(j?.error || `HTTP ${r.status}`)
+        const _tandas = tandasDe(peticion.symbols)
+        setProgreso({ clave, texto: _tandas ? `Pidiendo los candidatos al servidor (${_tandas.length} tandas)…` : 'Pidiendo los candidatos al servidor…' })
+        const j = await pideCandidatos(apiFetch, peticion)
         const msDatos = Date.now() - t0
-        const P = preparaCartera(j.candidatosAzar)
+        const P = preparaCartera(j.candidatosAzar, { mascara: peticion.universo?.mascara || null })
         const real = realCartera(P)
         const cmp = comparaConServidor(real, j)
         if (!cmp.ok) {
           Object.assign(e, { estado: 'error', error: `La cartera recompuesta no coincide con la ejecución (diferencias: CAGR ${cmp.dif.cagr.toExponential(1)}, caída ${cmp.dif.maxDD.toExponential(1)}, capital invertido ${cmp.dif.capInv.toExponential(1)}); la prueba no se calcula.` })
         } else {
           const semilla = semillaCartera(peticion), res = {}, motivoB = motivoNoAdmitida(peticion, 'B'), t1 = Date.now()
+          let sinColocar = 0
           for (const tipo of motivoB ? ['A'] : ['A', 'B']) {
             const pr = creaPrueba(P, { tipo, nSim: n, semilla })
             while (!pr.hecho()) {
@@ -153,8 +187,10 @@ export default function AzarCarteraPanel({ resultados = [], apiFetch = null }) {
               await new Promise(ok => setTimeout(ok, 0))   // cede el hilo entre tandas
             }
             res[tipo] = { ...resumenPrueba(real, pr.sims), simsCagr: pr.sims.cagr }
+            if (tipo === 'A') sinColocar = pr.stats.sinColocar
           }
-          Object.assign(e, { estado: 'hecho', res, motivoB, bh: bhDe(j), msDatos, msSim: Date.now() - t1, n })
+          Object.assign(e, { estado: 'hecho', res, motivoB, bh: bhDe(j), msDatos, msSim: Date.now() - t1, n, tandas: _tandas?.length || 1,
+            ...(refsDe(j) ? { refs: refsDe(j), sinColocar } : {}) })
         }
       } catch (err) { Object.assign(e, { estado: 'error', error: err?.message || 'error' }) }
       setProgreso(null); setVersion(v => v + 1)
@@ -178,10 +214,12 @@ export default function AzarCarteraPanel({ resultados = [], apiFetch = null }) {
       </div>
       {motivo && <div style={{ fontSize: TAM, color: GRIS, marginTop: 8 }}>{motivo}</div>}
       {!motivo && !apiFetch && <div style={{ fontSize: TAM, color: GRIS, marginTop: 8 }}>No disponible aquí.</div>}
+      {!motivo && pet?.universo && <div style={{ fontSize: TAM, color: '#ffd166', marginTop: 8, lineHeight: 1.5 }}>{AVISO_UNIVERSO}</div>}
       {!motivo && progreso?.clave === clave && <div role="status" style={{ fontSize: TAM, color: GRIS, marginTop: 8 }}>⏳ {progreso.texto}</div>}
       {entrada?.estado === 'error' && <div style={{ fontSize: TAM, color: '#ff4d6d', marginTop: 8 }}>{entrada.error}</div>}
       {entrada?.estado === 'hecho' && (<>
-        <div style={{ fontSize: TAM, color: GRIS, marginTop: 8 }}>{`La cartera real recompuesta en el navegador coincide con la ejecución. Tiempo: candidatos ${fmt(entrada.msDatos / 1000, 1)} s · simulación ${fmt(entrada.msSim / 1000, 1)} s.`}</div>
+        <div style={{ fontSize: TAM, color: GRIS, marginTop: 8 }}>{`La cartera real recompuesta en el navegador coincide con la ejecución. Tiempo: candidatos ${fmt(entrada.msDatos / 1000, 1)} s${entrada.tandas > 1 ? ` (${entrada.tandas} tandas)` : ''} · simulación ${fmt(entrada.msSim / 1000, 1)} s.`}</div>
+        {entrada.refs && <div style={{ fontSize: TAM, color: GRIS, marginTop: 4 }}>{`Referencias de la misma ejecución: B&H universo ${entrada.refs.universo ? `CAGR ${pct(entrada.refs.universo.cagr)}, caída máxima ${pct(entrada.refs.universo.maxDD)}` : '—'} · B&H QQQ ${entrada.refs.qqq ? `CAGR ${pct(entrada.refs.qqq.cagr)}, caída máxima ${pct(entrada.refs.qqq.maxDD)}` : '—'}.${entrada.sinColocar ? ` En A, ${fmt(entrada.sinColocar, 0)} colocaciones de activo no cupieron en su tramo y ese activo no operó en esa simulación.` : ''}`}</div>}
         <Bloque titulo="A · Señal al azar, reparto real" pregunta="¿Acierta la estrategia CUÁNDO entrar, con la misma forma de repartir el capital?" r={entrada.res.A} bh={entrada.bh} nSim={entrada.n} />
         <Bloque titulo="B · Señal real, orden al azar" pregunta="¿Acierta la cartera EN QUÉ activos poner el dinero, con las mismas señales?" r={entrada.res.B} bh={entrada.bh} nSim={entrada.n} motivo={entrada.motivoB} />
         <div style={{ fontSize: TAM, color: GRIS, lineHeight: 1.5, marginTop: 8 }}>
