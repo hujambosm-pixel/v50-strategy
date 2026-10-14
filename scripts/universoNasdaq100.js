@@ -2,6 +2,8 @@
 //
 //   node scripts/universoNasdaq100.js                 construye, contrasta y comprueba (no escribe nada)
 //   node scripts/universoNasdaq100.js --guardar       además escribe la tabla public.universo_miembros (indice 'NDX')
+//   node scripts/universoNasdaq100.js --guardar --ensayo  hace la escritura entera pero termina en ROLLBACK, y dice qué filas
+//                                                     cambiarían respecto a la tabla actual (no escribe nada)
 //   opciones: --desde 2008-01-01 (primer 1 de enero del universo) · --json fichero.json (vuelca el resultado)
 //             --sin-cache (vuelve a descargar de Wikipedia)
 //
@@ -200,8 +202,19 @@ const CORRECCIONES = [
 const ALIAS = { PCLN: 'BKNG', KFT: 'MDLZ', SYMC: 'NLOK', CTRP: 'TCOM', LINTA: 'QRTEA', QVCA: 'QRTEA', NWSA: 'FOXA', ERTS: 'EA', FB: 'META', FISV: 'FI', WLTW: 'WTW', HANS: 'MNST', WFMI: 'WFM', CDWC: 'CDW' }
 // En las fotos de antes del 3/4/2014, GOOG es la clase A de Google (la actual GOOGL); desde entonces, la clase C.
 const ALIAS_FOTO = (t, fecha) => t === 'GOOG' && fecha < '2014-04-03' ? 'GOOGL' : t
-// Símbolo de Yahoo cuando el ticker de la tabla ya no es el que cotiza.
-const YAHOO = { NLOK: 'GEN' }
+// Símbolo de Yahoo cuando el ticker de la tabla ya no es el que cotiza (se anota en «fuente»: «alias Yahoo: <ticker>»).
+// Solo renombres de la MISMA serie de cotización, comprobada en Yahoo (Fase 8a, paso 1c):
+//   FI → FISV: Fiserv volvió a cotizar como FISV; Yahoo tiene su historia desde 2005 (ajustada por sus splits 2:1).
+//   RIMM → BB: Research In Motion pasó a llamarse BlackBerry; BB da 113,71 el 2/1/2008, el precio de RIMM.
+//   MYL → VTRS: Mylan + Upjohn = Viatris (2020); Yahoo pone la historia de Mylan bajo VTRS (13,88 en 2008, 53,28 en 2016).
+// No: UAUA → UAL, IACI → MTCH, LMCA/LMCK → FWONA/FWONK (fusión o recapitalización; series reajustadas o sin verificar).
+const YAHOO = { NLOK: 'GEN', FI: 'FISV', RIMM: 'BB', MYL: 'VTRS' }
+// Motivos de salida mal copiados en la tabla de Wikipedia (ticker|fecha de salida → motivo corregido).
+const MOTIVO_CORREGIDO = {
+  'JNPR|2009-10-29': 'cambio de bolsa: Juniper Networks transferred its listing from NASDAQ to NYSE. [Corregido: la fila del '
+    + '29/10/2009 de «Historical components of the Nasdaq-100» repite por errata el texto de Joy Global (que salió el 6/12/2011); '
+    + 'la nota de Nasdaq que cita (22/10/2009) solo dice que Priceline sustituye a Juniper.]',
+}
 const normaliza = (t) => t ? (ALIAS[t] || t) : t
 function aplicaCorrecciones(cambios) {
   const out = [], usadas = new Set()
@@ -288,7 +301,7 @@ module.exports = { leeCambios, leeComponentes, reconstruye, miembrosEn, comprueb
 // ── Programa ───────────────────────────────────────────────────────────────────────────────────────────────────────────
 if (require.main === module) (async () => {
   const args = process.argv.slice(2), opcion = (n, d = null) => { const i = args.indexOf(n); return i >= 0 ? args[i + 1] : d }
-  const DESDE = opcion('--desde', '2008-01-01'), GUARDAR = args.includes('--guardar'), JSON_OUT = opcion('--json')
+  const DESDE = opcion('--desde', '2008-01-01'), GUARDAR = args.includes('--guardar'), JSON_OUT = opcion('--json'), ENSAYO = args.includes('--ensayo')
   SIN_CACHE = args.includes('--sin-cache')
   const hoy = new Date().toISOString().slice(0, 10)
   const t0 = Date.now()
@@ -373,8 +386,8 @@ if (require.main === module) (async () => {
   for (const e of entidades) for (const t of e.tramos) {
     if (t.hasta != null && t.hasta <= DESDE) continue
     const desde = t.desde == null || t.desde < DESDE ? DESDE : t.desde
-    filas.push({ indice: 'NDX', simbolo: e.ticker, simbolo_yahoo: e.tickerReutilizado ? null : (YAHOO[e.ticker] || e.ticker).replace(/\./g, '-'), nombre: e.nombre, desde, hasta: t.hasta, motivo_salida: t.hasta ? t.motivo : null,
-      fuente: `Wikipedia: tabla de cambios (rev. ${histWt.revid}) y lista actual (rev. ${listaWt.revid})${antes(e).length ? `; otros tickers: ${antes(e).join(', ')}` : ''}${t.desde == null || t.desde < DESDE ? `; ya era miembro antes del ${DESDE}` : ''}${e.tickerReutilizado ? `; sin símbolo de Yahoo: el ticker ${e.ticker} lo usa después otra empresa` : ''}` })
+    filas.push({ indice: 'NDX', simbolo: e.ticker, simbolo_yahoo: e.tickerReutilizado ? null : (YAHOO[e.ticker] || e.ticker).replace(/\./g, '-'), nombre: e.nombre, desde, hasta: t.hasta, motivo_salida: t.hasta ? (MOTIVO_CORREGIDO[`${e.ticker}|${t.hasta}`] || t.motivo) : null,
+      fuente: `Wikipedia: tabla de cambios (rev. ${histWt.revid}) y lista actual (rev. ${listaWt.revid})${antes(e).length ? `; otros tickers: ${antes(e).join(', ')}` : ''}${t.desde == null || t.desde < DESDE ? `; ya era miembro antes del ${DESDE}` : ''}${e.tickerReutilizado ? `; sin símbolo de Yahoo: el ticker ${e.ticker} lo usa después otra empresa` : ''}${!e.tickerReutilizado && YAHOO[e.ticker] ? `; alias Yahoo: ${e.ticker}` : ''}` })
   }
   filas.sort((a, b) => a.simbolo.localeCompare(b.simbolo) || a.desde.localeCompare(b.desde))
   console.log(`\n${filas.length} tramos de ${new Set(filas.map(f => f.simbolo)).size} valores desde el ${DESDE} · discrepancias sin explicar: ${discrepancias.filter(d => !d.motivo).length} · ${((Date.now() - t0) / 1000).toFixed(1)} s`)
@@ -382,7 +395,9 @@ if (require.main === module) (async () => {
   if (errores.length) { console.error('No se escribe nada: fallan las comprobaciones.'); process.exit(1) }
   if (!GUARDAR) return
   const valores = filas.map(f => `(${[f.indice, f.simbolo, f.simbolo_yahoo, f.nombre].map(lit).join(', ')}, ${lit(f.desde)}::date, ${f.hasta ? lit(f.hasta) + '::date' : 'NULL'}, ${lit(f.motivo_salida)}, ${lit(f.fuente)})`)
-  const r = await consulta(`BEGIN;
+  const r = await consulta(`BEGIN;${ENSAYO ? `
+CREATE TEMP TABLE filas_antes ON COMMIT DROP AS
+  SELECT indice, simbolo, simbolo_yahoo, nombre, desde, hasta, motivo_salida, fuente, excluido_motivo FROM public.universo_miembros WHERE indice = 'NDX';` : ''}
 CREATE TEMP TABLE excluidos_antes ON COMMIT DROP AS
   SELECT simbolo, nombre, desde, excluido_motivo FROM public.universo_miembros WHERE indice = 'NDX' AND excluido_motivo IS NOT NULL;
 DELETE FROM public.universo_miembros WHERE indice = 'NDX';
@@ -395,7 +410,19 @@ DO $$ BEGIN
     RAISE EXCEPTION 'alguna exclusión manual no encuentra su tramo: no se escribe nada';
   END IF;
 END $$;
-SELECT count(*)::int AS filas, count(excluido_motivo)::int AS excluidos FROM public.universo_miembros WHERE indice = 'NDX';
-COMMIT;`)
+SELECT count(*)::int AS filas, count(excluido_motivo)::int AS excluidos${ENSAYO ? `,
+  (SELECT coalesce(json_agg(x), '[]') FROM (SELECT 'antes' AS lado, * FROM (SELECT * FROM filas_antes EXCEPT
+    SELECT indice, simbolo, simbolo_yahoo, nombre, desde, hasta, motivo_salida, fuente, excluido_motivo FROM public.universo_miembros WHERE indice = 'NDX') a
+   UNION ALL SELECT 'después' AS lado, * FROM (SELECT indice, simbolo, simbolo_yahoo, nombre, desde, hasta, motivo_salida, fuente, excluido_motivo
+    FROM public.universo_miembros WHERE indice = 'NDX' EXCEPT SELECT * FROM filas_antes) d) x) AS cambios` : ''}
+  FROM public.universo_miembros WHERE indice = 'NDX';
+${ENSAYO ? 'ROLLBACK' : 'COMMIT'};`)
+  if (ENSAYO) {
+    const cambios = r?.[0]?.cambios || []
+    console.log(`ENSAYO (ROLLBACK, no se ha escrito nada): ${r?.[0]?.filas ?? '?'} filas, ${r?.[0]?.excluidos ?? '?'} exclusiones conservadas · `
+      + `${cambios.length ? `${cambios.length} filas cambiarían:` : 'IDÉNTICA a la tabla actual'}`)
+    for (const c of cambios) console.log(`  ${c.lado.padEnd(7)} ${c.simbolo} ${c.desde} → ${c.hasta || 'hoy'} · yahoo ${c.simbolo_yahoo} · ${String(c.motivo_salida || '').slice(0, 60)} · ${String(c.fuente || '').slice(-40)}`)
+    return
+  }
   console.log(`Escrito: ${r?.[0]?.filas ?? '?'} filas de indice NDX en public.universo_miembros (${r?.[0]?.excluidos ?? '?'} exclusiones manuales conservadas).`)
 })().catch(e => { console.error('El universo no ha podido construirse:', e.message); process.exit(1) })
