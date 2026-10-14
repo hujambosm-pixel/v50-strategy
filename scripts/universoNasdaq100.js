@@ -24,6 +24,8 @@
 // tabla de cambios (citada con las notas de Nasdaq), salvo que la foto la contradiga varios años seguidos (se avisa).
 //
 // ESCRITURA (--guardar): por la Management API, en UNA transacción: borra las filas de indice 'NDX' y escribe las nuevas.
+// Las exclusiones manuales (excluido_motivo, sql/universo_exclusiones.sql) se conservan: se guardan antes de borrar y se
+// vuelven a poner en el tramo con el mismo ticker, nombre y «desde»; si alguna no encuentra su tramo, no se escribe nada.
 // Antes comprueba: miembros a cada 1 de enero entre 95 y 105, ningún tramo solapado del mismo valor y ningún «hasta»
 // anterior a su «desde». Si algo falla, no escribe.
 const fs = require('fs')
@@ -381,10 +383,19 @@ if (require.main === module) (async () => {
   if (!GUARDAR) return
   const valores = filas.map(f => `(${[f.indice, f.simbolo, f.simbolo_yahoo, f.nombre].map(lit).join(', ')}, ${lit(f.desde)}::date, ${f.hasta ? lit(f.hasta) + '::date' : 'NULL'}, ${lit(f.motivo_salida)}, ${lit(f.fuente)})`)
   const r = await consulta(`BEGIN;
+CREATE TEMP TABLE excluidos_antes ON COMMIT DROP AS
+  SELECT simbolo, nombre, desde, excluido_motivo FROM public.universo_miembros WHERE indice = 'NDX' AND excluido_motivo IS NOT NULL;
 DELETE FROM public.universo_miembros WHERE indice = 'NDX';
 INSERT INTO public.universo_miembros (indice, simbolo, simbolo_yahoo, nombre, desde, hasta, motivo_salida, fuente) VALUES
 ${valores.join(',' + NL)};
-SELECT count(*)::int AS filas FROM public.universo_miembros WHERE indice = 'NDX';
+UPDATE public.universo_miembros u SET excluido_motivo = e.excluido_motivo FROM excluidos_antes e
+  WHERE u.indice = 'NDX' AND u.simbolo = e.simbolo AND u.nombre IS NOT DISTINCT FROM e.nombre AND u.desde = e.desde;
+DO $$ BEGIN
+  IF (SELECT count(*) FROM public.universo_miembros WHERE indice = 'NDX' AND excluido_motivo IS NOT NULL) <> (SELECT count(*) FROM excluidos_antes) THEN
+    RAISE EXCEPTION 'alguna exclusión manual no encuentra su tramo: no se escribe nada';
+  END IF;
+END $$;
+SELECT count(*)::int AS filas, count(excluido_motivo)::int AS excluidos FROM public.universo_miembros WHERE indice = 'NDX';
 COMMIT;`)
-  console.log(`Escrito: ${r?.[0]?.filas ?? '?'} filas de indice NDX en public.universo_miembros.`)
+  console.log(`Escrito: ${r?.[0]?.filas ?? '?'} filas de indice NDX en public.universo_miembros (${r?.[0]?.excluidos ?? '?'} exclusiones manuales conservadas).`)
 })().catch(e => { console.error('El universo no ha podido construirse:', e.message); process.exit(1) })

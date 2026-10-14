@@ -8,8 +8,8 @@
 // QUÉ MIDE, a cada 1 de enero (desde el primero en que el universo tiene miembros):
 //   · miembros: los tramos de public.universo_miembros que cubren ese día (desde <= día < hasta).
 //   · con precios: el símbolo de Yahoo del miembro tiene alguna vela entre el 1 y el 10 de enero de ese año, y el tramo no
-//     está marcado como posible ticker reutilizado (abajo). Si no, es «sin precios», con el porqué (sin símbolo, Yahoo no
-//     lo tiene —404—, el historial empieza después o termina antes, posible ticker reutilizado).
+//     está EXCLUIDO a mano (universo_miembros.excluido_motivo, sql/universo_exclusiones.sql). Si no, es «sin precios»,
+//     con el porqué (sin símbolo, Yahoo no lo tiene —404—, el historial empieza después o termina antes, excluido).
 //   · los 20 más volátiles del año anterior: volatilidad = desviación típica de los rendimientos logarítmicos diarios del
 //     cierre en el año natural anterior, anualizada (× √252), de los miembros con precios a ese 1 de enero con al menos 120
 //     rendimientos ese año. Los miembros SIN precios no tienen volatilidad medible (justo es lo que falta), así que no se
@@ -27,8 +27,9 @@
 //   · dentro del tramo: ningún salto de cierre a cierre de ×2 o ÷2 en un día, ni un hueco de más de 10 días naturales
 //     entre dos velas (el cierre más largo de la bolsa en el periodo, tras el 11-S, fue de 6).
 // Si la primera vela es posterior al «hasta», la primera vela es posterior al «desde» (sin salida a bolsa ese año), o hay
-// salto o hueco, se marca POSIBLE TICKER REUTILIZADO y ese tramo cuenta como «sin precios» todos sus años. En los miembros
-// que siguen en el índice, lo mismo es solo un aviso (historial que empieza tarde: otro instrumento, una reorganización).
+// salto o hueco, se marca POSIBLE TICKER REUTILIZADO. En los miembros que siguen en el índice, lo mismo es solo un aviso
+// (historial que empieza tarde: otro instrumento, una reorganización). Esta comprobación ya NO decide el recuento: lo
+// decide la exclusión manual (excluido_motivo); el informe compara las dos y avisa de lo detectado y no excluido.
 // Cambios de ticker (los ALIAS de scripts/universoNasdaq100.js: FB → META…): no se guarda la fecha del cambio, así que se
 // comprueba TODO el tramo de esa entidad, que la incluye: sin hueco ni salto.
 //
@@ -71,9 +72,9 @@ function revisaTramo(t, p, est) {
 }
 
 // Por qué un miembro no tiene precios a un 1 de enero.
-function porQueSinPrecios(t, p, anio, rev) {
+function porQueSinPrecios(t, p, anio) {
   if (!t.simbolo_yahoo) return 'sin símbolo de Yahoo'
-  if (rev?.reutilizado) return 'POSIBLE TICKER REUTILIZADO: ' + rev.motivos.join('; ')
+  if (t.excluido_motivo) return 'EXCLUIDO: ' + t.excluido_motivo
   if (!p) return 'no descargado'
   if (!p.velas) return 'Yahoo no lo tiene (404)'
   if (p.primera > `${anio}-01-${MARGEN_DIAS}`) return `historial de Yahoo desde ${p.primera}`
@@ -82,7 +83,8 @@ function porQueSinPrecios(t, p, anio, rev) {
 }
 
 // Cobertura de un 1 de enero. tramos: filas del universo; ps: precios_simbolos por símbolo; anual: {símbolo: {año: {primera,
-// n, vol}}}; revisiones: {claveTramo: revisaTramo(...)}.
+// n, vol}}}; revisiones: {claveTramo: revisaTramo(...)} (solo para los avisos). Lo excluido a mano (t.excluido_motivo)
+// es «sin precios».
 function coberturaAnio(tramos, ps, anual, anio, revisiones = {}) {
   const dia = `${anio}-01-01`
   const miembros = tramos.filter(t => cubre(t, dia))
@@ -90,8 +92,8 @@ function coberturaAnio(tramos, ps, anual, anio, revisiones = {}) {
   for (const t of miembros) {
     const a = t.simbolo_yahoo && anual[t.simbolo_yahoo]?.[anio]
     const rev = revisiones[claveTramo(t)]
-    if (a && a.primera <= `${anio}-01-${MARGEN_DIAS}` && !rev?.reutilizado) con.push({ ...t, aviso: !!rev?.avisos.length })
-    else sin.push({ ...t, porque: porQueSinPrecios(t, ps[t.simbolo_yahoo], anio, rev) })
+    if (a && a.primera <= `${anio}-01-${MARGEN_DIAS}` && !t.excluido_motivo) con.push({ ...t, aviso: !!rev?.avisos.length })
+    else sin.push({ ...t, porque: porQueSinPrecios(t, ps[t.simbolo_yahoo], anio) })
   }
   // Los más volátiles del año anterior, entre los miembros con precios.
   const medibles = con.map(t => ({ t, a: anual[t.simbolo_yahoo]?.[anio - 1] })).filter(x => x.a && x.a.n >= MIN_RENDIMIENTOS && x.a.vol != null)
@@ -111,7 +113,7 @@ module.exports = { coberturaAnio, porQueSinPrecios, revisaTramo, claveTramo, cub
 if (require.main === module) (async () => {
   const UNIVERSO = opcion('--universo', 'NDX')
   const t0 = Date.now()
-  const tramos = (await lee(`SELECT simbolo, simbolo_yahoo, nombre, desde::text, hasta::text, motivo_salida FROM public.universo_miembros
+  const tramos = (await lee(`SELECT simbolo, simbolo_yahoo, nombre, desde::text, hasta::text, motivo_salida, excluido_motivo FROM public.universo_miembros
     WHERE indice = ${lit(UNIVERSO)} ORDER BY desde, simbolo;`))
   if (!tramos.length) { console.error(`El universo «${UNIVERSO}» no existe.`); process.exit(1) }
   const simbolos = [...new Set(tramos.map(t => t.simbolo_yahoo).filter(Boolean))].sort()
@@ -174,7 +176,7 @@ if (require.main === module) (async () => {
   const tramoTxt = (t) => `${t.desde} → ${t.hasta || 'hoy'}`
   console.log(`COBERTURA DEL UNIVERSO ${UNIVERSO} (${tramos.length} tramos, ${simbolos.length} símbolos de Yahoo; ${filasPs.length} en la caché, `
     + `${filasPs.filter(p => !p.velas).length} de ellos sin datos en Yahoo)`)
-  console.log('«Con precios» = alguna vela entre el 1 y el 10 de enero y el tramo no marcado como posible ticker reutilizado.')
+  console.log('«Con precios» = alguna vela entre el 1 y el 10 de enero y el tramo no excluido a mano (excluido_motivo).')
   console.log(`Volatilidad del año anterior: desviación típica anualizada de los rendimientos logarítmicos diarios, con >= ${MIN_RENDIMIENTOS}`)
   console.log(`rendimientos. Hueco en los ${TOP} más volátiles: cota superior = min(faltan, ${TOP}) / ${TOP} (los que faltan no se pueden medir).`)
   console.log('')
@@ -194,10 +196,15 @@ if (require.main === module) (async () => {
   }
   const revs = Object.values(revisiones)
   const marcados = revs.filter(r => r.reutilizado)
+  const excluidos = tramos.filter(t => t.excluido_motivo)
   console.log('')
-  console.log(`POSIBLES TICKERS REUTILIZADOS (${marcados.length} de ${revs.filter(r => r.t.hasta).length} tramos de miembros que ya salieron y tienen velas;`
-    + ' no cuentan como «con precios»)')
-  for (const r of marcados) console.log(`   ${r.t.nombre} (${r.t.simbolo_yahoo}) · tramo ${tramoTxt(r.t)} · Yahoo ${ps[r.t.simbolo_yahoo].primera} → ${ps[r.t.simbolo_yahoo].ultima} · ${r.motivos.join('; ')}`)
+  console.log(`EXCLUIDOS A MANO (${excluidos.length} tramos; no cuentan como «con precios»)`)
+  for (const t of excluidos) console.log(`   ${t.nombre} (${t.simbolo_yahoo || t.simbolo}) · tramo ${tramoTxt(t)} · ${t.excluido_motivo}`)
+  const sinExcluir = marcados.filter(r => !r.t.excluido_motivo)
+  const noDetectados = excluidos.filter(t => !revisiones[claveTramo(t)]?.reutilizado)
+  console.log(`Comprobación automática de tickers reutilizados: ${marcados.length} de ${revs.filter(r => r.t.hasta).length} tramos de miembros que ya salieron y tienen velas`
+    + ` · detectados y NO excluidos: ${sinExcluir.length} · excluidos y no detectados: ${noDetectados.length}${noDetectados.length ? ` (${noDetectados.map(t => t.simbolo).join(', ')})` : ''}`)
+  for (const r of sinExcluir) console.log(`   ¡REVISAR! ${r.t.nombre} (${r.t.simbolo_yahoo}) · tramo ${tramoTxt(r.t)} · Yahoo ${ps[r.t.simbolo_yahoo].primera} → ${ps[r.t.simbolo_yahoo].ultima} · ${r.motivos.join('; ')}`)
   const avisados = revs.filter(r => r.avisos.length)
   console.log(`AVISOS (no cambian el recuento): ${avisados.length}`)
   for (const r of avisados) console.log(`   ${r.t.nombre} (${r.t.simbolo_yahoo}) · tramo ${tramoTxt(r.t)} · ${r.avisos.join('; ')}`)
