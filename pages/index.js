@@ -27,10 +27,10 @@ import OptimizacionPanel from '../components/OptimizacionPanel'
 import AzarCarteraPanel, { anotaPeticionMc, peticionMcDe, pruebasCalculadas } from '../components/AzarCarteraPanel'
 import BotonCopiar, { leeTabla } from '../components/BotonCopiar'
 import { textoMulticartera, datosCabeceraMulticartera } from '../lib/exportaTexto'
-import { nDeUniverso, nombreUniverso, cargaUniversoMc, estadoUniversoMc } from '../lib/universoMc'
+import { nDeUniverso, reglaDeUniverso, nombreUniverso, FRASE_REGLA, cargaUniversoMc, estadoUniversoMc } from '../lib/universoMc'
 import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.964'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.965'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -1391,10 +1391,11 @@ export default function Home() {
   const [mcShowOccupancy,setMcShowOccupancy]=useState(true)
   const [mcOccMode,setMcOccMode]=useState('compound')  // own filter for MC capital chart
   const [mcIntervalo,setMcIntervalo]=useState(mcAsigBoot.intervalo)  // 'diario' | 'semanal' — intervalo de datos MC
-  // Universo del multibacktest (Fase 8a): 'manual' (la lista seleccionada, lo de siempre) o 'ndx_vol_N' (Nasdaq-100, los
-  // N más volátiles del año anterior: public.universo_screener). No se guarda entre sesiones.
+  // Universo del multibacktest (Fase 8a): 'manual' (la lista seleccionada, lo de siempre), 'ndx_vol_N' (Nasdaq-100, los
+  // N más volátiles del año anterior) o 'ndx_mom_N' (los N con más momentum de 12 meses): public.universo_screener, regla
+  // «volatilidad» o «momentum». No se guarda entre sesiones.
   const [mcUniverso,setMcUniverso]=useState('manual')
-  // Lo leído de la base para cada N (lib/universoMc.js: filas de universo_screener y miembros), o { error }.
+  // Lo leído de la base para cada universo del selector (lib/universoMc.js: filas de universo_screener y miembros), o { error }.
   const [mcUniversoDatos,setMcUniversoDatos]=useState({})
   const [mcShowQQQ,setMcShowQQQ]=useState(true)
   const [mcShowBHUniv,setMcShowBHUniv]=useState(true)
@@ -1495,12 +1496,12 @@ export default function Home() {
   const mcResumenUniverso=useMemo(()=>mcResult?.universo?{qqq:resumenCurva(mcResult.universo.qqqBHCurve),universo:resumenCurva(mcResult.universo.bhUniversoCurve)}:null,[mcResult])
   // Universo dinámico: se lee de la base al elegirlo (una vez por N; si falló, se reintenta al volver a elegirlo).
   useEffect(()=>{
-    const n=nDeUniverso(mcUniverso)
-    if(!n||(mcUniversoDatos[n]&&!mcUniversoDatos[n].error)) return
+    const n=nDeUniverso(mcUniverso),u=mcUniverso
+    if(!n||(mcUniversoDatos[u]&&!mcUniversoDatos[u].error)) return
     let vivo=true
-    cargaUniversoMc(n,{url:getSupaUrl(),headers:getSupaH()})
-      .then(d=>{if(vivo)setMcUniversoDatos(p=>({...p,[n]:d}))})
-      .catch(e=>{if(vivo)setMcUniversoDatos(p=>({...p,[n]:{error:e.message||'No se pudo leer el universo.'}}))})
+    cargaUniversoMc(n,{url:getSupaUrl(),headers:getSupaH(),regla:reglaDeUniverso(u)})
+      .then(d=>{if(vivo)setMcUniversoDatos(p=>({...p,[u]:d}))})
+      .catch(e=>{if(vivo)setMcUniversoDatos(p=>({...p,[u]:{error:e.message||'No se pudo leer el universo.'}}))})
     return()=>{vivo=false}
   },[mcUniverso])
   // Estado del botón con universo dinámico (null con «Lista manual»): activo con UNA estrategia, sin mirar los activos
@@ -1509,7 +1510,7 @@ export default function Home() {
     const n=nDeUniverso(mcUniverso)
     if(!n) return null
     const per=rangoDePeriodo({modo:mcPeriodMode,years:mcYears,desde:mcFromDate,hasta:mcToDate})
-    return estadoUniversoMc({universo:mcUniverso,datos:mcUniversoDatos[n],fromDate:per.fromDate,toDate:per.toDate,estrategias:mcStratSelected})
+    return estadoUniversoMc({universo:mcUniverso,datos:mcUniversoDatos[mcUniverso],fromDate:per.fromDate,toDate:per.toDate,estrategias:mcStratSelected})
   },[mcUniverso,mcUniversoDatos,mcPeriodMode,mcYears,mcFromDate,mcToDate,mcStratSelected])
   const avisoHistoricoIndiv=result?.avisosHistorico||null
   // Nombre con el que ROTULAR el resultado cuando no viaja dentro de una lista con nombre propio:
@@ -5454,9 +5455,9 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
     // Universo dinámico: el mismo estado que el botón (si aún no se había leído la base, se lee ahora).
     let _estU=null
     if(_nUniv){
-      let datos=mcUniversoDatos[_nUniv]
+      let datos=mcUniversoDatos[mcUniverso]
       if(!datos||datos.error){
-        try{datos=await cargaUniversoMc(_nUniv,{url:getSupaUrl(),headers:getSupaH()});setMcUniversoDatos(p=>({...p,[_nUniv]:datos}))}
+        try{datos=await cargaUniversoMc(_nUniv,{url:getSupaUrl(),headers:getSupaH(),regla:reglaDeUniverso(mcUniverso)});setMcUniversoDatos(p=>({...p,[mcUniverso]:datos}))}
         catch(e){datos={error:e.message||'No se pudo leer el universo.'}}
       }
       _estU=estadoUniversoMc({universo:mcUniverso,datos,fromDate:_mcFrom,toDate:_mcTo,estrategias:mcStratSelected})
@@ -5501,16 +5502,16 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
     }
     const _prueba=mcPrueba&&stratIds.length===1&&stratIds[0]===mcPrueba.estrategiaId
       ?{filtros:[],params:mcPrueba.params,...(mcPrueba.calentamiento!=null?{calentamiento:mcPrueba.calentamiento}:{})}:{}
-    // ── Universo dinámico: Nasdaq-100 · N más volátiles ──
+    // ── Universo dinámico: Nasdaq-100 · N más volátiles o N con más momentum ──
     // Una estrategia, capital concentrado. La máscara (qué símbolo puede recibir ENTRADAS y cuándo) se reconstruye aquí con
     // lib/screener.js a partir de public.universo_screener y public.universo_miembros; el servidor la aplica.
     if(_estU){
       try{
-        setMcProgress({current:1,total:1,name:`${nombreUniverso(_nUniv)} (${_activosMc.length} activos)`})
+        setMcProgress({current:1,total:1,name:`${nombreUniverso(_nUniv,reglaDeUniverso(mcUniverso))} (${_activosMc.length} activos)`})
         const u=_estU.universo
         const _strat1=strategies.find(s=>s.id===stratIds[0])
         const _cuerpoMc={symbols:u.simbolos,modoAsig:'concentrado',weights:{},cfg:baseCfg,strategyId:stratIds[0],isNoStrategy:(_strat1?.name||'').includes('No Strategy'),filtros:filtrosBackend,intervalo:mcIntervalo,comisiones:mcComisiones,..._prueba,
-          universo:{regla:'volatilidad',n:_nUniv,mascara:u.mascara,elegidos:u.elegidos}}
+          universo:{regla:reglaDeUniverso(mcUniverso),n:_nUniv,mascara:u.mascara,elegidos:u.elegidos}}
         const res=await apiFetch('/api/multibacktest',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(_cuerpoMc)})
         const json=await leeRespuestaMc(res)
         anotaPeticionMc(json,_cuerpoMc)
@@ -6275,7 +6276,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.964</title>
+        <title>Trading Simulator V9.965</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6364,7 +6365,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             }} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.964
+            <span className="dot"/>Trading Simulator V9.965
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -7885,7 +7886,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   )
                 })()}
 
-                {/* Universo: la lista manual de siempre o el Nasdaq-100 con los N más volátiles del año anterior */}
+                {/* Universo: la lista manual de siempre o el Nasdaq-100 con los N más volátiles del año anterior o con más momentum */}
                 <div style={{padding:'5px 8px',borderBottom:'1px solid var(--border)',flexShrink:0,display:'flex',flexDirection:'column',gap:4}}>
                   <label style={{display:'flex',alignItems:'center',gap:6,fontFamily:MONO,fontSize:10,color:'#7aabc8'}}>
                     Universo
@@ -7893,13 +7894,21 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       style={{flex:1,background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:10,padding:'3px 5px',borderRadius:4,minWidth:0}}>
                       <option value="manual">Lista manual</option>
                       {[10,20,30].map(n=><option key={n} value={`ndx_vol_${n}`}>Nasdaq-100 · {n} más volátiles</option>)}
+                      {[10,20,30].map(n=><option key={`m${n}`} value={`ndx_mom_${n}`}>Nasdaq-100 · {n} con más momentum</option>)}
                     </select>
                   </label>
                   {mcUniverso!=='manual'&&(
                     <div style={{fontFamily:MONO,fontSize:10,color:'#a8ccdf',lineHeight:1.5}}>
+                      {/* Con volatilidad, el texto de siempre tal cual; con momentum, su regla en una frase (lib/universoMc.js). */}
+                      {reglaDeUniverso(mcUniverso)==='momentum'?(<>
+                      Cada 1 de enero, los {mcUniverso.split('_').pop()} miembros del Nasdaq-100 {FRASE_REGLA.momentum}. Solo pueden recibir
+                      ENTRADAS mientras están en el universo; las posiciones abiertas siguen hasta su salida normal. Los activos son los del universo
+                      en el periodo elegido. Solo con Capital concentrado y una estrategia.
+                      </>):(<>
                       Cada 1 de enero, los {mcUniverso.split('_').pop()} miembros del Nasdaq-100 con mayor volatilidad del año anterior. Solo pueden recibir
                       ENTRADAS mientras están en el universo; las posiciones abiertas siguen hasta su salida normal. Los activos son los del universo
                       en el periodo elegido. Solo con Capital concentrado y una estrategia.
+                      </>)}
                       <div style={{color:'#ffd166',marginTop:3}}>
                         El universo empieza el 01/01/2016. En 2016–2018, entre el 14 % y el 22 % de los miembros elegibles no tienen datos de precios
                         (deslistados): no se pueden medir ni elegir, así que esos años salen sesgados.
@@ -9420,7 +9429,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       +'Cierres por dejar de cotizar: posiciones cerradas en la última vela de un valor que deja de cotizar antes del final del periodo.'+String.fromCharCode(10)
                       +'B&H universo: reparto igual entre los elegidos de cada año, rebalanceado cada 1 de enero; quien sale del índice se mantiene hasta el rebalanceo y quien deja de cotizar pasa a liquidez.'}
                       style={{fontFamily:MONO,fontSize:10,color:'#ffd166',background:'rgba(255,209,102,0.10)',border:'1px solid rgba(255,209,102,0.35)',borderRadius:3,padding:'1px 6px',cursor:'help'}}>
-                      Universo: Nasdaq-100 · {mcResult.universo.n} más volátiles · {mcResult.universo.descartadasPorUniverso} entradas descartadas por universo · {mcResult.universo.cierresSinCotizacion} cierres por dejar de cotizar
+                      Universo: {nombreUniverso(mcResult.universo.n,mcResult.universo.regla)} · {mcResult.universo.descartadasPorUniverso} entradas descartadas por universo · {mcResult.universo.cierresSinCotizacion} cierres por dejar de cotizar
                       {mcResumenUniverso?.qqq?` · B&H QQQ ${fmt(mcResumenUniverso.qqq.cagr,2,' %')} CAGR (caída ${fmt(mcResumenUniverso.qqq.maxDD,1,' %')})`:''}
                       {mcResumenUniverso?.universo?` · B&H universo ${fmt(mcResumenUniverso.universo.cagr,2,' %')} CAGR (caída ${fmt(mcResumenUniverso.universo.maxDD,1,' %')})`:''}
                     </span>

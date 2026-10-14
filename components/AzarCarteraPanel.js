@@ -38,6 +38,10 @@ export async function pideCandidatos(apiFetch, peticion) {
 // Las referencias del universo de la misma ejecución (B&H de QQQ y del universo), si las hay.
 const refsDe = (j) => j?.universo ? { qqq: resumenCurva(j.universo.qqqBHCurve), universo: resumenCurva(j.universo.bhUniversoCurve) } : null
 export const AVISO_UNIVERSO = 'Universo dinámico (Nasdaq-100, los N más volátiles del año anterior): empieza el 01/01/2016, y en 2016–2018 entre el 14 % y el 22 % de los miembros elegibles no tienen datos de precios, así que esos años salen sesgados. En A, cada activo repite sus operaciones al azar DENTRO de cada tramo en que está en el universo; en B, las señales son las que ya pasaron el universo.'
+// El aviso según la regla del universo (el de volatilidad, tal cual; el de momentum dice su regla).
+export const avisoUniverso = (regla) => regla === 'momentum'
+  ? AVISO_UNIVERSO.replace('los N más volátiles del año anterior', 'los N con más momentum de 12 meses')
+  : AVISO_UNIVERSO
 
 // La petición de cada resultado, sin tocar el resultado: pages/index.js la anota al recibirlo.
 const PETICIONES = new WeakMap()
@@ -54,7 +58,7 @@ export function pruebasCalculadas(resultados = []) {
     const pref = `${JSON.stringify(pet)}|`
     const e = [...CACHE.entries()].filter(([k, v]) => k.startsWith(pref) && v.estado === 'hecho').map(([, v]) => v).pop()
     return e ? { nombre: r.name, nSim: e.n, semilla: semillaCartera(pet), bh: e.bh, A: e.res.A, B: e.res.B, motivoB: e.motivoB,
-      ...(e.refs ? { refs: e.refs, aviso: AVISO_UNIVERSO, sinColocar: e.sinColocar } : {}) } : { nombre: r.name, motivo: 'no calculada' }
+      ...(e.refs ? { refs: e.refs, aviso: avisoUniverso(pet.universo?.regla), sinColocar: e.sinColocar } : {}) } : { nombre: r.name, motivo: 'no calculada' }
   })
 }
 
@@ -214,7 +218,7 @@ export default function AzarCarteraPanel({ resultados = [], apiFetch = null }) {
       </div>
       {motivo && <div style={{ fontSize: TAM, color: GRIS, marginTop: 8 }}>{motivo}</div>}
       {!motivo && !apiFetch && <div style={{ fontSize: TAM, color: GRIS, marginTop: 8 }}>No disponible aquí.</div>}
-      {!motivo && pet?.universo && <div style={{ fontSize: TAM, color: '#ffd166', marginTop: 8, lineHeight: 1.5 }}>{AVISO_UNIVERSO}</div>}
+      {!motivo && pet?.universo && <div style={{ fontSize: TAM, color: '#ffd166', marginTop: 8, lineHeight: 1.5 }}>{avisoUniverso(pet.universo.regla)}</div>}
       {!motivo && progreso?.clave === clave && <div role="status" style={{ fontSize: TAM, color: GRIS, marginTop: 8 }}>⏳ {progreso.texto}</div>}
       {entrada?.estado === 'error' && <div style={{ fontSize: TAM, color: '#ff4d6d', marginTop: 8 }}>{entrada.error}</div>}
       {entrada?.estado === 'hecho' && (<>
