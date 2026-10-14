@@ -12,7 +12,7 @@
 //     con el porqué (sin símbolo, Yahoo no lo tiene —404—, el historial empieza después o termina antes, excluido).
 //   · los 20 más volátiles del año anterior: volatilidad = desviación típica de los rendimientos logarítmicos diarios del
 //     cierre en el año natural anterior, anualizada (× √252), de los miembros con precios a ese 1 de enero con al menos 120
-//     rendimientos ese año. Los miembros SIN precios no tienen volatilidad medible (justo es lo que falta), así que no se
+//     rendimientos ese año. La calcula lib/screener.js (estadisticasAnuales), la misma función que usa el screener. Los miembros SIN precios no tienen volatilidad medible (justo es lo que falta), así que no se
 //     pueden ordenar: el hueco entre los 20 más volátiles va de 0 (si los que faltan fueran tranquilos) a min(faltan, 20) / 20
 //     (si todos estuvieran entre los más volátiles). Se da esa cota superior y el umbral de volatilidad del puesto 20.
 //   · velas anómalas: el criterio de lib/cachePrecios.js (esAnomala, el mismo con el que guardar_velas cuenta
@@ -37,6 +37,7 @@
 const fs = require('fs')
 const path = require('path')
 const { consulta, ALIAS } = require('./universoNasdaq100')
+const { preparaEsm } = require('./guardian/cargaEsm')
 const NL = String.fromCharCode(10)
 
 const args = process.argv.slice(2)
@@ -108,7 +109,21 @@ function coberturaAnio(tramos, ps, anual, anio, revisiones = {}) {
   }
 }
 
-module.exports = { coberturaAnio, porQueSinPrecios, revisaTramo, claveTramo, cubre, MIN_RENDIMIENTOS, TOP, MARGEN_DIAS, SALTO_TRAMO, HUECO_TRAMO }
+// Cierres diarios desde `desde` de los símbolos dados: { símbolo: [{ date, close }] } en orden de fecha, por lotes y en
+// texto compacto (el float8 de PostgreSQL pasa a texto con la representación exacta más corta, así que vuelve idéntico).
+// Un cierre nulo se conserva como vela con close null: cuenta como «anterior» del par siguiente, igual que en lag().
+async function leeCierres(lee, simbolos, desde, lote = 40) {
+  const velas = {}
+  for (let i = 0; i < simbolos.length; i += lote) {
+    const filas = await lee(`SET LOCAL statement_timeout = '180s';
+      SELECT simbolo, string_agg(fecha::text || ' ' || coalesce(close::text, ''), ',' ORDER BY fecha) AS v
+      FROM public.precios_diarios WHERE simbolo = ANY(${arr(simbolos.slice(i, i + lote))}) AND fecha >= ${lit(desde)} GROUP BY simbolo;`)
+    for (const f of filas) velas[f.simbolo] = f.v.split(',').map(x => { const [date, c] = x.split(' '); return { date, close: c === '' ? null : Number(c) } })
+  }
+  return velas
+}
+
+module.exports = { coberturaAnio, porQueSinPrecios, revisaTramo, claveTramo, cubre, leeCierres, MIN_RENDIMIENTOS, TOP, MARGEN_DIAS, SALTO_TRAMO, HUECO_TRAMO }
 
 if (require.main === module) (async () => {
   const UNIVERSO = opcion('--universo', 'NDX')
@@ -123,15 +138,11 @@ if (require.main === module) (async () => {
   const primerDia = tramos.reduce((m, t) => t.desde < m ? t.desde : m, '9999')
   const anio0 = Number(primerDia.slice(0, 4)) + (primerDia.slice(5) === '01-01' ? 0 : 1)
   const desdeVelas = `${anio0 - 1}-01-01`
-  const filasAnual = await lee(`SET LOCAL statement_timeout = '180s';
-    WITH r AS (SELECT simbolo, fecha, close, lag(close) OVER (PARTITION BY simbolo ORDER BY fecha) AS prev
-      FROM public.precios_diarios WHERE simbolo = ANY(${arr(simbolos)}) AND fecha >= ${lit(desdeVelas)})
-    SELECT simbolo, extract(year FROM fecha)::int AS anio, min(fecha)::text AS primera,
-      count(*) FILTER (WHERE prev > 0 AND close > 0)::int AS n,
-      stddev_samp(ln(close / prev)) FILTER (WHERE prev > 0 AND close > 0) * sqrt(252) AS vol
-    FROM r GROUP BY 1, 2;`)
+  await preparaEsm()
+  const { estadisticasAnuales } = require('../lib/screener')
+  const velas = await leeCierres(lee, simbolos, desdeVelas)
   const anual = {}
-  for (const f of filasAnual) (anual[f.simbolo] ||= {})[f.anio] = { primera: f.primera, n: f.n, vol: f.vol == null ? null : Number(f.vol) }
+  for (const [s, vs] of Object.entries(velas)) anual[s] = estadisticasAnuales(vs)
 
   // Mayor salto y mayor hueco DENTRO de cada tramo con velas (pares de velas consecutivas, las dos dentro del tramo).
   const conDatos = tramos.filter(t => t.simbolo_yahoo && ps[t.simbolo_yahoo]?.velas > 0)
