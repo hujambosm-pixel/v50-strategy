@@ -32,6 +32,9 @@
 //   3. Las escribe con guardar_velas, NUNCA con un INSERT directo, para que pasen sus validaciones, en una
 //      transacción por símbolo.
 // Reanudable: salta los símbolos cuya ultima_fecha en precios_simbolos ya está al día.
+// PÉRDIDA DE HISTORIA (revisaHistoria de lib/cachePrecios.js): si el símbolo ya tiene velas desde la fecha que
+// se pide y Yahoo empieza después que ellas o trae menos del 90 %, no se sustituye ninguna: solo se guardan
+// las posteriores a la última guardada y se anota el aviso en precios_simbolos (anotar_aviso_historia).
 //
 // CÓMO ESCRIBE. Por la Management API, con el mismo token que scripts/backup.js (las funciones de abajo
 // están copiadas de allí). La Management API conecta como `postgres`, que no es un usuario de la app, y
@@ -167,6 +170,12 @@ function motivoDescarte(v, hoy, vistas) {
 }
 
 const pausa = (ms) => new Promise(r => setTimeout(r, ms))
+// El aviso de historia protegida, como el usuario de Sergi (ver la cabecera), cuando no hay nada que guardar.
+const anotaAviso = (s, aviso) => consulta(`BEGIN;
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claims', '{"sub":"${USUARIO}","role":"authenticated"}', true);
+SELECT public.anotar_aviso_historia(${lit(s)}, ${lit(aviso)});
+COMMIT;`)
 
 // ── Reintentos y 429 ────────────────────────────────────────────────────────────────────────────────
 // descarga(simbolo) → velas, o lanza un error con .status. espera(ms) → promesa. estado lleva los 429 seguidos de la
@@ -202,7 +211,7 @@ if (require.main === module) (async () => {
   if (!TOKEN) { console.error('No hay sesión con Supabase: ejecuta «npx.cmd supabase login» o define SUPABASE_ACCESS_TOKEN.'); process.exit(1) }
   if (!REF) { console.error('No sé a qué proyecto conectarme: define SUPABASE_URL o deja NEXT_PUBLIC_SUPABASE_URL en .env.local.'); process.exit(1) }
   await preparaEsm()
-  const { velasCerradas, esAnomala, aFilasBd } = require(path.join(RAIZ, 'lib', 'cachePrecios.js'))
+  const { velasCerradas, esAnomala, aFilasBd, revisaHistoria } = require(path.join(RAIZ, 'lib', 'cachePrecios.js'))
   const { FILTROS_CATALOGO } = require(path.join(RAIZ, 'lib', 'filtros.js'))
   const t0 = Date.now()
 
@@ -277,19 +286,30 @@ if (require.main === module) (async () => {
       }
       fila.rechazadas = crudas.length - cerradas.length
       fila.motivos = Object.entries(motivos).map(([m, n]) => `${n} ${m}`).join(', ')
-      if (!cerradas.length) { fila.estado = 'Yahoo sin velas cerradas'; filas.push(fila); continue }
-      const json = JSON.stringify(aFilasBd(cerradas))
+      // Lo guardado en el rango que se va a tocar (desde la fecha pedida), contra lo que da Yahoo.
+      const desdePedido = DESDE || new Date((Math.floor(Date.now() / 1000) - Math.round(ANIOS * 365.25 * 86400)) * 1000).toISOString().slice(0, 10)
+      const [g] = e0?.ultima ? await lee(`SELECT min(fecha)::text AS primera, max(fecha)::text AS ultima, count(*)::int AS velas
+        FROM precios_diarios WHERE simbolo = ${lit(s)} AND fecha >= ${lit(desdePedido)};`) : [null]
+      const h = revisaHistoria(g, cerradas)
+      const aGuardar = h.sospechosa ? h.posteriores : cerradas
+      if (h.sospechosa) { fila.aviso = h.motivo; console.log(`  ${s.padEnd(10)} AVISO: ${h.motivo}; solo se añaden ${aGuardar.length} velas posteriores`) }
+      if (!aGuardar.length) {
+        if (h.sospechosa) await anotaAviso(s, h.motivo)
+        fila.estado = h.sospechosa ? 'historia protegida: nada que añadir' : 'Yahoo sin velas cerradas'; filas.push(fila); continue
+      }
+      const json = JSON.stringify(aFilasBd(aGuardar))
       if (json.includes(ETIQUETA)) throw new Error('las velas contienen la etiqueta de dollar-quoting')
       // Una transacción por símbolo, como el usuario de Sergi (ver la cabecera).
       const r = await consulta(`BEGIN;
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claims', '{"sub":"${USUARIO}","role":"authenticated"}', true);
-SELECT public.guardar_velas(${lit(s)}, ${ETIQUETA}${json}${ETIQUETA}::jsonb) AS escritas;
+SELECT public.guardar_velas(${lit(s)}, ${ETIQUETA}${json}${ETIQUETA}::jsonb) AS escritas;${h.sospechosa ? `
+SELECT public.anotar_aviso_historia(${lit(s)}, ${lit(h.motivo)});` : ''}
 COMMIT;`)
-      fila.guardadas = Number(r?.[0]?.escritas ?? cerradas.length)
-      fila.primera = cerradas[0].date; fila.ultima = cerradas[cerradas.length - 1].date
-      fila.anomalas = cerradas.filter(esAnomala).length
-      fila.estado = 'ok'
+      fila.guardadas = Number(r?.[0]?.escritas ?? aGuardar.length)
+      fila.primera = aGuardar[0].date; fila.ultima = aGuardar[aGuardar.length - 1].date
+      fila.anomalas = aGuardar.filter(esAnomala).length
+      fila.estado = h.sospechosa ? 'historia protegida: solo lo posterior' : 'ok'
     } catch (e) {
       if (e.parar) { parada = e.message; fila.estado = 'PARADA: ' + e.message; filas.push(fila); break }
       fila.estado = 'ERROR: ' + String(e.message).replace(/\s+/g, ' ').slice(0, 160)
@@ -303,6 +323,8 @@ COMMIT;`)
   console.log('\nSÍMBOLO      PRIMERA     ÚLTIMA      GUARDADAS  DESCARTADAS             TIEMPO  ESTADO')
   for (const f of filas) console.log(`${f.simbolo.padEnd(12)} ${String(f.primera).padEnd(11)} ${String(f.ultima).padEnd(11)} ${String(f.guardadas).padStart(9)}  ${(f.rechazadas ? `${f.rechazadas} (${f.motivos})` : '0').padEnd(22)} ${(f.ms / 1000).toFixed(1).padStart(6)} s  ${f.estado}`)
   const errores = filas.filter(f => f.estado.startsWith('ERROR'))
+  const avisos = filas.filter(f => f.aviso)
+  if (avisos.length) { console.log(`\nHISTORIA PROTEGIDA (${avisos.length}): no se ha sustituido nada`); for (const f of avisos) console.log(`  ${f.simbolo.padEnd(10)} ${f.aviso}`) }
   console.log(`\n${filas.length} símbolos · ${filas.reduce((s, f) => s + f.guardadas, 0)} velas guardadas · ${errores.length} con error · ${((Date.now() - t0) / 1000).toFixed(0)} s`)
   if (parada) { console.log(`\nTANDA DETENIDA: ${parada}. Vuelve a lanzar el mismo comando para seguir: lo ya guardado se salta.`); process.exit(2) }
   if (errores.length) process.exit(1)
