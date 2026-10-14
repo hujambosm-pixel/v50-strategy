@@ -1,10 +1,12 @@
 -- sql/universo_screener.sql — selecciones del screener por reglas (Fase 8a): qué miembros del índice elige cada regla cada
 -- 1 de enero.
 --
--- QUÉ. Una fila por (regla, N, año, puesto): el valor elegido (símbolo de Yahoo) y su medida. Para la regla «volatilidad»
--- (lib/screener.js: los N miembros con mayor volatilidad del año anterior), volatilidad es la del año anio − 1. La llena
--- scripts/generaScreener.js. La app reconstruye la máscara de entradas con mascaraUniverso (lib/screener.js) a partir de
--- esta tabla y de universo_miembros (las salidas del índice a mitad de año cortan las entradas).
+-- QUÉ. Una fila por (regla, N, año, puesto): el valor elegido (símbolo de Yahoo) y su medida, en la columna «volatilidad»
+-- sea cual sea la regla. Regla «volatilidad» (lib/screener.js: los N miembros con mayor volatilidad del año anterior): la
+-- volatilidad del año anio − 1. Regla «momentum» (Fase 8a, paso 4): la rentabilidad de los 12 meses hasta el último día
+-- de bolsa antes del 1 de enero de anio. La llena scripts/generaScreener.js (--regla). La app reconstruye la máscara de
+-- entradas con mascaraUniverso (lib/screener.js) a partir de esta tabla y de universo_miembros (las salidas del índice a
+-- mitad de año cortan las entradas).
 --
 -- QUIÉN. Como universo_miembros: la app solo la LEE (authenticated); nadie la escribe desde el cliente. El script escribe
 -- por la Management API.

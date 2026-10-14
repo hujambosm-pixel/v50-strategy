@@ -4,13 +4,17 @@
 //   node scripts/generaScreener.js                 escribe (una transacción) y comprueba lo escrito leyéndolo de vuelta
 //   node scripts/generaScreener.js --revertir <md5>   borra las filas de la regla SOLO si su huella es la dada (la que
 //                                                  imprime la escritura); si alguien las cambió después, no toca nada
-//   opciones: --universo NDX · --n 10,20,30 · --desde 2016 · --hasta 2026
+//   opciones: --regla volatilidad|momentum (por defecto volatilidad) · --universo NDX · --n 10,20,30 · --desde 2016 ·
+//             --hasta 2026
 //
-// Regla «volatilidad»: las mismas selecciones que scripts/informeScreener.js (seleccion de lib/screener.js sobre
-// universo_miembros y los cierres de precios_diarios). Reescribe TODAS las filas de la regla para esos N (DELETE +
-// INSERT en la misma transacción) y deja la tabla igual que lo calculado o no la toca.
+// Reglas (REGLAS de lib/screener.js, sobre universo_miembros y los cierres de precios_diarios):
+//   · «volatilidad»: las mismas selecciones que scripts/informeScreener.js;
+//   · «momentum» (Fase 8a, paso 4): rentabilidad de 12 meses completos hasta el último día de bolsa del año anterior.
+// La columna «volatilidad» guarda la MEDIDA de la regla (la volatilidad o el momentum). Reescribe TODAS las filas de esa
+// regla para esos N (DELETE + INSERT en la misma transacción) y deja la tabla igual que lo calculado o no la toca; las
+// filas de las demás reglas no se tocan, y se comprueba con su huella antes y después.
 //
-// Huella: md5 de las filas de la regla, en orden (n, anio, posicion), con la volatilidad en su texto exacto.
+// Huella: md5 de las filas de la regla, en orden (n, anio, posicion), con la medida en su texto exacto.
 // Lee y escribe por la Management API, como los demás scripts del universo.
 const { consulta } = require('./universoNasdaq100')
 const { leeCierres } = require('./coberturaUniverso')
@@ -24,9 +28,13 @@ const opcion = (n, def = null) => { const i = args.indexOf(n); return i >= 0 ? a
 const EXACTO = 'SET LOCAL extra_float_digits = 1;'
 const lee = (q) => consulta('BEGIN READ ONLY;' + NL + EXACTO + NL + q + NL + 'ROLLBACK;')
 const lit = (s) => s == null ? 'NULL' : "'" + String(s).replace(/'/g, "''") + "'"
-const REGLA = 'volatilidad'
-const HUELLA = `SELECT md5(coalesce(string_agg(n || '|' || anio || '|' || posicion || '|' || simbolo_yahoo || '|' || coalesce(volatilidad::text, ''), ',' ORDER BY n, anio, posicion), '')) AS h,
-  count(*)::int AS filas FROM public.universo_screener WHERE regla = ${lit(REGLA)}`
+const REGLA = opcion('--regla', 'volatilidad')
+const huellaDe = (regla) => `SELECT md5(coalesce(string_agg(n || '|' || anio || '|' || posicion || '|' || simbolo_yahoo || '|' || coalesce(volatilidad::text, ''), ',' ORDER BY n, anio, posicion), '')) AS h,
+  count(*)::int AS filas FROM public.universo_screener WHERE regla = ${lit(regla)}`
+const HUELLA = huellaDe(REGLA)
+// Huella de las filas de las OTRAS reglas (tienen que quedar intactas).
+const HUELLA_OTRAS = `SELECT md5(coalesce(string_agg(regla || '|' || n || '|' || anio || '|' || posicion || '|' || simbolo_yahoo || '|' || coalesce(volatilidad::text, ''), ',' ORDER BY regla, n, anio, posicion), '')) AS h,
+  count(*)::int AS filas FROM public.universo_screener WHERE regla <> ${lit(REGLA)}`
 
 ;(async () => {
   const REVERTIR = opcion('--revertir')
@@ -49,7 +57,9 @@ const HUELLA = `SELECT md5(coalesce(string_agg(n || '|' || anio || '|' || posici
   const DESDE = Number(opcion('--desde', 2016)), HASTA = Number(opcion('--hasta', 2026))
   const ENSAYO = args.includes('--ensayo')
   await preparaEsm()
-  const { seleccion } = require('../lib/screener')
+  const { REGLAS } = require('../lib/screener')
+  const regla = REGLAS[REGLA]
+  if (!regla) { console.error(`Regla desconocida: «${REGLA}» (hay: ${Object.keys(REGLAS).join(', ')}).`); process.exit(1) }
 
   const miembros = await lee(`SELECT simbolo, simbolo_yahoo, nombre, desde::text, hasta::text, motivo_salida, excluido_motivo
     FROM public.universo_miembros WHERE indice = ${lit(UNIVERSO)} ORDER BY desde, simbolo;`)
@@ -59,20 +69,23 @@ const HUELLA = `SELECT md5(coalesce(string_agg(n || '|' || anio || '|' || posici
 
   const filas = []
   for (const N of NS) for (let y = DESDE; y <= HASTA; y++)
-    seleccion(y, N, miembros, velas).seleccionados.forEach((x, i) => filas.push({ n: N, anio: y, simbolo_yahoo: x.simbolo, posicion: i + 1, volatilidad: x.vol }))
+    regla(y, N, miembros, velas).seleccionados.forEach((x, i) => filas.push({ n: N, anio: y, simbolo_yahoo: x.simbolo, posicion: i + 1, volatilidad: REGLA === 'momentum' ? x.momentum : x.vol }))
   // String(número) es la representación exacta más corta: PostgreSQL la lee como el mismo float8.
   const valores = filas.map(f => `(${lit(REGLA)}, ${f.n}, ${f.anio}, ${lit(f.simbolo_yahoo)}, ${f.posicion}, ${f.volatilidad == null ? 'NULL' : String(f.volatilidad)})`)
-  const antes = (await lee(HUELLA + ';'))[0]
+  const antes = (await lee(HUELLA + ';'))[0], otrasAntes = (await lee(HUELLA_OTRAS + ';'))[0]
   const r = await consulta(`BEGIN; ${EXACTO}
     DELETE FROM public.universo_screener WHERE regla = ${lit(REGLA)} AND n = ANY(ARRAY[${NS.join(',')}]::int[]);
     INSERT INTO public.universo_screener (regla, n, anio, simbolo_yahoo, posicion, volatilidad) VALUES
     ${valores.join(',' + NL + '    ')};
-    ${HUELLA};
+    SELECT a.h, a.filas, b.h AS h_otras, b.filas AS filas_otras FROM (${HUELLA}) a, (${HUELLA_OTRAS}) b;
     ${ENSAYO ? 'ROLLBACK' : 'COMMIT'};`)
   const despues = r[0]
   console.log(`universo_screener · regla «${REGLA}» · N = ${NS.join(', ')} · años ${DESDE}–${HASTA}: ${filas.length} filas calculadas`)
   console.log(`   antes: ${antes.filas} filas, huella ${antes.h} · ${ENSAYO ? 'quedaría' : 'queda'}: ${despues.filas} filas, huella ${despues.h}`
     + (antes.h === despues.h ? ' (IDÉNTICA: no cambia nada)' : ''))
+  console.log(`   otras reglas: ${otrasAntes.filas} filas, huella ${otrasAntes.h} · ${ENSAYO ? 'quedaría' : 'queda'}: ${despues.filas_otras} filas, huella ${despues.h_otras}`
+    + (otrasAntes.h === despues.h_otras ? ' (INTACTAS)' : ' ¡CAMBIAN!'))
+  if (otrasAntes.h !== despues.h_otras) process.exit(1)
   if (ENSAYO) { console.log('   ENSAYO: ROLLBACK, la tabla no ha cambiado.'); return }
 
   // Comprobación: lo escrito, leído de vuelta, es exactamente lo calculado (volatilidad incluida, bit a bit).
@@ -80,6 +93,6 @@ const HUELLA = `SELECT md5(coalesce(string_agg(n || '|' || anio || '|' || posici
     AND n = ANY(ARRAY[${NS.join(',')}]::int[]) ORDER BY n, anio, posicion;`)
   const clave = (f) => `${f.n}|${f.anio}|${f.posicion}|${f.simbolo_yahoo}|${f.volatilidad}`
   const ok = leidas.length === filas.length && leidas.every((f, i) => clave(f) === clave(filas[i]))
-  console.log(`   comprobación: ${ok ? 'lo leído coincide con lo calculado fila a fila' : '¡NO COINCIDE!'} · para revertir: node scripts/generaScreener.js --revertir ${despues.h}`)
+  console.log(`   comprobación: ${ok ? 'lo leído coincide con lo calculado fila a fila' : '¡NO COINCIDE!'} · para revertir: node scripts/generaScreener.js --regla ${REGLA} --revertir ${despues.h}`)
   if (!ok) process.exit(1)
 })().catch(e => { console.error('FALLO', e.message); process.exit(1) })
