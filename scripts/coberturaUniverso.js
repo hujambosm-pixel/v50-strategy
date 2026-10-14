@@ -110,12 +110,13 @@ function coberturaAnio(tramos, ps, anual, anio, revisiones = {}) {
 }
 
 // Cierres diarios desde `desde` de los símbolos dados: { símbolo: [{ date, close }] } en orden de fecha, por lotes y en
-// texto compacto (el float8 de PostgreSQL pasa a texto con la representación exacta más corta, así que vuelve idéntico).
+// texto compacto. extra_float_digits = 1: el float8 pasa a texto con la representación exacta más corta, así que vuelve
+// idéntico (la conexión de la Management API trae 0, que lo redondea a 15 cifras).
 // Un cierre nulo se conserva como vela con close null: cuenta como «anterior» del par siguiente, igual que en lag().
 async function leeCierres(lee, simbolos, desde, lote = 40) {
   const velas = {}
   for (let i = 0; i < simbolos.length; i += lote) {
-    const filas = await lee(`SET LOCAL statement_timeout = '180s';
+    const filas = await lee(`SET LOCAL statement_timeout = '180s'; SET LOCAL extra_float_digits = 1;
       SELECT simbolo, string_agg(fecha::text || ' ' || coalesce(close::text, ''), ',' ORDER BY fecha) AS v
       FROM public.precios_diarios WHERE simbolo = ANY(${arr(simbolos.slice(i, i + lote))}) AND fecha >= ${lit(desde)} GROUP BY simbolo;`)
     for (const f of filas) velas[f.simbolo] = f.v.split(',').map(x => { const [date, c] = x.split(' '); return { date, close: c === '' ? null : Number(c) } })
