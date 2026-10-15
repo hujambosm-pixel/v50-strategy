@@ -118,13 +118,15 @@ function Histograma({ sims, real, bh }) {
   )
 }
 
-function Bloque({ titulo, pregunta, r, bh, nSim, motivo }) {
+// conCapital: la fila informativa «CAGR / capital invertido medio» (solo en la prueba A): con su percentil, sin veredicto.
+function Bloque({ titulo, pregunta, r, bh, nSim, motivo, conCapital = false }) {
   const c = { padding: '3px 8px', textAlign: 'right', fontSize: TAM }
   const filas = r ? [
     ['CAGR compuesto', r.cagr, (v) => pct(v), TEXTO_VEREDICTO],
     ['Caída máxima (con flotante)', r.maxDD, (v) => pct(v), TEXTO_VEREDICTO_CAIDA],
     ['CAGR / caída', r.ratio, (v) => num(v), TEXTO_RATIO],
     ['Capital invertido medio', r.capInv, (v) => pct(v), null],
+    ...(conCapital && r.capRatio ? [['CAGR / capital invertido medio', r.capRatio, (v) => pct(v), null]] : []),
   ] : []
   return (
     <div style={{ ...caja, margin: '10px 0 0' }}>
@@ -137,7 +139,7 @@ function Bloque({ titulo, pregunta, r, bh, nSim, motivo }) {
             <tbody>{filas.map(([nombre, x, f, textos]) => (
               <tr key={nombre} style={{ borderTop: '1px solid var(--border)' }}>
                 <td style={{ ...c, textAlign: 'left' }}>{nombre}</td><td style={c}>{x.real == null ? '—' : f(x.real)}</td><td style={c}>{x.mediana == null ? '—' : f(x.mediana)}</td>
-                <td style={c}>{x.p5 == null ? '—' : `${f(x.p5)} – ${f(x.p95)}`}</td><td style={c}>{textos && x.percentil != null ? fmt(x.percentil, 1) : '—'}</td>
+                <td style={c}>{x.p5 == null ? '—' : `${f(x.p5)} – ${f(x.p95)}`}</td><td style={c}>{x.percentil != null ? fmt(x.percentil, 1) : '—'}</td>
                 <td style={{ ...c, textAlign: 'left' }}>{textos ? (x.veredicto ? textos[x.veredicto] : '—') : 'Solo informativo'}</td>
               </tr>))}</tbody>
           </table>
@@ -224,7 +226,7 @@ export default function AzarCarteraPanel({ resultados = [], apiFetch = null }) {
       {entrada?.estado === 'hecho' && (<>
         <div style={{ fontSize: TAM, color: GRIS, marginTop: 8 }}>{`La cartera real recompuesta en el navegador coincide con la ejecución. Tiempo: candidatos ${fmt(entrada.msDatos / 1000, 1)} s${entrada.tandas > 1 ? ` (${entrada.tandas} tandas)` : ''} · simulación ${fmt(entrada.msSim / 1000, 1)} s.`}</div>
         {entrada.refs && <div style={{ fontSize: TAM, color: GRIS, marginTop: 4 }}>{`Referencias de la misma ejecución: B&H universo ${entrada.refs.universo ? `CAGR ${pct(entrada.refs.universo.cagr)}, caída máxima ${pct(entrada.refs.universo.maxDD)}` : '—'} · B&H QQQ ${entrada.refs.qqq ? `CAGR ${pct(entrada.refs.qqq.cagr)}, caída máxima ${pct(entrada.refs.qqq.maxDD)}` : '—'}.${entrada.sinColocar ? ` En A, ${fmt(entrada.sinColocar, 0)} colocaciones de activo no cupieron en su tramo y ese activo no operó en esa simulación.` : ''}`}</div>}
-        <Bloque titulo="A · Señal al azar, reparto real" pregunta="¿Acierta la estrategia CUÁNDO entrar, con la misma forma de repartir el capital?" r={entrada.res.A} bh={entrada.bh} nSim={entrada.n} />
+        <Bloque titulo="A · Señal al azar, reparto real" pregunta="¿Acierta la estrategia CUÁNDO entrar, con la misma forma de repartir el capital?" r={entrada.res.A} bh={entrada.bh} nSim={entrada.n} conCapital />
         <Bloque titulo="B · Señal real, orden al azar" pregunta="¿Acierta la cartera EN QUÉ activos poner el dinero, con las mismas señales?" r={entrada.res.B} bh={entrada.bh} nSim={entrada.n} motivo={entrada.motivoB} />
         <div style={{ fontSize: TAM, color: GRIS, lineHeight: 1.5, marginTop: 8 }}>
           Cómo leer esto: en A, cada activo repite sus operaciones (mismo número, mismas duraciones) en fechas al azar y la cartera las reparte con sus
