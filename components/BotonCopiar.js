@@ -7,11 +7,14 @@ import { MONO } from '../lib/utils'
 // su título empieza por «Ver el rendimiento de» o «Quitar la selección de» (las filas por activo de la comparativa).
 // Una etiqueta pegada al valor en la misma celda (p. ej. el % de señales ejecutadas junto a las Ops) lleva
 // data-etiqueta-copiar con lo que significa: se copia aparte, entre paréntesis («317 (31% de las señales ejecutadas)»),
-// en vez de pegada al número («31731%»). Las celdas sin esas etiquetas se copian como siempre.
+// en vez de pegada al número («31731%»). Con el atributo vacío, solo el paréntesis («B&H Diversif. (43 activos)»). Las
+// celdas sin esas etiquetas se copian como siempre.
 const textoCelda = (el) => {
   if (!el.querySelector?.('[data-etiqueta-copiar]')) return el.textContent || ''
   const c = el.cloneNode(true)
-  c.querySelectorAll('[data-etiqueta-copiar]').forEach(e => { e.textContent = ` (${(e.textContent || '').trim()} ${e.getAttribute('data-etiqueta-copiar')}) ` })
+  c.querySelectorAll('[data-etiqueta-copiar]').forEach(e => {
+    e.textContent = ` (${[(e.textContent || '').trim(), e.getAttribute('data-etiqueta-copiar')].filter(Boolean).join(' ')}) `
+  })
   return c.textContent || ''
 }
 export function leeTabla(raiz) {

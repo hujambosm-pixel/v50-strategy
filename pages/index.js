@@ -14,7 +14,7 @@ import { rangoDePeriodo, periodoInicial } from '../components/SelectorPeriodo'
 import CondicionesSimulacion from '../components/CondicionesSimulacion'
 import { COMISIONES_DEFECTO, comisionesDeAjustes, comisionesDelRanking } from '../lib/comisiones'
 import { condicionesDelRanking, condicionesGuardadas, conCondiciones, conComisiones } from '../lib/condicionesSimulacion'
-import { temporalidadDeEstrategia } from '../lib/condicionesSimulacion'
+import { temporalidadDeEstrategia, notaTemporalidad } from '../lib/condicionesSimulacion'
 import { filtrosDelRanking, tandaDelRanking, diasToleranciaDelRanking, activosPendientes, enTandas } from '../lib/rankingRecalculo'
 import { supabase } from '../lib/supabaseClient'
 import { fetchConditions, lsGetConds, lsSaveConds, COND_LS_KEY } from '../lib/conditions'
@@ -30,7 +30,7 @@ import { textoMulticartera, datosCabeceraMulticartera } from '../lib/exportaText
 import { nDeUniverso, reglaDeUniverso, nombreUniverso, FRASE_REGLA, cargaUniversoMc, estadoUniversoMc } from '../lib/universoMc'
 import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.968'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.969'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -6276,7 +6276,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.968</title>
+        <title>Trading Simulator V9.969</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6365,7 +6365,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             }} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.968
+            <span className="dot"/>Trading Simulator V9.969
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -9423,6 +9423,18 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                     </span>
                   )}
                   <span style={{fontFamily:MONO,fontSize:11,color:'#8ab8d4'}}>{/* Con excluidos, "N de M": los que entran frente a los pedidos (misma respuesta) */}{mcResult.avisosHistorico?.excluidos?.length?`${mcResult.n} de ${mcResult.n+mcResult.avisosHistorico.excluidos.length}`:mcResult.n} activos · <span style={{color:mcResult.modoAsig==='custom'?'#9b72ff':'#00d4ff'}}>{mcResult.modoAsig==='compartido'?'Capital compartido':mcResult.modoAsig==='concentrado'?'Capital concentrado':'Slots iguales'}</span></span>
+                  {/* Temporalidad: en el multibacktest manda la del panel; si alguna estrategia de la ejecución declara otra, se dice. */}
+                  {(()=>{
+                    const _pets=[peticionMcDe(mcResult),...mcMultiResults.map(r=>peticionMcDe(r.result))].filter(Boolean)
+                    const _iv=_pets[0]?.intervalo||'diario'
+                    const _nota=notaTemporalidad(_iv,[...new Set(_pets.map(p=>p.strategyId).filter(Boolean))].map(id=>strategies.find(s=>s.id===id)).filter(Boolean))
+                    return _nota?(
+                      <span title="En el multibacktest todas las estrategias se ejecutan con la temporalidad elegida en el panel (Condiciones de la simulación), aunque declaren otra en sus parámetros."
+                        style={{fontFamily:MONO,fontSize:10,color:'#ffd166',background:'rgba(255,209,102,0.10)',border:'1px solid rgba(255,209,102,0.35)',borderRadius:3,padding:'1px 6px',cursor:'help'}}>
+                        Temporalidad: {_iv} ({_nota})
+                      </span>
+                    ):null
+                  })()}
                   {/* Universo dinámico: qué universo, cuánto ha recortado y las dos referencias. */}
                   {mcResult.universo&&(
                     <span title={'Las entradas fuera del universo se descartan en su fecha de ejecución; las posiciones abiertas siguen hasta su salida normal.'+String.fromCharCode(10)
@@ -9766,7 +9778,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                         <span style={{fontFamily:MONO,fontSize:9,color:'#7a8a9a',width:8,flexShrink:0}}>{bhOpen?'▼':'▶'}</span>
                                         <div style={{width:7,height:7,borderRadius:2,background:'#a0b4c8',flexShrink:0}}/>
                                         <span style={{color:'#a0b4c8',fontWeight:600,fontStyle:'italic'}}>B&H Diversif.</span>
-                                        <span style={{fontFamily:MONO,fontSize:9,color:'#4a6a88',marginLeft:2}}>{bhStats.length} activos</span>
+                                        <span data-etiqueta-copiar="" style={{fontFamily:MONO,fontSize:9,color:'#4a6a88',marginLeft:2}}>{bhStats.length} activos</span>
                                       </div>
                                     </td>
                                     <td style={{padding:'5px 6px',color:'#a0b4c8'}}>{bhStats.length}</td>
