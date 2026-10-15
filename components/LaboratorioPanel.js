@@ -12,12 +12,13 @@ import { MONO, fmtDate, numeroEs } from '../lib/utils'
 import CampoFecha from './CampoFecha'
 import BotonCopiar from './BotonCopiar'
 import { SENALES, CATALOGO, parametrosPorDefecto, validaCombinacion, SALIDAS, CATALOGO_SALIDAS, parametrosSalidaPorDefecto } from '../lib/senales'
-import { LOTE_1, LOTE_2, configDe, configDeItem, configSalidasDe, validaConfig, esConfigSalidas, veredictoOficial, notaResimulado } from '../lib/lotesLab'
+import { LOTE_1, LOTE_2, configDe, configDeItem, configSalidasDe, validaConfig, esConfigSalidas, veredictoOficial, notaResimulado, textoCriterio,
+         SIN_VEREDICTO_STOPS, NOTA_PERMUTACION } from '../lib/lotesLab'
 import { clasificaConfig, guardarPrueba, cuentaPruebas, listarPruebas, leerPrueba, estadoLote, SELECT_HISTORIAL, notaDeFila } from '../lib/registroLab'
 import { SALIDA_VELAS, N_SIM_LAB, MIN_OPERACIONES, PERCENTIL_PASA } from '../lib/laboratorio'
 import { textoLaboratorio, CAB_LAB, filasLab, CAB_LAB_DETALLE, filasLabDetalle, CAB_LAB_EDGE, filasLabEdge, AVISO_POCAS_LAB, SIN_SECTOR_LAB, num, reglaLab,
-         CAB_LAB_S, filasLabSalidas, CAB_LAB_S_INFO, filasLabSalidasInfo, CAB_LAB_S_OTROS, filasLabSalidasOtros, CAB_LAB_S_DETALLE, filasLabSalidasDetalle,
-         CAB_LAB_ANIO, filasLabAnio, CAB_LAB_ACTIVO, filasLabActivo, textoCriterioSalidas } from '../lib/exportaTexto'
+         filasLabSalidas, CAB_LAB_S_INFO, filasLabSalidasInfo, CAB_LAB_S_OTROS, filasLabSalidasOtros, CAB_LAB_S_DETALLE, filasLabSalidasDetalle,
+         CAB_LAB_ANIO, filasLabAnio, CAB_LAB_ACTIVO, filasLabActivo, textoCriterioSalidas, cabLabSalidas, permutacionInformativa } from '../lib/exportaTexto'
 import { getSupaUrl, getSupaH, hayConfigSupabase } from '../lib/supabase'
 
 const CLAVE_LS = 'v50_laboratorio'
@@ -29,7 +30,7 @@ const etiqueta = { fontFamily: MONO, fontSize: TAM, color: GRIS, letterSpacing: 
 const entrada = { background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontFamily: MONO, fontSize: TAM, padding: '4px 6px' }
 const boton = { fontFamily: MONO, fontSize: TAM, padding: '4px 10px', borderRadius: 4, cursor: 'pointer', border: '1px solid var(--border)', background: 'var(--bg3)', color: 'var(--text)' }
 const botonPrincipal = { ...boton, border: '1px solid var(--accent)', background: 'rgba(0,212,255,0.12)', color: 'var(--accent)', fontWeight: 700 }
-const COLOR_ESTADO = { pasa: VERDE, 'no pasa': ROJO, 'datos insuficientes': AMBAR, pendiente: GRIS, 'sin veredicto': GRIS }
+const COLOR_ESTADO = { pasa: VERDE, 'no pasa': ROJO, 'datos insuficientes': AMBAR, pendiente: GRIS, 'sin veredicto': GRIS, [SIN_VEREDICTO_STOPS]: GRIS }
 
 const DISPARADORES = CATALOGO.filter(s => s.clase === 'disparador')
 const FILTROS = CATALOGO.filter(s => s.clase === 'filtro')
@@ -229,7 +230,7 @@ export default function LaboratorioPanel({ apiFetch, version = null }) {
       if (!r.ok) throw new Error(`El servidor no pudo calcular el periodo ${periodoCorto(cfg.periodos[k])}: ${j?.error || `HTTP ${r.status}`}`)
       periodos.push(j.resultado); datos.push({ simbolos: j.simbolos, sinDatos: j.sinDatos || [], aviso: j.aviso || null, tiempos: j.tiempos || null })
     }
-    const veredicto = veredictoOficial(c, periodos)   // con la versión de criterio del lote de la prueba (lib/lotesLab.js)
+    const veredicto = veredictoOficial({ ...c, salidas: cfg.salidas }, periodos)   // con la versión de criterio del lote de la prueba (lib/lotesLab.js)
     const res = { config: cfg, clas: c, periodos, datos, veredicto, id: null, creado: null, regla: reglaDe(cfg), errorGuardar: null }
     try {
       const fila = await guardarPrueba({ config: cfg, resultados: { periodos, veredicto, datos: datos.map(({ simbolos, sinDatos, aviso }) => ({ simbolos, sinDatos, aviso })) }, versionApp: version }, ctxRegistro())
@@ -286,6 +287,7 @@ export default function LaboratorioPanel({ apiFetch, version = null }) {
   }
   const yaEjecutada = clas?.oficial ? registro.lotes?.[clas.lote]?.[clas.item] : null
   const resSalidas = esConfigSalidas(resultado?.config)
+  const clasR = { ...(resultado?.clas || {}), salidas: resultado?.config?.salidas }   // con las reglas de salida, para el criterio 3
   const notaResultado = resultado ? notaResimulado({ oficial: resultado.clas?.oficial, lote: resultado.clas?.lote, veredicto: resultado.veredicto, periodos: resultado.periodos }) : null
 
   const textoCopia = () => textoLaboratorio({ cabecera: { titulo: 'Laboratorio de señales', version: resultado.version || version, fecha: fmtDate(resultado.creado || new Date().toISOString()),
@@ -445,8 +447,9 @@ export default function LaboratorioPanel({ apiFetch, version = null }) {
             {resSalidas ? (<>
             <div style={caja}>
               <div style={etiqueta}>Resultado por periodo · medida principal: media por operación</div>
-              <Tabla cab={CAB_LAB_S} filas={filasLabSalidas(resultado.periodos, resultado.clas || {})} />
-              <div style={{ fontSize: TAM, color: GRIS, marginTop: 6 }}>Rendimiento por operación bruto (sin comisiones). Dos azares de {num(resultado.periodos[0]?.azar?.nSim ?? N_SIM_LAB, 0)} simulaciones con semilla fija: <b>permutación</b> (las mismas entradas, con las duraciones reales de cada valor repartidas al azar entre sus operaciones sin solaparse) y <b>re-simulado</b> (la misma secuencia de señales, con duraciones del valor). {textoCriterioSalidas(resultado.clas?.lote)}</div>
+              <Tabla cab={cabLabSalidas(clasR)} filas={filasLabSalidas(resultado.periodos, clasR)} />
+              <div style={{ fontSize: TAM, color: GRIS, marginTop: 6 }}>Rendimiento por operación bruto (sin comisiones). Dos azares de {num(resultado.periodos[0]?.azar?.nSim ?? N_SIM_LAB, 0)} simulaciones con semilla fija: <b>re-simulado</b> (la misma secuencia de señales, con duraciones del valor) y <b>permutación</b> (las mismas entradas, con las duraciones reales de cada valor repartidas al azar entre sus operaciones sin solaparse).</div>
+              <div data-prueba="criterio" style={{ fontSize: TAM, marginTop: 4 }}>{textoCriterioSalidas(clasR)}{permutacionInformativa(clasR) && <span style={{ color: GRIS }}> Permutación: {NOTA_PERMUTACION}.</span>}</div>
               <div style={{ marginTop: 10 }}><Tabla cab={CAB_LAB_S_DETALLE} filas={filasLabSalidasDetalle(resultado.periodos, resultado.datos)} /></div>
               {(resultado.datos || []).some(d => d?.aviso) && <div style={{ fontSize: TAM, color: AMBAR, marginTop: 6 }}>{resultado.datos.map(d => d?.aviso).filter(Boolean).join(' ')}</div>}
             </div>
@@ -465,6 +468,7 @@ export default function LaboratorioPanel({ apiFetch, version = null }) {
               <div style={etiqueta}>Resultado por periodo</div>
               <Tabla cab={CAB_LAB} filas={filasLab(resultado.periodos, resultado.clas?.oficial)} />
               <div style={{ fontSize: TAM, color: GRIS, marginTop: 6 }}>Rendimiento por operación bruto (sin comisiones). Mediana del azar y P5–P95: de {num(resultado.periodos[0]?.azar?.nSim ?? N_SIM_LAB, 0)} simulaciones con semilla fija.</div>
+              <div data-prueba="criterio" style={{ fontSize: TAM, marginTop: 4 }}>{textoCriterio(clasR, false)}</div>
               <div style={{ marginTop: 10 }}><Tabla cab={CAB_LAB_DETALLE} filas={filasLabDetalle(resultado.periodos, resultado.datos)} /></div>
               {(resultado.datos || []).some(d => d?.aviso) && <div style={{ fontSize: TAM, color: AMBAR, marginTop: 6 }}>{resultado.datos.map(d => d?.aviso).filter(Boolean).join(' ')}</div>}
             </div>
@@ -503,9 +507,9 @@ export default function LaboratorioPanel({ apiFetch, version = null }) {
           <ul style={{ margin: 0, paddingLeft: 18 }}>
             <li>Aquí se prueba solo la <b>salida</b>: las entradas son al azar y las mismas para todas las salidas (1 de cada {num(1 / LOTE_2.comun.entradas.probabilidad, 0)} días candidatos, semilla fija), así que la entrada no aporta nada. Una operación por valor a la vez.</li>
             <li><b>Media</b>: el rendimiento medio por operación. Es la medida principal: una salida vale por cuánto deja correr lo bueno y corta lo malo, y eso lo recoge la media (la mediana no ve el tamaño de las grandes).</li>
-            <li><b>Dos azares</b>, {num(N_SIM_LAB, 0)} veces cada uno. La <b>permutación</b> conserva las mismas entradas y reparte entre ellas las duraciones reales del valor, y responde a «con estas mismas operaciones, ¿acierta la salida el momento de salir?»; pero cuando la salida depende del precio, el hueco hasta la siguiente entrada ya delata cómo le fue a cada operación y su respuesta sale torcida (en series sin ninguna ventaja da 0 o 100). El <b>re-simulado</b> repite el proceso entero con la misma secuencia de señales y duraciones del valor, y responde a «¿esta salida da más que salir al azar?»; por eso los lotes nuevos exigen los dos.</li>
+            <li><b>El re-simulado decide</b> ({num(N_SIM_LAB, 0)} simulaciones): repite el proceso entero con la misma secuencia de señales y duraciones del valor, y responde a «¿esta salida da más que salir al azar?». La <b>permutación</b> (mismas entradas, duraciones reales repartidas al azar) se enseña solo como informativa: cuando la salida depende del precio, el hueco hasta la siguiente entrada ya delata cómo le fue a cada operación y sale torcida (en series sin ninguna ventaja da 0 o 100).</li>
             <li>El <b>percentil</b> dice en cuántas de cada 100 simulaciones el azar salió peor que la salida: cerca de 50, igual que el azar; {PERCENTIL_PASA} o más, mejor que {PERCENTIL_PASA} de cada 100.</li>
-            <li><b>Pasa</b> solo una prueba oficial con al menos {MIN_OPERACIONES} operaciones y percentil de la media {PERCENTIL_PASA} o más en <b>todos</b> los periodos: en los lotes nuevos (LOTE_3 en adelante), con los <b>dos</b> azares; en el LOTE_2, con el criterio que declaró (la permutación), y si no se sostiene con el re-simulado lleva una nota. Si le faltan operaciones: «datos insuficientes». Las exploratorias no tienen veredicto.</li>
+            <li><b>Pasa</b> solo una prueba oficial con al menos {MIN_OPERACIONES} operaciones y percentil de la media {PERCENTIL_PASA} o más con el <b>re-simulado</b> en <b>todos</b> los periodos (criterio 3, LOTE_3 en adelante). Los <b>stops</b> (stop móvil y stop fijo con ATR) se quedan de momento <b>sin veredicto</b>: con ellos tampoco el re-simulado está calibrado. El LOTE_2 conserva el criterio que declaró (la permutación) y, si no se sostiene con el re-simulado, lleva una nota. Si faltan operaciones: «datos insuficientes». Las exploratorias no tienen veredicto.</li>
             <li>Informativas: la <b>mediana</b>, el <b>P5</b> (cuánto duelen las peores), el <b>% de acierto</b>, la <b>duración</b> (días en mercado; la del azar es la misma) y la <b>media por día</b> en mercado (para comparar una salida corta con una larga).</li>
             <li>Cuantas más reglas se prueban, más fácil es que alguna salga bien por casualidad: por eso se cuentan todas (arriba a la izquierda). Todo es bruto: sin comisiones ni impuestos.</li>
           </ul>) : (
@@ -526,12 +530,14 @@ export default function LaboratorioPanel({ apiFetch, version = null }) {
           {!registro.historial.length ? <div style={{ fontSize: TAM, color: GRIS }}>{registro.cargando ? 'Leyendo…' : 'Todavía no hay pruebas registradas.'}</div> : (
             <div style={{ overflowX: 'auto' }}>
               <table style={{ borderCollapse: 'collapse', fontSize: TAM }}>
-                <thead><tr>{['Fecha', 'Regla', 'Tipo', 'Percentiles', 'Veredicto', ''].map((c, i) => <th key={i} style={{ textAlign: 'left', padding: '3px 8px', color: GRIS, fontWeight: 400, borderBottom: '1px solid var(--border)' }}>{c}</th>)}</tr></thead>
+                <thead><tr>{['Fecha', 'Regla', 'Tipo', 'Criterio', 'Percentiles', 'Veredicto', ''].map((c, i) => <th key={i} style={{ textAlign: 'left', padding: '3px 8px', color: GRIS, fontWeight: 400, borderBottom: '1px solid var(--border)' }}>{c}</th>)}</tr></thead>
                 <tbody>{registro.historial.map(h => (
                   <tr key={h.id} style={{ borderBottom: '1px solid var(--border)' }}>
                     <td style={{ padding: '3px 8px', whiteSpace: 'nowrap' }}>{fmtDate(h.creado)}</td>
                     <td style={{ padding: '3px 8px', minWidth: 240 }}>{h.config ? reglaDe(h.config) : '—'}</td>
                     <td style={{ padding: '3px 8px', whiteSpace: 'nowrap', color: h.oficial ? 'var(--accent)' : GRIS }}>{h.oficial ? `Oficial · ${h.lote} · ${h.item_lote}` : 'Exploratoria'}</td>
+                    <td data-prueba="criterio-historial" style={{ padding: '3px 8px', whiteSpace: 'nowrap', color: GRIS }} title={h.config ? textoCriterio({ oficial: h.oficial, lote: h.lote, salidas: h.config.salidas }, esConfigSalidas(h.config)) : undefined}>
+                      {h.config ? textoCriterio({ oficial: h.oficial, lote: h.lote, salidas: h.config.salidas }, esConfigSalidas(h.config), { corto: true }) : '—'}</td>
                     <td style={{ padding: '3px 8px', whiteSpace: 'nowrap' }}>{[h.p0, h.p1, h.p2].map((p, k) => p == null ? null : `${h.config?.periodos?.[k] ? periodoCorto(h.config.periodos[k]) + ': ' : ''}${num(Number(p), 1)}${h[`r${k}`] != null ? ` (re-sim. ${num(Number(h[`r${k}`]), 1)})` : ''}`).filter(Boolean).join(' · ') || '—'}</td>
                     <td style={{ padding: '3px 8px', color: COLOR_ESTADO[h.veredicto] || 'var(--text)' }}>
                       <span style={{ whiteSpace: 'nowrap' }}>{h.veredicto || '—'}</span>
