@@ -9,6 +9,10 @@
 -- e insertar sus pruebas, no cambiarlas ni borrarlas (el registro sirve para contar cuántas cosas se probaron).
 --
 -- REVERSIÓN: DROP TABLE public.lab_pruebas; (no la usa nada más).
+--
+-- BORRAR UNA PRUEBA (p. ej. una de ensayo): el usuario no puede (tabla de solo añadir); se hace por la Management API, que
+-- conecta como postgres, con la huella como guardia para no borrar otra fila por un id equivocado:
+--   DELETE FROM public.lab_pruebas WHERE id = <id> AND hash_config = '<hash_config de esa fila>' RETURNING id;
 
 CREATE TABLE public.lab_pruebas (
   id           bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
