@@ -1666,6 +1666,54 @@ function _validaUniverso(u, modoAsig) {
   if (!Object.values(e).every(l => Array.isArray(l) && l.every(x => typeof x === 'string'))) return { error: '«universo.elegidos» no es válido.' }
   return { universo: { regla: String(u.regla || ''), n: Number(u.n) || null, mascara: m, elegidos: e } }
 }
+// ── Referencias independientes de la estrategia ──────────────────────────────────────────────────────────────────────
+// Las curvas B&H se dibujan en las fechas MUESTREADAS de las curvas (_sampledWithChanges: cada `step` velas más las
+// entradas y salidas de la estrategia), y su caída máxima se medía sobre esa muestra. Si el valle de una referencia caía
+// entre dos muestras, se lo saltaba; y como las muestras dependen de las operaciones, la caída de una misma referencia
+// cambiaba según la estrategia ejecutada. Ahora cada referencia se calcula sobre su eje COMPLETO, se buscan el pico y el
+// valle de su caída máxima y esas dos fechas se añaden a su curva: medida sobre la curva dibujada, la caída es la del eje
+// completo, igual con cualquier estrategia. Los demás puntos no cambian.
+// Pico y valle de la caída máxima de una curva [{ date, value }], con la misma regla que _calcDD (nuevo pico con «>»,
+// primera fecha que alcanza la caída máxima); null si no cae.
+function _extremosCaida(curva) {
+  if (!curva?.length) return null
+  let pico = curva[0], mejor = 0, res = null
+  for (const p of curva) {
+    if (p.value > pico.value) pico = p
+    const dd = (pico.value - p.value) / pico.value * 100
+    if (dd > mejor) { mejor = dd; res = { pico: pico.date, valle: p.date } }
+  }
+  return res
+}
+// Las fechas de dibujo más el pico y el valle de la caída máxima de la referencia (en orden, sin repetir).
+const _fechasConExtremos = (fechas, ext) => ext ? [...new Set([...fechas, ext.pico, ext.valle])].sort() : fechas
+// B&H Diversificado sobre el eje completo de los activos (_commonDates, la misma cuenta que en los cuatro modos: capital
+// inicial / nº de activos por activo, desde su primer cierre >= startDate). Sustituye bhCurve por la de siempre más el pico
+// y el valle de su caída y recalcula maxDDBH, maxDDBHDate y maxDDBHEur. Los puntos que ya estaban se conservan tal cual.
+function _bhDiversifEjeCompleto(curves, assetResults, capitalIni) {
+  if (!curves?.bhCurve?.length || !assetResults?.length) return
+  const { startDate, filteredDates } = _commonDates(assetResults)
+  const slotBH = capitalIni / assetResults.length
+  const series = assetResults.map(ar => { const f = ar.data ? ar.data.filter(d => d.date >= startDate) : []; return { f, p0: f.length ? f[0].close : null, j: -1 } })
+  const valorEn = (date) => {   // las fechas llegan en orden: un cursor por activo
+    let total = 0
+    for (const s of series) {
+      if (!s.p0) { total += slotBH; continue }
+      while (s.j + 1 < s.f.length && s.f[s.j + 1].date <= date) s.j++
+      total += s.j >= 0 ? slotBH * (s.f[s.j].close / s.p0) : slotBH
+    }
+    return total
+  }
+  const completa = filteredDates.map(date => ({ date, value: valorEn(date) }))
+  const ext = _extremosCaida(completa)
+  if (!ext) return
+  const porFecha = new Map(curves.bhCurve.map(p => [p.date, p]))
+  const deCompleta = new Map(completa.map(p => [p.date, p]))
+  const bhCurve = _fechasConExtremos(curves.bhCurve.map(p => p.date), ext).map(d => porFecha.get(d) || deCompleta.get(d)).filter(Boolean)
+  const dd = _calcDD(curves.simpleCurve, curves.compoundCurve, bhCurve, capitalIni)
+  Object.assign(curves, { bhCurve, maxDDBH: dd.maxDDBH, maxDDBHDate: dd.maxDDBHDate, maxDDBHEur: dd.maxDDBHEur })
+}
+
 // Curva B&H de una serie sobre las fechas de las curvas, normalizada al capital inicial en la primera vela >= startD
 // (la misma cuenta que el B&H del S&P 500 de la respuesta).
 function _curvaBHSobre(serie, fechas, startD, capitalIni) {
@@ -1683,16 +1731,20 @@ function _curvaBHSobre(serie, fechas, startD, capitalIni) {
 // de las curvas) y cuántas posiciones ejecutadas se cerraron en la última vela de un activo que deja de cotizar antes del
 // final del periodo.
 function _referenciasUniverso({ universo, assetResults, curves, qqqData, capitalIni, descartadas }) {
-  const fechas = curves.simpleCurve.map(p => p.date), startD = curves.startDate
+  const fechas = curves.simpleCurve.map(p => p.date), startD = curves.startDate, ultima = fechas[fechas.length - 1]
   const ultimaDe = Object.fromEntries(assetResults.map(ar => [ar.symbol, ar.data?.length ? ar.data[ar.data.length - 1].date : null]))
   const ultimaGlobal = Object.values(ultimaDe).filter(Boolean).sort().pop() ?? null
   const cierresSinCotizacion = (curves.executedTrades || []).filter(t => t._virtualClose && ultimaDe[t.symbol] && t.exitDate === ultimaDe[t.symbol] && ultimaDe[t.symbol] < ultimaGlobal).length
   const eje = [...new Set(assetResults.flatMap(ar => (ar.data || []).map(d => d.date)))].filter(d => d >= startD).sort()
   const series = Object.fromEntries(assetResults.map(ar => [ar.symbol, ar.data || []]))
   const completa = bhUniverso(universo.elegidos, series, eje, capitalIni)
-  const bhUniversoCurve = _curvaBHSobre(completa.map(p => ({ date: p.date, close: p.value })), fechas, startD, capitalIni)
+  // Cada referencia, con el pico y el valle de su caída sobre su propio eje completo (ver _extremosCaida): el del universo,
+  // el eje de sus activos; el de QQQ, sus propias velas en el periodo de las curvas.
+  const bhUniversoCurve = _curvaBHSobre(completa.map(p => ({ date: p.date, close: p.value })), _fechasConExtremos(fechas, _extremosCaida(completa)), startD, capitalIni)
+  const qqqEje = (qqqData || []).filter(d => d.date >= startD && d.date <= ultima)
+  const qqqCompleta = _curvaBHSobre(qqqData, qqqEje.map(d => d.date), startD, capitalIni)
   return { regla: universo.regla, n: universo.n, descartadasPorUniverso: descartadas, cierresSinCotizacion,
-    qqqBHCurve: _curvaBHSobre(qqqData, fechas, startD, capitalIni), bhUniversoCurve }
+    qqqBHCurve: _curvaBHSobre(qqqData, _fechasConExtremos(fechas, _extremosCaida(qqqCompleta)), startD, capitalIni), bhUniversoCurve }
 }
 
 function _candidatosParaAzar({ assetResults, sp500DataTf, modoAsig, sizeRules, symbols, capitalIni, comisiones, startDate, soloSimbolos = null }) {
@@ -1993,6 +2045,8 @@ async function handlePortfolioMode(req, res) {
         _criterio, _rsThr, _momThr, _proxThr, _rsWindow, _com
       )
     }
+    // B&H Diversificado: su caída máxima, sobre su eje completo (igual con cualquier estrategia; ver _bhDiversifEjeCompleto).
+    _bhDiversifEjeCompleto(curves, assetResults, cfg.capitalIni)
 
     // 6. assetStats agrupado por símbolo REAL (no sintético)
     //    buildConcentradoCurves reconstruye allCandidates con campos explícitos y pierde
@@ -2413,6 +2467,8 @@ async function handlerMultibacktest(req, res) {
       // 'slots' por defecto — también maneja legacy 'custom'
       curves = buildSlotsCurves(assetResults, cfg.capitalIni, _com)
     }
+    // B&H Diversificado: su caída máxima, sobre su eje completo (igual con cualquier estrategia; ver _bhDiversifEjeCompleto).
+    _bhDiversifEjeCompleto(curves, assetResults, cfg.capitalIni)
 
     // Métricas por activo (tabla resumen). Una sola convención para los cuatro modos: contribución
     // sobre el capital inicial, con el Max DD medido por la MISMA función que la estrategia sobre el eje
