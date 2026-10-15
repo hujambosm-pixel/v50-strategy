@@ -30,7 +30,7 @@ import { textoMulticartera, datosCabeceraMulticartera } from '../lib/exportaText
 import { nDeUniverso, reglaDeUniverso, nombreUniverso, FRASE_REGLA, cargaUniversoMc, estadoUniversoMc } from '../lib/universoMc'
 import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.966'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.967'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -6276,7 +6276,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.966</title>
+        <title>Trading Simulator V9.967</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6365,7 +6365,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             }} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.966
+            <span className="dot"/>Trading Simulator V9.967
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -9643,9 +9643,10 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                           ].filter(Boolean).join('\n')
                                       return(<span style={{display:'flex',alignItems:'center',gap:4}}>
                                         <span>{allT.length}</span>
-                                        <span title={tip} style={{fontSize:9,color:is100?'#00e5a0':'#ff9f43',cursor:'help',fontWeight:400,background:is100?'rgba(0,229,160,0.08)':'rgba(255,159,67,0.12)',borderRadius:2,padding:'1px 4px'}}>{pct}%</span>
+                                        {/* data-etiqueta-copiar: «Copiar para Claude» la saca aparte del número (components/BotonCopiar.js). */}
+                                        <span data-etiqueta-copiar="de las señales ejecutadas" title={tip} style={{fontSize:9,color:is100?'#00e5a0':'#ff9f43',cursor:'help',fontWeight:400,background:is100?'rgba(0,229,160,0.08)':'rgba(255,159,67,0.12)',borderRadius:2,padding:'1px 4px'}}>{pct}%</span>
                                         {lineaSinStop&&(
-                                          <span title={`${lineaSinStop}\n\nSu tamaño no sale de un stop real, sino de la distancia asumida que has configurado en Risk management. Si la proporción es alta, el resultado de este modo depende de ese supuesto.`}
+                                          <span data-etiqueta-copiar="sin stop inicial" title={`${lineaSinStop}\n\nSu tamaño no sale de un stop real, sino de la distancia asumida que has configurado en Risk management. Si la proporción es alta, el resultado de este modo depende de ese supuesto.`}
                                             style={{fontSize:9,color:'#ffd166',cursor:'help',fontWeight:400,background:'rgba(255,209,102,0.12)',borderRadius:2,padding:'1px 4px'}}>
                                             ⚠{ss.sinStopInicial}
                                           </span>

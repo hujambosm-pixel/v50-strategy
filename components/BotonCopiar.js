@@ -5,10 +5,19 @@ import { MONO } from '../lib/utils'
 
 // Las celdas de la primera tabla dentro de `raiz`, tal como están pintadas (texto de cada celda). Una fila es «de activo» si
 // su título empieza por «Ver el rendimiento de» o «Quitar la selección de» (las filas por activo de la comparativa).
+// Una etiqueta pegada al valor en la misma celda (p. ej. el % de señales ejecutadas junto a las Ops) lleva
+// data-etiqueta-copiar con lo que significa: se copia aparte, entre paréntesis («317 (31% de las señales ejecutadas)»),
+// en vez de pegada al número («31731%»). Las celdas sin esas etiquetas se copian como siempre.
+const textoCelda = (el) => {
+  if (!el.querySelector?.('[data-etiqueta-copiar]')) return el.textContent || ''
+  const c = el.cloneNode(true)
+  c.querySelectorAll('[data-etiqueta-copiar]').forEach(e => { e.textContent = ` (${(e.textContent || '').trim()} ${e.getAttribute('data-etiqueta-copiar')}) ` })
+  return c.textContent || ''
+}
 export function leeTabla(raiz) {
   const t = raiz?.querySelector?.('table')
   if (!t) return null
-  const limpia = (el) => (el.textContent || '').replace(/\s+/g, ' ').trim()
+  const limpia = (el) => textoCelda(el).replace(/\s+/g, ' ').trim()
   return { cabeceras: [...t.querySelectorAll('thead th')].map(limpia),
     filas: [...t.querySelectorAll('tbody > tr')].map(tr => ({ celdas: [...tr.children].map(limpia), activo: /^(Ver el rendimiento de|Quitar la selección de)/.test(tr.getAttribute('title') || '') })) }
 }
