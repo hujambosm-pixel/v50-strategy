@@ -8,16 +8,20 @@
 //   Prueba de SALIDAS (config.prueba = 'salidas', LOTE_2): { config: { prueba, entradas, salidas, universo, periodos,
 //   intervalo, entrada }, periodo } → lo mismo con ejecutaPeriodoSalidas (lib/laboratorioSalidas.js); los datos llegan
 //   hasta diasTrasPeriodo(tope) después del periodo, para que quepa el tope de tiempo.
+//   ESTRATEGIA COMPLETA (config.prueba = 'estrategias', LOTE_3): { config: { prueba, senales, salidas, universo, periodos,
+//   intervalo, entrada }, periodo } → ejecutaPeriodoEstrategias (lib/laboratorioEstrategias.js); se lee siempre QQQ (la
+//   referencia de comprar y mantener).
 //
 // Datos: los miembros del Nasdaq-100 (universo_miembros) y las velas diarias de la caché (precios_diarios, por la función
 // leer_velas, exactas) con el JWT del usuario: desde 3 años antes del periodo (calentamiento de los indicadores; la
 // ruptura de 252 velas y las medias de 200 lo necesitan) hasta 45 días después (salidas de hasta 20 velas). QQQ, solo si
 // algún filtro lo usa.
 import { exigeAuth } from '../../lib/verificaJwt'
-import { entradas, calculables, topeDe } from '../../lib/senales'
+import { entradas, calculables, topeDe, indicadoresSalidas } from '../../lib/senales'
 import { ejecutaPeriodo, semillaLab, N_SIM_LAB } from '../../lib/laboratorio'
-import { huella, validaConfig, esConfigSalidas } from '../../lib/lotesLab'
+import { huella, validaConfig, esConfigSalidas, esConfigEstrategias } from '../../lib/lotesLab'
 import { ejecutaPeriodoSalidas, calculablesIndicadores, decisionesDe, indicadoresPrueba, diasTrasPeriodo } from '../../lib/laboratorioSalidas'
+import { ejecutaPeriodoEstrategias } from '../../lib/laboratorioEstrategias'
 
 export const config = { maxDuration: 60 }
 const SUPA_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -34,7 +38,7 @@ export function validaPeticionLab(c, periodo) {
   e.push(...validaConfig(c))
   if (c.intervalo !== 'diario') e.push('Por ahora el laboratorio solo trabaja en diario.')
   if (c.universo?.indice !== 'NDX') e.push('Por ahora el único universo es el Nasdaq-100 (miembros en cada fecha).')
-  if (!esConfigSalidas(c) && (c.salida?.tipo !== 'velas' || !Number.isInteger(c.salida?.n) || c.salida.n < 1 || c.salida.n > 250)) e.push('La salida tiene que ser un número entero de velas entre 1 y 250.')
+  if (!esConfigSalidas(c) && !esConfigEstrategias(c) && (c.salida?.tipo !== 'velas' || !Number.isInteger(c.salida?.n) || c.salida.n < 1 || c.salida.n > 250)) e.push('La salida tiene que ser un número entero de velas entre 1 y 250.')
   if (!Array.isArray(c.periodos) || !c.periodos.length || !c.periodos.every(p => FECHA.test(p?.desde) && FECHA.test(p?.hasta) && p.desde < p.hasta)) e.push('Los periodos no son válidos.')
   if (!periodo || !(c.periodos || []).some(p => p.desde === periodo.desde && p.hasta === periodo.hasta)) e.push('El periodo pedido no es uno de los de la configuración.')
   return e
@@ -63,9 +67,10 @@ export default async function handler(req, res) {
     const tramos = {}
     for (const m of miembros) if (m.simbolo_yahoo && !m.excluido_motivo && m.desde <= hasta && (m.hasta == null || m.hasta > desde)) (tramos[m.simbolo_yahoo] ||= []).push(m)
     const simbolos = Object.keys(tramos).sort()
-    const salidas = esConfigSalidas(cfg), senales = salidas ? (cfg.entradas.tipo === 'senal' ? cfg.entradas : null) : cfg.senales
-    const tope = salidas ? topeDe(cfg.salidas) : null
-    const dDesde = masAnios(desde, -3), dHasta = masDias(hasta, salidas ? diasTrasPeriodo(tope) : 45)
+    const salidas = esConfigSalidas(cfg), estrategias = esConfigEstrategias(cfg)
+    const senales = salidas ? (cfg.entradas.tipo === 'senal' ? cfg.entradas : null) : cfg.senales
+    const tope = salidas || estrategias ? topeDe(cfg.salidas) : null
+    const dDesde = masAnios(desde, -3), dHasta = masDias(hasta, tope != null ? diasTrasPeriodo(tope) : 45)
     const lee = (sym) => get(`rpc/leer_velas?p_simbolo=${encodeURIComponent(sym)}&p_desde=${dDesde}&p_hasta=${dHasta}`).then(velasDe)
     const series = {}
     for (let i = 0; i < simbolos.length; i += EN_PARALELO) {
@@ -74,12 +79,20 @@ export default async function handler(req, res) {
       lote.forEach((s, k) => { series[s] = vs[k] })
     }
     const usaQqq = (senales?.filtros || []).some(f => f.id === 'mercadoAlcista')
-    const qqq = usaQqq ? await lee('QQQ') : null
+    const qqq = usaQqq || estrategias ? await lee('QQQ') : null
     const t1 = Date.now()
     const ctx = qqq ? { qqq } : {}
     const semilla = semillaLab(await huella(cfg), desde)
     let resultado
-    if (salidas) {
+    if (estrategias) {
+      // Calculable: la señal de la entrada (disparador y filtros) y los indicadores de las salidas.
+      const inds = indicadoresSalidas(cfg.salidas)
+      const valores = simbolos.filter(s => series[s].length).map(sym => {
+        const v = series[sym], ci = calculablesIndicadores(v, inds), cs = calculables(v, senales, ctx)
+        return { sym, velas: v, tramos: tramos[sym], calculables: ci.map((x, t) => x && cs[t]), senales: entradas(v, senales, ctx) }
+      })
+      resultado = ejecutaPeriodoEstrategias({ valores, desde, hasta, decisionesDe: (v) => decisionesDe(v, cfg.salidas), tope, nSim, semilla, qqq })
+    } else if (salidas) {
       // Calculable: los indicadores del calentamiento y de las salidas y, con un disparador, también su señal.
       const inds = indicadoresPrueba(cfg)
       const valores = simbolos.filter(s => series[s].length).map(sym => {
