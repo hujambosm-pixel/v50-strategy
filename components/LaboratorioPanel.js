@@ -7,18 +7,21 @@
 // Debajo, el estado del LOTE_1 según el registro y el historial. La configuración se recuerda en el navegador.
 // «Probar: Salidas» (LOTE_2): entradas al azar y fijas (las del lote) o, en las exploratorias, un disparador; una salida
 // del catálogo con su tope de tiempo; medida principal, la media por operación (lib/laboratorioSalidas.js).
+// «Probar: Estrategias» (LOTE_3): entrada (disparador y filtros) + salida con su tope, frente a la misma estrategia al azar
+// (lib/laboratorioEstrategias.js); veredicto solo si la combinación está calibrada (lib/calibracionLab.json).
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { MONO, fmtDate, numeroEs } from '../lib/utils'
 import CampoFecha from './CampoFecha'
 import BotonCopiar from './BotonCopiar'
 import { SENALES, CATALOGO, parametrosPorDefecto, validaCombinacion, SALIDAS, CATALOGO_SALIDAS, parametrosSalidaPorDefecto } from '../lib/senales'
-import { LOTE_1, LOTE_2, configDe, configDeItem, configSalidasDe, validaConfig, esConfigSalidas, veredictoOficial, notaResimulado, textoCriterio,
-         SIN_VEREDICTO_STOPS, NOTA_PERMUTACION } from '../lib/lotesLab'
+import { LOTE_1, LOTE_2, LOTE_3, configDe, configDeItem, configSalidasDe, configEstrategiaDe, validaConfig, esConfigSalidas, esConfigEstrategias, veredictoOficial,
+         notaResimulado, textoCriterio, calibracionDe, SIN_VEREDICTO_STOPS, SIN_VEREDICTO_NO_CALIBRADA, NOTA_PERMUTACION } from '../lib/lotesLab'
 import { clasificaConfig, guardarPrueba, cuentaPruebas, listarPruebas, leerPrueba, estadoLote, SELECT_HISTORIAL, notaDeFila } from '../lib/registroLab'
 import { SALIDA_VELAS, N_SIM_LAB, MIN_OPERACIONES, PERCENTIL_PASA } from '../lib/laboratorio'
 import { textoLaboratorio, CAB_LAB, filasLab, CAB_LAB_DETALLE, filasLabDetalle, CAB_LAB_EDGE, filasLabEdge, AVISO_POCAS_LAB, SIN_SECTOR_LAB, num, reglaLab,
          filasLabSalidas, CAB_LAB_S_INFO, filasLabSalidasInfo, CAB_LAB_S_OTROS, filasLabSalidasOtros, CAB_LAB_S_DETALLE, filasLabSalidasDetalle,
-         CAB_LAB_ANIO, filasLabAnio, CAB_LAB_ACTIVO, filasLabActivo, textoCriterioSalidas, cabLabSalidas, permutacionInformativa } from '../lib/exportaTexto'
+         CAB_LAB_ANIO, filasLabAnio, CAB_LAB_ACTIVO, filasLabActivo, textoCriterioSalidas, cabLabSalidas, permutacionInformativa,
+         CAB_LAB_E, filasLabEstrategias, CAB_LAB_E_INFO, filasLabEstrategiasInfo, CAB_LAB_E_DETALLE, filasLabEstrategiasDetalle, CAB_LAB_CAL, filaCalibracion } from '../lib/exportaTexto'
 import { getSupaUrl, getSupaH, hayConfigSupabase } from '../lib/supabase'
 
 const CLAVE_LS = 'v50_laboratorio'
@@ -30,7 +33,7 @@ const etiqueta = { fontFamily: MONO, fontSize: TAM, color: GRIS, letterSpacing: 
 const entrada = { background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontFamily: MONO, fontSize: TAM, padding: '4px 6px' }
 const boton = { fontFamily: MONO, fontSize: TAM, padding: '4px 10px', borderRadius: 4, cursor: 'pointer', border: '1px solid var(--border)', background: 'var(--bg3)', color: 'var(--text)' }
 const botonPrincipal = { ...boton, border: '1px solid var(--accent)', background: 'rgba(0,212,255,0.12)', color: 'var(--accent)', fontWeight: 700 }
-const COLOR_ESTADO = { pasa: VERDE, 'no pasa': ROJO, 'datos insuficientes': AMBAR, pendiente: GRIS, 'sin veredicto': GRIS, [SIN_VEREDICTO_STOPS]: GRIS }
+const COLOR_ESTADO = { pasa: VERDE, 'no pasa': ROJO, 'datos insuficientes': AMBAR, pendiente: GRIS, 'sin veredicto': GRIS, [SIN_VEREDICTO_STOPS]: GRIS, [SIN_VEREDICTO_NO_CALIBRADA]: GRIS }
 
 const DISPARADORES = CATALOGO.filter(s => s.clase === 'disparador')
 const FILTROS = CATALOGO.filter(s => s.clase === 'filtro')
@@ -59,7 +62,16 @@ const uiSDe = (config) => {
 }
 const UI_S_DEFECTO = () => uiSDe(configDeItem(LOTE_2, 'S1'))
 const leeGuardadoS = () => { try { const x = JSON.parse(localStorage.getItem(CLAVE_LS_S) || 'null'); return x?.periodos && x?.disparador?.id && SENALES[x.disparador.id] && (!x.condicion || SALIDAS[x.condicion.id]) ? x : null } catch (_) { return null } }
-const leeModo = () => { try { return localStorage.getItem(CLAVE_LS_MODO) === 'salidas' ? 'salidas' : 'entradas' } catch (_) { return 'entradas' } }
+const leeModo = () => { try { const m = localStorage.getItem(CLAVE_LS_MODO); return m === 'salidas' || m === 'estrategias' ? m : 'entradas' } catch (_) { return 'entradas' } }
+// Modo Estrategias: disparador y filtros de la entrada, una condición de salida y el tope.
+const CLAVE_LS_E = 'v50_laboratorio_estrategias'
+const uiEDe = (config) => {
+  const cond = config.salidas.find(r => r.id !== 'tiempoMaximo'), tope = config.salidas.find(r => r.id === 'tiempoMaximo')
+  return { disparador: senalUi(config.senales.disparador.id, config.senales.disparador.params), filtros: (config.senales.filtros || []).map(f => senalUi(f.id, f.params)),
+    condicion: cond && SALIDAS[cond.id] ? salidaUi(cond.id, cond.params) : null, tope: aTexto(tope?.params?.n), periodos: config.periodos.map(p => ({ ...p })) }
+}
+const UI_E_DEFECTO = () => uiEDe(configDeItem(LOTE_3, 'E1X1'))
+const leeGuardadoE = () => { try { const x = JSON.parse(localStorage.getItem(CLAVE_LS_E) || 'null'); return x?.periodos && x?.disparador?.id && SENALES[x.disparador.id] && (!x.condicion || SALIDAS[x.condicion.id]) ? x : null } catch (_) { return null } }
 // Errores de los periodos del constructor (fechaOk: validez de cada caja de fecha, por modo).
 function erroresPeriodos(periodos, fechaOk, modo) {
   const e = []
@@ -122,6 +134,26 @@ function ConstructorEntrada({ valor, setValor }) {
   </>)
 }
 
+// La salida (una condición del catálogo o ninguna) y el tope de tiempo (modos Salidas y Estrategias). valor tiene
+// { condicion, tope }; setValor recibe una función que devuelve el valor nuevo.
+function ConstructorSalida({ valor, setValor }) {
+  return (
+          <div style={caja} data-prueba="salida">
+            <div style={etiqueta}>Salida</div>
+            <select value={valor.condicion?.id || ''} onChange={e => setValor(u => ({ ...u, condicion: e.target.value ? salidaUi(e.target.value) : null }))} style={{ ...entrada, width: '100%' }}>
+              <option value="">Ninguna: solo el tiempo máximo</option>
+              {CONDICIONES_SALIDA.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+            </select>
+            {valor.condicion && <Parametros senal={SALIDAS[valor.condicion.id]} textos={valor.condicion.textos} onCambio={(k, v) => setValor(u => ({ ...u, condicion: { ...u.condicion, textos: { ...u.condicion.textos, [k]: v } } }))} />}
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: TAM, color: GRIS, marginTop: 8 }}>
+              Como mucho
+              <input type="text" inputMode="numeric" value={valor.tope} onChange={e => setValor(u => ({ ...u, tope: e.target.value }))} style={{ ...entrada, width: 50 }} />
+              velas (contando la de entrada, al cierre)
+            </label>
+            <div style={{ fontSize: TAM, color: GRIS, marginTop: 6 }}>La condición se mira al cierre de cada vela desde la de entrada y se sale a la apertura siguiente; el tope sale al cierre de su vela; si coinciden en la misma vela, manda el tope. Sale con lo primero que salte.</div>
+          </div>)
+}
+
 // Las cajas de los parámetros de una señal.
 function Parametros({ senal, textos, onCambio }) {
   return (
@@ -145,6 +177,8 @@ export default function LaboratorioPanel({ apiFetch, version = null }) {
   useEffect(() => { try { localStorage.setItem(CLAVE_LS_MODO, modo) } catch (_) {} }, [modo])
   const [uiS, setUiS] = useState(() => leeGuardadoS() || UI_S_DEFECTO())
   useEffect(() => { try { localStorage.setItem(CLAVE_LS_S, JSON.stringify(uiS)) } catch (_) {} }, [uiS])
+  const [uiE, setUiE] = useState(() => leeGuardadoE() || UI_E_DEFECTO())
+  useEffect(() => { try { localStorage.setItem(CLAVE_LS_E, JSON.stringify(uiE)) } catch (_) {} }, [uiE])
 
   // ── La configuración que sale del constructor, sus errores, su frase y si es oficial ──
   const combinacion = useMemo(() => ({ disparador: { id: ui.disparador.id, params: paramsDe(ui.disparador.id, ui.disparador.textos) },
@@ -177,11 +211,23 @@ export default function LaboratorioPanel({ apiFetch, version = null }) {
       filtros: configS.entradas.filtros.map(f => ({ ...f, params: huecos(f.params) })) } : configS.entradas
     return reglaLab({ ...configS, entradas: en, salidas: configS.salidas.map(r => ({ ...r, params: huecos(r.params) })) })
   }, [configS])
-  const configActiva = modo === 'salidas' ? configS : config
-  const erroresActivos = modo === 'salidas' ? erroresS : errores
-  const fraseActiva = modo === 'salidas' ? fraseS : frase
-  const periodosActivos = modo === 'salidas' ? uiS.periodos : ui.periodos
-  const ponPeriodos = (f) => (modo === 'salidas' ? setUiS : setUi)(u => ({ ...u, periodos: f(u.periodos) }))
+  // ── Y en el modo Estrategias ──
+  const topeE = numeroEs(uiE.tope)
+  const configE = useMemo(() => configEstrategiaDe({
+    disparador: { id: uiE.disparador.id, params: paramsDe(uiE.disparador.id, uiE.disparador.textos) }, filtros: uiE.filtros.map(f => ({ id: f.id, params: paramsDe(f.id, f.textos) })),
+    salidas: [...(uiE.condicion ? [{ id: uiE.condicion.id, params: paramsDe(uiE.condicion.id, uiE.condicion.textos, SALIDAS) }] : []), { id: 'tiempoMaximo', params: { n: topeE } }],
+  }, { universo: LOTE_3.comun.universo, periodos: uiE.periodos.map(p => ({ desde: p.desde, hasta: p.hasta })), intervalo: LOTE_3.comun.intervalo, entrada: LOTE_3.comun.entrada }), [uiE, topeE])
+  const erroresE = useMemo(() => [...validaConfig(configE), ...erroresPeriodos(uiE.periodos, fechaOk, 'estrategias')], [configE, uiE.periodos, fechaOk])
+  const fraseE = useMemo(() => {
+    const huecos = (s) => ({ ...s, params: Object.fromEntries(Object.entries(s.params || {}).map(([k, v]) => [k, v ?? '…'])) })
+    return reglaLab({ ...configE, senales: { disparador: huecos(configE.senales.disparador), filtros: configE.senales.filtros.map(huecos) }, salidas: configE.salidas.map(huecos) })
+  }, [configE])
+  const porModo = (e, s, x) => modo === 'salidas' ? s : modo === 'estrategias' ? x : e
+  const configActiva = porModo(config, configS, configE)
+  const erroresActivos = porModo(errores, erroresS, erroresE)
+  const fraseActiva = porModo(frase, fraseS, fraseE)
+  const periodosActivos = porModo(ui.periodos, uiS.periodos, uiE.periodos)
+  const ponPeriodos = (f) => porModo(setUi, setUiS, setUiE)(u => ({ ...u, periodos: f(u.periodos) }))
 
   const [clas, setClas] = useState(null)
   useEffect(() => {
@@ -194,7 +240,8 @@ export default function LaboratorioPanel({ apiFetch, version = null }) {
   // Poner en el constructor una configuración (de un lote o del historial), en su modo.
   const cargaConfig = (cfg) => {
     setFechaOk({})
-    if (esConfigSalidas(cfg)) { setModo('salidas'); setUiS(uiSDe(cfg)) } else { setModo('entradas'); setUi(uiDe(cfg)) }
+    if (esConfigEstrategias(cfg)) { setModo('estrategias'); setUiE(uiEDe(cfg)) }
+    else if (esConfigSalidas(cfg)) { setModo('salidas'); setUiS(uiSDe(cfg)) } else { setModo('entradas'); setUi(uiDe(cfg)) }
   }
 
   // ── Registro: contador, estado del lote, historial ──
@@ -204,8 +251,8 @@ export default function LaboratorioPanel({ apiFetch, version = null }) {
     setRegistro(r => ({ ...r, cargando: true }))
     try {
       const ctx = ctxRegistro()
-      const [contador, lote1, lote2, historial] = await Promise.all([cuentaPruebas(ctx), estadoLote(ctx, LOTE_1), estadoLote(ctx, LOTE_2), listarPruebas(ctx, { limite: 100, select: SELECT_HISTORIAL })])
-      setRegistro({ contador, lotes: { LOTE_1: lote1, LOTE_2: lote2 }, historial, error: null, cargando: false })
+      const [contador, lote1, lote2, lote3, historial] = await Promise.all([cuentaPruebas(ctx), estadoLote(ctx, LOTE_1), estadoLote(ctx, LOTE_2), estadoLote(ctx, LOTE_3), listarPruebas(ctx, { limite: 100, select: SELECT_HISTORIAL })])
+      setRegistro({ contador, lotes: { LOTE_1: lote1, LOTE_2: lote2, LOTE_3: lote3 }, historial, error: null, cargando: false })
     } catch (e) { setRegistro(r => ({ ...r, error: e?.message || 'No se pudo leer el registro.', cargando: false })) }
   }, [])
   useEffect(() => { recarga() }, [recarga])
@@ -286,13 +333,13 @@ export default function LaboratorioPanel({ apiFetch, version = null }) {
     } catch (e) { setErrorEjec(e?.message || String(e)) }
   }
   const yaEjecutada = clas?.oficial ? registro.lotes?.[clas.lote]?.[clas.item] : null
-  const resSalidas = esConfigSalidas(resultado?.config)
+  const resSalidas = esConfigSalidas(resultado?.config), resEstrategias = esConfigEstrategias(resultado?.config), resPorMedia = resSalidas || resEstrategias
   const clasR = { ...(resultado?.clas || {}), salidas: resultado?.config?.salidas }   // con las reglas de salida, para el criterio 3
   const notaResultado = resultado ? notaResimulado({ oficial: resultado.clas?.oficial, lote: resultado.clas?.lote, veredicto: resultado.veredicto, periodos: resultado.periodos }) : null
 
   const textoCopia = () => textoLaboratorio({ cabecera: { titulo: 'Laboratorio de señales', version: resultado.version || version, fecha: fmtDate(resultado.creado || new Date().toISOString()),
     datos: [['Universo', `${UNIVERSO.indice}: ${UNIVERSO.regla} (sin excluidos)`], ['Temporalidad', INTERVALO], ['Entrada', ENTRADA],
-      ...(resSalidas ? [['Una operación por valor a la vez', 'sí']] : [['Salida', `${resultado.config?.salida?.n} velas contando la de entrada, al cierre`]]),
+      ...(resPorMedia ? [['Una operación por valor a la vez', 'sí']] : [['Salida', `${resultado.config?.salida?.n} velas contando la de entrada, al cierre`]]),
       ['Periodos', (resultado.config?.periodos || []).map(periodoCorto).join(', ')]] },
     regla: resultado.regla, clas: resultado.clas, config: resultado.config, veredicto: resultado.veredicto, periodos: resultado.periodos, datos: resultado.datos, id: resultado.id })
 
@@ -308,11 +355,12 @@ export default function LaboratorioPanel({ apiFetch, version = null }) {
           </div>
           <table style={{ borderCollapse: 'collapse', fontSize: TAM, width: '100%' }} data-prueba={prueba}>
             <tbody>{lote.items.map(it => {
-              const e = est?.[it.id], estado = e?.estado || (est ? 'pendiente' : '—')
+              const e = est?.[it.id], estado = e?.estado || (est ? 'pendiente' : '—'), cal = lote.tipo === 'estrategias' ? calibracionDe(lote.id, it.id) : undefined
               return (
                 <tr key={it.id} style={{ borderBottom: '1px solid var(--border)' }}>
                   <td style={{ padding: '3px 4px', color: GRIS }}>{it.id}</td>
                   <td style={{ padding: '3px 4px' }}>{it.nombre}</td>
+                  {cal !== undefined && <td data-prueba="calibrada" title={cal ? `${cal.pctAprobados} % de falsos aprobados en ${cal.universos} universos sin ventaja` : 'sin calibración'} style={{ padding: '3px 4px', whiteSpace: 'nowrap', color: cal?.calibrada ? VERDE : AMBAR }}>{cal ? (cal.calibrada ? 'calibrada' : 'no calibrada') : 'sin calibrar'}</td>}
                   <td style={{ padding: '3px 4px', textAlign: 'right', color: COLOR_ESTADO[estado] || 'var(--text)', whiteSpace: 'nowrap' }}>
                     {e?.id ? <button onClick={() => verPrueba(e.id)} title="Ver el resultado registrado" style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: MONO, fontSize: TAM, color: 'inherit', textDecoration: 'underline' }}>{estado}</button> : estado}
                     {e?.nota && <span title={e.nota} data-prueba="nota-lote" style={{ color: AMBAR, cursor: 'help' }}> ⚠</span>}
@@ -338,11 +386,14 @@ export default function LaboratorioPanel({ apiFetch, version = null }) {
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }} data-prueba="modo">
           <span style={{ ...etiqueta, marginBottom: 0 }}>Probar:</span>
-          {[['entradas', 'Entradas'], ['salidas', 'Salidas']].map(([m, t]) => (
+          {[['entradas', 'Entradas'], ['salidas', 'Salidas'], ['estrategias', 'Estrategias']].map(([m, t]) => (
             <button key={m} onClick={() => { setFechaOk({}); setModo(m) }} aria-pressed={modo === m} style={modo === m ? botonPrincipal : boton}>{t}</button>))}
         </div>
 
-        {modo === 'entradas' ? <ConstructorEntrada valor={ui} setValor={setUi} /> : (<>
+        {modo === 'entradas' ? <ConstructorEntrada valor={ui} setValor={setUi} /> : modo === 'estrategias' ? (<>
+          <ConstructorEntrada valor={uiE} setValor={setUiE} />
+          <ConstructorSalida valor={uiE} setValor={setUiE} />
+        </>) : (<>
           <div style={caja} data-prueba="entradas-salidas">
             <div style={etiqueta}>Entradas</div>
             {[['azar', `Al azar (fija, la del lote: 1 de cada ${num(1 / LOTE_2.comun.entradas.probabilidad, 0)} días candidatos)`], ['senal', 'Con un disparador (solo exploratorias)']].map(([t, txt]) => (
@@ -352,24 +403,11 @@ export default function LaboratorioPanel({ apiFetch, version = null }) {
             {uiS.tipoEntrada === 'azar' && <div style={{ fontSize: TAM, color: GRIS, marginTop: 4 }}>Cada día en que el valor está en el índice, tiene datos y tiene calculados todos los indicadores del lote es entrada con probabilidad 1/{num(1 / LOTE_2.comun.entradas.probabilidad, 0)} (semilla {LOTE_2.comun.entradas.semilla}): las mismas señales para todas las salidas, así la entrada no aporta nada.</div>}
           </div>
           {uiS.tipoEntrada === 'senal' && <ConstructorEntrada valor={uiS} setValor={setUiS} />}
-          <div style={caja} data-prueba="salida">
-            <div style={etiqueta}>Salida</div>
-            <select value={uiS.condicion?.id || ''} onChange={e => setUiS(u => ({ ...u, condicion: e.target.value ? salidaUi(e.target.value) : null }))} style={{ ...entrada, width: '100%' }}>
-              <option value="">Ninguna: solo el tiempo máximo</option>
-              {CONDICIONES_SALIDA.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
-            </select>
-            {uiS.condicion && <Parametros senal={SALIDAS[uiS.condicion.id]} textos={uiS.condicion.textos} onCambio={(k, v) => setUiS(u => ({ ...u, condicion: { ...u.condicion, textos: { ...u.condicion.textos, [k]: v } } }))} />}
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: TAM, color: GRIS, marginTop: 8 }}>
-              Como mucho
-              <input type="text" inputMode="numeric" value={uiS.tope} onChange={e => setUiS(u => ({ ...u, tope: e.target.value }))} style={{ ...entrada, width: 50 }} />
-              velas (contando la de entrada, al cierre)
-            </label>
-            <div style={{ fontSize: TAM, color: GRIS, marginTop: 6 }}>La condición se mira al cierre de cada vela desde la de entrada y se sale a la apertura siguiente; el tope sale al cierre de su vela; si coinciden en la misma vela, manda el tope. Sale con lo primero que salte.</div>
-          </div>
+          <ConstructorSalida valor={uiS} setValor={setUiS} />
         </>)}
 
         <div style={caja}>
-          <div style={etiqueta}>{modo === 'salidas' ? 'Periodos' : 'Periodos y salida'}</div>
+          <div style={etiqueta}>{modo !== 'entradas' ? 'Periodos' : 'Periodos y salida'}</div>
           {periodosActivos.map((p, k) => (
             <div key={`${modo}${k}`} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, fontSize: TAM, marginBottom: 6 }}>
               <span style={{ color: GRIS }}>{k + 1}.</span>
@@ -384,7 +422,7 @@ export default function LaboratorioPanel({ apiFetch, version = null }) {
             <input type="text" inputMode="numeric" value={ui.salida} onChange={e => setUi(u => ({ ...u, salida: e.target.value }))} style={{ ...entrada, width: 50 }} />
             velas (contando la de entrada, al cierre)
           </label>}
-          <div style={{ fontSize: TAM, color: GRIS, marginTop: 6 }}>Universo: miembros del Nasdaq-100 en cada fecha · diario · entrada a la apertura de la vela siguiente{modo === 'salidas' ? ' · una operación por valor a la vez' : ''}</div>
+          <div style={{ fontSize: TAM, color: GRIS, marginTop: 6 }}>Universo: miembros del Nasdaq-100 en cada fecha · diario · entrada a la apertura de la vela siguiente{modo !== 'entradas' ? ' · una operación por valor a la vez' : ''}</div>
         </div>
 
         <div style={{ ...caja, borderColor: clas?.oficial ? 'var(--accent)' : 'var(--border)' }}>
@@ -403,6 +441,7 @@ export default function LaboratorioPanel({ apiFetch, version = null }) {
 
         {tablaLote(LOTE_1, 'lote')}
         {tablaLote(LOTE_2, 'lote2')}
+        {tablaLote(LOTE_3, 'lote3')}
         {registro.error && <div style={{ fontSize: TAM, color: ROJO }}>{registro.error}</div>}
       </div>
 
@@ -444,7 +483,28 @@ export default function LaboratorioPanel({ apiFetch, version = null }) {
               <div style={{ marginTop: 8 }}><BotonCopiar obtenerTexto={textoCopia} /></div>
             </div>
 
-            {resSalidas ? (<>
+            {resEstrategias ? (<>
+            <div style={caja}>
+              <div style={etiqueta}>Resultado por periodo · medida principal: media por operación</div>
+              <Tabla cab={CAB_LAB_E} filas={filasLabEstrategias(resultado.periodos, clasR)} />
+              <div style={{ fontSize: TAM, color: GRIS, marginTop: 6 }}>Rendimiento por operación bruto (sin comisiones). Estrategia al azar ({num(resultado.periodos[0]?.azar?.nSim ?? N_SIM_LAB, 0)} simulaciones con semilla fija): en cada valor, las mismas duraciones reales en fechas de señal al azar entre los días válidos, sin solaparse.</div>
+              <div data-prueba="criterio" style={{ fontSize: TAM, marginTop: 4 }}>{textoCriterio(clasR, 'estrategias')}</div>
+              <div style={{ marginTop: 10 }}><Tabla cab={CAB_LAB_E_DETALLE} filas={filasLabEstrategiasDetalle(resultado.periodos, resultado.datos)} /></div>
+              {(resultado.datos || []).some(d => d?.aviso) && <div style={{ fontSize: TAM, color: AMBAR, marginTop: 6 }}>{resultado.datos.map(d => d?.aviso).filter(Boolean).join(' ')}</div>}
+            </div>
+            <div style={caja} data-prueba="calibracion">
+              <div style={etiqueta}>Calibración de esta combinación</div>
+              {!clasR.oficial ? <div style={{ fontSize: TAM, color: GRIS }}>Exploratoria: no tiene calibración propia (solo se calibran las combinaciones declaradas en un lote).</div>
+                : calibracionDe(clasR.lote, clasR.item) ? <Tabla cab={CAB_LAB_CAL} filas={[filaCalibracion(calibracionDe(clasR.lote, clasR.item))]} />
+                : <div style={{ fontSize: TAM, color: AMBAR }}>Sin calibración: {SIN_VEREDICTO_NO_CALIBRADA}.</div>}
+              <div style={{ fontSize: TAM, color: GRIS, marginTop: 6 }}>La misma combinación sobre universos de paseos aleatorios sin ninguna ventaja posible: si el percentil sale {PERCENTIL_PASA} o más en más del 10 % de ellos, el azar no la juzga bien y se queda sin veredicto.</div>
+            </div>
+            <div style={caja}>
+              <div style={etiqueta}>Medidas informativas</div>
+              <Tabla cab={CAB_LAB_E_INFO} filas={filasLabEstrategiasInfo(resultado.periodos)} />
+              <div style={{ fontSize: TAM, color: GRIS, marginTop: 6 }}>P5: el peor 5 % de las operaciones. Duración: días en mercado (la del azar es la misma por construcción). Media por día: rendimiento por día invertido; el QQQ por día es la referencia de comprar y mantener todo el periodo.</div>
+            </div>
+            </>) : resSalidas ? (<>
             <div style={caja}>
               <div style={etiqueta}>Resultado por periodo · medida principal: media por operación</div>
               <Tabla cab={cabLabSalidas(clasR)} filas={filasLabSalidas(resultado.periodos, clasR)} />
@@ -483,7 +543,7 @@ export default function LaboratorioPanel({ apiFetch, version = null }) {
             <details style={caja}>
               <summary style={{ ...etiqueta, cursor: 'pointer', marginBottom: 0 }}>Desglose por año</summary>
               <div style={{ marginTop: 8 }}>
-                <Tabla cab={CAB_LAB_ANIO(resSalidas)} filas={filasLabAnio(resultado.periodos, resSalidas)} />
+                <Tabla cab={CAB_LAB_ANIO(resPorMedia)} filas={filasLabAnio(resultado.periodos, resPorMedia)} />
               </div>
             </details>
             <details style={caja}>
@@ -492,7 +552,7 @@ export default function LaboratorioPanel({ apiFetch, version = null }) {
               {resultado.periodos.map((p, k) => (
                 <div key={k} style={{ marginBottom: 10 }}>
                   <div style={{ fontSize: TAM, fontWeight: 700, marginBottom: 4 }}>{periodoCorto(p)} · {num(p.porActivo?.length, 0)} valores con operaciones</div>
-                  <Tabla cab={CAB_LAB_ACTIVO(resSalidas)} colorFila={j => (p.porActivo[j]?.operaciones ?? 0) < 30 ? GRIS : undefined} filas={filasLabActivo(p, resSalidas)} />
+                  <Tabla cab={CAB_LAB_ACTIVO(resPorMedia)} colorFila={j => (p.porActivo[j]?.operaciones ?? 0) < 30 ? GRIS : undefined} filas={filasLabActivo(p, resPorMedia)} />
                 </div>))}
             </details>
             <details style={caja}>
@@ -503,7 +563,16 @@ export default function LaboratorioPanel({ apiFetch, version = null }) {
 
         <div style={{ ...caja, fontSize: TAM, lineHeight: 1.5 }} data-prueba="como-leer">
           <div style={etiqueta}>Cómo leer esto</div>
-          {modo === 'salidas' ? (
+          {modo === 'estrategias' ? (
+          <ul style={{ margin: 0, paddingLeft: 18 }}>
+            <li>Aquí se prueba una <b>estrategia completa</b>: la entrada y la salida juntas, con una operación por valor a la vez, frente a <b>la misma estrategia hecha al azar</b>.</li>
+            <li><b>Media</b>: el rendimiento medio por operación, la medida principal (recoge cuánto dejan las buenas y cuánto quitan las malas).</li>
+            <li><b>Estrategia al azar</b> ({num(N_SIM_LAB, 0)} simulaciones): en cada valor, el mismo número de operaciones con las <b>mismas duraciones</b> que la real, pero en fechas de señal al azar entre los días válidos y sin solaparse. Responde a «¿entrar y salir así da más que entrar en cualquier momento y aguantar lo mismo?».</li>
+            <li>El <b>percentil</b> dice en cuántas de cada 100 simulaciones el azar salió peor: cerca de 50, igual que el azar; {PERCENTIL_PASA} o más, mejor que {PERCENTIL_PASA} de cada 100.</li>
+            <li><b>Calibración</b>: cada combinación del lote se probó antes sobre paseos aleatorios sin ninguna ventaja. Si aun así salía {PERCENTIL_PASA} o más en más del 10 % de ellos, el azar no la juzga bien: <b>sin veredicto</b>.</li>
+            <li><b>Pasa</b> solo una combinación oficial y calibrada con al menos {MIN_OPERACIONES} operaciones y percentil {PERCENTIL_PASA} o más en <b>todos</b> los periodos (criterio 4). Si faltan operaciones: «datos insuficientes». Las exploratorias no tienen veredicto.</li>
+            <li>El QQQ por día sirve de referencia (comprar y mantener); no entra en el veredicto. Todo es bruto: sin comisiones ni impuestos. Cuantas más reglas se prueban, más fácil es que alguna salga bien por casualidad: por eso se cuentan todas.</li>
+          </ul>) : modo === 'salidas' ? (
           <ul style={{ margin: 0, paddingLeft: 18 }}>
             <li>Aquí se prueba solo la <b>salida</b>: las entradas son al azar y las mismas para todas las salidas (1 de cada {num(1 / LOTE_2.comun.entradas.probabilidad, 0)} días candidatos, semilla fija), así que la entrada no aporta nada. Una operación por valor a la vez.</li>
             <li><b>Media</b>: el rendimiento medio por operación. Es la medida principal: una salida vale por cuánto deja correr lo bueno y corta lo malo, y eso lo recoge la media (la mediana no ve el tamaño de las grandes).</li>
@@ -536,8 +605,8 @@ export default function LaboratorioPanel({ apiFetch, version = null }) {
                     <td style={{ padding: '3px 8px', whiteSpace: 'nowrap' }}>{fmtDate(h.creado)}</td>
                     <td style={{ padding: '3px 8px', minWidth: 240 }}>{h.config ? reglaDe(h.config) : '—'}</td>
                     <td style={{ padding: '3px 8px', whiteSpace: 'nowrap', color: h.oficial ? 'var(--accent)' : GRIS }}>{h.oficial ? `Oficial · ${h.lote} · ${h.item_lote}` : 'Exploratoria'}</td>
-                    <td data-prueba="criterio-historial" style={{ padding: '3px 8px', whiteSpace: 'nowrap', color: GRIS }} title={h.config ? textoCriterio({ oficial: h.oficial, lote: h.lote, salidas: h.config.salidas }, esConfigSalidas(h.config)) : undefined}>
-                      {h.config ? textoCriterio({ oficial: h.oficial, lote: h.lote, salidas: h.config.salidas }, esConfigSalidas(h.config), { corto: true }) : '—'}</td>
+                    <td data-prueba="criterio-historial" style={{ padding: '3px 8px', whiteSpace: 'nowrap', color: GRIS }} title={h.config ? textoCriterio({ oficial: h.oficial, lote: h.lote, item: h.item_lote, salidas: h.config.salidas }, esConfigEstrategias(h.config) ? 'estrategias' : esConfigSalidas(h.config)) : undefined}>
+                      {h.config ? textoCriterio({ oficial: h.oficial, lote: h.lote, item: h.item_lote, salidas: h.config.salidas }, esConfigEstrategias(h.config) ? 'estrategias' : esConfigSalidas(h.config), { corto: true }) : '—'}</td>
                     <td style={{ padding: '3px 8px', whiteSpace: 'nowrap' }}>{[h.p0, h.p1, h.p2].map((p, k) => p == null ? null : `${h.config?.periodos?.[k] ? periodoCorto(h.config.periodos[k]) + ': ' : ''}${num(Number(p), 1)}${h[`r${k}`] != null ? ` (re-sim. ${num(Number(h[`r${k}`]), 1)})` : ''}`).filter(Boolean).join(' · ') || '—'}</td>
                     <td style={{ padding: '3px 8px', color: COLOR_ESTADO[h.veredicto] || 'var(--text)' }}>
                       <span style={{ whiteSpace: 'nowrap' }}>{h.veredicto || '—'}</span>
