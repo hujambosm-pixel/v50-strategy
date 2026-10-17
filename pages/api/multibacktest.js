@@ -1716,6 +1716,15 @@ function _bhDiversifEjeCompleto(curves, assetResults, capitalIni) {
 
 // Curva B&H de una serie sobre las fechas de las curvas, normalizada al capital inicial en la primera vela >= startD
 // (la misma cuenta que el B&H del S&P 500 de la respuesta).
+// V9.990: el B&H del S&P 500, con el mismo arreglo que QQQ en V9.966: a sus fechas de dibujo (las muestreadas de las curvas,
+// que dependen de las operaciones) se añaden el pico y el valle de su caída máxima medida sobre sus propias velas del
+// periodo. Así la caída de la curva dibujada es la del eje completo, igual con cualquier estrategia; los demás puntos no
+// cambian.
+function _fechasSp500(sp500Data, fechas, startD) {
+  if (!fechas.length) return fechas
+  const ultima = fechas[fechas.length - 1], eje = (sp500Data || []).filter(d => d.date >= startD && d.date <= ultima)
+  return _fechasConExtremos(fechas, _extremosCaida(_curvaBHSobre(sp500Data, eje.map(d => d.date), startD, 1)))
+}
 function _curvaBHSobre(serie, fechas, startD, capitalIni) {
   if (!serie?.length || !fechas.length) return []
   const v0 = serie.find(d => d.date >= startD)
@@ -2089,7 +2098,7 @@ async function handlePortfolioMode(req, res) {
     if (sp500Data?.length && curves.simpleCurve?.length) {
       const sp0 = sp500Data.find(d => d.date >= curves.startDate)
       if (sp0) {
-        sp500BHCurve = curves.simpleCurve.map(({ date }) => {
+        sp500BHCurve = _fechasSp500(sp500Data, curves.simpleCurve.map(p => p.date), curves.startDate).map(date => {
           let bar = null
           for (let i = sp500Data.length - 1; i >= 0; i--) {
             if (sp500Data[i].date <= date) { bar = sp500Data[i]; break }
@@ -2524,7 +2533,7 @@ async function handlerMultibacktest(req, res) {
       const sp0 = sp500Data.find(d => d.date >= startD)
       if (sp0) {
         const sp0Close = sp0.close
-        sp500BHCurve = filteredDates.map(date => {
+        sp500BHCurve = _fechasSp500(sp500Data, filteredDates, startD).map(date => {
           let spBar = null
           for (let i = sp500Data.length - 1; i >= 0; i--) {
             if (sp500Data[i].date <= date) { spBar = sp500Data[i]; break }
