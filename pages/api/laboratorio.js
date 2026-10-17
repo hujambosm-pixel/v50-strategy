@@ -11,6 +11,9 @@
 //   ESTRATEGIA COMPLETA (config.prueba = 'estrategias', LOTE_3): { config: { prueba, senales, salidas, universo, periodos,
 //   intervalo, entrada }, periodo } → ejecutaPeriodoEstrategias (lib/laboratorioEstrategias.js); se lee siempre QQQ (la
 //   referencia de comprar y mantener).
+//   CARTERA (config.prueba = 'cartera', CARTERA_1): { config: { prueba, regla, etf, periodos, … }, periodo } →
+//   ejecutaPeriodoCartera (lib/laboratorioCartera.js) con QQQ, el ETF y SPY de la caché (desde 3 años antes, para calentar
+//   la ventana de 252 velas) y los dividendos de lib/dividendosCartera.json (rentabilidad total).
 //
 // Datos: los miembros del Nasdaq-100 (universo_miembros) y las velas diarias de la caché (precios_diarios, por la función
 // leer_velas, exactas) con el JWT del usuario: desde 3 años antes del periodo (calentamiento de los indicadores; la
@@ -19,7 +22,9 @@
 import { exigeAuth } from '../../lib/verificaJwt'
 import { entradas, calculables, topeDe, indicadoresSalidas } from '../../lib/senales'
 import { ejecutaPeriodo, semillaLab, N_SIM_LAB } from '../../lib/laboratorio'
-import { huella, validaConfig, esConfigSalidas, esConfigEstrategias } from '../../lib/lotesLab'
+import { huella, validaConfig, esConfigSalidas, esConfigEstrategias, esConfigCartera } from '../../lib/lotesLab'
+import { ejecutaPeriodoCartera, alineaDatos, N_SIM_CARTERA } from '../../lib/laboratorioCartera'
+import DIVIDENDOS from '../../lib/dividendosCartera.json'
 import { ejecutaPeriodoSalidas, calculablesIndicadores, decisionesDe, indicadoresPrueba, diasTrasPeriodo } from '../../lib/laboratorioSalidas'
 import { ejecutaPeriodoEstrategias } from '../../lib/laboratorioEstrategias'
 
@@ -36,6 +41,10 @@ export function validaPeticionLab(c, periodo) {
   const e = []
   if (!c || typeof c !== 'object') return ['Falta la configuración.']
   e.push(...validaConfig(c))
+  if (esConfigCartera(c)) {
+    if (!periodo || !(c.periodos || []).some(p => p.desde === periodo.desde && p.hasta === periodo.hasta)) e.push('El periodo pedido no es uno de los de la configuración.')
+    return e
+  }
   if (c.intervalo !== 'diario') e.push('Por ahora el laboratorio solo trabaja en diario.')
   if (c.universo?.indice !== 'NDX') e.push('Por ahora el único universo es el Nasdaq-100 (miembros en cada fecha).')
   if (!esConfigSalidas(c) && !esConfigEstrategias(c) && (c.salida?.tipo !== 'velas' || !Number.isInteger(c.salida?.n) || c.salida.n < 1 || c.salida.n > 250)) e.push('La salida tiene que ser un número entero de velas entre 1 y 250.')
@@ -63,6 +72,17 @@ export default async function handler(req, res) {
   }
   try {
     const { desde, hasta } = periodo
+    if (esConfigCartera(cfg)) {
+      const pc = cfg.periodos.find(p => p.desde === desde && p.hasta === hasta)
+      const lee = (sym) => get(`rpc/leer_velas?p_simbolo=${encodeURIComponent(sym)}&p_desde=${masAnios(desde, -3)}&p_hasta=${masDias(hasta, 5)}`).then(velasDe)
+      const [qqq, etf, spy] = await Promise.all([lee('QQQ'), lee(cfg.etf), lee('SPY')])
+      const t1 = Date.now()
+      if (!qqq.length || !etf.length || !spy.length) return res.status(500).json({ error: `Faltan velas en la caché: ${[['QQQ', qqq], [cfg.etf, etf], ['SPY', spy]].filter(([, v]) => !v.length).map(([s]) => s).join(', ')}.` })
+      const datos = alineaDatos({ qqq, etf: { simbolo: cfg.etf, velas: etf }, spy }, DIVIDENDOS.simbolos)
+      const resultado = ejecutaPeriodoCartera({ datos, regla: cfg.regla, periodo: pc, nSim: Math.min(nSim, N_SIM_CARTERA * 5), semilla: semillaLab(await huella(cfg), desde) })
+      const t2 = Date.now()
+      return res.status(200).json({ resultado, simbolos: 3, sinDatos: [], dividendos: DIVIDENDOS.descargado, tiempos: { datosMs: t1 - t0, calculoMs: t2 - t1, totalMs: t2 - t0 } })
+    }
     const miembros = await get('universo_miembros?indice=eq.NDX&select=simbolo_yahoo,desde,hasta,excluido_motivo')
     const tramos = {}
     for (const m of miembros) if (m.simbolo_yahoo && !m.excluido_motivo && m.desde <= hasta && (m.hasta == null || m.hasta > desde)) (tramos[m.simbolo_yahoo] ||= []).push(m)

@@ -355,5 +355,118 @@
     "calibrada": true
    }
   }
+ },
+ "CARTERA_1": {
+  "huellaLote": "09f81f87c5053ea15828f298221c494a209156c23406f9371c521d1796892538",
+  "version": "V9.980",
+  "fecha": "2026-10-17",
+  "metodo": "QQQ en paseo aleatorio geométrico sin autocorrelación; ETF = L × rendimiento del QQQ en la noche y en el día, menos el coste anual repartido por días; falso aprobado: percentil del CAGR >= 95 en el periodo total",
+  "parametros": {
+   "universos": 200,
+   "derivaLogDiaria": 0.00055,
+   "volatilidadDiaria": 0.0142,
+   "fraccionNoche": 0.34,
+   "costeAnual": {
+    "2": 0.012,
+    "3": 0.026
+   },
+   "nSim": 1000,
+   "semilla": 20261017
+  },
+  "umbralFalsosAprobados": 10,
+  "items": {
+   "V1": {
+    "nombre": "Regla de Sergi + QLD",
+    "universos": 200,
+    "sinCiclos": 0,
+    "aprobados": 13,
+    "pctAprobados": 6.5,
+    "percentilMedio": 52.7,
+    "deciles": [
+     15,
+     15,
+     22,
+     17,
+     21,
+     31,
+     18,
+     17,
+     18,
+     26
+    ],
+    "ciclosMedios": 15.7,
+    "pctSuperaQqq": 47.5,
+    "calibrada": true
+   },
+   "V2": {
+    "nombre": "Regla de Sergi + TQQQ",
+    "universos": 200,
+    "sinCiclos": 0,
+    "aprobados": 4,
+    "pctAprobados": 2,
+    "percentilMedio": 50.3,
+    "deciles": [
+     14,
+     22,
+     22,
+     18,
+     21,
+     25,
+     16,
+     24,
+     19,
+     19
+    ],
+    "ciclosMedios": 12.9,
+    "pctSuperaQqq": 58.5,
+    "calibrada": true
+   },
+   "V3": {
+    "nombre": "Regla simple + QLD",
+    "universos": 200,
+    "sinCiclos": 0,
+    "aprobados": 11,
+    "pctAprobados": 5.5,
+    "percentilMedio": 51.3,
+    "deciles": [
+     16,
+     18,
+     22,
+     20,
+     22,
+     20,
+     16,
+     28,
+     19,
+     19
+    ],
+    "ciclosMedios": 15.7,
+    "pctSuperaQqq": 94,
+    "calibrada": true
+   },
+   "V4": {
+    "nombre": "Regla simple + TQQQ",
+    "universos": 200,
+    "sinCiclos": 0,
+    "aprobados": 16,
+    "pctAprobados": 8,
+    "percentilMedio": 54.5,
+    "deciles": [
+     11,
+     19,
+     20,
+     21,
+     20,
+     21,
+     22,
+     14,
+     19,
+     33
+    ],
+    "ciclosMedios": 12.9,
+    "pctSuperaQqq": 85,
+    "calibrada": true
+   }
+  }
  }
 }
