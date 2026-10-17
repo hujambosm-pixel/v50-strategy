@@ -22,8 +22,9 @@
 import { exigeAuth } from '../../lib/verificaJwt'
 import { entradas, calculables, topeDe, indicadoresSalidas } from '../../lib/senales'
 import { ejecutaPeriodo, semillaLab, N_SIM_LAB } from '../../lib/laboratorio'
-import { huella, validaConfig, esConfigSalidas, esConfigEstrategias, esConfigCartera } from '../../lib/lotesLab'
+import { huella, validaConfig, esConfigSalidas, esConfigEstrategias, esConfigCartera, esConfigExploracion } from '../../lib/lotesLab'
 import { ejecutaPeriodoCartera, alineaDatos, N_SIM_CARTERA } from '../../lib/laboratorioCartera'
+import { curvaRiesgoEtf, sensibilidadEtf } from '../../lib/exploracionCartera'
 import DIVIDENDOS from '../../lib/dividendosCartera.json'
 import { ejecutaPeriodoSalidas, calculablesIndicadores, decisionesDe, indicadoresPrueba, diasTrasPeriodo } from '../../lib/laboratorioSalidas'
 import { ejecutaPeriodoEstrategias } from '../../lib/laboratorioEstrategias'
@@ -43,6 +44,11 @@ export function validaPeticionLab(c, periodo) {
   e.push(...validaConfig(c))
   if (esConfigCartera(c)) {
     if (!periodo || !(c.periodos || []).some(p => p.desde === periodo.desde && p.hasta === periodo.hasta)) e.push('El periodo pedido no es uno de los de la configuración.')
+    return e
+  }
+  if (esConfigExploracion(c)) {
+    // En una exploración, `periodo` es la parte que se pide: { etf } (una petición por ETF).
+    if (!periodo?.etf || !(c.etfs || []).includes(periodo.etf)) e.push('La parte pedida no es uno de los ETF de la exploración.')
     return e
   }
   if (c.intervalo !== 'diario') e.push('Por ahora el laboratorio solo trabaja en diario.')
@@ -71,6 +77,18 @@ export default async function handler(req, res) {
     return r.json()
   }
   try {
+    if (esConfigExploracion(cfg)) {
+      const etf = periodo.etf, ps = [...(cfg.periodos?.[etf] || []), ...(cfg.fueraDeMuestra?.[etf] ? [cfg.fueraDeMuestra[etf].prueba] : [])]
+      const d0 = ps.reduce((m, p) => p.desde < m ? p.desde : m, '9999'), d1 = ps.reduce((m, p) => p.hasta > m ? p.hasta : m, '0000')
+      const lee = (sym) => get(`rpc/leer_velas?p_simbolo=${encodeURIComponent(sym)}&p_desde=${masAnios(d0, -3)}&p_hasta=${masDias(d1, 5)}`).then(velasDe)
+      const [qqq, etfV, spy] = await Promise.all([lee('QQQ'), lee(etf), lee('SPY')])
+      const t1 = Date.now()
+      if (!qqq.length || !etfV.length || !spy.length) return res.status(500).json({ error: 'Faltan velas en la caché de QQQ, del ETF o de SPY.' })
+      const datos = alineaDatos({ qqq, etf: { simbolo: etf, velas: etfV }, spy }, DIVIDENDOS.simbolos)
+      const resultado = cfg.tipo === 'curvaRiesgo' ? curvaRiesgoEtf({ datos, config: cfg, etf }) : await sensibilidadEtf({ datos, config: cfg, etf, nSim: Math.min(nSim, N_SIM_CARTERA * 5) })
+      const t2 = Date.now()
+      return res.status(200).json({ resultado: { prueba: 'exploracion', tipo: cfg.tipo, ...resultado }, simbolos: 3, sinDatos: [], dividendos: DIVIDENDOS.descargado, tiempos: { datosMs: t1 - t0, calculoMs: t2 - t1, totalMs: t2 - t0 } })
+    }
     const { desde, hasta } = periodo
     if (esConfigCartera(cfg)) {
       const pc = cfg.periodos.find(p => p.desde === desde && p.hasta === hasta)
@@ -79,7 +97,7 @@ export default async function handler(req, res) {
       const t1 = Date.now()
       if (!qqq.length || !etf.length || !spy.length) return res.status(500).json({ error: `Faltan velas en la caché: ${[['QQQ', qqq], [cfg.etf, etf], ['SPY', spy]].filter(([, v]) => !v.length).map(([s]) => s).join(', ')}.` })
       const datos = alineaDatos({ qqq, etf: { simbolo: cfg.etf, velas: etf }, spy }, DIVIDENDOS.simbolos)
-      const resultado = ejecutaPeriodoCartera({ datos, regla: cfg.regla, periodo: pc, nSim: Math.min(nSim, N_SIM_CARTERA * 5), semilla: semillaLab(await huella(cfg), desde) })
+      const resultado = ejecutaPeriodoCartera({ datos, regla: cfg.regla, periodo: pc, nSim: Math.min(nSim, N_SIM_CARTERA * 5), semilla: semillaLab(await huella(cfg), desde), comparaCon: cfg.comparaCon || null })
       const t2 = Date.now()
       return res.status(200).json({ resultado, simbolos: 3, sinDatos: [], dividendos: DIVIDENDOS.descargado, tiempos: { datosMs: t1 - t0, calculoMs: t2 - t1, totalMs: t2 - t0 } })
     }
