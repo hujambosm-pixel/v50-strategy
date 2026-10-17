@@ -32,7 +32,7 @@ import { textoMulticartera, datosCabeceraMulticartera } from '../lib/exportaText
 import { nDeUniverso, reglaDeUniverso, nombreUniverso, FRASE_REGLA, cargaUniversoMc, estadoUniversoMc } from '../lib/universoMc'
 import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.987'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.988'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -43,7 +43,7 @@ import { MultiCartChart, OccupancyBarChart, McOccupancyChart, StratCompareChart,
 import dynamic from 'next/dynamic'
 const McMonthlyGainsChart = dynamic(() => import('../components/McMonthlyGainsChart'), { ssr: false })
 import { TlEquityChart, TlInvestChart } from '../components/TlCharts'
-import { taxStrategyCurve, taxBHCurve, gananciaPorAñoPool, gananciaPorAñoSlots } from '../lib/afterTaxSim'
+import { taxStrategyCurveCaja, taxBHCurve, gananciaPorAñoPool, gananciaPorAñoSlots } from '../lib/afterTaxSim'
 import ContextThemeMenu, { applyTema } from '../components/ContextThemeMenu'
 import { exportTimeline, exportGantt, exportHistorial } from '../lib/exportTimeline'
 import GanttChart from '../components/GanttChart'
@@ -1959,7 +1959,8 @@ export default function Home() {
       // Ganancia realizada por año según el modo: slots deriva pnlCompound por activo; pool Σ pnlSimple.
       const sc=r.result?.slotCapital??mcResult.slotCapital
       const gpa=md==='slots'?gananciaPorAñoSlots(trades,sc):gananciaPorAñoPool(trades)
-      const res=taxStrategyCurve(base,gpa,capIni)
+      // Cálculo 2 (V9.988): el impuesto sale de la cartera el primer día del año siguiente (lib/afterTaxSim.js).
+      const res=taxStrategyCurveCaja(base,gpa,capIni)
       compoundById[r.id]=res.curve; taxByDateById[r.id]=res.taxByDate; totalTaxById[r.id]=res.totalTax
     })
     const bhRes=taxBHCurve(mcResult.bhCurve,capIni)  // B&H no tiene curva flotante (siempre 100% invertido)
@@ -6286,7 +6287,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.987</title>
+        <title>Trading Simulator V9.988</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6375,7 +6376,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             }} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.987
+            <span className="dot"/>Trading Simulator V9.988
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -10106,12 +10107,12 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       ))
                     )}
                     <button onClick={()=>setMcShowAfterTax(s=>!s)} disabled={mcPorActivo}
-                      title={mcPorActivo?"El impuesto se simula sobre la curva de la estrategia, no sobre la contribución de cada activo":"Simula el IRPF de la base del ahorro. Estrategias: impuesto anual (31 dic) sobre ganancias realizadas. Buy&hold: impuesto único al final. Tramos progresivos 19%-28%. Las pérdidas de un año compensan ganancias de años siguientes."}
+                      title={mcPorActivo?"El impuesto se simula sobre la curva de la estrategia, no sobre la contribución de cada activo":"Simula el IRPF de la base del ahorro (cálculo 2). Estrategias: el impuesto de cada año sobre las ganancias realizadas sale de la cartera el primer día del año siguiente (lo pagado deja de invertirse; aproximación proporcional). Buy&hold: impuesto único al final. Tramos progresivos 19%-28%. Las pérdidas compensan ganancias de los 4 años siguientes."}
                       style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:mcPorActivo?'not-allowed':'pointer',
                         border:`1px solid ${mcPorActivo?'#24384d':(mcShowAfterTax?'#e0b341':'#3d5a7a')}`,
                         background:(!mcPorActivo&&mcShowAfterTax)?'rgba(224,179,65,0.14)':'transparent',
                         color:mcPorActivo?'#2b4257':(mcShowAfterTax?'#e0b341':'#3d5a7a')}}>
-                      Después de impuestos
+                      Después de impuestos (cálculo 2)
                     </button>
                     {/* Toggles de series del modo Activos, en la MISMA fila que los botones y detrás de
                         un separador fino, porque son otra cosa: no cambian qué se calcula sino qué se ve.

@@ -23,7 +23,7 @@ import { exigeAuth } from '../../lib/verificaJwt'
 import { entradas, calculables, topeDe, indicadoresSalidas } from '../../lib/senales'
 import { ejecutaPeriodo, semillaLab, N_SIM_LAB } from '../../lib/laboratorio'
 import { huella, validaConfig, esConfigSalidas, esConfigEstrategias, esConfigCartera, esConfigExploracion } from '../../lib/lotesLab'
-import { ejecutaPeriodoCartera, alineaDatos, N_SIM_CARTERA } from '../../lib/laboratorioCartera'
+import { ejecutaPeriodoCartera, alineaDatos, N_SIM_CARTERA, calculoDe } from '../../lib/laboratorioCartera'
 import { curvaRiesgoEtf, sensibilidadEtf, estresParte, mapaMediaParte } from '../../lib/exploracionCartera'
 import { construyeSintetico } from '../../lib/etfSintetico'
 import { preciosTotales } from '../../lib/laboratorioCartera'
@@ -108,7 +108,7 @@ export default async function handler(req, res) {
       const k = cfg.etf === 'x3' ? 3 : 2
       const etf = sint ? construyeSintetico(preciosTotales(qqq, DIVIDENDOS.simbolos.QQQ), { k, comision: cfg.sinteticos.comision[k], ajuste: cfg.sinteticos.ajuste[k] }) : etfV
       const datos = alineaDatos({ qqq, etf: { simbolo: sint ? 'SINTETICO' : cfg.etf, velas: etf }, spy }, sint ? { ...DIVIDENDOS.simbolos, SINTETICO: [] } : DIVIDENDOS.simbolos)
-      const resultado = ejecutaPeriodoCartera({ datos, regla: cfg.regla, periodo: pc, nSim: Math.min(nSim, N_SIM_CARTERA * 5), semilla: semillaLab(await huella(cfg), desde), comparaCon: cfg.comparaCon || null })
+      const resultado = ejecutaPeriodoCartera({ datos, regla: cfg.regla, periodo: pc, nSim: Math.min(nSim, N_SIM_CARTERA * 5), semilla: semillaLab(await huella(cfg), desde), comparaCon: cfg.comparaCon || null, calculo: calculoDe(cfg) })
       const t2 = Date.now()
       return res.status(200).json({ resultado, simbolos: 3, sinDatos: [], dividendos: DIVIDENDOS.descargado, tiempos: { datosMs: t1 - t0, calculoMs: t2 - t1, totalMs: t2 - t0 } })
     }
