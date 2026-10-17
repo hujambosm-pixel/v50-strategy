@@ -8,18 +8,23 @@
 // pestaña «Explorar» con la curva de riesgo y el mapa de sensibilidad (lib/exploracionCartera.js).
 // V9.985: la columna izquierda es la «Próxima prueba» (al abrir un resultado se rellena con su configuración) y en
 // «Explorar», la prueba de estrés 1999–2025 con ETF sintéticos, con su validación frente a QLD y TQQQ siempre a la vista.
+// V9.987: la regla «Mezcla con filtro de tendencia» (CARTERA_3: periodo de la SMA, evaluación diaria o semanal, alcance y ETF
+// sintético), su tabla de lote, su resultado (medidas, referencias, azar por bloques FUERA y calibración) y, en «Explorar»,
+// el «Mapa de la media». Liquidez al 0 % en todo.
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { MONO, fmtDate, numeroEs } from '../lib/utils'
 import BotonCopiar from './BotonCopiar'
-import { CARTERA_1, CARTERA_2, reglaSergi, reglaSimple, reglaMezcla, configCarteraDe, configDeItem, validaConfig, veredictoOficial, textoCriterio, calibracionDe, esConfigCartera,
+import { CARTERA_1, CARTERA_2, CARTERA_3, NOMBRE_ALCANCE, calibracionLote, reglaSergi, reglaSimple, reglaMezcla, configCarteraDe, configDeItem, validaConfig, veredictoOficial, textoCriterio, calibracionDe, esConfigCartera,
          esConfigExploracion, EXPLORACIONES, VEREDICTOS_CARTERA } from '../lib/lotesLab'
 import { redondeaParaGuardar } from '../lib/exploracionCartera'
 import { clasificaConfig, guardarPrueba, cuentaPruebas, listarPruebas, leerPrueba, estadoLote, SELECT_HISTORIAL } from '../lib/registroLab'
-import { fraseTransicion, reduceCurva, CONDICIONES, N_SIM_CARTERA, FRECUENCIAS, SIN_AZAR } from '../lib/laboratorioCartera'
+import { fraseTransicion, reduceCurva, CONDICIONES, N_SIM_CARTERA, FRECUENCIAS, SIN_AZAR, reglaFiltro } from '../lib/laboratorioCartera'
 import { textoLaboratorio, reglaCarteraCorta, periodoCartera, CAB_CARTERA, filasCartera, CAB_CARTERA_REF, filasCarteraRef, CAB_CICLOS, filasCiclos,
          CAB_IMPUESTOS, filasImpuestos, resumenImpuestos, NOTA_IMPUESTOS, CAB_CAL_CARTERA, filaCalibracionCartera, num,
          CAB_COMPARACION, filasComparacion, AVISO_EXPLORACION, CAB_CURVA, filasCurva, cabMapa, filasMapa, textoFueraDeMuestra,
-         AVISO_SINTETICOS, CAB_VALIDACION, filasValidacion, avisoValidacion, CAB_VALIDACION_ANIOS, filasValidacionAnios, CAB_ESTRES, filasEstres, cabAnioEstres, filasAnioEstres } from '../lib/exportaTexto'
+         AVISO_SINTETICOS, CAB_VALIDACION, filasValidacion, avisoValidacion, CAB_VALIDACION_ANIOS, filasValidacionAnios, CAB_ESTRES, filasEstres, cabAnioEstres, filasAnioEstres,
+         AVISO_LIQUIDEZ, nombreEtfCartera, esConfigFiltro, CAB_FILTRO, filasFiltro, CAB_FILTRO_REF, filasFiltroRef, CAB_AZAR_FILTRO, filasAzarFiltro, CAB_FUERA, filasFuera, CAB_ANIO_FILTRO, filasAnioFiltro,
+         CAB_CAL_FILTRO, filaCalibracionFiltro, notaCalibracionFiltro, notaMediaDesde, textoMediaFiltro, nombreLineaMapa, cabMapaMedia, filasMapaMedia, textoFueraMapa, textoZonaMapa, CAB_REF_MAPA, filasRefMapa } from '../lib/exportaTexto'
 import { getSupaUrl, getSupaH, hayConfigSupabase } from '../lib/supabase'
 
 const CLAVE_LS = 'v50_laboratorio_cartera'
@@ -31,20 +36,27 @@ const etiqueta = { fontFamily: MONO, fontSize: TAM, color: GRIS, letterSpacing: 
 const entrada = { background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontFamily: MONO, fontSize: TAM, padding: '4px 6px' }
 const boton = { fontFamily: MONO, fontSize: TAM, padding: '4px 10px', borderRadius: 4, cursor: 'pointer', border: '1px solid var(--border)', background: 'var(--bg3)', color: 'var(--text)' }
 const botonPrincipal = { ...boton, border: '1px solid var(--accent)', background: 'rgba(0,212,255,0.12)', color: 'var(--accent)', fontWeight: 700 }
-const COLOR_VEREDICTO = { [VEREDICTOS_CARTERA.comparativo]: GRIS, [VEREDICTOS_CARTERA.mejorYAzar]: VERDE, [VEREDICTOS_CARTERA.mejorNoAzar]: AMBAR, [VEREDICTOS_CARTERA.mejorSinAzar]: AMBAR, [VEREDICTOS_CARTERA.noMejora]: ROJO, pendiente: GRIS, 'sin veredicto': GRIS }
-const SERIES = [['estrategia', 'Cartera', 'var(--accent)'], ['qqq', 'QQQ', GRIS], ['mitad', '50/50', AMBAR], ['spy', 'SPY', MORADO]]
+const COLOR_VEREDICTO = { [VEREDICTOS_CARTERA.comparativo]: GRIS, [VEREDICTOS_CARTERA.mejorYAzar]: VERDE, [VEREDICTOS_CARTERA.mejorNoAzar]: AMBAR, [VEREDICTOS_CARTERA.mejorSinAzar]: AMBAR, [VEREDICTOS_CARTERA.noMejora]: ROJO, pendiente: GRIS, 'sin veredicto': GRIS,
+  [VEREDICTOS_CARTERA.filtroMejoraYAzar]: VERDE, [VEREDICTOS_CARTERA.filtroMejoraNoAzar]: AMBAR, [VEREDICTOS_CARTERA.filtroMejoraSinAzar]: AMBAR, [VEREDICTOS_CARTERA.filtroNoMejora]: ROJO }
+const SERIES_BASE = [['estrategia', 'Cartera', 'var(--accent)'], ['qqq', 'QQQ', GRIS], ['mitad', '50/50', AMBAR], ['spy', 'SPY', MORADO]]
 
 // La configuración del constructor ↔ lo que se guarda en el navegador.
 const uiDe = (config) => {
+  if (config.regla.id === 'filtro') { const f = config.regla.filtro
+    return { regla: 'filtro', periodoMedia: String(f.periodo), evaluacion: f.evaluacion, alcance: f.alcance, pct: '10', ventana: '252', pctEtf: '50', frecuencia: 'anual', etf: config.etf } }
   if (config.regla.id === 'mezcla') { const w = config.regla.estados.MEZCLA.pesos
     return { regla: 'mezcla', pctEtf: String(Math.round(w.ETF * 1000) / 10).replace('.', ','), frecuencia: config.regla.transiciones.find(t => t.calendario)?.calendario || 'anual', pct: '10', ventana: '252', etf: config.etf } }
   const c = config.regla.transiciones.flatMap(t => t.si || []).find(s => s.c === 'caidaDesdeMaximo')
   return { regla: config.regla.id, pct: String(c?.pct ?? 10).replace('.', ','), ventana: String(c?.ventana ?? 252), pctEtf: '50', frecuencia: 'anual', etf: config.etf } }
 const UI_DEFECTO = () => uiDe(configDeItem(CARTERA_1, 'V1'))
-const leeGuardado = () => { try { const x = JSON.parse(localStorage.getItem(CLAVE_LS) || 'null'); return x && ['sergi', 'simple', 'mezcla'].includes(x.regla) && ['QLD', 'TQQQ'].includes(x.etf) ? x : null } catch (_) { return null } }
-const periodosDe = (etf) => CARTERA_1.items.find(i => i.etf === etf).periodos
+// La regla del constructor y su ETF casan: las de CARTERA_1 / 2 con QLD o TQQQ; el filtro con un sintético ×2 / ×3.
+const uiValida = (x) => !!x && ((['sergi', 'simple', 'mezcla'].includes(x.regla) && ['QLD', 'TQQQ'].includes(x.etf)) || (x.regla === 'filtro' && ['x2', 'x3'].includes(x.etf)))
+const leeGuardado = () => { try { const x = JSON.parse(localStorage.getItem(CLAVE_LS) || 'null'); return uiValida(x) ? x : null } catch (_) { return null } }
+const esSintetico = (etf) => etf === 'x2' || etf === 'x3'
+const periodosDe = (etf) => esSintetico(etf) ? CARTERA_3.items[0].periodos : CARTERA_1.items.find(i => i.etf === etf).periodos
 // La regla con la caída y la ventana del constructor (si son las de CARTERA_1, sale idéntica a la del lote).
 function reglaDe(ui) {
+  if (ui.regla === 'filtro') { const p = numeroEs(ui.periodoMedia ?? '200'); return reglaFiltro(p == null ? NaN : p, ui.evaluacion === 'semanal' ? 'semanal' : 'diario', ui.alcance === 'todo' ? 'todo' : 'apalancado') }
   if (ui.regla === 'mezcla') { const p = numeroEs(ui.pctEtf ?? '50'); return reglaMezcla(p == null ? NaN : 100 - p, FRECUENCIAS[ui.frecuencia] ? ui.frecuencia : 'anual') }
   const pct = numeroEs(ui.pct), ventana = numeroEs(ui.ventana), base = ui.regla === 'simple' ? reglaSimple(pct) : reglaSergi(pct)
   return { ...base, transiciones: base.transiciones.map(t => ({ ...t, si: t.si.map(s => s.c === 'caidaDesdeMaximo' ? { ...s, ventana } : s) })) }
@@ -65,10 +77,15 @@ function Tabla({ cab, filas }) {
 
 // El diagrama de estados: cajas y flechas numeradas; debajo, cada flecha con su condición en palabras.
 const NUMEROS = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧']
+// Lo que tiene la cartera en un estado, corto para su caja (en el filtro, el texto de FUERA no cabe: forma parte de la huella
+// del lote, así que se acorta solo al dibujarlo).
+const composicionCorta = (regla, id) => regla.id === 'filtro' && id === 'FUERA' ? (regla.filtro?.alcance === 'todo' ? '100 % liquidez' : 'QQQ + liquidez (0 %)') : regla.estados[id].composicion.split(' (')[0]
 export function DiagramaEstados({ regla }) {
-  const ids = Object.keys(regla.estados), W = 520, H = ids.length > 2 ? 230 : 120, bw = 130, bh = 46
+  // Con dos estados y un bucle (el rebalanceo anual del filtro), las cajas bajan para que quepa el bucle encima.
+  const bucle2 = Object.keys(regla.estados).length === 2 && regla.transiciones.some(t => t.desde === t.hacia)
+  const ids = Object.keys(regla.estados), W = 520, H = ids.length > 2 ? 230 : bucle2 ? 150 : 120, bw = 130, bh = 46
   const pos = ids.length > 2 ? { [ids[0]]: [20, 20], [ids[1]]: [W - bw - 20, 20], [ids[2]]: [(W - bw) / 2, H - bh - 16] }
-    : ids.length === 2 ? { [ids[0]]: [20, (H - bh) / 2], [ids[1]]: [W - bw - 20, (H - bh) / 2] } : { [ids[0]]: [(W - bw) / 2, H - bh - 14] }
+    : ids.length === 2 ? { [ids[0]]: [20, bucle2 ? H - bh - 16 : (H - bh) / 2], [ids[1]]: [W - bw - 20, bucle2 ? H - bh - 16 : (H - bh) / 2] } : { [ids[0]]: [(W - bw) / 2, H - bh - 14] }
   const centro = (id) => [pos[id][0] + bw / 2, pos[id][1] + bh / 2]
   // Recorta la línea al borde de la caja de destino.
   const borde = ([x0, y0], [x1, y1]) => { const dx = x1 - x0, dy = y1 - y0, tx = dx ? (bw / 2 + 6) / Math.abs(dx) : Infinity, ty = dy ? (bh / 2 + 6) / Math.abs(dy) : Infinity, t = Math.min(tx, ty); return [x1 - dx * t, y1 - dy * t] }
@@ -99,7 +116,7 @@ export function DiagramaEstados({ regla }) {
         {ids.map(id => (<g key={id}>
           <rect x={pos[id][0]} y={pos[id][1]} width={bw} height={bh} rx="6" fill="var(--bg3)" stroke={id === regla.inicial ? 'var(--accent)' : 'var(--border)'} />
           <text x={pos[id][0] + bw / 2} y={pos[id][1] + 19} textAnchor="middle" fontSize="12" fontWeight="700" fontFamily={MONO} fill="var(--text)">{id}</text>
-          <text x={pos[id][0] + bw / 2} y={pos[id][1] + 35} textAnchor="middle" fontSize="10" fontFamily={MONO} fill="var(--text-legible)">{regla.estados[id].composicion.split(' (')[0]}</text>
+          <text x={pos[id][0] + bw / 2} y={pos[id][1] + 35} textAnchor="middle" fontSize="10" fontFamily={MONO} fill="var(--text-legible)">{composicionCorta(regla, id)}</text>
         </g>))}
       </svg>
       <ol style={{ margin: '6px 0 0', paddingLeft: 0, listStyle: 'none', fontSize: TAM, lineHeight: 1.5 }}>
@@ -110,8 +127,9 @@ export function DiagramaEstados({ regla }) {
 }
 
 // La curva (escala logarítmica) de la cartera frente a las referencias.
-function Curva({ curva }) {
+function Curva({ curva, nombres = {} }) {
   if (!curva?.fechas?.length) return null
+  const SERIES = SERIES_BASE.map(([k, n, c]) => [k, nombres[k] || n, c])
   const W = 700, H = 240, m = { l: 46, r: 8, t: 8, b: 22 }, n = curva.fechas.length
   const todos = SERIES.flatMap(([k]) => curva[k] || []).filter(v => v > 0), lmin = Math.log(Math.min(...todos)), lmax = Math.log(Math.max(...todos))
   const x = (j) => m.l + (W - m.l - m.r) * (n > 1 ? j / (n - 1) : 0), y = (v) => m.t + (H - m.t - m.b) * (1 - (Math.log(v) - lmin) / ((lmax - lmin) || 1))
@@ -161,17 +179,52 @@ function CurvaRiesgo({ periodo, familias }) {
   )
 }
 
+// El mapa de la media: una línea por alcance y evaluación (el periodo de la semanal × 5, en días de mercado, para compartir
+// el eje), el CAGR / caída del total en vertical; los puntos de la zona estable, rellenos; la mezcla sin filtro, a trazos.
+const COLOR_ALCANCE = { apalancado: AMBAR, todo: 'var(--accent)' }
+function GraficoMapaMedia({ parte }) {
+  const W = 700, H = 300, m = { l: 52, r: 16, t: 14, b: 34 }, ref = parte.referencias?.find(r => r.papel === 'total')
+  const lineas = parte.lineas.map(l => ({ l, ps: l.valores.map(v => ({ x: l.evaluacion === 'semanal' ? v.periodo * 5 : v.periodo, y: v.total.cagrPorCaida, z: v.zonaEstable, p: v.periodo })).filter(p => p.y != null) }))
+  const ys = [...lineas.flatMap(x => x.ps.map(p => p.y)), ...(ref?.mezcla?.cagrPorCaida != null ? [ref.mezcla.cagrPorCaida] : [])]
+  const x0 = 0, x1 = 260, y0 = Math.min(0, ...ys), y1 = (Math.max(...ys) * 1.1) || 1
+  const X = (v) => m.l + (W - m.l - m.r) * (v - x0) / (x1 - x0), Y = (v) => m.t + (H - m.t - m.b) * (1 - (v - y0) / ((y1 - y0) || 1))
+  const paso = y1 - y0 > 2 ? 0.5 : y1 - y0 > 0.8 ? 0.2 : 0.1, marcasY = []
+  for (let v = Math.ceil(y0 / paso) * paso; v <= y1 + 1e-9; v += paso) marcasY.push(Math.round(v * 100) / 100)
+  return (
+    <div data-prueba="grafico-mapa">
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: 'block' }} role="img" aria-label="Mapa de la media: CAGR / caída máxima según el periodo de la media">
+        {marcasY.map(v => <g key={`y${v}`}><line x1={m.l} x2={W - m.r} y1={Y(v)} y2={Y(v)} stroke="var(--border)" strokeWidth="0.6" /><text x={m.l - 4} y={Y(v) + 3} textAnchor="end" fontSize="9" fontFamily={MONO} fill="var(--text-legible)">{num(v, 2)}</text></g>)}
+        {[20, 50, 100, 150, 200, 250].map(v => <text key={`x${v}`} x={X(v)} y={H - m.b + 14} textAnchor="middle" fontSize="9" fontFamily={MONO} fill="var(--text-legible)">{v} d · {v / 5} s</text>)}
+        <text x={(m.l + W - m.r) / 2} y={H - 4} textAnchor="middle" fontSize="10" fontFamily={MONO} fill="var(--text-legible)">periodo de la SMA (días de mercado; semanas × 5)</text>
+        <text x={12} y={(m.t + H - m.b) / 2} textAnchor="middle" fontSize="10" fontFamily={MONO} fill="var(--text-legible)" transform={`rotate(-90 12 ${(m.t + H - m.b) / 2})`}>CAGR / caída</text>
+        {ref?.mezcla?.cagrPorCaida != null && <g><line x1={m.l} x2={W - m.r} y1={Y(ref.mezcla.cagrPorCaida)} y2={Y(ref.mezcla.cagrPorCaida)} stroke={GRIS} strokeWidth="1.2" strokeDasharray="5 4" /><text x={W - m.r - 4} y={Y(ref.mezcla.cagrPorCaida) - 4} textAnchor="end" fontSize="9" fontFamily={MONO} fill={GRIS}>mezcla sin filtro</text></g>}
+        {lineas.map(({ l, ps }) => { const c = COLOR_ALCANCE[l.alcance], sem = l.evaluacion === 'semanal'
+          return (<g key={`${l.alcance}|${l.evaluacion}`}>
+            <polyline fill="none" stroke={c} strokeWidth="1.4" strokeDasharray={sem ? '4 3' : undefined} points={ps.map(p => `${X(p.x).toFixed(1)},${Y(p.y).toFixed(1)}`).join(' ')} />
+            {ps.map(p => <circle key={p.p} cx={X(p.x)} cy={Y(p.y)} r="3" fill={p.z ? c : 'var(--bg2)'} stroke={c} strokeWidth="1.2"><title>{`${nombreLineaMapa(l)} · SMA ${p.p}${sem ? ' semanas' : ''}: ${num(p.y, 2)}`}</title></circle>)}
+          </g>) })}
+      </svg>
+      <div style={{ display: 'flex', gap: 14, fontSize: TAM, marginTop: 4, flexWrap: 'wrap' }}>{parte.lineas.map(l => <span key={`${l.alcance}|${l.evaluacion}`}><span style={{ display: 'inline-block', width: 16, height: 0, borderTop: `2px ${l.evaluacion === 'semanal' ? 'dashed' : 'solid'} ${COLOR_ALCANCE[l.alcance]}`, verticalAlign: 'middle', marginRight: 5 }} />{nombreLineaMapa(l)}</span>)}<span style={{ color: GRIS }}>● zona estable · ○ fuera de ella</span></div>
+    </div>
+  )
+}
+const ARTICULO_EXPL = { curvaRiesgo: ['la', 'de la'], sensibilidad: ['el', 'del'], estres: ['la', 'de la'], mapaMedia: ['el', 'del'] }
+
 export default function CarteraPanel({ apiFetch, version = null }) {
   const [ui, setUi] = useState(() => leeGuardado() || UI_DEFECTO())
   useEffect(() => { try { localStorage.setItem(CLAVE_LS, JSON.stringify(ui)) } catch (_) {} }, [ui])
   const regla = useMemo(() => reglaDe(ui), [ui])
   // Una mezcla se compara siempre con la regla simple de CARTERA_1 del mismo ETF (V3 / V4), como en CARTERA_2.
-  const config = useMemo(() => configCarteraDe({ regla, etf: ui.etf, periodos: periodosDe(ui.etf), comparaCon: regla.id === 'mezcla' ? CARTERA_2.items.find(i => i.etf === ui.etf).comparaCon : undefined }, CARTERA_1.comun), [regla, ui.etf])
+  // El filtro de tendencia se arma con lo común de CARTERA_3 (ETF sintético, sus periodos desde 1999): con su misma regla
+  // sale idéntico a un elemento del lote.
+  const config = useMemo(() => configCarteraDe({ regla, etf: ui.etf, periodos: periodosDe(ui.etf), comparaCon: regla.id === 'mezcla' ? CARTERA_2.items.find(i => i.etf === ui.etf).comparaCon : undefined }, regla.id === 'filtro' ? CARTERA_3.comun : CARTERA_1.comun), [regla, ui.etf])
   const [pestana, setPestana] = useState('probar')
-  const errores = useMemo(() => validaConfig(config), [config])
+  const errores = useMemo(() => [...new Set(validaConfig(config))], [config])
   const [clas, setClas] = useState(null)
   useEffect(() => { let vivo = true; clasificaConfig(config).then(c => { if (vivo) setClas(c) }).catch(() => { if (vivo) setClas(null) }); return () => { vivo = false } }, [config])
   const pon = (k, v) => setUi(u => ({ ...u, [k]: v }))
+  // Al cambiar de regla, el ETF pasa a uno que le sirva (el filtro trabaja con los sintéticos).
+  const cambiaRegla = (v) => setUi(u => ({ ...u, regla: v, etf: v === 'filtro' ? (esSintetico(u.etf) ? u.etf : 'x3') : (esSintetico(u.etf) ? 'QLD' : u.etf) }))
 
   // ── Registro ──
   const [registro, setRegistro] = useState({ contador: null, lotes: null, historial: [], error: null, cargando: false })
@@ -180,10 +233,10 @@ export default function CarteraPanel({ apiFetch, version = null }) {
     setRegistro(r => ({ ...r, cargando: true }))
     try {
       const ctx = ctxRegistro()
-      const [contador, l1, l2, hc, he] = await Promise.all([cuentaPruebas(ctx), estadoLote(ctx, CARTERA_1), estadoLote(ctx, CARTERA_2),
+      const [contador, l1, l2, l3, hc, he] = await Promise.all([cuentaPruebas(ctx), estadoLote(ctx, CARTERA_1), estadoLote(ctx, CARTERA_2), estadoLote(ctx, CARTERA_3),
         listarPruebas(ctx, { limite: 100, select: SELECT_HISTORIAL, filtro: '&config->>prueba=eq.cartera' }), listarPruebas(ctx, { limite: 50, select: SELECT_HISTORIAL, filtro: '&config->>prueba=eq.exploracion' })])
       const historial = [...hc, ...he].sort((a, b) => a.creado < b.creado ? 1 : a.creado > b.creado ? -1 : b.id - a.id)
-      setRegistro({ contador, lotes: { CARTERA_1: l1, CARTERA_2: l2 }, historial, error: null, cargando: false })
+      setRegistro({ contador, lotes: { CARTERA_1: l1, CARTERA_2: l2, CARTERA_3: l3 }, historial, error: null, cargando: false })
     } catch (e) { setRegistro(r => ({ ...r, error: e?.message || 'No se pudo leer el registro.', cargando: false })) }
   }, [])
   useEffect(() => { recarga() }, [recarga])
@@ -210,7 +263,9 @@ export default function CarteraPanel({ apiFetch, version = null }) {
     const res = { config: cfg, clas: c, periodos, veredicto, id: null, creado: null, errorGuardar: null }
     try {
       // La curva, con menos puntos: el resumen tiene que caber en 50 KB.
-      const fila = await guardarPrueba({ config: cfg, resultados: { periodos: periodos.map(p => ({ ...p, curva: reduceCurva(p.curva, 8) })), veredicto, datos: [] }, versionApp: version }, ctxRegistro())
+      // Con el filtro (cinco periodos desde 1999), además los números a 6 decimales: si no, no cabe.
+      const resumen = { periodos: periodos.map(p => ({ ...p, curva: reduceCurva(p.curva, 8) })), veredicto, datos: [] }
+      const fila = await guardarPrueba({ config: cfg, resultados: esConfigFiltro(cfg) ? redondeaParaGuardar(resumen) : resumen, versionApp: version }, ctxRegistro())
       res.id = fila?.id ?? null; res.creado = fila?.creado ?? null
     } catch (e) { res.errorGuardar = `No se pudo guardar en el registro: ${e?.message || e}` }
     return res
@@ -246,10 +301,11 @@ export default function CarteraPanel({ apiFetch, version = null }) {
   const [etfExpl, setEtfExpl] = useState('QLD')
   const [perExpl, setPerExpl] = useState(3)
   const [perEstres, setPerEstres] = useState(0)
+  const [lineaMapa, setLineaMapa] = useState(0)
   const lanzaExploracion = async (tipo) => {
     const cfg = EXPLORACIONES[tipo]
     if (progreso) return
-    if (typeof window !== 'undefined' && !window.confirm(`Se va a ejecutar ${tipo === 'sensibilidad' ? 'el' : 'la'} ${cfg.nombre.toLowerCase()} (${cfg.etfs.map(nombreEtfExpl).join(' y ')}): queda registrada y cuenta como ${cfg.combinaciones} pruebas exploratorias. ¿Seguir?`)) return
+    if (typeof window !== 'undefined' && !window.confirm(`Se va a ejecutar ${ARTICULO_EXPL[tipo]?.[0] || 'la'} ${cfg.nombre.toLowerCase()} (${cfg.etfs.map(nombreEtfExpl).join(' y ')}): queda registrada y cuenta como ${cfg.combinaciones} pruebas exploratorias. ¿Seguir?`)) return
     parar.current = false; setErrorEjec(null)
     const inicio = Date.now(), partes = {}
     setAhora(inicio)
@@ -275,13 +331,14 @@ export default function CarteraPanel({ apiFetch, version = null }) {
     setErrorEjec(null)
     try { const f = await leerPrueba(ctxRegistro(), id); if (esConfigExploracion(f.config)) { verExploracion(f); return } setPestana('probar'); const ps = f.resultados?.periodos || []
       // La «Próxima prueba» se rellena con la configuración del resultado abierto.
-      try { const u = uiDe(f.config); if (['sergi', 'simple', 'mezcla'].includes(u.regla) && ['QLD', 'TQQQ'].includes(u.etf)) setUi(u) } catch (_) {}
+      try { const u = uiDe(f.config); if (uiValida(u)) setUi(u) } catch (_) {}
       setResultado({ config: f.config, clas: { hash: f.hash_config, oficial: f.oficial, lote: f.lote, item: f.item_lote }, periodos: ps, veredicto: f.resultados?.veredicto || '—', id: f.id, creado: f.creado, errorGuardar: null, version: f.version_app })
       setVerPeriodo(Math.max(0, ps.length - 1))
     } catch (e) { setErrorEjec(e?.message || String(e)) }
   }
+  const comunDe = (cfg) => esConfigFiltro(cfg) ? CARTERA_3.comun : CARTERA_1.comun
   const textoCopia = () => textoLaboratorio({ cabecera: { titulo: 'Laboratorio de cartera', version: resultado.version || version, fecha: fmtDate(resultado.creado || new Date().toISOString()),
-    datos: [['Precios', CARTERA_1.comun.precios], ['Ejecución', CARTERA_1.comun.ejecucion], ['Liquidez', CARTERA_1.comun.liquidez], ['Inicio de cada periodo', CARTERA_1.comun.inicio]] },
+    datos: [['Precios', comunDe(resultado.config).precios], ['Ejecución', comunDe(resultado.config).ejecucion], ['Liquidez', comunDe(resultado.config).liquidez], ['Inicio de cada periodo', comunDe(resultado.config).inicio]] },
     regla: reglaCarteraCorta(resultado.config), clas: resultado.clas, config: resultado.config, veredicto: resultado.veredicto, periodos: resultado.periodos, id: resultado.id })
   const seg = progreso ? Math.max(0, Math.round((ahora - progreso.inicio) / 1000)) : 0
   // La pestaña «Explorar» (lado derecho): la curva de riesgo o el mapa de sensibilidad, con su aviso, «Cómo leer esto» y la copia.
@@ -321,6 +378,71 @@ export default function CarteraPanel({ apiFetch, version = null }) {
       </>)}
     </>)
   }
+  // El mapa de la media (pestaña «Explorar»): gráfico, una tabla por línea, zona estable, fuera de muestra y referencias.
+  function vistaMapa(e, cfgE, etfV) {
+    const parte = e.partes?.[etfV]
+    if (!parte) return <div style={{ ...caja, fontSize: TAM, color: GRIS }}>Sin datos del {nombreEtfExpl(etfV)} en esta exploración.</div>
+    const kL = Math.min(lineaMapa, parte.lineas.length - 1), l = parte.lineas[kL], tot = parte.referencias?.find(r => r.papel === 'total')
+    return (<>
+      <div style={caja}>
+        <div style={etiqueta}>Mapa de la media · {nombreEtfExpl(etfV)}{tot ? ` · ${periodoCartera({ ...tot, total: true })}` : ''}</div>
+        <GraficoMapaMedia parte={parte} />
+      </div>
+      <div style={caja} data-prueba="tabla-mapa">
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
+          {parte.lineas.map((x, k) => <button key={k} onClick={() => setLineaMapa(k)} aria-pressed={k === kL} style={k === kL ? botonPrincipal : boton}>{nombreLineaMapa(x)}</button>)}
+        </div>
+        <Tabla cab={cabMapaMedia(l)} filas={filasMapaMedia(l)} />
+        <div style={{ fontSize: TAM, marginTop: 6 }} data-prueba="zona-mapa">{textoZonaMapa(l, cfgE.zonaEstable)}</div>
+        <div style={{ fontSize: TAM, color: GRIS, marginTop: 4 }}>Medidas del total salvo las dos últimas columnas. Cambios: salidas + entradas. Tiempo fuera: parte de los días fuera del mercado (liquidez al 0 %).</div>
+      </div>
+      <div style={{ ...caja, borderColor: 'var(--accent)' }} data-prueba="fuera-mapa">
+        <div style={etiqueta}>Comprobación fuera de muestra · {nombreLineaMapa(l)}</div>
+        <div style={{ fontSize: TAM, lineHeight: 1.5 }}>{textoFueraMapa(l)}</div>
+      </div>
+      <div style={caja}>
+        <div style={etiqueta}>Referencias (sin filtro)</div>
+        <Tabla cab={CAB_REF_MAPA} filas={filasRefMapa(parte)} />
+      </div>
+    </>)
+  }
+  // El resultado de una prueba con el filtro de tendencia (CARTERA_3 o una exploratoria con esa regla).
+  function vistaResultadoFiltro() {
+    const ps = resultado.periodos, tot = ps.find(p => p.total), cal = resultado.clas?.oficial ? calibracionDe(resultado.clas.lote, resultado.clas.item) : null
+    return (<>
+      <div style={caja} data-prueba="resultado-filtro">
+        <div style={etiqueta}>Resultado por periodo</div>
+        <Tabla cab={CAB_FILTRO} filas={filasFiltro(ps)} />
+        <div data-prueba="criterio" style={{ fontSize: TAM, marginTop: 6 }}>{textoCriterio(resultado.clas || {}, resultado.clas?.oficial ? 'cartera' : 'filtro')}</div>
+        {notaMediaDesde(ps) && <div style={{ fontSize: TAM, color: GRIS, marginTop: 4 }}>{notaMediaDesde(ps)}</div>}
+        <div style={{ marginTop: 10 }} data-prueba="referencias-filtro"><Tabla cab={CAB_FILTRO_REF} filas={filasFiltroRef(ps)} /></div>
+      </div>
+      <div style={caja} data-prueba="azar-filtro">
+        <div style={etiqueta}>Prueba contra el azar</div>
+        <Tabla cab={CAB_AZAR_FILTRO} filas={filasAzarFiltro(ps)} />
+        <div style={{ fontSize: TAM, color: GRIS, marginTop: 6 }}>Los periodos FUERA reales, con sus duraciones, colocados al azar en el periodo sin solaparse ({num(N_SIM_CARTERA, 0)} simulaciones, semilla fija). El percentil dice cuántas de cada 100 colocaciones al azar dieron un CAGR / caída peor: si el filtro sale de verdad en los malos momentos, debería quedar arriba.</div>
+      </div>
+      {tot?.anioAnio && (<div style={caja} data-prueba="anio-filtro">
+        <div style={etiqueta}>Año a año · {periodoCartera(tot)}</div>
+        <Tabla cab={CAB_ANIO_FILTRO} filas={filasAnioFiltro(tot)} />
+      </div>)}
+      {pVer && (<div style={caja} data-prueba="fuera-filtro">
+        <div style={etiqueta}>Periodos FUERA más largos · {periodoCartera(pVer)} ({num(pVer.ciclos, 0)} en total)</div>
+        {pVer.tablaCiclos?.length ? <Tabla cab={CAB_FUERA} filas={filasFuera(pVer)} /> : <div style={{ fontSize: TAM, color: GRIS }}>Ningún periodo FUERA en este periodo.</div>}
+      </div>)}
+      {pVer && (<details style={caja}>
+        <summary style={{ ...etiqueta, cursor: 'pointer', marginBottom: 0 }}>Impuestos (estimación) · {periodoCartera(pVer)}</summary>
+        <div style={{ marginTop: 8 }}>{pVer.impuestos?.plusvaliasPorAnio?.length ? <Tabla cab={CAB_IMPUESTOS} filas={filasImpuestos(pVer)} /> : <div style={{ fontSize: TAM, color: GRIS }}>Sin plusvalías realizadas.</div>}</div>
+        <div style={{ fontSize: TAM, marginTop: 6 }}>{resumenImpuestos(pVer)}</div>
+        <div style={{ fontSize: TAM, color: GRIS, marginTop: 6 }}>{NOTA_IMPUESTOS}</div>
+      </details>)}
+      <div style={caja} data-prueba="calibracion">
+        <div style={etiqueta}>Calibración de esta variante</div>
+        {!resultado.clas?.oficial ? <div style={{ fontSize: TAM, color: GRIS }}>Exploratoria: no tiene calibración propia.</div> : cal ? <Tabla cab={CAB_CAL_FILTRO} filas={[filaCalibracionFiltro(cal)]} /> : <div style={{ fontSize: TAM, color: AMBAR }}>Sin calibración: el azar no da veredicto.</div>}
+        <div style={{ fontSize: TAM, color: GRIS, marginTop: 6 }}>{notaCalibracionFiltro(calibracionLote('CARTERA_3'))} Si el percentil del total sale 95 o más en más del 10 % de esos mercados sin ventaja, el azar no juzga bien la variante. «Mejora a la mezcla sin ventaja» es informativo: cuántas veces el filtro mejora el CAGR / caída solo por suerte.</div>
+      </div>
+    </>)
+  }
   function vistaExplorar() {
     const etfsV = EXPLORACIONES[verExpl].etfs, etfV = etfsV.includes(etfExpl) ? etfExpl : etfsV[0]
     const e = expl[verExpl], parte = e?.partes?.[etfV], cfgE = e?.config
@@ -332,12 +454,13 @@ export default function CarteraPanel({ apiFetch, version = null }) {
         {etfsV.map(x => <button key={x} onClick={() => setEtfExpl(x)} aria-pressed={etfV === x} style={etfV === x ? botonPrincipal : boton}>{nombreEtfExpl(x)}</button>)}
       </div>
       {verExpl === 'estres' && validacionSinteticos()}
-      {!e ? <div style={{ ...caja, fontSize: TAM, color: GRIS }}>Todavía no hay resultado {verExpl === 'sensibilidad' ? 'del' : 'de la'} {EXPLORACIONES[verExpl].nombre.toLowerCase()}: ejecútala a la izquierda o ábrela del historial.</div> : (<div data-prueba="exploracion">
+      {verExpl === 'mapaMedia' && <div style={{ ...caja, borderColor: AMBAR, fontSize: TAM, color: AMBAR }} data-prueba="aviso-mapa">{AVISO_LIQUIDEZ} {AVISO_SINTETICOS}</div>}
+      {!e ? <div style={{ ...caja, fontSize: TAM, color: GRIS }}>Todavía no hay resultado {ARTICULO_EXPL[verExpl]?.[1] || 'de la'} {EXPLORACIONES[verExpl].nombre.toLowerCase()}: ejecútala a la izquierda o ábrela del historial.</div> : (<div data-prueba="exploracion">
         <div style={caja}>
           <div style={{ fontSize: TAM, color: GRIS }}>{cfgE.nombre} · {cfgE.combinaciones} combinaciones (cuentan como pruebas exploratorias) · huella {String(e.clas?.hash || '').slice(0, 12)}… · {e.id != null ? `prueba ${e.id}${e.creado ? `, ${fmtDate(e.creado)}` : ''}` : 'no guardada'}</div>
           <div style={{ marginTop: 8 }}><BotonCopiar obtenerTexto={textoCopiaExpl} /></div>
         </div>
-        {cfgE.tipo === 'estres' ? vistaEstres(e, cfgE, etfV) : !parte ? <div style={{ ...caja, fontSize: TAM, color: GRIS }}>Sin datos de {etfV} en esta exploración.</div> : cfgE.tipo === 'curvaRiesgo' ? (<>
+        {cfgE.tipo === 'mapaMedia' ? vistaMapa(e, cfgE, etfV) : cfgE.tipo === 'estres' ? vistaEstres(e, cfgE, etfV) : !parte ? <div style={{ ...caja, fontSize: TAM, color: GRIS }}>Sin datos de {etfV} en esta exploración.</div> : cfgE.tipo === 'curvaRiesgo' ? (<>
           <div style={caja}>
             <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
               <span style={{ ...etiqueta, marginBottom: 0 }}>Periodo</span>
@@ -371,6 +494,7 @@ export default function CarteraPanel({ apiFetch, version = null }) {
           <li><b>Prueba de estrés 1999–2025</b>: la Mezcla fija (rebalanceo anual) con un ETF ×2 o ×3 <b>sintético</b> desde 1999, para ver la burbuja de 2000–2002 y la crisis de 2008, que QLD y TQQQ no vivieron enteras. El sintético multiplica cada día el rendimiento del QQQ y resta su coste (comisión, el tipo a corto del dinero prestado y un ajuste calibrado). La <b>validación</b> de arriba dice cuánto se parece al real donde los dos existen: si la diferencia media anual es pequeña y la correlación diaria es casi 1, el sintético es creíble; antes de 2006 es una reconstrucción.</li>
           <li><b>Tiempo bajo el agua</b>: cuántos días pasan desde el pico de la peor caída hasta volver a él. «Sin recuperar» significa que al final del periodo todavía no había vuelto. Es lo que más cuesta aguantar: una caída muy profunda puede tardar muchos años en recuperarse.</li>
           <li><b>Año a año</b>: el rendimiento de cada año natural del {EXPLORACIONES.estres.anioAnio} % en el ETF frente a QQQ y SPY, para ver los años malos seguidos.</li>
+          <li><b>Mapa de la media</b>: la mezcla con filtro de tendencia (×3 sintético) con distintas medias, en diario (días) y en semanal (semanas; en el gráfico, × 5 para compartir eje). Mide el CAGR / caída máxima: rendimiento por cada punto de caída. Si la línea sube y baja mucho de un valor al de al lado, el resultado es frágil; la <b>zona estable</b> son los valores a menos del 10 % del mejor. <b>Fuera de muestra</b>: se elige la mejor media mirando solo 1999–2010 y se ve qué hizo en 2011–2025, frente a la mediana y a las medias de 50 y 200 días (10 y 40 semanas). Liquidez al 0 %.</li>
           <li>El valor neto de impuestos es una estimación (10.000 € al empezar, ventas FIFO, tramos del ahorro).</li>
         </ul>
       </div>
@@ -394,7 +518,9 @@ export default function CarteraPanel({ apiFetch, version = null }) {
           {Object.values(EXPLORACIONES).map(e => (
             <div key={e.tipo} style={caja}>
               <div style={etiqueta}>{e.nombre}</div>
-              <div style={{ fontSize: TAM, color: GRIS, marginBottom: 8 }}>{e.tipo === 'estres'
+              <div style={{ fontSize: TAM, color: GRIS, marginBottom: 8 }}>{e.tipo === 'mapaMedia'
+                ? `Mezcla con filtro de tendencia con el ×3 sintético, SMA de ${e.diario[0]} a ${e.diario[e.diario.length - 1]} días (de 10 en 10) en diario y de ${e.semanal[0]} a ${e.semanal[e.semanal.length - 1]} semanas (de 2 en 2) en semanal, para los dos alcances (${e.alcances.map(a => NOMBRE_ALCANCE[a]).join(' y ')}); por valor: CAGR, caída máxima, CAGR / caída, tiempo fuera y cambios; zona estable y fuera de muestra (elegir en 1999–2010, comprobar en 2011–2025). ${e.combinaciones} combinaciones. Liquidez al 0 %.`
+                : e.tipo === 'estres'
                 ? `Mezcla fija con rebalanceo anual, % en el ETF de 0 a 100 en saltos de 10, con un ETF ×2 y ×3 sintético sobre el QQQ desde 1999; periodos ${e.periodos.map(periodoCartera).join(', ')}; por periodo: CAGR, caída máxima, tiempo bajo el agua, peor año, CAGR / caída y valor final neto; año a año del ${e.anioAnio} %. ${e.combinaciones} combinaciones. ${AVISO_SINTETICOS}`
                 : e.tipo === 'curvaRiesgo'
                 ? `% de la cartera en el ETF de 0 a 100 en saltos de 10, para ${e.familias.map(f => f.nombre).join(' y ')}; ${e.etfs.join(' y ')}; por periodo: CAGR, caída máxima, peor año, CAGR / caída y valor final neto. ${e.combinaciones} combinaciones.`
@@ -409,10 +535,17 @@ export default function CarteraPanel({ apiFetch, version = null }) {
           <div style={etiqueta}>La regla</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, fontSize: TAM, color: GRIS }}>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>Regla
-              <select value={ui.regla} onChange={e => pon('regla', e.target.value)} style={entrada}><option value="sergi">Regla de Sergi</option><option value="simple">Regla simple</option><option value="mezcla">Mezcla fija</option></select></label>
+              <select value={ui.regla} onChange={e => cambiaRegla(e.target.value)} style={entrada}><option value="sergi">Regla de Sergi</option><option value="simple">Regla simple</option><option value="mezcla">Mezcla fija</option><option value="filtro">Mezcla con filtro de tendencia</option></select></label>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>ETF
-              <select value={ui.etf} onChange={e => pon('etf', e.target.value)} style={entrada}><option value="QLD">QLD (×2)</option><option value="TQQQ">TQQQ (×3)</option></select></label>
-            {ui.regla === 'mezcla' ? (<>
+              <select value={ui.etf} onChange={e => pon('etf', e.target.value)} style={entrada}>{ui.regla === 'filtro' ? <><option value="x2">×2 sintético</option><option value="x3">×3 sintético</option></> : <><option value="QLD">QLD (×2)</option><option value="TQQQ">TQQQ (×3)</option></>}</select></label>
+            {ui.regla === 'filtro' ? (<>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>SMA ({ui.evaluacion === 'semanal' ? 'semanas' : 'días'})
+              <input type="text" inputMode="numeric" value={ui.periodoMedia ?? '200'} onChange={e => pon('periodoMedia', e.target.value)} style={{ ...entrada, width: 70 }} /></label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>Evaluación
+              <select value={ui.evaluacion || 'diario'} onChange={e => pon('evaluacion', e.target.value)} style={entrada}><option value="diario">diaria</option><option value="semanal">semanal</option></select></label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>Al salir
+              <select value={ui.alcance || 'apalancado'} onChange={e => pon('alcance', e.target.value)} style={entrada}><option value="apalancado">{NOMBRE_ALCANCE.apalancado}</option><option value="todo">{NOMBRE_ALCANCE.todo}</option></select></label>
+            </>) : ui.regla === 'mezcla' ? (<>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>% en el ETF
               <input type="text" inputMode="decimal" value={ui.pctEtf ?? '50'} onChange={e => pon('pctEtf', e.target.value)} style={{ ...entrada, width: 70 }} /></label>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>Rebalanceo
@@ -424,7 +557,7 @@ export default function CarteraPanel({ apiFetch, version = null }) {
               <input type="text" inputMode="numeric" value={ui.ventana} onChange={e => pon('ventana', e.target.value)} style={{ ...entrada, width: 70 }} /></label>
             </>)}
           </div>
-          <div style={{ fontSize: TAM, color: GRIS, marginTop: 6 }}>Periodos ({ui.etf}): {periodosDe(ui.etf).map(periodoCartera).join(', ')} · {ui.regla === 'mezcla' ? `rebalanceo ${FRECUENCIAS[ui.frecuencia] || ''} a la apertura · sin azar (no elige momentos) · se compara con la regla simple de CARTERA_1 del mismo ETF` : 'cada periodo empieza en NORMAL'} · liquidez al 0 % · rentabilidad total</div>
+          <div style={{ fontSize: TAM, color: GRIS, marginTop: 6 }}>Periodos ({nombreEtfCartera(ui.etf)}): {periodosDe(ui.etf).map(periodoCartera).join(', ')} · {ui.regla === 'filtro' ? `${textoMediaFiltro(regla.filtro)} del QQQ al cierre, ejecución a la apertura siguiente · cada periodo empieza DENTRO o FUERA según la media · ETF sintético (antes de 2006, reconstrucción) · azar: los periodos FUERA al azar, medida CAGR / caída` : ui.regla === 'mezcla' ? `rebalanceo ${FRECUENCIAS[ui.frecuencia] || ''} a la apertura · sin azar (no elige momentos) · se compara con la regla simple de CARTERA_1 del mismo ETF` : 'cada periodo empieza en NORMAL'} · liquidez al 0 % · rentabilidad total</div>
         </div>
         <div style={caja}>
           <div style={etiqueta}>Diagrama de estados</div>
@@ -436,12 +569,13 @@ export default function CarteraPanel({ apiFetch, version = null }) {
             <span data-prueba="tipo" style={{ fontSize: TAM, fontWeight: 700, padding: '1px 8px', borderRadius: 10, border: `1px solid ${clas?.oficial ? 'var(--accent)' : 'var(--border)'}`, color: clas?.oficial ? 'var(--accent)' : GRIS }}>{etiquetaTipo(clas)}</span>
           </div>
           <div data-prueba="frase" style={{ fontSize: 13 }}>{reglaCarteraCorta(config)}</div>
-          {!clas?.oficial && <div style={{ fontSize: TAM, color: GRIS, marginTop: 6 }}>Exploratoria: no coincide con ninguna variante de CARTERA_1 ni de CARTERA_2. Se registra y se cuenta, pero no tiene veredicto.</div>}
+          {ui.regla === 'filtro' && <div style={{ fontSize: TAM, color: AMBAR, marginTop: 6 }} data-prueba="aviso-liquidez">{AVISO_LIQUIDEZ}</div>}
+          {!clas?.oficial && <div style={{ fontSize: TAM, color: GRIS, marginTop: 6 }}>Exploratoria: no coincide con ninguna variante de CARTERA_1, CARTERA_2 ni CARTERA_3. Se registra y se cuenta, pero no tiene veredicto.</div>}
           {clas?.oficial && registro.lotes?.[clas.lote]?.[clas.item] && registro.lotes[clas.lote][clas.item].estado !== 'pendiente' && <div style={{ fontSize: TAM, color: AMBAR, marginTop: 6 }}>Esta variante ya se ejecutó. Repetirla da el mismo resultado y cuenta como otra prueba.</div>}
           {errores.length > 0 && <ul style={{ margin: '6px 0 0', paddingLeft: 18, fontSize: TAM, color: ROJO }}>{errores.map((e, i) => <li key={i}>{e}</li>)}</ul>}
           <div style={{ marginTop: 8 }}><button onClick={ejecutaActual} disabled={!!errores.length || !clas || !!progreso} style={{ ...botonPrincipal, opacity: errores.length || !clas || progreso ? 0.5 : 1 }}>▶ Ejecutar prueba</button></div>
         </div>
-        {[[CARTERA_1, 'cartera1'], [CARTERA_2, 'cartera2']].map(([lote, prueba]) => { const est = registro.lotes?.[lote.id], pend = pendientesDe(lote), sinAzar = CARTERA_2 === lote
+        {[[CARTERA_1, 'cartera1'], [CARTERA_2, 'cartera2'], [CARTERA_3, 'cartera3']].map(([lote, prueba]) => { const est = registro.lotes?.[lote.id], pend = pendientesDe(lote), sinAzar = CARTERA_2 === lote
           return (<div key={lote.id} style={caja}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
             <span style={etiqueta}>{lote.nombre}</span>
@@ -477,7 +611,7 @@ export default function CarteraPanel({ apiFetch, version = null }) {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap' }}>
               <div style={{ flex: 1, minWidth: 260 }}>
                 <div style={{ fontSize: 13 }}>{reglaCarteraCorta(resultado.config)}</div>
-                <div style={{ fontSize: TAM, color: GRIS, marginTop: 4 }}>{etiquetaTipo(resultado.clas)} · huella {String(resultado.clas?.hash || '').slice(0, 12)}… · {resultado.id != null ? `prueba ${resultado.id}${resultado.creado ? `, ${fmtDate(resultado.creado)}` : ''}` : 'no guardada'} · ciclos: {resultado.periodos.map(p => `${periodoCartera(p)} ${p.ciclos}`).join(' · ')}</div>
+                <div style={{ fontSize: TAM, color: GRIS, marginTop: 4 }}>{etiquetaTipo(resultado.clas)} · huella {String(resultado.clas?.hash || '').slice(0, 12)}… · {resultado.id != null ? `prueba ${resultado.id}${resultado.creado ? `, ${fmtDate(resultado.creado)}` : ''}` : 'no guardada'} · {esConfigFiltro(resultado.config) ? 'periodos FUERA' : 'ciclos'}: {resultado.periodos.map(p => `${periodoCartera(p)} ${p.ciclos}`).join(' · ')}</div>
               </div>
               <div style={{ textAlign: 'right', maxWidth: 300 }}><div style={etiqueta}>Veredicto (orientativo)</div><div data-prueba="veredicto" style={{ fontSize: 14, fontWeight: 700, color: COLOR_VEREDICTO[resultado.veredicto] || 'var(--text)' }}>{resultado.veredicto}</div></div>
             </div>
@@ -489,8 +623,10 @@ export default function CarteraPanel({ apiFetch, version = null }) {
               <span style={{ ...etiqueta, marginBottom: 0 }}>Curva</span>
               {resultado.periodos.map((p, k) => <button key={k} onClick={() => setVerPeriodo(k)} aria-pressed={k === verPeriodo} style={k === verPeriodo ? botonPrincipal : boton}>{periodoCartera(p)}</button>)}
             </div>
-            <Curva curva={pVer?.curva} />
+            <Curva curva={pVer?.curva} nombres={esConfigFiltro(resultado.config) ? { mitad: 'Mezcla sin filtro' } : {}} />
           </div>
+          {esConfigFiltro(resultado.config) && <div style={{ ...caja, borderColor: AMBAR, fontSize: TAM, color: AMBAR }} data-prueba="aviso-liquidez-resultado">{AVISO_LIQUIDEZ} {AVISO_SINTETICOS}</div>}
+          {esConfigFiltro(resultado.config) ? vistaResultadoFiltro() : (<>
           <div style={caja}>
             <div style={etiqueta}>Resultado por periodo</div>
             <Tabla cab={CAB_CARTERA} filas={filasCartera(resultado.periodos)} />
@@ -516,6 +652,7 @@ export default function CarteraPanel({ apiFetch, version = null }) {
             {!resultado.clas?.oficial ? <div style={{ fontSize: TAM, color: GRIS }}>Exploratoria: no tiene calibración propia.</div> : calR ? <Tabla cab={CAB_CAL_CARTERA} filas={[filaCalibracionCartera(calR)]} /> : <div style={{ fontSize: TAM, color: AMBAR }}>Sin calibración: el azar no da veredicto.</div>}
             <div style={{ fontSize: TAM, color: GRIS, marginTop: 6 }}>La misma variante sobre QQQ sintéticos sin ninguna ventaja posible (paseos aleatorios con la deriva y la volatilidad del QQQ real; ETF construidos a diario con su coste). Si el percentil del total sale 95 o más en más del 10 % de ellos, el azar no la juzga bien. Fíjate también en «supera a QQQ sin ventaja»: el apalancamiento solo, con un mercado que sube, ya bate al QQQ muchas veces.</div>
           </div>
+          </>)}
         </div>)}
         <div style={{ ...caja, fontSize: TAM, lineHeight: 1.5 }} data-prueba="como-leer">
           <div style={etiqueta}>Cómo leer esto</div>
@@ -526,6 +663,7 @@ export default function CarteraPanel({ apiFetch, version = null }) {
             <li><b>Azar</b> ({num(N_SIM_CARTERA, 0)} simulaciones): los mismos ciclos, con sus mismas entradas y salidas del ETF y sus duraciones, pero empezando en fechas al azar. El <b>percentil</b> dice cuántas de cada 100 salieron peor: responde a «¿importa CUÁNDO entra la regla, o daría lo mismo entrar cuando fuera?».</li>
             <li><b>Veredicto orientativo</b> (hay pocos ciclos, así que la estadística es débil): «mejor que comprar y mantener QQQ» si su CAGR es mayor en todos los subperiodos; «… y que el azar» si además el percentil del total es 95 o más y la variante está calibrada. Mira siempre cuántos ciclos hay.</li>
             <li>Los <b>impuestos</b> son una estimación (tramos del ahorro, ventas FIFO, 10.000 € al empezar); comprar y mantener solo paga al vender al final.</li>
+            <li><b>Mezcla con filtro de tendencia</b> (CARTERA_3): DENTRO, 50 % QQQ + 50 % ETF (×2 o ×3 sintético) rebalanceada cada año; si el QQQ cierra por debajo de su media sale (solo el apalancado o todo) y vuelve a 50/50 cuando cierra por encima. <b>Liquidez al 0 %</b>: el dinero fuera no renta nada. Se compara sobre todo con la <b>misma mezcla sin filtro</b>, por el CAGR / caída máxima (criterio 7: mejor en el total y en al menos 3 de los 4 subperiodos), y con el QQQ con el mismo filtro sin apalancar, para separar lo que aporta el filtro de lo que aporta el apalancamiento. El <b>tiempo bajo el agua</b> son los días desde el pico de la peor caída hasta recuperarlo. El azar coloca los periodos FUERA reales en sitios al azar: ¿importa CUÁNDO sale el filtro?</li>
           </ul>
         </div>
         <div style={caja} data-prueba="historial">
@@ -538,7 +676,7 @@ export default function CarteraPanel({ apiFetch, version = null }) {
                 <td style={{ padding: '3px 8px', whiteSpace: 'nowrap' }}>{fmtDate(h.creado)}</td>
                 <td style={{ padding: '3px 8px' }}>{ex ? `${h.config.nombre} (${h.config.combinaciones} combinaciones)` : reglaCarteraCorta(h.config)}</td>
                 <td style={{ padding: '3px 8px', whiteSpace: 'nowrap', color: h.oficial ? 'var(--accent)' : GRIS }}>{h.oficial ? `Oficial · ${h.lote} · ${h.item_lote}` : ex ? 'Exploración' : 'Exploratoria'}</td>
-                <td data-prueba="criterio-historial" style={{ padding: '3px 8px', whiteSpace: 'nowrap', color: GRIS }} title={ex ? AVISO_EXPLORACION : textoCriterio({ oficial: h.oficial, lote: h.lote, item: h.item_lote }, 'cartera')}>{ex ? 'sin veredicto' : textoCriterio({ oficial: h.oficial, lote: h.lote, item: h.item_lote }, 'cartera', { corto: true })}</td>
+                <td data-prueba="criterio-historial" style={{ padding: '3px 8px', whiteSpace: 'nowrap', color: GRIS }} title={ex ? AVISO_EXPLORACION : textoCriterio({ oficial: h.oficial, lote: h.lote, item: h.item_lote }, esConfigFiltro(h.config) && !h.oficial ? 'filtro' : 'cartera')}>{ex ? 'sin veredicto' : textoCriterio({ oficial: h.oficial, lote: h.lote, item: h.item_lote }, esConfigFiltro(h.config) && !h.oficial ? 'filtro' : 'cartera', { corto: true })}</td>
                 <td style={{ padding: '3px 8px', color: COLOR_VEREDICTO[h.veredicto] || 'var(--text)' }}>{h.veredicto || '—'}</td>
                 <td style={{ padding: '3px 8px', whiteSpace: 'nowrap' }}><button onClick={() => verPrueba(h.id)} style={{ ...boton, padding: '1px 6px' }}>Ver</button>{!ex && <>{' '}<button onClick={() => setUi(uiDe(h.config))} title="Poner esta regla en el constructor" style={{ ...boton, padding: '1px 6px' }}>↑</button></>}</td>
               </tr>) })}</tbody>
