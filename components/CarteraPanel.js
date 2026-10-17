@@ -6,6 +6,8 @@
 // frente a las referencias, tablas, ciclos, impuestos, calibración y registro en lab_pruebas (lib/registroLab.js).
 // V9.983: la «Mezcla fija» (un estado con pesos y rebalanceo por calendario), CARTERA_2 (comparativa frente a V3 / V4) y la
 // pestaña «Explorar» con la curva de riesgo y el mapa de sensibilidad (lib/exploracionCartera.js).
+// V9.985: la columna izquierda es la «Próxima prueba» (al abrir un resultado se rellena con su configuración) y en
+// «Explorar», la prueba de estrés 1999–2025 con ETF sintéticos, con su validación frente a QLD y TQQQ siempre a la vista.
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { MONO, fmtDate, numeroEs } from '../lib/utils'
 import BotonCopiar from './BotonCopiar'
@@ -16,7 +18,8 @@ import { clasificaConfig, guardarPrueba, cuentaPruebas, listarPruebas, leerPrueb
 import { fraseTransicion, reduceCurva, CONDICIONES, N_SIM_CARTERA, FRECUENCIAS, SIN_AZAR } from '../lib/laboratorioCartera'
 import { textoLaboratorio, reglaCarteraCorta, periodoCartera, CAB_CARTERA, filasCartera, CAB_CARTERA_REF, filasCarteraRef, CAB_CICLOS, filasCiclos,
          CAB_IMPUESTOS, filasImpuestos, resumenImpuestos, NOTA_IMPUESTOS, CAB_CAL_CARTERA, filaCalibracionCartera, num,
-         CAB_COMPARACION, filasComparacion, AVISO_EXPLORACION, CAB_CURVA, filasCurva, cabMapa, filasMapa, textoFueraDeMuestra } from '../lib/exportaTexto'
+         CAB_COMPARACION, filasComparacion, AVISO_EXPLORACION, CAB_CURVA, filasCurva, cabMapa, filasMapa, textoFueraDeMuestra,
+         AVISO_SINTETICOS, CAB_VALIDACION, filasValidacion, avisoValidacion, CAB_VALIDACION_ANIOS, filasValidacionAnios, CAB_ESTRES, filasEstres, cabAnioEstres, filasAnioEstres } from '../lib/exportaTexto'
 import { getSupaUrl, getSupaH, hayConfigSupabase } from '../lib/supabase'
 
 const CLAVE_LS = 'v50_laboratorio_cartera'
@@ -128,7 +131,8 @@ function Curva({ curva }) {
 }
 
 // La curva de riesgo: un punto por % (caída máxima en horizontal, CAGR en vertical), una serie por familia, y QQQ y SPY.
-const COLOR_FAMILIA = { mezcla: AMBAR, simple: 'var(--accent)' }
+const COLOR_FAMILIA = { mezcla: AMBAR, simple: 'var(--accent)', x2: AMBAR, x3: ROJO }
+const nombreEtfExpl = (x) => x === 'x2' ? '×2 sintético' : x === 'x3' ? '×3 sintético' : x
 function CurvaRiesgo({ periodo, familias }) {
   const W = 700, H = 300, m = { l: 52, r: 16, t: 14, b: 34 }
   const pts = familias.flatMap(f => (periodo.familias[f.id] || []).map(p => ({ f: f.id, pct: p.pct, x: -p.caidaMaxima, y: p.cagr })))
@@ -241,17 +245,18 @@ export default function CarteraPanel({ apiFetch, version = null }) {
   const [verExpl, setVerExpl] = useState('curvaRiesgo')
   const [etfExpl, setEtfExpl] = useState('QLD')
   const [perExpl, setPerExpl] = useState(3)
+  const [perEstres, setPerEstres] = useState(0)
   const lanzaExploracion = async (tipo) => {
     const cfg = EXPLORACIONES[tipo]
     if (progreso) return
-    if (typeof window !== 'undefined' && !window.confirm(`Se va a ejecutar ${tipo === 'sensibilidad' ? 'el' : 'la'} ${cfg.nombre.toLowerCase()} (${cfg.etfs.join(' y ')}): queda registrada y cuenta como ${cfg.combinaciones} pruebas exploratorias. ¿Seguir?`)) return
+    if (typeof window !== 'undefined' && !window.confirm(`Se va a ejecutar ${tipo === 'sensibilidad' ? 'el' : 'la'} ${cfg.nombre.toLowerCase()} (${cfg.etfs.map(nombreEtfExpl).join(' y ')}): queda registrada y cuenta como ${cfg.combinaciones} pruebas exploratorias. ¿Seguir?`)) return
     parar.current = false; setErrorEjec(null)
     const inicio = Date.now(), partes = {}
     setAhora(inicio)
     try {
       for (const [k, etf] of cfg.etfs.entries()) {
         if (parar.current) throw new Error('Parado a petición tuya: esta exploración no se ha guardado.')
-        setProgreso({ texto: `${cfg.nombre} · ${etf} (${k + 1} de ${cfg.etfs.length})`, hechos: k, total: cfg.etfs.length, inicio, unidad: 'ETF' })
+        setProgreso({ texto: `${cfg.nombre} · ${nombreEtfExpl(etf)} (${k + 1} de ${cfg.etfs.length})`, hechos: k, total: cfg.etfs.length, inicio, unidad: 'ETF' })
         const r = await apiFetch('/api/laboratorio', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ config: cfg, periodo: { etf } }) })
         let j = null; try { j = await r.json() } catch (_) {}
         if (!r.ok) throw new Error(`El servidor no pudo calcular ${etf}: ${j?.error || `HTTP ${r.status}`}`)
@@ -269,6 +274,8 @@ export default function CarteraPanel({ apiFetch, version = null }) {
   const verPrueba = async (id) => {
     setErrorEjec(null)
     try { const f = await leerPrueba(ctxRegistro(), id); if (esConfigExploracion(f.config)) { verExploracion(f); return } setPestana('probar'); const ps = f.resultados?.periodos || []
+      // La «Próxima prueba» se rellena con la configuración del resultado abierto.
+      try { const u = uiDe(f.config); if (['sergi', 'simple', 'mezcla'].includes(u.regla) && ['QLD', 'TQQQ'].includes(u.etf)) setUi(u) } catch (_) {}
       setResultado({ config: f.config, clas: { hash: f.hash_config, oficial: f.oficial, lote: f.lote, item: f.item_lote }, periodos: ps, veredicto: f.resultados?.veredicto || '—', id: f.id, creado: f.creado, errorGuardar: null, version: f.version_app })
       setVerPeriodo(Math.max(0, ps.length - 1))
     } catch (e) { setErrorEjec(e?.message || String(e)) }
@@ -278,21 +285,59 @@ export default function CarteraPanel({ apiFetch, version = null }) {
     regla: reglaCarteraCorta(resultado.config), clas: resultado.clas, config: resultado.config, veredicto: resultado.veredicto, periodos: resultado.periodos, id: resultado.id })
   const seg = progreso ? Math.max(0, Math.round((ahora - progreso.inicio) / 1000)) : 0
   // La pestaña «Explorar» (lado derecho): la curva de riesgo o el mapa de sensibilidad, con su aviso, «Cómo leer esto» y la copia.
+  // La validación de los ETF sintéticos frente a QLD y TQQQ reales (siempre a la vista en la prueba de estrés).
+  function validacionSinteticos() {
+    const avisos = avisoValidacion()
+    return (<div style={{ ...caja, borderColor: 'var(--accent)' }} data-prueba="validacion-sinteticos">
+      <div style={etiqueta}>Validación de los ETF sintéticos (frente a los reales)</div>
+      <div style={{ fontSize: TAM, color: AMBAR, marginBottom: 6, fontWeight: 700 }} data-prueba="aviso-sinteticos">{AVISO_SINTETICOS}</div>
+      <Tabla cab={CAB_VALIDACION} filas={filasValidacion()} />
+      {avisos.length ? avisos.map((a, i) => <div key={i} style={{ fontSize: TAM, color: ROJO, marginTop: 6 }}>{a}</div>) : <div style={{ fontSize: TAM, color: GRIS, marginTop: 6 }}>Diferencia media anual por debajo de 1 punto en los dos.</div>}
+      <details style={{ marginTop: 6 }}><summary style={{ fontSize: TAM, cursor: 'pointer', color: GRIS }}>Año a año: real frente a sintético</summary><div style={{ marginTop: 6 }}><Tabla cab={CAB_VALIDACION_ANIOS} filas={filasValidacionAnios()} /></div></details>
+    </div>)
+  }
+  function vistaEstres(e, cfgE, etfV) {
+    const parte = e.partes?.[etfV], partes = cfgE.etfs.map(x => e.partes?.[x]).filter(Boolean), n = partes[0]?.periodos.length || 1, kP = Math.min(perEstres, n - 1)
+    const per = partes[0]?.periodos[kP], periodoCurva = per && { familias: Object.fromEntries(partes.map(p => [p.etf, p.periodos[kP].puntos])), referencias: per.referencias }
+    return (<>
+      {per && (<div style={caja}>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
+          <span style={{ ...etiqueta, marginBottom: 0 }}>Periodo</span>
+          {partes[0].periodos.map((p, k) => <button key={k} onClick={() => setPerEstres(k)} aria-pressed={k === kP} style={k === kP ? botonPrincipal : boton}>{periodoCartera(p)}</button>)}
+        </div>
+        <CurvaRiesgo periodo={periodoCurva} familias={partes.map(p => ({ id: p.etf, nombre: `Mezcla fija con el ${nombreEtfExpl(p.etf)} (rebalanceo anual)` }))} />
+        <div style={{ fontSize: TAM, color: GRIS, marginTop: 4 }}>{periodoCartera(per)}: del {fmtDate(per.fechaIni)} al {fmtDate(per.fechaFin)}.</div>
+      </div>)}
+      {!parte ? <div style={{ ...caja, fontSize: TAM, color: GRIS }}>Sin datos del {nombreEtfExpl(etfV)} en esta exploración.</div> : (<>
+        <div style={caja} data-prueba="tabla-estres">
+          <div style={etiqueta}>{nombreEtfExpl(etfV)} · {periodoCartera(parte.periodos[kP])}</div>
+          <Tabla cab={CAB_ESTRES} filas={filasEstres(parte.periodos[kP])} />
+          <div style={{ fontSize: TAM, color: GRIS, marginTop: 6 }}>Tiempo bajo el agua: días naturales desde el pico de la caída máxima hasta volver a él. Valor final neto: estimación con 10.000 € al empezar.</div>
+        </div>
+        <div style={caja} data-prueba="anio-estres">
+          <div style={etiqueta}>Año a año · {parte.anioAnio.pct} % en el {nombreEtfExpl(etfV)} · {periodoCartera(parte.periodos.find(p => p.total))}</div>
+          <Tabla cab={cabAnioEstres(parte)} filas={filasAnioEstres(parte)} />
+        </div>
+      </>)}
+    </>)
+  }
   function vistaExplorar() {
-    const e = expl[verExpl], parte = e?.partes?.[etfExpl], cfgE = e?.config
+    const etfsV = EXPLORACIONES[verExpl].etfs, etfV = etfsV.includes(etfExpl) ? etfExpl : etfsV[0]
+    const e = expl[verExpl], parte = e?.partes?.[etfV], cfgE = e?.config
     return (<>
       <div style={{ ...caja, borderColor: AMBAR, fontSize: TAM, color: AMBAR }}>{AVISO_EXPLORACION}</div>
       <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
         {Object.values(EXPLORACIONES).map(x => <button key={x.tipo} onClick={() => setVerExpl(x.tipo)} aria-pressed={verExpl === x.tipo} style={verExpl === x.tipo ? botonPrincipal : boton}>{x.nombre}</button>)}
         <span style={{ width: 12 }} />
-        {['QLD', 'TQQQ'].map(x => <button key={x} onClick={() => setEtfExpl(x)} aria-pressed={etfExpl === x} style={etfExpl === x ? botonPrincipal : boton}>{x}</button>)}
+        {etfsV.map(x => <button key={x} onClick={() => setEtfExpl(x)} aria-pressed={etfV === x} style={etfV === x ? botonPrincipal : boton}>{nombreEtfExpl(x)}</button>)}
       </div>
+      {verExpl === 'estres' && validacionSinteticos()}
       {!e ? <div style={{ ...caja, fontSize: TAM, color: GRIS }}>Todavía no hay resultado {verExpl === 'sensibilidad' ? 'del' : 'de la'} {EXPLORACIONES[verExpl].nombre.toLowerCase()}: ejecútala a la izquierda o ábrela del historial.</div> : (<div data-prueba="exploracion">
         <div style={caja}>
           <div style={{ fontSize: TAM, color: GRIS }}>{cfgE.nombre} · {cfgE.combinaciones} combinaciones (cuentan como pruebas exploratorias) · huella {String(e.clas?.hash || '').slice(0, 12)}… · {e.id != null ? `prueba ${e.id}${e.creado ? `, ${fmtDate(e.creado)}` : ''}` : 'no guardada'}</div>
           <div style={{ marginTop: 8 }}><BotonCopiar obtenerTexto={textoCopiaExpl} /></div>
         </div>
-        {!parte ? <div style={{ ...caja, fontSize: TAM, color: GRIS }}>Sin datos de {etfExpl} en esta exploración.</div> : cfgE.tipo === 'curvaRiesgo' ? (<>
+        {cfgE.tipo === 'estres' ? vistaEstres(e, cfgE, etfV) : !parte ? <div style={{ ...caja, fontSize: TAM, color: GRIS }}>Sin datos de {etfV} en esta exploración.</div> : cfgE.tipo === 'curvaRiesgo' ? (<>
           <div style={caja}>
             <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
               <span style={{ ...etiqueta, marginBottom: 0 }}>Periodo</span>
@@ -303,7 +348,7 @@ export default function CarteraPanel({ apiFetch, version = null }) {
           <div style={caja}><Tabla cab={CAB_CURVA} filas={filasCurva(parte.periodos[Math.min(perExpl, parte.periodos.length - 1)], cfgE.familias)} /></div>
         </>) : (<>
           <div style={caja} data-prueba="mapa">
-            <div style={etiqueta}>Mapa de sensibilidad · {etfExpl}</div>
+            <div style={etiqueta}>Mapa de sensibilidad · {etfV}</div>
             <div style={{ overflowX: 'auto' }}><table style={{ borderCollapse: 'collapse', fontSize: TAM }}>
               <thead><tr>{cabMapa(parte).map((c, i) => <th key={i} style={{ textAlign: i ? 'right' : 'left', padding: '3px 8px', color: GRIS, fontWeight: 400, borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' }}>{c}</th>)}</tr></thead>
               <tbody>{filasMapa(parte).map((f, j) => <tr key={j} style={{ background: parte.valores[j].zonaEstable ? 'rgba(0,229,160,0.10)' : undefined }}>{f.map((c, i) => <td key={i} style={{ textAlign: i ? 'right' : 'left', padding: '3px 8px', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap', fontWeight: parte.valores[j].pct === cfgE.porDefecto ? 700 : 400 }}>{c}</td>)}</tr>)}</tbody>
@@ -323,6 +368,9 @@ export default function CarteraPanel({ apiFetch, version = null }) {
           <li><b>Curva de riesgo</b>: cada punto es un % de la cartera en el ETF (de 0 a 100). Abajo-izquierda, poca caída y poco rendimiento; arriba-derecha, más de los dos. Sirve para elegir cuánta caída estás dispuesto a aguantar, no el punto más alto. En la Regla simple el % es lo que pasa al ETF en cada ciclo; con 0 % es comprar y mantener QQQ.</li>
           <li><b>Mapa de sensibilidad</b>: la misma regla con distintas caídas. Si el resultado cambia mucho de un valor al de al lado, es frágil. La <b>zona estable</b> son los valores parecidos al mejor.</li>
           <li><b>Fuera de muestra</b>: se elige el mejor valor mirando solo el primer tramo y se ve qué hizo después. Si después queda por debajo de la mediana o del valor por defecto, elegir «el mejor» era suerte.</li>
+          <li><b>Prueba de estrés 1999–2025</b>: la Mezcla fija (rebalanceo anual) con un ETF ×2 o ×3 <b>sintético</b> desde 1999, para ver la burbuja de 2000–2002 y la crisis de 2008, que QLD y TQQQ no vivieron enteras. El sintético multiplica cada día el rendimiento del QQQ y resta su coste (comisión, el tipo a corto del dinero prestado y un ajuste calibrado). La <b>validación</b> de arriba dice cuánto se parece al real donde los dos existen: si la diferencia media anual es pequeña y la correlación diaria es casi 1, el sintético es creíble; antes de 2006 es una reconstrucción.</li>
+          <li><b>Tiempo bajo el agua</b>: cuántos días pasan desde el pico de la peor caída hasta volver a él. «Sin recuperar» significa que al final del periodo todavía no había vuelto. Es lo que más cuesta aguantar: una caída muy profunda puede tardar muchos años en recuperarse.</li>
+          <li><b>Año a año</b>: el rendimiento de cada año natural del {EXPLORACIONES.estres.anioAnio} % en el ETF frente a QQQ y SPY, para ver los años malos seguidos.</li>
           <li>El valor neto de impuestos es una estimación (10.000 € al empezar, ventas FIFO, tramos del ahorro).</li>
         </ul>
       </div>
@@ -346,13 +394,17 @@ export default function CarteraPanel({ apiFetch, version = null }) {
           {Object.values(EXPLORACIONES).map(e => (
             <div key={e.tipo} style={caja}>
               <div style={etiqueta}>{e.nombre}</div>
-              <div style={{ fontSize: TAM, color: GRIS, marginBottom: 8 }}>{e.tipo === 'curvaRiesgo'
+              <div style={{ fontSize: TAM, color: GRIS, marginBottom: 8 }}>{e.tipo === 'estres'
+                ? `Mezcla fija con rebalanceo anual, % en el ETF de 0 a 100 en saltos de 10, con un ETF ×2 y ×3 sintético sobre el QQQ desde 1999; periodos ${e.periodos.map(periodoCartera).join(', ')}; por periodo: CAGR, caída máxima, tiempo bajo el agua, peor año, CAGR / caída y valor final neto; año a año del ${e.anioAnio} %. ${e.combinaciones} combinaciones. ${AVISO_SINTETICOS}`
+                : e.tipo === 'curvaRiesgo'
                 ? `% de la cartera en el ETF de 0 a 100 en saltos de 10, para ${e.familias.map(f => f.nombre).join(' y ')}; ${e.etfs.join(' y ')}; por periodo: CAGR, caída máxima, peor año, CAGR / caída y valor final neto. ${e.combinaciones} combinaciones.`
                 : `Regla simple con el ${e.fraccion * 100} % en el ETF y ventana ${e.ventana}, caída de ${e.caidas[0]} a ${e.caidas[e.caidas.length - 1]} % (${e.caidas.length} valores); ${e.etfs.join(' y ')}; zona estable y comprobación fuera de muestra. ${e.combinaciones} combinaciones.`}</div>
               <button onClick={() => lanzaExploracion(e.tipo)} disabled={!!progreso} style={{ ...botonPrincipal, opacity: progreso ? 0.5 : 1 }}>▶ Ejecutar</button>
               {expl[e.tipo] && <button onClick={() => setVerExpl(e.tipo)} style={{ ...boton, marginLeft: 8 }}>Ver el resultado</button>}
             </div>))}
         </>) : (<>
+        <div style={{ fontSize: 14, fontWeight: 700, margin: '4px 0 2px' }} data-prueba="proxima-prueba">Próxima prueba</div>
+        <div style={{ fontSize: TAM, color: GRIS, marginBottom: 8 }}>Lo que se ejecuta al pulsar «Ejecutar prueba». Al abrir un resultado (de un lote, «Ver» o el historial) se rellena con su configuración.</div>
         <div style={caja}>
           <div style={etiqueta}>La regla</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, fontSize: TAM, color: GRIS }}>
