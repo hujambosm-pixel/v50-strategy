@@ -468,5 +468,216 @@
     "calibrada": true
    }
   }
+ },
+ "CARTERA_3": {
+  "huellaLote": "4d21e68f3d1b7ef1f26ce7863eae7799a4def8e90df2e3e79996d2ecc50a7f4a",
+  "version": "V9.986",
+  "fecha": "2026-10-17",
+  "metodo": "QQQ en paseo aleatorio geométrico sin autocorrelación (calendario laborable desde el 10/03/1999, sin calentamiento); ETF sintético de V9.984 (k × rendimiento − comisión − (k − 1) × tipo a corto real − ajuste); liquidez al 0 %; falso aprobado: percentil del CAGR / caída máxima >= 95 en el periodo total",
+  "parametros": {
+   "universos": 200,
+   "derivaLogDiaria": 0.000394,
+   "volatilidadDiaria": 0.01701,
+   "fraccionNoche": 0.276,
+   "nSim": 1000,
+   "semilla": 20261018,
+   "desde": "1999-03-10",
+   "hasta": "2025-12-31"
+  },
+  "umbralFalsosAprobados": 10,
+  "items": {
+   "F1": {
+    "nombre": "Filtro SMA 50 · solo el apalancado · ×2 sintético",
+    "universos": 200,
+    "sinCiclos": 0,
+    "aprobados": 15,
+    "pctAprobados": 7.5,
+    "percentilMedio": 51,
+    "deciles": [
+     22,
+     16,
+     25,
+     20,
+     20,
+     17,
+     15,
+     19,
+     18,
+     28
+    ],
+    "ciclosMedios": 269.7,
+    "tiempoFueraMedio": 44.7,
+    "pctMejoraMezcla": 38.5,
+    "calibrada": true
+   },
+   "F2": {
+    "nombre": "Filtro SMA 50 · solo el apalancado · ×3 sintético",
+    "universos": 200,
+    "sinCiclos": 0,
+    "aprobados": 13,
+    "pctAprobados": 6.5,
+    "percentilMedio": 48.4,
+    "deciles": [
+     20,
+     24,
+     28,
+     17,
+     18,
+     15,
+     21,
+     12,
+     22,
+     23
+    ],
+    "ciclosMedios": 269.7,
+    "tiempoFueraMedio": 44.7,
+    "pctMejoraMezcla": 39,
+    "calibrada": true
+   },
+   "F3": {
+    "nombre": "Filtro SMA 50 · todo a liquidez · ×2 sintético",
+    "universos": 200,
+    "sinCiclos": 0,
+    "aprobados": 14,
+    "pctAprobados": 7,
+    "percentilMedio": 50.2,
+    "deciles": [
+     18,
+     19,
+     28,
+     20,
+     19,
+     13,
+     24,
+     14,
+     18,
+     27
+    ],
+    "ciclosMedios": 269.7,
+    "tiempoFueraMedio": 44.7,
+    "pctMejoraMezcla": 28.5,
+    "calibrada": true
+   },
+   "F4": {
+    "nombre": "Filtro SMA 50 · todo a liquidez · ×3 sintético",
+    "universos": 200,
+    "sinCiclos": 0,
+    "aprobados": 11,
+    "pctAprobados": 5.5,
+    "percentilMedio": 48.8,
+    "deciles": [
+     19,
+     23,
+     30,
+     18,
+     15,
+     15,
+     19,
+     17,
+     21,
+     23
+    ],
+    "ciclosMedios": 269.7,
+    "tiempoFueraMedio": 44.7,
+    "pctMejoraMezcla": 30.5,
+    "calibrada": true
+   },
+   "F5": {
+    "nombre": "Filtro SMA 200 · solo el apalancado · ×2 sintético",
+    "universos": 200,
+    "sinCiclos": 0,
+    "aprobados": 15,
+    "pctAprobados": 7.5,
+    "percentilMedio": 50.3,
+    "deciles": [
+     32,
+     16,
+     15,
+     16,
+     17,
+     19,
+     21,
+     17,
+     19,
+     28
+    ],
+    "ciclosMedios": 128.4,
+    "tiempoFueraMedio": 38.8,
+    "pctMejoraMezcla": 44.5,
+    "calibrada": true
+   },
+   "F6": {
+    "nombre": "Filtro SMA 200 · solo el apalancado · ×3 sintético",
+    "universos": 200,
+    "sinCiclos": 0,
+    "aprobados": 8,
+    "pctAprobados": 4,
+    "percentilMedio": 46.6,
+    "deciles": [
+     34,
+     19,
+     20,
+     14,
+     14,
+     22,
+     24,
+     16,
+     17,
+     20
+    ],
+    "ciclosMedios": 128.4,
+    "tiempoFueraMedio": 38.8,
+    "pctMejoraMezcla": 43,
+    "calibrada": true
+   },
+   "F7": {
+    "nombre": "Filtro SMA 200 · todo a liquidez · ×2 sintético",
+    "universos": 200,
+    "sinCiclos": 0,
+    "aprobados": 10,
+    "pctAprobados": 5,
+    "percentilMedio": 48.9,
+    "deciles": [
+     28,
+     22,
+     11,
+     22,
+     14,
+     21,
+     23,
+     21,
+     14,
+     24
+    ],
+    "ciclosMedios": 128.4,
+    "tiempoFueraMedio": 38.8,
+    "pctMejoraMezcla": 28,
+    "calibrada": true
+   },
+   "F8": {
+    "nombre": "Filtro SMA 200 · todo a liquidez · ×3 sintético",
+    "universos": 200,
+    "sinCiclos": 0,
+    "aprobados": 8,
+    "pctAprobados": 4,
+    "percentilMedio": 46.8,
+    "deciles": [
+     32,
+     17,
+     21,
+     18,
+     14,
+     19,
+     22,
+     21,
+     20,
+     16
+    ],
+    "ciclosMedios": 128.4,
+    "tiempoFueraMedio": 38.8,
+    "pctMejoraMezcla": 30.5,
+    "calibrada": true
+   }
+  }
  }
 }

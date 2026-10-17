@@ -24,7 +24,7 @@ import { entradas, calculables, topeDe, indicadoresSalidas } from '../../lib/sen
 import { ejecutaPeriodo, semillaLab, N_SIM_LAB } from '../../lib/laboratorio'
 import { huella, validaConfig, esConfigSalidas, esConfigEstrategias, esConfigCartera, esConfigExploracion } from '../../lib/lotesLab'
 import { ejecutaPeriodoCartera, alineaDatos, N_SIM_CARTERA } from '../../lib/laboratorioCartera'
-import { curvaRiesgoEtf, sensibilidadEtf, estresParte } from '../../lib/exploracionCartera'
+import { curvaRiesgoEtf, sensibilidadEtf, estresParte, mapaMediaParte } from '../../lib/exploracionCartera'
 import { construyeSintetico } from '../../lib/etfSintetico'
 import { preciosTotales } from '../../lib/laboratorioCartera'
 import DIVIDENDOS from '../../lib/dividendosCartera.json'
@@ -83,7 +83,7 @@ export default async function handler(req, res) {
       const etf = periodo.etf, ps = Array.isArray(cfg.periodos) ? cfg.periodos : [...(cfg.periodos?.[etf] || []), ...(cfg.fueraDeMuestra?.[etf] ? [cfg.fueraDeMuestra[etf].prueba] : [])]
       const d0 = ps.reduce((m, p) => p.desde < m ? p.desde : m, '9999'), d1 = ps.reduce((m, p) => p.hasta > m ? p.hasta : m, '0000')
       const lee = (sym) => get(`rpc/leer_velas?p_simbolo=${encodeURIComponent(sym)}&p_desde=${masAnios(d0, -3)}&p_hasta=${masDias(d1, 5)}`).then(velasDe)
-      const estres = cfg.tipo === 'estres'
+      const estres = ['estres', 'mapaMedia'].includes(cfg.tipo)
       const [qqq, etfV, spy] = await Promise.all([lee('QQQ'), estres ? Promise.resolve([]) : lee(etf), lee('SPY')])
       const t1 = Date.now()
       if (!qqq.length || (!estres && !etfV.length) || !spy.length) return res.status(500).json({ error: 'Faltan velas en la caché de QQQ, del ETF o de SPY.' })
@@ -91,7 +91,7 @@ export default async function handler(req, res) {
       const k = etf === 'x3' ? 3 : 2
       const velasEtf = estres ? construyeSintetico(preciosTotales(qqq, DIVIDENDOS.simbolos.QQQ), { k, comision: cfg.sinteticos.comision[k], ajuste: cfg.sinteticos.ajuste[k] }) : etfV
       const datos = alineaDatos({ qqq, etf: { simbolo: estres ? 'SINTETICO' : etf, velas: velasEtf }, spy }, { ...DIVIDENDOS.simbolos, SINTETICO: [] })
-      const resultado = estres ? estresParte({ datos, config: cfg, parte: etf })
+      const resultado = cfg.tipo === 'mapaMedia' ? mapaMediaParte({ datos, config: cfg, parte: etf }) : estres ? estresParte({ datos, config: cfg, parte: etf })
         : cfg.tipo === 'curvaRiesgo' ? curvaRiesgoEtf({ datos, config: cfg, etf }) : await sensibilidadEtf({ datos, config: cfg, etf, nSim: Math.min(nSim, N_SIM_CARTERA * 5) })
       const t2 = Date.now()
       return res.status(200).json({ resultado: { prueba: 'exploracion', tipo: cfg.tipo, ...resultado }, simbolos: 3, sinDatos: [], dividendos: DIVIDENDOS.descargado, tiempos: { datosMs: t1 - t0, calculoMs: t2 - t1, totalMs: t2 - t0 } })
@@ -100,10 +100,14 @@ export default async function handler(req, res) {
     if (esConfigCartera(cfg)) {
       const pc = cfg.periodos.find(p => p.desde === desde && p.hasta === hasta)
       const lee = (sym) => get(`rpc/leer_velas?p_simbolo=${encodeURIComponent(sym)}&p_desde=${masAnios(desde, -3)}&p_hasta=${masDias(hasta, 5)}`).then(velasDe)
-      const [qqq, etf, spy] = await Promise.all([lee('QQQ'), lee(cfg.etf), lee('SPY')])
+      // CARTERA_3: el ETF es el SINTÉTICO ×2 / ×3 de V9.984 sobre el QQQ de rentabilidad total (no se lee de la caché).
+      const sint = ['x2', 'x3'].includes(cfg.etf)
+      const [qqq, etfV, spy] = await Promise.all([lee('QQQ'), sint ? Promise.resolve([]) : lee(cfg.etf), lee('SPY')])
       const t1 = Date.now()
-      if (!qqq.length || !etf.length || !spy.length) return res.status(500).json({ error: `Faltan velas en la caché: ${[['QQQ', qqq], [cfg.etf, etf], ['SPY', spy]].filter(([, v]) => !v.length).map(([s]) => s).join(', ')}.` })
-      const datos = alineaDatos({ qqq, etf: { simbolo: cfg.etf, velas: etf }, spy }, DIVIDENDOS.simbolos)
+      if (!qqq.length || (!sint && !etfV.length) || !spy.length) return res.status(500).json({ error: `Faltan velas en la caché: ${[['QQQ', qqq], ...(sint ? [] : [[cfg.etf, etfV]]), ['SPY', spy]].filter(([, v]) => !v.length).map(([s]) => s).join(', ')}.` })
+      const k = cfg.etf === 'x3' ? 3 : 2
+      const etf = sint ? construyeSintetico(preciosTotales(qqq, DIVIDENDOS.simbolos.QQQ), { k, comision: cfg.sinteticos.comision[k], ajuste: cfg.sinteticos.ajuste[k] }) : etfV
+      const datos = alineaDatos({ qqq, etf: { simbolo: sint ? 'SINTETICO' : cfg.etf, velas: etf }, spy }, sint ? { ...DIVIDENDOS.simbolos, SINTETICO: [] } : DIVIDENDOS.simbolos)
       const resultado = ejecutaPeriodoCartera({ datos, regla: cfg.regla, periodo: pc, nSim: Math.min(nSim, N_SIM_CARTERA * 5), semilla: semillaLab(await huella(cfg), desde), comparaCon: cfg.comparaCon || null })
       const t2 = Date.now()
       return res.status(200).json({ resultado, simbolos: 3, sinDatos: [], dividendos: DIVIDENDOS.descargado, tiempos: { datosMs: t1 - t0, calculoMs: t2 - t1, totalMs: t2 - t0 } })
