@@ -18,9 +18,9 @@ import { CARTERA_1, CARTERA_2, CARTERA_3, NOMBRE_ALCANCE, calibracionLote, regla
          esConfigExploracion, EXPLORACIONES, VEREDICTOS_CARTERA } from '../lib/lotesLab'
 import { redondeaParaGuardar } from '../lib/exploracionCartera'
 import { clasificaConfig, guardarPrueba, cuentaPruebas, listarPruebas, leerPrueba, estadoLote, SELECT_HISTORIAL } from '../lib/registroLab'
-import { fraseTransicion, reduceCurva, CONDICIONES, N_SIM_CARTERA, FRECUENCIAS, SIN_AZAR, reglaFiltro } from '../lib/laboratorioCartera'
+import { fraseTransicion, reduceCurva, CONDICIONES, N_SIM_CARTERA, FRECUENCIAS, SIN_AZAR, reglaFiltro, COSTES_DEFECTO } from '../lib/laboratorioCartera'
 import { textoLaboratorio, reglaCarteraCorta, periodoCartera, CAB_CARTERA, filasCartera, CAB_CARTERA_REF, filasCarteraRef, CAB_CICLOS, filasCiclos,
-         CAB_IMPUESTOS, filasImpuestos, resumenImpuestos, NOTA_IMPUESTOS, cabImpuestos, notaImpuestos, textoCalculo, calculoDeConfig, CAB_CAL_CARTERA, filaCalibracionCartera, num,
+         CAB_IMPUESTOS, filasImpuestos, resumenImpuestos, NOTA_IMPUESTOS, cabImpuestos, notaImpuestos, textoCalculo, calculoDeConfig, textoCostesConfig, CAB_COSTES, filasCostes, CAB_CAL_CARTERA, filaCalibracionCartera, num,
          CAB_COMPARACION, filasComparacion, AVISO_EXPLORACION, CAB_CURVA, filasCurva, cabMapa, filasMapa, textoFueraDeMuestra,
          AVISO_SINTETICOS, CAB_VALIDACION, filasValidacion, avisoValidacion, CAB_VALIDACION_ANIOS, filasValidacionAnios, CAB_ESTRES, filasEstres, cabAnioEstres, filasAnioEstres,
          AVISO_LIQUIDEZ, nombreEtfCartera, esConfigFiltro, CAB_FILTRO, filasFiltro, CAB_FILTRO_REF, filasFiltroRef, CAB_AZAR_FILTRO, filasAzarFiltro, CAB_FUERA, filasFuera, CAB_ANIO_FILTRO, filasAnioFiltro,
@@ -42,7 +42,8 @@ const SERIES_BASE = [['estrategia', 'Cartera', 'var(--accent)'], ['qqq', 'QQQ', 
 
 // La configuración del constructor ↔ lo que se guarda en el navegador.
 // (calculo: '1' o '2'; V9.988. Una configuración sin calculo es del cálculo 1, el de los lotes congelados.)
-const uiDe = (config) => ({ ...uiDeBase(config), calculo: String(config.calculo ?? 1) })
+const aTexto = (x) => String(x).replace('.', ',')
+const uiDe = (config) => ({ ...uiDeBase(config), calculo: String(config.calculo ?? 1), ...(config.costes ? { comisionPct: aTexto(config.costes.comisionPct), comisionMin: aTexto(config.costes.comisionMinEur), horquillaQqq: aTexto(config.costes.horquillaPct.QQQ), horquillaEtf: aTexto(config.costes.horquillaPct.ETF) } : {}) })
 const uiDeBase = (config) => {
   if (config.regla.id === 'filtro') { const f = config.regla.filtro
     return { regla: 'filtro', periodoMedia: String(f.periodo), evaluacion: f.evaluacion, alcance: f.alcance, pct: '10', ventana: '252', pctEtf: '50', frecuencia: 'anual', etf: config.etf } }
@@ -54,6 +55,9 @@ const UI_DEFECTO = () => ({ ...uiDe(configDeItem(CARTERA_1, 'V1')), calculo: '2'
 // La regla del constructor y su ETF casan: las de CARTERA_1 / 2 con QLD o TQQQ; el filtro con un sintético ×2 / ×3.
 const uiValida = (x) => !!x && ((['sergi', 'simple', 'mezcla'].includes(x.regla) && ['QLD', 'TQQQ'].includes(x.etf)) || (x.regla === 'filtro' && ['x2', 'x3'].includes(x.etf)))
 const leeGuardado = () => { try { const x = JSON.parse(localStorage.getItem(CLAVE_LS) || 'null'); return uiValida(x) ? x : null } catch (_) { return null } }
+// Los costes por operación del constructor (cálculo 2): los de la interfaz o, si faltan, COSTES_DEFECTO.
+const numUi = (x, d) => { const v = numeroEs(x ?? ''); return x == null || x === '' ? d : v == null ? NaN : v }
+const costesDeUi = (ui) => ({ comisionPct: numUi(ui.comisionPct, COSTES_DEFECTO.comisionPct), comisionMinEur: numUi(ui.comisionMin, COSTES_DEFECTO.comisionMinEur), horquillaPct: { QQQ: numUi(ui.horquillaQqq, COSTES_DEFECTO.horquillaPct.QQQ), ETF: numUi(ui.horquillaEtf, COSTES_DEFECTO.horquillaPct.ETF) } })
 const esSintetico = (etf) => etf === 'x2' || etf === 'x3'
 const periodosDe = (etf) => esSintetico(etf) ? CARTERA_3.items[0].periodos : CARTERA_1.items.find(i => i.etf === etf).periodos
 // La regla con la caída y la ventana del constructor (si son las de CARTERA_1, sale idéntica a la del lote).
@@ -219,7 +223,7 @@ export default function CarteraPanel({ apiFetch, version = null }) {
   // Una mezcla se compara siempre con la regla simple de CARTERA_1 del mismo ETF (V3 / V4), como en CARTERA_2.
   // El filtro de tendencia se arma con lo común de CARTERA_3 (ETF sintético, sus periodos desde 1999): con su misma regla
   // sale idéntico a un elemento del lote.
-  const config = useMemo(() => configCarteraDe({ regla, etf: ui.etf, periodos: periodosDe(ui.etf), comparaCon: regla.id === 'mezcla' ? CARTERA_2.items.find(i => i.etf === ui.etf).comparaCon : undefined, calculo: ui.calculo === '1' ? undefined : 2 }, regla.id === 'filtro' ? CARTERA_3.comun : CARTERA_1.comun), [regla, ui.etf, ui.calculo])
+  const config = useMemo(() => configCarteraDe({ regla, etf: ui.etf, periodos: periodosDe(ui.etf), comparaCon: regla.id === 'mezcla' ? CARTERA_2.items.find(i => i.etf === ui.etf).comparaCon : undefined, calculo: ui.calculo === '1' ? undefined : 2, costes: ui.calculo === '1' ? undefined : costesDeUi(ui) }, regla.id === 'filtro' ? CARTERA_3.comun : CARTERA_1.comun), [regla, ui.etf, ui.calculo, ui.comisionPct, ui.comisionMin, ui.horquillaQqq, ui.horquillaEtf])
   const [pestana, setPestana] = useState('probar')
   const errores = useMemo(() => [...new Set(validaConfig(config))], [config])
   const [clas, setClas] = useState(null)
@@ -441,7 +445,8 @@ export default function CarteraPanel({ apiFetch, version = null }) {
         <div style={{ fontSize: TAM, marginTop: 6 }}>{resumenImpuestos(pVer)}</div>
         <div style={{ fontSize: TAM, color: GRIS, marginTop: 6 }}>{notaImpuestos(pVer)}</div>
       </details>)}
-      <div style={caja} data-prueba="calibracion">
+      {resultado.periodos.some(p => p.costes) && (<div style={caja} data-prueba="costes-resultado"><div style={etiqueta}>Costes por operación</div><Tabla cab={CAB_COSTES} filas={filasCostes(resultado.periodos)} /><div style={{ fontSize: TAM, color: GRIS, marginTop: 6 }}>Cálculo 2: {textoCostesConfig(resultado.config?.costes)}. Cada compra y cada venta paga su coste (también las del azar); entra en el precio de compra o de venta para los impuestos.</div></div>)}
+          <div style={caja} data-prueba="calibracion">
         <div style={etiqueta}>Calibración de esta variante</div>
         {!resultado.clas?.oficial ? <div style={{ fontSize: TAM, color: GRIS }}>Exploratoria: no tiene calibración propia.</div> : cal ? <Tabla cab={CAB_CAL_FILTRO} filas={[filaCalibracionFiltro(cal)]} /> : <div style={{ fontSize: TAM, color: AMBAR }}>Sin calibración: el azar no da veredicto.</div>}
         <div style={{ fontSize: TAM, color: GRIS, marginTop: 6 }}>{notaCalibracionFiltro(calibracionLote('CARTERA_3'))} Si el percentil del total sale 95 o más en más del 10 % de esos mercados sin ventaja, el azar no juzga bien la variante. «Mejora a la mezcla sin ventaja» es informativo: cuántas veces el filtro mejora el CAGR / caída solo por suerte.</div>
@@ -577,7 +582,11 @@ export default function CarteraPanel({ apiFetch, version = null }) {
           </div>
           <div data-prueba="frase" style={{ fontSize: 13 }}>{reglaCarteraCorta(config)}</div>
           {ui.regla === 'filtro' && <div style={{ fontSize: TAM, color: AMBAR, marginTop: 6 }} data-prueba="aviso-liquidez">{AVISO_LIQUIDEZ}</div>}
-          <div style={{ fontSize: TAM, color: GRIS, marginTop: 6 }} data-prueba="texto-calculo">Cálculo: {textoCalculo(ui.calculo === '1' ? 1 : 2)}. Las variantes de los lotes congelados solo cuentan como oficiales con el cálculo 1, el suyo.</div>
+          {ui.calculo !== '1' && (<div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, fontSize: TAM, color: GRIS, marginTop: 6 }} data-prueba="costes">
+            {[['comisionPct', 'Comisión (%)', '0'], ['comisionMin', 'Mínimo (€)', '0'], ['horquillaQqq', 'Media horquilla QQQ (%)', '0,05'], ['horquillaEtf', 'Media horquilla ETF (%)', '0,05']].map(([k, t, d]) => (
+              <label key={k} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>{t}<input type="text" inputMode="decimal" value={ui[k] ?? d} onChange={e => pon(k, e.target.value)} style={{ ...entrada, width: 70 }} /></label>))}
+          </div>)}
+          <div style={{ fontSize: TAM, color: GRIS, marginTop: 6 }} data-prueba="texto-calculo">Cálculo: {textoCalculo(ui.calculo === '1' ? 1 : 2)}. {ui.calculo !== '1' ? `Costes por operación: ${textoCostesConfig(config.costes)}.` : 'Sin costes por operación.'} Las variantes de los lotes congelados solo cuentan como oficiales con el cálculo 1, el suyo.</div>
           {!clas?.oficial && <div style={{ fontSize: TAM, color: GRIS, marginTop: 6 }}>Exploratoria: no coincide con ninguna variante de CARTERA_1, CARTERA_2 ni CARTERA_3. Se registra y se cuenta, pero no tiene veredicto.</div>}
           {clas?.oficial && registro.lotes?.[clas.lote]?.[clas.item] && registro.lotes[clas.lote][clas.item].estado !== 'pendiente' && <div style={{ fontSize: TAM, color: AMBAR, marginTop: 6 }}>Esta variante ya se ejecutó. Repetirla da el mismo resultado y cuenta como otra prueba.</div>}
           {errores.length > 0 && <ul style={{ margin: '6px 0 0', paddingLeft: 18, fontSize: TAM, color: ROJO }}>{errores.map((e, i) => <li key={i}>{e}</li>)}</ul>}
@@ -655,6 +664,7 @@ export default function CarteraPanel({ apiFetch, version = null }) {
             <div style={{ fontSize: TAM, marginTop: 6 }}>{resumenImpuestos(pVer)}</div>
             <div style={{ fontSize: TAM, color: GRIS, marginTop: 6 }}>{notaImpuestos(pVer)}</div>
           </details>)}
+          {resultado.periodos.some(p => p.costes) && (<div style={caja} data-prueba="costes-resultado"><div style={etiqueta}>Costes por operación</div><Tabla cab={CAB_COSTES} filas={filasCostes(resultado.periodos)} /><div style={{ fontSize: TAM, color: GRIS, marginTop: 6 }}>Cálculo 2: {textoCostesConfig(resultado.config?.costes)}. Cada compra y cada venta paga su coste (también las del azar); entra en el precio de compra o de venta para los impuestos.</div></div>)}
           <div style={caja} data-prueba="calibracion">
             <div style={etiqueta}>Calibración de esta variante</div>
             {!resultado.clas?.oficial ? <div style={{ fontSize: TAM, color: GRIS }}>Exploratoria: no tiene calibración propia.</div> : calR ? <Tabla cab={CAB_CAL_CARTERA} filas={[filaCalibracionCartera(calR)]} /> : <div style={{ fontSize: TAM, color: AMBAR }}>Sin calibración: el azar no da veredicto.</div>}
