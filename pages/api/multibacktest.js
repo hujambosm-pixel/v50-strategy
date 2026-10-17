@@ -166,9 +166,11 @@ function _conCesion(t, cesiones) {
 // Procedencia de cada serie descargada, para la respuesta.
 // `ajustadoDividendos` dice si la serie trae los dividendos incorporados. Hoy es siempre false: los
 // cierres de Yahoo que se leen aquí están ajustados por splits y no por dividendos.
+// V9.991: en orden ALFABÉTICO de símbolo, fijo: el objeto se llenaba en el orden en que acababan las descargas, así que el
+// JSON de la respuesta cambiaba de una ejecución a otra sin que cambiara nada (la batería tenía que normalizarlo).
 function _origenPrecios(descargas) {
   const out = {}
-  for (const [sym, r] of Object.entries(descargas || {})) {
+  for (const [sym, r] of Object.entries(descargas || {}).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) {
     if (r?.origen) out[sym] = { origen: r.origen, ajustadoDividendos: !!r.ajustadoDividendos }
   }
   return Object.keys(out).length ? out : undefined
