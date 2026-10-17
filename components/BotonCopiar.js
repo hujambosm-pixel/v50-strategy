@@ -25,11 +25,12 @@ export function leeTabla(raiz) {
     filas: [...t.querySelectorAll('tbody > tr')].map(tr => ({ celdas: [...tr.children].map(limpia), activo: /^(Ver el rendimiento de|Quitar la selección de)/.test(tr.getAttribute('title') || '') })) }
 }
 
-export default function BotonCopiar({ obtenerTexto, estilo = null }) {
+// obtenerTexto puede devolver una promesa (V9.992: «Copiar lote completo» lee las pruebas del registro); etiqueta: el texto del botón.
+export default function BotonCopiar({ obtenerTexto, estilo = null, etiqueta = '📋 Copiar para Claude', titulo = null }) {
   const [estado, setEstado] = useState(null)   // null | 'copiado' | { manual: texto } | { error }
   const copia = async () => {
     let texto
-    try { texto = obtenerTexto() } catch (e) { setEstado({ error: e?.message || 'no se pudo generar el texto' }); return }
+    try { setEstado(null); texto = await obtenerTexto() } catch (e) { setEstado({ error: e?.message || 'no se pudo generar el texto' }); return }
     try {
       if (!navigator?.clipboard?.writeText) throw new Error('sin portapapeles')
       await navigator.clipboard.writeText(texto)
@@ -39,9 +40,9 @@ export default function BotonCopiar({ obtenerTexto, estilo = null }) {
   return (
     <span style={{ display: 'inline-flex', flexDirection: 'column', gap: 6, ...(estilo || {}) }}>
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-        <button onClick={copia} title="Copia los resultados en Markdown (solo números, sin gráficos) para pegarlos en una conversación con Claude"
+        <button onClick={copia} title={titulo || 'Copia los resultados en Markdown (solo números, sin gráficos) para pegarlos en una conversación con Claude'}
           style={{ fontFamily: MONO, fontSize: 11, padding: '3px 9px', borderRadius: 4, cursor: 'pointer', border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text)' }}>
-          📋 Copiar para Claude</button>
+          {etiqueta}</button>
         {estado === 'copiado' && <span style={{ fontFamily: MONO, fontSize: 11, color: 'var(--accent)' }}>Copiado ✓</span>}
         {estado?.error && <span style={{ fontFamily: MONO, fontSize: 11, color: '#ff4d6d' }}>{estado.error}</span>}
       </span>

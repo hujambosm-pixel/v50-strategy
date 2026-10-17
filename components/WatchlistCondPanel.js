@@ -280,7 +280,7 @@ export default function WatchlistCondPanel({ conditions, onToggle, onReload, con
 
       {/* ── Sin condiciones ── */}
       {open&&conditions.length===0&&!editing&&(
-        <div style={{padding:'6px 10px 8px',fontFamily:MONO,fontSize:10,color:'#4a6a80',lineHeight:1.6}}>
+        <div style={{padding:'6px 10px 8px',fontFamily:MONO,fontSize:10,color:'var(--text3)',lineHeight:1.6}}>
           Sin condiciones. Pulsa <b style={{color:'var(--accent)'}}>+</b> para crear la primera.
         </div>
       )}

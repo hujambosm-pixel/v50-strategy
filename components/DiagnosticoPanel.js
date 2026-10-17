@@ -49,7 +49,7 @@ export default function DiagnosticoPanel({ result, abiertoInicial = false }) {
               ))}
             </div>
           ))}
-          <div style={{ fontSize: 9, color: '#3d5a7a' }}>Calculado por la aplicación a partir de las operaciones del backtest, sin IA.</div>
+          <div style={{ fontSize: 9, color: 'var(--text3)' }}>Calculado por la aplicación a partir de las operaciones del backtest, sin IA.</div>
         </div>
       )}
     </div>

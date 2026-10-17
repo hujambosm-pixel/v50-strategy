@@ -157,7 +157,7 @@ export default function ContextThemeMenu({ x, y, section, onClose, onSave }) {
             ✓ Guardar y cerrar
           </button>
         </div>
-        <div style={{fontSize:9,color:'#3d5a7a',textAlign:'center'}}>
+        <div style={{fontSize:9,color:'var(--text3)',textAlign:'center'}}>
           Los cambios se aplican al instante · Clic fuera para cerrar
         </div>
       </div>

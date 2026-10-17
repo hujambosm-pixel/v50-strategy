@@ -21,7 +21,7 @@ import { SALIDA_VELAS, N_SIM_LAB, MIN_OPERACIONES, PERCENTIL_PASA } from '../lib
 import { textoLaboratorio, CAB_LAB, filasLab, CAB_LAB_DETALLE, filasLabDetalle, CAB_LAB_EDGE, filasLabEdge, AVISO_POCAS_LAB, SIN_SECTOR_LAB, num, reglaLab,
          filasLabSalidas, CAB_LAB_S_INFO, filasLabSalidasInfo, CAB_LAB_S_OTROS, filasLabSalidasOtros, CAB_LAB_S_DETALLE, filasLabSalidasDetalle,
          CAB_LAB_ANIO, filasLabAnio, CAB_LAB_ACTIVO, filasLabActivo, textoCriterioSalidas, cabLabSalidas, permutacionInformativa,
-         CAB_LAB_E, filasLabEstrategias, CAB_LAB_E_INFO, filasLabEstrategiasInfo, CAB_LAB_E_DETALLE, filasLabEstrategiasDetalle, CAB_LAB_CAL, filaCalibracion } from '../lib/exportaTexto'
+         CAB_LAB_E, filasLabEstrategias, CAB_LAB_E_INFO, filasLabEstrategiasInfo, CAB_LAB_E_DETALLE, filasLabEstrategiasDetalle, CAB_LAB_CAL, filaCalibracion, textoLoteCompleto } from '../lib/exportaTexto'
 import { getSupaUrl, getSupaH, hayConfigSupabase } from '../lib/supabase'
 
 const CLAVE_LS = 'v50_laboratorio'
@@ -324,6 +324,12 @@ export default function LaboratorioPanel({ apiFetch, version = null }) {
     }
     lanza(trabajos)
   }
+  // «📋 Copiar lote completo» (V9.992): la prueba oficial más reciente de cada elemento ejecutado, juntas y sin repetir lo común.
+  const copiaLote = async (lote) => {
+    const est = registro.lotes?.[lote.id] || {}, ctx = ctxRegistro()
+    const filas = await Promise.all(lote.items.map(async it => ({ item: it.id, nombre: it.nombre, fila: est[it.id]?.id ? await leerPrueba(ctx, est[it.id].id) : null })))
+    return textoLoteCompleto({ lote, filas, version, fecha: fmtDate(new Date().toISOString()), reglaDe })
+  }
   const verPrueba = async (id) => {
     setErrorEjec(null)
     try {
@@ -351,7 +357,8 @@ export default function LaboratorioPanel({ apiFetch, version = null }) {
         <div style={caja}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
             <span style={etiqueta}>{lote.nombre}</span>
-            <button onClick={() => ejecutaPendientes(lote)} disabled={!!progreso || !pendientes.length || !est} style={{ ...boton, opacity: progreso || !pendientes.length || !est ? 0.5 : 1 }}>Ejecutar pendientes ({est ? pendientes.length : '—'})</button>
+            <span style={{ display: 'inline-flex', gap: 6, alignItems: 'flex-start' }}>{est && Object.values(est).some(x => x.id) && <BotonCopiar etiqueta="📋 Copiar lote completo" titulo="Junta en un texto los elementos ejecutados del lote (la prueba oficial más reciente de cada uno), sin repetir lo común" obtenerTexto={() => copiaLote(lote)} />}
+            <button onClick={() => ejecutaPendientes(lote)} disabled={!!progreso || !pendientes.length || !est} style={{ ...boton, opacity: progreso || !pendientes.length || !est ? 0.5 : 1 }}>Ejecutar pendientes ({est ? pendientes.length : '—'})</button></span>
           </div>
           <table style={{ borderCollapse: 'collapse', fontSize: TAM, width: '100%' }} data-prueba={prueba}>
             <tbody>{lote.items.map(it => {

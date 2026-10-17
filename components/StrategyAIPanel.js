@@ -201,7 +201,7 @@ export default function StrategyAIPanel({ definition, onApply, onClose }) {
               transition:'all .15s',flexShrink:0,alignSelf:'stretch'
             }}>➤</button>
           </div>
-          <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',marginTop:5}}>
+          <div style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',marginTop:5}}>
             {getGroqKey()?'✓ API Key configurada':'⚠ Sin API Key — configúrala en ⚙ Configuración → Integraciones'}
           </div>
 

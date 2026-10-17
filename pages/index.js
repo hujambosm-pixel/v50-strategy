@@ -32,7 +32,7 @@ import { textoMulticartera, datosCabeceraMulticartera } from '../lib/exportaText
 import { nDeUniverso, reglaDeUniverso, nombreUniverso, FRASE_REGLA, cargaUniversoMc, estadoUniversoMc } from '../lib/universoMc'
 import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.991'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.992'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -6287,7 +6287,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.991</title>
+        <title>Trading Simulator V9.992</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6376,7 +6376,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             }} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.991
+            <span className="dot"/>Trading Simulator V9.992
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6787,7 +6787,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                             }catch(err){alert('Error: '+err.message)}
                                           }}
                                           title="Renombrar lista"
-                                          style={{color:'#3d5a7a',fontSize:11,cursor:'pointer',padding:'2px 4px',borderRadius:2,flexShrink:0,lineHeight:1}}
+                                          style={{color:'var(--text3)',fontSize:11,cursor:'pointer',padding:'2px 4px',borderRadius:2,flexShrink:0,lineHeight:1}}
                                           onMouseOver={e=>e.currentTarget.style.color='#ffd166'}
                                           onMouseOut={e=>e.currentTarget.style.color='#3d5a7a'}>✏</span>
                                         <span onClick={async e=>{
@@ -7341,7 +7341,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         background:'rgba(0,0,0,0.25)',borderBottom:'1px solid var(--border)',borderTop:'1px solid var(--border)',
                         display:'flex',alignItems:'center',gap:6}}>
                         <span>{label}</span>
-                        <span style={{color:'#3d5a7a'}}>({count})</span>
+                        <span style={{color:'var(--text3)'}}>({count})</span>
                       </div>
                     )
 
@@ -7351,7 +7351,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     if(alarms.length===0) return(
                       <div style={{padding:'24px 12px',textAlign:'center'}}>
                         <div style={{fontSize:28,marginBottom:8}}>🔕</div>
-                        <div style={{fontFamily:MONO,fontSize:11,color:'#4a6a80',lineHeight:1.7}}>
+                        <div style={{fontFamily:MONO,fontSize:11,color:'var(--text3)',lineHeight:1.7}}>
                           Sin alertas configuradas.<br/>
                           Pulsa <b style={{color:'#00d4ff'}}>+</b> para crear una nueva.
                         </div>
@@ -7450,7 +7450,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                                   )}
                                   {(active&&isAcked)&&(
                                     <button onClick={()=>unackAlarm(sym,a.id)} title="Desmarcar"
-                                      style={{background:'transparent',border:'1px solid #2a3f55',color:'#3d5a7a',fontFamily:MONO,fontSize:9,padding:'3px 6px',borderRadius:3,cursor:'pointer',flexShrink:0}}>
+                                      style={{background:'transparent',border:'1px solid #2a3f55',color:'var(--text3)',fontFamily:MONO,fontSize:9,padding:'3px 6px',borderRadius:3,cursor:'pointer',flexShrink:0}}>
                                       ✓
                                     </button>
                                   )}
@@ -8097,7 +8097,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       {/* Notas */}
                       {tlSelected.notes&&(
                         <div style={{margin:'10px 10px 0',padding:'8px',background:'rgba(13,21,32,0.6)',borderRadius:4,border:'1px solid var(--border)'}}>
-                          <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',marginBottom:4,textTransform:'uppercase',letterSpacing:'0.08em'}}>Notas</div>
+                          <div style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',marginBottom:4,textTransform:'uppercase',letterSpacing:'0.08em'}}>Notas</div>
                           <div style={{fontFamily:MONO,fontSize:10,color:'#7a9bc0',lineHeight:1.5,whiteSpace:'pre-wrap'}}>{tlSelected.notes}</div>
                         </div>
                       )}
@@ -8123,7 +8123,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   const MESES=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
                   const selStyle={fontFamily:MONO,fontSize:10,width:'100%',padding:'3px 4px',borderRadius:3,
                     border:'1px solid #1a2d45',background:'#0a1628',color:'#c0d8f0',cursor:'pointer',outline:'none'}
-                  const labelStyle={fontFamily:MONO,fontSize:8,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:3}
+                  const labelStyle={fontFamily:MONO,fontSize:8,color:'var(--text3)',letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:3}
                   const rowStyle={padding:'6px 8px',borderBottom:'1px solid var(--border)',display:'flex',flexDirection:'column',gap:2}
                   return(
                     <div style={{overflowY:'auto',flex:1}}>
@@ -9145,7 +9145,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         {key:'fl',label:'Flotante',color:'#ff9a3c',state:showBacktestFloat,set:setShowBacktestFloat},
                       ].map(({key,label,color,state,set})=>(
                         <button key={key} onClick={()=>set(s=>!s)}
-                          style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',border:`1px solid ${state?color:'#3d5a7a'}`,background:state?`${color}18`:'transparent',color:state?color:'#3d5a7a'}}>
+                          style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',border:`1px solid ${state?color:'var(--text3)'}`,background:state?`${color}18`:'transparent',color:state?color:'var(--text3)'}}>
                           {label}
                         </button>
                       ))}
@@ -10035,7 +10035,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       // a precio de mercado. El botón se deshabilita en vez de desaparecer.
                       <button disabled title="Las contribuciones por activo ya van a precio de mercado"
                         style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'not-allowed',
-                          border:'1px solid #24384d',background:'transparent',color:'#2b4257'}}>
+                          border:'1px solid #24384d',background:'transparent',color:'var(--text3)'}}>
                         Flotante
                       </button>
                     ):mcDisplayResults.length>1?(
@@ -10044,9 +10044,9 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           <div key={r.id} style={{display:'flex',flexDirection:'column',alignItems:'center',gap:2}}>
                           <button onClick={()=>setMcStratVisible(v=>({...v,[r.id]:!v[r.id]}))}
                             style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',
-                              border:`1px solid ${mcStratVisible[r.id]!==false?r.color:'#3d5a7a'}`,
+                              border:`1px solid ${mcStratVisible[r.id]!==false?r.color:'var(--text3)'}`,
                               background:mcStratVisible[r.id]!==false?`${r.color}18`:'transparent',
-                              color:mcStratVisible[r.id]!==false?r.color:'#3d5a7a',
+                              color:mcStratVisible[r.id]!==false?r.color:'var(--text3)',
                               ...(mcIsModoCompare?{}:{maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'})}}>
                             {mcIsModoCompare?r.name.split(' · ').pop():r.name}
                           </button>
@@ -10101,7 +10101,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       ].map(({key,label,color,state,set})=>(
                         <button key={key} onClick={()=>set(s=>!s)}
                           style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',
-                            border:`1px solid ${state?color:'#3d5a7a'}`,background:state?`${color}18`:'transparent',color:state?color:'#3d5a7a'}}>
+                            border:`1px solid ${state?color:'var(--text3)'}`,background:state?`${color}18`:'transparent',color:state?color:'var(--text3)'}}>
                           {label}
                         </button>
                       ))
@@ -10129,11 +10129,11 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                             title={visible?`Ocultar ${c.name}`:`Mostrar ${c.name}`}
                             style={{display:'inline-flex',alignItems:'center',gap:5,fontFamily:MONO,fontSize:10,
                               padding:'2px 7px',borderRadius:3,cursor:'pointer',
-                              border:`1px solid ${visible?c.color:'#2b4257'}`,
+                              border:`1px solid ${visible?c.color:'var(--text3)'}`,
                               background:visible?`${c.color}18`:'transparent',
-                              color:visible?c.color:'#3d5a7a'}}>
+                              color:visible?c.color:'var(--text3)'}}>
                             <span style={{width:8,height:8,borderRadius:2,flexShrink:0,
-                              background:visible?c.color:'transparent',border:`1px solid ${visible?c.color:'#3d5a7a'}`}}/>
+                              background:visible?c.color:'transparent',border:`1px solid ${visible?c.color:'var(--text3)'}`}}/>
                             {c.name}
                           </button>
                         )
@@ -10603,7 +10603,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                             return(
                               <button key={r.id} onClick={()=>mcPonerEstrategia(r.id===mcHistIdPorDefecto?null:r.id)}
                                 style={{fontSize:9,padding:'2px 8px',borderRadius:3,cursor:'pointer',
-                                  border:`1px solid ${isAct?r.color:'#3d5a7a'}`,
+                                  border:`1px solid ${isAct?r.color:'var(--text3)'}`,
                                   background:isAct?r.color+'18':'transparent',
                                   color:isAct?r.color:'#4a6a88',
                                   display:'flex',alignItems:'center',gap:3}}>
@@ -10783,9 +10783,9 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                 <button key={r.id}
                                   onClick={()=>isMulti&&setMcChartsStratVisible(v=>({...v,[r.id]:!on}))}
                                   style={{fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:isMulti?'pointer':'default',
-                                    border:`1px solid ${on?r.color:'#3d5a7a'}`,
+                                    border:`1px solid ${on?r.color:'var(--text3)'}`,
                                     background:on?`${r.color}18`:'transparent',
-                                    color:on?r.color:'#3d5a7a',
+                                    color:on?r.color:'var(--text3)',
                                     display:'flex',alignItems:'center',gap:4}}>
                                   <span>▲▼</span><span>{r.name}</span>
                                 </button>
@@ -10868,7 +10868,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           onMouseOver={e=>e.currentTarget.style.color='#ff8080'}
                           onMouseOut={e=>e.currentTarget.style.color='#ff4d6d'}>✕</button>
                       )}
-                      <span style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',flexShrink:0}}>
+                      <span style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',flexShrink:0}}>
                         {tlTradesFiltered.length}
                       </span>
                       {tlLoading&&<span style={{fontFamily:MONO,fontSize:9,color:'#9b72ff',flexShrink:0}}>⟳</span>}
@@ -10918,7 +10918,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           <button onClick={()=>setTlMultiMode(true)}
                             title="Selección múltiple para borrar"
                             style={{flexShrink:0,fontFamily:MONO,fontSize:10,padding:'4px 8px',borderRadius:4,cursor:'pointer',
-                              background:'transparent',border:'1px solid #2a3040',color:'#4a6a80',whiteSpace:'nowrap'}}>
+                              background:'transparent',border:'1px solid #2a3040',color:'var(--text3)',whiteSpace:'nowrap'}}>
                             🗑
                           </button>
                           <button onClick={()=>setTlShowFxCols(v=>!v)}
@@ -11024,7 +11024,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               })()}
                             </th>
                             {['#','Symbol','Strategy','Broker','Entry','Exit','Shares','Px In','Capital','Px Out','Curr.','FX','Fee','P&L€','P&L%','Days','Status'].map(h=>(
-                              <th key={h} style={{padding:'6px 8px',textAlign:'center',fontFamily:MONO,fontSize:9,color:'#3d5a7a',
+                              <th key={h} style={{padding:'6px 8px',textAlign:'center',fontFamily:MONO,fontSize:9,color:'var(--text3)',
                                 letterSpacing:'0.08em',textTransform:'uppercase',borderBottom:'1px solid var(--border)',whiteSpace:'nowrap'}}>{h}</th>
                             ))}
                             {tlShowFxCols&&['FX €','FX %'].map(h=>(
@@ -11079,7 +11079,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                     ?<input type="checkbox" readOnly checked={trAllSelected} style={{cursor:'pointer',width:12,height:12,pointerEvents:'none'}}/>
                                     :fills.length>0&&<span style={{fontSize:9,color:isExp?'#00d4ff':'#3d5a7a'}}>{isExp?'▼':'▶'}</span>}
                                 </td>
-                                <td style={{padding:'6px 8px',color:'#3d5a7a',fontSize:10}}>{i+1}</td>
+                                <td style={{padding:'6px 8px',color:'var(--text3)',fontSize:10}}>{i+1}</td>
                                 <td style={{padding:'6px 4px 6px 8px',maxWidth:100}} onClick={e=>e.stopPropagation()}>
                                   <span onClick={e=>{e.stopPropagation();window.open('https://www.tradingview.com/chart/?symbol='+tvSym(trade.symbol),'_blank')}}
                                     title={'Abrir '+trade.symbol+' en TradingView'}
@@ -11105,21 +11105,21 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                   </span>
                                 </td>
                                 <td style={{padding:'6px 8px',color:'#a8ccdf',whiteSpace:'nowrap'}}>{fmtDate(trade.entry_date)||'—'}</td>
-                                <td style={{padding:'6px 8px',color:'#a8ccdf',whiteSpace:'nowrap'}}>{isOpen||isOrphan?<span style={{color:'#3d5a7a'}}>—</span>:fmtDate(trade.exit_date)||'—'}</td>
+                                <td style={{padding:'6px 8px',color:'#a8ccdf',whiteSpace:'nowrap'}}>{isOpen||isOrphan?<span style={{color:'var(--text3)'}}>—</span>:fmtDate(trade.exit_date)||'—'}</td>
                                 <td style={{padding:'6px 8px',color:'#e2eaf5'}}>{parseFloat(trade.shares||0).toFixed(2)}</td>
-                                <td style={{padding:'6px 8px',color:'#e2eaf5',whiteSpace:'nowrap'}}>{isOrphan?<span style={{color:'#3d5a7a'}}>—</span>:parseFloat(trade.entry_price||0).toFixed(2)}</td>
+                                <td style={{padding:'6px 8px',color:'#e2eaf5',whiteSpace:'nowrap'}}>{isOrphan?<span style={{color:'var(--text3)'}}>—</span>:parseFloat(trade.entry_price||0).toFixed(2)}</td>
                                 <td style={{padding:'6px 8px',color:'#7a9bc0',whiteSpace:'nowrap'}}>{capEur>0?'€'+Math.round(capEur).toLocaleString('es-ES'):'—'}</td>
                                 <td style={{padding:'6px 8px',color:isOpen?'#9b72ff':'#e2eaf5',whiteSpace:'nowrap'}}>
-                                  {trade.exit_price!=null?<>{parseFloat(trade.exit_price).toFixed(2)}</>:<span style={{color:'#3d5a7a'}}>—</span>}
+                                  {trade.exit_price!=null?<>{parseFloat(trade.exit_price).toFixed(2)}</>:<span style={{color:'var(--text3)'}}>—</span>}
                                 </td>
                                 <td style={{padding:'6px 8px',color:'#ffd166',fontSize:10}}>{trade.currency||'—'}</td>
                                 <td style={{padding:'6px 8px',color:'#4a7a95',fontSize:10}}>{(()=>{let fx=parseFloat(trade.fx_entry||0);if(!fx||isNaN(fx))return'—';if(fx<1)fx=1/fx;return fx.toFixed(4)})()}</td>
                                 <td style={{padding:'6px 8px',color:'#4a7a95',fontSize:10}}>{parseFloat(trade.commission||0)>0?'€'+parseFloat(trade.commission).toFixed(2):'—'}</td>
                                 <td style={{padding:'6px 8px',whiteSpace:'nowrap'}}>
-                                  {pnl!=null?<span style={{color:pnl>=0?'#00e5a0':'#ff4d6d',fontWeight:600}}>{pnl>=0?'+':''}{parseFloat(pnl).toFixed(2)}€</span>:<span style={{color:'#3d5a7a'}}>—</span>}
+                                  {pnl!=null?<span style={{color:pnl>=0?'#00e5a0':'#ff4d6d',fontWeight:600}}>{pnl>=0?'+':''}{parseFloat(pnl).toFixed(2)}€</span>:<span style={{color:'var(--text3)'}}>—</span>}
                                 </td>
                                 <td style={{padding:'6px 8px',whiteSpace:'nowrap'}}>
-                                  {pnlPct!=null?<span style={{color:pnlPct>=0?'#00e5a0':'#ff4d6d',fontWeight:600}}>{pnlPct>=0?'+':''}{parseFloat(pnlPct).toFixed(2)}%</span>:<span style={{color:'#3d5a7a'}}>—</span>}
+                                  {pnlPct!=null?<span style={{color:pnlPct>=0?'#00e5a0':'#ff4d6d',fontWeight:600}}>{pnlPct>=0?'+':''}{parseFloat(pnlPct).toFixed(2)}%</span>:<span style={{color:'var(--text3)'}}>—</span>}
                                 </td>
                                 <td style={{padding:'6px 8px',color:'#7a9bc0'}}>{dias!=null?dias+'d':'—'}</td>
                                 <td style={{padding:'6px 8px'}}>
@@ -11143,10 +11143,10 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                   const fxCellStyle={padding:'6px 8px',whiteSpace:'nowrap',background:'rgba(255,209,102,0.04)'}
                                   return(<>
                                     <td style={fxCellStyle}>
-                                      {fxImpEur!=null?<span style={{color:fxImpEur>=0?'#ffd166':'#ff9944',fontWeight:600}}>{fxImpEur>=0?'+':''}{fxImpEur.toFixed(2)}€</span>:<span style={{color:'#3d5a7a'}}>—</span>}
+                                      {fxImpEur!=null?<span style={{color:fxImpEur>=0?'#ffd166':'#ff9944',fontWeight:600}}>{fxImpEur>=0?'+':''}{fxImpEur.toFixed(2)}€</span>:<span style={{color:'var(--text3)'}}>—</span>}
                                     </td>
                                     <td style={fxCellStyle}>
-                                      {fxImpPct!=null?<span style={{color:fxImpPct>=0?'#ffd166':'#ff9944',fontWeight:600}}>{fxImpPct>=0?'+':''}{fxImpPct.toFixed(2)}%</span>:<span style={{color:'#3d5a7a'}}>—</span>}
+                                      {fxImpPct!=null?<span style={{color:fxImpPct>=0?'#ffd166':'#ff9944',fontWeight:600}}>{fxImpPct>=0?'+':''}{fxImpPct.toFixed(2)}%</span>:<span style={{color:'var(--text3)'}}>—</span>}
                                     </td>
                                   </>)
                                 })()}
@@ -11208,7 +11208,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         </tbody>
                       </table>
                       {!tlLoading&&tlTradesFiltered.length===0&&(
-                        <div style={{padding:'40px',textAlign:'center',fontFamily:MONO,fontSize:12,color:'#3d5a7a'}}>
+                        <div style={{padding:'40px',textAlign:'center',fontFamily:MONO,fontSize:12,color:'var(--text3)'}}>
                           Sin operaciones registradas.{' '}
                           <span style={{color:'#9b72ff',cursor:'pointer'}} onClick={()=>{const _df=tlDefaultForm();setTlForm(_df);setTlFormOpen(true);if(_df.currency&&_df.currency!=='EUR')tlFetchFx(_df.currency,_df.date)}}>
                             Añadir primera operación →
@@ -11253,7 +11253,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           background:'rgba(0,212,255,0.05)',color:'#00d4ff',fontSize:10,whiteSpace:'nowrap'}}>
                           📁 Subir archivo CSV
                         </span>
-                        <span style={{color:'#3d5a7a',fontSize:10}}>o pega el contenido directamente abajo</span>
+                        <span style={{color:'var(--text3)',fontSize:10}}>o pega el contenido directamente abajo</span>
                         <input type="file" accept=".csv,.txt" style={{display:'none'}}
                           onChange={e=>{
                             const f=e.target.files?.[0]; if(!f) return
@@ -11314,7 +11314,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         <table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:11}}>
                           <thead><tr style={{background:'var(--bg2)'}}>
                             {['Tipo','Símbolo','Fecha','Acc.','Precio','Div.','FX','Broker','Estrategia','Com.','Estado','Cap. €',''].map(h=>(
-                              <th key={h} style={{padding:'5px 8px',textAlign:'left',fontSize:9,color:'#3d5a7a',letterSpacing:'0.08em',textTransform:'uppercase',borderBottom:'1px solid var(--border)'}}>{h}</th>
+                              <th key={h} style={{padding:'5px 8px',textAlign:'left',fontSize:9,color:'var(--text3)',letterSpacing:'0.08em',textTransform:'uppercase',borderBottom:'1px solid var(--border)'}}>{h}</th>
                             ))}
                           </tr></thead>
                           <tbody>
@@ -11477,7 +11477,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                         {opts.map(n=><option key={n} value={n}>{n}</option>)}
                                       </select>
                                     )
-                                  })() : <span style={{color:'#3d5a7a'}}>—</span>}
+                                  })() : <span style={{color:'var(--text3)'}}>—</span>}
                                 </td>
                                 <td style={{padding:'3px 5px',color:'#7a9bc0',fontSize:10,textAlign:'right'}}>
                                   {(()=>{const c=(t.commission_buy||0)+(t.commission_sell||0);return c>0?c.toFixed(2):'—'})()}
@@ -11899,7 +11899,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               <div key={i} style={{flex:'1 0 9%',padding:'7px 8px',borderRight:'1px solid var(--border)',borderLeft:hl?'3px solid #ff4d6d':'none',background:hl?'rgba(255,77,109,0.04)':'transparent',display:'flex',flexDirection:'column',gap:1,minWidth:80}}>
                                 <div style={{fontFamily:MONO,fontSize:9,color:'#e2e8f0',letterSpacing:'0.08em',textTransform:'uppercase',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:4}}>{l}{warn&&<span title={warn} style={{display:'inline-flex',alignItems:'center',gap:3,background:'#ff9800',color:'#000',fontWeight:700,fontSize:9,padding:'2px 6px',borderRadius:3,marginLeft:4,animation:'warnPulse 1.5s infinite',cursor:'help',lineHeight:1.3,textTransform:'none',letterSpacing:0}}>⚠ INCOMPLETO</span>}</div>
                                 <div style={{fontFamily:MONO,fontSize:15,fontWeight:700,color:c,lineHeight:1.1,whiteSpace:'nowrap'}}>{v}</div>
-                                {sub&&<div style={{fontFamily:MONO,fontSize:7,color:'#3d5a7a'}}>{sub}</div>}
+                                {sub&&<div style={{fontFamily:MONO,fontSize:7,color:'var(--text3)'}}>{sub}</div>}
                               </div>
                             ))}
                           </div>
@@ -11911,9 +11911,9 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               <div style={{flex:tlEquityFlex,display:'flex',flexDirection:'column',overflow:'hidden',position:'relative',minHeight:0}}>
                                 {eqDisp.length>1
                                   ?<div ref={tlEquityContainerRef} style={{flex:1,minHeight:0}}><TlEquityChart curve={eqDisp} curveSinFx={sfxDisp.length>1?sfxDisp:null} curveSinComm={scommDisp.length>1?scommDisp:null} curveWithContribs={cwcDisp.length>1?cwcDisp:null} curveBH={bhDisp?.length>1?bhDisp:null} showBH={tlShowBH} onToggleBH={async()=>{const next=!tlShowBH;setTlShowBH(next);if(next&&!tlBHData){const first=contributions.filter(c=>c.type==='aportacion').sort((a,b)=>(a.date||'').localeCompare(b.date||''))[0]?.date;const r=await fetch('/api/sp500history'+(first?'?from='+first:''));if(r.ok){const{history}=await r.json();setTlBHData(history||[])}}}} equityMode={tlEquityMode} onToggleMode={()=>setTlEquityMode(m=>m==='pnl'?'equity':'pnl')} contributions={contributions} showWithContribs={showWithContribs} onToggleContribs={()=>setShowWithContribs(v=>!v)} curveFloat={floatCurveDisp.length>1?floatCurveDisp:null} floatLoading={floatLoading} showFloat={tlShowFloat} onToggleFloat={()=>setTlShowFloat(v=>!v)} onFirstFloat={triggerFloatFetch} pnlDaily={tlPnlDaily} pnlDailyLoading={floatLoading} onTogglePnlDaily={()=>{const n=!tlPnlDaily;setTlPnlDaily(n);if(n)triggerFloatFetch()}} height={tlEquityHeight} showTimeScale={false} syncRef={tlDashSyncRef}/></div>
-                                  :<div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:MONO,fontSize:10,color:'#3d5a7a'}}>Sin datos equity</div>}
+                                  :<div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:MONO,fontSize:10,color:'var(--text3)'}}>Sin datos equity</div>}
                                 <div onClick={()=>{document.getElementById('tlDetailEquity')?.scrollIntoView({behavior:'smooth'})}} title="Ir al gráfico detallado"
-                                  style={{position:'absolute',top:6,right:6,zIndex:10,cursor:'pointer',color:'#3d5a7a',fontSize:13,lineHeight:1,background:'rgba(13,21,32,0.75)',borderRadius:3,padding:'2px 5px',border:'1px solid #1a2d45'}}
+                                  style={{position:'absolute',top:6,right:6,zIndex:10,cursor:'pointer',color:'var(--text3)',fontSize:13,lineHeight:1,background:'rgba(13,21,32,0.75)',borderRadius:3,padding:'2px 5px',border:'1px solid #1a2d45'}}
                                   onMouseOver={e=>e.currentTarget.style.color='#00d4ff'} onMouseOut={e=>e.currentTarget.style.color='#3d5a7a'}>⤢</div>
                               </div>
                               {/* Divisor arrastrable */}
@@ -11945,11 +11945,11 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                   <div style={{height:'100%'}}>
                                     {investData.length>1
                                       ?<TlInvestChart investData={investData} syncRef={tlDashSyncRef} patrimonyCurve={cwcDisp.length>1?cwcDisp:null} compact={false} height={tlInvestHeight}/>
-                                      :<div style={{height:'100%',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:MONO,fontSize:9,color:'#3d5a7a'}}>—</div>}
+                                      :<div style={{height:'100%',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:MONO,fontSize:9,color:'var(--text3)'}}>—</div>}
                                   </div>
                                 </div>
                                 <div onClick={()=>{document.getElementById('tlDetailInvest')?.scrollIntoView({behavior:'smooth'})}} title="Ir al gráfico detallado"
-                                  style={{position:'absolute',top:6,right:6,zIndex:10,cursor:'pointer',color:'#3d5a7a',fontSize:13,lineHeight:1,background:'rgba(13,21,32,0.75)',borderRadius:3,padding:'2px 5px',border:'1px solid #1a2d45'}}
+                                  style={{position:'absolute',top:6,right:6,zIndex:10,cursor:'pointer',color:'var(--text3)',fontSize:13,lineHeight:1,background:'rgba(13,21,32,0.75)',borderRadius:3,padding:'2px 5px',border:'1px solid #1a2d45'}}
                                   onMouseOver={e=>e.currentTarget.style.color='#00d4ff'} onMouseOut={e=>e.currentTarget.style.color='#3d5a7a'}>⤢</div>
                               </div>
                             </div>
@@ -11984,7 +11984,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                   </div>
                                 </div>
                                 <div onClick={()=>{document.getElementById('tlDetailPnl')?.scrollIntoView({behavior:'smooth'})}} title="Ir al P&L detallado"
-                                  style={{position:'absolute',top:6,right:6,zIndex:10,cursor:'pointer',color:'#3d5a7a',fontSize:13,lineHeight:1,background:'rgba(13,21,32,0.75)',borderRadius:3,padding:'2px 5px',border:'1px solid #1a2d45'}}
+                                  style={{position:'absolute',top:6,right:6,zIndex:10,cursor:'pointer',color:'var(--text3)',fontSize:13,lineHeight:1,background:'rgba(13,21,32,0.75)',borderRadius:3,padding:'2px 5px',border:'1px solid #1a2d45'}}
                                   onMouseOver={e=>e.currentTarget.style.color='#00d4ff'} onMouseOut={e=>e.currentTarget.style.color='#3d5a7a'}>⤢</div>
                                 {tlPnlView==='operacion'?(
                                   (()=>{
@@ -12018,7 +12018,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                                 borderRadius:isW?'2px 2px 0 0':'0 0 2px 2px',minWidth:2}}/>
                                           })}
                                         </div>
-                                        <div style={{position:'relative',width:42,flexShrink:0,paddingLeft:4,fontFamily:MONO,fontSize:8,color:'#3d5a7a'}}>
+                                        <div style={{position:'relative',width:42,flexShrink:0,paddingLeft:4,fontFamily:MONO,fontSize:8,color:'var(--text3)'}}>
                                           <span style={{position:'absolute',top:'0%',left:4,lineHeight:1}}>+€{Math.round(maxPos)}</span>
                                           <span style={{position:'absolute',top:zeroPct+'%',left:4,lineHeight:1,color:'rgba(255,255,255,0.25)'}}>€0</span>
                                           <span style={{position:'absolute',bottom:'0%',left:4,lineHeight:1}}>-€{Math.round(maxNeg)}</span>
@@ -12051,7 +12051,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                             )
                                           })}
                                         </div>
-                                        <div style={{display:'flex',flexDirection:'column',justifyContent:'space-between',width:42,flexShrink:0,paddingLeft:4,paddingBottom:2,fontFamily:MONO,fontSize:8,color:'#3d5a7a',textAlign:'left'}}>
+                                        <div style={{display:'flex',flexDirection:'column',justifyContent:'space-between',width:42,flexShrink:0,paddingLeft:4,paddingBottom:2,fontFamily:MONO,fontSize:8,color:'var(--text3)',textAlign:'left'}}>
                                           {[mx,mx*0.5,0,-mx*0.5,-mx].map((v,i)=>(
                                             <span key={i} style={{lineHeight:1}}>{(v>0?'+':'')}{'€'+Math.round(v)}</span>
                                           ))}
@@ -12062,7 +12062,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                 ):(
                                   (()=>{
                                     const data=pnlMonthly
-                                    if(!data.length) return <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:MONO,fontSize:9,color:'#3d5a7a'}}>Sin datos mensuales</div>
+                                    if(!data.length) return <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:MONO,fontSize:9,color:'var(--text3)'}}>Sin datos mensuales</div>
                                     const maxPos=Math.max(...data.map(d=>Math.max(d.delta,0)),0.01)
                                     const maxNeg=Math.max(...data.map(d=>Math.max(-d.delta,0)),0.01)
                                     const totalRange=maxPos+maxNeg
@@ -12083,7 +12083,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                               style={{position:'absolute',left:barL+'%',width:barW+'%',height:pct+'%',top:isW?(zeroPct-pct)+'%':zeroPct+'%',background:isW?'#00e5a0':'#ff4d6d',borderRadius:isW?'2px 2px 0 0':'0 0 2px 2px',minWidth:2}}/>
                                           })}
                                         </div>
-                                        <div style={{position:'relative',width:42,flexShrink:0,paddingLeft:4,fontFamily:MONO,fontSize:8,color:'#3d5a7a'}}>
+                                        <div style={{position:'relative',width:42,flexShrink:0,paddingLeft:4,fontFamily:MONO,fontSize:8,color:'var(--text3)'}}>
                                           <span style={{position:'absolute',top:'0%',left:4,lineHeight:1}}>+€{Math.round(maxPos)}</span>
                                           <span style={{position:'absolute',top:zeroPct+'%',left:4,lineHeight:1,color:'rgba(255,255,255,0.25)'}}>€0</span>
                                           <span style={{position:'absolute',bottom:'0%',left:4,lineHeight:1}}>-€{Math.round(maxNeg)}</span>
@@ -12132,7 +12132,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                             <div style={{flex:1,overflow:'auto',padding:'4px 8px',borderBottom:'1px solid var(--border)'}}>
                               <div style={{fontFamily:MONO,fontSize:11,color:'#e2e8f0',letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:3,position:'sticky',top:0,background:'var(--bg)',paddingTop:4}}>Mercados</div>
                               {tlDashMarkets.length===0
-                                ?<div style={{fontFamily:MONO,fontSize:8,color:'#3d5a7a',lineHeight:1.5}}>No disponible</div>
+                                ?<div style={{fontFamily:MONO,fontSize:8,color:'var(--text3)',lineHeight:1.5}}>No disponible</div>
                                 :tlDashMarkets.map(m=>(
                                   <div key={m.symbol} onClick={()=>{setSimbolo(m.symbol);setSidePanel('watchlist');setTlTab('ops')}} onMouseOver={e=>e.currentTarget.style.background='rgba(255,255,255,0.04)'} onMouseOut={e=>e.currentTarget.style.background='transparent'} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'2px 0',borderBottom:'1px solid rgba(255,255,255,0.03)',cursor:'pointer'}}>
                                     <span style={{fontFamily:MONO,fontSize:11,color:'#a8ccdf'}}>{m.name}</span>
@@ -12166,14 +12166,14 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                         <span style={{fontFamily:MONO,fontSize:10,color:t.pnlPct>=0?'rgba(0,229,160,0.7)':'rgba(255,77,109,0.7)'}}>{t.pnlPct>=0?'+':''}{typeof t.pnlPct==='number'?t.pnlPct.toFixed(1):'—'}%</span>
                                       </span>
                                     </div>
-                                    {t.strategy&&t.strategy!=='—'&&<div style={{fontFamily:MONO,fontSize:7,color:'#3d5a7a'}}>{t.strategy}</div>}
+                                    {t.strategy&&t.strategy!=='—'&&<div style={{fontFamily:MONO,fontSize:7,color:'var(--text3)'}}>{t.strategy}</div>}
                                   </div>
                                 )
                                 if(rendView==='flotantes'){
                                   const floatRows=(tlFifo.openPositions||[])
                                     .map(t=>({symbol:t.symbol,pnlEur:t._pnl_float_eur||0,pnlPct:t._pnl_float_pct||0,strategy:t.strategy||'—',isOpen:true}))
                                     .sort((a,b)=>Math.abs(b.pnlEur)-Math.abs(a.pnlEur))
-                                  if(!floatRows.length) return <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a'}}>Sin posiciones abiertas</div>
+                                  if(!floatRows.length) return <div style={{fontFamily:MONO,fontSize:9,color:'var(--text3)'}}>Sin posiciones abiertas</div>
                                   return <>{floatRows.map((t,i)=>renderRow(t,i))}</>
                                 }
                                 const allRendimientos_=[
@@ -12182,7 +12182,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                 ].sort((a,b)=>b.pnlEur-a.pnlEur)
                                 const top4Rend_=allRendimientos_.slice(0,4)
                                 const bot4Rend_=allRendimientos_.slice(-4).reverse()
-                                if(!allRendimientos_.length) return <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a'}}>Sin datos</div>
+                                if(!allRendimientos_.length) return <div style={{fontFamily:MONO,fontSize:9,color:'var(--text3)'}}>Sin datos</div>
                                 return <>
                                   {top4Rend_.map((t,i)=>renderRow(t,i))}
                                   {top4Rend_.length>0&&bot4Rend_.length>0&&<div style={{borderTop:'1px dashed #1a2d45',margin:'2px 0'}}/>}
@@ -12219,7 +12219,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                     const levels=[mx,mx*0.5,0,-mx*0.5,-mx]
                                     return (
                                       <div style={{display:'flex',flex:1,minHeight:0,gap:0}}>
-                                        <div style={{display:'flex',flexDirection:'column',justifyContent:'space-between',width:58,flexShrink:0,paddingRight:6,paddingBottom:2,fontFamily:MONO,fontSize:9,color:'#3d5a7a',textAlign:'right'}}>
+                                        <div style={{display:'flex',flexDirection:'column',justifyContent:'space-between',width:58,flexShrink:0,paddingRight:6,paddingBottom:2,fontFamily:MONO,fontSize:9,color:'var(--text3)',textAlign:'right'}}>
                                           {levels.map((v,i)=>(
                                             <span key={i} style={{lineHeight:1}}>{(v>=0?'+':'')}{'€'+Math.round(v)}</span>
                                           ))}
@@ -12252,7 +12252,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                     const levels=[mx,mx*0.5,0,-mx*0.5,-mx]
                                     return (
                                       <div style={{display:'flex',flex:1,minHeight:0,gap:0}}>
-                                        <div style={{display:'flex',flexDirection:'column',justifyContent:'space-between',width:58,flexShrink:0,paddingRight:6,paddingBottom:2,fontFamily:MONO,fontSize:9,color:'#3d5a7a',textAlign:'right'}}>
+                                        <div style={{display:'flex',flexDirection:'column',justifyContent:'space-between',width:58,flexShrink:0,paddingRight:6,paddingBottom:2,fontFamily:MONO,fontSize:9,color:'var(--text3)',textAlign:'right'}}>
                                           {levels.map((v,i)=>(
                                             <span key={i} style={{lineHeight:1}}>{(v>=0?'+':'')}{'€'+Math.round(v)}</span>
                                           ))}
@@ -12280,7 +12280,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                 ):(
                                   (()=>{
                                     const data=pnlMonthly
-                                    if(!data.length) return <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:MONO,fontSize:10,color:'#3d5a7a'}}>Sin datos mensuales</div>
+                                    if(!data.length) return <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:MONO,fontSize:10,color:'var(--text3)'}}>Sin datos mensuales</div>
                                     const maxPos=Math.max(...data.map(d=>Math.max(d.delta,0)),0.01)
                                     const maxNeg=Math.max(...data.map(d=>Math.max(-d.delta,0)),0.01)
                                     const totalRange=maxPos+maxNeg
@@ -12288,7 +12288,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                                     const levels=[maxPos,maxPos*0.5,0,-maxNeg*0.5,-maxNeg]
                                     return (
                                       <div style={{display:'flex',flex:1,minHeight:0,gap:0}}>
-                                        <div style={{display:'flex',flexDirection:'column',justifyContent:'space-between',width:58,flexShrink:0,paddingRight:6,paddingBottom:2,fontFamily:MONO,fontSize:9,color:'#3d5a7a',textAlign:'right'}}>
+                                        <div style={{display:'flex',flexDirection:'column',justifyContent:'space-between',width:58,flexShrink:0,paddingRight:6,paddingBottom:2,fontFamily:MONO,fontSize:9,color:'var(--text3)',textAlign:'right'}}>
                                           {levels.map((v,i)=>(
                                             <span key={i} style={{lineHeight:1}}>{(v>=0?'+':'')}{'€'+Math.round(v)}</span>
                                           ))}
@@ -12352,7 +12352,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               {label:'Patrimonio total',val:fmtAmt(patrimTotal),col:patrimTotal>=0?'#00e5a0':'#ff4d6d'},
                             ].map(({label,val,col})=>(
                               <div key={label} style={{background:'#0d1824',border:'1px solid #1a2d45',borderRadius:8,padding:'12px 16px'}}>
-                                <div style={{fontFamily:MONO,fontSize:8,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:6}}>{label}</div>
+                                <div style={{fontFamily:MONO,fontSize:8,color:'var(--text3)',letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:6}}>{label}</div>
                                 <div style={{fontFamily:MONO,fontSize:20,fontWeight:700,color:col}}>{val}</div>
                               </div>
                             ))}
@@ -12385,13 +12385,13 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                               <thead>
                                 <tr style={{background:'#0d1824',borderBottom:'1px solid #1a2d45'}}>
                                   {['Fecha','Tipo','Importe','Notas',''].map(h=>(
-                                    <th key={h} style={{padding:'7px 12px',textAlign:'left',color:'#3d5a7a',fontWeight:400,fontSize:9,letterSpacing:'0.08em',textTransform:'uppercase'}}>{h}</th>
+                                    <th key={h} style={{padding:'7px 12px',textAlign:'left',color:'var(--text3)',fontWeight:400,fontSize:9,letterSpacing:'0.08em',textTransform:'uppercase'}}>{h}</th>
                                   ))}
                                 </tr>
                               </thead>
                               <tbody>
                                 {contributions.length===0&&(
-                                  <tr><td colSpan={5} style={{padding:'20px 12px',color:'#3d5a7a',textAlign:'center',fontSize:10}}>Sin registros — añade tu primera aportación</td></tr>
+                                  <tr><td colSpan={5} style={{padding:'20px 12px',color:'var(--text3)',textAlign:'center',fontSize:10}}>Sin registros — añade tu primera aportación</td></tr>
                                 )}
                                 {contributions.map((c,i)=>{
                                   const TYPE_COLOR={aportacion:'#2a7fff',retirada:'#ff4d6d',dividendo:'#aaff44'}
@@ -12468,7 +12468,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                   {tlResumenCollapsed&&(
                     <button onClick={()=>setTlResumenCollapsed(false)} title="Expandir Resumen"
                       style={{width:'100%',height:'100%',background:'transparent',border:'none',cursor:'pointer',
-                        display:'flex',alignItems:'center',justifyContent:'center',color:'#3d5a7a',
+                        display:'flex',alignItems:'center',justifyContent:'center',color:'var(--text3)',
                         fontSize:14,padding:0,flexDirection:'column',gap:6}}
                       onMouseOver={e=>{e.currentTarget.style.color='#7a9bc0';e.currentTarget.style.background='rgba(255,255,255,0.02)'}}
                       onMouseOut={e=>{e.currentTarget.style.color='#3d5a7a';e.currentTarget.style.background='transparent'}}>
@@ -12688,20 +12688,20 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                     ]
                     return(
                       <div className="tl-resumen" onContextMenu={e=>{e.stopPropagation();openCtx(e,'tl_resumen')}} style={{flex:tlSelected?'0 0 auto':1,overflowY:'auto',borderBottom:tlSelected?'1px solid var(--border)':'none'}}>
-                        <div style={{padding:'4px 6px 4px 10px',borderBottom:'1px solid var(--border)',fontFamily:MONO,fontSize:8,color:'#3d5a7a',letterSpacing:'0.1em',textTransform:'uppercase',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                        <div style={{padding:'4px 6px 4px 10px',borderBottom:'1px solid var(--border)',fontFamily:MONO,fontSize:8,color:'var(--text3)',letterSpacing:'0.1em',textTransform:'uppercase',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
                           <span>Resumen</span>
                           <div style={{display:'flex',gap:4,alignItems:'center'}}>
                             {result&&metricsResumen&&sidePanel!=='multi'&&sidePanel!=='tradelog'&&(
                               <button onClick={()=>setMetricsLayout(l=>l==='grid'?'panel':l==='panel'?'multi':'grid')}
                                 title={metricsLayout==='grid'?'Panel simple':metricsLayout==='panel'?'Multi-columna':'Grid'}
-                                style={{background:'transparent',border:'1px solid #1a2d45',color:'#3d5a7a',fontFamily:MONO,fontSize:9,
+                                style={{background:'transparent',border:'1px solid #1a2d45',color:'var(--text3)',fontFamily:MONO,fontSize:9,
                                   padding:'2px 6px',borderRadius:3,cursor:'pointer',letterSpacing:'normal',textTransform:'none'}}>
                                 {metricsLayout==='grid'?'☰':metricsLayout==='panel'?'⊞':'⊟'}
                               </button>
                             )}
                             {sidePanel==='tradelog'&&(
                               <button onClick={()=>setTlResumenCollapsed(true)} title="Contraer panel"
-                                style={{background:'transparent',border:'1px solid #1a2d45',color:'#3d5a7a',fontFamily:MONO,
+                                style={{background:'transparent',border:'1px solid #1a2d45',color:'var(--text3)',fontFamily:MONO,
                                   fontSize:9,padding:'2px 6px',borderRadius:3,cursor:'pointer',
                                   letterSpacing:'normal',textTransform:'none',lineHeight:1}}
                                 onMouseOver={e=>{e.currentTarget.style.borderColor='#4a7fa0';e.currentTarget.style.color='#7a9bc0'}}
@@ -12770,12 +12770,12 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                   style={{flex:1,background:'transparent',border:'none',outline:'none',color:'#e2eaf5',fontFamily:MONO,fontSize:18,fontWeight:600,letterSpacing:'0.05em'}}
                 />
                 <button onClick={()=>{setSymSearchOpen(false);setSymSearchQ('')}}
-                  style={{background:'transparent',border:'none',color:'#3d5a7a',fontSize:18,cursor:'pointer',lineHeight:1}}>✕</button>
+                  style={{background:'transparent',border:'none',color:'var(--text3)',fontSize:18,cursor:'pointer',lineHeight:1}}>✕</button>
               </div>
               {/* Resultados */}
               <div style={{overflowY:'auto',maxHeight:380}}>
                 {results.length===0&&q.length>0&&(
-                  <div style={{padding:'20px 16px',color:'#3d5a7a',fontSize:12,textAlign:'center'}}>Sin resultados para «{q}»</div>
+                  <div style={{padding:'20px 16px',color:'var(--text3)',fontSize:12,textAlign:'center'}}>Sin resultados para «{q}»</div>
                 )}
                 {results.map((r,i)=>(
                   <div key={r.symbol} onClick={()=>{setSimbolo(r.symbol);setSymSearchOpen(false);setSymSearchQ('')}}
@@ -12792,11 +12792,11 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       <div style={{color:'#7a9bc0',fontSize:11,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.name}</div>
                     </div>
                     {r.src==='watchlist'&&<span style={{fontSize:9,color:'#00d4ff',background:'rgba(0,212,255,0.1)',padding:'2px 6px',borderRadius:3}}>WL</span>}
-                    {i===0&&<span style={{fontSize:9,color:'#3d5a7a'}}>↵</span>}
+                    {i===0&&<span style={{fontSize:9,color:'var(--text3)'}}>↵</span>}
                   </div>
                 ))}
                 {q.length===0&&(
-                  <div style={{padding:'12px 16px',color:'#3d5a7a',fontSize:11,textAlign:'center'}}>Escribe para buscar · Esc para cerrar</div>
+                  <div style={{padding:'12px 16px',color:'var(--text3)',fontSize:11,textAlign:'center'}}>Escribe para buscar · Esc para cerrar</div>
                 )}
               </div>
             </div>
@@ -12835,7 +12835,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
               <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',background:'rgba(0,212,255,0.06)',border:'1px solid rgba(0,212,255,0.2)',borderRadius:5}}>
                 <span style={{fontFamily:MONO,fontSize:11,color:'#5a7a95'}}>Símbolo:</span>
                 <span style={{fontFamily:MONO,fontSize:15,color:'var(--accent)',fontWeight:700}}>{alarmForm.symbol||simbolo}</span>
-                <span style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',marginLeft:'auto'}}>activo en el gráfico</span>
+                <span style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',marginLeft:'auto'}}>activo en el gráfico</span>
               </div>
 
               {/* Tipo de alerta */}
@@ -12854,7 +12854,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
               {/* Si es condición técnica: enlazar con librería (opcional) */}
               {alarmForm.condition!=='price_level'&&conditions.length>0&&(
                 <label style={{display:'flex',flexDirection:'column',gap:4,color:'var(--text3)'}}>
-                  <span style={{fontSize:10}}>De la librería <span style={{color:'#4a6a80'}}>(opcional)</span></span>
+                  <span style={{fontSize:10}}>De la librería <span style={{color:'var(--text3)'}}>(opcional)</span></span>
                   <select value={alarmForm.condition_id||''} onChange={e=>{
                       const cid=e.target.value||null
                       const cond=conditions.find(c=>c.id===cid)
@@ -13067,7 +13067,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                 {vp!=null&&<span style={{fontSize:12,fontWeight:600,color:vp>=0?'#00e5a0':'#ff4d6d'}}>
                   {vp>=0?'+':''}{vp.toFixed(2)}%
                 </span>}
-                <span style={{marginLeft:'auto',fontSize:9,color:'#3d5a7a'}}>
+                <span style={{marginLeft:'auto',fontSize:9,color:'var(--text3)'}}>
                   {pr.fecha||''}{pr.origen?' · '+pr.origen:''}
                 </span>
               </div>
@@ -13090,7 +13090,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                 if(!aStr&&!tStr&&!siempre) return null
                 return(
                   <div key={label} style={{display:'grid',gridTemplateColumns:'70px 1fr'+(sameStrat?'':' 1fr'),gap:4,marginBottom:3,alignItems:'start'}}>
-                    <span style={{color:'#3d5a7a',fontSize:10}} title={label==='CAGR simple'?AYUDA_CAGR.simple:undefined}>{label}</span>
+                    <span style={{color:'var(--text3)',fontSize:10}} title={label==='CAGR simple'?AYUDA_CAGR.simple:undefined}>{label}</span>
                     {sameStrat
                       ? <span style={{color:colorFn(vAct),fontWeight:600,textAlign:'right',wordBreak:'break-word'}}>{aStr||'—'}</span>
                       : <>
@@ -13129,7 +13129,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                     </div>
                     {comps.map(([label,c,f])=>(
                       <div key={label} style={{display:'grid',gridTemplateColumns:G,gap:3,marginBottom:1,fontSize:10}}>
-                        <span style={{color:'#3d5a7a'}} title={label==='CAGR simp.'?AYUDA_CAGR.simple:undefined}>{label}</span>
+                        <span style={{color:'var(--text3)'}} title={label==='CAGR simp.'?AYUDA_CAGR.simple:undefined}>{label}</span>
                         <span style={{color:'#8aadcc',textAlign:'right'}}>{c.valor!=null?f(c.valor):'—'}</span>
                         <span style={{color:'#5a8aaa',textAlign:'right'}}>{fv(c.norm,0)}</span>
                         <span style={{color:c.puntos<0?'#ff7eb3':'#c8dff5',fontWeight:600,textAlign:'right'}}>
@@ -13157,7 +13157,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
               })()}
               {tooltipUpdatedAt&&(
                 <div style={{display:'flex',justifyContent:'space-between',marginTop:5,paddingTop:5,borderTop:'1px solid #131f2e'}}>
-                  <span style={{color:'#3d5a7a',fontSize:10}}>Actualizado</span>
+                  <span style={{color:'var(--text3)',fontSize:10}}>Actualizado</span>
                   <span style={{color:'#5a8aaa',fontSize:10}}>{new Date(tooltipUpdatedAt).toLocaleDateString('es-ES',{day:'2-digit',month:'2-digit',year:'2-digit'})}</span>
                 </div>
               )}
@@ -13528,7 +13528,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                   style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'5px 7px',borderRadius:4}}/>
               </label>
               <label style={{display:'flex',flexDirection:'column',gap:4}}>
-                <span style={{fontSize:10,color:'#5a8aaa'}}>FX <span style={{color:'#3d5a7a'}}>(opt.)</span></span>
+                <span style={{fontSize:10,color:'#5a8aaa'}}>FX <span style={{color:'var(--text3)'}}>(opt.)</span></span>
                 <div style={{display:'flex',gap:4,alignItems:'center'}}>
                   <input type="number" step="0.0001" placeholder={tlForm._fxLoading?'Cargando…':'auto'} value={tlForm.fx} onChange={e=>setTlForm(f=>({...f,fx:e.target.value,fx_manual:true}))}
                     style={{flex:1,background:'var(--bg3)',border:`1px solid ${tlForm.fx_manual?'#ffd166':tlForm.fx?'#00e5a0':'var(--border)'}`,color:tlForm._fxLoading?'#5a7a95':'var(--text)',fontFamily:MONO,fontSize:11,padding:'5px 7px',borderRadius:4}}/>
@@ -13539,7 +13539,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
             {/* Fila 5: estrategia, notas */}
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
               <label style={{display:'flex',flexDirection:'column',gap:4}}>
-                <span style={{fontSize:10,color:'#5a8aaa'}}>Estrategia{tlForm.id&&!tlForm._isFirstBuy&&<span style={{color:'#3d5a7a',marginLeft:4,fontSize:9}}>(solo editable en el 1er BUY)</span>}</span>
+                <span style={{fontSize:10,color:'#5a8aaa'}}>Estrategia{tlForm.id&&!tlForm._isFirstBuy&&<span style={{color:'var(--text3)',marginLeft:4,fontSize:9}}>(solo editable en el 1er BUY)</span>}</span>
                 <select value={tlForm.strategy||''} onChange={e=>setTlForm(f=>({...f,strategy:e.target.value}))}
                   disabled={!!(tlForm.id&&!tlForm._isFirstBuy)}
                   style={{background:'var(--bg3)',border:'1px solid var(--border)',color:tlForm.id&&!tlForm._isFirstBuy?'#3d5a7a':'var(--text)',fontFamily:MONO,fontSize:11,padding:'5px 7px',borderRadius:4,opacity:tlForm.id&&!tlForm._isFirstBuy?0.45:1,cursor:tlForm.id&&!tlForm._isFirstBuy?'not-allowed':'auto'}}>

@@ -159,7 +159,7 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
     <div style={{marginBottom:14}}>
       <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:5}}>
         <span style={{fontFamily:MONO,fontSize:11,color:'#7a9bc0',letterSpacing:'0.06em',textTransform:'uppercase'}}>{label}</span>
-        {tip&&<span style={{fontFamily:MONO,fontSize:10,color:'#3d5a7a'}}>{tip}</span>}
+        {tip&&<span style={{fontFamily:MONO,fontSize:10,color:'var(--text3)'}}>{tip}</span>}
       </div>
       {children}
     </div>
@@ -250,7 +250,7 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                     color:'#e2eaf5',fontFamily:MONO,fontSize:12,padding:'6px 10px',letterSpacing:'0.06em'}}
                 />
               )}
-              <div style={{fontSize:10,color:'#3d5a7a',lineHeight:1.6,marginTop:-6,marginBottom:16}}>
+              <div style={{fontSize:10,color:'var(--text3)',lineHeight:1.6,marginTop:-6,marginBottom:16}}>
                 Las credenciales se almacenan únicamente en localStorage de tu navegador. Sin configurar, el tradelog funciona en modo local.
               </div>
 
@@ -273,7 +273,7 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                   </button>
                 </div>
               )}
-              <div style={{fontSize:10,color:'#3d5a7a',lineHeight:1.6,marginTop:-6}}>
+              <div style={{fontSize:10,color:'var(--text3)',lineHeight:1.6,marginTop:-6}}>
                 La clave se almacena únicamente en localStorage de tu navegador. Obtén una clave gratuita en <a href="https://console.groq.com" target="_blank" rel="noreferrer" style={{color:'#4a9fd4'}}>console.groq.com</a>
               </div>
 
@@ -285,7 +285,7 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                   style={{accentColor:'#00d4ff',width:13,height:13}}/>
                 <span style={{fontSize:11,color:'#cce0f5'}}>Usar caché de precios</span>
               </label>
-              <div style={{fontSize:10,color:'#3d5a7a',lineHeight:1.6}}>
+              <div style={{fontSize:10,color:'var(--text3)',lineHeight:1.6}}>
                 Los backtests, el multiactivo, el panel del activo y el ranking leen las velas diarias ya cerradas
                 de la caché de Supabase y solo piden a Yahoo las últimas, la vela en curso y lo que falte. Los
                 resultados son los mismos. Si la caché falla o tarda más de 2 segundos, se descarga de Yahoo como
@@ -316,7 +316,7 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                       fontFamily:MONO,fontSize:11,padding:'3px 6px',borderRadius:3,textAlign:'right'}}/>
                   <span style={{fontFamily:MONO,fontSize:11,color:'#5a7a95'}}>activos</span>
                 </div>
-                <div style={{fontFamily:MONO,fontSize:9,color:'#4a6a80',lineHeight:1.6}}>
+                <div style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',lineHeight:1.6}}>
                   Si la lista activa del Watchlist tiene más de N activos, las alertas no se actualizarán
                   automáticamente — aparecerá un botón ↻ para hacerlo manualmente.
                   Con listas pequeñas (≤ N) la actualización es automática al cargar o cambiar el Watchlist.
@@ -335,7 +335,7 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                       fontFamily:MONO,fontSize:11,padding:'3px 6px',borderRadius:3,textAlign:'right'}}/>
                   <span style={{fontFamily:MONO,fontSize:11,color:'#5a7a95'}}>min</span>
                 </div>
-                <div style={{fontFamily:MONO,fontSize:9,color:'#4a6a80',lineHeight:1.6}}>
+                <div style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',lineHeight:1.6}}>
                   Tiempo en minutos que se conservan los datos descargados de cada activo antes de volver a consultarlos.
                   Con un valor mayor, las comprobaciones son más rápidas pero los datos pueden estar desactualizados.
                 </div>
@@ -454,7 +454,7 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                 {/* Lista */}
                 {condTab==='list'&&(
                   <div style={{display:'flex',flexDirection:'column',gap:6}}>
-                    {localConds.length===0&&<div style={{fontFamily:MONO,fontSize:11,color:'#4a6a80',padding:'8px 0'}}>No hay condiciones. Crea una en "Nueva condición".</div>}
+                    {localConds.length===0&&<div style={{fontFamily:MONO,fontSize:11,color:'var(--text3)',padding:'8px 0'}}>No hay condiciones. Crea una en "Nueva condición".</div>}
                     {localConds.map(c=>(
                       <div key={c.id} style={{background:'#0a1018',border:'1px solid #1a2d45',borderRadius:5,padding:'10px 12px',display:'flex',alignItems:'flex-start',gap:10}}>
                         <div style={{flex:1,minWidth:0}}>
@@ -463,7 +463,7 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                             {c.source==='groq'&&<span style={{fontFamily:MONO,fontSize:8,color:'#9b72ff',background:'rgba(155,114,255,0.1)',padding:'1px 5px',borderRadius:8,border:'1px solid rgba(155,114,255,0.3)'}}>IA</span>}
                           </div>
                           <div style={{fontFamily:MONO,fontSize:10,color:'#7a9bc0',marginBottom:2}}>{CTYPE_LABELS[c.type]||c.type} · {paramSummary(c)}</div>
-                          {c.description&&<div style={{fontFamily:MONO,fontSize:10,color:'#4a6a80',lineHeight:1.4}}>{c.description}</div>}
+                          {c.description&&<div style={{fontFamily:MONO,fontSize:10,color:'var(--text3)',lineHeight:1.4}}>{c.description}</div>}
                         </div>
                         <button onClick={()=>handleDeleteCond(c.id)} disabled={condDeleting===c.id}
                           style={{background:'transparent',border:'none',color:'#ff4d6d',fontSize:13,cursor:'pointer',padding:'0 2px',flexShrink:0,opacity:condDeleting===c.id?0.4:1}}>
@@ -529,7 +529,7 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                     {/* Separador */}
                     <div style={{display:'flex',alignItems:'center',gap:10,marginTop:4}}>
                       <div style={{flex:1,height:1,background:'#1a2d45'}}/>
-                      <span style={{fontFamily:MONO,fontSize:10,color:'#4a6a80',letterSpacing:'0.08em'}}>O MANUALMENTE</span>
+                      <span style={{fontFamily:MONO,fontSize:10,color:'var(--text3)',letterSpacing:'0.08em'}}>O MANUALMENTE</span>
                       <div style={{flex:1,height:1,background:'#1a2d45'}}/>
                     </div>
 
@@ -541,7 +541,7 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                           style={{background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,color:'#e2eaf5',fontFamily:MONO,fontSize:13,padding:'9px 11px'}}/>
                       </label>
                       <label style={{display:'flex',flexDirection:'column',gap:3,color:'#a8ccdf',fontSize:10}}>
-                        <span style={{display:'flex',alignItems:'center',gap:5}}>Tipo de condición <span style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a'}}>— define qué señal evalúa la condición</span></span>
+                        <span style={{display:'flex',alignItems:'center',gap:5}}>Tipo de condición <span style={{fontFamily:MONO,fontSize:9,color:'var(--text3)'}}>— define qué señal evalúa la condición</span></span>
                         <select value={manualForm.type} onChange={e=>{
                           const t=e.target.value
                           // Pre-fill default params so save works without touching inputs
@@ -659,7 +659,7 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                     onChange={e=>upd('chart.recentMonths',Number(e.target.value))}
                     style={{width:100,accentColor:'#00d4ff'}}/>
                 </div>
-                <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',lineHeight:1.5}}>
+                <div style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',lineHeight:1.5}}>
                   El botón ⊡ muestra los últimos N meses. ⊞ muestra todo el periodo del backtest.
                 </div>
               </div>
@@ -688,7 +688,7 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                       style={{accentColor:'#00d4ff',width:13,height:13}}/>
                     <span style={{fontFamily:MONO,fontSize:11,color:'#cce0f5',fontWeight:600}}>{label}</span>
                   </label>
-                  <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',lineHeight:1.5,marginLeft:21,marginTop:2}}>{hint}</div>
+                  <div style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',lineHeight:1.5,marginLeft:21,marginTop:2}}>{hint}</div>
                 </div>
               ))}
               {sep('Apariencia')}
@@ -1024,15 +1024,15 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                       <div style={{display:'grid',gridTemplateColumns:G,gap:4,fontSize:10,marginBottom:3}}>
                         <span/>
                         <span style={{gridColumn:'2 / span 3',textAlign:'center',color:'#22d3ee',fontWeight:700}}>
-                          Activa <span style={{color:'#3d5a7a',fontWeight:400}}>(n={distrib.nAct})</span>
+                          Activa <span style={{color:'var(--text3)',fontWeight:400}}>(n={distrib.nAct})</span>
                         </span>
                         <span/>
                         <span style={{gridColumn:'6 / span 3',textAlign:'center',color:'#ff9500',fontWeight:700}}>
-                          Top <span style={{color:'#3d5a7a',fontWeight:400}}>(n={distrib.nTop})</span>
+                          Top <span style={{color:'var(--text3)',fontWeight:400}}>(n={distrib.nTop})</span>
                         </span>
                       </div>
                       {/* Cabecera de columnas: en lenguaje llano, no en percentiles */}
-                      <div style={{display:'grid',gridTemplateColumns:G,gap:4,fontSize:9,color:'#3d5a7a',marginBottom:3}}>
+                      <div style={{display:'grid',gridTemplateColumns:G,gap:4,fontSize:9,color:'var(--text3)',marginBottom:3}}>
                         <span/>
                         <span style={{textAlign:'right',whiteSpace:'nowrap'}}>el 10% peor</span><span style={{textAlign:'right'}}>mediana</span><span style={{textAlign:'right',whiteSpace:'nowrap'}}>el 10% mejor</span>
                         <span/>
@@ -1135,7 +1135,7 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                           style={{width:52,background:'#080c14',border:'1px solid #1a2d45',borderRadius:4,
                             color:'#e2eaf5',fontFamily:MONO,fontSize:12,padding:'3px 6px',textAlign:'center'}}/>
                         <span style={{fontFamily:MONO,fontSize:11,color:'#7a9bc0'}}>días sin recalcular</span>
-                        <span style={{fontFamily:MONO,fontSize:11,color:'#3d5a7a',padding:'0 2px'}}>·</span>
+                        <span style={{fontFamily:MONO,fontSize:11,color:'var(--text3)',padding:'0 2px'}}>·</span>
                         <span style={{fontFamily:MONO,fontSize:11,color:'#7a9bc0'}}>actualizar por lote los</span>
                         <input type="number" value={batch} min={1} max={200}
                           onChange={e=>upd('ranking.metricsReminderBatch', Math.max(1,Number(e.target.value)))}
@@ -1198,7 +1198,7 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                     <option value="MM/DD">Mes/Día/Año — p.ej. 08/05/2026 = 5 de agosto (Interactive Brokers)</option>
                   </select>
                 </div>
-                <div style={{fontFamily:MONO,fontSize:9,color:'#3d5a7a',lineHeight:1.5,marginLeft:208,marginTop:2}}>
+                <div style={{fontFamily:MONO,fontSize:9,color:'var(--text3)',lineHeight:1.5,marginLeft:208,marginTop:2}}>
                   Solo afecta a la lectura del texto pegado. En la app las fechas siempre se muestran como Día/Mes/Año.
                 </div>
               </div>

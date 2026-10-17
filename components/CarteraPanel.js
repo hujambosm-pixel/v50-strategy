@@ -24,7 +24,7 @@ import { textoLaboratorio, reglaCarteraCorta, periodoCartera, CAB_CARTERA, filas
          CAB_COMPARACION, filasComparacion, AVISO_EXPLORACION, CAB_CURVA, filasCurva, cabMapa, filasMapa, textoFueraDeMuestra,
          AVISO_SINTETICOS, CAB_VALIDACION, filasValidacion, avisoValidacion, CAB_VALIDACION_ANIOS, filasValidacionAnios, CAB_ESTRES, filasEstres, cabAnioEstres, filasAnioEstres,
          AVISO_LIQUIDEZ, nombreEtfCartera, esConfigFiltro, CAB_FILTRO, filasFiltro, CAB_FILTRO_REF, filasFiltroRef, CAB_AZAR_FILTRO, filasAzarFiltro, CAB_FUERA, filasFuera, CAB_ANIO_FILTRO, filasAnioFiltro,
-         CAB_CAL_FILTRO, filaCalibracionFiltro, notaCalibracionFiltro, notaMediaDesde, textoMediaFiltro, nombreLineaMapa, cabMapaMedia, filasMapaMedia, textoFueraMapa, textoZonaMapa, CAB_REF_MAPA, filasRefMapa } from '../lib/exportaTexto'
+         CAB_CAL_FILTRO, filaCalibracionFiltro, notaCalibracionFiltro, notaMediaDesde, textoMediaFiltro, nombreLineaMapa, cabMapaMedia, filasMapaMedia, textoFueraMapa, textoZonaMapa, CAB_REF_MAPA, filasRefMapa, textoLoteCompleto } from '../lib/exportaTexto'
 import { getSupaUrl, getSupaH, hayConfigSupabase } from '../lib/supabase'
 
 const CLAVE_LS = 'v50_laboratorio_cartera'
@@ -334,6 +334,12 @@ export default function CarteraPanel({ apiFetch, version = null }) {
     } catch (e) { setErrorEjec(e?.message || String(e)) }
     setProgreso(null); recarga()
   }
+  // «📋 Copiar lote completo»: lee del registro la prueba oficial más reciente de cada variante ejecutada y las junta.
+  const copiaLote = async (lote) => {
+    const est = registro.lotes?.[lote.id] || {}, ctx = ctxRegistro()
+    const filas = await Promise.all(lote.items.map(async it => ({ item: it.id, nombre: it.nombre, fila: est[it.id]?.id ? await leerPrueba(ctx, est[it.id].id) : null })))
+    return textoLoteCompleto({ lote, filas, version, fecha: fmtDate(new Date().toISOString()), reglaDe: reglaCarteraCorta })
+  }
   const verExploracion = (f) => { const tipo = f.config.tipo; setExpl(x => ({ ...x, [tipo]: { config: f.config, partes: f.resultados?.partes || {}, clas: { hash: f.hash_config, oficial: false }, id: f.id, creado: f.creado, version: f.version_app } })); setVerExpl(tipo); setPestana('explorar') }
   const textoCopiaExpl = () => { const e = expl[verExpl]; return textoLaboratorio({ cabecera: { titulo: 'Laboratorio de cartera · exploración', version: e.version || version, fecha: fmtDate(e.creado || new Date().toISOString()) }, config: e.config, partes: e.partes, clas: e.clas, id: e.id }) }
   const verPrueba = async (id) => {
@@ -596,7 +602,8 @@ export default function CarteraPanel({ apiFetch, version = null }) {
           return (<div key={lote.id} style={caja}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
             <span style={etiqueta}>{lote.nombre}</span>
-            <button onClick={() => ejecutaPendientes(lote)} disabled={!!progreso || !pend.length || !est} style={{ ...boton, opacity: progreso || !pend.length || !est ? 0.5 : 1 }}>Ejecutar pendientes ({est ? pend.length : '—'})</button>
+            <span style={{ display: 'inline-flex', gap: 6, alignItems: 'flex-start' }}>{est && Object.values(est).some(x => x.id) && <BotonCopiar etiqueta="📋 Copiar lote completo" titulo="Junta en un texto las variantes ejecutadas del lote (la prueba oficial más reciente de cada una), sin repetir lo común" obtenerTexto={() => copiaLote(lote)} />}
+            <button onClick={() => ejecutaPendientes(lote)} disabled={!!progreso || !pend.length || !est} style={{ ...boton, opacity: progreso || !pend.length || !est ? 0.5 : 1 }}>Ejecutar pendientes ({est ? pend.length : '—'})</button></span>
           </div>
           <table style={{ borderCollapse: 'collapse', fontSize: TAM, width: '100%' }} data-prueba={prueba}><tbody>{lote.items.map(it => {
             const e = est?.[it.id], estado = e?.estado || (est ? 'pendiente' : '—'), cal = calibracionDe(lote.id, it.id)
