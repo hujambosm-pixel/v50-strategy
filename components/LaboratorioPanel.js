@@ -14,7 +14,7 @@ import { MONO, fmtDate, numeroEs } from '../lib/utils'
 import CampoFecha from './CampoFecha'
 import BotonCopiar from './BotonCopiar'
 import { SENALES, CATALOGO, parametrosPorDefecto, validaCombinacion, SALIDAS, CATALOGO_SALIDAS, parametrosSalidaPorDefecto } from '../lib/senales'
-import { LOTE_1, LOTE_2, LOTE_3, configDe, configDeItem, configSalidasDe, configEstrategiaDe, validaConfig, esConfigSalidas, esConfigEstrategias, esConfigCartera, veredictoOficial,
+import { LOTE_1, LOTE_2, LOTE_3, configDe, configDeItem, configSalidasDe, configEstrategiaDe, validaConfig, esConfigSalidas, esConfigEstrategias, esConfigCartera, esConfigExploracion, veredictoOficial,
          notaResimulado, textoCriterio, calibracionDe, SIN_VEREDICTO_STOPS, SIN_VEREDICTO_NO_CALIBRADA, NOTA_PERMUTACION } from '../lib/lotesLab'
 import { clasificaConfig, guardarPrueba, cuentaPruebas, listarPruebas, leerPrueba, estadoLote, SELECT_HISTORIAL, notaDeFila } from '../lib/registroLab'
 import { SALIDA_VELAS, N_SIM_LAB, MIN_OPERACIONES, PERCENTIL_PASA } from '../lib/laboratorio'
@@ -600,7 +600,7 @@ export default function LaboratorioPanel({ apiFetch, version = null }) {
             <div style={{ overflowX: 'auto' }}>
               <table style={{ borderCollapse: 'collapse', fontSize: TAM }}>
                 <thead><tr>{['Fecha', 'Regla', 'Tipo', 'Criterio', 'Percentiles', 'Veredicto', ''].map((c, i) => <th key={i} style={{ textAlign: 'left', padding: '3px 8px', color: GRIS, fontWeight: 400, borderBottom: '1px solid var(--border)' }}>{c}</th>)}</tr></thead>
-                <tbody>{registro.historial.filter(h => !esConfigCartera(h.config)).map(h => (
+                <tbody>{registro.historial.filter(h => !esConfigCartera(h.config) && !esConfigExploracion(h.config)).map(h => (
                   <tr key={h.id} style={{ borderBottom: '1px solid var(--border)' }}>
                     <td style={{ padding: '3px 8px', whiteSpace: 'nowrap' }}>{fmtDate(h.creado)}</td>
                     <td style={{ padding: '3px 8px', minWidth: 240 }}>{h.config ? reglaDe(h.config) : '—'}</td>
