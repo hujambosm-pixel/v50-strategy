@@ -24,7 +24,9 @@ import { entradas, calculables, topeDe, indicadoresSalidas } from '../../lib/sen
 import { ejecutaPeriodo, semillaLab, N_SIM_LAB } from '../../lib/laboratorio'
 import { huella, validaConfig, esConfigSalidas, esConfigEstrategias, esConfigCartera, esConfigExploracion } from '../../lib/lotesLab'
 import { ejecutaPeriodoCartera, alineaDatos, N_SIM_CARTERA } from '../../lib/laboratorioCartera'
-import { curvaRiesgoEtf, sensibilidadEtf } from '../../lib/exploracionCartera'
+import { curvaRiesgoEtf, sensibilidadEtf, estresParte } from '../../lib/exploracionCartera'
+import { construyeSintetico } from '../../lib/etfSintetico'
+import { preciosTotales } from '../../lib/laboratorioCartera'
 import DIVIDENDOS from '../../lib/dividendosCartera.json'
 import { ejecutaPeriodoSalidas, calculablesIndicadores, decisionesDe, indicadoresPrueba, diasTrasPeriodo } from '../../lib/laboratorioSalidas'
 import { ejecutaPeriodoEstrategias } from '../../lib/laboratorioEstrategias'
@@ -78,14 +80,19 @@ export default async function handler(req, res) {
   }
   try {
     if (esConfigExploracion(cfg)) {
-      const etf = periodo.etf, ps = [...(cfg.periodos?.[etf] || []), ...(cfg.fueraDeMuestra?.[etf] ? [cfg.fueraDeMuestra[etf].prueba] : [])]
+      const etf = periodo.etf, ps = Array.isArray(cfg.periodos) ? cfg.periodos : [...(cfg.periodos?.[etf] || []), ...(cfg.fueraDeMuestra?.[etf] ? [cfg.fueraDeMuestra[etf].prueba] : [])]
       const d0 = ps.reduce((m, p) => p.desde < m ? p.desde : m, '9999'), d1 = ps.reduce((m, p) => p.hasta > m ? p.hasta : m, '0000')
       const lee = (sym) => get(`rpc/leer_velas?p_simbolo=${encodeURIComponent(sym)}&p_desde=${masAnios(d0, -3)}&p_hasta=${masDias(d1, 5)}`).then(velasDe)
-      const [qqq, etfV, spy] = await Promise.all([lee('QQQ'), lee(etf), lee('SPY')])
+      const estres = cfg.tipo === 'estres'
+      const [qqq, etfV, spy] = await Promise.all([lee('QQQ'), estres ? Promise.resolve([]) : lee(etf), lee('SPY')])
       const t1 = Date.now()
-      if (!qqq.length || !etfV.length || !spy.length) return res.status(500).json({ error: 'Faltan velas en la caché de QQQ, del ETF o de SPY.' })
-      const datos = alineaDatos({ qqq, etf: { simbolo: etf, velas: etfV }, spy }, DIVIDENDOS.simbolos)
-      const resultado = cfg.tipo === 'curvaRiesgo' ? curvaRiesgoEtf({ datos, config: cfg, etf }) : await sensibilidadEtf({ datos, config: cfg, etf, nSim: Math.min(nSim, N_SIM_CARTERA * 5) })
+      if (!qqq.length || (!estres && !etfV.length) || !spy.length) return res.status(500).json({ error: 'Faltan velas en la caché de QQQ, del ETF o de SPY.' })
+      // Prueba de estrés: el ETF es el SINTÉTICO ×2 / ×3 construido sobre el QQQ de rentabilidad total (lib/etfSintetico.js).
+      const k = etf === 'x3' ? 3 : 2
+      const velasEtf = estres ? construyeSintetico(preciosTotales(qqq, DIVIDENDOS.simbolos.QQQ), { k, comision: cfg.sinteticos.comision[k], ajuste: cfg.sinteticos.ajuste[k] }) : etfV
+      const datos = alineaDatos({ qqq, etf: { simbolo: estres ? 'SINTETICO' : etf, velas: velasEtf }, spy }, { ...DIVIDENDOS.simbolos, SINTETICO: [] })
+      const resultado = estres ? estresParte({ datos, config: cfg, parte: etf })
+        : cfg.tipo === 'curvaRiesgo' ? curvaRiesgoEtf({ datos, config: cfg, etf }) : await sensibilidadEtf({ datos, config: cfg, etf, nSim: Math.min(nSim, N_SIM_CARTERA * 5) })
       const t2 = Date.now()
       return res.status(200).json({ resultado: { prueba: 'exploracion', tipo: cfg.tipo, ...resultado }, simbolos: 3, sinDatos: [], dividendos: DIVIDENDOS.descargado, tiempos: { datosMs: t1 - t0, calculoMs: t2 - t1, totalMs: t2 - t0 } })
     }

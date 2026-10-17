@@ -11,7 +11,7 @@
 // Solo lee de Yahoo (chart v8 con events=div); no toca la base de datos.
 const fs = require('fs'), path = require('path')
 const SIMBOLOS = ['QQQ', 'QLD', 'TQQQ', 'SPY']
-const DESDE = '2004-01-01'
+const DESDE = '1998-01-01'   // V9.984: desde 1998 (QQQ desde marzo de 1999, para la prueba de estrés)
 ;(async () => {
   const p1 = Math.floor(Date.parse(DESDE + 'T00:00:00Z') / 1000), p2 = Math.floor(Date.now() / 1000)
   const out = { fuente: 'Yahoo Finance, chart v8, events=div (importe por acción en la escala de splits de los precios de la caché)', descargado: new Date().toISOString().slice(0, 10), simbolos: {} }
