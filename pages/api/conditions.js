@@ -1,4 +1,5 @@
 import { exigeAuth } from '../../lib/verificaJwt'
+import { claveGroqDe, llamaGroq, cuerpoErrorGroq } from '../../lib/groq'
 
 // pages/api/conditions.js
 // CRUD para la tabla `conditions` (condiciones globales reutilizables)
@@ -192,26 +193,20 @@ export default async function handler(req, res) {
   if (req.method === 'POST' && req.query.action === 'groq_block') {
     const { text, role } = req.body
     if (!text?.trim() || !role) return res.status(400).json({ error: 'text y role requeridos' })
-    const apiKey = process.env.GROQ_API_KEY || req.headers['x-groq-key'] || ''
+    const apiKey = claveGroqDe(req)
     if (!apiKey) return res.status(400).json({ error: 'No hay Groq API Key configurada. Añádela en ⚙ Configuración → Integraciones.' })
     const system = GROQ_BLOCK_SYSTEMS[role] || GROQ_BLOCK_COND_SCHEMA
     try {
-      const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-        body: JSON.stringify({
-          model: 'llama-3.1-8b-instant',
-          max_tokens: 200,
-          temperature: 0.1,
-          messages: [
-            { role: 'system', content: system },
-            { role: 'user',   content: text.trim() },
-          ]
-        })
+      const r = await llamaGroq(apiKey, {
+        max_tokens: 200,
+        temperature: 0.1,
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user',   content: text.trim() }
+        ]
       })
-      if (!groqRes.ok) return res.status(502).json({ error: `Groq error: ${await groqRes.text()}` })
-      const data  = await groqRes.json()
-      const raw   = data.choices?.[0]?.message?.content || ''
+      if (!r.ok) return res.status(502).json(cuerpoErrorGroq(r.error))
+      const raw   = r.texto
       const clean = raw.replace(/```json|```/g, '').trim()
       const parsed = JSON.parse(clean)
       if (parsed.error) return res.status(422).json({ error: parsed.error })
@@ -225,25 +220,19 @@ export default async function handler(req, res) {
   if (req.method === 'POST' && req.query.action === 'groq_strategy') {
     const { text } = req.body
     if (!text?.trim()) return res.status(400).json({ error: 'text requerido' })
-    const apiKey = process.env.GROQ_API_KEY || req.headers['x-groq-key'] || ''
+    const apiKey = claveGroqDe(req)
     if (!apiKey) return res.status(400).json({ error: 'No hay Groq API Key configurada. Añádela en ⚙ Configuración → Integraciones.' })
     try {
-      const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type':'application/json', 'Authorization':`Bearer ${apiKey}` },
-        body: JSON.stringify({
-          model: 'llama-3.1-8b-instant',
-          max_tokens: 600,
-          temperature: 0.1,
-          messages: [
-            { role: 'system', content: GROQ_STRATEGY_SYSTEM },
-            { role: 'user',   content: text.trim() }
-          ]
-        })
+      const r = await llamaGroq(apiKey, {
+        max_tokens: 600,
+        temperature: 0.1,
+        messages: [
+          { role: 'system', content: GROQ_STRATEGY_SYSTEM },
+          { role: 'user',   content: text.trim() }
+        ]
       })
-      if (!groqRes.ok) return res.status(502).json({ error: `Groq error: ${await groqRes.text()}` })
-      const data   = await groqRes.json()
-      const raw    = data.choices?.[0]?.message?.content || ''
+      if (!r.ok) return res.status(502).json(cuerpoErrorGroq(r.error))
+      const raw    = r.texto
       const clean  = raw.replace(/```json|```/g, '').trim()
       const parsed = JSON.parse(clean)
       return res.status(200).json(transformGroqStrategy(parsed))
@@ -256,25 +245,19 @@ export default async function handler(req, res) {
   if (req.method === 'POST' && req.query.action === 'groq') {
     const { text } = req.body
     if (!text?.trim()) return res.status(400).json({ error: 'text requerido' })
-    const apiKey = process.env.GROQ_API_KEY || req.headers['x-groq-key'] || ''
+    const apiKey = claveGroqDe(req)
     if (!apiKey) return res.status(400).json({ error: 'No hay Groq API Key configurada. Añádela en ⚙ Configuración → Integraciones.' })
     try {
-      const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type':'application/json', 'Authorization':`Bearer ${apiKey}` },
-        body: JSON.stringify({
-          model: 'llama-3.1-8b-instant',
-          max_tokens: 300,
-          temperature: 0.1,
-          messages: [
-            { role: 'system', content: GROQ_SYSTEM },
-            { role: 'user',   content: text.trim() }
-          ]
-        })
+      const r = await llamaGroq(apiKey, {
+        max_tokens: 300,
+        temperature: 0.1,
+        messages: [
+          { role: 'system', content: GROQ_SYSTEM },
+          { role: 'user',   content: text.trim() }
+        ]
       })
-      if (!groqRes.ok) return res.status(502).json({ error: `Groq error: ${await groqRes.text()}` })
-      const data  = await groqRes.json()
-      const raw   = data.choices?.[0]?.message?.content || ''
+      if (!r.ok) return res.status(502).json(cuerpoErrorGroq(r.error))
+      const raw   = r.texto
       const clean = raw.replace(/```json|```/g, '').trim()
       const parsed = JSON.parse(clean)
       return res.status(200).json(parsed)

@@ -7,12 +7,14 @@ import FiltrosPanel from './FiltrosPanel'
 import { getSupaUrl, getSupaKey } from '../lib/supabase'
 import { loadSettings, saveSettingsRemote } from '../lib/settings'
 import { fetchConditions, saveCondition, deleteCondition, groqParseCondition, lsGetConds, lsSaveConds } from '../lib/conditions'
+import { textoErrorGroq, GROQ_MODELO } from '../lib/groq'
 import Tip from './Tip'
 
 export default function SettingsModal({ onClose, strategies=[], initialTab='integraciones', wlData={} }) {
   const [tab, setTab] = useState(initialTab)
   const [settings, setSettings] = useState(loadSettings)
   const [groqStatus, setGroqStatus] = useState(null) // null | 'testing' | 'ok' | 'err'
+  const [groqDetalle, setGroqDetalle] = useState(null) // con 'err': «HTTP 404 · model_not_found: …»
   const [dirty, setDirty] = useState(false)
   // ── Visor de distribución (pestaña Ranking) — bajo demanda, no altera ningún cálculo ──
   const [distrib, setDistrib] = useState(null)   // null = colapsado
@@ -122,15 +124,18 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
   const handleSave = () => { saveSettingsRemote(settings); setDirty(false); onClose() }
 
   const testGroq = async () => {
-    setGroqStatus('testing')
+    setGroqStatus('testing'); setGroqDetalle(null)
     try {
       const r = await fetch('/api/groq-help', {
         method:'POST',
         headers:{'Content-Type':'application/json','x-groq-key': settings.integrations?.groqKey||''},
         body: JSON.stringify({topic:'EMA Rápida'})
       })
-      setGroqStatus(r.ok ? 'ok' : 'err')
-    } catch(_) { setGroqStatus('err') }
+      if (r.ok) { setGroqStatus('ok'); return }
+      // El error de Groq viaja en el cuerpo (lib/groq.js: cuerpoErrorGroq); si no, el de la ruta.
+      const j = await r.json().catch(() => null)
+      setGroqStatus('err'); setGroqDetalle(j?.groq ? textoErrorGroq(j.groq) : `HTTP ${r.status}${j?.error ? `: ${j.error}` : ''}`)
+    } catch(e) { setGroqStatus('err'); setGroqDetalle(`sin respuesta: ${e?.message || e}`) }
   }
 
   const TABS = [
@@ -273,8 +278,9 @@ export default function SettingsModal({ onClose, strategies=[], initialTab='inte
                   </button>
                 </div>
               )}
+              {groqStatus==='err'&&groqDetalle&&<div data-prueba="groq-error" style={{fontFamily:MONO,fontSize:10,color:'#ff4d6d',lineHeight:1.5,marginTop:-6,marginBottom:8,wordBreak:'break-word'}}>{groqDetalle}</div>}
               <div style={{fontSize:10,color:'var(--text3)',lineHeight:1.6,marginTop:-6}}>
-                La clave se almacena únicamente en localStorage de tu navegador. Obtén una clave gratuita en <a href="https://console.groq.com" target="_blank" rel="noreferrer" style={{color:'#4a9fd4'}}>console.groq.com</a>
+                Modelo: {GROQ_MODELO}. La clave se almacena únicamente en localStorage de tu navegador. Obtén una clave gratuita en <a href="https://console.groq.com" target="_blank" rel="noreferrer" style={{color:'#4a9fd4'}}>console.groq.com</a>
               </div>
 
               {sep('Caché de precios')}

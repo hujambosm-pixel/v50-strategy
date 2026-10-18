@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { MONO } from '../lib/utils'
 import { validaCodeJs, avisosCodeJs } from '../lib/validaCodeJs'
+import { llamaGroq, textoErrorGroq } from '../lib/groq'
 
 const SUMMARY_SYSTEM_PROMPT = `You are a professional quantitative trading analyst. Analyze the following JavaScript backtesting strategy code and its JSON parameters. Generate a concise summary in Spanish (max 300 words) with these sections. Use only bullet points and plain text — no markdown bold (**text**), no ### headers:
 
@@ -87,25 +88,19 @@ export default function StrategyEditorPanel({ strForm, setStrForm, strategy, onS
     if (!key) { alert('Configura tu Groq API key en Ajustes → Integraciones'); return }
     setSummaryLoading(true)
     try {
-      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-        body: JSON.stringify({
-          model: 'llama-3.3-70b-versatile',
-          messages: [
-            { role: 'system', content: SUMMARY_SYSTEM_PROMPT },
-            { role: 'user',   content: `CODE:\n${code}\n\nPARAMS:\n${strForm.params || '{}'}` },
-          ],
-          max_tokens: 600,
-          temperature: 0.2,
-        }),
+      // Modelo y dirección: los de lib/groq.js, los mismos que las rutas del servidor.
+      const r = await llamaGroq(key, {
+        messages: [
+          { role: 'system', content: SUMMARY_SYSTEM_PROMPT },
+          { role: 'user',   content: `CODE:\n${code}\n\nPARAMS:\n${strForm.params || '{}'}` },
+        ],
+        max_tokens: 600,
+        temperature: 0.2,
       })
-      const data = await res.json()
-      const text = data?.choices?.[0]?.message?.content
-      if (text) upd('description', text.trim())
-      else alert('Groq no devolvió respuesta: ' + JSON.stringify(data).slice(0, 200))
-    } catch(e) { alert('Error Groq: ' + e.message) }
-    finally { setSummaryLoading(false) }
+      if (!r.ok) alert('Error Groq: ' + textoErrorGroq(r.error))
+      else if (r.texto.trim()) upd('description', r.texto.trim())
+      else alert('Groq no devolvió respuesta.')
+    } finally { setSummaryLoading(false) }
   }
 
   // Marcadores visuales — inline IIFE para mantener lógica compacta

@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { MONO } from '../lib/utils'
+import { GROQ_MODELO } from '../lib/groq'
 
 export default function StrategyAIPanel({ definition, onApply, onClose }) {
   const [messages, setMessages] = useState([
@@ -121,7 +122,7 @@ export default function StrategyAIPanel({ definition, onApply, onClose }) {
           }}>✦</div>
           <div style={{flex:1}}>
             <div style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:'#e2eaf5'}}>Asistente de Estrategias</div>
-            <div style={{fontFamily:MONO,fontSize:9,color:'#4a7fa0'}}>Powered by Groq · llama-3.3-70b</div>
+            <div style={{fontFamily:MONO,fontSize:9,color:'#4a7fa0'}}>Powered by Groq · {GROQ_MODELO}</div>
           </div>
           <button onClick={onClose} style={{background:'none',border:'none',color:'#5a7a95',fontSize:16,cursor:'pointer',padding:'2px 6px'}}>✕</button>
         </div>

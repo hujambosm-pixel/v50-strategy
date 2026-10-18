@@ -1,4 +1,5 @@
 import { exigeAuth } from '../../lib/verificaJwt'
+import { llamaGroq } from '../../lib/groq'
 
 // pages/api/tradelog.js
 // TradeLog API — CRUD fills individuales + FX histórico + parsers importación
@@ -361,7 +362,7 @@ function autoParseText(text, useDDMM = true) {
 }
 
 async function parseWithAI(text, apiKey) {
-  const GROQ_KEY = apiKey || process.env.GROQ_API_KEY
+  const GROQ_KEY = String(apiKey || '').trim()
   if (!GROQ_KEY) throw new Error('API key de Groq no configurada. Ve a ⚙ Config → Integraciones y añade tu clave Groq.')
   const PROMPT = `Extrae las operaciones de trading del siguiente texto y devuelve SOLO un JSON array.
 Cada operación debe tener estos campos (todos opcionales excepto symbol):
@@ -381,26 +382,13 @@ Responde SOLO con el JSON array, sin texto adicional, sin markdown.
 TEXTO:
 ${text.slice(0, 3500)}`
 
-  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${GROQ_KEY}` },
-    body: JSON.stringify({ model: 'llama-3.1-8b-instant', max_tokens: 2000, temperature: 0,
-      messages: [{ role: 'user', content: PROMPT }] })
-  })
-  if (!res.ok) {
-    const errText = await res.text()
-    try {
-      const errJson = JSON.parse(errText)
-      const errDetail = errJson?.error?.message || errText
-      const m = errDetail.match(/try again in ([\d.]+)s/i)
-      throw new Error(`Groq API ${res.status}${m ? ` — espera ${Math.ceil(parseFloat(m[1]))}s` : ''}: ${errDetail}`)
-    } catch(pe) {
-      if (pe.message.startsWith('Groq API')) throw pe
-      throw new Error(`Groq API ${res.status}: ${errText}`)
-    }
+  const r = await llamaGroq(GROQ_KEY, { max_tokens: 2000, temperature: 0, messages: [{ role: 'user', content: PROMPT }] })
+  if (!r.ok) {
+    // El cliente (tlImportParse) busca «try again in Ns» en el mensaje para avisar del límite de tokens.
+    const m = r.error.mensaje.match(/try again in ([\d.]+)s/i)
+    throw new Error(`Groq API ${r.error.status}${r.error.codigo ? ` (${r.error.codigo})` : ''}${m ? ` — espera ${Math.ceil(parseFloat(m[1]))}s` : ''}: ${r.error.mensaje}`)
   }
-  const data = await res.json()
-  const raw = data.choices?.[0]?.message?.content || '[]'
+  const raw = r.texto || '[]'
   try { return JSON.parse(raw.replace(/```json|```/g, '').trim()) } catch { return [] }
 }
 

@@ -1,5 +1,6 @@
 // pages/api/strategy-ai.js — Asistente IA para el constructor de estrategias
-// Usa Groq API (key desde env var o header del cliente)
+// Usa Groq API: la clave del usuario (cabecera x-groq-key) y el modelo de lib/groq.js
+import { claveGroqDe, llamaGroq, cuerpoErrorGroq } from '../../lib/groq'
 
 const SYSTEM_PROMPT = `Eres el asistente de configuración de estrategias de trading para la app V50 Strategy Builder.
 Tu objetivo es ayudar al usuario a configurar su estrategia de trading rellenando los 8 pasos del constructor.
@@ -141,31 +142,17 @@ export default async function handler(req, res) {
   const { messages } = req.body
   if (!messages?.length) return res.status(400).json({ error: 'messages requerido' })
 
-  const apiKey = process.env.GROQ_API_KEY || req.headers['x-groq-key'] || ''
+  const apiKey = claveGroqDe(req)
   if (!apiKey) return res.status(400).json({ error: 'No hay Groq API Key. Añádela en ⚙ Configuración → Integraciones.' })
 
-  try {
-    const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',  // modelo más capaz para razonamiento
-        max_tokens: 1200,
-        temperature: 0.3,
-        messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          ...messages
-        ]
-      })
-    })
-    if (!resp.ok) {
-      const err = await resp.text()
-      return res.status(502).json({ error: `Groq error: ${err}` })
-    }
-    const data = await resp.json()
-    const text = data.choices?.[0]?.message?.content || ''
-    res.status(200).json({ text })
-  } catch (err) {
-    res.status(500).json({ error: err.message })
-  }
+  const r = await llamaGroq(apiKey, {
+    max_tokens: 1200,
+    temperature: 0.3,
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      ...messages
+    ]
+  })
+  if (!r.ok) return res.status(502).json(cuerpoErrorGroq(r.error))
+  res.status(200).json({ text: r.texto })
 }
