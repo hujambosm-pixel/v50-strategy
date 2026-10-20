@@ -22,56 +22,17 @@ import { normalizaPeriodo, velasCalentamiento, recortaConCalentamiento, recortaI
 import { COMISIONES_CERO, comisionDe, netoDeOperacion, normalizaComisiones,
          sinComisiones } from '../../lib/comisiones'
 import { admiteEntrada, bhUniverso } from '../../lib/screener'
+import { buildAlignedCloses, buildAlignedWeekly } from '../../lib/alineaSeries'
 import { usaFuerzaRelativa, percentilesParaBarras } from '../../lib/fuerzaRelativa'
 import { proveedorFuerzaRelativa } from '../../lib/fuerzaRelativaServidor'
 
 const SUPA_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPA_KEY = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-export function calcEMA(values, period) {
-  if (!values?.length || period < 1) return []
-  const k = 2 / (period + 1)
-  const out = new Array(values.length).fill(null)
-  let sum = 0, valid = 0
-  for (let i = 0; i < values.length; i++) {
-    if (values[i] == null) continue
-    sum += values[i]; valid++
-    if (valid < period) continue
-    if (valid === period) { out[i] = sum / period; continue }
-    out[i] = values[i] * k + out[i - 1] * (1 - k)
-  }
-  return out
-}
-// ── Align external close series to asset dates with forward-fill (for market filters) ──
-export function buildAlignedCloses(externalData, assetDates) {
-  if (!externalData?.length) return assetDates.map(()=>null)
-  const closeMap = {}
-  externalData.forEach(d => { closeMap[d.date] = d.close })
-  const aligned = []
-  let last = null
-  for (const date of assetDates) {
-    if (closeMap[date] != null) last = closeMap[date]
-    aligned.push(last)
-  }
-  return aligned
-}
-
-// ── Compute EMA on native weekly series then forward-fill to daily asset dates ──
-export function buildAlignedWeekly(weeklyData, assetDates, emaPeriod) {
-  if (!weeklyData?.length || !assetDates?.length)
-    return { closes: assetDates.map(()=>null), ema: assetDates.map(()=>null) }
-  // La regla de la última semana CERRADA (corregida en V9.709) vive ahora en proyectarSemanal, en
-  // lib/filtros.js, para que no haya dos calendarios que puedan divergir. Aquí solo se preparan las
-  // series semanales y se proyectan ambas con esa misma regla.
-  const sorted = [...weeklyData].sort((a,b)=>a.date.localeCompare(b.date))
-  const wDates  = sorted.map(d=>d.date)
-  const wCloses = sorted.map(d=>d.close)
-  const wEma    = calcEMA(wCloses, Math.max(1, emaPeriod))
-  return {
-    closes: proyectarSemanal(wCloses, wDates, assetDates),
-    ema:    proyectarSemanal(wEma,    wDates, assetDates),
-  }
-}
+// calcEMA: la de lib/backtester.js (aquí había una copia idéntica); buildAlignedCloses y buildAlignedWeekly: lib/alineaSeries.js
+// (V9.1008). Se siguen exportando desde aquí, que es de donde los importa pages/api/asset-detail.js.
+export const calcEMA = _libEMA
+export { buildAlignedCloses, buildAlignedWeekly }
 
 // ── Rebuild compound capitalTras after filtering trades ──
 // Se llama SOLO cuando un filtro de mercado ha eliminado operaciones, para recomponer la cadena

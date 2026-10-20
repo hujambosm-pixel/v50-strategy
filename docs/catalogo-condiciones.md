@@ -310,7 +310,9 @@ reales, de las diarias de la caché; 6 años de historia antes del periodo; las 
 semanas; en los resultados, «días» son velas, es decir, semanas). Una prueba semanal es exploratoria. Commit 7 hecho en V9.1007: en la máquina de estados de la cartera, las
 condiciones `primerDiaHabil` (mensual, trimestral o anual), `cadaNSemanas`, `O`, `NO` e `histeresis`, con «sin dato»
 (una condición sin dato nunca es verdadera ni cambia el estado). Un rebalanceo mensual hecho con `primerDiaHabil` da la
-misma curva, byte a byte, que la transición de calendario de siempre. Siguiente: el 8. Se añade al final el 12: fuerza relativa por percentil (§3.1),
+misma curva, byte a byte, que la transición de calendario de siempre. Commit 8 hecho en V9.1008: fuera `evalCondition`
+(muerto) de `pages/index.js`; una sola `calcEMA` (la de `lib/backtester.js`) y una sola copia de `buildAlignedCloses` y
+`buildAlignedWeekly` (`lib/alineaSeries.js`). Siguiente: el 9. Se añade al final el 12: fuerza relativa por percentil (§3.1),
 mediano, cuando se decidan sus tres puntos.
 
 Donde el byte a byte es **imposible** si se unifica, se aísla con una **versión del cálculo**, como en V9.988

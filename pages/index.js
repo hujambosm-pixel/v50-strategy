@@ -33,7 +33,7 @@ import { nDeUniverso, reglaDeUniverso, nombreUniverso, FRASE_REGLA, cargaUnivers
 import AvisoUniverso from '../components/AvisoUniverso'
 import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.1007'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.1008'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -3958,20 +3958,6 @@ export default function Home() {
   }
   const newAlarm=()=>openEditAlarm({id:null})
 
-  // Evalúa una condición sobre closes
-  const evalCondition=(condition,closes,emaR,emaL)=>{
-    if(!closes||closes.length<20) return null
-    const ema=(vals,p)=>{const k=2/(p+1);let e=null;for(const v of vals){if(e===null)e=v;else e=v*k+e*(1-k)};return e}
-    const last=closes.slice(-200)
-    const er=ema(last,emaR), el=ema(last,emaL), price=last[last.length-1]
-    if(er==null||el==null) return null
-    if(condition==='ema_cross_up')    return er>el
-    if(condition==='ema_cross_down')  return er<el
-    if(condition==='price_above_ema') return price>er
-    if(condition==='price_below_ema') return price<er
-    return null
-  }
-
   // Para cada símbolo de la watchlist, evalúa todas las alarmas globales
   // Count of triggered alarms across all watchlist symbols (for tab badge)
   const alarmActiveCount = (alarms||[]).filter(a=>
@@ -6294,7 +6280,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.1007</title>
+        <title>Trading Simulator V9.1008</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6383,7 +6369,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             }} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.1007
+            <span className="dot"/>Trading Simulator V9.1008
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
