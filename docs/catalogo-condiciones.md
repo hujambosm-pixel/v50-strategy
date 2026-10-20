@@ -312,7 +312,10 @@ condiciones `primerDiaHabil` (mensual, trimestral o anual), `cadaNSemanas`, `O`,
 (una condición sin dato nunca es verdadera ni cambia el estado). Un rebalanceo mensual hecho con `primerDiaHabil` da la
 misma curva, byte a byte, que la transición de calendario de siempre. Commit 8 hecho en V9.1008: fuera `evalCondition`
 (muerto) de `pages/index.js`; una sola `calcEMA` (la de `lib/backtester.js`) y una sola copia de `buildAlignedCloses` y
-`buildAlignedWeekly` (`lib/alineaSeries.js`). Siguiente: el 9. Se añade al final el 12: fuerza relativa por percentil (§3.1),
+`buildAlignedWeekly` (`lib/alineaSeries.js`). Commit 9 hecho en V9.1009: los cuatro filtros del backtest
+(`lib/filtros.js`) comparan con `FILTROS_CALCULO_1` del catálogo, la variante heredada (cálculo 1: sin dato deja pasar,
+precio frente a media con «≥», sobre las series ya alineadas a la rejilla del activo). La alineación sigue en
+`lib/filtros.js` y `lib/alineaSeries.js`. Siguiente: el 10. Se añade al final el 12: fuerza relativa por percentil (§3.1),
 mediano, cuando se decidan sus tres puntos.
 
 Donde el byte a byte es **imposible** si se unifica, se aísla con una **versión del cálculo**, como en V9.988
