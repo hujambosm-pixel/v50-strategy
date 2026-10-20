@@ -315,7 +315,13 @@ misma curva, byte a byte, que la transición de calendario de siempre. Commit 8 
 `buildAlignedWeekly` (`lib/alineaSeries.js`). Commit 9 hecho en V9.1009: los cuatro filtros del backtest
 (`lib/filtros.js`) comparan con `FILTROS_CALCULO_1` del catálogo, la variante heredada (cálculo 1: sin dato deja pasar,
 precio frente a media con «≥», sobre las series ya alineadas a la rejilla del activo). La alineación sigue en
-`lib/filtros.js` y `lib/alineaSeries.js`. Siguiente: el 10. Se añade al final el 12: fuerza relativa por percentil (§3.1),
+`lib/filtros.js` y `lib/alineaSeries.js`. Commit 10 hecho en V9.1010: en las alarmas (`pages/api/status.js`), el precio o
+el cierre frente a la media sale de `precioVsMedia` del catálogo; `ma_type: 'SMA'` calcula una SMA de verdad y
+`close_above_ma` / `close_below_ma` se evalúan. Sin `ma_type` (o con uno que no es SMA, como el «MAX» de la condición
+«Pérdida 10%»), la EMA de siempre, con el mismo resultado que antes. Alarmas guardadas que cambian de estado (copia del
+21/10/2026: 3 alarmas y 6 condiciones, 1 activa, en los 45 valores de la watchlist con precios en el arnés): NINGUNA. Las
+condiciones que guarda el navegador (localStorage) no se han podido revisar. Los cruces, el RSI y el MACD de las alarmas
+siguen con su código (no estaban mal). Siguiente: el 11, el editor visual. Se añade al final el 12: fuerza relativa por percentil (§3.1),
 mediano, cuando se decidan sus tres puntos.
 
 Donde el byte a byte es **imposible** si se unifica, se aísla con una **versión del cálculo**, como en V9.988

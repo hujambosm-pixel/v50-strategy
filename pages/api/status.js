@@ -1,6 +1,6 @@
 // pages/api/status.js
 // Evalúa condiciones de alarma — devuelve {active, bars} por cada alarma/símbolo
-// Soporta: ema_cross_*, price_*_ma, rsi_*, macd_cross_*
+// Soporta: ema_cross_*, price_*_ma, close_*_ma, rsi_*, macd_cross_*
 
 // ── Indicadores ──────────────────────────────────────────────
 // Los mismos que el gráfico y que el backtest. Este archivo tenía copias propias desde antes de que
@@ -9,6 +9,8 @@
 // gráfico. Con periodos cortos daba igual —medido, 0 diferencias con 10/11, RSI 14 y MACD
 // 12/26/9—, pero con una media de 200 el error de siembra llegaba al 12%.
 import { calcEMA, calcRSI, calcMACD } from '../../lib/backtester'
+// Precio (cierre) frente a la media: la condición del catálogo único (V9.1010).
+import { precioVsMedia } from '../../lib/condiciones/catalogo'
 // ── Precios: Yahoo ───────────────────────────────────────────
 // Esto pedía a Stooq, que responde 403 a todo y se comía 15 segundos de espera por símbolo antes de
 // devolver null: con varias alarmas, la ruta entera se quedaba colgada y las alarmas no se evaluaban.
@@ -102,21 +104,18 @@ function evalConditionFull(alarm, closes, sym) {
     return { active: true, bars: n }
   }
 
-  // ── Price vs MA ──
-  if (condition === 'price_above_ma' || condition === 'price_below_ma' ||
-      condition === 'price_above_ema' || condition === 'price_below_ema') {
-    const maArr = calcEMA(last, maPeriod)
-    const price = last[n], ma = maArr[n]
-    if (ma == null) return { active: null, bars: null }
-    const isAbove = condition === 'price_above_ma' || condition === 'price_above_ema'
-    const active = isAbove ? price > ma : price < ma
-    if (!active) return { active: false, bars: null }
+  // ── Precio / cierre frente a la media (V9.1010: precioVsMedia del catálogo) ──
+  // Dos arreglos: `ma_type: 'SMA'` calcula de verdad una SMA (antes era SIEMPRE una EMA), y close_above_ma / close_below_ma,
+  // que el editor ofrece, se evalúan (antes devolvían «sin dato»). Sin ma_type, o con uno que no es SMA, sigue siendo la EMA
+  // de siempre, y con EMA el resultado es el mismo que antes. «Velas»: las seguidas, desde la última, en que se cumple.
+  if (['price_above_ma', 'price_below_ma', 'price_above_ema', 'price_below_ema', 'close_above_ma', 'close_below_ma'].includes(condition)) {
+    const tipo = String(p.ma_type || '').toUpperCase() === 'SMA' ? 'SMA' : 'EMA'
+    const lado = condition.includes('above') ? 'encima' : 'debajo'
+    const s = precioVsMedia.serie(last.map(close => ({ close })), { tipo, periodo: maPeriod, lado })
+    if (s[n] == null) return { active: null, bars: null }
+    if (!s[n]) return { active: false, bars: null }
     let count = 0
-    for (let i = n; i >= 0; i--) {
-      if (maArr[i] == null) break
-      const ok = isAbove ? last[i] > maArr[i] : last[i] < maArr[i]
-      if (ok) count++; else break
-    }
+    for (let i = n; i >= 0; i--) { if (s[i] !== true) break; count++ }
     return { active: true, bars: count }
   }
 
