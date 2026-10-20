@@ -20,7 +20,8 @@
 // ruptura de 252 velas y las medias de 200 lo necesitan) hasta 45 días después (salidas de hasta 20 velas). QQQ, solo si
 // algún filtro lo usa.
 import { exigeAuth } from '../../lib/verificaJwt'
-import { entradas, calculables, topeDe, indicadoresSalidas, tickersDeReferencia } from '../../lib/senales'
+import { entradas, calculables, topeDe, indicadoresSalidas, tickersDeReferencia, usaFuerzaRelativaCombinacion } from '../../lib/senales'
+import { distribucion, percentilesDe } from '../../lib/fuerzaRelativa'
 import { ejecutaPeriodo, semillaLab, N_SIM_LAB } from '../../lib/laboratorio'
 import { huella, validaConfig, esConfigSalidas, esConfigEstrategias, esConfigCartera, esConfigExploracion } from '../../lib/lotesLab'
 import { ejecutaPeriodoCartera, alineaDatos, N_SIM_CARTERA, calculoDe } from '../../lib/laboratorioCartera'
@@ -133,6 +134,12 @@ export default async function handler(req, res) {
     const tickersRef = tickersDeReferencia(senales), referencias = {}
     for (const t of tickersRef) referencias[t] = t === 'QQQ' && qqq ? qqq : await lee(t)
     const sinVelasRef = tickersRef.filter(t => !referencias[t].length)
+    // Filtro de fuerza relativa (V9.1004): la distribución de los miembros del Nasdaq-100 de cada día (con las velas ya
+    // leídas: todos los miembros del periodo, desde 3 años antes) y el percentil de cada valor, en el campo rsPercentil.
+    if (usaFuerzaRelativaCombinacion(senales)) {
+      const dist = distribucion(miembros, series)
+      for (const s of simbolos) { const pf = percentilesDe(series[s], dist, { ticker: s }); for (const v of series[s]) v.rsPercentil = pf[v.date] ?? null }
+    }
     const t1 = Date.now()
     const ctx = { ...(qqq ? { qqq } : {}), ...(tickersRef.length ? { referencias } : {}) }
     const semilla = semillaLab(await huella(cfg), desde)

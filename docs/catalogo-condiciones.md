@@ -219,7 +219,14 @@ pinte: `{ c: 'precioVsMedia', p: { tipo: 'SMA', periodo: 200, lado: 'encima' }, 
 | Atajos | — | `mercadoAlcista` = `precioVsMedia` con `ref: 'QQQ'`; `retroceso` = `cruza(Y(rsiNivel, precioVsMedia))` | conservan su id y su frase para que las huellas no cambien |
 | Salidas (operación) | operación | las cinco de hoy | `cierreBajoMedia`, `stopMovilATR`, `stopFijoATR`, `rsiSobrecompra`, `tiempoMaximo` |
 
-### 3.1 Fuerza relativa por percentil (propuesta, V9.999; sin implementar)
+### 3.1 Fuerza relativa por percentil (propuesta en V9.999; implementada en V9.1004–V9.1005)
+
+**Decidido por Sergi (21/10/2026)**: el universo de referencia es SIEMPRE el de los miembros del Nasdaq-100 en esa fecha
+que tengan velas, sea cual sea el universo o la lista de la ejecución (preparado para otros índices:
+`INDICE_FUERZA_RELATIVA`); el valor evaluado NO necesita ser miembro; el campo se llama `rsPercentil`. Cálculo:
+`lib/fuerzaRelativa.js`; condición del catálogo: `fuerzaRelativaPercentil` (lee el campo); filtro del laboratorio de
+señales: `fuerzaRelativa`. Percentil = 100 · (por debajo + ½ · iguales) / N. Un valor de una bolsa que cierra antes que
+Nueva York (sufijo de mercado: SAN.MC…) usa la distribución del día anterior.
 
 **Qué mide.** En cada fecha t y para cada valor del universo en t: la rentabilidad ponderada de 12 meses, con datos hasta
 el cierre de t, en cuatro trimestres de 63 velas (13 en semanal):
@@ -248,9 +255,7 @@ El valor de la vela i usa solo cierres hasta i, así que para decidir una entrad
 (`fuerzaRelativaPercentil`, umbral y lado) y en la cartera, una condición más; en la multicartera podría sustituir a la
 fuerza relativa frente al S&P 500 como prioridad (cálculo nuevo, sin tocar las de hoy).
 
-**Por decidir antes de implementarla.** (1) El universo: el de la ejecución (los activos marcados o el universo dinámico)
-o siempre el Nasdaq-100 completo de esa fecha, aunque la ejecución use menos valores. (2) Si se exige que el valor sea
-miembro ese día o basta con que tenga velas. (3) El nombre del campo (`rsPercentil`).
+(Las tres preguntas que quedaban se respondieron arriba.)
 
 ---
 
