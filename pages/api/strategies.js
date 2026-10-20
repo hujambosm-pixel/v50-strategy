@@ -1,5 +1,7 @@
 import { exigeAuth } from '../../lib/verificaJwt'
 import { validaCodeJs } from '../../lib/validaCodeJs'
+import { preparaGuardado } from '../../lib/editor/guardar'
+import { esDefinicionEditor } from '../../lib/editor/fuente'
 
 // pages/api/strategies.js — CRUD de estrategias en Supabase
 // Métodos: GET (list) | POST (create) | PUT (update) | DELETE (soft delete)
@@ -50,6 +52,18 @@ export default async function handler(req, res) {
     req.body.code_js = v.codigo
   }
 
+  // ESTRATEGIA DEL EDITOR (docs/editor-visual.md, E5): si el cuerpo trae una definición del editor, se valida ANTES de
+  // hablar con Supabase (422 con la lista de errores, tipo propio) y se guarda con code_js a null y en params los valores
+  // de sus parámetros (lib/editor/guardar.js). El motor la ejecuta con el intérprete (lib/editor/fuente.js).
+  const editor = esDefinicionEditor(req.body?.definition)
+  if (editor) {
+    if (req.body.code_js != null) return res.status(422).json({ error: 'Una estrategia del editor no lleva code_js.', tipo: 'definicion_editor', errores: ['Una estrategia del editor no lleva code_js.'] })
+    const g = preparaGuardado(req.body.definition, req.body.params)
+    if (!g.ok) return res.status(422).json({ error: g.errores.join(' '), tipo: 'definicion_editor', errores: g.errores })
+    req.body.params = g.params
+    req.body.code_js = null
+  }
+
   try {
     switch (req.method) {
 
@@ -63,9 +77,12 @@ export default async function handler(req, res) {
       case 'POST': {
         const { name, description, symbol, years, capital_ini, definition, color } = req.body
         if (!name || !definition) return res.status(400).json({ error: 'name y definition requeridos' })
+        // La del editor lleva además sus params (y code_js a null); las demás, como siempre.
+        const fila = { name, description, symbol, years, capital_ini, definition, color, active: true }
+        if (editor) Object.assign(fila, { code_js: null, params: req.body.params })
         const data = await supa('/strategies', {
           method: 'POST',
-          body: JSON.stringify({ name, description, symbol, years, capital_ini, definition, color, active: true }),
+          body: JSON.stringify(fila),
         })
         return res.status(201).json(Array.isArray(data) ? data[0] : data)
       }

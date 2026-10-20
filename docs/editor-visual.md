@@ -252,3 +252,12 @@ reconocen `/api/datos` (y el ranking y el optimizador), las dos ramas del multib
 `esquemaDeCodigo` (parámetros y calentamiento) y el guardián. El filtro de mercado descarga las velas de su ticker en el
 intervalo del activo. Una estrategia del editor que entre AL CIERRE tiene que guardar `entradaAlCierre: true` en sus
 params, como la 1.4 (lo hará la pantalla al guardar, E5).
+
+**Notas de E5 (V9.1015)**: `/api/strategies` reconoce una definición del editor en el cuerpo (POST o PUT): la valida
+antes de hablar con Supabase (422, tipo `definicion_editor`, con la lista de errores en castellano) y la guarda con
+`code_js` a null y en `params` los valores de sus parámetros (los de la declaración con los enviados encima; los no
+declarados se quitan) más `entradaAlCierre: true` si la orden es al cierre y la temporalidad (`intervalo`) si viene
+(`lib/editor/guardar.js`). En la lista de
+estrategias llevan la marca «editor». Su panel de edición enseña la regla en castellano en lugar del código y deja
+cambiar nombre, color, descripción y valores (validados al guardar; la copia conserva la definición). El botón «Editar»
+que abre la pestaña Editor llega con ella (E6). Exportar a code_js, al final (decisión 7).

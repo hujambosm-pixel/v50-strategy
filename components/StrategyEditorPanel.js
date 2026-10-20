@@ -2,6 +2,9 @@ import { useState, useMemo } from 'react'
 import { MONO } from '../lib/utils'
 import { validaCodeJs, avisosCodeJs } from '../lib/validaCodeJs'
 import { llamaGroq, textoErrorGroq } from '../lib/groq'
+import { esDefinicionEditor } from '../lib/editor/fuente'
+import { preparaGuardado } from '../lib/editor/guardar'
+import { fraseDefinicion } from '../lib/editor/definicion'
 
 const SUMMARY_SYSTEM_PROMPT = `You are a professional quantitative trading analyst. Analyze the following JavaScript backtesting strategy code and its JSON parameters. Generate a concise summary in Spanish (max 300 words) with these sections. Use only bullet points and plain text — no markdown bold (**text**), no ### headers:
 
@@ -48,6 +51,11 @@ export default function StrategyEditorPanel({ strForm, setStrForm, strategy, onS
 
   const upd = (k, v) => setStrForm(f => ({ ...f, [k]: v }))
   const isNew = !strategy?.id
+  // ESTRATEGIA DEL EDITOR VISUAL (docs/editor-visual.md, E5): su lógica es la definición, no un code_js. Aquí se cambian
+  // el nombre, el color, la descripción y los VALORES de sus parámetros (que se validan contra la definición al guardar);
+  // la columna del código enseña la regla en castellano.
+  const definicion = esDefinicionEditor(strategy?.definition) ? strategy.definition : null
+  const valoresForm = () => { try { const p = (strForm.params || '').trim() ? JSON.parse(strForm.params) : {}; const { intervalo: _i, ...r } = p; return r } catch (_) { return null } }
 
   // El código se revisa ANTES de guardar. Un code_js que no compila se guarda igual de bien en la
   // base y el fallo no aparece hasta que el backtest devuelve un 500 que el cliente rotula como
@@ -70,6 +78,12 @@ export default function StrategyEditorPanel({ strForm, setStrForm, strategy, onS
       try { JSON.parse(raw) } catch (_) { setParamsError('JSON inválido'); return }
     }
     setParamsError(null)
+    if (definicion) {
+      const g = preparaGuardado(definicion, valoresForm() || {})
+      if (!g.ok) { setParamsError(g.errores.join(' ')); return }
+      onSave(null)
+      return
+    }
     const limpio = revisaCodigo()
     if (limpio === null) return
     onSave(limpio)
@@ -299,7 +313,20 @@ export default function StrategyEditorPanel({ strForm, setStrForm, strategy, onS
 
         </div>
 
-        {/* ── COLUMNA DERECHA: Código JS llena todo ── */}
+        {/* ── COLUMNA DERECHA: Código JS llena todo (o la regla, si es del editor) ── */}
+        {definicion ? (
+        <div style={{display:'flex', flexDirection:'column', minHeight:0, gap:6}}>
+          <label style={S.label}>Regla (estrategia del editor visual)</label>
+          <div style={{...S.textarea, flex:1, overflowY:'auto', fontSize:12, lineHeight:1.5, whiteSpace:'normal'}}>
+            {(() => { const v = valoresForm(); return v ? fraseDefinicion(definicion, v) : 'Los parámetros no son un JSON válido.' })()}
+          </div>
+          <span style={{fontSize:11, color:'var(--text3)'}}>
+            Esta estrategia no tiene código: el motor ejecuta su definición. Aquí solo cambian su nombre, su color, su descripción y los valores
+            de sus parámetros (se comprueban contra su declaración al guardar). Cambiar muchos parámetros a la vez buscando el mejor resultado
+            aumenta el riesgo de sobreajuste: lo que funciona en el pasado por casualidad no se repite.
+          </span>
+        </div>
+        ) : (
         <div style={{display:'flex', flexDirection:'column', minHeight:0}}>
           <label style={S.label}>Código JS</label>
           {codeError && <span style={{fontSize:11, color:'#ff4d6d', marginBottom:3}}>⚠ {codeError}</span>}
@@ -317,6 +344,7 @@ export default function StrategyEditorPanel({ strForm, setStrForm, strategy, onS
             spellCheck={false}
           />
         </div>
+        )}
 
       </div>
     </div>

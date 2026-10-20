@@ -33,7 +33,7 @@ import { nDeUniverso, reglaDeUniverso, nombreUniverso, FRASE_REGLA, cargaUnivers
 import AvisoUniverso from '../components/AvisoUniverso'
 import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.1014'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.1015'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -53,6 +53,8 @@ import DiagnosticoPanel, { AvisoSinOperaciones } from '../components/Diagnostico
 import PriceAlarmQuickForm from '../components/PriceAlarmQuickForm'
 import StrategiesManager from '../components/StrategiesManager'
 import StrategyEditorPanel from '../components/StrategyEditorPanel'
+import { esDefinicionEditor } from '../lib/editor/fuente'
+import { preparaGuardado } from '../lib/editor/guardar'
 import WatchlistCondPanel from '../components/WatchlistCondPanel'
 import WatchlistManager from '../components/WatchlistManager'
 import StrategyManager from '../components/StrategyManager'
@@ -505,7 +507,7 @@ async function upsertStrategy(item) {
   const url=item.id?`${getSupaUrl()}/rest/v1/strategies?id=eq.${item.id}`:`${getSupaUrl()}/rest/v1/strategies`
   // Only send known DB columns — strip any UI-only keys (prefixed with _)
   const ALLOWED=['name','years','capital_ini','allocation_pct','color','observations','active',
-    'description','summary','code_js','params','visuals','enabled']
+    'description','summary','code_js','params','visuals','enabled','definition']
   const body={}; ALLOWED.forEach(k=>{if(item[k]!==undefined)body[k]=item[k]})
   const res=await fetch(url,{method,headers:{...getSupaH(),'Prefer':'return=representation'},body:JSON.stringify(body)})
   if(!res.ok){const t=await res.text();throw new Error(`Error guardando estrategia: ${t}`)}
@@ -3549,6 +3551,18 @@ export default function Home() {
   // codeLimpio llega del editor cuando ha quitado una valla de Markdown del código (ver
   // lib/validaCodeJs.js). Viene por argumento y no por strForm porque setStrForm no ha surtido
   // efecto todavía en este tick. Si no llega, se guarda strForm tal cual, como siempre.
+  // Una estrategia del editor visual (docs/editor-visual.md, E5) se guarda sin code_js, con su definición (la copia la
+  // necesita) y en params los valores validados contra ella (lib/editor/guardar.js), más el intervalo de siempre.
+  const paraEditor=(payload)=>{
+    if(!esDefinicionEditor(editingStr?.definition)) return
+    let p={}; try{p=payload.params?JSON.parse(payload.params):{}}catch(_){}
+    const {intervalo,...valores}=p
+    const g=preparaGuardado(editingStr.definition,valores)
+    if(!g.ok) throw new Error(g.errores.join(' '))
+    payload.code_js=null
+    payload.definition=editingStr.definition
+    payload.params=JSON.stringify(intervalo?{...g.params,intervalo}:g.params)
+  }
   const saveEditStr=async(codeLimpio)=>{
     setStrSaving(true)
     try{
@@ -3570,6 +3584,7 @@ export default function Home() {
         capital_ini:Number(strForm.capital_ini||(()=>{try{return JSON.parse(localStorage.getItem('v50_settings')||'{}')?.defaultCapital||1000}catch(_){return 1000}})()),
         allocation_pct:Number(strForm.allocation_pct||100),
       }
+      paraEditor(payload)
       const saved=await upsertStrategy(payload)
       reloadStrategies(); closeEditStr()
       if(saved?.id) run(simbolo,{strategyId:saved.id,capital_ini:Number(payload.capital_ini),years:Number(payload.years),allocation_pct:Number(payload.allocation_pct||100),filtros:filtrosBackend})
@@ -3597,6 +3612,7 @@ export default function Home() {
         capital_ini:Number(strForm.capital_ini||10000),
         allocation_pct:Number(strForm.allocation_pct||100),
       }
+      paraEditor(payload)
       await upsertStrategy(payload)
       reloadStrategies(); closeEditStr()
     }catch(e){alert('Error clonando: '+e.message)}
@@ -6280,7 +6296,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.1014</title>
+        <title>Trading Simulator V9.1015</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6369,7 +6385,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             }} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.1014
+            <span className="dot"/>Trading Simulator V9.1015
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6641,6 +6657,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                             <div style={{fontFamily:MONO,fontSize:11,color:isActive?'var(--accent)':'#d0e8fa',
                               fontWeight:isActive?700:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:4}}>
                               <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.name}</span>
+                              {esDefinicionEditor(s.definition)&&<span title="Estrategia del editor visual: el motor ejecuta su definición (no tiene code_js)" style={{fontSize:8,color:'#a78bfa',background:'rgba(167,139,250,0.12)',border:'1px solid rgba(167,139,250,0.35)',padding:'0 3px',borderRadius:3,flexShrink:0}}>editor</span>}
                               {isDisabled&&<span style={{fontSize:8,color:'#ff4d6d',background:'rgba(255,77,109,0.12)',border:'1px solid rgba(255,77,109,0.3)',padding:'0 3px',borderRadius:3,flexShrink:0}}>off</span>}
                             </div>
                             <div style={{fontFamily:MONO,fontSize:9,color:'#5a7a95',marginTop:1,display:'flex',alignItems:'center',gap:4}}>
