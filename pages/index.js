@@ -33,7 +33,7 @@ import { nDeUniverso, reglaDeUniverso, nombreUniverso, FRASE_REGLA, cargaUnivers
 import AvisoUniverso from '../components/AvisoUniverso'
 import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.1015'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.1016'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -53,6 +53,7 @@ import DiagnosticoPanel, { AvisoSinOperaciones } from '../components/Diagnostico
 import PriceAlarmQuickForm from '../components/PriceAlarmQuickForm'
 import StrategiesManager from '../components/StrategiesManager'
 import StrategyEditorPanel from '../components/StrategyEditorPanel'
+import EditorPanel from '../components/EditorPanel'
 import { esDefinicionEditor } from '../lib/editor/fuente'
 import { preparaGuardado } from '../lib/editor/guardar'
 import WatchlistCondPanel from '../components/WatchlistCondPanel'
@@ -1047,6 +1048,11 @@ export default function Home() {
   // Y la sección 💼 (components/CarteraPanel.js), el laboratorio de cartera.
   const [carteraVisitado,setCarteraVisitado]=useState(false)
   useEffect(()=>{ if(sidePanel==='cartera') setCarteraVisitado(true) },[sidePanel])
+  // Y la sección ✏️ (components/EditorPanel.js), el editor visual: lo que se está editando sobrevive a cambiar de sección.
+  // editorFila: la estrategia del editor que abre «Abrir en el Editor» (null: la pantalla sigue con lo que tenga).
+  const [editorVisitado,setEditorVisitado]=useState(false)
+  const [editorFila,setEditorFila]=useState(null)
+  useEffect(()=>{ if(sidePanel==='editor') setEditorVisitado(true) },[sidePanel])
   // Ficha fundamental del símbolo activo. Se pide SOLO con la sección abierta (ver el efecto más abajo).
   const [fundFicha,setFundFicha]=useState(null)
   const [fundCargando,setFundCargando]=useState(false)
@@ -6296,7 +6302,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.1015</title>
+        <title>Trading Simulator V9.1016</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6385,7 +6391,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             }} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.1015
+            <span className="dot"/>Trading Simulator V9.1016
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6520,6 +6526,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
           >
             {[
               {id:'config',     icon:'📈', label:'Estrategias'},
+              {id:'editor',     icon:'✏️', label:'Editor'},
               {id:'alarms',     icon:'🔔',label:'Alertas',   hasAlerts:alarmActiveCount>0, alertCount:alarmActiveCount},
               {id:'watchlist',  icon:'📋',label:'Watchlist'},
               {id:'fundamentals',icon:'🏦',label:'Fundamentals'},
@@ -6552,7 +6559,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
           </nav>
 
           {/* ── SIDEBAR ── */}
-          <aside className="sidebar" style={{padding:0,gap:0,position:'relative',width:(sidePanel==='tradelog'&&tlTab==='dashboard')||sidePanel==='optimiza'||sidePanel==='laboratorio'||sidePanel==='cartera'?0:sidebarW,overflow:'hidden',flexShrink:0,flexGrow:0,transition:'width 0.3s ease'}} onContextMenu={e=>openCtx(e,'sidebar')}
+          <aside className="sidebar" style={{padding:0,gap:0,position:'relative',width:(sidePanel==='tradelog'&&tlTab==='dashboard')||sidePanel==='optimiza'||sidePanel==='laboratorio'||sidePanel==='cartera'||sidePanel==='editor'?0:sidebarW,overflow:'hidden',flexShrink:0,flexGrow:0,transition:'width 0.3s ease'}} onContextMenu={e=>openCtx(e,'sidebar')}
             onWheel={e=>{if(e.ctrlKey){e.preventDefault();handlePanelScaleWheel(sidePanel,e)}}}>
             {/* Resize handle — right edge */}
             <div onMouseDown={e=>{sidebarResizing.current=true;sidebarStartX.current=e.clientX;sidebarStartW.current=sidebarW;document.body.style.cursor='col-resize';document.body.style.userSelect='none'}}
@@ -8298,6 +8305,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 onDelete={editingStr?.id?()=>deleteStr(editingStr.id):null}
                 onClone={editingStr?.id?cloneEditStr:null}
                 saving={strSaving}
+                onAbrirEditor={esDefinicionEditor(editingStr?.definition)?()=>{setEditorFila({...editingStr});closeEditStr();setSidePanel('editor')}:null}
               />
             )}
 
@@ -8308,15 +8316,15 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
             )}
 
             {/* Single-asset view — oculto cuando multicartera activa o editando */}
-            {sidePanel!=='optimiza'&&sidePanel!=='laboratorio'&&sidePanel!=='cartera'&&sidePanel!=='multi'&&sidePanel!=='tradelog'&&sidePanel!=='fundamentals'&&!(editingStr&&sidePanel==='config')&&pruebaParams&&pruebaParams.estrategiaId===currentStratId&&(
+            {sidePanel!=='optimiza'&&sidePanel!=='laboratorio'&&sidePanel!=='cartera'&&sidePanel!=='editor'&&sidePanel!=='multi'&&sidePanel!=='tradelog'&&sidePanel!=='fundamentals'&&!(editingStr&&sidePanel==='config')&&pruebaParams&&pruebaParams.estrategiaId===currentStratId&&(
               <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',margin:'8px 12px',padding:'7px 10px',borderRadius:6,border:'1px solid rgba(0,212,255,0.4)',background:'rgba(0,212,255,0.07)',fontFamily:MONO,fontSize:11,color:'var(--text)'}}>
                 <span>🎯 Probando <b>{pruebaParams.etiqueta}</b> de la Optimización: {pruebaParams.desde} → {pruebaParams.hasta}, {pruebaParams.intervalo}, capital {textoEs(pruebaParams.capitalIni,2)} €, sus comisiones, sin filtros{pruebaParams.calentamiento!=null?`, calentamiento ${pruebaParams.calentamiento} velas`:''}. La estrategia guardada no cambia.</span>
                 <button onClick={()=>setPruebaParams(null)} style={{background:'transparent',border:'1px solid var(--border)',borderRadius:4,color:'var(--text3)',fontFamily:MONO,fontSize:10,padding:'2px 8px',cursor:'pointer'}}>Quitar</button>
               </div>)}
-            {sidePanel!=='optimiza'&&sidePanel!=='laboratorio'&&sidePanel!=='cartera'&&sidePanel!=='multi'&&sidePanel!=='tradelog'&&sidePanel!=='fundamentals'&&!(editingStr&&sidePanel==='config')&&!result&&!error&&currentStratId&&<div className="loading"><div className="spinner"/><div className="loading-text">CARGANDO DATOS...</div></div>}
-            {sidePanel!=='optimiza'&&sidePanel!=='laboratorio'&&sidePanel!=='cartera'&&sidePanel!=='multi'&&sidePanel!=='tradelog'&&sidePanel!=='fundamentals'&&!(editingStr&&sidePanel==='config')&&error&&<div className="error-msg">⚠ {error}</div>}
+            {sidePanel!=='optimiza'&&sidePanel!=='laboratorio'&&sidePanel!=='cartera'&&sidePanel!=='editor'&&sidePanel!=='multi'&&sidePanel!=='tradelog'&&sidePanel!=='fundamentals'&&!(editingStr&&sidePanel==='config')&&!result&&!error&&currentStratId&&<div className="loading"><div className="spinner"/><div className="loading-text">CARGANDO DATOS...</div></div>}
+            {sidePanel!=='optimiza'&&sidePanel!=='laboratorio'&&sidePanel!=='cartera'&&sidePanel!=='editor'&&sidePanel!=='multi'&&sidePanel!=='tradelog'&&sidePanel!=='fundamentals'&&!(editingStr&&sidePanel==='config')&&error&&<div className="error-msg">⚠ {error}</div>}
 
-            {sidePanel!=='optimiza'&&sidePanel!=='laboratorio'&&sidePanel!=='cartera'&&sidePanel!=='multi'&&sidePanel!=='tradelog'&&sidePanel!=='fundamentals'&&!(editingStr&&sidePanel==='config')&&result&&(
+            {sidePanel!=='optimiza'&&sidePanel!=='laboratorio'&&sidePanel!=='cartera'&&sidePanel!=='editor'&&sidePanel!=='multi'&&sidePanel!=='tradelog'&&sidePanel!=='fundamentals'&&!(editingStr&&sidePanel==='config')&&result&&(
               <div style={{display:'flex',flex:1,minHeight:0,overflow:'hidden',height:'100%'}}>
                 {/* Columna principal */}
                 <div ref={contentRef} style={sidePanel==='risk'?{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',height:'calc(100vh - 56px)'}:result.isBareChart?{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',height:'100%'}:{flex:1,minHeight:0,overflowY:'auto'}}>
@@ -9409,6 +9417,15 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
             {(laboratorioVisitado||sidePanel==='laboratorio')&&(
               <div style={{display:sidePanel==='laboratorio'?'contents':'none'}}>
                 <LaboratorioPanelMemo apiFetch={apiFetch} version={VERSION_APP}/>
+              </div>
+            )}
+            {/* ══ EDITOR VISUAL (components/EditorPanel.js): a ancho completo, montado desde la primera visita. Guardar recarga la
+                lista; «Probar en backtest» la abre en Estrategias como un clic en la lista (backtest del activo de siempre). ══ */}
+            {(editorVisitado||sidePanel==='editor')&&(
+              <div style={{display:sidePanel==='editor'?'contents':'none'}}>
+                <EditorPanel apiFetch={apiFetch} filaInicial={editorFila}
+                  onGuardada={()=>reloadStrategies()}
+                  onProbar={(f)=>{reloadStrategies();loadStrategyLegacy(f)}}/>
               </div>
             )}
             {/* ══ LABORATORIO DE CARTERA (components/CarteraPanel.js): a ancho completo, montado desde la primera visita ══ */}

@@ -41,7 +41,7 @@ function hexRgb(hex) {
   return `${parseInt(h.slice(0,2),16)},${parseInt(h.slice(2,4),16)},${parseInt(h.slice(4,6),16)}`
 }
 
-export default function StrategyEditorPanel({ strForm, setStrForm, strategy, onSave, onCancel, onDelete, onClone, saving }) {
+export default function StrategyEditorPanel({ strForm, setStrForm, strategy, onSave, onCancel, onDelete, onClone, saving, onAbrirEditor = null }) {
   const [paramsError, setParamsError] = useState(null)
   const [codeError, setCodeError] = useState(null)
   // Avisos de la regla de la vela cerrada (lib/validaCodeJs.js): en vivo mientras se escribe, porque al
@@ -325,6 +325,12 @@ export default function StrategyEditorPanel({ strForm, setStrForm, strategy, onS
             de sus parámetros (se comprueban contra su declaración al guardar). Cambiar muchos parámetros a la vez buscando el mejor resultado
             aumenta el riesgo de sobreajuste: lo que funciona en el pasado por casualidad no se repite.
           </span>
+          {onAbrirEditor && (
+            <button onClick={onAbrirEditor} title="Cambiar sus reglas en la pestaña Editor"
+              style={{alignSelf:'flex-start', fontFamily:MONO, fontSize:11, padding:'4px 10px', borderRadius:4, cursor:'pointer', border:'1px solid #a78bfa', background:'rgba(167,139,250,0.12)', color:'#a78bfa'}}>
+              ✏️ Abrir en el Editor
+            </button>
+          )}
         </div>
         ) : (
         <div style={{display:'flex', flexDirection:'column', minHeight:0}}>

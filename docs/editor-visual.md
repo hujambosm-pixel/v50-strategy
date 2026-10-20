@@ -261,3 +261,16 @@ declarados se quitan) más `entradaAlCierre: true` si la orden es al cierre y la
 estrategias llevan la marca «editor». Su panel de edición enseña la regla en castellano en lugar del código y deja
 cambiar nombre, color, descripción y valores (validados al guardar; la copia conserva la definición). El botón «Editar»
 que abre la pestaña Editor llega con ella (E6). Exportar a code_js, al final (decisión 7).
+
+**Notas de E6 (V9.1016)**: pestaña propia ✏️ «Editor» (`components/EditorPanel.js`), a ancho completo y montada desde la
+primera visita. Como el formato 1 tiene un ciclo fijo (fuera → orden → dentro → fuera), los «estados y transiciones» son
+sus secciones: **Parámetros** (la declaración: tipo, rango, «periodo» para el calentamiento, restricciones, defecto y
+valor), **Entrada** (señal, orden —apertura siguiente, al cierre, stop o límite con su nivel y su ajuste—, cancelación y
+si se miran salidas en la vela de entrada), **Filtro de mercado**, **Stops** (en su orden, con «activa» según un parámetro
+y «se retira cuando lo supera») y **Salidas**. Cada condición es un árbol Y / O / NO / cruza / histéresis con hojas del
+catálogo, cuyo formulario sale de sus parámetros declarados (con su ayuda y su aviso); cualquier número u opción se puede
+enlazar a un parámetro de la estrategia con «$». A la derecha, en vivo: la regla en castellano con los valores actuales,
+los errores de la validación (con errores no se puede guardar), la huella, cómo leer el resultado y el riesgo de
+sobreajuste (en ámbar con más de 3 parámetros). Plantillas: en blanco, la 1 V50 y la 23. «Guardar» / «Guardar como
+nueva» van por `/api/strategies` (E5); «Probar en backtest» guarda y la abre en Estrategias como un clic en la lista. Desde
+el panel de una estrategia del editor, «Abrir en el Editor».
