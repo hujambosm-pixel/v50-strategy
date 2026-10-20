@@ -592,13 +592,18 @@ function buildCompartidoCurves(assetResults, capitalIni, symbolOrder = null, com
   }
 }
 
+// Cálculo de la prioridad de Concentrado (V9.997): sizeRules.calculoPrioridad = 1 pide el antiguo (con la vela de entrada,
+// que miraba al futuro); cualquier otra cosa, el 2. Las prioridades que miran velas son las únicas a las que afecta.
+const PRIORIDADES_CON_VELAS = ['momentum', 'fuerza_relativa', 'max52']
+const calculoPrioridadDe = (sizeRules) => Number(sizeRules?.calculoPrioridad) === 1 ? 1 : 2
+
 // ── MODO CAPITAL CONCENTRADO: pool compartido con techo por posición según maxPosiciones ──
 // prioridad: 'alfabetico' | 'score_metricas' | 'momentum' | 'fuerza_relativa' | 'max52'
 // momentumN: lookback en días para criterio 'momentum' (default 20)
 // sp500Data: array de barras del SP500 (para fuerza_relativa)
 // symbolsList: array ordenado de símbolos del watchlist (para score_metricas legacy)
 // scoreMap: {symbol: scoreMetricas} para prioridad 'score_metricas'
-function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, prioridad = 'alfabetico', momentumN = 20, sp500Data = null, symbolsList = null, scoreMap = null, criterioUso = 'desempate', rsGateThr = 0, momGateThr = 10, proxGateThr = 10, rsWindow = 63, comisiones = COMISIONES_CERO) {
+function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, prioridad = 'alfabetico', momentumN = 20, sp500Data = null, symbolsList = null, scoreMap = null, criterioUso = 'desempate', rsGateThr = 0, momGateThr = 10, proxGateThr = 10, rsWindow = 63, comisiones = COMISIONES_CERO, calculoPrioridad = 2, alCierre = null) {
   const conCom = !sinComisiones(comisiones)
   const n = assetResults.length
   if (!n) return _emptyCurves()
@@ -616,7 +621,11 @@ function buildConcentradoCurves(assetResults, capitalIni, maxPosiciones = 5, pri
   })
 
   // ── Prioridad (menor = entra antes) y candidatos: lib/prioridadCartera.js, compartido con el navegador ──
-  const _priorityScore = creaPuntuador({ prioridad, momentumN, rsWindow, scoreMap, symbolsList, sp500Data, dataMap: _dataMap, dateIdxMap: _dateIdxMap })
+  // Cálculo de la prioridad (V9.997, ver lib/prioridadCartera.js): 2 = con la vela anterior a la de entrada, salvo en las
+  // estrategias que entran al cierre (_entradaAlCierre); 1 = el antiguo, con la vela de entrada.
+  // alCierre: los símbolos que entran al cierre; si no se pasa, los activos con _entradaAlCierre (multicartera).
+  const _alCierre = alCierre ?? assetResults.filter(ar => ar._entradaAlCierre === true).map(ar => ar.symbol)
+  const _priorityScore = creaPuntuador({ prioridad, momentumN, rsWindow, scoreMap, symbolsList, sp500Data, dataMap: _dataMap, dateIdxMap: _dateIdxMap, calculoPrioridad, alCierre: _alCierre })
   const allCandidates = assetResults.flatMap(ar =>
     (ar.trades || []).map(t => {
       const c = candidatoDe(ar, t)
@@ -1758,12 +1767,19 @@ function _referenciasUniverso({ universo, assetResults, curves, qqqData, capital
     qqqBHCurve: _curvaBHSobre(qqqData, _fechasConExtremos(fechas, _extremosCaida(qqqCompleta)), startD, capitalIni), bhUniversoCurve }
 }
 
-function _candidatosParaAzar({ assetResults, sp500DataTf, modoAsig, sizeRules, symbols, capitalIni, comisiones, startDate, soloSimbolos = null }) {
+function _candidatosParaAzar({ assetResults, sp500DataTf, modoAsig, sizeRules, symbols, capitalIni, comisiones, startDate, soloSimbolos = null, entradaAlCierre = false }) {
   const opciones = { modo: modoAsig, capitalIni, n: assetResults.length, startDate,
     maxPosiciones: sizeRules.maxPosiciones ?? 5, prioridad: sizeRules.prioridad ?? 'alfabetico', momentumN: sizeRules.momentumN ?? 20,
     rsWindow: sizeRules.rsWindow ?? 63, criterioUso: sizeRules.criterioUso ?? 'desempate', rsGateThr: sizeRules.rsGateThr ?? 0,
     momGateThr: sizeRules.momGateThr ?? 10, proxGateThr: sizeRules.proxGateThr ?? 10, comisiones,
     scoreMap: sizeRules.scoreMap ?? null, symbolsList: symbols }
+  // El cálculo de la prioridad viaja solo con las prioridades que miran velas (con las demás no cambia nada y la respuesta
+  // queda igual byte a byte): el azar del navegador lo recalcula con estas mismas opciones.
+  if (modoAsig === 'concentrado' && PRIORIDADES_CON_VELAS.includes(opciones.prioridad)) {
+    opciones.calculoPrioridad = calculoPrioridadDe(sizeRules)
+    const alCierre = entradaAlCierre ? assetResults.map(ar => ar.symbol) : assetResults.filter(ar => ar._entradaAlCierre === true).map(ar => ar.symbol)
+    if (alCierre.length) opciones.alCierre = alCierre
+  }
   const dataMap = {}, dateIdxMap = {}
   assetResults.forEach(ar => { dataMap[ar.symbol] = ar.data || []; const m = {}; (ar.data || []).forEach((d, i) => { m[d.date] = i }); dateIdxMap[ar.symbol] = m })
   const puntua = modoAsig === 'concentrado' ? creaPuntuador({ ...opciones, sp500Data: sp500DataTf, dataMap, dateIdxMap }) : null
@@ -2053,7 +2069,7 @@ async function handlePortfolioMode(req, res) {
       curves = buildConcentradoCurves(
         assetResults, cfg.capitalIni, _maxPos,
         _prior, _momentN, sp500DataTf, synList, null,
-        _criterio, _rsThr, _momThr, _proxThr, _rsWindow, _com
+        _criterio, _rsThr, _momThr, _proxThr, _rsWindow, _com, calculoPrioridadDe(sizeRules)
       )
     }
     // B&H Diversificado: su caída máxima, sobre su eje completo (igual con cualquier estrategia; ver _bhDiversifEjeCompleto).
@@ -2471,7 +2487,8 @@ async function handlerMultibacktest(req, res) {
       const _momThr  = sizeRules.momGateThr  ?? 10
       const _proxThr = sizeRules.proxGateThr ?? 10
       const _rsWindow = sizeRules.rsWindow   ?? 63   // ventana del gate RS en velas (default 63)
-      curves = buildConcentradoCurves(assetResults, cfg.capitalIni, sizeRules.maxPosiciones ?? 5, _prior, _momentN, sp500DataTf, symbols, _scoreMap, _criterio, _rsThr, _momThr, _proxThr, _rsWindow, _com)
+      curves = buildConcentradoCurves(assetResults, cfg.capitalIni, sizeRules.maxPosiciones ?? 5, _prior, _momentN, sp500DataTf, symbols, _scoreMap, _criterio, _rsThr, _momThr, _proxThr, _rsWindow, _com, calculoPrioridadDe(sizeRules),
+        effectiveCfg?.entradaAlCierre === true ? assetResults.map(ar => ar.symbol) : [])
     } else if (modoAsig === 'positionsizing') {
       curves = buildPositionSizingCurves(assetResults, cfg.capitalIni, sizeRules, _com)
     } else {
@@ -2554,7 +2571,7 @@ async function handlerMultibacktest(req, res) {
       // candidatosDe (opcional): los candidatos solo de esos símbolos, para pedirlos por tandas (components/AzarCarteraPanel.js).
       const _soloCand = Array.isArray(req.body?.candidatosDe) ? new Set(req.body.candidatosDe) : null
       return res.status(200).json({
-        candidatosAzar: _candidatosParaAzar({ assetResults, sp500DataTf, modoAsig, sizeRules, symbols, capitalIni: cfg.capitalIni, comisiones: _com, startDate: curves.startDate, soloSimbolos: _soloCand }),
+        candidatosAzar: _candidatosParaAzar({ assetResults, sp500DataTf, modoAsig, sizeRules, symbols, capitalIni: cfg.capitalIni, comisiones: _com, startDate: curves.startDate, soloSimbolos: _soloCand, entradaAlCierre: effectiveCfg?.entradaAlCierre === true }),
         startDate: curves.startDate, compoundCurve: curves.compoundCurve, maxDDFloatCompound: curves.maxDDFloatCompound,
         avgCapOccupancy: curves.avgCapOccupancy ?? avgOccupancy, bhCurve: curves.bhCurve, maxDDBH: curves.maxDDBH,
         ...(_refsUniverso ? { universo: _refsUniverso } : {}),

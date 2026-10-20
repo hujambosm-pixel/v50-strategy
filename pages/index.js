@@ -33,7 +33,7 @@ import { nDeUniverso, reglaDeUniverso, nombreUniverso, FRASE_REGLA, cargaUnivers
 import AvisoUniverso from '../components/AvisoUniverso'
 import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.996'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.997'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -1358,6 +1358,10 @@ export default function Home() {
   const [mcPrioridad,setMcPrioridad]=useState(mcAsigBoot.prioridad) // criterio desempate concentrado
   const [mcCriterioUso,setMcCriterioUso]=useState(mcAsigBoot.criterioUso) // 'desempate' | 'filtro' — uso del criterio en Concentrado (default: filtro)
   const [mcMomentumN,setMcMomentumN]=useState(mcAsigBoot.momentumN)           // lookback días para criterio momentum
+  // Cálculo de la prioridad de Concentrado (V9.997, lib/prioridadCartera.js): 2 = con el último cierre conocido al comprar
+  // (el correcto, por defecto); 1 = el antiguo, con el cierre del día de entrada (miraba al futuro), solo para reproducir
+  // resultados guardados. No se guarda entre sesiones, y solo viaja en la petición cuando es el 1.
+  const [mcCalculoPrioridad,setMcCalculoPrioridad]=useState(2)
   const [mcRsGateThr,setMcRsGateThr]=useState(0)            // umbral gate RS (%) — default 0 (basta batir al índice)
   const [mcRsWindow,setMcRsWindow]=useState(mcAsigBoot.rsWindow)             // ventana (velas) del gate de fuerza relativa — default diario 63 (semanal 13); se resetea al cambiar mcIntervalo; independiente del RS visual (C) y del ranking (A)
   const [mcMomGateThr,setMcMomGateThr]=useState(10)         // umbral gate momentum (% subida mínima)
@@ -5482,6 +5486,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
       tipoStop,atrPeriod:Number(atrP),atrMult:Number(atrM),sinPerdidas,reentry,
       tipoFiltro,sp500EmaR:Number(sp500EmaR),sp500EmaL:Number(sp500EmaL),tipoCapital:mcCapital,
       sizeRules:{riskPerTrade:mcRiskPerTrade,maxPortfolioPct:mcMaxPortfolioPct,maxAccumRisk:mcMaxAccumRisk,assumedStopPct:mcAssumedStopPct,maxPosiciones:mcMaxPosiciones,prioridad:mcPrioridad,criterioUso:mcCriterioUso,momentumN:Number(mcMomentumN),rsWindow:Number(mcRsWindow),rsGateThr:Number(mcRsGateThr),momGateThr:Number(mcMomGateThr),proxGateThr:Number(mcProxGateThr),
+        ...(mcCalculoPrioridad===1?{calculoPrioridad:1}:{}),
         scoreMap:Object.fromEntries(_activosMc.map(sym=>[sym,wlData[sym.toUpperCase()]?.active?.scoreMetricas??null]))}}
     const buildCfgFromStrat=(strat)=>{
       // Parsear params del code_js (campo principal para estrategias modernas)
@@ -5634,6 +5639,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 rsGateThr:Number(mcRsGateThr),
                 momGateThr:Number(mcMomGateThr),
                 proxGateThr:Number(mcProxGateThr),
+                ...(mcCalculoPrioridad===1?{calculoPrioridad:1}:{}),
                 riskPerTrade:mcRiskPerTrade,
                 maxPortfolioPct:mcMaxPortfolioPct,
                 maxAccumRisk:mcMaxAccumRisk,
@@ -5655,7 +5661,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
       }
     }
     setMcLoading(false);setMcProgress(null)
-  },[mcSelected,mcMode,selectedModos,mcWeights,mcCapital,mcCapitalIni,mcYears,mcPeriodMode,mcFromDate,mcToDate,mcComisiones,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL,rankingData,mcStratSelected,strategies,currentStratId,mcRiskPerTrade,mcMaxPortfolioPct,mcMaxAccumRisk,mcAssumedStopPct,mcMaxPosiciones,mcPrioridad,mcCriterioUso,mcMomentumN,mcRsWindow,mcRsGateThr,mcMomGateThr,mcProxGateThr,filtrosBackend,mcIntervalo,mcPrueba,mcUniverso,mcUniversoDatos])
+  },[mcSelected,mcMode,selectedModos,mcWeights,mcCapital,mcCapitalIni,mcYears,mcPeriodMode,mcFromDate,mcToDate,mcComisiones,emaR,emaL,years,capitalIni,tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL,rankingData,mcStratSelected,strategies,currentStratId,mcRiskPerTrade,mcMaxPortfolioPct,mcMaxAccumRisk,mcAssumedStopPct,mcMaxPosiciones,mcPrioridad,mcCriterioUso,mcMomentumN,mcRsWindow,mcRsGateThr,mcMomGateThr,mcProxGateThr,mcCalculoPrioridad,filtrosBackend,mcIntervalo,mcPrueba,mcUniverso,mcUniversoDatos])
   // «Probar en backtest» (components/OptimizacionPanel.js): abre la combinación en el backtest individual
   // (la estrategia, el activo y el payload de la prueba) o en el multibacktest (la estrategia, los activos y
   // las condiciones de la optimización, y lo lanza). Nada se guarda en la estrategia.
@@ -6288,7 +6294,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.996</title>
+        <title>Trading Simulator V9.997</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6377,7 +6383,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             }} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.996
+            <span className="dot"/>Trading Simulator V9.997
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -7726,6 +7732,19 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                               background:'#0d1929',border:'1px solid #1a2a3a',
                               color:'#e0e8f0',fontSize:11,fontFamily:MONO,textAlign:'right'}}
                           />
+                        </div>
+                      )}
+                      {(mcPrioridad==='momentum'||mcPrioridad==='fuerza_relativa'||mcPrioridad==='max52')&&(
+                        <div data-prueba="calculo-prioridad" style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:4}}>
+                          <span title="Con qué vela se mide la prioridad. 2 (por defecto): con el último cierre conocido al comprar, la vela anterior a la de entrada (la propia si la estrategia entra al cierre). 1 (antiguo): con el cierre del día de entrada, que en una compra a la apertura o durante la vela todavía no se conoce; solo para reproducir resultados guardados antes de V9.997."
+                            style={{fontSize:9,color:'#4a6a88',cursor:'help',textDecoration:'underline dotted',paddingLeft:10}}>
+                            Cálculo
+                          </span>
+                          <select value={mcCalculoPrioridad} onChange={e=>setMcCalculoPrioridad(Number(e.target.value))}
+                            style={{padding:'2px 4px',borderRadius:3,background:'#0d1929',border:'1px solid #1a2a3a',color:mcCalculoPrioridad===1?'#f59e0b':'#e0e8f0',fontSize:10,fontFamily:MONO}}>
+                            <option value={2}>2 · cierre anterior</option>
+                            <option value={1}>1 · antiguo (mira al futuro)</option>
+                          </select>
                         </div>
                       )}
                     </div>

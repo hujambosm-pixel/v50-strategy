@@ -278,13 +278,13 @@ Donde el byte a byte es **imposible** si se unifica, se aísla con una **versió
   víspera con un calendario de mercado.
 - **EMA tras un hueco** (§1.3): latente en `calcEMA`. Arreglarlo cambiaría resultados solo donde haya huecos;
   conviene contar antes cuántos hay en la caché.
-- **Prioridad de la multicartera** (`lib/prioridadCartera.js`): el momentum, la fuerza relativa y `max52` parecen
-  usar el cierre de la propia fecha de entrada. Si la entrada es a la apertura, sería mirar al futuro. Está en el motor
-  y fuera de este plan; se apunta para revisarlo aparte (pregunta 8).
+- **Prioridad de la multicartera** (`lib/prioridadCartera.js`): **confirmado y corregido en V9.997** (ver §7, decisión 8).
 - **Volumen de Yahoo** en índices y en algunos ETF: los resultados con `volumenAlto` ahí no significan nada.
 - **Alcance**: el commit 9 toca el motor; si se hace, va solo y con toda la batería.
 
 ## 6. Preguntas abiertas
+
+Respondidas por Sergi el 20/10/2026: ver §7.
 
 1. Nulos: ¿por defecto `bloquea` (como el laboratorio) y `permite` solo en los filtros heredados?
 2. Precio frente a media: ¿estricto (`>`) por defecto en lo nuevo, y `≥` solo en la variante de los filtros?
@@ -296,3 +296,32 @@ Donde el byte a byte es **imposible** si se unifica, se aísla con una **versió
    como cálculo 1 para siempre?
 8. Prioridad de la multicartera: ¿se revisa aparte el posible uso del cierre del día de entrada?
 9. Volumen: ¿el 0 es un dato no válido (laboratorio) o válido (gráfico)?
+
+## 7. Decisiones
+
+Respuestas de Sergi (20/10/2026) a las preguntas de §6. Mandan sobre lo escrito antes en este documento.
+
+1. **Dato que falta**: la condición devuelve «sin dato» (`null`) y, en ese caso, no se entra ni se cambia de estado. Los
+   filtros heredados del backtest conservan su «dejar pasar» (fail-open), aislado como **cálculo 1**.
+2. **Comparación**: `>` en todo lo nuevo; `≥` solo en los filtros heredados.
+3. **Activo de referencia**: se calcula en sus propias sesiones, y en cada fecha del activo se usa el último valor ya
+   **cerrado** de la referencia (nunca uno futuro).
+4. **Filtros del backtest al catálogo**: sí, pero **al final** del plan (commit 9) y protegidos con la versión del cálculo.
+5. **Alarmas**: se arreglan (la SMA que calcula una EMA, y `close_above_ma` / `close_below_ma` que no se evalúan). Antes,
+   la lista de las alarmas guardadas que cambiarían de estado.
+6. **«Primer día hábil»**: la primera vela con datos.
+7. **Media semanal de cartera**: si no coincide con las velas semanales reales, la actual (`mediaSemanal`) queda como
+   cálculo 1 (lotes congelados) y lo nuevo usa las velas reales.
+8. **Prioridad de la multicartera con el cierre del día de entrada**: revisada en V9.997. **Miraba al futuro**: el
+   momentum, la fuerza relativa y el máximo de 52 semanas se medían con la vela de la fecha de entrada (su cierre; en
+   `max52`, también su máximo), y las entradas se ejecutan a la apertura o durante esa vela (la orden stop de la 1 V50);
+   solo «1.4 V50 EMA10/11 (entradas close same day)» entra al cierre. Corregido como comportamiento por defecto
+   (**cálculo 2**: la vela anterior a la de entrada; la propia solo con `entradaAlCierre`). El antiguo sigue disponible
+   como **cálculo 1** (`sizeRules.calculoPrioridad: 1`, «Cálculo» en el panel de Concentrado) para reproducir resultados
+   guardados.
+9. **Volumen 0**: dato no válido («sin dato»).
+
+**Pendiente, sin tocar**: el fallo latente de `calcEMA` (`lib/backtester.js`): con un nulo en mitad de la serie (después
+del calentamiento), la vela siguiente vale `v·k` (el nulo anterior cuenta como 0) y el error se arrastra. Con datos
+limpios no ocurre. Antes de arreglarlo hay que contar los huecos que hay en la caché y aislarlo con una versión del
+cálculo, porque se inyecta en el `code_js` de las estrategias.
