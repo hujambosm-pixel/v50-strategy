@@ -274,3 +274,9 @@ los errores de la validación (con errores no se puede guardar), la huella, cóm
 sobreajuste (en ámbar con más de 3 parámetros). Plantillas: en blanco, la 1 V50 y la 23. «Guardar» / «Guardar como
 nueva» van por `/api/strategies` (E5); «Probar en backtest» guarda y la abre en Estrategias como un clic en la lista. Desde
 el panel de una estrategia del editor, «Abrir en el Editor».
+
+**Notas de E7 (V9.1017)**: diagrama SVG propio (`components/DiagramaEditor.js`), solo para ver, en la columna derecha del
+Editor encima de la regla. Se dibuja solo desde la definición y los valores actuales: FUERA → (ORDEN VIVA, si la orden es
+stop o límite, con su ajuste) → DENTRO; la cancelación, flecha discontinua de ORDEN VIVA a FUERA; cada stop (rojo) o salida
+(ámbar) ACTIVO con esos valores, una flecha de DENTRO a FUERA numerada en el orden en que se comprueba. El filtro de mercado
+va en la etiqueta de la señal. Los textos van recortados; el entero, al pasar el ratón.

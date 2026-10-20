@@ -11,6 +11,7 @@ import { MONO } from '../lib/utils'
 import { CONDICIONES_EDITOR, FORMATO, MOTOR, validaDefinicion, valoresDe, fraseDefinicion, fraseCond, huellaDefinicion, esquemaDe } from '../lib/editor/definicion'
 import { DEF_V50, DEF_23 } from '../lib/editor/ejemplos'
 import { esDefinicionEditor } from '../lib/editor/fuente'
+import DiagramaEditor from './DiagramaEditor'
 
 const GRIS = 'var(--text-legible)'
 const TAM = 12
@@ -421,6 +422,11 @@ export default function EditorPanel({ apiFetch, filaInicial = null, onGuardada, 
 
       {/* ── La regla, la validación y los consejos ── */}
       <div style={{ flex: 2, overflowY: 'auto', padding: 12, borderLeft: '1px solid var(--border)', minWidth: 260 }}>
+        <div style={caja}>
+          <div style={etiqueta}>Diagrama</div>
+          <DiagramaEditor def={def} valores={valores}/>
+          <div style={{ ...nota, marginTop: 4 }}>Se dibuja solo a partir de los formularios. Las flechas de abajo son los stops (rojo) y las salidas (ámbar) activos, numerados en el orden en que se comprueban; pasa el ratón por un texto para leerlo entero.</div>
+        </div>
         <div style={caja}>
           <div style={etiqueta}>La regla</div>
           <div style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--text)' }}>{frase || '…'}</div>
