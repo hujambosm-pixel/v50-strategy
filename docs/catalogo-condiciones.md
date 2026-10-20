@@ -213,10 +213,44 @@ pinte: `{ c: 'precioVsMedia', p: { tipo: 'SMA', periodo: 200, lado: 'encima' }, 
 | `esMiembro` | nivel | índice (Nasdaq-100) | `esMiembroEn` (laboratorio) |
 | `elegidoPorScreener` | nivel | regla (volatilidad / momentum), N | `admiteEntrada` (H) |
 | `fuerzaRelativa` | nivel | ventana, referencia, umbral | la puerta de la multicartera (I); más adelante |
+| `fuerzaRelativaPercentil` | nivel (de universo) | umbral de percentil (0–100), lado | nueva: ver §3.1 |
 | `precioVsBollinger` | nivel | periodo, desviaciones, banda | opcional: `calcBollinger` ya existe, ninguna condición la usa |
 | Combinadores | — | `Y`, `O`, `NO`, `cruza`, `histeresis` | `aEvento`, la combinación «disparador Y filtros» |
 | Atajos | — | `mercadoAlcista` = `precioVsMedia` con `ref: 'QQQ'`; `retroceso` = `cruza(Y(rsiNivel, precioVsMedia))` | conservan su id y su frase para que las huellas no cambien |
 | Salidas (operación) | operación | las cinco de hoy | `cierreBajoMedia`, `stopMovilATR`, `stopFijoATR`, `rsiSobrecompra`, `tiempoMaximo` |
+
+### 3.1 Fuerza relativa por percentil (propuesta, V9.999; sin implementar)
+
+**Qué mide.** En cada fecha t y para cada valor del universo en t: la rentabilidad ponderada de 12 meses, con datos hasta
+el cierre de t, en cuatro trimestres de 63 velas (13 en semanal):
+
+`FR(t) = 0,4·r(t, t−63) + 0,2·r(t−63, t−126) + 0,2·r(t−126, t−189) + 0,2·r(t−189, t−252)`, con `r(a, b) = cierre[a] / cierre[b] − 1`.
+
+Después, el **percentil** de FR(t) entre los valores del universo **en esa fecha** que tienen FR calculable (empates: la
+media de sus puestos; 0 = el peor, 100 = el mejor). Sin 252 velas válidas o fuera del universo, «sin dato».
+
+**Por qué es distinta.** Todas las demás condiciones miran una sola serie (y, como mucho, una referencia). Esta compara cada
+valor con los demás el mismo día: necesita las velas de **todo el universo** alineadas por fecha y la pertenencia al índice
+en cada fecha (`universo_miembros`, la misma que usa el screener). Se calcula una vez por ejecución para todo el universo
+(una pasada por fecha, O(fechas × valores · log valores)) y se reparte por valor.
+
+**Cómo la recibe una estrategia: un campo por vela**, como ya se hace con `sp500Close` y `filtroActivo`. El servidor
+(/api/multibacktest y, con universo, /api/datos) inyecta en cada vela `rsPercentil` (0–100 o `null`) antes de ejecutar el
+`code_js`; la estrategia lo lee como cualquier otro campo:
+
+```js
+// entrada a la apertura de i + 1 con la vela i CERRADA (la regla de siempre)
+if (bars[i].rsPercentil != null && bars[i].rsPercentil >= 80 && cruceAlcista(i)) entradaPendiente = true
+```
+
+El valor de la vela i usa solo cierres hasta i, así que para decidir una entrada **durante** la vela i hay que leer el de
+`bars[i − 1]` (lo que ya vigila el guardián). En el laboratorio de señales sería un filtro del catálogo
+(`fuerzaRelativaPercentil`, umbral y lado) y en la cartera, una condición más; en la multicartera podría sustituir a la
+fuerza relativa frente al S&P 500 como prioridad (cálculo nuevo, sin tocar las de hoy).
+
+**Por decidir antes de implementarla.** (1) El universo: el de la ejecución (los activos marcados o el universo dinámico)
+o siempre el Nasdaq-100 completo de esa fecha, aunque la ejecución use menos valores. (2) Si se exige que el valor sea
+miembro ese día o basta con que tenga velas. (3) El nombre del campo (`rsPercentil`).
 
 ---
 
@@ -234,6 +268,10 @@ Cómo se garantiza el «byte a byte»:
 4. **Equivalencia de resultados**: los lotes y las exploraciones se vuelven a ejecutar con el arnés y su `resultados`
    se compara con la fila guardada (`lab_pruebas`), sin las marcas de tiempo ni la versión.
 5. Batería de V9.949 (52 + 44), `npm run guardian` (código 0) y build en cada commit, aunque el commit no toque el motor.
+
+**Estado del plan** (20/10/2026): commit 0 hecho en V9.998 («Copiar lote completo» con la calibración); commit 1 hecho
+en V9.999 (`lib/condiciones/nucleo.js`). Siguiente: el 2. Se añade al final el 12: fuerza relativa por percentil (§3.1),
+mediano, cuando se decidan sus tres puntos.
 
 Donde el byte a byte es **imposible** si se unifica, se aísla con una **versión del cálculo**, como en V9.988
 (`config.calculo`): sin el campo, el cálculo de siempre; con él, el nuevo. Hoy hay tres casos:
@@ -259,6 +297,7 @@ Donde el byte a byte es **imposible** si se unifica, se aísla con una **versió
 | 9 | Filtros del backtest al catálogo (opcional) | FiltrosPanel y `construirFiltroActivoMap` evalúan condiciones del catálogo con la variante de §4 | Batería 52 + 44 con filtros, guardian, `/api/datos` con cada filtro y ámbito | grande |
 | 10 | Alarmas al catálogo (si se decide) | `status.js` evalúa condiciones del catálogo; corrige los tres fallos de §1.3 | Cambia lo que muestran las alarmas: se enseña antes / después por símbolo | mediano |
 | 11 | Editor visual | Formularios a partir de `parametros`; árbol Y / O / NO; frase en castellano | — | grande |
+| 12 | Fuerza relativa por percentil (§3.1) | Cálculo por universo y fecha, campo `rsPercentil` por vela, filtro del laboratorio y condición de cartera | Las ejecuciones que no lo piden, byte a byte; prueba de truncado del percentil | mediano |
 
 ---
 
