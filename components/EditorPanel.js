@@ -14,6 +14,8 @@ import { esDefinicionEditor } from '../lib/editor/fuente'
 import DiagramaEditor from './DiagramaEditor'
 import EditorCartera from './EditorCartera'
 import EditorLotes from './EditorLotes'
+import { exportaCodeJs, motivosNoExportable } from '../lib/editor/exporta'
+import { preparaGuardado } from '../lib/editor/guardar'
 
 const GRIS = 'var(--text-legible)'
 const TAM = 12
@@ -296,7 +298,7 @@ const estadoDe = (filaInicial) => esDefinicionEditor(filaInicial?.definition)
 // (components/EditorLotes.js, E10: se monta al abrirlo por primera vez). Los dos primeros se quedan
 // montados al cambiar de modo, así que lo que se está editando en uno no se pierde al mirar el otro. Abrir una estrategia
 // del editor desde su panel vuelve al modo Estrategia.
-export default function EditorPanel({ apiFetch, filaInicial = null, onGuardada, onProbar, version, estrategias = [] }) {
+export default function EditorPanel({ apiFetch, filaInicial = null, onGuardada, onProbar, onExportar, version, estrategias = [] }) {
   const [modo, setModo] = useState('estrategia')
   const [lotesVisto, setLotesVisto] = useState(false)
   useEffect(() => { if (modo === 'lotes') setLotesVisto(true) }, [modo])
@@ -313,7 +315,7 @@ export default function EditorPanel({ apiFetch, filaInicial = null, onGuardada, 
         {pestana('lotes', 'Lotes', 'Declarar y congelar un lote de variantes antes de ver resultados, y probarlo contra el azar')}
       </div>
       <div style={{ flex: 1, display: modo === 'estrategia' ? 'flex' : 'none', minHeight: 0 }}>
-        <EditorEstrategia apiFetch={apiFetch} filaInicial={filaInicial} onGuardada={onGuardada} onProbar={onProbar}/>
+        <EditorEstrategia apiFetch={apiFetch} filaInicial={filaInicial} onGuardada={onGuardada} onProbar={onProbar} onExportar={onExportar} version={version}/>
       </div>
       <div style={{ flex: 1, display: modo === 'cartera' ? 'flex' : 'none', minHeight: 0 }}>
         <EditorCartera apiFetch={apiFetch} version={version}/>
@@ -328,7 +330,7 @@ export default function EditorPanel({ apiFetch, filaInicial = null, onGuardada, 
   )
 }
 
-function EditorEstrategia({ apiFetch, filaInicial = null, onGuardada, onProbar }) {
+function EditorEstrategia({ apiFetch, filaInicial = null, onGuardada, onProbar, onExportar, version }) {
   const [est, setEst] = useState(() => estadoDe(filaInicial))
   const [msg, setMsg] = useState(null)
   const [guardando, setGuardando] = useState(false)
@@ -490,6 +492,22 @@ function EditorEstrategia({ apiFetch, filaInicial = null, onGuardada, onProbar }
             <button style={{ ...boton, opacity: errores.length || sinNombre || guardando ? 0.5 : 1 }} disabled={!!errores.length || sinNombre || guardando}
               title="Guarda y la abre en Estrategias con el activo de siempre: el gráfico enseña sus órdenes, entradas y salidas"
               onClick={async () => { const f = await guarda(false); if (f) onProbar?.(f) }}>Probar en backtest ▸</button>
+            {onExportar && (() => {
+              // Exportar a code_js (decisión 7): crea una estrategia de CÓDIGO nueva que hace lo mismo (lib/editor/exporta.js).
+              const motivos = errores.length ? [] : motivosNoExportable(def, valores)
+              const no = !!errores.length || sinNombre || !!motivos.length
+              return <button style={{ ...boton, opacity: no ? 0.5 : 1 }} disabled={no}
+                title={motivos.length ? motivos.join(' ') : 'Crea una estrategia de código nueva que hace exactamente lo mismo, para retocarla a mano. Esta no cambia; la copia ya no se edita aquí.'}
+                onClick={async () => {
+                  if (!confirm('Se crea una estrategia de CÓDIGO nueva que hace exactamente lo mismo que esta, para retocarla a mano. Esta estrategia del editor no cambia, y la copia ya no se podrá editar en el editor. ¿Seguir?')) return
+                  try {
+                    const code = await exportaCodeJs({ ...def, nombre: est.nombre.trim() }, valores, { version })
+                    const g = preparaGuardado(def, valores)
+                    await onExportar({ name: `${est.nombre.trim()} (código)`, description: est.descripcion.trim() || null, code_js: code, params: g.ok ? g.params : { ...valoresEf, intervalo } })
+                    setMsg({ tipo: 'ok', texto: `Exportada como «${est.nombre.trim()} (código)»: se ha abierto en el editor de código.` })
+                  } catch (e) { setMsg({ tipo: 'err', texto: `No se pudo exportar: ${e.message}` }) }
+                }}>Exportar a code_js</button>
+            })()}
           </div>
           {msg && <div style={{ ...nota, marginTop: 6, color: msg.tipo === 'ok' ? VERDE : ROJO }}>{msg.texto}</div>}
         </div>

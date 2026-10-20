@@ -339,3 +339,21 @@ una de esas dos filas), ya no para las del editor. Quedan en el historial de git
   · no cambia nada más: foto del esquema público antes y después (columnas, políticas, permisos, RLS, disparadores,
     restricciones, índices y funciones): nada quitado y todo lo nuevo es de editor_lotes;
   · la copia de seguridad (`npm run backup`) ya la incluye (20 tablas).
+
+**Notas de «Exportar a code_js» (V9.1022, decisión 7)**: botón en el editor de estrategias (`lib/editor/exporta.js`). Crea
+una estrategia de CÓDIGO nueva, «<nombre> (código)», y la abre en el editor de código; la del editor no cambia y la copia
+ya no se edita en el editor. El code_js es autónomo: la definición como datos (`const DEF`, con los valores guardados como
+defectos), la regla en castellano y la huella en la cabecera, y debajo una copia del intérprete (motor 1) y de las
+condiciones del catálogo, sin imports: usa solo los ayudantes que el motor da a todo code_js (`calcEMA`, `calcRSI`,
+`calcATR`, los mismos del catálogo) y una copia de la SMA estricta. `run.parametros` es la declaración de la definición
+(optimizador y calentamiento). La condición de fuerza relativa solo va si la definición la usa (si no, el motor pediría el
+percentil del Nasdaq-100 sin necesidad). Guarda los mismos params que la del editor (con `entradaAlCierre` y la
+temporalidad). No se puede exportar con filtro de mercado (un code_js no recibe las velas de otro ticker): el botón lo dice.
+Comprobado: el `run()` exportado = el intérprete, byte a byte, en TODO lo que devuelve (operaciones, posición abierta,
+indicadores y gráfico) con la 1 V50 y la 23 en 109 valores (diario y semanal, con variaciones) y con definiciones sintéticas
+que cubren todas las órdenes, stops, salidas y condiciones; y en el motor, la fila de código exportada da la misma
+respuesta que la del editor en `/api/datos` y en el multibacktest. `MOTOR_EXPORTADO` = 1: si el intérprete cambia, el
+exportador se actualiza con él (la prueba lo vigila).
+
+**Estado del plan**: hechos E1–E7, E9, E10 (con la tabla) y E11, y exportar a code_js. Pendientes: E8 (dibujar con el ratón,
+aplazado) y la prueba contra el azar del laboratorio, con calibración, para estrategias del editor (decisión 5).

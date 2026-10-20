@@ -33,7 +33,7 @@ import { nDeUniverso, reglaDeUniverso, nombreUniverso, FRASE_REGLA, cargaUnivers
 import AvisoUniverso from '../components/AvisoUniverso'
 import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.1021'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.1022'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -6259,7 +6259,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.1021</title>
+        <title>Trading Simulator V9.1022</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6348,7 +6348,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             }} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.1021
+            <span className="dot"/>Trading Simulator V9.1022
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -9382,7 +9382,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
               <div style={{display:sidePanel==='editor'?'contents':'none'}}>
                 <EditorPanel apiFetch={apiFetch} filaInicial={editorFila} version={VERSION_APP} estrategias={strategies}
                   onGuardada={()=>reloadStrategies()}
-                  onProbar={(f)=>{reloadStrategies();loadStrategyLegacy(f)}}/>
+                  onProbar={(f)=>{reloadStrategies();loadStrategyLegacy(f)}}
+                  onExportar={async(f)=>{const saved=await upsertStrategy({...f,params:JSON.stringify(f.params),years:5,capital_ini:10000,color:'#00d4ff'});reloadStrategies();if(saved){openEditStr(saved);setSidePanel('config')}}}/>
               </div>
             )}
             {/* ══ LABORATORIO DE CARTERA (components/CarteraPanel.js): a ancho completo, montado desde la primera visita ══ */}
