@@ -270,7 +270,7 @@ Cómo se garantiza el «byte a byte»:
 5. Batería de V9.949 (52 + 44), `npm run guardian` (código 0) y build en cada commit, aunque el commit no toque el motor.
 
 **Estado del plan** (20/10/2026): commit 0 hecho en V9.998 («Copiar lote completo» con la calibración); commit 1 hecho
-en V9.999 (`lib/condiciones/nucleo.js`). Siguiente: el 2. Se añade al final el 12: fuerza relativa por percentil (§3.1),
+en V9.999 (`lib/condiciones/nucleo.js`); commit 2 hecho en V9.1000 (`lib/condiciones/indicadores.js`). Siguiente: el 3. Se añade al final el 12: fuerza relativa por percentil (§3.1),
 mediano, cuando se decidan sus tres puntos.
 
 Donde el byte a byte es **imposible** si se unifica, se aísla con una **versión del cálculo**, como en V9.988
