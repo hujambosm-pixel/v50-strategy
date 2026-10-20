@@ -29,6 +29,7 @@ import { normalizaComisiones } from '../../lib/comisiones'
 import { backtestActivo, descargaCompartida } from '../../lib/backtestActivo'
 import { metricasRanking } from '../../lib/metricasRanking'
 import { fetchAV } from './datos'
+import { proveedorFuerzaRelativa } from '../../lib/fuerzaRelativaServidor'
 
 const SUPA_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPA_KEY = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -84,7 +85,7 @@ async function handlerRankingActivo(req, res) {
         // fromDate/toDate no se usa para el periodo) y con allocation_pct 100.
         const b = await backtestActivo({ simbolo, codeJs, stratParams: row.params || null, stratName,
           capital_ini: capitalIni, years: 5, allocation_pct: 100, filtros, intervalo, fromDate, toDate, comisiones: _com, params },
-          { fetchAV: fetchCompartido, grafico: false })
+          { fetchAV: fetchCompartido, grafico: false, fuerzaRelativa: proveedorFuerzaRelativa(req) })
         const m = b._nucleo.metricas
         resultados[id] = {
           status: 200,

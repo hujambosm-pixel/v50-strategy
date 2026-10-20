@@ -22,6 +22,8 @@ import { normalizaPeriodo, velasCalentamiento, recortaConCalentamiento, recortaI
 import { COMISIONES_CERO, comisionDe, netoDeOperacion, normalizaComisiones,
          sinComisiones } from '../../lib/comisiones'
 import { admiteEntrada, bhUniverso } from '../../lib/screener'
+import { usaFuerzaRelativa, percentilesParaBarras } from '../../lib/fuerzaRelativa'
+import { proveedorFuerzaRelativa } from '../../lib/fuerzaRelativaServidor'
 
 const SUPA_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPA_KEY = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -1440,6 +1442,14 @@ function buildTrades(rawTrades, capitalIni, allocationPct = 100, barras = null, 
     })
 }
 
+// rsPercentil de las barras de un activo (V9.1005): el percentil de su fuerza relativa entre los miembros del Nasdaq-100 de
+// cada día (lib/fuerzaRelativa.js), leído de la caché con el proveedor de la petición; sin proveedor o sin datos, null.
+async function rsPercentilDe(fr, ticker, barras, semanal) {
+  let pf = null
+  if (fr && barras?.length) { try { pf = await fr(ticker, barras[0].date, barras[barras.length - 1].date) } catch (e) { console.log(`[fuerza-relativa] ${ticker}: ${e.message}`) } }
+  return pf ? percentilesParaBarras(barras, pf, semanal) : (barras || []).map(() => null)
+}
+
 // ── runCodeJsAsset: ejecuta code_js de una estrategia sobre un activo ──
 // Sandbox idéntica a datos.js. Si falla → { trades:[], indicators:{}, filterZones:[] }
 // `per` = { desde, iDesde }: `data` llega CON calentamiento y `per` dice donde empieza el periodo.
@@ -1459,7 +1469,8 @@ export function runCodeJsAsset(data, sp500Data, codeJs, slotCapital, years, cfg,
     const faltan = data.length - cerradas.length
     const sp500Map = {}
     if (sp500Data) sp500Data.forEach(d => { sp500Map[d.date] = d.close })
-    const enrichedData = cerradas.map(d => ({ ...d, sp500Close: sp500Map[d.date] ?? null }))
+    // rsPercentil (V9.1005): solo si se pasa en `per` (la estrategia nombra el campo); alineado con `data`.
+    const enrichedData = cerradas.map((d, i) => ({ ...d, sp500Close: sp500Map[d.date] ?? null, ...(per?.rsPercentil ? { rsPercentil: per.rsPercentil[i] ?? null } : {}) }))
     const wrappedCode = `"use strict";\n${codeJs}\nreturn run;`
     const getRunFn = new Function('calcEMA','calcSMA','calcRSI','calcATR','calcMACD', wrappedCode)
     const runFn = getRunFn(_libEMA, calcSMA, calcRSI, _libATR, calcMACD)
@@ -1932,8 +1943,9 @@ async function handlePortfolioMode(req, res) {
         const dataCal = tickerCacheCal[ticker]
         const synSym = `${ticker}#${orderTag}`
         // La estrategia ve la serie CON calentamiento; solo cuentan las entradas dentro del periodo.
+        const _rsPer = usaFuerzaRelativa(s.codeJs) ? await rsPercentilDe(proveedorFuerzaRelativa(req), ticker, dataCal, assetInterval === '1wk') : null
         const { trades: rawTrades, heredadas } = runCodeJsAsset(dataCal, sp500Data, s.codeJs, slotCapital, cfg.years ?? 5, s.effectiveCfg,
-          { desde: per.desde, iDesde: descargas[ticker].iDesde ?? 0 }, _com)
+          { desde: per.desde, iDesde: descargas[ticker].iDesde ?? 0, ...(_rsPer ? { rsPercentil: _rsPer } : {}) }, _com)
         // Enriquecer cada trade con metadata de estrategia
         const trades = rawTrades.map(t => ({
           ...t,
@@ -2366,6 +2378,12 @@ async function handlerMultibacktest(req, res) {
     if (!n) return res.status(400).json({ error: _mensajeTodosExcluidos(_activosExcluidos(symbols, descargas), cfg) ?? 'No se pudieron cargar datos de ningún símbolo' })
     const slotCapital = cfg.capitalIni / n
 
+    // rsPercentil (V9.1005): solo si el code_js nombra el campo; un activo tras otro (la distribución se lee una vez).
+    const _rsPor = {}
+    if (codeJs && usaFuerzaRelativa(codeJs)) {
+      const _fr = proveedorFuerzaRelativa(req)
+      for (const sym of symbols) { const b = allDataCal[sym] ?? allData[sym]; if (b?.length) _rsPor[sym] = await rsPercentilDe(_fr, sym, b, assetInterval === '1wk') }
+    }
     // Ejecutar backtest individual por activo
     const assetResults = symbols.map(sym => {
       const data = allData[sym]
@@ -2377,7 +2395,7 @@ async function handlerMultibacktest(req, res) {
       if (codeJs) {
         // Motor code_js: sandbox por activo con slotCapital = capital total / nº activos
         const { trades, heredadas } = runCodeJsAsset(dataCal, sp500Data, codeJs, slotCapital, cfg.years ?? 5, effectiveCfg,
-          { desde: per.desde, iDesde: descargas[sym].iDesde ?? 0 }, _com)
+          { desde: per.desde, iDesde: descargas[sym].iDesde ?? 0, ...(_rsPor[sym] ? { rsPercentil: _rsPor[sym] } : {}) }, _com)
         const capitalReinv = trades.length ? trades[trades.length-1].capitalTras : slotCapital
         const gananciaSimple = trades.reduce((s,t) => s + t.pnlSimple, 0)
         return { symbol: sym, data, dataCal, _heredadas: heredadas ?? [], trades, capitalReinv, gananciaSimple, startDate, blockEvents: {} }

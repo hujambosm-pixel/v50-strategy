@@ -257,6 +257,25 @@ fuerza relativa frente al S&P 500 como prioridad (cálculo nuevo, sin tocar las 
 
 (Las tres preguntas que quedaban se respondieron arriba.)
 
+**En el motor (V9.1005).** El servidor pone `rsPercentil` en cada vela que recibe `run()` —backtest individual, ranking,
+optimizador, multibacktest (las dos ramas) y detalle del activo— SOLO si el `code_js` de la estrategia nombra el campo
+(`usaFuerzaRelativa`): el resto de respuestas no cambia ni un byte. Lo lee de la caché de precios con la sesión del usuario
+(`lib/fuerzaRelativaServidor.js`: los miembros del índice y sus velas diarias desde 400 días antes de la primera vela que
+ve la estrategia; la distribución se recuerda 10 minutos en el proceso). Si no se puede (sin sesión, sin velas del índice o
+del valor en la caché), el campo va a `null` y `/api/datos` devuelve `avisoFuerzaRelativa`. Es el mismo valor con una lista
+manual que con un universo dinámico: la distribución es siempre la del Nasdaq-100 de ese día.
+
+Lectura desde una estrategia (la señal al cierre de la vela i y la entrada a la apertura de i + 1, como las VCP):
+
+```js
+const rsMin = P('rsMin', 70), r8 = P('r8', 1)            // parámetros nuevos de la regla 8
+// dentro de senal(i), después de las reglas de tendencia:
+const rs = bars[i].rsPercentil                            // 0–100, con datos hasta el cierre de i; null sin dato
+if (r8 && !(rs != null && rs >= rsMin)) return null       // sin dato, no hay señal
+```
+
+Para una entrada DURANTE la vela i (una orden stop) hay que leer el de `bars[i - 1]`.
+
 ---
 
 ## 4. Plan de migración

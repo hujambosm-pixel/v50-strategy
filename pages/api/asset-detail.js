@@ -9,6 +9,8 @@
 // el backtest —la descarga, el sandbox y los alineados—, de modo que no puede divergir de él. Si el motor
 // cambia, cambia para los dos a la vez.
 import { fetchData, fetchDataConMotivo, runCodeJsAsset, buildAlignedCloses, buildAlignedWeekly, calcEMA } from './multibacktest'
+import { usaFuerzaRelativa, percentilesParaBarras } from '../../lib/fuerzaRelativa'
+import { proveedorFuerzaRelativa } from '../../lib/fuerzaRelativaServidor'
 import { marcaBloqueadas } from '../../lib/graficoEstrategia'
 import { velasCalentamiento } from '../../lib/periodo'
 import { esquemaDeCodigo, paramsEfectivos, ventanasDeclaradas, cfgConParams } from '../../lib/parametrosEstrategia'
@@ -170,6 +172,13 @@ async function handlerAssetDetail(req, res) {
     // 3. El sandbox, por el mismo camino que el backtest. El capital solo afecta a los trades, que aquí
     //    se descartan: las series de indicadores no dependen de él.
     // Los indicadores vuelven ya en la rejilla del PERIODO: runCodeJsAsset los recorta con `iDesde`.
+    // rsPercentil (V9.1005): solo si el code_js nombra el campo, como en el backtest.
+    let _rsPer = null
+    if (codeJs && usaFuerzaRelativa(codeJs) && barrasConCal?.length) {
+      let pf = null
+      try { const fr = proveedorFuerzaRelativa(req); pf = fr ? await fr(symbol, barrasConCal[0].date, barrasConCal[barrasConCal.length - 1].date) : null } catch (e) { console.log(`[fuerza-relativa] ${symbol}: ${e.message}`) }
+      _rsPer = pf ? percentilesParaBarras(barrasConCal, pf, esSemanal) : barrasConCal.map(() => null)
+    }
     const { indicators = {}, filterZones: zonasSandbox = [], grafico = null } =
       // Esta ruta descarta las operaciones y solo usa las series de indicadores, asi que la
       // comision no cambia nada de lo que devuelve. Se pasa igual para que el sandbox corra con la
@@ -177,7 +186,7 @@ async function handlerAssetDetail(req, res) {
       // no habria que acordarse de esto.
       codeJs ? runCodeJsAsset(barrasConCal, sp500Data, codeJs, cfg.capitalIni ?? 10000, cfg.years ?? 5, effectiveCfg,
                               { desde: _d.periodo.desde, iDesde: _d.iDesde ?? 0, hasta: _d.periodo.hasta,
-                                grafico: true, conocidasGrafico: CONOCIDAS_GRAFICO }, comisiones)
+                                grafico: true, conocidasGrafico: CONOCIDAS_GRAFICO, ...(_rsPer ? { rsPercentil: _rsPer } : {}) }, comisiones)
              : { indicators: {}, filterZones: [] }
 
     paso = 'filtros'

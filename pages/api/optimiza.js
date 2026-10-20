@@ -28,6 +28,7 @@ import { esquemaDeCodigo, paramsEfectivos, ventanasDeclaradas } from '../../lib/
 import { normalizaFiltrosEntrada, fuerzaFiltrosSemanales } from '../../lib/filtros'
 import { velasCalentamiento } from '../../lib/periodo'
 import { fetchAV } from './datos'
+import { proveedorFuerzaRelativa } from '../../lib/fuerzaRelativaServidor'
 
 const SUPA_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPA_KEY = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -93,7 +94,7 @@ async function handlerOptimiza(req, res) {
       try {
         const b = await backtestActivo({ simbolo, codeJs: row.code_js, stratParams: row.params || null, stratName: row.name || null,
           capital_ini: capitalIni, years: 5, allocation_pct: 100, filtros, intervalo: iv, fromDate: desde, toDate: hasta,
-          comisiones: _com, params: r.params, calentamiento }, { fetchAV: fetchCompartido, grafico: false })
+          comisiones: _com, params: r.params, calentamiento }, { fetchAV: fetchCompartido, grafico: false, fuerzaRelativa: proveedorFuerzaRelativa(req) })
         const m = b._nucleo.metricas
         r.status = 200
         r.metricas = metricasOptimizacion({ trades: b._nucleo.trades, capitalReinv: m.capitalReinv, gananciaSimple: m.gananciaSimple,

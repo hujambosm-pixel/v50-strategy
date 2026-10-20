@@ -8,6 +8,7 @@ import { normalizaComisiones } from '../../lib/comisiones'
 import { calcEquityCurves } from '../../lib/nucleoBacktest'
 import { backtestActivo } from '../../lib/backtestActivo'
 import { conCachePrecios, cacheDeLaPeticion, diariasConCache } from '../../lib/cachePreciosServidor'
+import { proveedorFuerzaRelativa } from '../../lib/fuerzaRelativaServidor'
 
 const SUPA_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPA_KEY = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -241,9 +242,9 @@ async function handlerDatos(req, res) {
   try {
     // Periodo, calentamiento, descargas, filtros, compilar el code_js y el núcleo: lib/backtestActivo.js,
     // que comparte /api/ranking-activo. Aquí se construye la respuesta con lo que devuelve.
-    const { desde, hasta, modo, nCal, data, _corte, anyFiltroOn, filterZonesFromFiltros, sinSerieSemanal, _nucleo } =
+    const { desde, hasta, modo, nCal, data, _corte, anyFiltroOn, filterZonesFromFiltros, sinSerieSemanal, _nucleo, avisoFuerzaRelativa } =
       await backtestActivo({ simbolo, codeJs, stratParams, stratName, capital_ini, years, allocation_pct, filtros,
-        intervalo, fromDate, toDate, comisiones: _com, params, calentamiento }, { fetchAV, grafico: true })
+        intervalo, fromDate, toDate, comisiones: _com, params, calentamiento }, { fetchAV, grafico: true, fuerzaRelativa: proveedorFuerzaRelativa(req) })
     const _result = _nucleo.resultado
     // Calculados sobre la serie con calentamiento y consumidos por indice contra las velas del
     // periodo: hay que devolverlos a esa rejilla o salen desplazados. Ver lib/periodo.js.
@@ -341,6 +342,7 @@ async function handlerDatos(req, res) {
       // Solo presente si hay algo que avisar: símbolos cuya serie semanal no se pudo descargar y
       // que por tanto operaron SIN el filtro de activo en semanal (fail-open silencioso de otro modo).
       ...(sinSerieSemanal.length ? { avisosFiltros: { sinSerieSemanal } } : {}),
+      ...(avisoFuerzaRelativa ? { avisoFuerzaRelativa } : {}),
       // Del PERIODO: la estrategia tambien ha mirado las velas de calentamiento, y sus cruces y
       // marcadores existen de verdad, pero no son del backtest y el grafico no los puede pintar.
       slopeChanges:   marcasDelPeriodo(slopeChanges, desde, hasta),
