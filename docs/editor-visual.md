@@ -245,3 +245,10 @@ la 23 dan las mismas operaciones y la misma posición abierta, byte a byte, que 
 parámetros guardados y 8 variaciones; más de 240.000 operaciones), y las órdenes del gráfico de la 1 V50 son las mismas. Dos
 reglas para no mirar al futuro: la salida por condición es siempre a la APERTURA de la vela siguiente, y el tope de N velas
 sale a la apertura de la vela N + 1. E2 y E3 van en un solo commit: E2 solo no habría podido pasar la prueba de aceptación.
+
+**Notas de E4 (V9.1014)**: el intérprete está conectado al motor (`lib/editor/fuente.js`). Una fila de `strategies` cuya
+columna `definition` es una definición del editor se ejecuta con el intérprete; si no, su `code_js`, como siempre. Lo
+reconocen `/api/datos` (y el ranking y el optimizador), las dos ramas del multibacktest, el detalle del activo,
+`esquemaDeCodigo` (parámetros y calentamiento) y el guardián. El filtro de mercado descarga las velas de su ticker en el
+intervalo del activo. Una estrategia del editor que entre AL CIERRE tiene que guardar `entradaAlCierre: true` en sus
+params, como la 1.4 (lo hará la pantalla al guardar, E5).

@@ -29,6 +29,7 @@ import { normalizaFiltrosEntrada, fuerzaFiltrosSemanales } from '../../lib/filtr
 import { velasCalentamiento } from '../../lib/periodo'
 import { fetchAV } from './datos'
 import { proveedorFuerzaRelativa } from '../../lib/fuerzaRelativaServidor'
+import { fuenteDeFila } from '../../lib/editor/fuente'
 
 const SUPA_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPA_KEY = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -66,12 +67,13 @@ async function handlerOptimiza(req, res) {
     // La estrategia, con el JWT del usuario.
     let row = null
     try {
-      const r = await fetch(`${SUPA_URL}/rest/v1/strategies?id=eq.${estrategia}&select=code_js,params,name`,
+      const r = await fetch(`${SUPA_URL}/rest/v1/strategies?id=eq.${estrategia}&select=code_js,params,name,definition`,
         { headers: { apikey: SUPA_KEY, Authorization: `Bearer ${_jwt}` } })
       if (r.ok) row = (await r.json())?.[0] || null
     } catch (_) {}
-    if (!row?.code_js) return res.status(400).json({ error: 'Esta estrategia no tiene código generado. Abre el editor y usa "Generar con Claude".' })
-    const esquema = esquemaDeCodigo(row.code_js)
+    const fuente = fuenteDeFila(row)   // su code_js o, si es del editor, { definicion }
+    if (!fuente) return res.status(400).json({ error: 'Esta estrategia no tiene código generado. Abre el editor y usa "Generar con Claude".' })
+    const esquema = esquemaDeCodigo(fuente)
     if (!esquema) {
       const errores = ['Esta estrategia no declara sus parámetros (run.parametros): no se pueden cambiar.']
       return res.status(422).json({ error: 'Parámetros no válidos: ' + errores[0], tipo: 'parametros', errores })
@@ -92,7 +94,7 @@ async function handlerOptimiza(req, res) {
     for (const r of resultados) {
       if (r.status) continue
       try {
-        const b = await backtestActivo({ simbolo, codeJs: row.code_js, stratParams: row.params || null, stratName: row.name || null,
+        const b = await backtestActivo({ simbolo, codeJs: fuente, stratParams: row.params || null, stratName: row.name || null,
           capital_ini: capitalIni, years: 5, allocation_pct: 100, filtros, intervalo: iv, fromDate: desde, toDate: hasta,
           comisiones: _com, params: r.params, calentamiento }, { fetchAV: fetchCompartido, grafico: false, fuerzaRelativa: proveedorFuerzaRelativa(req) })
         const m = b._nucleo.metricas

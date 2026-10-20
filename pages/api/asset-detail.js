@@ -11,6 +11,7 @@
 import { fetchData, fetchDataConMotivo, runCodeJsAsset, buildAlignedCloses, buildAlignedWeekly, calcEMA } from './multibacktest'
 import { usaFuerzaRelativa, percentilesParaBarras } from '../../lib/fuerzaRelativa'
 import { proveedorFuerzaRelativa } from '../../lib/fuerzaRelativaServidor'
+import { fuenteDeFila, tickerFiltroMercado } from '../../lib/editor/fuente'
 import { marcaBloqueadas } from '../../lib/graficoEstrategia'
 import { velasCalentamiento } from '../../lib/periodo'
 import { esquemaDeCodigo, paramsEfectivos, ventanasDeclaradas, cfgConParams } from '../../lib/parametrosEstrategia'
@@ -117,12 +118,12 @@ async function handlerAssetDetail(req, res) {
     if (strategyId && SUPA_URL && SUPA_KEY) {
       try {
         const sr = await fetch(
-          `${SUPA_URL}/rest/v1/strategies?id=eq.${strategyId}&select=code_js,params`,
+          `${SUPA_URL}/rest/v1/strategies?id=eq.${strategyId}&select=code_js,params,definition`,
           { headers: { apikey: SUPA_KEY, Authorization: `Bearer ${_jwt}` } }
         )
         if (sr.ok) {
           const row = (await sr.json())?.[0] || {}
-          codeJs = row.code_js || null
+          codeJs = fuenteDeFila(row)   // su code_js o, si es del editor, { definicion }
           let stratParams = {}
           try {
             stratParams = row.params ? (typeof row.params === 'string' ? JSON.parse(row.params) : row.params) : {}
@@ -179,6 +180,10 @@ async function handlerAssetDetail(req, res) {
       try { const fr = proveedorFuerzaRelativa(req); pf = fr ? await fr(symbol, barrasConCal[0].date, barrasConCal[barrasConCal.length - 1].date) : null } catch (e) { console.log(`[fuerza-relativa] ${symbol}: ${e.message}`) }
       _rsPer = pf ? percentilesParaBarras(barrasConCal, pf, esSemanal) : barrasConCal.map(() => null)
     }
+    // Estrategia del editor con filtro de mercado (V9.1014): las velas de su ticker.
+    const _tickerFm = tickerFiltroMercado(codeJs)
+    let _refFm = null
+    if (_tickerFm) { try { _refFm = await fetchData(_tickerFm, cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, assetInterval, _cal) } catch (_) {} }
     const { indicators = {}, filterZones: zonasSandbox = [], grafico = null } =
       // Esta ruta descarta las operaciones y solo usa las series de indicadores, asi que la
       // comision no cambia nada de lo que devuelve. Se pasa igual para que el sandbox corra con la
@@ -186,7 +191,7 @@ async function handlerAssetDetail(req, res) {
       // no habria que acordarse de esto.
       codeJs ? runCodeJsAsset(barrasConCal, sp500Data, codeJs, cfg.capitalIni ?? 10000, cfg.years ?? 5, effectiveCfg,
                               { desde: _d.periodo.desde, iDesde: _d.iDesde ?? 0, hasta: _d.periodo.hasta,
-                                grafico: true, conocidasGrafico: CONOCIDAS_GRAFICO, ...(_rsPer ? { rsPercentil: _rsPer } : {}) }, comisiones)
+                                grafico: true, conocidasGrafico: CONOCIDAS_GRAFICO, ...(_rsPer ? { rsPercentil: _rsPer } : {}), ...(_tickerFm ? { referencias: { [_tickerFm]: _refFm || [] } } : {}) }, comisiones)
              : { indicators: {}, filterZones: [] }
 
     paso = 'filtros'

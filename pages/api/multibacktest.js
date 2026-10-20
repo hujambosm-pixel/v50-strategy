@@ -25,6 +25,7 @@ import { admiteEntrada, bhUniverso } from '../../lib/screener'
 import { buildAlignedCloses, buildAlignedWeekly } from '../../lib/alineaSeries'
 import { usaFuerzaRelativa, percentilesParaBarras } from '../../lib/fuerzaRelativa'
 import { proveedorFuerzaRelativa } from '../../lib/fuerzaRelativaServidor'
+import { fuenteDeFila, esFuenteEditor, runDeEditor, tickerFiltroMercado } from '../../lib/editor/fuente'
 
 const SUPA_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPA_KEY = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -1432,9 +1433,9 @@ export function runCodeJsAsset(data, sp500Data, codeJs, slotCapital, years, cfg,
     if (sp500Data) sp500Data.forEach(d => { sp500Map[d.date] = d.close })
     // rsPercentil (V9.1005): solo si se pasa en `per` (la estrategia nombra el campo); alineado con `data`.
     const enrichedData = cerradas.map((d, i) => ({ ...d, sp500Close: sp500Map[d.date] ?? null, ...(per?.rsPercentil ? { rsPercentil: per.rsPercentil[i] ?? null } : {}) }))
-    const wrappedCode = `"use strict";\n${codeJs}\nreturn run;`
-    const getRunFn = new Function('calcEMA','calcSMA','calcRSI','calcATR','calcMACD', wrappedCode)
-    const runFn = getRunFn(_libEMA, calcSMA, calcRSI, _libATR, calcMACD)
+    // Una estrategia del editor (V9.1014): su definición, con el intérprete; per.referencias, las velas de su filtro de mercado.
+    const runFn = esFuenteEditor(codeJs) ? runDeEditor(codeJs, { referencias: per?.referencias || {} })
+      : new Function('calcEMA','calcSMA','calcRSI','calcATR','calcMACD', `"use strict";\n${codeJs}\nreturn run;`)(_libEMA, calcSMA, calcRSI, _libATR, calcMACD)
     const result = runFn(enrichedData, {
       ...(cfg || {}),
       capital_ini:    slotCapital,
@@ -1808,7 +1809,7 @@ async function handlePortfolioMode(req, res) {
       if (!SUPA_URL || !SUPA_KEY) return base
       try {
         const sr = await fetch(
-          `${SUPA_URL}/rest/v1/strategies?id=eq.${s.id}&select=code_js,params,name`,
+          `${SUPA_URL}/rest/v1/strategies?id=eq.${s.id}&select=code_js,params,name,definition`,
           { headers: { apikey: SUPA_KEY, Authorization: `Bearer ${req.headers['x-supa-jwt']}` } }
         )
         if (!sr.ok) return base
@@ -1819,7 +1820,7 @@ async function handlePortfolioMode(req, res) {
           ...s,
           stratOrder,
           name:        s.name || row.name || s.id,
-          codeJs:      row.code_js || null,
+          codeJs:      fuenteDeFila(row),   // su code_js o, si es del editor, { definicion }
           stratParams,
           effectiveCfg: cfgConParams(cfg, stratParams),
         }
@@ -1895,6 +1896,7 @@ async function handlePortfolioMode(req, res) {
     //    Nota: slotCapital pasado a runCodeJsAsset solo afecta capitalTras del
     //    historial por símbolo — el pool recalcula todo desde pnlPct × capAsignado
     const assetResults = []
+    const _refsFm = {}   // velas de los filtros de mercado de las estrategias del editor, una vez por ticker
     for (const s of stratMeta) {
       if (!s.codeJs) continue
       const orderTag = String(s.stratOrder).padStart(3, '0')
@@ -1905,8 +1907,10 @@ async function handlePortfolioMode(req, res) {
         const synSym = `${ticker}#${orderTag}`
         // La estrategia ve la serie CON calentamiento; solo cuentan las entradas dentro del periodo.
         const _rsPer = usaFuerzaRelativa(s.codeJs) ? await rsPercentilDe(proveedorFuerzaRelativa(req), ticker, dataCal, assetInterval === '1wk') : null
+        const _tFm = tickerFiltroMercado(s.codeJs)
+        if (_tFm && !(_tFm in _refsFm)) { try { _refsFm[_tFm] = await fetchData(_tFm, cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, assetInterval, _cal) || [] } catch (_) { _refsFm[_tFm] = [] } }
         const { trades: rawTrades, heredadas } = runCodeJsAsset(dataCal, sp500Data, s.codeJs, slotCapital, cfg.years ?? 5, s.effectiveCfg,
-          { desde: per.desde, iDesde: descargas[ticker].iDesde ?? 0, ...(_rsPer ? { rsPercentil: _rsPer } : {}) }, _com)
+          { desde: per.desde, iDesde: descargas[ticker].iDesde ?? 0, ...(_rsPer ? { rsPercentil: _rsPer } : {}), ...(_tFm ? { referencias: { [_tFm]: _refsFm[_tFm] } } : {}) }, _com)
         // Enriquecer cada trade con metadata de estrategia
         const trades = rawTrades.map(t => ({
           ...t,
@@ -2210,12 +2214,12 @@ async function handlerMultibacktest(req, res) {
   if (strategyId && SUPA_URL && SUPA_KEY) {
     try {
       const sr = await fetch(
-        `${SUPA_URL}/rest/v1/strategies?id=eq.${strategyId}&select=code_js,params,name`,
+        `${SUPA_URL}/rest/v1/strategies?id=eq.${strategyId}&select=code_js,params,name,definition`,
         { headers: { apikey: SUPA_KEY, Authorization: `Bearer ${req.headers['x-supa-jwt']}` } }
       )
       if (sr.ok) {
         const row = (await sr.json())?.[0] || {}
-        codeJs = row.code_js || null
+        codeJs = fuenteDeFila(row)   // su code_js o, si es del editor, { definicion }
         _stratNameMb = row.name || null
         let stratParams = {}
         try {
@@ -2339,6 +2343,10 @@ async function handlerMultibacktest(req, res) {
     if (!n) return res.status(400).json({ error: _mensajeTodosExcluidos(_activosExcluidos(symbols, descargas), cfg) ?? 'No se pudieron cargar datos de ningún símbolo' })
     const slotCapital = cfg.capitalIni / n
 
+    // Estrategia del editor con filtro de mercado (V9.1014): las velas de su ticker, una vez.
+    const _tFm = tickerFiltroMercado(codeJs)
+    let _refFm = null
+    if (_tFm) { try { _refFm = await fetchData(_tFm, cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, assetInterval, _cal) || [] } catch (_) { _refFm = [] } }
     // rsPercentil (V9.1005): solo si el code_js nombra el campo; un activo tras otro (la distribución se lee una vez).
     const _rsPor = {}
     if (codeJs && usaFuerzaRelativa(codeJs)) {
@@ -2356,7 +2364,7 @@ async function handlerMultibacktest(req, res) {
       if (codeJs) {
         // Motor code_js: sandbox por activo con slotCapital = capital total / nº activos
         const { trades, heredadas } = runCodeJsAsset(dataCal, sp500Data, codeJs, slotCapital, cfg.years ?? 5, effectiveCfg,
-          { desde: per.desde, iDesde: descargas[sym].iDesde ?? 0, ...(_rsPor[sym] ? { rsPercentil: _rsPor[sym] } : {}) }, _com)
+          { desde: per.desde, iDesde: descargas[sym].iDesde ?? 0, ...(_rsPor[sym] ? { rsPercentil: _rsPor[sym] } : {}), ...(_tFm ? { referencias: { [_tFm]: _refFm } } : {}) }, _com)
         const capitalReinv = trades.length ? trades[trades.length-1].capitalTras : slotCapital
         const gananciaSimple = trades.reduce((s,t) => s + t.pnlSimple, 0)
         return { symbol: sym, data, dataCal, _heredadas: heredadas ?? [], trades, capitalReinv, gananciaSimple, startDate, blockEvents: {} }

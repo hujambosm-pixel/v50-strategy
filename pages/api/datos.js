@@ -9,6 +9,7 @@ import { calcEquityCurves } from '../../lib/nucleoBacktest'
 import { backtestActivo } from '../../lib/backtestActivo'
 import { conCachePrecios, cacheDeLaPeticion, diariasConCache } from '../../lib/cachePreciosServidor'
 import { proveedorFuerzaRelativa } from '../../lib/fuerzaRelativaServidor'
+import { fuenteDeFila } from '../../lib/editor/fuente'
 
 const SUPA_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPA_KEY = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -222,12 +223,12 @@ async function handlerDatos(req, res) {
   if (strategyId) {
     try {
       const r = await fetch(
-        `${SUPA_URL}/rest/v1/strategies?id=eq.${strategyId}&select=code_js,params,visuals,name`,
+        `${SUPA_URL}/rest/v1/strategies?id=eq.${strategyId}&select=code_js,params,visuals,name,definition`,
         { headers: { apikey: SUPA_KEY, Authorization: `Bearer ${_jwt}` } }
       )
       if (r.ok) {
         const row = (await r.json())?.[0] || {}
-        codeJs       = row.code_js || null
+        codeJs       = fuenteDeFila(row)   // su code_js o, si es del editor, { definicion }
         stratParams  = row.params  || null
         stratVisuals = row.visuals || null
         stratName    = row.name    || null

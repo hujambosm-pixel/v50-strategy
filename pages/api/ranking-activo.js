@@ -30,6 +30,7 @@ import { backtestActivo, descargaCompartida } from '../../lib/backtestActivo'
 import { metricasRanking } from '../../lib/metricasRanking'
 import { fetchAV } from './datos'
 import { proveedorFuerzaRelativa } from '../../lib/fuerzaRelativaServidor'
+import { fuenteDeFila } from '../../lib/editor/fuente'
 
 const SUPA_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPA_KEY = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -66,7 +67,7 @@ async function handlerRankingActivo(req, res) {
     // Las estrategias, de una vez, con el JWT del usuario (como /api/datos).
     const filas = new Map()
     try {
-      const r = await fetch(`${SUPA_URL}/rest/v1/strategies?id=in.(${lista.map(e => e.id).join(',')})&select=id,code_js,params,name`,
+      const r = await fetch(`${SUPA_URL}/rest/v1/strategies?id=in.(${lista.map(e => e.id).join(',')})&select=id,code_js,params,name,definition`,
         { headers: { apikey: SUPA_KEY, Authorization: `Bearer ${_jwt}` } })
       if (r.ok) for (const f of (await r.json()) || []) filas.set(f.id, f)
     } catch (_) {}
@@ -75,7 +76,7 @@ async function handlerRankingActivo(req, res) {
     const resultados = {}
     for (const { id, intervalo, params } of lista) {
       const row = filas.get(id) || {}
-      const codeJs = row.code_js || null, stratName = row.name || null
+      const codeJs = fuenteDeFila(row), stratName = row.name || null   // su code_js o, si es del editor, { definicion }
       if (!codeJs) {
         resultados[id] = { status: 400, error: 'Esta estrategia no tiene código generado. Abre el editor y usa "Generar con Claude".' }
         continue

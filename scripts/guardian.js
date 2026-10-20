@@ -91,7 +91,7 @@ function fetchSimulado(url, opciones) {
   m = url.match(/\/rest\/v1\/strategies\?id=eq\.([^&]+)/)
   if (m) {
     const e = ESTRATEGIAS.get(decodeURIComponent(m[1]))
-    return Promise.resolve(respuesta(200, e ? [{ code_js: e.code_js, params: e.params, visuals: null, name: e.name }] : []))
+    return Promise.resolve(respuesta(200, e ? [{ code_js: e.code_js, params: e.params, visuals: null, name: e.name, definition: e.definition ?? null }] : []))
   }
   if (url.includes('jwks')) return Promise.resolve(respuesta(503, {}))
   return Promise.reject(new Error('guardián: red bloqueada: ' + url.split('?')[0]))
@@ -234,8 +234,8 @@ function compruebaRespuesta(R, intervalo, anota) {
     lista = JSON.parse(fs.readFileSync(DE_FICHERO, 'utf8')).map((e, i) => ({ id: e.id || `fichero-${i}`, active: true, ...e }))
   } else {
     const { consultaSoloLectura } = require('./guardian/lecturaBd')
-    lista = await consultaSoloLectura(`SELECT id, name, active, params, code_js FROM strategies
-      WHERE active AND code_js IS NOT NULL AND length(trim(code_js)) > 0 ORDER BY name;`)
+    lista = await consultaSoloLectura(`SELECT id, name, active, params, code_js, definition FROM strategies
+      WHERE active AND ((code_js IS NOT NULL AND length(trim(code_js)) > 0) OR definition->>'tipo' = 'editor') ORDER BY name;`)
   }
   if (SOLO) lista = lista.filter(e => SOLO.test(e.name))
   for (const e of lista) ESTRATEGIAS.set(e.id, e)
@@ -247,7 +247,7 @@ function compruebaRespuesta(R, intervalo, anota) {
   const parametros = []      // { nombre, lista: [{ nombre, usado, probados }] } de las que declaran
   // ¿Cambia algo cada parámetro declarado? Ver la cabecera. `base`: las operaciones sin filtros por símbolo.
   const compruebaParametros = async (est, intervalo, base) => {
-    const esquema = esquemaDeCodigo(est.code_js)
+    const esquema = esquemaDeCodigo(est.definition?.tipo === 'editor' ? { definicion: est.definition } : est.code_js)
     if (!esquema || !esquema.lista.length) return null
     let guardados = {}; try { guardados = typeof est.params === 'string' ? JSON.parse(est.params || '{}') : (est.params || {}) } catch (_) {}
     const lista = []
