@@ -26,6 +26,7 @@ import { buildAlignedCloses, buildAlignedWeekly } from '../../lib/alineaSeries'
 import { usaFuerzaRelativa, percentilesParaBarras } from '../../lib/fuerzaRelativa'
 import { proveedorFuerzaRelativa } from '../../lib/fuerzaRelativaServidor'
 import { fuenteDeFila, esFuenteEditor, runDeEditor, tickerFiltroMercado } from '../../lib/editor/fuente'
+import { preparaGuardado } from '../../lib/editor/guardar'
 
 const SUPA_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPA_KEY = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -2232,6 +2233,19 @@ async function handlerMultibacktest(req, res) {
         effectiveCfg = cfgConParams(cfg, stratParams)
       }
     } catch(_) { codeJs = null }
+  }
+  // DEFINICIÓN DEL EDITOR EN LA PETICIÓN (V9.1020, lotes del editor: docs/editor-visual.md, E10). Una variante de un lote
+  // congelado se ejecuta con SU definición y SUS valores, no con una fila de strategies (que se puede editar después):
+  // `definicionEditor` + `paramsEditor`, sin strategyId. Se valida igual que al guardar (lib/editor/guardar.js; 422 con los
+  // errores) y sigue el camino de una estrategia del editor. Sin el campo, todo como siempre.
+  if (req.body?.definicionEditor != null) {
+    if (strategyId) return res.status(400).json({ error: 'definicionEditor va sin strategyId.' })
+    const g = preparaGuardado(req.body.definicionEditor, req.body.paramsEditor || {})
+    if (!g.ok) return res.status(422).json({ error: g.errores.join(' '), tipo: 'definicion_editor', errores: g.errores })
+    codeJs = { definicion: req.body.definicionEditor }
+    _stratNameMb = req.body.definicionEditor.nombre || null
+    _stratParamsMb = g.params
+    effectiveCfg = cfgConParams(cfg, g.params)
   }
   // Guard: sin code_js y no es "0 No Strategy" → error claro, nunca ejecutar estrategia hardcoded
   if (!codeJs && !isNoStrategy) {

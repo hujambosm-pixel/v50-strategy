@@ -310,3 +310,25 @@ historial al entrar». El guardián vio que «Prueba editor EMA20», guardada an
 llamaba ese panel), y de la página, `saveStrategy` y `cloneStrategy` (sin uso; mandaban un POST sin `definition` que daría
 400) con su estado. Se conserva la lectura de los parámetros heredados de una `definition` de bloques (por si se reactiva
 una de esas dos filas), ya no para las del editor. Quedan en el historial de git.
+
+**Notas de E10 (V9.1020)**: lotes del editor (decisiones 4 y 5), en el modo «Lotes» de la pestaña Editor
+(`components/EditorLotes.js`, `lib/editor/lotes.js`).
+- **Declarar**: lo común (activos, periodo, temporalidad, reparto concentrado o compartido, máximo de posiciones,
+  prioridad, simulaciones; sin filtros ni comisiones, como exige la prueba contra el azar) y de 1 a 20 variantes, cada una
+  una definición del editor con sus valores (de una estrategia guardada, copiada tal cual, o de las plantillas).
+- **Congelar**: el lote entero se guarda en la tabla nueva `editor_lotes` (`sql/editor_lotes.sql`: de solo añadir, RLS
+  «dueño», huella única por usuario) con su huella: sha256 del JSON canónico de { formato, común, [id y huella de cada
+  variante] }; no la cambian los nombres. Ya no se puede retocar.
+- **Ejecutar**: cada variante por `/api/multibacktest` con su definición EN la petición (`definicionEditor` +
+  `paramsEditor`, validada como al guardar; no depende de una fila de strategies que se pueda editar después) y
+  `conCandidatos`; en el navegador, la prueba A y la B de `lib/azarCartera.js` con una semilla de la huella del lote y el id
+  de la variante (se repite siempre igual). El resultado va al registro `lab_pruebas` como exploratorio
+  (`config.prueba = 'editorLote'`, con la huella del lote), así que cuenta en el historial.
+- **Criterio declarado**: una variante supera al azar si el percentil de su CAGR en la prueba A es ≥ 95. La B se enseña sin
+  veredicto del lote. El resumen dice cuántas superan frente a las K × 5 % que se esperarían por pura suerte.
+- La prueba contra el azar del laboratorio (Nasdaq-100, con calibración) para estrategias del editor queda para después
+  (decisión 5).
+- Comprobado: la definición en la petición da la misma respuesta, byte a byte, que la estrategia guardada (concentrado y
+  compartido, con candidatos); la cartera recalculada en el navegador coincide con la del servidor.
+- **Pendiente de permiso**: crear la tabla `editor_lotes` en Supabase (es un cambio de la base). Hasta entonces la pantalla
+  deja declarar y avisa de que no puede congelar.
