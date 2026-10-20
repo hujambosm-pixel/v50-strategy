@@ -21,7 +21,8 @@
 // algún filtro lo usa.
 import { exigeAuth } from '../../lib/verificaJwt'
 import { entradas, calculables, topeDe, indicadoresSalidas, tickersDeReferencia, usaFuerzaRelativaCombinacion } from '../../lib/senales'
-import { distribucion, percentilesDe } from '../../lib/fuerzaRelativa'
+import { distribucion, percentilesDe, percentilesParaBarras } from '../../lib/fuerzaRelativa'
+import { semanalesDesdeDiarias } from '../../lib/velasSemanales'
 import { ejecutaPeriodo, semillaLab, N_SIM_LAB } from '../../lib/laboratorio'
 import { huella, validaConfig, esConfigSalidas, esConfigEstrategias, esConfigCartera, esConfigExploracion } from '../../lib/lotesLab'
 import { ejecutaPeriodoCartera, alineaDatos, N_SIM_CARTERA, calculoDe } from '../../lib/laboratorioCartera'
@@ -54,7 +55,7 @@ export function validaPeticionLab(c, periodo) {
     if (!periodo?.etf || !(c.etfs || []).includes(periodo.etf)) e.push('La parte pedida no es uno de los ETF de la exploración.')
     return e
   }
-  if (c.intervalo !== 'diario') e.push('Por ahora el laboratorio solo trabaja en diario.')
+  if (c.intervalo !== 'diario' && c.intervalo !== 'semanal') e.push('Las velas tienen que ser diarias o semanales.')
   if (c.universo?.indice !== 'NDX') e.push('Por ahora el único universo es el Nasdaq-100 (miembros en cada fecha).')
   if (!esConfigSalidas(c) && !esConfigEstrategias(c) && (c.salida?.tipo !== 'velas' || !Number.isInteger(c.salida?.n) || c.salida.n < 1 || c.salida.n > 250)) e.push('La salida tiene que ser un número entero de velas entre 1 y 250.')
   if (!Array.isArray(c.periodos) || !c.periodos.length || !c.periodos.every(p => FECHA.test(p?.desde) && FECHA.test(p?.hasta) && p.desde < p.hasta)) e.push('Los periodos no son válidos.')
@@ -120,7 +121,11 @@ export default async function handler(req, res) {
     const salidas = esConfigSalidas(cfg), estrategias = esConfigEstrategias(cfg)
     const senales = salidas ? (cfg.entradas.tipo === 'senal' ? cfg.entradas : null) : cfg.senales
     const tope = salidas || estrategias ? topeDe(cfg.salidas) : null
-    const dDesde = masAnios(desde, -3), dHasta = masDias(hasta, tope != null ? diasTrasPeriodo(tope) : 45)
+    // Semanal (V9.1006): las velas semanales REALES, construidas de las diarias de la caché (lib/velasSemanales.js). Más
+    // historia hacia atrás (una media de 200 semanas son casi 4 años) y el margen tras el periodo en semanas.
+    const semanal = cfg.intervalo === 'semanal'
+    const dDesde = masAnios(desde, semanal ? -6 : -3)
+    const dHasta = semanal ? masDias(hasta, 7 * ((tope != null ? tope : cfg.salida?.n ?? 20) + 3)) : masDias(hasta, tope != null ? diasTrasPeriodo(tope) : 45)
     const lee = (sym) => get(`rpc/leer_velas?p_simbolo=${encodeURIComponent(sym)}&p_desde=${dDesde}&p_hasta=${dHasta}`).then(velasDe)
     const series = {}
     for (let i = 0; i < simbolos.length; i += EN_PARALELO) {
@@ -129,17 +134,25 @@ export default async function handler(req, res) {
       lote.forEach((s, k) => { series[s] = vs[k] })
     }
     const usaQqq = (senales?.filtros || []).some(f => f.id === 'mercadoAlcista')
-    const qqq = usaQqq || estrategias ? await lee('QQQ') : null
+    let qqq = usaQqq || estrategias ? await lee('QQQ') : null
     // Filtros con otro activo de referencia (referenciaSobreMedia, V9.1003): las velas de cada ticker, de la caché.
     const tickersRef = tickersDeReferencia(senales), referencias = {}
     for (const t of tickersRef) referencias[t] = t === 'QQQ' && qqq ? qqq : await lee(t)
     const sinVelasRef = tickersRef.filter(t => !referencias[t].length)
     // Filtro de fuerza relativa (V9.1004): la distribución de los miembros del Nasdaq-100 de cada día (con las velas ya
     // leídas: todos los miembros del periodo, desde 3 años antes) y el percentil de cada valor, en el campo rsPercentil.
+    // Siempre con las velas DIARIAS; en semanal, cada vela semanal lleva el de su última sesión.
+    const pfPor = {}
     if (usaFuerzaRelativaCombinacion(senales)) {
       const dist = distribucion(miembros, series)
-      for (const s of simbolos) { const pf = percentilesDe(series[s], dist, { ticker: s }); for (const v of series[s]) v.rsPercentil = pf[v.date] ?? null }
+      for (const s of simbolos) pfPor[s] = percentilesDe(series[s], dist, { ticker: s })
     }
+    if (semanal) {
+      for (const s of simbolos) series[s] = semanalesDesdeDiarias(series[s])
+      if (qqq) qqq = semanalesDesdeDiarias(qqq)
+      for (const t of Object.keys(referencias)) referencias[t] = semanalesDesdeDiarias(referencias[t])
+    }
+    for (const s of Object.keys(pfPor)) { const vals = percentilesParaBarras(series[s], pfPor[s], semanal); series[s].forEach((v, i) => { v.rsPercentil = vals[i] }) }
     const t1 = Date.now()
     const ctx = { ...(qqq ? { qqq } : {}), ...(tickersRef.length ? { referencias } : {}) }
     const semilla = semillaLab(await huella(cfg), desde)

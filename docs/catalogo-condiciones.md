@@ -304,7 +304,10 @@ cerradas). Commit 5 hecho en V9.1003 para el laboratorio de SEÑALES: el filtro 
 encima de su media», con cualquier ticker de la caché; con QQQ da lo mismo que `mercadoAlcista`) y el tipo de parámetro
 `ticker`. En la CARTERA queda pendiente: su máquina de estados está construida sobre QQQ (sus condiciones miran el QQQ y
 la ruta solo lee QQQ, el ETF y SPY), así que una referencia distinta es un cambio de la regla y de la pantalla, no solo
-una condición. Siguiente: el 6. Se añade al final el 12: fuerza relativa por percentil (§3.1),
+una condición (Sergi, 21/10/2026: se deja para cuando toque el editor). La fuerza relativa por percentil (el 12) se
+adelantó: V9.1004 y V9.1005 (§3.1). Commit 6 hecho en V9.1006: el laboratorio de señales admite velas SEMANALES (las
+reales, de las diarias de la caché; 6 años de historia antes del periodo; las salidas por velas y los topes cuentan
+semanas; en los resultados, «días» son velas, es decir, semanas). Una prueba semanal es exploratoria. Siguiente: el 7. Se añade al final el 12: fuerza relativa por percentil (§3.1),
 mediano, cuando se decidan sus tres puntos.
 
 Donde el byte a byte es **imposible** si se unifica, se aísla con una **versión del cálculo**, como en V9.988

@@ -63,6 +63,10 @@ const uiSDe = (config) => {
 const UI_S_DEFECTO = () => uiSDe(configDeItem(LOTE_2, 'S1'))
 const leeGuardadoS = () => { try { const x = JSON.parse(localStorage.getItem(CLAVE_LS_S) || 'null'); return x?.periodos && x?.disparador?.id && SENALES[x.disparador.id] && (!x.condicion || SALIDAS[x.condicion.id]) ? x : null } catch (_) { return null } }
 const leeModo = () => { try { const m = localStorage.getItem(CLAVE_LS_MODO); return m === 'salidas' || m === 'estrategias' ? m : 'entradas' } catch (_) { return 'entradas' } }
+// Las velas de la prueba (V9.1006): diarias (las de los lotes) o semanales (las reales, construidas de las diarias). Común a
+// los tres modos y recordada en el navegador. Con «diario» la configuración es la de siempre.
+const CLAVE_LS_IV = 'v50_laboratorio_iv'
+const leeTemporalidad = () => { try { return localStorage.getItem(CLAVE_LS_IV) === 'semanal' ? 'semanal' : 'diario' } catch (_) { return 'diario' } }
 // Modo Estrategias: disparador y filtros de la entrada, una condición de salida y el tope.
 const CLAVE_LS_E = 'v50_laboratorio_estrategias'
 const uiEDe = (config) => {
@@ -176,6 +180,8 @@ export default function LaboratorioPanel({ apiFetch, version = null }) {
   useEffect(() => { try { localStorage.setItem(CLAVE_LS, JSON.stringify(ui)) } catch (_) {} }, [ui])
   const [fechaOk, setFechaOk] = useState({})
   const [modo, setModo] = useState(leeModo)
+  const [temporalidad, setTemporalidad] = useState(leeTemporalidad)
+  useEffect(() => { try { localStorage.setItem(CLAVE_LS_IV, temporalidad) } catch (_) {} }, [temporalidad])
   useEffect(() => { try { localStorage.setItem(CLAVE_LS_MODO, modo) } catch (_) {} }, [modo])
   const [uiS, setUiS] = useState(() => leeGuardadoS() || UI_S_DEFECTO())
   useEffect(() => { try { localStorage.setItem(CLAVE_LS_S, JSON.stringify(uiS)) } catch (_) {} }, [uiS])
@@ -186,8 +192,8 @@ export default function LaboratorioPanel({ apiFetch, version = null }) {
   const combinacion = useMemo(() => ({ disparador: { id: ui.disparador.id, params: paramsDe(ui.disparador.id, ui.disparador.textos) },
     filtros: ui.filtros.map(f => ({ id: f.id, params: paramsDe(f.id, f.textos) })) }), [ui])
   const salida = numeroEs(ui.salida)
-  const config = useMemo(() => configDe(combinacion, { universo: UNIVERSO, periodos: ui.periodos.map(p => ({ desde: p.desde, hasta: p.hasta })), intervalo: INTERVALO, entrada: ENTRADA,
-    salida: { tipo: 'velas', n: salida } }), [combinacion, ui.periodos, salida])
+  const config = useMemo(() => configDe(combinacion, { universo: UNIVERSO, periodos: ui.periodos.map(p => ({ desde: p.desde, hasta: p.hasta })), intervalo: temporalidad, entrada: ENTRADA,
+    salida: { tipo: 'velas', n: salida } }), [combinacion, ui.periodos, salida, temporalidad])
   const errores = useMemo(() => {
     const e = [...validaCombinacion(combinacion)]
     if (!Number.isInteger(salida) || salida < 1 || salida > 250) e.push('La salida tiene que ser un número entero de velas entre 1 y 250.')
@@ -205,7 +211,7 @@ export default function LaboratorioPanel({ apiFetch, version = null }) {
     salidas: [...(uiS.condicion ? [{ id: uiS.condicion.id, params: paramsDe(uiS.condicion.id, uiS.condicion.textos, SALIDAS) }] : []), { id: 'tiempoMaximo', params: { n: topeS } }],
     entradas: uiS.tipoEntrada === 'azar' ? LOTE_2.comun.entradas
       : { tipo: 'senal', disparador: { id: uiS.disparador.id, params: paramsDe(uiS.disparador.id, uiS.disparador.textos) }, filtros: uiS.filtros.map(f => ({ id: f.id, params: paramsDe(f.id, f.textos) })) },
-  }, { universo: LOTE_2.comun.universo, periodos: uiS.periodos.map(p => ({ desde: p.desde, hasta: p.hasta })), intervalo: LOTE_2.comun.intervalo, entrada: LOTE_2.comun.entrada }), [uiS, topeS])
+  }, { universo: LOTE_2.comun.universo, periodos: uiS.periodos.map(p => ({ desde: p.desde, hasta: p.hasta })), intervalo: temporalidad, entrada: LOTE_2.comun.entrada }), [uiS, topeS, temporalidad])
   const erroresS = useMemo(() => [...validaConfig(configS), ...erroresPeriodos(uiS.periodos, fechaOk, 'salidas')], [configS, uiS.periodos, fechaOk])
   const fraseS = useMemo(() => {
     const huecos = (p) => Object.fromEntries(Object.entries(p || {}).map(([k, v]) => [k, v ?? '…']))
@@ -218,7 +224,7 @@ export default function LaboratorioPanel({ apiFetch, version = null }) {
   const configE = useMemo(() => configEstrategiaDe({
     disparador: { id: uiE.disparador.id, params: paramsDe(uiE.disparador.id, uiE.disparador.textos) }, filtros: uiE.filtros.map(f => ({ id: f.id, params: paramsDe(f.id, f.textos) })),
     salidas: [...(uiE.condicion ? [{ id: uiE.condicion.id, params: paramsDe(uiE.condicion.id, uiE.condicion.textos, SALIDAS) }] : []), { id: 'tiempoMaximo', params: { n: topeE } }],
-  }, { universo: LOTE_3.comun.universo, periodos: uiE.periodos.map(p => ({ desde: p.desde, hasta: p.hasta })), intervalo: LOTE_3.comun.intervalo, entrada: LOTE_3.comun.entrada }), [uiE, topeE])
+  }, { universo: LOTE_3.comun.universo, periodos: uiE.periodos.map(p => ({ desde: p.desde, hasta: p.hasta })), intervalo: temporalidad, entrada: LOTE_3.comun.entrada }), [uiE, topeE, temporalidad])
   const erroresE = useMemo(() => [...validaConfig(configE), ...erroresPeriodos(uiE.periodos, fechaOk, 'estrategias')], [configE, uiE.periodos, fechaOk])
   const fraseE = useMemo(() => {
     const huecos = (s) => ({ ...s, params: Object.fromEntries(Object.entries(s.params || {}).map(([k, v]) => [k, v ?? '…'])) })
@@ -242,6 +248,7 @@ export default function LaboratorioPanel({ apiFetch, version = null }) {
   // Poner en el constructor una configuración (de un lote o del historial), en su modo.
   const cargaConfig = (cfg) => {
     setFechaOk({})
+    setTemporalidad(cfg.intervalo === 'semanal' ? 'semanal' : 'diario')
     if (esConfigEstrategias(cfg)) { setModo('estrategias'); setUiE(uiEDe(cfg)) }
     else if (esConfigSalidas(cfg)) { setModo('salidas'); setUiS(uiSDe(cfg)) } else { setModo('entradas'); setUi(uiDe(cfg)) }
   }
@@ -397,6 +404,11 @@ export default function LaboratorioPanel({ apiFetch, version = null }) {
           <span style={{ ...etiqueta, marginBottom: 0 }}>Probar:</span>
           {[['entradas', 'Entradas'], ['salidas', 'Salidas'], ['estrategias', 'Estrategias']].map(([m, t]) => (
             <button key={m} onClick={() => { setFechaOk({}); setModo(m) }} aria-pressed={modo === m} style={modo === m ? botonPrincipal : boton}>{t}</button>))}
+          <span style={{ ...etiqueta, marginBottom: 0, marginLeft: 10 }}>Velas:</span>
+          <select data-prueba="temporalidad" value={temporalidad} onChange={e => setTemporalidad(e.target.value)} title="Semanales: las velas semanales reales, construidas de las diarias (lunes a viernes). Las salidas por velas y los topes cuentan semanas. Los lotes oficiales son diarios: una prueba semanal es exploratoria." style={entrada}>
+            <option value="diario">diarias</option>
+            <option value="semanal">semanales</option>
+          </select>
         </div>
 
         {modo === 'entradas' ? <ConstructorEntrada valor={ui} setValor={setUi} /> : modo === 'estrategias' ? (<>
