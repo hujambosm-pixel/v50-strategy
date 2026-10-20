@@ -299,3 +299,14 @@ sobreajuste.
 condiciones y el «superado» del máximo de referencia miran sus velas, alineadas a las fechas del QQQ con su última vela
 cerrada (`alineaVelasReferencia`); se sigue comprando y vendiendo QQQ, el ETF y liquidez. La ruta lee sus velas de la
 caché (500 con el motivo si faltan). Entra en la huella. Con referencia 'QQQ' el resultado es idéntico al de sin referencia.
+En E9 también: los stops fijos nuevos del editor de estrategias (y la plantilla en blanco) llevan «anotar el stop en el
+historial al entrar». El guardián vio que «Prueba editor EMA20», guardada antes con la plantilla en blanco, no lo anotaba
+(comprobación a); está en `scripts/guardian/conocidos.json` hasta que se abra en el Editor, se marque la casilla y se guarde
+(las operaciones no cambian, solo `stopHistory`).
+
+**Notas de E11 (V9.1019)**: retirado el constructor antiguo. Antes, en la base (solo lectura): de 84 filas de
+`strategies`, solo 2 llevan la `definition` de bloques (las dos «R-V50 EMA10/11…», inactivas) y 1 una del editor. Se borran
+`components/StrategyBuilder.js` y `components/StrategyAIPanel.js` (nadie los importaba) y `pages/api/strategy-ai.js` (solo lo
+llamaba ese panel), y de la página, `saveStrategy` y `cloneStrategy` (sin uso; mandaban un POST sin `definition` que daría
+400) con su estado. Se conserva la lectura de los parámetros heredados de una `definition` de bloques (por si se reactiva
+una de esas dos filas), ya no para las del editor. Quedan en el historial de git.

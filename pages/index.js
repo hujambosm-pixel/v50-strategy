@@ -33,7 +33,7 @@ import { nDeUniverso, reglaDeUniverso, nombreUniverso, FRASE_REGLA, cargaUnivers
 import AvisoUniverso from '../components/AvisoUniverso'
 import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.1018'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.1019'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -777,8 +777,6 @@ const capitalDeRespuesta=(r)=>{
 
 
 
-// ── StrategyBuilder — constructor jerárquico de 8 pasos ───────
-// Cada paso tiene número, título, descripción y controles específicos.
 
 
 
@@ -1098,7 +1096,6 @@ export default function Home() {
   const [estrategiaIntervalo, setEstrategiaIntervalo] = useState('diario') // 'diario'|'semanal' — intervalo del activo en backtest individual
   const [rsVisualWindow, setRsVisualWindow] = useState(63) // ventana (en velas) del RS visual de la cabecera — default diario 63 (semanal 13); se resetea al cambiar timeframe
   const [rsWinText, setRsWinText] = useState('63')          // texto editable del input (permite vaciar sin romper el cálculo; rsVisualWindow guarda el último válido)
-  const [stratSaving, setStratSaving] = useState(false)
   // RS visual de la cabecera: fuerza relativa del activo vs SP500 en las últimas N velas.
   // Independiente de cualquier estrategia/params. Devuelve {ok, pct} o {ok:false} si faltan datos.
   const rsVisual = useMemo(() => {
@@ -1143,7 +1140,6 @@ export default function Home() {
   const temporalidadEstrategia = _estrActiva ? temporalidadDeEstrategia(_estrActiva) : null
   const explorandoTemporalidad = !!(temporalidadEstrategia && temporalidadEstrategia !== estrategiaIntervalo)
   const [stratMsg, setStratMsg]       = useState(null)
-  const [stratTab, setStratTab]       = useState('build')
   // Alertas
   const [alarms,setAlarms]=useState([])
   const [alarmLoading,setAlarmLoading]=useState(true)
@@ -4683,45 +4679,7 @@ export default function Home() {
     }catch(e){setError(e.message)}finally{setLoading(false)}
   },[])
 
-  // ── Guardar estrategia en Supabase ──
-  const saveStrategy=useCallback(async(overwriteId=null)=>{
-    setStratSaving(true); setStratMsg(null)
-    try{
-      const body={ name:stratName, description:stratDesc,
-        years:Number(years), capital_ini:Number(capitalIni),
-        color:stratColor }
-      const method = overwriteId ? 'PUT' : 'POST'
-      if(overwriteId) body.id = overwriteId
-      const res=await apiFetch('/api/strategies',{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
-      const json=await res.json()
-      if(!res.ok) throw new Error(json.error||'Error')
-      // Recargar lista
-      const list=await apiFetch('/api/strategies').then(r=>r.json())
-      if(Array.isArray(list)) setStrategies(list)
-      setCurrentStratId(json?.id||overwriteId||null)
-      setStratMsg({type:'ok',text:'Estrategia guardada ✓'})
-    }catch(e){ setStratMsg({type:'err',text:e.message}) }
-    finally{ setStratSaving(false) }
-  },[stratName,stratDesc,simbolo,years,capitalIni,stratColor])
-
-  // ── Clonar estrategia activa ──
-  const cloneStrategy=useCallback(async()=>{
-    const body={
-      name:        stratName+' (copia)',
-      description: stratDesc,
-      years:       Number(years),
-      capital_ini: Number(capitalIni),
-      color:       stratColor,
-    }
-    try{
-      const res=await apiFetch('/api/strategies',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
-      if(!res.ok) throw new Error('Error clonando')
-      await reloadStrategies(false)
-      setStratMsg({type:'ok',text:'Estrategia clonada ✓'})
-    }catch(e){ console.error('Error clonando:',e) }
-  },[stratName,stratDesc,years,capitalIni,stratColor])
-
-  // ── Cargar estrategia guardada en el builder ──
+  // ── Cargar una estrategia guardada (el constructor antiguo se retiró en V9.1019: E11 de docs/editor-visual.md) ──
   const loadStrategy=useCallback((strat)=>{
     setResult(null)
     setStratName(strat.name||'')
@@ -4731,7 +4689,6 @@ export default function Home() {
     refreshWlData()
     setEstrategiaIntervalo(temporalidadDeEstrategia(strat))
     // symbol intentionally not stored in strategy (apply to any asset separately)
-    setStratTab('build')
     setStratMsg({type:'ok',text:`Cargada: ${strat.name}`})
     // Persist default strategy so it restores on reload
     if(strat.id){try{const _s=JSON.parse(localStorage.getItem('v50_settings')||'{}');_s.defaultStrategyId=strat.id;localStorage.setItem('v50_settings',JSON.stringify(_s))}catch(_){}}
@@ -5502,8 +5459,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
       if(strat?.params){
         try{stratParams=typeof strat.params==='string'?JSON.parse(strat.params):strat.params}catch(e){}
       }
-      // Fallback a definition.entry para estrategias legacy
-      const def=strat?.definition||{}
+      // Fallback a definition.entry para estrategias legacy (las del constructor antiguo; una del editor no lo usa)
+      const def=strat?.definition&&!esDefinicionEditor(strat.definition)?strat.definition:{}
       const entry=def.entry||{},stop=def.stop||{},mgmt=def.management||{},filt=def.filters?.market?.[0]||{}
       const legacyParams=Object.keys(def).length>0?{
         emaR:entry.ma_fast||entry.ma_period||Number(emaR),
@@ -6302,7 +6259,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.1018</title>
+        <title>Trading Simulator V9.1019</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6391,7 +6348,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             }} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.1018
+            <span className="dot"/>Trading Simulator V9.1019
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6668,7 +6625,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                               {isDisabled&&<span style={{fontSize:8,color:'#ff4d6d',background:'rgba(255,77,109,0.12)',border:'1px solid rgba(255,77,109,0.3)',padding:'0 3px',borderRadius:3,flexShrink:0}}>off</span>}
                             </div>
                             <div style={{fontFamily:MONO,fontSize:9,color:'#5a7a95',marginTop:1,display:'flex',alignItems:'center',gap:4}}>
-                              <span>{s.years||'?'}a · {s.definition?.setup?.ma_fast||s.ema_r||'?'}/{s.definition?.setup?.ma_slow||s.ema_l||'?'}</span>
+                              <span>{s.years||'?'}a{esDefinicionEditor(s.definition)?'':<> · {s.definition?.setup?.ma_fast||s.ema_r||'?'}/{s.definition?.setup?.ma_slow||s.ema_l||'?'}</>}</span>
                               {/* La temporalidad DE LA ESTRATEGIA. Antes este distintivo la
                                   cambiaba y la escribia en Supabase, para cualquier estrategia de
                                   la lista y con un clic. Ahora solo la ensena: se cambia en el
