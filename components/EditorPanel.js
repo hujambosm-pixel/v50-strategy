@@ -12,6 +12,7 @@ import { CONDICIONES_EDITOR, FORMATO, MOTOR, validaDefinicion, valoresDe, fraseD
 import { DEF_V50, DEF_23 } from '../lib/editor/ejemplos'
 import { esDefinicionEditor } from '../lib/editor/fuente'
 import DiagramaEditor from './DiagramaEditor'
+import EditorCartera from './EditorCartera'
 
 const GRIS = 'var(--text-legible)'
 const TAM = 12
@@ -34,7 +35,7 @@ const NUEVA = () => ({
   tipo: 'editor', formato: FORMATO, motor: MOTOR, nombre: '',
   parametros: { version: 1, lista: [{ nombre: 'ema', tipo: 'entero', defecto: 20, min: 2, max: 400, paso: 1, ventana: true, descripcion: 'Periodo de la EMA' }], restricciones: [] },
   entrada: { senal: { c: 'cruza', de: { c: 'precioVsMedia', p: { tipo: 'EMA', periodo: '$ema', lado: 'encima' } } }, orden: { tipo: 'apertura' } },
-  stops: [{ id: 'inicial', tipo: 'porcentaje', pct: 8, motivo: 'stop' }],
+  stops: [{ id: 'inicial', tipo: 'porcentaje', pct: 8, motivo: 'stop', historialAlEntrar: true }],
   salidas: [{ tipo: 'condicion', si: { c: 'cruza', de: { c: 'precioVsMedia', p: { tipo: 'EMA', periodo: '$ema', lado: 'debajo' } } }, precio: 'apertura', motivo: 'cruce_bajista' }],
 })
 const PLANTILLAS = { nueva: { nombre: 'En blanco (cruce de una EMA)', def: NUEVA }, v50: { nombre: '1 V50 EMA10/11', def: () => copia(DEF_V50) }, e23: { nombre: '23 EMA20 breakouts', def: () => copia(DEF_23) } }
@@ -54,7 +55,10 @@ const CAMPOS_STOP = {
   nivel: { de: [{ campo: 'low' }] }, minimoVelas: { n: 3 }, porcentaje: { pct: 8 }, atr: { k: 2, periodo: 14 },
   trailing: { si: { c: 'precioVsMedia', p: { tipo: 'EMA', periodo: 10, lado: 'debajo' } }, nivel: { campo: 'low', velas: 1 }, historial: 'siSube', fechaHistorial: 'vela' },
 }
-const stopPorDefecto = (tipo, n) => ({ id: `${tipo}${n}`, tipo, motivo: tipo === 'trailing' ? 'trailing_exit' : 'stop', ...copia(CAMPOS_STOP[tipo]) })
+// Los stops fijos nuevos se anotan en el historial al entrar (stopHistory): así el gráfico y el guardián ven el stop que
+// explica una salida, también la del mismo día de la entrada. En el motor 1 es una opción de cada stop (la 1 V50 y la 23 la
+// usan como sus code_js), así que la pantalla la pone por defecto.
+const stopPorDefecto = (tipo, n) => ({ id: `${tipo}${n}`, tipo, motivo: tipo === 'trailing' ? 'trailing_exit' : 'stop', ...copia(CAMPOS_STOP[tipo]), ...(tipo === 'trailing' ? {} : { historialAlEntrar: true }) })
 const TIPOS_SALIDA = { condicion: 'Por condición (a la apertura siguiente)', objetivo: 'Objetivo en múltiplos del riesgo inicial', tope: 'Tope de velas' }
 const salidaPorDefecto = (tipo) => ({
   condicion: { tipo, si: condPorDefecto('precioVsMedia'), precio: 'apertura', motivo: 'salida' },
@@ -223,7 +227,6 @@ function Stop({ s, k, n, onChange, onQuitar, onMueve, params, ids }) {
           ))}
           <button style={botonMini} onClick={() => set({ de: [...(s.de || []), { campo: 'low' }] })}>+</button>
           <span style={nota}>de la vela que fija la orden</span>
-          <label style={nota} title="Si el nivel de la orden cambia antes de entrar, el stop se recalcula con cada vela que la mueve"><input type="checkbox" checked={!!s.historialAlEntrar} onChange={e => set({ historialAlEntrar: e.target.checked || undefined })}/> anotar en el historial al entrar</label>
         </div>
       )}
       {s.tipo === 'minimoVelas' && <div style={fila}><span style={nota}>el mínimo de las</span><Valor valor={s.n} params={params} ancho={44} onChange={v => set({ n: v })}/><span style={nota}>velas hasta la de la señal</span></div>}
@@ -248,6 +251,13 @@ function Stop({ s, k, n, onChange, onQuitar, onMueve, params, ids }) {
           <select style={entrada} value={s.fechaHistorial || 'vela'} onChange={e => set({ fechaHistorial: e.target.value })}><option value="vela">la de la vela</option><option value="anterior">la de la vela anterior</option></select>
         </div>
       </>}
+      {s.tipo !== 'trailing' && (
+        <div style={fila}>
+          <label style={{ ...nota, color: s.historialAlEntrar ? GRIS : AMBAR }} title="El stop de entrada queda en el historial (stopHistory): el gráfico lo dibuja y el guardián lo usa para explicar una salida por stop, también la del mismo día de la entrada. Déjalo marcado salvo para reproducir una estrategia antigua.">
+            <input type="checkbox" checked={!!s.historialAlEntrar} onChange={e => set({ historialAlEntrar: e.target.checked || undefined })}/> anotar el stop en el historial al entrar{s.historialAlEntrar ? '' : ' (desmarcado: una salida por este stop no queda explicada en el gráfico)'}
+          </label>
+        </div>
+      )}
       {s.tipo !== 'trailing' && ids.filter(i => i !== s.id).length > 0 && (
         <div style={fila}>
           <span style={nota} title="Un stop fijo deja de contar cuando otro (un trailing) queda por encima">se retira cuando lo supera</span>
@@ -281,7 +291,33 @@ const estadoDe = (filaInicial) => esDefinicionEditor(filaInicial?.definition)
   ? { def: copia(filaInicial.definition), valores: (() => { try { return typeof filaInicial.params === 'string' ? JSON.parse(filaInicial.params) : (filaInicial.params || {}) } catch (_) { return {} } })(), id: filaInicial.id, nombre: filaInicial.name || filaInicial.definition.nombre || '', descripcion: filaInicial.description || '' }
   : { def: NUEVA(), valores: {}, id: null, nombre: '', descripcion: '' }
 
-export default function EditorPanel({ apiFetch, filaInicial = null, onGuardada, onProbar }) {
+// Dos modos (E9): «Estrategia» (de un activo, lo de arriba) y «Cartera» (components/EditorCartera.js). Los dos se quedan
+// montados al cambiar de modo, así que lo que se está editando en uno no se pierde al mirar el otro. Abrir una estrategia
+// del editor desde su panel vuelve al modo Estrategia.
+export default function EditorPanel({ apiFetch, filaInicial = null, onGuardada, onProbar, version }) {
+  const [modo, setModo] = useState('estrategia')
+  useEffect(() => { if (filaInicial) setModo('estrategia') }, [filaInicial])
+  const pestana = (m, texto, ayuda) => (
+    <button key={m} title={ayuda} onClick={() => setModo(m)}
+      style={{ ...boton, borderColor: modo === m ? 'var(--accent)' : 'var(--border)', color: modo === m ? 'var(--accent)' : 'var(--text)', fontWeight: modo === m ? 700 : 400 }}>{texto}</button>
+  )
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '8px 12px 0', fontFamily: MONO }}>
+        {pestana('estrategia', 'Estrategia de un activo', 'Cuándo entrar y salir de un valor: se guarda como estrategia y se prueba en el backtest')}
+        {pestana('cartera', 'Cartera (QQQ + ETF)', 'Una máquina de estados que reparte la cartera entre QQQ, un ETF apalancado y liquidez: se prueba en el laboratorio de cartera')}
+      </div>
+      <div style={{ flex: 1, display: modo === 'estrategia' ? 'flex' : 'none', minHeight: 0 }}>
+        <EditorEstrategia apiFetch={apiFetch} filaInicial={filaInicial} onGuardada={onGuardada} onProbar={onProbar}/>
+      </div>
+      <div style={{ flex: 1, display: modo === 'cartera' ? 'flex' : 'none', minHeight: 0 }}>
+        <EditorCartera apiFetch={apiFetch} version={version}/>
+      </div>
+    </div>
+  )
+}
+
+function EditorEstrategia({ apiFetch, filaInicial = null, onGuardada, onProbar }) {
   const [est, setEst] = useState(() => estadoDe(filaInicial))
   const [msg, setMsg] = useState(null)
   const [guardando, setGuardando] = useState(false)

@@ -280,3 +280,22 @@ Editor encima de la regla. Se dibuja solo desde la definición y los valores act
 stop o límite, con su ajuste) → DENTRO; la cancelación, flecha discontinua de ORDEN VIVA a FUERA; cada stop (rojo) o salida
 (ámbar) ACTIVO con esos valores, una flecha de DENTRO a FUERA numerada en el orden en que se comprueba. El filtro de mercado
 va en la etiqueta de la señal. Los textos van recortados; el entero, al pasar el ratón.
+
+**E8 aplazado** (Sergi, 20/10/2026): dibujar con el ratón se deja para más adelante; se sigue con E9 y E11.
+
+**Notas de E9 (V9.1018)**: la pestaña Editor tiene dos modos, «Estrategia de un activo» y «Cartera (QQQ + ETF)»
+(`components/EditorCartera.js`); los dos quedan montados al cambiar. El de cartera edita la `regla` del laboratorio de
+cartera: estados (composición y pesos opcionales), estado inicial, transiciones por condición (todas a la vez, con O / NO /
+histéresis, calendario y «una semana de cada N»), sus movimientos y sus marcas (rebalancea, inicia / termina el ciclo, fija
+el máximo de referencia), rebalanceos por calendario, el inicio según una media y la medida del azar. Lo demás de la prueba
+(ETF, periodos, el resto de lo común) sale de la plantilla, que es cualquier elemento de CARTERA_1–3: sin tocar nada sale
+«Oficial» (misma huella); al tocar la regla, su id pasa a `editor` y es exploratoria. Cálculo 1 o 2 (con los costes por
+defecto). Ejecutar va por `/api/laboratorio` como el laboratorio, un periodo por petición, y queda en el registro
+(`lab_pruebas`), así que cuenta en el historial de pruebas. Al lado: diagrama de estados, la regla en castellano, la
+validación, cómo leer el resultado (referencias, caída, percentil del azar, periodos por separado) y el riesgo de
+sobreajuste.
+**La referencia en la cartera** (pendiente desde el commit 5 del catálogo): `regla.referencia` = un ticker (SPY, ^GSPC,
+^NDX…). Sin ella, todo mira el QQQ como siempre (CARTERA_1–3 y las exploraciones, byte a byte iguales). Con ella, todas las
+condiciones y el «superado» del máximo de referencia miran sus velas, alineadas a las fechas del QQQ con su última vela
+cerrada (`alineaVelasReferencia`); se sigue comprando y vendiendo QQQ, el ETF y liquidez. La ruta lee sus velas de la
+caché (500 con el motivo si faltan). Entra en la huella. Con referencia 'QQQ' el resultado es idéntico al de sin referencia.

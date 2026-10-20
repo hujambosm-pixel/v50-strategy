@@ -25,7 +25,7 @@ import { distribucion, percentilesDe, percentilesParaBarras } from '../../lib/fu
 import { semanalesDesdeDiarias } from '../../lib/velasSemanales'
 import { ejecutaPeriodo, semillaLab, N_SIM_LAB } from '../../lib/laboratorio'
 import { huella, validaConfig, esConfigSalidas, esConfigEstrategias, esConfigCartera, esConfigExploracion } from '../../lib/lotesLab'
-import { ejecutaPeriodoCartera, alineaDatos, N_SIM_CARTERA, calculoDe } from '../../lib/laboratorioCartera'
+import { ejecutaPeriodoCartera, alineaDatos, alineaVelasReferencia, N_SIM_CARTERA, calculoDe } from '../../lib/laboratorioCartera'
 import { curvaRiesgoEtf, sensibilidadEtf, estresParte, mapaMediaParte } from '../../lib/exploracionCartera'
 import { construyeSintetico } from '../../lib/etfSintetico'
 import { preciosTotales } from '../../lib/laboratorioCartera'
@@ -110,6 +110,14 @@ export default async function handler(req, res) {
       const k = cfg.etf === 'x3' ? 3 : 2
       const etf = sint ? construyeSintetico(preciosTotales(qqq, DIVIDENDOS.simbolos.QQQ), { k, comision: cfg.sinteticos.comision[k], ajuste: cfg.sinteticos.ajuste[k] }) : etfV
       const datos = alineaDatos({ qqq, etf: { simbolo: sint ? 'SINTETICO' : cfg.etf, velas: etf }, spy }, sint ? { ...DIVIDENDOS.simbolos, SINTETICO: [] } : DIVIDENDOS.simbolos)
+      // La REFERENCIA de la regla (o de la comparada), si la hay: sus velas, alineadas a las fechas del QQQ (V9.1018).
+      const refs = [...new Set([cfg.regla?.referencia, cfg.comparaCon?.regla?.referencia].filter(Boolean))]
+      if (refs.length) {
+        const vr = await Promise.all(refs.map(lee))
+        const falta = refs.filter((_, i) => !vr[i].length)
+        if (falta.length) return res.status(500).json({ error: `Faltan velas en la caché: ${falta.join(', ')}.` })
+        datos.velasRef = Object.fromEntries(refs.map((s, i) => [s, alineaVelasReferencia(datos.fechas, vr[i])]))
+      }
       const resultado = ejecutaPeriodoCartera({ datos, regla: cfg.regla, periodo: pc, nSim: Math.min(nSim, N_SIM_CARTERA * 5), semilla: semillaLab(await huella(cfg), desde), comparaCon: cfg.comparaCon || null, calculo: calculoDe(cfg), costes: cfg.costes || null })
       const t2 = Date.now()
       return res.status(200).json({ resultado, simbolos: 3, sinDatos: [], dividendos: DIVIDENDOS.descargado, tiempos: { datosMs: t1 - t0, calculoMs: t2 - t1, totalMs: t2 - t0 } })

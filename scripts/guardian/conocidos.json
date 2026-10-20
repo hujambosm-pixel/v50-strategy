@@ -1,6 +1,8 @@
 {
   "_comentario": "Problemas CONOCIDOS que aún no se han corregido. Un fallo de una estrategia cuyo nombre case con «estrategias» (expresión regular) en una comprobación de la lista se informa como «conocido» y no hace fallar el guardián; un fallo en OTRA comprobación sí. «*» = todas. El resumen distingue «conocido (detectado)» —el guardián ve el fallo— de «conocido (no detectable por el guardián)» —el problema existe pero estas comprobaciones no lo ven—. Cuando se corrija una estrategia, hay que quitarla de aquí.",
   "conocidos": [
+    { "estrategias": "^Prueba editor EMA20$", "comprobaciones": ["a"],
+      "motivo": "Estrategia del editor guardada antes de V9.1018 con la plantilla en blanco: su stop del 8 % no lleva «anotar el stop en el historial al entrar», así que una salida por stop el mismo día de la entrada no queda en stopHistory. Corregir: abrirla en el Editor, marcar esa casilla y guardar (las operaciones no cambian)." },
     { "estrategias": "^1\\.3 V50", "comprobaciones": ["a"],
       "motivo": "Entra en la apertura y la salida de emergencia, decidida ya con el cierre anterior, la saca en esa misma apertura. Corregir: no colocar la entrada si el cruce bajista ya se ha producido." },
     { "estrategias": "^14 Trend", "comprobaciones": ["c"],
