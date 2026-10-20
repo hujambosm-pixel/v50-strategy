@@ -239,3 +239,9 @@ integrados (por ejemplo, el riesgo de sobreajuste al cambiar muchos parámetros)
 `run.parametros` (lo valida `lib/parametrosEstrategia.js`). Para reproducir la 1 V50, las condiciones de medias del catálogo
 admiten una comparación opcional «≥» (su cruce compara así); lo nuevo sigue con «>» por defecto. La reentrada de la 1 V50 no
 está en el motor 1: su definición no la declara (sus parámetros guardados la tienen apagada).
+
+**Notas de E2–E3 (V9.1013)**: el intérprete está en `lib/editor/interprete.js`. Prueba de aceptación superada: la 1 V50 y
+la 23 dan las mismas operaciones y la misma posición abierta, byte a byte, que su code_js (109 valores, diario y semanal,
+parámetros guardados y 8 variaciones; más de 240.000 operaciones), y las órdenes del gráfico de la 1 V50 son las mismas. Dos
+reglas para no mirar al futuro: la salida por condición es siempre a la APERTURA de la vela siguiente, y el tope de N velas
+sale a la apertura de la vela N + 1. E2 y E3 van en un solo commit: E2 solo no habría podido pasar la prueba de aceptación.
