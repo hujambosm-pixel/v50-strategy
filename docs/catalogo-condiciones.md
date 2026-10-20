@@ -274,7 +274,9 @@ en V9.999 (`lib/condiciones/nucleo.js`); commit 2 hecho en V9.1000 (`lib/condici
 V9.1001 (`lib/condiciones/catalogo.js`: `precioVsMedia`, `mediaVsMedia`, `rsiNivel`, `nuevoMaximo`, `volumenAlto` y
 `enReferencia`; las señales del laboratorio son envoltorios). Nota del 3: el `retroceso` conserva su conjunción ESTRICTA
 («sin dato» si falta cualquiera de las dos partes), no la Y de tres valores, porque «falso Y sin dato» daría falso y
-cambiaría sus eventos. Siguiente: el 4. Se añade al final el 12: fuerza relativa por percentil (§3.1),
+cambiaría sus eventos. Commit 4 hecho en V9.1002: `caidaDesdeMaximo` en el catálogo (movida tal cual), el cruce y el
+precio frente a la media diaria de la cartera desde el catálogo, y `enSemanal` (velas semanales reales, solo semanas
+cerradas). Siguiente: el 5. Se añade al final el 12: fuerza relativa por percentil (§3.1),
 mediano, cuando se decidan sus tres puntos.
 
 Donde el byte a byte es **imposible** si se unifica, se aísla con una **versión del cálculo**, como en V9.988
@@ -354,7 +356,12 @@ Respuestas de Sergi (20/10/2026) a las preguntas de §6. Mandan sobre lo escrito
    la lista de las alarmas guardadas que cambiarían de estado.
 6. **«Primer día hábil»**: la primera vela con datos.
 7. **Media semanal de cartera**: si no coincide con las velas semanales reales, la actual (`mediaSemanal`) queda como
-   cálculo 1 (lotes congelados) y lo nuevo usa las velas reales.
+   cálculo 1 (lotes congelados) y lo nuevo usa las velas reales. **Medido en V9.1002: coinciden.** QQQ 2005–2026, SMA de
+   4 a 50 semanas y EMA 10 y 40: en los 29.536 cierres de semana, el mismo valor byte a byte. La única diferencia es la
+   semana en curso, que `mediaSemanal` deja sin dato (no está cerrada) y la vela semanal real sí calcula. Así que no hace
+   falta versión del cálculo: la cartera sigue con `mediaSemanal` y lo nuevo usa `enSemanal` del catálogo, que da lo mismo
+   (284.908 días comparados). Las dos usan la FECHA de la vela siguiente para saber que la semana ha cerrado (el
+   calendario se conoce de antemano), nunca sus precios.
 8. **Prioridad de la multicartera con el cierre del día de entrada**: revisada en V9.997. **Miraba al futuro**: el
    momentum, la fuerza relativa y el máximo de 52 semanas se medían con la vela de la fecha de entrada (su cierre; en
    `max52`, también su máximo), y las entradas se ejecutan a la apertura o durante esa vela (la orden stop de la 1 V50);
