@@ -212,3 +212,30 @@ van antes que el lienzo); el rendimiento con muchas condiciones (la caché del c
 7. **Exportar a code_js**: ¿lo quieres (para retocar a mano una copia, que ya no se edita en el editor)?
 8. **Referencias a otros tickers** dentro de una estrategia (además de `sp500Close` y `rsPercentil`): ¿en la v1 o después?
 9. **Lienzo**: ¿te vale empezar con formularios y diagrama automático, y dibujar con el ratón después (E8)?
+
+## 7. Decisiones
+
+Respuestas de Sergi (21/10/2026). Mandan sobre lo anterior.
+
+1. **Dónde**: pestaña propia, «Editor».
+2. **Orden**: primero estrategias de un activo; las carteras, después.
+3. **Condición para conectar el intérprete al motor**: reproducir byte a byte las operaciones de la **1 V50** y de la
+   **23** con su code_js (definiciones en `lib/editor/ejemplos.js`).
+4. **Lotes del editor**: declarados desde la pantalla, en una **tabla nueva inmutable** con su huella. Los lotes antiguos
+   se quedan en el código, sin cambios.
+5. **Azar**: de momento, el A / B del multibacktest. El del laboratorio, con calibración, en un commit posterior.
+6. **Órdenes**: apertura siguiente, al cierre, stop sobre un máximo y límite. **Stops**: mínimo de N velas, % fijo,
+   k × ATR y trailing (incluido el estilo de la 23). **Salidas**: por condición del catálogo (p. ej., cierre bajo una media)
+   y objetivo en múltiplos del riesgo inicial.
+7. **Exportar a code_js**: sí, al final y con baja prioridad.
+8. **Otros tickers**: sí, solo como **filtro de mercado** con las condiciones del catálogo que ya admiten un activo de
+   referencia (p. ej., QQQ o SPY sobre su media).
+9. **Lienzo**: formularios y diagrama automático primero; dibujar con el ratón, más adelante.
+
+**Requisito de todas las pantallas**: que siempre quede claro qué está configurado y cómo leer los resultados, con consejos
+integrados (por ejemplo, el riesgo de sobreajuste al cambiar muchos parámetros).
+
+**Notas de E1 (V9.1012)**: el formato 1 está en `lib/editor/definicion.js`. Los parámetros usan el MISMO formato que
+`run.parametros` (lo valida `lib/parametrosEstrategia.js`). Para reproducir la 1 V50, las condiciones de medias del catálogo
+admiten una comparación opcional «≥» (su cruce compara así); lo nuevo sigue con «>» por defecto. La reentrada de la 1 V50 no
+está en el motor 1: su definición no la declara (sus parámetros guardados la tienen apagada).
