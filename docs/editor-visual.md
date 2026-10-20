@@ -330,5 +330,12 @@ una de esas dos filas), ya no para las del editor. Quedan en el historial de git
   (decisión 5).
 - Comprobado: la definición en la petición da la misma respuesta, byte a byte, que la estrategia guardada (concentrado y
   compartido, con candidatos); la cartera recalculada en el navegador coincide con la del servidor.
-- **Pendiente de permiso**: crear la tabla `editor_lotes` en Supabase (es un cambio de la base). Hasta entonces la pantalla
-  deja declarar y avisa de que no puede congelar.
+- **Tabla creada** el 20/10/2026, con permiso de Sergi, aplicando `sql/editor_lotes.sql` tal cual en una transacción.
+  Comprobado en la base real (cada prueba en una transacción con ROLLBACK; la tabla quedó vacía):
+  · inmutable: con tu usuario se puede añadir y leer un lote, pero UPDATE, DELETE y TRUNCATE de tu propio lote se
+    rechazan («permission denied»), igual que en lab_pruebas (mismos permisos y mismas políticas, comparados);
+  · RLS: otro usuario no ve tus lotes ni puede añadir uno a tu nombre; anon no puede leer, añadir, cambiar ni borrar;
+    el mismo lote dos veces se rechaza (huella única por usuario);
+  · no cambia nada más: foto del esquema público antes y después (columnas, políticas, permisos, RLS, disparadores,
+    restricciones, índices y funciones): nada quitado y todo lo nuevo es de editor_lotes;
+  · la copia de seguridad (`npm run backup`) ya la incluye (20 tablas).
