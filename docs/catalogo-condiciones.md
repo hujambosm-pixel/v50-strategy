@@ -276,7 +276,11 @@ V9.1001 (`lib/condiciones/catalogo.js`: `precioVsMedia`, `mediaVsMedia`, `rsiNiv
 («sin dato» si falta cualquiera de las dos partes), no la Y de tres valores, porque «falso Y sin dato» daría falso y
 cambiaría sus eventos. Commit 4 hecho en V9.1002: `caidaDesdeMaximo` en el catálogo (movida tal cual), el cruce y el
 precio frente a la media diaria de la cartera desde el catálogo, y `enSemanal` (velas semanales reales, solo semanas
-cerradas). Siguiente: el 5. Se añade al final el 12: fuerza relativa por percentil (§3.1),
+cerradas). Commit 5 hecho en V9.1003 para el laboratorio de SEÑALES: el filtro `referenciaSobreMedia` («otro activo por
+encima de su media», con cualquier ticker de la caché; con QQQ da lo mismo que `mercadoAlcista`) y el tipo de parámetro
+`ticker`. En la CARTERA queda pendiente: su máquina de estados está construida sobre QQQ (sus condiciones miran el QQQ y
+la ruta solo lee QQQ, el ETF y SPY), así que una referencia distinta es un cambio de la regla y de la pantalla, no solo
+una condición. Siguiente: el 6. Se añade al final el 12: fuerza relativa por percentil (§3.1),
 mediano, cuando se decidan sus tres puntos.
 
 Donde el byte a byte es **imposible** si se unifica, se aísla con una **versión del cálculo**, como en V9.988

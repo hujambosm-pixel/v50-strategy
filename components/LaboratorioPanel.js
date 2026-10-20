@@ -43,7 +43,7 @@ const { universo: UNIVERSO, intervalo: INTERVALO, entrada: ENTRADA } = LOTE_1.co
 // Parámetros ↔ textos de las cajas (coma decimal, sin separador de miles).
 const aTexto = (v) => typeof v === 'number' ? String(v).replace('.', ',') : (v ?? '')
 const textosDe = (params) => Object.fromEntries(Object.entries(params || {}).map(([k, v]) => [k, aTexto(v)]))
-const paramsDe = (id, textos, cat = SENALES) => Object.fromEntries(cat[id].parametros.map(p => [p.clave, p.tipo === 'opcion' ? textos?.[p.clave] : numeroEs(textos?.[p.clave])]))
+const paramsDe = (id, textos, cat = SENALES) => Object.fromEntries(cat[id].parametros.map(p => [p.clave, p.tipo === 'opcion' ? textos?.[p.clave] : p.tipo === 'ticker' ? String(textos?.[p.clave] ?? '').trim().toUpperCase() : numeroEs(textos?.[p.clave])]))
 const senalUi = (id, params = null) => ({ id, textos: textosDe(params || parametrosPorDefecto(id)) })
 // La configuración de una prueba guardada → lo que pinta el constructor.
 const uiDe = (config) => ({ disparador: senalUi(config.senales.disparador.id, config.senales.disparador.params),
@@ -163,6 +163,8 @@ function Parametros({ senal, textos, onCambio }) {
           {p.etiqueta}
           {p.tipo === 'opcion'
             ? <select value={textos[p.clave] ?? ''} onChange={e => onCambio(p.clave, e.target.value)} style={entrada}>{p.opciones.map(o => <option key={o} value={o}>{o}</option>)}</select>
+            : p.tipo === 'ticker'
+            ? <input type="text" value={textos[p.clave] ?? ''} placeholder="QQQ" onChange={e => onCambio(p.clave, e.target.value.toUpperCase())} style={{ ...entrada, width: 80 }} />
             : <input type="text" inputMode="decimal" value={textos[p.clave] ?? ''} onChange={e => onCambio(p.clave, e.target.value)} style={{ ...entrada, width: 70 }} />}
         </label>))}
     </div>

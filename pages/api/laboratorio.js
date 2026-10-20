@@ -20,7 +20,7 @@
 // ruptura de 252 velas y las medias de 200 lo necesitan) hasta 45 días después (salidas de hasta 20 velas). QQQ, solo si
 // algún filtro lo usa.
 import { exigeAuth } from '../../lib/verificaJwt'
-import { entradas, calculables, topeDe, indicadoresSalidas } from '../../lib/senales'
+import { entradas, calculables, topeDe, indicadoresSalidas, tickersDeReferencia } from '../../lib/senales'
 import { ejecutaPeriodo, semillaLab, N_SIM_LAB } from '../../lib/laboratorio'
 import { huella, validaConfig, esConfigSalidas, esConfigEstrategias, esConfigCartera, esConfigExploracion } from '../../lib/lotesLab'
 import { ejecutaPeriodoCartera, alineaDatos, N_SIM_CARTERA, calculoDe } from '../../lib/laboratorioCartera'
@@ -129,8 +129,12 @@ export default async function handler(req, res) {
     }
     const usaQqq = (senales?.filtros || []).some(f => f.id === 'mercadoAlcista')
     const qqq = usaQqq || estrategias ? await lee('QQQ') : null
+    // Filtros con otro activo de referencia (referenciaSobreMedia, V9.1003): las velas de cada ticker, de la caché.
+    const tickersRef = tickersDeReferencia(senales), referencias = {}
+    for (const t of tickersRef) referencias[t] = t === 'QQQ' && qqq ? qqq : await lee(t)
+    const sinVelasRef = tickersRef.filter(t => !referencias[t].length)
     const t1 = Date.now()
-    const ctx = qqq ? { qqq } : {}
+    const ctx = { ...(qqq ? { qqq } : {}), ...(tickersRef.length ? { referencias } : {}) }
     const semilla = semillaLab(await huella(cfg), desde)
     let resultado
     if (estrategias) {
@@ -156,7 +160,8 @@ export default async function handler(req, res) {
     }
     const t2 = Date.now()
     return res.status(200).json({ resultado, simbolos: simbolos.length, sinDatos: simbolos.filter(s => !series[s].length),
-      ...(usaQqq && !qqq?.length ? { aviso: 'QQQ no tiene velas en la caché: el filtro de mercado no deja entrar nunca.' } : {}),
+      ...(usaQqq && !qqq?.length ? { aviso: 'QQQ no tiene velas en la caché: el filtro de mercado no deja entrar nunca.' }
+        : sinVelasRef.length ? { aviso: `${sinVelasRef.join(', ')} no ${sinVelasRef.length === 1 ? 'tiene' : 'tienen'} velas en la caché: el filtro no deja entrar nunca.` } : {}),
       tiempos: { datosMs: t1 - t0, calculoMs: t2 - t1, totalMs: t2 - t0 } })
   } catch (e) {
     return res.status(500).json({ error: e.message || 'Error interno' })
