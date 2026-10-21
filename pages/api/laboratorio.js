@@ -24,7 +24,10 @@ import { entradas, calculables, topeDe, indicadoresSalidas, tickersDeReferencia,
 import { distribucion, percentilesDe, percentilesParaBarras } from '../../lib/fuerzaRelativa'
 import { semanalesDesdeDiarias } from '../../lib/velasSemanales'
 import { ejecutaPeriodo, semillaLab, N_SIM_LAB } from '../../lib/laboratorio'
-import { huella, validaConfig, esConfigSalidas, esConfigEstrategias, esConfigCartera, esConfigExploracion } from '../../lib/lotesLab'
+import { huella, validaConfig, esConfigSalidas, esConfigEstrategias, esConfigCartera, esConfigExploracion, esConfigEditorLab } from '../../lib/lotesLab'
+import { ejecutaPeriodoEditor } from '../../lib/editor/laboratorio'
+import { validaDefinicion } from '../../lib/editor/definicion'
+import { usaFuerzaRelativa } from '../../lib/fuerzaRelativa'
 import { ejecutaPeriodoCartera, alineaDatos, alineaVelasReferencia, N_SIM_CARTERA, calculoDe } from '../../lib/laboratorioCartera'
 import { curvaRiesgoEtf, sensibilidadEtf, estresParte, mapaMediaParte } from '../../lib/exploracionCartera'
 import { construyeSintetico } from '../../lib/etfSintetico'
@@ -55,9 +58,12 @@ export function validaPeticionLab(c, periodo) {
     if (!periodo?.etf || !(c.etfs || []).includes(periodo.etf)) e.push('La parte pedida no es uno de los ETF de la exploración.')
     return e
   }
+  // Estrategia del editor (V9.1027): su definición con sus valores, como al guardarla; por ahora solo con velas diarias (la
+  // calibración se hace con velas diarias).
+  if (esConfigEditorLab(c)) e.push(...validaDefinicion(c.definicion, c.valores || {}).map(x => `Definición: ${x}`))
   if (c.intervalo !== 'diario' && c.intervalo !== 'semanal') e.push('Las velas tienen que ser diarias o semanales.')
   if (c.universo?.indice !== 'NDX') e.push('Por ahora el único universo es el Nasdaq-100 (miembros en cada fecha).')
-  if (!esConfigSalidas(c) && !esConfigEstrategias(c) && (c.salida?.tipo !== 'velas' || !Number.isInteger(c.salida?.n) || c.salida.n < 1 || c.salida.n > 250)) e.push('La salida tiene que ser un número entero de velas entre 1 y 250.')
+  if (!esConfigSalidas(c) && !esConfigEstrategias(c) && !esConfigEditorLab(c) && (c.salida?.tipo !== 'velas' || !Number.isInteger(c.salida?.n) || c.salida.n < 1 || c.salida.n > 250)) e.push('La salida tiene que ser un número entero de velas entre 1 y 250.')
   if (!Array.isArray(c.periodos) || !c.periodos.length || !c.periodos.every(p => FECHA.test(p?.desde) && FECHA.test(p?.hasta) && p.desde < p.hasta)) e.push('Los periodos no son válidos.')
   if (!periodo || !(c.periodos || []).some(p => p.desde === periodo.desde && p.hasta === periodo.hasta)) e.push('El periodo pedido no es uno de los de la configuración.')
   return e
@@ -126,14 +132,15 @@ export default async function handler(req, res) {
     const tramos = {}
     for (const m of miembros) if (m.simbolo_yahoo && !m.excluido_motivo && m.desde <= hasta && (m.hasta == null || m.hasta > desde)) (tramos[m.simbolo_yahoo] ||= []).push(m)
     const simbolos = Object.keys(tramos).sort()
-    const salidas = esConfigSalidas(cfg), estrategias = esConfigEstrategias(cfg)
-    const senales = salidas ? (cfg.entradas.tipo === 'senal' ? cfg.entradas : null) : cfg.senales
+    const salidas = esConfigSalidas(cfg), estrategias = esConfigEstrategias(cfg), editor = esConfigEditorLab(cfg)
+    const senales = editor ? null : salidas ? (cfg.entradas.tipo === 'senal' ? cfg.entradas : null) : cfg.senales
     const tope = salidas || estrategias ? topeDe(cfg.salidas) : null
     // Semanal (V9.1006): las velas semanales REALES, construidas de las diarias de la caché (lib/velasSemanales.js). Más
     // historia hacia atrás (una media de 200 semanas son casi 4 años) y el margen tras el periodo en semanas.
     const semanal = cfg.intervalo === 'semanal'
     const dDesde = masAnios(desde, semanal ? -6 : -3)
-    const dHasta = semanal ? masDias(hasta, 7 * ((tope != null ? tope : cfg.salida?.n ?? 20) + 3)) : masDias(hasta, tope != null ? diasTrasPeriodo(tope) : 45)
+    // (Una estrategia del editor no tiene un tope declarado: un año después del periodo para cerrar sus operaciones.)
+    const dHasta = editor ? masDias(hasta, 400) : semanal ? masDias(hasta, 7 * ((tope != null ? tope : cfg.salida?.n ?? 20) + 3)) : masDias(hasta, tope != null ? diasTrasPeriodo(tope) : 45)
     const lee = (sym) => get(`rpc/leer_velas?p_simbolo=${encodeURIComponent(sym)}&p_desde=${dDesde}&p_hasta=${dHasta}`).then(velasDe)
     const series = {}
     for (let i = 0; i < simbolos.length; i += EN_PARALELO) {
@@ -142,16 +149,16 @@ export default async function handler(req, res) {
       lote.forEach((s, k) => { series[s] = vs[k] })
     }
     const usaQqq = (senales?.filtros || []).some(f => f.id === 'mercadoAlcista')
-    let qqq = usaQqq || estrategias ? await lee('QQQ') : null
+    let qqq = usaQqq || estrategias || editor ? await lee('QQQ') : null
     // Filtros con otro activo de referencia (referenciaSobreMedia, V9.1003): las velas de cada ticker, de la caché.
-    const tickersRef = tickersDeReferencia(senales), referencias = {}
+    const tickersRef = editor ? (cfg.definicion.filtroMercado?.ticker ? [cfg.definicion.filtroMercado.ticker] : []) : tickersDeReferencia(senales), referencias = {}
     for (const t of tickersRef) referencias[t] = t === 'QQQ' && qqq ? qqq : await lee(t)
     const sinVelasRef = tickersRef.filter(t => !referencias[t].length)
     // Filtro de fuerza relativa (V9.1004): la distribución de los miembros del Nasdaq-100 de cada día (con las velas ya
     // leídas: todos los miembros del periodo, desde 3 años antes) y el percentil de cada valor, en el campo rsPercentil.
     // Siempre con las velas DIARIAS; en semanal, cada vela semanal lleva el de su última sesión.
     const pfPor = {}
-    if (usaFuerzaRelativaCombinacion(senales)) {
+    if (editor ? usaFuerzaRelativa({ definicion: cfg.definicion }) : usaFuerzaRelativaCombinacion(senales)) {
       const dist = distribucion(miembros, series)
       for (const s of simbolos) pfPor[s] = percentilesDe(series[s], dist, { ticker: s })
     }
@@ -165,7 +172,11 @@ export default async function handler(req, res) {
     const ctx = { ...(qqq ? { qqq } : {}), ...(tickersRef.length ? { referencias } : {}) }
     const semilla = semillaLab(await huella(cfg), desde)
     let resultado
-    if (estrategias) {
+    if (editor) {
+      // La definición con sus valores en cada miembro (lib/editor/laboratorio.js); el filtro de mercado, con sus velas.
+      const valores = simbolos.filter(s => series[s].length).map(sym => ({ sym, velas: series[sym], tramos: tramos[sym] }))
+      resultado = ejecutaPeriodoEditor({ valores, definicion: cfg.definicion, params: cfg.valores, desde, hasta, nSim, semilla, qqq, ctx: tickersRef.length ? { referencias } : {} })
+    } else if (estrategias) {
       // Calculable: la señal de la entrada (disparador y filtros) y los indicadores de las salidas.
       const inds = indicadoresSalidas(cfg.salidas)
       const valores = simbolos.filter(s => series[s].length).map(sym => {
