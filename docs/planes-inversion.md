@@ -192,3 +192,46 @@ sintéticos; las acciones de una estrategia van sin dividendos.
 10. **Lotes de planes**: ¿en la tabla `editor_lotes` (mismo mecanismo, `tipo: 'planes'`) o en una tabla nueva?
 11. **Liquidez**: hoy al 0 % en todo (decisión tuya en CARTERA_3). En un plan con dinero esperando, ¿sigue al 0 % o se le da
     un tipo (letras, monetario)?
+
+---
+
+## 8. Decisiones
+
+Respuestas de Sergi (21/10/2026) y, donde no las dio, la propuesta que se aplica por defecto (marcada «propuesta»).
+Mandan sobre lo escrito antes en este documento.
+
+1. **Aportaciones** (propuesta): mensuales por defecto, el primer día de bolsa de cada mes (también trimestrales o
+   anuales), importe fijo con un crecimiento anual opcional (0 % por defecto) y aportaciones extraordinarias opcionales.
+   Retiradas: más adelante.
+2. **Dónde va la aportación** (Sergi): por defecto, a la pieza que más se ha quedado atrás de su peso: se rellenan los
+   huecos de las infraponderadas (rebalancear COMPRANDO, sin vender ni generar impuestos); lo que sobre, con los pesos.
+   Opción: repartir siempre con los pesos. Dentro de una pieza de cartera (propuesta): con los pesos del estado en que esté
+   (una pieza «fuera» con 50 % QQQ + 50 % liquidez deja la mitad en liquidez); si el estado no tiene pesos, en la misma
+   proporción que lo que ya tiene la pieza (y 100 % QQQ si está vacía, como la compra inicial de la cartera).
+3. **Rebalanceo entre piezas** (propuesta): por defecto, ninguno aparte del de las aportaciones (que no vende); opcional,
+   por calendario (anual o trimestral) y por banda (± pp sobre el peso), que sí venden y pagan impuestos.
+4. **Impuestos** (Sergi): ya, la **regla de los dos meses** (una pérdida por vender un valor no se computa si se compran
+   valores homogéneos dos meses antes o después; queda aplazada hasta que se vendan esos valores). Dividendos y divisa, más
+   adelante, con los productos reales en euros (ETF de acumulación). Propuesta: tramos del ahorro de hoy para todo el
+   periodo, el plan solo (sin otras ganancias de la persona), FIFO por valor para TODA la persona (dos piezas con QQQ
+   comparten los lotes), compensación de pérdidas de 4 años y liquidación final. El impuesto de un año se paga el primer día
+   de bolsa de JULIO del siguiente (se declara hasta el 30 de junio; así la ventana de dos meses de una venta de diciembre ya
+   está cerrada al calcularlo). Es distinto del cálculo 2 de la cartera (enero): el motor de planes es nuevo, no lo cambia.
+5. **Piezas de la primera versión** (propuesta): la máquina de estados de cartera (mezcla, filtro de tendencia, las reglas
+   del editor de cartera) y comprar y mantener un activo (QQQ, SPY o el ETF). La estrategia del editor y la rotación,
+   después.
+6. **Veredicto** (Sergi): por TWR. La TIR se enseña siempre, solo informativa.
+7. **Referencias** (propuesta): con los mismos flujos, costes e impuestos: QQQ, SPY, 50 % QQQ + 50 % ETF del plan con
+   rebalanceo anual, y liquidez (lo aportado).
+8. **Periodos** (propuesta): el plan declara el suyo; los inicios rodantes, el 1 de enero de cada año con una duración de
+   10 años por defecto (o la que se pida).
+9. **Dónde en la app**: la pantalla definitiva irá en un futuro «Builder» guiado, que se diseñará aparte. Ahora, solo el
+   motor y una ruta para probarlo (`/api/plan`).
+10. **Lotes de planes**: SIN DECIDIR (¿tabla `editor_lotes` con `tipo: 'planes'` o una tabla nueva?). No se construye nada que
+    dependa de ello hasta que Sergi responda.
+11. **Liquidez** (propuesta): al 0 %, como en toda la cartera (decisión de CARTERA_3).
+
+**Cambio de plan por estas decisiones**: el motor de planes es NUEVO (`lib/planes/`) y reutiliza de la cartera sus
+condiciones y su manera de decidir (al cierre, a la apertura siguiente), pero no toca `simula`: CARTERA_1–3 y las
+exploraciones no se pueden mover. P3 (flujos dentro de la máquina de estados) desaparece; en su lugar, una prueba de que
+el motor nuevo, sin aportaciones ni costes ni impuestos, da la MISMA curva que el laboratorio de cartera.
